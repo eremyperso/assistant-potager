@@ -1,0 +1,17 @@
+{
+  "name": "Mon Potager",
+  "short_name": "Potager",
+  "description": "Assistant vocal pour mon potager maraîcher",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a2e1a",
+  "theme_color": "#2d6a4f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/static/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

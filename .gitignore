@@ -1,0 +1,20 @@
+# Secrets — NE JAMAIS commiter
+.env
+config.py
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Audio temporaires
+*.ogg
+*.mp3

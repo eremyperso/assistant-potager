@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Mon Potager">
+  <title>Mon Potager 🌿</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a2e1a; color: #e8f5e9;
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+    header {
+      background: #2d6a4f; padding: 14px 20px 10px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .header-title { font-size: 18px; font-weight: 700; }
+    .header-date  { font-size: 12px; color: #95d5b2; }
+
+    .tabs { display: flex; background: #1b4332; border-bottom: 2px solid #40916c; }
+    .tab {
+      flex: 1; padding: 11px 4px; text-align: center;
+      font-size: 12px; font-weight: 600; color: #74c69d; cursor: pointer;
+    }
+    .tab.active { color: #fff; background: #2d6a4f; border-bottom: 3px solid #95d5b2; }
+
+    .page { display: none; flex-direction: column; }
+    .page.active { display: flex; }
+
+    /* ════ PAGE ASSISTANT ════ */
+    #page-assistant { justify-content: space-between; min-height: calc(100vh - 110px); }
+
+    .assistant-bubble {
+      background: #1b4332; border-left: 4px solid #40916c;
+      border-radius: 0 12px 12px 0; padding: 16px 18px; margin: 16px 16px 0;
+      font-size: 16px; line-height: 1.6; color: #d8f3dc; min-height: 80px;
+    }
+    .bubble-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+      color: #52b788; margin-bottom: 6px; font-weight: 700;
+    }
+
+    .user-bubble {
+      background: #0d1f0d; border-right: 4px solid #95d5b2;
+      border-radius: 12px 0 0 12px; padding: 12px 16px;
+      margin: 10px 16px 0; font-size: 14px; color: #b7e4c7;
+      font-style: italic; display: none;
+    }
+    .user-bubble.show { display: block; }
+
+    .recap-card {
+      background: #0d2b0d; border: 1px solid #52b788;
+      border-radius: 12px; padding: 12px; margin: 10px 16px 0; display: none;
+    }
+    .recap-card.show { display: block; }
+    .recap-row {
+      display: flex; justify-content: space-between;
+      padding: 5px 0; border-bottom: 1px solid #1b4332; font-size: 13px;
+    }
+    .recap-row:last-child { border-bottom: none; }
+    .recap-label { color: #74c69d; font-weight: 600; }
+    .recap-val   { color: #d8f3dc; text-align: right; max-width: 65%; }
+
+    .quick-actions {
+      display: none; flex-wrap: wrap; gap: 8px; padding: 10px 16px 0;
+    }
+    .quick-btn {
+      background: #1b4332; border: 1px solid #40916c; color: #95d5b2;
+      border-radius: 20px; padding: 9px 14px; font-size: 13px;
+      cursor: pointer; flex: 1; min-width: 130px; text-align: center;
+    }
+    .quick-btn:active { background: #2d6a4f; }
+    .quick-btn.primary {
+      background: #2d6a4f; border-color: #52b788; color: #fff; font-weight: 700;
+    }
+
+    .mic-container {
+      display: flex; flex-direction: column;
+      align-items: center; padding: 20px 16px 36px; gap: 12px;
+    }
+    #btn-mic {
+      width: 114px; height: 114px; border-radius: 50%;
+      border: 4px solid #40916c; background: #2d6a4f;
+      color: white; font-size: 46px; cursor: pointer;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    #btn-mic:active { transform: scale(0.93); }
+    #btn-mic.rec  { background:#b5272d; border-color:#ff6b6b; animation:pulse-red 1s infinite; }
+    #btn-mic.wait { background:#1a4a8a; border-color:#5588dd; animation:pulse-blue 1s infinite; }
+    @keyframes pulse-red  { 0%,100%{box-shadow:0 6px 24px rgba(181,39,45,.4)} 50%{box-shadow:0 6px 40px rgba(181,39,45,.9)} }
+    @keyframes pulse-blue { 0%,100%{box-shadow:0 6px 24px rgba(26,74,138,.4)} 50%{box-shadow:0 6px 40px rgba(85,136,221,.9)} }
+    .mic-label { font-size: 13px; color: #74c69d; text-align: center; }
+
+    /* ════ PAGE INTERROGER ════ */
+    #page-interroger { padding: 16px; gap: 12px; }
+    .btn-ask-mic {
+      background:#1b4332; border:1px dashed #40916c; color:#74c69d;
+      border-radius:12px; padding:12px; font-size:14px; cursor:pointer; text-align:center;
+    }
+    #ask-input {
+      background:#0d1f0d; border:1px solid #40916c; border-radius:12px;
+      padding:14px; color:#e8f5e9; font-size:15px; min-height:90px;
+      resize:none; outline:none; font-family:inherit;
+    }
+    .btn-primary {
+      background:#2d6a4f; color:white; border:none; border-radius:12px;
+      padding:14px; font-size:15px; font-weight:700; cursor:pointer;
+    }
+    .btn-primary:active { background:#1b4332; }
+    #ask-result {
+      background:#0d1f0d; border:1px solid #52b788; border-radius:12px;
+      padding:14px; font-size:15px; line-height:1.65; display:none; color:#d8f3dc;
+    }
+
+    /* ════ PAGE HISTORIQUE ════ */
+    #page-historique { padding:12px 16px; gap:10px; overflow-y:auto; }
+    .histo-header { display:flex; gap:8px; }
+    .filter-select {
+      background:#0d1f0d; border:1px solid #40916c; color:#b7e4c7;
+      border-radius:8px; padding:8px; font-size:13px; flex:1; outline:none;
+    }
+    #histo-list { display:flex; flex-direction:column; gap:8px; }
+    .event-card {
+      background:#0d1f0d; border:1px solid #2d6a4f; border-radius:10px; padding:12px;
+    }
+    .event-top { display:flex; justify-content:space-between; margin-bottom:5px; }
+    .event-action { font-weight:700; color:#95d5b2; text-transform:uppercase; font-size:11px; }
+    .event-date   { color:#74c69d; font-size:11px; }
+    .event-main   { font-size:15px; color:#d8f3dc; font-weight:600; margin-bottom:3px; }
+    .event-detail { color:#74c69d; font-size:12px; }
+    .event-texte  { color:#52b788; font-size:11px; font-style:italic; margin-top:4px; }
+
+    .spinner {
+      display:inline-block; width:16px; height:16px;
+      border:3px solid #2d6a4f; border-top-color:#95d5b2;
+      border-radius:50%; animation:spin .7s linear infinite;
+      vertical-align:middle; margin-right:6px;
+    }
+    @keyframes spin { to { transform:rotate(360deg) } }
+    .loading { text-align:center; color:#52b788; padding:20px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="header-title">🌿 Mon Potager</div>
+    <div class="header-date" id="hdr-date"></div>
+  </div>
+  <div style="font-size:11px;color:#74c69d;text-align:right">
+    Groq IA<br><span id="nb-evts" style="color:#95d5b2">—</span> événements
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('assistant')">🎤 Assistant</div>
+  <div class="tab"        onclick="showTab('interroger')">🔍 Interroger</div>
+  <div class="tab"        onclick="showTab('historique')">📋 Historique</div>
+</div>
+
+<!-- ══ ASSISTANT ══ -->
+<div class="page active" id="page-assistant">
+
+  <div class="assistant-bubble">
+    <div class="bubble-label">🌿 Assistant potager</div>
+    <span id="asst-txt">Bonjour ! Je suis votre assistant potager.<br>Appuyez sur le micro pour commencer.</span>
+  </div>
+
+  <div class="user-bubble" id="usr-bubble"></div>
+  <div class="recap-card"  id="recap-card"></div>
+
+  <div class="quick-actions" id="quick-actions">
+    <button class="quick-btn primary" onclick="doNewAction()">➕ Autre action</button>
+    <button class="quick-btn"         onclick="doAsk()">🔍 Interroger</button>
+  </div>
+
+  <div class="mic-container">
+    <button id="btn-mic" onclick="toggleMic()">🎤</button>
+    <div class="mic-label" id="mic-lbl">Appuyer pour parler</div>
+  </div>
+
+</div>
+
+<!-- ══ INTERROGER ══ -->
+<div class="page" id="page-interroger">
+  <button class="btn-ask-mic" onclick="startAskMic()">🎤 Poser la question à la voix</button>
+  <textarea id="ask-input"
+    placeholder="Quand ai-je récolté mes patates douces pour la dernière fois ?&#10;Combien de kg de tomates cette saison ?&#10;Historique traitements courgettes"></textarea>
+  <button class="btn-primary" onclick="sendQuestion()">📊 Analyser mes données</button>
+  <div id="ask-result"></div>
+</div>
+
+<!-- ══ HISTORIQUE ══ -->
+<div class="page" id="page-historique">
+  <div class="histo-header">
+    <select class="filter-select" id="fil-action" onchange="loadHistorique()">
+      <option value="">Toutes les actions</option>
+      <option value="recolte">Récoltes</option>
+      <option value="arrosage">Arrosages</option>
+      <option value="semis">Semis</option>
+      <option value="traitement">Traitements</option>
+      <option value="plantation">Plantations</option>
+    </select>
+    <button class="btn-primary" style="padding:8px 14px;font-size:13px" onclick="loadHistorique()">🔄</button>
+  </div>
+  <div id="histo-list"><div class="loading">Chargement...</div></div>
+</div>
+
+<script>
+const API = window.location.origin;
+// const API = 'http://100.88.XX.XX:8000'; // ← décommenter si accès Tailscale externe
+
+let recog      = null;
+let recording  = false;
+
+// ── INIT ───────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const d = new Date();
+  document.getElementById('hdr-date').textContent =
+    d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
+  refreshCount();
+  // Salutation vocale après 1 seconde
+  setTimeout(() => say("Bonjour ! Je suis votre assistant potager. Appuyez sur le micro pour commencer."), 1000);
+});
+
+async function refreshCount() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    document.getElementById('nb-evts').textContent = d.evenements_total;
+  } catch(e) {}
+}
+
+// ── TABS ───────────────────────────────────────────────────────────────────────
+function showTab(name) {
+  ['assistant','interroger','historique'].forEach((n,i) => {
+    document.querySelectorAll('.tab')[i].classList.toggle('active', n===name);
+    document.getElementById('page-'+n).classList.toggle('active', n===name);
+  });
+  if (name === 'historique') loadHistorique();
+}
+
+// ── SYNTHÈSE VOCALE ────────────────────────────────────────────────────────────
+function say(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g,'').replace(/\n/g,' '));
+  u.lang  = 'fr-FR';
+  u.rate  = 1.05;
+  // Charger voix française si dispo
+  const voices = window.speechSynthesis.getVoices();
+  const fr = voices.find(v => v.lang.startsWith('fr'));
+  if (fr) u.voice = fr;
+  window.speechSynthesis.speak(u);
+}
+
+function setAsst(html, speak=true) {
+  document.getElementById('asst-txt').innerHTML = html;
+  if (speak) say(html);
+}
+
+// ── RECONNAISSANCE VOCALE ──────────────────────────────────────────────────────
+function toggleMic() { recording ? stopRec() : startRec(); }
+
+function startRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    setAsst("⚠️ Reconnaissance vocale indisponible.<br>Utilisez Safari sur iPhone.", false);
+    return;
+  }
+  recog = new SR();
+  recog.lang = 'fr-FR';
+  recog.interimResults = true;
+
+  recog.onstart = () => {
+    recording = true;
+    setBtn('rec','⏹','Parlez maintenant...');
+    document.getElementById('usr-bubble').className = 'user-bubble';
+    document.getElementById('recap-card').className = 'recap-card';
+    document.getElementById('quick-actions').style.display = 'none';
+  };
+
+  recog.onresult = (e) => {
+    let fin='', inter='';
+    for (let i=e.resultIndex; i<e.results.length; i++) {
+      if (e.results[i].isFinal) fin += e.results[i][0].transcript;
+      else inter += e.results[i][0].transcript;
+    }
+    showUsr(fin||inter);
+    if (fin) { stopRec(); sendCmd(fin); }
+  };
+
+  recog.onerror = (e) => { setAsst("❌ Erreur micro : "+e.error, false); stopRec(); };
+  recog.onend   = () => { if (recording) stopRec(); };
+  recog.start();
+}
+
+function stopRec() {
+  recording = false;
+  if (recog) { recog.stop(); recog = null; }
+  setBtn('','🎤','Appuyer pour parler');
+}
+
+function setBtn(cls, icon, lbl) {
+  const b = document.getElementById('btn-mic');
+  b.textContent = icon;
+  b.className = cls;
+  document.getElementById('mic-lbl').textContent = lbl;
+}
+
+function showUsr(t) {
+  const b = document.getElementById('usr-bubble');
+  b.textContent = '🗣 ' + t;
+  b.className = 'user-bubble show';
+}
+
+// ── ENVOI & RÉCAP ──────────────────────────────────────────────────────────────
+async function sendCmd(texte) {
+  setBtn('wait','⏳','Analyse en cours...');
+  setAsst("Je traite votre commande...", false);
+  try {
+    const res  = await fetch(API+'/parse', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({texte})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail||'Erreur');
+    setBtn('','🎤','Appuyer pour parler');
+    showRecap(data.parsed);
+    refreshCount();
+  } catch(err) {
+    setBtn('','🎤','Appuyer pour parler');
+    setAsst("❌ "+err.message, false);
+  }
+}
+
+function showRecap(p) {
+  // Résumé vocal
+  const parts = [
+    p.action,
+    p.culture ? (p.culture + (p.variete ? ' '+p.variete : '')) : null,
+    p.quantite != null ? p.quantite+' '+(p.unite||'') : null,
+    p.parcelle ? 'parcelle '+p.parcelle : null,
+    p.traitement,
+    p.duree_minutes ? p.duree_minutes+' minutes' : null,
+  ].filter(Boolean);
+
+  const resume = parts.join(', ');
+  setAsst(
+    `✅ C'est noté !<br><br>` +
+    `J'ai enregistré : <strong>${resume}</strong>.<br><br>` +
+    `Voulez-vous enregistrer une autre action ou interroger vos données ?`,
+    true
+  );
+
+  // Carte visuelle
+  const rows = [
+    ['Action',     p.action],
+    ['Culture',    p.culture],
+    ['Variété',    p.variete],
+    ['Quantité',   p.quantite!=null ? p.quantite+' '+(p.unite||'') : null],
+    ['Parcelle',   p.parcelle],
+    ['Rang',       p.rang],
+    ['Durée',      p.duree_minutes ? p.duree_minutes+' min' : null],
+    ['Traitement', p.traitement],
+    ['Date',       p.date],
+    ['Note',       p.commentaire],
+  ].filter(r=>r[1]!=null);
+
+  const card = document.getElementById('recap-card');
+  card.innerHTML = rows.map(([l,v]) =>
+    `<div class="recap-row">
+       <span class="recap-label">${l}</span>
+       <span class="recap-val">${v}</span>
+     </div>`).join('');
+  card.className = 'recap-card show';
+  document.getElementById('quick-actions').style.display = 'flex';
+}
+
+// ── BOUTONS SUITE ──────────────────────────────────────────────────────────────
+function doNewAction() {
+  document.getElementById('quick-actions').style.display = 'none';
+  document.getElementById('recap-card').className = 'recap-card';
+  document.getElementById('usr-bubble').className = 'user-bubble';
+  setAsst("Je vous écoute !<br>Dites-moi ce que vous avez fait au potager.", true);
+  setTimeout(() => startRec(), 2500);
+}
+
+function doAsk() {
+  showTab('interroger');
+  setTimeout(() => startAskMic(), 400);
+}
+
+// ── INTERROGATION ──────────────────────────────────────────────────────────────
+let askRecog = null;
+function startAskMic() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { alert('Safari uniquement'); return; }
+  askRecog = new SR();
+  askRecog.lang = 'fr-FR';
+  askRecog.onresult = e => {
+    document.getElementById('ask-input').value = e.results[0][0].transcript;
+    sendQuestion();
+  };
+  askRecog.start();
+}
+
+async function sendQuestion() {
+  const texte = document.getElementById('ask-input').value.trim();
+  if (!texte) return;
+  const box = document.getElementById('ask-result');
+  box.style.display = 'block';
+  box.innerHTML = '<span class="spinner"></span> Analyse de vos données...';
+  try {
+    const res  = await fetch(API+'/ask', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({texte})
+    });
+    const d = await res.json();
+    const rep = d.reponse || 'Aucune réponse.';
+    box.innerHTML = rep.replace(/\n/g,'<br>');
+    say(rep);
+  } catch(err) {
+    box.innerHTML = '❌ '+err.message;
+  }
+}
+
+// ── HISTORIQUE ─────────────────────────────────────────────────────────────────
+async function loadHistorique() {
+  const list = document.getElementById('histo-list');
+  const act  = document.getElementById('fil-action').value;
+  list.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+  try {
+    const url  = API+'/historique?limit=40'+(act?'&action='+act:'');
+    const evts = await (await fetch(url)).json();
+    if (!evts.length) { list.innerHTML='<div class="loading">Aucun événement</div>'; return; }
+    list.innerHTML = evts.map(e => {
+      const main   = [e.culture, e.variete].filter(Boolean).join(' ');
+      const detail = [
+        e.quantite!=null ? e.quantite+' '+(e.unite||'') : null,
+        e.parcelle ? 'Parcelle : '+e.parcelle : null,
+        e.traitement,
+      ].filter(Boolean).join(' · ');
+      return `<div class="event-card">
+        <div class="event-top">
+          <span class="event-action">${e.action||'?'}</span>
+          <span class="event-date">${e.date||''}</span>
+        </div>
+        <div class="event-main">${main||'—'}</div>
+        ${detail?`<div class="event-detail">${detail}</div>`:''}
+        ${e.texte?`<div class="event-texte">"${e.texte}"</div>`:''}
+      </div>`;
+    }).join('');
+  } catch(err) {
+    list.innerHTML = `<div class="loading" style="color:#ff8080">❌ ${err.message}</div>`;
+  }
+}
+
+// Voix TTS iOS (nécessite un événement utilisateur au 1er appel)
+if (window.speechSynthesis)
+  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+</script>
+</body>
+</html>

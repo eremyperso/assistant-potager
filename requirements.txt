@@ -1,0 +1,26 @@
+# Assistant Potager v2 — dépendances Python
+# Installer avec : pip install -r requirements.txt
+
+# Serveur web
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+
+# LLM + Whisper — Groq (GRATUIT)
+groq>=0.13.0
+
+# Bot Telegram
+python-telegram-bot==21.6
+
+# Base de données
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# Utilitaires
+unidecode==1.3.8
+python-dotenv==1.0.1
+
+# Synthèse vocale TTS
+gtts>=2.5.0
+# Note : ffmpeg requis pour conversion MP3→OGG (voice note Telegram)
+# Windows : winget install ffmpeg
+# ou https://www.gyan.dev/ffmpeg/builds/
