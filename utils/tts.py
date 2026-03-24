@@ -1,7 +1,14 @@
 """
-utils/tts.py — Synthèse vocale via gTTS
-----------------------------------------
+utils/tts.py — Synthèse vocale via gTTS avec activation dynamique
+------------------------------------------------------------------
 Convertit un texte en message vocal Telegram (.ogg/opus).
+
+Activation/désactivation depuis Telegram :
+    /tts      → affiche l'état actuel
+    /tts_on   → active les réponses vocales
+    /tts_off  → désactive les réponses vocales
+
+L'état est persisté dans utils/.tts_state.json → survit au redémarrage.
 
 Dépendances :
     pip install gtts
@@ -10,12 +17,13 @@ Dépendances :
       ou https://www.gyan.dev/ffmpeg/builds/ → ffmpeg-release-essentials.zip
 
 Utilisation :
-    from utils.tts import send_voice_reply
+    from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
     await send_voice_reply(update, "Votre texte à dicter")
 """
 
 import os
 import re
+import json
 import logging
 import tempfile
 import subprocess
@@ -23,9 +31,34 @@ from gtts import gTTS
 
 log = logging.getLogger("potager")
 
-# ── Activer / désactiver la synthèse vocale ────────────────────────────────────
-# Passez à False pour désactiver sans toucher au code appelant
-TTS_ENABLED = True
+# ── Fichier d'état persistant ──────────────────────────────────────────────────
+_TTS_STATE_FILE = os.path.join(os.path.dirname(__file__), ".tts_state.json")
+
+def _load_tts_state() -> bool:
+    """Charge la préférence TTS depuis le fichier d'état (défaut : False)."""
+    try:
+        with open(_TTS_STATE_FILE) as f:
+            return json.load(f).get("enabled", False)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return False  # désactivé par défaut au 1er lancement
+
+def _save_tts_state(enabled: bool):
+    """Persiste la préférence TTS dans un fichier JSON local."""
+    try:
+        with open(_TTS_STATE_FILE, "w") as f:
+            json.dump({"enabled": enabled}, f)
+    except Exception as e:
+        log.error(f"❌ TTS STATE SAVE  : impossible d'écrire l'état → {e}")
+
+def set_tts_enabled(enabled: bool):
+    """Active ou désactive le TTS globalement (persiste au redémarrage)."""
+    _save_tts_state(enabled)
+    log.info(f"{'🔊' if enabled else '🔇'} TTS STATE        : {'activé' if enabled else 'désactivé'}")
+
+def is_tts_enabled() -> bool:
+    """Retourne l'état TTS courant (lu depuis le fichier de persistance)."""
+    return _load_tts_state()
+
 
 # ── Longueur max du texte lu à voix haute ─────────────────────────────────────
 # Au-delà, seule une version raccourcie est lue (évite les messages de 2 minutes)
@@ -37,18 +70,13 @@ def _strip_markdown(texte: str) -> str:
     Supprime les balises Markdown pour une lecture vocale propre.
     * gras *, _ italique _, `code`, # titres, liens [x](y)...
     """
-    # Titres
     texte = re.sub(r"#+\s*", "", texte)
-    # Gras / italique / code inline
     texte = re.sub(r"[*_`]{1,3}", "", texte)
-    # Liens Markdown [texte](url) → texte
     texte = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", texte)
-    # Émojis (gTTS les lit bizarrement, on les retire)
     texte = re.sub(
         r"[\U0001F300-\U0001FFFF\U00002702-\U000027B0\U0000FE0F\U00002000-\U00002BFF]+",
         " ", texte
     )
-    # Espaces multiples / retours à la ligne → espace simple
     texte = re.sub(r"\s+", " ", texte).strip()
     return texte
 
@@ -61,7 +89,6 @@ def _truncate_for_tts(texte: str) -> str:
     if len(texte) <= TTS_MAX_CHARS:
         return texte
     tronque = texte[:TTS_MAX_CHARS]
-    # Couper à la dernière phrase (. ! ?)
     dernier_point = max(
         tronque.rfind("."),
         tronque.rfind("!"),
@@ -81,10 +108,10 @@ def _mp3_to_ogg(mp3_path: str) -> str | None:
     try:
         result = subprocess.run(
             [
-                "ffmpeg", "-y",          # écraser sans confirmation
+                "ffmpeg", "-y",
                 "-i", mp3_path,
-                "-c:a", "libopus",       # codec Opus (requis par Telegram voice note)
-                "-b:a", "32k",           # bitrate léger (voix)
+                "-c:a", "libopus",
+                "-b:a", "32k",
                 ogg_path
             ],
             capture_output=True,
@@ -105,18 +132,17 @@ def _mp3_to_ogg(mp3_path: str) -> str | None:
 async def send_voice_reply(update, texte: str) -> bool:
     """
     Génère un message vocal à partir du texte et l'envoie via Telegram reply_voice().
+    Ne fait rien si le TTS est désactivé (commande /tts_off).
 
     Paramètres :
         update  — objet Update Telegram
         texte   — texte brut ou Markdown à synthétiser
 
     Retourne True si le vocal a été envoyé, False sinon (erreur silencieuse).
-    L'appelant peut continuer normalement même si le TTS échoue.
     """
-    if not TTS_ENABLED:
+    if not is_tts_enabled():
         return False
 
-    # Nettoyage du texte
     texte_clean = _strip_markdown(texte)
     texte_clean = _truncate_for_tts(texte_clean)
 
@@ -127,23 +153,19 @@ async def send_voice_reply(update, texte: str) -> bool:
     ogg_path = None
 
     try:
-        # ── Génération MP3 via gTTS ────────────────────────────────────────────
         tts = gTTS(text=texte_clean, lang="fr", slow=False)
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             mp3_path = tmp.name
         tts.save(mp3_path)
         log.info(f"🔊 TTS GÉNÉRÉ      : {len(texte_clean)} chars → {mp3_path}")
 
-        # ── Conversion OGG/Opus pour Telegram voice note ──────────────────────
         ogg_path = _mp3_to_ogg(mp3_path)
 
         if ogg_path:
-            # Envoi comme note vocale (bulle micro dans Telegram)
             with open(ogg_path, "rb") as audio:
                 await update.message.reply_voice(voice=audio)
             log.info("🔊 TTS ENVOYÉ      : voice note OGG/Opus")
         else:
-            # Fallback : envoi comme fichier audio MP3 si ffmpeg absent
             with open(mp3_path, "rb") as audio:
                 await update.message.reply_audio(
                     audio=audio,
@@ -159,7 +181,6 @@ async def send_voice_reply(update, texte: str) -> bool:
         return False
 
     finally:
-        # Nettoyage fichiers temporaires
         for path in [mp3_path, ogg_path]:
             if path and os.path.exists(path):
                 try:

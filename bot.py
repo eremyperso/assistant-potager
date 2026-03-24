@@ -8,10 +8,13 @@ Fonctionnalités :
   - /ask  → question analytique sur l'historique
   - /stats → statistiques rapides
   - /historique → derniers événements
+  - /tts → afficher l'état de la synthèse vocale
+  - /tts_on → activer les réponses vocales
+  - /tts_off → désactiver les réponses vocales
   - Guidage conversationnel (propose les suites possibles)
 
 Installation :
-  pip install python-telegram-bot groq sqlalchemy psycopg2-binary unidecode python-dotenv
+  pip install python-telegram-bot groq sqlalchemy psycopg2-binary unidecode python-dotenv gtts
 
 Lancement :
   python bot.py
@@ -46,7 +49,7 @@ from database.models import Evenement
 from utils.actions import normalize_action
 from llm.groq_client import parse_commande, repondre_question
 from utils.date_utils import parse_date
-from utils.tts import send_voice_reply
+from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -133,7 +136,6 @@ def _last_weekday(weekday: int) -> str:
     return (today - timedelta(days=days_ago)).isoformat()
 
 def _infer_action(texte: str) -> str | None:
-    """Déduit l'action depuis le texte si Groq a retourné action=null."""
     words = texte.lower().replace(",", " ").replace(".", " ").split()
     for word in words:
         if word in ACTION_KEYWORDS:
@@ -141,17 +143,13 @@ def _infer_action(texte: str) -> str | None:
     return None
 
 def _infer_culture(texte: str) -> str | None:
-    """Extrait le légume depuis le texte si Groq a retourné culture=null."""
     t = texte.lower()
-    # Chercher d'abord les expressions multi-mots (plus spécifiques)
     for cult in sorted(CULTURES_CONNUES, key=len, reverse=True):
         if cult in t:
-            # Retourner au singulier
             return cult.rstrip("s") if cult.endswith("s") and len(cult) > 4 else cult
     return None
 
 def _infer_date(texte: str) -> str | None:
-    """Extrait la date depuis le texte si Groq a retourné date=null."""
     t = texte.lower()
     for mot, fn in TEMPORAL_MAP.items():
         if mot in t:
@@ -160,14 +158,8 @@ def _infer_date(texte: str) -> str | None:
 
 
 def _normalize_items(items: list, texte_original: str = "") -> list:
-    """
-    Normalise la réponse Groq :
-    1. Si action=null → inférence depuis le texte original
-    2. Si culture/quantite sont des listes → explosion en objets séparés
-    """
     normalized = []
     for item in items:
-        # ── Inférence des champs null depuis le texte original ───────────────
         item = dict(item)
         if texte_original:
             if item.get("action") is None:
@@ -183,7 +175,6 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
                         item["culture"] = inferred
                         log.info(f"🔧 CULTURE INFÉRÉE : '{inferred}'")
             if item.get("date") is None:
-                # N'inférer la date que si le texte source contient un mot temporel explicite
                 if texte_original and any(m in texte_original.lower() for m in TEMPORAL_MAP):
                     inferred = _infer_date(texte_original)
                     if inferred:
@@ -193,12 +184,10 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
         culture  = item.get("culture")
         quantite = item.get("quantite")
 
-        # Cas normal : culture est une string → pas de transformation
         if not isinstance(culture, list):
             normalized.append(item)
             continue
 
-        # Cas Groq défaillant : culture est une liste
         log.warning(f"⚠️  NORMALISATION  : Groq a retourné des listes, explosion en {len(culture)} objets")
         for i, cult in enumerate(culture):
             new_item = dict(item)
@@ -210,6 +199,7 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
             normalized.append(new_item)
 
     return normalized
+
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 # ── Clavier principal ────────────────────────────────────────────────────────────
@@ -230,7 +220,6 @@ AFTER_RECORD_KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True
 )
 
-# ── États conversation ───────────────────────────────────────────────────────────
 WAITING_ASK = 1
 
 
@@ -239,16 +228,18 @@ WAITING_ASK = 1
 # ══════════════════════════════════════════════════════════════════════════════
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Message de bienvenue."""
     prenom = update.effective_user.first_name or "jardinier"
     db = SessionLocal()
     nb = db.query(Evenement).count()
     db.close()
 
+    tts_etat = "🔊 activée" if is_tts_enabled() else "🔇 désactivée"
+
     await update.message.reply_text(
         f"🌿 *Bonjour {prenom} !*\n\n"
         f"Je suis votre assistant potager.\n"
-        f"📦 *{nb} événements* enregistrés dans votre base.\n\n"
+        f"📦 *{nb} événements* enregistrés dans votre base.\n"
+        f"Synthèse vocale : {tts_etat}\n\n"
         f"Envoyez-moi un *message vocal* ou *texte* pour enregistrer une action.\n"
         f"Ex : _\"Récolté 3 kg de tomates variété cerise parcelle nord\"_\n\n"
         f"Ou utilisez les boutons ci-dessous :",
@@ -258,17 +249,14 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Message vocal → transcription Groq Whisper → parsing → PostgreSQL."""
     msg = await update.message.reply_text("🎤 *Transcription en cours...*", parse_mode="Markdown")
 
-    # ── 1. Télécharger le fichier audio ────────────────────────────────────────
     voice_file = await update.message.voice.get_file()
 
     with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
         tmp_path = tmp.name
         await voice_file.download_to_drive(tmp_path)
 
-    # ── 2. Transcrire via Groq Whisper ──────────────────────────────────────────
     try:
         with open(tmp_path, "rb") as audio:
             transcription = groq_client.audio.transcriptions.create(
@@ -292,9 +280,6 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await msg.edit_text(f"🗣 _\"{texte}\"_\n\n⏳ Analyse en cours...", parse_mode="Markdown")
 
-    # ── 3. Modes correction actifs : bypass intent classification ──────────────
-    # Quand on est en pleine conversation de correction, on ne reclassifie pas —
-    # le texte est une réponse dans un flux déjà engagé.
     mode = ctx.user_data.get('mode')
     MODES_CORR = {'corr_search','corr_select','corr_apply','corr_confirm','corr_confirm_delete'}
     if mode in MODES_CORR:
@@ -311,16 +296,13 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await _corr_confirm_delete(update, ctx, texte)
         return
 
-    # ── 4. Mode ask actif : bypass aussi ──────────────────────────────────────
     if mode == 'ask':
         ctx.user_data['mode'] = None
         await _ask_question(update, texte)
         return
 
-    # ── 5. Classification de l'intention via Groq ──────────────────────────────
     intent = classify_intent(texte)
 
-    # ── 6. Routage selon intent ────────────────────────────────────────────────
     if intent == "STATS":
         await msg.edit_text("📊 *Statistiques*", parse_mode="Markdown")
         await cmd_stats(update, ctx)
@@ -330,8 +312,6 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await cmd_historique(update, ctx)
         return
     if intent == "INTERROGER":
-        # Si le texte est déjà une question complète (>4 mots), la traiter directement
-        # Sinon, demander de formuler la question (mot court type "interroger", "question"...)
         mots = texte.strip().split()
         if len(mots) > 4:
             log.info(f"❓ QUESTION DIRECTE : '{texte}' → traitement immédiat")
@@ -366,11 +346,9 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # intent == "ACTION" : enregistrer comme action potager
     await _parse_and_save(update, texte, msg)
 
 
-# Mots déclencheurs de QUESTION analytique (début de phrase)
 QUESTION_STARTERS = (
     "combien", "quand", "quel", "quelle", "quels", "quelles",
     "est-ce", "depuis", "total", "bilan de", "liste des",
@@ -382,7 +360,6 @@ QUESTION_STARTERS = (
     "quelles cultures", "quel traitement", "quels traitements",
 )
 
-# Verbes d'action potager — ne jamais les traiter comme des questions
 ACTION_VERBS = (
     "arros", "semé", "semer", "planté", "planter", "récolté", "récolter",
     "cueilli", "cueillir", "ramassé", "ramasser", "repiqué", "repiquer",
@@ -393,14 +370,11 @@ ACTION_VERBS = (
 )
 
 def _is_question(texte: str) -> bool:
-    """Retourne True si la phrase ressemble à une question analytique."""
     t = texte.lower().strip()
-    # Si ça commence par un verbe d'action → jamais une question
     if t.startswith(ACTION_VERBS):
         return False
     return t.startswith(QUESTION_STARTERS) or t.endswith("?")
 
-# Mots-clés de navigation reconnus (avec ou sans émoji, insensible à la casse)
 NAV_NOUVELLE = {"🎤 nouvelle action vocale", "➕ autre action", "autre action",
                 "nouvelle action", "nouvelle", "action"}
 NAV_INTERROGER = {"🔍 interroger", "🔍 interroger mes données", "interroger",
@@ -423,17 +397,9 @@ NAV_SUPPRIMER  = {"🗑 supprimer", "supprimer", "supprimer le dernier", "annule
                   "effacer", "effacer le dernier", "delete",
                   "supprimé", "supprimée", "supprimés", "effacé", "effacée"}
 
-# ── Intent classification via Groq ─────────────────────────────────────────
-# Intents possibles retournés par classify_intent()
 INTENTS = {
-    "STATS",        # statistiques, bilan, résumé
-    "HISTORIQUE",   # journal, historique, derniers événements
-    "INTERROGER",   # question, analyser, demander
-    "CORRIGER",     # corriger, modifier, changer un enregistrement
-    "SUPPRIMER",    # supprimer, effacer, annuler le dernier
-    "MENU",         # retour accueil, menu
-    "NOUVELLE",     # nouvelle action, autre chose
-    "ACTION",       # action potager à enregistrer (récolte, semis, arrosage...)
+    "STATS", "HISTORIQUE", "INTERROGER", "CORRIGER",
+    "SUPPRIMER", "MENU", "NOUVELLE", "ACTION",
 }
 
 _CLASSIFY_PROMPT = """Tu es un assistant potager. L'utilisateur t'envoie un message (transcrit vocalement ou tapé).
@@ -453,7 +419,6 @@ Réponds avec UN SEUL MOT en majuscules parmi : STATS, HISTORIQUE, INTERROGER, C
 Réponse :"""
 
 def classify_intent(texte: str) -> str:
-    """Utilise Groq pour classer l'intention du message en un intent canonique."""
     from groq import Groq
     from config import GROQ_API_KEY, GROQ_MODEL
     client = Groq(api_key=GROQ_API_KEY)
@@ -472,21 +437,18 @@ def classify_intent(texte: str) -> str:
         return intent
     except Exception as e:
         log.error(f"Erreur classify_intent : {e}")
-        return "ACTION"  # fallback sûr
+        return "ACTION"
 
 
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
-    texte     = texte_raw.lower()  # comparaison insensible à la casse
+    texte     = texte_raw.lower()
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
-    # Réinitialiser le mode SAUF si on est en plein flux de correction
     MODES_CORRECTION = {'corr_select', 'corr_apply', 'corr_search', 'corr_confirm_delete', 'corr_confirm'}
     if ctx.user_data.get('mode') not in MODES_CORRECTION:
         ctx.user_data['mode'] = None
 
-    # Boutons de navigation (avec ou sans émoji, texte libre accepté)
     if texte in NAV_NOUVELLE:
         await update.message.reply_text(
             "🎤 *Je vous écoute !*\n\nEnvoyez-moi un message vocal ou tapez votre action.",
@@ -519,24 +481,18 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await cmd_start(update, ctx)
         return
 
-    # ── PRIORITÉ 1 : modes correction actifs
     mode = ctx.user_data.get('mode')
     MODES_CORR = {'corr_search','corr_select','corr_apply','corr_confirm','corr_confirm_delete'}
 
-    # Si l'utilisateur tape "corriger" ou un mot-clé NAV en plein milieu d'une correction
-    # → reset complet et redémarrage propre (évite les états bloqués)
     if mode in MODES_CORR and (
-        texte in NAV_CORRIGER
-        or texte in NAV_MENU
-        or texte in NAV_STATS
-        or texte in NAV_HISTORIQUE
+        texte in NAV_CORRIGER or texte in NAV_MENU
+        or texte in NAV_STATS or texte in NAV_HISTORIQUE
         or texte in NAV_INTERROGER
     ):
         log.info(f"🔄 RESET CORRECTION : mode={mode}, texte='{texte}' → nettoyage")
         for k in ['mode','corr_event_id','corr_candidates','corr_last_id',
                   'corr_pending','corr_event_actuel']:
             ctx.user_data.pop(k, None)
-        # Laisser le flux normal gérer la commande (pas de return ici)
     elif mode == 'corr_search':
         await _corr_search(update, ctx, texte_raw)
         return
@@ -553,33 +509,27 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _corr_confirm_delete(update, ctx, texte_raw)
         return
 
-    # ── PRIORITÉ 2 : mode question analytique actif
     if mode == 'ask':
         ctx.user_data['mode'] = None
         log.info(f"❓ MODE ASK        : reroutage → _ask_question")
         await _ask_question(update, texte_raw)
         return
 
-    # ── PRIORITÉ 3 : mots-clés correction/suppression
     if texte in NAV_SUPPRIMER or any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"]):
         await _corr_annuler_dernier(update, ctx)
         return
     if texte in NAV_CORRIGER or any(texte.startswith(k) for k in ["corriger", "modifier"]):
-        # Nettoyer tout contexte correction résiduel avant de démarrer
         for k in ['mode','corr_event_id','corr_candidates','corr_last_id',
                   'corr_pending','corr_event_actuel']:
             ctx.user_data.pop(k, None)
         await _corr_start(update, ctx)
         return
 
-    # ── PRIORITÉ 4 : détection automatique question
     if _is_question(texte_raw):
         log.info(f"❓ QUESTION AUTO   : détectée → reroutage vers _ask_question")
         await _ask_question(update, texte_raw)
         return
 
-    # Sinon : parser comme action(s) potager
-    # Si multi-lignes → traiter chaque ligne séparément
     lignes = [l.strip() for l in texte_raw.split("\n") if l.strip()]
     if len(lignes) > 1:
         msg = await update.message.reply_text(
@@ -594,7 +544,6 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 # ── PARSING MULTI-LIGNES ─────────────────────────────────────────────────────────
 async def _parse_multi(update, lignes: list, msg=None):
-    """Traite chaque ligne séparément → chaque événement a son propre texte_original et sa propre date."""
     log.info(f"📋 MULTI-LIGNES    : {len(lignes)} phrases à traiter séparément")
     total_saved = []
 
@@ -627,7 +576,7 @@ async def _parse_multi(update, lignes: list, msg=None):
                     duree          = _to_int(parsed.get("duree_minutes")),
                     traitement     = parsed.get("traitement"),
                     commentaire    = parsed.get("commentaire"),
-                    texte_original = ligne,   # ← texte propre à CETTE ligne
+                    texte_original = ligne,
                     date           = parse_date(parsed.get("date")),
                 )
                 db.add(event)
@@ -641,7 +590,6 @@ async def _parse_multi(update, lignes: list, msg=None):
         finally:
             db.close()
 
-    # Récapitulatif global
     if not total_saved:
         if msg: await msg.edit_text("❌ Aucune action reconnue.")
         return
@@ -663,9 +611,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     )
     refreshed = SessionLocal()
     try:
-        from sqlalchemy import func
         nb = refreshed.query(Evenement).count()
-        # pas de reply ici, juste log
         log.info(f"📦 TOTAL BASE     : {nb} événements")
     finally:
         refreshed.close()
@@ -673,9 +619,8 @@ async def _parse_multi(update, lignes: list, msg=None):
 
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
 async def _parse_and_save(update: Update, texte: str, msg=None):
-    """Parse le texte → liste d'événements → PostgreSQL → récapitulatif."""
     try:
-        items = parse_commande(texte)   # retourne toujours une liste
+        items = parse_commande(texte)
     except Exception as e:
         log.error(f"❌ ERREUR PARSING  : {e}")
         txt = f"❌ Erreur parsing : {e}\n\nEssayez de reformuler votre action."
@@ -692,9 +637,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
         await update.message.reply_text("❌ Aucune action détectée.")
         return
 
-    # Cas JSON vide (tous champs null) → phrase non reconnue comme action potager
     first = items[0] if items else {}
-    # Un enregistrement est "vide" seulement si AUCUN champ utile n'a de valeur
     useful_fields = [first.get(k) for k in (
         "action","culture","quantite","traitement",
         "duree_minutes","parcelle","rang","variete","commentaire"
@@ -710,7 +653,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
         )
         return
 
-    # Cas ambiguïté rang/quantité détectée par Groq
     if len(items) == 1 and items[0].get("action") == "AMBIGUE":
         hint = items[0].get("commentaire", "précisez le nombre de plants par rang et le nombre de rangs")
         await update.message.reply_text(
@@ -724,7 +666,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
         )
         return
 
-    # Sauvegarde PostgreSQL (1 ou plusieurs événements)
     db = SessionLocal()
     saved_items = []
     try:
@@ -755,7 +696,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     finally:
         db.close()
 
-    # Récapitulatif
     if len(saved_items) == 1:
         parsed, event_id = saved_items[0]
         recap = _build_recap(parsed, event_id)
@@ -778,17 +718,13 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
         reply_markup=AFTER_RECORD_KEYBOARD
     )
 
-    # ── Synthèse vocale du récapitulatif ──────────────────────────────────────
-    #if len(saved_items) == 1:
-    #    parsed, _ = saved_items[0]
-    #    await send_voice_reply(update, _build_recap_tts(parsed))
+    # ── Synthèse vocale du récapitulatif ─────────────────────────────────────
+    if len(saved_items) == 1:
+        parsed, _ = saved_items[0]
+        await send_voice_reply(update, _build_recap_tts(parsed))
 
 
 def _build_recap_tts(p: dict) -> str:
-    """
-    Version vocale du récapitulatif — phrase naturelle sans Markdown ni émoji.
-    Ex : "Récolte enregistrée. 3 kg de tomates cerise, parcelle nord, le 2026-03-11."
-    """
     parties = []
     action = p.get("action") or "action"
     parties.append(f"{action.capitalize()} enregistrée.")
@@ -824,11 +760,9 @@ def _build_recap_tts(p: dict) -> str:
 
 
 def _build_recap(p: dict, event_id: int) -> str:
-    """Construit le message de récapitulatif."""
     lines = ["✅ *C'est noté !* _(ID #%d)_\n" % event_id]
 
-    # Calcul quantité totale si rang présent
-    qte_str  = None
+    qte_str = None
     if p.get("quantite") is not None:
         qte_val = p["quantite"]
         unite   = p.get("unite") or ""
@@ -862,7 +796,6 @@ def _build_recap(p: dict, event_id: int) -> str:
 
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
-    """Interroge l'historique via Groq."""
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     db  = SessionLocal()
@@ -893,20 +826,17 @@ async def _ask_question(update: Update, question: str):
         reponse  = repondre_question(question, contexte)
 
         log.info(f"💡 RÉPONSE GROQ   : {reponse[:200]}{'...' if len(reponse)>200 else ''}")
-        # Pas de parse_mode sur la réponse Groq : elle peut contenir des caractères
-        # spéciaux (apostrophes, tirets, parenthèses) qui cassent le parser Telegram
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
-            # Fallback sans markdown si la réponse contient des caractères problématiques
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
         await update.message.reply_text(
             "_Autre question ou action ?_",
             parse_mode="Markdown",
             reply_markup=AFTER_RECORD_KEYBOARD
         )
-        # ── Synthèse vocale de la réponse analytique ──────────────────────────
-        #await send_voice_reply(update, reponse)
+        # ── Synthèse vocale de la réponse analytique ─────────────────────────
+        await send_voice_reply(update, reponse)
     except Exception as e:
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
     finally:
@@ -915,13 +845,11 @@ async def _ask_question(update: Update, question: str):
 
 # ── COMMANDES ───────────────────────────────────────────────────────────────────
 async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Statistiques rapides. Plantations : total = quantite × rang."""
     db = SessionLocal()
     try:
         total = db.query(Evenement).count()
         lines_out = [f"📊 *Statistiques potager*\n\n📦 Total : *{total} événements*\n"]
 
-        # Récoltes
         recoltes = (
             db.query(Evenement.culture, Evenement.unite, func.sum(Evenement.quantite))
             .filter(Evenement.type_action == "recolte")
@@ -934,7 +862,6 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 if culture:
                     lines_out.append(f"  • {culture} : *{round(qte,2) if qte else 0} {unite or 'unités'}*")
 
-        # Plantations avec calcul quantite × rang
         plantations = (
             db.query(Evenement.culture, Evenement.quantite, Evenement.rang, Evenement.unite)
             .filter(Evenement.type_action == "plantation")
@@ -952,7 +879,6 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 for (culture, unite), tot in totaux.items():
                     lines_out.append(f"  • {culture} : *{int(tot)} {unite}*")
 
-        # Arrosages
         arrosages = (
             db.query(func.count(Evenement.id), func.sum(Evenement.duree))
             .filter(Evenement.type_action == "arrosage")
@@ -968,14 +894,13 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=MENU_KEYBOARD
         )
-        # ── Synthèse vocale des statistiques ──────────────────────────────────
-        #await send_voice_reply(update, "\n".join(lines_out))
+        # ── Synthèse vocale des statistiques ─────────────────────────────────
+        await send_voice_reply(update, "\n".join(lines_out))
     finally:
         db.close()
 
 
 async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """20 derniers événements."""
     db = SessionLocal()
     try:
         events = (
@@ -1002,14 +927,13 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
             reply_markup=MENU_KEYBOARD
         )
-        # ── Synthèse vocale de l'historique ───────────────────────────────────
-        #await send_voice_reply(update, "\n\n".join(lines))
+        # ── Synthèse vocale de l'historique ──────────────────────────────────
+        await send_voice_reply(update, "\n\n".join(lines))
     finally:
         db.close()
 
 
 async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Commande /ask."""
     question = " ".join(ctx.args) if ctx.args else None
     if not question:
         await update.message.reply_text(
@@ -1018,6 +942,39 @@ async def cmd_ask(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
     await _ask_question(update, question)
+
+
+# ── COMMANDES TTS ────────────────────────────────────────────────────────────────
+async def cmd_tts(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Affiche l'état de la synthèse vocale + rappel des commandes."""
+    etat = "🔊 *activée*" if is_tts_enabled() else "🔇 *désactivée*"
+    await update.message.reply_text(
+        f"Synthèse vocale : {etat}\n\n"
+        f"• `/tts_on`  — activer les réponses vocales\n"
+        f"• `/tts_off` — désactiver les réponses vocales",
+        parse_mode="Markdown"
+    )
+
+async def cmd_tts_on(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Active les réponses vocales (persiste au redémarrage)."""
+    set_tts_enabled(True)
+    log.info("🔊 TTS ACTIVÉ      : par commande utilisateur")
+    await update.message.reply_text(
+        "🔊 *Synthèse vocale activée !*\n\n"
+        "Je vais maintenant lire mes réponses à voix haute.\n"
+        "Tapez `/tts_off` pour désactiver.",
+        parse_mode="Markdown"
+    )
+
+async def cmd_tts_off(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Désactive les réponses vocales (persiste au redémarrage)."""
+    set_tts_enabled(False)
+    log.info("🔇 TTS DÉSACTIVÉ   : par commande utilisateur")
+    await update.message.reply_text(
+        "🔇 *Synthèse vocale désactivée.*\n\n"
+        "Tapez `/tts_on` pour réactiver.",
+        parse_mode="Markdown"
+    )
 
 
 # ── HELPERS ─────────────────────────────────────────────────────────────────────
@@ -1030,7 +987,6 @@ def _to_int(v):
     except: return None
 
 
-
 # ══════════════════════════════════════════════════════════════════════════════
 # SYSTÈME DE CORRECTION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1041,7 +997,6 @@ CORR_KEYBOARD = ReplyKeyboardMarkup(
 )
 
 def _fmt_event(e) -> str:
-    """Formate un événement en une ligne lisible."""
     d    = e.date.strftime("%d/%m") if e.date else "?"
     act  = e.type_action or "?"
     cult = f" {e.culture}" if e.culture else ""
@@ -1053,7 +1008,6 @@ def _fmt_event(e) -> str:
 
 
 def _normalize_action_search(action: str) -> str:
-    """Normalise une action retournée par Groq pour correspondre aux valeurs en base."""
     from unidecode import unidecode
     mapping = {
         "recolte": "recolte", "récolte": "recolte", "recolter": "recolte", "récolter": "recolte",
@@ -1074,7 +1028,6 @@ def _normalize_action_search(action: str) -> str:
 
 
 def _find_candidates(description: str, limit: int = 3) -> list:
-    """Groq extrait les critères → SQL retrouve les événements."""
     from groq import Groq
     from config import GROQ_API_KEY, GROQ_MODEL
     import json
@@ -1115,7 +1068,6 @@ JSON brut uniquement."""
         log.error(f"Groq critères erreur : {e}")
         criteres = {}
 
-    # Normaliser l'action
     if criteres.get("action"):
         criteres["action"] = _normalize_action_search(criteres["action"])
 
@@ -1142,7 +1094,6 @@ JSON brut uniquement."""
 
 
 async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Propose correction ou suppression du dernier événement."""
     db = SessionLocal()
     try:
         event = db.query(Evenement).order_by(Evenement.id.desc()).first()
@@ -1166,7 +1117,6 @@ async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Étape 1 — Demande à l'utilisateur de décrire l'événement à corriger."""
     db = SessionLocal()
     try:
         last = db.query(Evenement).order_by(Evenement.id.desc()).first()
@@ -1187,13 +1137,11 @@ async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
-    """Étape 2 — Recherche les candidats en base."""
     if "annuler" in texte.lower():
         ctx.user_data['mode'] = None
         await update.message.reply_text("↩️ Correction annulée.", reply_markup=MENU_KEYBOARD)
         return
 
-    # Raccourci "1" → dernier événement
     if texte.strip() == "1" and ctx.user_data.get('corr_last_id'):
         db = SessionLocal()
         try:
@@ -1223,10 +1171,9 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     ctx.user_data['mode'] = 'corr_select'
 
     if len(candidates) == 1:
-        # Un seul résultat → directement en mode corr_apply, sans étape intermédiaire
         e = candidates[0]
         ctx.user_data['corr_event_id'] = e.id
-        ctx.user_data['mode'] = 'corr_apply'   # ← clé du fix
+        ctx.user_data['mode'] = 'corr_apply'
         await update.message.reply_text(
             f"✅ Événement trouvé :\n\n`{_fmt_event(e)}`\n\n"
             f"✏️ Dites-moi ce que vous souhaitez modifier :\n"
@@ -1250,7 +1197,6 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
 
 
 async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
-    """Étape 3 — L'utilisateur choisit l'action (corriger/supprimer) ou le numéro."""
     t = texte.strip().lower()
 
     if "annuler" in t:
@@ -1258,10 +1204,8 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         await update.message.reply_text("↩️ Correction annulée.", reply_markup=MENU_KEYBOARD)
         return
 
-    # Si event_id déjà défini (un seul candidat) → action directe
     event_id = ctx.user_data.get('corr_event_id')
 
-    # Sinon extraire le numéro
     if not event_id:
         try:
             num = int(t) - 1
@@ -1272,7 +1216,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
             await update.message.reply_text("❓ Tapez le numéro affiché (1, 2, 3...).")
             return
 
-    # Relire l'événement
     db = SessionLocal()
     try:
         event = db.get(Evenement, event_id)
@@ -1284,7 +1227,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         ctx.user_data['mode'] = None
         return
 
-    # Bouton supprimer
     if "supprimer" in t:
         ctx.user_data['mode'] = 'corr_confirm_delete'
         await update.message.reply_text(
@@ -1296,7 +1238,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         )
         return
 
-    # Bouton corriger explicite
     if t in ("✏️ corriger", "corriger"):
         ctx.user_data['mode'] = 'corr_apply'
         await update.message.reply_text(
@@ -1308,9 +1249,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         )
         return
 
-    # ── Cas clé : l'utilisateur décrit directement la correction sans passer par le bouton
-    # Ex : "changer la date au 9 mars", "c'était 1.5 kg", "parcelle nord"
-    # → on saute directement à corr_apply avec ce texte
     MOTS_CORRECTION = ("changer", "modifier", "mettre", "c'était", "c etait",
                        "il s'agit", "il s agit", "ajouter", "enlever", "suppr",
                        "corriger", "plutôt", "plutot", "non ", "pas ")
@@ -1320,7 +1258,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         await _corr_apply(update, ctx, texte)
         return
 
-    # Sinon : texte libre sans mot-clé → proposer les boutons
     ctx.user_data['corr_event_id'] = event_id
     await update.message.reply_text(
         f"Événement sélectionné :\n\n`{_fmt_event(event)}`\n\nQue souhaitez-vous faire ?",
@@ -1333,7 +1270,6 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
 
 
 async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
-    """Confirmation suppression."""
     t = texte.strip().lower()
     event_id = ctx.user_data.get('corr_event_id')
 
@@ -1360,13 +1296,11 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
 
 
 async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
-    """Étape 4 — Groq identifie les champs à modifier → présente un résumé pour confirmation."""
     t = texte.strip().lower()
     if "annuler" in t:
         ctx.user_data['mode'] = None
         await update.message.reply_text("↩️ Correction annulée.", reply_markup=MENU_KEYBOARD)
         return
-    # Suppression demandée depuis corr_apply (bouton 🗑)
     if "supprimer" in t:
         event_id = ctx.user_data.get('corr_event_id')
         if event_id:
@@ -1461,18 +1395,11 @@ JSON brut uniquement."""
 
     log.info(f"✏️ CORRECTIONS     : {corrections}")
 
-    # Préparer le résumé lisible avant confirmation
     LABELS = {
         "action": "Action", "culture": "Culture", "variete": "Variété",
         "quantite": "Quantité", "unite": "Unité", "parcelle": "Parcelle",
         "rang": "Rangs", "duree_minutes": "Durée (min)", "traitement": "Traitement",
         "commentaire": "Commentaire", "date": "Date"
-    }
-    mapping = {
-        "action": "type_action", "culture": "culture", "variete": "variete",
-        "quantite": "quantite", "unite": "unite", "parcelle": "parcelle",
-        "rang": "rang", "duree_minutes": "duree", "traitement": "traitement",
-        "commentaire": "commentaire"
     }
 
     lines = [f"📋 *Résumé des modifications sur #{event_id} :*\n"]
@@ -1483,14 +1410,11 @@ JSON brut uniquement."""
 
     lines.append("\nConfirmez-vous ces modifications ?")
 
-    # Sauvegarder les corrections en attente + état avant modification
     ctx.user_data['corr_pending']      = corrections
     ctx.user_data['corr_event_actuel'] = event_actuel
     ctx.user_data['mode'] = 'corr_confirm'
 
-    await msg_wait.edit_text(
-        "\n".join(lines), parse_mode="Markdown"
-    )
+    await msg_wait.edit_text("\n".join(lines), parse_mode="Markdown")
     await update.message.reply_text(
         "Confirmez ?",
         reply_markup=ReplyKeyboardMarkup(
@@ -1501,7 +1425,6 @@ JSON brut uniquement."""
 
 
 async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
-    """Étape 5 — Confirmation finale avant UPDATE en base."""
     t = texte.strip().lower()
 
     if "annuler" in t:
@@ -1510,7 +1433,6 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         return
 
     if "modifier" in t or "autre" in t:
-        # Retour à l'étape de saisie de correction
         ctx.user_data['mode'] = 'corr_apply'
         db = SessionLocal()
         try:
@@ -1548,7 +1470,6 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
                 elif hasattr(event, col):
                     setattr(event, col, valeur)
 
-            # ── Trace de correction dans texte_original ───────────────────
             LABELS = {
                 "action": "action", "culture": "culture", "variete": "variété",
                 "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
@@ -1597,6 +1518,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
 def main():
     print("🌿 Démarrage du bot Telegram potager...")
     print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
+    print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
 
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
@@ -1606,6 +1528,11 @@ def main():
     app.add_handler(CommandHandler("historique", cmd_historique))
     app.add_handler(CommandHandler("ask",        cmd_ask))
     app.add_handler(CommandHandler("corriger",   lambda u,c: _corr_start(u,c)))
+
+    # Commandes TTS
+    app.add_handler(CommandHandler("tts",        cmd_tts))
+    app.add_handler(CommandHandler("tts_on",     cmd_tts_on))
+    app.add_handler(CommandHandler("tts_off",    cmd_tts_off))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
