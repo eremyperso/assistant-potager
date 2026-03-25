@@ -1,124 +1,130 @@
-# Patch — Météo quotidienne Open-Meteo
+# Patch — Fix garde sauvegarde (bug latent)
 
-## Fichiers modifiés / ajoutés
-
-| Fichier | Nature |
-|---------|--------|
-| `app/utils/meteo.py` | **NOUVEAU** — module complet météo |
-| `app/bot.py` | + import, + `cmd_meteo`, + `job_meteo_quotidienne`, + `main()` |
-| `app/requirements.txt` | + `requests`, + `pytz`, `python-telegram-bot[job-queue]` |
+**Version :** hotfix — 25 mars 2026  
+**Fichiers modifiés :** `app/bot.py`  
+**Migrations SQL :** aucune
 
 ---
 
-## Déploiement
+## Problème
 
-### 1. Copier les fichiers
+Toute phrase envoyée au bot — même dénuée de sens potager — était
+**enregistrée en base** dès que Groq renvoyait une valeur dans le champ
+`commentaire`.
 
+Exemples observés en test :
+- `"météo du jour"` → id=139, action=None, culture=None
+- `"acheter du jour"` → id=140, action=None, culture=None
+- `"acheter lapin ce jour"` → id=141, action=None, culture=None
+- `"je veux acheter un lapin aujourd'hui et pour toujours"` → id=142
+
+### Cause racine
+
+La condition de garde dans `_parse_and_save()` et `_parse_multi()`
+incluait `commentaire` dans la liste des champs "utiles" :
+
+```python
+# AVANT — bugué
+useful_fields = [first.get(k) for k in (
+    "action","culture","quantite","traitement",
+    "duree_minutes","parcelle","rang","variete","commentaire"  # ← commentaire inclus
+)]
+if all(v is None for v in useful_fields):
+    # bloquer
 ```
-assistant-potager/app/utils/meteo.py    ← nouveau fichier
-assistant-potager/app/bot.py            ← remplacer
-assistant-potager/app/requirements.txt  ← remplacer
-```
 
-### 2. Installer les nouvelles dépendances
+Groq place systématiquement le résidu textuel dans `commentaire`,
+donc `all(v is None)` n'était **jamais `True`**.
+La garde ne bloquait rien.
 
-```bash
-pip install requests pytz
-pip install "python-telegram-bot[job-queue]==21.6"
-```
-
-⚠️ Le `[job-queue]` est obligatoire pour que `app.job_queue` fonctionne.
-Sans ça, le bot démarre mais le job silencieux à 5h ne se déclenchera jamais.
-
-### 3. Aucune migration SQL nécessaire
-
-Les observations météo utilisent la table `evenements` existante avec
-`type_action='observation'` et `texte_original='[AUTO-METEO]'`.
+Ce bug était présent depuis l'origine — les tests du 25 mars l'ont
+mis en évidence pour la première fois avec des phrases hors contexte.
 
 ---
 
-## Utilisation
+## Fix
 
-| Commande | Effet |
-|----------|-------|
-| `/meteo` | Déclenche manuellement la météo du jour + enregistrement en base |
-| Job 05h00 | Automatique chaque matin — silencieux, pas de message Telegram |
+Remplacement de la condition dans les deux fonctions par un test
+**positif** : exiger qu'au moins `action` **ou** `culture` **ou**
+`quantite` soit présent.
 
-### Tester immédiatement après déploiement
+### `_parse_multi()` — ligne ~611
 
+```python
+# AVANT
+useful = [first.get(k) for k in ("action","culture","quantite","traitement","duree_minutes","parcelle","rang","variete","commentaire")]
+if all(v is None for v in useful):
+    log.warning(f"  [{i}] JSON vide ignoré pour : {ligne}")
+    continue
+
+# APRÈS
+if not (first.get("action") or first.get("culture") or first.get("quantite")):
+    log.warning(f"  [{i}] JSON sans action ni culture — ignoré : {ligne}")
+    continue
 ```
-/meteo
+
+### `_parse_and_save()` — ligne ~696
+
+```python
+# AVANT
+useful_fields = [first.get(k) for k in (
+    "action","culture","quantite","traitement",
+    "duree_minutes","parcelle","rang","variete","commentaire"
+)]
+if all(v is None for v in useful_fields):
+    log.warning("⚠️  JSON VIDE       : phrase non reconnue comme action, pas de sauvegarde")
+
+# APRÈS
+if not (first.get("action") or first.get("culture") or first.get("quantite")):
+    log.warning("⚠️  JSON SANS ACTION NI CULTURE : phrase non reconnue, pas de sauvegarde")
 ```
 
-Doit répondre :
-```
-🌤️ Météo enregistrée !
-☀️ Ciel dégagé · Min 8°C / Max 18°C · Matin 12°C / AM 17°C · Pluie 0mm (5%) · Vent 14km/h · ☀ 07:12→20:34 · ✅ Conditions idéales
-```
+---
 
-Puis vérifier en base :
+## Nettoyage base de données
+
+Les enregistrements parasites créés lors des tests sont à supprimer
+manuellement :
+
 ```sql
-SELECT id, date, type_action, commentaire, texte_original
+-- Supprimer les entrées parasites du 25 mars
+DELETE FROM evenements WHERE id IN (139, 140, 141, 142);
+
+-- Vérification générale : détecter d'éventuels autres parasites
+SELECT id, date::date, commentaire, texte_original
 FROM evenements
-WHERE texte_original = '[AUTO-METEO]'
-ORDER BY date DESC
-LIMIT 5;
+WHERE type_action IS NULL AND culture IS NULL
+ORDER BY id DESC;
+
+-- Nettoyage global si nécessaire (à adapter selon résultats)
+-- DELETE FROM evenements WHERE type_action IS NULL AND culture IS NULL;
 ```
 
 ---
 
-## Ce qui est enregistré en base
+## Comportement attendu après fix
 
-```sql
-type_action    = 'observation'
-texte_original = '[AUTO-METEO]'
-commentaire    = '☀️ Ensoleillé · Min 8°C / Max 22°C · Matin 12°C / AM 21°C · Pluie 0mm (5%) · Vent 18km/h · ☀ 07:12→20:34 · ✅ Conditions idéales'
-date           = 2026-03-25 00:00:00
-culture        = NULL
+| Phrase envoyée | Avant | Après |
+|----------------|-------|-------|
+| `"météo du jour"` | Sauvegardé en base (parasite) | Message d'incompréhension, pas de sauvegarde |
+| `"acheter un lapin"` | Sauvegardé en base (parasite) | Message d'incompréhension, pas de sauvegarde |
+| `"récolté 2 kg de tomates"` | Sauvegardé ✅ | Sauvegardé ✅ |
+| `"arrosage carré sud 20 min"` | Sauvegardé ✅ | Sauvegardé ✅ |
+
+Log console attendu pour une phrase rejetée :
 ```
-
-### Anti-doublon intégré
-
-Si tu lances `/meteo` deux fois dans la même journée, ou si le job
-se redéclenche par erreur, **aucun doublon ne sera créé** — la fonction
-vérifie si une observation `[AUTO-METEO]` existe déjà pour aujourd'hui.
+HH:MM:SS │ WARNING │ ⚠️  JSON SANS ACTION NI CULTURE : phrase non reconnue, pas de sauvegarde
+```
 
 ---
 
-## Données Open-Meteo récupérées
+## Backlog connexe
 
-| Donnée | Source API |
-|--------|-----------|
-| Température min/max | `daily.temperature_2m_min/max` |
-| Température 8h / 14h | `hourly.temperature_2m` |
-| Précipitations totales | `daily.precipitation_sum` |
-| Probabilité de pluie max | `daily.precipitation_probability_max` |
-| Vent max | `daily.windspeed_10m_max` |
-| Code météo WMO | `daily.weathercode` |
-| Lever/coucher soleil | `daily.sunrise/sunset` |
-
-**Coordonnées configurées :**
-Latitude 48.96082 / Longitude 2.20382 (Cergy / Val-d'Oise)
+Ce patch ne couvre pas l'asymétrie suivante, à traiter séparément :
+- Les messages **texte** ne passent pas par `classify_intent()`, contrairement
+  aux messages **vocaux**. "Météo du jour" en texte ne bénéficie pas du
+  routage intelligent vers `INTERROGER`. À corriger dans une prochaine itération.
 
 ---
 
-## Conseils potager générés automatiquement (logique locale)
-
-| Condition | Conseil affiché |
-|-----------|----------------|
-| Temp matin ≤ 0°C | ⚠️ Risque de gel — protéger les plantations |
-| Temp PM ≥ 35°C | 🌡️ Canicule — arrosage en soirée indispensable |
-| Orage prévu (WMO 95/96/99) | ⛈️ Pas d'arrosage ni de traitement |
-| Précip ≥ 10mm | 🌧️ Pluie abondante — arrosage inutile |
-| Pas de pluie + temp ≥ 22°C | 💧 Penser à arroser en soirée |
-| Vent ≥ 50 km/h | 💨 Vérifier tuteurs et protections |
-| Brouillard | 🌫️ Risque de maladies fongiques |
-| Beau temps + vent < 20km/h | ✅ Conditions idéales pour traitements |
-
----
-
-## BotFather — ajouter la commande (optionnel)
-
-```
-meteo - Météo du jour et conseil potager
-```
+*Assistant Potager — hotfix 25 mars 2026*
