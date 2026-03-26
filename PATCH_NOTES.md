@@ -1,3 +1,61 @@
+# Patch — Optimisation orchestrateur IA pour questions analytiques
+
+**Version :** feature — 26 mars 2026  
+**Fichiers modifiés :** `utils/ia_orchestrator.py` (nouveau), `bot.py`, `BACKLOG.md` (nouveau)  
+**Migrations SQL :** aucune
+
+---
+
+## Contexte
+
+Les questions analytiques (`/ask`) envoyaient l'intégralité de l'historique potager en JSON à Groq, causant :
+- Consommation excessive de tokens.
+- Risques de dépassement de quota.
+- Bruit contextuel pour le LLM.
+- Manque de traçabilité du trafic sortant.
+
+---
+
+## Évolutions réalisées
+
+### 1. Création de `utils/ia_orchestrator.py`
+- **Fonction `extract_question_intent`** : Extraction d'intention (action, culture, filtres temporels) à partir de la question.
+- **Fonction `fetch_filtered_events`** : Requête DB ciblée avec filtres SQL (au lieu de `SELECT *`).
+- **Fonction `build_reduced_context`** : Construction d'un JSON limité à 50 événements max.
+- **Fonction `build_question_context`** : Orchestrateur complet question → contexte réduit.
+
+### 2. Modification de `bot.py`
+- Remplacement du dump complet par `build_question_context(db, question)`.
+- Ajout de logs pour mesurer le trafic sortant (taille JSON, tokens estimés ~4 chars/token).
+- Gestion des cas sans données pertinentes.
+
+### 3. Logs professionnels ajoutés
+- **Orchestrateur** : Intention extraite, événements récupérés, taille contexte.
+- **LLM** : Taille appel et réponse pour suivi quota.
+- Format structuré avec emojis pour filtrage (ex. `grep "ORCHESTRATOR"`).
+
+### 4. Création de `BACKLOG.md`
+- Liste des tâches prioritaires pour tests unitaires, sécurité, et améliorations futures.
+
+---
+
+## Impact
+
+- **Réduction tokens** : Contexte limité vs historique complet (ex. 50 événements au lieu de 1000+).
+- **Traçabilité** : Logs détaillés pour mesurer correspondance quota Groq.
+- **Performance** : Requêtes DB plus rapides et ciblées.
+- **Sécurité** : Moins de données sensibles transmises.
+
+---
+
+## Tests recommandés
+
+- Poser des questions variées (`/ask "Combien de tomates ?"`, `/ask "Dernier arrosage courgettes ?"`, `/ask "Fenouils cette année ?"`).
+- Vérifier les logs pour volume transmis.
+- Mesurer tokens consommés via dashboard Groq.
+
+---
+
 # Patch — Fix garde sauvegarde (bug latent)
 
 **Version :** hotfix — 25 mars 2026  
@@ -98,6 +156,7 @@ ORDER BY id DESC;
 
 -- Nettoyage global si nécessaire (à adapter selon résultats)
 -- DELETE FROM evenements WHERE type_action IS NULL AND culture IS NULL;
+```
 ```
 
 ---

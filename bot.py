@@ -48,6 +48,7 @@ from database.db import SessionLocal, Base, engine
 from database.models import Evenement
 from utils.actions import normalize_action
 from llm.groq_client import parse_commande, repondre_question
+from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
 from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commentaire
@@ -868,30 +869,14 @@ async def _ask_question(update: Update, question: str):
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     db  = SessionLocal()
     try:
-        events = db.query(Evenement).order_by(Evenement.date).all()
-        if not events:
-            await msg.edit_text("📭 Aucune donnée enregistrée pour l'instant.")
+        contexte = build_question_context(db, question)
+        if not contexte or contexte == "[]":
+            await msg.edit_text("📭 Aucune donnée pertinente pour cette question.")
             return
 
-        data = [
-            {
-                "id"         : e.id,
-                "date"       : str(e.date)[:10] if e.date else None,
-                "action"     : e.type_action,
-                "culture"    : e.culture,
-                "variete"    : e.variete,
-                "quantite"   : e.quantite,
-                "unite"      : e.unite,
-                "parcelle"   : e.parcelle,
-                "rang"       : e.rang,
-                "duree_min"  : e.duree,
-                "traitement" : e.traitement,
-                "commentaire": e.commentaire,
-            }
-            for e in events
-        ]
-        contexte = json.dumps(data, ensure_ascii=False)
-        reponse  = repondre_question(question, contexte)
+        log.info(f"🤖 LLM | Appel à Groq pour question analytique: '{question}' (contexte: {len(contexte)} chars)")
+        reponse = repondre_question(question, contexte)
+        log.info(f"💡 LLM | Réponse Groq reçue: {len(reponse)} caractères")
 
         log.info(f"💡 RÉPONSE GROQ   : {reponse[:200]}{'...' if len(reponse)>200 else ''}")
         # Pas de parse_mode sur la réponse Groq : elle peut contenir des caractères
