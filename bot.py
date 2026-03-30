@@ -35,6 +35,11 @@ logging.basicConfig(
 )
 log = logging.getLogger("potager")
 
+# ── Suppression logs verbeux (HTTP Telegram, httpx, etc.) ──────────────────────
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
+logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
+logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
+
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
