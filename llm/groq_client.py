@@ -200,9 +200,10 @@ REGLE CALCUL PLANTATIONS :
 - Exemple INTERDIT : "- tomate : 42 plants (10 x 3 + 4 x 3)"
 
 REGLE CALCUL STOCK REEL :
-- Stock reel = plantations totales - pertes totales pour chaque culture.
-- Afficher : "culture : X plants (plante Y, perdu Z)"
-- Si pas de pertes : "culture : X plants"
+- Stock reel = plantations totales - pertes totales - récoltes totales pour chaque culture.
+- Afficher : "culture : X plants (plante Y, perdu Z, récolté W)"
+- Si pas de pertes ou récoltes : ajuster l'affichage en conséquence.
+- Exemple : "salade : 19 plants (planté 25, perdu 4, récolté 2)"
 """
 
 def repondre_question(question: str, contexte_json: str) -> str:

@@ -1,3 +1,45 @@
+# Patch — Correction calcul stock réel avec récoltes
+
+**Version :** v2.1.0 — 30 mars 2026  
+**Fichiers modifiés :** `bot.py`, `llm/groq_client.py`, `tests/test_bot.py`, `tests/conftest.py`  
+**Migrations SQL :** aucune
+
+---
+
+## Contexte
+
+Correction d'un bug où le calcul du stock réel ne prenait pas en compte les récoltes, affichant un stock incorrectement élevé.
+
+---
+
+## Évolutions réalisées
+
+### 1. Mise à jour de `llm/groq_client.py`
+- Ajout des récoltes dans la `REGLE CALCUL STOCK REEL` du `QUERY_PROMPT`.
+- Nouveau calcul : stock réel = plantations - pertes - récoltes.
+- Exemple d'affichage explicite incluant les récoltes.
+
+### 2. Modification de `bot.py`
+- Calcul des `recoltes_dict` dans `cmd_stats()`.
+- Mise à jour du calcul du stock réel pour soustraire les récoltes.
+- Affichage enrichi : "(planté X, perdu Y, récolté Z)" selon les valeurs présentes.
+
+### 3. Amélioration des tests unitaires
+- Ajout de test pour le cas plantations + pertes + récoltes.
+- Refactorisation des tests existants pour utiliser les fixtures pytest.
+- Nettoyage automatique de la base de données entre tests.
+
+---
+
+## Impact
+
+- **Calcul correct** : Stock réel prend désormais en compte les récoltes.
+- **Affichage précis** : /stats montre le détail complet (planté, perdu, récolté).
+- **Fiabilité accrue** : Tests couvrent tous les scénarios de calcul de stock.
+- **Maintenance facilitée** : Fixtures de test améliorées pour éviter les interférences.
+
+---
+
 # Patch — Fonctionnalité perte de plants
 
 **Version :** feature — 30 mars 2026  

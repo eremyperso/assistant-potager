@@ -944,6 +944,14 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         pertes_dict = {culture: qte for culture, qte in pertes}
         
+        recoltes = (
+            db.query(Evenement.culture, func.sum(Evenement.quantite))
+            .filter(Evenement.type_action == "recolte")
+            .group_by(Evenement.culture)
+            .all()
+        )
+        recoltes_dict = {culture: qte for culture, qte in recoltes}
+        
         if plantations:
             totaux = {}
             for culture, qte, rang, unite in plantations:
@@ -955,11 +963,16 @@ async def cmd_stats(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 lines_out.append("\n🌱 *Stock plants actuel :*")
                 for (culture, unite), tot_plant in totaux.items():
                     perdu = pertes_dict.get(culture, 0)
-                    stock_reel = tot_plant - perdu
+                    recolte = recoltes_dict.get(culture, 0)
+                    stock_reel = tot_plant - perdu - recolte
+                    details = []
+                    details.append(f"planté {int(tot_plant)}")
                     if perdu > 0:
-                        lines_out.append(f"  • {culture} : *{int(stock_reel)} {unite}* (planté {int(tot_plant)}, perdu {int(perdu)})")
-                    else:
-                        lines_out.append(f"  • {culture} : *{int(stock_reel)} {unite}*")
+                        details.append(f"perdu {int(perdu)}")
+                    if recolte > 0:
+                        details.append(f"récolté {int(recolte)}")
+                    detail_str = ", ".join(details)
+                    lines_out.append(f"  • {culture} : *{int(stock_reel)} {unite}* ({detail_str})")
 
         # Arrosages
         arrosages = (

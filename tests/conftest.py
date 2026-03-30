@@ -17,6 +17,9 @@ def test_db(test_engine):
     """Session DB de test."""
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     db = SessionLocal()
+    # Clear all tables
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
     yield db
     db.rollback()
     db.close()
