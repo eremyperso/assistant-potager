@@ -1,3 +1,53 @@
+# Patch — Classification agronomique des cultures (végétatif vs reproducteur)
+
+**Version :** v2.2.0 — 31 mars 2026  
+**Fichiers modifiés :** `database/models.py`, `migrations/migration_v5.sql`, `main.py`, `tests/test_api.py`, `llm/rag.py`  
+**Migrations SQL :** migration_v5.sql
+
+---
+
+## Contexte
+
+Ajout de la classification agronomique fondamentale distinguant les cultures selon leur organe récolté (végétatif vs reproducteur) pour des calculs de rendement scientifiquement corrects.
+
+---
+
+## Évolutions réalisées
+
+### 1. Modèle de données agronomique (`database/models.py`)
+- Ajout colonne `type_organe_recolte` à la table `evenements` (valeurs : végétatif | reproducteur | null)
+- Création modèle `CultureConfig` pour classifier les cultures classiques
+
+### 2. Migration de base de données (`migrations/migration_v5.sql`)
+- Ajout colonne `type_organe_recolte` à `evenements`
+- Création table `culture_config` avec index de performance
+- Seed de 20+ cultures avec descriptions agronomiques (salade→végétatif, tomate→reproducteur)
+- Rétropopulation automatique des événements existants
+
+### 3. API REST étendue (`main.py`)
+- Nouvel endpoint `GET /cultures` retournant liste des cultures avec type et description
+- Héritage automatique du type lors du parsing vocal (`POST /parse`)
+
+### 4. Module RAG (`llm/rag.py`)
+- Création du module pour l'indexation RAG (Retrieval-Augmented Generation)
+
+### 5. Tests API complets (`tests/test_api.py`)
+- Tests pour l'endpoint `/cultures`
+- Tests d'héritage automatique du type lors du parsing
+- Tests de gestion des cultures inconnues
+
+---
+
+## Impact
+
+- **Classification agronomique** : Base de données prête pour calculs de rendement différenciés
+- **API enrichie** : Exposition des cultures configurées pour interfaces tierces
+- **Données rétropopulées** : Événements historiques automatiquement classés
+- **Fondation US suivantes** : Prêt pour adaptation du calcul de stock et affichage différencié
+- **Tests complets** : Couverture des nouveaux endpoints et logique métier
+
+---
+
 # Patch — Correction calcul stock réel avec récoltes
 
 **Version :** v2.1.0 — 30 mars 2026  

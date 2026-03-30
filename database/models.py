@@ -33,3 +33,16 @@ class Evenement(Base):
 
     # Texte original dicté
     texte_original = Column(String)
+
+    # Type d'organe récolté (végétatif | reproducteur | null)
+    type_organe_recolte = Column(String)
+
+
+class CultureConfig(Base):
+    """Configuration des cultures avec leur type d'organe récolté."""
+    __tablename__ = "culture_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, unique=True, index=True)  # ex: "salade", "tomate"
+    type_organe_recolte = Column(String)  # "végétatif" | "reproducteur"
+    description_agronomique = Column(String)  # Description courte du type

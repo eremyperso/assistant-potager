@@ -18,7 +18,7 @@ from sqlalchemy import func
 import os
 
 from database.db import Base, engine, SessionLocal
-from database.models import Evenement
+from database.models import Evenement, CultureConfig
 from utils.actions import normalize_action
 from llm.groq_client import parse_commande, repondre_question
 from utils.date_utils import parse_date
@@ -61,6 +61,28 @@ def health():
     }
 
 
+@app.get("/cultures")
+def get_cultures():
+    """
+    Retourne la liste des cultures configurées avec leur type d'organe récolté.
+    Utile pour l'interface PWA et la validation des saisies.
+    """
+    db = SessionLocal()
+    try:
+        cultures = db.query(CultureConfig).order_by(CultureConfig.nom).all()
+        result = [
+            {
+                "nom": c.nom,
+                "type_organe_recolte": c.type_organe_recolte,
+                "description_agronomique": c.description_agronomique
+            }
+            for c in cultures
+        ]
+        return {"cultures": result, "total": len(result)}
+    finally:
+        db.close()
+
+
 @app.post("/parse")
 def parse(req: TexteRequest):
     """
@@ -99,6 +121,13 @@ def parse(req: TexteRequest):
                 texte_original = req.texte,
                 date           = parse_date(parsed.get("date")),
             )
+            
+            # Héritage automatique du type d'organe récolté depuis culture_config
+            if event.culture:
+                config = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
+                if config:
+                    event.type_organe_recolte = config.type_organe_recolte
+            
             db.add(event)
             db.commit()
             db.refresh(event)
