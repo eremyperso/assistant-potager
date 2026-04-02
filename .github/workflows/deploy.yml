@@ -1,0 +1,72 @@
+name: Deploy to Scaleway
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Assistant Potager
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SCALEWAY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SCALEWAY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync code on server
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager
+            git fetch origin
+            git checkout main
+            git pull origin main
+          "
+
+      - name: Install dependencies
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager
+            python3 -m pip install --quiet --upgrade pip
+            python3 -m pip install --quiet -r requirements.txt
+          "
+
+      - name: Apply SQL migrations
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager
+            set -a && source .env.prod && set +a
+            for migration in migrations/migration_v*.sql; do
+              echo \"Applying \${migration}...\"
+              psql \"\${DATABASE_URL}\" -f \"\${migration}\" 2>/dev/null || true
+            done
+          "
+
+      - name: Restart systemd service
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
+            "sudo systemctl restart potager.service"
+
+      - name: Smoke test
+        run: |
+          sleep 10
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            status=\$(systemctl is-active potager.service)
+            if [ \"\${status}\" != 'active' ]; then
+              echo \"ERREUR: service non actif (\${status})\"
+              systemctl status potager.service --no-pager
+              exit 1
+            fi
+            curl --fail --silent --max-time 10 http://localhost:8000/health | grep -q 'ok'
+          "
+          echo "Déploiement réussi — @AssistantPotagerBot actif"

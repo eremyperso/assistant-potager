@@ -1,3 +1,10 @@
+import os
+# Variables d'environnement de test — doivent être définies avant tout import de config
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test_token")
+os.environ.setdefault("GROQ_API_KEY", "test_groq_key")
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

@@ -1,3 +1,64 @@
+# Patch — Déploiement automatisé Scaleway (US-005)
+
+**Version :** v2.4.0 — 2 avril 2026  
+**Fichiers créés :** `deploy.sh`, `.github/workflows/deploy.yml`, `infra/potager.service`, `tests/test_us005_deploiement.py`  
+**Migrations SQL :** aucune
+
+---
+
+## Contexte
+
+Mise en place du pipeline de déploiement automatisé sur serveur Scaleway (Ubuntu 22.04).
+Deux modes disponibles : script manuel `deploy.sh` et workflow GitHub Actions déclenché sur push `main`.
+
+---
+
+## Évolutions réalisées
+
+- `deploy.sh` : script SSH en 5 étapes (sync git → pip install → migrations SQL → restart systemd → smoke test)
+- `.github/workflows/deploy.yml` : workflow GitHub Actions équivalent, déclenché sur push main ou manuellement
+- `infra/potager.service` : unit systemd avec `Restart=on-failure`, `EnvironmentFile=.env.prod`, `APP_ENV=prod`
+- Aucun secret transmis par les scripts — tous injectés via `.env.prod` côté serveur ou GitHub Secrets
+
+## Tests
+
+```
+tests/test_us005_deploiement.py — 18/18 PASSED
+```
+
+---
+
+# Patch — Gestion des environnements dev/prod (US-004)
+
+**Version :** v2.3.0 — 2 avril 2026  
+**Fichiers modifiés :** `config.py`, `.gitignore`, `tests/conftest.py`  
+**Fichiers créés :** `.env.example`, `tests/test_us004_config_env.py`  
+**Migrations SQL :** aucune
+
+---
+
+## Contexte
+
+Séparation des environnements dev (local) et production (Scaleway) avec fichiers `.env` dédiés.
+Correction de la vulnérabilité OWASP A02 : suppression des tokens Telegram et credentials PostgreSQL hardcodés.
+
+---
+
+## Évolutions réalisées
+
+- `config.py` : charge `.env.dev` ou `.env.prod` selon la variable `APP_ENV` — plus aucune valeur hardcodée
+- `.gitignore` : ajout de `.env.dev` et `.env.prod` — suppression de `config.py` (désormais versionnable)
+- `.env.example` : template public avec placeholders pour onboarding nouveaux développeurs
+- `tests/conftest.py` : initialisation des vars d'environnement de test avant les imports
+
+## Tests
+
+```
+tests/test_us004_config_env.py — 8/8 PASSED
+```
+
+---
+
 # Patch — Classification agronomique des cultures (végétatif vs reproducteur)
 
 **Version :** v2.2.0 — 31 mars 2026  

@@ -1,6 +1,7 @@
 # Secrets — NE JAMAIS commiter
 .env
-config.py
+.env.dev
+.env.prod
 
 # Python
 __pycache__/
