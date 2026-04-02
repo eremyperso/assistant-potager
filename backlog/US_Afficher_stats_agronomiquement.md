@@ -21,4 +21,36 @@ Estimation : 3 points
 
 Scénario Gherkin :
 
+```gherkin
+Feature: Affichage agronomiquement pertinent des statistiques
+
+  Scenario: Commande /stats pour une culture végétative
+    Given 5 plants de salade plantés, 4 récoltés, 1 actuel
+    And salade est classifiée type_organe_recolte = "végétatif"
+    When l'utilisateur envoie /stats sur Telegram
+    Then le message contient "5 plants de salade (4 récoltés, 1 actuel)"
+
+  Scenario: Commande /stats pour une culture reproductive
+    Given 2 plants de tomate actuels avec 8.5 kg récoltés au total
+    And tomate est classifiée type_organe_recolte = "reproducteur"
+    When l'utilisateur envoie /stats sur Telegram
+    Then le message contient "2 plants de tomate actuels · rendement 8.5 kg"
+
+  Scenario: Interface PWA affiche deux sections distinctes
+    Given des cultures végétatives et reproductrices en base
+    When l'utilisateur ouvre l'interface PWA
+    Then la section "Cultures à récolte unique" est visible avec les cultures végétatives
+    And la section "Cultures productives continues" est visible avec les cultures reproductrices
+
+  Scenario: Question /ask adaptée au type de culture
+    Given la question "quelle salade ai-je le plus produit ?"
+    When l'utilisateur envoie cette question via /ask
+    Then la réponse porte sur le nombre de plants récoltés, pas sur le rendement en kg
+
+  Scenario: Question /ask sur productivité d'un plant reproducteur
+    Given la question "quel plant de tomate est le plus productif ?"
+    When l'utilisateur envoie cette question via /ask
+    Then la réponse porte sur le rendement_total_kg par plant, pas sur le nombre de récoltes
+```
+
 Labels GitHub : us, ux, display
