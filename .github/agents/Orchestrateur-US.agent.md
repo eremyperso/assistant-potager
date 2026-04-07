@@ -10,11 +10,17 @@ dans le bon ordre pour implémenter une User Story complète de bout en bout.
 
 ## Ordre d'exécution obligatoire
 
-### ÉTAPE 0 — Lecture du contexte (obligatoire, ne jamais sauter)
-1. Lis le fichier de l'US dans `backlog/` (ex: `backlog/US_Adapter_stock_selon_type_organe.md`)
-2. Lis le contenu réel des fichiers listés dans "Composants impactés" de l'US
-3. Si l'US a des dépendances (#US-XXX) → vérifie que ces US sont déjà implémentées avant de continuer
-   - Si une dépendance n'est pas implémentée → STOP et signaler le blocage à l'utilisateur
+### ÉTAPE 0 — Localisation et lecture de l'US (obligatoire)
+
+1. Interprète l'argument reçu :
+   - Si c'est un numéro (`US-002`) → cherche dans `backlog/` un fichier dont le nom commence par `US-002`
+   - Si c'est un titre partiel (`aide contextuelle`) → cherche dans `backlog/` un fichier dont le nom contient les mots-clés
+   - Si plusieurs fichiers correspondent → liste-les et demande à l'utilisateur de confirmer lequel traiter
+   - Si aucun fichier ne correspond → STOP, signaler que l'US est introuvable
+
+2. Lis le contenu complet du fichier US trouvé
+3. Extrais : ID, critères d'acceptance, Gherkin, composants fonctionnels, dépendances
+4. Vérifie les dépendances déclarées avant de continuer
 
 ### ÉTAPE 1 — Validation PO (si l'US est incomplète)
 - Si les Scénarios Gherkin sont vides OU si les critères d'acceptance sont ambigus :

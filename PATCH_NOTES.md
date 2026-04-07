@@ -1,4 +1,10 @@
 
+## [v2.9.0] — 2026-04-07
+
+### 🚀 Nouveautés
+- Ajoute la commande `/help` : aide en ligne synthétique en français, optimisée mobile, message unique ≤ 4096 chars (commandes, actions, mots-clés navigation, exemples de questions), sans appel Groq (US_Commande_help_aide_mobile)
+- Ajoute la mention `📖 Tapez /help pour l'aide en ligne.` dans le message de bienvenue `/start`
+
 ## [v2.8.2] — 2026-04-03
 
 ### 🐛 Corrections

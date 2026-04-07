@@ -271,10 +271,56 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Synthèse vocale : {tts_etat}\n\n"
         f"Envoyez-moi un *message vocal* ou *texte* pour enregistrer une action.\n"
         f"Ex : _\"Récolté 3 kg de tomates variété cerise parcelle nord\"_\n\n"
-        f"Ou utilisez les boutons ci-dessous :",
+        f"Ou utilisez les boutons ci-dessous.\n"
+        f"📖 Tapez /help pour l'aide en ligne.",
         parse_mode="Markdown",
         reply_markup=MENU_KEYBOARD
     )
+
+
+async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Aide en ligne synthétique, optimisée mobile."""
+    texte = (
+        "🌿 *AIDE — Assistant Potager*\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "*📝 Enregistrer une action*\n"
+        "Parlez ou écrivez naturellement :\n"
+        "• _\"Récolté 2 kg de tomates cerise\"_\n"
+        "• _\"Planté 6 poivrons en 2 rangs\"_\n"
+        "• _\"Semé carottes Nantaise rang 4\"_\n"
+        "• _\"Arrosé les courgettes 30 min\"_\n"
+        "• _\"Traité rosiers au savon noir\"_\n"
+        "• _\"Observation : pucerons sur fèves\"_\n\n"
+        "*Actions reconnues :*\n"
+        "récolte · plantation · semis · repiquage\n"
+        "arrosage · paillage · traitement\n"
+        "désherbage · taille · tuteurage\n"
+        "amendement · protection · observation\n\n"
+        "*Dates :* hier · avant-hier · lundi… \"le 5 mars\"\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "*⌨️ Commandes*\n"
+        "/start — Menu principal\n"
+        "/stats — Statistiques saison\n"
+        "/historique — 10 derniers événements\n"
+        "/ask — Question analytique\n"
+        "/corriger — Modifier un événement\n"
+        "/meteo — Météo + conseil potager\n"
+        "/tts\\_on · /tts\\_off — Vocal on/off\n"
+        "/help — Cette aide\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "*🔘 Boutons & mots-clés*\n"
+        "Stats · Historique · Interroger\n"
+        "Corriger · Supprimer · Menu\n"
+        "Confirmer · Annuler\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "*🔍 Exemples de questions*\n"
+        "• _\"Combien de kg de tomates récoltés ?\"_\n"
+        "• _\"Quand ai-je planté les courgettes ?\"_\n"
+        "• _\"Bilan de ma saison de carottes\"_\n"
+        "• _\"Dernier arrosage des poivrons\"_\n\n"
+        "💡 _Plusieurs actions : séparez par un retour à la ligne._"
+    )
+    await update.message.reply_text(texte, parse_mode="Markdown")
 
 
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -1778,6 +1824,7 @@ def main():
 
     # Commandes
     app.add_handler(CommandHandler("start",      cmd_start))
+    app.add_handler(CommandHandler("help",       cmd_help))
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("historique", cmd_historique))
     app.add_handler(CommandHandler("ask",        cmd_ask))
