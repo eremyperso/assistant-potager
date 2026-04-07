@@ -31,7 +31,7 @@ from datetime import date, datetime
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s │ %(levelname)s │ %(message)s",
-    datefmt="%H:%M:%S"
+    datefmt="%Y-%m-%d %H:%M:%S"  # Affiche date + heure
 )
 log = logging.getLogger("potager")
 
@@ -1061,7 +1061,9 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             cult   = " ".join(filter(None, [e.culture, e.variete]))
             qte    = f"{e.quantite} {e.unite or ''}" if e.quantite else ""
             parc   = f"· {e.parcelle}" if e.parcelle else ""
-            lines.append(f"*{d}* — {action}\n  {cult} {qte} {parc}".strip())
+            rang   = f" x{e.rang}rangs" if e.rang else ""
+            trt    = f" ({e.traitement})" if e.traitement else ""
+            lines.append(f"*{d}* — {action}\n  {cult} {qte} {parc}{rang}{trt}".strip())
 
         await update.message.reply_text(
             "\n\n".join(lines),
@@ -1329,7 +1331,7 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         await update.message.reply_text(
             f"✅ Événement trouvé :\n\n`{_fmt_event(e)}`\n\n"
             f"✏️ Dites-moi ce que vous souhaitez modifier :\n"
-            f"_Ex : c\'était 3 kg / la date c\'était le 9 mars / ajouter parcelle nord_\n\n"
+            f"_Ex : c'est 3 kg / la date c'est le 9 mars / ajouter parcelle nord_\n\n"
             f"Ou : [🗑 Supprimer] pour effacer cet événement.",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(
