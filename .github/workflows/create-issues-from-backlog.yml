@@ -1,0 +1,207 @@
+name: Create Issues from Backlog
+
+on:
+  push:
+    paths:
+      - 'backlog/*.md'
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create issues from backlog
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // NETTOYAGE : retire backticks, guillemets, astérisques, espaces
+            function cleanLabel(raw) {
+              return raw
+                .replace(/`/g, '')
+                .replace(/['"*]/g, '')
+                .toLowerCase()
+                .trim();
+            }
+
+            // NORMALISATION pour comparaison : retire accents, tirets, espaces
+            function normalize(str) {
+              return str
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')  // supprime les accents
+                .replace(/[-_\s]/g, '')            // supprime tirets/underscores/espaces
+                .toLowerCase()
+                .trim();
+            }
+
+            // CORRESPONDANCE EXACTE après normalisation (pas de fuzzy)
+            function isSameLabel(a, b) {
+              return normalize(a) === normalize(b);
+            }
+
+            // PAGINATION : récupère TOUTES les issues (pas seulement les 100 premières)
+            async function getAllIssues() {
+              const issues = [];
+              let page = 1;
+              while (true) {
+                const res = await github.rest.issues.listForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'all',
+                  per_page: 100,
+                  page
+                });
+                if (res.data.length === 0) break;
+                issues.push(...res.data);
+                if (res.data.length < 100) break;
+                page++;
+              }
+              return issues;
+            }
+
+            // PAGINATION : récupère TOUS les labels existants du repo
+            async function getAllRepoLabels() {
+              const labels = [];
+              let page = 1;
+              while (true) {
+                const res = await github.rest.issues.listLabelsForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  per_page: 100,
+                  page
+                });
+                if (res.data.length === 0) break;
+                labels.push(...res.data);
+                if (res.data.length < 100) break;
+                page++;
+              }
+              return labels;
+            }
+
+            // CRÉATION de label manquant avec couleur selon catégorie
+            function getLabelColor(label) {
+              const n = normalize(label);
+              if (n.includes('prioritehaute'))  return 'e11d48';
+              if (n.includes('prioritemoyenne'))return 'f97316';
+              if (n.includes('prioritebasse'))  return '22c55e';
+              if (n.includes('bug'))            return 'd73a4a';
+              if (n.includes('us'))             return '0075ca';
+              if (n.includes('stock'))          return '7c3aed';
+              if (n.includes('backlog'))        return 'ededed';
+              return '888888';
+            }
+
+            async function ensureLabelExists(labelName, repoLabels) {
+              const match = repoLabels.find(l => isSameLabel(l.name, labelName));
+              if (match) return match.name; // retourne le NOM EXACT du label existant
+
+              // Crée le label s'il n'existe pas
+              console.log(`   ✨ Création du label: "${labelName}"`);
+              try {
+                const res = await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: labelName,
+                  color: getLabelColor(labelName),
+                  description: ''
+                });
+                repoLabels.push(res.data); // mise à jour de la liste locale
+                return res.data.name;
+              } catch (err) {
+                // Label créé en parallèle par un autre job ? On retente la récupération
+                if (err.status === 422) {
+                  const existing = repoLabels.find(l => isSameLabel(l.name, labelName));
+                  return existing ? existing.name : labelName;
+                }
+                throw err;
+              }
+            }
+
+            // EXTRACTION du titre depuis la première ligne H1 ou ligne "**Titre :**"
+            function extractTitle(content) {
+              const h1 = content.match(/^#\s+(.+)/m);
+              if (h1) return h1[1].trim();
+              const bold = content.match(/\*\*Titre\s*:\*\*\s*(.+)/i);
+              if (bold) return bold[1].trim();
+              return content.split('\n')[0].replace(/^#+\s*/, '').trim();
+            }
+
+            // EXTRACTION des labels depuis la ligne "Labels GitHub :"
+            function extractLabels(content) {
+              const line = content.match(/Labels GitHub\s*:\*?\*?\s*(.+)/i);
+              if (!line) return [];
+              return line[1]
+                .split(',')
+                .map(l => cleanLabel(l))
+                .filter(l => l.length > 0);
+            }
+
+            // ── MAIN ──────────────────────────────────────────────────────────
+
+            console.log('Chargement des labels et issues existants...');
+            const [repoLabels, allIssues] = await Promise.all([
+              getAllRepoLabels(),
+              getAllIssues()
+            ]);
+            console.log(`${repoLabels.length} labels, ${allIssues.length} issues chargés.`);
+
+            const existingTitles = new Set(allIssues.map(i => i.title.toLowerCase().trim()));
+
+            const backlogDir = './backlog';
+            const files = fs.readdirSync(backlogDir)
+              .filter(f => f.endsWith('.md'))
+              .sort();
+
+            for (const file of files) {
+              const content = fs.readFileSync(path.join(backlogDir, file), 'utf8');
+              const title = extractTitle(content);
+              const rawLabels = ['us', 'backlog', ...extractLabels(content)];
+
+              // Dédoublonnage par normalisation + résolution vers noms exacts GitHub
+              const seen = new Set();
+              const resolvedLabels = [];
+              for (const raw of rawLabels) {
+                const key = normalize(raw);
+                if (seen.has(key)) {
+                  console.log(`   ⏭ Doublon ignoré: "${raw}"`);
+                  continue;
+                }
+                seen.add(key);
+                const exactName = await ensureLabelExists(raw, repoLabels);
+                resolvedLabels.push(exactName);
+              }
+
+              console.log(`\nFichier : ${file}`);
+              console.log(`Titre   : ${title}`);
+              console.log(`Labels  : ${resolvedLabels.join(', ')}`);
+
+              if (existingTitles.has(title.toLowerCase().trim())) {
+                console.log('⏭ Issue déjà existante — ignorée.');
+                continue;
+              }
+
+              try {
+                const issue = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title,
+                  body: content,
+                  labels: resolvedLabels
+                });
+                console.log(`✅ Issue créée : #${issue.data.number}`);
+                existingTitles.add(title.toLowerCase().trim());
+              } catch (err) {
+                console.error(`❌ Erreur sur "${file}": ${err.message}`);
+              }
+            }
