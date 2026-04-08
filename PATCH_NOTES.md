@@ -1,4 +1,19 @@
 
+## [v2.10.0] — 2026-04-08
+
+### 🚀 Nouveautés
+- Ajoute l'enregistrement d'une mise en godet avec calcul automatique du taux de réussite de germination (nb_plants_godets / nb_graines_semees) (US_Enregistrer_mise_en_godet)
+
+### 🔧 Améliorations techniques
+- Ajoute `mise_en_godet` dans `ACTION_MAP` avec ses synonymes vocaux et dans le prompt d'intention du bot
+- Ajoute les champs `nb_graines_semees` et `nb_plants_godets` dans le schéma JSON Groq et l'exemple Gherkin du `PARSE_PROMPT`
+- Spécialise `_build_recap` pour afficher le taux de réussite uniquement pour `mise_en_godet`
+- Isole `mise_en_godet` du domaine stock actif : ne modifie pas `calcul_stock_cultures`
+
+### 💾 Base de données
+- Ajoute `migration_v7.sql` : colonnes `nb_graines_semees INTEGER` et `nb_plants_godets INTEGER` (nullable) sur la table `evenements`
+- Ajoute les colonnes `nb_graines_semees` et `nb_plants_godets` dans le modèle SQLAlchemy `Evenement`
+
 ## [v2.9.0] — 2026-04-07
 
 ### 🚀 Nouveautés

@@ -63,6 +63,11 @@ ACTION_MAP: dict[str, list[str]] = {
         "creve", "crevee", "creves", "crevees",
         "disparu", "disparue", "disparus", "disparues"
     ],
+    "mise_en_godet": [
+        "mise en godet", "mis en godet", "mettre en godet",
+        "godet", "godets", "rempotage godet",
+        "repique en godet", "repique en godets",
+    ],
 }
 
 # Petits mots à ignorer au début (langage naturel)

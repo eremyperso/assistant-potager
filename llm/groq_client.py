@@ -82,17 +82,19 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"        : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte
-  "culture"       : string,   // légume au singulier minuscule ("tomates" → "tomate")
-  "variete"       : string,   // variété ou couleur ("rouge", "nantaise"...)
-  "quantite"      : number,   // quantité numérique (PAR RANG si rang mentionné)
-  "unite"         : string,   // kg | g | l | plants | graines
-  "parcelle"      : string,   // localisation (nord, sud, carré sud, serre...)
-  "rang"          : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
-  "duree_minutes" : number,   // durée en minutes
-  "traitement"    : string,   // produit utilisé (purin d ortie, compost...)
-  "date"          : string,   // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}
-  "commentaire"   : string    // toute autre observation utile
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet
+  "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
+  "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
+  "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
+  "unite"            : string,   // kg | g | l | plants | graines
+  "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
+  "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
+  "duree_minutes"    : number,   // durée en minutes
+  "traitement"       : string,   // produit utilisé (purin d ortie, compost...)
+  "date"             : string,   // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}
+  "commentaire"      : string,   // toute autre observation utile
+  "nb_graines_semees": number,   // pour mise_en_godet : nombre de graines semees initialement
+  "nb_plants_godets" : number    // pour mise_en_godet : nombre de plants obtenus en godet
 }}
 
 Exemples :
@@ -119,6 +121,9 @@ Exemples :
 
 "J'ai planté 15 oignons blancs et 10 radis hier"
 → [{{"action":"plantation","culture":"oignon","variete":"blanc","quantite":15,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}},{{"action":"plantation","culture":"radis","variete":null,"quantite":10,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}]
+
+"Mis en godet 24 tomates cerise sur 30 graines semées"
+→ {{"action":"mise_en_godet","culture":"tomate","variete":"cerise","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":"cerise","commentaire":null,"nb_graines_semees":30,"nb_plants_godets":24}}
 
 Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
 Si plusieurs cultures dans la même phrase → tableau de JSONs.

@@ -43,6 +43,10 @@ class Evenement(Base):
     # Valeurs : "végétatif" | "reproducteur" | null
     type_organe_recolte = Column(String, nullable=True)
 
+    # [US_Enregistrer_mise_en_godet] Pépinière : nb graines semées → nb plants obtenus
+    nb_graines_semees   = Column(Integer, nullable=True)
+    nb_plants_godets    = Column(Integer, nullable=True)
+
 
 class CultureConfig(Base):
     """

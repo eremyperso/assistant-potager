@@ -456,6 +456,7 @@ ACTION_VERBS = (
     "taillé", "tailler", "tuteurer", "tuteuré", "fertilisé", "fertiliser",
     "observé", "observer", "constaté", "constater", "mis en", "mis ",
     "posé", "appliqué", "installé", "sorti",
+    "godet", "mis en godet", "mise en godet",
 )
 
 def _is_question(texte: str) -> bool:
@@ -511,7 +512,7 @@ Classe ce message dans UNE SEULE catégorie parmi :
 - SUPPRIMER   : veut supprimer ou effacer un enregistrement
 - MENU        : veut revenir au menu, accueil, annuler
 - NOUVELLE    : veut saisir une nouvelle action (après une autre)
-- ACTION      : décrit une action potager réellement RÉALISÉE à enregistrer (récolte, semis, plantation, arrosage, paillage, traitement, observation, fertilisation, taille, tuteurage, repiquage, désherbage, perte)
+- ACTION      : décrit une action potager réellement RÉALISÉE à enregistrer (récolte, semis, plantation, arrosage, paillage, traitement, observation, fertilisation, taille, tuteurage, repiquage, désherbage, perte, mise_en_godet)
 
 RÈGLE IMPORTANTE : si le message contient "afficher", "montrer", "voir", "liste", "consulter", "quand", "combien", "quel" → c'est INTERROGER ou HISTORIQUE, jamais ACTION.
 
@@ -694,18 +695,20 @@ async def _parse_multi(update, lignes: list, msg=None):
         try:
             for parsed in items:
                 event = Evenement(
-                    type_action    = normalize_action(parsed.get("action")),
-                    culture        = parsed.get("culture"),
-                    variete        = parsed.get("variete"),
-                    quantite       = _to_float(parsed.get("quantite")),
-                    unite          = parsed.get("unite"),
-                    parcelle       = parsed.get("parcelle"),
-                    rang           = _to_int(parsed.get("rang")),
-                    duree          = _to_int(parsed.get("duree_minutes")),
-                    traitement     = parsed.get("traitement"),
-                    commentaire    = parsed.get("commentaire"),
-                    texte_original = ligne,   # ← texte propre à CETTE ligne
-                    date           = parse_date(parsed.get("date")),
+                    type_action       = normalize_action(parsed.get("action")),
+                    culture           = parsed.get("culture"),
+                    variete           = parsed.get("variete"),
+                    quantite          = _to_float(parsed.get("quantite")),
+                    unite             = parsed.get("unite"),
+                    parcelle          = parsed.get("parcelle"),
+                    rang              = _to_int(parsed.get("rang")),
+                    duree             = _to_int(parsed.get("duree_minutes")),
+                    traitement        = parsed.get("traitement"),
+                    commentaire       = parsed.get("commentaire"),
+                    texte_original    = ligne,   # ← texte propre à CETTE ligne
+                    date              = parse_date(parsed.get("date")),
+                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
                 )
                 db.add(event)
                 db.commit()
@@ -802,18 +805,20 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     try:
         for parsed in items:
             event = Evenement(
-                type_action    = normalize_action(parsed.get("action")),
-                culture        = parsed.get("culture"),
-                variete        = parsed.get("variete"),
-                quantite       = _to_float(parsed.get("quantite")),
-                unite          = parsed.get("unite"),
-                parcelle       = parsed.get("parcelle"),
-                rang           = _to_int(parsed.get("rang")),
-                duree          = _to_int(parsed.get("duree_minutes")),
-                traitement     = parsed.get("traitement"),
-                commentaire    = parsed.get("commentaire"),
-                texte_original = texte,
-                date           = parse_date(parsed.get("date")),
+                type_action       = normalize_action(parsed.get("action")),
+                culture           = parsed.get("culture"),
+                variete           = parsed.get("variete"),
+                quantite          = _to_float(parsed.get("quantite")),
+                unite             = parsed.get("unite"),
+                parcelle          = parsed.get("parcelle"),
+                rang              = _to_int(parsed.get("rang")),
+                duree             = _to_int(parsed.get("duree_minutes")),
+                traitement        = parsed.get("traitement"),
+                commentaire       = parsed.get("commentaire"),
+                texte_original    = texte,
+                date              = parse_date(parsed.get("date")),
+                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
             )
             db.add(event)
             db.commit()
@@ -898,6 +903,26 @@ def _build_recap_tts(p: dict) -> str:
 def _build_recap(p: dict, event_id: int) -> str:
     """Construit le message de récapitulatif."""
     lines = ["✅ *C'est noté !* _(ID #%d)_\n" % event_id]
+
+    # Cas spécial mise_en_godet : affichage taux de réussite germination
+    action_norm = normalize_action(p.get("action")) or p.get("action") or ""
+    if action_norm == "mise_en_godet":
+        nb_g = p.get("nb_graines_semees")
+        nb_p = p.get("nb_plants_godets")
+        taux_str = ""
+        if nb_g and nb_p:
+            taux = round(nb_p / nb_g * 100)
+            taux_str = f" \u2192 *{taux}% de réussite*"
+        lines.append(f"🌱 Action : *mise en godet* (pépinière — hors stock)")
+        if p.get("culture"):  lines.append(f"🥬 Culture : *{p['culture']}*")
+        if p.get("variete"): lines.append(f"🏷 Variété : *{p['variete']}*")
+        if nb_g:             lines.append(f"🌱 Graines semées : *{nb_g}*")
+        if nb_p:             lines.append(f"🌱 Plants obtenus : *{nb_p}*{taux_str}")
+        if p.get("parcelle"): lines.append(f"📍 Parcelle : *{p['parcelle']}*")
+        if p.get("date"):    lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        lines.append("\n_Que voulez-vous faire ensuite ?_")
+        return "\n".join(lines)
 
     # Calcul quantité totale si rang présent
     qte_str  = None
