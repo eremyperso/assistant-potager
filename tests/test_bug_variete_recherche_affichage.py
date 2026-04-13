@@ -273,3 +273,60 @@ class TestSansPrenthesesVides:
         assert "tomate" in result
         assert "30.0plants" in result
         assert "()" not in result
+
+
+# ── Issue #77 : recherche insensible aux accents ──────────────────────────────
+
+class TestIssue77RechercheCulturesAccentuees:
+    """
+    Issue #77 : recherche sur une culture avec accent (ex: "échalote")
+    ne retourne rien alors que l'événement existe en base.
+
+    Fix : func.unaccent() côté DB + unidecode() côté terme de recherche.
+    """
+
+    def test_culture_accentuee_retrouvee(self, db):
+        """
+        Quand la culture en base est "échalote" et que Groq retourne "échalote"
+        (accents préservés grâce au prompt corrigé), l'événement doit être trouvé.
+        """
+        db.add(_make_event(300, "plantation", "échalote"))
+        db.commit()
+
+        groq_json = {
+            "action": "plantation",
+            "culture": "échalote",
+            "variete": None,
+            "date_debut": None,
+            "date_fin": None,
+            "parcelle": None,
+        }
+
+        results = _call_find_candidates_with_groq(
+            "modifier plantation échalote", groq_json, db
+        )
+        assert any(e.id == 300 for e in results), \
+            "L'événement 'échalote' (accentué en base) doit être retrouvé"
+
+    def test_culture_sans_accent_retrouve_non_accentuee_en_base(self, db):
+        """
+        Quand la culture en base est "courgette" (sans accent) et que Groq
+        retourne "courgette", l'événement doit être trouvé (cas sans accent).
+        """
+        db.add(_make_event(302, "plantation", "courgette"))
+        db.commit()
+
+        groq_json = {
+            "action": "plantation",
+            "culture": "courgette",
+            "variete": None,
+            "date_debut": None,
+            "date_fin": None,
+            "parcelle": None,
+        }
+
+        results = _call_find_candidates_with_groq(
+            "modifier plantation courgette", groq_json, db
+        )
+        assert any(e.id == 302 for e in results), \
+            "L'événement 'courgette' doit être retrouvé"
