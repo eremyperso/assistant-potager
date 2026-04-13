@@ -2026,7 +2026,7 @@ Retourne UNIQUEMENT ce JSON (null si non mentionné) :
 
 RÈGLES :
 - action SANS accent : recolte, plantation, semis, arrosage, paillage, traitement, desherbage, taille, observation, tuteurage, fertilisation, repiquage
-- culture au singulier minuscule sans accent
+- culture au singulier minuscule (conserver les accents si applicable, ex: "échalote", "courgette")
 - variete : mot ou groupe de mots décrivant la variété (ex: "ronde", "cerise", "noire de crimée"), null si non mentionné
 - "11 mars" ou "11 mars dernier" → date_debut="{today.year}-03-11", date_fin="{today.year}-03-11"  
 - "la semaine dernière" → date_debut="{last_week}", date_fin="{today.isoformat()}"
@@ -2055,15 +2055,19 @@ JSON brut uniquement."""
 
     log.info(f"🔎 CRITÈRES RECHERCHE : {criteres}")
 
+    from unidecode import unidecode as _uni
+
     db = SessionLocal()
     try:
         q = db.query(Evenement)
         if criteres.get("action"):
             q = q.filter(Evenement.type_action == criteres["action"])
         if criteres.get("culture"):
-            q = q.filter(Evenement.culture.ilike(f"%{criteres['culture']}%"))
+            culture_val = criteres["culture"].strip()
+            q = q.filter(Evenement.culture.ilike(f"%{culture_val}%"))
         if criteres.get("variete"):
-            q = q.filter(Evenement.variete.ilike(f"%{criteres['variete']}%"))
+            variete_val = criteres["variete"].strip()
+            q = q.filter(Evenement.variete.ilike(f"%{variete_val}%"))
         if criteres.get("parcelle"):
             q = q.filter(Evenement.parcelle.ilike(f"%{criteres['parcelle']}%"))
         if criteres.get("date_debut"):
