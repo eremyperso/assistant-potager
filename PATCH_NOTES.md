@@ -1,4 +1,16 @@
 
+## [v2.14.1] — 2026-04-16
+
+### 🐛 Corrections
+- Corrige le crash de `/corriger` (`DetachedInstanceError`) causé par la migration v12 : `e.parcelle` déclenchait un lazy load SQLAlchemy après fermeture de session dans `_corr_start`, `_corr_search`, `_corr_select` et `_corr_confirm`
+- Corrige l'affichage de `1504 kg` au lieu de `5.5 kg` dans `/stats` : les récoltes en unités mixtes (kg/g) étaient additionnées sans normalisation dans `calcul_stock_cultures`
+- Corrige les récoltes sans variété ignorées dans `/stats [culture]` : elles sont désormais rattachées à la variété plantée quand une seule variété existe, ou affichées sous "Variété non précisée" sinon
+
+### 🔧 Améliorations techniques
+- Ajoute `selectinload(Evenement.parcelle_rel)` dans `_find_candidates` pour charger la relation en session avant fermeture
+- Extrait la logique de normalisation d'unités (`_to_g` / `_best_unite`) dans `calcul_stock_cultures`, cohérente avec `calcul_semis`
+- Met à jour `CLAUDE.md` avec la liste complète des commandes Telegram (17 commandes slash, claviers inline, intents vocaux, flux correction)
+
 ## [v2.14.0] — 2026-04-13
 
 ### 🚀 Nouveautés

@@ -56,7 +56,48 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 ### Entry Points
 
-**bot.py** — Telegram bot. Handles voice notes (transcribed via Whisper) and text commands. Key handlers: `/parse` (log event), `/ask` (analytics question), `/stats`, `/plan`, `/parcelle`. Runs a daily 5am job to fetch weather via Open-Meteo.
+**bot.py** — Telegram bot. Handles voice notes (transcribed via Whisper) and text commands. Runs a daily 5am job to fetch weather via Open-Meteo.
+
+#### Telegram Bot — Commandes slash
+
+| Commande | Description |
+|----------|-------------|
+| `/start` | Menu principal + compteur d'événements |
+| `/help` | Aide générale |
+| `/help parcelle` | Aide ciblée — mots-clés : `parcelle`, `semis`, `godet`, `recolte`, `stock`, `stats` |
+| `/stats` | Statistiques saison (végétatif vs reproducteur) |
+| `/stats <culture>` | Détail par variété pour une culture donnée |
+| `/historique` | 10 derniers événements |
+| `/ask <question>` | Question analytique en langage naturel (ou `/ask` seul puis saisie) |
+| `/corriger` | Lancer le flux de correction d'un événement existant |
+| `/plan` | Plan d'occupation global du potager |
+| `/plan <parcelle>` | Plan détaillé d'une parcelle spécifique |
+| `/parcelle ajouter <nom> [exposition] [superficie]` | Créer une parcelle (détection de doublons) |
+| `/parcelle modifier <nom> clé=valeur …` | Modifier les métadonnées (`exposition`, `superficie`, `ordre`) |
+| `/parcelle renommer <ancien> <nouveau>` | Renommer (propagation sur tout l'historique) |
+| `/parcelle lister` | Lister toutes les parcelles |
+| `/parcelles` | Alias de `/parcelle lister` |
+| `/meteo` | Récupérer et afficher la météo manuellement (job auto à 05h00) |
+| `/tts` | Afficher l'état de la synthèse vocale |
+| `/tts_on` | Activer les réponses vocales |
+| `/tts_off` | Désactiver les réponses vocales |
+
+#### Clavier inline (boutons persistants)
+
+Menu principal : `🎤 Nouvelle action vocale` · `🔍 Interroger` · `📋 Historique` · `📊 Stats` · `✏️ Corriger`
+
+Après enregistrement : `➕ Autre action` · `🔍 Interroger mes données` · `📋 Historique` · `🏠 Menu principal`
+
+#### Intents vocaux reconnus (classification Groq)
+
+`ACTION` · `INTERROGER` · `STATS` · `HISTORIQUE` · `PLAN` · `CORRIGER` · `SUPPRIMER` · `MENU` · `NOUVELLE`
+
+#### Flux de correction conversationnel (`/corriger`)
+
+1. Décrire l'événement à retrouver (ou taper `1` pour le dernier)
+2. Sélectionner parmi les candidats trouvés
+3. Dicter la correction en langage naturel
+4. Confirmer le résumé des modifications
 
 **main.py** — FastAPI server. Key endpoints: `POST /parse`, `POST /ask`, `GET /stats`, `GET /historique`, `GET /cultures`. Serves PWA static files.
 
