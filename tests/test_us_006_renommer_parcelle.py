@@ -78,10 +78,10 @@ def _cree_parcelle(db, nom: str, ordre: int = 1) -> Parcelle:
     return p
 
 
-def _cree_evenements(db, parcelle_nom: str, nb: int) -> list[Evenement]:
-    """Insère nb événements liés à la parcelle (par nom textuel)."""
+def _cree_evenements(db, parcelle: Parcelle, nb: int) -> list[Evenement]:
+    """Insère nb événements liés à la parcelle (via parcelle_id FK)."""
     evts = [
-        Evenement(type_action="plantation", culture="tomate", parcelle=parcelle_nom)
+        Evenement(type_action="plantation", culture="tomate", parcelle_id=parcelle.id)
         for _ in range(nb)
     ]
     db.add_all(evts)
@@ -127,20 +127,19 @@ class TestRenameParcelle:
     # ── CA3 ───────────────────────────────────────────────────────────────────
 
     def test_006_rename_ca3_propagation_evenements(self, db) -> None:
-        """[CA3] Tous les événements sont mis à jour avec le nouveau nom."""
+        """[CA3] Tous les événements restent liés à la parcelle renommée via FK."""
         # Arrange
-        _cree_parcelle(db, "est", ordre=1)
-        _cree_evenements(db, "est", 5)
+        parc_est = _cree_parcelle(db, "est", ordre=1)
+        _cree_evenements(db, parc_est, 5)
 
         # Act
         parc, nb = rename_parcelle(db, "est", "est-jardin")
 
         # Assert
         assert nb == 5
-        anciens = db.query(Evenement).filter(Evenement.parcelle == "est").count()
-        nouveaux = db.query(Evenement).filter(Evenement.parcelle == "est-jardin").count()
-        assert anciens == 0
-        assert nouveaux == 5
+        # Via FK : tous les événements pointent toujours sur la même parcelle (maintenant "est-jardin")
+        lies = db.query(Evenement).filter(Evenement.parcelle_id == parc.id).count()
+        assert lies == 5
 
     def test_006_rename_ca3_zero_evenement(self, db) -> None:
         """[CA3] Parcelle sans événements → nb retourné vaut 0."""
@@ -154,19 +153,19 @@ class TestRenameParcelle:
         assert nb == 0
 
     def test_006_rename_ca3_propagation_partielle(self, db) -> None:
-        """[CA3] Seuls les événements de la parcelle renommée sont modifiés."""
+        """[CA3] Seuls les événements de la parcelle renommée sont comptés."""
         # Arrange
-        _cree_parcelle(db, "nord", ordre=1)
-        _cree_parcelle(db, "sud", ordre=2)
-        _cree_evenements(db, "nord", 3)
-        _cree_evenements(db, "sud", 7)
+        parc_nord = _cree_parcelle(db, "nord", ordre=1)
+        parc_sud  = _cree_parcelle(db, "sud",  ordre=2)
+        _cree_evenements(db, parc_nord, 3)
+        _cree_evenements(db, parc_sud,  7)
 
         # Act
         _, nb = rename_parcelle(db, "nord", "nord-nouveau")
 
         # Assert — les événements "sud" ne bougent pas
         assert nb == 3
-        assert db.query(Evenement).filter(Evenement.parcelle == "sud").count() == 7
+        assert db.query(Evenement).filter(Evenement.parcelle_id == parc_sud.id).count() == 7
 
     # ── CA4 ───────────────────────────────────────────────────────────────────
 
@@ -213,8 +212,8 @@ class TestRenameParcelle:
     def test_006_rename_ca6_retour_tuple(self, db) -> None:
         """[CA6] La fonction retourne bien un tuple (Parcelle, int)."""
         # Arrange
-        _cree_parcelle(db, "parcelle-test", ordre=1)
-        _cree_evenements(db, "parcelle-test", 12)
+        parc_test = _cree_parcelle(db, "parcelle-test", ordre=1)
+        _cree_evenements(db, parc_test, 12)
 
         # Act
         resultat = rename_parcelle(db, "parcelle-test", "nouveau-nom")
@@ -230,8 +229,8 @@ class TestRenameParcelle:
     def test_006_rename_ca7_insensible_casse(self, db) -> None:
         """[CA7] L'ancien nom est résolu même si la casse est différente."""
         # Arrange
-        _cree_parcelle(db, "Ouest", ordre=1)
-        _cree_evenements(db, "Ouest", 3)
+        parc_ouest = _cree_parcelle(db, "Ouest", ordre=1)
+        _cree_evenements(db, parc_ouest, 3)
 
         # Act
         parc, nb = rename_parcelle(db, "OUEST", "ouest-jardin")
@@ -278,17 +277,18 @@ class TestRenameParcelle:
         assert parc.nom_normalise == "sud"
 
     def test_006_rename_edge_atomique(self, db) -> None:
-        """[CA2+CA3] Un seul commit : parcelle et événements cohérents."""
+        """[CA2+CA3] Un seul commit : parcelle renommée, événements toujours liés via FK."""
         # Arrange
-        _cree_parcelle(db, "milieu", ordre=1)
-        _cree_evenements(db, "milieu", 4)
+        parc_milieu = _cree_parcelle(db, "milieu", ordre=1)
+        _cree_evenements(db, parc_milieu, 4)
 
         # Act
-        rename_parcelle(db, "milieu", "centre")
+        parc, nb = rename_parcelle(db, "milieu", "centre")
 
-        # Assert — ancienne valeur effacée, nouvelle présente
-        assert db.query(Evenement).filter(Evenement.parcelle == "milieu").count() == 0
-        assert db.query(Evenement).filter(Evenement.parcelle == "centre").count() == 4
+        # Assert — la parcelle est renommée et les 4 événements lui sont toujours liés
+        assert parc.nom == "centre"
+        assert nb == 4
+        assert db.query(Evenement).filter(Evenement.parcelle_id == parc.id).count() == 4
 
 
 # ── Tests handler bot : cmd_parcelle renommer ─────────────────────────────────

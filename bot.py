@@ -50,7 +50,7 @@ from sqlalchemy import func
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
 from database.db import SessionLocal, Base, engine
-from database.models import Evenement
+from database.models import Evenement, Parcelle
 from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
@@ -962,13 +962,15 @@ async def _parse_multi(update, lignes: list, msg=None):
         db = SessionLocal()
         try:
             for parsed in items:
+                nom_parcelle = parsed.get("parcelle")
+                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
                 event = Evenement(
                     type_action       = normalize_action(parsed.get("action")),
                     culture           = parsed.get("culture"),
                     variete           = parsed.get("variete"),
                     quantite          = _to_float(parsed.get("quantite")),
                     unite             = parsed.get("unite"),
-                    parcelle          = parsed.get("parcelle"),
+                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
                     rang              = _to_int(parsed.get("rang")),
                     duree             = _to_int(parsed.get("duree_minutes")),
                     traitement        = parsed.get("traitement"),
@@ -981,7 +983,7 @@ async def _parse_multi(update, lignes: list, msg=None):
                 db.add(event)
                 db.commit()
                 db.refresh(event)
-                log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | date={event.date}")
+                log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
                 total_saved.append((parsed, event.id))
         except Exception as e:
             db.rollback()
@@ -1092,7 +1094,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
                 variete           = parsed.get("variete"),
                 quantite          = _to_float(parsed.get("quantite")),
                 unite             = parsed.get("unite"),
-                parcelle          = parcelle_obj.nom if parcelle_obj else None,
                 parcelle_id       = parcelle_obj.id  if parcelle_obj else None,
                 rang              = _to_int(parsed.get("rang")),
                 duree             = _to_int(parsed.get("duree_minutes")),
@@ -2069,7 +2070,9 @@ JSON brut uniquement."""
             variete_val = criteres["variete"].strip()
             q = q.filter(Evenement.variete.ilike(f"%{variete_val}%"))
         if criteres.get("parcelle"):
-            q = q.filter(Evenement.parcelle.ilike(f"%{criteres['parcelle']}%"))
+            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
+                Parcelle.nom.ilike(f"%{criteres['parcelle']}%")
+            )
         if criteres.get("date_debut"):
             q = q.filter(Evenement.date >= criteres["date_debut"])
         if criteres.get("date_fin"):
@@ -2513,8 +2516,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
                 elif champ in ("rang", "duree_minutes"):
                     setattr(event, col, _to_int(valeur))
                 elif champ == "parcelle":
-                    # Mettre à jour le texte ET la FK parcelle_id
-                    event.parcelle    = valeur
+                    # [migration_v12] seule la FK parcelle_id est persistée
                     event.parcelle_id = corrections.get("_parcelle_id")
                 elif hasattr(event, col):
                     setattr(event, col, valeur)

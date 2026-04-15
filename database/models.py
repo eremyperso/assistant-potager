@@ -5,6 +5,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-001] Ajout modèle CultureConfig (table culture_config)
 """
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 from database.db import Base
 
 
@@ -28,7 +29,7 @@ class Evenement(Base):
     unite          = Column(String)
 
     # Localisation
-    parcelle       = Column(String, index=True)
+    # [migration_v12] colonne parcelle (texte dénormalisé) supprimée — parcelle_id est l'unique référence
     parcelle_id    = Column(Integer, ForeignKey("parcelles.id"), nullable=True, index=True)
     rang           = Column(Integer)   # [migration_v3] INTEGER (pas String)
 
@@ -47,6 +48,17 @@ class Evenement(Base):
     # [US_Enregistrer_mise_en_godet] Pépinière : nb graines semées → nb plants obtenus
     nb_graines_semees   = Column(Integer, nullable=True)
     nb_plants_godets    = Column(Integer, nullable=True)
+
+    # [migration_v12] Traçabilité pépinière : événement source (semis → godet → plantation)
+    origine_graines_id  = Column(Integer, ForeignKey("evenements.id", ondelete="SET NULL"), nullable=True)
+
+    # Relation vers la parcelle — permet d'accéder à e.parcelle_rel.nom
+    parcelle_rel = relationship("Parcelle", foreign_keys=[parcelle_id])
+
+    @property
+    def parcelle(self) -> str | None:
+        """Nom de la parcelle (compatibilité avec l'ancien champ texte dénormalisé)."""
+        return self.parcelle_rel.nom if self.parcelle_rel else None
 
 
 class CultureConfig(Base):

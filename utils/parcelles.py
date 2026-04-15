@@ -286,13 +286,14 @@ def rename_parcelle(
     if conflit is not None:
         raise ValueError(f"Ce nom est déjà utilisé par une autre parcelle : {conflit.nom!r}")
 
-    ancien_nom_stocke = parcelle.nom
+    ancien_nom = parcelle.nom
 
-    # Propagation sur evenements.parcelle (nom textuel)
+    # [migration_v12] la colonne evenements.parcelle n'existe plus :
+    # les événements sont liés via parcelle_id — compter suffit, pas besoin de propager
     nb_evenements = (
         db.query(Evenement)
-        .filter(Evenement.parcelle == ancien_nom_stocke)
-        .update({Evenement.parcelle: nouveau_nom}, synchronize_session="fetch")
+        .filter(Evenement.parcelle_id == parcelle.id)
+        .count()
     )
 
     # Mise à jour de la parcelle elle-même
@@ -303,8 +304,8 @@ def rename_parcelle(
     db.refresh(parcelle)
 
     log.info(
-        f"[US-006] Parcelle renommée : {ancien_nom_stocke!r} → {nouveau_nom!r} "
-        f"({nb_evenements} événements mis à jour)"
+        f"[US-006] Parcelle renommée : {ancien_nom!r} → {nouveau_nom!r} "
+        f"({nb_evenements} événements liés)"
     )
     return parcelle, nb_evenements
 
@@ -365,12 +366,13 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         db.query(
             Evenement.culture,
             Evenement.variete,
-            Evenement.parcelle,
+            Parcelle.nom.label("parcelle_nom"),
             Evenement.quantite,
             Evenement.rang,
             Evenement.unite,
             Evenement.date,
         )
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.in_(list(cultures_actives)))
         .order_by(Evenement.date)

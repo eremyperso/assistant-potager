@@ -18,8 +18,9 @@ from sqlalchemy import func
 import os
 
 from database.db import Base, engine, SessionLocal
-from database.models import Evenement, CultureConfig
+from database.models import Evenement, CultureConfig, Parcelle
 from utils.actions import normalize_action
+from utils.parcelles import resolve_parcelle
 from utils.stock import calcul_stock_cultures, format_stock_stats_json
 from llm.groq_client import parse_commande, repondre_question
 from utils.date_utils import parse_date
@@ -107,14 +108,15 @@ def parse(req: TexteRequest):
     saved = []
     try:
         for parsed in items:
+            nom_parcelle = parsed.get("parcelle")
+            parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
             event = Evenement(
                 type_action    = normalize_action(parsed.get("action")),
                 culture        = parsed.get("culture"),
                 variete        = parsed.get("variete"),
-                produit        = parsed.get("culture"),
                 quantite       = _to_float(parsed.get("quantite")),
                 unite          = parsed.get("unite"),
-                parcelle       = parsed.get("parcelle"),
+                parcelle_id    = parcelle_obj.id if parcelle_obj else None,
                 rang           = parsed.get("rang"),
                 duree          = _to_int(parsed.get("duree_minutes")),
                 traitement     = parsed.get("traitement"),
@@ -247,7 +249,9 @@ def historique(
         if culture:
             q = q.filter(Evenement.culture.ilike(f"%{culture}%"))
         if parcelle:
-            q = q.filter(Evenement.parcelle.ilike(f"%{parcelle}%"))
+            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
+                Parcelle.nom.ilike(f"%{parcelle}%")
+            )
 
         events = q.limit(limit).all()
         return [
