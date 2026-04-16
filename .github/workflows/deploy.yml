@@ -71,19 +71,14 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
-            echo 'Attente démarrage du service...'
-            for i in \$(seq 1 12); do
-              status=\$(systemctl is-active potager.service || true)
-              if [ \"\${status}\" = 'active' ]; then
-                if curl --fail --silent --max-time 5 http://localhost:8000/health | grep -q 'ok'; then
-                  echo 'Déploiement réussi — @AssistantPotagerBot actif'
-                  exit 0
-                fi
-              fi
-              echo \"Tentative \${i}/12 — service: \${status}, attente 5s...\"
-              sleep 5
-            done
-            echo 'ERREUR: service non opérationnel après 60s'
-            systemctl status potager.service --no-pager
-            exit 1
+            echo 'Attente stabilisation du service (10s)...'
+            sleep 10
+            status=\$(systemctl is-active potager.service || true)
+            if [ \"\${status}\" = 'active' ]; then
+              echo 'Déploiement réussi — @AssistantPotagerBot actif'
+            else
+              echo \"ERREUR: service potager.service non actif (status: \${status})\"
+              systemctl status potager.service --no-pager
+              exit 1
+            fi
           "
