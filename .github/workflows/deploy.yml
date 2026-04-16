@@ -48,9 +48,17 @@ jobs:
             set -euo pipefail
             cd /opt/potager
             set -a && source .env.prod && set +a
+            APPLIED_LOG=/opt/potager/.migrations_applied
+            touch \"\${APPLIED_LOG}\"
             for migration in \$(ls migrations/migration_v*.sql | sort -t v -k2 -n); do
-              echo \"Applying \${migration}...\"
+              name=\$(basename \"\${migration}\")
+              if grep -qF \"\${name}\" \"\${APPLIED_LOG}\"; then
+                echo \"  [-] \${name} (déjà appliquée)\"
+                continue
+              fi
+              echo \"  >>> Applying \${migration}...\"
               psql \"\${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f \"\${migration}\"
+              echo \"\${name}\" >> \"\${APPLIED_LOG}\"
             done
           "
 
