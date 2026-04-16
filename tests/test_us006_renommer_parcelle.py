@@ -55,14 +55,14 @@ def _seed_parcelle(db: object, nom: str, ordre: int = 1) -> Parcelle:
     return p
 
 
-def _seed_evenements(db: object, parcelle_nom: str, nb: int) -> list:
-    """Crée nb événements liés à la parcelle (par nom textuel)."""
+def _seed_evenements(db: object, parcelle: Parcelle, nb: int) -> list:
+    """Crée nb événements liés à la parcelle (via parcelle_id FK)."""
     evts = []
     for i in range(nb):
         e = Evenement(
             type_action="plantation",
             culture="tomate",
-            parcelle=parcelle_nom,
+            parcelle_id=parcelle.id,
         )
         db.add(e)
         evts.append(e)
@@ -76,9 +76,9 @@ class TestRenameParcelle:
     """[CA2, CA3, CA4, CA5, CA6, CA7] Tests de la fonction rename_parcelle."""
 
     def test_renommage_nominal(self, db):
-        """[CA2, CA3, CA6] Renommage simple avec propagation sur les événements."""
-        _seed_parcelle(db, "sud", ordre=1)
-        _seed_evenements(db, "sud", 15)
+        """[CA2, CA3, CA6] Renommage simple — événements toujours liés via FK."""
+        parc_sud = _seed_parcelle(db, "sud", ordre=1)
+        _seed_evenements(db, parc_sud, 15)
 
         parc, nb = rename_parcelle(db, "sud", "carré-sud")
 
@@ -86,8 +86,8 @@ class TestRenameParcelle:
         assert parc.nom_normalise == "carresud"
         assert nb == 15
 
-        # Vérification en base
-        evts = db.query(Evenement).filter(Evenement.parcelle == "carré-sud").all()
+        # Via FK : tous les événements pointent toujours sur la même parcelle
+        evts = db.query(Evenement).filter(Evenement.parcelle_id == parc.id).all()
         assert len(evts) == 15
 
     def test_propagation_aucun_evenement(self, db):
@@ -101,8 +101,8 @@ class TestRenameParcelle:
 
     def test_insensible_casse(self, db):
         """[CA7] La résolution de l'ancien nom est insensible à la casse."""
-        _seed_parcelle(db, "Ouest", ordre=1)
-        _seed_evenements(db, "Ouest", 3)
+        parc_ouest = _seed_parcelle(db, "Ouest", ordre=1)
+        _seed_evenements(db, parc_ouest, 3)
 
         parc, nb = rename_parcelle(db, "OUEST", "ouest-jardin")
 
@@ -131,17 +131,16 @@ class TestRenameParcelle:
             rename_parcelle(db, "nord", "sud")
 
     def test_transaction_atomique(self, db):
-        """[CA2+CA3] Un seul commit — les deux mises à jour sont cohérentes."""
-        _seed_parcelle(db, "est", ordre=1)
-        _seed_evenements(db, "est", 5)
+        """[CA2+CA3] Un seul commit — parcelle renommée, 5 événements toujours liés."""
+        parc_est = _seed_parcelle(db, "est", ordre=1)
+        _seed_evenements(db, parc_est, 5)
 
         parc, nb = rename_parcelle(db, "est", "est-nouveau")
 
-        # Après commit, l'ancienne valeur ne doit plus exister
-        anciens_evts = db.query(Evenement).filter(Evenement.parcelle == "est").all()
-        nouveaux_evts = db.query(Evenement).filter(Evenement.parcelle == "est-nouveau").all()
-        assert len(anciens_evts) == 0
-        assert len(nouveaux_evts) == 5
+        # La parcelle est renommée et tous les événements lui sont toujours liés via FK
+        assert parc.nom == "est-nouveau"
+        assert nb == 5
+        assert db.query(Evenement).filter(Evenement.parcelle_id == parc.id).count() == 5
 
     def test_renommage_meme_nom_normalise_autre_casse(self, db):
         """

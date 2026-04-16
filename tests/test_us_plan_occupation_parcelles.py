@@ -55,6 +55,10 @@ def db_with_cultures(test_db):
     db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
     db.add(CultureConfig(nom="salade", type_organe_recolte="végétatif"))
     db.add(CultureConfig(nom="basilic", type_organe_recolte="végétatif"))
+
+    # Parcelle de test
+    nord = Parcelle(nom="NORD", nom_normalise="nord", ordre=1, actif=True)
+    db.add(nord)
     db.commit()
 
     today = datetime.now()
@@ -66,7 +70,7 @@ def db_with_cultures(test_db):
         quantite=3.0,
         rang=1,
         unite="plants",
-        parcelle="NORD",
+        parcelle_id=nord.id,
         date=today - timedelta(days=27),
     ))
     # Salade dans parcelle NORD plantée il y a 50 jours (> seuil 45j végétatif)
@@ -77,7 +81,7 @@ def db_with_cultures(test_db):
         quantite=8.0,
         rang=1,
         unite="plants",
-        parcelle="NORD",
+        parcelle_id=nord.id,
         date=today - timedelta(days=50),
     ))
     # Basilic sans parcelle plantée il y a 8 jours
@@ -88,7 +92,7 @@ def db_with_cultures(test_db):
         quantite=20.0,
         rang=1,
         unite="plants",
-        parcelle=None,
+        parcelle_id=None,
         date=today - timedelta(days=8),
     ))
     db.commit()

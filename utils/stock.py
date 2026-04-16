@@ -113,7 +113,17 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
     )
     pertes: Dict[str, float] = {c: (q or 0) for c, q in pertes_raw}
 
-    # ── 3. Récoltes par (culture, unite) ───────────────────────────────────
+    # ── 3. Récoltes par (culture, unite) — normalisées en grammes ──────────
+    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+
+    def _to_g(val: float, unite: str) -> float:
+        return val * _UNITE_TO_G.get((unite or "").lower(), 1.0)
+
+    def _best_unite(total_g: float) -> tuple:
+        if total_g >= 1000:
+            return round(total_g / 1000, 2), "kg"
+        return round(total_g, 1), "g"
+
     recoltes_raw = (
         db.query(
             Evenement.culture,
@@ -126,13 +136,20 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
         .group_by(Evenement.culture, Evenement.unite)
         .all()
     )
-    recoltes: Dict[str, tuple] = {}  # culture → (nb, total, unite)
+    # Agréger en grammes pour éviter le mélange kg/g
+    recoltes_g: Dict[str, tuple] = {}  # culture → (nb, total_g)
     for culture, unite, nb, total in recoltes_raw:
-        existing = recoltes.get(culture)
-        if existing:
-            recoltes[culture] = (existing[0] + nb, existing[1] + (total or 0), unite or existing[2])
+        val_g = _to_g(total or 0.0, unite)
+        if culture in recoltes_g:
+            prev_nb, prev_g = recoltes_g[culture]
+            recoltes_g[culture] = (prev_nb + nb, prev_g + val_g)
         else:
-            recoltes[culture] = (nb, total or 0, unite or "")
+            recoltes_g[culture] = (nb, val_g)
+
+    recoltes: Dict[str, tuple] = {}  # culture → (nb, valeur_lisible, unite)
+    for culture, (nb, total_g) in recoltes_g.items():
+        val, unite_out = _best_unite(total_g)
+        recoltes[culture] = (nb, val, unite_out)
 
     # ── 4. Construction des objets StockCulture ─────────────────────────────
     result: Dict[str, StockCulture] = {}
@@ -394,31 +411,79 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
                 "date_min": date_ev,
             }
 
-    # ── 6. Agrégation récoltes par variété ───────────────────────────────────
-    recoltes: Dict[Optional[str], dict] = {}
+    # ── 6. Agrégation récoltes par variété — en grammes pour normaliser ────────
+    _UNITE_TO_G_V = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+
+    recoltes_g: Dict[Optional[str], dict] = {}
     for variete, unite, qte, date_ev in recoltes_raw:
-        val = qte or 0
-        if variete in recoltes:
-            recoltes[variete]["nb"]    += 1
-            recoltes[variete]["total"] += val
+        val_g = (qte or 0) * _UNITE_TO_G_V.get((unite or "").lower(), 1.0)
+        if variete in recoltes_g:
+            recoltes_g[variete]["nb"]    += 1
+            recoltes_g[variete]["total"] += val_g
             if date_ev and (
-                recoltes[variete]["date_max"] is None
-                or date_ev > recoltes[variete]["date_max"]
+                recoltes_g[variete]["date_max"] is None
+                or date_ev > recoltes_g[variete]["date_max"]
             ):
-                recoltes[variete]["date_max"] = date_ev
+                recoltes_g[variete]["date_max"] = date_ev
         else:
-            recoltes[variete] = {
+            recoltes_g[variete] = {
                 "nb":       1,
-                "total":    val,
+                "total":    val_g,
                 "unite":    unite or "",
                 "date_max": date_ev,
             }
 
+    def _best_g(total_g: float) -> tuple:
+        if total_g >= 1000:
+            return round(total_g / 1000, 2), "kg"
+        return round(total_g, 1), "g"
+
+    recoltes: Dict[Optional[str], dict] = {}
+    for variete, d in recoltes_g.items():
+        val, unite_out = _best_g(d["total"])
+        recoltes[variete] = {
+            "nb":       d["nb"],
+            "total":    val,
+            "unite":    unite_out,
+            "date_max": d["date_max"],
+        }
+
     # ── 7. Construction de la liste de résultats ─────────────────────────────
     # [CA5] None regroupé comme "Variété non précisée"
+    # Les récoltes sans variété (None) sont fusionnées avec les variétés plantées
+    # si la culture n'a qu'une seule variété plantée, sinon listées séparément.
+    recoltes_sans_variete = recoltes.pop(None, None)
+    varietes_plantees = list(plantes.keys())
+    if recoltes_sans_variete:
+        if len(varietes_plantees) == 1:
+            # Une seule variété plantée → on rattache les récoltes sans variété à elle
+            vk = varietes_plantees[0]
+            if vk in recoltes:
+                recoltes[vk]["nb"]    += recoltes_sans_variete["nb"]
+                recoltes[vk]["total"] += recoltes_sans_variete["total"]
+                if recoltes_sans_variete["date_max"] and (
+                    recoltes[vk]["date_max"] is None
+                    or recoltes_sans_variete["date_max"] > recoltes[vk]["date_max"]
+                ):
+                    recoltes[vk]["date_max"] = recoltes_sans_variete["date_max"]
+                # Renormaliser après fusion
+                total_g = recoltes[vk]["total"] * _UNITE_TO_G_V.get(recoltes[vk]["unite"], 1.0)
+                val, unite_out = _best_g(total_g)
+                recoltes[vk]["total"] = val
+                recoltes[vk]["unite"] = unite_out
+            else:
+                recoltes[vk] = recoltes_sans_variete
+        else:
+            # Plusieurs variétés → garder "Variété non précisée" séparément (sans plantation)
+            recoltes[None] = recoltes_sans_variete
+
     result: List[dict] = []
-    for vkey in sorted(plantes.keys(), key=lambda v: ("" if v is None else v)):
-        p = plantes[vkey]
+    all_keys = sorted(
+        set(list(plantes.keys()) + ([None] if None in recoltes else [])),
+        key=lambda v: ("" if v is None else v)
+    )
+    for vkey in all_keys:
+        p = plantes.get(vkey, {"total": 0, "unite": "plants", "date_min": None})
         r = recoltes.get(vkey, {"nb": 0, "total": 0.0, "unite": "", "date_max": None})
         result.append({
             "variete":                  vkey if vkey is not None else "Variété non précisée",

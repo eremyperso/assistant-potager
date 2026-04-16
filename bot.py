@@ -50,7 +50,7 @@ from sqlalchemy import func
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
 from database.db import SessionLocal, Base, engine
-from database.models import Evenement
+from database.models import Evenement, Parcelle
 from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
@@ -962,13 +962,15 @@ async def _parse_multi(update, lignes: list, msg=None):
         db = SessionLocal()
         try:
             for parsed in items:
+                nom_parcelle = parsed.get("parcelle")
+                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
                 event = Evenement(
                     type_action       = normalize_action(parsed.get("action")),
                     culture           = parsed.get("culture"),
                     variete           = parsed.get("variete"),
                     quantite          = _to_float(parsed.get("quantite")),
                     unite             = parsed.get("unite"),
-                    parcelle          = parsed.get("parcelle"),
+                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
                     rang              = _to_int(parsed.get("rang")),
                     duree             = _to_int(parsed.get("duree_minutes")),
                     traitement        = parsed.get("traitement"),
@@ -981,7 +983,7 @@ async def _parse_multi(update, lignes: list, msg=None):
                 db.add(event)
                 db.commit()
                 db.refresh(event)
-                log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | date={event.date}")
+                log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
                 total_saved.append((parsed, event.id))
         except Exception as e:
             db.rollback()
@@ -1092,7 +1094,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
                 variete           = parsed.get("variete"),
                 quantite          = _to_float(parsed.get("quantite")),
                 unite             = parsed.get("unite"),
-                parcelle          = parcelle_obj.nom if parcelle_obj else None,
                 parcelle_id       = parcelle_obj.id  if parcelle_obj else None,
                 rang              = _to_int(parsed.get("rang")),
                 duree             = _to_int(parsed.get("duree_minutes")),
@@ -2056,10 +2057,11 @@ JSON brut uniquement."""
     log.info(f"🔎 CRITÈRES RECHERCHE : {criteres}")
 
     from unidecode import unidecode as _uni
+    from sqlalchemy.orm import selectinload
 
     db = SessionLocal()
     try:
-        q = db.query(Evenement)
+        q = db.query(Evenement).options(selectinload(Evenement.parcelle_rel))
         if criteres.get("action"):
             q = q.filter(Evenement.type_action == criteres["action"])
         if criteres.get("culture"):
@@ -2069,7 +2071,9 @@ JSON brut uniquement."""
             variete_val = criteres["variete"].strip()
             q = q.filter(Evenement.variete.ilike(f"%{variete_val}%"))
         if criteres.get("parcelle"):
-            q = q.filter(Evenement.parcelle.ilike(f"%{criteres['parcelle']}%"))
+            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
+                Parcelle.nom.ilike(f"%{criteres['parcelle']}%")
+            )
         if criteres.get("date_debut"):
             q = q.filter(Evenement.date >= criteres["date_debut"])
         if criteres.get("date_fin"):
@@ -2110,15 +2114,17 @@ async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db = SessionLocal()
     try:
         last = db.query(Evenement).order_by(Evenement.id.desc()).first()
+        last_id  = last.id          if last else None
+        last_fmt = _fmt_event(last) if last else None
     finally:
         db.close()
 
     ctx.user_data['mode'] = 'corr_search'
-    ctx.user_data['corr_last_id'] = last.id if last else None
+    ctx.user_data['corr_last_id'] = last_id
 
     txt = "✏️ *Mode correction*\n\nDécrivez l'action à retrouver :\n_Ex : récolte de tomates du 11 mars, dernier arrosage, paillage courgettes..._"
-    if last:
-        txt += f"\n\n_Ou tapez_ *1* _pour sélectionner directement le dernier :_\n`{_fmt_event(last)}`"
+    if last_fmt:
+        txt += f"\n\n_Ou tapez_ *1* _pour sélectionner directement le dernier :_\n`{last_fmt}`"
 
     await update.message.reply_text(
         txt, parse_mode="Markdown",
@@ -2139,11 +2145,13 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         try:
             event = db.get(Evenement, ctx.user_data['corr_last_id'])
             candidates = [event] if event else []
+            candidates_fmt = [_fmt_event(e) for e in candidates]
         finally:
             db.close()
     else:
         msg_wait = await update.message.reply_text("🔎 Recherche en cours...")
-        candidates = _find_candidates(texte)
+        candidates = _find_candidates(texte)  # charge déjà parcelle_rel via selectinload
+        candidates_fmt = [_fmt_event(e) for e in candidates]
         try:
             await msg_wait.delete()
         except Exception:
@@ -2168,7 +2176,7 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         ctx.user_data['corr_event_id'] = e.id
         ctx.user_data['mode'] = 'corr_apply'   # ← clé du fix
         await update.message.reply_text(
-            f"✅ Événement trouvé :\n\n`{_fmt_event(e)}`\n\n"
+            f"✅ Événement trouvé :\n\n`{candidates_fmt[0]}`\n\n"
             f"✏️ Dites-moi ce que vous souhaitez modifier :\n"
             f"_Ex : c'est 3 kg / la date c'est le 9 mars / ajouter parcelle nord_\n\n"
             f"Ou : [🗑 Supprimer] pour effacer cet événement.",
@@ -2180,8 +2188,8 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         )
     else:
         lines = ["*Plusieurs événements trouvés, lequel voulez-vous modifier ?*\n"]
-        for i, e in enumerate(candidates, 1):
-            lines.append(f"*{i}.* `{_fmt_event(e)}`")
+        for i, fmt in enumerate(candidates_fmt, 1):
+            lines.append(f"*{i}.* `{fmt}`")
         btns = [[str(i) for i in range(1, len(candidates)+1)], ["❌ Annuler"]]
         await update.message.reply_text(
             "\n".join(lines), parse_mode="Markdown",
@@ -2216,6 +2224,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     db = SessionLocal()
     try:
         event = db.get(Evenement, event_id)
+        event_fmt = _fmt_event(event) if event else None
     finally:
         db.close()
 
@@ -2228,7 +2237,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     if "supprimer" in t:
         ctx.user_data['mode'] = 'corr_confirm_delete'
         await update.message.reply_text(
-            f"⚠️ *Confirmer la suppression ?*\n\n`{_fmt_event(event)}`\n\nCette action est irréversible.",
+            f"⚠️ *Confirmer la suppression ?*\n\n`{event_fmt}`\n\nCette action est irréversible.",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(
                 [["✅ Oui, supprimer"], ["❌ Non, annuler"]], resize_keyboard=True
@@ -2240,7 +2249,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     if t in ("✏️ corriger", "corriger"):
         ctx.user_data['mode'] = 'corr_apply'
         await update.message.reply_text(
-            f"✏️ Événement à corriger :\n\n`{_fmt_event(event)}`\n\n"
+            f"✏️ Événement à corriger :\n\n`{event_fmt}`\n\n"
             f"Dites-moi ce que vous souhaitez modifier :\n"
             f"_Ex : c'était 3 kg et non 2 / la date c'était le 10 mars / ajouter parcelle nord_",
             parse_mode="Markdown",
@@ -2263,7 +2272,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     # Sinon : texte libre sans mot-clé → proposer les boutons
     ctx.user_data['corr_event_id'] = event_id
     await update.message.reply_text(
-        f"Événement sélectionné :\n\n`{_fmt_event(event)}`\n\nQue souhaitez-vous faire ?",
+        f"Événement sélectionné :\n\n`{event_fmt}`\n\nQue souhaitez-vous faire ?",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup(
             [["✏️ Corriger", "🗑 Supprimer"], ["❌ Annuler"]],
@@ -2479,10 +2488,11 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         db = SessionLocal()
         try:
             event = db.get(Evenement, ctx.user_data['corr_event_id'])
+            event_fmt = _fmt_event(event) if event else "?"
         finally:
             db.close()
         await update.message.reply_text(
-            f"✏️ Que souhaitez-vous modifier d'autre ?\n\n`{_fmt_event(event)}`",
+            f"✏️ Que souhaitez-vous modifier d'autre ?\n\n`{event_fmt}`",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup([["❌ Annuler"]], resize_keyboard=True)
         )
@@ -2513,8 +2523,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
                 elif champ in ("rang", "duree_minutes"):
                     setattr(event, col, _to_int(valeur))
                 elif champ == "parcelle":
-                    # Mettre à jour le texte ET la FK parcelle_id
-                    event.parcelle    = valeur
+                    # [migration_v12] seule la FK parcelle_id est persistée
                     event.parcelle_id = corrections.get("_parcelle_id")
                 elif hasattr(event, col):
                     setattr(event, col, valeur)
