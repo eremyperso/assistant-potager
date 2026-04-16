@@ -1,4 +1,17 @@
 
+## [v2.15.0] — 2026-04-16
+
+### 🚀 Nouveautés
+- Ajoute la commande `/version` au bot Telegram : affiche le numéro de version, le SHA git court du commit courant et l'environnement actif (`APP_ENV`) (US-008)
+- Ajoute le fichier `VERSION` à la racine du projet comme source de vérité unique pour la version sémantique
+
+### 🔧 Améliorations techniques
+- `GET /health` lit désormais la version depuis le fichier `VERSION` au lieu de la valeur codée en dur `"2.0-groq"`
+- `FastAPI(version=...)` utilise également le fichier `VERSION`
+- Fonctions utilitaires `_lire_version()` et `_lire_git_sha()` avec gestion défensive (fichier absent → `"inconnue"`, git indisponible → `"inconnu"`)
+- Ajoute `/version` dans la liste des commandes affichée par `/help`
+- Ajoute 10 tests couvrant les CA1 à CA6 dans `tests/test_us008_version_command.py`
+
 ## [v2.14.1] — 2026-04-16
 
 ### 🐛 Corrections

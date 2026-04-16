@@ -9,6 +9,7 @@ Endpoints :
   GET  /historique  → derniers événements avec filtres
 """
 import json
+import subprocess
 from datetime import date
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +17,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 import os
+
+# ── Version [US-008] ────────────────────────────────────────────────────────────
+def _lire_version() -> str:
+    try:
+        _base = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(_base, "VERSION"), encoding="utf-8") as _f:
+            return _f.read().strip()
+    except OSError:
+        return "inconnue"
+
+_APP_VERSION = _lire_version()
 
 from database.db import Base, engine, SessionLocal
 from database.models import Evenement, CultureConfig, Parcelle
@@ -27,7 +39,7 @@ from utils.date_utils import parse_date
 from llm.rag import add_to_rag
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
-app = FastAPI(title="Assistant Potager 🌿", version="2.0-groq")
+app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
 Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
 
 # ── Fichiers statiques PWA ─────────────────────────────────────────────────────
@@ -56,7 +68,7 @@ def health():
     db.close()
     return {
         "status"          : "ok",
-        "version"         : "2.0-groq",
+        "version"         : _APP_VERSION,
         "moteur_llm"      : "Groq (gratuit)",
         "date"            : str(date.today()),
         "evenements_total": nb
