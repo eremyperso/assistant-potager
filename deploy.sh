@@ -50,9 +50,9 @@ ssh "${DEPLOY_HOST}" "
   cd ${REMOTE_DIR}
   export APP_ENV=prod
   set -a && source .env.prod && set +a
-  for migration in migrations/migration_v*.sql; do
+  for migration in \$(ls migrations/migration_v*.sql | sort -t v -k2 -n); do
     echo \"    Applying \${migration}...\"
-    psql \"\${DATABASE_URL}\" -f \"\${migration}\" 2>/dev/null || true
+    psql \"\${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f \"\${migration}\"
   done
 "
 
