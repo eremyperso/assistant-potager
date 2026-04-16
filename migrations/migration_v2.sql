@@ -9,8 +9,16 @@ ALTER TABLE evenements ADD COLUMN IF NOT EXISTS rang           VARCHAR;
 ALTER TABLE evenements ADD COLUMN IF NOT EXISTS traitement     VARCHAR;
 ALTER TABLE evenements ADD COLUMN IF NOT EXISTS texte_original VARCHAR;
 
--- Recopier 'produit' vers 'culture' pour les données existantes
-UPDATE evenements SET culture = produit WHERE culture IS NULL AND produit IS NOT NULL;
+-- Recopier 'produit' vers 'culture' pour les données existantes (si colonne encore présente)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'evenements' AND column_name = 'produit'
+  ) THEN
+    UPDATE evenements SET culture = produit WHERE culture IS NULL AND produit IS NOT NULL;
+  END IF;
+END $$;
 
 -- Vérification : doit lister toutes les colonnes
 SELECT column_name, data_type
