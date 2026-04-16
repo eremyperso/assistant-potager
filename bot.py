@@ -25,6 +25,7 @@ import json
 import asyncio
 import tempfile
 import logging
+import subprocess
 from datetime import date, datetime
 
 # ── Logging console ────────────────────────────────────────────────────────────
@@ -66,6 +67,30 @@ from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commen
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
+
+# ── Version [US-008] ────────────────────────────────────────────────────────────
+def _lire_version() -> str:
+    """Lit le numéro de version depuis le fichier VERSION à la racine."""
+    try:
+        _base = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(_base, "VERSION"), encoding="utf-8") as _f:
+            return _f.read().strip()
+    except OSError:
+        return "inconnue"
+
+def _lire_git_sha() -> str:
+    """Retourne le SHA court du commit courant via git."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return "inconnu"
+
+_APP_VERSION = _lire_version()
+_APP_GIT_SHA = _lire_git_sha()
 
 # ── Dictionnaire mots-clés → action ─────────────────────────────────────────
 ACTION_KEYWORDS = {
@@ -422,6 +447,18 @@ _HELP_CONTEXTUEL: dict[str, str] = {
 }
 
 
+async def cmd_version(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[US-008] Affiche la version déployée, le SHA git et l'environnement actif."""
+    app_env = os.environ.get("APP_ENV", "dev")
+    texte = (
+        "🌿 *Assistant Potager*\n"
+        f"Version : `{_APP_VERSION}`\n"
+        f"Commit  : `{_APP_GIT_SHA}`\n"
+        f"Env     : `{app_env}`"
+    )
+    await update.message.reply_text(texte, parse_mode="Markdown")
+
+
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """[US_Aide_contextuelle_par_commande] Aide générale ou ciblée via /help [mot-clé]."""
     from unidecode import unidecode as _uni
@@ -474,6 +511,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/corriger — Modifier un événement\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
+        "/version — Version déployée\n"
         "/help — Cette aide\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "*💡 Aide ciblée par domaine*\n"
@@ -2659,6 +2697,7 @@ def main():
     # Commandes
     app.add_handler(CommandHandler("start",      cmd_start))
     app.add_handler(CommandHandler("help",       cmd_help))
+    app.add_handler(CommandHandler("version",    cmd_version))  # [US-008]
     app.add_handler(CommandHandler("stats",      cmd_stats))
     app.add_handler(CommandHandler("historique", cmd_historique))
     app.add_handler(CommandHandler("ask",        cmd_ask))
