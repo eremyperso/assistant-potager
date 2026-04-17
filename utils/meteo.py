@@ -276,7 +276,6 @@ def save_meteo_observation(db: Session) -> dict | None:
         variete        = None,
         quantite       = None,
         unite          = None,
-        parcelle       = None,
         rang           = None,
         duree          = None,
         traitement     = None,
