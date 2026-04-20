@@ -1,4 +1,20 @@
 
+## [v2.17.0] — 2026-04-20
+
+### 🚀 Nouveautés
+- Ajoute l'agent SQL `llm/sql_agent.py` pour répondre aux questions analytiques sans appel Groq (US-012)
+- Ajoute `extract_intent_query()` dans `groq_client.py` — extraction d'intent question en ~100 tokens (US-012)
+- Ajoute `utils/validation.py` — validation post-parsing Python pur avec whitelist d'actions canoniques (US-011)
+
+### 🐛 Corrections
+- Corrige les fausses entrées créées quand une question passe dans `_parse_and_save()` : la validation US-011 filtre les hallucinations Groq avant toute sauvegarde (US-011)
+- Corrige le mode interrogation qui consommait ~5 000 tokens Groq par question : désormais ~100 tokens via SQL agent (US-012)
+
+### 🔧 Améliorations techniques
+- Refactorise `_ask_question()` dans `bot.py` : supprime l'appel à `repondre_question()` et `build_question_context()`, remplace par `extract_intent_query()` + `query_agent_answer()` (US-012)
+- Ajoute la validation `validate_parsed_action()` dans `_parse_and_save()` après `_normalize_items()` avec log WARNING sur chaque rejet (US-011)
+- Ajoute 27 tests dans `tests/test_us011_validation.py` et `tests/test_us012_sql_agent.py`
+
 ## [v2.16.0] — 2026-04-20
 
 ### 🚀 Nouveautés

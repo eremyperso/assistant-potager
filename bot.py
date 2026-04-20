@@ -1119,6 +1119,17 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
 
+    # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
+    from utils.validation import validate_parsed_action
+    validated = []
+    for item in items:
+        is_valid, reason = validate_parsed_action(item, texte)
+        if not is_valid:
+            log.warning(f"❌ VALIDATION US011: {reason} | item={json.dumps(item, ensure_ascii=False)}")
+        else:
+            validated.append(item)
+    items = validated
+
     if not items:
         await update.message.reply_text("❌ Aucune action détectée.")
         return
@@ -1324,39 +1335,37 @@ def _build_recap(p: dict, event_id: int) -> str:
 
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
-    """Interroge l'historique via Groq."""
+    """
+    [US-012] Interroge l'historique via SQL agent — zéro hallucination, zéro Groq pour la réponse.
+
+    Flux : extract_intent_query() [~100 tokens] → query_agent_answer() [0 tokens] → réponse.
+    """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
-    db  = SessionLocal()
     try:
-        contexte = build_question_context(db, question)
-        if not contexte or contexte == "[]":
-            await msg.edit_text("📭 Aucune donnée pertinente pour cette question.")
-            return
+        from llm.groq_client import extract_intent_query
+        from llm.sql_agent import query_agent_answer
 
-        log.info(f"🤖 LLM | Appel à Groq pour question analytique: '{question}' (contexte: {len(contexte)} chars)")
-        reponse = repondre_question(question, contexte)
-        log.info(f"💡 LLM | Réponse Groq reçue: {len(reponse)} caractères")
+        intent = extract_intent_query(question)
+        log.info(f"🎯 INTENT QUERY   : {intent}")
 
-        log.info(f"💡 RÉPONSE GROQ   : {reponse[:200]}{'...' if len(reponse)>200 else ''}")
-        # Pas de parse_mode sur la réponse Groq : elle peut contenir des caractères
-        # spéciaux (apostrophes, tirets, parenthèses) qui cassent le parser Telegram
+        reponse = query_agent_answer(question, intent)
+        log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
+
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
-            # Fallback sans markdown si la réponse contient des caractères problématiques
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+
         await update.message.reply_text(
             "_Autre question ou action ?_",
             parse_mode="Markdown",
             reply_markup=AFTER_RECORD_KEYBOARD
         )
-        # ── Synthèse vocale de la réponse analytique ──────────────────────────
         await send_voice_reply(update, reponse)
     except Exception as e:
+        log.error(f"❌ Erreur _ask_question: {e}")
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
-    finally:
-        db.close()
 
 
 # ── COMMANDES ───────────────────────────────────────────────────────────────────
