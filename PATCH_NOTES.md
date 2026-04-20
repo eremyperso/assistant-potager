@@ -1,4 +1,17 @@
 
+## [v2.16.0] — 2026-04-20
+
+### 🚀 Nouveautés
+- Améliore la classification d'intention pour distinguer questions et actions potager (US-010)
+- Ajoute 13 tests unitaires couvrant CA1–CA6, edge cases et erreur API dans `tests/test_us010_classify_intent.py`
+
+### 🐛 Corrections
+- Corrige la classification erronée de questions en ACTION : "Combien de tomates ?" n'est plus enregistré comme action (US-010)
+
+### 🔧 Améliorations techniques
+- Enrichit `_CLASSIFY_PROMPT` avec 30+ exemples explicites (questions vs actions) et deux règles de priorité absolue
+- Ajoute des contre-exemples ❌ inline dans le prompt pour réduire les faux positifs ACTION sur les questions
+
 ## [v2.15.0] — 2026-04-16
 
 ### 🚀 Nouveautés
