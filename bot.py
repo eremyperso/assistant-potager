@@ -727,36 +727,79 @@ INTENTS = {
     "PLAN",         # [US_Plan_occupation_parcelles / CA9] plan d'occupation parcelles
 }
 
-_CLASSIFY_PROMPT = """Tu es un assistant potager. L'utilisateur t'envoie un message (transcrit vocalement ou tapé).
-Classe ce message dans UNE SEULE catégorie parmi :
-- STATS       : veut voir des statistiques, bilan, résumé, chiffres
-- HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
-- INTERROGER  : pose une question ou demande d'AFFICHER des données existantes (combien, quand, quel, afficher, montrer, liste, voir, consulter...)
-- CORRIGER    : veut corriger, modifier, changer un enregistrement existant
-- SUPPRIMER   : veut supprimer ou effacer un enregistrement
-- MENU        : veut revenir au menu, accueil, annuler
-- NOUVELLE    : veut saisir une nouvelle action (après une autre)
-- ACTION      : décrit une action potager réellement RÉALISÉE à enregistrer (récolte, semis, plantation, arrosage, paillage, traitement, observation, fertilisation, taille, tuteurage, repiquage, désherbage, perte, mise_en_godet)
-- PLAN        : veut voir le plan d'occupation des parcelles (plan du potager, plan parcelle X)
+_CLASSIFY_PROMPT = """Tu es un assistant potager spécialisé dans la classification de messages.
+L'utilisateur t'envoie un message (vocal transcrit ou texte).
 
-RÈGLE IMPORTANTE : si le message contient "afficher", "montrer", "voir", "liste", "consulter", "quand", "combien", "quel" → c'est INTERROGER ou HISTORIQUE, jamais ACTION.
+CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 
-Exemples :
-- "afficher les récoltes de carotte variété nantaise" → INTERROGER
-- "afficher mes semis de radis" → INTERROGER
-- "voir l'historique des arrosages courgette" → HISTORIQUE
-- "combien ai-je récolté de tomates" → INTERROGER
-- "j'ai récolté 2 kg de tomates" → ACTION
-- "récolte 500g de carotte nantaise hier" → ACTION
-- "semis de radis 50 graines" → ACTION
-- "quand ai-je semé les carottes" → INTERROGER
-- "plan du potager" → PLAN
-- "plan parcelle nord" → PLAN
-- "montre-moi le plan" → PLAN
+🧮 STATS       : veut voir des statistiques, bilan, résumé, chiffres totaux
+  Exemples : "stats", "statistiques", "combien en total ?", "bilan de saison"
 
-Message : "{texte}"
+📖 HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
+  Exemples : "historique", "histo", "journal", "derniers événements", "liste des actions"
 
-Réponds avec UN SEUL MOT en majuscules parmi : STATS, HISTORIQUE, INTERROGER, CORRIGER, SUPPRIMER, MENU, NOUVELLE, ACTION, PLAN
+❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER des données
+  MOTS-CLÉS : combien, quand, quel, afficher, montrer, voir, liste, consulter, historique de, date de
+  Exemples :
+    ✅ "Combien de kg de tomates ai-je récolté cette saison ?"
+    ✅ "Quand ai-je planté mes courgettes ?"
+    ✅ "Afficher les récoltes de carotte variété nantaise"
+    ✅ "Date des traitements sur les poivrons"
+    ✅ "Historique des arrosages courgettes"
+    ✅ "Montrer mes semis de radis"
+    ✅ "Voir les dernières récoltes"
+    ✅ "Quel est le total de mes semis ?"
+    ✅ "Consulter les pertes de cette saison"
+    ✅ "Liste des plantations de mai"
+    ✅ "Combien ai-je perdu de plants ?"
+    ✅ "Quels légumes ai-je arrosés cette semaine ?"
+    ❌ "J'ai récolté 2 kg de tomates" (c'est une ACTION, pas une INTERROGATION)
+    ❌ "Semé des carottes hier" (c'est une ACTION)
+
+✏️ CORRIGER    : veut corriger, modifier, changer un enregistrement existant
+  Exemples : "corriger", "modifier", "changer", "rectifier"
+
+🗑️ SUPPRIMER   : veut supprimer ou effacer un enregistrement
+  Exemples : "supprimer", "effacer", "annuler", "delete"
+
+🏠 MENU        : veut revenir au menu, accueil, annuler, retour
+  Exemples : "menu", "accueil", "retour", "home", "annuler"
+
+🎤 NOUVELLE    : veut saisir une nouvelle action (après en avoir enregistré une)
+  Exemples : "nouvelle action", "autre action", "ajouter une autre"
+
+🌱 ACTION      : décrit une action potager RÉELLEMENT RÉALISÉE à enregistrer
+  Verbes d'action : récolté, semé, planté, arrosé, paillé, traité, désherbé, taillé, tuteuré, repiqué, fertilisé, perdu
+  Exemples :
+    ✅ "J'ai récolté 2 kg de tomates"
+    ✅ "Semé des carottes hier"
+    ✅ "Planté 12 plants de poivrons en 3 rangs"
+    ✅ "Arrosé les courgettes 30 minutes"
+    ✅ "Récolte 500g de carotte nantaise"
+    ✅ "Paillé la parcelle nord"
+    ✅ "Repiqué 20 plants de laitue"
+    ✅ "Traité les tomates contre le mildiou"
+    ✅ "Tuteuré les haricots"
+    ✅ "Perdu 5 plants de courgettes au gel"
+    ❌ "Combien de tomates ?" (c'est une INTERROGATION, pas une ACTION)
+    ❌ "Afficher mes récoltes" (c'est une INTERROGATION)
+
+🗺️ PLAN        : veut voir le plan d'occupation des parcelles
+  Exemples : "plan du potager", "plan parcelle nord", "montre-moi le plan"
+
+RÈGLE IMPORTANTE #1 :
+Si le message contient "afficher", "montrer", "voir", "liste", "consulter", "combien", "quand", "quel"
+ET qu'il se termine par "?" → c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION.
+
+RÈGLE IMPORTANTE #2 :
+Si le message COMMENCE par un verbe d'action au passé (récolté, semé, planté, arrosé, paillé, traité...)
+ET SANS "?" → c'est ACTION, jamais INTERROGER.
+
+Message utilisateur : "{texte}"
+
+Réponds avec UN SEUL MOT en majuscules parmi :
+STATS | HISTORIQUE | INTERROGER | CORRIGER | SUPPRIMER | MENU | NOUVELLE | ACTION | PLAN
+
 Réponse :"""
 
 def classify_intent(texte: str) -> str:
@@ -1076,6 +1119,17 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
 
+    # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
+    from utils.validation import validate_parsed_action
+    validated = []
+    for item in items:
+        is_valid, reason = validate_parsed_action(item, texte)
+        if not is_valid:
+            log.warning(f"❌ VALIDATION US011: {reason} | item={json.dumps(item, ensure_ascii=False)}")
+        else:
+            validated.append(item)
+    items = validated
+
     if not items:
         await update.message.reply_text("❌ Aucune action détectée.")
         return
@@ -1281,39 +1335,37 @@ def _build_recap(p: dict, event_id: int) -> str:
 
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
-    """Interroge l'historique via Groq."""
+    """
+    [US-012] Interroge l'historique via SQL agent — zéro hallucination, zéro Groq pour la réponse.
+
+    Flux : extract_intent_query() [~100 tokens] → query_agent_answer() [0 tokens] → réponse.
+    """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
-    db  = SessionLocal()
     try:
-        contexte = build_question_context(db, question)
-        if not contexte or contexte == "[]":
-            await msg.edit_text("📭 Aucune donnée pertinente pour cette question.")
-            return
+        from llm.groq_client import extract_intent_query
+        from llm.sql_agent import query_agent_answer
 
-        log.info(f"🤖 LLM | Appel à Groq pour question analytique: '{question}' (contexte: {len(contexte)} chars)")
-        reponse = repondre_question(question, contexte)
-        log.info(f"💡 LLM | Réponse Groq reçue: {len(reponse)} caractères")
+        intent = extract_intent_query(question)
+        log.info(f"🎯 INTENT QUERY   : {intent}")
 
-        log.info(f"💡 RÉPONSE GROQ   : {reponse[:200]}{'...' if len(reponse)>200 else ''}")
-        # Pas de parse_mode sur la réponse Groq : elle peut contenir des caractères
-        # spéciaux (apostrophes, tirets, parenthèses) qui cassent le parser Telegram
+        reponse = query_agent_answer(question, intent)
+        log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
+
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
-            # Fallback sans markdown si la réponse contient des caractères problématiques
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+
         await update.message.reply_text(
             "_Autre question ou action ?_",
             parse_mode="Markdown",
             reply_markup=AFTER_RECORD_KEYBOARD
         )
-        # ── Synthèse vocale de la réponse analytique ──────────────────────────
         await send_voice_reply(update, reponse)
     except Exception as e:
+        log.error(f"❌ Erreur _ask_question: {e}")
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
-    finally:
-        db.close()
 
 
 # ── COMMANDES ───────────────────────────────────────────────────────────────────
