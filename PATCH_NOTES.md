@@ -1,4 +1,40 @@
 
+## [v2.19.0] — 2026-04-21
+
+### 🚀 Nouveautés
+- Ajoute la section `🌱 Semis en cours` dans `/stats [culture]` — tous les semis de la culture sont visibles avec variété en gras, quantité et date (US-014)
+- Ajoute `calcul_semis_par_culture()` dans `utils/stock.py` pour requêter les semis par culture et variété (US-014)
+- Ajoute la règle d'exécution des agents dans `CLAUDE.md` — lecture obligatoire du fichier `.agent.md` avant toute action (process)
+
+### 🐛 Corrections
+- Corrige la sauvegarde silencieuse d'événements avec `action=None` : la validation bloque désormais tout JSON sans action et reroute vers le flux interrogation (US-011)
+- Corrige `classify_intent()` : "affiche", "montre", "détail" classifiés INTERROGER/STATS même sans "?" en fin de phrase (US-010)
+- Corrige `/stats [culture]` : une culture avec uniquement des semis (sans plantation) est maintenant affichée au lieu de "Aucune donnée" (US-014)
+
+### 🔧 Améliorations techniques
+- Améliore la présentation `/stats [culture]` : dates et récoltes sur une seule ligne, `(planté X, perdu Y)` affiché uniquement en cas de perte réelle (US-014)
+- Améliore `_extract_stats_culture()` : reconnaît "affiche le détail de X", "montre le détail sur X", "infos sur X", "détail X" → route vers `/stats [culture]` (US-010)
+- Remplace `📅` par `🗓️` dans les affichages de dates (présentation)
+- Renforce l'Orchestrateur-US : lecture obligatoire de chaque fichier sous-agent avant exécution, confirmation d'étape requise (process)
+
+### 🧪 Tests
+- Ajoute `tests/test_us014_stats_semis.py` — 15 cas CA1→CA7 couvrant semis, non-régression plantations et isolation cultures (US-014)
+
+## [v2.18.0] — 2026-04-21
+
+### 🐛 Corrections
+- Corrige l'affichage erroné des récoltes dans la section Semis de `/stats` : les récoltes appartiennent toujours aux plantations, jamais aux semis (US-014)
+- Les itinéraires culturaux décalés (semis lancés après des plants déjà en production) sont maintenant correctement représentés sans double-comptage (US-014)
+
+### 🚀 Nouveautés
+- `/stats [culture]` : les semis sont désormais visibles dans le bloc variété correspondant avec quantité et date (`🌱 20 graines semées · 📅 20 avr`) (US-014)
+- `/stats [culture]` : les semis sans plantation correspondante sont listés dans une section dédiée "Semis sans plantation correspondante" (US-014)
+- `/stats [culture]` : une culture avec uniquement des semis (pas encore de plantation) est maintenant affichée (plus de "Aucune donnée") (US-014)
+- Nouvelle fonction `calcul_semis_par_culture(db, culture)` dans `utils/stock.py` (US-014)
+
+### 🧪 Tests
+- Ajout de `tests/test_us014_stats_semis.py` — 15 cas couvrant CA1→CA7 + non-régression (US-014)
+
 ## [v2.17.0] — 2026-04-20
 
 ### 🚀 Nouveautés
