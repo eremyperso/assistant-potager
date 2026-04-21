@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Toujours répondre en français, quelle que soit la langue utilisée dans les messages.
 
+## Règles d'exécution des agents (NON NÉGOCIABLES)
+
+Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/agents/`.
+
+1. **Lire le fichier agent avant toute action** : avant d'exécuter le rôle d'un sous-agent,
+   lire intégralement son fichier `.github/agents/*.agent.md`. Ne jamais improviser de mémoire.
+
+2. **Patch Notes Writer — checklist obligatoire** : lors de l'exécution de l'étape Documentation,
+   les deux fichiers suivants DOIVENT être modifiés sans exception :
+   - `PATCH_NOTES.md` — nouvelle entrée insérée EN HAUT
+   - `VERSION` — numéro incrémenté selon SemVer (PATCH / MINOR / MAJOR)
+   Toute exécution du Patch Notes Writer sans mise à jour de `VERSION` est une erreur.
+
+3. **Confirmation d'étape** : après chaque étape de l'Orchestrateur, indiquer explicitement
+   "Étape X terminée" avec les fichiers modifiés. Ne pas enchaîner silencieusement.
+
 ## Project Overview
 
 **Assistant Potager** is an intelligent gardening tracker for amateur gardeners. It combines:

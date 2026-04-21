@@ -732,18 +732,28 @@ L'utilisateur t'envoie un message (vocal transcrit ou texte).
 
 CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 
-🧮 STATS       : veut voir des statistiques, bilan, résumé, chiffres totaux
-  Exemples : "stats", "statistiques", "combien en total ?", "bilan de saison"
+🧮 STATS       : veut voir des statistiques, bilan, résumé, chiffres totaux, OU demande le détail d'une culture
+  MOTS-CLÉS : stats, statistiques, bilan, résumé, détail, affiche le détail, montre le détail, infos sur
+  Exemples :
+    ✅ "stats", "statistiques", "bilan de saison"
+    ✅ "affiche le détail de la culture courgette"
+    ✅ "affiche moi le détail de la courgette"
+    ✅ "montre le détail sur les tomates"
+    ✅ "détail courgette"
+    ✅ "infos sur mes poivrons"
+    ✅ "donne moi les stats de la tomate"
 
 📖 HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
   Exemples : "historique", "histo", "journal", "derniers événements", "liste des actions"
 
-❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER des données
-  MOTS-CLÉS : combien, quand, quel, afficher, montrer, voir, liste, consulter, historique de, date de
+❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER/MONTRER des données
+  MOTS-CLÉS : combien, quand, quel, affiche, afficher, montre, montrer, voir, liste, consulter, détail, detail, historique de, date de
   Exemples :
     ✅ "Combien de kg de tomates ai-je récolté cette saison ?"
     ✅ "Quand ai-je planté mes courgettes ?"
     ✅ "Afficher les récoltes de carotte variété nantaise"
+    ✅ "Affiche le détail sur la culture courgette"
+    ✅ "Montre-moi les semis de radis"
     ✅ "Date des traitements sur les poivrons"
     ✅ "Historique des arrosages courgettes"
     ✅ "Montrer mes semis de radis"
@@ -753,6 +763,8 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
     ✅ "Liste des plantations de mai"
     ✅ "Combien ai-je perdu de plants ?"
     ✅ "Quels légumes ai-je arrosés cette semaine ?"
+    ✅ "Détail des récoltes de courgettes"
+    ✅ "Donne-moi les infos sur mes tomates"
     ❌ "J'ai récolté 2 kg de tomates" (c'est une ACTION, pas une INTERROGATION)
     ❌ "Semé des carottes hier" (c'est une ACTION)
 
@@ -788,8 +800,8 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
   Exemples : "plan du potager", "plan parcelle nord", "montre-moi le plan"
 
 RÈGLE IMPORTANTE #1 :
-Si le message contient "afficher", "montrer", "voir", "liste", "consulter", "combien", "quand", "quel"
-ET qu'il se termine par "?" → c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION.
+Si le message contient "affiche", "afficher", "montre", "montrer", "voir", "liste", "consulter", "détail", "combien", "quand", "quel"
+→ c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION (même sans "?" en fin de phrase).
 
 RÈGLE IMPORTANTE #2 :
 Si le message COMMENCE par un verbe d'action au passé (récolté, semé, planté, arrosé, paillé, traité...)
@@ -828,19 +840,62 @@ def classify_intent(texte: str) -> str:
 def _extract_stats_culture(texte: str) -> str | None:
     """
     [US_Stats_detail_par_variete / CA8]
-    Extrait la culture depuis une phrase vocale type 'stats tomate'.
+    Extrait la culture depuis une phrase vocale type 'stats tomate' ou
+    'affiche le détail de la culture courgette'.
 
     Exemples reconnus :
-      "stats tomate" → "tomate"
-      "statistiques de la tomate" → "tomate"
-      "stats" seul → None
+      "stats tomate"                              → "tomate"
+      "statistiques de la tomate"                → "tomate"
+      "affiche le détail de la culture courgette" → "courgette"
+      "affiche moi le détail de la courgette"    → "courgette"
+      "montre le détail sur les tomates"         → "tomates"
+      "détail courgette"                         → "courgette"
+      "infos sur mes poivrons"                   → "poivrons"
+      "stats" seul                               → None
     """
     import re
+    t = texte.lower().strip()
+
+    # Pattern 1 — "stats/statistiques [de [la/les/du]] <culture>"
     m = re.match(
         r'^(?:stats?|statistiques?)\s+(?:de\s+(?:la\s+|les?\s+|des?\s+)?|du\s+)?(\w+)$',
-        texte.lower().strip(),
+        t,
     )
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+
+    # Pattern 2 — "affiche/montre [moi] le détail [de [la culture/les/du]] <culture>"
+    m = re.search(
+        r'(?:affiche?(?:r)?|montre?(?:r)?)\s+(?:moi\s+)?(?:le\s+)?d[eé]tail\s+'
+        r'(?:de\s+(?:la\s+culture\s+|la\s+|les?\s+|des?\s+|du\s+)?'
+        r'|sur\s+(?:la\s+culture\s+|les?\s+cultures?\s+|la\s+|les?\s+)?)?(\w+)',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    # Pattern 3 — "détail <culture>" ou "détail de [la] <culture>"
+    m = re.match(
+        r'^d[eé]tail\s+(?:de\s+(?:la\s+|les?\s+|des?\s+|du\s+)?)?(\w+)$',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    # Pattern 4 — "infos sur [mes/les/la] <culture>"
+    m = re.search(r'infos?\s+sur\s+(?:mes?\s+|les?\s+|la\s+)?(\w+)', t)
+    if m:
+        return m.group(1)
+
+    # Pattern 5 — "donne moi les stats de [la] <culture>"
+    m = re.search(
+        r'(?:donne(?:r)?(?:\s+moi)?)\s+(?:les?\s+)?stats?\s+(?:de\s+(?:la\s+|les?\s+|des?\s+)?)?(\w+)',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    return None
 
 
 def _extract_plan_parcelle(texte: str) -> str | None:
@@ -1122,16 +1177,24 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
     from utils.validation import validate_parsed_action
     validated = []
+    action_none_detected = False
     for item in items:
         is_valid, reason = validate_parsed_action(item, texte)
         if not is_valid:
             log.warning(f"❌ VALIDATION US011: {reason} | item={json.dumps(item, ensure_ascii=False)}")
+            if "manquante" in reason or "None" in reason:
+                action_none_detected = True
         else:
             validated.append(item)
     items = validated
 
     if not items:
-        await update.message.reply_text("❌ Aucune action détectée.")
+        if action_none_detected:
+            # Groq a parsé une question comme action → reroutage vers le flux interrogation
+            log.info(f"❓ REROUTAGE US011 : action=None détectée → _ask_question('{texte}')")
+            await _ask_question(update, texte)
+        else:
+            await update.message.reply_text("❌ Aucune action détectée.")
         return
 
     # Cas JSON sans action ni culture → phrase non reconnue comme action potager
@@ -1805,7 +1868,8 @@ async def cmd_stats(update, ctx):
     """
     from utils.stock import (
         calcul_stock_cultures, format_stock_ligne_telegram, calcul_semis,
-        calcul_stock_par_variete, format_variete_bloc_telegram,
+        calcul_stock_par_variete, format_variete_bloc_telegram, _fmt_date_variete,
+        calcul_semis_par_culture,
     )
 
     # [US_Stats_detail_par_variete / CA7] Insensible à la casse
@@ -1818,9 +1882,10 @@ async def cmd_stats(update, ctx):
         # ── [US_Stats_detail_par_variete / CA3] Mode détail variété ──────────
         if culture_arg:
             varietes = calcul_stock_par_variete(db, culture_arg)
+            semis_culture = calcul_semis_par_culture(db, culture_arg)
 
-            # [CA6] Culture inconnue
-            if not varietes:
+            # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
+            if not varietes and not semis_culture:
                 texte_final = f"_Aucune donnée pour {culture_arg}_"
                 try:
                     await update.message.reply_text(
@@ -1830,15 +1895,33 @@ async def cmd_stats(update, ctx):
                     await update.message.reply_text(texte_final, reply_markup=MENU_KEYBOARD)
                 return
 
-            # Emoji selon type_organe du premier résultat
-            type_organe = varietes[0]["type_organe"]
+            # Emoji selon type_organe (plantation ou semis)
+            type_organe = varietes[0]["type_organe"] if varietes else None
             emoji = "🍅" if type_organe == "reproducteur" else "🥬"
             culture_display = culture_arg.capitalize()
 
             lines_out = [f"{emoji} *{culture_display} — détail par variété*\n"]
+
+            current_year_sv = __import__("datetime").datetime.now().year
+
+            # Blocs plantations
             for v in varietes:
                 lines_out.append(format_variete_bloc_telegram(v))
-                lines_out.append("")  # ligne vide entre variétés
+                lines_out.append("")
+
+            # [US-014 / CA3+CA4] Section semis unifiée — toujours en bas, jamais inline
+            if semis_culture:
+                lines_out.append("🌱 *Semis en cours :*")
+                for s in semis_culture:
+                    var_label = s["variete"] or "Variété non précisée"
+                    date_s    = s["date_premier_semis"]
+                    date_str  = _fmt_date_variete(date_s, current_year_sv) if date_s else "?"
+                    if s["total_seme"]:
+                        semis_label = f"semis de {int(s['total_seme'])} {s['unite']}"
+                    else:
+                        semis_label = f"{s['nb_semis']} semis"
+                    lines_out.append(f"  • *{var_label}* : {semis_label} · 🗓️ {date_str}")
+                lines_out.append("")
 
             lines_out.append("_Pour revenir à la synthèse : /stats_")
             texte_final = "\n".join(lines_out)
@@ -1890,6 +1973,7 @@ async def cmd_stats(update, ctx):
 
             lines_out.append("\n🌱 *Semis :*")
 
+            # [US-014 / CA1] Récoltes retirées — elles appartiennent aux plantations
             if veg_semis:
                 lines_out.append("  _→ Récolte destructive (végétatif)_")
                 for culture, s in veg_semis.items():
@@ -1897,10 +1981,6 @@ async def cmd_stats(update, ctx):
                         ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
                     else:
                         ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                    if s["nb_recoltes"] > 0:
-                        r_val = round(s["total_recolte"], 2)
-                        r_u   = s["unite_recolte"] or "unités"
-                        ligne += f" · {r_val} {r_u} récoltés ({s['nb_recoltes']} fois)"
                     lines_out.append(ligne)
 
             if repr_semis:
@@ -1910,10 +1990,6 @@ async def cmd_stats(update, ctx):
                         ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
                     else:
                         ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                    if s["nb_recoltes"] > 0:
-                        r_val = round(s["total_recolte"], 2)
-                        r_u   = s["unite_recolte"] or "unités"
-                        ligne += f" · {r_val} {r_u} récoltés ({s['nb_recoltes']} fois)"
                     lines_out.append(ligne)
 
         # ── Arrosages (inchangé) ───────────────────────────────────────────────
