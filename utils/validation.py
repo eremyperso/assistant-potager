@@ -16,8 +16,8 @@ ACTIONS_VALIDES = {
 
 QUESTION_MARKERS = {
     "combien", "quand", "quel", "quelle", "quels", "quelles",
-    "afficher", "montrer", "voir", "liste", "consulter", "historique",
-    "date", "derniere", "dernier", "depuis", "nombre", "total",
+    "affiche", "afficher", "montre", "montrer", "voir", "liste", "consulter", "historique",
+    "detail", "détail", "date", "derniere", "dernier", "depuis", "nombre", "total",
 }
 
 
@@ -37,8 +37,12 @@ def validate_parsed_action(parsed: dict, texte_original: str) -> tuple[bool, str
     quantite = parsed.get("quantite")
     date = parsed.get("date")
 
-    # Règle 1 — action dans la whitelist (si fournie)
-    if action and action.lower() not in ACTIONS_VALIDES:
+    # Règle 0 — action obligatoire (None = Groq a parsé une question/hallucination)
+    if not action:
+        return False, "Action manquante (None) — Groq a parsé une interrogation comme une action"
+
+    # Règle 1 — action dans la whitelist
+    if action.lower() not in ACTIONS_VALIDES:
         return False, f"Action inconnue ou hallucination Groq : '{action}'"
 
     # Règle 2 — observation exige culture + date

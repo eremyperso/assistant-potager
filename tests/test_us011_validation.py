@@ -157,10 +157,11 @@ def test_us011_ca6_toutes_actions_canoniques_acceptees(action):
 # Edge cases
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_us011_edge_sans_action_ni_culture_accepte():
-    """Edge : JSON sans action ni culture n'est pas bloqué par validation (gardefou amont)."""
-    valid, _ = validate_parsed_action({}, "test simple")
-    assert valid is True  # la validation ne gère pas ce cas, c'est le gardefou amont
+def test_us011_edge_sans_action_bloque():
+    """Règle 0 : action=None → rejet immédiat (Groq a parsé une interrogation comme action)."""
+    valid, reason = validate_parsed_action({}, "affiche le détail sur la culture courgette")
+    assert valid is False
+    assert "None" in reason or "manquante" in reason
 
 
 def test_us011_edge_quantite_none_acceptee():

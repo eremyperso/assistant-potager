@@ -738,12 +738,14 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 📖 HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
   Exemples : "historique", "histo", "journal", "derniers événements", "liste des actions"
 
-❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER des données
-  MOTS-CLÉS : combien, quand, quel, afficher, montrer, voir, liste, consulter, historique de, date de
+❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER/MONTRER des données
+  MOTS-CLÉS : combien, quand, quel, affiche, afficher, montre, montrer, voir, liste, consulter, détail, detail, historique de, date de
   Exemples :
     ✅ "Combien de kg de tomates ai-je récolté cette saison ?"
     ✅ "Quand ai-je planté mes courgettes ?"
     ✅ "Afficher les récoltes de carotte variété nantaise"
+    ✅ "Affiche le détail sur la culture courgette"
+    ✅ "Montre-moi les semis de radis"
     ✅ "Date des traitements sur les poivrons"
     ✅ "Historique des arrosages courgettes"
     ✅ "Montrer mes semis de radis"
@@ -753,6 +755,8 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
     ✅ "Liste des plantations de mai"
     ✅ "Combien ai-je perdu de plants ?"
     ✅ "Quels légumes ai-je arrosés cette semaine ?"
+    ✅ "Détail des récoltes de courgettes"
+    ✅ "Donne-moi les infos sur mes tomates"
     ❌ "J'ai récolté 2 kg de tomates" (c'est une ACTION, pas une INTERROGATION)
     ❌ "Semé des carottes hier" (c'est une ACTION)
 
@@ -788,8 +792,8 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
   Exemples : "plan du potager", "plan parcelle nord", "montre-moi le plan"
 
 RÈGLE IMPORTANTE #1 :
-Si le message contient "afficher", "montrer", "voir", "liste", "consulter", "combien", "quand", "quel"
-ET qu'il se termine par "?" → c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION.
+Si le message contient "affiche", "afficher", "montre", "montrer", "voir", "liste", "consulter", "détail", "combien", "quand", "quel"
+→ c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION (même sans "?" en fin de phrase).
 
 RÈGLE IMPORTANTE #2 :
 Si le message COMMENCE par un verbe d'action au passé (récolté, semé, planté, arrosé, paillé, traité...)
