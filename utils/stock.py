@@ -212,12 +212,14 @@ def format_stock_ligne_telegram(s: StockCulture) -> str:
 
 def calcul_semis(db: Session) -> Dict[str, dict]:
     """
-    Agrège les semis par culture et croise avec les récoltes déjà réalisées.
-    Retourne un dict { culture: { nb_semis, total_seme, unite, type_organe,
-                                  nb_recoltes, total_recolte, unite_recolte } }
+    [US-014 / CA1] Agrège les semis par culture.
+
+    Un semis est un stade agronomique (germination/godet) indépendant des plantations.
+    Les récoltes sont toujours liées aux plantations, jamais aux semis — on ne les
+    croise donc plus ici pour éviter une double attribution incorrecte.
+
+    Retourne un dict { culture: { nb_semis, total_seme, unite, type_organe } }
     """
-    # Grouper uniquement par culture (pas par unite) pour compter tous les semis
-    # même si l'unité varie ou est absente selon les enregistrements
     semis_raw = (
         db.query(
             Evenement.culture,
@@ -232,7 +234,6 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
     if not semis_raw:
         return {}
 
-    # Récupérer la première unité non-nulle par culture
     unites_raw = (
         db.query(Evenement.culture, Evenement.unite)
         .filter(Evenement.type_action == "semis")
@@ -242,46 +243,6 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         .all()
     )
     unites: Dict[str, str] = {c: u for c, u in unites_raw}
-
-    recoltes_raw = (
-        db.query(
-            Evenement.culture,
-            Evenement.unite,
-            func.count(Evenement.id),
-            func.sum(Evenement.quantite)
-        )
-        .filter(Evenement.type_action == "recolte")
-        .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.culture, Evenement.unite)
-        .all()
-    )
-
-    # Normalisation des unités en grammes pour pouvoir additionner correctement
-    # quand une même culture a des récoltes avec des unités différentes (kg, g, etc.)
-    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
-
-    def _to_g(val: float, unite: str) -> float:
-        return val * _UNITE_TO_G.get((unite or "").lower(), 1.0)
-
-    def _best_unite(total_g: float) -> tuple:
-        """Retourne (valeur, unite) la plus lisible."""
-        if total_g >= 1000:
-            return round(total_g / 1000, 2), "kg"
-        return round(total_g, 1), "g"
-
-    recoltes_g: Dict[str, tuple] = {}   # culture → (nb, total_en_grammes, unite_originale)
-    for culture, unite, nb, total in recoltes_raw:
-        val_g = _to_g(total or 0.0, unite)
-        if culture in recoltes_g:
-            prev_nb, prev_g, _ = recoltes_g[culture]
-            recoltes_g[culture] = (prev_nb + nb, prev_g + val_g, unite or "")
-        else:
-            recoltes_g[culture] = (nb, val_g, unite or "")
-
-    recoltes: Dict[str, tuple] = {}
-    for culture, (nb, total_g, _) in recoltes_g.items():
-        val, unite_out = _best_unite(total_g)
-        recoltes[culture] = (nb, val, unite_out)
 
     # Graines passées en godet par culture (nb_graines_semees des mise_en_godet)
     godets_raw = (
@@ -295,18 +256,66 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
 
     result: Dict[str, dict] = {}
     for culture, nb, total in semis_raw:
-        rec = recoltes.get(culture, (0, 0.0, ""))
         result[culture] = {
-            "nb_semis":        nb,
-            "total_seme":      total,        # None si toutes les quantites sont absentes
-            "unite":           unites.get(culture, "graines"),
-            "type_organe":     get_type_organe(db, culture),
-            "nb_recoltes":     rec[0],
-            "total_recolte":   rec[1],
-            "unite_recolte":   rec[2],
+            "nb_semis":         nb,
+            "total_seme":       total,
+            "unite":            unites.get(culture, "graines"),
+            "type_organe":      get_type_organe(db, culture),
             "graines_en_godet": graines_en_godet.get(culture, 0),
         }
     return dict(sorted(result.items()))
+
+
+def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
+    """
+    [US-014 / CA3, CA4, CA5] Retourne les semis par variété pour une culture donnée.
+
+    Champs de chaque dict : variete, nb_semis, total_seme, unite, date_premier_semis
+    Retourne [] si aucun semis trouvé pour cette culture.
+    """
+    culture_lower = culture.lower()
+
+    semis_raw = (
+        db.query(
+            Evenement.variete,
+            Evenement.unite,
+            Evenement.quantite,
+            Evenement.date,
+        )
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.type_action == "semis")
+        .all()
+    )
+    if not semis_raw:
+        return []
+
+    agregat: Dict[Optional[str], dict] = {}
+    for variete, unite, qte, date_ev in semis_raw:
+        if variete not in agregat:
+            agregat[variete] = {
+                "nb_semis":         0,
+                "total_seme":       0.0,
+                "unite":            unite or "graines",
+                "date_premier_semis": date_ev,
+            }
+        agregat[variete]["nb_semis"] += 1
+        agregat[variete]["total_seme"] += qte or 0.0
+        if date_ev and (
+            agregat[variete]["date_premier_semis"] is None
+            or date_ev < agregat[variete]["date_premier_semis"]
+        ):
+            agregat[variete]["date_premier_semis"] = date_ev
+
+    result = []
+    for variete, d in sorted(agregat.items(), key=lambda x: ("" if x[0] is None else x[0])):
+        result.append({
+            "variete":           variete,
+            "nb_semis":          d["nb_semis"],
+            "total_seme":        d["total_seme"],
+            "unite":             d["unite"],
+            "date_premier_semis": d["date_premier_semis"],
+        })
+    return result
 
 
 def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
@@ -587,35 +596,39 @@ def format_variete_bloc_telegram(v: dict) -> str:
     is_repr      = (type_organe == "reproducteur")
     current_year = datetime.now().year
 
-    lines = [f"🔸 *{nom}*"]
-
-    if is_repr:
-        # [CA4] Reproducteur : plants actifs + rendement kg
-        stock = max(0, plants_plantes - plants_perdus)
-        base  = f"  • {stock} {unite_plant} actifs"
-        if recoltes_total > 0:
-            r_val  = round(recoltes_total, 2)
-            base  += f" · {r_val} {unite_recolte} récoltés ({nb_recoltes} fois)"
-        lines.append(base)
-        details = [f"planté {plants_plantes}"]
-        if plants_perdus > 0:
-            details.append(f"perdu {plants_perdus}")
-        lines.append(f"    ({', '.join(details)})")
-    else:
-        # [CA4] Végétatif : récolte est destructive (réduit le stock)
-        stock = max(0, plants_plantes - plants_perdus - int(recoltes_total))
-        base  = f"  • {stock} {unite_plant}"
-        details = [f"planté {plants_plantes}"]
-        if plants_perdus > 0:
-            details.append(f"perdu {plants_perdus}")
-        if recoltes_total > 0:
-            details.append(f"récolté {int(recoltes_total)}")
-        lines.append(base + f" ({', '.join(details)})")
-
-    # [CA4] Période plantation → dernière récolte (ou "en cours")
+    # Calcul de la période pour affichage inline
+    date_periode = ""
     if date_plantation:
         date_debut = _fmt_date_variete(date_plantation, current_year)
         date_fin   = _fmt_date_variete(date_recolte, current_year) if date_recolte else "en cours"
-        lines.append(f"  📅 {date_debut} → {date_fin}")
+        date_periode = f" · 🗓️ {date_debut} → {date_fin}"
+
+    lines = [f"🔸 *{nom}*"]
+
+    if is_repr:
+        # [CA4] Reproducteur : plants actifs + détails si perte + rendement + date
+        stock = max(0, plants_plantes - plants_perdus)
+        base  = f"  • {stock} {unite_plant} actifs"
+        # Détails entre parenthèses uniquement si le stock diffère du total planté (perte)
+        if plants_perdus > 0:
+            base += f" (planté {plants_plantes}, perdu {plants_perdus})"
+        if recoltes_total > 0:
+            r_val  = round(recoltes_total, 2)
+            base  += f" · {r_val} {unite_recolte} récoltés ({nb_recoltes} fois)"
+        base += date_periode
+        lines.append(base)
+    else:
+        # [CA4] Végétatif : récolte destructive + détails si différence + date
+        stock = max(0, plants_plantes - plants_perdus - int(recoltes_total))
+        base  = f"  • {stock} {unite_plant}"
+        # Détails uniquement si stock != plants_plantes (perte ou récolte destructive)
+        if plants_perdus > 0 or recoltes_total > 0:
+            details = [f"planté {plants_plantes}"]
+            if plants_perdus > 0:
+                details.append(f"perdu {plants_perdus}")
+            if recoltes_total > 0:
+                details.append(f"récolté {int(recoltes_total)}")
+            base += f" ({', '.join(details)})"
+        lines.append(base + date_periode)
 
     return "\n".join(lines)

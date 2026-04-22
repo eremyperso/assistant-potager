@@ -23,32 +23,40 @@ dans le bon ordre pour implémenter une User Story complète de bout en bout.
 4. Vérifie les dépendances déclarées avant de continuer
 
 ### ÉTAPE 1 — Validation PO (si l'US est incomplète)
-- Si les Scénarios Gherkin sont vides OU si les critères d'acceptance sont ambigus :
-  → Invoque `@Persona PO` pour compléter l'US AVANT de coder
-- Si l'US est complète avec ses scénarios Gherkin → passer directement à l'étape 2
+1. **Lire** `.github/agents/Personna PO.agent.md` intégralement avant d'agir en tant que PO
+2. Si les Scénarios Gherkin sont vides OU si les critères d'acceptance sont ambigus :
+   → Appliquer toutes les règles du fichier PO pour compléter l'US AVANT de coder
+3. Si l'US est complète avec ses scénarios Gherkin → passer directement à l'étape 2
 
 ### ÉTAPE 2 — Implémentation Developer
-- Invoque `@Persona Developer` en lui fournissant :
-  - Le contenu complet de l'US (critères d'acceptance + Gherkin)
-  - Le contenu réel des fichiers impactés (code existant)
-- Résultat attendu : code Python modifié + migration SQL si nécessaire
+1. **Lire** `.github/agents/Developer.agent.md` intégralement avant d'agir en tant que Developer
+2. Appliquer toutes les règles du fichier Developer en fournissant :
+   - Le contenu complet de l'US (critères d'acceptance + Gherkin)
+   - Le contenu réel des fichiers impactés (code existant)
+3. Résultat attendu : code Python modifié + migration SQL si nécessaire
 
 ### ÉTAPE 3 — Validation QA
-- Invoque `@Persona QA` en lui fournissant :
-  - Le code produit à l'étape 2
-  - Les critères d'acceptance de l'US
-  - Les scénarios Gherkin
-- Résultat attendu : fichier `tests/test_us_XXX_[composant].py` avec couverture ≥ 80 %
+1. **Lire** `.github/agents/Qa-tester.agent.md` intégralement avant d'agir en tant que QA
+2. Appliquer toutes les règles du fichier QA en fournissant :
+   - Le code produit à l'étape 2
+   - Les critères d'acceptance de l'US
+   - Les scénarios Gherkin
+3. Résultat attendu : fichier `tests/test_us_XXX_[composant].py` avec couverture ≥ 80 %
 
 ### ÉTAPE 4 — Documentation
-- Invoque `@Patch Notes Writer` pour documenter les changements
-- Résultat attendu : nouvelle entrée ajoutée en haut de `PATCH_NOTES.md`
+1. **Lire** `.github/agents/patch-notes.prompt.agent.md` intégralement avant d'agir en tant que Patch Notes Writer
+2. Appliquer **toutes** les étapes 1→8 du fichier agent dans l'ordre, sans en sauter aucune :
+   - Étape 6 obligatoire : calculer et mettre à jour le fichier `VERSION`
+   - Étape 7 obligatoire : insérer la nouvelle entrée EN HAUT de `PATCH_NOTES.md`
+3. Résultat attendu : `PATCH_NOTES.md` mis à jour ET `VERSION` incrémenté
 
 ## Règles
+- **RÈGLE ABSOLUE** : lire le fichier `.agent.md` du sous-agent AVANT de l'exécuter — jamais de mémoire
 - Ne jamais sauter l'Étape 0 — le contexte réel du code est obligatoire
 - Ne jamais passer à l'étape suivante si l'étape courante a produit des erreurs ou du code incomplet
 - Les fichiers générés doivent respecter les chemins réels du projet (voir `Developer.agent.md`)
 - En cas d'ambiguïté sur un critère d'acceptance, demander à l'utilisateur avant de coder
+- Après chaque étape, confirmer explicitement : "Étape X terminée — résultat : [résumé]"
 
 ## Exemple d'invocation
 ```
@@ -59,3 +67,4 @@ Résultat attendu :
 - `llm/groq_client.py` modifié (fonction `build_question_context`)
 - `tests/test_us_002_stats.py` créé
 - `PATCH_NOTES.md` mis à jour
+- `VERSION` incrémenté

@@ -750,36 +750,91 @@ INTENTS = {
     "PLAN",         # [US_Plan_occupation_parcelles / CA9] plan d'occupation parcelles
 }
 
-_CLASSIFY_PROMPT = """Tu es un assistant potager. L'utilisateur t'envoie un message (transcrit vocalement ou tapé).
-Classe ce message dans UNE SEULE catégorie parmi :
-- STATS       : veut voir des statistiques, bilan, résumé, chiffres
-- HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
-- INTERROGER  : pose une question ou demande d'AFFICHER des données existantes (combien, quand, quel, afficher, montrer, liste, voir, consulter...)
-- CORRIGER    : veut corriger, modifier, changer un enregistrement existant
-- SUPPRIMER   : veut supprimer ou effacer un enregistrement
-- MENU        : veut revenir au menu, accueil, annuler
-- NOUVELLE    : veut saisir une nouvelle action (après une autre)
-- ACTION      : décrit une action potager réellement RÉALISÉE à enregistrer (récolte, semis, plantation, arrosage, paillage, traitement, observation, fertilisation, taille, tuteurage, repiquage, désherbage, perte, mise_en_godet)
-- PLAN        : veut voir le plan d'occupation des parcelles (plan du potager, plan parcelle X)
+_CLASSIFY_PROMPT = """Tu es un assistant potager spécialisé dans la classification de messages.
+L'utilisateur t'envoie un message (vocal transcrit ou texte).
 
-RÈGLE IMPORTANTE : si le message contient "afficher", "montrer", "voir", "liste", "consulter", "quand", "combien", "quel" → c'est INTERROGER ou HISTORIQUE, jamais ACTION.
+CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 
-Exemples :
-- "afficher les récoltes de carotte variété nantaise" → INTERROGER
-- "afficher mes semis de radis" → INTERROGER
-- "voir l'historique des arrosages courgette" → HISTORIQUE
-- "combien ai-je récolté de tomates" → INTERROGER
-- "j'ai récolté 2 kg de tomates" → ACTION
-- "récolte 500g de carotte nantaise hier" → ACTION
-- "semis de radis 50 graines" → ACTION
-- "quand ai-je semé les carottes" → INTERROGER
-- "plan du potager" → PLAN
-- "plan parcelle nord" → PLAN
-- "montre-moi le plan" → PLAN
+🧮 STATS       : veut voir des statistiques, bilan, résumé, chiffres totaux, OU demande le détail d'une culture
+  MOTS-CLÉS : stats, statistiques, bilan, résumé, détail, affiche le détail, montre le détail, infos sur
+  Exemples :
+    ✅ "stats", "statistiques", "bilan de saison"
+    ✅ "affiche le détail de la culture courgette"
+    ✅ "affiche moi le détail de la courgette"
+    ✅ "montre le détail sur les tomates"
+    ✅ "détail courgette"
+    ✅ "infos sur mes poivrons"
+    ✅ "donne moi les stats de la tomate"
 
-Message : "{texte}"
+📖 HISTORIQUE  : veut voir l'historique, le journal, les derniers événements
+  Exemples : "historique", "histo", "journal", "derniers événements", "liste des actions"
 
-Réponds avec UN SEUL MOT en majuscules parmi : STATS, HISTORIQUE, INTERROGER, CORRIGER, SUPPRIMER, MENU, NOUVELLE, ACTION, PLAN
+❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER/MONTRER des données
+  MOTS-CLÉS : combien, quand, quel, affiche, afficher, montre, montrer, voir, liste, consulter, détail, detail, historique de, date de
+  Exemples :
+    ✅ "Combien de kg de tomates ai-je récolté cette saison ?"
+    ✅ "Quand ai-je planté mes courgettes ?"
+    ✅ "Afficher les récoltes de carotte variété nantaise"
+    ✅ "Affiche le détail sur la culture courgette"
+    ✅ "Montre-moi les semis de radis"
+    ✅ "Date des traitements sur les poivrons"
+    ✅ "Historique des arrosages courgettes"
+    ✅ "Montrer mes semis de radis"
+    ✅ "Voir les dernières récoltes"
+    ✅ "Quel est le total de mes semis ?"
+    ✅ "Consulter les pertes de cette saison"
+    ✅ "Liste des plantations de mai"
+    ✅ "Combien ai-je perdu de plants ?"
+    ✅ "Quels légumes ai-je arrosés cette semaine ?"
+    ✅ "Détail des récoltes de courgettes"
+    ✅ "Donne-moi les infos sur mes tomates"
+    ❌ "J'ai récolté 2 kg de tomates" (c'est une ACTION, pas une INTERROGATION)
+    ❌ "Semé des carottes hier" (c'est une ACTION)
+
+✏️ CORRIGER    : veut corriger, modifier, changer un enregistrement existant
+  Exemples : "corriger", "modifier", "changer", "rectifier"
+
+🗑️ SUPPRIMER   : veut supprimer ou effacer un enregistrement
+  Exemples : "supprimer", "effacer", "annuler", "delete"
+
+🏠 MENU        : veut revenir au menu, accueil, annuler, retour
+  Exemples : "menu", "accueil", "retour", "home", "annuler"
+
+🎤 NOUVELLE    : veut saisir une nouvelle action (après en avoir enregistré une)
+  Exemples : "nouvelle action", "autre action", "ajouter une autre"
+
+🌱 ACTION      : décrit une action potager RÉELLEMENT RÉALISÉE à enregistrer
+  Verbes d'action : récolté, semé, planté, arrosé, paillé, traité, désherbé, taillé, tuteuré, repiqué, fertilisé, perdu
+  Exemples :
+    ✅ "J'ai récolté 2 kg de tomates"
+    ✅ "Semé des carottes hier"
+    ✅ "Planté 12 plants de poivrons en 3 rangs"
+    ✅ "Arrosé les courgettes 30 minutes"
+    ✅ "Récolte 500g de carotte nantaise"
+    ✅ "Paillé la parcelle nord"
+    ✅ "Repiqué 20 plants de laitue"
+    ✅ "Traité les tomates contre le mildiou"
+    ✅ "Tuteuré les haricots"
+    ✅ "Perdu 5 plants de courgettes au gel"
+    ❌ "Combien de tomates ?" (c'est une INTERROGATION, pas une ACTION)
+    ❌ "Afficher mes récoltes" (c'est une INTERROGATION)
+
+🗺️ PLAN        : veut voir le plan d'occupation des parcelles
+  Exemples : "plan du potager", "plan parcelle nord", "montre-moi le plan"
+
+RÈGLE IMPORTANTE #1 :
+Si le message contient "affiche", "afficher", "montre", "montrer", "voir", "liste", "consulter", "détail", "combien", "quand", "quel"
+→ c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION (même sans "?" en fin de phrase).
+
+RÈGLE IMPORTANTE #2 :
+Si le message COMMENCE par un verbe d'action au passé (récolté, semé, planté, arrosé, paillé, traité...)
+ET SANS "?" → c'est ACTION, jamais INTERROGER.
+
+Message utilisateur : "{texte}"
+
+Réponds avec UN SEUL MOT en majuscules parmi :
+STATS | HISTORIQUE | INTERROGER | CORRIGER | SUPPRIMER | MENU | NOUVELLE | ACTION | PLAN
+
 Réponse :"""
 
 def classify_intent(texte: str) -> str:
@@ -808,19 +863,62 @@ def classify_intent(texte: str) -> str:
 def _extract_stats_culture(texte: str) -> str | None:
     """
     [US_Stats_detail_par_variete / CA8]
-    Extrait la culture depuis une phrase vocale type 'stats tomate'.
+    Extrait la culture depuis une phrase vocale type 'stats tomate' ou
+    'affiche le détail de la culture courgette'.
 
     Exemples reconnus :
-      "stats tomate" → "tomate"
-      "statistiques de la tomate" → "tomate"
-      "stats" seul → None
+      "stats tomate"                              → "tomate"
+      "statistiques de la tomate"                → "tomate"
+      "affiche le détail de la culture courgette" → "courgette"
+      "affiche moi le détail de la courgette"    → "courgette"
+      "montre le détail sur les tomates"         → "tomates"
+      "détail courgette"                         → "courgette"
+      "infos sur mes poivrons"                   → "poivrons"
+      "stats" seul                               → None
     """
     import re
+    t = texte.lower().strip()
+
+    # Pattern 1 — "stats/statistiques [de [la/les/du]] <culture>"
     m = re.match(
         r'^(?:stats?|statistiques?)\s+(?:de\s+(?:la\s+|les?\s+|des?\s+)?|du\s+)?(\w+)$',
-        texte.lower().strip(),
+        t,
     )
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+
+    # Pattern 2 — "affiche/montre [moi] le détail [de [la culture/les/du]] <culture>"
+    m = re.search(
+        r'(?:affiche?(?:r)?|montre?(?:r)?)\s+(?:moi\s+)?(?:le\s+)?d[eé]tail\s+'
+        r'(?:de\s+(?:la\s+culture\s+|la\s+|les?\s+|des?\s+|du\s+)?'
+        r'|sur\s+(?:la\s+culture\s+|les?\s+cultures?\s+|la\s+|les?\s+)?)?(\w+)',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    # Pattern 3 — "détail <culture>" ou "détail de [la] <culture>"
+    m = re.match(
+        r'^d[eé]tail\s+(?:de\s+(?:la\s+|les?\s+|des?\s+|du\s+)?)?(\w+)$',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    # Pattern 4 — "infos sur [mes/les/la] <culture>"
+    m = re.search(r'infos?\s+sur\s+(?:mes?\s+|les?\s+|la\s+)?(\w+)', t)
+    if m:
+        return m.group(1)
+
+    # Pattern 5 — "donne moi les stats de [la] <culture>"
+    m = re.search(
+        r'(?:donne(?:r)?(?:\s+moi)?)\s+(?:les?\s+)?stats?\s+(?:de\s+(?:la\s+|les?\s+|des?\s+)?)?(\w+)',
+        t,
+    )
+    if m:
+        return m.group(1)
+
+    return None
 
 
 def _extract_plan_parcelle(texte: str) -> str | None:
@@ -1105,8 +1203,27 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
 
+    # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
+    from utils.validation import validate_parsed_action
+    validated = []
+    action_none_detected = False
+    for item in items:
+        is_valid, reason = validate_parsed_action(item, texte)
+        if not is_valid:
+            log.warning(f"❌ VALIDATION US011: {reason} | item={json.dumps(item, ensure_ascii=False)}")
+            if "manquante" in reason or "None" in reason:
+                action_none_detected = True
+        else:
+            validated.append(item)
+    items = validated
+
     if not items:
-        await update.message.reply_text("❌ Aucune action détectée.")
+        if action_none_detected:
+            # Groq a parsé une question comme action → reroutage vers le flux interrogation
+            log.info(f"❓ REROUTAGE US011 : action=None détectée → _ask_question('{texte}')")
+            await _ask_question(update, texte)
+        else:
+            await update.message.reply_text("❌ Aucune action détectée.")
         return
 
     # Cas JSON sans action ni culture → phrase non reconnue comme action potager
@@ -1310,39 +1427,37 @@ def _build_recap(p: dict, event_id: int) -> str:
 
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
-    """Interroge l'historique via Groq."""
+    """
+    [US-012] Interroge l'historique via SQL agent — zéro hallucination, zéro Groq pour la réponse.
+
+    Flux : extract_intent_query() [~100 tokens] → query_agent_answer() [0 tokens] → réponse.
+    """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
-    db  = SessionLocal()
     try:
-        contexte = build_question_context(db, question)
-        if not contexte or contexte == "[]":
-            await msg.edit_text("📭 Aucune donnée pertinente pour cette question.")
-            return
+        from llm.groq_client import extract_intent_query
+        from llm.sql_agent import query_agent_answer
 
-        log.info(f"🤖 LLM | Appel à Groq pour question analytique: '{question}' (contexte: {len(contexte)} chars)")
-        reponse = repondre_question(question, contexte)
-        log.info(f"💡 LLM | Réponse Groq reçue: {len(reponse)} caractères")
+        intent = extract_intent_query(question)
+        log.info(f"🎯 INTENT QUERY   : {intent}")
 
-        log.info(f"💡 RÉPONSE GROQ   : {reponse[:200]}{'...' if len(reponse)>200 else ''}")
-        # Pas de parse_mode sur la réponse Groq : elle peut contenir des caractères
-        # spéciaux (apostrophes, tirets, parenthèses) qui cassent le parser Telegram
+        reponse = query_agent_answer(question, intent)
+        log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
+
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
-            # Fallback sans markdown si la réponse contient des caractères problématiques
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+
         await update.message.reply_text(
             "_Autre question ou action ?_",
             parse_mode="Markdown",
             reply_markup=AFTER_RECORD_KEYBOARD
         )
-        # ── Synthèse vocale de la réponse analytique ──────────────────────────
         await send_voice_reply(update, reponse)
     except Exception as e:
+        log.error(f"❌ Erreur _ask_question: {e}")
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
-    finally:
-        db.close()
 
 
 async def _consulter_godets(update) -> None:
@@ -1833,7 +1948,8 @@ async def cmd_stats(update, ctx):
     """
     from utils.stock import (
         calcul_stock_cultures, format_stock_ligne_telegram, calcul_semis,
-        calcul_stock_par_variete, format_variete_bloc_telegram, calcul_godets,
+        calcul_stock_par_variete, format_variete_bloc_telegram, _fmt_date_variete,
+        calcul_semis_par_culture, calcul_godets,
     )
 
     # [US_Stats_detail_par_variete / CA7] Insensible à la casse
@@ -1846,9 +1962,10 @@ async def cmd_stats(update, ctx):
         # ── [US_Stats_detail_par_variete / CA3] Mode détail variété ──────────
         if culture_arg:
             varietes = calcul_stock_par_variete(db, culture_arg)
+            semis_culture = calcul_semis_par_culture(db, culture_arg)
 
-            # [CA6] Culture inconnue
-            if not varietes:
+            # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
+            if not varietes and not semis_culture:
                 texte_final = f"_Aucune donnée pour {culture_arg}_"
                 try:
                     await update.message.reply_text(
@@ -1858,15 +1975,33 @@ async def cmd_stats(update, ctx):
                     await update.message.reply_text(texte_final, reply_markup=MENU_KEYBOARD)
                 return
 
-            # Emoji selon type_organe du premier résultat
-            type_organe = varietes[0]["type_organe"]
+            # Emoji selon type_organe (plantation ou semis)
+            type_organe = varietes[0]["type_organe"] if varietes else None
             emoji = "🍅" if type_organe == "reproducteur" else "🥬"
             culture_display = culture_arg.capitalize()
 
             lines_out = [f"{emoji} *{culture_display} — détail par variété*\n"]
+
+            current_year_sv = __import__("datetime").datetime.now().year
+
+            # Blocs plantations
             for v in varietes:
                 lines_out.append(format_variete_bloc_telegram(v))
-                lines_out.append("")  # ligne vide entre variétés
+                lines_out.append("")
+
+            # [US-014 / CA3+CA4] Section semis unifiée — toujours en bas, jamais inline
+            if semis_culture:
+                lines_out.append("🌱 *Semis en cours :*")
+                for s in semis_culture:
+                    var_label = s["variete"] or "Variété non précisée"
+                    date_s    = s["date_premier_semis"]
+                    date_str  = _fmt_date_variete(date_s, current_year_sv) if date_s else "?"
+                    if s["total_seme"]:
+                        semis_label = f"semis de {int(s['total_seme'])} {s['unite']}"
+                    else:
+                        semis_label = f"{s['nb_semis']} semis"
+                    lines_out.append(f"  • *{var_label}* : {semis_label} · 🗓️ {date_str}")
+                lines_out.append("")
 
             lines_out.append("_Pour revenir à la synthèse : /stats_")
             texte_final = "\n".join(lines_out)
@@ -1918,6 +2053,7 @@ async def cmd_stats(update, ctx):
 
             lines_out.append("\n🌱 *Semis :*")
 
+            # [US-014 / CA1] Récoltes retirées — elles appartiennent aux plantations
             def _ligne_semis(culture: str, s: dict) -> str:
                 if s["total_seme"] is not None and s["total_seme"] > 0:
                     ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
@@ -1925,10 +2061,6 @@ async def cmd_stats(update, ctx):
                     ligne = f"  • {culture} : *{s['nb_semis']} semis*"
                 if s.get("graines_en_godet", 0) > 0:
                     ligne += f" · dont *{s['graines_en_godet']}* passées en godet"
-                if s["nb_recoltes"] > 0:
-                    r_val = round(s["total_recolte"], 2)
-                    r_u   = s["unite_recolte"] or "unités"
-                    ligne += f" · {r_val} {r_u} récoltés ({s['nb_recoltes']} fois)"
                 return ligne
 
             if veg_semis:

@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Toujours répondre en français, quelle que soit la langue utilisée dans les messages.
 
+## Règles d'exécution des agents (NON NÉGOCIABLES)
+
+Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/agents/`.
+
+1. **Lire le fichier agent avant toute action** : avant d'exécuter le rôle d'un sous-agent,
+   lire intégralement son fichier `.github/agents/*.agent.md`. Ne jamais improviser de mémoire.
+
+2. **Patch Notes Writer — checklist obligatoire** : lors de l'exécution de l'étape Documentation,
+   les deux fichiers suivants DOIVENT être modifiés sans exception :
+   - `PATCH_NOTES.md` — nouvelle entrée insérée EN HAUT
+   - `VERSION` — numéro incrémenté selon SemVer (PATCH / MINOR / MAJOR)
+   Toute exécution du Patch Notes Writer sans mise à jour de `VERSION` est une erreur.
+
+3. **Confirmation d'étape** : après chaque étape de l'Orchestrateur, indiquer explicitement
+   "Étape X terminée" avec les fichiers modifiés. Ne pas enchaîner silencieusement.
+
 ## Project Overview
 
 **Assistant Potager** is an intelligent gardening tracker for amateur gardeners. It combines:
@@ -151,3 +167,46 @@ User story tests follow the pattern `test_us*.py` and cover specific features en
 - **FFmpeg**: required for MP3→OGG/Opus conversion (Telegram voice replies); gracefully degraded if missing
 - **Open-Meteo**: weather API (free, no key)
 - **Groq**: LLM API — models configured in `.env` as `GROQ_MODEL` and `GROQ_WHISPER_MODEL`
+
+## Roadmap v2.0 — Fix hallucinations mode interrogation
+
+### Mission
+Implémenter le fix critique hallucinations mode interrogation en 20h (10 jours).
+
+### Documentation disponible
+
+Tous les docs sont dans `docs/` :
+- `docs/00_INDEX_NAVIGATION.md` — guide de navigation
+- `docs/RESUME_EXECUTIF_1PAGE.md` — synthèse 5 min
+- `docs/SCHEMAS_ARCHITECTURE_ASCII.md` — diagrammes avant/après + TEST MATRIX
+- `docs/PLAN_IMPLEMENTATION_20h.md` — code exact à implémenter (référence quotidienne)
+- `docs/AUDIT_ARCHITECTURAL_ASSISTANT_POTAGER_v2.0.md` — contexte complet
+
+### Quick Start
+
+1. Lire `docs/RESUME_EXECUTIF_1PAGE.md` (5 min)
+2. Implémenter `docs/PLAN_IMPLEMENTATION_20h.md` → section Jour 1–2
+3. Tester via `docs/SCHEMAS_ARCHITECTURE_ASCII.md` → TEST MATRIX
+
+### Bug critique
+
+`classify_intent()` (bot.py ~l.730) classifie mal les questions en ACTION → `_parse_and_save()` est appelée sur une question → Groq hallucine un JSON avec `culture` seule → la garde-fou passe → fausse entrée sauvegardée en base (3–5/jour). Coût additionnel : ~5000 tokens/question (frôle quota 100k/jour).
+
+### Impact attendu
+
+- 0 fausses entrées (avant : 3–5/jour)
+- -56% tokens Groq (avant : ~94k/jour, après : ~41k/jour)
+- Effort : 20h (10 jours × 2h)
+
+### Fichiers à modifier / créer
+
+| Fichier | Action | Changement |
+|---------|--------|-----------|
+| `bot.py` ~l.730 | MODIFIER | Enrichir `_CLASSIFY_PROMPT` (30+ exemples questions) |
+| `bot.py` ~l.1283 | MODIFIER | Refactorer `_ask_question()` → ne plus appeler `parse_commande()` |
+| `llm/groq_client.py` ~l.44 | MODIFIER | Ajouter `extract_intent_query()` (~100 tokens) |
+| `utils/validation.py` | CRÉER | `validate_parsed_action()` — whitelist + règles strictes |
+| `llm/sql_agent.py` | CRÉER | `build_sql_query()` + `query_agent_answer()` — Python pur, zéro Groq |
+| `tests/test_validation.py` | CRÉER | Tests unitaires validation |
+
+> Lire `docs/PLAN_IMPLEMENTATION_20h.md` section du jour avant de coder — le code exact y est, zéro ambiguïté.

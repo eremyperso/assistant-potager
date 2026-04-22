@@ -15,7 +15,7 @@ ACTION_MAP: dict[str, list[str]] = {
     ],
     "plantation": [
         "planter", "plante", "plantee", "plantes", "plantees",
-        "repiquer", "repique", "repiquee", "repiquees",
+        "repiquer", "repique", "repiquee", "repiquees", "repiquage",
         "mise en terre", "mettre en terre", "transplanter"
     ],
     "arrosage": [

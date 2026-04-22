@@ -41,6 +41,16 @@ Exemples :
 """ 
 
 
+def extract_intent_query(question: str) -> dict:
+    """
+    [US-012] Extrait l'intention d'une question analytique (~100 tokens Groq).
+
+    Retourne {"action": ..., "culture": ..., "date_from": ...}.
+    Alias orienté questions — utilise le même INTENT_PROMPT qu'extract_intent().
+    """
+    return extract_intent(question)
+
+
 def extract_intent(question: str) -> dict:
     chat = _client.chat.completions.create(
         model=GROQ_MODEL,

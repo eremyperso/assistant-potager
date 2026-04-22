@@ -1,4 +1,69 @@
 
+## [v2.19.0] — 2026-04-21
+
+### 🚀 Nouveautés
+- Ajoute la section `🌱 Semis en cours` dans `/stats [culture]` — tous les semis de la culture sont visibles avec variété en gras, quantité et date (US-014)
+- Ajoute `calcul_semis_par_culture()` dans `utils/stock.py` pour requêter les semis par culture et variété (US-014)
+- Ajoute la règle d'exécution des agents dans `CLAUDE.md` — lecture obligatoire du fichier `.agent.md` avant toute action (process)
+
+### 🐛 Corrections
+- Corrige la sauvegarde silencieuse d'événements avec `action=None` : la validation bloque désormais tout JSON sans action et reroute vers le flux interrogation (US-011)
+- Corrige `classify_intent()` : "affiche", "montre", "détail" classifiés INTERROGER/STATS même sans "?" en fin de phrase (US-010)
+- Corrige `/stats [culture]` : une culture avec uniquement des semis (sans plantation) est maintenant affichée au lieu de "Aucune donnée" (US-014)
+
+### 🔧 Améliorations techniques
+- Améliore la présentation `/stats [culture]` : dates et récoltes sur une seule ligne, `(planté X, perdu Y)` affiché uniquement en cas de perte réelle (US-014)
+- Améliore `_extract_stats_culture()` : reconnaît "affiche le détail de X", "montre le détail sur X", "infos sur X", "détail X" → route vers `/stats [culture]` (US-010)
+- Remplace `📅` par `🗓️` dans les affichages de dates (présentation)
+- Renforce l'Orchestrateur-US : lecture obligatoire de chaque fichier sous-agent avant exécution, confirmation d'étape requise (process)
+
+### 🧪 Tests
+- Ajoute `tests/test_us014_stats_semis.py` — 15 cas CA1→CA7 couvrant semis, non-régression plantations et isolation cultures (US-014)
+
+## [v2.18.0] — 2026-04-21
+
+### 🐛 Corrections
+- Corrige l'affichage erroné des récoltes dans la section Semis de `/stats` : les récoltes appartiennent toujours aux plantations, jamais aux semis (US-014)
+- Les itinéraires culturaux décalés (semis lancés après des plants déjà en production) sont maintenant correctement représentés sans double-comptage (US-014)
+
+### 🚀 Nouveautés
+- `/stats [culture]` : les semis sont désormais visibles dans le bloc variété correspondant avec quantité et date (`🌱 20 graines semées · 📅 20 avr`) (US-014)
+- `/stats [culture]` : les semis sans plantation correspondante sont listés dans une section dédiée "Semis sans plantation correspondante" (US-014)
+- `/stats [culture]` : une culture avec uniquement des semis (pas encore de plantation) est maintenant affichée (plus de "Aucune donnée") (US-014)
+- Nouvelle fonction `calcul_semis_par_culture(db, culture)` dans `utils/stock.py` (US-014)
+
+### 🧪 Tests
+- Ajout de `tests/test_us014_stats_semis.py` — 15 cas couvrant CA1→CA7 + non-régression (US-014)
+
+## [v2.17.0] — 2026-04-20
+
+### 🚀 Nouveautés
+- Ajoute l'agent SQL `llm/sql_agent.py` pour répondre aux questions analytiques sans appel Groq (US-012)
+- Ajoute `extract_intent_query()` dans `groq_client.py` — extraction d'intent question en ~100 tokens (US-012)
+- Ajoute `utils/validation.py` — validation post-parsing Python pur avec whitelist d'actions canoniques (US-011)
+
+### 🐛 Corrections
+- Corrige les fausses entrées créées quand une question passe dans `_parse_and_save()` : la validation US-011 filtre les hallucinations Groq avant toute sauvegarde (US-011)
+- Corrige le mode interrogation qui consommait ~5 000 tokens Groq par question : désormais ~100 tokens via SQL agent (US-012)
+
+### 🔧 Améliorations techniques
+- Refactorise `_ask_question()` dans `bot.py` : supprime l'appel à `repondre_question()` et `build_question_context()`, remplace par `extract_intent_query()` + `query_agent_answer()` (US-012)
+- Ajoute la validation `validate_parsed_action()` dans `_parse_and_save()` après `_normalize_items()` avec log WARNING sur chaque rejet (US-011)
+- Ajoute 27 tests dans `tests/test_us011_validation.py` et `tests/test_us012_sql_agent.py`
+
+## [v2.16.0] — 2026-04-20
+
+### 🚀 Nouveautés
+- Améliore la classification d'intention pour distinguer questions et actions potager (US-010)
+- Ajoute 13 tests unitaires couvrant CA1–CA6, edge cases et erreur API dans `tests/test_us010_classify_intent.py`
+
+### 🐛 Corrections
+- Corrige la classification erronée de questions en ACTION : "Combien de tomates ?" n'est plus enregistré comme action (US-010)
+
+### 🔧 Améliorations techniques
+- Enrichit `_CLASSIFY_PROMPT` avec 30+ exemples explicites (questions vs actions) et deux règles de priorité absolue
+- Ajoute des contre-exemples ❌ inline dans le prompt pour réduire les faux positifs ACTION sur les questions
+
 ## [v2.15.0] — 2026-04-16
 
 ### 🚀 Nouveautés
