@@ -363,11 +363,14 @@ _HELP_GODET = (
     "Suivre le repiquage des plants de pépinière en godet.\n\n"
     "*Actions disponibles :*\n"
     "• Enregistrer une mise en godet\n"
-    "  → _\"mise en godet tomates Saint-Pierre 20 plants\"_\n"
+    "  → _\"mise en godet 20 tomates Saint-Pierre\"_\n"
+    "  → _\"mis en godet 24 tomates sur 30 graines\"_ (taux calculé)\n"
     "  → _\"repiquer 15 plants de poivron en godet le 10 mars\"_\n"
     "• Consulter les godets en attente\n"
     "  → _\"liste des godets\"_\n"
-    "  → _\"quels plants sont en godet ?\"_\n\n"
+    "  → _\"quels plants sont en godet ?\"_\n"
+    "• Voir les stats pépinière\n"
+    "  → /stats  (section 🪴 Pépinière)\n\n"
     "💡 _La mise en godet est l'étape entre le semis plateau\n"
     "   et la plantation en parcelle._"
 )
@@ -619,6 +622,11 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await cmd_plan(update, ctx)
         return
     if intent == "INTERROGER":
+        if _is_requete_godets(texte):
+            log.info(f"🪴 GODETS VOCAL    : détecté → _consulter_godets")
+            await msg.edit_text("🪴 *Godets en attente...*", parse_mode="Markdown")
+            await _consulter_godets(update)
+            return
         # Si le texte est déjà une question complète (>4 mots), la traiter directement
         # Sinon, demander de formuler la question (mot court type "interroger", "question"...)
         mots = texte.strip().split()
@@ -681,6 +689,21 @@ ACTION_VERBS = (
     "posé", "appliqué", "installé", "sorti",
     "godet", "mis en godet", "mise en godet",
 )
+
+_GODETS_KEYWORDS = (
+    "liste des godets", "liste godets", "quels plants en godet",
+    "quels plants sont en godet", "plants en godet", "godets en attente",
+    "mes godets", "voir les godets", "mes plants en godet",
+)
+
+
+def _is_requete_godets(texte: str) -> bool:
+    """Retourne True si la phrase porte sur la consultation des godets en attente."""
+    t = texte.lower().strip()
+    return any(kw in t for kw in _GODETS_KEYWORDS) or (
+        "godet" in t and any(w in t for w in ("liste", "quels", "combien", "voir", "etat", "état"))
+    )
+
 
 def _is_question(texte: str) -> bool:
     """Retourne True si la phrase ressemble à une question analytique."""
@@ -1053,6 +1076,12 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                   'corr_pending','corr_event_actuel']:
             ctx.user_data.pop(k, None)
         await _corr_start(update, ctx)
+        return
+
+    # ── PRIORITÉ 3b : requête godets en attente ──────────────────────────────
+    if _is_requete_godets(texte_raw):
+        log.info(f"🪴 GODETS          : détecté → _consulter_godets")
+        await _consulter_godets(update)
         return
 
     # ── PRIORITÉ 4 : détection automatique question
@@ -1429,6 +1458,57 @@ async def _ask_question(update: Update, question: str):
     except Exception as e:
         log.error(f"❌ Erreur _ask_question: {e}")
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+
+
+async def _consulter_godets(update) -> None:
+    """[US_mise_en_godet] Affiche les plants en godet sans plantation postérieure."""
+    db = SessionLocal()
+    try:
+        godets_all = (
+            db.query(Evenement)
+            .filter(Evenement.type_action == "mise_en_godet")
+            .order_by(Evenement.date.desc())
+            .all()
+        )
+        en_attente = []
+        for g in godets_all:
+            plantation = db.query(Evenement).filter(
+                Evenement.type_action == "plantation",
+                Evenement.culture == g.culture,
+            )
+            if g.date:
+                plantation = plantation.filter(Evenement.date >= g.date)
+            if not plantation.first():
+                en_attente.append(g)
+
+        if not en_attente:
+            await update.message.reply_text(
+                "🪴 *Aucun plant en godet actuellement.*\n\n"
+                "Enregistrez une mise en godet :\n"
+                "_\"mise en godet 20 tomates Saint-Pierre\"_",
+                parse_mode="Markdown",
+                reply_markup=AFTER_RECORD_KEYBOARD,
+            )
+            return
+
+        lines = ["🪴 *Plants actuellement en godet :*\n"]
+        for g in en_attente:
+            cult = g.culture or "?"
+            var  = f" ({g.variete})" if g.variete else ""
+            nb   = f" — *{g.nb_plants_godets} plants*" if g.nb_plants_godets else ""
+            date_str = f" _{g.date.strftime('%d/%m/%Y')}_" if g.date else ""
+            lines.append(f"• 🌱 {cult}{var}{nb}{date_str}")
+
+        lines.append("\n💡 _Plantez-les avec : \"planté X tomates en A1\"_")
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=AFTER_RECORD_KEYBOARD,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+    finally:
+        db.close()
 
 
 # ── COMMANDES ───────────────────────────────────────────────────────────────────
@@ -1869,7 +1949,7 @@ async def cmd_stats(update, ctx):
     from utils.stock import (
         calcul_stock_cultures, format_stock_ligne_telegram, calcul_semis,
         calcul_stock_par_variete, format_variete_bloc_telegram, _fmt_date_variete,
-        calcul_semis_par_culture,
+        calcul_semis_par_culture, calcul_godets,
     )
 
     # [US_Stats_detail_par_variete / CA7] Insensible à la casse
@@ -1974,23 +2054,34 @@ async def cmd_stats(update, ctx):
             lines_out.append("\n🌱 *Semis :*")
 
             # [US-014 / CA1] Récoltes retirées — elles appartiennent aux plantations
+            def _ligne_semis(culture: str, s: dict) -> str:
+                if s["total_seme"] is not None and s["total_seme"] > 0:
+                    ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
+                else:
+                    ligne = f"  • {culture} : *{s['nb_semis']} semis*"
+                if s.get("graines_en_godet", 0) > 0:
+                    ligne += f" · dont *{s['graines_en_godet']}* passées en godet"
+                return ligne
+
             if veg_semis:
                 lines_out.append("  _→ Récolte destructive (végétatif)_")
                 for culture, s in veg_semis.items():
-                    if s["total_seme"] is not None and s["total_seme"] > 0:
-                        ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
-                    else:
-                        ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                    lines_out.append(ligne)
+                    lines_out.append(_ligne_semis(culture, s))
 
             if repr_semis:
                 lines_out.append("  _→ Récolte continue (reproducteur)_")
                 for culture, s in repr_semis.items():
-                    if s["total_seme"] is not None and s["total_seme"] > 0:
-                        ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
-                    else:
-                        ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                    lines_out.append(ligne)
+                    lines_out.append(_ligne_semis(culture, s))
+
+        # ── Pépinière (godets) ─────────────────────────────────────────────────
+        godets_stats = calcul_godets(db)
+        if godets_stats:
+            lines_out.append("\n🪴 *Pépinière :*")
+            for key, g in godets_stats.items():
+                nb_p = g["nb_plants_godets"]
+                taux = g["taux_reussite"]
+                taux_str = f" · taux *{taux}%*" if taux is not None else ""
+                lines_out.append(f"  • {key} : *{nb_p} plants*{taux_str}")
 
         # ── Arrosages (inchangé) ───────────────────────────────────────────────
         arrosages = (

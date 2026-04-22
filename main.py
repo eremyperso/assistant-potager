@@ -123,18 +123,20 @@ def parse(req: TexteRequest):
             nom_parcelle = parsed.get("parcelle")
             parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
             event = Evenement(
-                type_action    = normalize_action(parsed.get("action")),
-                culture        = parsed.get("culture"),
-                variete        = parsed.get("variete"),
-                quantite       = _to_float(parsed.get("quantite")),
-                unite          = parsed.get("unite"),
-                parcelle_id    = parcelle_obj.id if parcelle_obj else None,
-                rang           = parsed.get("rang"),
-                duree          = _to_int(parsed.get("duree_minutes")),
-                traitement     = parsed.get("traitement"),
-                commentaire    = parsed.get("commentaire"),
-                texte_original = req.texte,
-                date           = parse_date(parsed.get("date")),
+                type_action       = normalize_action(parsed.get("action")),
+                culture           = parsed.get("culture"),
+                variete           = parsed.get("variete"),
+                quantite          = _to_float(parsed.get("quantite")),
+                unite             = parsed.get("unite"),
+                parcelle_id       = parcelle_obj.id if parcelle_obj else None,
+                rang              = parsed.get("rang"),
+                duree             = _to_int(parsed.get("duree_minutes")),
+                traitement        = parsed.get("traitement"),
+                commentaire       = parsed.get("commentaire"),
+                texte_original    = req.texte,
+                date              = parse_date(parsed.get("date")),
+                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
             )
             
             # Héritage automatique du type d'organe récolté depuis culture_config
@@ -217,11 +219,12 @@ def ask(req: TexteRequest):
 @app.get("/stats")
 def stats():
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié."""
-    from utils.stock import calcul_stock_cultures, format_stock_stats_json
+    from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets
     db = SessionLocal()
     try:
         total  = db.query(Evenement).count()
         stocks = calcul_stock_cultures(db)
+        godets = calcul_godets(db)
         arrosages = (
             db.query(func.count(Evenement.id), func.sum(Evenement.duree))
             .filter(Evenement.type_action == "arrosage").first()
@@ -234,9 +237,62 @@ def stats():
         return {
             "total_evenements"  : total,
             "stock_par_culture" : format_stock_stats_json(stocks),
+            "godets"            : [
+                {
+                    "culture":           v["culture"],
+                    "variete":           v["variete"],
+                    "nb_plants_godets":  v["nb_plants_godets"],
+                    "nb_graines_semees": v["nb_graines_semees"],
+                    "taux_reussite":     v["taux_reussite"],
+                }
+                for v in godets.values()
+            ],
             "arrosages"         : {"nb": arrosages[0] or 0, "duree_totale_min": arrosages[1] or 0},
             "traitements"       : [{"produit": t or "?", "nb_applications": n} for t, n in traitements],
         }
+    finally:
+        db.close()
+
+
+@app.get("/godets")
+def get_godets():
+    """
+    [US_mise_en_godet] Retourne les plants actuellement en godet sans plantation postérieure.
+
+    Un godet est considéré "en attente" si aucune plantation de la même culture
+    n'a été enregistrée après la date de mise en godet.
+    """
+    db = SessionLocal()
+    try:
+        godets_all = (
+            db.query(Evenement)
+            .filter(Evenement.type_action == "mise_en_godet")
+            .order_by(Evenement.date.desc())
+            .all()
+        )
+        en_attente = []
+        for g in godets_all:
+            date_ref = g.date
+            plantation = (
+                db.query(Evenement)
+                .filter(
+                    Evenement.type_action == "plantation",
+                    Evenement.culture == g.culture,
+                )
+            )
+            if date_ref:
+                plantation = plantation.filter(Evenement.date >= date_ref)
+            if not plantation.first():
+                en_attente.append({
+                    "id":               g.id,
+                    "culture":          g.culture,
+                    "variete":          g.variete,
+                    "nb_graines_semees": g.nb_graines_semees,
+                    "nb_plants_godets": g.nb_plants_godets,
+                    "date":             str(g.date)[:10] if g.date else None,
+                    "commentaire":      g.commentaire,
+                })
+        return {"godets_en_attente": en_attente, "total": len(en_attente)}
     finally:
         db.close()
 

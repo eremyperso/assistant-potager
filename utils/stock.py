@@ -244,13 +244,24 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
     )
     unites: Dict[str, str] = {c: u for c, u in unites_raw}
 
+    # Graines passées en godet par culture (nb_graines_semees des mise_en_godet)
+    godets_raw = (
+        db.query(Evenement.culture, func.sum(Evenement.nb_graines_semees))
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture)
+        .all()
+    )
+    graines_en_godet: Dict[str, int] = {c: (int(q) if q else 0) for c, q in godets_raw}
+
     result: Dict[str, dict] = {}
     for culture, nb, total in semis_raw:
         result[culture] = {
-            "nb_semis":   nb,
-            "total_seme": total,
-            "unite":      unites.get(culture, "graines"),
-            "type_organe": get_type_organe(db, culture),
+            "nb_semis":         nb,
+            "total_seme":       total,
+            "unite":            unites.get(culture, "graines"),
+            "type_organe":      get_type_organe(db, culture),
+            "graines_en_godet": graines_en_godet.get(culture, 0),
         }
     return dict(sorted(result.items()))
 
@@ -508,6 +519,42 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
         })
 
     return result
+
+
+def calcul_godets(db: Session) -> Dict[str, dict]:
+    """
+    [US_mise_en_godet] Agrège les mise_en_godet par culture/variété.
+
+    Retourne un dict trié { "culture (variete)": { culture, variete,
+    nb_godets, nb_graines_semees, nb_plants_godets, taux_reussite } }.
+    taux_reussite est None si l'un des deux compteurs est absent.
+    """
+    rows = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            func.sum(Evenement.nb_graines_semees),
+            func.sum(Evenement.nb_plants_godets),
+            func.count(Evenement.id),
+        )
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    result: Dict[str, dict] = {}
+    for culture, variete, tot_g, tot_p, nb in rows:
+        key = culture + (f" ({variete})" if variete else "")
+        taux = round(tot_p / tot_g * 100) if (tot_g and tot_p) else None
+        result[key] = {
+            "culture":          culture,
+            "variete":          variete,
+            "nb_godets":        nb,
+            "nb_graines_semees": int(tot_g) if tot_g else 0,
+            "nb_plants_godets":  int(tot_p) if tot_p else 0,
+            "taux_reussite":    taux,
+        }
+    return dict(sorted(result.items()))
 
 
 _MOIS_FR = [
