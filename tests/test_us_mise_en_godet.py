@@ -290,3 +290,202 @@ class TestCA5PromptLLM:
         assert "mise_en_godet" in formatted
         assert "nb_graines_semees" in formatted
         assert "nb_plants_godets" in formatted
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CA6 — POST /parse sauvegarde nb_graines_semees et nb_plants_godets
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCA6MainParseSaveGodetFields:
+    def test_ca6_post_parse_sauvegarde_champs_godet(self, test_db) -> None:
+        """CA6 — POST /parse crée un Evenement avec nb_graines_semees et nb_plants_godets."""
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+
+        parsed_mock = [{
+            "action": "mise_en_godet",
+            "culture": "tomate",
+            "variete": "cerise",
+            "nb_graines_semees": 30,
+            "nb_plants_godets": 24,
+            "quantite": None,
+            "unite": None,
+            "parcelle": None,
+            "date": None,
+            "commentaire": None,
+        }]
+        with patch("main.parse_commande", return_value=parsed_mock), \
+             patch("main.add_to_rag"), \
+             patch("main.SessionLocal", return_value=test_db):
+            client = TestClient(app)
+            resp = client.post("/parse", json={"texte": "mis en godet 24 tomates cerise sur 30 graines"})
+
+        assert resp.status_code == 200
+        ev = test_db.query(Evenement).filter(Evenement.type_action == "mise_en_godet").first()
+        assert ev is not None
+        assert ev.nb_graines_semees == 30
+        assert ev.nb_plants_godets == 24
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CA7 — GET /godets retourne les godets sans plantation postérieure
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCA7GetGodets:
+    def test_ca7_godets_en_attente_retournes(self, test_db) -> None:
+        """CA7 — GET /godets retourne un godet sans plantation postérieure."""
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+
+        test_db.add(Evenement(
+            type_action="mise_en_godet",
+            culture="tomate",
+            variete="cerise",
+            nb_graines_semees=30,
+            nb_plants_godets=24,
+        ))
+        test_db.commit()
+
+        with patch("main.SessionLocal", return_value=test_db):
+            client = TestClient(app)
+            resp = client.get("/godets")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 1
+        assert data["godets_en_attente"][0]["culture"] == "tomate"
+        assert data["godets_en_attente"][0]["nb_plants_godets"] == 24
+
+    def test_ca7_godets_vide_si_aucun(self, test_db) -> None:
+        """CA7 — GET /godets retourne une liste vide si aucun godet enregistré."""
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from main import app
+
+        with patch("main.SessionLocal", return_value=test_db):
+            client = TestClient(app)
+            resp = client.get("/godets")
+
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CA8 — GET /godets exclut les godets avec plantation postérieure
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCA8GetGodetsExclusion:
+    def test_ca8_godet_exclu_si_plantation_posterieure(self, test_db) -> None:
+        """CA8 — GET /godets n'inclut pas un godet déjà planté en parcelle."""
+        from fastapi.testclient import TestClient
+        from unittest.mock import patch
+        from datetime import datetime
+        from main import app
+
+        test_db.add(Evenement(
+            type_action="mise_en_godet",
+            culture="poivron",
+            nb_plants_godets=15,
+            date=datetime(2026, 3, 10),
+        ))
+        test_db.add(Evenement(
+            type_action="plantation",
+            culture="poivron",
+            quantite=15.0,
+            unite="plants",
+            rang=1,
+            date=datetime(2026, 4, 1),
+        ))
+        test_db.commit()
+
+        with patch("main.SessionLocal", return_value=test_db):
+            client = TestClient(app)
+            resp = client.get("/godets")
+
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CA9 — calcul_godets() retourne le taux de réussite correct
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCA9CalcGodets:
+    def test_ca9_taux_reussite_calcule(self, test_db) -> None:
+        """CA9 — calcul_godets() retourne 80% pour 24 plants sur 30 graines."""
+        from utils.stock import calcul_godets
+
+        test_db.add(Evenement(
+            type_action="mise_en_godet",
+            culture="tomate",
+            variete="cerise",
+            nb_graines_semees=30,
+            nb_plants_godets=24,
+        ))
+        test_db.commit()
+
+        godets = calcul_godets(test_db)
+        assert "tomate (cerise)" in godets
+        assert godets["tomate (cerise)"]["taux_reussite"] == 80
+
+    def test_ca9_taux_none_si_graines_absentes(self, test_db) -> None:
+        """CA9 — taux_reussite est None si nb_graines_semees est absent."""
+        from utils.stock import calcul_godets
+
+        test_db.add(Evenement(
+            type_action="mise_en_godet",
+            culture="poivron",
+            nb_plants_godets=10,
+            nb_graines_semees=None,
+        ))
+        test_db.commit()
+
+        godets = calcul_godets(test_db)
+        assert "poivron" in godets
+        assert godets["poivron"]["taux_reussite"] is None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CA10 — calcul_semis() retourne graines_en_godet enrichi
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCA10CalcSemisEnriched:
+    def test_ca10_graines_en_godet_present(self, test_db) -> None:
+        """CA10 — calcul_semis() retourne graines_en_godet pour la culture concernée."""
+        from utils.stock import calcul_semis
+
+        test_db.add(Evenement(
+            type_action="semis",
+            culture="tomate",
+            quantite=50.0,
+            unite="graines",
+        ))
+        test_db.add(Evenement(
+            type_action="mise_en_godet",
+            culture="tomate",
+            nb_graines_semees=30,
+            nb_plants_godets=24,
+        ))
+        test_db.commit()
+
+        semis = calcul_semis(test_db)
+        assert "tomate" in semis
+        assert semis["tomate"]["graines_en_godet"] == 30
+
+    def test_ca10_graines_en_godet_zero_si_aucun_godet(self, test_db) -> None:
+        """CA10 — graines_en_godet vaut 0 si aucune mise_en_godet pour cette culture."""
+        from utils.stock import calcul_semis
+
+        test_db.add(Evenement(
+            type_action="semis",
+            culture="carotte",
+            quantite=100.0,
+            unite="graines",
+        ))
+        test_db.commit()
+
+        semis = calcul_semis(test_db)
+        assert "carotte" in semis
+        assert semis["carotte"]["graines_en_godet"] == 0
