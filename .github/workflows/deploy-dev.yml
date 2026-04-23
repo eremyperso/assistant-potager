@@ -41,6 +41,12 @@ jobs:
             venv/bin/pip install --quiet -r requirements.txt
           "
 
+      - name: Setup PostgreSQL extensions
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            sudo -u postgres psql -d potager_dev -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+          "
+
       - name: Apply SQL migrations
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
