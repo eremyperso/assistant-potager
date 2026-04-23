@@ -244,9 +244,14 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
     )
     unites: Dict[str, str] = {c: u for c, u in unites_raw}
 
-    # Graines passées en godet par culture (nb_graines_semees des mise_en_godet)
+    # Graines passées en godet par culture.
+    # COALESCE(nb_graines_semees, quantite) : rétrocompat avec anciens événements
+    # qui stockaient le nombre de graines dans `quantite` avant migration v7.
     godets_raw = (
-        db.query(Evenement.culture, func.sum(Evenement.nb_graines_semees))
+        db.query(
+            Evenement.culture,
+            func.sum(func.coalesce(Evenement.nb_graines_semees, Evenement.quantite)),
+        )
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
@@ -529,11 +534,13 @@ def calcul_godets(db: Session) -> Dict[str, dict]:
     nb_godets, nb_graines_semees, nb_plants_godets, taux_reussite } }.
     taux_reussite est None si l'un des deux compteurs est absent.
     """
+    # COALESCE(nb_graines_semees, quantite) : rétrocompat avec anciens événements
+    # qui stockaient le nombre de graines dans `quantite` avant migration v7.
     rows = (
         db.query(
             Evenement.culture,
             Evenement.variete,
-            func.sum(Evenement.nb_graines_semees),
+            func.sum(func.coalesce(Evenement.nb_graines_semees, Evenement.quantite)),
             func.sum(Evenement.nb_plants_godets),
             func.count(Evenement.id),
         )
