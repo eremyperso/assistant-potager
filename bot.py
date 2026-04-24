@@ -2076,19 +2076,18 @@ async def cmd_stats(update, ctx):
 
             lines_out.append("\n🌱 *Semis :*")
 
-            # [US-014 / CA1 | US-017] Affichage semis avec stock résiduel par culture
+            # Synthèse semis : stock résiduel toutes variétés confondues — détail via /stats <culture>
             def _ligne_semis(culture: str, s: dict) -> str:
-                if s["total_seme"] is not None and s["total_seme"] > 0:
-                    ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
-                else:
-                    ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                en_godet = s.get("plants_en_godet", 0)
-                if en_godet > 0:
-                    residuel = s.get("stock_residuel", 0)
-                    ligne += f" · dont *{en_godet}* passées en godet"
-                    if residuel > 0:
-                        ligne += f" · *{residuel} restantes*"
-                return ligne
+                residuel  = s.get("stock_residuel", 0)
+                en_godet  = s.get("plants_en_godet", 0)
+                unite     = s.get("unite", "graines")
+                if residuel > 0:
+                    return f"  • {culture} : *{residuel} {unite} restantes*"
+                elif en_godet > 0:
+                    return f"  • {culture} : *tout en godet*"
+                elif s["total_seme"]:
+                    return f"  • {culture} : *{int(s['total_seme'])} {unite}*"
+                return f"  • {culture} : *{s['nb_semis']} semis*"
 
             if veg_semis:
                 lines_out.append("  _→ Récolte destructive (végétatif)_")
