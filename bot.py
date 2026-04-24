@@ -1372,23 +1372,23 @@ def _build_recap(p: dict, event_id: int) -> str:
     """Construit le message de récapitulatif."""
     lines = ["✅ *C'est noté !* _(ID #%d)_\n" % event_id]
 
-    # Cas spécial mise_en_godet : affichage taux de réussite germination
+    # Cas spécial mise_en_godet : repiquage de plantules barquette → godet [US-016]
     action_norm = normalize_action(p.get("action")) or p.get("action") or ""
     if action_norm == "mise_en_godet":
-        nb_g = p.get("nb_graines_semees")
-        nb_p = p.get("nb_plants_godets")
+        nb_g = p.get("nb_graines_semees")   # graines d'origine dans la barquette (optionnel)
+        nb_p = p.get("nb_plants_godets")    # plants repiqués en godet (champ principal)
         taux_str = ""
         if nb_g and nb_p:
             taux = round(nb_p / nb_g * 100)
-            taux_str = f" \u2192 *{taux}% de réussite*"
-        lines.append(f"🌱 Action : *mise en godet* (pépinière — hors stock)")
-        if p.get("culture"):  lines.append(f"🥬 Culture : *{p['culture']}*")
-        if p.get("variete"): lines.append(f"🏷 Variété : *{p['variete']}*")
-        if nb_g:             lines.append(f"🌱 Graines semées : *{nb_g}*")
-        if nb_p:             lines.append(f"🌱 Plants obtenus : *{nb_p}*{taux_str}")
-        if p.get("parcelle"): lines.append(f"📍 Parcelle : *{p['parcelle']}*")
-        if p.get("date"):    lines.append(f"📅 Date : *{p['date']}*")
-        if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+            taux_str = f" → *{taux}% de réussite*"
+        lines.append("🪴 Action : *mise en godet* (repiquage plantules → godet)")
+        if p.get("culture"):      lines.append(f"🥬 Culture : *{p['culture']}*")
+        if p.get("variete"):      lines.append(f"🏷 Variété : *{p['variete']}*")
+        if nb_p:                  lines.append(f"🌱 Plants repiqués en godet : *{nb_p}*{taux_str}")
+        if nb_g:                  lines.append(f"🌾 Graines en barquette d'origine : *{nb_g}*")
+        if p.get("parcelle"):     lines.append(f"📍 Parcelle : *{p['parcelle']}*")
+        if p.get("date"):         lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("commentaire"):  lines.append(f"📝 Note : *{p['commentaire']}*")
         lines.append("\n_Que voulez-vous faire ensuite ?_")
         return "\n".join(lines)
 
@@ -1949,7 +1949,7 @@ async def cmd_stats(update, ctx):
     from utils.stock import (
         calcul_stock_cultures, format_stock_ligne_telegram, calcul_semis,
         calcul_stock_par_variete, format_variete_bloc_telegram, _fmt_date_variete,
-        calcul_semis_par_culture, calcul_godets,
+        calcul_semis_par_culture, calcul_godets, calcul_godets_par_culture,
     )
 
     # [US_Stats_detail_par_variete / CA7] Insensible à la casse
@@ -1961,11 +1961,12 @@ async def cmd_stats(update, ctx):
     try:
         # ── [US_Stats_detail_par_variete / CA3] Mode détail variété ──────────
         if culture_arg:
-            varietes = calcul_stock_par_variete(db, culture_arg)
+            varietes      = calcul_stock_par_variete(db, culture_arg)
             semis_culture = calcul_semis_par_culture(db, culture_arg)
+            godets_culture = calcul_godets_par_culture(db, culture_arg)  # [US-018]
 
             # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
-            if not varietes and not semis_culture:
+            if not varietes and not semis_culture and not godets_culture:
                 texte_final = f"_Aucune donnée pour {culture_arg}_"
                 try:
                     await update.message.reply_text(
@@ -1989,7 +1990,7 @@ async def cmd_stats(update, ctx):
                 lines_out.append(format_variete_bloc_telegram(v))
                 lines_out.append("")
 
-            # [US-014 / CA3+CA4] Section semis unifiée — toujours en bas, jamais inline
+            # [US-014 / CA3+CA4 | US-017 / CA5] Section semis avec stock résiduel par variété
             if semis_culture:
                 lines_out.append("🌱 *Semis en cours :*")
                 for s in semis_culture:
@@ -2000,13 +2001,35 @@ async def cmd_stats(update, ctx):
                         semis_label = f"semis de {int(s['total_seme'])} {s['unite']}"
                     else:
                         semis_label = f"{s['nb_semis']} semis"
-                    lines_out.append(f"  • *{var_label}* : {semis_label} · 🗓️ {date_str}")
+                    en_godet = s.get("plants_en_godet", 0)
+                    residuel = s.get("stock_residuel", 0)
+                    if en_godet > 0:
+                        godet_str = f" · {en_godet} en godet"
+                        if residuel > 0:
+                            godet_str += f" · *{residuel} restantes*"
+                    else:
+                        godet_str = ""
+                    lines_out.append(f"  • *{var_label}* : {semis_label}{godet_str} · 🗓️ {date_str}")
+                lines_out.append("")
+
+            # [US-018 / CA1, CA2] Section pépinière par variété — godets actifs
+            if godets_culture:
+                current_year_g = __import__("datetime").datetime.now().year
+                lines_out.append("🪴 *Pépinière :*")
+                for g in godets_culture:
+                    var_g  = g["variete"] or "Variété non précisée"
+                    nb_p   = g["nb_plants_godets"]
+                    taux   = g["taux_reussite"]
+                    d_godet = g["date_derniere_mise_en_godet"]
+                    date_g = _fmt_date_variete(d_godet, current_year_g) if d_godet else "?"
+                    taux_str = f" · taux *{taux}%*" if taux is not None else ""
+                    lines_out.append(f"  • *{var_g}* : {nb_p} plants{taux_str} · 🗓️ {date_g} → en cours")
                 lines_out.append("")
 
             lines_out.append("_Pour revenir à la synthèse : /stats_")
             texte_final = "\n".join(lines_out)
 
-            log.info(f"📊 STATS VARIETE  : culture='{culture_arg}', {len(varietes)} variété(s)")
+            log.info(f"📊 STATS VARIETE  : culture='{culture_arg}', {len(varietes)} variété(s), {len(godets_culture)} godet(s)")
             try:
                 await update.message.reply_text(
                     texte_final, parse_mode="Markdown", reply_markup=MENU_KEYBOARD
@@ -2053,14 +2076,18 @@ async def cmd_stats(update, ctx):
 
             lines_out.append("\n🌱 *Semis :*")
 
-            # [US-014 / CA1] Récoltes retirées — elles appartiennent aux plantations
+            # [US-014 / CA1 | US-017] Affichage semis avec stock résiduel par culture
             def _ligne_semis(culture: str, s: dict) -> str:
                 if s["total_seme"] is not None and s["total_seme"] > 0:
                     ligne = f"  • {culture} : *{int(s['total_seme'])} {s['unite']}* ({s['nb_semis']} semis)"
                 else:
                     ligne = f"  • {culture} : *{s['nb_semis']} semis*"
-                if s.get("graines_en_godet", 0) > 0:
-                    ligne += f" · dont *{s['graines_en_godet']}* passées en godet"
+                en_godet = s.get("plants_en_godet", 0)
+                if en_godet > 0:
+                    residuel = s.get("stock_residuel", 0)
+                    ligne += f" · dont *{en_godet}* passées en godet"
+                    if residuel > 0:
+                        ligne += f" · *{residuel} restantes*"
                 return ligne
 
             if veg_semis:
