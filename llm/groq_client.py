@@ -103,9 +103,13 @@ Champs à extraire :
   "traitement"       : string,   // produit utilisé (purin d ortie, compost...)
   "date"             : string,   // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}
   "commentaire"      : string,   // toute autre observation utile
-  "nb_graines_semees": number,   // pour mise_en_godet : nombre de graines semees initialement
-  "nb_plants_godets" : number    // pour mise_en_godet : nombre de plants obtenus en godet
+  "nb_graines_semees": number,   // pour mise_en_godet UNIQUEMENT : nb total de graines dans la barquette d'origine (optionnel, sert au taux de réussite)
+  "nb_plants_godets" : number    // pour mise_en_godet UNIQUEMENT : nb de plantules/plants repiqués en godet (champ PRINCIPAL — jamais des graines)
 }}
+
+RÈGLE mise_en_godet : c'est le REPIQUAGE de plantules déjà levées (tige visible) vers un godet individuel.
+On ne met JAMAIS des graines directement en godet. Si l'utilisateur dit "X graines en godet" → interpréter X comme des plants (nb_plants_godets=X, nb_graines_semees=null).
+Différence clé : semis = graines dans barquette pour germer | mise_en_godet = plants levés vers godet.
 
 Exemples :
 "J'ai paillé les tomates hier"
@@ -133,7 +137,13 @@ Exemples :
 → [{{"action":"plantation","culture":"oignon","variete":"blanc","quantite":15,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}},{{"action":"plantation","culture":"radis","variete":null,"quantite":10,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}]
 
 "Mis en godet 24 tomates cerise sur 30 graines semées"
-→ {{"action":"mise_en_godet","culture":"tomate","variete":"cerise","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":"cerise","commentaire":null,"nb_graines_semees":30,"nb_plants_godets":24}}
+→ {{"action":"mise_en_godet","culture":"tomate","variete":"cerise","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null,"nb_graines_semees":30,"nb_plants_godets":24}}
+
+"mise en godet de 10 graines de courgette jaune"
+→ {{"action":"mise_en_godet","culture":"courgette","variete":"jaune","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":10}}
+
+"repiquer 15 plants de poivron en godet"
+→ {{"action":"mise_en_godet","culture":"poivron","variete":null,"quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":15}}
 
 Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
 Si plusieurs cultures dans la même phrase → tableau de JSONs.

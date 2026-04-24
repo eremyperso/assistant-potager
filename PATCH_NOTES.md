@@ -1,4 +1,21 @@
 
+## [v2.20.0] — 2026-04-24
+
+### 🚀 Nouveautés
+- Ajoute la section `🪴 Pépinière` dans `/stats <culture>` — affiche les plants en godet par variété avec taux de réussite et date (US-018)
+- Affiche le stock résiduel de semis par variété dans `/stats <culture>` — "X en godet · Y restantes" (US-017)
+- Affiche le stock résiduel de semis dans `/stats` global — compteur de plants restants après mise en godet (US-017)
+
+### 🐛 Corrections
+- Corrige la sémantique `mise_en_godet` dans le prompt LLM : "mise en godet de 10 graines" est désormais interprété comme 10 plants repiqués et non des graines brutes (US-016)
+- Corrige le récapitulatif de mise en godet : libellés "Plants repiqués" et "Graines en barquette d'origine" (US-016)
+- Corrige le calcul du stock semis : la déduction utilise désormais `nb_plants_godets` (plants repiqués) et non `nb_graines_semees` (barquette d'origine) (US-017)
+
+### 🔧 Améliorations techniques
+- Renomme la clé `graines_en_godet` en `plants_en_godet` dans `calcul_semis()` pour cohérence sémantique
+- Ajoute `calcul_godets_par_culture()` dans `utils/stock.py` pour agréger les godets par variété d'une culture
+- Enrichit `calcul_semis_par_culture()` avec les champs `plants_en_godet` et `stock_residuel` par variété
+
 ## [v2.19.0] — 2026-04-21
 
 ### 🚀 Nouveautés

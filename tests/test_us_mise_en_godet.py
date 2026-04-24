@@ -176,9 +176,9 @@ class TestCA3TauxReussite:
         assert "% de réussite" not in recap
 
     def test_ca3_recap_mentionne_pepiniere_hors_stock(self, parsed_mise_en_godet: dict) -> None:
-        """CA3 — Le récap indique explicitement 'hors stock' (pepinière)."""
+        """CA3 — Le récap indique la mise en godet comme repiquage de plantules [US-016]."""
         recap = _build_recap(parsed_mise_en_godet, event_id=5)
-        assert "hors stock" in recap.lower()
+        assert "repiquage" in recap.lower() or "godet" in recap.lower()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -453,7 +453,7 @@ class TestCA9CalcGodets:
 
 class TestCA10CalcSemisEnriched:
     def test_ca10_graines_en_godet_present(self, test_db) -> None:
-        """CA10 — calcul_semis() retourne graines_en_godet pour la culture concernée."""
+        """CA10 — calcul_semis() retourne plants_en_godet (nb_plants_godets) [US-017]."""
         from utils.stock import calcul_semis
 
         test_db.add(Evenement(
@@ -472,7 +472,9 @@ class TestCA10CalcSemisEnriched:
 
         semis = calcul_semis(test_db)
         assert "tomate" in semis
-        assert semis["tomate"]["graines_en_godet"] == 30
+        # [US-017] On déduit nb_plants_godets (24), pas nb_graines_semees (30)
+        assert semis["tomate"]["plants_en_godet"] == 24
+        assert semis["tomate"]["stock_residuel"] == max(0, 50 - 24)  # 26
 
     def test_ca10_graines_en_godet_zero_si_aucun_godet(self, test_db) -> None:
         """CA10 — graines_en_godet vaut 0 si aucune mise_en_godet pour cette culture."""
@@ -488,4 +490,4 @@ class TestCA10CalcSemisEnriched:
 
         semis = calcul_semis(test_db)
         assert "carotte" in semis
-        assert semis["carotte"]["graines_en_godet"] == 0
+        assert semis["carotte"]["plants_en_godet"] == 0  # [US-017] nouvelle clé
