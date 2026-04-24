@@ -1,4 +1,25 @@
 
+## [v2.21.0] — 2026-04-24
+
+### 🚀 Nouveautés
+- Ajoute la sélection assistée de variété lors d'une mise en godet ambiguë (US-019) :
+  - CA1 : plusieurs variétés en pépinière → menu inline avec boutons par variété et stock restant
+  - CA2 : une seule variété en stock → confirmation automatique pré-remplie
+  - CA3 : aucun semis actif pour la culture → avertissement + choix d'enregistrer quand même ou annuler
+  - CA4 : variété déjà précisée dans la commande → court-circuit, sauvegarde directe inchangée
+  - CA5 : timeout 60 s → annulation automatique du pending avec message utilisateur
+
+### 🐛 Corrections
+- Corrige les assertions `🌱 *Stock plants actuel :*` dans les tests bot (section renommée en v2.20)
+- Corrige l'assertion emoji `📅` dans test_us_stats_detail_variete (code utilise `🗓️`)
+
+### 🔧 Améliorations techniques
+- Ajoute `_GODET_PENDING` dict (state machine par user_id) et timeout `_GODET_TIMEOUT = 60`
+- Ajoute helper `_save_godet_item()` pour factoriser la sauvegarde godet post-sélection
+- Ajoute callback handler `_godet_variete_cb()` pour gérer les réponses inline (godet_var, godet_confirm, godet_cancel, godet_force)
+- Enregistre `CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_")` dans `main()`
+- Ajoute 8 tests unitaires dans `tests/test_us019_godet_selection_variete.py`
+
 ## [v2.20.0] — 2026-04-24
 
 ### 🚀 Nouveautés

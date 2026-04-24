@@ -41,10 +41,10 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
 logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
 logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    ContextTypes, filters, ConversationHandler
+    ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 )
 from groq import Groq
 from sqlalchemy import func
@@ -1186,6 +1186,89 @@ async def _parse_multi(update, lignes: list, msg=None):
         refreshed.close()
 
 
+# ── [US-019] SÉLECTION VARIÉTÉ MISE EN GODET ────────────────────────────────────
+# Stocke les items mise_en_godet en attente de sélection de variété {user_id: {parsed, texte, ts}}
+_GODET_PENDING: dict[int, dict] = {}
+
+_GODET_TIMEOUT = 60  # secondes
+
+
+async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
+    """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
+    db = SessionLocal()
+    try:
+        event = Evenement(
+            type_action       = "mise_en_godet",
+            culture           = parsed.get("culture"),
+            variete           = parsed.get("variete"),
+            quantite          = _to_float(parsed.get("quantite")),
+            unite             = parsed.get("unite"),
+            parcelle_id       = None,
+            rang              = None,
+            duree             = None,
+            traitement        = None,
+            commentaire       = parsed.get("commentaire"),
+            texte_original    = texte,
+            date              = parse_date(parsed.get("date")),
+            nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+            nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete}")
+    except Exception as e:
+        db.rollback()
+        await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
+        return
+    finally:
+        db.close()
+
+    recap = _build_recap(parsed, event.id)
+    await update.effective_message.reply_text(recap, parse_mode="Markdown", reply_markup=AFTER_RECORD_KEYBOARD)
+    await send_voice_reply(update, _build_recap_tts(parsed))
+
+
+async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-019] Callback inline — sélection de variété pour une mise en godet ambiguë."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _GODET_PENDING.pop(user_id, None)
+
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre mise en godet.")
+        return
+
+    import time
+    if time.time() - pending["ts"] > _GODET_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 60 s). Veuillez re-saisir.", parse_mode="Markdown")
+        return
+
+    data = query.data  # godet_var:{variete} | godet_confirm | godet_cancel | godet_force
+
+    if data == "godet_cancel":
+        await query.edit_message_text("❌ Mise en godet annulée.", reply_markup=None)
+        return
+
+    parsed = pending["parsed"]
+    texte  = pending["texte"]
+
+    if data.startswith("godet_var:"):
+        variete = data[len("godet_var:"):]
+        parsed["variete"] = variete if variete != "__none__" else None
+    elif data in ("godet_confirm", "godet_force"):
+        pass  # variété déjà dans parsed (CA2) ou aucune (CA3)
+
+    await query.edit_message_text(
+        f"✅ Variété confirmée : *{parsed.get('variete') or 'non précisée'}*",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+    await _save_godet_item(update, parsed, texte)
+
+
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
 async def _parse_and_save(update: Update, texte: str, msg=None):
     """Parse le texte → liste d'événements → PostgreSQL → récapitulatif."""
@@ -1252,6 +1335,72 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
             reply_markup=MENU_KEYBOARD
         )
         return
+
+    # [US-019 / CA1-CA3] Interception mise_en_godet sans variété — sélection assistée
+    import time as _time
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "mise_en_godet"
+        and not items[0].get("variete")
+    ):
+        parsed_godet = items[0]
+        culture      = parsed_godet.get("culture", "")
+        user_id      = update.effective_user.id
+
+        from utils.stock import calcul_semis_par_culture
+        db_tmp = SessionLocal()
+        try:
+            semis_var = [
+                s for s in calcul_semis_par_culture(db_tmp, culture)
+                if s["stock_residuel"] > 0
+            ]
+        finally:
+            db_tmp.close()
+
+        _GODET_PENDING[user_id] = {"parsed": parsed_godet, "texte": texte, "ts": _time.time()}
+
+        if len(semis_var) > 1:
+            # CA1 — plusieurs variétés disponibles → menu inline
+            buttons = []
+            for s in semis_var:
+                var_label = s["variete"] or "non précisée"
+                cb_key    = s["variete"] if s["variete"] else "__none__"
+                buttons.append([InlineKeyboardButton(
+                    f"{var_label} ({s['stock_residuel']} restantes)",
+                    callback_data=f"godet_var:{cb_key}"
+                )])
+            buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="godet_cancel")])
+            await update.message.reply_text(
+                f"🪴 Pour quelle variété de *{culture}* ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        elif len(semis_var) == 1:
+            # CA2 — une seule variété → confirmation automatique
+            s   = semis_var[0]
+            var = s["variete"] or "non précisée"
+            parsed_godet["variete"] = s["variete"]
+            buttons = [
+                [InlineKeyboardButton("✅ Confirmer", callback_data="godet_confirm"),
+                 InlineKeyboardButton("❌ Annuler",   callback_data="godet_cancel")]
+            ]
+            await update.message.reply_text(
+                f"🪴 Je suppose la variété *{var}* (seule en pépinière, {s['stock_residuel']} restantes). Confirmer ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        else:
+            # CA3 — aucun semis actif pour cette culture
+            buttons = [
+                [InlineKeyboardButton("✅ Enregistrer quand même", callback_data="godet_force"),
+                 InlineKeyboardButton("❌ Annuler",                callback_data="godet_cancel")]
+            ]
+            await update.message.reply_text(
+                f"⚠️ Aucun semis de *{culture}* en pépinière. Voulez-vous quand même enregistrer cette mise en godet ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        return  # attente callback — pas de sauvegarde immédiate
 
     # Sauvegarde PostgreSQL (1 ou plusieurs événements)
     db = SessionLocal()
@@ -2960,6 +3109,9 @@ def main():
     app.add_handler(CommandHandler("plan",      cmd_plan))
     app.add_handler(CommandHandler("parcelle",  cmd_parcelle))
     app.add_handler(CommandHandler("parcelles", _cmd_parcelles_lister))  # alias /parcelle lister
+
+    # [US-019] Sélection variété mise en godet — boutons inline
+    app.add_handler(CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
