@@ -100,59 +100,70 @@ def test_us016_ca4_ratio_plants_sur_graines():
     assert parsed["nb_graines_semees"] == 30
 
 
-# ── US-017 CA1 ── calcul_semis() utilise nb_plants_godets
-def test_us017_ca1_calcul_semis_utilise_nb_plants_godets(db):
-    """CA1 — calcul_semis() déduit nb_plants_godets (pas nb_graines_semees) du stock."""
+# ── US-017 CA1 ── calcul_semis() déduit nb_graines_semees quand fourni
+def test_us017_ca1_calcul_semis_deduit_graines_barquette(db):
+    """CA1 — '5 plants sur 10 graines' consomme 10 graines du stock, pas 5."""
     session, pid = db
     _semis(session, pid, "courgette", variete="jaune", quantite=20)
-    # nb_plants_godets=10, nb_graines_semees=30 (barquette d'origine)
-    _godet(session, pid, "courgette", variete="jaune", nb_plants=10, nb_graines=30)
+    # 5 plants repiqués depuis une barquette de 10 graines → 10 graines consommées
+    _godet(session, pid, "courgette", variete="jaune", nb_plants=5, nb_graines=10)
 
     result = calcul_semis(session)
     courgette = result.get("courgette")
     assert courgette is not None
-    assert courgette["plants_en_godet"] == 10    # déduit nb_plants_godets
-    assert courgette["stock_residuel"] == 10     # 20 - 10 = 10
-    # S'assurer qu'on ne déduit PAS nb_graines_semees (30 != 10)
-    assert courgette["plants_en_godet"] != 30
+    assert courgette["plants_en_godet"] == 5     # plants repiqués affichés
+    assert courgette["stock_residuel"] == 10     # 20 - 10 (barquette) = 10
 
 
 # ── US-017 CA2 ── calcul_semis_par_culture() retourne stock_residuel par variété
 def test_us017_ca2_semis_par_culture_stock_residuel(db):
-    """CA2 — calcul_semis_par_culture() calcule le stock résiduel par variété."""
+    """CA2 — stock_residuel = total_seme - graines_barquette_consommees par variété."""
     session, pid = db
     _semis(session, pid, "courgette", variete="jaune", quantite=20)
     _semis(session, pid, "courgette", variete="ronde", quantite=15)
-    _godet(session, pid, "courgette", variete="jaune", nb_plants=10)
+    # 5 plants sur 10 graines → 10 graines consommées pour jaune
+    _godet(session, pid, "courgette", variete="jaune", nb_plants=5, nb_graines=10)
 
     result = calcul_semis_par_culture(session, "courgette")
     by_var = {r["variete"]: r for r in result}
 
-    assert by_var["jaune"]["plants_en_godet"] == 10
-    assert by_var["jaune"]["stock_residuel"] == 10     # 20 - 10
+    assert by_var["jaune"]["plants_en_godet"] == 5
+    assert by_var["jaune"]["stock_residuel"] == 10     # 20 - 10 (barquette)
     assert by_var["ronde"]["plants_en_godet"] == 0
     assert by_var["ronde"]["stock_residuel"] == 15     # 15 - 0
 
 
-# ── US-017 CA3 ── affichage total correct (total_seme - nb_plants_godets)
-def test_us017_ca3_total_correct_apres_deduction(db):
-    """CA3 — Le stock résiduel global culture est bien total_seme - plants_en_godet."""
+# ── US-017 CA2bis ── sans nb_graines_semees → fallback sur nb_plants_godets
+def test_us017_ca2bis_fallback_sur_plants_si_pas_de_graines(db):
+    """CA2bis — Sans nb_graines_semees, on déduit nb_plants_godets du stock."""
     session, pid = db
-    _semis(session, pid, "tomate", quantite=50)
-    _godet(session, pid, "tomate", nb_plants=50)
+    _semis(session, pid, "tomate", quantite=30)
+    _godet(session, pid, "tomate", nb_plants=8, nb_graines=None)  # pas de ratio fourni
 
     result = calcul_semis(session)
     tomate = result.get("tomate")
-    assert tomate["plants_en_godet"] == 50
-    assert tomate["stock_residuel"] == 0
+    assert tomate["plants_en_godet"] == 8
+    assert tomate["stock_residuel"] == 22     # 30 - 8
+
+
+# ── US-017 CA3 ── barquette entièrement consommée
+def test_us017_ca3_barquette_entierement_consommee(db):
+    """CA3 — Si barquette = semis total, stock_residuel = 0."""
+    session, pid = db
+    _semis(session, pid, "tomate", quantite=20)
+    _godet(session, pid, "tomate", nb_plants=15, nb_graines=20)  # barquette de 20
+
+    result = calcul_semis(session)
+    tomate = result.get("tomate")
+    assert tomate["stock_residuel"] == 0     # 20 - 20
 
 
 # ── US-017 CA4 ── stock résiduel jamais négatif
 def test_us017_ca4_stock_residuel_jamais_negatif(db):
-    """CA4 — Si plus de plants en godet que de semis, stock_residuel = 0 (pas négatif)."""
+    """CA4 — stock_residuel = 0 même si nb_graines_semees > total_seme."""
     session, pid = db
     _semis(session, pid, "courgette", variete="jaune", quantite=10)
-    _godet(session, pid, "courgette", variete="jaune", nb_plants=15)  # plus que semis
+    _godet(session, pid, "courgette", variete="jaune", nb_plants=5, nb_graines=15)
 
     result = calcul_semis_par_culture(session, "courgette")
     jaune = next(r for r in result if r["variete"] == "jaune")

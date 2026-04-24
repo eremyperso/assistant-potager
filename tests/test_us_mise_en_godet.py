@@ -472,9 +472,9 @@ class TestCA10CalcSemisEnriched:
 
         semis = calcul_semis(test_db)
         assert "tomate" in semis
-        # [US-017] On déduit nb_plants_godets (24), pas nb_graines_semees (30)
+        # [US-017 corrigé] On déduit nb_graines_semees (30 = barquette consommée)
         assert semis["tomate"]["plants_en_godet"] == 24
-        assert semis["tomate"]["stock_residuel"] == max(0, 50 - 24)  # 26
+        assert semis["tomate"]["stock_residuel"] == max(0, 50 - 30)  # 20
 
     def test_ca10_graines_en_godet_zero_si_aucun_godet(self, test_db) -> None:
         """CA10 — graines_en_godet vaut 0 si aucune mise_en_godet pour cette culture."""
