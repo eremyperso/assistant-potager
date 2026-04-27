@@ -311,6 +311,36 @@ def rename_parcelle(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# [US-009] Suppression (soft-delete) d'une parcelle
+# ──────────────────────────────────────────────────────────────────────────────
+
+def supprimer_parcelle(db: Session, nom: str) -> Tuple[Parcelle, int]:
+    """
+    [US-009] Soft-delete d'une parcelle : actif=False + réaffectation atomique
+    des événements liés (parcelle_id → NULL).
+
+    Returns:
+        (parcelle, nb_evenements_reaffectes)
+
+    Raises:
+        LookupError : si la parcelle est introuvable ou déjà supprimée
+    """
+    parcelle = resolve_parcelle(db, nom)
+    if parcelle is None:
+        raise LookupError(nom)
+
+    nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count()
+    db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).update(
+        {"parcelle_id": None}, synchronize_session="fetch"
+    )
+    parcelle.actif = False
+    db.commit()
+
+    log.info(f"[US-009] Parcelle supprimée : {parcelle.nom!r} — {nb} événements réaffectés en Non localisé")
+    return parcelle, nb
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # [US_Plan_occupation_parcelles / CA4] Liste des parcelles
 # ──────────────────────────────────────────────────────────────────────────────
 

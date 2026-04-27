@@ -56,7 +56,7 @@ from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
     find_doublon, create_parcelle, update_parcelle, get_all_parcelles,
-    resolve_parcelle, rename_parcelle,
+    resolve_parcelle, rename_parcelle, supprimer_parcelle,
 )
 from llm.groq_client import parse_commande, repondre_question
 from utils.ia_orchestrator import build_question_context
@@ -337,7 +337,10 @@ _HELP_PARCELLE = (
     "  → /parcelle modifier nord exposition=sud superficie=8.5\n"
     "  _Paramètres : exposition · superficie · ordre_\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
-    "  → /parcelle renommer sud carré-sud\n\n"
+    "  → /parcelle renommer sud carré-sud\n"
+    "• Supprimer une parcelle (soft-delete — historique conservé)\n"
+    "  → /parcelle supprimer serre-1\n"
+    "  ⚠️ _Les événements liés deviennent « Non localisé »_\n\n"
     "💡 _Noms de parcelle insensibles à la casse.\n"
     "   Les doublons sont détectés automatiquement._"
 )
@@ -1946,7 +1949,8 @@ async def cmd_parcelle(update, ctx) -> None:
         "Exemples :\n"
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
-        "  /parcelle renommer sud carré-sud"
+        "  /parcelle renommer sud carré-sud\n\n"
+        "_Pour supprimer une parcelle : /help parcelle_"
     )
 
     if not ctx.args:
@@ -2149,6 +2153,48 @@ async def cmd_parcelle(update, ctx) -> None:
             )
         except Exception as e:
             log.error(f"[US-006] cmd_parcelle renommer erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /parcelle supprimer <nom> ─────────────────────────────────────────────
+    if sous_cmd == "supprimer":
+        if len(ctx.args) < 2:
+            await update.message.reply_text(
+                "❌ Précisez le nom de la parcelle.\nExemple : /parcelle supprimer serre-1",
+                parse_mode="Markdown",
+            )
+            return
+        nom = " ".join(ctx.args[1:]).strip()
+        db = SessionLocal()
+        try:
+            parcelle = resolve_parcelle(db, nom)
+            if parcelle is None:
+                all_p = get_all_parcelles(db)
+                noms = ", ".join(p.nom.lower() for p in all_p) or "(aucune)"
+                await update.message.reply_text(
+                    f"❌ Parcelle introuvable : *{nom}*\nParcelles connues : {noms}",
+                    parse_mode="Markdown",
+                )
+                return
+            nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count()
+            nb_str = (
+                f"⚠️ *{nb} événement{'s' if nb > 1 else ''}* seront réaffectés en *Non localisé*."
+                if nb > 0 else "Aucun événement associé."
+            )
+            buttons = [[
+                InlineKeyboardButton("✅ Confirmer", callback_data=f"parcelle_suppr_confirm:{parcelle.id}"),
+                InlineKeyboardButton("❌ Annuler",   callback_data="parcelle_suppr_cancel"),
+            ]]
+            log.info(f"[US-009] Demande suppression : {parcelle.nom!r} — {nb} événements")
+            await update.message.reply_text(
+                f"🗑 Supprimer la parcelle *{parcelle.nom.upper()}* ?\n{nb_str}",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        except Exception as e:
+            log.error(f"[US-009] cmd_parcelle supprimer erreur : {e}")
             await update.message.reply_text(f"❌ Erreur : {e}")
         finally:
             db.close()
@@ -2405,7 +2451,7 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             action = (e.type_action or "?").upper()
             cult   = " ".join(filter(None, [e.culture, e.variete]))
             qte    = f"{e.quantite} {e.unite or ''}" if e.quantite else ""
-            parc   = f"· {e.parcelle}" if e.parcelle else ""
+            parc   = f"· {e.parcelle}" if e.parcelle else "· Non localisé"
             rang   = f" x{e.rang}rangs" if e.rang else ""
             trt    = f" ({e.traitement})" if e.traitement else ""
             lines.append(f"*{d}* — {action}\n  {cult} {qte} {parc}{rang}{trt}".strip())
@@ -3150,6 +3196,54 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+# ── [US-009] CALLBACK SUPPRESSION PARCELLE ──────────────────────────────────────
+
+async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-009] Callback inline — confirmation ou annulation de suppression de parcelle."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "parcelle_suppr_cancel":
+        await query.edit_message_text("Suppression annulée — la parcelle est conservée.", reply_markup=None)
+        return
+
+    # parcelle_suppr_confirm:<parcelle_id>
+    try:
+        parcelle_id = int(query.data.split(":")[1])
+    except (IndexError, ValueError):
+        await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+        return
+
+    db = SessionLocal()
+    try:
+        parcelle = db.query(Parcelle).filter(Parcelle.id == parcelle_id).first()
+        if parcelle is None or not parcelle.actif:
+            await query.edit_message_text("❌ Parcelle introuvable ou déjà supprimée.", reply_markup=None)
+            return
+        nom = parcelle.nom
+        nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).count()
+        db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).update(
+            {"parcelle_id": None}, synchronize_session="fetch"
+        )
+        parcelle.actif = False
+        db.commit()
+        log.info(f"[US-009] Parcelle supprimée : {nom!r} — {nb} événements réaffectés")
+        if nb > 0:
+            msg = (
+                f"✅ Parcelle *{nom.upper()}* supprimée — "
+                f"{nb} événement{'s' if nb > 1 else ''} réaffectés en *Non localisé*"
+            )
+        else:
+            msg = f"✅ Parcelle *{nom.upper()}* supprimée"
+        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=None)
+    except Exception as e:
+        db.rollback()
+        log.error(f"[US-009] _parcelle_suppr_cb erreur : {e}")
+        await query.edit_message_text(f"❌ Erreur : {e}", reply_markup=None)
+    finally:
+        db.close()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # LANCEMENT
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3196,6 +3290,9 @@ def main():
 
     # [US-021] Confirmation avant enregistrement — boutons inline
     app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
+
+    # [US-009] Suppression parcelle — boutons inline
+    app.add_handler(CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
