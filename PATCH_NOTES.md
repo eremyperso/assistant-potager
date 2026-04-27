@@ -1,4 +1,17 @@
 
+## [v2.23.0] — 2026-04-27
+
+### 🚀 Nouveautés
+- Ajoute `/parcelle supprimer <nom>` — soft-delete avec boutons inline ✅/❌ (US-009)
+- Réaffecte atomiquement tous les événements liés en *Non localisé* (`parcelle_id = NULL`) lors de la suppression
+- Affiche "Non localisé" dans `/historique` pour les événements sans parcelle (CA8)
+
+### 🔧 Améliorations techniques
+- Ajoute `supprimer_parcelle()` dans `utils/parcelles.py` — opération atomique (réaffectation + soft-delete en un seul commit)
+- Ajoute callback `_parcelle_suppr_cb()` pour gérer les boutons `parcelle_suppr_confirm:<id>` et `parcelle_suppr_cancel`
+- Enregistre `CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_")` dans `main()`
+- Ajoute 9 tests unitaires dans `tests/test_us009_supprimer_parcelle.py`
+
 ## [v2.22.0] — 2026-04-27
 
 ### 🚀 Nouveautés
