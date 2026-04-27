@@ -2872,18 +2872,28 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         return
 
     # ── Cas clé : l'utilisateur décrit directement la correction sans passer par le bouton
-    # Ex : "changer la date au 9 mars", "c'était 1.5 kg", "parcelle nord"
+    # Ex : "changer la date au 9 mars", "c'était 1.5 kg", "parcelle nord", "associer parcelle tomate"
     # → on saute directement à corr_apply avec ce texte
     MOTS_CORRECTION = ("changer", "modifier", "mettre", "c'était", "c etait",
                        "il s'agit", "il s agit", "ajouter", "enlever", "suppr",
-                       "corriger", "plutôt", "plutot", "non ", "pas ")
+                       "corriger", "plutôt", "plutot", "non ", "pas ",
+                       "associer", "affecter", "rattacher", "lier", "parcelle",
+                       "la culture", "la variete", "la variété", "la quantite", "la quantité")
     if any(t.startswith(m) or m in t for m in MOTS_CORRECTION):
         log.info(f"⚡ CORRECTION DIRECTE : texte '{texte}' → saut vers corr_apply")
         ctx.user_data['mode'] = 'corr_apply'
         await _corr_apply(update, ctx, texte)
         return
 
-    # Sinon : texte libre sans mot-clé → proposer les boutons
+    # Si l'event est déjà sélectionné et que le texte n'est pas un mot-clé nav,
+    # on l'envoie directement à corr_apply (évite la boucle "Que souhaitez-vous faire ?")
+    if ctx.user_data.get('corr_event_id'):
+        log.info(f"⚡ CORRECTION DIRECTE (event déjà sélectionné) : texte '{texte}' → corr_apply")
+        ctx.user_data['mode'] = 'corr_apply'
+        await _corr_apply(update, ctx, texte)
+        return
+
+    # Sinon : premier choix de l'event dans une liste → proposer les boutons
     ctx.user_data['corr_event_id'] = event_id
     await update.message.reply_text(
         f"Événement sélectionné :\n\n`{event_fmt}`\n\nQue souhaitez-vous faire ?",
