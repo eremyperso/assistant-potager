@@ -14,11 +14,11 @@ Afin d'éviter les enregistrements erronés et de toujours associer mes actions 
 - [x] CA5 : Si l'utilisateur ne répond pas dans un délai de 1 minute, l'action est automatiquement annulée et un message d'expiration est affiché
 - [x] CA6 : Les intents de type interrogation (INTERROGER, STATS, HISTORIQUE, PLAN) ne déclenchent PAS de confirmation — ils sont exécutés directement comme aujourd'hui
 - [x] CA7 : Le flux de confirmation est compatible avec les flux à étapes multiples existants (US-019 sélection variété, US-020 sélection lot) — la confirmation intervient en dernier, après toutes les sélections
-- [ ] CA8 : Si la parcelle est absente du résumé (non détectée par Groq), le bot affiche un menu inline avec toutes les parcelles actives + un bouton `📍 Sans parcelle` — **avant** d'afficher les boutons Confirmer/Annuler
-- [ ] CA9 : Une fois la parcelle sélectionnée via le menu, le résumé est mis à jour avec la parcelle choisie, puis les boutons `✅ Confirmer` / `❌ Annuler` apparaissent
-- [ ] CA10 : Si le jardinier choisit `📍 Sans parcelle`, l'enregistrement se fait avec `parcelle_id = NULL` — comportement identique à aujourd'hui
-- [ ] CA11 : Si aucune parcelle active n'existe en base, le menu de sélection n'est pas affiché — le bot passe directement à la confirmation avec `parcelle_id = NULL`
-- [ ] CA12 : Le TTL de 1 minute s'applique à l'ensemble du flux (sélection parcelle + confirmation) — pas de remise à zéro entre les étapes
+- [x] CA8 : Si la parcelle est absente du résumé (non détectée par Groq), le bot affiche un menu inline avec toutes les parcelles actives + un bouton `📍 Sans parcelle` — **avant** d'afficher les boutons Confirmer/Annuler
+- [x] CA9 : Une fois la parcelle sélectionnée via le menu, le résumé est mis à jour avec la parcelle choisie, puis les boutons `✅ Confirmer` / `❌ Annuler` apparaissent
+- [x] CA10 : Si le jardinier choisit `📍 Sans parcelle`, l'enregistrement se fait avec `parcelle_id = NULL` — comportement identique à aujourd'hui
+- [x] CA11 : Si aucune parcelle active n'existe en base, le menu de sélection n'est pas affiché — le bot passe directement à la confirmation avec `parcelle_id = NULL`
+- [x] CA12 : Le TTL de 1 minute s'applique à l'ensemble du flux (sélection parcelle + confirmation) — pas de remise à zéro entre les étapes
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : interaction Telegram, enregistrement

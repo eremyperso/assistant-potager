@@ -1294,7 +1294,10 @@ def _build_action_summary(items: list[dict]) -> str:
                 lines.append(f"⚖️ Quantité : *{int(qte)} {unite}/rang × {rang} rangs*")
             else:
                 lines.append(f"⚖️ Quantité : *{qte} {unite}*".strip())
-        if p.get("parcelle"):  lines.append(f"📍 Parcelle : *{p['parcelle']}*")
+        if p.get("parcelle"):
+            lines.append(f"📍 Parcelle : *{p['parcelle']}*")
+        elif p.get("_parcelle_demandee") is not True:
+            lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
         lines.append("\nC'est correct ?")
@@ -1385,28 +1388,49 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
 
 
 async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    """[US-021] Callback inline — confirmation ou annulation d'une action en attente."""
+    """[US-021] Callback inline — sélection parcelle, confirmation ou annulation."""
     import time
     query = update.callback_query
     await query.answer()
 
     user_id = update.effective_user.id
-    pending = _ACTION_PENDING.pop(user_id, None)
+    data    = query.data
+
+    # Annulation valide à toutes les étapes
+    if data == "action_cancel":
+        _ACTION_PENDING.pop(user_id, None)
+        log.info(f"[US-021] Action annulée — user_id={user_id}")
+        await query.edit_message_text("❌ Action annulée.", reply_markup=None)
+        return
+
+    pending = _ACTION_PENDING.get(user_id)  # ne pas pop avant confirmation finale
 
     if pending is None:
         await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre commande.")
         return
 
     if time.time() - pending["ts"] > _ACTION_TIMEOUT:
+        _ACTION_PENDING.pop(user_id, None)
         await query.edit_message_text("⏱ *Confirmation expirée (60 s), action annulée.*", parse_mode="Markdown")
         return
 
-    if query.data == "action_cancel":
-        log.info(f"[US-021] Action annulée par user_id={user_id}")
-        await query.edit_message_text("❌ Action annulée.", reply_markup=None)
+    # [CA9/CA10] Sélection de parcelle
+    if data.startswith("action_parcelle:") or data == "action_parcelle_none":
+        parcelle_nom = None if data == "action_parcelle_none" else data[len("action_parcelle:"):]
+        for item in pending["items"]:
+            item["parcelle"] = parcelle_nom
+            item.pop("_parcelle_demandee", None)
+        log.info(f"[US-021 CA9] Parcelle sélectionnée : {parcelle_nom!r} — user_id={user_id}")
+        summary = _build_action_summary(pending["items"])
+        buttons = [[
+            InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
+            InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
+        ]]
+        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
         return
 
     # action_confirm → sauvegarde effective
+    _ACTION_PENDING.pop(user_id, None)
     await query.edit_message_text("⏳ Enregistrement en cours...", reply_markup=None)
     log.info(f"[US-021] Confirmation reçue — user_id={user_id}, {len(pending['items'])} item(s)")
     await _do_save_items(update, pending["items"], pending["texte"])
@@ -1545,10 +1569,36 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
             )
         return  # attente callback — pas de sauvegarde immédiate
 
-    # [US-021] Confirmation avant enregistrement — affiche le résumé + boutons Confirmer/Annuler
+    # [US-021] Confirmation avant enregistrement
     import time as _time
     user_id = update.effective_user.id
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+
+    # [CA8/CA11] Parcelle absente sur action simple → proposer menu de sélection
+    if len(items) == 1 and not items[0].get("parcelle"):
+        db_tmp = SessionLocal()
+        try:
+            parcelles_actives = get_all_parcelles(db_tmp)
+        finally:
+            db_tmp.close()
+
+        if parcelles_actives:
+            items[0]["_parcelle_demandee"] = True
+            summary = _build_action_summary(items)
+            buttons = [
+                [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
+                for p in parcelles_actives
+            ]
+            buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
+            log.info(f"[US-021 CA8] Sélection parcelle demandée — user_id={user_id}")
+            await update.message.reply_text(
+                summary + "\n\n*Quelle parcelle ?*",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+            return
+
+    # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)
     buttons = [[
         InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),

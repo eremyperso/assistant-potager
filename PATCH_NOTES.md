@@ -1,4 +1,19 @@
 
+## [v2.24.0] — 2026-04-27
+
+### 🚀 Nouveautés
+- Sélection guidée de parcelle dans le flux de confirmation (US-021 CA8–CA12) : si aucune parcelle n'est détectée, un menu inline liste toutes les parcelles actives + bouton "📍 Sans parcelle"
+- Résumé mis à jour avec la parcelle choisie avant les boutons ✅ Confirmer / ❌ Annuler (CA9)
+- Choix "Sans parcelle" → enregistrement avec `parcelle_id = NULL` (CA10)
+- Si aucune parcelle active en base → confirmation directe sans menu intermédiaire (CA11)
+- Le TTL de 60 s s'applique à l'ensemble du flux, y compris pendant la sélection de parcelle (CA12)
+
+### 🔧 Améliorations techniques
+- `_build_action_summary()` affiche "❓ non détectée" quand la parcelle manque et que le menu est affiché (`_parcelle_demandee` flag)
+- `_parse_and_save()` insère l'étape de sélection de parcelle avant la confirmation finale (CA8/CA11)
+- `_action_confirm_cb()` gère trois phases : sélection parcelle → confirmation → sauvegarde, annulation valide à tout moment
+- Ajoute 5 tests unitaires CA8–CA12 dans `tests/test_us021_confirmation_enregistrement.py` (14 tests au total)
+
 ## [v2.23.0] — 2026-04-27
 
 ### 🚀 Nouveautés
