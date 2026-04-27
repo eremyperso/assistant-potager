@@ -2067,7 +2067,7 @@ async def cmd_parcelle(update, ctx) -> None:
             if exact:
                 log.info(f"[US_Plan_occupation_parcelles] Doublon exact : {nom!r} → {exact.nom!r}")
                 await update.message.reply_text(
-                    f"❌ La parcelle *{exact.nom.upper()}* existe déjà.\n"
+                    f"❌ La parcelle *{_md(exact.nom.upper())}* existe déjà.\n"
                     "Utilisez /plan pour consulter les parcelles existantes.",
                     parse_mode="Markdown",
                 )
@@ -2083,8 +2083,8 @@ async def cmd_parcelle(update, ctx) -> None:
                     "superficie_m2": superficie_m2,
                 }
                 await update.message.reply_text(
-                    f"⚠️ Une parcelle similaire existe : *{proche.nom.upper()}*.\n"
-                    f"Confirmer la création de *{nom.upper()}* ? _(oui / non)_",
+                    f"⚠️ Une parcelle similaire existe : *{_md(proche.nom.upper())}*.\n"
+                    f"Confirmer la création de *{_md(nom.upper())}* ? _(oui / non)_",
                     parse_mode="Markdown",
                 )
                 return
@@ -2093,7 +2093,7 @@ async def cmd_parcelle(update, ctx) -> None:
             parcelles_existantes = get_all_parcelles(db)
             lignes = ["📋 *Parcelles existantes :*"]
             for p in parcelles_existantes:
-                lignes.append(f"  · {p.nom.upper()}")
+                lignes.append(f"  · {_md(p.nom.upper())}")
             if not parcelles_existantes:
                 lignes.append("  _(aucune pour l'instant)_")
 
@@ -2104,7 +2104,7 @@ async def cmd_parcelle(update, ctx) -> None:
                 detail_parts.append(f"superficie : {superficie_m2} m²")
             detail_conf = f" ({', '.join(detail_parts)})" if detail_parts else ""
             lignes.append(
-                f"\n➕ Créer la parcelle *{nom.upper()}*{detail_conf} ? _(oui / non)_"
+                f"\n➕ Créer la parcelle *{_md(nom.upper())}*{detail_conf} ? _(oui / non)_"
             )
 
             ctx.user_data['mode'] = 'parcelle_confirm'
@@ -2513,6 +2513,11 @@ async def cmd_tts_off(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 # ── HELPERS ─────────────────────────────────────────────────────────────────────
+def _md(text: str) -> str:
+    """Échappe les underscores dans un nom pour éviter les conflits Markdown Telegram."""
+    return text.replace("_", "\\_")
+
+
 def _to_float(v):
     try:    return float(v) if v is not None else None
     except: return None
