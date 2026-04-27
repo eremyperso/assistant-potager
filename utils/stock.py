@@ -244,33 +244,48 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
     )
     unites: Dict[str, str] = {c: u for c, u in unites_raw}
 
-    # Graines passées en godet par culture (nb_graines_semees des mise_en_godet)
-    godets_raw = (
-        db.query(Evenement.culture, func.sum(Evenement.nb_graines_semees))
+    # Graines consommées par culture : nb_graines_semees si fourni, sinon nb_plants_godets.
+    # Règle métier : "5 plants sur 10 graines" → 10 graines consommées (toute la barquette),
+    # pas 5. Les graines non germées sont perdues, elles quittent quand même le stock.
+    godets_brut = (
+        db.query(
+            Evenement.culture,
+            Evenement.nb_graines_semees,
+            Evenement.nb_plants_godets,
+        )
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.culture)
         .all()
     )
-    graines_en_godet: Dict[str, int] = {c: (int(q) if q else 0) for c, q in godets_raw}
+    graines_consommees: Dict[str, int] = {}
+    plants_en_godet: Dict[str, int] = {}
+    for culture, nb_g, nb_p in godets_brut:
+        consommees = int(nb_g) if nb_g else (int(nb_p) if nb_p else 0)
+        plants     = int(nb_p) if nb_p else 0
+        graines_consommees[culture] = graines_consommees.get(culture, 0) + consommees
+        plants_en_godet[culture]    = plants_en_godet.get(culture, 0) + plants
 
     result: Dict[str, dict] = {}
     for culture, nb, total in semis_raw:
+        total_seme = total or 0
+        consommees = graines_consommees.get(culture, 0)
         result[culture] = {
-            "nb_semis":         nb,
-            "total_seme":       total,
-            "unite":            unites.get(culture, "graines"),
-            "type_organe":      get_type_organe(db, culture),
-            "graines_en_godet": graines_en_godet.get(culture, 0),
+            "nb_semis":        nb,
+            "total_seme":      total_seme,
+            "unite":           unites.get(culture, "graines"),
+            "type_organe":     get_type_organe(db, culture),
+            "plants_en_godet": plants_en_godet.get(culture, 0),
+            "stock_residuel":  max(0, int(total_seme) - consommees),
         }
     return dict(sorted(result.items()))
 
 
 def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
     """
-    [US-014 / CA3, CA4, CA5] Retourne les semis par variété pour une culture donnée.
+    [US-014 / CA3, CA4, CA5 | US-017 / CA2] Retourne les semis par variété pour une culture donnée.
 
-    Champs de chaque dict : variete, nb_semis, total_seme, unite, date_premier_semis
+    Champs de chaque dict : variete, nb_semis, total_seme, unite, date_premier_semis,
+                            plants_en_godet, stock_residuel
     Retourne [] si aucun semis trouvé pour cette culture.
     """
     culture_lower = culture.lower()
@@ -289,13 +304,33 @@ def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
     if not semis_raw:
         return []
 
+    # Graines consommées par variété : nb_graines_semees si fourni, sinon nb_plants_godets.
+    # "5 plants sur 10 graines" → 10 graines déduites du stock (toute la barquette consommée).
+    godets_brut_var = (
+        db.query(
+            Evenement.variete,
+            Evenement.nb_graines_semees,
+            Evenement.nb_plants_godets,
+        )
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .all()
+    )
+    graines_consommees_var: Dict[Optional[str], int] = {}
+    plants_en_godet_var: Dict[Optional[str], int] = {}
+    for variete, nb_g, nb_p in godets_brut_var:
+        consommees = int(nb_g) if nb_g else (int(nb_p) if nb_p else 0)
+        plants     = int(nb_p) if nb_p else 0
+        graines_consommees_var[variete] = graines_consommees_var.get(variete, 0) + consommees
+        plants_en_godet_var[variete]    = plants_en_godet_var.get(variete, 0) + plants
+
     agregat: Dict[Optional[str], dict] = {}
     for variete, unite, qte, date_ev in semis_raw:
         if variete not in agregat:
             agregat[variete] = {
-                "nb_semis":         0,
-                "total_seme":       0.0,
-                "unite":            unite or "graines",
+                "nb_semis":           0,
+                "total_seme":         0.0,
+                "unite":              unite or "graines",
                 "date_premier_semis": date_ev,
             }
         agregat[variete]["nb_semis"] += 1
@@ -308,12 +343,16 @@ def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
 
     result = []
     for variete, d in sorted(agregat.items(), key=lambda x: ("" if x[0] is None else x[0])):
+        en_godet   = plants_en_godet_var.get(variete, 0)
+        consommees = graines_consommees_var.get(variete, 0)
         result.append({
-            "variete":           variete,
-            "nb_semis":          d["nb_semis"],
-            "total_seme":        d["total_seme"],
-            "unite":             d["unite"],
+            "variete":            variete,
+            "nb_semis":           d["nb_semis"],
+            "total_seme":         d["total_seme"],
+            "unite":              d["unite"],
             "date_premier_semis": d["date_premier_semis"],
+            "plants_en_godet":    en_godet,
+            "stock_residuel":     max(0, int(d["total_seme"]) - consommees),
         })
     return result
 
@@ -555,6 +594,44 @@ def calcul_godets(db: Session) -> Dict[str, dict]:
             "taux_reussite":    taux,
         }
     return dict(sorted(result.items()))
+
+
+def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
+    """
+    [US-018 / CA1, CA2, CA6] Retourne les godets actifs par variété pour une culture donnée.
+
+    Champs : variete, nb_plants_godets, nb_graines_semees, taux_reussite, date_derniere_mise_en_godet
+    Retourne [] si aucun événement mise_en_godet pour cette culture.
+    """
+    culture_lower = culture.lower()
+    rows = (
+        db.query(
+            Evenement.variete,
+            func.sum(Evenement.nb_plants_godets),
+            func.sum(Evenement.nb_graines_semees),
+            func.count(Evenement.id),
+            func.max(Evenement.date),
+        )
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.variete)
+        .all()
+    )
+    result: List[dict] = []
+    for variete, tot_p, tot_g, nb, date_max in rows:
+        nb_p = int(tot_p) if tot_p else 0
+        nb_g = int(tot_g) if tot_g else 0
+        taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        result.append({
+            "variete":                    variete,
+            "nb_plants_godets":           nb_p,
+            "nb_graines_semees":          nb_g,
+            "taux_reussite":              taux,
+            "nb_godets":                  nb,
+            "date_derniere_mise_en_godet": date_max,
+        })
+    return sorted(result, key=lambda x: ("" if x["variete"] is None else x["variete"]))
 
 
 _MOIS_FR = [

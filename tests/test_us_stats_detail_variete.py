@@ -204,7 +204,7 @@ class TestFormatVarieteBlocTelegram:
         data = self._data(date_derniere_recolte=datetime(2025, 9, 12))
         bloc = format_variete_bloc_telegram(data)
         assert "en cours" not in bloc
-        assert "📅" in bloc
+        assert "🗓️" in bloc
 
     def test_ca4_vegetatif_stock_calcul(self):
         """[CA4] Végétatif : stock = planté - perdu - récolté."""

@@ -1,0 +1,100 @@
+name: Deploy to Scaleway (DEV)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Assistant Potager DEV
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SCALEWAY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.SCALEWAY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync code on server
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager-dev
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+          "
+
+      - name: Install dependencies
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager-dev
+            venv/bin/pip install --quiet --upgrade pip
+            venv/bin/pip install --quiet -r requirements.txt
+          "
+
+      - name: Setup PostgreSQL extensions
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            sudo -u postgres psql -d potager_dev -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+          "
+
+      - name: Apply SQL migrations
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager-dev
+            set -a && source .env.dev-server && set +a
+            APPLIED_LOG=/opt/potager-dev/.migrations_applied
+            touch \"\${APPLIED_LOG}\"
+            for migration in \$(ls migrations/migration_v*.sql | sort -t v -k2 -n); do
+              name=\$(basename \"\${migration}\")
+              if grep -qF \"\${name}\" \"\${APPLIED_LOG}\"; then
+                echo \"  [-] \${name} (déjà appliquée)\"
+                continue
+              fi
+              echo \"  >>> Applying \${migration}...\"
+              psql \"\${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f \"\${migration}\"
+              echo \"\${name}\" >> \"\${APPLIED_LOG}\"
+            done
+          "
+
+      - name: Restart systemd service
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
+            "sudo systemctl restart potager-dev.service"
+
+      - name: Smoke test
+        id: smoke
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            echo 'Attente stabilisation du service (10s)...'
+            sleep 10
+            status=\$(systemctl is-active potager-dev.service || true)
+            if [ \"\${status}\" = 'active' ]; then
+              echo 'Déploiement DEV réussi — bot dev actif'
+            else
+              echo \"ERREUR: service potager-dev.service non actif (status: \${status})\"
+              systemctl status potager-dev.service --no-pager
+              exit 1
+            fi
+          "
+
+      - name: Update deploy history
+        if: always()
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            STATUS='success'
+            if [ '${{ job.status }}' != 'success' ]; then STATUS='failure'; fi
+            echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) branch=dev commit=${{ github.sha }} actor=${{ github.actor }} status=\${STATUS}\" \
+              >> /opt/potager-dev/.deploy_history
+          "
