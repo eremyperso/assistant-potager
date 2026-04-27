@@ -1,4 +1,18 @@
 
+## [v2.22.0] — 2026-04-27
+
+### 🚀 Nouveautés
+- Ajoute une étape de confirmation avant tout enregistrement d'action en base (US-021) : résumé lisible + boutons ✅ Confirmer / ❌ Annuler
+- Annulation automatique après 60 s d'inactivité (CA4/CA5) — aucune sauvegarde parasite
+- Les intents interrogation, stats et historique restent exécutés directement, sans confirmation (CA6)
+
+### 🔧 Améliorations techniques
+- Extrait la logique de sauvegarde DB dans `_do_save_items()` — réutilisable par le callback de confirmation
+- Ajoute `_ACTION_PENDING` dict et `_ACTION_TIMEOUT = 60` pour la state machine de confirmation par user_id
+- Ajoute `_build_action_summary()` pour construire le résumé lisible (1 ou N actions)
+- Ajoute callback handler `_action_confirm_cb()` enregistré sur le pattern `^action_`
+- Ajoute 9 tests unitaires dans `tests/test_us021_confirmation_enregistrement.py`
+
 ## [v2.21.0] — 2026-04-24
 
 ### 🚀 Nouveautés
