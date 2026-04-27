@@ -337,7 +337,10 @@ _HELP_PARCELLE = (
     "  → /parcelle modifier nord exposition=sud superficie=8.5\n"
     "  _Paramètres : exposition · superficie · ordre_\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
-    "  → /parcelle renommer sud carré-sud\n\n"
+    "  → /parcelle renommer sud carré-sud\n"
+    "• Supprimer une parcelle (soft-delete — historique conservé)\n"
+    "  → /parcelle supprimer serre-1\n"
+    "  ⚠️ _Les événements liés deviennent « Non localisé »_\n\n"
     "💡 _Noms de parcelle insensibles à la casse.\n"
     "   Les doublons sont détectés automatiquement._"
 )
