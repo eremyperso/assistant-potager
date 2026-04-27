@@ -1189,8 +1189,11 @@ async def _parse_multi(update, lignes: list, msg=None):
 # ── [US-019] SÉLECTION VARIÉTÉ MISE EN GODET ────────────────────────────────────
 # Stocke les items mise_en_godet en attente de sélection de variété {user_id: {parsed, texte, ts}}
 _GODET_PENDING: dict[int, dict] = {}
-
 _GODET_TIMEOUT = 60  # secondes
+
+# [US-021] Actions en attente de confirmation {user_id: {items, texte, ts}}
+_ACTION_PENDING: dict[int, dict] = {}
+_ACTION_TIMEOUT = 60  # secondes
 
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
@@ -1267,6 +1270,143 @@ async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=None,
     )
     await _save_godet_item(update, parsed, texte)
+
+
+# ── [US-021] CONFIRMATION AVANT ENREGISTREMENT ──────────────────────────────────
+
+def _build_action_summary(items: list[dict]) -> str:
+    """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
+    if len(items) == 1:
+        p = items[0]
+        lines = ["📝 *Je vais enregistrer :*\n"]
+        action = p.get("action") or "action"
+        lines.append(f"🌱 Action : *{action}*")
+        if p.get("culture"):   lines.append(f"🥬 Culture : *{p['culture']}*")
+        if p.get("variete"):   lines.append(f"🏷 Variété : *{p['variete']}*")
+        if p.get("quantite") is not None:
+            qte   = p["quantite"]
+            unite = p.get("unite") or ""
+            rang  = p.get("rang")
+            if rang:
+                lines.append(f"⚖️ Quantité : *{int(qte)} {unite}/rang × {rang} rangs*")
+            else:
+                lines.append(f"⚖️ Quantité : *{qte} {unite}*".strip())
+        if p.get("parcelle"):  lines.append(f"📍 Parcelle : *{p['parcelle']}*")
+        if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
+    else:
+        lines = [f"📝 *Je vais enregistrer {len(items)} actions :*\n"]
+        for i, p in enumerate(items, 1):
+            action  = p.get("action") or "action"
+            culture = p.get("culture") or "?"
+            qte_str = f" — {p['quantite']} {p.get('unite') or ''}".strip() if p.get("quantite") is not None else ""
+            lines.append(f"{i}. *{action}* {culture}{qte_str}")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
+
+
+async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> None:
+    """[US-021] Sauvegarde effective en base après confirmation utilisateur."""
+    db = SessionLocal()
+    saved_items = []
+    try:
+        for parsed in items:
+            nom_parcelle = parsed.get("parcelle")
+            parcelle_obj = None
+            if nom_parcelle:
+                parcelle_obj = resolve_parcelle(db, nom_parcelle)
+                if parcelle_obj is None:
+                    log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
+                    err_msg = (
+                        f"❌ La parcelle *{nom_parcelle}* n'existe pas dans votre potager.\n\n"
+                        f"Créez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
+                    )
+                    if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+                    else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                    return
+            event = Evenement(
+                type_action       = normalize_action(parsed.get("action")),
+                culture           = parsed.get("culture"),
+                variete           = parsed.get("variete"),
+                quantite          = _to_float(parsed.get("quantite")),
+                unite             = parsed.get("unite"),
+                parcelle_id       = parcelle_obj.id if parcelle_obj else None,
+                rang              = _to_int(parsed.get("rang")),
+                duree             = _to_int(parsed.get("duree_minutes")),
+                traitement        = parsed.get("traitement"),
+                commentaire       = parsed.get("commentaire"),
+                texte_original    = texte,
+                date              = parse_date(parsed.get("date")),
+                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
+            )
+            db.add(event)
+            db.commit()
+            db.refresh(event)
+            log.info(f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} | qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}")
+            saved_items.append((parsed, event.id))
+    except Exception as e:
+        db.rollback()
+        await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
+        return
+    finally:
+        db.close()
+
+    if len(saved_items) == 1:
+        parsed, event_id = saved_items[0]
+        recap = _build_recap(parsed, event_id)
+        if msg:  await msg.edit_text(recap, parse_mode="Markdown")
+        else:    await update.effective_message.reply_text(recap, parse_mode="Markdown")
+    else:
+        lines_out = [f"✅ *{len(saved_items)} actions enregistrées !*\n"]
+        for parsed, event_id in saved_items:
+            cult  = parsed.get("culture") or "?"
+            qte   = str(parsed["quantite"]) + " " + (parsed.get("unite") or "") if parsed.get("quantite") else ""
+            d     = parsed.get("date") or str(date.today())
+            lines_out.append(f"• *{cult}* {qte} — _{d}_ ✔")
+        recap_multi = "\n".join(lines_out)
+        if msg:  await msg.edit_text(recap_multi, parse_mode="Markdown")
+        else:    await update.effective_message.reply_text(recap_multi, parse_mode="Markdown")
+
+    await update.effective_message.reply_text(
+        "_Que voulez-vous faire ensuite ?_",
+        parse_mode="Markdown",
+        reply_markup=AFTER_RECORD_KEYBOARD,
+    )
+
+    if len(saved_items) == 1:
+        parsed, _ = saved_items[0]
+        await send_voice_reply(update, _build_recap_tts(parsed))
+
+
+async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-021] Callback inline — confirmation ou annulation d'une action en attente."""
+    import time
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _ACTION_PENDING.pop(user_id, None)
+
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre commande.")
+        return
+
+    if time.time() - pending["ts"] > _ACTION_TIMEOUT:
+        await query.edit_message_text("⏱ *Confirmation expirée (60 s), action annulée.*", parse_mode="Markdown")
+        return
+
+    if query.data == "action_cancel":
+        log.info(f"[US-021] Action annulée par user_id={user_id}")
+        await query.edit_message_text("❌ Action annulée.", reply_markup=None)
+        return
+
+    # action_confirm → sauvegarde effective
+    await query.edit_message_text("⏳ Enregistrement en cours...", reply_markup=None)
+    log.info(f"[US-021] Confirmation reçue — user_id={user_id}, {len(pending['items'])} item(s)")
+    await _do_save_items(update, pending["items"], pending["texte"])
 
 
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
@@ -1402,80 +1542,21 @@ async def _parse_and_save(update: Update, texte: str, msg=None):
             )
         return  # attente callback — pas de sauvegarde immédiate
 
-    # Sauvegarde PostgreSQL (1 ou plusieurs événements)
-    db = SessionLocal()
-    saved_items = []
-    try:
-        for parsed in items:
-            # ── Résolution FK parcelle ────────────────────────────────────────
-            nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = None
-            if nom_parcelle:
-                parcelle_obj = resolve_parcelle(db, nom_parcelle)
-                if parcelle_obj is None:
-                    log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
-                    err_msg = (
-                        f"❌ La parcelle *{nom_parcelle}* n'existe pas dans votre potager.\n\n"
-                        f"Créez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
-                    )
-                    if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
-                    else:    await update.message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                    return
-            event = Evenement(
-                type_action       = normalize_action(parsed.get("action")),
-                culture           = parsed.get("culture"),
-                variete           = parsed.get("variete"),
-                quantite          = _to_float(parsed.get("quantite")),
-                unite             = parsed.get("unite"),
-                parcelle_id       = parcelle_obj.id  if parcelle_obj else None,
-                rang              = _to_int(parsed.get("rang")),
-                duree             = _to_int(parsed.get("duree_minutes")),
-                traitement        = parsed.get("traitement"),
-                commentaire       = parsed.get("commentaire"),
-                texte_original    = texte,
-                date              = parse_date(parsed.get("date")),
-                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-            )
-            db.add(event)
-            db.commit()
-            db.refresh(event)
-            log.info(f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} | qte={event.quantite} {event.unite or ''} | rang={event.rang} | parcelle={event.parcelle} (id={event.parcelle_id}) | date={event.date}")
-            saved_items.append((parsed, event.id))
-    except Exception as e:
-        db.rollback()
-        await update.message.reply_text(f"❌ Erreur base de données : {e}")
-        return
-    finally:
-        db.close()
-
-    # Récapitulatif
-    if len(saved_items) == 1:
-        parsed, event_id = saved_items[0]
-        recap = _build_recap(parsed, event_id)
-        if msg:   await msg.edit_text(recap, parse_mode="Markdown")
-        else:     await update.message.reply_text(recap, parse_mode="Markdown")
-    else:
-        lines_out = [f"✅ *{len(saved_items)} actions enregistrées !*\n"]
-        for parsed, event_id in saved_items:
-            cult = parsed.get("culture") or "?"
-            qte  = str(parsed["quantite"]) + " " + (parsed.get("unite") or "") if parsed.get("quantite") else ""
-            d    = parsed.get("date") or str(date.today())
-            lines_out.append(f"• *{cult}* {qte} — _{d}_ ✔")
-        recap_multi = "\n".join(lines_out)
-        if msg:   await msg.edit_text(recap_multi, parse_mode="Markdown")
-        else:     await update.message.reply_text(recap_multi, parse_mode="Markdown")
-
+    # [US-021] Confirmation avant enregistrement — affiche le résumé + boutons Confirmer/Annuler
+    import time as _time
+    user_id = update.effective_user.id
+    _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+    summary = _build_action_summary(items)
+    buttons = [[
+        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
+        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
+    ]]
+    log.info(f"[US-021] Confirmation demandée — user_id={user_id}, {len(items)} item(s)")
     await update.message.reply_text(
-        "_Que voulez-vous faire ensuite ?_",
+        summary,
         parse_mode="Markdown",
-        reply_markup=AFTER_RECORD_KEYBOARD
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
-
-    # ── Synthèse vocale du récapitulatif ──────────────────────────────────────
-    if len(saved_items) == 1:
-        parsed, _ = saved_items[0]
-        await send_voice_reply(update, _build_recap_tts(parsed))
 
 
 def _build_recap_tts(p: dict) -> str:
@@ -3112,6 +3193,9 @@ def main():
 
     # [US-019] Sélection variété mise en godet — boutons inline
     app.add_handler(CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_"))
+
+    # [US-021] Confirmation avant enregistrement — boutons inline
+    app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
