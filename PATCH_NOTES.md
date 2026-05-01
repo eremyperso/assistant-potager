@@ -1,4 +1,24 @@
 
+## [v2.25.0] — 2026-05-01
+
+### 🚀 Nouveautés
+- Flux conversationnel DEPLACER (US-007) : réassocier une culture à une nouvelle parcelle en un seul échange
+- Détection vocale et textuelle des phrases "associer/déplacer/rattacher/changer parcelle + culture" (CA1, CA10)
+- Si plusieurs variétés détectées : demande de sélection (CA4) ; variété unique → saut direct (CA3)
+- Liste des parcelles avec occupation actuelle (🟢 Libre / 📍 occupée) via `calcul_occupation_parcelles` (CA5)
+- Parcelle inconnue acceptée sans erreur : créée automatiquement à la confirmation (CA6)
+- Récapitulatif avant confirmation : culture, variété, parcelle cible, nb plantations concernées (CA7)
+- UPDATE groupé uniquement sur les événements `plantation` + trace `[DÉPL YYYY-MM-DD] parcelle: ancienne → nouvelle` dans `texte_original` (CA8)
+- Culture non détectée → mode `depl_culture_ask` avec demande explicite (CA11)
+- Annulable à tout moment ("annuler" / "menu" / "retour") avec reset complet de l'état (CA9)
+
+### 🔧 Améliorations techniques
+- Ajoute `DEPLACER` à `INTENTS` et au prompt `_CLASSIFY_PROMPT` avec 8 exemples vocaux
+- Ajoute `MODES_DEPLACER` set et bypass dans `handle_voice` / `handle_text` (identique au pattern `MODES_CORR`)
+- Ajoute `_is_deplacer_request()` et `_extract_culture_deplacer()` (regex, 0 token Groq pour les cas nominaux)
+- Ajoute fonctions `_depl_start()`, `_depl_variete_select()`, `_depl_show_parcelles()`, `_depl_parcelle_select()`, `_depl_confirm()`, `_depl_reset()`
+- Ajoute 14 tests unitaires dans `tests/test_us007_reassocier_culture.py` couvrant CA1–CA11
+
 ## [v2.24.0] — 2026-04-27
 
 ### 🚀 Nouveautés
