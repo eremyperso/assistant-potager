@@ -392,11 +392,14 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         return {}
 
     # ── 2. Événements de plantation pour cultures actives ────────────────────
+    # Parcelle.nom retourné uniquement si actif=True — les parcelles soft-deletées
+    # tombent dans le groupe None (Non localisé) comme les events sans parcelle_id.
+    from sqlalchemy import case as sa_case
     rows = (
         db.query(
             Evenement.culture,
             Evenement.variete,
-            Parcelle.nom.label("parcelle_nom"),
+            sa_case((Parcelle.actif.is_(True), Parcelle.nom), else_=None).label("parcelle_nom"),
             Evenement.quantite,
             Evenement.rang,
             Evenement.unite,
