@@ -64,6 +64,7 @@ from utils.date_utils import parse_date
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
 from utils.stock import calcul_stock_cultures, format_stock_ligne_telegram
 from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commentaire
+from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_culture_deplacer as _extract_culture_deplacer  # [US-007]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -588,6 +589,20 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await _corr_confirm_delete(update, ctx, texte)
         return
 
+    # ── 3b. [US-007] Modes déplacement actifs : bypass intent classification ────
+    if mode in MODES_DEPLACER:
+        if mode == 'depl_culture_ask':
+            culture = _extract_culture_deplacer(texte) or texte.strip().lower()
+            ctx.user_data.pop('mode', None)
+            await _depl_start(update, ctx, culture)
+        elif mode == 'depl_variete_select':
+            await _depl_variete_select(update, ctx, texte)
+        elif mode == 'depl_parcelle_select':
+            await _depl_parcelle_select(update, ctx, texte)
+        elif mode == 'depl_confirm':
+            await _depl_confirm(update, ctx, texte)
+        return
+
     # ── 4. Mode ask actif : bypass aussi ──────────────────────────────────────
     if mode == 'ask':
         ctx.user_data['mode'] = None
@@ -665,6 +680,13 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown", reply_markup=MENU_KEYBOARD
         )
         return
+    # [US-007 / CA10] Routage vocal DEPLACER
+    if intent == "DEPLACER":
+        await msg.edit_text("🔀 *Réassociation culture → parcelle...*", parse_mode="Markdown")
+        culture = _extract_culture_deplacer(texte)
+        log.info(f"🔀 DEPLACER VOCAL  : culture='{culture}'")
+        await _depl_start(update, ctx, culture)
+        return
 
     # intent == "ACTION" : enregistrer comme action potager
     await _parse_and_save(update, texte, msg)
@@ -716,6 +738,9 @@ def _is_question(texte: str) -> bool:
         return False
     return t.startswith(QUESTION_STARTERS) or t.endswith("?")
 
+
+# [US-007] _is_deplacer_request et _extract_culture_deplacer sont importées de utils/deplacer.py
+
 # Mots-clés de navigation reconnus (avec ou sans émoji, insensible à la casse)
 NAV_NOUVELLE = {"🎤 nouvelle action vocale", "➕ autre action", "autre action",
                 "nouvelle action", "nouvelle", "action"}
@@ -751,6 +776,7 @@ INTENTS = {
     "NOUVELLE",     # nouvelle action, autre chose
     "ACTION",       # action potager à enregistrer (récolte, semis, arrosage...)
     "PLAN",         # [US_Plan_occupation_parcelles / CA9] plan d'occupation parcelles
+    "DEPLACER",     # [US-007] réassocier une culture à une nouvelle parcelle
 }
 
 _CLASSIFY_PROMPT = """Tu es un assistant potager spécialisé dans la classification de messages.
@@ -825,6 +851,19 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 🗺️ PLAN        : veut voir le plan d'occupation des parcelles
   Exemples : "plan du potager", "plan parcelle nord", "montre-moi le plan"
 
+🔀 DEPLACER    : veut réassocier une culture à une nouvelle parcelle (associer, déplacer, changer de parcelle)
+  MOTS-CLÉS : associer, déplacer, changer de parcelle, rattacher, affecter, réassocier, déménager
+  Exemples :
+    ✅ "j'ai besoin d'associer ma zone tomate sur une nouvelle parcelle"
+    ✅ "déplacer mes carottes sur la parcelle nord"
+    ✅ "changer la parcelle de mes courgettes"
+    ✅ "réassocier mes tomates cerise à la parcelle serre"
+    ✅ "affecter mes poivrons à une autre parcelle"
+    ✅ "rattacher mes aubergines à la parcelle est"
+    ✅ "déménager mes salades vers la parcelle sud"
+    ❌ "planté des tomates dans la parcelle nord" (c'est une ACTION, pas un déplacement)
+    ❌ "j'ai déplacé un pot" (pas une culture de parcelle)
+
 RÈGLE IMPORTANTE #1 :
 Si le message contient "affiche", "afficher", "montre", "montrer", "voir", "liste", "consulter", "détail", "combien", "quand", "quel"
 → c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION (même sans "?" en fin de phrase).
@@ -836,7 +875,7 @@ ET SANS "?" → c'est ACTION, jamais INTERROGER.
 Message utilisateur : "{texte}"
 
 Réponds avec UN SEUL MOT en majuscules parmi :
-STATS | HISTORIQUE | INTERROGER | CORRIGER | SUPPRIMER | MENU | NOUVELLE | ACTION | PLAN
+STATS | HISTORIQUE | INTERROGER | CORRIGER | SUPPRIMER | MENU | NOUVELLE | ACTION | PLAN | DEPLACER
 
 Réponse :"""
 
@@ -953,8 +992,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     texte     = texte_raw.lower()  # comparaison insensible à la casse
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
-    # Réinitialiser le mode SAUF si on est en plein flux de correction ou en attente de question
-    MODES_CORRECTION = {'corr_select', 'corr_apply', 'corr_search', 'corr_confirm_delete', 'corr_confirm', 'ask', 'parcelle_confirm'}
+    # Réinitialiser le mode SAUF si on est en plein flux de correction, déplacement ou en attente de question
+    MODES_CORRECTION = {
+        'corr_select', 'corr_apply', 'corr_search', 'corr_confirm_delete', 'corr_confirm',
+        'ask', 'parcelle_confirm',
+        # [US-007] flux déplacement
+        'depl_culture_ask', 'depl_variete_select', 'depl_parcelle_select', 'depl_confirm',
+    }
     if ctx.user_data.get('mode') not in MODES_CORRECTION:
         ctx.user_data['mode'] = None
 
@@ -1025,6 +1069,22 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _corr_confirm_delete(update, ctx, texte_raw)
         return
 
+    # ── PRIORITÉ 1b : [US-007] flux déplacement actif
+    elif mode == 'depl_culture_ask':
+        culture = _extract_culture_deplacer(texte_raw) or texte_raw.strip().lower()
+        ctx.user_data.pop('mode', None)
+        await _depl_start(update, ctx, culture)
+        return
+    elif mode == 'depl_variete_select':
+        await _depl_variete_select(update, ctx, texte_raw)
+        return
+    elif mode == 'depl_parcelle_select':
+        await _depl_parcelle_select(update, ctx, texte_raw)
+        return
+    elif mode == 'depl_confirm':
+        await _depl_confirm(update, ctx, texte_raw)
+        return
+
     # ── PRIORITÉ 2 : mode question analytique actif
     if mode == 'ask':
         ctx.user_data['mode'] = None
@@ -1085,6 +1145,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if _is_requete_godets(texte_raw):
         log.info(f"🪴 GODETS          : détecté → _consulter_godets")
         await _consulter_godets(update)
+        return
+
+    # ── PRIORITÉ 3c : [US-007 / CA10] détection déplacement culture → parcelle
+    if _is_deplacer_request(texte_raw):
+        culture = _extract_culture_deplacer(texte_raw)
+        log.info(f"🔀 DEPLACER TEXTE  : détecté → culture='{culture}'")
+        await _depl_start(update, ctx, culture)
         return
 
     # ── PRIORITÉ 4 : détection automatique question
@@ -3194,6 +3261,286 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
             "❓ Tapez *✅ Confirmer* pour valider ou *❌ Annuler*.",
             parse_mode="Markdown"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-007] DÉPLACEMENT / RÉASSOCIATION CULTURE → PARCELLE
+# ══════════════════════════════════════════════════════════════════════════════
+
+MODES_DEPLACER = {
+    'depl_culture_ask',    # CA11 — culture non détectée, on demande
+    'depl_variete_select', # CA4  — plusieurs variétés, choix
+    'depl_parcelle_select', # CA5  — liste des parcelles, saisie cible
+    'depl_confirm',         # CA7  — récapitulatif, attente confirmation
+}
+
+
+async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: str | None):
+    """
+    [US-007] Point d'entrée du flux de réassociation.
+    - Si culture=None → mode depl_culture_ask (CA11)
+    - Sinon → cherche les plantations, route vers variété ou parcelle
+    """
+    if not culture:
+        ctx.user_data['mode'] = 'depl_culture_ask'
+        await update.message.reply_text(
+            "🔀 *Réassociation culture → parcelle*\n\nQuelle culture souhaitez-vous déplacer ?",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup([["❌ Annuler"]], resize_keyboard=True),
+        )
+        return
+
+    culture = culture.strip().lower()
+    db = SessionLocal()
+    try:
+        # Chercher les plantations de cette culture
+        rows = (
+            db.query(Evenement)
+            .filter(
+                Evenement.type_action == "plantation",
+                func.lower(Evenement.culture) == culture,
+            )
+            .all()
+        )
+    finally:
+        db.close()
+
+    if not rows:
+        await update.message.reply_text(
+            f"❌ Aucune plantation de *{culture}* trouvée en base.",
+            parse_mode="Markdown",
+            reply_markup=MENU_KEYBOARD,
+        )
+        ctx.user_data['mode'] = None
+        log.info(f"[US-007 CA2] Aucune plantation pour culture='{culture}'")
+        return
+
+    ctx.user_data['depl_culture'] = culture
+
+    # Collecter les variétés distinctes (None = sans variété précisée)
+    varietes = list({(e.variete or "") for e in rows})
+    varietes_remplies = [v for v in varietes if v]
+
+    if len(varietes_remplies) > 1:
+        # CA4 — plusieurs variétés → demander laquelle
+        ctx.user_data['mode'] = 'depl_variete_select'
+        lines = [f"🌿 J'ai trouvé *{len(varietes_remplies)} variété(s)* de *{culture}* plantée(s) :\n"]
+        for v in varietes_remplies:
+            nb = sum(1 for e in rows if (e.variete or "") == v)
+            lines.append(f"• *{v}* — {nb} plantation(s)")
+        lines.append("\nSouhaitez-vous déplacer *toutes* les variétés ou une en particulier ?")
+        lines.append("Tapez `toutes` ou le nom d'une variété.")
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup([["toutes"], ["❌ Annuler"]], resize_keyboard=True),
+        )
+        log.info(f"[US-007 CA4] Plusieurs variétés pour '{culture}' : {varietes_remplies}")
+    else:
+        # CA3 — une seule variété ou aucune → passer directement à la sélection de parcelle
+        variete_unique = varietes_remplies[0] if varietes_remplies else None
+        ctx.user_data['depl_variete'] = variete_unique
+        log.info(f"[US-007 CA3] Variété unique '{variete_unique}' → sélection parcelle directe")
+        await _depl_show_parcelles(update, ctx)
+
+
+async def _depl_show_parcelles(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[US-007 / CA5] Affiche la liste des parcelles avec occupation actuelle."""
+    culture = ctx.user_data.get('depl_culture', '?')
+    variete = ctx.user_data.get('depl_variete')
+    var_str = f" (variété : {variete})" if variete else " (toutes variétés)"
+
+    db = SessionLocal()
+    try:
+        parcelles = get_all_parcelles(db)
+        occupation = calcul_occupation_parcelles(db)
+    finally:
+        db.close()
+
+    lines = [f"📋 Où souhaitez-vous placer *{culture}*{var_str} ?\n"]
+    for p in parcelles:
+        cultures_p = occupation.get(p.nom, [])
+        if not cultures_p:
+            lines.append(f"🟢 *{p.nom.upper()}* — Libre")
+        else:
+            resumes = []
+            for c in cultures_p[:3]:
+                cult_label = c['culture']
+                if c.get('variete'):
+                    cult_label += f" {c['variete']}"
+                nb = int(c['nb_plants']) if c['nb_plants'] == int(c['nb_plants']) else c['nb_plants']
+                resumes.append(f"{cult_label} ({nb} {c.get('unite', 'plants')})")
+            suffix = " …" if len(cultures_p) > 3 else ""
+            lines.append(f"📍 *{p.nom.upper()}* — {', '.join(resumes)}{suffix}")
+
+    lines.append("\nTapez le nom de la parcelle cible (ou *annuler*).")
+    ctx.user_data['mode'] = 'depl_parcelle_select'
+    await update.message.reply_text(
+        "\n".join(lines),
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["❌ Annuler"]], resize_keyboard=True),
+    )
+
+
+async def _depl_variete_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
+    """[US-007 / CA4] L'utilisateur choisit 'toutes' ou une variété spécifique."""
+    t = texte.strip().lower()
+    if "annuler" in t or "menu" in t or "retour" in t:
+        _depl_reset(ctx)
+        await update.message.reply_text("↩️ Déplacement annulé.", reply_markup=MENU_KEYBOARD)
+        return
+
+    if t in ("toutes", "toutes les variétés", "toutes les varietes", "all"):
+        ctx.user_data['depl_variete'] = None
+    else:
+        ctx.user_data['depl_variete'] = texte.strip()
+
+    await _depl_show_parcelles(update, ctx)
+
+
+async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
+    """[US-007 / CA5, CA6] L'utilisateur saisit le nom de la parcelle cible."""
+    t = texte.strip().lower()
+    if "annuler" in t or "menu" in t or "retour" in t:
+        _depl_reset(ctx)
+        await update.message.reply_text("↩️ Déplacement annulé.", reply_markup=MENU_KEYBOARD)
+        return
+
+    culture = ctx.user_data.get('depl_culture', '')
+    variete = ctx.user_data.get('depl_variete')
+    nom_parcelle = texte.strip()
+
+    db = SessionLocal()
+    try:
+        # Résoudre la parcelle (CA6 : accepter une parcelle inconnue)
+        parcelle_obj = resolve_parcelle(db, nom_parcelle)
+        parcelle_id_cible = parcelle_obj.id if parcelle_obj else None
+        nom_affiche = parcelle_obj.nom.upper() if parcelle_obj else nom_parcelle.upper()
+
+        # Compter les enregistrements plantation concernés
+        q = db.query(Evenement).filter(
+            Evenement.type_action == "plantation",
+            func.lower(Evenement.culture) == culture.lower(),
+        )
+        if variete is not None:
+            q = q.filter(Evenement.variete == variete)
+        nb_records = q.count()
+    finally:
+        db.close()
+
+    if nb_records == 0:
+        await update.message.reply_text(
+            f"❌ Aucune plantation de *{culture}* trouvée.",
+            parse_mode="Markdown",
+        )
+        _depl_reset(ctx)
+        return
+
+    ctx.user_data['depl_parcelle_cible'] = nom_parcelle
+    ctx.user_data['depl_parcelle_cible_id'] = parcelle_id_cible
+    ctx.user_data['depl_nb_records'] = nb_records
+    ctx.user_data['mode'] = 'depl_confirm'
+
+    var_str = f" — variété : {variete}" if variete else " — toutes variétés"
+    recap = (
+        f"✅ *Récapitulatif :*\n"
+        f"🌿 Culture : *{culture}*{var_str}\n"
+        f"📍 Nouvelle parcelle : *{nom_affiche}*\n"
+        f"📝 Enregistrements mis à jour : *{nb_records}* plantation(s)\n\n"
+        f"Confirmez-vous ? (*oui* / *non*)"
+    )
+    await update.message.reply_text(
+        recap,
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["oui", "non"], ["❌ Annuler"]], resize_keyboard=True),
+    )
+    log.info(f"[US-007 CA7] Récapitulatif : culture={culture} variete={variete} → {nom_affiche} ({nb_records} records)")
+
+
+async def _depl_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
+    """[US-007 / CA8] Confirmation finale — exécute l'UPDATE groupé."""
+    t = texte.strip().lower()
+
+    if "annuler" in t or "menu" in t or "retour" in t or t in ("non", "n", "no"):
+        _depl_reset(ctx)
+        await update.message.reply_text("↩️ Déplacement annulé.", reply_markup=MENU_KEYBOARD)
+        return
+
+    if t not in ("oui", "o", "yes", "y", "confirmer", "confirme", "✅ confirmer"):
+        await update.message.reply_text(
+            "❓ Tapez *oui* pour confirmer ou *non* pour annuler.",
+            parse_mode="Markdown",
+        )
+        return
+
+    culture      = ctx.user_data.get('depl_culture', '')
+    variete      = ctx.user_data.get('depl_variete')
+    nom_parcelle = ctx.user_data.get('depl_parcelle_cible', '')
+    parcelle_id  = ctx.user_data.get('depl_parcelle_cible_id')
+    nb_records   = ctx.user_data.get('depl_nb_records', 0)
+
+    db = SessionLocal()
+    try:
+        # CA6 : créer la parcelle si elle n'existe pas encore
+        if parcelle_id is None:
+            from utils.parcelles import create_parcelle, find_doublon
+            doublon = find_doublon(db, nom_parcelle)
+            if doublon:
+                parcelle_id = doublon.id
+                nom_affiche = doublon.nom.upper()
+            else:
+                new_p = create_parcelle(db, nom_parcelle)
+                parcelle_id = new_p.id
+                nom_affiche = new_p.nom.upper()
+                log.info(f"[US-007 CA6] Nouvelle parcelle créée : {nom_affiche!r}")
+        else:
+            parc = db.get(Parcelle, parcelle_id)
+            nom_affiche = parc.nom.upper() if parc else nom_parcelle.upper()
+
+        # Récupérer les événements à mettre à jour
+        q = db.query(Evenement).filter(
+            Evenement.type_action == "plantation",
+            func.lower(Evenement.culture) == culture.lower(),
+        )
+        if variete is not None:
+            q = q.filter(Evenement.variete == variete)
+        events = q.all()
+
+        today = date.today().isoformat()
+        nb_updated = 0
+        for event in events:
+            ancienne = event.parcelle_rel.nom if event.parcelle_rel else "Non localisé"
+            event.parcelle_id = parcelle_id
+            # CA8 — trace d'auditabilité identique au flux correction
+            trace = f" | [DÉPL {today}] parcelle: {ancienne} → {nom_affiche}"
+            event.texte_original = (event.texte_original or "") + trace
+            nb_updated += 1
+
+        db.commit()
+        log.info(f"[US-007 CA8] UPDATE : {nb_updated} plantation(s) de '{culture}' → parcelle_id={parcelle_id}")
+    except Exception as e:
+        db.rollback()
+        log.error(f"[US-007] Erreur UPDATE : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+        _depl_reset(ctx)
+        return
+    finally:
+        db.close()
+
+    _depl_reset(ctx)
+    var_str = f" {variete}" if variete else ""
+    await update.message.reply_text(
+        f"✅ *{nb_updated} plantation(s) de {culture}{var_str}* associée(s) à la parcelle *{nom_affiche}*.",
+        parse_mode="Markdown",
+        reply_markup=AFTER_RECORD_KEYBOARD,
+    )
+
+
+def _depl_reset(ctx: ContextTypes.DEFAULT_TYPE):
+    """[US-007 / CA9] Réinitialise tous les clés du flux DEPLACER."""
+    for k in ['mode', 'depl_culture', 'depl_variete', 'depl_parcelle_cible',
+              'depl_parcelle_cible_id', 'depl_nb_records']:
+        ctx.user_data.pop(k, None)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
