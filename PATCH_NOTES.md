@@ -1,4 +1,24 @@
 
+## [v2.24.0] — 2026-05-07
+
+### 🚀 Nouveautés — PWA Voice Assistant (iPhone)
+- Ajoute le endpoint `POST /voice` : blob audio MediaRecorder → Groq Whisper → classification intent → parse/ask → JSON `{ reponse, intent, texte, recap, session_id }`
+- Remplace Web Speech API (non disponible en PWA iOS) par **MediaRecorder** côté client — compatible iOS Safari 14.3+ et Android Chrome
+- Détection automatique du format audio : `audio/webm;codecs=opus` (Chrome/Android) ou `audio/mp4` (iOS Safari)
+- Sessions conversationnelles in-memory (multi-tours) : les 5 derniers échanges sont conservés par `session_id` (UUID persisté en `localStorage`)
+- Synthèse vocale iOS : réponse lue par `SpeechSynthesis` immédiatement après la réponse serveur
+- Mode **écoute automatique** (toggle) : le micro reprend automatiquement après la lecture de la réponse
+- Ajout `apple-touch-icon` et `theme-color` pour l'installation sur l'écran d'accueil iPhone
+
+### 🔧 Améliorations techniques
+- Ajoute `transcribe_audio()` dans `llm/groq_client.py` — transcription Whisper côté serveur (Groq)
+- Ajoute `classify_intent_pwa()` dans `llm/groq_client.py` — classification ACTION/INTERROGER via Groq (~8 tokens de sortie)
+- Ajoute `python-multipart>=0.0.9` dans `requirements.txt` (requis pour `UploadFile` FastAPI)
+- Crée `static/sw.js` — service worker basique (cache-first sur assets statiques, réseau sur API)
+- Met à jour `static/manifest.json` : `lang`, `purpose: maskable`, `shortcuts`
+- Crée `static/icon.png` — icône 192×192 verte (#2d6a4f) pour l'écran d'accueil
+- Ajoute un bandeau d'avertissement micro si `getUserMedia` est refusé (guidage iOS Réglages)
+
 ## [v2.23.0] — 2026-04-27
 
 ### 🚀 Nouveautés

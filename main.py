@@ -3,20 +3,22 @@ main.py — Assistant Potager v2 (moteur Groq, gratuit)
 ─────────────────────────────────────────────────────
 Endpoints :
   GET  /health      → vérifier que l'API tourne
-  POST /parse       → dicter une commande vocale
+  POST /parse       → dicter une commande vocale (JSON)
+  POST /voice       → blob audio MediaRecorder → Whisper → intent → JSON (PWA iPhone)
   POST /ask         → poser une question analytique
   GET  /stats       → stats JSON instantanées (sans LLM)
   GET  /historique  → derniers événements avec filtres
 """
 import json
-import subprocess
+import os
+import tempfile
+import uuid
 from datetime import date
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
-import os
 
 # ── Version [US-008] ────────────────────────────────────────────────────────────
 def _lire_version() -> str:
@@ -34,13 +36,29 @@ from database.models import Evenement, CultureConfig, Parcelle
 from utils.actions import normalize_action
 from utils.parcelles import resolve_parcelle
 from utils.stock import calcul_stock_cultures, format_stock_stats_json
-from llm.groq_client import parse_commande, repondre_question
+from llm.groq_client import parse_commande, repondre_question, transcribe_audio, classify_intent_pwa
 from utils.date_utils import parse_date
 from llm.rag import add_to_rag
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
 Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
+
+# ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
+# { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
+_sessions: dict[str, list[dict]] = {}
+_SESSION_MAX_TURNS = 5  # garder les 5 derniers échanges
+
+# ── Mapping MIME type → extension fichier audio ────────────────────────────────
+_MIME_EXT: dict[str, str] = {
+    "audio/mp4"  : ".mp4",
+    "audio/m4a"  : ".m4a",
+    "audio/webm" : ".webm",
+    "audio/ogg"  : ".ogg",
+    "audio/wav"  : ".wav",
+    "audio/mpeg" : ".mp3",
+    "audio/aac"  : ".aac",
+}
 
 # ── Fichiers statiques PWA ─────────────────────────────────────────────────────
 if os.path.isdir("static"):
@@ -169,6 +187,174 @@ def parse(req: TexteRequest):
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
     finally:
         db.close()
+
+
+@app.post("/voice")
+async def voice(
+    audio: UploadFile = File(...),
+    session_id: str   = Form(default=""),
+):
+    """
+    [PWA iPhone] Reçoit un blob audio MediaRecorder →
+      1. Groq Whisper → texte transcrit
+      2. classify_intent_pwa() → ACTION | INTERROGER
+      3. parse_commande() ou repondre_question()
+      4. Retourne { reponse, intent, texte, recap, session_id }
+    """
+    # 1. Écrire le blob audio dans un fichier temporaire
+    ct  = (audio.content_type or "audio/webm").split(";")[0].strip()
+    ext = _MIME_EXT.get(ct, ".webm")
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+        tmp_path = tmp.name
+        tmp.write(await audio.read())
+
+    # 2. Transcription Whisper
+    try:
+        texte = transcribe_audio(tmp_path, ext)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur Whisper : {e}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if not texte:
+        return {
+            "reponse"    : "Je n'ai pas compris. Parlez plus distinctement et réessayez.",
+            "intent"     : "ERREUR",
+            "texte"      : "",
+            "recap"      : None,
+            "session_id" : session_id or str(uuid.uuid4()),
+        }
+
+    # 3. Session
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    history = _sessions.get(session_id, [])
+
+    # 4. Classification de l'intention
+    intent = classify_intent_pwa(texte)
+
+    # 5a. INTERROGER — question analytique sur l'historique
+    if intent == "INTERROGER":
+        db = SessionLocal()
+        try:
+            events = db.query(Evenement).order_by(Evenement.date).all()
+            if not events:
+                reponse = "Aucune donnée enregistrée pour l'instant. Commencez par dicter quelques actions !"
+            else:
+                data = [
+                    {
+                        "id"         : e.id,
+                        "date"       : str(e.date)[:10] if e.date else None,
+                        "action"     : e.type_action,
+                        "culture"    : e.culture,
+                        "variete"    : e.variete,
+                        "quantite"   : e.quantite,
+                        "unite"      : e.unite,
+                        "parcelle"   : e.parcelle,
+                        "rang"       : e.rang,
+                        "duree_min"  : e.duree,
+                        "traitement" : e.traitement,
+                        "commentaire": e.commentaire,
+                    }
+                    for e in events
+                ]
+                try:
+                    reponse = repondre_question(texte, json.dumps(data, ensure_ascii=False))
+                except Exception as e:
+                    raise HTTPException(status_code=502, detail=f"Erreur Groq : {e}")
+        finally:
+            db.close()
+
+        result = {
+            "reponse"    : reponse,
+            "intent"     : "INTERROGER",
+            "texte"      : texte,
+            "recap"      : None,
+            "session_id" : session_id,
+        }
+
+    # 5b. ACTION — enregistrement d'un événement potager
+    else:
+        try:
+            items = parse_commande(texte)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=502, detail=f"JSON invalide Groq : {e}")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Erreur parsing : {e}")
+
+        db = SessionLocal()
+        saved_parsed: list[dict] = []
+        try:
+            for parsed in items:
+                nom_parcelle = parsed.get("parcelle")
+                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
+                event = Evenement(
+                    type_action       = normalize_action(parsed.get("action")),
+                    culture           = parsed.get("culture"),
+                    variete           = parsed.get("variete"),
+                    quantite          = _to_float(parsed.get("quantite")),
+                    unite             = parsed.get("unite"),
+                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
+                    rang              = parsed.get("rang"),
+                    duree             = _to_int(parsed.get("duree_minutes")),
+                    traitement        = parsed.get("traitement"),
+                    commentaire       = parsed.get("commentaire"),
+                    texte_original    = texte,
+                    date              = parse_date(parsed.get("date")),
+                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
+                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
+                )
+                if event.culture:
+                    cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
+                    if cfg:
+                        event.type_organe_recolte = cfg.type_organe_recolte
+                db.add(event)
+                db.commit()
+                db.refresh(event)
+                add_to_rag(event.id, parsed)
+                saved_parsed.append(parsed)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Erreur base : {e}")
+        finally:
+            db.close()
+
+        recap = saved_parsed[0] if saved_parsed else None
+
+        # Réponse vocale synthétique
+        if recap:
+            parts = [
+                recap.get("action"),
+                (recap.get("culture") or "") + (f" {recap['variete']}" if recap.get("variete") else ""),
+                f"{recap['quantite']} {recap.get('unite', '')}".strip() if recap.get("quantite") is not None else None,
+                f"parcelle {recap['parcelle']}" if recap.get("parcelle") else None,
+            ]
+            resume = ", ".join(p for p in parts if p)
+            reponse = f"C'est noté ! J'ai enregistré : {resume}."
+            if len(saved_parsed) > 1:
+                reponse = f"C'est noté ! J'ai enregistré {len(saved_parsed)} actions."
+        else:
+            reponse = "Action enregistrée."
+
+        result = {
+            "reponse"       : reponse,
+            "intent"        : "ACTION",
+            "texte"         : texte,
+            "recap"         : recap,
+            "session_id"    : session_id,
+            "nb_evenements" : len(saved_parsed),
+        }
+
+    # 6. Mettre à jour la session (historique multi-tours)
+    history.append({"role": "user",      "content": texte})
+    history.append({"role": "assistant", "content": result["reponse"]})
+    _sessions[session_id] = history[-(  _SESSION_MAX_TURNS * 2):]
+
+    return result
 
 
 @app.post("/ask")

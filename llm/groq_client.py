@@ -4,12 +4,17 @@ groq_client.py — LLM Groq pour parsing et questions
 Corrections v2.1 :
   - Date réelle extraite (hier, avant-hier, lundi dernier...)
   - Détection phrases multiples → liste de JSONs
+v2.24 :
+  - transcribe_audio() — Whisper côté serveur pour la PWA
+  - classify_intent_pwa() — ACTION vs INTERROGER (PWA /voice)
 """
 import json
+import os
 import re
+import tempfile
 from datetime import date, timedelta
 from groq import Groq
-from config import GROQ_API_KEY, GROQ_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL
 
 _client = Groq(api_key=GROQ_API_KEY)
 
@@ -248,3 +253,69 @@ def repondre_question(question: str, contexte_json: str) -> str:
         stream=False
     )
     return chat.choices[0].message.content.strip()
+
+
+# ── Transcription Whisper (PWA /voice) ────────────────────────────────────────
+
+def transcribe_audio(audio_path: str, ext: str = ".webm") -> str:
+    """
+    Transcrit un fichier audio via Groq Whisper.
+    Supporte mp4 (iOS), webm (Android/Chrome), ogg, wav, mp3.
+    Retourne le texte transcrit ou '' si silence/échec.
+    """
+    with open(audio_path, "rb") as f:
+        tr = _client.audio.transcriptions.create(
+            file=(f"audio{ext}", f),
+            model=GROQ_WHISPER_MODEL,
+            language="fr",
+            response_format="text",
+        )
+    return (tr or "").strip()
+
+
+# ── Classificateur d'intention pour la PWA ────────────────────────────────────
+
+_PWA_CLASSIFY_PROMPT = """Tu es un classificateur pour un assistant potager.
+Réponds UNIQUEMENT par un seul mot : ACTION ou INTERROGER
+
+ACTION = description d'une action réalisée (récolte, semis, arrosage, plantation, traitement, paillage, désherbage, observation, perte, mise en godet...)
+INTERROGER = question ou demande d'affichage de données (quand, combien, historique, liste, bilan, stats, total, montre...)
+
+Exemples :
+"j'ai récolté 2 kg de tomates" → ACTION
+"semé des carottes hier" → ACTION
+"arrosage courgettes 20 minutes" → ACTION
+"planté 10 salades parcelle nord" → ACTION
+"perdu 3 plants de tomates" → ACTION
+"mis en godet 15 poivrons" → ACTION
+"combien de kg de tomates cette saison ?" → INTERROGER
+"quand ai-je semé les carottes ?" → INTERROGER
+"montre moi l'historique" → INTERROGER
+"bilan de la semaine" → INTERROGER
+"historique des traitements" → INTERROGER
+"stats courgettes" → INTERROGER
+"total des récoltes" → INTERROGER
+"""
+
+
+def classify_intent_pwa(texte: str) -> str:
+    """
+    Classifie l'intention d'un message vocal (PWA).
+    Retourne 'ACTION' ou 'INTERROGER'.
+    Utilise Groq LLM (~150 tokens, très rapide).
+    """
+    try:
+        chat = _client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": _PWA_CLASSIFY_PROMPT},
+                {"role": "user",   "content": texte},
+            ],
+            temperature=0.0,
+            max_tokens=8,
+            stream=False,
+        )
+        result = chat.choices[0].message.content.strip().upper()
+        return "INTERROGER" if "INTERROGER" in result else "ACTION"
+    except Exception:
+        return "ACTION"  # fallback conservatif
