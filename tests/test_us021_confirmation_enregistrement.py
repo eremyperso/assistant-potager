@@ -1,13 +1,18 @@
 """
 [US-021] Tests — Confirmation avant enregistrement d'une action en base
 
-CA1 : Résumé + boutons Confirmer/Annuler affichés après parsing d'une action
-CA2 : Bouton Confirmer → enregistrement effectif en base
-CA3 : Bouton Annuler → aucun enregistrement, message "Action annulée."
-CA4 : Timeout expiré (> 60 s) → message d'expiration, aucun enregistrement
-CA5 : Pending absent (double-clic) → message d'expiration
-CA6 : Intents interrogation/stats/historique → pas de confirmation (exécution directe)
-CA7 : _build_action_summary — rendu correct pour 1 et N actions
+CA1  : Résumé + boutons Confirmer/Annuler affichés après parsing d'une action
+CA2  : Bouton Confirmer → enregistrement effectif en base
+CA3  : Bouton Annuler → aucun enregistrement, message "Action annulée."
+CA4  : Timeout expiré (> 60 s) → message d'expiration, aucun enregistrement
+CA5  : Pending absent (double-clic) → message d'expiration
+CA6  : Intents interrogation/stats/historique → pas de confirmation (exécution directe)
+CA7  : _build_action_summary — rendu correct pour 1 et N actions
+CA8  : Parcelle absente + parcelles actives → menu inline affiché avant confirmation
+CA9  : Sélection parcelle via menu → résumé mis à jour + boutons Confirmer/Annuler
+CA10 : Sélection "Sans parcelle" → parcelle=None dans items
+CA11 : Aucune parcelle active en base → confirmation directe sans menu
+CA12 : TTL de 1 min s'applique pendant la sélection de parcelle
 """
 import time
 import pytest
@@ -219,4 +224,144 @@ async def test_us021_ca6_question_pas_de_confirmation():
         await bot_module._parse_and_save(update, "combien de tomates ai-je récoltées ?")
 
     mock_ask.assert_awaited_once()
+    assert user_id not in _ACTION_PENDING
+
+
+# ── CA8 — Parcelle absente + parcelles actives → menu inline ─────────────────
+
+@pytest.mark.asyncio
+async def test_us021_ca8_menu_parcelle_affiche():
+    """CA8 — Pas de parcelle détectée et parcelles actives → menu inline."""
+    user_id = 8
+    parsed_item = {"action": "plantation", "culture": "tomate", "quantite": 10, "unite": "plants"}
+
+    fake_parcelle = MagicMock()
+    fake_parcelle.nom = "zone-tomates"
+
+    with (
+        patch("bot.parse_commande", return_value=[parsed_item]),
+        patch("utils.validation.validate_parsed_action", return_value=(True, "")),
+        patch("bot._normalize_items", return_value=[parsed_item]),
+        patch("bot.get_all_parcelles", return_value=[fake_parcelle]),
+        patch("bot.SessionLocal"),
+    ):
+        _ACTION_PENDING.pop(user_id, None)
+        update = _make_update(user_id=user_id)
+        await bot_module._parse_and_save(update, "plantation 10 plants de tomate")
+
+    # Le menu doit être affiché (reply_text appelé)
+    assert update.message.reply_text.called
+    call_kwargs = update.message.reply_text.call_args
+    text_sent = call_kwargs[0][0] if call_kwargs[0] else call_kwargs[1].get("text", "")
+    assert "Quelle parcelle" in text_sent or "parcelle" in text_sent.lower()
+
+    # _parcelle_demandee doit être True dans pending
+    assert user_id in _ACTION_PENDING
+    assert _ACTION_PENDING[user_id]["items"][0].get("_parcelle_demandee") is True
+    _ACTION_PENDING.pop(user_id, None)
+
+
+# ── CA9 — Sélection parcelle → résumé + boutons Confirmer/Annuler ────────────
+
+@pytest.mark.asyncio
+async def test_us021_ca9_selection_parcelle_affiche_confirmation():
+    """CA9 — Sélection parcelle via callback → items mis à jour + boutons Confirmer/Annuler."""
+    user_id = 9
+    items = [{"action": "plantation", "culture": "tomate", "quantite": 10,
+              "unite": "plants", "_parcelle_demandee": True}]
+    _ACTION_PENDING[user_id] = {"items": items, "texte": "plantation tomate", "ts": time.time()}
+
+    update = _make_callback_update(user_id=user_id, data="action_parcelle:zone-tomates")
+
+    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+        await _action_confirm_cb(update, _ctx())
+
+    # Pas de sauvegarde à cette étape
+    mock_save.assert_not_awaited()
+
+    # Parcelle mise à jour dans items
+    assert _ACTION_PENDING[user_id]["items"][0]["parcelle"] == "zone-tomates"
+    assert "_parcelle_demandee" not in _ACTION_PENDING[user_id]["items"][0]
+
+    # Boutons Confirmer/Annuler affichés
+    update.callback_query.edit_message_text.assert_awaited_once()
+    edit_kwargs = update.callback_query.edit_message_text.call_args
+    markup = edit_kwargs[1].get("reply_markup") or (edit_kwargs[0][1] if len(edit_kwargs[0]) > 1 else None)
+    assert markup is not None  # InlineKeyboardMarkup présent
+    _ACTION_PENDING.pop(user_id, None)
+
+
+# ── CA10 — "Sans parcelle" → parcelle=None dans items ───────────────────────
+
+@pytest.mark.asyncio
+async def test_us021_ca10_sans_parcelle():
+    """CA10 — Choix 'Sans parcelle' → items[0]['parcelle'] = None."""
+    user_id = 10
+    items = [{"action": "arrosage", "culture": "tomate", "_parcelle_demandee": True}]
+    _ACTION_PENDING[user_id] = {"items": items, "texte": "arrosage tomate", "ts": time.time()}
+
+    update = _make_callback_update(user_id=user_id, data="action_parcelle_none")
+
+    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+        await _action_confirm_cb(update, _ctx())
+
+    mock_save.assert_not_awaited()
+    assert _ACTION_PENDING[user_id]["items"][0]["parcelle"] is None
+    assert "_parcelle_demandee" not in _ACTION_PENDING[user_id]["items"][0]
+    update.callback_query.edit_message_text.assert_awaited_once()
+    _ACTION_PENDING.pop(user_id, None)
+
+
+# ── CA11 — Aucune parcelle active → confirmation directe sans menu ───────────
+
+@pytest.mark.asyncio
+async def test_us021_ca11_aucune_parcelle_active():
+    """CA11 — Aucune parcelle active en base → confirmation directe (sans menu)."""
+    user_id = 11
+    parsed_item = {"action": "semis", "culture": "laitue", "quantite": 5, "unite": "graines"}
+
+    with (
+        patch("bot.parse_commande", return_value=[parsed_item]),
+        patch("utils.validation.validate_parsed_action", return_value=(True, "")),
+        patch("bot._normalize_items", return_value=[parsed_item]),
+        patch("bot.get_all_parcelles", return_value=[]),  # aucune parcelle active
+        patch("bot.SessionLocal"),
+    ):
+        _ACTION_PENDING.pop(user_id, None)
+        update = _make_update(user_id=user_id)
+        await bot_module._parse_and_save(update, "semis 5 graines laitue")
+
+    # Doit afficher la confirmation directement (pas de "Quelle parcelle")
+    assert update.message.reply_text.called
+    call_kwargs = update.message.reply_text.call_args
+    text_sent = call_kwargs[0][0] if call_kwargs[0] else call_kwargs[1].get("text", "")
+    assert "Quelle parcelle" not in text_sent
+
+    # Pending sans _parcelle_demandee
+    assert user_id in _ACTION_PENDING
+    assert _ACTION_PENDING[user_id]["items"][0].get("_parcelle_demandee") is not True
+    _ACTION_PENDING.pop(user_id, None)
+
+
+# ── CA12 — TTL s'applique pendant la sélection de parcelle ──────────────────
+
+@pytest.mark.asyncio
+async def test_us021_ca12_ttl_pendant_selection_parcelle():
+    """CA12 — Pending expiré lors de la sélection de parcelle → message d'expiration."""
+    user_id = 12
+    items = [{"action": "semis", "culture": "radis", "_parcelle_demandee": True}]
+    _ACTION_PENDING[user_id] = {
+        "items": items, "texte": "semis radis",
+        "ts": time.time() - (_ACTION_TIMEOUT + 5),  # expiré
+    }
+
+    update = _make_callback_update(user_id=user_id, data="action_parcelle:zone-nord")
+
+    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+        await _action_confirm_cb(update, _ctx())
+
+    mock_save.assert_not_awaited()
+    update.callback_query.edit_message_text.assert_awaited_once()
+    msg = update.callback_query.edit_message_text.call_args[0][0]
+    assert "expir" in msg.lower() or "annul" in msg.lower()
     assert user_id not in _ACTION_PENDING
