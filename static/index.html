@@ -6,8 +6,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Mon Potager">
-  <title>Mon Potager 🌿</title>
+  <meta name="theme-color" content="#2d6a4f">
   <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon.png">
+  <title>Mon Potager 🌿</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -82,7 +84,7 @@
 
     .mic-container {
       display: flex; flex-direction: column;
-      align-items: center; padding: 20px 16px 36px; gap: 12px;
+      align-items: center; padding: 20px 16px 30px; gap: 12px;
     }
     #btn-mic {
       width: 114px; height: 114px; border-radius: 50%;
@@ -90,14 +92,23 @@
       color: white; font-size: 46px; cursor: pointer;
       box-shadow: 0 6px 24px rgba(0,0,0,0.5);
       display: flex; align-items: center; justify-content: center;
-      transition: all 0.15s;
+      transition: all 0.15s; -webkit-user-select: none; user-select: none;
     }
     #btn-mic:active { transform: scale(0.93); }
     #btn-mic.rec  { background:#b5272d; border-color:#ff6b6b; animation:pulse-red 1s infinite; }
     #btn-mic.wait { background:#1a4a8a; border-color:#5588dd; animation:pulse-blue 1s infinite; }
-    @keyframes pulse-red  { 0%,100%{box-shadow:0 6px 24px rgba(181,39,45,.4)} 50%{box-shadow:0 6px 40px rgba(181,39,45,.9)} }
-    @keyframes pulse-blue { 0%,100%{box-shadow:0 6px 24px rgba(26,74,138,.4)} 50%{box-shadow:0 6px 40px rgba(85,136,221,.9)} }
+    #btn-mic.say  { background:#4a5500; border-color:#aacc00; animation:pulse-green 1s infinite; }
+    @keyframes pulse-red   { 0%,100%{box-shadow:0 6px 24px rgba(181,39,45,.4)} 50%{box-shadow:0 6px 40px rgba(181,39,45,.9)} }
+    @keyframes pulse-blue  { 0%,100%{box-shadow:0 6px 24px rgba(26,74,138,.4)} 50%{box-shadow:0 6px 40px rgba(85,136,221,.9)} }
+    @keyframes pulse-green { 0%,100%{box-shadow:0 6px 24px rgba(74,85,0,.4)}  50%{box-shadow:0 6px 40px rgba(170,204,0,.9)} }
     .mic-label { font-size: 13px; color: #74c69d; text-align: center; }
+
+    /* Auto-restart toggle */
+    .auto-toggle {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: #74c69d; cursor: pointer;
+    }
+    .auto-toggle input { width: 16px; height: 16px; cursor: pointer; accent-color: #52b788; }
 
     /* ════ PAGE INTERROGER ════ */
     #page-interroger { padding: 16px; gap: 12px; }
@@ -146,6 +157,14 @@
     }
     @keyframes spin { to { transform:rotate(360deg) } }
     .loading { text-align:center; color:#52b788; padding:20px; }
+
+    /* Bandeau info micro non supporté */
+    .mic-warn {
+      background:#3a1a00; border:1px solid #ff8c42; border-radius:10px;
+      padding:12px 16px; margin:12px 16px 0; font-size:13px; color:#ffb380;
+      display:none;
+    }
+    .mic-warn.show { display:block; }
   </style>
 </head>
 <body>
@@ -177,6 +196,10 @@
   <div class="user-bubble" id="usr-bubble"></div>
   <div class="recap-card"  id="recap-card"></div>
 
+  <div class="mic-warn" id="mic-warn">
+    ⚠️ Microphone non disponible. Vérifiez les autorisations dans <strong>Réglages → Safari → Micro</strong>, puis rechargez la page.
+  </div>
+
   <div class="quick-actions" id="quick-actions">
     <button class="quick-btn primary" onclick="doNewAction()">➕ Autre action</button>
     <button class="quick-btn"         onclick="doAsk()">🔍 Interroger</button>
@@ -185,6 +208,9 @@
   <div class="mic-container">
     <button id="btn-mic" onclick="toggleMic()">🎤</button>
     <div class="mic-label" id="mic-lbl">Appuyer pour parler</div>
+    <label class="auto-toggle" title="Reprend l'écoute automatiquement après la réponse">
+      <input type="checkbox" id="chk-auto"> Écoute automatique
+    </label>
   </div>
 
 </div>
@@ -193,7 +219,7 @@
 <div class="page" id="page-interroger">
   <button class="btn-ask-mic" onclick="startAskMic()">🎤 Poser la question à la voix</button>
   <textarea id="ask-input"
-    placeholder="Quand ai-je récolté mes patates douces pour la dernière fois ?&#10;Combien de kg de tomates cette saison ?&#10;Historique traitements courgettes"></textarea>
+    placeholder="Quand ai-je récolté mes patates douces ?&#10;Combien de kg de tomates cette saison ?&#10;Historique traitements courgettes"></textarea>
   <button class="btn-primary" onclick="sendQuestion()">📊 Analyser mes données</button>
   <div id="ask-result"></div>
 </div>
@@ -215,21 +241,49 @@
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════════════════════════
 const API = window.location.origin;
 // const API = 'http://100.88.XX.XX:8000'; // ← décommenter si accès Tailscale externe
 
-let recog      = null;
-let recording  = false;
+// ── Session persistante (multi-tours) ──────────────────────────────────────
+let sessionId = localStorage.getItem('potager_session');
+if (!sessionId) {
+  sessionId = crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
+  localStorage.setItem('potager_session', sessionId);
+}
 
-// ── INIT ───────────────────────────────────────────────────────────────────────
+// ── MediaRecorder state ─────────────────────────────────────────────────────
+let mediaRecorder = null;
+let audioChunks   = [];
+let recording     = false;
+let mimeType      = '';
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════════════════════
 window.addEventListener('DOMContentLoaded', () => {
   const d = new Date();
   document.getElementById('hdr-date').textContent =
     d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long'});
   refreshCount();
-  // Salutation vocale après 1 seconde
-  setTimeout(() => say("Bonjour ! Je suis votre assistant potager. Appuyez sur le micro pour commencer."), 1000);
+  // Pré-charger les voix TTS (iOS requiert un événement utilisateur pour le 1er appel)
+  if (window.speechSynthesis) {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+  }
+  // Salutation vocale au 1er chargement (déclenchée par DOMContentLoaded, pas user gesture)
+  // On attend un clic utilisateur pour lancer le TTS sur iOS
+  document.getElementById('btn-mic').addEventListener('click', initAudioOnce, { once: true });
 });
+
+let _audioInitDone = false;
+function initAudioOnce() {
+  if (_audioInitDone) return;
+  _audioInitDone = true;
+  say("Bonjour ! Je suis votre assistant potager. Appuyez sur le micro pour commencer.");
+}
 
 async function refreshCount() {
   try {
@@ -239,7 +293,9 @@ async function refreshCount() {
   } catch(e) {}
 }
 
-// ── TABS ───────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════════════════════
 function showTab(name) {
   ['assistant','interroger','historique'].forEach((n,i) => {
     document.querySelectorAll('.tab')[i].classList.toggle('active', n===name);
@@ -248,71 +304,117 @@ function showTab(name) {
   if (name === 'historique') loadHistorique();
 }
 
-// ── SYNTHÈSE VOCALE ────────────────────────────────────────────────────────────
-function say(text) {
-  if (!window.speechSynthesis) return;
+// ══════════════════════════════════════════════════════════════════════════════
+// SYNTHÈSE VOCALE — iOS-compatible
+// ══════════════════════════════════════════════════════════════════════════════
+function say(text, onEnd) {
+  if (!window.speechSynthesis) { onEnd?.(); return; }
   window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g,'').replace(/\n/g,' '));
+  const clean = text.replace(/<[^>]+>/g,'').replace(/\n/g,' ');
+  const u = new SpeechSynthesisUtterance(clean);
   u.lang  = 'fr-FR';
   u.rate  = 1.05;
-  // Charger voix française si dispo
   const voices = window.speechSynthesis.getVoices();
-  const fr = voices.find(v => v.lang.startsWith('fr'));
+  const fr = voices.find(v => v.lang && v.lang.startsWith('fr'));
   if (fr) u.voice = fr;
+  u.onend   = () => onEnd?.();
+  u.onerror = () => onEnd?.();
+  setBtn('say','🔊','Lecture...');
   window.speechSynthesis.speak(u);
 }
 
-function setAsst(html, speak=true) {
+function setAsst(html, speak=true, onEnd) {
   document.getElementById('asst-txt').innerHTML = html;
-  if (speak) say(html);
+  if (speak) say(html, onEnd);
+  else onEnd?.();
 }
 
-// ── RECONNAISSANCE VOCALE ──────────────────────────────────────────────────────
-function toggleMic() { recording ? stopRec() : startRec(); }
+// ══════════════════════════════════════════════════════════════════════════════
+// MEDIARECORDER — iOS Safari & Android Chrome
+// ══════════════════════════════════════════════════════════════════════════════
 
-function startRec() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    setAsst("⚠️ Reconnaissance vocale indisponible.<br>Utilisez Safari sur iPhone.", false);
+function detectMimeType() {
+  // Ordre de préférence : webm/opus (Chrome/Android) → mp4 (iOS Safari) → défaut
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    '',
+  ];
+  for (const t of candidates) {
+    if (!t || (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t))) {
+      return t;
+    }
+  }
+  return '';
+}
+
+function toggleMic() {
+  if (recording) stopRec();
+  else startRec();
+}
+
+async function startRec() {
+  if (typeof MediaRecorder === 'undefined') {
+    document.getElementById('mic-warn').className = 'mic-warn show';
+    setAsst("⚠️ MediaRecorder non supporté.<br>Essayez Safari 14.3+ ou Chrome.", false);
     return;
   }
-  recog = new SR();
-  recog.lang = 'fr-FR';
-  recog.interimResults = true;
 
-  recog.onstart = () => {
-    recording = true;
-    setBtn('rec','⏹','Parlez maintenant...');
-    document.getElementById('usr-bubble').className = 'user-bubble';
-    document.getElementById('recap-card').className = 'recap-card';
-    document.getElementById('quick-actions').style.display = 'none';
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) {
+    document.getElementById('mic-warn').className = 'mic-warn show';
+    setAsst("⚠️ Microphone refusé.<br>Autorisez l'accès dans Réglages → Safari → Micro.", false);
+    return;
+  }
+
+  document.getElementById('mic-warn').className = 'mic-warn';
+  mimeType = detectMimeType();
+  const opts = mimeType ? { mimeType } : {};
+  try {
+    mediaRecorder = new MediaRecorder(stream, opts);
+  } catch(e) {
+    mediaRecorder = new MediaRecorder(stream); // sans options si ça échoue
+    mimeType = '';
+  }
+
+  audioChunks = [];
+
+  mediaRecorder.ondataavailable = e => {
+    if (e.data && e.data.size > 0) audioChunks.push(e.data);
   };
 
-  recog.onresult = (e) => {
-    let fin='', inter='';
-    for (let i=e.resultIndex; i<e.results.length; i++) {
-      if (e.results[i].isFinal) fin += e.results[i][0].transcript;
-      else inter += e.results[i][0].transcript;
-    }
-    showUsr(fin||inter);
-    if (fin) { stopRec(); sendCmd(fin); }
+  mediaRecorder.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blobType = mimeType || 'audio/webm';
+    const blob = new Blob(audioChunks, { type: blobType });
+    sendAudio(blob, blobType);
   };
 
-  recog.onerror = (e) => { setAsst("❌ Erreur micro : "+e.error, false); stopRec(); };
-  recog.onend   = () => { if (recording) stopRec(); };
-  recog.start();
+  mediaRecorder.start();
+  recording = true;
+
+  setBtn('rec','⏹','Parlez... (appuyer pour arrêter)');
+  document.getElementById('usr-bubble').className = 'user-bubble';
+  document.getElementById('recap-card').className  = 'recap-card';
+  document.getElementById('quick-actions').style.display = 'none';
+  setAsst("Je vous écoute...", false);
 }
 
 function stopRec() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
   recording = false;
-  if (recog) { recog.stop(); recog = null; }
-  setBtn('','🎤','Appuyer pour parler');
+  mediaRecorder.stop();
+  setBtn('wait','⏳','Envoi & transcription...');
 }
 
 function setBtn(cls, icon, lbl) {
   const b = document.getElementById('btn-mic');
   b.textContent = icon;
-  b.className = cls;
+  b.className   = cls;
   document.getElementById('mic-lbl').textContent = lbl;
 }
 
@@ -322,58 +424,79 @@ function showUsr(t) {
   b.className = 'user-bubble show';
 }
 
-// ── ENVOI & RÉCAP ──────────────────────────────────────────────────────────────
-async function sendCmd(texte) {
-  setBtn('wait','⏳','Analyse en cours...');
-  setAsst("Je traite votre commande...", false);
+// ══════════════════════════════════════════════════════════════════════════════
+// ENVOI AUDIO → /voice
+// ══════════════════════════════════════════════════════════════════════════════
+
+function mimeToExt(mt) {
+  if (!mt) return 'webm';
+  if (mt.includes('mp4'))  return 'mp4';
+  if (mt.includes('ogg'))  return 'ogg';
+  if (mt.includes('wav'))  return 'wav';
+  return 'webm';
+}
+
+async function sendAudio(blob, blobType) {
+  setBtn('wait','⏳','Transcription Whisper...');
+
+  const ext = mimeToExt(blobType);
+  const fd  = new FormData();
+  fd.append('audio',      blob, `voice.${ext}`);
+  fd.append('session_id', sessionId);
+
   try {
-    const res  = await fetch(API+'/parse', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({texte})
-    });
+    const res  = await fetch(API + '/voice', { method: 'POST', body: fd });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail||'Erreur');
-    setBtn('','🎤','Appuyer pour parler');
-    showRecap(data.parsed);
+
+    if (!res.ok) throw new Error(data.detail || 'Erreur serveur');
+
+    // Afficher la transcription
+    if (data.texte) showUsr(data.texte);
+
+    // Mettre à jour le session_id si le serveur en a créé un nouveau
+    if (data.session_id && data.session_id !== sessionId) {
+      sessionId = data.session_id;
+      localStorage.setItem('potager_session', sessionId);
+    }
+
+    const autoRestart = document.getElementById('chk-auto').checked;
+
+    if (data.intent === 'ACTION' && data.recap) {
+      showRecap(data.recap, data.reponse, autoRestart);
+    } else if (data.intent === 'INTERROGER') {
+      setAsst(data.reponse, true, autoRestart ? () => setTimeout(startRec, 600) : null);
+      setBtn('','🎤','Appuyer pour parler');
+    } else {
+      // ERREUR ou fallback
+      setAsst(data.reponse || "Une erreur est survenue.", false);
+      setBtn('','🎤','Appuyer pour parler');
+    }
+
     refreshCount();
   } catch(err) {
     setBtn('','🎤','Appuyer pour parler');
-    setAsst("❌ "+err.message, false);
+    setAsst("❌ " + err.message, false);
   }
 }
 
-function showRecap(p) {
-  // Résumé vocal
-  const parts = [
-    p.action,
-    p.culture ? (p.culture + (p.variete ? ' '+p.variete : '')) : null,
-    p.quantite != null ? p.quantite+' '+(p.unite||'') : null,
-    p.parcelle ? 'parcelle '+p.parcelle : null,
-    p.traitement,
-    p.duree_minutes ? p.duree_minutes+' minutes' : null,
-  ].filter(Boolean);
+// ══════════════════════════════════════════════════════════════════════════════
+// AFFICHAGE RECAP ACTION
+// ══════════════════════════════════════════════════════════════════════════════
+function showRecap(p, reponse, autoRestart) {
+  const txt = reponse || buildDefaultReponse(p);
 
-  const resume = parts.join(', ');
-  setAsst(
-    `✅ C'est noté !<br><br>` +
-    `J'ai enregistré : <strong>${resume}</strong>.<br><br>` +
-    `Voulez-vous enregistrer une autre action ou interroger vos données ?`,
-    true
-  );
-
-  // Carte visuelle
   const rows = [
     ['Action',     p.action],
     ['Culture',    p.culture],
     ['Variété',    p.variete],
-    ['Quantité',   p.quantite!=null ? p.quantite+' '+(p.unite||'') : null],
+    ['Quantité',   p.quantite != null ? p.quantite + ' ' + (p.unite||'') : null],
     ['Parcelle',   p.parcelle],
     ['Rang',       p.rang],
-    ['Durée',      p.duree_minutes ? p.duree_minutes+' min' : null],
+    ['Durée',      p.duree_minutes ? p.duree_minutes + ' min' : null],
     ['Traitement', p.traitement],
     ['Date',       p.date],
     ['Note',       p.commentaire],
-  ].filter(r=>r[1]!=null);
+  ].filter(r => r[1] != null);
 
   const card = document.getElementById('recap-card');
   card.innerHTML = rows.map(([l,v]) =>
@@ -383,15 +506,40 @@ function showRecap(p) {
      </div>`).join('');
   card.className = 'recap-card show';
   document.getElementById('quick-actions').style.display = 'flex';
+
+  setAsst(
+    `✅ C'est noté !<br><br>` +
+    `J'ai enregistré : <strong>${buildResume(p)}</strong>.<br><br>` +
+    `Voulez-vous enregistrer une autre action ou interroger vos données ?`,
+    true,
+    autoRestart ? () => setTimeout(startRec, 800) : null
+  );
+  setBtn('','🎤','Appuyer pour parler');
 }
 
-// ── BOUTONS SUITE ──────────────────────────────────────────────────────────────
+function buildResume(p) {
+  return [
+    p.action,
+    p.culture ? (p.culture + (p.variete ? ' ' + p.variete : '')) : null,
+    p.quantite != null ? p.quantite + ' ' + (p.unite||'') : null,
+    p.parcelle ? 'parcelle ' + p.parcelle : null,
+    p.traitement,
+    p.duree_minutes ? p.duree_minutes + ' minutes' : null,
+  ].filter(Boolean).join(', ');
+}
+
+function buildDefaultReponse(p) {
+  return `C'est noté ! J'ai enregistré : ${buildResume(p)}.`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BOUTONS SUITE
+// ══════════════════════════════════════════════════════════════════════════════
 function doNewAction() {
   document.getElementById('quick-actions').style.display = 'none';
   document.getElementById('recap-card').className = 'recap-card';
   document.getElementById('usr-bubble').className = 'user-bubble';
-  setAsst("Je vous écoute !<br>Dites-moi ce que vous avez fait au potager.", true);
-  setTimeout(() => startRec(), 2500);
+  setAsst("Je vous écoute !<br>Dites-moi ce que vous avez fait au potager.", true, () => setTimeout(startRec, 300));
 }
 
 function doAsk() {
@@ -399,18 +547,73 @@ function doAsk() {
   setTimeout(() => startAskMic(), 400);
 }
 
-// ── INTERROGATION ──────────────────────────────────────────────────────────────
-let askRecog = null;
-function startAskMic() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { alert('Safari uniquement'); return; }
-  askRecog = new SR();
-  askRecog.lang = 'fr-FR';
-  askRecog.onresult = e => {
-    document.getElementById('ask-input').value = e.results[0][0].transcript;
-    sendQuestion();
+// ══════════════════════════════════════════════════════════════════════════════
+// INTERROGATION TEXTUELLE / VOCALE (onglet Interroger)
+// ══════════════════════════════════════════════════════════════════════════════
+let askRecorder  = null;
+let askChunks    = [];
+let askRecording = false;
+
+async function startAskMic() {
+  if (askRecording) {
+    // Arrêter l'enregistrement
+    if (askRecorder && askRecorder.state !== 'inactive') askRecorder.stop();
+    askRecording = false;
+    document.querySelector('.btn-ask-mic').textContent = '🎤 Poser la question à la voix';
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch(e) {
+    alert('Microphone non autorisé.');
+    return;
+  }
+
+  const mt   = detectMimeType();
+  const opts = mt ? { mimeType: mt } : {};
+  try {
+    askRecorder = new MediaRecorder(stream, opts);
+  } catch(e) {
+    askRecorder = new MediaRecorder(stream);
+  }
+  askChunks    = [];
+  askRecording = true;
+  document.querySelector('.btn-ask-mic').textContent = '⏹ Arrêter l\'enregistrement';
+
+  askRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) askChunks.push(e.data); };
+  askRecorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    askRecording = false;
+    document.querySelector('.btn-ask-mic').textContent = '🎤 Poser la question à la voix';
+
+    // Transcrire via /voice (intent INTERROGER forcé par le contenu)
+    const blob = new Blob(askChunks, { type: mt || 'audio/webm' });
+    const ext  = mimeToExt(mt);
+    const fd   = new FormData();
+    fd.append('audio',      blob, `ask.${ext}`);
+    fd.append('session_id', sessionId);
+
+    const box = document.getElementById('ask-result');
+    box.style.display = 'block';
+    box.innerHTML = '<span class="spinner"></span> Transcription...';
+
+    try {
+      const res  = await fetch(API + '/voice', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Erreur');
+
+      if (data.texte) document.getElementById('ask-input').value = data.texte;
+
+      const rep = data.reponse || 'Aucune réponse.';
+      box.innerHTML = rep.replace(/\n/g,'<br>');
+      say(rep);
+    } catch(err) {
+      box.innerHTML = '❌ ' + err.message;
+    }
   };
-  askRecog.start();
+  askRecorder.start();
 }
 
 async function sendQuestion() {
@@ -420,7 +623,7 @@ async function sendQuestion() {
   box.style.display = 'block';
   box.innerHTML = '<span class="spinner"></span> Analyse de vos données...';
   try {
-    const res  = await fetch(API+'/ask', {
+    const res  = await fetch(API + '/ask', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({texte})
     });
@@ -429,24 +632,26 @@ async function sendQuestion() {
     box.innerHTML = rep.replace(/\n/g,'<br>');
     say(rep);
   } catch(err) {
-    box.innerHTML = '❌ '+err.message;
+    box.innerHTML = '❌ ' + err.message;
   }
 }
 
-// ── HISTORIQUE ─────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// HISTORIQUE
+// ══════════════════════════════════════════════════════════════════════════════
 async function loadHistorique() {
   const list = document.getElementById('histo-list');
   const act  = document.getElementById('fil-action').value;
   list.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
   try {
-    const url  = API+'/historique?limit=40'+(act?'&action='+act:'');
+    const url  = API + '/historique?limit=40' + (act ? '&action=' + act : '');
     const evts = await (await fetch(url)).json();
     if (!evts.length) { list.innerHTML='<div class="loading">Aucun événement</div>'; return; }
     list.innerHTML = evts.map(e => {
       const main   = [e.culture, e.variete].filter(Boolean).join(' ');
       const detail = [
-        e.quantite!=null ? e.quantite+' '+(e.unite||'') : null,
-        e.parcelle ? 'Parcelle : '+e.parcelle : null,
+        e.quantite != null ? e.quantite + ' ' + (e.unite||'') : null,
+        e.parcelle ? 'Parcelle : ' + e.parcelle : null,
         e.traitement,
       ].filter(Boolean).join(' · ');
       return `<div class="event-card">
@@ -464,9 +669,14 @@ async function loadHistorique() {
   }
 }
 
-// Voix TTS iOS (nécessite un événement utilisateur au 1er appel)
-if (window.speechSynthesis)
-  window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+// ══════════════════════════════════════════════════════════════════════════════
+// SERVICE WORKER
+// ══════════════════════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
