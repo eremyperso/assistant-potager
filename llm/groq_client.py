@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from groq import Groq
 from config import GROQ_API_KEY, GROQ_MODEL
 
-_client = Groq(api_key=GROQ_API_KEY)
+_client = Groq(api_key=GROQ_API_KEY, timeout=20.0)
 
 # ── Date du jour injectée dans le prompt ──────────────────────────────────────
 def _today_context() -> str:

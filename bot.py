@@ -256,7 +256,7 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
             normalized.append(new_item)
 
     return normalized
-groq_client = Groq(api_key=GROQ_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY, timeout=20.0)
 
 # ── Clavier principal ────────────────────────────────────────────────────────────
 MENU_KEYBOARD = ReplyKeyboardMarkup(
@@ -546,14 +546,17 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await voice_file.download_to_drive(tmp_path)
 
     # ── 2. Transcrire via Groq Whisper ──────────────────────────────────────────
+    # Exécuté dans un thread pour ne pas bloquer la boucle asyncio pendant l'appel réseau.
     try:
-        with open(tmp_path, "rb") as audio:
-            transcription = groq_client.audio.transcriptions.create(
-                file=("message.ogg", audio),
-                model=GROQ_WHISPER_MODEL,
-                language="fr",
-                response_format="text"
-            )
+        def _do_transcription():
+            with open(tmp_path, "rb") as audio:
+                return groq_client.audio.transcriptions.create(
+                    file=("message.ogg", audio),
+                    model=GROQ_WHISPER_MODEL,
+                    language="fr",
+                    response_format="text"
+                )
+        transcription = await asyncio.to_thread(_do_transcription)
         texte = transcription.strip()
         os.unlink(tmp_path)
     except Exception as e:
@@ -595,7 +598,8 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # ── 5. Classification de l'intention via Groq ──────────────────────────────
-    intent = classify_intent(texte)
+    # asyncio.to_thread : évite de bloquer la boucle d'événements pendant l'appel Groq.
+    intent = await asyncio.to_thread(classify_intent, texte)
 
     # ── 6. Routage selon intent ────────────────────────────────────────────────
     if intent == "STATS":
@@ -842,11 +846,8 @@ Réponse :"""
 
 def classify_intent(texte: str) -> str:
     """Utilise Groq pour classer l'intention du message en un intent canonique."""
-    from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
-    client = Groq(api_key=GROQ_API_KEY)
     try:
-        resp = client.chat.completions.create(
+        resp = groq_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": _CLASSIFY_PROMPT.format(texte=texte)}],
             temperature=0.0,
@@ -1116,7 +1117,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     for i, ligne in enumerate(lignes, 1):
         log.info(f"  [{i}/{len(lignes)}] Traitement : {ligne}")
         try:
-            items = parse_commande(ligne)
+            items = await asyncio.to_thread(parse_commande, ligne)
             items = _normalize_items(items, ligne)
         except Exception as e:
             log.error(f"  [{i}] Erreur parsing : {e}")
@@ -1416,7 +1417,7 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
 async def _parse_and_save(update: Update, texte: str, msg=None):
     """Parse le texte → liste d'événements → PostgreSQL → récapitulatif."""
     try:
-        items = parse_commande(texte)   # retourne toujours une liste
+        items = await asyncio.to_thread(parse_commande, texte)
     except Exception as e:
         log.error(f"❌ ERREUR PARSING  : {e}")
         txt = f"❌ Erreur parsing : {e}\n\nEssayez de reformuler votre action."
@@ -1671,10 +1672,10 @@ async def _ask_question(update: Update, question: str):
         from llm.groq_client import extract_intent_query
         from llm.sql_agent import query_agent_answer
 
-        intent = extract_intent_query(question)
+        intent = await asyncio.to_thread(extract_intent_query, question)
         log.info(f"🎯 INTENT QUERY   : {intent}")
 
-        reponse = query_agent_answer(question, intent)
+        reponse = await asyncio.to_thread(query_agent_answer, question, intent)
         log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
