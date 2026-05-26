@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plants de légumes en pot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --green: #1D9E75;
+    --green-light: #EAF3DE;
+    --green-text: #3B6D11;
+    --amber-light: #FAEEDA;
+    --amber-text: #854F0B;
+    --red-light: #FCEBEB;
+    --red-text: #A32D2D;
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a18;
+    --muted: #6b6b67;
+    --hint: #9b9b96;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1rem 4rem;
+  }
+
+  .container { max-width: 900px; margin: 0 auto; }
+
+  header { margin-bottom: 2rem; }
+  header h1 { font-size: 24px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  header h1 svg { color: var(--green); }
+  header p { margin-top: 6px; font-size: 14px; color: var(--muted); }
+
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1.5rem; }
+  .tag {
+    font-size: 13px; padding: 5px 14px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--muted); cursor: pointer; transition: .15s; font-family: inherit;
+  }
+  .tag:hover { border-color: var(--green); color: var(--green); }
+  .tag.active { background: var(--green); color: #fff; border-color: var(--green); }
+
+  .state { text-align: center; padding: 4rem 1rem; color: var(--muted); font-size: 15px; }
+  .state svg { display: block; margin: 0 auto 1rem; opacity: .4; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+    display: flex; flex-direction: column;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .card:hover { border-color: rgba(29,158,117,.4); box-shadow: 0 2px 12px rgba(29,158,117,.08); }
+
+  /* Photo ou placeholder emoji en haut de la carte */
+  .card-visual {
+    width: 100%; height: 150px;
+    background: var(--green-light);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; flex-shrink: 0;
+  }
+  .card-visual img {
+    width: 100%; height: 100%; object-fit: cover;
+    display: block;
+  }
+  .card-visual .emoji-big { font-size: 56px; line-height: 1; }
+
+  .card-body { padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .card-title { font-size: 15px; font-weight: 600; }
+  .variety { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .desc { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+  hr { border: none; border-top: 1px solid var(--border); }
+
+  .dates { font-size: 12px; display: flex; flex-direction: column; gap: 5px; }
+  .date-row { display: flex; justify-content: space-between; gap: 6px; }
+  .date-label { color: var(--hint); }
+  .date-val { font-weight: 500; color: var(--muted); }
+
+  .footer-card { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 4px; }
+  .price { font-size: 22px; font-weight: 600; color: var(--green); }
+  .price span { font-size: 13px; font-weight: 400; color: var(--muted); }
+
+  .stock { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+  .stock.in  { background: var(--green-light); color: var(--green-text); }
+  .stock.low { background: var(--amber-light); color: var(--amber-text); }
+  .stock.out { background: var(--red-light);   color: var(--red-text);   }
+
+  /* Lightbox photo */
+  .lightbox {
+    display: none; position: fixed; inset: 0; z-index: 100;
+    background: rgba(0,0,0,.82); align-items: center; justify-content: center;
+    padding: 1rem;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 100%; max-height: 90vh; border-radius: 10px; object-fit: contain; }
+  .lightbox-close {
+    position: absolute; top: 16px; right: 20px;
+    font-size: 28px; color: #fff; cursor: pointer; line-height: 1;
+    background: none; border: none;
+  }
+  .card-visual.has-photo { cursor: zoom-in; }
+
+  .contact {
+    margin-top: 2.5rem; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem 1.5rem;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .contact-icon { font-size: 32px; flex-shrink: 0; }
+  .contact-body { flex: 1; min-width: 180px; }
+  .contact-body strong { font-size: 15px; }
+  .contact-body p { font-size: 13px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .btn {
+    font-size: 13px; font-family: inherit; font-weight: 500;
+    padding: 9px 20px; border-radius: 8px;
+    border: 1px solid var(--green); background: var(--green);
+    color: #fff; cursor: pointer; text-decoration: none; white-space: nowrap;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .88; }
+
+  footer { margin-top: 3rem; text-align: center; font-size: 12px; color: var(--hint); }
+
+  @media (max-width: 480px) {
+    .grid { grid-template-columns: 1fr 1fr; }
+    .card-visual { height: 120px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a9 9 0 0 1 9 9c0 3.6-2.6 7.29-5.09 9.47A2 2 0 0 1 14.5 21h-5a2 2 0 0 1-1.41-.53C5.6 18.29 3 14.6 3 11a9 9 0 0 1 9-9z"/><path d="M12 2v19"/></svg>
+      Plants de légumes en pot
+    </h1>
+    <p>Semis maison · Variétés sélectionnées · Retrait sur place — Cormeilles-en-Parisis</p>
+  </header>
+
+  <div class="filters" id="filters"></div>
+
+  <div id="content">
+    <div class="state">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      Chargement des plants…
+    </div>
+  </div>
+
+  <div class="contact">
+    <div class="contact-icon">🌱</div>
+    <div class="contact-body">
+      <strong>Réservation & retrait</strong>
+      <p>Contactez-moi pour réserver vos plants.<br>Paiement sur place à l'enlèvement — espèces ou virement.</p>
+    </div>
+    <!-- ✏️ Remplacez l'adresse email ci-dessous -->
+    <a href="mailto:contact@exemple.fr" class="btn">✉ Me contacter</a>
+  </div>
+
+  <footer>Mise à jour automatique depuis Google Sheets · Données actualisées à chaque visite</footer>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lightbox-img" src="" alt="">
+</div>
+
+<script>
+// ============================================================
+// ✏️  URL CSV du Google Sheet (publié en CSV)
+// ============================================================
+const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqaboj4KRyeXtbJ-WeeviCLnURdmCyiWicGNy6nLentyKTOkxmuYay_RYjkA_OGu-Rjci1AlmUmJ3M/pub?output=csv";
+// ============================================================
+
+const EMOJI = {
+  tomate: "🍅", poivron: "🫑", piment: "🌶️", courgette: "🥒",
+  concombre: "🥒", salade: "🥬", laitue: "🥬", epinard: "🌿",
+  carotte: "🥕", basilic: "🌿", persil: "🌿", ciboulette: "🌿",
+  poireau: "🧅", oignon: "🧅", ail: "🧄", courge: "🎃",
+  haricot: "🫘", pois: "🫛", aubergine: "🍆", bette: "🌿",
+  default: "🌱"
+};
+
+const STOCK_LABEL = { in: "Disponible", low: "Derniers", out: "Épuisé" };
+const CAT_LABEL = { fruit: "Fruits", feuille: "Feuilles", racine: "Racines", aromatique: "Aromatiques" };
+
+let allPlants = [];
+
+function getEmoji(name) {
+  const key = name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return EMOJI[key] || EMOJI.default;
+}
+
+// Convertit une URL Google Drive en lien d'image directe
+function driveToImg(url) {
+  if (!url) return "";
+  // Format partagé : https://drive.google.com/file/d/FILE_ID/view
+  const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+  // Déjà une URL directe
+  return url;
+}
+
+function openLightbox(src) {
+  document.getElementById("lightbox-img").src = src;
+  document.getElementById("lightbox").classList.add("open");
+}
+function closeLightbox() {
+  document.getElementById("lightbox").classList.remove("open");
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
+  return lines.slice(1).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || [];
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = (vals[i] || "").replace(/"/g, "").trim(); });
+    return obj;
+  }).filter(p => p.nom);
+}
+
+function renderCards(plants) {
+  if (!plants.length) {
+    return `<div class="state">Aucun plant dans cette catégorie.</div>`;
+  }
+  return `<div class="grid">${plants.map(p => {
+    const emoji = getEmoji(p.nom);
+    const prix = parseFloat(p.prix) || 0;
+    const stock = ["in", "low", "out"].includes(p.stock) ? p.stock : "in";
+    const imgSrc = p.photo ? driveToImg(p.photo) : "";
+
+    const visual = imgSrc
+      ? `<div class="card-visual has-photo" onclick="openLightbox('${imgSrc}')">
+           <img src="${imgSrc}" alt="${p.nom}" loading="lazy"
+                onerror="this.parentNode.classList.remove('has-photo');this.parentNode.innerHTML='<span class=emoji-big>${emoji}</span>'">
+         </div>`
+      : `<div class="card-visual"><span class="emoji-big">${emoji}</span></div>`;
+
+    return `<div class="card">
+      ${visual}
+      <div class="card-body">
+        <div>
+          <div class="card-title">${p.nom}</div>
+          <div class="variety">${p.variete || ""}</div>
+        </div>
+        ${p.description ? `<p class="desc">${p.description}</p>` : ""}
+        <hr>
+        <div class="dates">
+          <div class="date-row"><span class="date-label">🌱 Semis</span><span class="date-val">${p.semis || "—"}</span></div>
+          <div class="date-row"><span class="date-label">🪴 Mise en pot</span><span class="date-val">${p.pot || "—"}</span></div>
+        </div>
+        <hr>
+        <div class="footer-card">
+          <span class="price">${prix.toFixed(2)} <span>€ / plant</span></span>
+          <span class="stock ${stock}">${STOCK_LABEL[stock]}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function renderFilters(plants) {
+  const cats = [...new Set(plants.map(p => p.categorie).filter(Boolean))];
+  const el = document.getElementById("filters");
+  el.innerHTML = `<button class="tag active" onclick="filter('all',this)">Tous (${plants.length})</button>` +
+    cats.map(c => {
+      const count = plants.filter(p => p.categorie === c).length;
+      return `<button class="tag" onclick="filter('${c}',this)">${CAT_LABEL[c] || c} (${count})</button>`;
+    }).join("");
+}
+
+function filter(cat, el) {
+  document.querySelectorAll(".tag").forEach(t => t.classList.remove("active"));
+  el.classList.add("active");
+  const filtered = cat === "all" ? allPlants : allPlants.filter(p => p.categorie === cat);
+  document.getElementById("content").innerHTML = renderCards(filtered);
+}
+
+async function loadSheet() {
+  try {
+    const res = await fetch(SHEET_CSV_URL);
+    if (!res.ok) throw new Error("Réponse réseau incorrecte");
+    const text = await res.text();
+    allPlants = parseCSV(text);
+    renderFilters(allPlants);
+    document.getElementById("content").innerHTML = renderCards(allPlants);
+  } catch (e) {
+    document.getElementById("content").innerHTML = `<div class="state">❌ Impossible de charger les données<br><small style="color:#9b9b96;margin-top:8px;display:block">${e.message}</small></div>`;
+  }
+}
+
+loadSheet();
+</script>
+</body>
+</html>
