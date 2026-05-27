@@ -50,11 +50,13 @@
   .tag:hover { border-color: var(--green); color: var(--green); }
   .tag.active { background: var(--green); color: #fff; border-color: var(--green); }
 
+  /* Loading / error */
   .state { text-align: center; padding: 4rem 1rem; color: var(--muted); font-size: 15px; }
   .state svg { display: block; margin: 0 auto 1rem; opacity: .4; animation: spin 1s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  /* Grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
 
   .card {
     background: var(--surface); border: 1px solid var(--border);
@@ -64,25 +66,35 @@
   }
   .card:hover { border-color: rgba(29,158,117,.4); box-shadow: 0 2px 12px rgba(29,158,117,.08); }
 
-  /* Photo ou placeholder emoji en haut de la carte */
+  /* Zone image en haut de carte */
   .card-visual {
-    width: 100%; height: 150px;
+    width: 100%; height: 155px;
     background: var(--green-light);
     display: flex; align-items: center; justify-content: center;
-    overflow: hidden; flex-shrink: 0;
+    overflow: hidden; flex-shrink: 0; position: relative;
   }
   .card-visual img {
-    width: 100%; height: 100%; object-fit: cover;
-    display: block;
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform .25s;
   }
-  .card-visual .emoji-big { font-size: 56px; line-height: 1; }
+  .card-visual.has-photo { cursor: zoom-in; }
+  .card-visual.has-photo:hover img { transform: scale(1.04); }
+  .card-visual .emoji-big { font-size: 58px; line-height: 1; user-select: none; }
 
+  /* Pastille zoom */
+  .zoom-hint {
+    position: absolute; bottom: 7px; right: 9px;
+    background: rgba(0,0,0,.45); color: #fff;
+    font-size: 11px; padding: 2px 7px; border-radius: 20px;
+    pointer-events: none; opacity: 0; transition: opacity .2s;
+  }
+  .card-visual.has-photo:hover .zoom-hint { opacity: 1; }
+
+  /* Corps de carte */
   .card-body { padding: 0.9rem 1rem; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 
-  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
   .card-title { font-size: 15px; font-weight: 600; }
   .variety { font-size: 12px; color: var(--muted); margin-top: 2px; }
-
   .desc { font-size: 13px; color: var(--muted); line-height: 1.55; }
 
   hr { border: none; border-top: 1px solid var(--border); }
@@ -101,21 +113,28 @@
   .stock.low { background: var(--amber-light); color: var(--amber-text); }
   .stock.out { background: var(--red-light);   color: var(--red-text);   }
 
-  /* Lightbox photo */
+  /* Lightbox */
   .lightbox {
-    display: none; position: fixed; inset: 0; z-index: 100;
-    background: rgba(0,0,0,.82); align-items: center; justify-content: center;
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,.85);
+    align-items: center; justify-content: center;
     padding: 1rem;
+    cursor: zoom-out;
   }
   .lightbox.open { display: flex; }
-  .lightbox img { max-width: 100%; max-height: 90vh; border-radius: 10px; object-fit: contain; }
-  .lightbox-close {
-    position: absolute; top: 16px; right: 20px;
-    font-size: 28px; color: #fff; cursor: pointer; line-height: 1;
-    background: none; border: none;
+  .lightbox img {
+    max-width: min(90vw, 700px); max-height: 88vh;
+    border-radius: 10px; object-fit: contain;
+    box-shadow: 0 8px 40px rgba(0,0,0,.5);
   }
-  .card-visual.has-photo { cursor: zoom-in; }
+  .lightbox-close {
+    position: fixed; top: 16px; right: 20px;
+    font-size: 30px; color: #fff; cursor: pointer;
+    background: none; border: none; line-height: 1;
+    text-shadow: 0 1px 4px rgba(0,0,0,.6);
+  }
 
+  /* Contact */
   .contact {
     margin-top: 2.5rem; background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 1.25rem 1.5rem;
@@ -139,6 +158,7 @@
   @media (max-width: 480px) {
     .grid { grid-template-columns: 1fr 1fr; }
     .card-visual { height: 120px; }
+    .card-body { padding: 0.75rem; gap: 6px; }
   }
 </style>
 </head>
@@ -154,7 +174,6 @@
   </header>
 
   <div class="filters" id="filters"></div>
-
   <div id="content">
     <div class="state">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
@@ -168,8 +187,7 @@
       <strong>Réservation & retrait</strong>
       <p>Contactez-moi pour réserver vos plants.<br>Paiement sur place à l'enlèvement — espèces ou virement.</p>
     </div>
-    <!-- ✏️ Remplacez l'adresse email ci-dessous -->
-    <a href="mailto:contact@exemple.fr" class="btn">✉ Me contacter</a>
+    <a href="mailto:eremy@sqli.com" class="btn">✉ Me contacter</a>
   </div>
 
   <footer>Mise à jour automatique depuis Google Sheets · Données actualisées à chaque visite</footer>
@@ -182,11 +200,7 @@
 </div>
 
 <script>
-// ============================================================
-// ✏️  URL CSV du Google Sheet (publié en CSV)
-// ============================================================
 const SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQqaboj4KRyeXtbJ-WeeviCLnURdmCyiWicGNy6nLentyKTOkxmuYay_RYjkA_OGu-Rjci1AlmUmJ3M/pub?output=csv";
-// ============================================================
 
 const EMOJI = {
   tomate: "🍅", poivron: "🫑", piment: "🌶️", courgette: "🥒",
@@ -198,7 +212,7 @@ const EMOJI = {
 };
 
 const STOCK_LABEL = { in: "Disponible", low: "Derniers", out: "Épuisé" };
-const CAT_LABEL = { fruit: "Fruits", feuille: "Feuilles", racine: "Racines", aromatique: "Aromatiques" };
+const CAT_LABEL   = { fruit: "Fruits", feuille: "Feuilles", racine: "Racines", aromatique: "Aromatiques" };
 
 let allPlants = [];
 
@@ -207,13 +221,11 @@ function getEmoji(name) {
   return EMOJI[key] || EMOJI.default;
 }
 
-// Convertit une URL Google Drive en lien d'image directe
+// Convertit un lien de partage Google Drive en URL d'image directe
 function driveToImg(url) {
   if (!url) return "";
-  // Format partagé : https://drive.google.com/file/d/FILE_ID/view
   const m = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
   if (m) return `https://lh3.googleusercontent.com/d/${m[1]}`;
-  // Déjà une URL directe
   return url;
 }
 
@@ -238,19 +250,19 @@ function parseCSV(text) {
 }
 
 function renderCards(plants) {
-  if (!plants.length) {
-    return `<div class="state">Aucun plant dans cette catégorie.</div>`;
-  }
+  if (!plants.length) return `<div class="state">Aucun plant dans cette catégorie.</div>`;
+
   return `<div class="grid">${plants.map(p => {
-    const emoji = getEmoji(p.nom);
-    const prix = parseFloat(p.prix) || 0;
-    const stock = ["in", "low", "out"].includes(p.stock) ? p.stock : "in";
-    const imgSrc = p.photo ? driveToImg(p.photo) : "";
+    const emoji   = getEmoji(p.nom);
+    const prix    = parseFloat(p.prix) || 0;
+    const stock   = ["in", "low", "out"].includes(p.stock) ? p.stock : "in";
+    const imgSrc  = driveToImg(p.photo || "");
 
     const visual = imgSrc
       ? `<div class="card-visual has-photo" onclick="openLightbox('${imgSrc}')">
            <img src="${imgSrc}" alt="${p.nom}" loading="lazy"
-                onerror="this.parentNode.classList.remove('has-photo');this.parentNode.innerHTML='<span class=emoji-big>${emoji}</span>'">
+                onerror="this.closest('.card-visual').outerHTML='<div class=card-visual><span class=emoji-big>${emoji}</span></div>'">
+           <span class="zoom-hint">🔍 Agrandir</span>
          </div>`
       : `<div class="card-visual"><span class="emoji-big">${emoji}</span></div>`;
 
@@ -279,31 +291,32 @@ function renderCards(plants) {
 
 function renderFilters(plants) {
   const cats = [...new Set(plants.map(p => p.categorie).filter(Boolean))];
-  const el = document.getElementById("filters");
-  el.innerHTML = `<button class="tag active" onclick="filter('all',this)">Tous (${plants.length})</button>` +
+  document.getElementById("filters").innerHTML =
+    `<button class="tag active" onclick="filter('all',this)">Tous (${plants.length})</button>` +
     cats.map(c => {
-      const count = plants.filter(p => p.categorie === c).length;
-      return `<button class="tag" onclick="filter('${c}',this)">${CAT_LABEL[c] || c} (${count})</button>`;
+      const n = plants.filter(p => p.categorie === c).length;
+      return `<button class="tag" onclick="filter('${c}',this)">${CAT_LABEL[c] || c} (${n})</button>`;
     }).join("");
 }
 
 function filter(cat, el) {
   document.querySelectorAll(".tag").forEach(t => t.classList.remove("active"));
   el.classList.add("active");
-  const filtered = cat === "all" ? allPlants : allPlants.filter(p => p.categorie === cat);
-  document.getElementById("content").innerHTML = renderCards(filtered);
+  const list = cat === "all" ? allPlants : allPlants.filter(p => p.categorie === cat);
+  document.getElementById("content").innerHTML = renderCards(list);
 }
 
 async function loadSheet() {
   try {
-    const res = await fetch(SHEET_CSV_URL);
+    const res  = await fetch(SHEET_CSV_URL);
     if (!res.ok) throw new Error("Réponse réseau incorrecte");
-    const text = await res.text();
-    allPlants = parseCSV(text);
+    allPlants = parseCSV(await res.text());
     renderFilters(allPlants);
     document.getElementById("content").innerHTML = renderCards(allPlants);
   } catch (e) {
-    document.getElementById("content").innerHTML = `<div class="state">❌ Impossible de charger les données<br><small style="color:#9b9b96;margin-top:8px;display:block">${e.message}</small></div>`;
+    document.getElementById("content").innerHTML =
+      `<div class="state">❌ Impossible de charger les données<br>
+       <small style="color:#9b9b96;margin-top:8px;display:block">${e.message}</small></div>`;
   }
 }
 
