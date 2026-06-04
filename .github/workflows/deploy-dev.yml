@@ -37,6 +37,10 @@ jobs:
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
             cd /opt/potager-dev
+            if [ ! -d venv ]; then
+              echo 'Création du virtualenv...'
+              python3 -m venv venv
+            fi
             venv/bin/pip install --quiet --upgrade pip
             venv/bin/pip install --quiet -r requirements.txt
           "
