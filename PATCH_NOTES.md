@@ -1,4 +1,16 @@
 
+## [v2.27.0] — 2026-06-04
+
+### 🚀 Nouveautés
+- Déduit les plants placés en pleine terre du stock de godets pépinière par variété (US-022) : `stock_godet = Σ repiqués − Σ plantés`
+- Complète la chaîne de traçabilité `semis → godet → plantation` initiée par US-017
+
+### 🔧 Améliorations techniques
+- Enrichit `calcul_godets_par_culture()` dans `utils/stock.py` : ajoute les champs `nb_plantes`, `stock_residuel_godet` et filtre automatiquement les variétés à stock nul (CA4)
+- Rattache automatiquement une plantation sans variété à la variété unique en godet ; log WARNING si plusieurs variétés (CA6)
+- Met à jour l'affichage section `🪴 Pépinière` dans `/stats <culture>` : affiche le stock résiduel avec détail `(X repiqués · Y plantés)` (CA3)
+- Ajoute 10 tests unitaires dans `tests/test_us022_deduction_godet_plantation.py` couvrant CA1–CA7
+
 ## [v2.26.0] — 2026-05-08
 
 ### 🚀 Nouveautés — PWA Voice Assistant (iPhone)
@@ -53,6 +65,7 @@
 - `_parse_and_save()` insère l'étape de sélection de parcelle avant la confirmation finale (CA8/CA11)
 - `_action_confirm_cb()` gère trois phases : sélection parcelle → confirmation → sauvegarde, annulation valide à tout moment
 - Ajoute 5 tests unitaires CA8–CA12 dans `tests/test_us021_confirmation_enregistrement.py` (14 tests au total)
+
 ## [v2.23.0] — 2026-04-27
 
 ### 🚀 Nouveautés

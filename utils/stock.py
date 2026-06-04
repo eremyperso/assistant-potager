@@ -598,12 +598,19 @@ def calcul_godets(db: Session) -> Dict[str, dict]:
 
 def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
     """
-    [US-018 / CA1, CA2, CA6] Retourne les godets actifs par variété pour une culture donnée.
+    [US-018 / CA1, CA2, CA6 | US-022 / CA1-CA6] Retourne les godets actifs par variété.
 
-    Champs : variete, nb_plants_godets, nb_graines_semees, taux_reussite, date_derniere_mise_en_godet
-    Retourne [] si aucun événement mise_en_godet pour cette culture.
+    stock_residuel_godet = Σ nb_plants_godets (mise_en_godet) − Σ quantite (plantation)
+    par couple (culture, variété). Seules les variétés avec stock > 0 sont retournées (CA4).
+
+    Champs : variete, nb_plants_godets, nb_plantes, stock_residuel_godet,
+             nb_graines_semees, taux_reussite, nb_godets, date_derniere_mise_en_godet
     """
+    import logging as _log
+    _logger = _log.getLogger("potager")
+
     culture_lower = culture.lower()
+
     rows = (
         db.query(
             Evenement.variete,
@@ -618,14 +625,54 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
         .group_by(Evenement.variete)
         .all()
     )
+
+    if not rows:
+        return []
+
+    # [US-022 / CA1] Plantations par variété — à déduire du stock godet
+    plant_rows = (
+        db.query(
+            Evenement.variete,
+            func.sum(Evenement.quantite),
+        )
+        .filter(Evenement.type_action == "plantation")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.variete)
+        .all()
+    )
+    plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
+
+    # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique si une seule en godet
+    nb_plantes_sans_variete = plantations.pop(None, 0)
+    if nb_plantes_sans_variete > 0:
+        varietes_avec_godet = [r[0] for r in rows if r[0] is not None]
+        if len(varietes_avec_godet) == 1:
+            v_unique = varietes_avec_godet[0]
+            plantations[v_unique] = plantations.get(v_unique, 0) + nb_plantes_sans_variete
+        else:
+            _logger.warning(
+                "[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée du calcul",
+                culture, len(varietes_avec_godet),
+            )
+
     result: List[dict] = []
     for variete, tot_p, tot_g, nb, date_max in rows:
         nb_p = int(tot_p) if tot_p else 0
         nb_g = int(tot_g) if tot_g else 0
         taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        nb_plantes       = plantations.get(variete, 0)
+        stock_residuel   = max(0, nb_p - nb_plantes)
+
+        # [US-022 / CA4] On n'expose que les godets non entièrement plantés
+        if stock_residuel == 0:
+            continue
+
         result.append({
             "variete":                    variete,
             "nb_plants_godets":           nb_p,
+            "nb_plantes":                 nb_plantes,
+            "stock_residuel_godet":       stock_residuel,
             "nb_graines_semees":          nb_g,
             "taux_reussite":              taux,
             "nb_godets":                  nb,

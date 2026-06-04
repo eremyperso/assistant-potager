@@ -2405,18 +2405,21 @@ async def cmd_stats(update, ctx):
                     lines_out.append(f"  • *{var_label}* : {semis_label}{godet_str} · 🗓️ {date_str}")
                 lines_out.append("")
 
-            # [US-018 / CA1, CA2] Section pépinière par variété — godets actifs
+            # [US-018 / CA1, CA2] [US-022 / CA3, CA4] Section pépinière — godets non encore plantés
             if godets_culture:
                 current_year_g = __import__("datetime").datetime.now().year
                 lines_out.append("🪴 *Pépinière :*")
                 for g in godets_culture:
-                    var_g  = g["variete"] or "Variété non précisée"
-                    nb_p   = g["nb_plants_godets"]
-                    taux   = g["taux_reussite"]
-                    d_godet = g["date_derniere_mise_en_godet"]
-                    date_g = _fmt_date_variete(d_godet, current_year_g) if d_godet else "?"
+                    var_g    = g["variete"] or "Variété non précisée"
+                    nb_p     = g["nb_plants_godets"]
+                    nb_pl    = g.get("nb_plantes", 0)
+                    residuel = g.get("stock_residuel_godet", nb_p)
+                    taux     = g["taux_reussite"]
+                    d_godet  = g["date_derniere_mise_en_godet"]
+                    date_g   = _fmt_date_variete(d_godet, current_year_g) if d_godet else "?"
                     taux_str = f" · taux *{taux}%*" if taux is not None else ""
-                    lines_out.append(f"  • *{var_g}* : {nb_p} plants{taux_str} · 🗓️ {date_g} → en cours")
+                    detail   = f" ({nb_p} repiqués · {nb_pl} plantés)" if nb_pl > 0 else ""
+                    lines_out.append(f"  • *{var_g}* : {residuel} plants en godet{detail}{taux_str} · 🗓️ {date_g} → en cours")
                 lines_out.append("")
 
             lines_out.append("_Pour revenir à la synthèse : /stats_")
