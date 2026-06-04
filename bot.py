@@ -2500,10 +2500,12 @@ async def cmd_stats(update, ctx):
         if godets_stats:
             lines_out.append("\n🪴 *Pépinière :*")
             for key, g in godets_stats.items():
-                nb_p = g["nb_plants_godets"]
-                taux = g["taux_reussite"]
+                residuel = g.get("stock_residuel_godet", g["nb_plants_godets"])
+                nb_pl    = g.get("nb_plantes", 0)
+                taux     = g["taux_reussite"]
                 taux_str = f" · taux *{taux}%*" if taux is not None else ""
-                lines_out.append(f"  • {key} : *{nb_p} plants*{taux_str}")
+                detail   = f" ({g['nb_plants_godets']} repiqués · {nb_pl} plantés)" if nb_pl > 0 else ""
+                lines_out.append(f"  • {key} : *{residuel} plants*{detail}{taux_str}")
 
         # ── Arrosages (inchangé) ───────────────────────────────────────────────
         arrosages = (

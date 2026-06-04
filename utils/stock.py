@@ -562,12 +562,15 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
 
 def calcul_godets(db: Session) -> Dict[str, dict]:
     """
-    [US_mise_en_godet] Agrège les mise_en_godet par culture/variété.
+    [US_mise_en_godet | US-022] Agrège les mise_en_godet par culture/variété.
+    Déduit les plantations du stock godet — seules les entrées avec stock > 0 sont retournées.
 
-    Retourne un dict trié { "culture (variete)": { culture, variete,
-    nb_godets, nb_graines_semees, nb_plants_godets, taux_reussite } }.
-    taux_reussite est None si l'un des deux compteurs est absent.
+    Champs : culture, variete, nb_godets, nb_graines_semees, nb_plants_godets,
+             nb_plantes, stock_residuel_godet, taux_reussite
     """
+    import logging as _log
+    _logger = _log.getLogger("potager")
+
     rows = (
         db.query(
             Evenement.culture,
@@ -581,17 +584,62 @@ def calcul_godets(db: Session) -> Dict[str, dict]:
         .group_by(Evenement.culture, Evenement.variete)
         .all()
     )
+
+    if not rows:
+        return {}
+
+    # [US-022] Plantations par (culture, variété)
+    plant_rows = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            func.sum(Evenement.quantite),
+        )
+        .filter(Evenement.type_action == "plantation")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    plantations: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in plant_rows}
+
+    # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique par culture
+    varietes_par_culture: Dict[str, list] = {}
+    for culture, variete, *_ in rows:
+        if variete is not None:
+            varietes_par_culture.setdefault(culture, []).append(variete)
+
+    for culture in [c for (c, v) in list(plantations) if v is None]:
+        nb_sans_var = plantations.pop((culture, None), 0)
+        if nb_sans_var > 0:
+            varietes = varietes_par_culture.get(culture, [])
+            if len(varietes) == 1:
+                plantations[(culture, varietes[0])] = plantations.get((culture, varietes[0]), 0) + nb_sans_var
+            elif len(varietes) == 0:
+                plantations[(culture, None)] = nb_sans_var  # pas de godet avec variété → garder None
+            else:
+                _logger.warning("[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée", culture, len(varietes))
+
     result: Dict[str, dict] = {}
     for culture, variete, tot_g, tot_p, nb in rows:
+        nb_p = int(tot_p) if tot_p else 0
+        nb_g = int(tot_g) if tot_g else 0
+        taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        nb_plantes     = plantations.get((culture, variete), 0)
+        stock_residuel = max(0, nb_p - nb_plantes)
+
+        if stock_residuel == 0:
+            continue
+
         key = culture + (f" ({variete})" if variete else "")
-        taux = round(tot_p / tot_g * 100) if (tot_g and tot_p) else None
         result[key] = {
-            "culture":          culture,
-            "variete":          variete,
-            "nb_godets":        nb,
-            "nb_graines_semees": int(tot_g) if tot_g else 0,
-            "nb_plants_godets":  int(tot_p) if tot_p else 0,
-            "taux_reussite":    taux,
+            "culture":             culture,
+            "variete":             variete,
+            "nb_godets":           nb,
+            "nb_graines_semees":   nb_g,
+            "nb_plants_godets":    nb_p,
+            "nb_plantes":          nb_plantes,
+            "stock_residuel_godet": stock_residuel,
+            "taux_reussite":       taux,
         }
     return dict(sorted(result.items()))
 
