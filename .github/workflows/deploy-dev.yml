@@ -56,7 +56,7 @@ jobs:
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
             cd /opt/potager-dev
-            set -a && source .env.dev-server && set +a
+            set -a && source .env.dev && set +a
             APPLIED_LOG=/opt/potager-dev/.migrations_applied
             touch \"\${APPLIED_LOG}\"
             for migration in \$(ls migrations/migration_v*.sql | sort -t v -k2 -n); do
