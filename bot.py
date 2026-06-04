@@ -58,7 +58,7 @@ from utils.parcelles import (
     find_doublon, create_parcelle, update_parcelle, get_all_parcelles,
     resolve_parcelle, rename_parcelle, supprimer_parcelle,
 )
-from llm.groq_client import parse_commande, repondre_question
+from llm.groq_client import parse_commande, repondre_question, parse_message
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
@@ -610,14 +610,15 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _ask_question(update, texte)
         return
 
-    # ── 5. Classification de l'intention via Groq ──────────────────────────────
-    intent = classify_intent(texte)
+    # ── 5. Analyse unifiée intent + parsing via Groq (single-pass) ───────────
+    parsed = parse_message(texte)
+    intent = parsed["intent"]
 
     # ── 6. Routage selon intent ────────────────────────────────────────────────
     if intent == "STATS":
         await msg.edit_text("📊 *Statistiques*", parse_mode="Markdown")
-        # [US_Stats_detail_par_variete / CA8] Détecter "stats <culture>" vocal
-        culture_vocal = _extract_stats_culture(texte)
+        # culture extraite par le LLM (remplace _extract_stats_culture)
+        culture_vocal = parsed.get("culture")
         if culture_vocal:
             log.info(f"📊 STATS VOCAL VARIETE : culture='{culture_vocal}'")
             ctx.args = [culture_vocal]
@@ -632,7 +633,8 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # [US_Plan_occupation_parcelles / CA9] Routage vocal PLAN
     if intent == "PLAN":
         await msg.edit_text("🗺 *Plan du potager...*", parse_mode="Markdown")
-        parcelle_vocal = _extract_plan_parcelle(texte)
+        # parcelle extraite par le LLM (remplace _extract_plan_parcelle)
+        parcelle_vocal = parsed.get("parcelle")
         if parcelle_vocal:
             log.info(f"🗺 PLAN VOCAL PARCELLE : parcelle='{parcelle_vocal}'")
             ctx.args = [parcelle_vocal]
@@ -646,8 +648,6 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await msg.edit_text("🪴 *Godets en attente...*", parse_mode="Markdown")
             await _consulter_godets(update)
             return
-        # Si le texte est déjà une question complète (>4 mots), la traiter directement
-        # Sinon, demander de formuler la question (mot court type "interroger", "question"...)
         mots = texte.strip().split()
         if len(mots) > 4:
             log.info(f"❓ QUESTION DIRECTE : '{texte}' → traitement immédiat")
@@ -684,13 +684,13 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # [US-007 / CA10] Routage vocal DEPLACER
     if intent == "DEPLACER":
         await msg.edit_text("🔀 *Réassociation culture → parcelle...*", parse_mode="Markdown")
-        culture = _extract_culture_deplacer(texte)
+        culture = parsed.get("culture") or _extract_culture_deplacer(texte)
         log.info(f"🔀 DEPLACER VOCAL  : culture='{culture}'")
         await _depl_start(update, ctx, culture)
         return
 
-    # intent == "ACTION" : enregistrer comme action potager
-    await _parse_and_save(update, texte, msg)
+    # intent == "ACTION" : items pré-parsés par parse_message, pas de 2e appel LLM
+    await _parse_and_save(update, texte, msg, pre_parsed_items=parsed.get("items"))
 
 
 # Mots déclencheurs de QUESTION analytique (début de phrase)
@@ -1505,10 +1505,17 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
-async def _parse_and_save(update: Update, texte: str, msg=None):
-    """Parse le texte → liste d'événements → PostgreSQL → récapitulatif."""
+async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items=None):
+    """Parse le texte → liste d'événements → PostgreSQL → récapitulatif.
+
+    pre_parsed_items : items déjà extraits par parse_message() (single-pass).
+    Si None, appel de secours à parse_commande() (bulk, multi-lignes, fallback).
+    """
     try:
-        items = parse_commande(texte)   # retourne toujours une liste
+        if pre_parsed_items is not None:
+            items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
+        else:
+            items = parse_commande(texte)   # fallback : parse_commande classique
     except Exception as e:
         log.error(f"❌ ERREUR PARSING  : {e}")
         txt = f"❌ Erreur parsing : {e}\n\nEssayez de reformuler votre action."

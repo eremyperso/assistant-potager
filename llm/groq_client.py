@@ -298,6 +298,180 @@ Exemples :
 """
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PARSE UNIFIÉ — intent + parsing en un seul appel LLM
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PARSE_MESSAGE_PROMPT = """{date_context}
+
+Tu es un assistant potager. Analyse ce message et retourne UNIQUEMENT un JSON.
+
+=== CHAMP OBLIGATOIRE : "intent" ===
+Choisis UNE valeur parmi :
+- "ACTION"     : action réalisée à enregistrer (récolté, semé, planté, arrosé, paillé, traité...)
+- "HISTORIQUE" : consulter l'historique / le journal des événements passés
+- "STATS"      : voir des statistiques, bilan, résumé chiffré
+- "INTERROGER" : question analytique (combien, quand, quel total, date de...)
+- "PLAN"       : voir le plan d'occupation des parcelles
+- "DEPLACER"   : réassocier / déplacer une culture vers une autre parcelle
+- "CORRIGER"   : corriger ou modifier un enregistrement existant
+- "SUPPRIMER"  : supprimer / effacer un enregistrement
+- "MENU"       : revenir au menu / accueil / annuler
+- "NOUVELLE"   : saisir une nouvelle action (après une confirmation)
+
+=== RÈGLE DE CLASSIFICATION ===
+- Message qui COMMENCE par un verbe au passé (récolté, semé, planté, arrosé...) SANS "?" → ACTION
+- "historique", "histo", "journal", "liste des", "mes [action]s" → HISTORIQUE
+- "stats", "bilan", "résumé", "chiffres", "total" → STATS
+- "combien", "quand", "quel", "affiche", "montre", "consulter" → INTERROGER
+- "plan", "plan du potager", "occupation" → PLAN
+
+=== FORMAT DE RÉPONSE ===
+Retourne TOUJOURS ce JSON (sans backticks, sans texte autour) :
+{{
+  "intent": "ACTION|HISTORIQUE|STATS|INTERROGER|PLAN|DEPLACER|CORRIGER|SUPPRIMER|MENU|NOUVELLE",
+  "culture": string|null,
+  "parcelle": string|null,
+  "action_filtre": string|null,
+  "items": null
+}}
+
+Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/action) :
+{{
+  "intent": "ACTION",
+  "culture": null,
+  "parcelle": null,
+  "action_filtre": null,
+  "items": [
+    {{
+      "action": "recolte|semis|plantation|arrosage|traitement|desherbage|taille|paillage|observation|perte|mise_en_godet|repiquage|fertilisation|tuteurage",
+      "culture": string|null,
+      "variete": string|null,
+      "quantite": number|null,
+      "unite": "kg|g|l|plants|graines"|null,
+      "parcelle": string|null,
+      "rang": number|null,
+      "duree_minutes": number|null,
+      "traitement": string|null,
+      "date": "ISO date"|null,
+      "commentaire": string|null,
+      "nb_graines_semees": number|null,
+      "nb_plants_godets": number|null
+    }}
+  ]
+}}
+
+=== EXEMPLES ===
+"récolté 800g de tomates en A1"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"recolte","culture":"tomate","variete":null,"quantite":800,"unite":"g","parcelle":"A1","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"historique récolte"
+→ {{"intent":"HISTORIQUE","culture":null,"parcelle":null,"action_filtre":"recolte","items":null}}
+
+"historique récoltes cornichon"
+→ {{"intent":"HISTORIQUE","culture":"cornichon","parcelle":null,"action_filtre":"recolte","items":null}}
+
+"mes récoltes du mois de mars"
+→ {{"intent":"HISTORIQUE","culture":null,"parcelle":null,"action_filtre":"recolte","items":null}}
+
+"stats courgettes"
+→ {{"intent":"STATS","culture":"courgette","parcelle":null,"action_filtre":null,"items":null}}
+
+"plan parcelle nord"
+→ {{"intent":"PLAN","culture":null,"parcelle":"nord","action_filtre":null,"items":null}}
+
+"combien de kg de tomates cette saison ?"
+→ {{"intent":"INTERROGER","culture":"tomate","parcelle":null,"action_filtre":"recolte","items":null}}
+
+"planté 15 oignons blancs et 10 radis hier"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"plantation","culture":"oignon","variete":"blanc","quantite":15,"unite":"plants","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"date":"{yesterday}","commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}},{{"action":"plantation","culture":"radis","variete":null,"quantite":10,"unite":"plants","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"date":"{yesterday}","commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"Mis en godet 24 tomates cerise sur 30 graines semées"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"mise_en_godet","culture":"tomate","variete":"cerise","quantite":null,"unite":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":30,"nb_plants_godets":24}}]}}
+
+"historique"
+→ {{"intent":"HISTORIQUE","culture":null,"parcelle":null,"action_filtre":null,"items":null}}
+
+"stats"
+→ {{"intent":"STATS","culture":null,"parcelle":null,"action_filtre":null,"items":null}}
+"""
+
+_INTENTS_VALIDES = {
+    "ACTION", "HISTORIQUE", "STATS", "INTERROGER", "PLAN",
+    "DEPLACER", "CORRIGER", "SUPPRIMER", "MENU", "NOUVELLE",
+}
+
+
+def parse_message(texte: str) -> dict:
+    """
+    Single-pass : classifie l'intention ET parse les champs en un seul appel LLM.
+
+    Retourne toujours un dict avec au minimum :
+      {intent, culture, parcelle, action_filtre, items}
+
+    'items' est une liste de dicts action si intent == 'ACTION', sinon None.
+    En cas d'erreur → fallback {"intent": "ACTION", "items": None} pour déclencher
+    le chemin de parse_commande() existant.
+    """
+    import logging as _log
+    _logger = _log.getLogger("potager")
+
+    today      = date.today()
+    yesterday  = today - timedelta(days=1)
+    day_before = today - timedelta(days=2)
+
+    prompt = _PARSE_MESSAGE_PROMPT.format(
+        date_context = _today_context(),
+        today_iso    = today.isoformat(),
+        yesterday    = yesterday.isoformat(),
+        day_before   = day_before.isoformat(),
+    )
+
+    try:
+        chat = _client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user",   "content": texte},
+            ],
+            temperature=0.0,
+            max_tokens=1024,
+            stream=False,
+        )
+        raw = chat.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
+
+        result = json.loads(raw.strip())
+
+        intent = str(result.get("intent", "ACTION")).strip().upper()
+        if intent not in _INTENTS_VALIDES:
+            _logger.warning("[parse_message] intent inconnu '%s' → ACTION", intent)
+            intent = "ACTION"
+        result["intent"] = intent
+
+        # Garantir la présence des clés attendues
+        result.setdefault("culture", None)
+        result.setdefault("parcelle", None)
+        result.setdefault("action_filtre", None)
+        result.setdefault("items", None)
+
+        # items doit être une liste si présent
+        if result["items"] is not None and isinstance(result["items"], dict):
+            result["items"] = [result["items"]]
+
+        _logger.info("[parse_message] intent='%s' culture='%s' action_filtre='%s' items=%s",
+                     intent, result["culture"], result["action_filtre"],
+                     len(result["items"]) if result["items"] else 0)
+        return result
+
+    except Exception as e:
+        _logger.error("[parse_message] erreur → fallback ACTION : %s", e)
+        return {"intent": "ACTION", "culture": None, "parcelle": None,
+                "action_filtre": None, "items": None}
+
+
 def classify_intent_pwa(texte: str) -> str:
     """
     Classifie l'intention d'un message vocal (PWA).
