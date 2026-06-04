@@ -65,6 +65,7 @@ from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
 from utils.stock import calcul_stock_cultures, format_stock_ligne_telegram
 from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commentaire
 from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_culture_deplacer as _extract_culture_deplacer  # [US-007]
+from utils.cultures_icons import get_emoji_culture
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -1870,10 +1871,6 @@ async def _consulter_godets(update) -> None:
 # [US_Plan_occupation_parcelles / CA3] Seuils d'alerte par type d'organe (jours)
 SEUIL_ALERTE = {"végétatif": 45, "reproducteur": 90}
 
-# [US_Plan_occupation_parcelles] Emoji par type d'organe
-_EMOJI_ORGANE = {"reproducteur": "🍅", "végétatif": "🥬"}
-_EMOJI_INCONNU = "🌱"
-
 
 async def cmd_plan(update, ctx) -> None:
     """
@@ -1923,7 +1920,7 @@ async def cmd_plan(update, ctx) -> None:
             lignes = [f"📍 *{nom_affiche}* — Plan détaillé\n"]
             for c in sorted(cultures, key=lambda x: x["culture"]):
                 alerte = _alerte_recolte(c["type_organe"], c["age_jours"])
-                emoji = _EMOJI_ORGANE.get(c["type_organe"], _EMOJI_INCONNU)
+                emoji = get_emoji_culture(c["culture"], c["type_organe"])
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb = int(c["nb_plants"])
                 unite = c["unite"] or "plants"
@@ -1965,7 +1962,7 @@ async def cmd_plan(update, ctx) -> None:
             nb = len(cultures_liste)
             bloc.append(f"📍 *{nom_affiche}* · {nb} culture{'s' if nb > 1 else ''} active{'s' if nb > 1 else ''}")
             for c in sorted(cultures_liste, key=lambda x: x["culture"]):
-                emoji = _EMOJI_ORGANE.get(c["type_organe"], _EMOJI_INCONNU)
+                emoji = get_emoji_culture(c["culture"], c["type_organe"])
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb_plants = int(c["nb_plants"])
                 unite = c["unite"] or "plants"
@@ -2011,7 +2008,7 @@ async def cmd_plan(update, ctx) -> None:
             nb = len(sans_parcelle)
             lignes.append(f"📍 *Non localisé* · {nb} culture{'s' if nb > 1 else ''}")
             for c in sorted(sans_parcelle, key=lambda x: x["culture"]):
-                emoji = _EMOJI_ORGANE.get(c["type_organe"], _EMOJI_INCONNU)
+                emoji = get_emoji_culture(c["culture"], c["type_organe"])
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb_plants = int(c["nb_plants"])
                 unite = c["unite"] or "plants"
@@ -2371,7 +2368,7 @@ async def cmd_stats(update, ctx):
 
             # Emoji selon type_organe (plantation ou semis)
             type_organe = varietes[0]["type_organe"] if varietes else None
-            emoji = "🍅" if type_organe == "reproducteur" else "🥬"
+            emoji = get_emoji_culture(culture_arg, type_organe)
             culture_display = culture_arg.capitalize()
 
             lines_out = [f"{emoji} *{culture_display} — détail par variété*\n"]

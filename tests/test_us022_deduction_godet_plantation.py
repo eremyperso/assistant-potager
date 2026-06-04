@@ -208,6 +208,39 @@ def test_us022_ca6_plantation_sans_variete_ignoree_si_plusieurs_varietes(db):
     assert par_var["orange"]["stock_residuel_godet"] == 4
 
 
+# ── CA6 — Godet ET plantation sans variété → match direct (régression cornichon) ──
+
+def test_us022_ca6_godet_et_plantation_sans_variete(db):
+    """CA6 — Quand godet et plantation ont variete=None, la déduction doit être appliquée.
+
+    Régression : avant le fix, les plantations sans variété étaient ignorées
+    quand le godet était aussi sans variété (varietes_avec_godet vide → else → WARNING).
+    """
+    session, pid = db
+    _godet(session, pid, "cornichon", variete=None, nb_plants=10, nb_graines=30)
+    _plantation(session, pid, "cornichon", variete=None, quantite=6)
+
+    result = calcul_godets_par_culture(session, "cornichon")
+
+    assert len(result) == 1
+    g = result[0]
+    assert g["variete"] is None
+    assert g["nb_plants_godets"] == 10
+    assert g["nb_plantes"] == 6
+    assert g["stock_residuel_godet"] == 4
+
+
+def test_us022_ca6_godet_et_plantation_sans_variete_entierement_plante(db):
+    """CA6 — Godet et plantation sans variété, stock = 0 → absent de la liste (CA4)."""
+    session, pid = db
+    _godet(session, pid, "cornichon", variete=None, nb_plants=6, nb_graines=18)
+    _plantation(session, pid, "cornichon", variete=None, quantite=6)
+
+    result = calcul_godets_par_culture(session, "cornichon")
+
+    assert result == []
+
+
 # ── Stocke jamais négatif ─────────────────────────────────────────────────────
 
 def test_us022_stock_residuel_jamais_negatif(db):

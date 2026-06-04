@@ -691,11 +691,14 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
     )
     plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
 
-    # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique si une seule en godet
+    # [US-022 / CA6] Plantation sans variété → rattacher selon le contexte godet
     nb_plantes_sans_variete = plantations.pop(None, 0)
     if nb_plantes_sans_variete > 0:
         varietes_avec_godet = [r[0] for r in rows if r[0] is not None]
-        if len(varietes_avec_godet) == 1:
+        if len(varietes_avec_godet) == 0:
+            # Godet aussi sans variété → match direct (cas le plus courant)
+            plantations[None] = nb_plantes_sans_variete
+        elif len(varietes_avec_godet) == 1:
             v_unique = varietes_avec_godet[0]
             plantations[v_unique] = plantations.get(v_unique, 0) + nb_plantes_sans_variete
         else:
