@@ -92,8 +92,11 @@ jobs:
 
       - name: Restart systemd service
         run: |
-          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
-            "sudo systemctl restart potager-dev.service"
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            fuser -k 8001/tcp || true
+            sleep 1
+            sudo systemctl restart potager-dev.service
+          "
 
       - name: Smoke test
         id: smoke
