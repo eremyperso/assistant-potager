@@ -1,0 +1,19 @@
+[Unit]
+Description=Assistant Potager — DEV Bot Telegram
+After=network.target postgresql.service potager-dev.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/potager-dev
+EnvironmentFile=/opt/potager-dev/.env.dev
+Environment=APP_ENV=dev
+ExecStart=/opt/potager-dev/venv/bin/python bot.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

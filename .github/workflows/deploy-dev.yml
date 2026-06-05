@@ -57,12 +57,14 @@ jobs:
           rsync -az --delete frontend/dist/ \
             ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager-dev/frontend/dist/
 
-      - name: Install systemd service (si absent ou modifié)
+      - name: Install systemd services (API + Bot)
         run: |
           scp infra/potager-dev.service \
             ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-dev.service
+          scp infra/potager-dev-bot.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-dev-bot.service
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
-            "systemctl daemon-reload"
+            "systemctl daemon-reload && systemctl enable potager-dev-bot.service"
 
       - name: Setup PostgreSQL extensions
         run: |
@@ -90,12 +92,13 @@ jobs:
             done
           "
 
-      - name: Restart systemd service
+      - name: Restart systemd services (API + Bot)
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             fuser -k 8001/tcp || true
             sleep 1
             sudo systemctl restart potager-dev.service
+            sudo systemctl restart potager-dev-bot.service
           "
 
       - name: Smoke test
