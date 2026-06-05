@@ -1,4 +1,14 @@
 
+## [v3.2.0] — 2026-06-05
+
+### 🚀 Nouveautés
+- Ajoute la vue Stocks cultures complète : deux sections végétatif/reproducteur, résumé en 3 tuiles, filtre de recherche en temps réel (US-025)
+- Ajoute le graphe comparatif semis/récolte/perte (Recharts BarChart groupé, limité à 10 cultures) (US-025)
+
+### 🔧 Améliorations techniques
+- Ajoute 8 tests de contrat dans `tests/test_us025_stocks_frontend.py` couvrant CA1–CA6 (8/8 verts)
+- Ajoute les scénarios Gherkin manquants dans `backlog/US-025_stocks-cultures-frontend.md`
+
 ## [v3.1.0] — 2026-06-05
 
 ### 🚀 Nouveautés
