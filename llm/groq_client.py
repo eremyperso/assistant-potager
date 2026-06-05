@@ -31,18 +31,29 @@ def _today_context() -> str:
     )
 
 
-INTENT_PROMPT = """Tu es un assistant assistant potager spécialisé dans l'analyse de questions en langage naturel.
+INTENT_PROMPT = """Tu es un assistant potager spécialisé dans l'analyse de questions en langage naturel.
 Donne uniquement du JSON sans texte additionnel, sans guillemets, avec ces champs:
 {
   "action": "semis|plantation|arrosage|recolte|repiquage|traitement|desherbage|taille|paillage|observation|perte|null",
-  "culture": string|null,  # nom du légume au singulier minuscule, sinon null
-  "date_from": string|null  # date ISO ou null
+  "culture": string|null,
+  "date_from": string|null,
+  "query_type": "date|quantite|historique|stats"
 }
 
+Règles pour query_type :
+- "date"      : question sur QUAND un événement a eu lieu (mots-clés : quand, à quelle date, date de, dernière fois)
+- "quantite"  : question sur COMBIEN (mots-clés : combien, total, poids, kg, quantité)
+- "historique": liste des événements d'une culture ou période (mots-clés : historique, liste, voir mes, afficher)
+- "stats"     : classement ou bilan global sans culture précise (mots-clés : top, bilan, le plus, résumé)
+
 Exemples :
-"quels légumes ai-je le plus récoltés en kg ?" -> {"action":"recolte","culture":null,"date_from":null}
-"arrosage courgettes cette semaine" -> {"action":"arrosage","culture":"courgette","date_from":"2026-03-19"}
-"quand ai-je semé des carottes" -> {"action":"semis","culture":"carotte","date_from":null}
+"quels légumes ai-je le plus récoltés en kg ?" -> {"action":"recolte","culture":null,"date_from":null,"query_type":"stats"}
+"arrosage courgettes cette semaine" -> {"action":"arrosage","culture":"courgette","date_from":"2026-03-19","query_type":"historique"}
+"quand ai-je semé des carottes ?" -> {"action":"semis","culture":"carotte","date_from":null,"query_type":"date"}
+"à quelle date la plantation de butternut ?" -> {"action":"plantation","culture":"butternut","date_from":null,"query_type":"date"}
+"dernière récolte de blette ?" -> {"action":"recolte","culture":"blette","date_from":null,"query_type":"date"}
+"combien de tomates ai-je récolté ?" -> {"action":"recolte","culture":"tomate","date_from":null,"query_type":"quantite"}
+"mes récoltes de blette ce mois-ci" -> {"action":"recolte","culture":"blette","date_from":null,"query_type":"historique"}
 """ 
 
 

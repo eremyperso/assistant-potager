@@ -71,14 +71,19 @@ class QueryAgent:
 
         Args:
             question: Question utilisateur (pour le fallback message)
-            intent: {"action": ..., "culture": ..., "date_from": ...}
+            intent: {"action": ..., "culture": ..., "date_from": ..., "query_type": ...}
         Returns:
             Réponse texte prête à afficher
         """
-        action = intent.get("action")
-        culture = intent.get("culture")
+        action     = intent.get("action")
+        culture    = intent.get("culture")
+        query_type = intent.get("query_type", "quantite")
 
         if culture and action:
+            if query_type == "date":
+                return self._answer_date(action, culture)
+            if query_type == "historique":
+                return self._answer_history_culture(culture, action)
             return self._answer_quantity(action, culture)
 
         if culture and not action:
@@ -105,22 +110,54 @@ class QueryAgent:
         total_str = _aggregate([(r.unite, r.total) for r in rows])
         return f"Total {culture} {action} : {total_str}"
 
-    def _answer_history_culture(self, culture: str) -> str:
-        """Répond à : "Historique de [culture]"."""
+    def _answer_date(self, action: str, culture: str) -> str:
+        """Répond à : "À quelle date ai-je [action] de [culture] ?"."""
         events = (
             self.db.query(Evenement)
-            .filter(Evenement.culture == culture)
+            .filter(
+                Evenement.type_action == action,
+                Evenement.culture == culture,
+            )
             .order_by(Evenement.date.desc())
             .limit(5)
             .all()
         )
         if not events:
-            return f"Aucun événement enregistré pour {culture}."
+            return f"Aucune {action} de {culture} enregistrée."
 
-        lines = [f"Historique {culture} (5 derniers) :"]
+        if len(events) == 1:
+            e = events[0]
+            date_str = e.date.strftime("%d/%m/%Y") if e.date else "?"
+            variete_str = f" ({e.variete})" if e.variete else ""
+            qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
+            return f"{action.capitalize()} de {culture}{variete_str} : le {date_str}{qte_str}"
+
+        lines = [f"{action.capitalize()} de {culture} ({len(events)} entrées) :"]
         for e in events:
             date_str = e.date.strftime("%d/%m/%Y") if e.date else "?"
-            lines.append(f"  • {e.type_action} ({date_str})")
+            variete_str = f" {e.variete}" if e.variete else ""
+            qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
+            lines.append(f"  • {date_str}{variete_str}{qte_str}")
+        return "\n".join(lines)
+
+    def _answer_history_culture(self, culture: str, action: str | None = None) -> str:
+        """Répond à : "Historique de [culture]" ou "Mes [action] de [culture]"."""
+        q = self.db.query(Evenement).filter(Evenement.culture == culture)
+        if action:
+            q = q.filter(Evenement.type_action == action)
+        events = q.order_by(Evenement.date.desc()).limit(5).all()
+
+        if not events:
+            label = f"{action} de {culture}" if action else culture
+            return f"Aucun événement enregistré pour {label}."
+
+        label = f"{action} de {culture}" if action else culture
+        lines = [f"Historique {label} (5 derniers) :"]
+        for e in events:
+            date_str = e.date.strftime("%d/%m/%Y") if e.date else "?"
+            variete_str = f" {e.variete}" if e.variete else ""
+            qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
+            lines.append(f"  • {date_str}{variete_str} {e.type_action}{qte_str}")
         return "\n".join(lines)
 
     def _answer_action_stats(self, action: str) -> str:
