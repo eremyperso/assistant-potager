@@ -32,7 +32,7 @@ jobs:
             git pull origin dev
           "
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
@@ -44,6 +44,25 @@ jobs:
             venv/bin/pip install --quiet --upgrade pip
             venv/bin/pip install --quiet -r requirements.txt
           "
+
+      - name: Build frontend React
+        run: |
+          cd frontend
+          echo "VITE_API_URL=http://${{ secrets.SCALEWAY_HOST }}:8001" > .env.local
+          npm ci --prefer-offline
+          npm run build
+
+      - name: Deploy frontend dist to server
+        run: |
+          rsync -az --delete frontend/dist/ \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager-dev/frontend/dist/
+
+      - name: Install systemd service (si absent ou modifié)
+        run: |
+          scp infra/potager-dev.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-dev.service
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
+            "systemctl daemon-reload"
 
       - name: Setup PostgreSQL extensions
         run: |

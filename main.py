@@ -73,13 +73,28 @@ _MIME_EXT: dict[str, str] = {
     "audio/aac"  : ".aac",
 }
 
-# ── Fichiers statiques PWA ─────────────────────────────────────────────────────
-if os.path.isdir("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+# ── Frontend React (prioritaire) ou PWA fallback ──────────────────────────────
+_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
+_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-    @app.get("/")
+if os.path.isdir(_DIST):
+    # Dashboard React buildé — servi en priorité
+    _DIST_ASSETS = os.path.join(_DIST, "assets")
+    if os.path.isdir(_DIST_ASSETS):
+        app.mount("/assets", StaticFiles(directory=_DIST_ASSETS), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    def serve_frontend():
+        """Sert le dashboard React (frontend/dist/index.html)."""
+        return FileResponse(os.path.join(_DIST, "index.html"))
+
+elif os.path.isdir(_STATIC):
+    # Fallback : ancienne PWA si le dist React n'est pas buildé
+    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+
+    @app.get("/", include_in_schema=False)
     def serve_pwa():
-        return FileResponse("static/index.html")
+        return FileResponse(os.path.join(_STATIC, "index.html"))
 
 
 # ── Modèle de requête ──────────────────────────────────────────────────────────
