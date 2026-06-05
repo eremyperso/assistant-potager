@@ -49,7 +49,7 @@ jobs:
         run: |
           cd frontend
           echo "VITE_API_URL=http://${{ secrets.SCALEWAY_HOST }}:8001" > .env.local
-          npm ci --prefer-offline
+          npm install
           npm run build
 
       - name: Deploy frontend dist to server
