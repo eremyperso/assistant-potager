@@ -1,4 +1,14 @@
 
+## [v3.1.0] — 2026-06-05
+
+### 🚀 Nouveautés
+- Ajoute la vue Plan du dashboard : carte par parcelle avec cultures, badges végétatif/reproducteur, barre d'occupation (US-024)
+- Ajoute l'endpoint `GET /plan` sur FastAPI : liste parcelles actives + cultures en cours + occupation_pct
+
+### 🔧 Améliorations techniques
+- Ajoute `api.plan()` dans le client API frontend
+- Ajoute 8 tests contrat `tests/test_us024_plan_frontend.py` couvrant CA1–CA6 + edge (8/8 verts)
+
 ## [v3.0.0] — 2026-06-05
 
 ### 🚀 Nouveautés

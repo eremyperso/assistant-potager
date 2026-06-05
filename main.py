@@ -468,6 +468,51 @@ def stats():
         db.close()
 
 
+@app.get("/plan")
+def get_plan():
+    """
+    [US-024] Plan d'occupation des parcelles pour le dashboard frontend.
+
+    Retourne la liste des parcelles actives avec leurs cultures en cours.
+    Les parcelles sans culture sont incluses avec cultures=[].
+    """
+    from utils.parcelles import calcul_occupation_parcelles, get_all_parcelles
+
+    db = SessionLocal()
+    try:
+        parcelles     = get_all_parcelles(db)
+        occupation    = calcul_occupation_parcelles(db)
+
+        result = []
+        for p in parcelles:
+            cultures_raw = occupation.get(p.nom, [])
+            cultures = [
+                {
+                    "culture":    c.get("culture", ""),
+                    "variete":    c.get("variete"),
+                    "nb_plants":  int(c.get("nb_plants") or 0),
+                    "type_organe": c.get("type_organe"),
+                }
+                for c in cultures_raw
+            ]
+            nb_cultures = len(cultures)
+            occupation_pct = None
+            if p.superficie_m2 and nb_cultures:
+                occupation_pct = min(100, round(nb_cultures / max(p.superficie_m2, 1) * 100))
+
+            result.append({
+                "nom":           p.nom,
+                "exposition":    p.exposition,
+                "superficie_m2": p.superficie_m2,
+                "cultures":      cultures,
+                "occupation_pct": occupation_pct,
+            })
+
+        return {"parcelles": result, "total": len(result)}
+    finally:
+        db.close()
+
+
 @app.get("/godets")
 def get_godets():
     """

@@ -20,6 +20,7 @@ async function get(path) {
 
 export const api = {
   health:     () => get('/health'),
+  plan:       () => get('/plan'),
   stats:      () => get('/stats'),
   godets:     () => get('/godets'),
   cultures:   () => get('/cultures'),
