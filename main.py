@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 # ── Version [US-008] ────────────────────────────────────────────────────────────
 def _lire_version() -> str:
@@ -575,18 +576,26 @@ def get_godets():
 
 @app.get("/historique")
 def historique(
-    limit   : int = Query(default=20, le=100),
-    action  : str = Query(default=None),
-    culture : str = Query(default=None),
-    parcelle: str = Query(default=None),
+    limit     : int = Query(default=20, le=100),
+    offset    : int = Query(default=0, ge=0),
+    action    : str = Query(default=None),
+    culture   : str = Query(default=None),
+    parcelle  : str = Query(default=None),
+    from_date : str = Query(default=None, alias="from"),
+    to_date   : str = Query(default=None, alias="to"),
 ):
     """
-    Retourne les derniers événements avec filtres optionnels.
-    Ex: /historique?culture=tomate&action=recolte
+    [US-027] Retourne les événements paginés avec filtres optionnels.
+    Ex: /historique?culture=tomate&action=recolte&from=2026-05-01&to=2026-05-31&offset=20
+    Retourne : { total: int, evenements: [...] }
     """
     db = SessionLocal()
     try:
-        q = db.query(Evenement).order_by(Evenement.date.desc())
+        q = (
+            db.query(Evenement)
+            .options(joinedload(Evenement.parcelle_rel))
+            .order_by(Evenement.date.desc())
+        )
         if action:
             q = q.filter(Evenement.type_action == action)
         if culture:
@@ -595,23 +604,30 @@ def historique(
             q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
                 Parcelle.nom.ilike(f"%{parcelle}%")
             )
+        if from_date:
+            q = q.filter(Evenement.date >= from_date)
+        if to_date:
+            q = q.filter(Evenement.date <= to_date + " 23:59:59")
 
-        events = q.limit(limit).all()
-        return [
-            {
-                "id"        : e.id,
-                "date"      : str(e.date)[:10] if e.date else None,
-                "action"    : e.type_action,
-                "culture"   : e.culture,
-                "variete"   : e.variete,
-                "quantite"  : e.quantite,
-                "unite"     : e.unite,
-                "parcelle"  : e.parcelle,
-                "traitement": e.traitement,
-                "texte"     : e.texte_original,
-            }
-            for e in events
-        ]
+        total  = q.count()
+        events = q.offset(offset).limit(limit).all()
+        return {
+            "total": total,
+            "evenements": [
+                {
+                    "id"         : e.id,
+                    "date"       : str(e.date)[:10] if e.date else None,
+                    "type_action": e.type_action,
+                    "culture"    : e.culture,
+                    "variete"    : e.variete,
+                    "quantite"   : e.quantite,
+                    "unite"      : e.unite,
+                    "parcelle"   : e.parcelle,
+                    "traitement" : e.traitement,
+                }
+                for e in events
+            ],
+        }
     finally:
         db.close()
 

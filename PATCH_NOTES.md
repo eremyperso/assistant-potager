@@ -1,4 +1,15 @@
 
+## [v3.3.0] — 2026-06-05
+
+### 🚀 Nouveautés
+- Ajoute la vue Historique complète : chips filtres action défilants, filtre texte culture, sélecteur période from/to, pagination chevrons (US-027)
+- Enrichit `GET /historique` : pagination offset/limit, filtres from/to date, format `{total, evenements}` avec `type_action` (US-027)
+
+### 🔧 Améliorations techniques
+- Ajoute `joinedload(Evenement.parcelle_rel)` sur `/historique` pour éviter N+1 queries
+- Ajoute 9 tests de contrat dans `tests/test_us027_historique_frontend.py` couvrant CA1–CA7 (9/9 verts)
+- Ajoute les scénarios Gherkin dans `backlog/US-027_historique-evenements-frontend.md`
+
 ## [v3.2.0] — 2026-06-05
 
 ### 🚀 Nouveautés
