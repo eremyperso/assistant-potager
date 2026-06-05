@@ -1,4 +1,20 @@
 
+## [v3.0.0] — 2026-06-05
+
+### 🚀 Nouveautés
+- Ajoute le dashboard frontend React/Vite — 5 vues (Plan, Stocks, Pépinière, Historique, Stats) accessibles depuis le navigateur sans passer par Telegram (US-023)
+- Ajoute le client API centralisé `frontend/src/lib/api.js` — tous les appels FastAPI configurables via `VITE_API_URL` (dev via tunnel SSH, prod via domaine)
+- Ajoute le middleware CORS sur FastAPI — autorise les origines Netlify et dev local Vite (localhost:3000, localhost:5173)
+
+### 🔧 Améliorations techniques
+- Crée le socle frontend : Vite + React 18 + Tailwind CSS + Lucide React + Recharts
+- Ajoute les composants génériques `LoadingSkeleton` et `ApiError` réutilisables dans toutes les vues
+- Ajoute la bottom tab bar mobile-first (5 onglets, couleur #1D9E75) et le toggle dark/light persisté en localStorage
+- Ajoute 8 tests de contrat API dans `tests/test_us023_frontend_api.py` couvrant CA1–CA6 + edge
+
+### ⚠️ Breaking changes
+- Incrémente la version en MAJOR (2.x → 3.0) : ajout d'un frontend complet constitue une évolution majeure du produit
+
 ## [v2.27.0] — 2026-06-04
 
 ### 🚀 Nouveautés

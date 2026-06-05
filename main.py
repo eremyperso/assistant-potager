@@ -17,6 +17,7 @@ from datetime import date
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func
 
@@ -43,6 +44,18 @@ from llm.rag import add_to_rag
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
 Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
+
+# ── CORS — autorise le frontend Netlify + dev local ────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",        # dev React local
+        "http://localhost:5173",        # dev Vite local
+        "https://*.netlify.app",        # frontend Netlify (prod)
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
