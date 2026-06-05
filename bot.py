@@ -2970,14 +2970,16 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
 
     # Si event_id déjà défini (un seul candidat) → action directe
     event_id = ctx.user_data.get('corr_event_id')
+    just_selected_from_list = False  # True si on vient d'extraire l'id depuis une liste
 
-    # Sinon extraire le numéro
+    # Sinon extraire le numéro depuis la liste de candidats
     if not event_id:
         try:
             num = int(t) - 1
             candidates = ctx.user_data.get('corr_candidates', [])
             event_id = candidates[num]
             ctx.user_data['corr_event_id'] = event_id
+            just_selected_from_list = True  # ne pas auto-forwarder le "2" à corr_apply
         except (ValueError, IndexError):
             await update.message.reply_text("❓ Tapez le numéro affiché (1, 2, 3...).")
             return
@@ -3033,9 +3035,9 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
         await _corr_apply(update, ctx, texte)
         return
 
-    # Si l'event est déjà sélectionné et que le texte n'est pas un mot-clé nav,
-    # on l'envoie directement à corr_apply (évite la boucle "Que souhaitez-vous faire ?")
-    if ctx.user_data.get('corr_event_id'):
+    # Si l'event était déjà sélectionné AVANT cet appel (pas juste extrait d'une liste),
+    # et que le texte décrit une correction → forwarder directement à corr_apply
+    if ctx.user_data.get('corr_event_id') and not just_selected_from_list:
         log.info(f"⚡ CORRECTION DIRECTE (event déjà sélectionné) : texte '{texte}' → corr_apply")
         ctx.user_data['mode'] = 'corr_apply'
         await _corr_apply(update, ctx, texte)

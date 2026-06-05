@@ -146,6 +146,18 @@ def resolve_parcelle(db: Session, nom: str) -> Optional[Parcelle]:
             f"{nom!r} → {proche.nom!r} (distance Levenshtein ≤ 2)"
         )
         return proche
+
+    # Correspondance par sous-chaîne : "planchecentrale" contient "centrale"
+    # Couvre les cas où l'utilisateur préfixe le nom ("planche-centrale" → "CENTRALE")
+    parcelles_actives = db.query(Parcelle).filter(Parcelle.actif == True).all()
+    for p in parcelles_actives:
+        p_norm = p.nom_normalise
+        if p_norm and (p_norm in nom_normalise or nom_normalise in p_norm):
+            log.warning(
+                f"[resolve_parcelle] Correspondance sous-chaîne : "
+                f"{nom!r} → {p.nom!r}"
+            )
+            return p
     return None
 
 
