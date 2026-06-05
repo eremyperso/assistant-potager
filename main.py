@@ -483,6 +483,12 @@ def get_plan():
         parcelles     = get_all_parcelles(db)
         occupation    = calcul_occupation_parcelles(db)
 
+        # Index surface_m2 par nom de culture (insensible à la casse)
+        configs = db.query(CultureConfig).all()
+        surface_par_culture = {
+            c.nom.lower(): (c.surface_m2 or 0.0) for c in configs
+        }
+
         result = []
         for p in parcelles:
             cultures_raw = occupation.get(p.nom, [])
@@ -491,14 +497,24 @@ def get_plan():
                     "culture":    c.get("culture", ""),
                     "variete":    c.get("variete"),
                     "nb_plants":  int(c.get("nb_plants") or 0),
-                    "type_organe": c.get("type_organe"),
+                    "type_organe": c.get("type_organe") or "végétatif",
+                    "surface_m2_par_plant": surface_par_culture.get(
+                        (c.get("culture") or "").lower(), None
+                    ),
                 }
                 for c in cultures_raw
             ]
-            nb_cultures = len(cultures)
+
+            # Calcul occupation réel : Σ(nb_plants × surface_m2) / superficie_parcelle
             occupation_pct = None
-            if p.superficie_m2 and nb_cultures:
-                occupation_pct = min(100, round(nb_cultures / max(p.superficie_m2, 1) * 100))
+            if p.superficie_m2:
+                surface_utilisee = sum(
+                    c["nb_plants"] * c["surface_m2_par_plant"]
+                    for c in cultures
+                    if c["surface_m2_par_plant"]
+                )
+                if surface_utilisee > 0:
+                    occupation_pct = min(100, round(surface_utilisee / p.superficie_m2 * 100))
 
             result.append({
                 "nom":           p.nom,

@@ -77,6 +77,8 @@ class CultureConfig(Base):
     nom                     = Column(String, unique=True, index=True, nullable=False)
     type_organe_recolte     = Column(String, nullable=False)   # "végétatif" | "reproducteur"
     description_agronomique = Column(String)
+    espacement              = Column(String, nullable=True)    # ex: "30 × 40 cm"
+    surface_m2              = Column(Float,  nullable=True)    # surface au sol par plant en m²
 
 
 class Parcelle(Base):

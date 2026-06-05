@@ -24,10 +24,11 @@ function ExpositionIcon({ exposition }) {
 }
 
 function Badge({ type }) {
-  const cls = BADGE[type] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+  if (!type) return null
+  const cls = BADGE[type] || 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
   return (
     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${cls}`}>
-      {type || 'libre'}
+      {type}
     </span>
   )
 }
