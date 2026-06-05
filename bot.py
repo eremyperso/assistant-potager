@@ -3371,10 +3371,13 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
         )
         return
 
+    from unidecode import unidecode
     culture = culture.strip().lower()
+    culture_norm = unidecode(culture)  # supprime accents pour la comparaison
+
     db = SessionLocal()
     try:
-        # Chercher les plantations de cette culture
+        # Essai 1 : correspondance exacte (insensible casse)
         rows = (
             db.query(Evenement)
             .filter(
@@ -3383,12 +3386,27 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
             )
             .all()
         )
+        # Essai 2 : correspondance partielle (gère typos, accents, pluriel)
+        if not rows:
+            rows = (
+                db.query(Evenement)
+                .filter(
+                    Evenement.type_action == "plantation",
+                    func.lower(Evenement.culture).ilike(f"%{culture_norm[:6]}%"),
+                )
+                .all()
+            )
+            if rows:
+                # Utiliser le nom exact stocké en base pour la suite du flux
+                culture = rows[0].culture.lower()
+                log.info(f"[US-007] Culture corrigée : '{culture}' trouvée via recherche partielle")
     finally:
         db.close()
 
     if not rows:
         await update.message.reply_text(
-            f"❌ Aucune plantation de *{culture}* trouvée en base.",
+            f"❌ Aucune plantation de *{culture}* trouvée en base.\n\n"
+            f"_Vérifiez le nom avec /stats_",
             parse_mode="Markdown",
             reply_markup=MENU_KEYBOARD,
         )
