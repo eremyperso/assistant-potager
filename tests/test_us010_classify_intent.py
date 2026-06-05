@@ -154,3 +154,34 @@ def test_us010_intent_inconnu_fallback_action():
     """Intent non reconnu dans INTENTS → fallback ACTION."""
     result = _classify("blabla incomprehensible", "INCONNU_XYZ")
     assert result == "ACTION"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Régression — phrases avec nom de culture sans verbe passé → INTERROGER
+# (cas rencontrés en production le 2026-06-05)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_us010_regression_mes_recoltes_blette_interroger():
+    """Régression : 'mes récoltes de blette' (pronom possessif) → INTERROGER, jamais ACTION."""
+    result = _classify("mes récoltes de blette", "INTERROGER")
+    assert result == "INTERROGER"
+
+
+def test_us010_regression_recolte_nom_ce_mois_interroger():
+    """Régression : 'récolte de blette ce mois-ci' (nom, pas verbe passé) → INTERROGER."""
+    result = _classify("récolte de blette ce mois-ci", "INTERROGER")
+    assert result == "INTERROGER"
+
+
+def test_us010_regression_derniere_recolte_interroger():
+    """Régression : 'dernière récolte de blette' (consultation historique) → INTERROGER."""
+    result = _classify("dernière récolte de blette ?", "INTERROGER")
+    assert result == "INTERROGER"
+
+
+def test_us010_regression_recolte_nom_vs_recolte_verbe():
+    """Régression : distinguer 'récolté' (action passée) de 'récolte' (nom/consultation)."""
+    result_action = _classify("récolté 3 blettes hier", "ACTION")
+    result_interroger = _classify("récolte de blette du mois dernier", "INTERROGER")
+    assert result_action == "ACTION"
+    assert result_interroger == "INTERROGER"

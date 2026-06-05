@@ -801,6 +801,7 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
 
 ❓ INTERROGER  : pose une QUESTION ou demande d'AFFICHER/MONTRER des données
   MOTS-CLÉS : combien, quand, quel, affiche, afficher, montre, montrer, voir, liste, consulter, détail, detail, historique de, date de
+  PRONOMS DE POSSESSION : "mes X", "mon X", "ma X", "les X de", "la X de" → INTERROGER car l'utilisateur demande à VOIR ses données
   Exemples :
     ✅ "Combien de kg de tomates ai-je récolté cette saison ?"
     ✅ "Quand ai-je planté mes courgettes ?"
@@ -818,6 +819,12 @@ CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
     ✅ "Quels légumes ai-je arrosés cette semaine ?"
     ✅ "Détail des récoltes de courgettes"
     ✅ "Donne-moi les infos sur mes tomates"
+    ✅ "mes récoltes de blette" (pronom possessif → c'est une INTERROGATION)
+    ✅ "mes plantations de ce mois" (pronom possessif → INTERROGATION)
+    ✅ "récolte de blette ce mois-ci" ("récolte" est un NOM ici, pas un verbe → INTERROGATION)
+    ✅ "dernière récolte de blette" ("dernière" indique une consultation → INTERROGATION)
+    ✅ "dernière plantation de tomates ?" (demande d'info → INTERROGATION)
+    ✅ "semis de radis cette semaine" ("semis" est un NOM → INTERROGATION si pas de verbe d'action)
     ❌ "J'ai récolté 2 kg de tomates" (c'est une ACTION, pas une INTERROGATION)
     ❌ "Semé des carottes hier" (c'est une ACTION)
 
@@ -870,8 +877,19 @@ Si le message contient "affiche", "afficher", "montre", "montrer", "voir", "list
 → c'est INTERROGER ou HISTORIQUE, JAMAIS ACTION (même sans "?" en fin de phrase).
 
 RÈGLE IMPORTANTE #2 :
-Si le message COMMENCE par un verbe d'action au passé (récolté, semé, planté, arrosé, paillé, traité...)
+Si le message COMMENCE par un verbe d'action au PASSÉ COMPOSÉ (récolté, semé, planté, arrosé, paillé, traité...)
 ET SANS "?" → c'est ACTION, jamais INTERROGER.
+ATTENTION : "récolte" (sans accent final, forme nominale) ≠ "récolté" (participe passé).
+"récolte de blette" = NOM → INTERROGER. "récolté des blettes" = VERBE PASSÉ → ACTION.
+
+RÈGLE IMPORTANTE #3 :
+Si le message COMMENCE par un pronom possessif (mes, mon, ma, les, nos, leurs, des...)
+suivi d'un nom de culture ou d'action → c'est INTERROGER (l'utilisateur consulte ses données).
+Exemples : "mes récoltes de blette" → INTERROGER, "mes plantations" → INTERROGER.
+
+RÈGLE IMPORTANTE #4 :
+Si le message contient "dernière", "dernier", "première", "premier", "ce mois-ci", "cette semaine"
+SANS verbe d'action au passé → c'est INTERROGER (consultation de données existantes).
 
 Message utilisateur : "{texte}"
 

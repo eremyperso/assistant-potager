@@ -210,3 +210,25 @@ Tous les docs sont dans `docs/` :
 | `tests/test_validation.py` | CRÉER | Tests unitaires validation |
 
 > Lire `docs/PLAN_IMPLEMENTATION_20h.md` section du jour avant de coder — le code exact y est, zéro ambiguïté.
+
+## Base de données — Serveur Scaleway
+
+PostgreSQL hébergé sur un VPS Scaleway. Deux bases en production :
+
+| Base | Owner | Usage |
+|------|-------|-------|
+| `potager_dev` | `potager_user` | Environnement de développement |
+| `potager_prod` | `potager_user` | Environnement de production |
+
+### Accès local via tunnel SSH
+
+```powershell
+# Ouvrir le tunnel (laisser tourner)
+ssh -L 5433:localhost:5432 root@<IP_SERVEUR> -N
+```
+
+Puis dans pgAdmin (ou tout client PostgreSQL) :
+- Host : `localhost`
+- Port : `5433`
+- Username : `potager_user`
+- DB dev : `potager_dev` / DB prod : `potager_prod`
