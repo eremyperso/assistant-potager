@@ -92,9 +92,10 @@ def extract_intent(question: str) -> dict:
 
     # normalisation des clés
     return {
-        "action": parsed.get("action"),
-        "culture": parsed.get("culture"),
-        "date_from": parsed.get("date_from"),
+        "action":     parsed.get("action"),
+        "culture":    parsed.get("culture"),
+        "date_from":  parsed.get("date_from"),
+        "query_type": parsed.get("query_type", "quantite"),
     }
 
 # ─────────────────────────────────────────────────────────────────────────────

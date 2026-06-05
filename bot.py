@@ -698,11 +698,12 @@ QUESTION_STARTERS = (
     "combien", "quand", "quel", "quelle", "quels", "quelles",
     "est-ce", "depuis", "total", "bilan de", "liste des",
     "montre", "donne", "rappelle", "résume", "résumé de",
-    "quelle quantité", "quelle date", "à quelle",
+    "quelle quantité", "quelle date", "à quelle", "a quelle",
     "date des", "dates des", "date de", "dates de",
     "liste de", "liste des", "historique de", "historique des",
     "dernière", "dernier", "derniers", "dernières",
     "quelles cultures", "quel traitement", "quels traitements",
+    "mes récoltes", "mes semis", "mes plantations", "mes arrosages",
 )
 
 # Verbes d'action potager — ne jamais les traiter comme des questions
