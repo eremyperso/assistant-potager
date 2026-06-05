@@ -7,9 +7,56 @@ Stratégie :
   3. Formater la réponse en texte simple
 """
 
+from collections import defaultdict
 from sqlalchemy import func
 from database.db import SessionLocal
 from database.models import Evenement
+
+# ─── Conversion d'unités ───────────────────────────────────────────────────────
+
+_WEIGHT_TO_G: dict[str, float] = {
+    "g": 1, "gr": 1, "gramme": 1, "grammes": 1,
+    "kg": 1000, "kilo": 1000, "kilos": 1000,
+}
+_VOLUME_TO_ML: dict[str, float] = {
+    "ml": 1, "cl": 10, "dl": 100,
+    "l": 1000, "litre": 1000, "litres": 1000,
+}
+
+
+def _fmt_poids(g: float) -> str:
+    return f"{g / 1000:g} kg" if g >= 1000 else f"{g:g} g"
+
+
+def _fmt_volume(ml: float) -> str:
+    return f"{ml / 1000:g} L" if ml >= 1000 else f"{ml:g} ml"
+
+
+def _aggregate(pairs: list[tuple[str | None, float]]) -> str:
+    """Convertit et agrège des (unite, quantite), retourne une chaîne formatée."""
+    weight_g = 0.0
+    volume_ml = 0.0
+    other: dict[str, float] = defaultdict(float)
+
+    for unite, total in pairs:
+        if total is None:
+            continue
+        u = (unite or "").strip().lower()
+        if u in _WEIGHT_TO_G:
+            weight_g += total * _WEIGHT_TO_G[u]
+        elif u in _VOLUME_TO_ML:
+            volume_ml += total * _VOLUME_TO_ML[u]
+        else:
+            other[unite or ""] += total
+
+    parts = []
+    if weight_g:
+        parts.append(_fmt_poids(weight_g))
+    if volume_ml:
+        parts.append(_fmt_volume(volume_ml))
+    for unite, total in other.items():
+        parts.append(f"{total:g} {unite}".strip())
+    return " + ".join(parts) if parts else "0"
 
 
 class QueryAgent:
@@ -55,12 +102,7 @@ class QueryAgent:
         if not rows or all(r.total is None for r in rows):
             return f"Aucune donnée enregistrée pour {culture} / {action}."
 
-        parts = []
-        for unite, total in rows:
-            if total is not None:
-                unite_str = f" {unite}" if unite else ""
-                parts.append(f"{total:g}{unite_str}")
-        total_str = " + ".join(parts)
+        total_str = _aggregate([(r.unite, r.total) for r in rows])
         return f"Total {culture} {action} : {total_str}"
 
     def _answer_history_culture(self, culture: str) -> str:
@@ -99,19 +141,19 @@ class QueryAgent:
         if not rows:
             return f"Aucun événement de type {action} enregistré."
 
-        # Regroupe les lignes par culture (une culture peut avoir plusieurs unités)
-        from collections import defaultdict
-        par_culture: dict[str, list[str]] = defaultdict(list)
+        # Regroupe par culture, agrège les unités avec conversion
+        pairs_by_culture: dict[str, list[tuple]] = defaultdict(list)
+        nb_by_culture: dict[str, int] = defaultdict(int)
         for culture, unite, nb, total in rows:
-            if total:
-                unite_str = f" {unite}" if unite else ""
-                par_culture[culture or "?"].append(f"{total:g}{unite_str}")
-            else:
-                par_culture[culture or "?"].append(f"{nb} fois")
+            key = culture or "?"
+            pairs_by_culture[key].append((unite, total))
+            nb_by_culture[key] += nb
 
         lines = [f"Top cultures — {action} :"]
-        for culture, parts in par_culture.items():
-            lines.append(f"  • {culture} : {' + '.join(parts)}")
+        for culture, pairs in pairs_by_culture.items():
+            has_qty = any(total for _, total in pairs)
+            qte_str = _aggregate(pairs) if has_qty else f"{nb_by_culture[culture]} fois"
+            lines.append(f"  • {culture} : {qte_str}")
         return "\n".join(lines)
 
 

@@ -147,6 +147,59 @@ def test_us012_edge_action_seule_sans_culture(agent):
     assert "courgette" in reponse.lower()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Conversion d'unités — _aggregate()
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_us012_conversion_g_et_kg_fusionne_en_kg():
+    """500 g + 1 kg → 1.5 kg (fusion, pas '500 g + 1 kg')."""
+    from llm.sql_agent import _aggregate
+    result = _aggregate([("g", 500.0), ("kg", 1.0)])
+    assert result == "1.5 kg"
+
+
+def test_us012_conversion_g_seul_reste_en_g():
+    """800 g reste affiché en g (pas de conversion si < 1000 g)."""
+    from llm.sql_agent import _aggregate
+    result = _aggregate([("g", 800.0)])
+    assert result == "800 g"
+
+
+def test_us012_conversion_g_depasse_1000_passe_en_kg():
+    """1200 g → 1.2 kg."""
+    from llm.sql_agent import _aggregate
+    result = _aggregate([("g", 1200.0)])
+    assert result == "1.2 kg"
+
+
+def test_us012_conversion_ml_et_cl_fusionne_en_l():
+    """500 ml + 50 cl (=500 ml) → 1 L."""
+    from llm.sql_agent import _aggregate
+    result = _aggregate([("ml", 500.0), ("cl", 50.0)])
+    assert result == "1 L"
+
+
+def test_us012_conversion_unites_mixtes_non_converties_separees():
+    """'graines' et 'plants' restent séparés (pas de conversion)."""
+    from llm.sql_agent import _aggregate
+    result = _aggregate([("graines", 50.0), ("plants", 10.0)])
+    assert "50 graines" in result
+    assert "10 plants" in result
+
+
+def test_us012_conversion_en_base_total_kg_mixte(db_session):
+    """Récolte avec g et kg en base → total converti en kg."""
+    from datetime import datetime
+    db_session.add(Evenement(type_action="recolte", culture="fraise",
+                             quantite=500.0, unite="g", date=datetime(2026, 5, 1)))
+    db_session.add(Evenement(type_action="recolte", culture="fraise",
+                             quantite=1.0, unite="kg", date=datetime(2026, 5, 2)))
+    db_session.commit()
+    agent = QueryAgent(db_session)
+    reponse = agent.answer("Total fraise ?", {"action": "recolte", "culture": "fraise"})
+    assert "1.5 kg" in reponse
+
+
 def test_us012_edge_extract_intent_query_json_invalide():
     """Edge : Groq retourne du JSON invalide → fallback dict vide sans crash."""
     mock_client = MagicMock()
