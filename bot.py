@@ -1363,6 +1363,26 @@ async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
 
 # ── [US-021] CONFIRMATION AVANT ENREGISTREMENT ──────────────────────────────────
 
+# Actions qui créent la présence d'une culture (source) → liste complète des parcelles
+_ACTIONS_SOURCE = {"plantation", "semis", "mise_en_godet"}
+
+
+def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
+    """Retourne les parcelles distinctes où cette culture a été plantée."""
+    q = (
+        db.query(Parcelle)
+        .join(Evenement, Evenement.parcelle_id == Parcelle.id)
+        .filter(
+            Parcelle.actif == True,
+            Evenement.type_action == "plantation",
+            Evenement.culture == culture,
+        )
+    )
+    if variete:
+        q = q.filter(Evenement.variete == variete)
+    return q.distinct().all()
+
+
 def _build_action_summary(items: list[dict]) -> str:
     """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
     if len(items) == 1:
@@ -1667,29 +1687,62 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     user_id = update.effective_user.id
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
 
-    # [CA8/CA11] Parcelle absente sur action simple → proposer menu de sélection
+    # [CA8/CA11] Parcelle absente sur action simple → sélection intelligente
     if len(items) == 1 and not items[0].get("parcelle"):
+        action_type = items[0].get("type_action") or items[0].get("action") or ""
+        culture     = items[0].get("culture") or ""
+        variete     = items[0].get("variete") or None
+
         db_tmp = SessionLocal()
         try:
-            parcelles_actives = get_all_parcelles(db_tmp)
+            if action_type not in _ACTIONS_SOURCE and culture:
+                # Actions sur culture déjà en place → chercher les parcelles où elle a été plantée
+                parcelles_culture = _get_parcelles_avec_culture(db_tmp, culture, variete)
+            else:
+                parcelles_culture = []
+
+            if parcelles_culture and len(parcelles_culture) == 1:
+                # Une seule parcelle connue → auto-assignation silencieuse
+                items[0]["parcelle"] = parcelles_culture[0].nom
+                log.info(f"[US-021] Parcelle auto-détectée : {parcelles_culture[0].nom!r} pour {culture!r}")
+
+            elif parcelles_culture:
+                # Plusieurs parcelles avec cette culture → proposer uniquement celles-là
+                items[0]["_parcelle_demandee"] = True
+                summary = _build_action_summary(items)
+                buttons = [
+                    [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
+                    for p in parcelles_culture
+                ]
+                buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
+                log.info(f"[US-021 CA8] {len(parcelles_culture)} parcelles pour {culture!r} — user_id={user_id}")
+                await update.message.reply_text(
+                    summary + f"\n\n*Dans quelle parcelle ?* _(parcelles avec {culture})_",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+                return
+
+            else:
+                # Aucune plantation connue ou action source → liste complète
+                parcelles_actives = get_all_parcelles(db_tmp)
+                if parcelles_actives:
+                    items[0]["_parcelle_demandee"] = True
+                    summary = _build_action_summary(items)
+                    buttons = [
+                        [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
+                        for p in parcelles_actives
+                    ]
+                    buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
+                    log.info(f"[US-021 CA8] Sélection parcelle (liste complète) — user_id={user_id}")
+                    await update.message.reply_text(
+                        summary + "\n\n*Quelle parcelle ?*",
+                        parse_mode="Markdown",
+                        reply_markup=InlineKeyboardMarkup(buttons),
+                    )
+                    return
         finally:
             db_tmp.close()
-
-        if parcelles_actives:
-            items[0]["_parcelle_demandee"] = True
-            summary = _build_action_summary(items)
-            buttons = [
-                [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
-                for p in parcelles_actives
-            ]
-            buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
-            log.info(f"[US-021 CA8] Sélection parcelle demandée — user_id={user_id}")
-            await update.message.reply_text(
-                summary + "\n\n*Quelle parcelle ?*",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(buttons),
-            )
-            return
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)
