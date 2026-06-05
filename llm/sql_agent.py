@@ -44,17 +44,24 @@ class QueryAgent:
 
     def _answer_quantity(self, action: str, culture: str) -> str:
         """Répond à : "Combien de [culture] [action] ?"."""
-        row = self.db.query(
+        rows = self.db.query(
+            Evenement.unite,
             func.sum(Evenement.quantite).label("total"),
-            func.count(Evenement.id).label("nb"),
         ).filter(
             Evenement.type_action == action,
             Evenement.culture == culture,
-        ).first()
+        ).group_by(Evenement.unite).all()
 
-        if row and row.total is not None:
-            return f"Total {culture} {action} : {row.total} ({row.nb} entrée(s))"
-        return f"Aucune donnée enregistrée pour {culture} / {action}."
+        if not rows or all(r.total is None for r in rows):
+            return f"Aucune donnée enregistrée pour {culture} / {action}."
+
+        parts = []
+        for unite, total in rows:
+            if total is not None:
+                unite_str = f" {unite}" if unite else ""
+                parts.append(f"{total:g}{unite_str}")
+        total_str = " + ".join(parts)
+        return f"Total {culture} {action} : {total_str}"
 
     def _answer_history_culture(self, culture: str) -> str:
         """Répond à : "Historique de [culture]"."""
@@ -79,11 +86,12 @@ class QueryAgent:
         rows = (
             self.db.query(
                 Evenement.culture,
+                Evenement.unite,
                 func.count(Evenement.id).label("nb"),
                 func.sum(Evenement.quantite).label("total"),
             )
             .filter(Evenement.type_action == action)
-            .group_by(Evenement.culture)
+            .group_by(Evenement.culture, Evenement.unite)
             .order_by(func.sum(Evenement.quantite).desc())
             .limit(10)
             .all()
@@ -91,10 +99,19 @@ class QueryAgent:
         if not rows:
             return f"Aucun événement de type {action} enregistré."
 
+        # Regroupe les lignes par culture (une culture peut avoir plusieurs unités)
+        from collections import defaultdict
+        par_culture: dict[str, list[str]] = defaultdict(list)
+        for culture, unite, nb, total in rows:
+            if total:
+                unite_str = f" {unite}" if unite else ""
+                par_culture[culture or "?"].append(f"{total:g}{unite_str}")
+            else:
+                par_culture[culture or "?"].append(f"{nb} fois")
+
         lines = [f"Top cultures — {action} :"]
-        for culture, nb, total in rows:
-            qte_str = f"{total}" if total else f"{nb} fois"
-            lines.append(f"  • {culture or '?'} : {qte_str}")
+        for culture, parts in par_culture.items():
+            lines.append(f"  • {culture} : {' + '.join(parts)}")
         return "\n".join(lines)
 
 
