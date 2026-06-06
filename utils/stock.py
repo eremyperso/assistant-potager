@@ -577,10 +577,13 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
     return result
 
 
-def calcul_godets(db: Session) -> Dict[str, dict]:
+def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]:
     """
-    [US_mise_en_godet | US-022] Agrège les mise_en_godet par culture/variété.
-    Déduit les plantations du stock godet — seules les entrées avec stock > 0 sont retournées.
+    [US_mise_en_godet | US-022 | US-026] Agrège les mise_en_godet par culture/variété.
+    Déduit les plantations du stock godet.
+
+    Args:
+        include_epuises: si True, inclut aussi les entrées avec stock = 0 (tout planté).
 
     Champs : culture, variete, nb_godets, nb_graines_semees, nb_plants_godets,
              nb_plantes, stock_residuel_godet, taux_reussite
@@ -644,7 +647,7 @@ def calcul_godets(db: Session) -> Dict[str, dict]:
         nb_plantes     = plantations.get((culture, variete), 0)
         stock_residuel = max(0, nb_p - nb_plantes)
 
-        if stock_residuel == 0:
+        if stock_residuel == 0 and not include_epuises:
             continue
 
         key = culture + (f" ({variete})" if variete else "")

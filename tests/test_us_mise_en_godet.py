@@ -334,7 +334,7 @@ class TestCA6MainParseSaveGodetFields:
 
 class TestCA7GetGodets:
     def test_ca7_godets_en_attente_retournes(self, test_db) -> None:
-        """CA7 — GET /godets retourne un godet sans plantation postérieure."""
+        """CA7 — GET /godets retourne un godet sans plantation postérieure [US-026 format]."""
         from fastapi.testclient import TestClient
         from unittest.mock import patch
         from main import app
@@ -355,8 +355,9 @@ class TestCA7GetGodets:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
-        assert data["godets_en_attente"][0]["culture"] == "tomate"
-        assert data["godets_en_attente"][0]["nb_plants_godets"] == 24
+        assert data["en_attente"][0]["culture"] == "tomate"
+        assert data["en_attente"][0]["nb_plants_godets"] == 24
+        assert data["en_attente"][0]["stock_residuel_godet"] == 24
 
     def test_ca7_godets_vide_si_aucun(self, test_db) -> None:
         """CA7 — GET /godets retourne une liste vide si aucun godet enregistré."""
@@ -369,7 +370,10 @@ class TestCA7GetGodets:
             resp = client.get("/godets")
 
         assert resp.status_code == 200
-        assert resp.json()["total"] == 0
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["en_attente"] == []
+        assert data["tout_plante"] == []
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -378,7 +382,7 @@ class TestCA7GetGodets:
 
 class TestCA8GetGodetsExclusion:
     def test_ca8_godet_exclu_si_plantation_posterieure(self, test_db) -> None:
-        """CA8 — GET /godets n'inclut pas un godet déjà planté en parcelle."""
+        """CA8 — Godet entièrement planté : n'apparaît pas dans en_attente, mais dans tout_plante."""
         from fastapi.testclient import TestClient
         from unittest.mock import patch
         from datetime import datetime
@@ -405,7 +409,9 @@ class TestCA8GetGodetsExclusion:
             resp = client.get("/godets")
 
         assert resp.status_code == 200
-        assert resp.json()["total"] == 0
+        data = resp.json()
+        assert data["total"] == 0                          # rien en attente
+        assert any(c["culture"] == "poivron" for c in data["tout_plante"])  # dans tout planté
 
 
 # ──────────────────────────────────────────────────────────────────────────────

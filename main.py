@@ -533,42 +533,23 @@ def get_plan():
 @app.get("/godets")
 def get_godets():
     """
-    [US_mise_en_godet] Retourne les plants actuellement en godet sans plantation postérieure.
+    [US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.
 
-    Un godet est considéré "en attente" si aucune plantation de la même culture
-    n'a été enregistrée après la date de mise en godet.
+    Utilise calcul_godets() pour un stock agrégé par (culture, variété) avec déduction
+    des plantations. Retourne deux listes :
+    - en_attente  : cultures avec stock_residuel_godet > 0
+    - tout_plante : cultures entièrement plantées (stock = 0), listées dans l'encart "Tout planté"
     """
+    from utils.stock import calcul_godets
     db = SessionLocal()
     try:
-        godets_all = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .order_by(Evenement.date.desc())
-            .all()
-        )
-        en_attente = []
-        for g in godets_all:
-            date_ref = g.date
-            plantation = (
-                db.query(Evenement)
-                .filter(
-                    Evenement.type_action == "plantation",
-                    Evenement.culture == g.culture,
-                )
-            )
-            if date_ref:
-                plantation = plantation.filter(Evenement.date >= date_ref)
-            if not plantation.first():
-                en_attente.append({
-                    "id":               g.id,
-                    "culture":          g.culture,
-                    "variete":          g.variete,
-                    "nb_graines_semees": g.nb_graines_semees,
-                    "nb_plants_godets": g.nb_plants_godets,
-                    "date":             str(g.date)[:10] if g.date else None,
-                    "commentaire":      g.commentaire,
-                })
-        return {"godets_en_attente": en_attente, "total": len(en_attente)}
+        tous = calcul_godets(db, include_epuises=True)
+        en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0]
+        tout_plante = [
+            {"culture": v["culture"], "variete": v["variete"]}
+            for v in tous.values() if v["stock_residuel_godet"] == 0
+        ]
+        return {"en_attente": en_attente, "tout_plante": tout_plante, "total": len(en_attente)}
     finally:
         db.close()
 

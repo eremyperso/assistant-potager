@@ -1,4 +1,17 @@
 
+## [v3.4.0] — 2026-06-06
+
+### 🚀 Nouveautés
+- Ajoute la vue Pépinière complète : 2 tuiles résumé (total plants + taux germination moyen), carte compacte par variété avec grand chiffre coloré (vert/orange/rouge) + barre de stock résiduel (US-026)
+- Encart "Tout planté ✓" listant les cultures entièrement transplantées en parcelle (US-026 CA5)
+
+### 🔧 Améliorations techniques
+- Refactore `GET /godets` — utilise `calcul_godets()` au lieu du scan événement par événement ; retourne `{en_attente, tout_plante, total}` (US-026)
+- Ajoute param `include_epuises: bool` à `calcul_godets()` pour exposer les godets à stock=0 (US-026 CA4/CA5)
+- Ajoute 10 tests de contrat dans `tests/test_us026_pepiniere_frontend.py` couvrant CA1–CA6 (10/10 verts)
+- Met à jour `tests/test_us023_frontend_api.py::test_us023_ca3` au nouveau format `/godets`
+- Met à jour `tests/test_us_mise_en_godet.py` CA7/CA8 au nouveau format `en_attente` / `tout_plante`
+
 ## [v3.3.0] — 2026-06-05
 
 ### 🚀 Nouveautés

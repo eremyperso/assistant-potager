@@ -68,15 +68,18 @@ def test_us023_ca2_stats_retourne_structure_complete(app_client):
     assert isinstance(body["godets"], list)
 
 
-# ─── CA3 : /godets → dict avec godets_en_attente ─────────────────────────────
+# ─── CA3 : /godets → format US-026 (en_attente + tout_plante + total) ────────
 
 def test_us023_ca3_godets_retourne_dict(app_client):
-    """CA3 — GET /godets retourne un objet avec godets_en_attente (liste)."""
+    """CA3 — GET /godets retourne en_attente, tout_plante et total [US-026]."""
     resp = app_client.get("/godets")
     assert resp.status_code == 200
     body = resp.json()
-    assert "godets_en_attente" in body
-    assert isinstance(body["godets_en_attente"], list)
+    assert "en_attente"  in body
+    assert "tout_plante" in body
+    assert "total"       in body
+    assert isinstance(body["en_attente"], list)
+    assert isinstance(body["tout_plante"], list)
 
 
 # ─── CA4 : /historique → accepte ?limit et ?culture ─────────────────────────
