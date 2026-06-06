@@ -1998,8 +1998,6 @@ async def cmd_plan(update, ctx) -> None:
             nom_affiche = (cle_originale or filtre_arg).upper()
             lignes = [f"📍 *{nom_affiche}* — Plan détaillé\n"]
             for c in sorted(cultures, key=lambda x: x["culture"]):
-                alerte = _alerte_recolte(c["type_organe"], c["age_jours"])
-                emoji = get_emoji_culture(c["culture"], c["type_organe"])
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb = int(c["nb_plants"])
                 unite = c["unite"] or "plants"
@@ -2007,15 +2005,23 @@ async def cmd_plan(update, ctx) -> None:
                     c["date_plantation"].strftime("%d %b").lstrip("0")
                     if c["date_plantation"] else "?"
                 )
-                lignes.append(
-                    f"{emoji} *{c['culture']}{var}*\n"
-                    f"  {nb} {unite} actifs · plantés le {date_str} (J+{c['age_jours']})"
-                )
-                if c["type_organe"]:
-                    lignes.append(f"  Type : {c['type_organe']}")
-                if alerte:
-                    seuil = SEUIL_ALERTE.get(c["type_organe"], 0)
-                    lignes.append(f"  ⚠️ Récolte imminente ({c['type_organe']} > {seuil} j)")
+                if c.get("type_action") == "semis":
+                    lignes.append(
+                        f"🌱 *{c['culture']}{var}*\n"
+                        f"  {nb} {unite} semés le {date_str} (J+{c['age_jours']})"
+                    )
+                else:
+                    alerte = _alerte_recolte(c["type_organe"], c["age_jours"])
+                    emoji = get_emoji_culture(c["culture"], c["type_organe"])
+                    lignes.append(
+                        f"{emoji} *{c['culture']}{var}*\n"
+                        f"  {nb} {unite} actifs · plantés le {date_str} (J+{c['age_jours']})"
+                    )
+                    if c["type_organe"]:
+                        lignes.append(f"  Type : {c['type_organe']}")
+                    if alerte:
+                        seuil = SEUIL_ALERTE.get(c["type_organe"], 0)
+                        lignes.append(f"  ⚠️ Récolte imminente ({c['type_organe']} > {seuil} j)")
 
             lignes.append(
                 f"\n_Historique de rotation : \"rotation parcelle {filtre_arg}\"_"
@@ -2041,15 +2047,20 @@ async def cmd_plan(update, ctx) -> None:
             nb = len(cultures_liste)
             bloc.append(f"📍 *{nom_affiche}* · {nb} culture{'s' if nb > 1 else ''} active{'s' if nb > 1 else ''}")
             for c in sorted(cultures_liste, key=lambda x: x["culture"]):
-                emoji = get_emoji_culture(c["culture"], c["type_organe"])
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb_plants = int(c["nb_plants"])
                 unite = c["unite"] or "plants"
-                alerte = _alerte_recolte(c["type_organe"], c["age_jours"])
-                alerte_str = " ⚠️ récolte imminente" if alerte else ""
-                bloc.append(
-                    f"  {emoji} {c['culture']}{var} — {nb_plants} {unite} · J+{c['age_jours']}{alerte_str}"
-                )
+                if c.get("type_action") == "semis":
+                    bloc.append(
+                        f"  🌱 {c['culture']}{var} — {nb_plants} {unite} semés · J+{c['age_jours']}"
+                    )
+                else:
+                    emoji = get_emoji_culture(c["culture"], c["type_organe"])
+                    alerte = _alerte_recolte(c["type_organe"], c["age_jours"])
+                    alerte_str = " ⚠️ récolte imminente" if alerte else ""
+                    bloc.append(
+                        f"  {emoji} {c['culture']}{var} — {nb_plants} {unite} · J+{c['age_jours']}{alerte_str}"
+                    )
             return bloc
 
         # Parcelles BDD actives (ordonnées)
@@ -2550,9 +2561,15 @@ async def cmd_stats(update, ctx):
 
             # Synthèse semis : stock résiduel toutes variétés confondues — détail via /stats <culture>
             def _ligne_semis(culture: str, s: dict) -> str:
-                residuel  = s.get("stock_residuel", 0)
-                en_godet  = s.get("plants_en_godet", 0)
-                unite     = s.get("unite", "graines")
+                residuel     = s.get("stock_residuel", 0)
+                en_godet     = s.get("plants_en_godet", 0)
+                unite        = s.get("unite", "graines")
+                parcelles_pt = s.get("parcelles_pleine_terre", [])
+                if parcelles_pt:
+                    # Semis directement en pleine terre → indiquer la/les parcelle(s)
+                    total        = s.get("total_seme", 0)
+                    parcelles_str = ", ".join(parcelles_pt)
+                    return f"  • {culture} : *{int(total)} {unite}* en parcelle _{parcelles_str}_"
                 if residuel > 0:
                     return f"  • {culture} : *{residuel} {unite} restantes*"
                 elif en_godet > 0:

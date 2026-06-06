@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from unidecode import unidecode
 
 from database.models import Evenement, Parcelle
-from utils.stock import calcul_stock_cultures
+from utils.stock import calcul_stock_cultures, get_type_organe
 
 log = logging.getLogger("potager")
 
@@ -400,9 +400,6 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
     stocks = calcul_stock_cultures(db)
     cultures_actives = {c for c, s in stocks.items() if s.stock_plants > 0}
 
-    if not cultures_actives:
-        return {}
-
     # ── 2. Événements de plantation pour cultures actives ────────────────────
     # Parcelle.nom retourné uniquement si actif=True — les parcelles soft-deletées
     # tombent dans le groupe None (Non localisé) comme les events sans parcelle_id.
@@ -424,8 +421,7 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         .all()
     )
 
-    # ── 3. Agrégation par (culture, variete, parcelle) ───────────────────────
-    # Clé : (culture, variete_norm, parcelle)
+    # ── 3. Agrégation par (culture, variete, parcelle) — plantations ─────────
     groupes: Dict[tuple, dict] = {}
 
     for culture, variete, parcelle, quantite, rang, unite, date_evt in rows:
@@ -444,12 +440,53 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
 
         groupes[key]["nb_plants"] += total
 
-        # Garder la date la plus ancienne
         if date_evt and (
             groupes[key]["date_premiere"] is None
             or date_evt < groupes[key]["date_premiere"]
         ):
             groupes[key]["date_premiere"] = date_evt
+
+    # ── 3b. Semis pleine terre (parcelle_id non null) ─────────────────────────
+    # Un semis avec parcelle_id = semé directement en pleine terre (pas pépinière).
+    # Traité séparément des plantations — pas de filtre cultures_actives.
+    semis_pt_rows = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            sa_case((Parcelle.actif.is_(True), Parcelle.nom), else_=None).label("parcelle_nom"),
+            Evenement.quantite,
+            Evenement.unite,
+            Evenement.date,
+        )
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.parcelle_id.isnot(None))
+        .order_by(Evenement.date)
+        .all()
+    )
+
+    groupes_semis: Dict[tuple, dict] = {}
+    for culture, variete, parcelle, quantite, unite, date_evt in semis_pt_rows:
+        variete_norm = variete or ""
+        key = (culture, variete_norm, parcelle)
+        total = quantite or 0
+
+        if key not in groupes_semis:
+            groupes_semis[key] = {
+                "culture": culture,
+                "variete": variete_norm,
+                "nb_plants": 0.0,
+                "unite": unite or "graines",
+                "date_premiere": date_evt,
+            }
+
+        groupes_semis[key]["nb_plants"] += total
+
+        if date_evt and (
+            groupes_semis[key]["date_premiere"] is None
+            or date_evt < groupes_semis[key]["date_premiere"]
+        ):
+            groupes_semis[key]["date_premiere"] = date_evt
 
     # ── 4. Construction du résultat final ─────────────────────────────────────
     today = datetime.now().date()
@@ -482,6 +519,31 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         if parcelle not in result:
             result[parcelle] = []
         result[parcelle].append(entree)
+
+    # ── 4b. Semis pleine terre dans le résultat ───────────────────────────────
+    for (culture, variete, parcelle), data in groupes_semis.items():
+        date_semis = data["date_premiere"]
+        if date_semis and hasattr(date_semis, "date"):
+            age_jours = (today - date_semis.date()).days
+        elif date_semis:
+            age_jours = (today - date_semis).days
+        else:
+            age_jours = 0
+
+        entree_semis = {
+            "culture": culture,
+            "variete": variete,
+            "nb_plants": data["nb_plants"],
+            "unite": data["unite"],
+            "type_organe": get_type_organe(db, culture),
+            "date_plantation": date_semis,
+            "age_jours": max(0, age_jours),
+            "type_action": "semis",     # distingue des plantations dans l'affichage
+        }
+
+        if parcelle not in result:
+            result[parcelle] = []
+        result[parcelle].append(entree_semis)
 
     log.info(
         f"[US_Plan_occupation_parcelles] calcul_occupation_parcelles : "

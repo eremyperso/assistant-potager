@@ -22,7 +22,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from database.models import Evenement, CultureConfig
+from database.models import Evenement, CultureConfig, Parcelle
 
 
 @dataclass
@@ -265,17 +265,34 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         graines_consommees[culture] = graines_consommees.get(culture, 0) + consommees
         plants_en_godet[culture]    = plants_en_godet.get(culture, 0) + plants
 
+    # Parcelles de semis pleine terre (parcelle_id non null) par culture
+    parcelles_pt_raw = (
+        db.query(Evenement.culture, Parcelle.nom)
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(Parcelle.actif.is_(True))
+        .all()
+    )
+    parcelles_pt: Dict[str, list] = {}
+    for culture_pt, nom_p in parcelles_pt_raw:
+        if culture_pt not in parcelles_pt:
+            parcelles_pt[culture_pt] = []
+        if nom_p not in parcelles_pt[culture_pt]:
+            parcelles_pt[culture_pt].append(nom_p)
+
     result: Dict[str, dict] = {}
     for culture, nb, total in semis_raw:
         total_seme = total or 0
         consommees = graines_consommees.get(culture, 0)
         result[culture] = {
-            "nb_semis":        nb,
-            "total_seme":      total_seme,
-            "unite":           unites.get(culture, "graines"),
-            "type_organe":     get_type_organe(db, culture),
-            "plants_en_godet": plants_en_godet.get(culture, 0),
-            "stock_residuel":  max(0, int(total_seme) - consommees),
+            "nb_semis":               nb,
+            "total_seme":             total_seme,
+            "unite":                  unites.get(culture, "graines"),
+            "type_organe":            get_type_organe(db, culture),
+            "plants_en_godet":        plants_en_godet.get(culture, 0),
+            "stock_residuel":         max(0, int(total_seme) - consommees),
+            "parcelles_pleine_terre": parcelles_pt.get(culture, []),
         }
     return dict(sorted(result.items()))
 

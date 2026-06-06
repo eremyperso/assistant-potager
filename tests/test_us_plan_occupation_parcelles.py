@@ -509,3 +509,69 @@ class TestCmdParcelle:
         await cmd_parcelle(update, ctx)
         texte = update.message.reply_text.call_args[0][0]
         assert "Usage" in texte
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Semis pleine terre — calcul_occupation_parcelles
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def db_with_semis_pleine_terre(test_db):
+    """BD avec un semis directement associé à une parcelle (pleine terre)."""
+    db = test_db
+    db.add(CultureConfig(nom="rutabaga", type_organe_recolte="végétatif"))
+    est = Parcelle(nom="Est", nom_normalise="est", ordre=1, actif=True)
+    db.add(est)
+    db.commit()
+
+    db.add(Evenement(
+        type_action="semis",
+        culture="rutabaga",
+        variete=None,
+        quantite=30.0,
+        unite="graines",
+        parcelle_id=est.id,
+        date=datetime.now() - timedelta(days=10),
+    ))
+    db.commit()
+    return db
+
+
+class TestSemisPleineTerre:
+    def test_semis_pleine_terre_dans_plan(self, db_with_semis_pleine_terre) -> None:
+        """Un semis avec parcelle_id apparaît dans calcul_occupation_parcelles."""
+        result = calcul_occupation_parcelles(db_with_semis_pleine_terre)
+        est = result.get("Est", [])
+        assert len(est) == 1
+        assert est[0]["culture"] == "rutabaga"
+        assert est[0]["nb_plants"] == 30.0
+        assert est[0].get("type_action") == "semis"
+
+    def test_semis_pleine_terre_age_jours(self, db_with_semis_pleine_terre) -> None:
+        """L'âge J+ du semis pleine terre est calculé depuis la date de semis."""
+        result = calcul_occupation_parcelles(db_with_semis_pleine_terre)
+        est = result.get("Est", [])
+        assert len(est) == 1
+        assert 9 <= est[0]["age_jours"] <= 11
+
+    def test_semis_sans_parcelle_absent_du_plan(self, test_db) -> None:
+        """Un semis sans parcelle_id n'apparaît PAS dans calcul_occupation_parcelles."""
+        test_db.add(CultureConfig(nom="carotte", type_organe_recolte="végétatif"))
+        test_db.add(Evenement(
+            type_action="semis",
+            culture="carotte",
+            quantite=50.0,
+            unite="graines",
+            parcelle_id=None,
+            date=datetime.now() - timedelta(days=5),
+        ))
+        test_db.commit()
+        result = calcul_occupation_parcelles(test_db)
+        # Pas de plantation → aucune culture active → aucune entrée dans le plan
+        assert result == {}
+
+    def test_semis_pleine_terre_unite(self, db_with_semis_pleine_terre) -> None:
+        """L'unité du semis (graines) est conservée dans le résultat."""
+        result = calcul_occupation_parcelles(db_with_semis_pleine_terre)
+        est = result.get("Est", [])
+        assert est[0]["unite"] == "graines"
