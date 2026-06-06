@@ -545,10 +545,7 @@ def get_godets():
     try:
         tous = calcul_godets(db, include_epuises=True)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0]
-        tout_plante = [
-            {"culture": v["culture"], "variete": v["variete"]}
-            for v in tous.values() if v["stock_residuel_godet"] == 0
-        ]
+        tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0]
         return {"en_attente": en_attente, "tout_plante": tout_plante, "total": len(en_attente)}
     finally:
         db.close()
