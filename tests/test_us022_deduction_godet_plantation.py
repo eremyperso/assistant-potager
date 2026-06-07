@@ -253,3 +253,48 @@ def test_us022_stock_residuel_jamais_negatif(db):
 
     # stock = max(0, 3-10) = 0 → variété absente (filtrée par CA4)
     assert result == []
+
+
+# ── CA6-reverse — Godet sans variété + plantation avec variété ────────────────
+
+def test_us022_ca6_reverse_godet_sans_variete_plantation_avec_variete(db):
+    """CA6-reverse — Godet sans variété + plantation avec variété unique → stock correct.
+
+    Cas réel cornichon :
+      mise_en_godet(variete=None, 10 plants)
+      plantation(variete='petit Paris', 8 plants)
+      → stock résiduel = 2 (pas 10)
+    """
+    from utils.stock import calcul_godets
+    session, pid = db
+    _godet(session, pid, "cornichon", variete=None, nb_plants=10, nb_graines=30)
+    _plantation(session, pid, "cornichon", variete="petit Paris", quantite=8)
+
+    # calcul_godets_par_culture
+    result = calcul_godets_par_culture(session, "cornichon")
+    assert len(result) == 1
+    g = result[0]
+    assert g["variete"] is None
+    assert g["nb_plants_godets"] == 10
+    assert g["nb_plantes"] == 8         # plantation 'petit Paris' rattachée
+    assert g["stock_residuel_godet"] == 2
+
+    # calcul_godets (cohérence)
+    godets = calcul_godets(session, include_epuises=False)
+    assert len(godets) == 1
+    v = list(godets.values())[0]
+    assert v["nb_plantes"] == 8
+    assert v["stock_residuel_godet"] == 2
+
+
+def test_us022_ca6_reverse_pas_rattachement_si_plusieurs_varietes(db):
+    """CA6-reverse — Pas de rattachement si plusieurs variétés en plantation (ambiguïté)."""
+    session, pid = db
+    _godet(session, pid, "tomate", variete=None, nb_plants=10, nb_graines=15)
+    _plantation(session, pid, "tomate", variete="cerise", quantite=3)
+    _plantation(session, pid, "tomate", variete="cœur de bœuf", quantite=4)
+
+    # Deux variétés en plantation → impossible de rattacher → stock reste = 10
+    result = calcul_godets_par_culture(session, "tomate")
+    assert len(result) == 1
+    assert result[0]["stock_residuel_godet"] == 10

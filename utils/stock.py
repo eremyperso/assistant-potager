@@ -635,9 +635,20 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
             if len(varietes) == 1:
                 plantations[(culture, varietes[0])] = plantations.get((culture, varietes[0]), 0) + nb_sans_var
             elif len(varietes) == 0:
-                plantations[(culture, None)] = nb_sans_var  # pas de godet avec variété → garder None
+                plantations[(culture, None)] = nb_sans_var
             else:
                 _logger.warning("[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée", culture, len(varietes))
+
+    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
+    # Cas : godet mis en barquette sans préciser la variété, puis plantation avec variété saisie
+    for culture in {c for c, v, *_ in rows if v is None}:
+        varietes_plantees = [(c, v) for (c, v) in list(plantations) if c == culture and v is not None]
+        if len(varietes_plantees) == 1:
+            c_key, v_key = varietes_plantees[0]
+            nb = plantations.pop((c_key, v_key), 0)
+            if nb > 0:
+                plantations[(culture, None)] = plantations.get((culture, None), 0) + nb
+                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_key)
 
     result: Dict[str, dict] = {}
     for culture, variete, tot_g, tot_p, nb in rows:
@@ -726,6 +737,16 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
                 "[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée du calcul",
                 culture, len(varietes_avec_godet),
             )
+
+    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
+    if any(r[0] is None for r in rows):
+        varietes_dans_plantations = [v for v in plantations if v is not None]
+        if len(varietes_dans_plantations) == 1:
+            v_unique = varietes_dans_plantations[0]
+            nb = plantations.pop(v_unique, 0)
+            if nb > 0:
+                plantations[None] = plantations.get(None, 0) + nb
+                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_unique)
 
     result: List[dict] = []
     for variete, tot_p, tot_g, nb, date_max in rows:
