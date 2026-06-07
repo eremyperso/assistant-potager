@@ -490,12 +490,54 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
 
     # ── 4. Construction du résultat final ─────────────────────────────────────
     today = datetime.now().date()
+
+    # Pertes par (culture, variete_norm) pour corriger les nb_plants affichés dans le plan.
+    # Les pertes sans variete sont attribuées à toutes les varietes de la culture
+    # proportionnellement à leur poids dans le total planté.
+    from sqlalchemy import func as _func
+    pertes_raw = (
+        db.query(Evenement.culture, Evenement.variete, _func.sum(Evenement.quantite))
+        .filter(Evenement.type_action == "perte")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    # pertes_var[(culture, variete_norm)] = quantite
+    pertes_var: Dict[tuple, float] = {}
+    pertes_sans_variete: Dict[str, float] = {}
+    for c, v, q in pertes_raw:
+        if v:
+            pertes_var[(c, v)] = pertes_var.get((c, v), 0) + (q or 0)
+        else:
+            pertes_sans_variete[c] = pertes_sans_variete.get(c, 0) + (q or 0)
+
+    # Totaux plantés par culture (toutes varietes) pour distribution proportionnelle
+    total_plante_par_culture: Dict[str, float] = {}
+    for (c, v, _p), d in groupes.items():
+        total_plante_par_culture[c] = total_plante_par_culture.get(c, 0) + d["nb_plants"]
+
+    def _perte_pour_groupe(culture: str, variete: str, nb_plants: float) -> float:
+        """Retourne la part de perte à déduire pour ce groupe."""
+        # Perte spécifique à la variété
+        perte = pertes_var.get((culture, variete), 0)
+        # Perte sans variété → distribuée au prorata du poids de ce groupe
+        perte_globale = pertes_sans_variete.get(culture, 0)
+        total_c = total_plante_par_culture.get(culture, 0)
+        if perte_globale > 0 and total_c > 0:
+            perte += perte_globale * (nb_plants / total_c)
+        return perte
+
     result: Dict[Optional[str], list] = {}
 
     for (culture, variete, parcelle), data in groupes.items():
         stock = stocks.get(culture)
         # [CA1] Ne garder que les cultures avec stock actif
         if not stock or stock.stock_plants <= 0:
+            continue
+
+        nb_plantes_brut = data["nb_plants"]
+        nb_plants = max(0.0, nb_plantes_brut - _perte_pour_groupe(culture, variete, nb_plantes_brut))
+        if nb_plants <= 0:
             continue
 
         date_plantation = data["date_premiere"]
@@ -509,7 +551,7 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         entree = {
             "culture": culture,
             "variete": variete,
-            "nb_plants": data["nb_plants"],
+            "nb_plants": nb_plants,
             "unite": data["unite"],
             "type_organe": stock.type_organe,           # [CA3] pour seuil alerte
             "date_plantation": date_plantation,

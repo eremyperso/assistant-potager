@@ -537,6 +537,68 @@ def db_with_semis_pleine_terre(test_db):
     return db
 
 
+class TestPerteDeduiteDuPlan:
+    def test_perte_reduit_nb_plants_dans_plan(self, test_db) -> None:
+        """Perte d'une culture réduit nb_plants dans calcul_occupation_parcelles."""
+        db = test_db
+        db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
+        nord = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+        db.add(nord)
+        db.commit()
+
+        today = datetime.now()
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete="cerise",
+            quantite=36.0, rang=1, unite="plants",
+            parcelle_id=nord.id, date=today - timedelta(days=10),
+        ))
+        db.add(Evenement(
+            type_action="perte", culture="tomate", variete="cerise",
+            quantite=1.0, unite="plants",
+        ))
+        db.commit()
+
+        result = calcul_occupation_parcelles(db)
+        nord_cultures = result.get("Nord", [])
+        tomate = next((c for c in nord_cultures if c["culture"] == "tomate"), None)
+        assert tomate is not None
+        assert tomate["nb_plants"] == 35.0  # 36 - 1 perte
+
+    def test_perte_sans_variete_distribuee_proportionnellement(self, test_db) -> None:
+        """Perte sans variete déduite proportionnellement de toutes les varietes."""
+        db = test_db
+        db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
+        p1 = Parcelle(nom="A", nom_normalise="a", ordre=1, actif=True)
+        p2 = Parcelle(nom="B", nom_normalise="b", ordre=2, actif=True)
+        db.add(p1); db.add(p2)
+        db.commit()
+
+        today = datetime.now()
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete="cerise",
+            quantite=10.0, rang=1, unite="plants",
+            parcelle_id=p1.id, date=today - timedelta(days=10),
+        ))
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete="noire",
+            quantite=10.0, rang=1, unite="plants",
+            parcelle_id=p2.id, date=today - timedelta(days=10),
+        ))
+        # Perte sans variete → distribuée 50/50
+        db.add(Evenement(
+            type_action="perte", culture="tomate", variete=None,
+            quantite=2.0, unite="plants",
+        ))
+        db.commit()
+
+        result = calcul_occupation_parcelles(db)
+        a_cultures = result.get("A", [])
+        b_cultures = result.get("B", [])
+        nb_a = next((c["nb_plants"] for c in a_cultures if c["culture"] == "tomate"), 0)
+        nb_b = next((c["nb_plants"] for c in b_cultures if c["culture"] == "tomate"), 0)
+        assert nb_a + nb_b == 18.0  # 20 - 2 pertes au total
+
+
 class TestSemisPleineTerre:
     def test_semis_pleine_terre_dans_plan(self, db_with_semis_pleine_terre) -> None:
         """Un semis avec parcelle_id apparaît dans calcul_occupation_parcelles."""
