@@ -72,6 +72,11 @@ function SemisRow({ s }) {
 // ── Ligne godet (pépinière disponible) ───────────────────────────────────────
 
 function GodetRow({ g }) {
+  const sorties = []
+  if (g.nb_plantes    > 0) sorties.push(`${g.nb_plantes} plantés`)
+  if (g.nb_vendus     > 0) sorties.push(`${g.nb_vendus} vendus`)
+  if (g.nb_pertes_godet > 0) sorties.push(`${g.nb_pertes_godet} perdus`)
+
   return (
     <div className="flex items-center gap-2 py-2 border-b border-gray-50 dark:border-gray-700 last:border-0">
       <div className="flex-1 min-w-0">
@@ -79,10 +84,13 @@ function GodetRow({ g }) {
         {g.variete && (
           <span className="text-[10px] text-gray-400 ml-1.5">{g.variete}</span>
         )}
+        {sorties.length > 0 && (
+          <p className="text-[10px] text-gray-400 mt-0.5">{g.nb_plants_godets} repiqués · {sorties.join(' · ')}</p>
+        )}
       </div>
       <div className="text-right shrink-0">
         <p className="text-[12px] font-semibold text-teal-600 dark:text-teal-400">
-          {g.stock_residuel_godet} <span className="font-normal text-gray-400">plants</span>
+          {g.stock_residuel_godet ?? g.nb_plants_godets} <span className="font-normal text-gray-400">plants</span>
         </p>
         {g.taux_reussite != null && (
           <p className="text-[10px] text-gray-400">{g.taux_reussite}% germination</p>

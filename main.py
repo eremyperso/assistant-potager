@@ -488,6 +488,9 @@ def stats():
                     "variete":           v["variete"],
                     "nb_plants_godets":  v["nb_plants_godets"],
                     "nb_graines_semees": v["nb_graines_semees"],
+                    "nb_vendus":         v.get("nb_vendus", 0),
+                    "nb_pertes_godet":   v.get("nb_pertes_godet", 0),
+                    "stock_residuel_godet": v["stock_residuel_godet"],
                     "taux_reussite":     v["taux_reussite"],
                 }
                 for v in godets.values()

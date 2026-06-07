@@ -265,6 +265,28 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         graines_consommees[culture] = graines_consommees.get(culture, 0) + consommees
         plants_en_godet[culture]    = plants_en_godet.get(culture, 0) + plants
 
+    # Cultures avec godets : perte_godet y est déjà décomptée dans calcul_godets
+    cultures_avec_godets = {
+        row[0].lower() for row in
+        db.query(Evenement.culture)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+        .distinct().all()
+    }
+
+    # perte_godet pour cultures SANS godet = perte de semences en barquette
+    pertes_semis_raw = (
+        db.query(Evenement.culture, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action == "perte_godet")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture)
+        .all()
+    )
+    pertes_semis_dict: Dict[str, int] = {
+        c: int(q or 0) for c, q in pertes_semis_raw
+        if c.lower() not in cultures_avec_godets
+    }
+
     # Parcelles de semis pleine terre (parcelle_id non null) par culture
     parcelles_pt_raw = (
         db.query(Evenement.culture, Parcelle.nom)
@@ -283,15 +305,16 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
 
     result: Dict[str, dict] = {}
     for culture, nb, total in semis_raw:
-        total_seme = total or 0
-        consommees = graines_consommees.get(culture, 0)
+        total_seme  = total or 0
+        consommees  = graines_consommees.get(culture, 0)
+        perte_semis = pertes_semis_dict.get(culture, 0)
         result[culture] = {
             "nb_semis":               nb,
             "total_seme":             total_seme,
             "unite":                  unites.get(culture, "graines"),
             "type_organe":            get_type_organe(db, culture),
             "plants_en_godet":        plants_en_godet.get(culture, 0),
-            "stock_residuel":         max(0, int(total_seme) - consommees),
+            "stock_residuel":         max(0, int(total_seme) - consommees - perte_semis),
             "parcelles_pleine_terre": parcelles_pt.get(culture, []),
         }
     return dict(sorted(result.items()))
@@ -640,7 +663,6 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
                 _logger.warning("[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée", culture, len(varietes))
 
     # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    # Cas : godet mis en barquette sans préciser la variété, puis plantation avec variété saisie
     for culture in {c for c, v, *_ in rows if v is None}:
         varietes_plantees = [(c, v) for (c, v) in list(plantations) if c == culture and v is not None]
         if len(varietes_plantees) == 1:
@@ -650,27 +672,69 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
                 plantations[(culture, None)] = plantations.get((culture, None), 0) + nb
                 _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_key)
 
+    # [vendu + perte_godet] Sorties de la pépinière hors plantation
+    sorties_rows = (
+        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    sorties: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in sorties_rows}
+
+    # CA6-reverse pour sorties aussi (godet sans variété + sortie avec variété unique)
+    for culture in {c for c, v, *_ in rows if v is None}:
+        varietes_sorties = [(c, v) for (c, v) in list(sorties) if c == culture and v is not None]
+        if len(varietes_sorties) == 1:
+            c_key, v_key = varietes_sorties[0]
+            nb = sorties.pop((c_key, v_key), 0)
+            if nb > 0:
+                sorties[(culture, None)] = sorties.get((culture, None), 0) + nb
+
+    # [vendu/perte_godet détail] par (culture, variete) pour exposition dans le résultat
+    vendus_rows = (
+        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action == "vendu")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    vendus: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in vendus_rows}
+
+    pertes_godet_rows = (
+        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action == "perte_godet")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+        .all()
+    )
+    pertes_godet: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in pertes_godet_rows}
+
     result: Dict[str, dict] = {}
     for culture, variete, tot_g, tot_p, nb in rows:
         nb_p = int(tot_p) if tot_p else 0
         nb_g = int(tot_g) if tot_g else 0
         taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
         nb_plantes     = plantations.get((culture, variete), 0)
-        stock_residuel = max(0, nb_p - nb_plantes)
+        nb_vendus_val  = vendus.get((culture, variete), 0)
+        nb_pertes_val  = pertes_godet.get((culture, variete), 0)
+        stock_residuel = max(0, nb_p - nb_plantes - nb_vendus_val - nb_pertes_val)
 
         if stock_residuel == 0 and not include_epuises:
             continue
 
         key = culture + (f" ({variete})" if variete else "")
         result[key] = {
-            "culture":             culture,
-            "variete":             variete,
-            "nb_godets":           nb,
-            "nb_graines_semees":   nb_g,
-            "nb_plants_godets":    nb_p,
-            "nb_plantes":          nb_plantes,
+            "culture":              culture,
+            "variete":              variete,
+            "nb_godets":            nb,
+            "nb_graines_semees":    nb_g,
+            "nb_plants_godets":     nb_p,
+            "nb_plantes":           nb_plantes,
+            "nb_vendus":            nb_vendus_val,
+            "nb_pertes_godet":      nb_pertes_val,
             "stock_residuel_godet": stock_residuel,
-            "taux_reussite":       taux,
+            "taux_reussite":        taux,
         }
     return dict(sorted(result.items()))
 
@@ -748,13 +812,42 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
                 plantations[None] = plantations.get(None, 0) + nb
                 _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_unique)
 
+    # [vendu + perte_godet] Sorties hors plantation
+    sorties_par_variete_rows = (
+        db.query(Evenement.variete, Evenement.type_action, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.variete, Evenement.type_action)
+        .all()
+    )
+    vendus_var: Dict[Optional[str], int]      = {}
+    pertes_godet_var: Dict[Optional[str], int] = {}
+    for variete, action, qte in sorties_par_variete_rows:
+        if action == "vendu":
+            vendus_var[variete] = vendus_var.get(variete, 0) + int(qte or 0)
+        else:
+            pertes_godet_var[variete] = pertes_godet_var.get(variete, 0) + int(qte or 0)
+
+    # CA6-reverse pour vendu/perte_godet (godet sans variété + sortie avec variété unique)
+    if any(r[0] is None for r in rows):
+        for d in (vendus_var, pertes_godet_var):
+            varietes_non_none = [v for v in d if v is not None]
+            if len(varietes_non_none) == 1:
+                v_unique = varietes_non_none[0]
+                nb = d.pop(v_unique, 0)
+                if nb > 0:
+                    d[None] = d.get(None, 0) + nb
+
     result: List[dict] = []
     for variete, tot_p, tot_g, nb, date_max in rows:
-        nb_p = int(tot_p) if tot_p else 0
-        nb_g = int(tot_g) if tot_g else 0
-        taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
-        nb_plantes       = plantations.get(variete, 0)
-        stock_residuel   = max(0, nb_p - nb_plantes)
+        nb_p          = int(tot_p) if tot_p else 0
+        nb_g          = int(tot_g) if tot_g else 0
+        taux          = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        nb_plantes    = plantations.get(variete, 0)
+        nb_v          = vendus_var.get(variete, 0)
+        nb_pg         = pertes_godet_var.get(variete, 0)
+        stock_residuel = max(0, nb_p - nb_plantes - nb_v - nb_pg)
 
         # [US-022 / CA4] On n'expose que les godets non entièrement plantés
         if stock_residuel == 0:
@@ -764,6 +857,8 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
             "variete":                    variete,
             "nb_plants_godets":           nb_p,
             "nb_plantes":                 nb_plantes,
+            "nb_vendus":                  nb_v,
+            "nb_pertes_godet":            nb_pg,
             "stock_residuel_godet":       stock_residuel,
             "nb_graines_semees":          nb_g,
             "taux_reussite":              taux,

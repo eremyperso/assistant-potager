@@ -109,7 +109,7 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
@@ -161,6 +161,12 @@ Exemples :
 
 "repiquer 15 plants de poivron en godet"
 → {{"action":"mise_en_godet","culture":"poivron","variete":null,"quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":15}}
+
+"vendu 5 tomates cerise à un ami"
+→ {{"action":"vendu","culture":"tomate","variete":"cerise","quantite":5,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}
+
+"perdu 3 cornichons en godet"
+→ {{"action":"perte_godet","culture":"cornichon","variete":null,"quantite":3,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}
 
 Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
 Si plusieurs cultures dans la même phrase → tableau de JSONs.

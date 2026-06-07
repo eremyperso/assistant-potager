@@ -68,6 +68,17 @@ ACTION_MAP: dict[str, list[str]] = {
         "godet", "godets", "rempotage godet",
         "repique en godet", "repique en godets",
     ],
+    "vendu": [
+        "vendu", "vendue", "vendus", "vendues",
+        "vendre", "vendu a", "vente", "cede", "cedee", "cedees",
+        "donne", "donnee", "donnees",
+    ],
+    "perte_godet": [
+        "perte godet", "perdu en godet", "perdu dans le godet",
+        "perdu en pepiniere", "perdu pepiniere",
+        "perte pepiniere", "perte semis",
+        "perdu en semis", "graines perdues", "graines perdus",
+    ],
 }
 
 # Petits mots à ignorer au début (langage naturel)
