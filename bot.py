@@ -1871,7 +1871,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             )
         return  # attente callback — pas de sauvegarde immédiate
 
-    # ── [vendu/perte_godet] Disambiguation perte — ÉTAPE 1 : contexte d'abord ────
+    # ── [vendu/perte_godet] Disambiguation perte — intelligence contextuelle ──────
     if (
         len(items) == 1
         and normalize_action(items[0].get("action")) == "perte"
@@ -1881,42 +1881,149 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         culture = item.get("culture", "")
         variete = item.get("variete")
 
+        # ── 1. Détection du contexte dans le texte brut ─────────────────────
+        from unidecode import unidecode as _ud
+        texte_n = _ud(texte.lower())
+        _MOTS_JARDIN    = {"potager", "jardin", "pleine terre", "en terre", "sol"}
+        _MOTS_PEPINIERE = {"pepiniere", "godet", "en godet", "semis"}
+        ctx_jardin    = any(m in texte_n for m in _MOTS_JARDIN)
+        ctx_pepiniere = any(m in texte_n for m in _MOTS_PEPINIERE)
+
+        # ── 2. Nettoyage : si Groq a mis un mot-clé de contexte dans variete ─
+        if variete:
+            v_n = _ud(variete.lower())
+            if any(m in v_n for m in _MOTS_JARDIN | _MOTS_PEPINIERE):
+                if any(m in v_n for m in _MOTS_PEPINIERE): ctx_pepiniere = True
+                if any(m in v_n for m in _MOTS_JARDIN):    ctx_jardin    = True
+                variete         = None
+                item["variete"] = None
+
+        # ── 3. Chargement des stocks disponibles ────────────────────────────
         from utils.stock import calcul_godets_par_culture as _cgpc, calcul_stock_par_variete as _csv
+        from utils.parcelles import levenshtein_distance as _lev
         db_perte = SessionLocal()
         try:
-            godets_dispo    = _cgpc(db_perte, culture)      # godet actif (stock > 0)
-            varietes_jardin = _csv(db_perte, culture)       # toutes variétés jardin
+            godets_dispo    = _cgpc(db_perte, culture)
+            varietes_jardin = _csv(db_perte, culture)
         finally:
             db_perte.close()
 
-        # Restreindre godets à la variété si précisée (match exact ou godet sans variété)
-        if variete:
-            godets_pertinents = [g for g in godets_dispo if g["variete"] == variete or g["variete"] is None]
-        else:
-            godets_pertinents = godets_dispo
+        jardin_actif  = [v for v in varietes_jardin if _stock_variete_jardin(v) > 0]
 
-        # Variétés actives au jardin (stock > 0)
-        jardin_actif = [v for v in varietes_jardin if _stock_variete_jardin(v) > 0]
-        # Si variété précisée, restreindre aussi le jardin
-        if variete:
-            jardin_actif = [v for v in jardin_actif if v.get("variete") == variete]
+        # ── 4. Fuzzy match variété sur les candidats disponibles ─────────────
+        def _fuzzy_variete(needle: str, candidates: list[str]) -> str | None:
+            """Retourne le candidat le plus proche (Levenshtein ≤ 2), ou None."""
+            needle_n = _ud(needle.lower())
+            best, best_d = None, 99
+            for c in candidates:
+                if not c: continue
+                d = _lev(needle_n, _ud(c.lower()))
+                if d < best_d:
+                    best, best_d = c, d
+            return best if best_d <= 2 else None
 
+        var_jardin_matched    = None
+        var_pepiniere_matched = None
+        if variete:
+            var_jardin_matched    = _fuzzy_variete(variete, [v.get("variete") or "" for v in jardin_actif])
+            var_pepiniere_matched = _fuzzy_variete(variete, [g.get("variete") or "" for g in godets_dispo])
+
+        # ── 5. Décision : contexte connu → court-circuit des menus ──────────
+        ctx_connu = ctx_jardin or ctx_pepiniere
+
+        if ctx_jardin and not ctx_pepiniere:
+            # Contexte jardin clair
+            item["action"] = "perte"
+            if var_jardin_matched:
+                # Variété reconnue (fuzzy) → sauvegarder directement
+                item["variete"] = var_jardin_matched
+                log.info(f"[perte-auto] Jardin, variété fuzzy '{variete}'→'{var_jardin_matched}'")
+                await _save_perte_item(update, item, texte)
+                return
+            elif len(jardin_actif) == 1:
+                item["variete"] = jardin_actif[0]["variete"]
+                log.info(f"[perte-auto] Jardin, variété unique '{item['variete']}'")
+                await _save_perte_item(update, item, texte)
+                return
+            elif len(jardin_actif) > 1:
+                # Afficher sélection variété jardin directement (sans question source)
+                import time as _time
+                _PERTE_PENDING[update.effective_user.id] = {
+                    "item": item, "texte": texte,
+                    "godets": godets_dispo, "jardin_varietes": varietes_jardin,
+                    "ts": _time.time(),
+                }
+                buttons = []
+                for v in jardin_actif:
+                    var   = v["variete"] or "non précisée"
+                    stock = _stock_variete_jardin(v)
+                    cb    = v["variete"] if v["variete"] else "__none__"
+                    buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
+                buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
+                await update.message.reply_text(
+                    f"🌿 Quelle variété de *{_md(culture)}* au potager ?",
+                    parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons),
+                )
+                return
+            # Aucune variété active au jardin → sauvegarder sans variété
+            log.info(f"[perte-auto] Jardin, aucune variété active → save sans variété")
+            await _save_perte_item(update, item, texte)
+            return
+
+        if ctx_pepiniere and not ctx_jardin:
+            # Contexte pépinière clair
+            item["action"] = "perte_godet"
+            item.pop("parcelle", None)
+            if var_pepiniere_matched:
+                item["variete"] = var_pepiniere_matched
+                log.info(f"[perte-auto] Pépinière, variété fuzzy '{variete}'→'{var_pepiniere_matched}'")
+                await _save_perte_item(update, item, texte)
+                return
+            elif len(godets_dispo) == 1:
+                item["variete"] = godets_dispo[0]["variete"]
+                log.info(f"[perte-auto] Pépinière, variété unique '{item['variete']}'")
+                await _save_perte_item(update, item, texte)
+                return
+            elif len(godets_dispo) > 1:
+                import time as _time
+                _PERTE_PENDING[update.effective_user.id] = {
+                    "item": item, "texte": texte,
+                    "godets": godets_dispo, "jardin_varietes": varietes_jardin,
+                    "ts": _time.time(),
+                }
+                buttons = []
+                for g in godets_dispo:
+                    var = g["variete"] or "non précisée"
+                    cb  = g["variete"] if g["variete"] else "__none__"
+                    buttons.append([InlineKeyboardButton(f"🪴 {var} ({g['stock_residuel_godet']} en godet)", callback_data=f"perte_var_p:{cb}")])
+                buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
+                await update.message.reply_text(
+                    f"🪴 Quelle variété de *{_md(culture)}* en pépinière ?",
+                    parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons),
+                )
+                return
+            # Aucun godet → sauvegarder sans variété
+            log.info(f"[perte-auto] Pépinière, aucune variété en godet → save sans variété")
+            await _save_perte_item(update, item, texte)
+            return
+
+        # ── 6. Contexte non connu : menu source si godet en stock ───────────
+        godets_pertinents = godets_dispo
         if godets_pertinents:
-            # Pépinière en stock → demander le contexte en PREMIER
             user_id = update.effective_user.id
             import time as _time
             _PERTE_PENDING[user_id] = {
                 "item":           item,
                 "texte":          texte,
                 "godets":         godets_pertinents,
-                "jardin_varietes": varietes_jardin,   # toutes (filtre stock dans le callback)
+                "jardin_varietes": varietes_jardin,
                 "ts":             _time.time(),
             }
-            culture_md  = _md(culture)
-            qte         = item.get("quantite", "?")
-            nb_godets   = len(godets_pertinents)
-            nb_jardin   = len(jardin_actif)
-            lbl_jardin  = f"🌿 Au potager ({nb_jardin} variété{'s' if nb_jardin > 1 else ''} active{'s' if nb_jardin > 1 else ''})" if nb_jardin > 1 else "🌿 Au potager"
+            culture_md    = _md(culture)
+            qte           = item.get("quantite", "?")
+            nb_godets     = len(godets_pertinents)
+            nb_jardin     = len(jardin_actif)
+            lbl_jardin    = f"🌿 Au potager ({nb_jardin} variété{'s' if nb_jardin > 1 else ''} active{'s' if nb_jardin > 1 else ''})" if nb_jardin > 1 else "🌿 Au potager"
             lbl_pepiniere = f"🪴 Pépinière ({nb_godets} variété{'s' if nb_godets > 1 else ''} en godet)" if nb_godets > 1 else f"🪴 Pépinière ({godets_pertinents[0]['stock_residuel_godet']} en godet)"
             buttons = [
                 [InlineKeyboardButton(lbl_jardin,    callback_data="perte_source:jardin")],

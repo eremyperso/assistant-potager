@@ -298,3 +298,95 @@ def test_ca8_update_message_none_regression(db):
     # Et l'événement est bien sauvegardé malgré update.message = None
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
     assert ev is not None, "Événement non sauvegardé quand update.message=None"
+
+
+# ── Tests contexte intelligent (court-circuit) ───────────────────────────────
+
+def _make_message_update(user_id: int, text: str):
+    """Update mocké pour message texte (update.message n'est PAS None)."""
+    update = MagicMock()
+    update.effective_user.id = user_id
+    update.effective_message = MagicMock()
+    update.effective_message.reply_text = AsyncMock()
+    update.message = MagicMock()
+    update.message.reply_text = AsyncMock()
+    update.callback_query = None
+    return update
+
+
+def _setup_db_tomate(session, pid):
+    """Crée une situation avec godets ET jardin pour tomate."""
+    session.add(Evenement(
+        type_action="plantation", culture="tomate", variete="cerise",
+        quantite=10.0, rang=1, unite="plants",
+        parcelle_id=pid, date=datetime(2026, 5, 1),
+    ))
+    session.add(Evenement(
+        type_action="mise_en_godet", culture="tomate", variete="cerise",
+        nb_plants_godets=5, nb_graines_semees=8, date=datetime(2026, 4, 1),
+    ))
+    session.commit()
+
+
+def test_cx1_contexte_pepiniere_dans_texte_sauvegarde_direct(db):
+    """CX1 — 'pépinière' dans le texte → sauvegarde directe sans menu source."""
+    session, pid = db
+    _setup_db_tomate(session, pid)
+
+    update = _make_message_update(999, "perte de 1 plant de tomate pépinière")
+    item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 1}
+
+    with patch("bot.SessionLocal", return_value=session), \
+         patch("bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from bot import _parse_and_save
+        _run(_parse_and_save(update, "perte de 1 plant de tomate pépinière", pre_parsed_items=[item]))
+
+    ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
+    assert ev is not None, "Devrait être perte_godet sans menu car 'pépinière' dans texte"
+    # Aucun menu ne doit avoir été affiché (pas de reply_text avec clavier inline)
+    update.message.reply_text.assert_not_called()
+
+
+def test_cx2_contexte_potager_dans_texte_sauvegarde_direct(db):
+    """CX2 — 'au potager' dans le texte → sauvegarde directe sans menu source."""
+    session, pid = db
+    _setup_db_tomate(session, pid)
+
+    update = _make_message_update(998, "perte de 1 plant de tomate au potager")
+    item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 1}
+
+    with patch("bot.SessionLocal", return_value=session), \
+         patch("bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from bot import _parse_and_save
+        _run(_parse_and_save(update, "perte de 1 plant de tomate au potager", pre_parsed_items=[item]))
+
+    ev = session.query(Evenement).filter_by(type_action="perte").first()
+    assert ev is not None, "Devrait être perte jardin sans menu car 'potager' dans texte"
+    update.message.reply_text.assert_not_called()
+
+
+def test_cx3_variete_fuzzy_match_typo(db):
+    """CX3 — variété mal orthographiée → fuzzy match → sauvegarde avec variété correcte."""
+    session, pid = db
+    # 1 godet tomate cerise
+    session.add(Evenement(
+        type_action="mise_en_godet", culture="tomate", variete="cerise",
+        nb_plants_godets=5, nb_graines_semees=8, date=datetime(2026, 4, 1),
+    ))
+    session.commit()
+
+    update = _make_message_update(997, "perte de 1 tomate cerize pépinière")
+    # Groq a mal orthographié "cerise" → "cerize"
+    item = {"action": "perte", "culture": "tomate", "variete": "cerize", "quantite": 1}
+
+    with patch("bot.SessionLocal", return_value=session), \
+         patch("bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from bot import _parse_and_save
+        _run(_parse_and_save(update, "perte de 1 tomate cerize pépinière", pre_parsed_items=[item]))
+
+    ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
+    assert ev is not None
+    assert ev.variete == "cerise", f"Variété attendue 'cerise', obtenu '{ev.variete}'"
