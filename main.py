@@ -445,8 +445,18 @@ def stats():
             .filter(Evenement.type_action == "traitement")
             .group_by(Evenement.traitement).all()
         )
+        # Origine par culture : "pépinière" si mise_en_godet existe, sinon "pied_acheté"
+        cultures_avec_godet = {
+            row[0].lower() for row in
+            db.query(Evenement.culture)
+            .filter(Evenement.type_action == "mise_en_godet")
+            .filter(Evenement.culture.isnot(None))
+            .distinct().all()
+        }
+
         # [US-026 / semis pleine terre] Semis directement associés à une parcelle
         semis_data = calcul_semis(db)
+        cultures_semis_pt = {c.lower() for c, s in semis_data.items() if s.get("parcelles_pleine_terre")}
         semis_pleine_terre = [
             {
                 "culture":    c,
@@ -458,9 +468,20 @@ def stats():
             for c, s in semis_data.items()
             if s.get("parcelles_pleine_terre")
         ]
+
+        stock_enrichi = format_stock_stats_json(stocks)
+        for entry in stock_enrichi:
+            nom = (entry.get("culture") or "").lower()
+            if nom in cultures_avec_godet:
+                entry["origine"] = "pépinière"
+            elif nom in cultures_semis_pt:
+                entry["origine"] = "semis_pleine_terre"
+            else:
+                entry["origine"] = "pied_acheté"
+
         return {
             "total_evenements"   : total,
-            "stock_par_culture"  : format_stock_stats_json(stocks),
+            "stock_par_culture"  : stock_enrichi,
             "godets"             : [
                 {
                     "culture":           v["culture"],
