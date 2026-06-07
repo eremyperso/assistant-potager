@@ -1326,6 +1326,42 @@ async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     await send_voice_reply(update, _build_recap_tts(parsed))
 
 
+async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
+    """
+    Sauvegarde directe d'un item perte ou perte_godet depuis un callback inline.
+
+    N'utilise PAS _parse_and_save (qui nécessite update.message).
+    Utilise update.effective_message qui fonctionne dans les contextes callback ET message.
+    """
+    db = SessionLocal()
+    try:
+        event = Evenement(
+            type_action    = item.get("action"),
+            culture        = item.get("culture"),
+            variete        = item.get("variete"),
+            quantite       = _to_float(item.get("quantite")),
+            unite          = item.get("unite") or "plants",
+            parcelle_id    = None,
+            commentaire    = item.get("commentaire"),
+            texte_original = texte,
+            date           = parse_date(item.get("date")),
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        log.info(f"💾 PERTE SAVE : id={event.id} action={event.type_action} culture={event.culture} variete={event.variete} qte={event.quantite}")
+    except Exception as e:
+        db.rollback()
+        await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
+        return
+    finally:
+        db.close()
+
+    recap = _build_recap(item, event.id)
+    await update.effective_message.reply_text(recap, parse_mode="Markdown", reply_markup=AFTER_RECORD_KEYBOARD)
+    await send_voice_reply(update, _build_recap_tts(item))
+
+
 async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """[US-019] Callback inline — sélection de variété pour une mise en godet ambiguë."""
     query = update.callback_query
@@ -1426,7 +1462,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             _PERTE_PENDING.pop(user_id, None)
             item["action"] = "perte"
             await query.edit_message_text("🌿 Enregistrement perte au potager...", reply_markup=None)
-            await _parse_and_save(update, texte, pre_parsed_items=[item])
+            await _save_perte_item(update, item, texte)
 
         elif len(jardin_varietes) == 1:
             _PERTE_PENDING.pop(user_id, None)
@@ -1434,7 +1470,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item["variete"] = jardin_varietes[0]["variete"]
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
-            await _parse_and_save(update, texte, pre_parsed_items=[item])
+            await _save_perte_item(update, item, texte)
 
         else:
             # Plusieurs variétés actives au jardin → demander laquelle
@@ -1460,7 +1496,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item["action"] = "perte_godet"
             item.pop("parcelle", None)
             await query.edit_message_text("🪴 Enregistrement perte pépinière...", reply_markup=None)
-            await _parse_and_save(update, texte, pre_parsed_items=[item])
+            await _save_perte_item(update, item, texte)
 
         elif len(godets_actifs) == 1:
             _PERTE_PENDING.pop(user_id, None)
@@ -1469,7 +1505,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item.pop("parcelle", None)
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
-            await _parse_and_save(update, texte, pre_parsed_items=[item])
+            await _save_perte_item(update, item, texte)
 
         else:
             # Plusieurs variétés en godet → demander laquelle
