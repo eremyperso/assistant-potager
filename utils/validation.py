@@ -12,6 +12,7 @@ ACTIONS_VALIDES = {
     "semis", "plantation", "repiquage", "arrosage", "desherbage",
     "paillage", "fertilisation", "traitement", "taille", "tuteurage",
     "recolte", "perte", "observation", "mise_en_godet",
+    "vendu", "perte_godet",   # actions pépinière
 }
 
 QUESTION_MARKERS = {

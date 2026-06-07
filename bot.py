@@ -1533,7 +1533,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         var_lbl         = variete or "non précisée"
         log.info(f"[perte] Jardin variété={var_lbl}")
         await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement perte potager...", parse_mode="Markdown", reply_markup=None)
-        await _parse_and_save(update, texte, pre_parsed_items=[item])
+        await _save_perte_item(update, item, texte)
         return
 
     if data.startswith("perte_var_p:"):
@@ -1546,7 +1546,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         var_lbl         = variete or "non précisée"
         log.info(f"[perte] Pépinière variété={var_lbl}")
         await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement perte pépinière...", parse_mode="Markdown", reply_markup=None)
-        await _parse_and_save(update, texte, pre_parsed_items=[item])
+        await _save_perte_item(update, item, texte)
         return
 
 
