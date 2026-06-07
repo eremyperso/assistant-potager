@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Leaf, TrendingDown } from 'lucide-react'
+import { Search, Leaf, Sprout } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -70,6 +70,45 @@ function Section({ title, cultures, colorCls }) {
         <span className="shrink-0">Plants · Récolté · Perdu</span>
       </div>
       {cultures.map((c, i) => <CultureRow key={i} c={c} />)}
+    </div>
+  )
+}
+
+// ── Semis pleine terre ────────────────────────────────────────────────────────
+
+function SemisPleineTerrSection({ semis, search }) {
+  const filtered = search
+    ? semis.filter(s => s.culture.toLowerCase().includes(search))
+    : semis
+  if (!filtered.length) return null
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 mb-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Sprout size={13} className="text-teal-600 dark:text-teal-400" />
+        <span className="text-xs font-semibold text-teal-700 dark:text-teal-400">Semis en pleine terre</span>
+        <span className="text-[10px] text-gray-400 ml-auto">{filtered.length} culture{filtered.length > 1 ? 's' : ''}</span>
+      </div>
+      <div className="flex text-[10px] text-gray-400 pb-1 border-b border-gray-100 dark:border-gray-700 mb-1">
+        <span className="flex-1">Culture</span>
+        <span className="shrink-0">Quantité · Parcelle</span>
+      </div>
+      {filtered.map((s, i) => (
+        <div key={i} className="flex items-center gap-2 py-2 border-b border-gray-50 dark:border-gray-700 last:border-0">
+          <div className="flex-1 min-w-0">
+            <span className="text-[12px] font-medium text-gray-900 dark:text-gray-100 capitalize">{s.culture}</span>
+            <TypeBadge type={s.type_organe} />
+          </div>
+          <div className="text-right shrink-0 space-y-0.5">
+            <p className="text-[12px] font-semibold text-gray-800 dark:text-gray-200">
+              {s.total_seme} <span className="font-normal text-gray-400">{s.unite}</span>
+            </p>
+            <p className="text-[10px] text-teal-600 dark:text-teal-400 capitalize">
+              {s.parcelles.join(', ')}
+            </p>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -177,7 +216,7 @@ export default function Stocks({ refresh }) {
         />
       </div>
 
-      {/* Sections */}
+      {/* Sections plantations */}
       <Section
         title="🥬 Cultures végétatives"
         cultures={vegetatifs}
@@ -199,6 +238,9 @@ export default function Stocks({ refresh }) {
       {filtered.length === 0 && search && (
         <p className="text-sm text-gray-400 text-center mt-8">Aucune culture pour "{search}".</p>
       )}
+
+      {/* Semis pleine terre */}
+      <SemisPleineTerrSection semis={data?.semis_pleine_terre ?? []} search={q} />
 
       {/* Graphe */}
       <Chart cultures={stocks} />

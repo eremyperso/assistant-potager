@@ -434,25 +434,34 @@ def ask(req: TexteRequest):
 @app.get("/stats")
 def stats():
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié."""
-    from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets
+    from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets, calcul_semis
     db = SessionLocal()
     try:
         total  = db.query(Evenement).count()
         stocks = calcul_stock_cultures(db)
         godets = calcul_godets(db)
-        arrosages = (
-            db.query(func.count(Evenement.id), func.sum(Evenement.duree))
-            .filter(Evenement.type_action == "arrosage").first()
-        )
         traitements = (
             db.query(Evenement.traitement, func.count(Evenement.id))
             .filter(Evenement.type_action == "traitement")
             .group_by(Evenement.traitement).all()
         )
+        # [US-026 / semis pleine terre] Semis directement associés à une parcelle
+        semis_data = calcul_semis(db)
+        semis_pleine_terre = [
+            {
+                "culture":    c,
+                "total_seme": int(s["total_seme"]),
+                "unite":      s["unite"],
+                "type_organe": s["type_organe"],
+                "parcelles":  s["parcelles_pleine_terre"],
+            }
+            for c, s in semis_data.items()
+            if s.get("parcelles_pleine_terre")
+        ]
         return {
-            "total_evenements"  : total,
-            "stock_par_culture" : format_stock_stats_json(stocks),
-            "godets"            : [
+            "total_evenements"   : total,
+            "stock_par_culture"  : format_stock_stats_json(stocks),
+            "godets"             : [
                 {
                     "culture":           v["culture"],
                     "variete":           v["variete"],
@@ -462,8 +471,8 @@ def stats():
                 }
                 for v in godets.values()
             ],
-            "arrosages"         : {"nb": arrosages[0] or 0, "duree_totale_min": arrosages[1] or 0},
-            "traitements"       : [{"produit": t or "?", "nb_applications": n} for t, n in traitements],
+            "semis_pleine_terre" : semis_pleine_terre,
+            "traitements"        : [{"produit": t or "?", "nb_applications": n} for t, n in traitements],
         }
     finally:
         db.close()

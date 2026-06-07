@@ -56,16 +56,17 @@ def test_us023_ca1_health_retourne_200(app_client):
 # ─── CA2 : /stats → 4 clés attendues par le frontend ────────────────────────
 
 def test_us023_ca2_stats_retourne_structure_complete(app_client):
-    """CA2 — GET /stats retourne total_evenements, stock_par_culture, godets, arrosages."""
+    """CA2 — GET /stats retourne total_evenements, stock_par_culture, godets, semis_pleine_terre."""
     resp = app_client.get("/stats")
     assert resp.status_code == 200
     body = resp.json()
-    assert "total_evenements"  in body
-    assert "stock_par_culture" in body
-    assert "godets"            in body
-    assert "arrosages"         in body
-    assert isinstance(body["stock_par_culture"], list)
-    assert isinstance(body["godets"], list)
+    assert "total_evenements"   in body
+    assert "stock_par_culture"  in body
+    assert "godets"             in body
+    assert "semis_pleine_terre" in body
+    assert isinstance(body["stock_par_culture"],  list)
+    assert isinstance(body["godets"],             list)
+    assert isinstance(body["semis_pleine_terre"], list)
 
 
 # ─── CA3 : /godets → format US-026 (en_attente + tout_plante + total) ────────

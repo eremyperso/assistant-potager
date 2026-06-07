@@ -2554,39 +2554,50 @@ async def cmd_stats(update, ctx):
         # ── Semis ──────────────────────────────────────────────────────────────
         semis = calcul_semis(db)
         if semis:
-            veg_semis  = {c: s for c, s in semis.items() if s["type_organe"] != "reproducteur"}
-            repr_semis = {c: s for c, s in semis.items() if s["type_organe"] == "reproducteur"}
+            # Pleine terre : semis directement associés à une parcelle
+            semis_pt = {c: s for c, s in semis.items() if s.get("parcelles_pleine_terre")}
+            # Pépinière : semis sans parcelle et non entièrement mis en godet
+            semis_pep = {
+                c: s for c, s in semis.items()
+                if not s.get("parcelles_pleine_terre")
+                and not (s.get("stock_residuel", 0) == 0 and s.get("plants_en_godet", 0) > 0)
+            }
 
-            lines_out.append("\n🌱 *Semis :*")
-
-            # Synthèse semis : stock résiduel toutes variétés confondues — détail via /stats <culture>
-            def _ligne_semis(culture: str, s: dict) -> str:
-                residuel     = s.get("stock_residuel", 0)
-                en_godet     = s.get("plants_en_godet", 0)
-                unite        = s.get("unite", "graines")
-                parcelles_pt = s.get("parcelles_pleine_terre", [])
-                if parcelles_pt:
-                    # Semis directement en pleine terre → indiquer la/les parcelle(s)
-                    total        = s.get("total_seme", 0)
-                    parcelles_str = ", ".join(parcelles_pt)
-                    return f"  • {culture} : *{int(total)} {unite}* en parcelle _{parcelles_str}_"
+            def _ligne_semis_pep(culture: str, s: dict) -> str:
+                residuel = s.get("stock_residuel", 0)
+                unite    = s.get("unite", "graines")
                 if residuel > 0:
                     return f"  • {culture} : *{residuel} {unite} restantes*"
-                elif en_godet > 0:
-                    return f"  • {culture} : *tout en godet*"
-                elif s["total_seme"]:
+                elif s.get("total_seme"):
                     return f"  • {culture} : *{int(s['total_seme'])} {unite}*"
                 return f"  • {culture} : *{s['nb_semis']} semis*"
 
-            if veg_semis:
-                lines_out.append("  _→ Récolte destructive (végétatif)_")
-                for culture, s in veg_semis.items():
-                    lines_out.append(_ligne_semis(culture, s))
+            if semis_pt or semis_pep:
+                lines_out.append("\n🌱 *Semis :*")
 
-            if repr_semis:
-                lines_out.append("  _→ Récolte continue (reproducteur)_")
-                for culture, s in repr_semis.items():
-                    lines_out.append(_ligne_semis(culture, s))
+                # Pleine terre
+                if semis_pt:
+                    lines_out.append("  _🌿 En pleine terre :_")
+                    for culture, s in semis_pt.items():
+                        total         = s.get("total_seme", 0)
+                        unite         = s.get("unite", "graines")
+                        parcelles_str = ", ".join(s["parcelles_pleine_terre"])
+                        lines_out.append(f"  • {culture} : *{int(total)} {unite}* · _{parcelles_str}_")
+
+                # Pépinière — semences en stock
+                if semis_pep:
+                    if semis_pt:
+                        lines_out.append("  _📦 Pépinière — semences :_")
+                    veg_pep  = {c: s for c, s in semis_pep.items() if s["type_organe"] != "reproducteur"}
+                    repr_pep = {c: s for c, s in semis_pep.items() if s["type_organe"] == "reproducteur"}
+                    if veg_pep:
+                        lines_out.append("  _→ Récolte destructive (végétatif)_")
+                        for culture, s in veg_pep.items():
+                            lines_out.append(_ligne_semis_pep(culture, s))
+                    if repr_pep:
+                        lines_out.append("  _→ Récolte continue (reproducteur)_")
+                        for culture, s in repr_pep.items():
+                            lines_out.append(_ligne_semis_pep(culture, s))
 
         # ── Pépinière (godets) ─────────────────────────────────────────────────
         godets_stats = calcul_godets(db)
@@ -2599,17 +2610,6 @@ async def cmd_stats(update, ctx):
                 taux_str = f" · taux *{taux}%*" if taux is not None else ""
                 detail   = f" ({g['nb_plants_godets']} repiqués · {nb_pl} plantés)" if nb_pl > 0 else ""
                 lines_out.append(f"  • {key} : *{residuel} plants*{detail}{taux_str}")
-
-        # ── Arrosages (inchangé) ───────────────────────────────────────────────
-        arrosages = (
-            db.query(func.count(Evenement.id), func.sum(Evenement.duree))
-            .filter(Evenement.type_action == "arrosage")
-            .first()
-        )
-        if arrosages and arrosages[0]:
-            lines_out.append(f"\n💧 *Arrosages :* {arrosages[0]} fois")
-            if arrosages[1]:
-                lines_out.append(f"  Durée totale : *{arrosages[1]} min*")
 
         # ── Traitements (bonus) ───────────────────────────────────────────────
         nb_traitements = (
