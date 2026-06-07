@@ -1368,8 +1368,27 @@ async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
 
 # ── [vendu/perte_godet] CALLBACK DISAMBIGUATION PERTE ────────────────────────────
 
+def _stock_variete_jardin(v: dict) -> int:
+    """Calcule le stock actif d'une variété au jardin."""
+    plants = (v.get("plants_plantes") or 0) - (v.get("plants_perdus") or 0)
+    if v.get("type_organe") != "reproducteur":
+        plants -= (v.get("recoltes_total") or 0)
+    return max(0, int(plants))
+
+
 async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    """Traite les callbacks du flux disambiguation perte jardin vs pépinière."""
+    """
+    Flux disambiguation perte en 2 étapes :
+      Étape 1 : potager ou pépinière ? (toujours en premier)
+      Étape 2 : quelle variété ? (uniquement si plusieurs variétés actives dans ce contexte)
+
+    Callbacks :
+      perte_source:jardin     → sélection contexte jardin
+      perte_source:pepiniere  → sélection contexte pépinière
+      perte_var_j:{variete}   → variété jardin choisie → save perte
+      perte_var_p:{variete}   → variété pépinière choisie → save perte_godet
+      perte_cancel            → annulation
+    """
     query = update.callback_query
     await query.answer()
 
@@ -1386,58 +1405,113 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("⏱ *Action expirée* (timeout). Veuillez re-saisir.", parse_mode="Markdown")
         return
 
-    data  = query.data  # perte_var:{v} | perte_source:jardin | perte_source:pepiniere | perte_cancel
-    item  = pending["item"]
-    texte = pending["texte"]
-    godets = pending["godets"]
+    data    = query.data
+    item    = pending["item"]
+    texte   = pending["texte"]
+    culture = item.get("culture", "")
+    qte     = item.get("quantite", "?")
 
     if data == "perte_cancel":
         _PERTE_PENDING.pop(user_id, None)
         await query.edit_message_text("❌ Annulé.", reply_markup=None)
         return
 
-    if data.startswith("perte_var:"):
-        # Étape 1 → variété choisie, maintenant demander jardin/pépinière
-        variete = data[len("perte_var:"):]
-        variete = variete if variete != "__none__" else None
-        item["variete"] = variete
-        pending["item"] = item
+    # ── ÉTAPE 1 : contexte choisi → maintenant sélection variété ────────────
 
-        godets_var = [g for g in godets if g["variete"] == variete]
-        stock_g    = godets_var[0]["stock_residuel_godet"] if godets_var else 0
-        culture    = item.get("culture", "")
-        qte        = item.get("quantite", "?")
-        var_lbl    = variete or "non précisée"
+    if data == "perte_source:jardin":
+        jardin_varietes = [v for v in pending.get("jardin_varietes", []) if _stock_variete_jardin(v) > 0]
 
-        buttons = [
-            [InlineKeyboardButton(f"🪴 Pépinière ({stock_g} en godet)", callback_data="perte_source:pepiniere")],
-            [InlineKeyboardButton("🌿 Au jardin",                        callback_data="perte_source:jardin")],
-            [InlineKeyboardButton("❌ Annuler",                           callback_data="perte_cancel")],
-        ]
-        await query.edit_message_text(
-            f"🤔 Perte de *{qte} {culture}* ({var_lbl}) — jardin ou pépinière ?",
-            parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(buttons),
-        )
+        if len(jardin_varietes) == 0:
+            # Aucune variété active au jardin → enregistrer sans variété
+            _PERTE_PENDING.pop(user_id, None)
+            item["action"] = "perte"
+            await query.edit_message_text("🌿 Enregistrement perte au potager...", reply_markup=None)
+            await _parse_and_save(update, texte, pre_parsed_items=[item])
+
+        elif len(jardin_varietes) == 1:
+            _PERTE_PENDING.pop(user_id, None)
+            item["action"]  = "perte"
+            item["variete"] = jardin_varietes[0]["variete"]
+            var_lbl = item["variete"] or "non précisée"
+            await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
+            await _parse_and_save(update, texte, pre_parsed_items=[item])
+
+        else:
+            # Plusieurs variétés actives au jardin → demander laquelle
+            buttons = []
+            for v in jardin_varietes:
+                var   = v["variete"] or "non précisée"
+                stock = _stock_variete_jardin(v)
+                cb    = v["variete"] if v["variete"] else "__none__"
+                buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
+            buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
+            await query.edit_message_text(
+                f"🌿 Quelle variété de *{_md(culture)}* au potager ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
         return
 
-    # perte_source:jardin | perte_source:pepiniere
-    _PERTE_PENDING.pop(user_id, None)
-
     if data == "perte_source:pepiniere":
-        item["action"] = "perte_godet"
-        item.pop("parcelle", None)    # perte pépinière n'a pas de parcelle
-        log.info(f"[perte] Disambiguation → perte_godet : {item}")
-    else:  # jardin
-        item["action"] = "perte"
-        log.info(f"[perte] Disambiguation → perte jardin : {item}")
+        godets_actifs = pending.get("godets", [])
 
-    await query.edit_message_text(
-        f"{'🪴' if item['action'] == 'perte_godet' else '🌿'} Contexte sélectionné — enregistrement...",
-        parse_mode="Markdown",
-        reply_markup=None,
-    )
-    await _parse_and_save(update, texte, pre_parsed_items=[item])
+        if len(godets_actifs) == 0:
+            _PERTE_PENDING.pop(user_id, None)
+            item["action"] = "perte_godet"
+            item.pop("parcelle", None)
+            await query.edit_message_text("🪴 Enregistrement perte pépinière...", reply_markup=None)
+            await _parse_and_save(update, texte, pre_parsed_items=[item])
+
+        elif len(godets_actifs) == 1:
+            _PERTE_PENDING.pop(user_id, None)
+            item["action"]  = "perte_godet"
+            item["variete"] = godets_actifs[0]["variete"]
+            item.pop("parcelle", None)
+            var_lbl = item["variete"] or "non précisée"
+            await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
+            await _parse_and_save(update, texte, pre_parsed_items=[item])
+
+        else:
+            # Plusieurs variétés en godet → demander laquelle
+            buttons = []
+            for g in godets_actifs:
+                var = g["variete"] or "non précisée"
+                cb  = g["variete"] if g["variete"] else "__none__"
+                buttons.append([InlineKeyboardButton(f"🪴 {var} ({g['stock_residuel_godet']} en godet)", callback_data=f"perte_var_p:{cb}")])
+            buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
+            await query.edit_message_text(
+                f"🪴 Quelle variété de *{_md(culture)}* en pépinière ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+        return
+
+    # ── ÉTAPE 2 : variété choisie ────────────────────────────────────────────
+
+    if data.startswith("perte_var_j:"):
+        _PERTE_PENDING.pop(user_id, None)
+        variete         = data[len("perte_var_j:"):]
+        variete         = variete if variete != "__none__" else None
+        item["action"]  = "perte"
+        item["variete"] = variete
+        var_lbl         = variete or "non précisée"
+        log.info(f"[perte] Jardin variété={var_lbl}")
+        await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement perte potager...", parse_mode="Markdown", reply_markup=None)
+        await _parse_and_save(update, texte, pre_parsed_items=[item])
+        return
+
+    if data.startswith("perte_var_p:"):
+        _PERTE_PENDING.pop(user_id, None)
+        variete         = data[len("perte_var_p:"):]
+        variete         = variete if variete != "__none__" else None
+        item["action"]  = "perte_godet"
+        item["variete"] = variete
+        item.pop("parcelle", None)
+        var_lbl         = variete or "non précisée"
+        log.info(f"[perte] Pépinière variété={var_lbl}")
+        await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement perte pépinière...", parse_mode="Markdown", reply_markup=None)
+        await _parse_and_save(update, texte, pre_parsed_items=[item])
+        return
 
 
 # ── [US-021] CONFIRMATION AVANT ENREGISTREMENT ──────────────────────────────────
@@ -1761,7 +1835,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             )
         return  # attente callback — pas de sauvegarde immédiate
 
-    # ── [vendu/perte_godet] Disambiguation perte jardin vs pépinière ─────────────
+    # ── [vendu/perte_godet] Disambiguation perte — ÉTAPE 1 : contexte d'abord ────
     if (
         len(items) == 1
         and normalize_action(items[0].get("action")) == "perte"
@@ -1771,61 +1845,54 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         culture = item.get("culture", "")
         variete = item.get("variete")
 
-        from utils.stock import calcul_godets_par_culture as _cgpc
+        from utils.stock import calcul_godets_par_culture as _cgpc, calcul_stock_par_variete as _csv
         db_perte = SessionLocal()
         try:
-            godets_dispo = _cgpc(db_perte, culture)
+            godets_dispo    = _cgpc(db_perte, culture)      # godet actif (stock > 0)
+            varietes_jardin = _csv(db_perte, culture)       # toutes variétés jardin
         finally:
             db_perte.close()
 
-        # Filtrer les godets pertinents selon la variété demandée
+        # Restreindre godets à la variété si précisée (match exact ou godet sans variété)
         if variete:
             godets_pertinents = [g for g in godets_dispo if g["variete"] == variete or g["variete"] is None]
         else:
             godets_pertinents = godets_dispo
 
+        # Variétés actives au jardin (stock > 0)
+        jardin_actif = [v for v in varietes_jardin if _stock_variete_jardin(v) > 0]
+        # Si variété précisée, restreindre aussi le jardin
+        if variete:
+            jardin_actif = [v for v in jardin_actif if v.get("variete") == variete]
+
         if godets_pertinents:
-            # Ambiguïté : il y a du stock en pépinière → demander le contexte
+            # Pépinière en stock → demander le contexte en PREMIER
             user_id = update.effective_user.id
             import time as _time
-            _PERTE_PENDING[user_id] = {"item": item, "texte": texte, "godets": godets_pertinents, "ts": _time.time()}
-            culture_md = _md(culture)
-            qte        = item.get("quantite", "?")
-
-            if not variete and len(godets_pertinents) > 1:
-                # Plusieurs variétés en pépinière → demander d'abord la variété
-                buttons = []
-                for g in godets_pertinents:
-                    var_label = g["variete"] or "non précisée"
-                    cb_key    = g["variete"] if g["variete"] else "__none__"
-                    buttons.append([InlineKeyboardButton(
-                        f"🪴 {var_label} ({g['stock_residuel_godet']} en godet)",
-                        callback_data=f"perte_var:{cb_key}"
-                    )])
-                buttons.append([InlineKeyboardButton("🌿 Au jardin", callback_data="perte_source:jardin")])
-                buttons.append([InlineKeyboardButton("❌ Annuler",   callback_data="perte_cancel")])
-                await update.message.reply_text(
-                    f"🤔 Perte de *{qte} {culture_md}* — quelle variété de votre pépinière ?",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                )
-            else:
-                # Une variété ou variété déjà précisée → demander jardin/pépinière
-                if not variete and len(godets_pertinents) == 1:
-                    item["variete"] = godets_pertinents[0]["variete"]
-                    _PERTE_PENDING[user_id]["item"] = item
-                stock_g   = sum(g["stock_residuel_godet"] for g in godets_pertinents)
-                var_label = item.get("variete") or ""
-                buttons = [
-                    [InlineKeyboardButton(f"🪴 Pépinière ({stock_g} en godet)", callback_data="perte_source:pepiniere")],
-                    [InlineKeyboardButton("🌿 Au jardin",                        callback_data="perte_source:jardin")],
-                    [InlineKeyboardButton("❌ Annuler",                           callback_data="perte_cancel")],
-                ]
-                await update.message.reply_text(
-                    f"🤔 Perte de *{qte} {culture_md}*{' ' + var_label if var_label else ''} — jardin ou pépinière ?",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                )
+            _PERTE_PENDING[user_id] = {
+                "item":           item,
+                "texte":          texte,
+                "godets":         godets_pertinents,
+                "jardin_varietes": varietes_jardin,   # toutes (filtre stock dans le callback)
+                "ts":             _time.time(),
+            }
+            culture_md  = _md(culture)
+            qte         = item.get("quantite", "?")
+            nb_godets   = len(godets_pertinents)
+            nb_jardin   = len(jardin_actif)
+            lbl_jardin  = f"🌿 Au potager ({nb_jardin} variété{'s' if nb_jardin > 1 else ''} active{'s' if nb_jardin > 1 else ''})" if nb_jardin > 1 else "🌿 Au potager"
+            lbl_pepiniere = f"🪴 Pépinière ({nb_godets} variété{'s' if nb_godets > 1 else ''} en godet)" if nb_godets > 1 else f"🪴 Pépinière ({godets_pertinents[0]['stock_residuel_godet']} en godet)"
+            buttons = [
+                [InlineKeyboardButton(lbl_jardin,    callback_data="perte_source:jardin")],
+                [InlineKeyboardButton(lbl_pepiniere, callback_data="perte_source:pepiniere")],
+                [InlineKeyboardButton("❌ Annuler",   callback_data="perte_cancel")],
+            ]
+            var_lbl = f" *{variete}*" if variete else ""
+            await update.message.reply_text(
+                f"🤔 Perte de *{qte} {culture_md}*{var_lbl} — au potager ou en pépinière ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
             return  # attente callback
 
     # [US-021] Confirmation avant enregistrement
