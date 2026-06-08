@@ -3142,6 +3142,9 @@ def _normalize_action_search(action: str) -> str:
         "tuteurage": "tuteurage", "tuteurer": "tuteurage", "tuteuré": "tuteurage",
         "fertilisation": "fertilisation", "fertiliser": "fertilisation",
         "observation": "observation", "observer": "observation",
+        "mise_en_godet": "mise_en_godet", "godet": "mise_en_godet",
+        "mis en godet": "mise_en_godet", "mise en godet": "mise_en_godet",
+        "perte": "perte",
     }
     key = unidecode(action.lower().strip())
     return mapping.get(action.lower().strip(), mapping.get(key, action.lower().strip()))
@@ -3166,7 +3169,8 @@ Retourne UNIQUEMENT ce JSON (null si non mentionné) :
 {{"action": string|null, "culture": string|null, "variete": string|null, "date_debut": "YYYY-MM-DD"|null, "date_fin": "YYYY-MM-DD"|null, "parcelle": string|null}}
 
 RÈGLES :
-- action SANS accent : recolte, plantation, semis, arrosage, paillage, traitement, desherbage, taille, observation, tuteurage, fertilisation, repiquage
+- action SANS accent : recolte, plantation, semis, mise_en_godet, arrosage, paillage, traitement, desherbage, taille, observation, tuteurage, fertilisation, perte, repiquage
+- "godet", "mis en godet", "mise en godet", "repiquer en godet" → action="mise_en_godet"
 - culture au singulier minuscule (conserver les accents si applicable, ex: "échalote", "courgette")
 - variete : mot ou groupe de mots décrivant la variété (ex: "ronde", "cerise", "noire de crimée"), null si non mentionné
 - "11 mars" ou "11 mars dernier" → date_debut="{today.year}-03-11", date_fin="{today.year}-03-11"  
