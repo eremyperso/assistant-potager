@@ -1,4 +1,23 @@
 
+## [v3.5.0] — 2026-06-08
+
+### 🚀 Nouveautés
+- Ajoute le chaînage complet du cycle de vie semis → godet → plantation via la colonne `source_evenement_ids` (US-029)
+- Hérite automatiquement la variété du godet lors d'une plantation sans variété précisée, si une seule variété est active en pépinière (US-029 CA5)
+- Lie automatiquement chaque mise en godet à son semis parent via `origine_graines_id` (US-029 CA3/CA4)
+
+### 🐛 Corrections
+- Corrige le bug CA6/CA6-reverse qui annulait mutuellement la déduction des stocks godet, causant un affichage de stock erroné (US-029 CA10)
+
+### 🔧 Améliorations techniques
+- Ajoute `_find_plantation_sources()` dans `utils/stock.py` : résolution FIFO multi-lots avec allocation sur les godets les plus anciens (US-029 CA7/CA8)
+- Ajoute 12 tests dans `tests/test_us029_chainagecomplet.py` couvrant CA1/CA5/CA7/CA8/CA9/CA10 (12/12 verts)
+- Ajoute `mise_en_godet` et `perte` dans le mapping `_normalize_action_search` et le prompt LLM du mode /corriger
+
+### 💾 Base de données
+- Ajoute la colonne `source_evenement_ids TEXT NULL` sur la table `evenements` (migration_v14.sql)
+- Rétroalimente `source_evenement_ids` et `variete` pour les plantations historiques sans variété dont la culture a une variété unique en godet
+
 ## [v3.4.0] — 2026-06-06
 
 ### 🚀 Nouveautés

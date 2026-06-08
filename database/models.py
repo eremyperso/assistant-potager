@@ -52,6 +52,9 @@ class Evenement(Base):
     # [migration_v12] Traçabilité pépinière : événement source (semis → godet → plantation)
     origine_graines_id  = Column(Integer, ForeignKey("evenements.id", ondelete="SET NULL"), nullable=True)
 
+    # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
+    source_evenement_ids = Column(String, nullable=True)
+
     # Relation vers la parcelle — permet d'accéder à e.parcelle_rel.nom
     parcelle_rel = relationship("Parcelle", foreign_keys=[parcelle_id])
 

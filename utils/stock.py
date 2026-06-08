@@ -788,6 +788,7 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
 
     # [US-022 / CA6] Plantation sans variété → rattacher selon le contexte godet
     nb_plantes_sans_variete = plantations.pop(None, 0)
+    ca6_applied = False
     if nb_plantes_sans_variete > 0:
         varietes_avec_godet = [r[0] for r in rows if r[0] is not None]
         if len(varietes_avec_godet) == 0:
@@ -796,6 +797,7 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
         elif len(varietes_avec_godet) == 1:
             v_unique = varietes_avec_godet[0]
             plantations[v_unique] = plantations.get(v_unique, 0) + nb_plantes_sans_variete
+            ca6_applied = True  # [US-029 CA10] marque pour bloquer CA6-reverse
         else:
             _logger.warning(
                 "[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée du calcul",
@@ -803,7 +805,8 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
             )
 
     # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    if any(r[0] is None for r in rows):
+    # [US-029 CA10] Ne s'applique PAS si CA6 vient d'attribuer les plants (évite l'annulation mutuelle)
+    if not ca6_applied and any(r[0] is None for r in rows):
         varietes_dans_plantations = [v for v in plantations if v is not None]
         if len(varietes_dans_plantations) == 1:
             v_unique = varietes_dans_plantations[0]
@@ -866,6 +869,99 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
             "date_derniere_mise_en_godet": date_max,
         })
     return sorted(result, key=lambda x: ("" if x["variete"] is None else x["variete"]))
+
+
+def _find_plantation_sources(
+    db: Session,
+    culture: str,
+    variete: str | None,
+    quantite: float,
+) -> tuple[str | None, str | None]:
+    """
+    [US-029 CA5/CA7/CA8] Trouve la variété héritée et les IDs de godets sources pour une plantation.
+
+    - Si variete=None et 1 seule variété active en godet → hérite la variété (CA5)
+    - Allocation FIFO : consomme les lots les plus anciens en premier (CA8)
+    - Si plusieurs lots nécessaires → IDs séparés par ";" dans source_evenement_ids (CA7)
+
+    Retourne (variete_resolue, source_evenement_ids_str).
+    Retourne (None, None) si la variété est ambiguë (plusieurs variétés, menu inline requis).
+    """
+    import logging as _log
+    _logger = _log.getLogger("potager")
+
+    culture_lower = culture.lower()
+
+    # Charger tous les godets pour cette culture, FIFO (plus ancien d'abord)
+    godet_events = (
+        db.query(Evenement.id, Evenement.variete, Evenement.nb_plants_godets, Evenement.date)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.culture.isnot(None))
+        .filter(Evenement.nb_plants_godets.isnot(None))
+        .order_by(Evenement.date.asc().nullsfirst(), Evenement.id.asc())
+        .all()
+    )
+
+    if not godet_events:
+        return (variete, None)
+
+    # Calculer les consommations déjà enregistrées via source_evenement_ids
+    plant_linked = (
+        db.query(Evenement.source_evenement_ids, Evenement.quantite)
+        .filter(Evenement.type_action == "plantation")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.source_evenement_ids.isnot(None))
+        .all()
+    )
+    consumed: dict[int, float] = {}
+    for src_ids_str, p_qte in plant_linked:
+        for part in (src_ids_str or "").split(";"):
+            try:
+                gid = int(part.strip())
+                consumed[gid] = consumed.get(gid, 0.0) + float(p_qte or 0)
+            except ValueError:
+                pass
+
+    # Stock résiduel par godet
+    residuel: dict[int, float] = {
+        g.id: max(0.0, float(g.nb_plants_godets) - consumed.get(g.id, 0.0))
+        for g in godet_events
+    }
+
+    # Résolution variété si None (CA5)
+    if variete is None:
+        varietes_actives = {
+            g.variete for g in godet_events
+            if g.variete is not None and residuel.get(g.id, 0.0) > 0
+        }
+        if len(varietes_actives) == 1:
+            variete = next(iter(varietes_actives))
+            _logger.info("[US-029 CA5] Variété unique déduite depuis godet : '%s' pour '%s'", variete, culture)
+        elif len(varietes_actives) == 0:
+            return (None, None)
+        else:
+            return (None, None)  # Ambiguïté : menu inline requis en amont
+
+    # Allocation FIFO sur les godets de la variété (CA8)
+    godets_variete = [
+        g for g in godet_events
+        if g.variete == variete and residuel.get(g.id, 0.0) > 0
+    ]
+
+    if not godets_variete:
+        return (variete, None)  # variété connue mais plus de stock godet actif
+
+    remaining   = float(quantite)
+    source_ids: list[str] = []
+    for g in godets_variete:
+        if remaining <= 0:
+            break
+        if residuel[g.id] > 0:
+            source_ids.append(str(g.id))
+            remaining -= residuel[g.id]
+
+    return (variete, ";".join(source_ids) if source_ids else None)
 
 
 _MOIS_FR = [

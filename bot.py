@@ -1294,26 +1294,51 @@ async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
     db = SessionLocal()
     try:
+        culture_str = parsed.get("culture") or ""
+        variete_str = parsed.get("variete")
+
+        # [US-029 CA3/CA4] Auto-link au semis parent + héritage variété
+        origine_graines_id: int | None = None
+        from sqlalchemy import func as _sqlfunc
+        semis_rows = (
+            db.query(Evenement.id, Evenement.variete)
+            .filter(Evenement.type_action == "semis")
+            .filter(_sqlfunc.lower(Evenement.culture) == culture_str.lower())
+            .filter(Evenement.culture.isnot(None))
+        )
+        if variete_str:
+            semis_rows = semis_rows.filter(Evenement.variete == variete_str)
+        semis_list = semis_rows.order_by(Evenement.date.asc()).all()
+
+        if len(semis_list) == 1:
+            origine_graines_id = semis_list[0].id
+            if not variete_str and semis_list[0].variete:
+                parsed["variete"] = semis_list[0].variete
+                variete_str = semis_list[0].variete
+                log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
+            log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
+
         event = Evenement(
-            type_action       = "mise_en_godet",
-            culture           = parsed.get("culture"),
-            variete           = parsed.get("variete"),
-            quantite          = _to_float(parsed.get("quantite")),
-            unite             = parsed.get("unite"),
-            parcelle_id       = None,
-            rang              = None,
-            duree             = None,
-            traitement        = None,
-            commentaire       = parsed.get("commentaire"),
-            texte_original    = texte,
-            date              = parse_date(parsed.get("date")),
-            nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-            nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
+            type_action        = "mise_en_godet",
+            culture            = culture_str,
+            variete            = parsed.get("variete"),
+            quantite           = _to_float(parsed.get("quantite")),
+            unite              = parsed.get("unite"),
+            parcelle_id        = None,
+            rang               = None,
+            duree              = None,
+            traitement         = None,
+            commentaire        = parsed.get("commentaire"),
+            texte_original     = texte,
+            date               = parse_date(parsed.get("date")),
+            nb_graines_semees  = _to_int(parsed.get("nb_graines_semees")),
+            nb_plants_godets   = _to_int(parsed.get("nb_plants_godets")),
+            origine_graines_id = origine_graines_id,
         )
         db.add(event)
         db.commit()
         db.refresh(event)
-        log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete}")
+        log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete} origine={origine_graines_id}")
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -1627,21 +1652,40 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                     if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                     else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                     return
+
+            # [US-029 CA5/CA7/CA8] Plantation : héritage variété + source_evenement_ids
+            source_evenement_ids: str | None = parsed.get("source_evenement_ids")
+            if normalize_action(parsed.get("action")) == "plantation" and parsed.get("culture"):
+                from utils.stock import _find_plantation_sources
+                variete_src, src_ids = _find_plantation_sources(
+                    db,
+                    parsed["culture"],
+                    parsed.get("variete"),
+                    float(parsed.get("quantite") or 0),
+                )
+                if variete_src and not parsed.get("variete"):
+                    parsed["variete"] = variete_src
+                    log.info(f"[US-029 CA5] Variété '{variete_src}' héritée du godet → plantation '{parsed['culture']}'")
+                if src_ids:
+                    source_evenement_ids = src_ids
+                    log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
+
             event = Evenement(
-                type_action       = normalize_action(parsed.get("action")),
-                culture           = parsed.get("culture"),
-                variete           = parsed.get("variete"),
-                quantite          = _to_float(parsed.get("quantite")),
-                unite             = parsed.get("unite"),
-                parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                rang              = _to_int(parsed.get("rang")),
-                duree             = _to_int(parsed.get("duree_minutes")),
-                traitement        = parsed.get("traitement"),
-                commentaire       = parsed.get("commentaire"),
-                texte_original    = texte,
-                date              = parse_date(parsed.get("date")),
-                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
+                type_action          = normalize_action(parsed.get("action")),
+                culture              = parsed.get("culture"),
+                variete              = parsed.get("variete"),
+                quantite             = _to_float(parsed.get("quantite")),
+                unite                = parsed.get("unite"),
+                parcelle_id          = parcelle_obj.id if parcelle_obj else None,
+                rang                 = _to_int(parsed.get("rang")),
+                duree                = _to_int(parsed.get("duree_minutes")),
+                traitement           = parsed.get("traitement"),
+                commentaire          = parsed.get("commentaire"),
+                texte_original       = texte,
+                date                 = parse_date(parsed.get("date")),
+                nb_graines_semees    = _to_int(parsed.get("nb_graines_semees")),
+                nb_plants_godets     = _to_int(parsed.get("nb_plants_godets")),
+                source_evenement_ids = source_evenement_ids,
             )
             db.add(event)
             db.commit()
