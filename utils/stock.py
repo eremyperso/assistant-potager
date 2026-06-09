@@ -631,6 +631,27 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
     if not rows:
         return {}
 
+    # [US-029] Taux de germination : calculer depuis les semis parents (origine_graines_id)
+    # nb_graines_semees sur une mise_en_godet est un champ contextuel par lot, pas le total réel
+    _godet_links = (
+        db.query(Evenement.culture, Evenement.variete, Evenement.origine_graines_id)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+        .all()
+    )
+    _semis_ids_all = {r.origine_graines_id for r in _godet_links if r.origine_graines_id}
+    _semis_qtites_all: Dict[int, int] = {}
+    if _semis_ids_all:
+        for sid, sqte in db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_all)).all():
+            _semis_qtites_all[sid] = int(sqte or 0)
+    graines_par_cv: Dict[tuple, int] = {}
+    _seen_cv: Dict[tuple, set] = {}
+    for r in _godet_links:
+        key = (r.culture, r.variete)
+        if r.origine_graines_id and r.origine_graines_id not in _seen_cv.get(key, set()):
+            _seen_cv.setdefault(key, set()).add(r.origine_graines_id)
+            graines_par_cv[key] = graines_par_cv.get(key, 0) + _semis_qtites_all.get(r.origine_graines_id, 0)
+
     # [US-022] Plantations par (culture, variété)
     plant_rows = (
         db.query(
@@ -714,7 +735,8 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
     for culture, variete, tot_g, tot_p, nb in rows:
         nb_p = int(tot_p) if tot_p else 0
         nb_g = int(tot_g) if tot_g else 0
-        taux = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        nb_g_semis = graines_par_cv.get((culture, variete), 0)
+        taux = round(nb_p / nb_g_semis * 100) if (nb_g_semis and nb_p) else None
         nb_plantes     = plantations.get((culture, variete), 0)
         nb_vendus_val  = vendus.get((culture, variete), 0)
         nb_pertes_val  = pertes_godet.get((culture, variete), 0)
@@ -771,6 +793,26 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
 
     if not rows:
         return []
+
+    # [US-029] Taux de germination depuis les semis parents (origine_graines_id)
+    _godet_links_var = (
+        db.query(Evenement.variete, Evenement.origine_graines_id)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.culture.isnot(None))
+        .all()
+    )
+    _semis_ids_var = {r.origine_graines_id for r in _godet_links_var if r.origine_graines_id}
+    _semis_qtites_var: Dict[int, int] = {}
+    if _semis_ids_var:
+        for sid, sqte in db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_var)).all():
+            _semis_qtites_var[sid] = int(sqte or 0)
+    graines_par_variete: Dict[Optional[str], int] = {}
+    _seen_var: Dict[Optional[str], set] = {}
+    for r in _godet_links_var:
+        if r.origine_graines_id and r.origine_graines_id not in _seen_var.get(r.variete, set()):
+            _seen_var.setdefault(r.variete, set()).add(r.origine_graines_id)
+            graines_par_variete[r.variete] = graines_par_variete.get(r.variete, 0) + _semis_qtites_var.get(r.origine_graines_id, 0)
 
     # [US-022 / CA1] Plantations par variété — à déduire du stock godet
     plant_rows = (
@@ -846,7 +888,8 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
     for variete, tot_p, tot_g, nb, date_max in rows:
         nb_p          = int(tot_p) if tot_p else 0
         nb_g          = int(tot_g) if tot_g else 0
-        taux          = round(nb_p / nb_g * 100) if (nb_g and nb_p) else None
+        nb_g_semis    = graines_par_variete.get(variete, 0)
+        taux          = round(nb_p / nb_g_semis * 100) if (nb_g_semis and nb_p) else None
         nb_plantes    = plantations.get(variete, 0)
         nb_v          = vendus_var.get(variete, 0)
         nb_pg         = pertes_godet_var.get(variete, 0)
