@@ -1,4 +1,17 @@
 
+## [v3.6.0] — 2026-06-09
+
+### 🚀 Nouveautés
+- Ajoute un panneau de détail (bottom sheet) sur chaque carte pépinière affichant la timeline complète semis → lot(s) godet → plantation (US-029)
+- Ajoute l'endpoint `GET /godets/detail?culture=X&variete=Y` retournant les événements liés par `origine_graines_id` et `source_evenement_ids`
+
+### 🐛 Corrections
+- Corrige le taux de réussite pépinière qui pouvait dépasser 100% quand `nb_graines_semees` était renseigné sur un événement `mise_en_godet` — le calcul remonte désormais au semis parent via `origine_graines_id`
+
+### 🔧 Améliorations techniques
+- Redesign complet de la vue Pépinière : ArcCounter SVG circulaire (vert/ambre/rouge), strip 3 métriques, badge taux coloré, zone commentaire contextuelle et alerte verte pour les cultures entièrement plantées
+- Ajoute `api.godetsDetail()` côté client pour alimenter le panneau de détail
+
 ## [v3.5.0] — 2026-06-08
 
 ### 🚀 Nouveautés
