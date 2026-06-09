@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pépinière — Preview B Affiné</title>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
+    .no-scroll::-webkit-scrollbar { display: none; }
+    .no-scroll { scrollbar-width: none; }
+    .sheet-enter { animation: slideUp 0.25s ease-out; }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState } = React;
+
+/* ── PALETTE ── */
+const LIGHT = {
+  body: '#DBD8CF', phoneBg: '#F4F1EB', contentBg: '#EDE9E0',
+  cardBg: '#FFFFFF', cardBorder: 'transparent', cardShadow: '0 1px 4px rgba(0,0,0,0.08)',
+  navBg: '#F4F1EB', navBorder: '#DDD8CF', topbarBorder: '#DDD8CF',
+  textPrimary: '#1C1917', textSecondary: '#A8A29E', divider: '#EAE6DC',
+  commentBg: '#F7F5F0', commentText: '#78716C',
+  navActive: '#2E6B3F', navInactive: '#C4BFBA',
+  arcTrack: '#E7E2D8', alertBg: '#ECFDF5', alertBorder: '#6EE7B7', alertText: '#065F46',
+};
+const DARK = {
+  body: '#07070A', phoneBg: '#111113', contentBg: '#0A0A0D',
+  cardBg: '#1C1C1F', cardBorder: '#2C2C30', cardShadow: 'none',
+  navBg: '#111113', navBorder: '#222226', topbarBorder: '#222226',
+  textPrimary: '#F4F4F5', textSecondary: '#71717A', divider: '#2C2C30',
+  commentBg: '#27272A', commentText: '#71717A',
+  navActive: '#4ADE80', navInactive: '#3F3F46',
+  arcTrack: '#2C2C30', alertBg: '#0D2B1A', alertBorder: '#16A34A44', alertText: '#4ADE80',
+};
+
+/* ── HELPERS ── */
+function tauxMeta(taux, dark) {
+  if (taux == null) return { label: '—', text: dark ? '#71717A' : '#A8A29E', bg: dark ? '#27272A' : '#F7F5F0' };
+  if (taux >= 80) return { label: `Réussite ${taux}%`, text: dark ? '#4ADE80' : '#2E6B3F', bg: dark ? '#14532D44' : '#D1FAE5' };
+  if (taux >= 50) return { label: `Réussite ${taux}%`, text: dark ? '#FBBF24' : '#B45309', bg: dark ? '#78350F44' : '#FEF3C7' };
+  return { label: `Réussite ${taux}%`, text: dark ? '#F87171' : '#B91C1C', bg: dark ? '#7F1D1D44' : '#FEE2E2' };
+}
+
+function arcColor(pct, dark) {
+  if (pct === 0)   return dark ? '#3F3F46' : '#D4CBBD';
+  if (pct > 0.5)   return dark ? '#4ADE80' : '#2E6B3F';
+  if (pct > 0.25)  return dark ? '#FBBF24' : '#B45309';
+  return dark ? '#F87171' : '#B91C1C';
+}
+
+function fmt(d) {
+  if (!d) return '—';
+  const [y,m,dd] = d.split('-'); return `${dd}/${m}/${y}`;
+}
+
+/* ── ICONS ── */
+function IconSun({ c }) {
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>;
+}
+function IconMoon({ c }) {
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
+}
+
+/* ── ARC COUNTER ── */
+function ArcCounter({ total, restants, t, dark }) {
+  const r = 17, cx = 22, cy = 22, circ = 2 * Math.PI * r;
+  const pct = total > 0 ? restants / total : 0;
+  const fill = arcColor(pct, dark);
+  return (
+    <div style={{ position:'relative', width:44, height:44, flexShrink:0 }}>
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={t.arcTrack} strokeWidth="4"/>
+        {pct > 0 && (
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={fill} strokeWidth="4"
+            strokeDasharray={`${pct*circ} ${circ}`} strokeLinecap="round"
+            transform={`rotate(-90 ${cx} ${cy})`}/>
+        )}
+      </svg>
+      <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
+        <span style={{ fontSize:13, fontWeight:800, color:fill, lineHeight:1 }}>{restants}</span>
+        <span style={{ fontSize:7, color:t.textSecondary, lineHeight:1.4, letterSpacing:'0.2px' }}>dispo</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── CULTURE CARD ── */
+function CultureCard({ c, epuise, onClick, t, dark }) {
+  const tm = tauxMeta(c.taux, dark);
+  const comment = epuise
+    ? `${c.total} plants entièrement plantés — lot clôturé.`
+    : `${c.total} plants en godet · ${c.plantes} planté${c.plantes>1?'s':''} · ${c.restants} en attente de mise en place.`;
+  return (
+    <div onClick={onClick} style={{
+      background: t.cardBg, border: `1px solid ${t.cardBorder}`,
+      borderRadius: 14, padding: '11px 13px',
+      display:'flex', flexDirection:'column', gap:8,
+      boxShadow: t.cardShadow, cursor:'pointer',
+      transition:'background .3s, border-color .3s',
+    }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+        <div style={{ flex:1, display:'flex', flexDirection:'column', gap:5 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:6, flexWrap:'wrap' }}>
+            <span style={{ fontSize:13, fontWeight:700, color:t.textPrimary }}>{c.name}</span>
+            {c.variete && <span style={{ fontSize:10, color:t.textSecondary, fontStyle:'italic' }}>{c.variete}</span>}
+          </div>
+          <span style={{ alignSelf:'flex-start', fontSize:10, fontWeight:600, color:tm.text, background:tm.bg, borderRadius:5, padding:'2px 7px' }}>
+            {tm.label}
+          </span>
+        </div>
+        <ArcCounter total={c.total} restants={c.restants} t={t} dark={dark}/>
+      </div>
+      <div style={{ background:t.commentBg, borderRadius:8, padding:'7px 9px', fontSize:10, color:t.commentText, lineHeight:1.55, fontStyle:'italic' }}>
+        {comment}
+      </div>
+    </div>
+  );
+}
+
+/* ── TIMELINE ROW ── */
+function TRow({ icon, bg, isLast, children, t }) {
+  return (
+    <div style={{ display:'flex', gap:12 }}>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
+        <div style={{ width:32, height:32, borderRadius:'50%', background:bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, flexShrink:0 }}>{icon}</div>
+        {!isLast && <div style={{ width:1, flex:1, background:t.divider, marginTop:4, minHeight:24 }}/>}
+      </div>
+      <div style={{ paddingBottom:16, flex:1 }}>{children}</div>
+    </div>
+  );
+}
+
+/* ── DETAIL SHEETS DATA ── */
+const detailData = {
+  frisee: {
+    titre: 'salade · frisée',
+    semis: [{ id:229, date:'2026-06-09', nb_graines:10, parcelle:null }],
+    godets: [
+      { id:230, date:'2026-06-09', nb_plants:5, nb_graines_lot:null },
+      { id:231, date:'2026-06-09', nb_plants:2, nb_graines_lot:5 },
+    ],
+    taux: 70,
+    plantations: [{ id:232, date:'2026-06-09', quantite:7, parcelle:'Carré légumes', sources:['230','231'] }],
+  },
+  butternut: {
+    titre: 'butternut · récolte 2025',
+    semis: [{ id:65, date:'2026-04-01', nb_graines:20, parcelle:null }],
+    godets: [{ id:125, date:'2026-04-18', nb_plants:20, nb_graines_lot:null }],
+    taux: 100,
+    plantations: [{ id:210, date:'2026-05-25', quantite:10, parcelle:'Carré potager', sources:['125'] }],
+  },
+  courge: {
+    titre: 'courge · musqué de Provence',
+    semis: [{ id:42, date:'2026-04-01', nb_graines:18, parcelle:null }],
+    godets: [{ id:122, date:'2026-04-18', nb_plants:18, nb_graines_lot:null }],
+    taux: 100,
+    plantations: [{ id:214, date:'2026-05-25', quantite:10, parcelle:'Carré potager', sources:['122'] }],
+  },
+  tomates: {
+    titre: 'tomates · Cœur de bœuf',
+    semis: [{ id:88, date:'2026-04-10', nb_graines:20, parcelle:null }],
+    godets: [{ id:144, date:'2026-04-30', nb_plants:14, nb_graines_lot:null }],
+    taux: 70,
+    plantations: [{ id:201, date:'2026-05-20', quantite:8, parcelle:'Planche B', sources:['144'] }],
+  },
+};
+
+/* ── CULTURES DATA ── */
+const cultures = [
+  { key:'frisee',   name:'Salade',     variete:'Frisée',            total:7,  plantes:7,  restants:3,  taux:70,  epuise:false },
+  { key:'butternut',name:'Butternut',  variete:'Récolte 2025',      total:20, plantes:10, restants:0,  taux:100, epuise:true  },
+  { key:'courge',   name:'Courge',     variete:'Musqué de Provence', total:18, plantes:10, restants:0,  taux:100, epuise:true  },
+  { key:'tomates',  name:'Tomates',    variete:'Cœur de bœuf',      total:14, plantes:8,  restants:6,  taux:70,  epuise:false },
+];
+
+/* ── NAV ── */
+const TABS = [
+  { label:'Plan',      d:'M3 3h7v7H3zm11 0h7v7h-7zM3 14h7v7H3zm11 0h7v7h-7z' },
+  { label:'Stocks',    d:'M4 20V10m5 10V4m5 16V8m5 12V6' },
+  { label:'Pépinière', d:'M12 21v-8m0 0c0-3 2.5-5 5-6m-5 6c0-3-2.5-5-5-6', active:true },
+  { label:'Historique',d:'M4 6h16M4 12h16M4 18h10' },
+  { label:'Stats',     d:'M3 19l4-8 4 4 4-6 4 10' },
+];
+
+/* ── APP ── */
+function App() {
+  const [dark, setDark]   = useState(false);
+  const [sheet, setSheet] = useState(null);
+  const t = dark ? DARK : LIGHT;
+
+  const enAttente  = cultures.filter(c => !c.epuise);
+  const toutPlante = cultures.filter(c =>  c.epuise);
+  const totalDispo = enAttente.reduce((s,c)=>s+c.restants, 0);
+  const tauxMoyen  = Math.round(cultures.reduce((s,c)=>s+c.taux,0)/cultures.length);
+  const det = sheet ? detailData[sheet] : null;
+
+  return (
+    <div style={{ minHeight:'100vh', background:t.body, display:'flex', alignItems:'center', justifyContent:'center', padding:24, transition:'background .3s' }}>
+
+      {/* ── Phone frame ── */}
+      <div style={{
+        width:320, height:622, background:t.phoneBg, borderRadius:38,
+        overflow:'hidden', display:'flex', flexDirection:'column',
+        boxShadow: dark ? '0 0 0 9px #1a1a1e, 0 32px 72px rgba(0,0,0,.65)' : '0 0 0 9px #C8C4BC, 0 32px 72px rgba(0,0,0,.22)',
+        transition:'background .3s, box-shadow .3s',
+      }}>
+
+        {/* Dynamic island */}
+        <div style={{ flexShrink:0, height:30, background:t.phoneBg, display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ width:90, height:13, background:'#000', borderRadius:7 }}/>
+        </div>
+
+        {/* TopBar */}
+        <div style={{ flexShrink:0, padding:'8px 16px', background:t.phoneBg, borderBottom:`0.5px solid ${t.topbarBorder}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <span style={{ fontSize:15, fontWeight:700, color:t.textPrimary }}>Pépinière</span>
+          <button onClick={()=>setDark(d=>!d)} style={{ background:'none', border:'none', cursor:'pointer', padding:0 }}>
+            {dark ? <IconSun c={t.textSecondary}/> : <IconMoon c={t.textSecondary}/>}
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="no-scroll" style={{ flex:1, overflowY:'auto', background:t.contentBg, padding:'10px 12px', display:'flex', flexDirection:'column', gap:8, transition:'background .3s' }}>
+
+          {/* Strip 3 métriques */}
+          <div style={{ background:t.cardBg, border:`1px solid ${t.cardBorder}`, borderRadius:14, display:'flex', boxShadow:t.cardShadow }}>
+            {[
+              { val:totalDispo,      label:'godets dispo',  color:t.textPrimary },
+              { val:`${tauxMoyen}%`, label:'réussite moy.', color:dark?'#4ADE80':'#2E6B3F' },
+              { val:cultures.length, label:'cultures',      color:t.textPrimary },
+            ].map((m,i) => (
+              <React.Fragment key={m.label}>
+                {i>0 && <div style={{ width:'0.5px', background:t.divider, margin:'10px 0' }}/>}
+                <div style={{ flex:1, padding:'10px 0', textAlign:'center' }}>
+                  <div style={{ fontSize:22, fontWeight:700, color:m.color, letterSpacing:'-0.5px' }}>{m.val}</div>
+                  <div style={{ fontSize:9, color:t.textSecondary, marginTop:2 }}>{m.label}</div>
+                </div>
+              </React.Fragment>
+            ))}
+          </div>
+
+          {/* Cartes en attente */}
+          {enAttente.map(c => <CultureCard key={c.key} c={c} epuise={false} t={t} dark={dark} onClick={()=>setSheet(c.key)}/>)}
+          {/* Cartes tout planté */}
+          {toutPlante.map(c => <CultureCard key={c.key} c={c} epuise={true} t={t} dark={dark} onClick={()=>setSheet(c.key)}/>)}
+
+          {/* Alerte */}
+          {toutPlante.length > 0 && (
+            <div style={{ background:t.alertBg, border:`1px solid ${t.alertBorder}`, borderRadius:9, padding:'8px 12px', display:'flex', alignItems:'center', gap:8, fontSize:11, color:t.alertText }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <span><b>{toutPlante.length}</b> culture{toutPlante.length>1?'s':''} entièrement plantée{toutPlante.length>1?'s':''} : {toutPlante.map(c=>c.name.toLowerCase()).join(', ')}</span>
+            </div>
+          )}
+
+        </div>
+
+        {/* BottomNav */}
+        <div style={{ flexShrink:0, display:'flex', background:t.navBg, borderTop:`0.5px solid ${t.navBorder}`, paddingBottom:6 }}>
+          {TABS.map(tab => (
+            <div key={tab.label} style={{ flex:1, paddingTop:7, display:'flex', flexDirection:'column', alignItems:'center', gap:2, fontSize:9, fontWeight:tab.active?600:400, color:tab.active?t.navActive:t.navInactive }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tab.active?t.navActive:t.navInactive} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={tab.d}/></svg>
+              {tab.label}
+            </div>
+          ))}
+        </div>
+
+      </div>{/* /phone */}
+
+      {/* ── DETAIL SHEET ── */}
+      {det && (
+        <div style={{ position:'fixed', inset:0, zIndex:50, display:'flex', flexDirection:'column', justifyContent:'flex-end', maxWidth:320, margin:'0 auto' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={()=>setSheet(null)}/>
+          <div className="sheet-enter" style={{ position:'relative', background:t.phoneBg, borderRadius:'18px 18px 0 0', maxHeight:'80%', display:'flex', flexDirection:'column' }}>
+
+            {/* Header */}
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 16px 10px', borderBottom:`0.5px solid ${t.topbarBorder}`, flexShrink:0 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:t.textPrimary, textTransform:'capitalize' }}>{det.titre}</div>
+                <div style={{ fontSize:10, color:t.textSecondary, marginTop:2 }}>Cycle de vie complet</div>
+              </div>
+              <button onClick={()=>setSheet(null)} style={{ width:28, height:28, borderRadius:'50%', background:t.commentBg, border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:t.textSecondary }}>✕</button>
+            </div>
+
+            {/* Timeline */}
+            <div className="no-scroll" style={{ overflowY:'auto', padding:'14px 16px 20px' }}>
+
+              {/* Semis */}
+              {det.semis.map(s => (
+                <TRow key={s.id} icon="🌱" bg={dark?'#14532D':'#D1FAE5'} isLast={false} t={t}>
+                  <div style={{ fontSize:11, fontWeight:600, color:t.textPrimary }}>Semis <span style={{ fontWeight:400, color:t.textSecondary }}>#{s.id}</span></div>
+                  <div style={{ fontSize:11, color:t.textSecondary }}>{s.nb_graines} graines</div>
+                  <div style={{ fontSize:9, color:t.textSecondary, marginTop:2 }}>{fmt(s.date)}</div>
+                </TRow>
+              ))}
+
+              {/* Godets */}
+              {det.godets.map((g,i) => (
+                <TRow key={g.id} icon="🪴" bg={dark?'#0D3B38':'#CCFBF1'} isLast={false} t={t}>
+                  <div style={{ fontSize:11, fontWeight:600, color:t.textPrimary }}>
+                    Lot godet <span style={{ fontWeight:400, color:t.textSecondary }}>#{g.id}</span>
+                    {det.godets.length>1 && <span style={{ fontSize:9, color:t.textSecondary }}> · Lot {i+1}/{det.godets.length}</span>}
+                  </div>
+                  <div style={{ fontSize:11, color:t.textSecondary }}>
+                    {g.nb_plants} plants{g.nb_graines_lot!=null ? ` sur ${g.nb_graines_lot} graines`:'' }
+                  </div>
+                  <div style={{ fontSize:9, color:t.textSecondary, marginTop:2 }}>{fmt(g.date)}</div>
+                </TRow>
+              ))}
+
+              {/* Taux */}
+              {det.taux != null && (() => {
+                const tm = tauxMeta(det.taux, dark);
+                return (
+                  <div style={{ background:t.commentBg, borderRadius:9, padding:'7px 11px', display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
+                    <span style={{ fontSize:10, color:t.textSecondary }}>Taux de germination</span>
+                    <span style={{ fontSize:12, fontWeight:700, color:tm.text, background:tm.bg, borderRadius:5, padding:'2px 8px' }}>{det.taux}%</span>
+                  </div>
+                );
+              })()}
+
+              {/* Plantations */}
+              {det.plantations.map((p,i) => (
+                <TRow key={p.id} icon="🌿" bg={dark?'#14532D':'#DCFCE7'} isLast={i===det.plantations.length-1} t={t}>
+                  <div style={{ fontSize:11, fontWeight:600, color:t.textPrimary }}>Plantation <span style={{ fontWeight:400, color:t.textSecondary }}>#{p.id}</span></div>
+                  <div style={{ fontSize:11, color:t.textSecondary }}>
+                    {p.quantite} plants{p.parcelle ? ` → ${p.parcelle}` : ''}
+                  </div>
+                  <div style={{ fontSize:9, color:t.textSecondary, marginTop:2 }}>Lots : #{p.sources.join(', #')} · {fmt(p.date)}</div>
+                </TRow>
+              ))}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

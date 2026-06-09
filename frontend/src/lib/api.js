@@ -28,4 +28,9 @@ export const api = {
     const qs = new URLSearchParams(params).toString()
     return get(`/historique${qs ? '?' + qs : ''}`)
   },
+  godetsDetail: (culture, variete) => {
+    const params = new URLSearchParams({ culture })
+    if (variete) params.append('variete', variete)
+    return get(`/godets/detail?${params}`)
+  },
 }

@@ -585,6 +585,100 @@ def get_godets():
 
 
 
+@app.get("/godets/detail")
+def get_godet_detail(culture: str = Query(...), variete: str = Query(default=None)):
+    """
+    [US-029] Cycle de vie complet semis → godets → plantations pour une (culture, variété).
+    Utilisé par le panneau de détail de la pépinière frontend.
+    """
+    db = SessionLocal()
+    try:
+        culture_lower = culture.lower()
+
+        # 1. Godets pour cette culture/variété
+        godet_q = (
+            db.query(Evenement)
+            .filter(Evenement.type_action == "mise_en_godet")
+            .filter(func.lower(Evenement.culture) == culture_lower)
+        )
+        if variete:
+            godet_q = godet_q.filter(func.lower(Evenement.variete) == variete.lower())
+        else:
+            godet_q = godet_q.filter(Evenement.variete.is_(None))
+        godet_events = godet_q.order_by(Evenement.date.asc()).all()
+
+        godet_ids = {str(g.id) for g in godet_events}
+
+        # 2. Semis parents distincts via origine_graines_id
+        semis_ids = {g.origine_graines_id for g in godet_events if g.origine_graines_id}
+        semis_events = []
+        if semis_ids:
+            semis_events = (
+                db.query(Evenement)
+                .options(joinedload(Evenement.parcelle_rel))
+                .filter(Evenement.id.in_(semis_ids))
+                .order_by(Evenement.date.asc())
+                .all()
+            )
+
+        # 3. Plantations liées via source_evenement_ids
+        plantation_candidates = (
+            db.query(Evenement)
+            .options(joinedload(Evenement.parcelle_rel))
+            .filter(Evenement.type_action == "plantation")
+            .filter(func.lower(Evenement.culture) == culture_lower)
+            .filter(Evenement.source_evenement_ids.isnot(None))
+            .order_by(Evenement.date.asc())
+            .all()
+        )
+        linked_plantations = [
+            p for p in plantation_candidates
+            if godet_ids & set(p.source_evenement_ids.split(";"))
+        ]
+
+        # 4. Taux de germination (plants godets / graines semis parents)
+        total_plants  = sum(g.nb_plants_godets or 0 for g in godet_events)
+        total_graines = sum(int(s.quantite or 0) for s in semis_events)
+        taux = round(total_plants / total_graines * 100) if total_graines and total_plants else None
+
+        return {
+            "culture": culture,
+            "variete": variete,
+            "semis": [
+                {
+                    "id":        s.id,
+                    "date":      str(s.date)[:10],
+                    "nb_graines": int(s.quantite or 0),
+                    "parcelle":  s.parcelle_rel.nom if s.parcelle_rel else None,
+                }
+                for s in semis_events
+            ],
+            "godets": [
+                {
+                    "id":              g.id,
+                    "date":            str(g.date)[:10],
+                    "nb_plants":       int(g.nb_plants_godets or 0),
+                    "nb_graines_lot":  int(g.nb_graines_semees) if g.nb_graines_semees else None,
+                    "origine_semis_id": g.origine_graines_id,
+                }
+                for g in godet_events
+            ],
+            "plantations": [
+                {
+                    "id":              p.id,
+                    "date":            str(p.date)[:10],
+                    "quantite":        int(p.quantite or 0),
+                    "parcelle":        p.parcelle_rel.nom if p.parcelle_rel else None,
+                    "source_godet_ids": p.source_evenement_ids.split(";") if p.source_evenement_ids else [],
+                }
+                for p in linked_plantations
+            ],
+            "taux_germination": taux,
+        }
+    finally:
+        db.close()
+
+
 @app.get("/historique")
 def historique(
     limit     : int = Query(default=20, le=100),
