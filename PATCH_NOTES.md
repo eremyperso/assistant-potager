@@ -1,4 +1,16 @@
 
+## [v3.9.0] — 2026-06-10
+
+### 🚀 Nouveautés
+- Aligne les filtres date et culture côte à côte sur une seule ligne dans les vues Plan, Pépinière et Stocks — présentation compacte conforme à la maquette "filtre combiné"
+- Affiche un badge ambre "X pied(s) vendu(s)" sur chaque carte pépinière quand des ventes ont été enregistrées
+- Ajoute un bandeau récapitulatif en bas de la pépinière indiquant le total de pieds vendus sur la saison
+- Affiche les ventes (🏷️) dans la timeline du panneau de détail d'une culture en pépinière
+
+### 🔧 Améliorations techniques
+- `DateRefPicker` et `CultureFilter` acceptent une prop `className` pour permettre leur intégration en mode inline sans casser les usages existants
+- Endpoint `GET /godets/detail` retourne désormais un tableau `ventes` (id, date, quantite) en plus des semis, godets et plantations
+
 ## [v3.8.0] — 2026-06-10
 
 ### 🚀 Nouveautés

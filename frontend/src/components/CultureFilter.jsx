@@ -1,9 +1,9 @@
 // [US-031 CA17-CA19] Champ de recherche culture — local par écran, non persisté.
 import { Search } from 'lucide-react'
 
-export default function CultureFilter({ value, onChange, placeholder = 'Filtrer par culture…' }) {
+export default function CultureFilter({ value, onChange, placeholder = 'Filtrer par culture…', className = 'relative mb-3' }) {
   return (
-    <div className="relative mb-3">
+    <div className={className}>
       <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" aria-hidden="true" />
       <input
         type="text"

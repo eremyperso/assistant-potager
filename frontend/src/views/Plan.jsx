@@ -157,8 +157,10 @@ export default function Plan({ refresh }) {
   if (!filtered.length && !loading) {
     return (
       <>
-        <DateRefPicker />
-        <CultureFilter value={search} onChange={setSearch} />
+        <div className="flex items-center gap-2 mb-3">
+          <DateRefPicker className="flex items-center gap-1.5" />
+          <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
+        </div>
         <div className="flex flex-col items-center gap-3 mt-12 text-gray-400">
           <Leaf size={36} />
           <p className="text-sm">{search ? 'Aucune culture correspondante.' : 'Aucune parcelle enregistrée.'}</p>
@@ -178,11 +180,11 @@ export default function Plan({ refresh }) {
 
   return (
     <div>
-      {/* [CA5] Sélecteur date */}
-      <DateRefPicker />
-
-      {/* [CA17] Filtre culture */}
-      <CultureFilter value={search} onChange={setSearch} />
+      {/* [CA5+CA17] Filtres combinés côte à côte */}
+      <div className="flex items-center gap-2 mb-3">
+        <DateRefPicker className="flex items-center gap-1.5" />
+        <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
+      </div>
 
       {/* Résumé */}
       <div className="flex gap-2 mb-3">

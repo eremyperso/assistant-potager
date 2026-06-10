@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sprout, X, CheckCircle } from 'lucide-react'
+import { Sprout, X, CheckCircle, ShoppingBag } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
@@ -127,6 +127,11 @@ function CultureCard({ g, epuise, onClick, isDark }) {
           <span className={`self-start text-[10px] font-semibold rounded-md px-1.5 py-0.5 ${tm.badge}`}>
             {tm.label}
           </span>
+          {(g.nb_vendus ?? 0) > 0 && (
+            <span className="self-start text-[10px] font-semibold rounded-md px-1.5 py-0.5 bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-400">
+              {g.nb_vendus} pied{g.nb_vendus > 1 ? 's' : ''} vendu{g.nb_vendus > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
         <ArcCounter total={total} restants={stock} isDark={isDark} />
       </div>
@@ -184,6 +189,9 @@ function DetailSheet({ godet, onClose, isDark }) {
       detail.plantations.forEach(p => rows.push({ type: 'plantation', data: p }))
     } else {
       rows.push({ type: 'plantation_absent' })
+    }
+    if ((detail.ventes ?? []).length > 0) {
+      detail.ventes.forEach(v => rows.push({ type: 'vente', data: v }))
     }
     return rows
   }
@@ -282,6 +290,18 @@ function DetailSheet({ godet, onClose, isDark }) {
                     </TimelineRow>
                   )
 
+                  if (row.type === 'vente') return (
+                    <TimelineRow key={`vente-${row.data.id}`} icon="🏷️" color="bg-amber-100 dark:bg-amber-900/60" isLast={isLast}>
+                      <p className="text-xs font-semibold text-stone-800 dark:text-zinc-200">
+                        Vente <span className="text-stone-400 dark:text-zinc-500 font-normal">#{row.data.id}</span>
+                      </p>
+                      <p className="text-xs text-stone-500 dark:text-zinc-400">
+                        {row.data.quantite} pied{row.data.quantite > 1 ? 's' : ''} vendu{row.data.quantite > 1 ? 's' : ''}
+                      </p>
+                      <p className="text-[10px] text-stone-400 dark:text-zinc-500 mt-0.5">{fmt(row.data.date)}</p>
+                    </TimelineRow>
+                  )
+
                   return null
                 })}
               </div>
@@ -333,8 +353,10 @@ export default function Pepiniere({ refresh }) {
 
   if (!tous.length) return (
     <>
-      <DateRefPicker />
-      <CultureFilter value={search} onChange={setSearch} />
+      <div className="flex items-center gap-2 mb-3">
+        <DateRefPicker className="flex items-center gap-1.5" />
+        <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
+      </div>
       <div className="flex flex-col items-center gap-2 mt-12 text-stone-400 dark:text-zinc-500">
         <Sprout size={32} />
         <p className="text-sm">Aucun godet en pépinière.</p>
@@ -354,15 +376,16 @@ export default function Pepiniere({ refresh }) {
     ? Math.round(tauxValues.reduce((a, b) => a + b, 0) / tauxValues.length)
     : null
   const nomsToutPlante = filteredPlante.map(c => c.variete ? `${c.culture} (${c.variete})` : c.culture)
+  const totalVendus    = filteredTous.reduce((acc, g) => acc + (g.nb_vendus ?? 0), 0)
 
   return (
     <>
       <div className="space-y-2 bg-stone-100 dark:bg-zinc-950 min-h-full px-0 py-0">
 
-        {/* [CA14] Sélecteur date + filtre culture */}
-        <div className="px-0 pt-0 pb-1">
-          <DateRefPicker />
-          <CultureFilter value={search} onChange={setSearch} />
+        {/* [CA14] Filtres combinés côte à côte */}
+        <div className="flex items-center gap-2 mb-2">
+          <DateRefPicker className="flex items-center gap-1.5" />
+          <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
         </div>
 
         {/* Strip 3 métriques */}
@@ -386,6 +409,16 @@ export default function Pepiniere({ refresh }) {
             <CheckCircle size={13} className="shrink-0" />
             <span>
               <span className="font-semibold">{toutPlante.length}</span> culture{toutPlante.length > 1 ? 's' : ''} entièrement plantée{toutPlante.length > 1 ? 's' : ''} : {nomsToutPlante.join(', ')}
+            </span>
+          </div>
+        )}
+
+        {/* Bandeau récap ventes */}
+        {totalVendus > 0 && (
+          <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-xl px-3 py-2 text-[11px] text-amber-800 dark:text-amber-400">
+            <ShoppingBag size={13} className="shrink-0" />
+            <span>
+              <span className="font-semibold">{totalVendus}</span> pied{totalVendus > 1 ? 's' : ''} vendu{totalVendus > 1 ? 's' : ''} cette saison
             </span>
           </div>
         )}

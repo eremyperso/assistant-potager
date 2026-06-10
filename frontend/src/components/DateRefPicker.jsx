@@ -11,12 +11,12 @@ function fmtFR(iso) {
   return `${d}/${m}/${y}`
 }
 
-export default function DateRefPicker() {
+export default function DateRefPicker({ className = 'flex items-center gap-1.5 mb-3' }) {
   const { dateRef, setDateRef } = useDateRef()
   const isPast = Boolean(dateRef)
 
   return (
-    <div className="flex items-center gap-1.5 mb-3">
+    <div className={className}>
       {/* Bouton + input natif superposé */}
       <div className="relative inline-flex items-center">
         {/* Couche visuelle [CA6 / CA10] */}

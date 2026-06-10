@@ -202,11 +202,11 @@ export default function Stocks({ refresh }) {
 
   return (
     <div>
-      {/* [CA13] Sélecteur date */}
-      <DateRefPicker />
-
-      {/* [CA17] Filtre culture harmonisé */}
-      <CultureFilter value={search} onChange={setSearch} placeholder="Rechercher une culture…" />
+      {/* [CA13+CA17] Filtres combinés côte à côte */}
+      <div className="flex items-center gap-2 mb-3">
+        <DateRefPicker className="flex items-center gap-1.5" />
+        <CultureFilter value={search} onChange={setSearch} placeholder="Rechercher une culture…" className="relative flex-1" />
+      </div>
 
       {/* Résumé */}
       <div className="grid grid-cols-3 gap-2 mb-3">

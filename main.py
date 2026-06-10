@@ -658,7 +658,19 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
             if godet_ids & set(p.source_evenement_ids.split(";"))
         ]
 
-        # 4. Taux de germination (plants godets / graines semis parents)
+        # 4. Ventes (vendu) pour cette culture/variété
+        vendu_q = (
+            db.query(Evenement)
+            .filter(Evenement.type_action == "vendu")
+            .filter(func.lower(Evenement.culture) == culture_lower)
+        )
+        if variete:
+            vendu_q = vendu_q.filter(func.lower(Evenement.variete) == variete.lower())
+        else:
+            vendu_q = vendu_q.filter(Evenement.variete.is_(None))
+        vendu_events = vendu_q.order_by(Evenement.date.asc()).all()
+
+        # 5. Taux de germination (plants godets / graines semis parents)
         total_plants  = sum(g.nb_plants_godets or 0 for g in godet_events)
         total_graines = sum(int(s.quantite or 0) for s in semis_events)
         taux = round(total_plants / total_graines * 100) if total_graines and total_plants else None
@@ -694,6 +706,14 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
                     "source_godet_ids": p.source_evenement_ids.split(";") if p.source_evenement_ids else [],
                 }
                 for p in linked_plantations
+            ],
+            "ventes": [
+                {
+                    "id":       v.id,
+                    "date":     str(v.date)[:10],
+                    "quantite": int(v.quantite or 0),
+                }
+                for v in vendu_events
             ],
             "taux_germination": taux,
         }
