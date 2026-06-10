@@ -432,14 +432,22 @@ def ask(req: TexteRequest):
 
 
 @app.get("/stats")
-def stats():
-    """[US-002/CA4] Statistiques JSON avec stock agronomique différencié."""
+def stats(date_ref: date = Query(default=None)):
+    """[US-002/CA4] Statistiques JSON avec stock agronomique différencié.
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
     from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets, calcul_semis
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None   # None = pas de filtre = comportement par défaut
+    date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        total  = db.query(Evenement).count()
-        stocks = calcul_stock_cultures(db)
-        godets = calcul_godets(db)
+        total_q = db.query(func.count(Evenement.id))
+        if dr:
+            from datetime import datetime as _dt
+            total_q = total_q.filter(Evenement.date <= _dt(dr.year, dr.month, dr.day, 23, 59, 59))
+        total  = total_q.scalar() or 0
+        stocks = calcul_stock_cultures(db, dr)
+        godets = calcul_godets(db, date_ref=dr)
         traitements = (
             db.query(Evenement.traitement, func.count(Evenement.id))
             .filter(Evenement.type_action == "traitement")
@@ -455,7 +463,7 @@ def stats():
         }
 
         # [US-026 / semis pleine terre] Semis directement associés à une parcelle
-        semis_data = calcul_semis(db)
+        semis_data = calcul_semis(db, dr)
         cultures_semis_pt = {c.lower() for c, s in semis_data.items() if s.get("parcelles_pleine_terre")}
         semis_pleine_terre = [
             {
@@ -480,6 +488,7 @@ def stats():
                 entry["origine"] = "pied_acheté"
 
         return {
+            "date_ref_effective" : date_ref_effective.isoformat(),
             "total_evenements"   : total,
             "stock_par_culture"  : stock_enrichi,
             "godets"             : [
@@ -503,19 +512,23 @@ def stats():
 
 
 @app.get("/plan")
-def get_plan():
+def get_plan(date_ref: date = Query(default=None)):
     """
     [US-024] Plan d'occupation des parcelles pour le dashboard frontend.
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
 
     Retourne la liste des parcelles actives avec leurs cultures en cours.
     Les parcelles sans culture sont incluses avec cultures=[].
     """
     from utils.parcelles import calcul_occupation_parcelles, get_all_parcelles
 
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
     db = SessionLocal()
     try:
         parcelles     = get_all_parcelles(db)
-        occupation    = calcul_occupation_parcelles(db)
+        occupation    = calcul_occupation_parcelles(db, dr)
 
         # Index surface_m2 par nom de culture (insensible à la casse)
         configs = db.query(CultureConfig).all()
@@ -558,15 +571,16 @@ def get_plan():
                 "occupation_pct": occupation_pct,
             })
 
-        return {"parcelles": result, "total": len(result)}
+        return {"parcelles": result, "total": len(result), "date_ref_effective": date_ref_effective.isoformat()}
     finally:
         db.close()
 
 
 @app.get("/godets")
-def get_godets():
+def get_godets(date_ref: date = Query(default=None)):
     """
     [US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
 
     Utilise calcul_godets() pour un stock agrégé par (culture, variété) avec déduction
     des plantations. Retourne deux listes :
@@ -574,12 +588,20 @@ def get_godets():
     - tout_plante : cultures entièrement plantées (stock = 0), listées dans l'encart "Tout planté"
     """
     from utils.stock import calcul_godets
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        tous = calcul_godets(db, include_epuises=True)
+        tous = calcul_godets(db, include_epuises=True, date_ref=dr)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0]
         tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0]
-        return {"en_attente": en_attente, "tout_plante": tout_plante, "total": len(en_attente)}
+        return {
+            "en_attente": en_attente,
+            "tout_plante": tout_plante,
+            "total": len(en_attente),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
     finally:
         db.close()
 
@@ -681,19 +703,26 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
 
 @app.get("/historique")
 def historique(
-    limit     : int = Query(default=20, le=100),
-    offset    : int = Query(default=0, ge=0),
-    action    : str = Query(default=None),
-    culture   : str = Query(default=None),
-    parcelle  : str = Query(default=None),
-    from_date : str = Query(default=None, alias="from"),
-    to_date   : str = Query(default=None, alias="to"),
+    limit     : int  = Query(default=20, le=100),
+    offset    : int  = Query(default=0, ge=0),
+    action    : str  = Query(default=None),
+    culture   : str  = Query(default=None),
+    parcelle  : str  = Query(default=None),
+    from_date : str  = Query(default=None, alias="from"),
+    to_date   : str  = Query(default=None, alias="to"),
+    date_ref  : date = Query(default=None),
 ):
     """
     [US-027] Retourne les événements paginés avec filtres optionnels.
+    [US-030] date_ref optionnel (YYYY-MM-DD) : borne haute, prioritaire sur to_date.
     Ex: /historique?culture=tomate&action=recolte&from=2026-05-01&to=2026-05-31&offset=20
-    Retourne : { total: int, evenements: [...] }
+    Retourne : { total: int, evenements: [...], date_ref_effective: str }
     """
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    # date_ref prend priorité sur to_date
+    effective_to = dr.isoformat() if dr else to_date
     db = SessionLocal()
     try:
         q = (
@@ -711,13 +740,14 @@ def historique(
             )
         if from_date:
             q = q.filter(Evenement.date >= from_date)
-        if to_date:
-            q = q.filter(Evenement.date <= to_date + " 23:59:59")
+        if effective_to:
+            q = q.filter(Evenement.date <= effective_to + " 23:59:59")
 
         total  = q.count()
         events = q.offset(offset).limit(limit).all()
         return {
             "total": total,
+            "date_ref_effective": date_ref_effective.isoformat(),
             "evenements": [
                 {
                     "id"         : e.id,

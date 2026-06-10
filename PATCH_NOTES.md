@@ -1,4 +1,24 @@
 
+## [v3.7.1] — 2026-06-10
+
+### 🐛 Corrections
+- Corrige l'affichage "0 plants" dans `/plan` pour les cultures récemment plantées en petite quantité — la distribution proportionnelle des pertes sans variété produisait un arrondi bas (`int(0.56) = 0`) ; utilise désormais `round()` (`round(0.56) = 1`)
+- Étend la disambiguation de variété avant confirmation aux actions `perte` sans contexte godet : auto-remplissage si une seule variété active au jardin, menu inline si plusieurs (comportement identique à `récolte`)
+
+## [v3.7.0] — 2026-06-10
+
+### 🚀 Nouveautés
+- Ajoute un paramètre `date_ref` optionnel (YYYY-MM-DD) sur les endpoints `GET /stats`, `GET /plan`, `GET /godets` et `GET /historique` — reconstitue l'état du potager à une date passée (US-030)
+- Ajoute le support des dates dans les commandes Telegram `/plan 01/05/2025` et `/stats tomate 2025-05-01` — affiche une bannière 📅 quand une date passée est active (US-030)
+- Retourne `date_ref_effective` dans chaque réponse d'endpoint — indique la date réellement utilisée pour le calcul
+
+### 🔧 Améliorations techniques
+- Ajoute `_cutoff_dt()` dans `utils/stock.py` — helper de borne temporelle partagé par toutes les fonctions de calcul
+- Propage `date_ref` dans 6 fonctions de calcul : `calcul_stock_cultures`, `calcul_semis`, `calcul_semis_par_culture`, `calcul_stock_par_variete`, `calcul_godets`, `calcul_godets_par_culture`
+- Propage `date_ref` dans `calcul_occupation_parcelles` — le calcul d'âge J+ est relatif à la date de référence et non à aujourd'hui
+- Ajoute `_parse_date_arg()` et `_looks_like_date()` dans `bot.py` — parsing robuste JJ/MM/AAAA et YYYY-MM-DD avec détection d'erreur de format (US-030 CA14)
+- Ajoute 17 tests dans `tests/test_us030_date_reference.py` couvrant CA1-CA16 (17/17 verts)
+
 ## [v3.6.0] — 2026-06-09
 
 ### 🚀 Nouveautés

@@ -2153,10 +2153,10 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             return
 
         # ── 6. Contexte non connu : menu source si godet en stock ───────────
+        import time as _time
         godets_pertinents = godets_dispo
         if godets_pertinents:
             user_id = update.effective_user.id
-            import time as _time
             _PERTE_PENDING[user_id] = {
                 "item":           item,
                 "texte":          texte,
@@ -2182,6 +2182,37 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 reply_markup=InlineKeyboardMarkup(buttons),
             )
             return  # attente callback
+
+        # ── 7. Aucun godet, aucun contexte → disambiguation variété jardin ───
+        # (même logique que récolte : auto-remplir si unique, menu si plusieurs)
+        if not godets_pertinents and jardin_actif and not variete:
+            if len(jardin_actif) == 1:
+                item["variete"] = jardin_actif[0]["variete"]
+                log.info("[perte-auto] Aucun godet, variété unique jardin '%s' → auto-remplie", item["variete"])
+                # pas de return → continue vers la confirmation
+            else:
+                # Plusieurs variétés au jardin → menu inline
+                _PERTE_PENDING[update.effective_user.id] = {
+                    "item": item, "texte": texte,
+                    "godets": [], "jardin_varietes": varietes_jardin,
+                    "ts": _time.time(),
+                }
+                buttons_var = [
+                    [InlineKeyboardButton(
+                        f"🌿 {v['variete'] or 'non précisée'} ({_stock_variete_jardin(v)} plants actifs)",
+                        callback_data=f"perte_var_j:{v['variete'] if v['variete'] else '__none__'}",
+                    )]
+                    for v in jardin_actif
+                ]
+                buttons_var.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
+                await update.message.reply_text(
+                    f"🌿 Quelle variété de *{_md(culture)}* avez-vous perdu ?",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(buttons_var),
+                )
+                log.info("[perte] %d variétés jardin pour '%s', aucun godet — menu inline user_id=%s",
+                         len(jardin_actif), culture, update.effective_user.id)
+                return
 
     # [US-021] Confirmation avant enregistrement
     import time as _time
@@ -2453,7 +2484,7 @@ SEUIL_ALERTE = {"végétatif": 45, "reproducteur": 90}
 
 async def cmd_plan(update, ctx) -> None:
     """
-    /plan [parcelle] — Plan d'occupation du potager.
+    /plan [parcelle|date] — Plan d'occupation du potager.
 
     [CA1] Vue globale : cultures actives par parcelle avec variété et nb plants
     [CA2] Âge J+ depuis la première plantation
@@ -2462,15 +2493,39 @@ async def cmd_plan(update, ctx) -> None:
     [CA5] /plan nord filtre sur la parcelle "nord" (insensible à la casse)
     [CA6] Hint en pied de message
     [CA7] Cultures sans parcelle sous 📍 Non localisé
+    [US-030 / CA10] /plan 2025-05-01 ou /plan 01/05/2025 → état au 01/05/2025
     """
     from datetime import date as date_type
     db = SessionLocal()
     try:
-        occupation = calcul_occupation_parcelles(db)
+        # ── [US-030] Détection date de référence dans les args ────────────────
+        date_ref: date_type | None = None
+        raw_args = list(ctx.args) if ctx.args else []
+        args_sans_date = []
+        for a in raw_args:
+            parsed = _parse_date_arg(a)
+            if parsed is not None:
+                date_ref = parsed
+            elif _looks_like_date(a):
+                # [US-030 / CA14] Ressemble à une date mais invalide
+                await update.message.reply_text(
+                    "❌ Format de date invalide — utilise `JJ/MM/AAAA` ou `AAAA-MM-JJ`",
+                    parse_mode="Markdown",
+                )
+                return
+            else:
+                args_sans_date.append(a)
+
+        occupation = calcul_occupation_parcelles(db, date_ref)
         parcelles_bdd = get_all_parcelles(db)
 
+        # ── [US-030] Bannière date de référence ───────────────────────────────
+        date_banner = ""
+        if date_ref:
+            date_banner = f"📅 _État au {date_ref.strftime('%d/%m/%Y')}_\n\n"
+
         # ── Filtre parcelle spécifique (CA5) ──────────────────────────────────
-        filtre_arg = (ctx.args[0].strip().lower() if ctx.args else None)
+        filtre_arg = (args_sans_date[0].strip().lower() if args_sans_date else None)
 
         if filtre_arg:
             # Vue détaillée d'une parcelle
@@ -2496,7 +2551,7 @@ async def cmd_plan(update, ctx) -> None:
                 return
 
             nom_affiche = (cle_originale or filtre_arg).upper()
-            lignes = [f"📍 *{nom_affiche}* — Plan détaillé\n"]
+            lignes = [date_banner + f"📍 *{nom_affiche}* — Plan détaillé\n"]
             for c in sorted(cultures, key=lambda x: x["culture"]):
                 var = f" {c['variete']}" if c["variete"] else ""
                 nb = int(c["nb_plants"])
@@ -2532,9 +2587,10 @@ async def cmd_plan(update, ctx) -> None:
 
         # ── Vue globale ────────────────────────────────────────────────────────
         today = date_type.today()
-        date_str = today.strftime("%d %b %Y").lstrip("0") if hasattr(today, "strftime") else str(today)
+        ref_day = date_ref or today
+        date_str = ref_day.strftime("%d %b %Y").lstrip("0") if hasattr(ref_day, "strftime") else str(ref_day)
 
-        lignes = [f"📋 *Plan d'occupation — {date_str}*\n"]
+        lignes = [date_banner + f"📋 *Plan d'occupation — {date_str}*\n"]
 
         # Parcelles connues en BDD → ordre défini
         noms_bdd = {p.nom.strip().lower(): p.nom for p in parcelles_bdd}
@@ -2629,6 +2685,32 @@ def _alerte_recolte(type_organe: str | None, age_jours: int) -> bool:
     if type_organe and type_organe in SEUIL_ALERTE:
         return age_jours >= SEUIL_ALERTE[type_organe]
     return False
+
+
+import re as _re
+
+_DATE_ISO_RE  = _re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_FR_RE   = _re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
+
+
+def _parse_date_arg(s: str) -> date | None:
+    """[US-030 / CA10-CA14] Tente de parser une chaîne en date (YYYY-MM-DD ou JJ/MM/AAAA).
+    Retourne None si invalide. Future → capée à aujourd'hui."""
+    try:
+        if _DATE_ISO_RE.match(s):
+            d = date.fromisoformat(s)
+        elif m := _DATE_FR_RE.match(s):
+            d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+        else:
+            return None
+        return min(d, date.today())
+    except ValueError:
+        return None
+
+
+def _looks_like_date(s: str) -> bool:
+    """Retourne True si la chaîne ressemble à une date (format reconnu) mais pourrait être invalide."""
+    return bool(_DATE_ISO_RE.match(s) or _DATE_FR_RE.match(s))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2925,6 +3007,7 @@ async def cmd_stats(update, ctx):
     [US-002 / CA4] Champs stock_plants + rendement_total distincts via /stats API
     [US_Stats_detail_par_variete / CA1] Sans argument → synthèse générale inchangée
     [US_Stats_detail_par_variete / CA3] Avec argument → détail par variété de la culture
+    [US-030 / CA11-CA14] Accepte une date optionnelle : /stats 2025-05-01, /stats tomate 01/05/2025
     """
     from utils.stock import (
         calcul_stock_cultures, format_stock_ligne_telegram, calcul_semis,
@@ -2932,18 +3015,36 @@ async def cmd_stats(update, ctx):
         calcul_semis_par_culture, calcul_godets, calcul_godets_par_culture,
     )
 
-    # [US_Stats_detail_par_variete / CA7] Insensible à la casse
+    # [US-030 / CA12-CA14] Parser les args : date optionnelle + culture optionnelle
+    date_ref: date | None = None
     culture_arg: str | None = None
     if ctx and getattr(ctx, "args", None):
-        culture_arg = ctx.args[0].lower()
+        for a in ctx.args:
+            parsed_d = _parse_date_arg(a)
+            if parsed_d is not None:
+                date_ref = parsed_d
+            elif _looks_like_date(a):
+                # [US-030 / CA14] Ressemble à une date mais invalide
+                await update.message.reply_text(
+                    "❌ Format de date invalide — utilise `JJ/MM/AAAA` ou `AAAA-MM-JJ`",
+                    parse_mode="Markdown",
+                )
+                return
+            elif culture_arg is None:
+                culture_arg = a.lower()
+
+    # [US-030 / CA13] Bannière date de référence
+    date_banner = ""
+    if date_ref:
+        date_banner = f"📅 _État au {date_ref.strftime('%d/%m/%Y')}_\n\n"
 
     db = SessionLocal()
     try:
         # ── [US_Stats_detail_par_variete / CA3] Mode détail variété ──────────
         if culture_arg:
-            varietes      = calcul_stock_par_variete(db, culture_arg)
-            semis_culture = calcul_semis_par_culture(db, culture_arg)
-            godets_culture = calcul_godets_par_culture(db, culture_arg)  # [US-018]
+            varietes      = calcul_stock_par_variete(db, culture_arg, date_ref)
+            semis_culture = calcul_semis_par_culture(db, culture_arg, date_ref)
+            godets_culture = calcul_godets_par_culture(db, culture_arg, date_ref)  # [US-018]
 
             # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
             if not varietes and not semis_culture and not godets_culture:
@@ -2961,7 +3062,7 @@ async def cmd_stats(update, ctx):
             emoji = get_emoji_culture(culture_arg, type_organe)
             culture_display = culture_arg.capitalize()
 
-            lines_out = [f"{emoji} *{culture_display} — détail par variété*\n"]
+            lines_out = [date_banner + f"{emoji} *{culture_display} — détail par variété*\n"]
 
             current_year_sv = __import__("datetime").datetime.now().year
 
@@ -3032,10 +3133,10 @@ async def cmd_stats(update, ctx):
             return
 
         # ── [US_Stats_detail_par_variete / CA1] Mode synthèse (comportement existant) ──
-        lines_out = ["📊 *Statistiques potager*\n"]
+        lines_out = [date_banner + "📊 *Statistiques potager*\n"]
 
         # ── [US-002] Calcul stock agronomique différencié ──────────────────────
-        stocks = calcul_stock_cultures(db)
+        stocks = calcul_stock_cultures(db, date_ref)
 
         if stocks:
             # [US-003 / CA3] Séparer végétatif et reproducteur
@@ -3058,7 +3159,7 @@ async def cmd_stats(update, ctx):
             lines_out.append("_Aucune plantation enregistrée._")
 
         # ── Semis ──────────────────────────────────────────────────────────────
-        semis = calcul_semis(db)
+        semis = calcul_semis(db, date_ref)
         if semis:
             # Pleine terre : semis directement associés à une parcelle
             semis_pt = {c: s for c, s in semis.items() if s.get("parcelles_pleine_terre")}
@@ -3106,7 +3207,7 @@ async def cmd_stats(update, ctx):
                             lines_out.append(_ligne_semis_pep(culture, s))
 
         # ── Pépinière (godets) ─────────────────────────────────────────────────
-        godets_stats = calcul_godets(db)
+        godets_stats = calcul_godets(db, date_ref=date_ref)
         if godets_stats:
             lines_out.append("\n🪴 *Pépinière :*")
             for key, g in godets_stats.items():

@@ -15,14 +15,15 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import date as _date, datetime
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from unidecode import unidecode
 
 from database.models import Evenement, Parcelle
-from utils.stock import calcul_stock_cultures, get_type_organe
+from utils.stock import calcul_stock_cultures, get_type_organe, _cutoff_dt
 
 log = logging.getLogger("potager")
 
@@ -372,9 +373,10 @@ def get_all_parcelles(db: Session) -> List[Parcelle]:
 # [US_Plan_occupation_parcelles / CA1-CA7] Structure d'occupation
 # ──────────────────────────────────────────────────────────────────────────────
 
-def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
+def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -> Dict[Optional[str], list]:
     """
     [CA1-CA7] Calcule la structure d'occupation du potager par parcelle.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Retourne un dict :
     {
@@ -396,15 +398,18 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
     Seules les cultures avec stock > 0 sont incluses.
     Groupées par (culture, variete, parcelle) depuis les événements de plantation.
     """
+    cutoff = _cutoff_dt(date_ref)
+    ref_day = date_ref if date_ref is not None else datetime.now().date()
+
     # ── 1. Cultures actives (stock > 0) ──────────────────────────────────────
-    stocks = calcul_stock_cultures(db)
+    stocks = calcul_stock_cultures(db, date_ref)
     cultures_actives = {c for c, s in stocks.items() if s.stock_plants > 0}
 
     # ── 2. Événements de plantation pour cultures actives ────────────────────
     # Parcelle.nom retourné uniquement si actif=True — les parcelles soft-deletées
     # tombent dans le groupe None (Non localisé) comme les events sans parcelle_id.
     from sqlalchemy import case as sa_case
-    rows = (
+    _q_rows = (
         db.query(
             Evenement.culture,
             Evenement.variete,
@@ -418,8 +423,10 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.in_(list(cultures_actives)))
         .order_by(Evenement.date)
-        .all()
     )
+    if cutoff is not None:
+        _q_rows = _q_rows.filter(Evenement.date <= cutoff)
+    rows = _q_rows.all()
 
     # ── 3. Agrégation par (culture, variete, parcelle) — plantations ─────────
     groupes: Dict[tuple, dict] = {}
@@ -449,7 +456,7 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
     # ── 3b. Semis pleine terre (parcelle_id non null) ─────────────────────────
     # Un semis avec parcelle_id = semé directement en pleine terre (pas pépinière).
     # Traité séparément des plantations — pas de filtre cultures_actives.
-    semis_pt_rows = (
+    _q_semis_pt = (
         db.query(
             Evenement.culture,
             Evenement.variete,
@@ -462,8 +469,10 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.parcelle_id.isnot(None))
         .order_by(Evenement.date)
-        .all()
     )
+    if cutoff is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
+    semis_pt_rows = _q_semis_pt.all()
 
     groupes_semis: Dict[tuple, dict] = {}
     for culture, variete, parcelle, quantite, unite, date_evt in semis_pt_rows:
@@ -489,19 +498,20 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
             groupes_semis[key]["date_premiere"] = date_evt
 
     # ── 4. Construction du résultat final ─────────────────────────────────────
-    today = datetime.now().date()
+    today = ref_day  # [US-030] calcul d'âge relatif à la date de référence
 
     # Pertes par (culture, variete_norm) pour corriger les nb_plants affichés dans le plan.
     # Les pertes sans variete sont attribuées à toutes les varietes de la culture
     # proportionnellement à leur poids dans le total planté.
-    from sqlalchemy import func as _func
-    pertes_raw = (
-        db.query(Evenement.culture, Evenement.variete, _func.sum(Evenement.quantite))
+    _q_pertes = (
+        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "perte")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
+    pertes_raw = _q_pertes.all()
     # pertes_var[(culture, variete_norm)] = quantite
     pertes_var: Dict[tuple, float] = {}
     pertes_sans_variete: Dict[str, float] = {}
@@ -536,7 +546,7 @@ def calcul_occupation_parcelles(db: Session) -> Dict[Optional[str], list]:
             continue
 
         nb_plantes_brut = data["nb_plants"]
-        nb_plants = max(0.0, nb_plantes_brut - _perte_pour_groupe(culture, variete, nb_plantes_brut))
+        nb_plants = round(max(0.0, nb_plantes_brut - _perte_pour_groupe(culture, variete, nb_plantes_brut)))
         if nb_plants <= 0:
             continue
 

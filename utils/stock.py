@@ -17,12 +17,19 @@ Cette logique est centralisée ici pour être partagée entre bot.py et main.py.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date as _date, datetime
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from database.models import Evenement, CultureConfig, Parcelle
+
+
+def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
+    """[US-030] Borne haute inclusive (23:59:59) pour filtrage temporel par date de référence."""
+    if date_ref is None:
+        return None
+    return datetime(date_ref.year, date_ref.month, date_ref.day, 23, 59, 59)
 
 
 @dataclass
@@ -67,9 +74,10 @@ def get_type_organe(db: Session, culture: str) -> Optional[str]:
     return cfg.type_organe_recolte if cfg else None
 
 
-def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
+def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict[str, StockCulture]:
     """
     [US-002] Calcule le stock réel de toutes les cultures plantées.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Retourne un dict { culture: StockCulture } trié par culture.
 
@@ -80,8 +88,10 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
     4. Récupérer le type_organe depuis culture_config
     5. Appliquer la règle végétatif / reproducteur
     """
+    cutoff = _cutoff_dt(date_ref)
+
     # ── 1. Plantations : total = quantite × rang ────────────────────────────
-    plantations_raw = (
+    _q_plant = (
         db.query(
             Evenement.culture,
             Evenement.unite,
@@ -90,8 +100,10 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
         )
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.isnot(None))
-        .all()
     )
+    if cutoff is not None:
+        _q_plant = _q_plant.filter(Evenement.date <= cutoff)
+    plantations_raw = _q_plant.all()
 
     plantes: Dict[str, tuple] = {}   # culture → (total_plants, unite)
     for culture, unite, qte, rang in plantations_raw:
@@ -104,13 +116,15 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
         return {}
 
     # ── 2. Pertes par culture ───────────────────────────────────────────────
-    pertes_raw = (
+    _q_pertes = (
         db.query(Evenement.culture, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "perte")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
-        .all()
     )
+    if cutoff is not None:
+        _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
+    pertes_raw = _q_pertes.all()
     pertes: Dict[str, float] = {c: (q or 0) for c, q in pertes_raw}
 
     # ── 3. Récoltes par (culture, unite) — normalisées en grammes ──────────
@@ -124,7 +138,7 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
             return round(total_g / 1000, 2), "kg"
         return round(total_g, 1), "g"
 
-    recoltes_raw = (
+    _q_recoltes = (
         db.query(
             Evenement.culture,
             Evenement.unite,
@@ -134,8 +148,10 @@ def calcul_stock_cultures(db: Session) -> Dict[str, StockCulture]:
         .filter(Evenement.type_action == "recolte")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.unite)
-        .all()
     )
+    if cutoff is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
+    recoltes_raw = _q_recoltes.all()
     # Agréger en grammes pour éviter le mélange kg/g
     recoltes_g: Dict[str, tuple] = {}  # culture → (nb, total_g)
     for culture, unite, nb, total in recoltes_raw:
@@ -210,9 +226,10 @@ def format_stock_ligne_telegram(s: StockCulture) -> str:
         return base + f" ({', '.join(details)})"
 
 
-def calcul_semis(db: Session) -> Dict[str, dict]:
+def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dict]:
     """
     [US-014 / CA1] Agrège les semis par culture.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Un semis est un stade agronomique (germination/godet) indépendant des plantations.
     Les récoltes sont toujours liées aux plantations, jamais aux semis — on ne les
@@ -220,7 +237,9 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
 
     Retourne un dict { culture: { nb_semis, total_seme, unite, type_organe } }
     """
-    semis_raw = (
+    cutoff = _cutoff_dt(date_ref)
+
+    _q_semis = (
         db.query(
             Evenement.culture,
             func.count(Evenement.id),
@@ -229,25 +248,29 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
-        .all()
     )
+    if cutoff is not None:
+        _q_semis = _q_semis.filter(Evenement.date <= cutoff)
+    semis_raw = _q_semis.all()
     if not semis_raw:
         return {}
 
-    unites_raw = (
+    _q_unites = (
         db.query(Evenement.culture, Evenement.unite)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
         .filter(Evenement.unite.isnot(None))
         .distinct(Evenement.culture)
-        .all()
     )
+    if cutoff is not None:
+        _q_unites = _q_unites.filter(Evenement.date <= cutoff)
+    unites_raw = _q_unites.all()
     unites: Dict[str, str] = {c: u for c, u in unites_raw}
 
     # Graines consommées par culture : nb_graines_semees si fourni, sinon nb_plants_godets.
     # Règle métier : "5 plants sur 10 graines" → 10 graines consommées (toute la barquette),
     # pas 5. Les graines non germées sont perdues, elles quittent quand même le stock.
-    godets_brut = (
+    _q_godets = (
         db.query(
             Evenement.culture,
             Evenement.nb_graines_semees,
@@ -255,8 +278,10 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         )
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
-        .all()
     )
+    if cutoff is not None:
+        _q_godets = _q_godets.filter(Evenement.date <= cutoff)
+    godets_brut = _q_godets.all()
     graines_consommees: Dict[str, int] = {}
     plants_en_godet: Dict[str, int] = {}
     for culture, nb_g, nb_p in godets_brut:
@@ -266,36 +291,42 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
         plants_en_godet[culture]    = plants_en_godet.get(culture, 0) + plants
 
     # Cultures avec godets : perte_godet y est déjà décomptée dans calcul_godets
-    cultures_avec_godets = {
-        row[0].lower() for row in
+    _q_cultures_g = (
         db.query(Evenement.culture)
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
-        .distinct().all()
-    }
+        .distinct()
+    )
+    if cutoff is not None:
+        _q_cultures_g = _q_cultures_g.filter(Evenement.date <= cutoff)
+    cultures_avec_godets = {row[0].lower() for row in _q_cultures_g.all()}
 
     # perte_godet pour cultures SANS godet = perte de semences en barquette
-    pertes_semis_raw = (
+    _q_pertes_s = (
         db.query(Evenement.culture, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "perte_godet")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
-        .all()
     )
+    if cutoff is not None:
+        _q_pertes_s = _q_pertes_s.filter(Evenement.date <= cutoff)
+    pertes_semis_raw = _q_pertes_s.all()
     pertes_semis_dict: Dict[str, int] = {
         c: int(q or 0) for c, q in pertes_semis_raw
         if c.lower() not in cultures_avec_godets
     }
 
     # Parcelles de semis pleine terre (parcelle_id non null) par culture
-    parcelles_pt_raw = (
+    _q_parcelles_pt = (
         db.query(Evenement.culture, Parcelle.nom)
         .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.parcelle_id.isnot(None))
         .filter(Parcelle.actif.is_(True))
-        .all()
     )
+    if cutoff is not None:
+        _q_parcelles_pt = _q_parcelles_pt.filter(Evenement.date <= cutoff)
+    parcelles_pt_raw = _q_parcelles_pt.all()
     parcelles_pt: Dict[str, list] = {}
     for culture_pt, nom_p in parcelles_pt_raw:
         if culture_pt not in parcelles_pt:
@@ -320,17 +351,19 @@ def calcul_semis(db: Session) -> Dict[str, dict]:
     return dict(sorted(result.items()))
 
 
-def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
+def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
     """
     [US-014 / CA3, CA4, CA5 | US-017 / CA2] Retourne les semis par variété pour une culture donnée.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Champs de chaque dict : variete, nb_semis, total_seme, unite, date_premier_semis,
                             plants_en_godet, stock_residuel
     Retourne [] si aucun semis trouvé pour cette culture.
     """
+    cutoff = _cutoff_dt(date_ref)
     culture_lower = culture.lower()
 
-    semis_raw = (
+    _q_semis = (
         db.query(
             Evenement.variete,
             Evenement.unite,
@@ -339,14 +372,16 @@ def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
         )
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "semis")
-        .all()
     )
+    if cutoff is not None:
+        _q_semis = _q_semis.filter(Evenement.date <= cutoff)
+    semis_raw = _q_semis.all()
     if not semis_raw:
         return []
 
     # Graines consommées par variété : nb_graines_semees si fourni, sinon nb_plants_godets.
     # "5 plants sur 10 graines" → 10 graines déduites du stock (toute la barquette consommée).
-    godets_brut_var = (
+    _q_godets_var = (
         db.query(
             Evenement.variete,
             Evenement.nb_graines_semees,
@@ -354,8 +389,10 @@ def calcul_semis_par_culture(db: Session, culture: str) -> List[dict]:
         )
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "mise_en_godet")
-        .all()
     )
+    if cutoff is not None:
+        _q_godets_var = _q_godets_var.filter(Evenement.date <= cutoff)
+    godets_brut_var = _q_godets_var.all()
     graines_consommees_var: Dict[Optional[str], int] = {}
     plants_en_godet_var: Dict[Optional[str], int] = {}
     for variete, nb_g, nb_p in godets_brut_var:
@@ -428,10 +465,11 @@ def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
 # [US_Stats_detail_par_variete] Détail par variété
 # ══════════════════════════════════════════════════════════════════════════════
 
-def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
+def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
     """
     [US_Stats_detail_par_variete / CA3, CA4, CA5, CA6, CA7]
     Agrège les événements par variété pour une culture donnée.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Filtre insensible à la casse via func.lower().
     Retourne [] si aucune plantation trouvée pour cette culture.
@@ -441,10 +479,11 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
       unite_recolte, unite_plant, type_organe,
       date_premiere_plantation, date_derniere_recolte
     """
+    cutoff = _cutoff_dt(date_ref)
     culture_lower = culture.lower()
 
     # ── 1. Plantations brutes (pour recalculer qte × rang en Python) ────────
-    plantations_raw = (
+    _q_plant = (
         db.query(
             Evenement.variete,
             Evenement.unite,
@@ -454,25 +493,29 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
         )
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "plantation")
-        .all()
     )
+    if cutoff is not None:
+        _q_plant = _q_plant.filter(Evenement.date <= cutoff)
+    plantations_raw = _q_plant.all()
 
     # [CA6] Culture inconnue → liste vide
     if not plantations_raw:
         return []
 
     # ── 2. Pertes par variété ────────────────────────────────────────────────
-    pertes_raw = (
+    _q_pertes = (
         db.query(Evenement.variete, func.sum(Evenement.quantite))
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "perte")
         .group_by(Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
+    pertes_raw = _q_pertes.all()
     pertes: Dict[Optional[str], float] = {v: (q or 0) for v, q in pertes_raw}
 
     # ── 3. Récoltes brutes par variété (agrégation Python pour gérer multi-unités) ──
-    recoltes_raw = (
+    _q_recoltes = (
         db.query(
             Evenement.variete,
             Evenement.unite,
@@ -481,8 +524,10 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
         )
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "recolte")
-        .all()
     )
+    if cutoff is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
+    recoltes_raw = _q_recoltes.all()
 
     # ── 4. type_organe depuis culture_config ────────────────────────────────
     cfg = (
@@ -600,10 +645,11 @@ def calcul_stock_par_variete(db: Session, culture: str) -> List[dict]:
     return result
 
 
-def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]:
+def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional[_date] = None) -> Dict[str, dict]:
     """
     [US_mise_en_godet | US-022 | US-026] Agrège les mise_en_godet par culture/variété.
     Déduit les plantations du stock godet.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     Args:
         include_epuises: si True, inclut aussi les entrées avec stock = 0 (tout planté).
@@ -614,7 +660,9 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
     import logging as _log
     _logger = _log.getLogger("potager")
 
-    rows = (
+    cutoff = _cutoff_dt(date_ref)
+
+    _q_rows = (
         db.query(
             Evenement.culture,
             Evenement.variete,
@@ -625,20 +673,24 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_rows = _q_rows.filter(Evenement.date <= cutoff)
+    rows = _q_rows.all()
 
     if not rows:
         return {}
 
     # [US-029] Taux de germination : calculer depuis les semis parents (origine_graines_id)
     # nb_graines_semees sur une mise_en_godet est un champ contextuel par lot, pas le total réel
-    _godet_links = (
+    _q_links = (
         db.query(Evenement.culture, Evenement.variete, Evenement.origine_graines_id)
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
-        .all()
     )
+    if cutoff is not None:
+        _q_links = _q_links.filter(Evenement.date <= cutoff)
+    _godet_links = _q_links.all()
     _semis_ids_all = {r.origine_graines_id for r in _godet_links if r.origine_graines_id}
     _semis_qtites_all: Dict[int, int] = {}
     if _semis_ids_all:
@@ -653,7 +705,7 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
             graines_par_cv[key] = graines_par_cv.get(key, 0) + _semis_qtites_all.get(r.origine_graines_id, 0)
 
     # [US-022] Plantations par (culture, variété)
-    plant_rows = (
+    _q_plant = (
         db.query(
             Evenement.culture,
             Evenement.variete,
@@ -662,8 +714,10 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_plant = _q_plant.filter(Evenement.date <= cutoff)
+    plant_rows = _q_plant.all()
     plantations: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in plant_rows}
 
     # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique par culture
@@ -694,13 +748,15 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
                 _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_key)
 
     # [vendu + perte_godet] Sorties de la pépinière hors plantation
-    sorties_rows = (
+    _q_sorties = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_sorties = _q_sorties.filter(Evenement.date <= cutoff)
+    sorties_rows = _q_sorties.all()
     sorties: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in sorties_rows}
 
     # CA6-reverse pour sorties aussi (godet sans variété + sortie avec variété unique)
@@ -713,22 +769,26 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
                 sorties[(culture, None)] = sorties.get((culture, None), 0) + nb
 
     # [vendu/perte_godet détail] par (culture, variete) pour exposition dans le résultat
-    vendus_rows = (
+    _q_vendus = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "vendu")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_vendus = _q_vendus.filter(Evenement.date <= cutoff)
+    vendus_rows = _q_vendus.all()
     vendus: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in vendus_rows}
 
-    pertes_godet_rows = (
+    _q_pertes_g = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "perte_godet")
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_pertes_g = _q_pertes_g.filter(Evenement.date <= cutoff)
+    pertes_godet_rows = _q_pertes_g.all()
     pertes_godet: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in pertes_godet_rows}
 
     result: Dict[str, dict] = {}
@@ -761,9 +821,10 @@ def calcul_godets(db: Session, include_epuises: bool = False) -> Dict[str, dict]
     return dict(sorted(result.items()))
 
 
-def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
+def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
     """
     [US-018 / CA1, CA2, CA6 | US-022 / CA1-CA6] Retourne les godets actifs par variété.
+    [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
 
     stock_residuel_godet = Σ nb_plants_godets (mise_en_godet) − Σ quantite (plantation)
     par couple (culture, variété). Seules les variétés avec stock > 0 sont retournées (CA4).
@@ -774,9 +835,10 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
     import logging as _log
     _logger = _log.getLogger("potager")
 
+    cutoff = _cutoff_dt(date_ref)
     culture_lower = culture.lower()
 
-    rows = (
+    _q_rows = (
         db.query(
             Evenement.variete,
             func.sum(Evenement.nb_plants_godets),
@@ -788,20 +850,24 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_rows = _q_rows.filter(Evenement.date <= cutoff)
+    rows = _q_rows.all()
 
     if not rows:
         return []
 
     # [US-029] Taux de germination depuis les semis parents (origine_graines_id)
-    _godet_links_var = (
+    _q_links_var = (
         db.query(Evenement.variete, Evenement.origine_graines_id)
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
-        .all()
     )
+    if cutoff is not None:
+        _q_links_var = _q_links_var.filter(Evenement.date <= cutoff)
+    _godet_links_var = _q_links_var.all()
     _semis_ids_var = {r.origine_graines_id for r in _godet_links_var if r.origine_graines_id}
     _semis_qtites_var: Dict[int, int] = {}
     if _semis_ids_var:
@@ -815,7 +881,7 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
             graines_par_variete[r.variete] = graines_par_variete.get(r.variete, 0) + _semis_qtites_var.get(r.origine_graines_id, 0)
 
     # [US-022 / CA1] Plantations par variété — à déduire du stock godet
-    plant_rows = (
+    _q_plant_var = (
         db.query(
             Evenement.variete,
             func.sum(Evenement.quantite),
@@ -824,8 +890,10 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete)
-        .all()
     )
+    if cutoff is not None:
+        _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
+    plant_rows = _q_plant_var.all()
     plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
 
     # [US-022 / CA6] Plantation sans variété → rattacher selon le contexte godet
@@ -858,14 +926,16 @@ def calcul_godets_par_culture(db: Session, culture: str) -> List[dict]:
                 _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_unique)
 
     # [vendu + perte_godet] Sorties hors plantation
-    sorties_par_variete_rows = (
+    _q_sorties_var = (
         db.query(Evenement.variete, Evenement.type_action, func.sum(Evenement.quantite))
         .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete, Evenement.type_action)
-        .all()
     )
+    if cutoff is not None:
+        _q_sorties_var = _q_sorties_var.filter(Evenement.date <= cutoff)
+    sorties_par_variete_rows = _q_sorties_var.all()
     vendus_var: Dict[Optional[str], int]      = {}
     pertes_godet_var: Dict[Optional[str], int] = {}
     for variete, action, qte in sorties_par_variete_rows:
