@@ -1289,6 +1289,8 @@ _PERTE_TIMEOUT = 90  # secondes
 _ACTION_PENDING: dict[int, dict] = {}
 _ACTION_TIMEOUT = 60  # secondes
 
+_UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
+
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
@@ -1652,6 +1654,16 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                     if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                     else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                     return
+
+            # Normalisation unité semis : "graines" par défaut si absent ou non reconnu
+            if normalize_action(parsed.get("action")) == "semis":
+                unite_brute = (parsed.get("unite") or "").lower().strip()
+                if unite_brute not in _UNITES_SEMIS_VALIDES:
+                    log.info(
+                        "[semis] Unité '%s' non reconnue → forcée à 'graines' (culture=%s)",
+                        parsed.get("unite"), parsed.get("culture"),
+                    )
+                    parsed["unite"] = "graines"
 
             # [US-029 CA5/CA7/CA8] Plantation : héritage variété + source_evenement_ids
             source_evenement_ids: str | None = parsed.get("source_evenement_ids")
