@@ -1,4 +1,9 @@
 
+## [v3.8.1] — 2026-06-10
+
+### 🐛 Corrections
+- Corrige le DateRefPicker inopérant sur Chrome desktop (et Firefox) — remplace l'input transparent superposé par `showPicker()` avec fallback `click()` ; le sélecteur de date natif s'ouvre correctement sur tous les navigateurs
+
 ## [v3.8.0] — 2026-06-10
 
 ### 🚀 Nouveautés
