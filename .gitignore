@@ -25,3 +25,13 @@ utils/.tts_state.json
 
 # Suivi local des migrations déjà appliquées en dev
 .migrations_applied
+
+# Frontend React — dépendances et build
+frontend/node_modules/
+frontend/dist/
+
+# Base SQLite locale (tests manuels)
+*.db
+
+# Claude Code local settings
+.claude/
