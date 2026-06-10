@@ -1291,6 +1291,9 @@ _ACTION_TIMEOUT = 60  # secondes
 
 _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
 
+_RECOLTE_PENDING: dict[int, dict] = {}
+_RECOLTE_TIMEOUT = 60  # secondes
+
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
@@ -1351,6 +1354,45 @@ async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     recap = _build_recap(parsed, event.id)
     await update.effective_message.reply_text(recap, parse_mode="Markdown", reply_markup=AFTER_RECORD_KEYBOARD)
     await send_voice_reply(update, _build_recap_tts(parsed))
+
+
+async def _recolte_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Callback inline — sélection de variété pour une récolte ambiguë."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _RECOLTE_PENDING.pop(user_id, None)
+
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre récolte.")
+        return
+
+    import time as _time_mod
+    if _time_mod.time() - pending["ts"] > _RECOLTE_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 60 s). Veuillez re-saisir.", parse_mode="Markdown")
+        return
+
+    data = query.data  # recolte_var:{variete} | recolte_cancel
+
+    if data == "recolte_cancel":
+        await query.edit_message_text("❌ Récolte annulée.", reply_markup=None)
+        return
+
+    if data.startswith("recolte_var:"):
+        variete = data[len("recolte_var:"):]
+        item    = pending["item"]
+        texte   = pending["texte"]
+        item["variete"] = variete
+        log.info("[recolte_cb] Variété '%s' sélectionnée pour '%s' — user_id=%s", variete, item.get("culture"), user_id)
+
+        await query.edit_message_text(
+            f"✅ Variété *{variete}* sélectionnée.",
+            parse_mode="Markdown",
+            reply_markup=None,
+        )
+        # Relancer le flux de confirmation avec la variété renseignée
+        await _parse_and_save(update, texte, pre_parsed_items=[item])
 
 
 async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
@@ -1926,6 +1968,53 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 reply_markup=InlineKeyboardMarkup(buttons),
             )
         return  # attente callback — pas de sauvegarde immédiate
+
+    # ── Disambiguation récolte — variété + parcelle ──────────────────────────────
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "recolte"
+        and items[0].get("culture")
+        and not items[0].get("variete")
+    ):
+        item_r  = items[0]
+        culture = item_r["culture"]
+        user_id = update.effective_user.id
+
+        from utils.stock import calcul_stock_par_variete
+        db_tmp = SessionLocal()
+        try:
+            varietes_stock = [
+                v for v in calcul_stock_par_variete(db_tmp, culture)
+                if (v["plants_plantes"] - v["plants_perdus"]) > 0
+                and v["variete"] != "Variété non précisée"
+            ]
+        finally:
+            db_tmp.close()
+
+        if len(varietes_stock) > 1:
+            # Plusieurs variétés en stock → menu inline
+            _RECOLTE_PENDING[user_id] = {"item": item_r, "texte": texte, "ts": _time.time()}
+            buttons = [
+                [InlineKeyboardButton(
+                    f"🌿 {v['variete']} ({int(v['plants_plantes'] - v['plants_perdus'])} plants)",
+                    callback_data=f"recolte_var:{v['variete']}"
+                )]
+                for v in varietes_stock
+            ]
+            buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="recolte_cancel")])
+            await update.message.reply_text(
+                f"🥬 *{culture.capitalize()}* — Quelle variété récoltez-vous ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+            log.info("[recolte] %d variétés pour '%s' — menu inline user_id=%s", len(varietes_stock), culture, user_id)
+            return
+
+        elif len(varietes_stock) == 1:
+            # Une seule variété → auto-remplir silencieusement
+            item_r["variete"] = varietes_stock[0]["variete"]
+            log.info("[recolte] Variété '%s' auto-déduite pour '%s'", item_r["variete"], culture)
+            # pas de return → continue vers la confirmation normale
 
     # ── [vendu/perte_godet] Disambiguation perte — intelligence contextuelle ──────
     if (
@@ -4286,6 +4375,9 @@ def main():
 
     # [US-019] Sélection variété mise en godet — boutons inline
     app.add_handler(CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_"))
+
+    # Sélection variété récolte — boutons inline
+    app.add_handler(CallbackQueryHandler(_recolte_variete_cb, pattern=r"^recolte_"))
 
     # [perte_godet/vendu] Disambiguation perte jardin vs pépinière
     app.add_handler(CallbackQueryHandler(_handle_perte_callback, pattern=r"^perte_"))
