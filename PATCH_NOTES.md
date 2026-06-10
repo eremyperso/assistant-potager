@@ -1,4 +1,9 @@
 
+## [v3.9.1] — 2026-06-10
+
+### 🐛 Corrections
+- Corrige la vente de plants après sélection de variété par menu inline — `_vendu_variete_cb` appelait `_parse_and_save` (qui utilise `update.message`, `None` en contexte callback) au lieu de `_save_perte_item` (qui utilise `update.effective_message`, compatible callback)
+
 ## [v3.9.0] — 2026-06-10
 
 ### 🚀 Nouveautés

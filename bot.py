@@ -1433,7 +1433,9 @@ async def _vendu_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
             parse_mode="Markdown",
             reply_markup=None,
         )
-        await _parse_and_save(update, texte, pre_parsed_items=[item])
+        # _parse_and_save utilise update.message (None dans un callback) → utiliser _save_perte_item
+        # qui utilise update.effective_message, compatible callback ET message
+        await _save_perte_item(update, item, texte)
 
 
 async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
