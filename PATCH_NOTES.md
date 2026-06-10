@@ -1,4 +1,19 @@
 
+## [v3.8.0] — 2026-06-10
+
+### 🚀 Nouveautés
+- Ajoute un sélecteur de date de référence `DateRefPicker` dans le header de chaque vue — permet de consulter l'état du potager à une date passée (US-031)
+- La date de référence est **globale** : choisie sur un écran, elle persiste sur tous les autres sans resaisie (React Context + localStorage)
+- Bouton amber visible quand une date passée est active ; clic `×` pour revenir à "Aujourd'hui"
+- Ajoute un filtre culture harmonisé (`CultureFilter`) sur les vues Plan, Stocks et Pépinière — même composant, même placement, indépendant par écran (non persisté)
+- La vue Historique respecte la date de référence globale comme borne haute (prioritaire sur le filtre `to` local)
+
+### 🔧 Améliorations techniques
+- Nouveau `AppContext` React (`context/AppContext.jsx`) — expose `dateRef`/`setDateRef`, persisté en `localStorage(potager_date_ref)`
+- `api.js` — `plan()`, `stats()`, `godets()` acceptent un paramètre `dateRef` optionnel transmis comme `?date_ref=`
+- Tous les `useEffect` de chargement dépendent maintenant de `[refresh, dateRef]` — refetch automatique à chaque changement de date
+- Build React prod vérifié (✓ 2323 modules, 0 erreur)
+
 ## [v3.7.2] — 2026-06-10
 
 ### 🐛 Corrections

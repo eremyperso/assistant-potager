@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Search, Leaf, Sprout, ShoppingBag } from 'lucide-react'
+import { Leaf, Sprout, ShoppingBag } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
+import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 
@@ -155,23 +158,24 @@ function Chart({ cultures }) {
 // ── Vue principale ────────────────────────────────────────────────────────────
 
 export default function Stocks({ refresh }) {
+  const { dateRef } = useDateRef()
   const [stats, setStats]     = useState(null)
   const [godets, setGodets]   = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
-  const [search, setSearch]   = useState('')
+  const [search, setSearch]   = useState('')  // [CA19] local, non persisté
 
   async function load() {
     setLoading(true); setError(null)
     try {
-      const [s, g] = await Promise.all([api.stats(), api.godets()])
+      const [s, g] = await Promise.all([api.stats(dateRef), api.godets(dateRef)])
       setStats(s)
       setGodets(g)
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [refresh])
+  useEffect(() => { load() }, [refresh, dateRef])
 
   if (loading) return <LoadingSkeleton lines={4} />
   if (error)   return <ApiError message={error} onRetry={load} />
@@ -198,6 +202,12 @@ export default function Stocks({ refresh }) {
 
   return (
     <div>
+      {/* [CA13] Sélecteur date */}
+      <DateRefPicker />
+
+      {/* [CA17] Filtre culture harmonisé */}
+      <CultureFilter value={search} onChange={setSearch} placeholder="Rechercher une culture…" />
+
       {/* Résumé */}
       <div className="grid grid-cols-3 gap-2 mb-3">
         <div className="bg-primary-light dark:bg-green-950 rounded-xl p-2 text-center">
@@ -212,18 +222,6 @@ export default function Stocks({ refresh }) {
           <p className="text-xl font-semibold text-red-500">{totalPerdus}</p>
           <p className="text-[10px] text-red-400">perdus</p>
         </div>
-      </div>
-
-      {/* Filtre */}
-      <div className="relative mb-3">
-        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Rechercher une culture…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full pl-8 pr-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary"
-        />
       </div>
 
       {/* Section 1 — Au potager */}

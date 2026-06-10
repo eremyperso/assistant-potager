@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Sprout, X, CheckCircle } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
+import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 
@@ -293,10 +296,12 @@ function DetailSheet({ godet, onClose, isDark }) {
 // ── Vue principale ────────────────────────────────────────────────────────────
 
 export default function Pepiniere({ refresh }) {
+  const { dateRef } = useDateRef()
   const [data, setData]              = useState(null)
   const [loading, setLoading]        = useState(true)
   const [error, setError]            = useState(null)
   const [selectedGodet, setSelected] = useState(null)
+  const [search, setSearch]          = useState('')  // [CA19] local, non persisté
   const [isDark, setIsDark]          = useState(
     document.documentElement.classList.contains('dark')
   )
@@ -312,12 +317,12 @@ export default function Pepiniere({ refresh }) {
 
   async function load() {
     setLoading(true); setError(null)
-    try   { setData(await api.godets()) }
+    try   { setData(await api.godets(dateRef)) }
     catch (e) { setError(e.message) }
     finally   { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [refresh])
+  useEffect(() => { load() }, [refresh, dateRef])
 
   if (loading) return <LoadingSkeleton lines={4} />
   if (error)   return <ApiError message={error} onRetry={load} />
@@ -327,34 +332,50 @@ export default function Pepiniere({ refresh }) {
   const tous       = [...enAttente, ...toutPlante]
 
   if (!tous.length) return (
-    <div className="flex flex-col items-center gap-2 mt-12 text-stone-400 dark:text-zinc-500">
-      <Sprout size={32} />
-      <p className="text-sm">Aucun godet en pépinière.</p>
-    </div>
+    <>
+      <DateRefPicker />
+      <CultureFilter value={search} onChange={setSearch} />
+      <div className="flex flex-col items-center gap-2 mt-12 text-stone-400 dark:text-zinc-500">
+        <Sprout size={32} />
+        <p className="text-sm">Aucun godet en pépinière.</p>
+      </div>
+    </>
   )
 
-  const totalDispo  = enAttente.reduce((acc, g) => acc + (g.stock_residuel_godet ?? 0), 0)
-  const tauxValues  = tous.map(g => g.taux_reussite).filter(t => t != null)
+  // [CA18] Filtre culture côté client
+  const q = search.toLowerCase()
+  const filteredAttente  = q ? enAttente.filter(g => (g.culture || '').toLowerCase().includes(q) || (g.variete || '').toLowerCase().includes(q)) : enAttente
+  const filteredPlante   = q ? toutPlante.filter(g => (g.culture || '').toLowerCase().includes(q) || (g.variete || '').toLowerCase().includes(q)) : toutPlante
+  const filteredTous     = [...filteredAttente, ...filteredPlante]
+
+  const totalDispo  = filteredAttente.reduce((acc, g) => acc + (g.stock_residuel_godet ?? 0), 0)
+  const tauxValues  = filteredTous.map(g => g.taux_reussite).filter(t => t != null)
   const tauxMoyen   = tauxValues.length
     ? Math.round(tauxValues.reduce((a, b) => a + b, 0) / tauxValues.length)
     : null
-  const nomsToutPlante = toutPlante.map(c => c.variete ? `${c.culture} (${c.variete})` : c.culture)
+  const nomsToutPlante = filteredPlante.map(c => c.variete ? `${c.culture} (${c.variete})` : c.culture)
 
   return (
     <>
       <div className="space-y-2 bg-stone-100 dark:bg-zinc-950 min-h-full px-0 py-0">
 
+        {/* [CA14] Sélecteur date + filtre culture */}
+        <div className="px-0 pt-0 pb-1">
+          <DateRefPicker />
+          <CultureFilter value={search} onChange={setSearch} />
+        </div>
+
         {/* Strip 3 métriques */}
-        <MetricStrip totalDispo={totalDispo} tauxMoyen={tauxMoyen} nbCultures={tous.length} />
+        <MetricStrip totalDispo={totalDispo} tauxMoyen={tauxMoyen} nbCultures={filteredTous.length} />
 
         {/* Cartes en attente */}
-        {enAttente.map((g, i) => (
+        {filteredAttente.map((g, i) => (
           <CultureCard key={`att-${i}`} g={g} epuise={false} isDark={isDark}
             onClick={() => setSelected(g)} />
         ))}
 
         {/* Cartes tout planté */}
-        {toutPlante.map((g, i) => (
+        {filteredPlante.map((g, i) => (
           <CultureCard key={`ep-${i}`} g={g} epuise={true} isDark={isDark}
             onClick={() => setSelected(g)} />
         ))}

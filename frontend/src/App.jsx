@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useTheme } from './hooks/useTheme.js'
+import { AppContextProvider } from './context/AppContext.jsx'
 import TopBar    from './components/TopBar.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import Plan      from './views/Plan.jsx'
@@ -16,8 +17,8 @@ const VIEWS = {
   stats:      { title: 'Statistiques',       Component: Stats     },
 }
 
-export default function App() {
-  useTheme() // applique dark/light au chargement
+function AppInner() {
+  useTheme()
 
   const [activeTab, setActiveTab] = useState('plan')
   const [refreshKey, setRefreshKey] = useState(0)
@@ -41,5 +42,13 @@ export default function App() {
 
       <BottomNav active={activeTab} onChange={setActiveTab} />
     </div>
+  )
+}
+
+export default function App() {
+  return (
+    <AppContextProvider>
+      <AppInner />
+    </AppContextProvider>
   )
 }

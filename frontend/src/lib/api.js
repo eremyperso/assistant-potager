@@ -18,16 +18,19 @@ async function get(path) {
   return res.json()
 }
 
+function qs(params) {
+  const s = new URLSearchParams(params).toString()
+  return s ? '?' + s : ''
+}
+
 export const api = {
   health:     () => get('/health'),
-  plan:       () => get('/plan'),
-  stats:      () => get('/stats'),
-  godets:     () => get('/godets'),
+  // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
+  plan:       (dateRef) => get(`/plan${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  stats:      (dateRef) => get(`/stats${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  godets:     (dateRef) => get(`/godets${dateRef ? qs({ date_ref: dateRef }) : ''}`),
   cultures:   () => get('/cultures'),
-  historique: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return get(`/historique${qs ? '?' + qs : ''}`)
-  },
+  historique: (params = {}) => get(`/historique${qs(params)}`),
   godetsDetail: (culture, variete) => {
     const params = new URLSearchParams({ culture })
     if (variete) params.append('variete', variete)

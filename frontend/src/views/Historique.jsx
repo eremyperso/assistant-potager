@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Search, Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 
@@ -58,6 +60,7 @@ function EventRow({ e }) {
 // ── Vue principale ────────────────────────────────────────────────────────────
 
 export default function Historique({ refresh }) {
+  const { dateRef } = useDateRef()
   const [data, setData]         = useState({ total: 0, evenements: [] })
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState(null)
@@ -75,7 +78,9 @@ export default function Historique({ refresh }) {
       const params = { limit: PAGE_SIZE, offset: pg * PAGE_SIZE }
       if (actionFilter) params.action = actionFilter
       if (fromDate)     params.from   = fromDate
-      if (toDate)       params.to     = toDate
+      // [CA15 US-031] dateRef global prime sur le filtre toDate local
+      if (dateRef)      params.date_ref = dateRef
+      else if (toDate)  params.to       = toDate
       setData(await api.historique(params))
     } catch (e) {
       setError(e.message)
@@ -88,7 +93,7 @@ export default function Historique({ refresh }) {
   useEffect(() => {
     setPage(0)
     load(0)
-  }, [refresh, actionFilter, fromDate, toDate])
+  }, [refresh, actionFilter, fromDate, toDate, dateRef])
 
   useEffect(() => { load(page) }, [page])
 
@@ -108,6 +113,9 @@ export default function Historique({ refresh }) {
 
   return (
     <div>
+      {/* [CA15] Sélecteur date de référence */}
+      <DateRefPicker />
+
       {/* Chips filtre action (CA4) */}
       <div className="flex gap-1.5 overflow-x-auto pb-2 mb-2 scrollbar-hide">
         {CHIPS.map(chip => {

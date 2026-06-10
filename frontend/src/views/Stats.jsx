@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 
 export default function Stats({ refresh }) {
+  const { dateRef } = useDateRef()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
 
   async function load() {
     setLoading(true); setError(null)
-    try   { setData(await api.stats()) }
+    try   { setData(await api.stats(dateRef)) }
     catch (e) { setError(e.message) }
     finally   { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [refresh])
+  useEffect(() => { load() }, [refresh, dateRef])
 
   if (loading) return <LoadingSkeleton lines={3} />
   if (error)   return <ApiError message={error} onRetry={load} />
@@ -29,6 +32,9 @@ export default function Stats({ refresh }) {
 
   return (
     <div className="space-y-3">
+      {/* [CA16] Sélecteur date */}
+      <DateRefPicker />
+
       {/* Tuiles résumé */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3">

@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { MapPin, Sun, Cloud, Leaf } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
+import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 
@@ -113,15 +116,17 @@ function ParcellCard({ parcelle }) {
 // ── Vue principale ────────────────────────────────────────────────────────────
 
 export default function Plan({ refresh }) {
+  const { dateRef } = useDateRef()
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState(null)
+  const [search, setSearch]   = useState('')  // [CA17-CA19] filtre local, non persisté
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      setData(await api.plan())
+      setData(await api.plan(dateRef))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -129,30 +134,56 @@ export default function Plan({ refresh }) {
     }
   }
 
-  useEffect(() => { load() }, [refresh])
+  // [CA11] Recharge quand refresh ou dateRef change
+  useEffect(() => { load() }, [refresh, dateRef])
 
   if (loading) return <LoadingSkeleton lines={4} />
   if (error)   return <ApiError message={error} onRetry={load} />
 
   const parcelles = data?.parcelles ?? []
-  if (!parcelles.length) {
+  const q = search.toLowerCase()
+
+  // [CA18] Filtre côté client : parcelles dont au moins une culture match OU le nom de parcelle
+  const filtered = q
+    ? parcelles.map(p => ({
+        ...p,
+        cultures: p.cultures.filter(c =>
+          (c.culture || '').toLowerCase().includes(q) ||
+          (c.variete || '').toLowerCase().includes(q)
+        ),
+      })).filter(p => p.nom.toLowerCase().includes(q) || p.cultures.length > 0)
+    : parcelles
+
+  if (!filtered.length && !loading) {
     return (
-      <div className="flex flex-col items-center gap-3 mt-16 text-gray-400">
-        <Leaf size={36} />
-        <p className="text-sm">Aucune parcelle enregistrée.</p>
-        <p className="text-xs text-center">
-          Ajoutez une parcelle depuis le bot avec<br />
-          <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/parcelle ajouter nom</code>
-        </p>
-      </div>
+      <>
+        <DateRefPicker />
+        <CultureFilter value={search} onChange={setSearch} />
+        <div className="flex flex-col items-center gap-3 mt-12 text-gray-400">
+          <Leaf size={36} />
+          <p className="text-sm">{search ? 'Aucune culture correspondante.' : 'Aucune parcelle enregistrée.'}</p>
+          {!search && (
+            <p className="text-xs text-center">
+              Ajoutez une parcelle depuis le bot avec<br />
+              <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">/parcelle ajouter nom</code>
+            </p>
+          )}
+        </div>
+      </>
     )
   }
 
-  const nbActives = parcelles.filter(p => p.cultures.length > 0).length
-  const nbCultures = parcelles.reduce((s, p) => s + p.cultures.length, 0)
+  const nbActives  = filtered.filter(p => p.cultures.length > 0).length
+  const nbCultures = filtered.reduce((s, p) => s + p.cultures.length, 0)
 
   return (
     <div>
+      {/* [CA5] Sélecteur date */}
+      <DateRefPicker />
+
+      {/* [CA17] Filtre culture */}
+      <CultureFilter value={search} onChange={setSearch} />
+
       {/* Résumé */}
       <div className="flex gap-2 mb-3">
         <div className="flex-1 bg-primary-light dark:bg-green-950 rounded-xl p-3 text-center">
@@ -172,7 +203,7 @@ export default function Plan({ refresh }) {
       </div>
 
       {/* Cartes */}
-      {parcelles.map((p, i) => <ParcellCard key={i} parcelle={p} />)}
+      {filtered.map((p, i) => <ParcellCard key={i} parcelle={p} />)}
     </div>
   )
 }
