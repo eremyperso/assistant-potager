@@ -1294,6 +1294,9 @@ _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant",
 _RECOLTE_PENDING: dict[int, dict] = {}
 _RECOLTE_TIMEOUT = 60  # secondes
 
+_VENDU_PENDING: dict[int, dict] = {}
+_VENDU_TIMEOUT  = 60  # secondes
+
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
@@ -1392,6 +1395,44 @@ async def _recolte_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) ->
             reply_markup=None,
         )
         # Relancer le flux de confirmation avec la variété renseignée
+        await _parse_and_save(update, texte, pre_parsed_items=[item])
+
+
+async def _vendu_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Callback inline — sélection de variété godet pour une vente ambiguë."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _VENDU_PENDING.pop(user_id, None)
+
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre vente.")
+        return
+
+    import time as _time_mod
+    if _time_mod.time() - pending["ts"] > _VENDU_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 60 s). Veuillez re-saisir.", parse_mode="Markdown")
+        return
+
+    data = query.data  # vendu_var:{variete} | vendu_cancel
+
+    if data == "vendu_cancel":
+        await query.edit_message_text("❌ Vente annulée.", reply_markup=None)
+        return
+
+    if data.startswith("vendu_var:"):
+        variete = data[len("vendu_var:"):]
+        variete = variete if variete != "__none__" else None
+        item    = pending["item"]
+        texte   = pending["texte"]
+        item["variete"] = variete
+        log.info("[vendu_cb] Variété '%s' sélectionnée pour '%s' — user_id=%s", variete, item.get("culture"), user_id)
+        await query.edit_message_text(
+            f"✅ Variété *{variete or 'non précisée'}* sélectionnée.",
+            parse_mode="Markdown",
+            reply_markup=None,
+        )
         await _parse_and_save(update, texte, pre_parsed_items=[item])
 
 
@@ -2016,6 +2057,49 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             log.info("[recolte] Variété '%s' auto-déduite pour '%s'", item_r["variete"], culture)
             # pas de return → continue vers la confirmation normale
 
+    # ── Disambiguation vendu — variété godet ─────────────────────────────────────
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "vendu"
+        and items[0].get("culture")
+        and not items[0].get("variete")
+    ):
+        item_v  = items[0]
+        culture = item_v["culture"]
+        user_id = update.effective_user.id
+
+        from utils.stock import calcul_godets_par_culture as _cgpc_v
+        db_tmp = SessionLocal()
+        try:
+            godets_dispo = _cgpc_v(db_tmp, culture)
+        finally:
+            db_tmp.close()
+
+        if len(godets_dispo) > 1:
+            # Plusieurs variétés en godet → menu inline
+            _VENDU_PENDING[user_id] = {"item": item_v, "texte": texte, "ts": _time.time()}
+            buttons = [
+                [InlineKeyboardButton(
+                    f"🪴 {g['variete'] or 'non précisée'} ({g['stock_residuel_godet']} en godet)",
+                    callback_data=f"vendu_var:{g['variete'] if g['variete'] else '__none__'}",
+                )]
+                for g in godets_dispo
+            ]
+            buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="vendu_cancel")])
+            await update.message.reply_text(
+                f"🪴 *{culture.capitalize()}* — Quelle variété vendez-vous ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+            log.info("[vendu] %d variétés godet pour '%s' — menu inline user_id=%s", len(godets_dispo), culture, user_id)
+            return
+
+        elif len(godets_dispo) == 1:
+            # Une seule variété → auto-remplir silencieusement
+            item_v["variete"] = godets_dispo[0]["variete"]
+            log.info("[vendu] Variété '%s' auto-déduite depuis godet pour '%s'", item_v["variete"], culture)
+            # pas de return → continue vers la confirmation
+
     # ── [vendu/perte_godet] Disambiguation perte — intelligence contextuelle ──────
     if (
         len(items) == 1
@@ -2219,62 +2303,66 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     user_id = update.effective_user.id
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
 
+    # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
+    _ACTIONS_PEPINIERE = {"vendu", "perte_godet"}
+
     # [CA8/CA11] Parcelle absente sur action simple → sélection intelligente
     if len(items) == 1 and not items[0].get("parcelle"):
         action_type = items[0].get("type_action") or items[0].get("action") or ""
         culture     = items[0].get("culture") or ""
         variete     = items[0].get("variete") or None
 
-        db_tmp = SessionLocal()
-        try:
-            if action_type not in _ACTIONS_SOURCE and culture:
-                # Actions sur culture déjà en place → chercher les parcelles où elle a été plantée
-                parcelles_culture = _get_parcelles_avec_culture(db_tmp, culture, variete)
-            else:
-                parcelles_culture = []
+        if action_type not in _ACTIONS_PEPINIERE:
+            db_tmp = SessionLocal()
+            try:
+                if action_type not in _ACTIONS_SOURCE and culture:
+                    # Actions sur culture déjà en place → chercher les parcelles où elle a été plantée
+                    parcelles_culture = _get_parcelles_avec_culture(db_tmp, culture, variete)
+                else:
+                    parcelles_culture = []
 
-            if parcelles_culture and len(parcelles_culture) == 1:
-                # Une seule parcelle connue → auto-assignation silencieuse
-                items[0]["parcelle"] = parcelles_culture[0].nom
-                log.info(f"[US-021] Parcelle auto-détectée : {parcelles_culture[0].nom!r} pour {culture!r}")
+                if parcelles_culture and len(parcelles_culture) == 1:
+                    # Une seule parcelle connue → auto-assignation silencieuse
+                    items[0]["parcelle"] = parcelles_culture[0].nom
+                    log.info(f"[US-021] Parcelle auto-détectée : {parcelles_culture[0].nom!r} pour {culture!r}")
 
-            elif parcelles_culture:
-                # Plusieurs parcelles avec cette culture → proposer uniquement celles-là
-                items[0]["_parcelle_demandee"] = True
-                summary = _build_action_summary(items)
-                buttons = [
-                    [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
-                    for p in parcelles_culture
-                ]
-                buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
-                log.info(f"[US-021 CA8] {len(parcelles_culture)} parcelles pour {culture!r} — user_id={user_id}")
-                await update.message.reply_text(
-                    summary + f"\n\n*Dans quelle parcelle ?* _(parcelles avec {culture})_",
-                    parse_mode="Markdown",
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                )
-                return
-
-            else:
-                # Aucune plantation connue ou action source → liste complète
-                parcelles_actives = get_all_parcelles(db_tmp)
-                if parcelles_actives:
+                elif parcelles_culture:
+                    # Plusieurs parcelles avec cette culture → proposer uniquement celles-là
                     items[0]["_parcelle_demandee"] = True
                     summary = _build_action_summary(items)
                     buttons = [
                         [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
-                        for p in parcelles_actives
+                        for p in parcelles_culture
                     ]
                     buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
-                    log.info(f"[US-021 CA8] Sélection parcelle (liste complète) — user_id={user_id}")
+                    log.info(f"[US-021 CA8] {len(parcelles_culture)} parcelles pour {culture!r} — user_id={user_id}")
                     await update.message.reply_text(
-                        summary + "\n\n*Quelle parcelle ?*",
+                        summary + f"\n\n*Dans quelle parcelle ?* _(parcelles avec {culture})_",
                         parse_mode="Markdown",
                         reply_markup=InlineKeyboardMarkup(buttons),
                     )
                     return
-        finally:
-            db_tmp.close()
+
+                else:
+                    # Aucune plantation connue ou action source → liste complète
+                    parcelles_actives = get_all_parcelles(db_tmp)
+                    if parcelles_actives:
+                        items[0]["_parcelle_demandee"] = True
+                        summary = _build_action_summary(items)
+                        buttons = [
+                            [InlineKeyboardButton(f"📍 {p.nom}", callback_data=f"action_parcelle:{p.nom}")]
+                            for p in parcelles_actives
+                        ]
+                        buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
+                        log.info(f"[US-021 CA8] Sélection parcelle (liste complète) — user_id={user_id}")
+                        await update.message.reply_text(
+                            summary + "\n\n*Quelle parcelle ?*",
+                            parse_mode="Markdown",
+                            reply_markup=InlineKeyboardMarkup(buttons),
+                        )
+                        return
+            finally:
+                db_tmp.close()
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)
@@ -4479,6 +4567,7 @@ def main():
 
     # Sélection variété récolte — boutons inline
     app.add_handler(CallbackQueryHandler(_recolte_variete_cb, pattern=r"^recolte_"))
+    app.add_handler(CallbackQueryHandler(_vendu_variete_cb,  pattern=r"^vendu_"))
 
     # [perte_godet/vendu] Disambiguation perte jardin vs pépinière
     app.add_handler(CallbackQueryHandler(_handle_perte_callback, pattern=r"^perte_"))

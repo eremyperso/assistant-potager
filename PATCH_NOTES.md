@@ -1,4 +1,10 @@
 
+## [v3.7.2] — 2026-06-10
+
+### 🐛 Corrections
+- Corrige le flux `vendu` qui demandait une parcelle (les ventes de pépinière n'ont pas de parcelle) — `vendu` et `perte_godet` sont maintenant exclus du bloc de sélection de parcelle (US-021)
+- Ajoute la disambiguation de variété pour `vendu` : auto-remplie si une seule variété en godet, menu inline `🪴 variété (N en godet)` si plusieurs — identique au comportement de `récolte`
+
 ## [v3.7.1] — 2026-06-10
 
 ### 🐛 Corrections
