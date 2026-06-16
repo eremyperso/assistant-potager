@@ -23,48 +23,52 @@ export default function Stats({ refresh }) {
 
   if (loading) return <LoadingSkeleton lines={3} />
   if (error)   return <ApiError message={error} onRetry={load} />
-  if (!data)   return <p className="text-sm text-gray-400 text-center mt-8">Aucune donnée.</p>
+  if (!data)   return <p className="text-base text-g-sec text-center mt-8">Aucune donnée.</p>
 
   const chartData = (data.stock_par_culture || []).slice(0, 8).map(c => ({
-    name: c.culture?.slice(0, 6) || '?',
+    name:   c.culture?.slice(0, 6) || '?',
     plants: c.nb_plants || 0,
   }))
 
   return (
     <div className="space-y-3">
       {/* [CA16] Sélecteur date */}
-      <DateRefPicker />
+      <DateRefPicker className="flex items-center gap-1.5 mb-1" />
 
       {/* Tuiles résumé */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3">
-          <p className="text-2xl font-medium text-primary">{data.total_evenements}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Événements total</p>
+        <div className="bg-g-card border border-g-brd rounded-2xl p-4">
+          <p className="text-4xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-acc)' }}>
+            {data.total_evenements}
+          </p>
+          <p className="text-[13px] mt-2" style={{ color: 'var(--g-sec)' }}>Événements total</p>
         </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3">
-          <p className="text-2xl font-medium text-gray-800 dark:text-gray-200">
+        <div className="bg-g-card border border-g-brd rounded-2xl p-4">
+          <p className="text-4xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-pri)' }}>
             {data.arrosages?.nb || 0}
           </p>
-          <p className="text-xs text-gray-400 mt-0.5">Arrosages</p>
+          <p className="text-[13px] mt-2" style={{ color: 'var(--g-sec)' }}>Arrosages</p>
         </div>
       </div>
 
       {/* Graphique stocks par culture */}
       {chartData.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3">
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-3">Plants par culture</p>
-          <ResponsiveContainer width="100%" height={140}>
+        <div className="bg-g-card border border-g-brd rounded-2xl p-4">
+          <p className="text-sm font-medium mb-3" style={{ color: 'var(--g-sec)' }}>Plants par culture</p>
+          <ResponsiveContainer width="100%" height={150}>
             <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
               <XAxis dataKey="name" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
               <Tooltip
-                contentStyle={{ fontSize: 11, borderRadius: 8 }}
-                cursor={{ fill: '#E1F5EE' }}
+                contentStyle={{ fontSize: 12, borderRadius: 10 }}
+                cursor={{ fill: 'var(--g-acc-dim)' }}
               />
-              <Bar dataKey="plants" fill="#1D9E75" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="plants" fill="var(--g-acc)" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="text-xs text-gray-400 text-center mt-1">US-028 — graphiques avancés à implémenter</p>
+          <p className="text-[12px] text-center mt-1" style={{ color: 'var(--g-sec)' }}>
+            US-028 — graphiques avancés à implémenter
+          </p>
         </div>
       )}
     </div>

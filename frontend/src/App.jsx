@@ -33,10 +33,10 @@ function AppInner() {
   const { title, Component } = VIEWS[activeTab]
 
   return (
-    <div className="flex flex-col h-dvh max-w-md mx-auto bg-gray-50 dark:bg-gray-950">
+    <div className="flex flex-col h-dvh max-w-md mx-auto bg-g-bg">
       <TopBar title={title} onRefresh={handleRefresh} loading={loading} />
 
-      <main className="flex-1 overflow-y-auto p-3">
+      <main className="flex-1 overflow-y-auto px-3 pt-3 pb-2">
         <Component refresh={refreshKey} />
       </main>
 
