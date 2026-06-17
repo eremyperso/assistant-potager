@@ -1,4 +1,19 @@
 
+## [v3.10.0] — 2026-06-18
+
+### 🚀 Nouveautés
+- Ajoute un graphique météo SVG dans l'onglet Statistiques — températures min/max par barre dégradée ambre→bleu + précipitations en barres bleues
+- Ajoute 4 KPI au-dessus du graphique : pic max°, creux min°, cumul pluie (mm), nombre de jours de pluie sur la période
+- Ajoute un sélecteur de période 7 / 14 / 30 jours avec appel dynamique à `GET /meteo/history?days=N` (Open-Meteo Archive, zéro token Groq)
+
+### 🐛 Corrections
+- Corrige le sélecteur de date de référence (`DateRefPicker`) inopérant sur Chrome et Firefox desktop — utilise désormais `showPicker()` avec fallback `.click()`
+- Corrige le scroll horizontal du graphique météo sur desktop — la molette convertit le scroll vertical en défilement horizontal (listener natif `{ passive: false }`)
+
+### 🔧 Améliorations techniques
+- Ajoute `api.meteoHistory(days)` dans `api.js` — centralisé avec les autres appels REST
+- Ajoute les variables CSS `--g-rain`, `--g-rain-dim`, `--g-rain-line` en mode clair et sombre pour les couleurs météo précipitations
+
 ## [v3.9.1] — 2026-06-10
 
 ### 🐛 Corrections
