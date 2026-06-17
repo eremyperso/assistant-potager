@@ -31,7 +31,8 @@ METEO_LONGITUDE = 2.2038296967715305
 METEO_TIMEZONE  = "Europe/Paris"
 
 # ── URL Open-Meteo ─────────────────────────────────────────────────────────────
-OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_URL         = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 # ── Codes météo WMO → label potager ───────────────────────────────────────────
 # https://open-meteo.com/en/docs#weathervariables
@@ -232,6 +233,76 @@ def format_meteo_commentaire(m: dict) -> str:
         f"☀ {m['lever_soleil']}→{m['coucher_soleil']} · "
         f"{m['conseil']}"
     )
+
+
+def fetch_meteo_history(
+    lat: float = METEO_LATITUDE,
+    lon: float = METEO_LONGITUDE,
+    days: int = 30,
+    timezone: str = METEO_TIMEZONE,
+) -> list[dict] | None:
+    """
+    Interroge Open-Meteo Archive pour l'historique météo journalier.
+
+    Args:
+        lat      : latitude GPS (défaut : potager configuré)
+        lon      : longitude GPS (défaut : potager configuré)
+        days     : nombre de jours d'historique (7–365)
+        timezone : fuseau IANA (défaut : Europe/Paris)
+
+    Retourne une liste de dicts triés par date croissante :
+        [{ date, temp_max, temp_min, precipitations, wmo_code, emoji, label }, ...]
+    Retourne None en cas d'erreur réseau ou de parsing.
+    """
+    from datetime import timedelta
+
+    today      = date.today()
+    end_date   = today - timedelta(days=1)          # archive n'a pas les données du jour
+    start_date = end_date - timedelta(days=days - 1)
+
+    params = {
+        "latitude"  : lat,
+        "longitude" : lon,
+        "start_date": start_date.isoformat(),
+        "end_date"  : end_date.isoformat(),
+        "daily"     : [
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "precipitation_sum",
+            "weathercode",
+        ],
+        "timezone"  : timezone,
+    }
+
+    try:
+        resp = requests.get(OPEN_METEO_ARCHIVE_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        raw = resp.json()
+    except requests.RequestException as e:
+        log.error(f"❌ MÉTÉO HISTORIQUE  : {e}")
+        return None
+
+    try:
+        daily  = raw["daily"]
+        times  = daily["time"]
+        result = []
+        for i, t in enumerate(times):
+            wmo         = daily["weathercode"][i]
+            emoji, label = _wmo_label(wmo)
+            result.append({
+                "date"          : t,
+                "temp_max"      : daily["temperature_2m_max"][i],
+                "temp_min"      : daily["temperature_2m_min"][i],
+                "precipitations": daily["precipitation_sum"][i] or 0.0,
+                "wmo_code"      : wmo,
+                "emoji"         : emoji,
+                "label"         : label,
+            })
+        log.info(f"🌤️  MÉTÉO HISTORIQUE : {len(result)} jours ({start_date} → {end_date})")
+        return result
+    except (KeyError, IndexError, TypeError) as e:
+        log.error(f"❌ MÉTÉO HISTORIQUE PARSE : {e}")
+        return None
 
 
 def save_meteo_observation(db: Session) -> dict | None:

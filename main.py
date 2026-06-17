@@ -721,6 +721,44 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
         db.close()
 
 
+@app.get("/meteo/history")
+def meteo_history(
+    days    : int   = Query(default=30, ge=7, le=365, description="Nombre de jours d'historique"),
+    lat     : float = Query(default=None, description="Latitude GPS (défaut : potager configuré)"),
+    lon     : float = Query(default=None, description="Longitude GPS (défaut : potager configuré)"),
+    timezone: str   = Query(default=None, description="Fuseau IANA (défaut : Europe/Paris)"),
+):
+    """
+    Historique météo journalier (températures min/max + précipitations) depuis Open-Meteo Archive.
+    Gratuit, sans authentification, zéro token Groq.
+
+    Paramètres optionnels lat/lon permettent d'interroger n'importe quel potager.
+    Retourne : { jours: [...], meta: { lat, lon, timezone, days, start_date, end_date } }
+    """
+    from utils.meteo import fetch_meteo_history, METEO_LATITUDE, METEO_LONGITUDE, METEO_TIMEZONE
+
+    eff_lat = lat      if lat      is not None else METEO_LATITUDE
+    eff_lon = lon      if lon      is not None else METEO_LONGITUDE
+    eff_tz  = timezone if timezone is not None else METEO_TIMEZONE
+
+    jours = fetch_meteo_history(lat=eff_lat, lon=eff_lon, days=days, timezone=eff_tz)
+
+    if jours is None:
+        raise HTTPException(status_code=502, detail="Impossible de récupérer les données Open-Meteo Archive")
+
+    return {
+        "jours": jours,
+        "meta": {
+            "lat"       : eff_lat,
+            "lon"       : eff_lon,
+            "timezone"  : eff_tz,
+            "days"      : days,
+            "start_date": jours[0]["date"]  if jours else None,
+            "end_date"  : jours[-1]["date"] if jours else None,
+        },
+    }
+
+
 @app.get("/historique")
 def historique(
     limit     : int  = Query(default=20, le=100),
