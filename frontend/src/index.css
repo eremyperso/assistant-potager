@@ -9,36 +9,44 @@
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 
     /* ─── Mode clair — parchemin naturel ─── */
-    --g-bg:      #EEE8D5;
-    --g-sur:     #E6DFC9;
-    --g-card:    #FDFAF1;
-    --g-brd:     #D2C8B0;
-    --g-acc:     #3A6918;
-    --g-acc-dim: #D6EAC0;
-    --g-pri:     #1A2808;
-    --g-sec:     #7A8A56;
-    --g-mid:     #567232;
-    --g-amb:     #966010;
-    --g-amb-dim: #F5E6C8;
-    --g-red:     #8F3030;
-    --g-red-dim: #F5DDDD;
+    --g-bg:       #EEE8D5;
+    --g-sur:      #E6DFC9;
+    --g-card:     #FDFAF1;
+    --g-brd:      #D2C8B0;
+    --g-acc:      #3A6918;
+    --g-acc-dim:  #D6EAC0;
+    --g-pri:      #1A2808;
+    --g-sec:      #7A8A56;
+    --g-mid:      #567232;
+    --g-amb:      #966010;
+    --g-amb-dim:  #F5E6C8;
+    --g-red:      #8F3030;
+    --g-red-dim:  #F5DDDD;
+    /* Météo — précipitations */
+    --g-rain:      #3D7A99;
+    --g-rain-dim:  #D7E6EC;
+    --g-rain-line: #2E6B8A;
   }
 
   .dark {
     /* ─── Mode sombre — kaki forêt ─── */
-    --g-bg:      #0D1309;
-    --g-sur:     #14200C;
-    --g-card:    #1B2912;
-    --g-brd:     #243318;
-    --g-acc:     #8EC452;
-    --g-acc-dim: #152210;
-    --g-pri:     #DFE9C8;
-    --g-sec:     #4C6430;
-    --g-mid:     #79A24E;
-    --g-amb:     #C98C26;
-    --g-amb-dim: #291C07;
-    --g-red:     #BF4040;
-    --g-red-dim: #270D0D;
+    --g-bg:       #0D1309;
+    --g-sur:      #14200C;
+    --g-card:     #1B2912;
+    --g-brd:      #243318;
+    --g-acc:      #8EC452;
+    --g-acc-dim:  #152210;
+    --g-pri:      #DFE9C8;
+    --g-sec:      #4C6430;
+    --g-mid:      #79A24E;
+    --g-amb:      #C98C26;
+    --g-amb-dim:  #291C07;
+    --g-red:      #BF4040;
+    --g-red-dim:  #270D0D;
+    /* Météo — précipitations */
+    --g-rain:      #6AA6C2;
+    --g-rain-dim:  #142730;
+    --g-rain-line: #4F8DA8;
   }
 
   * {
