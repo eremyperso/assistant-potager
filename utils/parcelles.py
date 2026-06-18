@@ -512,7 +512,6 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
-    # pertes_var[(culture, variete_norm)] = quantite
     pertes_var: Dict[tuple, float] = {}
     pertes_sans_variete: Dict[str, float] = {}
     for c, v, q in pertes_raw:
@@ -521,20 +520,45 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         else:
             pertes_sans_variete[c] = pertes_sans_variete.get(c, 0) + (q or 0)
 
+    # Récoltes par (culture, variete_norm) — uniquement pour cultures végétatives.
+    # Pour végétatif : récolter = arracher → diminue le nombre de pieds en terre.
+    # Pour reproducteur : la plante reste, les récoltes n'affectent pas l'occupation.
+    _q_recoltes = (
+        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        .filter(Evenement.type_action == "recolte")
+        .filter(Evenement.culture.isnot(None))
+        .group_by(Evenement.culture, Evenement.variete)
+    )
+    if cutoff is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
+    recoltes_raw = _q_recoltes.all()
+    recoltes_var: Dict[tuple, float] = {}
+    recoltes_sans_variete: Dict[str, float] = {}
+    for c, v, q in recoltes_raw:
+        if v:
+            recoltes_var[(c, v)] = recoltes_var.get((c, v), 0) + (q or 0)
+        else:
+            recoltes_sans_variete[c] = recoltes_sans_variete.get(c, 0) + (q or 0)
+
     # Totaux plantés par culture (toutes varietes) pour distribution proportionnelle
     total_plante_par_culture: Dict[str, float] = {}
     for (c, v, _p), d in groupes.items():
         total_plante_par_culture[c] = total_plante_par_culture.get(c, 0) + d["nb_plants"]
 
     def _perte_pour_groupe(culture: str, variete: str, nb_plants: float) -> float:
-        """Retourne la part de perte à déduire pour ce groupe."""
-        # Perte spécifique à la variété
-        perte = pertes_var.get((culture, variete), 0)
-        # Perte sans variété → distribuée au prorata du poids de ce groupe
-        perte_globale = pertes_sans_variete.get(culture, 0)
+        """Retourne la part de perte + récolte à déduire pour ce groupe."""
         total_c = total_plante_par_culture.get(culture, 0)
+
+        perte = pertes_var.get((culture, variete), 0)
+        perte_globale = pertes_sans_variete.get(culture, 0)
         if perte_globale > 0 and total_c > 0:
             perte += perte_globale * (nb_plants / total_c)
+
+        perte += recoltes_var.get((culture, variete), 0)
+        recolte_globale = recoltes_sans_variete.get(culture, 0)
+        if recolte_globale > 0 and total_c > 0:
+            perte += recolte_globale * (nb_plants / total_c)
+
         return perte
 
     result: Dict[Optional[str], list] = {}

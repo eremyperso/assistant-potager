@@ -47,7 +47,8 @@ pytest tests/ -k "test_name"                   # single test by name
 python bot.py
 
 # Start FastAPI server (http://localhost:8000)
-python main.py
+uvicorn main:app --host 0.0.0.0 --port 8000
+# NB: main.py n'a pas de bloc __main__ — `python main.py` ne lance rien.
 
 # Apply latest database migration
 psql -d potager -f migrations/migration_v12.sql
@@ -232,3 +233,29 @@ Puis dans pgAdmin (ou tout client PostgreSQL) :
 - Port : `5433`
 - Username : `potager_user`
 - DB dev : `potager_dev` / DB prod : `potager_prod`
+
+## Déploiement & Docker
+
+### ⚠️ IMPORTANT — Protocole de déploiement
+
+**JAMAIS** faire `pg_dump > file.sql` + import manuel. Cela crée des problèmes d'encodage (UTF-8 vs WIN1252) et de collation imprévisibles.
+
+### ✅ Solution recommandée : Docker Compose
+
+**TODO** — À mettre en place ASAP avant le prochain déploiement :
+
+1. Créer `Dockerfile` (Python + dépendances)
+2. Créer `docker-compose.yml` (API + PostgreSQL)
+3. Utiliser **scripts de migration versionnés** (Alembic), pas de dumps manuels
+4. Toutes les config via variables d'env (`.env.local`, `.env.prod`)
+
+**Bénéfices** :
+- ✅ Encodage UTF-8 natif (Linux)
+- ✅ Marche identique Windows/Mac/Linux
+- ✅ Zéro soucis de collation
+- ✅ Redéploiement = `docker-compose up`
+- ✅ Pas de stato "c'était bon sur ma machine"
+
+**Effort estimé** : 4h (une seule fois)
+
+**Retour sur investissement** : éviter 10h+ de galère lors du prochain déploiement

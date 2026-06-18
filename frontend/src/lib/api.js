@@ -32,6 +32,7 @@ export const api = {
   cultures:   () => get('/cultures'),
   historique: (params = {}) => get(`/historique${qs(params)}`),
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
+  activite:     (annee, dateRef) => get(`/stats/activite${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
   godetsDetail: (culture, variete) => {
     const params = new URLSearchParams({ culture })
     if (variete) params.append('variete', variete)

@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import DateRefPicker from '../components/DateRefPicker.jsx'
-import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
-import ApiError from '../components/ApiError.jsx'
+import CultureFilter from '../components/CultureFilter.jsx'
 
 // ─── constantes ───────────────────────────────────────────────────────────────
 const WD = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
 const MO = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+const ACT_MO = ['Janv', 'Févr', 'Mars', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc']
+const CS = 12, CG = 2, CST = 14, MH = 16   // dimensions cases heatmap activité
 
 // ─── 5 paliers de chaleur (couleurs dark / light) ─────────────────────────────
 const HEAT = [
@@ -305,6 +305,107 @@ function WeatherChart({ data, isDark }) {
   )
 }
 
+function actColor(n, isDark) {
+  if (n <= 0) return 'var(--g-brd)'
+  if (n === 1) return isDark ? '#253D18' : '#C5DCAA'
+  if (n === 2) return isDark ? '#3D6020' : '#9DC45A'
+  if (n === 3) return isDark ? '#5A8A2E' : '#72A838'
+  if (n === 4) return isDark ? '#78B040' : '#4A8828'
+  return 'var(--g-acc)'
+}
+
+function ActivityHeatmap({ jours, annee, dateRef, isDark }) {
+  const scrollRef = useRef(null)
+
+  const today = new Date()
+  const yEnd = dateRef
+    ? new Date(dateRef + 'T12:00:00')
+    : (today.getFullYear() === annee ? today : new Date(annee, 11, 31))
+  const yStart = new Date(annee, 0, 1)
+
+  // Aligner sur lundi (Mon=0)
+  const startDow = (yStart.getDay() + 6) % 7
+  const origin = new Date(yStart)
+  origin.setDate(origin.getDate() - startDow)
+
+  const weeks = []
+  for (let cur = new Date(origin); cur <= yEnd; cur.setDate(cur.getDate() + 7)) {
+    const week = []
+    for (let di = 0; di < 7; di++) {
+      const dt = new Date(cur)
+      dt.setDate(dt.getDate() + di)
+      const inRange = dt >= yStart && dt <= yEnd
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+      week.push({ inRange, count: inRange ? (jours[key] || 0) : -1, month: dt.getMonth() })
+    }
+    weeks.push(week)
+  }
+
+  const seen = new Set()
+  const monthLabels = []
+  weeks.forEach((w, wi) => {
+    const first = w.find(d => d.inRange)
+    if (first && !seen.has(first.month)) {
+      seen.add(first.month)
+      monthLabels.push({ label: ACT_MO[first.month], x: wi * CST })
+    }
+  })
+
+  const svgW = weeks.length * CST
+  const svgH = MH + 7 * CST - CG
+  const total = Object.values(jours).reduce((s, v) => s + v, 0)
+  const active = Object.values(jours).filter(v => v > 0).length
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <StatTile value={total} label="actions totales" color="var(--g-acc)" bg="var(--g-acc-dim)"/>
+        <StatTile value={active} label="jours actifs"/>
+        <StatTile value={active ? (total / active).toFixed(1) : 0} label="moy./j. actif" color="var(--g-amb)"/>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+        {/* labels jour */}
+        <div style={{ flexShrink: 0, paddingTop: MH + CG, display: 'flex', flexDirection: 'column', gap: CG }}>
+          {['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((l, i) => (
+            <div key={i} style={{ height: CS, width: 12, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+              {i % 2 === 0 && <span style={{ fontSize: 9, color: 'var(--g-sec)' }}>{l}</span>}
+            </div>
+          ))}
+        </div>
+        {/* grille scrollable */}
+        <div ref={scrollRef} style={{ flex: 1, overflowX: 'auto' }}>
+          <svg width={svgW} height={svgH} style={{ display: 'block' }}>
+            {monthLabels.map(({ label, x }) => (
+              <text key={label} x={x} y={12} fontSize="10" fontWeight="600" fill="var(--g-acc)">{label}</text>
+            ))}
+            {weeks.map((week, wi) =>
+              week.map((day, di) => day.inRange ? (
+                <rect key={`${wi}-${di}`} x={wi * CST} y={MH + di * CST} width={CS} height={CS} rx={3} fill={actColor(day.count, isDark)}/>
+              ) : null)
+            )}
+          </svg>
+        </div>
+      </div>
+
+      {/* légende avec valeurs */}
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {[0, 1, 2, 3, 4, 5].map(v => (
+            <div key={v} style={{ width: CS, height: CS, borderRadius: 3, flexShrink: 0, background: actColor(v, isDark) }}/>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {['0', '1', '2', '3', '4', '5+'].map((l, i) => (
+            <div key={i} style={{ width: CS, textAlign: 'center', fontSize: 9, color: 'var(--g-sec)', flexShrink: 0 }}>{l}</div>
+          ))}
+        </div>
+        <span style={{ fontSize: 10, color: 'var(--g-sec)', fontStyle: 'italic' }}>nombre d'actions par jour</span>
+      </div>
+    </div>
+  )
+}
+
 // ─── vue principale ───────────────────────────────────────────────────────────
 
 export default function Stats({ refresh }) {
@@ -312,21 +413,19 @@ export default function Stats({ refresh }) {
   const isDark = theme === 'dark'
   const { dateRef } = useDateRef()
 
-  const [statsData, setStatsData]   = useState(null)
-  const [statsLoading, setStatsLoading] = useState(true)
-  const [statsError, setStatsError] = useState(null)
-
   const [meteo, setMeteo]           = useState(null)
   const [meteoLoading, setMeteoLoading] = useState(true)
   const [meteoError, setMeteoError] = useState(null)
   const [days, setDays]             = useState(7)
 
-  async function loadStats() {
-    setStatsLoading(true); setStatsError(null)
-    try   { setStatsData(await api.stats(dateRef)) }
-    catch (e) { setStatsError(e.message) }
-    finally   { setStatsLoading(false) }
-  }
+  const [search, setSearch]         = useState('')   // filtre commun (cohérence avec les autres onglets)
+
+  const [activite, setActivite]         = useState(null)
+  const [activiteLoading, setActiviteLoading] = useState(true)
+  const [activiteError, setActiviteError]     = useState(null)
+  const activiteAnnee = dateRef
+    ? new Date(dateRef + 'T12:00:00').getFullYear()
+    : new Date().getFullYear()
 
   async function loadMeteo() {
     setMeteoLoading(true); setMeteoError(null)
@@ -335,8 +434,15 @@ export default function Stats({ refresh }) {
     finally   { setMeteoLoading(false) }
   }
 
-  useEffect(() => { loadStats() }, [refresh, dateRef])
+  async function loadActivite() {
+    setActiviteLoading(true); setActiviteError(null)
+    try   { setActivite(await api.activite(activiteAnnee, dateRef)) }
+    catch (e) { setActiviteError(e.message) }
+    finally   { setActiviteLoading(false) }
+  }
+
   useEffect(() => { loadMeteo() }, [days])
+  useEffect(() => { loadActivite() }, [refresh, dateRef, activiteAnnee])
 
   // ─── KPIs météo ─────────────────────────────────────────────────────────────
   const jours    = meteo?.jours || []
@@ -362,15 +468,13 @@ export default function Stats({ refresh }) {
     precip: Math.round((d.precipitations || 0) * 10) / 10,
   }))
 
-  // graphique stocks existant
-  const stockChart = (statsData?.stock_par_culture || []).slice(0, 8).map(c => ({
-    name:   c.culture?.slice(0, 6) || '?',
-    plants: c.nb_plants || 0,
-  }))
-
   return (
     <div className="space-y-3">
-      <DateRefPicker className="flex items-center gap-1.5 mb-1" />
+      {/* [filtre commun] cohérent avec Plan/Pépinière/etc. */}
+      <div className="flex items-center gap-2 mb-1">
+        <DateRefPicker />
+        <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
+      </div>
 
       {/* ─── Graphique météo ─── */}
       <GraphZone
@@ -451,47 +555,48 @@ export default function Stats({ refresh }) {
         )}
       </GraphZone>
 
-      {/* ─── Tuiles résumé cultures ─── */}
-      {statsLoading ? (
-        <LoadingSkeleton lines={3} />
-      ) : statsError ? (
-        <ApiError message={statsError} onRetry={loadStats} />
-      ) : statsData && (
-        <>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="bg-g-card border border-g-brd rounded-2xl p-4">
-              <p className="text-4xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-acc)' }}>
-                {statsData.total_evenements}
-              </p>
-              <p className="text-[13px] mt-2" style={{ color: 'var(--g-sec)' }}>Événements total</p>
-            </div>
-            <div className="bg-g-card border border-g-brd rounded-2xl p-4">
-              <p className="text-4xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-pri)' }}>
-                {statsData.arrosages?.nb || 0}
-              </p>
-              <p className="text-[13px] mt-2" style={{ color: 'var(--g-sec)' }}>Arrosages</p>
-            </div>
+      {/* ─── Activité potager ─── */}
+      <GraphZone
+        icon={
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+            stroke="var(--g-acc)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8"  y1="2" x2="8"  y2="6"/>
+            <line x1="3"  y1="10" x2="21" y2="10"/>
+            <polyline points="8 14 10 16 14 12"/>
+          </svg>
+        }
+        title="Activité potager"
+        subtitle={`Intensité quotidienne des actions · ${activiteAnnee}`}
+      >
+        {activiteLoading ? (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 13, color: 'var(--g-sec)' }}>Chargement…</span>
           </div>
-
-          {/* graphique plants par culture */}
-          {stockChart.length > 0 && (
-            <div className="bg-g-card border border-g-brd rounded-2xl p-4">
-              <p className="text-sm font-medium mb-3" style={{ color: 'var(--g-sec)' }}>Plants par culture</p>
-              <ResponsiveContainer width="100%" height={150}>
-                <BarChart data={stockChart} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12, borderRadius: 10 }}
-                    cursor={{ fill: 'var(--g-acc-dim)' }}
-                  />
-                  <Bar dataKey="plants" fill="var(--g-acc)" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </>
-      )}
+        ) : activiteError ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <span style={{ fontSize: 13, color: 'var(--g-red)' }}>{activiteError}</span>
+            <button
+              onClick={loadActivite}
+              style={{
+                display: 'block', margin: '8px auto 0',
+                fontSize: 13, color: 'var(--g-acc)',
+                background: 'none', border: 'none', cursor: 'pointer',
+              }}
+            >
+              Réessayer
+            </button>
+          </div>
+        ) : (
+          <ActivityHeatmap
+            jours={activite?.jours || {}}
+            annee={activiteAnnee}
+            dateRef={dateRef}
+            isDark={isDark}
+          />
+        )}
+      </GraphZone>
     </div>
   )
 }

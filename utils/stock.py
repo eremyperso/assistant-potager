@@ -434,6 +434,30 @@ def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date
     return result
 
 
+def calcul_activite_quotidienne(
+    db: Session, annee: int, date_ref: Optional[_date] = None
+) -> Dict[str, int]:
+    """
+    [US_Stats_activite_potager] Compte le nombre d'événements par jour pour une année donnée.
+    [US-030] date_ref optionnel : plafonne la borne haute à cette date (sinon 31/12 de l'année).
+
+    Retourne { "YYYY-MM-DD": nb_evenements }, uniquement les jours ayant au moins 1 événement.
+    """
+    debut = datetime(annee, 1, 1)
+    fin_annee = datetime(annee, 12, 31, 23, 59, 59)
+    cutoff = _cutoff_dt(date_ref)
+    fin = min(fin_annee, cutoff) if cutoff else fin_annee
+
+    rows = (
+        db.query(func.date(Evenement.date), func.count(Evenement.id))
+        .filter(Evenement.date >= debut)
+        .filter(Evenement.date <= fin)
+        .group_by(func.date(Evenement.date))
+        .all()
+    )
+    return {str(jour): nb for jour, nb in rows}
+
+
 def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
     """
     [US-002 / CA4] Retourne les données de stock sous forme JSON pour l'API /stats.

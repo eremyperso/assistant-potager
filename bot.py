@@ -1012,6 +1012,34 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     texte     = texte_raw.lower()  # comparaison insensible à la casse
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
+    # [US-021 CA9] Quantité en attente ? Traiter comme quantité
+    user_id = update.effective_user.id
+    if user_id in _QUANTITE_PENDING:
+        pending = _QUANTITE_PENDING.pop(user_id)
+        items = pending["items"]
+
+        # Parser la quantité du texte (simple regex)
+        import re
+        match = re.search(r"([\d.]+)\s*(\w+)?", texte_raw)
+        if match:
+            qty = match.group(1)
+            unite = match.group(2) or ""
+            items[0]["quantite"] = qty
+            if unite:
+                items[0]["unite"] = unite
+            log.info(f"[US-021 CA9] Quantité détectée: {qty} {unite} — user_id={user_id}")
+
+            # Continuer avec confirmation
+            await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Quantité non reconnue. Précisez un nombre (ex: _2 kg_, _15 plants_)",
+                parse_mode="Markdown"
+            )
+            _QUANTITE_PENDING[user_id] = pending  # remettre en attente
+            return
+
     # Réinitialiser le mode SAUF si on est en plein flux de correction, déplacement ou en attente de question
     MODES_CORRECTION = {
         'corr_select', 'corr_apply', 'corr_search', 'corr_confirm_delete', 'corr_confirm',
@@ -1296,6 +1324,9 @@ _RECOLTE_TIMEOUT = 60  # secondes
 
 _VENDU_PENDING: dict[int, dict] = {}
 _VENDU_TIMEOUT  = 60  # secondes
+
+_QUANTITE_PENDING: dict[int, dict] = {}
+_QUANTITE_TIMEOUT = 60  # secondes
 
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
@@ -1879,6 +1910,9 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     pre_parsed_items : items déjà extraits par parse_message() (single-pass).
     Si None, appel de secours à parse_commande() (bulk, multi-lignes, fallback).
     """
+    # Gestion des callback queries : update.message peut être None
+    message = update.message or (update.callback_query.message if update.callback_query else None)
+
     try:
         if pre_parsed_items is not None:
             items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
@@ -1888,7 +1922,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         log.error(f"❌ ERREUR PARSING  : {e}")
         txt = f"❌ Erreur parsing : {e}\n\nEssayez de reformuler votre action."
         if msg: await msg.edit_text(txt)
-        else:   await update.message.reply_text(txt)
+        else:   await message.reply_text(txt)
         return
 
     log.info(f"🤖 GROQ PARSING   : {json.dumps(items, ensure_ascii=False)}")
@@ -1916,14 +1950,14 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             log.info(f"❓ REROUTAGE US011 : action=None détectée → _ask_question('{texte}')")
             await _ask_question(update, texte)
         else:
-            await update.message.reply_text("❌ Aucune action détectée.")
+            await message.reply_text("❌ Aucune action détectée.")
         return
 
     # Cas JSON sans action ni culture → phrase non reconnue comme action potager
     first = items[0] if items else {}
     if not (first.get("action") or first.get("culture") or first.get("quantite")):
         log.warning("⚠️  JSON SANS ACTION NI CULTURE : phrase non reconnue, pas de sauvegarde")
-        await update.message.reply_text(
+        await message.reply_text(
             "🤔 Je n'ai pas compris cette action.\n\n"
             "• Pour enregistrer : _\"Récolté 2 kg de tomates hier\"_\n"
             "• Pour interroger  : _\"Combien de tomates ai-je récolté ?\"_",
@@ -1935,7 +1969,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # Cas ambiguïté rang/quantité détectée par Groq
     if len(items) == 1 and items[0].get("action") == "AMBIGUE":
         hint = items[0].get("commentaire", "précisez le nombre de plants par rang et le nombre de rangs")
-        await update.message.reply_text(
+        await message.reply_text(
             "🤔 *Précision nécessaire*\n\n"
             "Je n'ai pas bien compris la quantité et les rangs.\n\n"
             "Reformulez en précisant :\n"
@@ -1980,7 +2014,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                     callback_data=f"godet_var:{cb_key}"
                 )])
             buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="godet_cancel")])
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🪴 Pour quelle variété de *{culture}* ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -1994,7 +2028,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 [InlineKeyboardButton("✅ Confirmer", callback_data="godet_confirm"),
                  InlineKeyboardButton("❌ Annuler",   callback_data="godet_cancel")]
             ]
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🪴 Je suppose la variété *{var}* (seule en pépinière, {s['stock_residuel']} restantes). Confirmer ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -2005,7 +2039,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 [InlineKeyboardButton("✅ Enregistrer quand même", callback_data="godet_force"),
                  InlineKeyboardButton("❌ Annuler",                callback_data="godet_cancel")]
             ]
-            await update.message.reply_text(
+            await message.reply_text(
                 f"⚠️ Aucun semis de *{culture}* en pépinière. Voulez-vous quand même enregistrer cette mise en godet ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -2045,7 +2079,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 for v in varietes_stock
             ]
             buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="recolte_cancel")])
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🥬 *{culture.capitalize()}* — Quelle variété récoltez-vous ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -2088,7 +2122,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 for g in godets_dispo
             ]
             buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="vendu_cancel")])
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🪴 *{culture.capitalize()}* — Quelle variété vendez-vous ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -2357,7 +2391,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                         ]
                         buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
                         log.info(f"[US-021 CA8] Sélection parcelle (liste complète) — user_id={user_id}")
-                        await update.message.reply_text(
+                        await message.reply_text(
                             summary + "\n\n*Quelle parcelle ?*",
                             parse_mode="Markdown",
                             reply_markup=InlineKeyboardMarkup(buttons),
@@ -2366,6 +2400,20 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             finally:
                 db_tmp.close()
 
+    # [US-021 CA9] Quantité manquante pour actions clés → demander avant confirmation
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) in ["recolte", "semis", "plantation"]
+        and not items[0].get("quantite")
+    ):
+        user_id = update.effective_user.id
+        _QUANTITE_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+        log.info(f"[US-021 CA9] Quantité manquante pour '{items[0].get('action')}' — user_id={user_id}")
+        await message.reply_text(
+            "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"
+        )
+        return
+
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)
     buttons = [[
@@ -2373,7 +2421,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
     ]]
     log.info(f"[US-021] Confirmation demandée — user_id={user_id}, {len(items)} item(s)")
-    await update.message.reply_text(
+    await message.reply_text(
         summary,
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(buttons),

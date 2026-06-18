@@ -511,6 +511,27 @@ def stats(date_ref: date = Query(default=None)):
         db.close()
 
 
+@app.get("/stats/activite")
+def get_activite(annee: int = Query(default=None), date_ref: date = Query(default=None)):
+    """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    from utils.stock import calcul_activite_quotidienne
+    today = date.today()
+    annee_eff = annee or today.year
+    dr = min(date_ref, today) if date_ref else None
+    db = SessionLocal()
+    try:
+        jours = calcul_activite_quotidienne(db, annee_eff, dr)
+        return {
+            "annee":         annee_eff,
+            "jours":         jours,
+            "total_actions": sum(jours.values()),
+            "jours_actifs":  len(jours),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/plan")
 def get_plan(date_ref: date = Query(default=None)):
     """
