@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
+import { useTheme } from '../hooks/useTheme.js'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -9,6 +10,19 @@ import ApiError from '../components/ApiError.jsx'
 // ─── constantes ───────────────────────────────────────────────────────────────
 const WD = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
 const MO = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+// ─── 5 paliers de chaleur (couleurs dark / light) ─────────────────────────────
+const HEAT = [
+  { max: 20, dark: '#3E9E46', light: '#347D2C', label: 'frais',       range: '< 20°'  },
+  { max: 24, dark: '#8EC452', light: '#5FA02E', label: 'doux',        range: '20–23°' },
+  { max: 28, dark: '#E2B53C', light: '#C2941A', label: 'chaud',       range: '24–27°' },
+  { max: 31, dark: '#E07B2E', light: '#C2691A', label: 'très chaud',  range: '28–30°' },
+  { max: 99, dark: '#D6493B', light: '#B2362A', label: 'caniculaire', range: '≥ 31°'  },
+]
+function heatColor(t, isDark) {
+  const cat = HEAT.find(h => t < h.max) || HEAT[HEAT.length - 1]
+  return isDark ? cat.dark : cat.light
+}
 
 // ─── composants utilitaires ───────────────────────────────────────────────────
 
@@ -116,7 +130,35 @@ function Segmented({ options, value, onChange }) {
   )
 }
 
-function WeatherChart({ data }) {
+function HeatScale() {
+  return (
+    <div>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 8, marginBottom: 7, paddingInline: 2,
+      }}>
+        <span style={{ fontSize: 12, color: 'var(--g-sec)' }}>Niveau de chaleur (max du jour)</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--g-sec)', flexShrink: 0 }}>
+          <span style={{ display: 'inline-block', width: 11, height: 11, borderRadius: 3, background: 'var(--g-rain)' }}/>
+          précip. (mm)
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 3 }}>
+        {HEAT.map((h, i) => (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <div style={{
+              width: '100%', height: 13, borderRadius: 4,
+              background: `var(--heat-${i}, ${h.dark})`,
+            }}/>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--g-sec)', lineHeight: 1 }}>{h.range}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function WeatherChart({ data, isDark }) {
   const scrollRef = useRef(null)
 
   useEffect(() => {
@@ -178,11 +220,14 @@ function WeatherChart({ data }) {
       {/* zone scrollable */}
       <div ref={scrollRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden' }}>
         <svg width={plotW} viewBox={`0 0 ${plotW} ${H}`} style={{ display: 'block' }}>
+          {/* dégradé par barre : couleur du palier min (bas/matin) → max (haut/pic) */}
           <defs>
-            <linearGradient id="wx-bgrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   style={{ stopColor: 'var(--g-amb)' }}/>
-              <stop offset="100%" style={{ stopColor: 'var(--g-rain)' }}/>
-            </linearGradient>
+            {data.map((p, i) => (
+              <linearGradient key={i} id={`wx-heat-${i}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={heatColor(p.tmax, isDark)}/>
+                <stop offset="100%" stopColor={heatColor(p.tmin, isDark)}/>
+              </linearGradient>
+            ))}
           </defs>
 
           {/* grille horizontale */}
@@ -196,7 +241,7 @@ function WeatherChart({ data }) {
             />
           ))}
 
-          {/* barres temp min–max */}
+          {/* barres temp min–max avec dégradé dynamique par palier */}
           {data.map((p, i) => (
             <rect
               key={i}
@@ -205,15 +250,15 @@ function WeatherChart({ data }) {
               width={bw}
               height={Math.max(2, ty(p.tmin) - ty(p.tmax))}
               rx={bw / 2}
-              fill="url(#wx-bgrad)"
+              fill={`url(#wx-heat-${i})`}
             />
           ))}
 
-          {/* étiquettes temp */}
+          {/* étiquettes temp colorées par palier */}
           {data.map((p, i) => (
             <g key={i}>
-              <text x={x(i)} y={ty(p.tmax) - 7}  textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--g-amb)">{p.tmax}</text>
-              <text x={x(i)} y={ty(p.tmin) + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill="var(--g-rain-line)">{p.tmin}</text>
+              <text x={x(i)} y={ty(p.tmax) - 7}  textAnchor="middle" fontSize="11" fontWeight="700" fill={heatColor(p.tmax, isDark)}>{p.tmax}</text>
+              <text x={x(i)} y={ty(p.tmin) + 14} textAnchor="middle" fontSize="11" fontWeight="700" fill={heatColor(p.tmin, isDark)}>{p.tmin}</text>
             </g>
           ))}
 
@@ -263,6 +308,8 @@ function WeatherChart({ data }) {
 // ─── vue principale ───────────────────────────────────────────────────────────
 
 export default function Stats({ refresh }) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const { dateRef } = useDateRef()
 
   const [statsData, setStatsData]   = useState(null)
@@ -360,8 +407,8 @@ export default function Stats({ refresh }) {
           <>
             {/* KPI tiles */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              <StatTile value={tmaxP ?? '—'} unit="°" label="max"      color="var(--g-amb)"/>
-              <StatTile value={tminP ?? '—'} unit="°" label="min"      color="var(--g-rain-line)"/>
+              <StatTile value={tmaxP ?? '—'} unit="°" label="max"      color={tmaxP != null ? heatColor(tmaxP, isDark) : 'var(--g-sec)'}/>
+              <StatTile value={tminP ?? '—'} unit="°" label="min"      color={tminP != null ? heatColor(tminP, isDark) : 'var(--g-sec)'}/>
               <StatTile
                 value={Math.round(totPluie * 10) / 10}
                 unit="mm" label="pluie"
@@ -370,22 +417,13 @@ export default function Stats({ refresh }) {
               <StatTile value={joursPluie} unit="j" label="j. pluie"/>
             </div>
 
-            {/* légende */}
-            <div style={{ display: 'flex', gap: 14, paddingInline: 2, marginBottom: 8 }}>
-              {[
-                { c: 'var(--g-amb)',       l: 'max' },
-                { c: 'var(--g-rain-line)', l: 'min' },
-                { c: 'var(--g-rain)',      l: 'précip.' },
-              ].map(({ c, l }) => (
-                <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 3, background: c }}/>
-                  <span style={{ fontSize: 12, color: 'var(--g-sec)' }}>{l}</span>
-                </div>
-              ))}
+            {/* légende paliers de chaleur */}
+            <div style={{ marginBottom: 10 }}>
+              <HeatScale/>
             </div>
 
             {/* graphique */}
-            {chartData.length > 0 && <WeatherChart data={chartData}/>}
+            {chartData.length > 0 && <WeatherChart data={chartData} isDark={isDark}/>}
 
             {/* hint défilement */}
             {days > 7 && (

@@ -26,6 +26,12 @@
     --g-rain:      #3D7A99;
     --g-rain-dim:  #D7E6EC;
     --g-rain-line: #2E6B8A;
+    /* Paliers de chaleur (mode clair) */
+    --heat-0: #347D2C;
+    --heat-1: #5FA02E;
+    --heat-2: #C2941A;
+    --heat-3: #C2691A;
+    --heat-4: #B2362A;
   }
 
   .dark {
@@ -47,6 +53,12 @@
     --g-rain:      #6AA6C2;
     --g-rain-dim:  #142730;
     --g-rain-line: #4F8DA8;
+    /* Paliers de chaleur (mode sombre) */
+    --heat-0: #3E9E46;
+    --heat-1: #8EC452;
+    --heat-2: #E2B53C;
+    --heat-3: #E07B2E;
+    --heat-4: #D6493B;
   }
 
   * {
