@@ -458,6 +458,86 @@ def calcul_activite_quotidienne(
     return {str(jour): nb for jour, nb in rows}
 
 
+def calcul_rendement_mensuel(db: Session, annee: int, date_ref: Optional[_date] = None) -> dict:
+    """
+    [US_Stats_rendement_timeline] Agrège les récoltes par culture et par mois pour une année donnée.
+    [US-030] date_ref optionnel : plafonne la borne haute à cette date (sinon 31/12 de l'année).
+
+    Ne retient que les cultures dont la récolte est mesurée en poids (kg/g/mg) — tout est
+    normalisé en kg pour permettre une échelle de comparaison commune entre cultures.
+    Les cultures récoltées en unités (pièces) ne sont pas incluses dans ce graphique.
+
+    Retourne :
+    {
+        "cultures": [
+            {
+                "culture": str,
+                "unite": "kg",
+                "total": float,
+                "mensuel": { "5": 1.2, "6": 2.0, ... },   # clé = mois (str), en kg
+            }, ...
+        ],  # triées par total décroissant
+        "mois_range": [5, 8],         # premier/dernier mois avec au moins une récolte pesée ([] si aucune)
+        "total_general_kg": 14.2,
+    }
+    """
+    debut = datetime(annee, 1, 1)
+    fin_annee = datetime(annee, 12, 31, 23, 59, 59)
+    cutoff = _cutoff_dt(date_ref)
+    fin = min(fin_annee, cutoff) if cutoff else fin_annee
+
+    rows = (
+        db.query(Evenement.culture, Evenement.unite, Evenement.quantite, Evenement.date)
+        .filter(Evenement.type_action == "recolte")
+        .filter(Evenement.culture.isnot(None))
+        .filter(Evenement.date >= debut)
+        .filter(Evenement.date <= fin)
+        .all()
+    )
+    if not rows:
+        return {"cultures": [], "mois_range": [], "total_general_kg": 0.0}
+
+    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+
+    par_culture: Dict[str, dict] = {}
+    mois_avec_recolte: set = set()
+
+    for culture, unite, qte, dt in rows:
+        if not dt or qte is None:
+            continue
+        unite_l = (unite or "").lower()
+        if unite_l not in _UNITE_TO_G:
+            continue  # culture récoltée en pièces : hors périmètre de ce graphique
+        mois = dt.month
+        mois_avec_recolte.add(mois)
+        entry = par_culture.setdefault(culture, {"total_g": 0.0, "mensuel_g": {}})
+        val_g = qte * _UNITE_TO_G[unite_l]
+        entry["total_g"] += val_g
+        entry["mensuel_g"][mois] = entry["mensuel_g"].get(mois, 0.0) + val_g
+
+    cultures_out: List[dict] = []
+    total_general_kg = 0.0
+    for culture, e in par_culture.items():
+        total_kg = round(e["total_g"] / 1000.0, 2)
+        mensuel = {str(m): round(g / 1000.0, 2) for m, g in e["mensuel_g"].items()}
+        total_general_kg += e["total_g"] / 1000.0
+        cultures_out.append({
+            "culture": culture,
+            "unite":   "kg",
+            "total":   total_kg,
+            "mensuel": mensuel,
+        })
+
+    cultures_out.sort(key=lambda c: c["total"], reverse=True)
+    mois_range = [min(mois_avec_recolte), max(mois_avec_recolte)] if mois_avec_recolte else []
+
+    return {
+        "cultures":         cultures_out,
+        "mois_range":       mois_range,
+        "total_general_kg": round(total_general_kg, 2),
+    }
+
+
 def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
     """
     [US-002 / CA4] Retourne les données de stock sous forme JSON pour l'API /stats.

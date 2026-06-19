@@ -511,6 +511,22 @@ def stats(date_ref: date = Query(default=None)):
         db.close()
 
 
+@app.get("/stats/rendement")
+def get_rendement(annee: int = Query(default=None), date_ref: date = Query(default=None)):
+    """[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    from utils.stock import calcul_rendement_mensuel
+    today = date.today()
+    annee_eff = annee or today.year
+    dr = min(date_ref, today) if date_ref else None
+    db = SessionLocal()
+    try:
+        data = calcul_rendement_mensuel(db, annee_eff, dr)
+        return {"annee": annee_eff, **data}
+    finally:
+        db.close()
+
+
 @app.get("/stats/activite")
 def get_activite(annee: int = Query(default=None), date_ref: date = Query(default=None)):
     """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).

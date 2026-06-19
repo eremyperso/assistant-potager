@@ -305,6 +305,188 @@ function WeatherChart({ data, isDark }) {
   )
 }
 
+// ─── couleurs par culture (rendement) ─────────────────────────────────────────
+const CULT_CLR = {
+  tomate:    { dark: '#D4813A', light: '#B5631A' },
+  courgette: { dark: '#C98C26', light: '#A06B10' },
+  concombre: { dark: '#52C472', light: '#2E9A4E' },
+  cornichon: { dark: '#8EC452', light: '#5FA02E' },
+  fraise:    { dark: '#BF4040', light: '#9A2828' },
+  courge:    { dark: '#E07B2E', light: '#C2601A' },
+  oignon:    { dark: '#A8D452', light: '#7A9E2E' },
+  betterave: { dark: '#C060C0', light: '#902890' },
+}
+function cultClr(nom, isDark) {
+  const c = CULT_CLR[(nom || '').toLowerCase()]
+  if (!c) return 'var(--g-acc)'
+  return isDark ? c.dark : c.light
+}
+
+function DonutRing({ pct, color, size = 64 }) {
+  const sw = 5, r = (size - sw) / 2
+  const circ = 2 * Math.PI * r
+  const dash = pct / 100 * circ
+  const cx = size / 2, cy = size / 2
+  return (
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={sw} opacity={0.2}/>
+      <circle
+        cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={sw}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="butt"
+        transform={`rotate(-90 ${cx} ${cy})`}
+      />
+      <text x={cx} y={cy + 1} textAnchor="middle" dominantBaseline="middle" fontSize="16" fontWeight="800" fill={color}>
+        {pct}%
+      </text>
+    </svg>
+  )
+}
+
+function MiniBarChart({ monthly, mois, maxKg, color }) {
+  const BAR_W = 24, GAP = 6, H = 26, LBL_TOP = 12, LBL_BOT = 11
+  const W = mois.length * (BAR_W + GAP) - GAP
+  return (
+    <svg width={W} height={LBL_TOP + H + LBL_BOT} style={{ display: 'block', overflow: 'visible' }}>
+      {mois.map((m, i) => {
+        const kg = monthly[String(m)] || 0
+        const bh = maxKg > 0 ? Math.max(kg / maxKg * H, kg > 0 ? 3 : 0) : 0
+        const x  = i * (BAR_W + GAP)
+        return (
+          <g key={m}>
+            {/* fond track — met en valeur le niveau du bâton (pleine hauteur du graphique) */}
+            <rect x={x} y={LBL_TOP} width={BAR_W} height={H} rx={3} fill="#1B2912"/>
+            {bh > 0 && (
+              <rect x={x} y={LBL_TOP + H - bh} width={BAR_W} height={bh} rx={3} fill={color}/>
+            )}
+            {kg > 0 && (
+              <text x={x + BAR_W / 2} y={LBL_TOP - 3} textAnchor="middle" fontSize="10" fontWeight="700" fill={color}>
+                {kg.toFixed(1)}
+              </text>
+            )}
+            <text x={x + BAR_W / 2} y={LBL_TOP + H + LBL_BOT - 1} textAnchor="middle" fontSize="9" fill="var(--g-sec)">
+              {ACT_MO[m - 1]}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+function HarvestBlock({ data, search, isDark }) {
+  const [tri, setTri] = useState('qte')
+  const cultures  = data?.cultures || []
+  const moisRange = data?.mois_range || []
+
+  if (!cultures.length || !moisRange.length) {
+    return (
+      <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 13, color: 'var(--g-sec)' }}>
+        Aucune récolte pesée enregistrée sur la période.
+      </div>
+    )
+  }
+
+  const mois = []
+  for (let m = moisRange[0]; m <= moisRange[1]; m++) mois.push(m)
+
+  const q = (search || '').toLowerCase()
+  const items = cultures
+    .filter(c => !q || c.culture.toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => tri === 'alpha' ? a.culture.localeCompare(b.culture) : b.total - a.total)
+
+  const grandTotal = items.reduce((s, c) => s + c.total, 0)
+  const maxMonthKg = Math.max(
+    ...items.flatMap(c => mois.map(m => c.mensuel[String(m)] || 0)), 1
+  )
+
+  return (
+    <div>
+      {/* carte total + tri */}
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 14 }}>
+        <div style={{
+          flex: 'none', width: 'calc(33% - 5px)',
+          background: 'var(--g-sur)', border: '1px solid var(--g-brd)',
+          borderRadius: 13, padding: '11px 4px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+            <span style={{ fontSize: 23, fontWeight: 700, color: 'var(--g-acc)', letterSpacing: '-0.6px', lineHeight: 1 }}>
+              {grandTotal.toFixed(1)}
+            </span>
+            <span style={{ fontSize: 13, color: 'var(--g-acc)', fontWeight: 600 }}>kg</span>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--g-sec)', textAlign: 'center', lineHeight: 1.25 }}>
+            production cumulée
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, justifyContent: 'center' }}>
+          {[{ v: 'qte', l: 'Qté ↓' }, { v: 'alpha', l: 'A→Z' }].map(o => {
+            const on = tri === o.v
+            return (
+              <button
+                key={o.v}
+                onClick={() => setTri(o.v)}
+                style={{
+                  padding: '4px 12px', borderRadius: 7,
+                  border: `1px solid ${on ? 'var(--g-acc)' : 'var(--g-brd)'}`,
+                  background: on ? 'var(--g-acc-dim)' : 'transparent',
+                  color: on ? 'var(--g-acc)' : 'var(--g-sec)',
+                  fontSize: 12, fontWeight: on ? 700 : 500, cursor: 'pointer',
+                }}
+              >
+                {o.l}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* lignes cultures */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {items.map(c => {
+          const pct   = grandTotal > 0 ? Math.round(c.total / grandTotal * 100) : 0
+          const color = cultClr(c.culture, isDark)
+          return (
+            <div key={c.culture} style={{
+              background: 'var(--g-sur)', borderRadius: 12, padding: '8px 10px',
+              display: 'flex', alignItems: 'stretch', gap: 8, minHeight: 90,
+            }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 80 }}>
+                <DonutRing pct={pct} color={color} size={74}/>
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{
+                    fontSize: 16, fontWeight: 500, color: 'var(--g-pri)',
+                    fontFamily: "'Lora', Georgia, 'Times New Roman', serif",
+                    textTransform: 'capitalize',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0,
+                  }}>
+                    {c.culture}
+                  </span>
+                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--g-mid)' }}>{c.total.toFixed(1)}</span>
+                    <span style={{ fontSize: 11, color: 'var(--g-sec)', fontWeight: 600 }}>kg</span>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
+                  <MiniBarChart monthly={c.mensuel} mois={mois} maxKg={maxMonthKg} color={color}/>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {items.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '12px 0', fontSize: 13, color: 'var(--g-sec)' }}>
+            Aucune culture pour « {search} ».
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function actColor(n, isDark) {
   if (n <= 0) return 'var(--g-brd)'
   if (n === 1) return isDark ? '#253D18' : '#C5DCAA'
@@ -427,6 +609,10 @@ export default function Stats({ refresh }) {
     ? new Date(dateRef + 'T12:00:00').getFullYear()
     : new Date().getFullYear()
 
+  const [rendement, setRendement]               = useState(null)
+  const [rendementLoading, setRendementLoading] = useState(true)
+  const [rendementError, setRendementError]     = useState(null)
+
   async function loadMeteo() {
     setMeteoLoading(true); setMeteoError(null)
     try   { setMeteo(await api.meteoHistory(days)) }
@@ -441,8 +627,16 @@ export default function Stats({ refresh }) {
     finally   { setActiviteLoading(false) }
   }
 
+  async function loadRendement() {
+    setRendementLoading(true); setRendementError(null)
+    try   { setRendement(await api.rendement(activiteAnnee, dateRef)) }
+    catch (e) { setRendementError(e.message) }
+    finally   { setRendementLoading(false) }
+  }
+
   useEffect(() => { loadMeteo() }, [days])
   useEffect(() => { loadActivite() }, [refresh, dateRef, activiteAnnee])
+  useEffect(() => { loadRendement() }, [refresh, dateRef, activiteAnnee])
 
   // ─── KPIs météo ─────────────────────────────────────────────────────────────
   const jours    = meteo?.jours || []
@@ -552,6 +746,42 @@ export default function Stats({ refresh }) {
               />
             </div>
           </>
+        )}
+      </GraphZone>
+
+      {/* ─── Rendements ─── */}
+      <GraphZone
+        icon={
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+            stroke="var(--g-acc)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22V12"/>
+            <path d="M5 12c0-3.866 3.134-7 7-7s7 3.134 7 7"/>
+            <path d="M5.5 6.5C7 4 9.5 2.5 12 2.5S17 4 18.5 6.5"/>
+          </svg>
+        }
+        title="Rendements"
+        subtitle={`Récoltes par culture · saison ${activiteAnnee}`}
+      >
+        {rendementLoading ? (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 13, color: 'var(--g-sec)' }}>Chargement…</span>
+          </div>
+        ) : rendementError ? (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <span style={{ fontSize: 13, color: 'var(--g-red)' }}>{rendementError}</span>
+            <button
+              onClick={loadRendement}
+              style={{
+                display: 'block', margin: '8px auto 0',
+                fontSize: 13, color: 'var(--g-acc)',
+                background: 'none', border: 'none', cursor: 'pointer',
+              }}
+            >
+              Réessayer
+            </button>
+          </div>
+        ) : (
+          <HarvestBlock data={rendement} search={search} isDark={isDark}/>
         )}
       </GraphZone>
 
