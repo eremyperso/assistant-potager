@@ -244,8 +244,9 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════════════════════════════
-const API = window.location.origin;
-// const API = 'http://100.88.XX.XX:8000'; // ← décommenter si accès Tailscale externe
+const API = 'https://potager.eremy.fr';
+// const API = window.location.origin; // ← dynamique, fonctionne aussi derrière le reverse-proxy nginx
+// const API = 'http://100.88.XX.XX:8000'; // ← Tailscale (obsolète)
 
 // ── Session persistante (multi-tours) ──────────────────────────────────────
 let sessionId = localStorage.getItem('potager_session');
