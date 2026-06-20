@@ -1,10 +1,33 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from llm.groq_client import parse_commande, extract_intent, repondre_question
+from llm.groq_client import parse_commande, extract_intent, repondre_question, PARSE_PROMPT
 
 
 class TestParseCommande:
     """Tests pour parse_commande (parsing avec Groq)."""
+
+    def test_parse_prompt_lists_protection_action(self):
+        """[Regression] 'protection' (voile/filet/cloche/tunnel) doit rester
+        dans l'enum du PARSE_PROMPT, sinon Groq la confond avec 'paillage'."""
+        assert "protection" in PARSE_PROMPT
+        assert "voile" in PARSE_PROMPT
+
+    @patch('llm.groq_client._client')
+    def test_parse_protection_voile(self, mock_client):
+        """Test parsing d'une phrase de protection (voile anti-gel)."""
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = '''{
+            "action": "protection",
+            "culture": "courge",
+            "parcelle": "courge"
+        }'''
+        mock_client.chat.completions.create.return_value = mock_response
+
+        result = parse_commande("Mise d'un voile sur parcelle courge")
+
+        assert len(result) == 1
+        assert result[0]['action'] == 'protection'
+        assert result[0]['culture'] == 'courge'
 
     @patch('llm.groq_client._client')
     def test_parse_perte(self, mock_client):

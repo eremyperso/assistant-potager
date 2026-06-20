@@ -92,7 +92,7 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | protection | observation | plantation | tuteurage | perte | mise_en_godet
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
@@ -126,6 +126,12 @@ Exemples :
 
 "traitement purin d'ortie sur les courgettes hier"
 → {{"action":"traitement","culture":"courgette","quantite":null,"unite":null,"date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":"purin d ortie","variete":null,"commentaire":null}}
+
+"Mise d'un voile sur parcelle courge"
+→ {{"action":"protection","culture":"courge","quantite":null,"unite":null,"date":null,"parcelle":"courge","rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
+
+"posé un filet anti-insectes sur les choux"
+→ {{"action":"protection","culture":"chou","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
 
 "semé des carottes nantaises parcelle est"
 → {{"action":"semis","culture":"carotte","quantite":null,"unite":null,"date":null,"parcelle":"est","rang":null,"duree_minutes":null,"traitement":null,"variete":"nantaise","commentaire":null}}
