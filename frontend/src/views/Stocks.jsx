@@ -7,6 +7,7 @@ import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
+import MetricStrip from '../components/MetricStrip.jsx'
 
 // ── Badges d'origine ──────────────────────────────────────────────────────────
 
@@ -216,20 +217,11 @@ export default function Stocks({ refresh }) {
       </div>
 
       {/* Métriques */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <div className="bg-g-acc-dim border border-g-brd rounded-2xl p-3 text-center">
-          <p className="text-3xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-acc)' }}>{totalPotager}</p>
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--g-mid)' }}>au potager</p>
-        </div>
-        <div className="bg-g-card border border-g-brd rounded-2xl p-3 text-center">
-          <p className="text-3xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-mid)' }}>{totalGodets}</p>
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--g-sec)' }}>à replanter</p>
-        </div>
-        <div className="bg-g-red-dim border border-g-brd rounded-2xl p-3 text-center">
-          <p className="text-3xl font-bold tracking-tight leading-none" style={{ color: 'var(--g-red)' }}>{totalPerdus}</p>
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--g-red)' }}>perdus</p>
-        </div>
-      </div>
+      <MetricStrip metrics={[
+        { value: totalPotager, label: 'au potager',  color: 'var(--g-acc)' },
+        { value: totalGodets,  label: 'à replanter',  color: 'var(--g-mid)' },
+        { value: totalPerdus,  label: 'perdus',       color: 'var(--g-red)' },
+      ]}/>
 
       {/* Section 1 — Au potager */}
       {(filteredStocks.length > 0 || filteredSemis.length > 0) && (

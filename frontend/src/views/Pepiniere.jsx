@@ -6,6 +6,7 @@ import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
+import MetricStrip from '../components/MetricStrip.jsx'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -59,35 +60,6 @@ function ArcCounter({ total, restants }) {
         <span style={{ fontSize: 14, fontWeight: 800, color, lineHeight: 1 }}>{restants}</span>
         <span style={{ fontSize: 8, color: 'var(--g-sec)', lineHeight: 1.4 }}>dispo</span>
       </div>
-    </div>
-  )
-}
-
-// ── Strip 3 métriques ─────────────────────────────────────────────────────────
-
-function MetricStrip({ totalDispo, tauxMoyen, nbCultures }) {
-  return (
-    <div
-      className="rounded-2xl border border-g-brd flex mb-2"
-      style={{ background: 'var(--g-card)' }}
-    >
-      {[
-        { val: totalDispo,                              label: 'godets dispo',  color: 'var(--g-pri)' },
-        { val: tauxMoyen != null ? `${tauxMoyen}%` : '—', label: 'réussite moy.', color: 'var(--g-acc)' },
-        { val: nbCultures,                             label: 'cultures',      color: 'var(--g-pri)' },
-      ].map((m, i) => (
-        <div key={m.label} className="flex-1 relative">
-          {i > 0 && (
-            <div className="absolute left-0 top-2.5 bottom-2.5 w-px" style={{ background: 'var(--g-brd)' }} />
-          )}
-          <div className="py-3 text-center">
-            <div className="text-4xl font-bold tracking-tight leading-none" style={{ color: m.color }}>
-              {m.val}
-            </div>
-            <div className="text-[11px] mt-1.5" style={{ color: 'var(--g-sec)' }}>{m.label}</div>
-          </div>
-        </div>
-      ))}
     </div>
   )
 }
@@ -412,7 +384,11 @@ export default function Pepiniere({ refresh }) {
         </div>
 
         {/* Strip 3 métriques */}
-        <MetricStrip totalDispo={totalDispo} tauxMoyen={tauxMoyen} nbCultures={filteredTous.length} />
+        <MetricStrip metrics={[
+          { value: totalDispo,                              label: 'godets dispo',  color: 'var(--g-pri)' },
+          { value: tauxMoyen != null ? `${tauxMoyen}%` : '—', label: 'réussite moy.', color: 'var(--g-acc)' },
+          { value: filteredTous.length,                      label: 'cultures',      color: 'var(--g-pri)' },
+        ]}/>
 
         {/* Cartes en attente */}
         {filteredAttente.map((g, i) => (

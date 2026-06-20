@@ -342,9 +342,12 @@ function DonutRing({ pct, color, size = 64 }) {
   )
 }
 
-function MiniBarChart({ monthly, mois, maxKg, color }) {
+function MiniBarChart({ monthly, mois, maxKg, color, isDark }) {
   const BAR_W = 24, GAP = 6, H = 26, LBL_TOP = 12, LBL_BOT = 11
   const W = mois.length * (BAR_W + GAP) - GAP
+  // fond track : sombre et profond en mode nuit, clair et doux en mode jour
+  // (harmonisé avec --g-sur des deux thèmes plutôt qu'une valeur fixe)
+  const trackFill = isDark ? '#1B2912' : '#EFE8D4'
   return (
     <svg width={W} height={LBL_TOP + H + LBL_BOT} style={{ display: 'block', overflow: 'visible' }}>
       {mois.map((m, i) => {
@@ -354,7 +357,7 @@ function MiniBarChart({ monthly, mois, maxKg, color }) {
         return (
           <g key={m}>
             {/* fond track — met en valeur le niveau du bâton (pleine hauteur du graphique) */}
-            <rect x={x} y={LBL_TOP} width={BAR_W} height={H} rx={3} fill="#1B2912"/>
+            <rect x={x} y={LBL_TOP} width={BAR_W} height={H} rx={3} fill={trackFill}/>
             {bh > 0 && (
               <rect x={x} y={LBL_TOP + H - bh} width={BAR_W} height={bh} rx={3} fill={color}/>
             )}
@@ -471,7 +474,7 @@ function HarvestBlock({ data, search, isDark }) {
                   </div>
                 </div>
                 <div style={{ overflowX: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
-                  <MiniBarChart monthly={c.mensuel} mois={mois} maxKg={maxMonthKg} color={color}/>
+                  <MiniBarChart monthly={c.mensuel} mois={mois} maxKg={maxMonthKg} color={color} isDark={isDark}/>
                 </div>
               </div>
             </div>

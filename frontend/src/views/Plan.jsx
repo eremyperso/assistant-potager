@@ -6,6 +6,7 @@ import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
+import MetricStrip from '../components/MetricStrip.jsx'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -181,16 +182,10 @@ export default function Plan({ refresh }) {
       ) : (
         <>
           {/* Métriques */}
-          <div className="flex gap-2 mb-3">
-            <div className="flex-1 bg-g-acc-dim border border-g-brd rounded-2xl p-3.5 text-center">
-              <p className="text-4xl font-bold text-g-acc leading-none tracking-tight">{nbActives}</p>
-              <p className="text-[12px] text-g-mid mt-1.5">parcelles actives</p>
-            </div>
-            <div className="flex-1 bg-g-card border border-g-brd rounded-2xl p-3.5 text-center">
-              <p className="text-4xl font-bold text-g-pri leading-none tracking-tight">{nbCultures}</p>
-              <p className="text-[12px] text-g-sec mt-1.5">cultures en place</p>
-            </div>
-          </div>
+          <MetricStrip metrics={[
+            { value: nbActives,  label: 'parcelles actives', color: 'var(--g-acc)' },
+            { value: nbCultures, label: 'cultures en place',  color: 'var(--g-pri)' },
+          ]}/>
 
           {/* Légende */}
           <div className="flex gap-4 mb-3 text-[13px] text-g-sec">
