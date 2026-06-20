@@ -48,7 +48,7 @@ jobs:
       - name: Build frontend React
         run: |
           cd frontend
-          echo "VITE_API_URL=http://${{ secrets.SCALEWAY_HOST }}:8001" > .env.local
+          echo "VITE_API_URL=https://potager.eremy.fr" > .env.local
           npm install
           npm run build
 
