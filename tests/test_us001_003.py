@@ -127,8 +127,9 @@ class TestUS002StockCalcul:
         assert s.type_organe == "reproducteur"
         # [US-002/CA2] 5 plantés, récoltes ne comptent pas → stock = 5
         assert s.stock_plants == 5
-        # Rendement cumulé = 14 kg
-        assert s.recoltes_total == 14.0
+        # [US-036] Rendement cumulé = 14 kg (pool "poids", pas le pool "pièces")
+        assert s.rendement_total == 14.0
+        assert s.recoltes_total == 0.0
 
     def test_us002_ca2_reproducteur_avec_pertes(self, db):
         """[US-002/CA2] Reproducteur : les pertes réduisent bien le stock."""
@@ -142,7 +143,7 @@ class TestUS002StockCalcul:
         s = stocks["tomate"]
         # stock = 5 - 2 = 3 (récolte n'affecte pas)
         assert s.stock_plants == 3
-        assert s.recoltes_total == 3.0
+        assert s.rendement_total == 3.0
 
     def test_us002_ca1_vegetatif_avec_pertes_et_recoltes(self, db):
         """[US-002/CA1] Végétatif : stock = plantations - pertes - récoltes."""
@@ -241,8 +242,8 @@ class TestUS003AffichageTelegram:
         """[US-003/CA2] Reproducteur : affiche 'X plants actifs · Y kg récoltés'."""
         s = StockCulture(
             culture="tomate", unite="plants", type_organe="reproducteur",
-            plants_plantes=5, plants_perdus=0, recoltes_total=14.0, nb_recoltes=3,
-            unite_recolte="kg"
+            plants_plantes=5, plants_perdus=0, rendement_total=14.0, nb_recoltes_poids=3,
+            unite_rendement="kg"
         )
         ligne = format_stock_ligne_telegram(s)
         assert "tomate"  in ligne
@@ -264,7 +265,7 @@ class TestUS003AffichageTelegram:
         """[US-003/CA2] Reproducteur sans récolte : n'affiche pas le rendement."""
         s = StockCulture(
             culture="poivron", unite="plants", type_organe="reproducteur",
-            plants_plantes=8, plants_perdus=0, recoltes_total=0, nb_recoltes=0
+            plants_plantes=8, plants_perdus=0, rendement_total=0, nb_recoltes_poids=0
         )
         ligne = format_stock_ligne_telegram(s)
         assert "8 plants actifs" in ligne

@@ -81,9 +81,9 @@ def test_us014_ca1_semis_ne_doublonne_pas_recoltes(db):
     semis  = calcul_semis(session)
     stocks = calcul_stock_cultures(session)
 
-    # Récoltes dans stocks (plantations), pas dans semis
-    assert stocks["tomate"].nb_recoltes == 1
-    assert stocks["tomate"].recoltes_total > 0
+    # [US-036] Récolte en kg → pool "poids" (rendement), pas le pool "pièces"
+    assert stocks["tomate"].nb_recoltes_poids == 1
+    assert stocks["tomate"].rendement_total > 0
     assert "nb_recoltes" not in semis["tomate"]
 
 
@@ -218,8 +218,8 @@ def test_us014_ca6_recoltes_dans_stocks_plantations(db):
 
     stocks = calcul_stock_cultures(session)
     assert "tomate" in stocks
-    assert stocks["tomate"].nb_recoltes == 2
-    assert stocks["tomate"].recoltes_total == pytest.approx(5.0)
+    assert stocks["tomate"].nb_recoltes_poids == 2
+    assert stocks["tomate"].rendement_total == pytest.approx(5.0)
 
 
 def test_us014_ca6_semis_sans_impact_sur_stock_plantations(db):

@@ -128,6 +128,11 @@ RÈGLE mise_en_godet : c'est le REPIQUAGE de plantules déjà levées (tige visi
 On ne met JAMAIS des graines directement en godet. Si l'utilisateur dit "X graines en godet" → interpréter X comme des plants (nb_plants_godets=X, nb_graines_semees=null).
 Différence clé : semis = graines dans barquette pour germer | mise_en_godet = plants levés vers godet.
 
+RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne À LA FOIS un NOMBRE DE PIEDS/PLANTS ET un POIDS (ex : "2 betteraves pour 250 grammes", "récolté 3 salades, 600g au total"), NE JAMAIS additionner ces deux valeurs. Retourner DEUX objets recolte distincts dans un tableau :
+- un avec quantite=nombre de pieds et unite="plants"
+- un avec quantite=poids et unite="kg" ou "g"
+Si seul un nombre de pieds OU seul un poids est mentionné (cas normal), un seul objet recolte suffit comme d'habitude.
+
 Exemples :
 "J'ai paillé les tomates hier"
 → {{"action":"paillage","culture":"tomate","date":"{yesterday}","quantite":null,"unite":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
@@ -152,6 +157,9 @@ Exemples :
 
 "J'ai planté 15 oignons blancs et 10 radis hier"
 → [{{"action":"plantation","culture":"oignon","variete":"blanc","quantite":15,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}},{{"action":"plantation","culture":"radis","variete":null,"quantite":10,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}]
+
+"récolté 2 betteraves pour 250 grammes"
+→ [{{"action":"recolte","culture":"betterave","variete":null,"quantite":2,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}},{{"action":"recolte","culture":"betterave","variete":null,"quantite":250,"unite":"g","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}]
 
 "Mis en godet 24 tomates cerise sur 30 graines semées"
 → {{"action":"mise_en_godet","culture":"tomate","variete":"cerise","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null,"nb_graines_semees":30,"nb_plants_godets":24}}

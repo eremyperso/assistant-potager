@@ -17,18 +17,35 @@ from utils.stock import StockCulture
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 def _stock(culture, type_organe, plantes=10, perdus=0, recoltes=0.0, unite="plants"):
-    """Crée un StockCulture mocké."""
+    """Crée un StockCulture mocké.
+
+    [US-036] `recoltes` alimente le pool "pièces" (recoltes_total, stock)
+    pour le végétatif, ou le pool "poids" (rendement_total) pour le
+    reproducteur — jamais les deux à la fois, conformément au garde-fou CA6.
+    """
     s = MagicMock(spec=StockCulture)
     s.culture        = culture
     s.type_organe    = type_organe
     s.plants_plantes = plantes
     s.plants_perdus  = perdus
-    s.stock_plants   = plantes - perdus - (recoltes if type_organe != "reproducteur" else 0)
     s.unite          = unite
     s.is_reproducteur = type_organe == "reproducteur"
-    s.recoltes_total  = recoltes
-    s.unite_recolte   = "kg"
-    s.nb_recoltes     = 2 if recoltes else 0
+    if type_organe == "reproducteur":
+        s.stock_plants      = plantes - perdus
+        s.recoltes_total    = 0.0
+        s.unite_recolte     = "plants"
+        s.nb_recoltes       = 0
+        s.rendement_total   = recoltes
+        s.unite_rendement   = "kg"
+        s.nb_recoltes_poids = 2 if recoltes else 0
+    else:
+        s.stock_plants      = plantes - perdus - recoltes
+        s.recoltes_total    = recoltes
+        s.unite_recolte     = "plants"
+        s.nb_recoltes       = 2 if recoltes else 0
+        s.rendement_total   = 0.0
+        s.unite_rendement   = ""
+        s.nb_recoltes_poids = 0
     return s
 
 

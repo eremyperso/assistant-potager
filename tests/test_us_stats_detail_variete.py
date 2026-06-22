@@ -92,7 +92,7 @@ class TestCalcStockParVariete:
         v = result[0]
         assert v["variete"] == "cœur de bœuf"
         assert v["plants_plantes"] == 3
-        assert v["recoltes_total"] == 4.2
+        assert v["rendement_total"] == 4.2
         assert v["type_organe"] == "reproducteur"
         assert v["date_premiere_plantation"] == datetime(2025, 4, 15)
         assert v["date_derniere_recolte"] == datetime(2025, 9, 12)

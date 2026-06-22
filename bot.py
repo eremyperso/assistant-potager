@@ -1012,8 +1012,32 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     texte     = texte_raw.lower()  # comparaison insensible à la casse
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
-    # [US-021 CA9] Quantité en attente ? Traiter comme quantité
+    # [US-036 CA10] Nombre de pieds en attente (récolte végétative pesée) ?
     user_id = update.effective_user.id
+    if user_id in _RECOLTE_PIECES_PENDING:
+        pending = _RECOLTE_PIECES_PENDING.pop(user_id)
+        items = pending["items"]
+
+        import re
+        match = re.search(r"(\d+)", texte_raw)
+        if match:
+            nb_pieds = match.group(1)
+            pieces_item = dict(items[0])
+            pieces_item["quantite"] = nb_pieds
+            pieces_item["unite"]    = "plants"
+            items.append(pieces_item)
+            log.info(f"[US-036 CA10] Nombre de pieds détecté: {nb_pieds} — user_id={user_id}")
+            await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Nombre de pieds non reconnu. Précisez un nombre (ex: _2_, _3 pieds_)",
+                parse_mode="Markdown"
+            )
+            _RECOLTE_PIECES_PENDING[user_id] = pending  # remettre en attente
+            return
+
+    # [US-021 CA9] Quantité en attente ? Traiter comme quantité
     if user_id in _QUANTITE_PENDING:
         pending = _QUANTITE_PENDING.pop(user_id)
         items = pending["items"]
@@ -1327,6 +1351,10 @@ _VENDU_TIMEOUT  = 60  # secondes
 
 _QUANTITE_PENDING: dict[int, dict] = {}
 _QUANTITE_TIMEOUT = 60  # secondes
+
+# [US-036 CA10] Récolte végétative pesée sans nombre de pieds → clarification {user_id: {items, texte, ts}}
+_RECOLTE_PIECES_PENDING: dict[int, dict] = {}
+_RECOLTE_PIECES_TIMEOUT = 60  # secondes
 
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
@@ -2092,6 +2120,32 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             item_r["variete"] = varietes_stock[0]["variete"]
             log.info("[recolte] Variété '%s' auto-déduite pour '%s'", item_r["variete"], culture)
             # pas de return → continue vers la confirmation normale
+
+    # ── [US-036 CA10] Récolte végétative pesée sans nombre de pieds — clarification ──
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "recolte"
+        and items[0].get("culture")
+        and (items[0].get("unite") or "").lower() in {"kg", "g", "mg"}
+    ):
+        culture_p = items[0]["culture"]
+        from utils.stock import get_type_organe
+        db_tmp = SessionLocal()
+        try:
+            type_organe_p = get_type_organe(db_tmp, culture_p)
+        finally:
+            db_tmp.close()
+
+        if type_organe_p == "végétatif":
+            user_id = update.effective_user.id
+            _RECOLTE_PIECES_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+            log.info("[US-036 CA10] Poids sans nb de pieds pour '%s' (végétatif) — user_id=%s", culture_p, user_id)
+            await message.reply_text(
+                f"🌿 Combien de pieds de *{culture_p}* avez-vous récoltés au total ? "
+                "_(le poids sera conservé séparément pour le rendement)_",
+                parse_mode="Markdown",
+            )
+            return
 
     # ── Disambiguation vendu — variété godet ─────────────────────────────────────
     if (

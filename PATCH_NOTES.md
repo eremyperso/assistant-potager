@@ -1,4 +1,14 @@
 
+## [v3.11.0] — 2026-06-22
+
+### 🚀 Nouveautés
+- Ajoute le suivi du rendement en poids pour les cultures végétatives récoltées en pieds (salade, betterave, carotte...) — dicter "récolté 2 betteraves 250g" enregistre à la fois le nombre de pieds (stock) et le poids (rendement) (US-036)
+- Le bot demande désormais combien de pieds ont été récoltés si seul un poids est dicté pour une culture végétative, plutôt que de risquer une déduction de stock erronée (US-036)
+- Le graphique Rendements du dashboard et `/stats <culture>` (Telegram, détail par variété) affichent ce rendement cumulé pour les cultures végétatives pesées, comme pour les reproductrices (US-036)
+
+### 🔧 Améliorations techniques
+- Sépare dans `utils/stock.py` les récoltes en deux pools indépendants — "pièces" (déduction de stock) et "poids" (rendement) — pour toute culture, évitant tout mélange entre les deux quel que soit le type d'organe (US-036)
+
 ## [v3.10.0] — 2026-06-18
 
 ### 🚀 Nouveautés

@@ -523,10 +523,15 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
     # Récoltes par (culture, variete_norm) — uniquement pour cultures végétatives.
     # Pour végétatif : récolter = arracher → diminue le nombre de pieds en terre.
     # Pour reproducteur : la plante reste, les récoltes n'affectent pas l'occupation.
+    # [US-036 / CA6] Ne compter QUE les récoltes en nombre de pièces (unité hors
+    # kg/g/mg) — une récolte pesée (rendement) ne doit jamais réduire le nombre
+    # de pieds en terre, sous peine de double déduction avec l'événement "pièces".
+    _UNITES_POIDS = ("kg", "g", "mg")
     _q_recoltes = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "recolte")
         .filter(Evenement.culture.isnot(None))
+        .filter(~func.lower(func.coalesce(Evenement.unite, "")).in_(_UNITES_POIDS))
         .group_by(Evenement.culture, Evenement.variete)
     )
     if cutoff is not None:

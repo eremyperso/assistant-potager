@@ -33,7 +33,10 @@ function OrigineBadge({ origine }) {
 // ── Ligne culture au potager ──────────────────────────────────────────────────
 
 function CultureRow({ c }) {
-  const recolte = c.type_organe === 'reproducteur' && c.rendement_total > 0
+  // [US-036] rendement_total est désormais aussi exposé pour le végétatif
+  // dès qu'une récolte pesée existe — l'affichage ne doit plus être limité
+  // au reproducteur.
+  const recolte = c.rendement_total > 0
     ? `${c.rendement_total} ${c.unite_rendement || ''}`
     : null
 
