@@ -1,13 +1,25 @@
+import { useState, useEffect } from 'react'
 import { RefreshCw, Moon, Sun } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme.js'
+import { api } from '../lib/api.js'
 
 export default function TopBar({ title, onRefresh, loading }) {
   const { theme, toggle } = useTheme()
+  const [version, setVersion] = useState(null)
+
+  useEffect(() => {
+    api.health().then(h => setVersion(h?.version)).catch(() => {})
+  }, [])
 
   return (
     <header className="flex items-center justify-between px-4 bg-g-sur border-b border-g-brd" style={{ height: 54, flexShrink: 0 }}>
       <span className="text-xl font-bold text-g-pri font-serif tracking-tight leading-none">{title}</span>
       <div className="flex items-center gap-4 text-g-sec">
+        {version && (
+          <span className="text-[11px] font-medium" style={{ color: 'var(--g-sec)' }}>
+            v{version}
+          </span>
+        )}
         <button
           onClick={onRefresh}
           disabled={loading}
