@@ -77,27 +77,30 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 #### Telegram Bot — Commandes slash
 
-| Commande | Description |
-|----------|-------------|
-| `/start` | Menu principal + compteur d'événements |
-| `/help` | Aide générale |
-| `/help parcelle` | Aide ciblée — mots-clés : `parcelle`, `semis`, `godet`, `recolte`, `stock`, `stats` |
-| `/stats` | Statistiques saison (végétatif vs reproducteur) |
-| `/stats <culture>` | Détail par variété pour une culture donnée |
-| `/historique` | 10 derniers événements |
-| `/ask <question>` | Question analytique en langage naturel (ou `/ask` seul puis saisie) |
-| `/corriger` | Lancer le flux de correction d'un événement existant |
-| `/plan` | Plan d'occupation global du potager |
-| `/plan <parcelle>` | Plan détaillé d'une parcelle spécifique |
-| `/parcelle ajouter <nom> [exposition] [superficie]` | Créer une parcelle (détection de doublons) |
-| `/parcelle modifier <nom> clé=valeur …` | Modifier les métadonnées (`exposition`, `superficie`, `ordre`) |
-| `/parcelle renommer <ancien> <nouveau>` | Renommer (propagation sur tout l'historique) |
-| `/parcelle lister` | Lister toutes les parcelles |
-| `/parcelles` | Alias de `/parcelle lister` |
-| `/meteo` | Récupérer et afficher la météo manuellement (job auto à 05h00) |
-| `/tts` | Afficher l'état de la synthèse vocale |
-| `/tts_on` | Activer les réponses vocales |
-| `/tts_off` | Désactiver les réponses vocales |
+| Commande | Paramètres | Description |
+|----------|------------|-------------|
+| `/start` | — | Menu principal + compteur d'événements |
+| `/help` | `[parcelle\|semis\|godet\|recolte\|stock\|stats]` | Aide générale ou ciblée par mot-clé |
+| `/version` | — | Affiche la version de l'app (`bot.py:458`) |
+| `/stats` | — | Statistiques saison (végétatif vs reproducteur) |
+| `/stats <culture>` | `<culture>` | Détail par variété pour une culture donnée |
+| `/stats <culture> <date>` | `[culture] [JJ/MM/AAAA\|AAAA-MM-JJ]` | Stats à une date de référence (`bot.py:3191`) |
+| `/historique` | — | 10 derniers événements |
+| `/ask` | `[question en langage naturel]` | Question analytique (ou saisie interactive si sans arg) |
+| `/corriger` | — | Lancer le flux de correction d'un événement existant |
+| `/plan` | — | Plan d'occupation global du potager |
+| `/plan <parcelle>` | `<nom_parcelle>` | Plan filtré sur une parcelle spécifique |
+| `/plan <date>` | `[JJ/MM/AAAA\|AAAA-MM-JJ]` | État du potager à une date de référence (`bot.py:2677`) |
+| `/parcelle ajouter <nom> [exposition] [superficie]` | `<nom> [exposition] [superficie_m2]` | Créer une parcelle (détection de doublons) |
+| `/parcelle modifier <nom> clé=valeur …` | `<nom> exposition=X superficie=X ordre=X` | Modifier les métadonnées |
+| `/parcelle renommer <ancien> <nouveau>` | `<ancien_nom> <nouveau_nom>` | Renommer (propagation sur tout l'historique) |
+| `/parcelle lister` | — | Lister toutes les parcelles actives |
+| `/parcelles` | — | Alias de `/parcelle lister` (`bot.py:4665`) |
+| `/vendre <culture> [variété] <quantité>` | `<culture> [variété] <quantité>` | Enregistrer une vente de plants pépinière (`bot.py:4585`) |
+| `/meteo` | — | Déclencher la météo manuellement (job auto à 05h00) |
+| `/tts` | — | Afficher l'état de la synthèse vocale |
+| `/tts_on` | — | Activer les réponses vocales |
+| `/tts_off` | — | Désactiver les réponses vocales |
 
 #### Clavier inline (boutons persistants)
 
@@ -105,9 +108,27 @@ Menu principal : `🎤 Nouvelle action vocale` · `🔍 Interroger` · `📋 His
 
 Après enregistrement : `➕ Autre action` · `🔍 Interroger mes données` · `📋 Historique` · `🏠 Menu principal`
 
+#### Callbacks inline (patterns, `bot.py:4670`)
+
+| Pattern | Déclencheur |
+|---------|-------------|
+| `godet_*` | Sélection de variété lors d'une mise en godet |
+| `recolte_*` | Sélection de variété lors d'une récolte |
+| `vendu_*` | Sélection de variété lors d'une vente |
+| `perte_*` | Confirmation de perte |
+| `action_*` | Confirmation d'une action enregistrée |
+| `parcelle_suppr_*` | Confirmation de suppression de parcelle |
+
 #### Intents vocaux reconnus (classification Groq)
 
 `ACTION` · `INTERROGER` · `STATS` · `HISTORIQUE` · `PLAN` · `CORRIGER` · `SUPPRIMER` · `MENU` · `NOUVELLE`
+
+#### Messages non-slash (handlers, `bot.py:4686`)
+
+| Type | Pipeline |
+|------|----------|
+| **Message vocal** | Transcription Whisper → classification intent → action correspondante |
+| **Message texte libre** | Même pipeline que vocal (classification intent → action) |
 
 #### Flux de correction conversationnel (`/corriger`)
 

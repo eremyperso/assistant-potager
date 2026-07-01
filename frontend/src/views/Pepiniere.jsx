@@ -187,6 +187,9 @@ function DetailSheet({ godet, onClose }) {
     if ((detail.ventes ?? []).length > 0) {
       detail.ventes.forEach(v => rows.push({ type: 'vente', data: v }))
     }
+    if ((detail.pertes_godet ?? []).length > 0) {
+      detail.pertes_godet.forEach(p => rows.push({ type: 'perte_godet', data: p }))
+    }
     return rows
   }
 
@@ -305,6 +308,18 @@ function DetailSheet({ godet, onClose }) {
                       </p>
                       <p className="text-sm" style={{ color: 'var(--g-sec)' }}>
                         {row.data.quantite} pied{row.data.quantite > 1 ? 's' : ''} vendu{row.data.quantite > 1 ? 's' : ''}
+                      </p>
+                      <p className="text-[12px] mt-0.5" style={{ color: 'var(--g-sec)' }}>{fmt(row.data.date)}</p>
+                    </TimelineRow>
+                  )
+
+                  if (row.type === 'perte_godet') return (
+                    <TimelineRow key={`perte-${row.data.id}`} icon="💀" bgVar="var(--g-red-dim)" isLast={isLast}>
+                      <p className="text-sm font-semibold" style={{ color: 'var(--g-pri)' }}>
+                        Perte pépinière <span className="font-normal" style={{ color: 'var(--g-sec)' }}>#{row.data.id}</span>
+                      </p>
+                      <p className="text-sm" style={{ color: 'var(--g-red)' }}>
+                        {row.data.quantite} plant{row.data.quantite > 1 ? 's' : ''} perdu{row.data.quantite > 1 ? 's' : ''}
                       </p>
                       <p className="text-[12px] mt-0.5" style={{ color: 'var(--g-sec)' }}>{fmt(row.data.date)}</p>
                     </TimelineRow>
