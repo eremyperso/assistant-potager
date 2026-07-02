@@ -3188,6 +3188,37 @@ async def _cmd_parcelles_lister(update, ctx) -> None:
     await cmd_parcelle(update, ctx)
 
 
+async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
+    """Envoie un texte long en découpant par blocs de ≤4096 chars sur des sauts de ligne."""
+    MAX = 4096
+    lines = texte.split("\n")
+    chunks, current = [], ""
+    for line in lines:
+        candidate = (current + "\n" + line) if current else line
+        if len(candidate) > MAX:
+            if current:
+                chunks.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        chunks.append(current)
+
+    for i, chunk in enumerate(chunks):
+        is_last = (i == len(chunks) - 1)
+        try:
+            await update.effective_message.reply_text(
+                chunk,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup if is_last else None,
+            )
+        except Exception:
+            await update.effective_message.reply_text(
+                chunk.replace("*", "").replace("_", ""),
+                reply_markup=reply_markup if is_last else None,
+            )
+
+
 async def cmd_stats(update, ctx):
     """
     /stats — Statistiques rapides du potager.
@@ -3240,13 +3271,7 @@ async def cmd_stats(update, ctx):
 
             # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
             if not varietes and not semis_culture and not godets_culture:
-                texte_final = f"_Aucune donnée pour {culture_arg}_"
-                try:
-                    await update.effective_message.reply_text(
-                        texte_final, parse_mode="Markdown", reply_markup=MENU_KEYBOARD
-                    )
-                except Exception:
-                    await update.effective_message.reply_text(texte_final, reply_markup=MENU_KEYBOARD)
+                await _send_chunked(update, f"_Aucune donnée pour {culture_arg}_", reply_markup=MENU_KEYBOARD)
                 return
 
             # Emoji selon type_organe (plantation ou semis)
@@ -3312,15 +3337,7 @@ async def cmd_stats(update, ctx):
             texte_final = "\n".join(lines_out)
 
             log.info(f"📊 STATS VARIETE  : culture='{culture_arg}', {len(varietes)} variété(s), {len(godets_culture)} godet(s)")
-            try:
-                await update.effective_message.reply_text(
-                    texte_final, parse_mode="Markdown", reply_markup=MENU_KEYBOARD
-                )
-            except Exception:
-                await update.effective_message.reply_text(
-                    texte_final.replace("*", "").replace("_", ""),
-                    reply_markup=MENU_KEYBOARD,
-                )
+            await _send_chunked(update, texte_final, reply_markup=MENU_KEYBOARD)
             await send_voice_reply(update, texte_final)
             return
 
@@ -3424,18 +3441,7 @@ async def cmd_stats(update, ctx):
 
         texte_final = "\n".join(lines_out)
 
-        try:
-            await update.effective_message.reply_text(
-                texte_final,
-                parse_mode="Markdown",
-                reply_markup=MENU_KEYBOARD
-            )
-        except Exception:
-            # Fallback sans Markdown si le texte contient des caractères problématiques
-            await update.effective_message.reply_text(
-                texte_final.replace("*", "").replace("_", ""),
-                reply_markup=MENU_KEYBOARD
-            )
+        await _send_chunked(update, texte_final, reply_markup=MENU_KEYBOARD)
 
         # ── Synthèse vocale ───────────────────────────────────────────────────
         await send_voice_reply(update, texte_final)
