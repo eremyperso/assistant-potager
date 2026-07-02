@@ -3217,7 +3217,7 @@ async def cmd_stats(update, ctx):
                 date_ref = parsed_d
             elif _looks_like_date(a):
                 # [US-030 / CA14] Ressemble à une date mais invalide
-                await update.message.reply_text(
+                await update.effective_message.reply_text(
                     "❌ Format de date invalide — utilise `JJ/MM/AAAA` ou `AAAA-MM-JJ`",
                     parse_mode="Markdown",
                 )
@@ -3242,11 +3242,11 @@ async def cmd_stats(update, ctx):
             if not varietes and not semis_culture and not godets_culture:
                 texte_final = f"_Aucune donnée pour {culture_arg}_"
                 try:
-                    await update.message.reply_text(
+                    await update.effective_message.reply_text(
                         texte_final, parse_mode="Markdown", reply_markup=MENU_KEYBOARD
                     )
                 except Exception:
-                    await update.message.reply_text(texte_final, reply_markup=MENU_KEYBOARD)
+                    await update.effective_message.reply_text(texte_final, reply_markup=MENU_KEYBOARD)
                 return
 
             # Emoji selon type_organe (plantation ou semis)
@@ -3313,11 +3313,11 @@ async def cmd_stats(update, ctx):
 
             log.info(f"📊 STATS VARIETE  : culture='{culture_arg}', {len(varietes)} variété(s), {len(godets_culture)} godet(s)")
             try:
-                await update.message.reply_text(
+                await update.effective_message.reply_text(
                     texte_final, parse_mode="Markdown", reply_markup=MENU_KEYBOARD
                 )
             except Exception:
-                await update.message.reply_text(
+                await update.effective_message.reply_text(
                     texte_final.replace("*", "").replace("_", ""),
                     reply_markup=MENU_KEYBOARD,
                 )
@@ -3425,14 +3425,14 @@ async def cmd_stats(update, ctx):
         texte_final = "\n".join(lines_out)
 
         try:
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 texte_final,
                 parse_mode="Markdown",
                 reply_markup=MENU_KEYBOARD
             )
         except Exception:
             # Fallback sans Markdown si le texte contient des caractères problématiques
-            await update.message.reply_text(
+            await update.effective_message.reply_text(
                 texte_final.replace("*", "").replace("_", ""),
                 reply_markup=MENU_KEYBOARD
             )
