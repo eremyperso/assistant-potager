@@ -96,20 +96,20 @@ jobs:
 
       - name: Install systemd services (API + Bot)
         run: |
-          scp infra/potager.service \
-            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager.service
-          scp infra/potager-bot.service \
-            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-bot.service
+          scp infra/potager-prod.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-prod.service
+          scp infra/potager-prod-bot.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-prod-bot.service
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
-            "systemctl daemon-reload && systemctl enable potager-bot.service"
+            "systemctl daemon-reload && systemctl enable potager-prod.service potager-prod-bot.service"
 
       - name: Restart systemd services (API + Bot)
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             fuser -k 8000/tcp || true
             sleep 1
-            sudo systemctl restart potager.service
-            sudo systemctl restart potager-bot.service
+            sudo systemctl restart potager-prod.service
+            sudo systemctl restart potager-prod-bot.service
           "
 
       - name: Smoke test
@@ -118,12 +118,12 @@ jobs:
             set -euo pipefail
             echo 'Attente stabilisation du service (10s)...'
             sleep 10
-            status=\$(systemctl is-active potager.service || true)
+            status=\$(systemctl is-active potager-prod.service || true)
             if [ \"\${status}\" = 'active' ]; then
               echo 'Déploiement réussi — @AssistantPotagerBot actif'
             else
-              echo \"ERREUR: service potager.service non actif (status: \${status})\"
-              systemctl status potager.service --no-pager
+              echo \"ERREUR: service potager-prod.service non actif (status: \${status})\"
+              systemctl status potager-prod.service --no-pager
               exit 1
             fi
           "

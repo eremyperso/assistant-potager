@@ -1,6 +1,6 @@
 [Unit]
-Description=Assistant Potager — Bot Telegram
-After=network.target postgresql.service potager.service
+Description=Assistant Potager — API FastAPI (PROD)
+After=network.target postgresql.service
 Wants=postgresql.service
 
 [Service]
@@ -9,7 +9,7 @@ User=root
 WorkingDirectory=/opt/potager-prod
 EnvironmentFile=/opt/potager-prod/.env.prod
 Environment=APP_ENV=prod
-ExecStart=/opt/potager-prod/venv/bin/python bot.py
+ExecStart=/opt/potager-prod/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
