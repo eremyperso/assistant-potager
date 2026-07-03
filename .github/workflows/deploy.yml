@@ -27,9 +27,12 @@ jobs:
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
             if [ ! -d /opt/potager/.git ]; then
-              echo 'Premier déploiement — clonage du dépôt...'
-              git clone https://github.com/eremyperso/assistant-potager.git /opt/potager
+              echo 'Premier déploiement — initialisation git sur place...'
               cd /opt/potager
+              git init
+              git remote add origin https://github.com/eremyperso/assistant-potager.git
+              git fetch origin main --depth=1
+              git reset --hard origin/main
               git checkout main
             else
               cd /opt/potager
