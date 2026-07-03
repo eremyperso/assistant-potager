@@ -5,7 +5,7 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
-User=potager
+User=root
 WorkingDirectory=/opt/potager-prod
 EnvironmentFile=/opt/potager-prod/.env.prod
 Environment=APP_ENV=prod
