@@ -46,6 +46,7 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
+            apt-get install -y python3-venv python3-pip > /dev/null 2>&1 || true
             cd /opt/potager
             if [ ! -d venv ]; then
               echo 'Création du virtualenv...'
