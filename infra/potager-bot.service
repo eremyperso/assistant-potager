@@ -6,10 +6,10 @@ Wants=postgresql.service
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/potager
-EnvironmentFile=/opt/potager/.env.prod
+WorkingDirectory=/opt/potager-prod
+EnvironmentFile=/opt/potager-prod/.env.prod
 Environment=APP_ENV=prod
-ExecStart=/opt/potager/venv/bin/python bot.py
+ExecStart=/opt/potager-prod/venv/bin/python bot.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

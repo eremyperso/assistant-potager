@@ -26,16 +26,16 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
-            if [ ! -d /opt/potager/.git ]; then
+            if [ ! -d /opt/potager-prod/.git ]; then
               echo 'Premier déploiement — initialisation git sur place...'
-              cd /opt/potager
+              cd /opt/potager-prod
               git init
               git remote add origin https://github.com/eremyperso/assistant-potager.git
               git fetch origin main --depth=1
               git reset --hard origin/main
               git checkout main
             else
-              cd /opt/potager
+              cd /opt/potager-prod
               git fetch origin
               git checkout main
               git pull origin main
@@ -46,7 +46,7 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
-            cd /opt/potager
+            cd /opt/potager-prod
             if [ ! -x venv/bin/python ]; then
               echo 'Création du virtualenv...'
               rm -rf venv
@@ -66,7 +66,7 @@ jobs:
       - name: Deploy frontend dist to server
         run: |
           rsync -az --delete frontend/dist/ \
-            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager/frontend/dist/
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager-prod/frontend/dist/
 
       - name: Setup PostgreSQL extensions
         run: |
@@ -78,9 +78,9 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
-            cd /opt/potager
+            cd /opt/potager-prod
             set -a && source .env.prod && set +a
-            APPLIED_LOG=/opt/potager/.migrations_applied
+            APPLIED_LOG=/opt/potager-prod/.migrations_applied
             touch \"\${APPLIED_LOG}\"
             for migration in \$(ls migrations/migration_v*.sql | sort -t v -k2 -n); do
               name=\$(basename \"\${migration}\")
@@ -135,5 +135,5 @@ jobs:
             STATUS='success'
             if [ '${{ job.status }}' != 'success' ]; then STATUS='failure'; fi
             echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) branch=main commit=${{ github.sha }} actor=${{ github.actor }} status=\${STATUS}\" \
-              >> /opt/potager/.deploy_history
+              >> /opt/potager-prod/.deploy_history
           "

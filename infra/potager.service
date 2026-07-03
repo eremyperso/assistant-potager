@@ -6,10 +6,10 @@ Wants=postgresql.service
 [Service]
 Type=simple
 User=potager
-WorkingDirectory=/opt/potager
-EnvironmentFile=/opt/potager/.env.prod
+WorkingDirectory=/opt/potager-prod
+EnvironmentFile=/opt/potager-prod/.env.prod
 Environment=APP_ENV=prod
-ExecStart=/opt/potager/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/potager-prod/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
