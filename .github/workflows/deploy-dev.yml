@@ -48,7 +48,7 @@ jobs:
       - name: Build frontend React
         run: |
           cd frontend
-          echo "VITE_API_URL=https://potager.eremy.fr" > .env.local
+          echo "VITE_API_URL=https://dev.potager.eremy.fr" > .env.local
           npm install
           npm run build
 
