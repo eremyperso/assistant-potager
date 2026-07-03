@@ -33,13 +33,35 @@ jobs:
             git pull origin main
           "
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
             cd /opt/potager
-            python3 -m pip install --quiet --upgrade pip
-            python3 -m pip install --quiet -r requirements.txt
+            if [ ! -d venv ]; then
+              echo 'Création du virtualenv...'
+              python3 -m venv venv
+            fi
+            venv/bin/pip install --quiet --upgrade pip
+            venv/bin/pip install --quiet -r requirements.txt
+          "
+
+      - name: Build frontend React
+        run: |
+          cd frontend
+          echo "VITE_API_URL=https://potager.eremy.fr" > .env.local
+          npm install
+          npm run build
+
+      - name: Deploy frontend dist to server
+        run: |
+          rsync -az --delete frontend/dist/ \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager/frontend/dist/
+
+      - name: Setup PostgreSQL extensions
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            sudo -u postgres psql -d potager_prod -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
           "
 
       - name: Apply SQL migrations
@@ -62,10 +84,23 @@ jobs:
             done
           "
 
-      - name: Restart systemd service
+      - name: Install systemd services (API + Bot)
         run: |
+          scp infra/potager.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager.service
+          scp infra/potager-bot.service \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/etc/systemd/system/potager-bot.service
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} \
-            "sudo systemctl restart potager.service"
+            "systemctl daemon-reload && systemctl enable potager-bot.service"
+
+      - name: Restart systemd services (API + Bot)
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            fuser -k 8000/tcp || true
+            sleep 1
+            sudo systemctl restart potager.service
+            sudo systemctl restart potager-bot.service
+          "
 
       - name: Smoke test
         run: |
@@ -81,4 +116,14 @@ jobs:
               systemctl status potager.service --no-pager
               exit 1
             fi
+          "
+
+      - name: Update deploy history
+        if: always()
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            STATUS='success'
+            if [ '${{ job.status }}' != 'success' ]; then STATUS='failure'; fi
+            echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) branch=main commit=${{ github.sha }} actor=${{ github.actor }} status=\${STATUS}\" \
+              >> /opt/potager/.deploy_history
           "
