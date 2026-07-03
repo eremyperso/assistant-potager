@@ -74,7 +74,7 @@ INSERT INTO culture_config (id, nom, type_organe_recolte, description_agronomiqu
 (144, 'cassis',            'reproducteur', 'Fruit noir, arbuste vivace — production annuelle'),
 (145, 'rhubarbe',          'reproducteur', 'Pétiole charnu, plante vivace pérenne — récolte en coupe chaque année')
 
-ON CONFLICT (nom) DO NOTHING;
+ON CONFLICT DO NOTHING;
 
 -- ── Vérification post-import ──────────────────────────────────────────────────
 SELECT
