@@ -47,14 +47,13 @@ jobs:
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
             cd /opt/potager
-            if [ ! -x venv/bin/python ] || [ ! -x venv/bin/pip ]; then
+            if [ ! -x venv/bin/python ]; then
               echo 'Création du virtualenv...'
               rm -rf venv
-              python3 -m venv venv --without-pip
-              venv/bin/python -m ensurepip --upgrade
+              python3 -m venv venv
             fi
-            venv/bin/pip install --quiet --upgrade pip
-            venv/bin/pip install --quiet -r requirements.txt
+            venv/bin/python -m pip install --quiet --upgrade pip
+            venv/bin/python -m pip install --quiet -r requirements.txt
           "
 
       - name: Build frontend React
