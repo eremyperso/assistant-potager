@@ -26,11 +26,17 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             set -euo pipefail
-            mkdir -p /opt/potager
-            cd /opt/potager
-            git fetch origin
-            git checkout main
-            git pull origin main
+            if [ ! -d /opt/potager/.git ]; then
+              echo 'Premier déploiement — clonage du dépôt...'
+              git clone https://github.com/eremyperso/assistant-potager.git /opt/potager
+              cd /opt/potager
+              git checkout main
+            else
+              cd /opt/potager
+              git fetch origin
+              git checkout main
+              git pull origin main
+            fi
           "
 
       - name: Install Python dependencies
