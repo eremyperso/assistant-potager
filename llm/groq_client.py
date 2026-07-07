@@ -14,9 +14,13 @@ import re
 import tempfile
 from datetime import date, timedelta
 from groq import Groq
-from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL, GROQ_REASONING_EFFORT
 
 _client = Groq(api_key=GROQ_API_KEY)
+
+# Passé aux appels chat.completions.create() — vide pour les modèles non-reasoning
+# (ex: llama-3.3-70b-versatile), où l'API Groq rejette ce paramètre.
+_REASONING_KWARGS = {"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}
 
 # ── Date du jour injectée dans le prompt ──────────────────────────────────────
 def _today_context() -> str:
@@ -76,7 +80,8 @@ def extract_intent(question: str) -> dict:
         ],
         temperature=0.0,
         max_tokens=128,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
 
     raw = chat.choices[0].message.content.strip()
@@ -203,7 +208,8 @@ def parse_commande(texte: str) -> list[dict]:
         ],
         temperature=0.0,
         max_tokens=1024,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
     raw = chat.choices[0].message.content.strip()
 
@@ -276,7 +282,8 @@ def repondre_question(question: str, contexte_json: str) -> str:
         ],
         temperature=0.0,
         max_tokens=200,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
     return chat.choices[0].message.content.strip()
 
@@ -463,6 +470,7 @@ def parse_message(texte: str) -> dict:
             temperature=0.0,
             max_tokens=1024,
             stream=False,
+            **_REASONING_KWARGS
         )
         raw = chat.choices[0].message.content.strip()
         if raw.startswith("```"):
@@ -512,8 +520,9 @@ def classify_intent_pwa(texte: str) -> str:
                 {"role": "user",   "content": texte},
             ],
             temperature=0.0,
-            max_tokens=8,
+            max_tokens=100,
             stream=False,
+            **_REASONING_KWARGS
         )
         result = chat.choices[0].message.content.strip().upper()
         return "INTERROGER" if "INTERROGER" in result else "ACTION"
