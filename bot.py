@@ -47,7 +47,7 @@ from telegram.ext import (
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 )
 from groq import Groq
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, select
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
 from database.db import SessionLocal, Base, engine
@@ -337,7 +337,11 @@ _HELP_PARCELLE = (
     "  → /parcelle modifier nord exposition=sud\n"
     "  → /parcelle modifier nord superficie=8.5\n"
     "  → /parcelle modifier nord exposition=sud superficie=8.5\n"
-    "  _Paramètres : exposition · superficie · ordre_\n"
+    "  → /parcelle modifier serre pepiniere=true\n"
+    "  _Paramètres : exposition · superficie · ordre · pepiniere_\n"
+    "  _pepiniere=true : une serre/pépinière ne compte jamais comme_\n"
+    "  _pleine terre — un semis qui y est rattaché reste en pépinière_\n"
+    "  _tant qu'aucune plantation réelle n'a eu lieu ailleurs._\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
     "  → /parcelle renommer sud carré-sud\n"
     "• Supprimer une parcelle (soft-delete — historique conservé)\n"
@@ -1752,12 +1756,22 @@ _ACTIONS_SOURCE = {"plantation", "semis", "mise_en_godet", "vendu", "perte_godet
 
 
 def _cond_localisation_culture():
-    """[US-037] Une culture est "localisée" via une 'plantation' OU un 'semis' directement
-    lié à une parcelle (semis pleine terre). Un semis SANS parcelle_id (pépinière, destiné
-    à un godet) n'est jamais considéré comme une localisation."""
+    """[US-037 / migration_v15] Une culture est "localisée" via une 'plantation' OU un
+    'semis' directement lié à une VRAIE parcelle de pleine terre (semis pleine terre).
+    Un semis SANS parcelle_id (pépinière, destiné à un godet), ou rattaché à une
+    parcelle marquée est_pepiniere=true (serre, pépinière, ou la parcelle factice
+    "Non localisé"), n'est jamais considéré comme une localisation.
+
+    Utilise une sous-requête plutôt qu'un join sur Parcelle : cette condition est
+    réutilisée dans des requêtes sur Evenement seul, sans jointure Parcelle."""
+    pepiniere_ids = select(Parcelle.id).where(Parcelle.est_pepiniere.is_(True))
     return or_(
         Evenement.type_action == "plantation",
-        and_(Evenement.type_action == "semis", Evenement.parcelle_id.isnot(None)),
+        and_(
+            Evenement.type_action == "semis",
+            Evenement.parcelle_id.isnot(None),
+            Evenement.parcelle_id.notin_(pepiniere_ids),
+        ),
     )
 
 
@@ -3055,6 +3069,7 @@ async def cmd_parcelle(update, ctx) -> None:
         "Exemples :\n"
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
+        "  /parcelle modifier serre pepiniere=true\n"
         "  /parcelle renommer sud carré-sud\n\n"
         "_Pour supprimer une parcelle : /help parcelle_"
     )
@@ -3084,6 +3099,8 @@ async def cmd_parcelle(update, ctx) -> None:
                     details.append(f"exposition {p.exposition}")
                 if p.superficie_m2 is not None:
                     details.append(f"{p.superficie_m2} m²")
+                if p.est_pepiniere:
+                    details.append("🌱 pépinière")
                 detail_str = f" · {' · '.join(details)}" if details else ""
                 lignes.append(f"📍 *{p.nom.upper()}*{detail_str}")
             lignes.append("\n_Ajouter : /parcelle ajouter [nom] [exposition] [superficie]_")
