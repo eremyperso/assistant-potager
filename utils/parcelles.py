@@ -428,12 +428,16 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
 
-    # ── 3. Agrégation par (culture, variete, parcelle) — plantations ─────────
+    # ── 3. Agrégation par (culture, variete, parcelle, unite) — plantations ──
+    # [US-037 / CA2] L'unité fait partie de la clé de regroupement — jamais de
+    # somme entre deux unités différentes (ex: "plants" et "pieds") pour un même
+    # (culture, variété, parcelle).
     groupes: Dict[tuple, dict] = {}
 
     for culture, variete, parcelle, quantite, rang, unite, date_evt in rows:
         variete_norm = variete or ""
-        key = (culture, variete_norm, parcelle)
+        unite_norm = unite or "plants"
+        key = (culture, variete_norm, parcelle, unite_norm)
         total = (quantite or 0) * (rang or 1)
 
         if key not in groupes:
@@ -441,7 +445,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
                 "culture": culture,
                 "variete": variete_norm,
                 "nb_plants": 0.0,
-                "unite": unite or "plants",
+                "unite": unite_norm,
                 "date_premiere": date_evt,
             }
 
@@ -550,7 +554,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
 
     # Totaux plantés par culture (toutes varietes) pour distribution proportionnelle
     total_plante_par_culture: Dict[str, float] = {}
-    for (c, v, _p), d in groupes.items():
+    for (c, v, _p, _u), d in groupes.items():
         total_plante_par_culture[c] = total_plante_par_culture.get(c, 0) + d["nb_plants"]
 
     def _perte_pour_groupe(culture: str, variete: str, nb_plants: float) -> float:
@@ -571,7 +575,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
 
     result: Dict[Optional[str], list] = {}
 
-    for (culture, variete, parcelle), data in groupes.items():
+    for (culture, variete, parcelle, _unite_cle), data in groupes.items():
         stock = stocks.get(culture)
         # [CA1] Ne garder que les cultures avec stock actif
         if not stock or stock.stock_plants <= 0:
