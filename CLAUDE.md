@@ -296,6 +296,32 @@ Puis dans pgAdmin (ou tout client PostgreSQL) :
 - Username : `potager_user`
 - DB dev : `potager_dev` / DB prod : `potager_prod`
 
+### Serveur Hetzner (`162.55.57.49`) — accès direct sans tunnel
+
+PostgreSQL 14 (cluster `main`), mêmes bases/owner que ci-dessus. Accès direct configuré
+depuis pgAdmin, restreint à l'IP fixe du poste client (whitelist, pas d'ouverture publique).
+
+Conf côté serveur (déjà appliquée, à reproduire si le serveur est réinstallé) :
+
+1. `/etc/postgresql/14/main/postgresql.conf` :
+   ```
+   listen_addresses = '*'
+   ssl = on
+   ```
+2. `/etc/postgresql/14/main/pg_hba.conf` (ligne ajoutée en bas) :
+   ```
+   host    potager_dev,potager_prod    potager_user    <IP_CLIENTE>/32    scram-sha-256
+   ```
+3. `systemctl restart postgresql`
+4. Hetzner Cloud Firewall (`potager-firewall`, console web, pas depuis le serveur) :
+   règle inbound TCP port `5432`, source = `<IP_CLIENTE>/32` (jamais `0.0.0.0/0`)
+
+⚠️ Si l'IP publique du poste client change, il faut mettre à jour à la fois la ligne
+`pg_hba.conf` et la règle du firewall Hetzner, sinon la connexion est refusée.
+
+pgAdmin (sans tunnel) : Host `162.55.57.49`, Port `5432`, Username `potager_user`,
+SSL mode `Require`.
+
 ## Déploiement & Docker
 
 ### ⚠️ IMPORTANT — Protocole de déploiement
