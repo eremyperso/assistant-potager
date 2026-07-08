@@ -477,7 +477,10 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
     groupes_semis: Dict[tuple, dict] = {}
     for culture, variete, parcelle, quantite, unite, date_evt in semis_pt_rows:
         variete_norm = variete or ""
-        key = (culture, variete_norm, parcelle)
+        unite_norm = unite or "graines"
+        # [US-037 / CA2] L'unité fait partie de la clé de regroupement — jamais de
+        # somme entre graines/pieds/m² pour une même culture+variété+parcelle.
+        key = (culture, variete_norm, parcelle, unite_norm)
         total = quantite or 0
 
         if key not in groupes_semis:
@@ -485,7 +488,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
                 "culture": culture,
                 "variete": variete_norm,
                 "nb_plants": 0.0,
-                "unite": unite or "graines",
+                "unite": unite_norm,
                 "date_premiere": date_evt,
             }
 
@@ -602,7 +605,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         result[parcelle].append(entree)
 
     # ── 4b. Semis pleine terre dans le résultat ───────────────────────────────
-    for (culture, variete, parcelle), data in groupes_semis.items():
+    for (culture, variete, parcelle, _unite_cle), data in groupes_semis.items():
         date_semis = data["date_premiere"]
         if date_semis and hasattr(date_semis, "date"):
             age_jours = (today - date_semis.date()).days
