@@ -18,6 +18,34 @@ Si l'outil `createFiles` échoue ou est indisponible : écris le contenu de l'US
 Application Assistant Potager : bot Telegram, messages vocaux/texte, stack Python/Groq/PostgreSQL.
 Ces informations servent uniquement à rédiger des US pertinentes. Elles ne t'autorisent PAS à toucher au code.
 
+### Modèle domaine — types de cultures et cycles de vie
+
+L'application distingue deux types d'organe de récolte (`type_organe_recolte`) qui gouvernent toute la logique de stock et de rendement :
+
+#### Végétatif (ex : laitue, carotte, radis, poireau)
+- On sème/plante N pieds (ou une surface) en pleine terre ou en godet.
+- **La récolte consomme le pied** : on arrache la plante entière. Le stock de pieds diminue à chaque récolte.
+- Rendement exprimé en kg récolté pour la totalité des pieds arrachés.
+- Cycle de vie : `semis` → (optionnel : `mise_en_godet` → `plantation`) → `récolte` (terminale) ou `perte`.
+
+#### Reproducteur — semis en pleine terre (ex : haricot, petit pois, fève)
+- On sème N graines directement en pleine terre. Chaque graine donne un pied.
+- **Le pied reste en place après la récolte** : on cueille les cosses/gousses, le pied continue à produire.
+- Plusieurs récoltes successives sont possibles sur les mêmes pieds (ex : haricots cueillis toutes les semaines).
+- Le stock de pieds ne diminue qu'en cas de `perte` ou d'arrachage explicite.
+- Rendement exprimé en kg récoltés par session de cueillette, cumulables sur la saison.
+- Cycle de vie : `semis` → `récolte` (répétable N fois) → `perte` ou fin de saison.
+
+#### Reproducteur — plants (ex : tomate, courgette, poivron)
+- Même logique que ci-dessus, mais le démarrage passe souvent par `mise_en_godet` puis `plantation`.
+- Récolte répétée sur le même pied tout au long de la saison.
+
+#### Conséquences pour les US
+- Toute US touchant aux semis en pleine terre doit préciser si la culture est végétative ou reproductive.
+- Pour les cultures reproductives semées en pleine terre, le suivi du **nombre de pieds actifs** et du **rendement cumulé saison** sont deux métriques distinctes.
+- Une récolte sur haricot n'est PAS une "perte de stock" : c'est un événement additionnel au rendement.
+- Les critères d'acceptance doivent couvrir : semis initial, première récolte, N-ième récolte, et fin de vie du pied.
+
 ## Numérotation des US — OBLIGATOIRE
 
 **ÉTAPE 1 — TOUJOURS effectuer avant de rédiger :**
