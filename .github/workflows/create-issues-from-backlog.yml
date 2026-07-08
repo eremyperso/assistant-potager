@@ -6,6 +6,7 @@ on:
       - 'backlog/*.md'
     branches:
       - main
+      - dev
   workflow_dispatch:
 
 permissions:
@@ -129,11 +130,16 @@ jobs:
             }
 
             // EXTRACTION du titre depuis la première ligne H1 ou ligne "**Titre :**"
+            // Si le fichier a un **ID :** US-XXX séparé du titre, on le préfixe.
             function extractTitle(content) {
               const h1 = content.match(/^#\s+(.+)/m);
               if (h1) return h1[1].trim();
               const bold = content.match(/\*\*Titre\s*:\*\*\s*(.+)/i);
-              if (bold) return bold[1].trim();
+              if (bold) {
+                const idMatch = content.match(/\*\*ID\s*:\*\*\s*(US-\d+)/i);
+                const prefix = idMatch ? `${idMatch[1]} : ` : '';
+                return prefix + bold[1].trim();
+              }
               return content.split('\n')[0].replace(/^#+\s*/, '').trim();
             }
 
@@ -147,6 +153,21 @@ jobs:
                 .filter(l => l.length > 0);
             }
 
+            // SUPPRIME le préfixe "US-XXX : " pour comparer avec les anciens titres
+            function stripUsPrefix(title) {
+              return title.replace(/^US-\d+\s*:\s*/i, '').trim();
+            }
+
+            // RECHERCHE une issue existante : titre exact OU titre sans préfixe US
+            function findExistingIssue(newTitle, allIssues) {
+              const exact = newTitle.toLowerCase().trim();
+              const stripped = stripUsPrefix(newTitle).toLowerCase().trim();
+              return allIssues.find(i => {
+                const t = i.title.toLowerCase().trim();
+                return t === exact || t === stripped;
+              });
+            }
+
             // ── MAIN ──────────────────────────────────────────────────────────
 
             console.log('Chargement des labels et issues existants...');
@@ -155,8 +176,6 @@ jobs:
               getAllIssues()
             ]);
             console.log(`${repoLabels.length} labels, ${allIssues.length} issues chargés.`);
-
-            const existingTitles = new Set(allIssues.map(i => i.title.toLowerCase().trim()));
 
             const backlogDir = './backlog';
             const files = fs.readdirSync(backlogDir)
@@ -186,8 +205,26 @@ jobs:
               console.log(`Titre   : ${title}`);
               console.log(`Labels  : ${resolvedLabels.join(', ')}`);
 
-              if (existingTitles.has(title.toLowerCase().trim())) {
-                console.log('⏭ Issue déjà existante — ignorée.');
+              const existing = findExistingIssue(title, allIssues);
+
+              if (existing) {
+                if (existing.title.trim() === title.trim()) {
+                  console.log(`⏭ Issue #${existing.number} déjà à jour — ignorée.`);
+                } else {
+                  // Titre a changé (ex: ajout préfixe US-XXX) → mise à jour
+                  try {
+                    await github.rest.issues.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: existing.number,
+                      title
+                    });
+                    console.log(`✏️ Issue #${existing.number} renommée : "${existing.title}" → "${title}"`);
+                    existing.title = title; // mise à jour locale
+                  } catch (err) {
+                    console.error(`❌ Erreur renommage #${existing.number}: ${err.message}`);
+                  }
+                }
                 continue;
               }
 
@@ -200,7 +237,7 @@ jobs:
                   labels: resolvedLabels
                 });
                 console.log(`✅ Issue créée : #${issue.data.number}`);
-                existingTitles.add(title.toLowerCase().trim());
+                allIssues.push(issue.data); // évite doublons dans la même exécution
               } catch (err) {
                 console.error(`❌ Erreur sur "${file}": ${err.message}`);
               }

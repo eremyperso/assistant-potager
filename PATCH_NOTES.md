@@ -1,4 +1,17 @@
 
+## [v3.13.0] — 2026-07-09
+
+### 🚀 Nouveautés
+- Ajoute un statut "pépinière" sur une parcelle (`/parcelle modifier <nom> pepiniere=true`) — une serre ou un carré dédié aux semis en godet peut désormais être rattaché à un vrai lieu sans être compté comme une culture en pleine terre (US-037)
+- Affiche le marqueur "🌱 pépinière" dans `/parcelle lister` pour repérer d'un coup d'œil les parcelles exclues du calcul de stock en terre
+
+### 🐛 Corrections
+- Corrige le stock affiché dans "Stocks cultures" qui pouvait montrer un total de graines déjà consommées en godet (ex : "75 graines") à la place du nombre réel de plants en terre, quand ces graines avaient été semées sur une parcelle réelle de type serre/pépinière
+- Corrige le doublon d'affichage d'une même culture sous deux lignes distinctes ("Pépinière" et "Semis pleine terre") dans le dashboard Stocks
+
+### 💾 Base de données
+- Ajoute la colonne `parcelles.est_pepiniere` (migration_v15) — la parcelle "Non localisé" est automatiquement marquée pépinière lors de la migration
+
 ## [v3.12.0] — 2026-07-07
 
 ### 🚀 Nouveautés

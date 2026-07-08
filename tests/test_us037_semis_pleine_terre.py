@@ -26,6 +26,7 @@ from database.models import Evenement, Parcelle, CultureConfig
 from utils.stock import (
     calcul_stock_cultures,
     calcul_stock_par_variete,
+    calcul_semis,
     format_stock_ligne_telegram,
     format_stock_stats_json,
     get_type_organe,
@@ -553,3 +554,75 @@ class TestPasDeMelangeUnitesIncompatibles:
         assert semis["haricot"]["total_seme"] == 100
         assert semis["haricot"]["unite"] == "graines"
         assert semis["haricot"]["total_seme"] != 102
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [migration_v15] Parcelle pépinière (est_pepiniere=True) — un semis qui y est
+# rattaché ne doit jamais polluer le stock "pleine terre", même consommé en
+# godet puis planté ailleurs. Bug remonté : 75 graines de tomate semées en
+# pépinière (parcelle "serre" réelle) écrasaient les 22 plants réellement
+# plantés, car _resoudre_unite_dominante gardait l'unité au plus gros total
+# brut (75 > 22) sans savoir que ces graines étaient déjà consommées.
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestParcellePepiniereExclueDuStockPleineTerre:
+
+    @pytest.fixture
+    def db_avec_serre(self, db_with_parcelle_et_cultures):
+        db = db_with_parcelle_et_cultures
+        db.add(Parcelle(nom="Serre", nom_normalise="serre", ordre=2, actif=True, est_pepiniere=True))
+        db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
+        db.commit()
+        return db
+
+    def test_semis_pepiniere_nalimente_pas_le_stock_pleine_terre(self, db_avec_serre):
+        db = db_avec_serre
+        serre = db.query(Parcelle).filter_by(nom_normalise="serre").first()
+        centre = db.query(Parcelle).filter_by(nom_normalise="nord").first()
+
+        # 75 graines semées en pépinière (parcelle réelle "serre", flag pépinière)
+        db.add(Evenement(
+            type_action="semis", culture="tomate", quantite=75, unite="graines",
+            parcelle_id=serre.id, date=datetime.now() - timedelta(days=60),
+        ))
+        # Mise en godet : les 75 graines sont consommées
+        db.add(Evenement(
+            type_action="mise_en_godet", culture="tomate",
+            nb_graines_semees=75, nb_plants_godets=38,
+            date=datetime.now() - timedelta(days=45),
+        ))
+        # 22 plants réellement transplantés en pleine terre
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", quantite=22, unite="plants",
+            parcelle_id=centre.id, date=datetime.now() - timedelta(days=20),
+        ))
+        db.commit()
+
+        stocks = calcul_stock_cultures(db)
+        tomate = stocks["tomate"]
+        # Le stock "au potager" reflète les vraies plantations, pas les graines
+        # déjà transformées en godet.
+        assert tomate.stock_plants == 22
+        assert tomate.unite == "plants"
+
+        semis = calcul_semis(db)
+        # La tomate ne doit plus apparaître comme "semée en pleine terre"
+        assert semis["tomate"]["parcelles_pleine_terre"] == []
+
+    def test_semis_parcelle_ordinaire_reste_pleine_terre(self, db_avec_serre):
+        """Non-régression : une parcelle normale (est_pepiniere=False) continue de
+        compter comme pleine terre, comme avant migration_v15."""
+        db = db_avec_serre
+        nord = db.query(Parcelle).filter_by(nom_normalise="nord").first()
+        db.add(Evenement(
+            type_action="semis", culture="haricot", quantite=2, unite="m²",
+            parcelle_id=nord.id, date=datetime.now(),
+        ))
+        db.commit()
+
+        stocks = calcul_stock_cultures(db)
+        assert stocks["haricot"].stock_plants == 2
+        assert stocks["haricot"].unite == "m²"
+
+        semis = calcul_semis(db)
+        assert semis["haricot"]["parcelles_pleine_terre"] == ["Nord"]

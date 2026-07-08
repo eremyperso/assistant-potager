@@ -92,6 +92,9 @@ class Parcelle(Base):
     - nom_normalise : forme canonique unique (strip + lower + unidecode + sans tirets/espaces)
     - ordre         : position pour l'affichage trié du plan
     - actif         : permet de désactiver sans supprimer
+    - est_pepiniere : [migration_v13] une parcelle pépinière/serre n'est jamais comptée
+                      comme "pleine terre" pour un semis, même avec un parcelle_id renseigné
+                      (voir utils.stock._cond_semis_pleine_terre)
     """
     __tablename__ = "parcelles"
 
@@ -102,3 +105,4 @@ class Parcelle(Base):
     superficie_m2 = Column(Float, nullable=True)
     ordre         = Column(Integer, default=0)
     actif         = Column(Boolean, default=True, nullable=False)
+    est_pepiniere = Column(Boolean, default=False, nullable=False)

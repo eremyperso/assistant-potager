@@ -23,7 +23,9 @@ from sqlalchemy import func
 from unidecode import unidecode
 
 from database.models import Evenement, Parcelle
-from utils.stock import calcul_stock_cultures, get_type_organe, _cutoff_dt
+from utils.stock import (
+    calcul_stock_cultures, get_type_organe, _cutoff_dt, _cond_semis_pleine_terre,
+)
 
 log = logging.getLogger("potager")
 
@@ -198,7 +200,7 @@ def create_parcelle(
 # [US_Plan_occupation_parcelles] Mise à jour des métadonnées d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre"}
+_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere"}
 
 
 def update_parcelle(
@@ -207,7 +209,9 @@ def update_parcelle(
     """
     Met à jour les métadonnées d'une parcelle existante.
 
-    Paramètres acceptés via kwargs : exposition, superficie (float m²), ordre (int).
+    Paramètres acceptés via kwargs : exposition, superficie (float m²), ordre (int),
+    pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
+    "semis pleine terre", voir utils.stock._cond_semis_pleine_terre).
     Lève ValueError  si un paramètre est inconnu ou mal typé.
     Lève LookupError si la parcelle est introuvable.
 
@@ -217,7 +221,7 @@ def update_parcelle(
     if inconnus:
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
-            f"Acceptés : exposition, superficie, ordre"
+            f"Acceptés : exposition, superficie, ordre, pepiniere"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -247,6 +251,13 @@ def update_parcelle(
             raise ValueError("ordre doit être un entier (ex : 1)")
         parcelle.ordre = val_ord
         modifs.append(f"Ordre : {val_ord}")
+    if "pepiniere" in kwargs:
+        val_str = kwargs["pepiniere"].strip().lower()
+        if val_str not in ("true", "false"):
+            raise ValueError("pepiniere doit être true ou false")
+        val_bool = val_str == "true"
+        parcelle.est_pepiniere = val_bool
+        modifs.append(f"Pépinière : {'oui' if val_bool else 'non'}")
 
     db.commit()
     db.refresh(parcelle)
@@ -428,12 +439,16 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
 
-    # ── 3. Agrégation par (culture, variete, parcelle) — plantations ─────────
+    # ── 3. Agrégation par (culture, variete, parcelle, unite) — plantations ──
+    # [US-037 / CA2] L'unité fait partie de la clé de regroupement — jamais de
+    # somme entre deux unités différentes (ex: "plants" et "pieds") pour un même
+    # (culture, variété, parcelle).
     groupes: Dict[tuple, dict] = {}
 
     for culture, variete, parcelle, quantite, rang, unite, date_evt in rows:
         variete_norm = variete or ""
-        key = (culture, variete_norm, parcelle)
+        unite_norm = unite or "plants"
+        key = (culture, variete_norm, parcelle, unite_norm)
         total = (quantite or 0) * (rang or 1)
 
         if key not in groupes:
@@ -441,7 +456,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
                 "culture": culture,
                 "variete": variete_norm,
                 "nb_plants": 0.0,
-                "unite": unite or "plants",
+                "unite": unite_norm,
                 "date_premiere": date_evt,
             }
 
@@ -453,9 +468,12 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         ):
             groupes[key]["date_premiere"] = date_evt
 
-    # ── 3b. Semis pleine terre (parcelle_id non null) ─────────────────────────
-    # Un semis avec parcelle_id = semé directement en pleine terre (pas pépinière).
-    # Traité séparément des plantations — pas de filtre cultures_actives.
+    # ── 3b. Semis pleine terre (parcelle_id non null, hors parcelles pépinière) ──
+    # Un semis avec une VRAIE parcelle_id de pleine terre = semé directement en
+    # terre (pas pépinière). Un semis rattaché à une parcelle est_pepiniere=true
+    # (serre, pépinière, ou la parcelle factice "Non localisé") reste un semis
+    # pépinière sans localisation. Traité séparément des plantations — pas de
+    # filtre cultures_actives.
     _q_semis_pt = (
         db.query(
             Evenement.culture,
@@ -467,7 +485,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         )
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
-        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
         .order_by(Evenement.date)
     )
     if cutoff is not None:
@@ -550,7 +568,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
 
     # Totaux plantés par culture (toutes varietes) pour distribution proportionnelle
     total_plante_par_culture: Dict[str, float] = {}
-    for (c, v, _p), d in groupes.items():
+    for (c, v, _p, _u), d in groupes.items():
         total_plante_par_culture[c] = total_plante_par_culture.get(c, 0) + d["nb_plants"]
 
     def _perte_pour_groupe(culture: str, variete: str, nb_plants: float) -> float:
@@ -571,7 +589,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
 
     result: Dict[Optional[str], list] = {}
 
-    for (culture, variete, parcelle), data in groupes.items():
+    for (culture, variete, parcelle, _unite_cle), data in groupes.items():
         stock = stocks.get(culture)
         # [CA1] Ne garder que les cultures avec stock actif
         if not stock or stock.stock_plants <= 0:

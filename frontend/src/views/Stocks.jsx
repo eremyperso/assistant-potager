@@ -204,7 +204,12 @@ export default function Stocks({ refresh }) {
 
   const q             = search.toLowerCase()
   const filteredStocks = q ? stocks.filter(c  => c.culture.toLowerCase().includes(q)) : stocks
-  const filteredSemis  = q ? semis_pt.filter(s => s.culture.toLowerCase().includes(q)) : semis_pt
+  // Filet de sécurité : une culture déjà affichée via stock_par_culture (ligne
+  // "Pépinière"/"pied acheté") ne doit jamais être aussi rendue en "Semis pleine
+  // terre" — évite un double comptage visuel si le backend renvoie un chevauchement.
+  const stocksCultures = new Set(filteredStocks.map(c => c.culture.toLowerCase()))
+  const filteredSemis  = (q ? semis_pt.filter(s => s.culture.toLowerCase().includes(q)) : semis_pt)
+    .filter(s => !stocksCultures.has(s.culture.toLowerCase()))
   const filteredGodets = q ? enAttente.filter(g => g.culture.toLowerCase().includes(q)) : enAttente
 
   const totalPotager = filteredStocks.reduce((s, c) => s + (c.stock_plants || 0), 0)

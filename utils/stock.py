@@ -35,6 +35,20 @@ def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
 import logging as _logging
 _log_stock = _logging.getLogger("potager")
 
+# [migration_v15] parcelles.est_pepiniere classe explicitement une parcelle comme
+# serre/pépinière (y compris la parcelle synthétique "Non localisé", migration_v12,
+# marquée est_pepiniere=true par migration_v15). Un semis rattaché à une telle
+# parcelle reste un semis pépinière tant qu'aucune plantation réelle n'a eu lieu —
+# même si son parcelle_id est renseigné. isnot(None) seul ne suffit donc pas pour
+# détecter "pleine terre".
+def _cond_semis_pleine_terre(evenement_cls, parcelle_cls):
+    """[US-037 CA4/CA5] Condition SQL : semis rattaché à une VRAIE parcelle de
+    pleine terre (parcelle_id non null ET parcelle non marquée pépinière)."""
+    return (
+        (evenement_cls.parcelle_id.isnot(None))
+        & (parcelle_cls.est_pepiniere.is_(False))
+    )
+
 
 def _resoudre_unite_dominante(
     par_unite: "Dict[str, Dict[str, float]]", contexte: str = "",
@@ -170,19 +184,22 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         _accumuler(culture, unite or "plants", total)
 
     # ── 1b. [US-037 / CA4, CA5] Semis pleine terre (parcelle_id non null) ───
-    # Un semis directement lié à une parcelle est un semis à la volée / en terre,
-    # pas un semis en barquette destiné à la pépinière (celui-ci n'a pas de
-    # parcelle_id). Il alimente donc directement le stock, comme une plantation :
-    # aucune conversion d'unité (m² reste m², pieds/graines restent tels quels).
+    # Un semis directement lié à une VRAIE parcelle de pleine terre est un semis à
+    # la volée / en terre, pas un semis en barquette destiné à la pépinière (celui-ci
+    # n'a pas de parcelle_id, ou est rattaché à une parcelle marquée
+    # est_pepiniere=true — serre, pépinière, ou la parcelle factice "Non localisé").
+    # Il alimente donc directement le stock, comme une plantation : aucune
+    # conversion d'unité (m² reste m², pieds/graines restent tels quels).
     _q_semis_pt = (
         db.query(
             Evenement.culture,
             Evenement.unite,
             Evenement.quantite,
         )
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
-        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
     )
     if cutoff is not None:
         _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
@@ -426,12 +443,12 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         if c.lower() not in cultures_avec_godets
     }
 
-    # Parcelles de semis pleine terre (parcelle_id non null) par culture
+    # Parcelles de semis pleine terre (parcelle_id non null, hors "Non localisé") par culture
     _q_parcelles_pt = (
         db.query(Evenement.culture, Parcelle.nom)
         .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
-        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
         .filter(Parcelle.actif.is_(True))
     )
     if cutoff is not None:
@@ -728,8 +745,9 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations_raw = _q_plant.all()
 
-    # [US-037 / CA4, CA5, CA9] Semis pleine terre (parcelle_id non null) par variété —
-    # alimente le stock au même titre qu'une plantation, sans conversion d'unité.
+    # [US-037 / CA4, CA5, CA9] Semis pleine terre (parcelle_id non null, hors "Non
+    # localisé") par variété — alimente le stock au même titre qu'une plantation,
+    # sans conversion d'unité.
     _q_semis_pt = (
         db.query(
             Evenement.variete,
@@ -737,9 +755,10 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
             Evenement.quantite,
             Evenement.date,
         )
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "semis")
-        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
     )
     if cutoff is not None:
         _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
