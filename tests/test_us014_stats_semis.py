@@ -194,15 +194,29 @@ def test_us014_ca5_culture_semis_seuls(db):
     assert result[0]["total_seme"] == 50.0
 
 
-def test_us014_ca5_calcul_stock_par_variete_culture_semis_seuls(db):
-    """calcul_stock_par_variete retourne [] pour culture sans plantation (comportement existant)."""
+def test_us014_ca5_calcul_stock_par_variete_culture_semis_seuls_pepiniere(db):
+    """[US-037] Un semis SANS parcelle_id (pépinière, destiné à godet) reste hors stock —
+    calcul_stock_par_variete retourne [] pour une culture sans plantation ni semis pleine terre."""
+    session, pid = db
+    session.add(Evenement(
+        type_action="semis", culture="basilic", variete=None, quantite=50, unite="graines",
+        date=datetime(2026, 4, 1), parcelle_id=None,
+    ))
+    session.flush()
+
+    result = calcul_stock_par_variete(session, "basilic")
+    assert result == []
+
+
+def test_us014_ca5_calcul_stock_par_variete_culture_semis_pleine_terre_seuls(db):
+    """[US-037 / CA4, CA5, CA9] Un semis AVEC parcelle_id (pleine terre) alimente désormais
+    le stock même sans événement 'plantation' — c'est le cœur de l'US-037."""
     session, pid = db
     _ev(session, pid, "semis", "basilic", variete=None, quantite=50, unite="graines")
 
     result = calcul_stock_par_variete(session, "basilic")
-    # La fonction existante retourne [] sans plantation — c'est attendu
-    # Le routing cmd_stats gère ce cas avec calcul_semis_par_culture
-    assert result == []
+    assert len(result) == 1
+    assert result[0]["plants_plantes"] == 50
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,16 +236,47 @@ def test_us014_ca6_recoltes_dans_stocks_plantations(db):
     assert stocks["tomate"].rendement_total == pytest.approx(5.0)
 
 
-def test_us014_ca6_semis_sans_impact_sur_stock_plantations(db):
-    """Ajouter un semis ne change pas le stock des plantations."""
+def test_us014_ca6_semis_pepiniere_sans_impact_sur_stock_plantations(db):
+    """[US-037] Un semis SANS parcelle_id (pépinière) ne change pas le stock des plantations —
+    seul un semis pleine terre (parcelle_id renseigné) le fait désormais (CA4/CA5)."""
     session, pid = db
     _ev(session, pid, "plantation", "courgette", quantite=10, unite="plants")
     stocks_avant = calcul_stock_cultures(session)
 
-    _ev(session, pid, "semis", "courgette", quantite=20, unite="graines")
+    session.add(Evenement(
+        type_action="semis", culture="courgette", quantite=20, unite="graines",
+        date=datetime(2026, 4, 1), parcelle_id=None,
+    ))
+    session.flush()
     stocks_apres = calcul_stock_cultures(session)
 
     assert stocks_avant["courgette"].stock_plants == stocks_apres["courgette"].stock_plants
+
+
+def test_us014_ca6_semis_pleine_terre_alimente_le_stock_plantations(db):
+    """[US-037 / CA4, CA5] Un semis AVEC parcelle_id (pleine terre), de MÊME unité que la
+    plantation existante, s'ajoute au stock existant."""
+    session, pid = db
+    _ev(session, pid, "plantation", "courgette", quantite=10, unite="plants")
+    stocks_avant = calcul_stock_cultures(session)
+
+    _ev(session, pid, "semis", "courgette", quantite=20, unite="plants")
+    stocks_apres = calcul_stock_cultures(session)
+
+    assert stocks_apres["courgette"].stock_plants == stocks_avant["courgette"].stock_plants + 20
+
+
+def test_us014_ca6_semis_pleine_terre_unite_differente_non_additionnee(db):
+    """[US-037 / CA2] Une plantation en 'plants' et un semis pleine terre en 'graines' pour
+    la même culture ne sont JAMAIS additionnés — seule l'unité dominante (le plus grand
+    total) est conservée."""
+    session, pid = db
+    _ev(session, pid, "plantation", "courgette", quantite=10, unite="plants")
+    _ev(session, pid, "semis", "courgette", quantite=20, unite="graines")
+
+    stocks = calcul_stock_cultures(session)
+    assert stocks["courgette"].stock_plants == 20
+    assert stocks["courgette"].unite == "graines"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -264,11 +309,15 @@ def test_us014_ca7_calcul_stock_par_variete_sans_semis_inchange(db):
 
 
 def test_us014_ca7_plusieurs_cultures_isolation(db):
-    """Les semis d'une culture n'affectent pas les stats d'une autre."""
+    """Les semis d'une culture (pépinière, sans parcelle) n'affectent pas les stats d'une autre."""
     session, pid = db
     _ev(session, pid, "plantation", "tomate",   quantite=10, unite="plants")
     _ev(session, pid, "plantation", "courgette",quantite=5,  unite="plants")
-    _ev(session, pid, "semis",      "courgette",quantite=20, unite="graines")
+    session.add(Evenement(
+        type_action="semis", culture="courgette", quantite=20, unite="graines",
+        date=datetime(2026, 4, 1), parcelle_id=None,
+    ))
+    session.flush()
 
     semis = calcul_semis(session)
     assert "courgette" in semis
@@ -276,4 +325,18 @@ def test_us014_ca7_plusieurs_cultures_isolation(db):
 
     stocks = calcul_stock_cultures(session)
     assert stocks["tomate"].stock_plants == 10
+    # Semis pépinière (parcelle_id=None) → n'alimente pas le stock (CA4/CA5 US-037)
     assert stocks["courgette"].stock_plants == 5
+
+
+def test_us014_ca7_semis_pleine_terre_isolation(db):
+    """[US-037] Un semis pleine terre (parcelle_id renseigné), de même unité que la
+    plantation existante, alimente sa propre culture sans affecter les autres."""
+    session, pid = db
+    _ev(session, pid, "plantation", "tomate",   quantite=10, unite="plants")
+    _ev(session, pid, "plantation", "courgette",quantite=5,  unite="plants")
+    _ev(session, pid, "semis",      "courgette",quantite=20, unite="plants")
+
+    stocks = calcul_stock_cultures(session)
+    assert stocks["tomate"].stock_plants == 10
+    assert stocks["courgette"].stock_plants == 25

@@ -580,7 +580,10 @@ def get_plan(date_ref: date = Query(default=None)):
                 {
                     "culture":    c.get("culture", ""),
                     "variete":    c.get("variete"),
-                    "nb_plants":  int(c.get("nb_plants") or 0),
+                    # [US-037 / CA10] Une surface m² est fractionnable (ex: 1.5 m²) —
+                    # ne jamais tronquer en int comme pour un nombre de plants/graines.
+                    "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") == "m²" else int(c.get("nb_plants") or 0),
+                    "unite":      c.get("unite") or "plants",
                     "type_organe": c.get("type_organe") or "végétatif",
                     "surface_m2_par_plant": surface_par_culture.get(
                         (c.get("culture") or "").lower(), None
@@ -589,13 +592,17 @@ def get_plan(date_ref: date = Query(default=None)):
                 for c in cultures_raw
             ]
 
-            # Calcul occupation réel : Σ(nb_plants × surface_m2) / superficie_parcelle
+            # [US-037 / CA10] Calcul occupation réel : une culture semée en m² occupe
+            # directement cette surface (aucune conversion via une empreinte au pied) ;
+            # les autres unités (graines, pieds, plants) restent multipliées par
+            # surface_m2_par_plant comme avant.
             occupation_pct = None
             if p.superficie_m2:
                 surface_utilisee = sum(
-                    c["nb_plants"] * c["surface_m2_par_plant"]
+                    c["nb_plants"] if c["unite"] == "m²"
+                    else c["nb_plants"] * c["surface_m2_par_plant"]
                     for c in cultures
-                    if c["surface_m2_par_plant"]
+                    if c["unite"] == "m²" or c["surface_m2_par_plant"]
                 )
                 if surface_utilisee > 0:
                     occupation_pct = min(100, round(surface_utilisee / p.superficie_m2 * 100))
