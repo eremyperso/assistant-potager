@@ -616,8 +616,9 @@ class TestSemisPleineTerre:
         assert len(est) == 1
         assert 9 <= est[0]["age_jours"] <= 11
 
-    def test_semis_sans_parcelle_absent_du_plan(self, test_db) -> None:
-        """Un semis sans parcelle_id n'apparaît PAS dans calcul_occupation_parcelles."""
+    def test_semis_sans_parcelle_dans_non_localise(self, test_db) -> None:
+        """[fix visibilité semis sans parcelle] Un semis sans parcelle_id apparaît
+        sous le groupe "Non localisé" (clé None) au lieu de disparaître du plan."""
         test_db.add(CultureConfig(nom="carotte", type_organe_recolte="végétatif"))
         test_db.add(Evenement(
             type_action="semis",
@@ -629,8 +630,11 @@ class TestSemisPleineTerre:
         ))
         test_db.commit()
         result = calcul_occupation_parcelles(test_db)
-        # Pas de plantation → aucune culture active → aucune entrée dans le plan
-        assert result == {}
+        non_localise = result.get(None, [])
+        assert len(non_localise) == 1
+        assert non_localise[0]["culture"] == "carotte"
+        assert non_localise[0]["nb_plants"] == 50.0
+        assert non_localise[0].get("type_action") == "semis"
 
     def test_semis_pleine_terre_unite(self, db_with_semis_pleine_terre) -> None:
         """L'unité du semis (graines) est conservée dans le résultat."""

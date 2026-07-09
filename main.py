@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 # ── Version [US-008] ────────────────────────────────────────────────────────────
@@ -638,8 +638,8 @@ def get_godets(date_ref: date = Query(default=None)):
     db = SessionLocal()
     try:
         tous = calcul_godets(db, include_epuises=True, date_ref=dr)
-        en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0]
-        tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0]
+        en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0]
+        tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0 and not v.get("graines_en_germination")]
         return {
             "en_attente": en_attente,
             "tout_plante": tout_plante,
@@ -675,17 +675,30 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
 
         godet_ids = {str(g.id) for g in godet_events}
 
-        # 2. Semis parents distincts via origine_graines_id
-        semis_ids = {g.origine_graines_id for g in godet_events if g.origine_graines_id}
-        semis_events = []
-        if semis_ids:
-            semis_events = (
-                db.query(Evenement)
-                .options(joinedload(Evenement.parcelle_rel))
-                .filter(Evenement.id.in_(semis_ids))
-                .order_by(Evenement.date.asc())
-                .all()
-            )
+        # 2. Semis "pépinière" pour cette culture/variété — rattachés à un godet ou
+        # pas encore transformés (stade "en germination", voir calcul_godets /
+        # utils/stock.py). Filtre direct par culture/variété plutôt que via
+        # origine_graines_id : un semis sans mise_en_godet associée doit quand
+        # même apparaître ici.
+        # ⚠️ Un semis pleine terre (parcelle réelle non-pépinière, ex: 2 m² sur
+        # "planche-test") appartient à un cycle totalement différent — planté
+        # directement en terre, jamais transformé en godet. Le mélanger ici avec
+        # les semis pépinière du même couple culture/variété n'a pas de sens
+        # (unité différente en plus : m² vs graines) : on l'exclut avec le même
+        # critère que calcul_godets (parcelle_id NULL ou parcelle.est_pepiniere).
+        semis_q = (
+            db.query(Evenement)
+            .options(joinedload(Evenement.parcelle_rel))
+            .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+            .filter(Evenement.type_action == "semis")
+            .filter(func.lower(Evenement.culture) == culture_lower)
+            .filter(or_(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
+        )
+        if variete:
+            semis_q = semis_q.filter(func.lower(Evenement.variete) == variete.lower())
+        else:
+            semis_q = semis_q.filter(Evenement.variete.is_(None))
+        semis_events = semis_q.order_by(Evenement.date.asc()).all()
 
         # 3. Plantations liées via source_evenement_ids
         plantation_candidates = (
@@ -739,6 +752,7 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
                     "id":        s.id,
                     "date":      str(s.date)[:10],
                     "nb_graines": int(s.quantite or 0),
+                    "unite":     s.unite or "graines",
                     "parcelle":  s.parcelle_rel.nom if s.parcelle_rel else None,
                 }
                 for s in semis_events

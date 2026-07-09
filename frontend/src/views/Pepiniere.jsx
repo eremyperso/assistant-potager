@@ -67,14 +67,23 @@ function ArcCounter({ total, restants }) {
 // ── Carte culture ─────────────────────────────────────────────────────────────
 
 function CultureCard({ g, epuise, onClick }) {
+  const enGermination = g.statut === 'en_germination'
   const stock  = g.stock_residuel_godet ?? 0
   const total  = g.nb_plants_godets    ?? 0
   const tm     = tauxMeta(g.taux_reussite)
-  const accent = stockAccentVar(stock, total)
+  const accent = enGermination ? 'var(--g-mid)' : stockAccentVar(stock, total)
 
-  const comment = epuise
-    ? `${total} plants entièrement plantés — lot clôturé.`
-    : `${total} plants en godet · ${g.nb_plantes ?? 0} planté${(g.nb_plantes ?? 0) > 1 ? 's' : ''} · ${stock} en attente de mise en place.`
+  let comment
+  if (enGermination) {
+    comment = `${g.graines_en_germination} ${g.unite_germination || 'graines'} semées, pas encore repiquées en godet.`
+  } else if (epuise) {
+    comment = `${total} plants entièrement plantés — lot clôturé.`
+  } else {
+    comment = `${total} plants en godet · ${g.nb_plantes ?? 0} planté${(g.nb_plantes ?? 0) > 1 ? 's' : ''} · ${stock} en attente de mise en place.`
+    if (g.graines_en_germination > 0) {
+      comment += ` (+${g.graines_en_germination} ${g.unite_germination || 'graines'} en germination)`
+    }
+  }
 
   return (
     <button
@@ -102,12 +111,14 @@ function CultureCard({ g, epuise, onClick }) {
               )}
             </div>
 
-            {/* Badge taux */}
+            {/* Badge taux / germination */}
             <span
               className="self-start text-[12px] font-semibold rounded-lg px-2 py-0.5"
-              style={{ color: tm.textVar, background: tm.bgVar }}
+              style={enGermination
+                ? { color: 'var(--g-mid)', background: 'var(--g-brd)' }
+                : { color: tm.textVar, background: tm.bgVar }}
             >
-              {tm.label}
+              {enGermination ? '🌱 En germination' : tm.label}
             </span>
 
             {/* Badge ventes */}
@@ -121,7 +132,14 @@ function CultureCard({ g, epuise, onClick }) {
             )}
           </div>
 
-          <ArcCounter total={total} restants={stock} />
+          {enGermination ? (
+            <div style={{ width: 48, height: 48, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--g-mid)', lineHeight: 1 }}>{g.graines_en_germination}</span>
+              <span style={{ fontSize: 8, color: 'var(--g-sec)', lineHeight: 1.4 }}>{g.unite_germination || 'graines'}</span>
+            </div>
+          ) : (
+            <ArcCounter total={total} restants={stock} />
+          )}
         </div>
 
         {/* Zone commentaire */}
@@ -234,7 +252,7 @@ function DetailSheet({ godet, onClose }) {
                         Semis <span className="font-normal" style={{ color: 'var(--g-sec)' }}>#{row.data.id}</span>
                       </p>
                       <p className="text-sm" style={{ color: 'var(--g-sec)' }}>
-                        {row.data.nb_graines} graine{row.data.nb_graines > 1 ? 's' : ''}
+                        {row.data.nb_graines} {row.data.unite || 'graines'}
                         {row.data.parcelle && <span style={{ color: 'var(--g-mid)' }}> · {row.data.parcelle}</span>}
                       </p>
                       <p className="text-[12px] mt-0.5" style={{ color: 'var(--g-sec)' }}>{fmt(row.data.date)}</p>

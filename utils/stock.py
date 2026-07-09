@@ -443,23 +443,32 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         if c.lower() not in cultures_avec_godets
     }
 
-    # Parcelles de semis pleine terre (parcelle_id non null, hors "Non localisé") par culture
+    # Parcelles de semis pleine terre par culture, "Non localisé" inclus.
+    # [fix visibilité semis sans parcelle] Un semis sans parcelle_id (aucune
+    # parcelle précisée à la dictée) n'est ni une vraie localisation pleine
+    # terre, ni rattaché à une parcelle pépinière/serre — il ne doit pas pour
+    # autant disparaître de l'affichage : il rejoint le groupe "Non localisé",
+    # au même titre que les plantations sans parcelle (CA7, utils/parcelles.py).
+    from sqlalchemy import or_ as _sa_or, and_ as _sa_and
     _q_parcelles_pt = (
-        db.query(Evenement.culture, Parcelle.nom)
-        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        db.query(Evenement.culture, Evenement.parcelle_id, Parcelle.nom)
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
-        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
-        .filter(Parcelle.actif.is_(True))
+        .filter(_sa_or(
+            Evenement.parcelle_id.is_(None),
+            _sa_and(Parcelle.est_pepiniere.is_(False), Parcelle.actif.is_(True)),
+        ))
     )
     if cutoff is not None:
         _q_parcelles_pt = _q_parcelles_pt.filter(Evenement.date <= cutoff)
     parcelles_pt_raw = _q_parcelles_pt.all()
     parcelles_pt: Dict[str, list] = {}
-    for culture_pt, nom_p in parcelles_pt_raw:
+    for culture_pt, parcelle_id_pt, nom_p in parcelles_pt_raw:
+        nom_affiche = nom_p if parcelle_id_pt is not None else "Non localisé"
         if culture_pt not in parcelles_pt:
             parcelles_pt[culture_pt] = []
-        if nom_p not in parcelles_pt[culture_pt]:
-            parcelles_pt[culture_pt].append(nom_p)
+        if nom_affiche not in parcelles_pt[culture_pt]:
+            parcelles_pt[culture_pt].append(nom_affiche)
 
     result: Dict[str, dict] = {}
     for culture, (total_seme, unite_dominante) in semis_resolus.items():
@@ -962,9 +971,9 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
     if cutoff is not None:
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
-
-    if not rows:
-        return {}
+    # [fix visibilité semis pépinière] Pas de retour anticipé même si aucun
+    # mise_en_godet n'existe : des semis "en germination" peuvent quand même
+    # être présents plus bas (voir bloc semis_par_cv en fin de fonction).
 
     # [US-029] Taux de germination : calculer depuis les semis parents (origine_graines_id)
     # nb_graines_semees sur une mise_en_godet est un champ contextuel par lot, pas le total réel
@@ -1103,6 +1112,60 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
             "stock_residuel_godet": stock_residuel,
             "taux_reussite":        taux,
         }
+
+    # [fix visibilité semis pépinière] Un semis rattaché à une parcelle pépinière
+    # (serre, "Non localisé"...) ou sans parcelle du tout est un stade "en
+    # germination" — pas encore repiqué en godet (mise_en_godet). Sans ce bloc,
+    # ces graines ne remontent dans AUCUNE vue : ni "pleine terre" (exclues par
+    # _cond_semis_pleine_terre), ni "pépinière" (calculée uniquement depuis
+    # mise_en_godet). On les fusionne donc ici dans le même dict que les godets,
+    # avec un statut dédié quand aucune mise_en_godet n'existe encore pour ce
+    # couple (culture, variete).
+    from sqlalchemy import or_ as _sa_or
+    _q_semis_pep = (
+        db.query(Evenement.culture, Evenement.variete, Evenement.quantite, Evenement.unite)
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.culture.isnot(None))
+        .filter(_sa_or(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
+    )
+    if cutoff is not None:
+        _q_semis_pep = _q_semis_pep.filter(Evenement.date <= cutoff)
+    semis_par_cv: Dict[tuple, Dict[str, float]] = {}
+    for culture, variete, qte, unite in _q_semis_pep.all():
+        u = unite or "graines"
+        sous_total = semis_par_cv.setdefault((culture, variete), {})
+        sous_total[u] = sous_total.get(u, 0.0) + (qte or 0.0)
+
+    for (culture, variete), par_unite in semis_par_cv.items():
+        unite_dom = max(par_unite, key=par_unite.get)
+        total_seme = par_unite[unite_dom]
+        consommees = graines_par_cv.get((culture, variete), 0)
+        reste = max(0, total_seme - consommees)
+        if reste <= 0:
+            continue
+
+        key = culture + (f" ({variete})" if variete else "")
+        if key in result:
+            result[key]["graines_en_germination"] = int(reste)
+            result[key]["unite_germination"]      = unite_dom
+        else:
+            result[key] = {
+                "culture":               culture,
+                "variete":               variete,
+                "nb_godets":             0,
+                "nb_graines_semees":     0,
+                "nb_plants_godets":      0,
+                "nb_plantes":            0,
+                "nb_vendus":             0,
+                "nb_pertes_godet":       0,
+                "stock_residuel_godet":  0,
+                "taux_reussite":         None,
+                "graines_en_germination": int(reste),
+                "unite_germination":      unite_dom,
+                "statut":                 "en_germination",
+            }
+
     return dict(sorted(result.items()))
 
 
