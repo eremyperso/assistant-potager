@@ -32,6 +32,51 @@ def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
     return datetime(date_ref.year, date_ref.month, date_ref.day, 23, 59, 59)
 
 
+import logging as _logging
+_log_stock = _logging.getLogger("potager")
+
+# [migration_v15] parcelles.est_pepiniere classe explicitement une parcelle comme
+# serre/pépinière (y compris la parcelle synthétique "Non localisé", migration_v12,
+# marquée est_pepiniere=true par migration_v15). Un semis rattaché à une telle
+# parcelle reste un semis pépinière tant qu'aucune plantation réelle n'a eu lieu —
+# même si son parcelle_id est renseigné. isnot(None) seul ne suffit donc pas pour
+# détecter "pleine terre".
+def _cond_semis_pleine_terre(evenement_cls, parcelle_cls):
+    """[US-037 CA4/CA5] Condition SQL : semis rattaché à une VRAIE parcelle de
+    pleine terre (parcelle_id non null ET parcelle non marquée pépinière)."""
+    return (
+        (evenement_cls.parcelle_id.isnot(None))
+        & (parcelle_cls.est_pepiniere.is_(False))
+    )
+
+
+def _resoudre_unite_dominante(
+    par_unite: "Dict[str, Dict[str, float]]", contexte: str = "",
+) -> "Dict[str, tuple]":
+    """
+    [US-037 / CA2] Une même culture ne doit JAMAIS voir ses quantités additionnées
+    entre unités incompatibles (ex : 100 graines + 2 m² ≠ 102 de quoi que ce soit).
+
+    Reçoit { culture: { unite: total } } et retourne { culture: (total, unite) } en
+    ne conservant QUE l'unité dominante (celle au plus grand total cumulé) par
+    culture. Les quantités des autres unités sont exclues du total affiché — pas
+    additionnées, pas converties — et un warning est loggé pour rester traçable.
+    """
+    result: Dict[str, tuple] = {}
+    for culture, totaux in par_unite.items():
+        if not totaux:
+            continue
+        unite_dominante, total_dominant = max(totaux.items(), key=lambda kv: kv[1])
+        if len(totaux) > 1:
+            _log_stock.warning(
+                "[US-037 CA2] Unités incompatibles pour '%s'%s : %s — seule '%s' (%.2f) est comptée, "
+                "les autres unités sont exclues du total (pas additionnées, pas converties)",
+                culture, f" ({contexte})" if contexte else "", totaux, unite_dominante, total_dominant,
+            )
+        result[culture] = (total_dominant, unite_dominante)
+    return result
+
+
 @dataclass
 class StockCulture:
     """[US-002] Données de stock agronomique pour une culture donnée.
@@ -101,6 +146,9 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
 
     Algorithme :
     1. Agréger plantations par (culture, unite) avec rang
+    1b. [US-037 / CA4, CA5] Agréger les semis pleine terre (parcelle_id non null)
+        comme des plantations à part entière — pas de conversion d'unité (m²
+        reste m², pieds reste pieds), pas de multiplication par un rang.
     2. Agréger pertes par culture
     3. Agréger récoltes par (culture, unite)
     4. Récupérer le type_organe depuis culture_config
@@ -123,15 +171,49 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations_raw = _q_plant.all()
 
-    plantes: Dict[str, tuple] = {}   # culture → (total_plants, unite)
+    # [US-037 / CA2] Accumulation PAR unité — jamais directement en un seul total,
+    # pour ne jamais additionner des graines avec des m² ou des pieds.
+    plantes_par_unite: Dict[str, Dict[str, float]] = {}
+
+    def _accumuler(culture: str, unite: str, total: float) -> None:
+        sous_dict = plantes_par_unite.setdefault(culture, {})
+        sous_dict[unite] = sous_dict.get(unite, 0.0) + total
+
     for culture, unite, qte, rang in plantations_raw:
         total = (qte or 0) * (rang or 1)
-        key = culture
-        cur_total, cur_unite = plantes.get(key, (0.0, unite or "plants"))
-        plantes[key] = (cur_total + total, unite or cur_unite)
+        _accumuler(culture, unite or "plants", total)
 
-    if not plantes:
+    # ── 1b. [US-037 / CA4, CA5] Semis pleine terre (parcelle_id non null) ───
+    # Un semis directement lié à une VRAIE parcelle de pleine terre est un semis à
+    # la volée / en terre, pas un semis en barquette destiné à la pépinière (celui-ci
+    # n'a pas de parcelle_id, ou est rattaché à une parcelle marquée
+    # est_pepiniere=true — serre, pépinière, ou la parcelle factice "Non localisé").
+    # Il alimente donc directement le stock, comme une plantation : aucune
+    # conversion d'unité (m² reste m², pieds/graines restent tels quels).
+    _q_semis_pt = (
+        db.query(
+            Evenement.culture,
+            Evenement.unite,
+            Evenement.quantite,
+        )
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.culture.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
+    )
+    if cutoff is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
+    semis_pt_raw = _q_semis_pt.all()
+
+    for culture, unite, qte in semis_pt_raw:
+        _accumuler(culture, unite or "graines", qte or 0.0)
+
+    if not plantes_par_unite:
         return {}
+
+    # [US-037 / CA2] Résolution : une seule unité "dominante" par culture, jamais
+    # de somme entre unités différentes (voir _resoudre_unite_dominante).
+    plantes = _resoudre_unite_dominante(plantes_par_unite, contexte="plantations+semis pleine terre")
 
     # ── 2. Pertes par culture ───────────────────────────────────────────────
     _q_pertes = (
@@ -216,25 +298,36 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
     return result
 
 
+def _fmt_qte_unite(valeur: float, unite: str) -> float | int:
+    """[US-037 / CA9] Une surface m² est fractionnable (1.5 m²) — ne jamais tronquer
+    en entier comme pour un nombre de plants/graines/pieds. Un m² entier (2.0) s'affiche
+    "2", pas "2.0"."""
+    if unite == "m²":
+        arrondi = round(valeur, 2)
+        return int(arrondi) if arrondi == int(arrondi) else arrondi
+    return int(valeur)
+
+
 def format_stock_ligne_telegram(s: StockCulture) -> str:
     """
-    [US-002 / CA3] [US-036] Formate une ligne de stock pour /stats Telegram.
+    [US-002 / CA3] [US-036] [US-037 / CA9] Formate une ligne de stock pour /stats Telegram.
 
     Exemples attendus :
     - végétatif  : "salade : *19 plants* (planté 25, perdu 4, récolté 2)"
     - végétatif pesé : "betterave : *18 plants* (planté 20, récolté 2) · *0.25 kg* récoltés"
     - reproducteur: "tomate : *5 plants actifs* · 8.5 kg récoltés (3 fois)"
+    - reproducteur semé en m² : "haricot : *2 m² actifs* · 1.4 kg récoltés (2 fois)"
     - inconnu    : "carotte : *50 plants* (planté 50)"
     """
-    stock = int(s.stock_plants)
     unite = s.unite
+    stock = _fmt_qte_unite(s.stock_plants, unite)
 
     if s.is_reproducteur:
         # Stock = plantes vivantes ; rendement = poids cumulé (pool "poids")
         base = f"• {s.culture} : *{stock} {unite} actifs*"
-        details = [f"planté {int(s.plants_plantes)}"]
+        details = [f"planté {_fmt_qte_unite(s.plants_plantes, unite)}"]
         if s.plants_perdus > 0:
-            details.append(f"perdu {int(s.plants_perdus)}")
+            details.append(f"perdu {_fmt_qte_unite(s.plants_perdus, unite)}")
 
         if s.rendement_total > 0:
             r_val  = round(s.rendement_total, 2)
@@ -247,11 +340,11 @@ def format_stock_ligne_telegram(s: StockCulture) -> str:
     else:
         # Végétatif : récolte en pièces réduit le stock ; le poids (s'il existe) est un rendement à part
         base = f"• {s.culture} : *{stock} {unite}*"
-        details = [f"planté {int(s.plants_plantes)}"]
+        details = [f"planté {_fmt_qte_unite(s.plants_plantes, unite)}"]
         if s.plants_perdus > 0:
-            details.append(f"perdu {int(s.plants_perdus)}")
+            details.append(f"perdu {_fmt_qte_unite(s.plants_perdus, unite)}")
         if s.recoltes_total > 0:
-            details.append(f"récolté {int(s.recoltes_total)}")
+            details.append(f"récolté {_fmt_qte_unite(s.recoltes_total, unite)}")
         base += f" ({', '.join(details)})"
 
         if s.rendement_total > 0:
@@ -275,33 +368,31 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
     """
     cutoff = _cutoff_dt(date_ref)
 
+    # [US-037 / CA2] Lecture brute par (culture, unite) — jamais un SUM SQL global
+    # par culture, qui additionnerait à tort des graines et des m² entre eux.
     _q_semis = (
-        db.query(
-            Evenement.culture,
-            func.count(Evenement.id),
-            func.sum(Evenement.quantite),
-        )
+        db.query(Evenement.culture, Evenement.unite, Evenement.quantite)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.culture)
     )
     if cutoff is not None:
         _q_semis = _q_semis.filter(Evenement.date <= cutoff)
-    semis_raw = _q_semis.all()
-    if not semis_raw:
+    semis_rows = _q_semis.all()
+    if not semis_rows:
         return {}
 
-    _q_unites = (
-        db.query(Evenement.culture, Evenement.unite)
-        .filter(Evenement.type_action == "semis")
-        .filter(Evenement.culture.isnot(None))
-        .filter(Evenement.unite.isnot(None))
-        .distinct(Evenement.culture)
-    )
-    if cutoff is not None:
-        _q_unites = _q_unites.filter(Evenement.date <= cutoff)
-    unites_raw = _q_unites.all()
-    unites: Dict[str, str] = {c: u for c, u in unites_raw}
+    semis_par_unite: Dict[str, Dict[str, float]] = {}
+    nb_par_culture_unite: Dict[str, Dict[str, int]] = {}
+    for culture, unite, qte in semis_rows:
+        u = unite or "graines"
+        sous_total = semis_par_unite.setdefault(culture, {})
+        sous_total[u] = sous_total.get(u, 0.0) + (qte or 0.0)
+        sous_nb = nb_par_culture_unite.setdefault(culture, {})
+        sous_nb[u] = sous_nb.get(u, 0) + 1
+
+    # Résolution : une seule unité dominante par culture (voir _resoudre_unite_dominante).
+    semis_resolus = _resoudre_unite_dominante(semis_par_unite, contexte="calcul_semis")
+    unites: Dict[str, str] = {c: u for c, (_, u) in semis_resolus.items()}
 
     # Graines consommées par culture : nb_graines_semees si fourni, sinon nb_plants_godets.
     # Règle métier : "5 plants sur 10 graines" → 10 graines consommées (toute la barquette),
@@ -352,12 +443,12 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         if c.lower() not in cultures_avec_godets
     }
 
-    # Parcelles de semis pleine terre (parcelle_id non null) par culture
+    # Parcelles de semis pleine terre (parcelle_id non null, hors "Non localisé") par culture
     _q_parcelles_pt = (
         db.query(Evenement.culture, Parcelle.nom)
         .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
-        .filter(Evenement.parcelle_id.isnot(None))
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
         .filter(Parcelle.actif.is_(True))
     )
     if cutoff is not None:
@@ -371,8 +462,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
             parcelles_pt[culture_pt].append(nom_p)
 
     result: Dict[str, dict] = {}
-    for culture, nb, total in semis_raw:
-        total_seme  = total or 0
+    for culture, (total_seme, unite_dominante) in semis_resolus.items():
+        nb          = nb_par_culture_unite.get(culture, {}).get(unite_dominante, 0)
         consommees  = graines_consommees.get(culture, 0)
         perte_semis = pertes_semis_dict.get(culture, 0)
         result[culture] = {
@@ -437,22 +528,33 @@ def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date
         graines_consommees_var[variete] = graines_consommees_var.get(variete, 0) + consommees
         plants_en_godet_var[variete]    = plants_en_godet_var.get(variete, 0) + plants
 
-    agregat: Dict[Optional[str], dict] = {}
+    # [US-037 / CA2] Accumulation par (variete, unite) — jamais un total qui mélange
+    # graines/pieds/m² pour une même variété (voir _resoudre_unite_dominante).
+    semis_par_unite_var: Dict[Optional[str], Dict[str, float]] = {}
+    nb_par_variete_unite: Dict[Optional[str], Dict[str, int]] = {}
+    date_premier_par_variete: Dict[Optional[str], datetime] = {}
     for variete, unite, qte, date_ev in semis_raw:
-        if variete not in agregat:
-            agregat[variete] = {
-                "nb_semis":           0,
-                "total_seme":         0.0,
-                "unite":              unite or "graines",
-                "date_premier_semis": date_ev,
-            }
-        agregat[variete]["nb_semis"] += 1
-        agregat[variete]["total_seme"] += qte or 0.0
+        u = unite or "graines"
+        sous_total = semis_par_unite_var.setdefault(variete, {})
+        sous_total[u] = sous_total.get(u, 0.0) + (qte or 0.0)
+        sous_nb = nb_par_variete_unite.setdefault(variete, {})
+        sous_nb[u] = sous_nb.get(u, 0) + 1
         if date_ev and (
-            agregat[variete]["date_premier_semis"] is None
-            or date_ev < agregat[variete]["date_premier_semis"]
+            variete not in date_premier_par_variete
+            or date_ev < date_premier_par_variete[variete]
         ):
-            agregat[variete]["date_premier_semis"] = date_ev
+            date_premier_par_variete[variete] = date_ev
+
+    semis_var_resolus = _resoudre_unite_dominante(semis_par_unite_var, contexte=f"{culture} semis par variété")
+    agregat: Dict[Optional[str], dict] = {
+        variete: {
+            "nb_semis":           nb_par_variete_unite.get(variete, {}).get(unite, 0),
+            "total_seme":         total,
+            "unite":              unite,
+            "date_premier_semis": date_premier_par_variete.get(variete),
+        }
+        for variete, (total, unite) in semis_var_resolus.items()
+    }
 
     result = []
     for variete, d in sorted(agregat.items(), key=lambda x: ("" if x[0] is None else x[0])):
@@ -576,10 +678,10 @@ def calcul_rendement_mensuel(db: Session, annee: int, date_ref: Optional[_date] 
 
 def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
     """
-    [US-002 / CA4] [US-036] Retourne les données de stock sous forme JSON pour l'API /stats.
+    [US-002 / CA4] [US-036] [US-037 / CA9] Retourne les données de stock sous forme JSON pour l'API /stats.
 
     Champs distincts selon le type :
-    - stock_plants         : plants actuellement en vie
+    - stock_plants         : plants actuellement en vie (fractionnaire si unite="m²")
     - rendement_total      : total récolté en poids (toujours pour reproducteur ;
                               également pour végétatif si des récoltes pesées existent)
     - unite_rendement      : unité du rendement
@@ -589,9 +691,9 @@ def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
         entry = {
             "culture"            : culture,
             "type_organe"        : s.type_organe or "inconnu",
-            "plants_plantes"     : int(s.plants_plantes),
-            "plants_perdus"      : int(s.plants_perdus),
-            "stock_plants"       : int(s.stock_plants),
+            "plants_plantes"     : _fmt_qte_unite(s.plants_plantes, s.unite),
+            "plants_perdus"      : _fmt_qte_unite(s.plants_perdus, s.unite),
+            "stock_plants"       : _fmt_qte_unite(s.stock_plants, s.unite),
             "unite"              : s.unite,
         }
         if s.is_reproducteur or s.rendement_total > 0:
@@ -643,8 +745,27 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations_raw = _q_plant.all()
 
+    # [US-037 / CA4, CA5, CA9] Semis pleine terre (parcelle_id non null, hors "Non
+    # localisé") par variété — alimente le stock au même titre qu'une plantation,
+    # sans conversion d'unité.
+    _q_semis_pt = (
+        db.query(
+            Evenement.variete,
+            Evenement.unite,
+            Evenement.quantite,
+            Evenement.date,
+        )
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(Evenement.type_action == "semis")
+        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
+    )
+    if cutoff is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
+    semis_pt_raw = _q_semis_pt.all()
+
     # [CA6] Culture inconnue → liste vide
-    if not plantations_raw:
+    if not plantations_raw and not semis_pt_raw:
         return []
 
     # ── 2. Pertes par variété ────────────────────────────────────────────────
@@ -682,23 +803,36 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
     )
     type_organe: Optional[str] = cfg.type_organe_recolte if cfg else None
 
-    # ── 5. Agrégation plantations par variété ───────────────────────────────
-    plantes: Dict[Optional[str], dict] = {}
+    # ── 5. Agrégation plantations + semis pleine terre par variété ──────────
+    # [US-037 / CA2] Accumulation PAR unité — jamais un total unique mélangeant
+    # graines/pieds/m² pour une même variété (voir _resoudre_unite_dominante).
+    plantes_par_unite: Dict[Optional[str], Dict[str, float]] = {}
+    date_min_par_variete: Dict[Optional[str], datetime] = {}
+
+    def _accumuler_variete(variete, unite: str, total: float, date_ev) -> None:
+        sous_dict = plantes_par_unite.setdefault(variete, {})
+        sous_dict[unite] = sous_dict.get(unite, 0.0) + total
+        if date_ev and (
+            variete not in date_min_par_variete
+            or date_ev < date_min_par_variete[variete]
+        ):
+            date_min_par_variete[variete] = date_ev
+
     for variete, unite, qte, rang, date_ev in plantations_raw:
         total = (qte or 0) * (rang or 1)
-        if variete in plantes:
-            plantes[variete]["total"] += total
-            if date_ev and (
-                plantes[variete]["date_min"] is None
-                or date_ev < plantes[variete]["date_min"]
-            ):
-                plantes[variete]["date_min"] = date_ev
-        else:
-            plantes[variete] = {
-                "total":    total,
-                "unite":    unite or "plants",
-                "date_min": date_ev,
-            }
+        _accumuler_variete(variete, unite or "plants", total, date_ev)
+
+    # [US-037 / CA4, CA5] Semis pleine terre fusionnés dans le même pool — pas de
+    # rang appliqué (un semis à la volée n'a pas de notion de rang), pas de
+    # conversion d'unité.
+    for variete, unite, qte, date_ev in semis_pt_raw:
+        _accumuler_variete(variete, unite or "graines", qte or 0.0, date_ev)
+
+    plantes_resolues = _resoudre_unite_dominante(plantes_par_unite, contexte=f"{culture} par variété")
+    plantes: Dict[Optional[str], dict] = {
+        variete: {"total": total, "unite": unite, "date_min": date_min_par_variete.get(variete)}
+        for variete, (total, unite) in plantes_resolues.items()
+    }
 
     # ── 6. Agrégation récoltes par variété — 2 pools séparés [US-036] ───────
     # pool "pièces" (nombre de plants, sert au stock) vs pool "poids" (kg/g,
@@ -1256,13 +1390,13 @@ def format_variete_bloc_telegram(v: dict) -> str:
     'en cours' si date_derniere_recolte est None.
     """
     nom              = v["variete"]
-    plants_plantes   = int(v["plants_plantes"])
-    plants_perdus    = int(v["plants_perdus"])
+    unite_plant      = v["unite_plant"] or "plants"
+    plants_plantes   = _fmt_qte_unite(v["plants_plantes"], unite_plant)
+    plants_perdus    = _fmt_qte_unite(v["plants_perdus"], unite_plant)
     recoltes_total   = v["recoltes_total"]
     nb_recoltes_poids = v.get("nb_recoltes_poids", 0)
     rendement_total  = v.get("rendement_total", 0.0)
     unite_rendement  = v.get("unite_rendement") or "unités"
-    unite_plant      = v["unite_plant"] or "plants"
     type_organe      = v["type_organe"]
     date_plantation  = v["date_premiere_plantation"]
     date_recolte     = v["date_derniere_recolte"]

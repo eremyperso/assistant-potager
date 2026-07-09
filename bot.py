@@ -47,7 +47,7 @@ from telegram.ext import (
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler
 )
 from groq import Groq
-from sqlalchemy import func
+from sqlalchemy import func, or_, and_, select
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
 from database.db import SessionLocal, Base, engine
@@ -337,7 +337,11 @@ _HELP_PARCELLE = (
     "  → /parcelle modifier nord exposition=sud\n"
     "  → /parcelle modifier nord superficie=8.5\n"
     "  → /parcelle modifier nord exposition=sud superficie=8.5\n"
-    "  _Paramètres : exposition · superficie · ordre_\n"
+    "  → /parcelle modifier serre pepiniere=true\n"
+    "  _Paramètres : exposition · superficie · ordre · pepiniere_\n"
+    "  _pepiniere=true : une serre/pépinière ne compte jamais comme_\n"
+    "  _pleine terre — un semis qui y est rattaché reste en pépinière_\n"
+    "  _tant qu'aucune plantation réelle n'a eu lieu ailleurs._\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
     "  → /parcelle renommer sud carré-sud\n"
     "• Supprimer une parcelle (soft-delete — historique conservé)\n"
@@ -1343,6 +1347,26 @@ _ACTION_TIMEOUT = 60  # secondes
 
 _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
 
+# [US-037 / CA1, CA2, CA6, CA8] Unités valides pour un semis, normalisées vers
+# la forme canonique stockée en base : "graines" | "pieds" | "m²".
+# Le m² est une surface autonome — elle n'est JAMAIS convertie en graines/pieds.
+_UNITES_SEMIS_CANONIQUES: dict[str, str] = {
+    "graine": "graines", "graines": "graines",
+    "pied": "pieds", "pieds": "pieds", "plant": "pieds", "plants": "pieds",
+    "m2": "m²", "m²": "m²", "metre carre": "m²", "mètre carré": "m²",
+    "metres carres": "m²", "mètres carrés": "m²", "m^2": "m²",
+}
+
+
+def _normalize_unite_semis(unite_brute: str | None) -> str:
+    """[US-037 / CA1, CA2, CA6] Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²'.
+
+    Ne force JAMAIS une surface m² vers une autre unité — seule une unité
+    totalement inconnue retombe sur 'graines' par défaut (comportement historique).
+    """
+    cle = (unite_brute or "").lower().strip()
+    return _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+
 _RECOLTE_PENDING: dict[int, dict] = {}
 _RECOLTE_TIMEOUT = 60  # secondes
 
@@ -1355,6 +1379,10 @@ _QUANTITE_TIMEOUT = 60  # secondes
 # [US-036 CA10] Récolte végétative pesée sans nombre de pieds → clarification {user_id: {items, texte, ts}}
 _RECOLTE_PIECES_PENDING: dict[int, dict] = {}
 _RECOLTE_PIECES_TIMEOUT = 60  # secondes
+
+# [US-037 CA7] Semis d'une culture absente de CultureConfig → clarification végétatif/reproducteur
+_SEMIS_CULTURE_PENDING: dict[int, dict] = {}
+_SEMIS_CULTURE_TIMEOUT = 90  # secondes
 
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
@@ -1727,14 +1755,34 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 _ACTIONS_SOURCE = {"plantation", "semis", "mise_en_godet", "vendu", "perte_godet"}
 
 
+def _cond_localisation_culture():
+    """[US-037 / migration_v15] Une culture est "localisée" via une 'plantation' OU un
+    'semis' directement lié à une VRAIE parcelle de pleine terre (semis pleine terre).
+    Un semis SANS parcelle_id (pépinière, destiné à un godet), ou rattaché à une
+    parcelle marquée est_pepiniere=true (serre, pépinière, ou la parcelle factice
+    "Non localisé"), n'est jamais considéré comme une localisation.
+
+    Utilise une sous-requête plutôt qu'un join sur Parcelle : cette condition est
+    réutilisée dans des requêtes sur Evenement seul, sans jointure Parcelle."""
+    pepiniere_ids = select(Parcelle.id).where(Parcelle.est_pepiniere.is_(True))
+    return or_(
+        Evenement.type_action == "plantation",
+        and_(
+            Evenement.type_action == "semis",
+            Evenement.parcelle_id.isnot(None),
+            Evenement.parcelle_id.notin_(pepiniere_ids),
+        ),
+    )
+
+
 def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
-    """Retourne les parcelles distinctes où cette culture a été plantée."""
+    """Retourne les parcelles distinctes où cette culture a été plantée ou semée en pleine terre."""
     q = (
         db.query(Parcelle)
         .join(Evenement, Evenement.parcelle_id == Parcelle.id)
         .filter(
             Parcelle.actif == True,
-            Evenement.type_action == "plantation",
+            _cond_localisation_culture(),
             Evenement.culture == culture,
         )
     )
@@ -1799,15 +1847,24 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                     else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                     return
 
-            # Normalisation unité semis : "graines" par défaut si absent ou non reconnu
+            # [US-037 / CA1, CA2, CA6] Normalisation unité semis : graines | pieds | m².
+            # Le m² n'est JAMAIS reconverti en graines/pieds — seule une unité vraiment
+            # inconnue retombe sur 'graines' par défaut (comportement historique).
+            type_organe_semis: str | None = None
             if normalize_action(parsed.get("action")) == "semis":
-                unite_brute = (parsed.get("unite") or "").lower().strip()
-                if unite_brute not in _UNITES_SEMIS_VALIDES:
+                unite_normalisee = _normalize_unite_semis(parsed.get("unite"))
+                if unite_normalisee != (parsed.get("unite") or "").lower().strip():
                     log.info(
-                        "[semis] Unité '%s' non reconnue → forcée à 'graines' (culture=%s)",
-                        parsed.get("unite"), parsed.get("culture"),
+                        "[US-037] Unité semis '%s' normalisée en '%s' (culture=%s)",
+                        parsed.get("unite"), unite_normalisee, parsed.get("culture"),
                     )
-                    parsed["unite"] = "graines"
+                parsed["unite"] = unite_normalisee
+
+                # [US-037 / CA3] Résolution type_organe_recolte via CultureConfig
+                culture_semis = (parsed.get("culture") or "").strip()
+                if culture_semis:
+                    from utils.stock import get_type_organe
+                    type_organe_semis = get_type_organe(db, culture_semis)
 
             # [US-029 CA5/CA7/CA8] Plantation : héritage variété + source_evenement_ids
             source_evenement_ids: str | None = parsed.get("source_evenement_ids")
@@ -1842,6 +1899,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 nb_graines_semees    = _to_int(parsed.get("nb_graines_semees")),
                 nb_plants_godets     = _to_int(parsed.get("nb_plants_godets")),
                 source_evenement_ids = source_evenement_ids,
+                type_organe_recolte  = type_organe_semis,
             )
             db.add(event)
             db.commit()
@@ -1880,6 +1938,53 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     if len(saved_items) == 1:
         parsed, _ = saved_items[0]
         await send_voice_reply(update, _build_recap_tts(parsed))
+
+
+async def _semis_organe_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-037 CA7] Callback inline — végétatif/reproducteur pour une culture inconnue lors d'un semis."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    data    = query.data  # semis_organe:végétatif | semis_organe:reproducteur | semis_organe_cancel
+
+    if data == "semis_organe_cancel":
+        _SEMIS_CULTURE_PENDING.pop(user_id, None)
+        log.info(f"[US-037 CA7] Semis annulé (culture inconnue) — user_id={user_id}")
+        await query.edit_message_text("❌ Semis annulé.", reply_markup=None)
+        return
+
+    pending = _SEMIS_CULTURE_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre semis.")
+        return
+
+    import time as _time_mod
+    if _time_mod.time() - pending["ts"] > _SEMIS_CULTURE_TIMEOUT:
+        await query.edit_message_text(f"⏱ *Confirmation expirée ({_SEMIS_CULTURE_TIMEOUT} s), semis annulé.*", parse_mode="Markdown")
+        return
+
+    type_organe = data[len("semis_organe:"):]
+    items       = pending["items"]
+    culture     = (items[0].get("culture") or "").strip()
+
+    db = SessionLocal()
+    try:
+        from database.models import CultureConfig
+        cfg = db.query(CultureConfig).filter(CultureConfig.nom == culture).first()
+        if cfg is None:
+            db.add(CultureConfig(nom=culture, type_organe_recolte=type_organe))
+            db.commit()
+            log.info(f"[US-037 CA7] CultureConfig créée : '{culture}' → {type_organe}")
+    finally:
+        db.close()
+
+    await query.edit_message_text(
+        f"✅ *{culture.capitalize()}* enregistrée comme culture *{type_organe}*.",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+    await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
 
 
 async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2007,6 +2112,43 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             reply_markup=MENU_KEYBOARD
         )
         return
+
+    # [US-037 / CA7] Semis d'une culture inconnue de CultureConfig — demander
+    # à l'utilisateur si elle est végétative ou reproductive avant d'enregistrer.
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "semis"
+        and items[0].get("culture")
+    ):
+        culture_semis_ca7 = items[0]["culture"].strip()
+        from utils.stock import get_type_organe as _get_type_organe_ca7
+        db_tmp = SessionLocal()
+        try:
+            type_organe_connu = _get_type_organe_ca7(db_tmp, culture_semis_ca7)
+        finally:
+            db_tmp.close()
+
+        if type_organe_connu is None:
+            import time as _time_ca7
+            user_id = update.effective_user.id
+            _SEMIS_CULTURE_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time_ca7.time()}
+            buttons = [
+                [InlineKeyboardButton("🌱 Végétative (récolte = plante entière)", callback_data="semis_organe:végétatif")],
+                [InlineKeyboardButton("🔁 Reproductive (récoltes multiples)", callback_data="semis_organe:reproducteur")],
+                [InlineKeyboardButton("❌ Annuler", callback_data="semis_organe_cancel")],
+            ]
+            await message.reply_text(
+                f"🤔 *{culture_semis_ca7.capitalize()}* est une culture inconnue.\n\n"
+                "Est-elle *végétative* (on récolte la plante entière, ex: carotte, salade) "
+                "ou *reproductive* (on cueille plusieurs fois, ex: tomate, haricot) ?",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(buttons),
+            )
+            log.info(
+                "[US-037 CA7] Culture '%s' inconnue de CultureConfig — clarification demandée user_id=%s",
+                culture_semis_ca7, user_id,
+            )
+            return
 
     # [US-019 / CA1-CA3] Interception mise_en_godet sans variété — sélection assistée
     import time as _time
@@ -2927,6 +3069,7 @@ async def cmd_parcelle(update, ctx) -> None:
         "Exemples :\n"
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
+        "  /parcelle modifier serre pepiniere=true\n"
         "  /parcelle renommer sud carré-sud\n\n"
         "_Pour supprimer une parcelle : /help parcelle_"
     )
@@ -2956,6 +3099,8 @@ async def cmd_parcelle(update, ctx) -> None:
                     details.append(f"exposition {p.exposition}")
                 if p.superficie_m2 is not None:
                     details.append(f"{p.superficie_m2} m²")
+                if p.est_pepiniere:
+                    details.append("🌱 pépinière")
                 detail_str = f" · {' · '.join(details)}" if details else ""
                 lignes.append(f"📍 *{p.nom.upper()}*{detail_str}")
             lignes.append("\n_Ajouter : /parcelle ajouter [nom] [exposition] [superficie]_")
@@ -4209,7 +4354,7 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
         rows = (
             db.query(Evenement)
             .filter(
-                Evenement.type_action == "plantation",
+                _cond_localisation_culture(),
                 func.lower(Evenement.culture) == culture,
             )
             .all()
@@ -4219,7 +4364,7 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
             rows = (
                 db.query(Evenement)
                 .filter(
-                    Evenement.type_action == "plantation",
+                    _cond_localisation_culture(),
                     func.lower(Evenement.culture).ilike(f"%{culture_norm[:6]}%"),
                 )
                 .all()
@@ -4233,13 +4378,13 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
 
     if not rows:
         await update.message.reply_text(
-            f"❌ Aucune plantation de *{culture}* trouvée en base.\n\n"
+            f"❌ Aucune plantation ni semis pleine terre de *{culture}* trouvé en base.\n\n"
             f"_Vérifiez le nom avec /stats_",
             parse_mode="Markdown",
             reply_markup=MENU_KEYBOARD,
         )
         ctx.user_data['mode'] = None
-        log.info(f"[US-007 CA2] Aucune plantation pour culture='{culture}'")
+        log.info(f"[US-007 CA2] Aucune plantation/semis pleine terre pour culture='{culture}'")
         return
 
     ctx.user_data['depl_culture'] = culture
@@ -4254,7 +4399,7 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
         lines = [f"🌿 J'ai trouvé *{len(varietes_remplies)} variété(s)* de *{culture}* plantée(s) :\n"]
         for v in varietes_remplies:
             nb = sum(1 for e in rows if (e.variete or "") == v)
-            lines.append(f"• *{v}* — {nb} plantation(s)")
+            lines.append(f"• *{v}* — {nb} enregistrement(s)")
         lines.append("\nSouhaitez-vous déplacer *toutes* les variétés ou une en particulier ?")
         lines.append("Tapez `toutes` ou le nom d'une variété.")
         await update.message.reply_text(
@@ -4344,9 +4489,9 @@ async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
         parcelle_id_cible = parcelle_obj.id if parcelle_obj else None
         nom_affiche = parcelle_obj.nom.upper() if parcelle_obj else nom_parcelle.upper()
 
-        # Compter les enregistrements plantation concernés
+        # Compter les enregistrements plantation/semis pleine terre concernés
         q = db.query(Evenement).filter(
-            Evenement.type_action == "plantation",
+            _cond_localisation_culture(),
             func.lower(Evenement.culture) == culture.lower(),
         )
         if variete is not None:
@@ -4357,7 +4502,7 @@ async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
 
     if nb_records == 0:
         await update.message.reply_text(
-            f"❌ Aucune plantation de *{culture}* trouvée.",
+            f"❌ Aucune plantation ni semis pleine terre de *{culture}* trouvé.",
             parse_mode="Markdown",
         )
         _depl_reset(ctx)
@@ -4373,7 +4518,7 @@ async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
         f"✅ *Récapitulatif :*\n"
         f"🌿 Culture : *{culture}*{var_str}\n"
         f"📍 Nouvelle parcelle : *{nom_affiche}*\n"
-        f"📝 Enregistrements mis à jour : *{nb_records}* plantation(s)\n\n"
+        f"📝 Enregistrements mis à jour : *{nb_records}* plantation(s)/semis\n\n"
         f"Confirmez-vous ? (*oui* / *non*)"
     )
     await update.message.reply_text(
@@ -4424,9 +4569,11 @@ async def _depl_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
             parc = db.get(Parcelle, parcelle_id)
             nom_affiche = parc.nom.upper() if parc else nom_parcelle.upper()
 
-        # Récupérer les événements à mettre à jour
+        # [US-037] Récupérer les événements à mettre à jour : plantations ET semis
+        # pleine terre (parcelle_id déjà renseigné) — un semis pépinière n'est jamais
+        # concerné puisqu'il n'a pas de localisation à déplacer.
         q = db.query(Evenement).filter(
-            Evenement.type_action == "plantation",
+            _cond_localisation_culture(),
             func.lower(Evenement.culture) == culture.lower(),
         )
         if variete is not None:
@@ -4684,6 +4831,7 @@ def main():
 
     # [US-021] Confirmation avant enregistrement — boutons inline
     app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
+    app.add_handler(CallbackQueryHandler(_semis_organe_cb, pattern=r"^semis_organe"))
 
     # [US-009] Suppression parcelle — boutons inline
     app.add_handler(CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_"))

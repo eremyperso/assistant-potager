@@ -43,17 +43,58 @@ pytest tests/
 pytest tests/test_us006_renommer_parcelle.py   # single test file
 pytest tests/ -k "test_name"                   # single test by name
 
-# Start Telegram bot
-python bot.py
-
-# Start FastAPI server (http://localhost:8000)
-uvicorn main:app --host 0.0.0.0 --port 8000
-# NB: main.py n'a pas de bloc __main__ — `python main.py` ne lance rien.
-
 # Apply latest database migration
 psql -d potager -f migrations/migration_v12.sql
+```
 
-# Redéployer l'environnement dev local (pull + deps + migrations)
+### Lancer le bot Telegram et l'API en local (PowerShell, Windows)
+
+Le shell par défaut est PowerShell, pas bash — `VAR=val cmd` ne fonctionne pas, et
+`uvicorn`/`python` doivent venir du venv du projet (`.venv/`), pas du PATH global.
+
+```powershell
+cd "C:\Users\eremy\OneDrive - SQLI\Documents\GitHub\assistant-potager"
+.\.venv\Scripts\Activate.ps1          # active le venv pour la session courante
+$env:APP_ENV = "dev"                  # reste actif pour tout le terminal, une seule fois
+
+# Bot Telegram — pas de --reload possible, il faut arrêter (Ctrl+C) et relancer
+# manuellement à chaque modification de bot.py / groq_client.py / config.py
+python bot.py
+
+# API FastAPI (http://localhost:8000) — sert aussi le frontend buildé (frontend/dist)
+# --reload recharge automatiquement à chaque modification de fichier Python
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# NB: main.py n'a pas de bloc __main__ — `python main.py` ne lance rien, il faut passer par uvicorn.
+
+# Si Activate.ps1 est bloqué par la politique d'exécution PowerShell, contourner via :
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Mettre à jour le frontend si l'interface change
+
+Le dashboard React (`frontend/`, Vite) peut tourner de deux façons :
+
+```powershell
+# Mode dev — hot reload instantané, pointe sur l'API via frontend/.env.local (VITE_API_URL)
+cd frontend
+npm install        # une seule fois / après changement de dépendances
+npm run dev        # http://localhost:3000
+
+# Mode "comme en prod" — l'API FastAPI sert le build statique
+cd frontend
+npm run build       # génère frontend/dist
+# puis (re)démarrer l'API pour qu'elle serve le nouveau build :
+cd ..
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+`main.py` sert `frontend/dist` en priorité (fallback sur `static/` si le build React est absent) —
+toute modification de l'UI nécessite un `npm run build` avant de se refléter via l'API,
+le mode `npm run dev` (port 3000) suffit pour itérer rapidement sans rebuild.
+
+### Redéployer l'environnement dev local (pull + deps + migrations)
+
+```powershell
 .\update_dev.ps1
 .\update_dev.ps1 -SkipPull   # depuis un hook git
 .\update_dev.ps1 -Force      # tout rejouer
@@ -254,6 +295,32 @@ Puis dans pgAdmin (ou tout client PostgreSQL) :
 - Port : `5433`
 - Username : `potager_user`
 - DB dev : `potager_dev` / DB prod : `potager_prod`
+
+### Serveur Hetzner (`162.55.57.49`) — accès direct sans tunnel
+
+PostgreSQL 14 (cluster `main`), mêmes bases/owner que ci-dessus. Accès direct configuré
+depuis pgAdmin, restreint à l'IP fixe du poste client (whitelist, pas d'ouverture publique).
+
+Conf côté serveur (déjà appliquée, à reproduire si le serveur est réinstallé) :
+
+1. `/etc/postgresql/14/main/postgresql.conf` :
+   ```
+   listen_addresses = '*'
+   ssl = on
+   ```
+2. `/etc/postgresql/14/main/pg_hba.conf` (ligne ajoutée en bas) :
+   ```
+   host    potager_dev,potager_prod    potager_user    <IP_CLIENTE>/32    scram-sha-256
+   ```
+3. `systemctl restart postgresql`
+4. Hetzner Cloud Firewall (`potager-firewall`, console web, pas depuis le serveur) :
+   règle inbound TCP port `5432`, source = `<IP_CLIENTE>/32` (jamais `0.0.0.0/0`)
+
+⚠️ Si l'IP publique du poste client change, il faut mettre à jour à la fois la ligne
+`pg_hba.conf` et la règle du firewall Hetzner, sinon la connexion est refusée.
+
+pgAdmin (sans tunnel) : Host `162.55.57.49`, Port `5432`, Username `potager_user`,
+SSL mode `Require`.
 
 ## Déploiement & Docker
 

@@ -1,4 +1,29 @@
 
+## [v3.13.0] — 2026-07-09
+
+### 🚀 Nouveautés
+- Ajoute un statut "pépinière" sur une parcelle (`/parcelle modifier <nom> pepiniere=true`) — une serre ou un carré dédié aux semis en godet peut désormais être rattaché à un vrai lieu sans être compté comme une culture en pleine terre (US-037)
+- Affiche le marqueur "🌱 pépinière" dans `/parcelle lister` pour repérer d'un coup d'œil les parcelles exclues du calcul de stock en terre
+
+### 🐛 Corrections
+- Corrige le stock affiché dans "Stocks cultures" qui pouvait montrer un total de graines déjà consommées en godet (ex : "75 graines") à la place du nombre réel de plants en terre, quand ces graines avaient été semées sur une parcelle réelle de type serre/pépinière
+- Corrige le doublon d'affichage d'une même culture sous deux lignes distinctes ("Pépinière" et "Semis pleine terre") dans le dashboard Stocks
+
+### 💾 Base de données
+- Ajoute la colonne `parcelles.est_pepiniere` (migration_v15) — la parcelle "Non localisé" est automatiquement marquée pépinière lors de la migration
+
+## [v3.12.0] — 2026-07-07
+
+### 🚀 Nouveautés
+- Ajoute la surface (m²) comme unité de semis à part entière, en plus des graines et des pieds — dicter "semé 2 m² de haricots à la volée" enregistre la surface telle quelle, sans jamais la convertir en nombre de pieds ou de graines (US-037)
+- Le stock d'une culture est désormais alimenté directement par un semis en pleine terre (lié à une parcelle), même sans mise en godet ni plantation explicite — pour les cultures reproductives (haricot, petit pois...), les récoltes n'en décrémentent plus le stock de pieds actifs (US-037)
+- Si la culture semée est inconnue, le bot demande maintenant si elle est végétative ou reproductive avant d'enregistrer, plutôt que de sauvegarder un événement sans classification agronomique (US-037)
+
+### 🐛 Corrections
+- Corrige la perte silencieuse de la quantité dictée lors d'un semis en m² — l'unité non reconnue faisait retomber sur "graines" en effaçant la valeur numérique (US-037)
+- Corrige le calcul de surface occupée d'une parcelle (`/plan`) qui multipliait à tort un semis exprimé en m² par l'empreinte au pied de la culture, au lieu de compter la surface directement (US-037)
+- Corrige l'affichage `/stats` et dashboard qui tronquait une surface fractionnaire (ex : 1.5 m²) en entier (US-037)
+
 ## [v3.11.0] — 2026-06-22
 
 ### 🚀 Nouveautés

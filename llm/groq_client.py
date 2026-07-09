@@ -14,9 +14,13 @@ import re
 import tempfile
 from datetime import date, timedelta
 from groq import Groq
-from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL
+from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL, GROQ_REASONING_EFFORT
 
 _client = Groq(api_key=GROQ_API_KEY)
+
+# Passé aux appels chat.completions.create() — vide pour les modèles non-reasoning
+# (ex: llama-3.3-70b-versatile), où l'API Groq rejette ce paramètre.
+_REASONING_KWARGS = {"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}
 
 # ── Date du jour injectée dans le prompt ──────────────────────────────────────
 def _today_context() -> str:
@@ -76,7 +80,8 @@ def extract_intent(question: str) -> dict:
         ],
         temperature=0.0,
         max_tokens=128,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
 
     raw = chat.choices[0].message.content.strip()
@@ -113,7 +118,7 @@ Champs à extraire :
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
-  "unite"            : string,   // kg | g | l | plants | graines
+  "unite"            : string,   // kg | g | l | plants | graines | pieds | m²
   "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
   "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
   "duree_minutes"    : number,   // durée en minutes
@@ -127,6 +132,12 @@ Champs à extraire :
 RÈGLE mise_en_godet : c'est le REPIQUAGE de plantules déjà levées (tige visible) vers un godet individuel.
 On ne met JAMAIS des graines directement en godet. Si l'utilisateur dit "X graines en godet" → interpréter X comme des plants (nb_plants_godets=X, nb_graines_semees=null).
 Différence clé : semis = graines dans barquette pour germer | mise_en_godet = plants levés vers godet.
+
+RÈGLE unité de semis (action="semis" UNIQUEMENT) : trois unités possibles, à déduire du contexte SANS que l'utilisateur nomme l'unité explicitement :
+- "X m²" ou "X mètres carrés" ou "à la volée" (sans nombre de graines/pieds précisé, juste une surface) → unite="m²", quantite=X. NE JAMAIS convertir cette surface en nombre de graines ou de pieds : la valeur numérique reste telle quelle.
+- "X graines" ou semis en barquette/godet destiné à germer avant repiquage → unite="graines"
+- "X pieds" ou "X plants" semés directement en terre (pas en godet) → unite="pieds"
+Si aucune unité n'est mentionnée et qu'aucun indice de surface n'est présent → unite=null (ne pas inventer).
 
 RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne À LA FOIS un NOMBRE DE PIEDS/PLANTS ET un POIDS (ex : "2 betteraves pour 250 grammes", "récolté 3 salades, 600g au total"), NE JAMAIS additionner ces deux valeurs. Retourner DEUX objets recolte distincts dans un tableau :
 - un avec quantite=nombre de pieds et unite="plants"
@@ -151,6 +162,18 @@ Exemples :
 
 "semé des carottes nantaises parcelle est"
 → {{"action":"semis","culture":"carotte","quantite":null,"unite":null,"date":null,"parcelle":"est","rang":null,"duree_minutes":null,"traitement":null,"variete":"nantaise","commentaire":null}}
+
+"j'ai semé 2 m² de haricots verts dans la parcelle potager"
+→ {{"action":"semis","culture":"haricot","variete":"vert","quantite":2,"unite":"m²","date":null,"parcelle":"potager","rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}
+
+"semé 2 mètres carrés de mâche à la volée"
+→ {{"action":"semis","culture":"mâche","quantite":2,"unite":"m²","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
+
+"semé 50 graines de carottes"
+→ {{"action":"semis","culture":"carotte","quantite":50,"unite":"graines","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
+
+"semé 30 pieds de radis en pleine terre"
+→ {{"action":"semis","culture":"radis","quantite":30,"unite":"pieds","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
 
 "J'ai perdu 3 plants de tomates à cause du gel"
 → {{"action":"perte","culture":"tomate","quantite":3,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":"gel"}}
@@ -203,7 +226,8 @@ def parse_commande(texte: str) -> list[dict]:
         ],
         temperature=0.0,
         max_tokens=1024,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
     raw = chat.choices[0].message.content.strip()
 
@@ -276,7 +300,8 @@ def repondre_question(question: str, contexte_json: str) -> str:
         ],
         temperature=0.0,
         max_tokens=200,
-        stream=False
+        stream=False,
+        **_REASONING_KWARGS
     )
     return chat.choices[0].message.content.strip()
 
@@ -374,7 +399,7 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
       "culture": string|null,
       "variete": string|null,
       "quantite": number|null,
-      "unite": "kg|g|l|plants|graines"|null,
+      "unite": "kg|g|l|plants|graines|pieds|m²"|null,
       "parcelle": string|null,
       "rang": number|null,
       "duree_minutes": number|null,
@@ -387,9 +412,20 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
   ]
 }}
 
+=== RÈGLE unité de semis (action="semis" UNIQUEMENT) ===
+- "X m²" / "X mètres carrés" / "à la volée" → unite="m²", quantite=X (JAMAIS converti en graines ou pieds)
+- "X graines" ou semis en barquette destiné à germer avant repiquage → unite="graines"
+- "X pieds" / "X plants" semés directement en terre → unite="pieds"
+
 === EXEMPLES ===
 "récolté 800g de tomates en A1"
 → {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"recolte","culture":"tomate","variete":null,"quantite":800,"unite":"g","parcelle":"A1","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"j'ai semé 2 m² de haricots verts dans la parcelle potager"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"semis","culture":"haricot","variete":"vert","quantite":2,"unite":"m²","parcelle":"potager","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"semé 30 pieds de radis en pleine terre carré nord"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"semis","culture":"radis","variete":null,"quantite":30,"unite":"pieds","parcelle":"nord","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
 
 "historique récolte"
 → {{"intent":"HISTORIQUE","culture":null,"parcelle":null,"action_filtre":"recolte","items":null}}
@@ -463,6 +499,7 @@ def parse_message(texte: str) -> dict:
             temperature=0.0,
             max_tokens=1024,
             stream=False,
+            **_REASONING_KWARGS
         )
         raw = chat.choices[0].message.content.strip()
         if raw.startswith("```"):
@@ -512,8 +549,9 @@ def classify_intent_pwa(texte: str) -> str:
                 {"role": "user",   "content": texte},
             ],
             temperature=0.0,
-            max_tokens=8,
+            max_tokens=100,
             stream=False,
+            **_REASONING_KWARGS
         )
         result = chat.choices[0].message.content.strip().upper()
         return "INTERROGER" if "INTERROGER" in result else "ACTION"
