@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { Leaf, Sprout, ShoppingBag } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
@@ -15,6 +14,7 @@ const ORIGINE_CONFIG = {
   'pépinière':          { label: 'Pépinière',         bg: 'var(--g-acc-dim)', text: 'var(--g-acc)' },
   'pied_acheté':        { label: 'Pied acheté',        bg: 'var(--g-amb-dim)', text: 'var(--g-amb)' },
   'semis_pleine_terre': { label: 'Semis pleine terre', bg: 'var(--g-brd)',     text: 'var(--g-mid)' },
+  'non_localisé':       { label: 'Non localisé',       bg: 'var(--g-brd)',     text: 'var(--g-sec)' },
 }
 
 function OrigineBadge({ origine }) {
@@ -64,11 +64,14 @@ function CultureRow({ c }) {
 // ── Ligne semis pleine terre ──────────────────────────────────────────────────
 
 function SemisRow({ s }) {
+  // [fix visibilité semis sans parcelle] Un semis dont toutes les parcelles
+  // valent "Non localisé" n'est pas vraiment "pleine terre" — badge dédié.
+  const nonLocalise = (s.parcelles || []).every(p => p === 'Non localisé')
   return (
     <div className="flex items-center gap-2 py-2.5 border-b border-g-brd last:border-0">
       <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
         <span className="text-base font-medium capitalize" style={{ color: 'var(--g-pri)' }}>{s.culture}</span>
-        <OrigineBadge origine="semis_pleine_terre" />
+        <OrigineBadge origine={nonLocalise ? 'non_localisé' : 'semis_pleine_terre'} />
       </div>
       <div className="text-right shrink-0">
         <p className="text-base font-semibold" style={{ color: 'var(--g-pri)' }}>
@@ -129,39 +132,6 @@ function Section({ icon, title, count, titleColor, children }) {
         <span className="shrink-0">Stock</span>
       </div>
       {children}
-    </div>
-  )
-}
-
-// ── Graphe comparatif ─────────────────────────────────────────────────────────
-
-function Chart({ cultures }) {
-  const data = cultures.slice(0, 10).map(c => ({
-    name:    c.culture.length > 7 ? c.culture.slice(0, 7) + '…' : c.culture,
-    planté:  c.plants_plantes || 0,
-    perdu:   c.plants_perdus  || 0,
-    récolté: c.type_organe === 'reproducteur' ? (c.nb_recoltes || 0) : 0,
-  }))
-
-  if (!data.length) return null
-
-  return (
-    <div className="bg-g-card border border-g-brd rounded-2xl p-3.5 mb-3">
-      <p className="text-sm font-medium mb-3" style={{ color: 'var(--g-sec)' }}>
-        Comparatif semis / récolte / perte
-        {cultures.length > 10 && <span className="text-[12px] ml-1" style={{ color: 'var(--g-sec)' }}>(10 premières)</span>}
-      </p>
-      <ResponsiveContainer width="100%" height={160}>
-        <BarChart data={data} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-          <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip contentStyle={{ fontSize: 12, borderRadius: 10 }} cursor={{ fill: 'var(--g-acc-dim)' }} />
-          <Legend iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-          <Bar dataKey="planté"  fill="var(--g-acc)" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="récolté" fill="var(--g-mid)" radius={[3, 3, 0, 0]} />
-          <Bar dataKey="perdu"   fill="var(--g-red)" radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
     </div>
   )
 }
@@ -259,9 +229,6 @@ export default function Stocks({ refresh }) {
       {(filteredStocks.length === 0 && filteredSemis.length === 0 && filteredGodets.length === 0) && search && (
         <p className="text-base text-g-sec text-center mt-8">Aucune culture pour « {search} ».</p>
       )}
-
-      {/* Graphe */}
-      <Chart cultures={stocks} />
     </div>
   )
 }
