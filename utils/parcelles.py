@@ -468,12 +468,16 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         ):
             groupes[key]["date_premiere"] = date_evt
 
-    # ── 3b. Semis pleine terre (parcelle_id non null, hors parcelles pépinière) ──
+    # ── 3b. Semis pleine terre + non localisés (hors parcelles pépinière) ──────
     # Un semis avec une VRAIE parcelle_id de pleine terre = semé directement en
     # terre (pas pépinière). Un semis rattaché à une parcelle est_pepiniere=true
     # (serre, pépinière, ou la parcelle factice "Non localisé") reste un semis
-    # pépinière sans localisation. Traité séparément des plantations — pas de
-    # filtre cultures_actives.
+    # pépinière sans localisation.
+    # [fix visibilité semis sans parcelle] Un semis SANS parcelle_id du tout
+    # (aucune parcelle précisée à la dictée) n'était auparavant inclus dans
+    # aucune vue — il rejoint ici le groupe "Non localisé" (parcelle=None),
+    # au même titre que les plantations sans parcelle (CA7 plus bas).
+    # Traité séparément des plantations — pas de filtre cultures_actives.
     _q_semis_pt = (
         db.query(
             Evenement.culture,
@@ -485,7 +489,10 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         )
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
-        .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
+        .filter(
+            (Evenement.parcelle_id.is_(None))
+            | _cond_semis_pleine_terre(Evenement, Parcelle)
+        )
         .order_by(Evenement.date)
     )
     if cutoff is not None:
