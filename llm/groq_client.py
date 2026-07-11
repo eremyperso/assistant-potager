@@ -104,6 +104,96 @@ def extract_intent(question: str) -> dict:
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# [US-038] EXTRACTION DES CHAMPS D'UNE NOTE GUIDÉE
+# ─────────────────────────────────────────────────────────────────────────────
+_NOTE_FIELDS_PROMPT = """Tu es un extracteur de données pour un potager maraîcher français.
+{date_context}
+
+L'utilisateur vient de répondre à une question guidée pour noter une observation
+de catégorie "{categorie}". Analyse sa réponse et retourne UNIQUEMENT un JSON avec :
+{{
+  "culture"    : string|null,   // légume/plante au singulier minuscule concerné, si mentionné
+  "variete"    : string|null,   // variété si mentionnée
+  "parcelle"   : string|null,   // parcelle concernée si mentionnée
+  "constat"    : string,        // reformulation courte et fidèle du constat/observation (jamais vide)
+  "traitement" : string|null,   // produit/traitement appliqué ou envisagé, ou matériau de paillage
+  "duree_minutes" : number|null, // durée constatée en minutes, si pertinent (ex: arrosage)
+  "date"       : string|null    // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}
+}}
+
+Ne jamais inventer une information non mentionnée : mets null si absente.
+Le champ "constat" doit toujours être rempli avec le texte de l'observation (reformulé brièvement si besoin).
+
+Exemples :
+"tomates parcelle Nord, mildiou sur les feuilles du bas, j'ai traité au purin d'ortie"
+→ {{"culture":"tomate","variete":null,"parcelle":"Nord","constat":"mildiou sur les feuilles du bas","traitement":"purin d'ortie","duree_minutes":null,"date":null}}
+
+"sol sec sur la parcelle Sud"
+→ {{"culture":null,"variete":null,"parcelle":"Sud","constat":"sol sec","traitement":null,"duree_minutes":null,"date":null}}
+
+"paillage renouvelé sur les courgettes avec de la paille"
+→ {{"culture":"courgette","variete":null,"parcelle":null,"constat":"paillage renouvelé","traitement":"paille","duree_minutes":null,"date":null}}
+
+Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
+"""
+
+
+def extract_note_fields(categorie: str, texte: str) -> dict:
+    """
+    [US-038] Extrait les champs pertinents d'une réponse libre à une question
+    guidée de note (catégorie observation/maladie/arrosage/paillage).
+
+    Retourne toujours un dict avec les clés culture/variete/parcelle/constat/
+    traitement/duree_minutes/date. En cas d'erreur, "constat" retombe sur le
+    texte brut de l'utilisateur pour ne jamais perdre l'information saisie.
+    """
+    today      = date.today()
+    yesterday  = today - timedelta(days=1)
+    day_before = today - timedelta(days=2)
+    prompt = _NOTE_FIELDS_PROMPT.format(
+        date_context = _today_context(),
+        categorie    = categorie,
+        today_iso    = today.isoformat(),
+        yesterday    = yesterday.isoformat(),
+        day_before   = day_before.isoformat(),
+    )
+
+    try:
+        chat = _client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user",   "content": texte},
+            ],
+            temperature=0.0,
+            max_tokens=256,
+            stream=False,
+            **_REASONING_KWARGS
+        )
+        raw = chat.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            lines = raw.split("\n")
+            raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
+        parsed = json.loads(raw.strip())
+    except Exception:
+        return {
+            "culture": None, "variete": None, "parcelle": None,
+            "constat": texte.strip(), "traitement": None,
+            "duree_minutes": None, "date": None,
+        }
+
+    return {
+        "culture":       parsed.get("culture"),
+        "variete":       parsed.get("variete"),
+        "parcelle":      parsed.get("parcelle"),
+        "constat":       parsed.get("constat") or texte.strip(),
+        "traitement":    parsed.get("traitement"),
+        "duree_minutes": parsed.get("duree_minutes"),
+        "date":          parsed.get("date"),
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PROMPT PARSING — retourne UN ou PLUSIEURS JSONs selon la phrase
 # ─────────────────────────────────────────────────────────────────────────────
 PARSE_PROMPT = """Tu es un extracteur de données pour un potager maraîcher français.
@@ -369,6 +459,7 @@ Choisis UNE valeur parmi :
 - "SUPPRIMER"  : supprimer / effacer un enregistrement
 - "MENU"       : revenir au menu / accueil / annuler
 - "NOUVELLE"   : saisir une nouvelle action (après une confirmation)
+- "NOTE"       : veut NOTER/consigner une observation guidée (pas une action réalisée à enregistrer directement)
 
 === RÈGLE DE CLASSIFICATION ===
 - Message qui COMMENCE par un verbe au passé (récolté, semé, planté, arrosé...) SANS "?" → ACTION
@@ -376,6 +467,7 @@ Choisis UNE valeur parmi :
 - "stats", "bilan", "résumé", "chiffres", "total" → STATS
 - "combien", "quand", "quel", "affiche", "montre", "consulter" → INTERROGER
 - "plan", "plan du potager", "occupation" → PLAN
+- "je veux noter", "noter une observation", "ajouter une note", "prendre une note" → NOTE
 
 === FORMAT DE RÉPONSE ===
 Retourne TOUJOURS ce JSON (sans backticks, sans texte autour) :
@@ -427,6 +519,12 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 "semé 30 pieds de radis en pleine terre carré nord"
 → {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"semis","culture":"radis","variete":null,"quantite":30,"unite":"pieds","parcelle":"nord","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
 
+"je veux noter une observation sur mes tomates"
+→ {{"intent":"NOTE","culture":null,"parcelle":null,"action_filtre":null,"items":null}}
+
+"je veux noter que le sol est sec sur la parcelle Sud"
+→ {{"intent":"NOTE","culture":null,"parcelle":"Sud","action_filtre":null,"items":null}}
+
 "historique récolte"
 → {{"intent":"HISTORIQUE","culture":null,"parcelle":null,"action_filtre":"recolte","items":null}}
 
@@ -460,7 +558,7 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 
 _INTENTS_VALIDES = {
     "ACTION", "HISTORIQUE", "STATS", "INTERROGER", "PLAN",
-    "DEPLACER", "CORRIGER", "SUPPRIMER", "MENU", "NOUVELLE",
+    "DEPLACER", "CORRIGER", "SUPPRIMER", "MENU", "NOUVELLE", "NOTE",
 }
 
 

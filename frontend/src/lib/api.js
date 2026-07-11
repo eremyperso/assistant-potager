@@ -39,4 +39,12 @@ export const api = {
     if (variete) params.append('variete', variete)
     return get(`/godets/detail?${params}`)
   },
+  // [US-039] parcelleId seul (carte parcelle) | parcelleId+culture+variete (ligne culture) | culture seule (Stocks)
+  observations: ({ parcelleId, culture, variete } = {}) => {
+    const params = {}
+    if (parcelleId != null) params.parcelle_id = parcelleId
+    if (culture) params.culture = culture
+    if (variete) params.variete = variete
+    return get(`/observations${qs(params)}`)
+  },
 }
