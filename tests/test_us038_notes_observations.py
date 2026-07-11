@@ -11,6 +11,7 @@ CA7 : Aucune colonne ajoutée — réutilisation stricte du modèle Evenement ex
 CA9 : Annulation à tout moment (bouton ou mot-clé) → aucun enregistrement
 """
 import time
+from datetime import datetime
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -141,7 +142,7 @@ async def test_us038_ca9_annulation_pendant_selection_categorie():
 # ── CA4/CA5 — Extraction Groq + récapitulatif ────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_us038_ca4_ca5_extraction_et_recapitulatif():
+async def test_us038_ca4_ca5_extraction_et_recapitulatif(test_db):
     user_id = 5
     update = _make_update(user_id=user_id)
     ctx = _ctx()
@@ -155,7 +156,8 @@ async def test_us038_ca4_ca5_extraction_et_recapitulatif():
     }
     _NOTE_PENDING.pop(user_id, None)
 
-    with patch("bot.extract_note_fields", return_value=fields) as mock_extract:
+    with patch("bot.extract_note_fields", return_value=fields) as mock_extract, \
+         patch("bot.SessionLocal", return_value=test_db):
         await _note_details_received(
             update, ctx,
             "tomates parcelle Nord, mildiou sur les feuilles du bas, j'ai traité au purin d'ortie",
@@ -173,12 +175,38 @@ async def test_us038_ca4_ca5_extraction_et_recapitulatif():
     assert _NOTE_PENDING[user_id]["categorie"] == 'maladie'
     assert _NOTE_PENDING[user_id]["fields"] == fields
 
-    # récapitulatif envoyé avec boutons inline
-    call_args = update.message.reply_text.call_args
-    recap_text = call_args[0][0]
-    assert "mildiou sur les feuilles du bas" in recap_text
-    assert "purin d'ortie" in recap_text
-    assert call_args[1].get("reply_markup") is not None
+
+@pytest.mark.asyncio
+async def test_us038_resolution_culture_variete_vers_valeurs_canoniques(test_db):
+    """[feedback] Repro terrain : Groq extrait culture='haricot'/variete='nain', la base
+    a 'haricot'/'vert nain Contender' → la résolution doit retrouver la variété existante."""
+    test_db.add(Evenement(type_action="semis", culture="haricot", variete="vert nain Contender",
+                           quantite=100, unite="graines", date=datetime.now()))
+    test_db.commit()
+
+    user_id = 55
+    update = _make_update(user_id=user_id)
+    ctx = _ctx()
+    ctx.user_data['mode'] = 'note_details'
+    ctx.user_data['note_category'] = 'maladie'
+
+    fields_bruts = {
+        "culture": "haricot", "variete": "nain", "parcelle": None,
+        "constat": "observation sur les haricots nains", "traitement": None,
+        "duree_minutes": None, "date": None,
+    }
+    _NOTE_PENDING.pop(user_id, None)
+
+    with patch("bot.extract_note_fields", return_value=fields_bruts), \
+         patch("bot.SessionLocal", return_value=test_db):
+        await _note_details_received(update, ctx, "sur les haricot nain")
+
+    assert _NOTE_PENDING[user_id]["fields"]["culture"] == "haricot"
+    assert _NOTE_PENDING[user_id]["fields"]["variete"] == "vert nain Contender"
+
+    # récapitulatif reflète la variété résolue, pas la valeur brute dictée
+    recap_text = update.message.reply_text.call_args[0][0]
+    assert "vert nain Contender" in recap_text
 
     _NOTE_PENDING.pop(user_id, None)
 

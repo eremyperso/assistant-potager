@@ -54,7 +54,7 @@ function CultureLine({ c, parcelleId }) {
           )}
         </span>
         {/* [US-039 / CA1, CA5] Observations liées à cette culture+variete précise */}
-        {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} size={15} />}
+        {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} size={15} count={c.nb_observations} />}
         {c.nb_plants > 0 && (
           <span className="text-[15px] text-g-mid font-semibold">{c.nb_plants}</span>
         )}
@@ -71,7 +71,7 @@ function CultureLine({ c, parcelleId }) {
 // ── Carte parcelle ────────────────────────────────────────────────────────────
 
 function ParcellCard({ parcelle }) {
-  const { id, nom, exposition, superficie_m2, cultures, occupation_pct, has_observations } = parcelle
+  const { id, nom, exposition, superficie_m2, cultures, occupation_pct, has_observations, nb_observations } = parcelle
   const libre    = cultures.length === 0
   const accent   = occAccent(occupation_pct ?? 0)
   const textCls  = occTextCls(occupation_pct ?? 0)
@@ -97,7 +97,7 @@ function ParcellCard({ parcelle }) {
               {nom}
             </span>
             {/* [US-039 / CA1, CA5] Observations liées à cette parcelle */}
-            {has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} />}
+            {has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} count={nb_observations} />}
           </div>
           {!libre ? (
             <div className="text-right flex-shrink-0">

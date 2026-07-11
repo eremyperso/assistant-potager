@@ -67,6 +67,7 @@ from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commen
 from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_culture_deplacer as _extract_culture_deplacer  # [US-007]
 from utils.cultures_icons import get_emoji_culture
 from utils.notes import NOTE_CATEGORIES, is_note_request as _is_note_request, match_note_category  # [US-038]
+from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -2188,6 +2189,24 @@ async def _note_details_received(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
         return
 
     fields = extract_note_fields(categorie, texte)
+
+    # [feedback] Résout culture/variete vers les valeurs canoniques déjà en base
+    # (Groq peut renvoyer "haricot"/"nain" alors que la BDD a "haricot"/"vert nain Contender")
+    if fields.get("culture"):
+        db = SessionLocal()
+        try:
+            culture_resolue = resolve_culture(db, fields["culture"])
+            if culture_resolue != fields["culture"]:
+                log.info(f"[US-038] Culture résolue : '{fields['culture']}' → '{culture_resolue}'")
+            fields["culture"] = culture_resolue
+            if fields.get("variete"):
+                variete_resolue = resolve_variete(db, culture_resolue, fields["variete"])
+                if variete_resolue != fields["variete"]:
+                    log.info(f"[US-038] Variété résolue : '{fields['variete']}' → '{variete_resolue}'")
+                fields["variete"] = variete_resolue
+        finally:
+            db.close()
+
     _note_reset(ctx)
 
     user_id = update.effective_user.id

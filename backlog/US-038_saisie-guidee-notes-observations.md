@@ -41,6 +41,7 @@ Aujourd'hui, seules les actions "fortes" (semis, récolte, arrosage réel, etc.)
 - [ ] CA7 : Aucune colonne n'est ajoutée au modèle `Evenement` — tous les champs utilisés existent déjà (`database/models.py`)
 - [ ] CA8 : `/help note` affiche l'aide dédiée à cette commande
 - [ ] CA9 : L'utilisateur peut annuler le flux à tout moment (bouton ❌ ou commande `/annuler` si existante)
+- [ ] CA10 : La `culture` et la `variete` extraites par Groq sont résolues vers leurs valeurs canoniques déjà présentes en base (`evenements`/`culture_config`) avant enregistrement — comparaison exacte, puis Levenshtein ≤ 2, puis sous-chaîne/mot-clé (ex : "nain" retrouve "vert nain Contender"). Si aucune correspondance n'est trouvée, la valeur brute dictée est conservée (une culture/variété peut être légitimement nouvelle)
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : interaction Telegram (nouveau flux conversationnel) + enregistrement

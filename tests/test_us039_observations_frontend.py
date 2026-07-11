@@ -218,6 +218,8 @@ class TestObservationsEndpoints:
         test_db.commit()
         test_db.add(Evenement(type_action="observation", parcelle_id=p.id, commentaire="[Observation] test",
                                date=datetime(2026, 6, 1)))
+        test_db.add(Evenement(type_action="observation", parcelle_id=p.id, commentaire="[Paillage] test2",
+                               date=datetime(2026, 6, 2)))
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
@@ -226,6 +228,7 @@ class TestObservationsEndpoints:
         parcelle = next(x for x in data["parcelles"] if x["nom"] == "Nord")
         assert parcelle["id"] == p.id
         assert parcelle["has_observations"] is True
+        assert parcelle["nb_observations"] == 2
 
     def test_plan_has_observations_false_sans_note(self, test_db):
         p = Parcelle(nom="Sud", nom_normalise="sud", actif=True)
@@ -237,6 +240,7 @@ class TestObservationsEndpoints:
 
         parcelle = next(x for x in data["parcelles"] if x["nom"] == "Sud")
         assert parcelle["has_observations"] is False
+        assert parcelle["nb_observations"] == 0
 
     def test_stats_stock_par_culture_expose_has_observations(self, test_db):
         test_db.add(Evenement(type_action="plantation", culture="courgette", quantite=5, unite="plants",
@@ -251,6 +255,27 @@ class TestObservationsEndpoints:
         stock = next((c for c in data["stock_par_culture"] if c["culture"] == "courgette"), None)
         assert stock is not None
         assert stock["has_observations"] is True
+        assert stock["nb_observations"] == 1
+
+    def test_plan_culture_row_expose_nb_observations(self, test_db):
+        p = Parcelle(nom="Nord", nom_normalise="nord", actif=True)
+        test_db.add(p)
+        test_db.commit()
+        test_db.add(Evenement(type_action="plantation", culture="tomate", variete="Roma",
+                               quantite=5, unite="plants", parcelle_id=p.id, date=datetime(2026, 5, 1)))
+        test_db.add(Evenement(type_action="observation", culture="tomate", variete="Roma", parcelle_id=p.id,
+                               commentaire="[Maladie / ravageur] mildiou", date=datetime(2026, 6, 1)))
+        test_db.commit()
+
+        with patch('main.SessionLocal', return_value=test_db):
+            data = main.get_plan(date_ref=None)
+
+        parcelle = next(x for x in data["parcelles"] if x["nom"] == "Nord")
+        culture = next(c for c in parcelle["cultures"] if c["culture"] == "tomate")
+        assert culture["has_observations"] is True
+        assert culture["nb_observations"] == 1
+        # [règle exclusive] pas comptée dans l'icône parcelle
+        assert parcelle["nb_observations"] == 0
 
     def test_observations_endpoint_par_parcelle(self, test_db):
         p = Parcelle(nom="Nord", nom_normalise="nord", actif=True)
