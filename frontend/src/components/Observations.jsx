@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Eye, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 
 const PAGE_SIZE = 3
 
@@ -7,14 +7,20 @@ const PAGE_SIZE = 3
  * [US-039] Icône déclencheur d'observations — bouton discret, à placer comme
  * item d'une ligne flex existante (parcelle ou culture). Le parent gère l'état
  * ouvert/fermé et le rendu de <ObservationPanel /> juste en dessous de la ligne.
- * Symbole "œil" repris de la maquette Claude Design (ObsGlyph → IcoEye).
+ * Symbole "bulle de dialogue" repris de la maquette Claude Design à jour
+ * (ObsGlyph → IcoChat, remplace l'ancien IcoEye).
+ *
+ * count : nombre d'observations — affiché en badge superposé façon notification
+ * (coin supérieur droit de l'icône), plafonné à "10+" au-delà de 9.
  */
-export function ObservationIcon({ onClick, active = false, size = 17 }) {
+export function ObservationIcon({ onClick, active = false, size = 17, count = 0 }) {
+  const label = count > 9 ? '10+' : String(count)
+
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick() }}
       title="Observations"
-      aria-label="Observations"
+      aria-label={`Observations (${count})`}
       className="shrink-0 flex items-center justify-center"
       style={{
         background: 'none', border: 'none', cursor: 'pointer',
@@ -22,7 +28,24 @@ export function ObservationIcon({ onClick, active = false, size = 17 }) {
         padding: 8, margin: -8,
       }}
     >
-      <Eye size={size} style={{ color: active ? 'var(--g-acc)' : 'var(--g-sec)' }} />
+      <span className="relative inline-flex items-center justify-center">
+        <MessageCircle size={size} style={{ color: active ? 'var(--g-acc)' : 'var(--g-sec)' }} />
+        {count > 0 && (
+          <span
+            className="absolute flex items-center justify-center font-bold leading-none"
+            style={{
+              top: -6, right: -7,
+              minWidth: 14, height: 14, padding: '0 3px',
+              borderRadius: 999,
+              background: 'var(--g-acc)',
+              color: 'var(--g-bg)',
+              fontSize: 9,
+            }}
+          >
+            {label}
+          </span>
+        )}
+      </span>
     </button>
   )
 }

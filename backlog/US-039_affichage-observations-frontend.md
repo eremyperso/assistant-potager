@@ -40,7 +40,8 @@ Chaque observation est acheminée vers **un seul** point d'accès, jamais deux �
 - [ ] CA4 : La résolution du cas 1 (culture+variété sans parcelle_id) réutilise `calcul_occupation_parcelles` — pas de nouvelle logique de calcul d'occupation dupliquée
 - [ ] CA5 : Sur Plan, l'icône observation apparaît SOIT sur `ParcellCard` (notes sans culture) SOIT sur une ligne de culture précise (notes culture+variété résolues) — jamais les deux pour une même note
 - [ ] CA6 : Sur Stocks, l'icône observation apparaît sur `CultureRow` si la culture a des observations agrégées (culture seule, ou culture+variété non résolue à une parcelle unique)
-- [ ] CA7 : Un clic sur l'icône charge (lazy, au premier clic) puis affiche/masque un bloc accordéon inline avec la liste des observations, paginée par blocs de 3 (précédent/suivant), symbole œil (repris de la maquette Claude Design)
+- [ ] CA7 : Un clic sur l'icône charge (lazy, au premier clic) puis affiche/masque un bloc accordéon inline avec la liste des observations, paginée par blocs de 3 (précédent/suivant), symbole bulle de dialogue (repris de la maquette Claude Design, `ObsGlyph`/`IcoChat`)
+- [ ] CA15 : Le nombre d'observations est affiché en badge superposé sur l'icône (coin supérieur droit), plafonné à "10+" au-delà de 9
 - [ ] CA8 : Le texte affiché ne contient jamais le préfixe `[Catégorie]` brut du champ `commentaire`
 - [ ] CA9 : Message `"Aucune observation enregistrée."` si la liste est vide après chargement
 - [ ] CA10 : Le rendu visuel (couleurs, typographie, espacements, icônes) reprend exactement le système déjà en place (classes Tailwind, variables CSS `--g-*`, icônes `lucide-react`) — pas de nouvelle palette ni de composant stylé "à la Claude Design"

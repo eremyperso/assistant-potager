@@ -51,7 +51,7 @@ function CultureRow({ c }) {
         <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
           <span className="text-base font-medium capitalize" style={{ color: 'var(--g-pri)' }}>{c.culture}</span>
           <OrigineBadge origine={c.origine} />
-          {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} />}
+          {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} count={c.nb_observations} />}
         </div>
         <div className="text-right shrink-0 space-y-0.5">
           <p className="text-base font-semibold" style={{ color: 'var(--g-pri)' }}>

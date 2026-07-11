@@ -490,7 +490,9 @@ def stats(date_ref: date = Query(default=None)):
                 entry["origine"] = "semis_pleine_terre"
             else:
                 entry["origine"] = "pied_acheté"
-            entry["has_observations"] = bool(obs_index["stocks"].get(nom))
+            nb_obs = len(obs_index["stocks"].get(nom, []))
+            entry["has_observations"] = nb_obs > 0
+            entry["nb_observations"]  = nb_obs
 
         return {
             "date_ref_effective" : date_ref_effective.isoformat(),
@@ -596,13 +598,15 @@ def get_plan(date_ref: date = Query(default=None)):
                     "surface_m2_par_plant": surface_par_culture.get(
                         (c.get("culture") or "").lower(), None
                     ),
-                    "has_observations": bool(
-                        c.get("variete") and c.get("culture") and
-                        obs_index["culture_row"].get((p.id, c["culture"].lower(), c["variete"]))
+                    "nb_observations": (
+                        len(obs_index["culture_row"].get((p.id, c["culture"].lower(), c["variete"]), []))
+                        if c.get("variete") and c.get("culture") else 0
                     ),
                 }
                 for c in cultures_raw
             ]
+            for c in cultures:
+                c["has_observations"] = c["nb_observations"] > 0
 
             # [US-037 / CA10] Calcul occupation réel : une culture semée en m² occupe
             # directement cette surface (aucune conversion via une empreinte au pied) ;
@@ -619,6 +623,7 @@ def get_plan(date_ref: date = Query(default=None)):
                 if surface_utilisee > 0:
                     occupation_pct = min(100, round(surface_utilisee / p.superficie_m2 * 100))
 
+            nb_obs_parcelle = len(obs_index["parcelle"].get(p.id, []))
             result.append({
                 "id":            p.id,
                 "nom":           p.nom,
@@ -626,7 +631,8 @@ def get_plan(date_ref: date = Query(default=None)):
                 "superficie_m2": p.superficie_m2,
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
-                "has_observations": bool(obs_index["parcelle"].get(p.id)),
+                "has_observations": nb_obs_parcelle > 0,
+                "nb_observations":  nb_obs_parcelle,
             })
 
         return {"parcelles": result, "total": len(result), "date_ref_effective": date_ref_effective.isoformat()}
