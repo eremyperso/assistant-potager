@@ -7,6 +7,9 @@ import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import MetricStrip from '../components/MetricStrip.jsx'
+import { ObservationIcon, ObservationPanel } from '../components/Observations.jsx'
+import { useObservations } from '../hooks/useObservations.js'
+import { ObservationsUIProvider } from '../context/ObservationsUIContext.jsx'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -29,14 +32,51 @@ function ExpositionIcon({ exposition }) {
   return <Icon size={13} className="text-g-amb" aria-hidden="true" />
 }
 
+// ── Ligne culture (avec accès observations si culture+variete précisés) ───────
+
+function CultureLine({ c, parcelleId }) {
+  const obs = useObservations(
+    `culture-row:${parcelleId}:${c.culture}:${c.variete || ''}`,
+    { parcelleId, culture: c.culture, variete: c.variete },
+  )
+
+  return (
+    <div>
+      <div className="flex items-center gap-2.5">
+        <div
+          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+          style={{ background: c.type_organe === 'végétatif' ? 'var(--g-acc)' : 'var(--g-amb)' }}
+        />
+        <span className="flex-1 text-base text-g-pri font-serif font-medium capitalize leading-snug">
+          {c.culture}
+          {c.variete && (
+            <span className="italic text-g-sec ml-1.5 text-[15px]">{c.variete}</span>
+          )}
+        </span>
+        {/* [US-039 / CA1, CA5] Observations liées à cette culture+variete précise */}
+        {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} size={15} />}
+        {c.nb_plants > 0 && (
+          <span className="text-[15px] text-g-mid font-semibold">{c.nb_plants}</span>
+        )}
+      </div>
+      {c.has_observations && obs.open && (
+        <div className="pl-1.5">
+          <ObservationPanel items={obs.items} loading={obs.loading} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Carte parcelle ────────────────────────────────────────────────────────────
 
 function ParcellCard({ parcelle }) {
-  const { nom, exposition, superficie_m2, cultures, occupation_pct } = parcelle
+  const { id, nom, exposition, superficie_m2, cultures, occupation_pct, has_observations } = parcelle
   const libre    = cultures.length === 0
   const accent   = occAccent(occupation_pct ?? 0)
   const textCls  = occTextCls(occupation_pct ?? 0)
   const pct      = occupation_pct ?? 0
+  const obs      = useObservations(`parcelle:${id}`, { parcelleId: id })
 
   return (
     <div
@@ -56,6 +96,8 @@ function ParcellCard({ parcelle }) {
             <span className="text-[19px] font-semibold text-g-pri font-serif tracking-tight leading-tight">
               {nom}
             </span>
+            {/* [US-039 / CA1, CA5] Observations liées à cette parcelle */}
+            {has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} />}
           </div>
           {!libre ? (
             <div className="text-right flex-shrink-0">
@@ -70,6 +112,13 @@ function ParcellCard({ parcelle }) {
             </span>
           )}
         </div>
+
+        {/* [US-039 / CA7] Observations de la parcelle (accordéon lazy) */}
+        {has_observations && obs.open && (
+          <div className="pl-1.5">
+            <ObservationPanel items={obs.items} loading={obs.loading} />
+          </div>
+        )}
 
         {/* Expo + surface */}
         {(exposition || superficie_m2) && (
@@ -86,23 +135,7 @@ function ParcellCard({ parcelle }) {
         {/* Liste des cultures */}
         {!libre && (
           <div className="space-y-2.5">
-            {cultures.map((c, i) => (
-              <div key={i} className="flex items-center gap-2.5">
-                <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ background: c.type_organe === 'végétatif' ? 'var(--g-acc)' : 'var(--g-amb)' }}
-                />
-                <span className="flex-1 text-base text-g-pri font-serif font-medium capitalize leading-snug">
-                  {c.culture}
-                  {c.variete && (
-                    <span className="italic text-g-sec ml-1.5 text-[15px]">{c.variete}</span>
-                  )}
-                </span>
-                {c.nb_plants > 0 && (
-                  <span className="text-[15px] text-g-mid font-semibold">{c.nb_plants}</span>
-                )}
-              </div>
-            ))}
+            {cultures.map((c, i) => <CultureLine key={i} c={c} parcelleId={id} />)}
           </div>
         )}
 
@@ -167,42 +200,44 @@ export default function Plan({ refresh }) {
   const nbCultures = filtered.reduce((s, p) => s + p.cultures.length, 0)
 
   return (
-    <div>
-      {/* [CA5+CA17] Filtres combinés côte à côte */}
-      <div className="flex items-center gap-2 mb-3">
-        <DateRefPicker />
-        <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 mt-12 text-g-sec">
-          <Leaf size={36} />
-          <p className="text-base">{search ? 'Aucune culture correspondante.' : 'Aucune parcelle enregistrée.'}</p>
+    <ObservationsUIProvider>
+      <div>
+        {/* [CA5+CA17] Filtres combinés côte à côte */}
+        <div className="flex items-center gap-2 mb-3">
+          <DateRefPicker />
+          <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
         </div>
-      ) : (
-        <>
-          {/* Métriques */}
-          <MetricStrip metrics={[
-            { value: nbActives,  label: 'parcelles actives', color: 'var(--g-acc)' },
-            { value: nbCultures, label: 'cultures en place',  color: 'var(--g-pri)' },
-          ]}/>
 
-          {/* Légende */}
-          <div className="flex gap-4 mb-3 text-[13px] text-g-sec">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-g-acc inline-block" />
-              végétatif
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-g-amb inline-block" />
-              reproducteur
-            </span>
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 mt-12 text-g-sec">
+            <Leaf size={36} />
+            <p className="text-base">{search ? 'Aucune culture correspondante.' : 'Aucune parcelle enregistrée.'}</p>
           </div>
+        ) : (
+          <>
+            {/* Métriques */}
+            <MetricStrip metrics={[
+              { value: nbActives,  label: 'parcelles actives', color: 'var(--g-acc)' },
+              { value: nbCultures, label: 'cultures en place',  color: 'var(--g-pri)' },
+            ]}/>
 
-          {/* Cartes */}
-          {filtered.map((p, i) => <ParcellCard key={i} parcelle={p} />)}
-        </>
-      )}
-    </div>
+            {/* Légende */}
+            <div className="flex gap-4 mb-3 text-[13px] text-g-sec">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-g-acc inline-block" />
+                végétatif
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-g-amb inline-block" />
+                reproducteur
+              </span>
+            </div>
+
+            {/* Cartes */}
+            {filtered.map((p, i) => <ParcellCard key={i} parcelle={p} />)}
+          </>
+        )}
+      </div>
+    </ObservationsUIProvider>
   )
 }

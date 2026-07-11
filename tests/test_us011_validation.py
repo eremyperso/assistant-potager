@@ -6,7 +6,7 @@ Zéro appel réseau — validation en Python pur.
 """
 
 import pytest
-from utils.validation import validate_parsed_action
+from utils.validation import validate_parsed_action, culture_grounded_dans_texte, strip_culture_hallucinee
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -179,4 +179,86 @@ def test_us011_edge_action_casse_insensible():
         {"action": "RECOLTE", "culture": "tomate"},
         "Récolté des tomates"
     )
+    assert valid is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-011 bis] Culture halluciné — absente du texte source → retirée
+# Repro : "paillage totalité parcelle planche test le 25/05 dernier" → Groq a
+# inventé culture="ail" alors qu'aucun légume n'est mentionné (bug remonté prod).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_us011bis_culture_grounded_absente_du_texte():
+    """Culture non mentionnée dans le texte → non fondée."""
+    assert culture_grounded_dans_texte("ail", "paillage totalité parcelle planche test le 25/05 dernier") is False
+
+
+def test_us011bis_culture_grounded_presente_dans_texte():
+    """Culture mentionnée telle quelle dans le texte → fondée."""
+    assert culture_grounded_dans_texte("tomate", "Récolté 2 kg de tomates hier") is True
+
+
+def test_us011bis_culture_grounded_pluriel_simple():
+    """Culture au singulier extraite d'un texte qui la mentionne au pluriel."""
+    assert culture_grounded_dans_texte("carotte", "Semé des carottes hier") is True
+    assert culture_grounded_dans_texte("radis", "Récolté des radis") is True
+
+
+def test_us011bis_culture_grounded_insensible_accents_casse():
+    """Comparaison insensible aux accents et à la casse."""
+    assert culture_grounded_dans_texte("Poivron", "planté des POIVRONS en serre") is True
+    assert culture_grounded_dans_texte("épinard", "semé des epinards") is True
+
+
+def test_us011bis_culture_grounded_none_toujours_vrai():
+    """Pas de culture à vérifier → considéré comme fondé (rien à retirer)."""
+    assert culture_grounded_dans_texte(None, "paillage parcelle nord") is True
+
+
+def test_us011bis_strip_culture_hallucinee_retire_culture_et_variete():
+    """Repro bug prod : culture inventée sans aucune mention dans le texte → retirée."""
+    parsed = {"action": "paillage", "culture": "ail", "variete": "blanc", "parcelle": "planche test"}
+    texte = "paillage totalité parcelle planche test le 25/05 dernier"
+
+    result = strip_culture_hallucinee(parsed, texte)
+
+    assert result["culture"] is None
+    assert result["variete"] is None
+    assert result["action"] == "paillage"       # le reste de l'item n'est pas altéré
+    assert result["parcelle"] == "planche test"
+
+
+def test_us011bis_strip_culture_hallucinee_conserve_culture_fondee():
+    """Culture réellement mentionnée dans le texte → conservée telle quelle."""
+    parsed = {"action": "recolte", "culture": "tomate", "quantite": 2}
+    texte = "Récolté 2 kg de tomates"
+
+    result = strip_culture_hallucinee(parsed, texte)
+
+    assert result["culture"] == "tomate"
+    assert result["quantite"] == 2
+
+
+def test_us011bis_strip_culture_hallucinee_sans_culture_inchange():
+    """Pas de culture dans l'item → aucune modification."""
+    parsed = {"action": "paillage", "culture": None, "parcelle": "nord"}
+    texte = "paillage parcelle nord"
+
+    result = strip_culture_hallucinee(parsed, texte)
+
+    assert result == parsed
+
+
+def test_us011bis_repro_prod_paillage_sans_culture_valide_apres_strip():
+    """
+    Repro bout-en-bout : l'item nettoyé passe la validation US-011 (action seule
+    suffisante pour un paillage), la culture hallucinée n'est plus présente.
+    """
+    parsed = {"action": "paillage", "culture": "ail", "parcelle": "planche test", "date": "2026-05-25"}
+    texte = "paillage totalité parcelle planche test le 25/05 dernier"
+
+    cleaned = strip_culture_hallucinee(parsed, texte)
+    valid, _ = validate_parsed_action(cleaned, texte)
+
+    assert cleaned["culture"] is None
     assert valid is True

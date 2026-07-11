@@ -1,4 +1,22 @@
 
+## [v3.14.0] — 2026-07-10
+
+### 🚀 Nouveautés
+- Ajoute la commande `/note` pour consigner rapidement une observation de terrain (état sanitaire, arrosage, paillage, remarque générale) — l'assistant guide la saisie en demandant les informations pertinentes selon la catégorie choisie (US-038)
+- Le flux de note est aussi accessible en dictant ou en tapant "je veux noter une observation" (US-038)
+- Un récapitulatif s'affiche avant tout enregistrement, avec boutons Confirmer/Annuler, avant de sauvegarder la note (US-038)
+- Affiche les observations dictées au bot directement dans le dashboard : une icône œil apparaît sur la parcelle (Plan) ou sur la culture (Stocks) selon que la note est localisée ou non, avec un aperçu dépliable au clic, paginé par blocs de 3 pour éviter les listes trop longues (US-039)
+- Un seul panneau d'observations reste ouvert à la fois par écran — en ouvrir un nouveau referme automatiquement le précédent ; zone de clic de l'icône élargie pour un usage confortable au smartphone (US-039)
+- Précise le routage des observations : une note liée à une culture ET une variété n'apparaît plus que sur sa ligne de culture précise (jamais aussi sur l'icône de la parcelle) ; une note liée à une culture sans variété reste toujours sur Stocks, même si une parcelle est renseignée (US-039)
+- Une note liée à une culture et une variété précises, mais sans parcelle indiquée, est automatiquement rattachée à la bonne parcelle dans Plan si cette culture/variété n'y est actuellement cultivée qu'à un seul endroit (US-039)
+
+### 🐛 Corrections
+- Corrige une hallucination Groq qui pouvait inventer une culture inexistante dans le texte dicté (ex : "paillage parcelle X" enregistré avec culture "ail" alors qu'aucun légume n'était mentionné) — toute culture extraite est désormais retirée si elle n'apparaît pas réellement dans le message (US-011)
+
+### 🔧 Améliorations techniques
+- Les notes sont enregistrées comme un événement `observation` classique, sans ajout de colonne au modèle de données — la catégorie est conservée en préfixe du commentaire (US-038)
+- Nouvel endpoint `GET /observations`, et `GET /plan` / `GET /stats` enrichis d'un indicateur `has_observations` (US-039)
+
 ## [v3.13.0] — 2026-07-09
 
 ### 🚀 Nouveautés
