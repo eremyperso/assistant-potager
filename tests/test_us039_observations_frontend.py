@@ -9,30 +9,14 @@ CA2 : /stats (stock_par_culture) expose has_observations par culture
 CA3 : /observations retourne les items selon le filtre (parcelle_id / culture+variete)
 CA4 : la résolution du cas 3 réutilise calcul_occupation_parcelles
 CA5/CA6 : routage mutuellement exclusif Plan vs Stocks
-CA8 : le préfixe [Catégorie] est retiré du texte affiché
+CA8 (révisé) : le commentaire brut est renvoyé tel quel, préfixe [Catégorie] inclus
 """
 import pytest
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 from database.models import Evenement, Parcelle
-from utils.observations import strip_categorie, build_observations_index
-
-
-# ── strip_categorie ────────────────────────────────────────────────────────
-
-def test_us039_strip_categorie_retire_prefixe():
-    assert strip_categorie("[Maladie / ravageur] mildiou sur les feuilles") == "mildiou sur les feuilles"
-    assert strip_categorie("[Paillage] paille de blé") == "paille de blé"
-
-
-def test_us039_strip_categorie_sans_prefixe_inchange():
-    assert strip_categorie("texte sans préfixe") == "texte sans préfixe"
-
-
-def test_us039_strip_categorie_none_ou_vide():
-    assert strip_categorie(None) == ""
-    assert strip_categorie("") == ""
+from utils.observations import build_observations_index
 
 
 # ── build_observations_index — cas 1 : parcelle_id renseigné ────────────────
@@ -51,7 +35,8 @@ def test_us039_ca1_observation_parcelle_seule(test_db):
     index = build_observations_index(test_db)
 
     assert len(index["parcelle"][p.id]) == 1
-    assert index["parcelle"][p.id][0]["texte"] == "Sol sec"
+    # [feedback] Le commentaire brut est renvoyé tel quel, préfixe inclus
+    assert index["parcelle"][p.id][0]["texte"] == "[Arrosage (remarque)] Sol sec"
     assert index["culture_row"] == {}
     assert index["stocks"] == {}
 
@@ -71,7 +56,7 @@ def test_us039_ca1_observation_parcelle_et_culture_variete(test_db):
     index = build_observations_index(test_db)
 
     assert index["parcelle"] == {}  # [règle exclusive] pas d'icône parcelle
-    assert index["culture_row"][(p.id, "tomate", "Roma")][0]["texte"] == "mildiou"
+    assert index["culture_row"][(p.id, "tomate", "Roma")][0]["texte"] == "[Maladie / ravageur] mildiou"
     assert index["stocks"] == {}  # [CA11] jamais dupliqué sur Stocks
 
 
@@ -91,7 +76,7 @@ def test_us039_orphelin_culture_sans_variete_avec_parcelle(test_db):
 
     assert index["parcelle"] == {}
     assert index["culture_row"] == {}
-    assert index["stocks"]["courgette"][0]["texte"] == "paille ajoutée"
+    assert index["stocks"]["courgette"][0]["texte"] == "[Paillage] paille ajoutée"
 
 
 # ── build_observations_index — cas 2 : culture seule, pas de parcelle ───────
@@ -104,7 +89,7 @@ def test_us039_ca2_observation_culture_sans_parcelle(test_db):
 
     index = build_observations_index(test_db)
 
-    assert index["stocks"]["courgette"][0]["texte"] == "belle vigueur"
+    assert index["stocks"]["courgette"][0]["texte"] == "[Observation] belle vigueur"
     assert index["parcelle"] == {}
     assert index["culture_row"] == {}
 
@@ -131,7 +116,7 @@ def test_us039_ca3_ca4_resolution_parcelle_unique(test_db):
 
     index = build_observations_index(test_db)
 
-    assert index["culture_row"][(p.id, "tomate", "cerise")][0]["texte"] == "pucerons"
+    assert index["culture_row"][(p.id, "tomate", "cerise")][0]["texte"] == "[Maladie / ravageur] pucerons"
     assert "tomate" not in index["stocks"]  # [CA11] pas dupliqué sur Stocks
 
 
@@ -152,7 +137,7 @@ def test_us039_ca3_repli_stocks_si_plusieurs_parcelles(test_db):
 
     index = build_observations_index(test_db)
 
-    assert index["stocks"]["tomate"][0]["texte"] == "belle floraison"
+    assert index["stocks"]["tomate"][0]["texte"] == "[Observation] belle floraison"
     assert index["culture_row"] == {}
 
 
@@ -165,7 +150,7 @@ def test_us039_ca3_repli_stocks_si_aucune_parcelle(test_db):
 
     index = build_observations_index(test_db)
 
-    assert index["stocks"]["tomate"][0]["texte"] == "semis prévu"
+    assert index["stocks"]["tomate"][0]["texte"] == "[Observation] semis prévu"
 
 
 # ── build_observations_index — cas 4 : hors périmètre ────────────────────────
@@ -199,7 +184,7 @@ def test_us039_tri_plus_recent_en_premier(test_db):
 
     index = build_observations_index(test_db)
     textes = [o["texte"] for o in index["parcelle"][p.id]]
-    assert textes == ["récent", "ancien"]
+    assert textes == ["[Paillage] récent", "[Paillage] ancien"]
 
 
 # ── Endpoints API ─────────────────────────────────────────────────────────────
@@ -289,7 +274,7 @@ class TestObservationsEndpoints:
             data = main.get_observations(parcelle_id=p.id, culture=None, variete=None)
 
         assert len(data["items"]) == 1
-        assert data["items"][0]["texte"] == "sol sec"
+        assert data["items"][0]["texte"] == "[Arrosage (remarque)] sol sec"
 
     def test_observations_endpoint_par_culture(self, test_db):
         test_db.add(Evenement(type_action="observation", culture="poireau", parcelle_id=None,
@@ -299,7 +284,7 @@ class TestObservationsEndpoints:
         with patch('main.SessionLocal', return_value=test_db):
             data = main.get_observations(parcelle_id=None, culture="poireau", variete=None)
 
-        assert data["items"][0]["texte"] == "paille ajoutée"
+        assert data["items"][0]["texte"] == "[Paillage] paille ajoutée"
 
     def test_observations_endpoint_vide_si_rien(self, test_db):
         with patch('main.SessionLocal', return_value=test_db):
