@@ -7,6 +7,9 @@ import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import MetricStrip from '../components/MetricStrip.jsx'
+import { ObservationIcon, ObservationPanel } from '../components/Observations.jsx'
+import { useObservations } from '../hooks/useObservations.js'
+import { ObservationsUIProvider } from '../context/ObservationsUIContext.jsx'
 
 // ── Badges d'origine ──────────────────────────────────────────────────────────
 
@@ -39,24 +42,30 @@ function CultureRow({ c }) {
   const recolte = c.rendement_total > 0
     ? `${c.rendement_total} ${c.unite_rendement || ''}`
     : null
+  // [US-039 / CA2, CA6] Observations agrégées par culture (parcelle_id absent)
+  const obs = useObservations(`stocks:${c.culture}`, { culture: c.culture })
 
   return (
-    <div className="flex items-center gap-2 py-2.5 border-b border-g-brd last:border-0">
-      <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-        <span className="text-base font-medium capitalize" style={{ color: 'var(--g-pri)' }}>{c.culture}</span>
-        <OrigineBadge origine={c.origine} />
+    <div className="py-2.5 border-b border-g-brd last:border-0">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+          <span className="text-base font-medium capitalize" style={{ color: 'var(--g-pri)' }}>{c.culture}</span>
+          <OrigineBadge origine={c.origine} />
+          {c.has_observations && <ObservationIcon onClick={obs.toggle} active={obs.open} count={c.nb_observations} />}
+        </div>
+        <div className="text-right shrink-0 space-y-0.5">
+          <p className="text-base font-semibold" style={{ color: 'var(--g-pri)' }}>
+            {c.stock_plants} <span className="font-normal text-sm" style={{ color: 'var(--g-sec)' }}>{c.unite}</span>
+          </p>
+          {recolte && (
+            <p className="text-[12px]" style={{ color: 'var(--g-acc)' }}>↑ {recolte}</p>
+          )}
+          {c.plants_perdus > 0 && (
+            <p className="text-[12px]" style={{ color: 'var(--g-red)' }}>↓ {c.plants_perdus} perdus</p>
+          )}
+        </div>
       </div>
-      <div className="text-right shrink-0 space-y-0.5">
-        <p className="text-base font-semibold" style={{ color: 'var(--g-pri)' }}>
-          {c.stock_plants} <span className="font-normal text-sm" style={{ color: 'var(--g-sec)' }}>{c.unite}</span>
-        </p>
-        {recolte && (
-          <p className="text-[12px]" style={{ color: 'var(--g-acc)' }}>↑ {recolte}</p>
-        )}
-        {c.plants_perdus > 0 && (
-          <p className="text-[12px]" style={{ color: 'var(--g-red)' }}>↓ {c.plants_perdus} perdus</p>
-        )}
-      </div>
+      {c.has_observations && obs.open && <ObservationPanel items={obs.items} loading={obs.loading} />}
     </div>
   )
 }
@@ -187,48 +196,50 @@ export default function Stocks({ refresh }) {
   const totalGodets  = filteredGodets.reduce((s, g) => s + (g.stock_residuel_godet || 0), 0)
 
   return (
-    <div>
-      {/* [CA13+CA17] Filtres combinés côte à côte */}
-      <div className="flex items-center gap-2 mb-3">
-        <DateRefPicker />
-        <CultureFilter value={search} onChange={setSearch} placeholder="Rechercher une culture…" className="relative flex-1" />
+    <ObservationsUIProvider>
+      <div>
+        {/* [CA13+CA17] Filtres combinés côte à côte */}
+        <div className="flex items-center gap-2 mb-3">
+          <DateRefPicker />
+          <CultureFilter value={search} onChange={setSearch} placeholder="Rechercher une culture…" className="relative flex-1" />
+        </div>
+
+        {/* Métriques */}
+        <MetricStrip metrics={[
+          { value: totalPotager, label: 'au potager',  color: 'var(--g-acc)' },
+          { value: totalGodets,  label: 'à replanter',  color: 'var(--g-mid)' },
+          { value: totalPerdus,  label: 'perdus',       color: 'var(--g-red)' },
+        ]}/>
+
+        {/* Section 1 — Au potager */}
+        {(filteredStocks.length > 0 || filteredSemis.length > 0) && (
+          <Section
+            icon={<Leaf size={14} style={{ color: 'var(--g-acc)' }} />}
+            title="Au potager"
+            count={filteredStocks.length + filteredSemis.length}
+            titleColor="var(--g-acc)"
+          >
+            {filteredStocks.map((c, i) => <CultureRow key={i}    c={c} />)}
+            {filteredSemis.map((s, i)   => <SemisRow  key={`s${i}`} s={s} />)}
+          </Section>
+        )}
+
+        {/* Section 2 — En pépinière */}
+        {filteredGodets.length > 0 && (
+          <Section
+            icon={<Sprout size={14} style={{ color: 'var(--g-mid)' }} />}
+            title="En pépinière — prêt à replanter"
+            count={filteredGodets.length}
+            titleColor="var(--g-mid)"
+          >
+            {filteredGodets.map((g, i) => <GodetRow key={i} g={g} />)}
+          </Section>
+        )}
+
+        {(filteredStocks.length === 0 && filteredSemis.length === 0 && filteredGodets.length === 0) && search && (
+          <p className="text-base text-g-sec text-center mt-8">Aucune culture pour « {search} ».</p>
+        )}
       </div>
-
-      {/* Métriques */}
-      <MetricStrip metrics={[
-        { value: totalPotager, label: 'au potager',  color: 'var(--g-acc)' },
-        { value: totalGodets,  label: 'à replanter',  color: 'var(--g-mid)' },
-        { value: totalPerdus,  label: 'perdus',       color: 'var(--g-red)' },
-      ]}/>
-
-      {/* Section 1 — Au potager */}
-      {(filteredStocks.length > 0 || filteredSemis.length > 0) && (
-        <Section
-          icon={<Leaf size={14} style={{ color: 'var(--g-acc)' }} />}
-          title="Au potager"
-          count={filteredStocks.length + filteredSemis.length}
-          titleColor="var(--g-acc)"
-        >
-          {filteredStocks.map((c, i) => <CultureRow key={i}    c={c} />)}
-          {filteredSemis.map((s, i)   => <SemisRow  key={`s${i}`} s={s} />)}
-        </Section>
-      )}
-
-      {/* Section 2 — En pépinière */}
-      {filteredGodets.length > 0 && (
-        <Section
-          icon={<Sprout size={14} style={{ color: 'var(--g-mid)' }} />}
-          title="En pépinière — prêt à replanter"
-          count={filteredGodets.length}
-          titleColor="var(--g-mid)"
-        >
-          {filteredGodets.map((g, i) => <GodetRow key={i} g={g} />)}
-        </Section>
-      )}
-
-      {(filteredStocks.length === 0 && filteredSemis.length === 0 && filteredGodets.length === 0) && search && (
-        <p className="text-base text-g-sec text-center mt-8">Aucune culture pour « {search} ».</p>
-      )}
-    </div>
+    </ObservationsUIProvider>
   )
 }

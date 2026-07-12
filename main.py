@@ -38,6 +38,7 @@ from database.models import Evenement, CultureConfig, Parcelle
 from utils.actions import normalize_action
 from utils.parcelles import resolve_parcelle
 from utils.stock import calcul_stock_cultures, format_stock_stats_json
+from utils.observations import build_observations_index
 from llm.groq_client import parse_commande, repondre_question, transcribe_audio, classify_intent_pwa
 from utils.date_utils import parse_date
 from llm.rag import add_to_rag
@@ -477,6 +478,9 @@ def stats(date_ref: date = Query(default=None)):
             if s.get("parcelles_pleine_terre")
         ]
 
+        # [US-039 / CA2, CA6] Indicateur d'observations agrégées par culture (Stocks)
+        obs_index = build_observations_index(db)
+
         stock_enrichi = format_stock_stats_json(stocks)
         for entry in stock_enrichi:
             nom = (entry.get("culture") or "").lower()
@@ -486,6 +490,9 @@ def stats(date_ref: date = Query(default=None)):
                 entry["origine"] = "semis_pleine_terre"
             else:
                 entry["origine"] = "pied_acheté"
+            nb_obs = len(obs_index["stocks"].get(nom, []))
+            entry["has_observations"] = nb_obs > 0
+            entry["nb_observations"]  = nb_obs
 
         return {
             "date_ref_effective" : date_ref_effective.isoformat(),
@@ -573,6 +580,9 @@ def get_plan(date_ref: date = Query(default=None)):
             c.nom.lower(): (c.surface_m2 or 0.0) for c in configs
         }
 
+        # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
+        obs_index = build_observations_index(db)
+
         result = []
         for p in parcelles:
             cultures_raw = occupation.get(p.nom, [])
@@ -588,9 +598,15 @@ def get_plan(date_ref: date = Query(default=None)):
                     "surface_m2_par_plant": surface_par_culture.get(
                         (c.get("culture") or "").lower(), None
                     ),
+                    "nb_observations": (
+                        len(obs_index["culture_row"].get((p.id, c["culture"].lower(), c["variete"]), []))
+                        if c.get("variete") and c.get("culture") else 0
+                    ),
                 }
                 for c in cultures_raw
             ]
+            for c in cultures:
+                c["has_observations"] = c["nb_observations"] > 0
 
             # [US-037 / CA10] Calcul occupation réel : une culture semée en m² occupe
             # directement cette surface (aucune conversion via une empreinte au pied) ;
@@ -607,15 +623,47 @@ def get_plan(date_ref: date = Query(default=None)):
                 if surface_utilisee > 0:
                     occupation_pct = min(100, round(surface_utilisee / p.superficie_m2 * 100))
 
+            nb_obs_parcelle = len(obs_index["parcelle"].get(p.id, []))
             result.append({
+                "id":            p.id,
                 "nom":           p.nom,
                 "exposition":    p.exposition,
                 "superficie_m2": p.superficie_m2,
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
+                "has_observations": nb_obs_parcelle > 0,
+                "nb_observations":  nb_obs_parcelle,
             })
 
         return {"parcelles": result, "total": len(result), "date_ref_effective": date_ref_effective.isoformat()}
+    finally:
+        db.close()
+
+
+@app.get("/observations")
+def get_observations(
+    parcelle_id: int = Query(default=None),
+    culture: str = Query(default=None),
+    variete: str = Query(default=None),
+):
+    """
+    [US-039 / CA3] Détail des observations pour un point d'accès du dashboard :
+      - parcelle_id + culture + variete → ligne de culture précise (Plan)
+      - parcelle_id seul                → carte parcelle (Plan)
+      - culture seule                   → agrégat culture (Stocks)
+    """
+    db = SessionLocal()
+    try:
+        index = build_observations_index(db)
+        if parcelle_id is not None and culture and variete:
+            items = index["culture_row"].get((parcelle_id, culture.lower(), variete), [])
+        elif parcelle_id is not None:
+            items = index["parcelle"].get(parcelle_id, [])
+        elif culture:
+            items = index["stocks"].get(culture.lower(), [])
+        else:
+            items = []
+        return {"items": items}
     finally:
         db.close()
 

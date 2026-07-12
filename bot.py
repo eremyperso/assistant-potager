@@ -58,7 +58,7 @@ from utils.parcelles import (
     find_doublon, create_parcelle, update_parcelle, get_all_parcelles,
     resolve_parcelle, rename_parcelle, supprimer_parcelle,
 )
-from llm.groq_client import parse_commande, repondre_question, parse_message
+from llm.groq_client import parse_commande, repondre_question, parse_message, extract_note_fields
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
@@ -66,6 +66,8 @@ from utils.stock import calcul_stock_cultures, format_stock_ligne_telegram
 from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commentaire
 from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_culture_deplacer as _extract_culture_deplacer  # [US-007]
 from utils.cultures_icons import get_emoji_culture
+from utils.notes import NOTE_CATEGORIES, is_note_request as _is_note_request, match_note_category  # [US-038]
+from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -265,7 +267,7 @@ MENU_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🎤 Nouvelle action vocale"), KeyboardButton("🔍 Interroger")],
         [KeyboardButton("📋 Historique"),             KeyboardButton("📊 Stats")],
-        [KeyboardButton("✏️ Corriger")],
+        [KeyboardButton("✏️ Corriger"),               KeyboardButton("📝 Note")],
     ],
     resize_keyboard=True,
     is_persistent=True
@@ -441,7 +443,22 @@ _HELP_STATS = (
     "  → _\"quelles familles ont occupé chaque parcelle ?\"_"
 )
 
-_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats"
+_HELP_NOTE = (
+    "📝 *Aide — Notes*\n"
+    "Consigner rapidement une observation de terrain, guidé par l'assistant.\n\n"
+    "*Catégories disponibles :*\n"
+    "🔍 Observation — remarque générale de suivi\n"
+    "🐛 Maladie / ravageur — problème sanitaire détecté\n"
+    "💧 Arrosage (remarque) — constat qualitatif (sol sec...), sans créer d'événement d'arrosage réel\n"
+    "🌿 Paillage — constat ou action de paillage informelle\n\n"
+    "*Comment noter :*\n"
+    "• /note — ouvre le menu de catégories\n"
+    "• _\"je veux noter une observation\"_ (vocal ou texte)\n\n"
+    "L'assistant pose une question adaptée à la catégorie choisie, puis vous répondez\n"
+    "en langage naturel. Un récapitulatif s'affiche avant enregistrement définitif."
+)
+
+_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note"
 
 _HELP_CONTEXTUEL: dict[str, str] = {
     "parcelle":  _HELP_PARCELLE,
@@ -456,6 +473,8 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "stocks":    _HELP_STOCK,
     "stats":     _HELP_STATS,
     "statistiques": _HELP_STATS,
+    "note":      _HELP_NOTE,
+    "notes":     _HELP_NOTE,
 }
 
 
@@ -521,6 +540,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
         "/corriger — Modifier un événement\n"
+        "/note — Noter une observation (guidé)\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
         "/version — Version déployée\n"
@@ -608,6 +628,14 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await _depl_confirm(update, ctx, texte)
         return
 
+    # ── 3c. [US-038] Flux note guidée actif : bypass intent classification ─────
+    if mode in ('note_category', 'note_details'):
+        if mode == 'note_category':
+            await _note_category_selected(update, ctx, texte)
+        elif mode == 'note_details':
+            await _note_details_received(update, ctx, texte)
+        return
+
     # ── 4. Mode ask actif : bypass aussi ──────────────────────────────────────
     if mode == 'ask':
         ctx.user_data['mode'] = None
@@ -692,6 +720,11 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         log.info(f"🔀 DEPLACER VOCAL  : culture='{culture}'")
         await _depl_start(update, ctx, culture)
         return
+    # [US-038] Routage vocal NOTE
+    if intent == "NOTE":
+        await msg.edit_text("📝 *Nouvelle note...*", parse_mode="Markdown")
+        await _note_start(update, ctx)
+        return
 
     # intent == "ACTION" : items pré-parsés par parse_message, pas de 2e appel LLM
     await _parse_and_save(update, texte, msg, pre_parsed_items=parsed.get("items"))
@@ -769,6 +802,9 @@ NAV_CORRIGER   = {"✏️ corriger", "corriger", "modifier", "correction", "corr
 NAV_SUPPRIMER  = {"🗑 supprimer", "supprimer", "supprimer le dernier", "annuler",
                   "effacer", "effacer le dernier", "delete",
                   "supprimé", "supprimée", "supprimés", "effacé", "effacée"}
+# [US-038] Déclencheurs du flux guidé de note/observation
+NAV_NOTE       = {"📝 note", "note", "notes", "une note", "ajouter une note",
+                  "prendre une note", "/note"}
 
 # ── Intent classification via Groq ─────────────────────────────────────────
 # Intents possibles retournés par classify_intent()
@@ -1074,6 +1110,8 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         'ask', 'parcelle_confirm',
         # [US-007] flux déplacement
         'depl_culture_ask', 'depl_variete_select', 'depl_parcelle_select', 'depl_confirm',
+        # [US-038] flux note guidée
+        'note_category', 'note_details',
     }
     if ctx.user_data.get('mode') not in MODES_CORRECTION:
         ctx.user_data['mode'] = None
@@ -1109,6 +1147,10 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if texte in NAV_MENU:
         await cmd_start(update, ctx)
+        return
+
+    if texte in NAV_NOTE:
+        await _note_start(update, ctx)
         return
 
     # ── PRIORITÉ 1 : modes correction actifs
@@ -1159,6 +1201,14 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     elif mode == 'depl_confirm':
         await _depl_confirm(update, ctx, texte_raw)
+        return
+
+    # ── PRIORITÉ 1c : [US-038] flux note guidée actif
+    elif mode == 'note_category':
+        await _note_category_selected(update, ctx, texte_raw)
+        return
+    elif mode == 'note_details':
+        await _note_details_received(update, ctx, texte_raw)
         return
 
     # ── PRIORITÉ 2 : mode question analytique actif
@@ -1230,6 +1280,12 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _depl_start(update, ctx, culture)
         return
 
+    # ── PRIORITÉ 3d : [US-038 / CA2] détection demande de note guidée
+    if _is_note_request(texte_raw):
+        log.info(f"📝 NOTE TEXTE      : détectée → _note_start")
+        await _note_start(update, ctx)
+        return
+
     # ── PRIORITÉ 4 : détection automatique question
     if _is_question(texte_raw):
         log.info(f"❓ QUESTION AUTO   : détectée → reroutage vers _ask_question")
@@ -1261,6 +1317,12 @@ async def _parse_multi(update, lignes: list, msg=None):
         try:
             items = parse_commande(ligne)
             items = _normalize_items(items, ligne)
+            from utils.validation import strip_culture_hallucinee
+            for j, item in enumerate(items):
+                culture_avant = item.get("culture")
+                items[j] = strip_culture_hallucinee(item, ligne)
+                if culture_avant and items[j].get("culture") is None:
+                    log.warning(f"  [{i}] ⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | ligne={ligne!r}")
         except Exception as e:
             log.error(f"  [{i}] Erreur parsing : {e}")
             continue
@@ -1344,6 +1406,10 @@ _PERTE_TIMEOUT = 90  # secondes
 # [US-021] Actions en attente de confirmation {user_id: {items, texte, ts}}
 _ACTION_PENDING: dict[int, dict] = {}
 _ACTION_TIMEOUT = 60  # secondes
+
+# [US-038] Notes en attente de confirmation {user_id: {categorie, fields, texte, ts}}
+_NOTE_PENDING: dict[int, dict] = {}
+_NOTE_TIMEOUT = 60  # secondes
 
 _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
 
@@ -2036,6 +2102,209 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     await _do_save_items(update, pending["items"], pending["texte"])
 
 
+# ── [US-038] SAISIE GUIDÉE DE NOTES/OBSERVATIONS ────────────────────────────────
+_NOTE_CATEGORY_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        [KeyboardButton(NOTE_CATEGORIES["observation"]["label"]), KeyboardButton(NOTE_CATEGORIES["maladie"]["label"])],
+        [KeyboardButton(NOTE_CATEGORIES["arrosage"]["label"]),    KeyboardButton(NOTE_CATEGORIES["paillage"]["label"])],
+        [KeyboardButton("❌ Annuler")],
+    ],
+    resize_keyboard=True,
+)
+
+_NOTE_CANCEL_KEYWORDS = {"❌ annuler", "annuler"}
+
+
+def _note_reset(ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    ctx.user_data.pop('mode', None)
+    ctx.user_data.pop('note_category', None)
+
+
+async def _note_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-038 / CA1, CA2] Démarre le flux guidé : affiche le menu de catégories."""
+    _note_reset(ctx)
+    ctx.user_data['mode'] = 'note_category'
+    await update.effective_message.reply_text(
+        "📝 *Nouvelle note*\n\nQuelle catégorie souhaites-tu noter ?",
+        parse_mode="Markdown",
+        reply_markup=_NOTE_CATEGORY_KEYBOARD,
+    )
+
+
+async def _note_category_selected(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str) -> None:
+    """[US-038 / CA3] Étape 2 — la catégorie est choisie, on pose la question guidée."""
+    if texte.strip().lower() in _NOTE_CANCEL_KEYWORDS:
+        _note_reset(ctx)
+        await update.effective_message.reply_text("↩️ Note annulée.", reply_markup=MENU_KEYBOARD)
+        return
+
+    categorie = match_note_category(texte)
+    if categorie is None:
+        await update.effective_message.reply_text(
+            "❓ Catégorie non reconnue. Choisis un des boutons ci-dessous :",
+            reply_markup=_NOTE_CATEGORY_KEYBOARD,
+        )
+        return
+
+    ctx.user_data['note_category'] = categorie
+    ctx.user_data['mode'] = 'note_details'
+    log.info(f"[US-038] Catégorie sélectionnée : {categorie}")
+    await update.effective_message.reply_text(
+        NOTE_CATEGORIES[categorie]["question"],
+        reply_markup=ReplyKeyboardMarkup([["❌ Annuler"]], resize_keyboard=True),
+    )
+
+
+def _build_note_summary(categorie: str, fields: dict) -> str:
+    label = NOTE_CATEGORIES[categorie]["label"]
+    lines = [f"{label}\n"]
+    if fields.get("culture"):
+        lines.append(f"🥬 Culture : *{fields['culture']}*")
+    if fields.get("variete"):
+        lines.append(f"🏷 Variété : *{fields['variete']}*")
+    if fields.get("parcelle"):
+        lines.append(f"📍 Parcelle : *{fields['parcelle']}*")
+    lines.append(f"📝 Constat : *{fields['constat']}*")
+    if fields.get("traitement"):
+        lines.append(f"🧪 Traitement / matériau : *{fields['traitement']}*")
+    if fields.get("duree_minutes"):
+        lines.append(f"⏱ Durée constatée : *{fields['duree_minutes']} min*")
+    lines.append("\nC'est correct ?")
+    return "\n".join(lines)
+
+
+async def _note_details_received(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str) -> None:
+    """[US-038 / CA4, CA5] Étape 3 — extraction Groq des champs + récapitulatif."""
+    import time
+
+    if texte.strip().lower() in _NOTE_CANCEL_KEYWORDS:
+        _note_reset(ctx)
+        await update.effective_message.reply_text("↩️ Note annulée.", reply_markup=MENU_KEYBOARD)
+        return
+
+    categorie = ctx.user_data.get('note_category')
+    if categorie is None:
+        # État incohérent (ex: redémarrage du bot en plein flux) → on repart proprement
+        await _note_start(update, ctx)
+        return
+
+    fields = extract_note_fields(categorie, texte)
+
+    # [feedback] Résout culture/variete vers les valeurs canoniques déjà en base
+    # (Groq peut renvoyer "haricot"/"nain" alors que la BDD a "haricot"/"vert nain Contender")
+    if fields.get("culture"):
+        db = SessionLocal()
+        try:
+            culture_resolue = resolve_culture(db, fields["culture"])
+            if culture_resolue != fields["culture"]:
+                log.info(f"[US-038] Culture résolue : '{fields['culture']}' → '{culture_resolue}'")
+            fields["culture"] = culture_resolue
+            if fields.get("variete"):
+                variete_resolue = resolve_variete(db, culture_resolue, fields["variete"])
+                if variete_resolue != fields["variete"]:
+                    log.info(f"[US-038] Variété résolue : '{fields['variete']}' → '{variete_resolue}'")
+                fields["variete"] = variete_resolue
+        finally:
+            db.close()
+
+    _note_reset(ctx)
+
+    user_id = update.effective_user.id
+    _NOTE_PENDING[user_id] = {
+        "categorie": categorie,
+        "fields": fields,
+        "texte": texte,
+        "ts": time.time(),
+    }
+
+    summary = _build_note_summary(categorie, fields)
+    buttons = [[
+        InlineKeyboardButton("✅ Confirmer", callback_data="note_confirm"),
+        InlineKeyboardButton("❌ Annuler",   callback_data="note_cancel"),
+    ]]
+    await update.effective_message.reply_text(
+        summary, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def _save_note_event(update: Update, pending: dict) -> None:
+    """[US-038 / CA6, CA7] Sauvegarde l'Evenement observation — aucune colonne ajoutée."""
+    categorie = pending["categorie"]
+    fields    = pending["fields"]
+    label     = NOTE_CATEGORIES[categorie]["label"].split(" ", 1)[-1]  # retire l'emoji
+
+    db = SessionLocal()
+    try:
+        parcelle_obj = None
+        nom_parcelle = fields.get("parcelle")
+        if nom_parcelle:
+            parcelle_obj = resolve_parcelle(db, nom_parcelle)
+            if parcelle_obj is None:
+                log.warning(f"⚠️ [US-038] PARCELLE INCONNUE : {nom_parcelle!r} — note enregistrée sans parcelle")
+
+        event = Evenement(
+            type_action    = normalize_action("observation"),
+            culture        = fields.get("culture"),
+            variete        = fields.get("variete"),
+            parcelle_id    = parcelle_obj.id if parcelle_obj else None,
+            duree          = _to_int(fields.get("duree_minutes")),
+            traitement     = fields.get("traitement"),
+            commentaire    = f"[{label}] {fields['constat']}",
+            texte_original = pending["texte"],
+            date           = parse_date(fields.get("date")),
+        )
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+        log.info(f"💾 DB SAVE [US-038] : id={event.id} | categorie={categorie} | culture={event.culture} | parcelle_id={event.parcelle_id}")
+    except Exception as e:
+        db.rollback()
+        await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
+        return
+    finally:
+        db.close()
+
+    await update.effective_message.reply_text(
+        f"✅ *Note enregistrée* — {NOTE_CATEGORIES[categorie]['label']}",
+        parse_mode="Markdown",
+    )
+    await update.effective_message.reply_text(
+        "_Que voulez-vous faire ensuite ?_",
+        parse_mode="Markdown",
+        reply_markup=AFTER_RECORD_KEYBOARD,
+    )
+
+
+async def _note_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-038 / CA5, CA9] Callback inline — confirmation ou annulation de la note."""
+    import time
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    data    = query.data
+
+    if data == "note_cancel":
+        _NOTE_PENDING.pop(user_id, None)
+        log.info(f"[US-038] Note annulée — user_id={user_id}")
+        await query.edit_message_text("❌ Note annulée.", reply_markup=None)
+        return
+
+    pending = _NOTE_PENDING.get(user_id)
+    if pending is None:
+        await query.edit_message_text("⏱ Note expirée. Veuillez recommencer avec /note.")
+        return
+
+    if time.time() - pending["ts"] > _NOTE_TIMEOUT:
+        _NOTE_PENDING.pop(user_id, None)
+        await query.edit_message_text(f"⏱ *Confirmation expirée ({_NOTE_TIMEOUT} s), note annulée.*", parse_mode="Markdown")
+        return
+
+    _NOTE_PENDING.pop(user_id, None)
+    await query.edit_message_text("⏳ Enregistrement en cours...", reply_markup=None)
+    await _save_note_event(update, pending)
+
+
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
 async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items=None):
     """Parse le texte → liste d'événements → PostgreSQL → récapitulatif.
@@ -2062,6 +2331,14 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     items = _normalize_items(items, texte)
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
+
+    # [US-011 bis] Retire toute culture hallucinée (absente du texte source) avant validation
+    from utils.validation import strip_culture_hallucinee
+    for i, item in enumerate(items):
+        culture_avant = item.get("culture")
+        items[i] = strip_culture_hallucinee(item, texte)
+        if culture_avant and items[i].get("culture") is None:
+            log.warning(f"⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | texte={texte!r}")
 
     # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
     from utils.validation import validate_parsed_action
@@ -4803,6 +5080,7 @@ def main():
     app.add_handler(CommandHandler("historique", cmd_historique))
     app.add_handler(CommandHandler("ask",        cmd_ask))
     app.add_handler(CommandHandler("corriger",   lambda u,c: _corr_start(u,c)))
+    app.add_handler(CommandHandler("note",       lambda u,c: _note_start(u,c)))  # [US-038]
 
     # Commandes TTS
     app.add_handler(CommandHandler("tts",        cmd_tts))
@@ -4832,6 +5110,9 @@ def main():
     # [US-021] Confirmation avant enregistrement — boutons inline
     app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
     app.add_handler(CallbackQueryHandler(_semis_organe_cb, pattern=r"^semis_organe"))
+
+    # [US-038] Confirmation avant enregistrement d'une note — boutons inline
+    app.add_handler(CallbackQueryHandler(_note_confirm_cb, pattern=r"^note_"))
 
     # [US-009] Suppression parcelle — boutons inline
     app.add_handler(CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_"))
