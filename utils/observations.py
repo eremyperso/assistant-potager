@@ -15,26 +15,18 @@ Règle de routage (décidée avec le PO — révision exclusive) :
 Une même observation n'apparaît jamais à deux endroits (Plan/Stocks mutuellement
 exclusifs, et au sein de Plan : parcelle OU ligne culture, jamais les deux).
 """
-import re
 from collections import defaultdict
 from datetime import datetime
 
 from database.models import Evenement
 
-_CATEGORIE_RE = re.compile(r"^\[([^\]]+)\]\s*")
-
-
-def strip_categorie(commentaire: str | None) -> str:
-    """Retire le préfixe '[Catégorie] ' ajouté par la saisie guidée US-038."""
-    if not commentaire:
-        return ""
-    return _CATEGORIE_RE.sub("", commentaire).strip()
-
 
 def _serialize(ev: Evenement) -> dict:
+    # [feedback] Le commentaire brut (avec son préfixe [Catégorie]) est renvoyé
+    # tel quel — aucune interprétation côté backend, l'API expose la donnée réelle.
     return {
         "date":  ev.date.strftime("%d/%m") if ev.date else "",
-        "texte": strip_categorie(ev.commentaire),
+        "texte": (ev.commentaire or "").strip(),
     }
 
 
