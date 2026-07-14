@@ -3,10 +3,45 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 -----------------------------------------------------------------
 [US-001] Ajout colonne type_organe_recolte sur Evenement
 [US-001] Ajout modèle CultureConfig (table culture_config)
+[US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
+
+
+class User(Base):
+    """[US-040] Utilisateur de la plateforme (compte web et/ou Telegram lié)."""
+    __tablename__ = "users"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    email            = Column(String(255), unique=True, nullable=True)
+    telegram_chat_id = Column(BigInteger, unique=True, nullable=True)
+    nom              = Column(String(100), nullable=True)
+    cree_le          = Column(DateTime, server_default=func.now())
+
+
+class Potager(Base):
+    """[US-040] Un potager (jardin partagé) — le tenant de l'application."""
+    __tablename__ = "potagers"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    nom              = Column(String(100), nullable=False)
+    latitude         = Column(Float, nullable=True)
+    longitude        = Column(Float, nullable=True)
+    proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
+    plan             = Column(String(20), default="free")
+    cree_le          = Column(DateTime, server_default=func.now())
+
+
+class PotagerMembre(Base):
+    """[US-040] Appartenance d'un utilisateur à un potager, avec son rôle."""
+    __tablename__ = "potager_membres"
+
+    user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    potager_id = Column(Integer, ForeignKey("potagers.id"), primary_key=True)
+    role       = Column(String(10), nullable=False)  # 'owner' | 'editor' | 'lecteur'
 
 
 class Evenement(Base):
@@ -55,8 +90,16 @@ class Evenement(Base):
     # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
     source_evenement_ids = Column(String, nullable=True)
 
+    # [US-040] Rattachement tenant — NULLABLE à ce stade (backfill = potager #1),
+    # NOT NULL réservé à une US ultérieure de scoping applicatif
+    potager_id = Column(Integer, ForeignKey("potagers.id"), nullable=True)
+
     # Relation vers la parcelle — permet d'accéder à e.parcelle_rel.nom
     parcelle_rel = relationship("Parcelle", foreign_keys=[parcelle_id])
+
+    __table_args__ = (
+        Index("idx_evenements_potager_date", "potager_id", "date"),
+    )
 
     @property
     def parcelle(self) -> str | None:
@@ -83,6 +126,11 @@ class CultureConfig(Base):
     espacement              = Column(String, nullable=True)    # ex: "30 × 40 cm"
     surface_m2              = Column(Float,  nullable=True)    # surface au sol par plant en m²
 
+    # [US-040] NULL = fiche référentiel globale partagée entre potagers ;
+    # non NULL = fiche personnalisée à un potager (le backfill ne force pas
+    # cette colonne, contrairement aux tables purement métier)
+    potager_id               = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+
 
 class Parcelle(Base):
     """
@@ -106,3 +154,6 @@ class Parcelle(Base):
     ordre         = Column(Integer, default=0)
     actif         = Column(Boolean, default=True, nullable=False)
     est_pepiniere = Column(Boolean, default=False, nullable=False)
+
+    # [US-040] Rattachement tenant — NULLABLE à ce stade (backfill = potager #1)
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)

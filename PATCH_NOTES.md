@@ -1,4 +1,12 @@
 
+## [v3.15.0] — 2026-07-12
+
+### 🔧 Améliorations techniques
+- Pose le socle de données multi-tenant (`users`, `potagers`, `potager_membres`) — chaque table métier (`evenements`, `parcelles`, `culture_config`) porte désormais une colonne `potager_id` optionnelle, sans aucun changement de comportement du bot ni de la PWA (US-040)
+
+### 💾 Base de données
+- Ajoute les tables `users`, `potagers`, `potager_membres` et la colonne `potager_id` sur `evenements`, `parcelles`, `culture_config` (migration_v16, rollback_v16) — préparation à l'isolation des données entre jardins, aucune donnée existante impactée (US-040)
+
 ## [v3.14.0] — 2026-07-10
 
 ### 🚀 Nouveautés
