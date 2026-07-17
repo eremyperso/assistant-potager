@@ -1,4 +1,11 @@
 
+## [v3.16.0] — 2026-07-16
+
+### 🔧 Améliorations techniques
+- Extrait toute la logique métier (événements, stats, stock, plan, questions) dans une nouvelle couche `app/services/`, appelée désormais par `bot.py` et `main.py` à la place de leurs propres accès directs à la base — l'isolation par potager à venir se codera à un seul endroit par fonction au lieu d'être dupliquée entre le bot et l'API (US-041)
+- `POST /ask` et la branche `INTERROGER` de `POST /voice` (PWA) répondent désormais via l'agent SQL déjà utilisé côté Telegram (`services.questions.repondre_question`) au lieu d'envoyer tout l'historique brut au LLM — réponse plus rapide et coût Groq réduit sur ces deux points d'entrée (US-041)
+- Supprime la duplication de l'héritage `type_organe_recolte` dans `POST /parse` (le même lookup `CultureConfig` était exécuté deux fois de suite)
+
 ## [v3.15.0] — 2026-07-12
 
 ### 🔧 Améliorations techniques

@@ -62,7 +62,7 @@ def client():
         patch("main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value=MOCK_STOCKS),
         patch("utils.stock.calcul_godets",          return_value={}),
-        patch("main.Evenement",                     new_callable=MagicMock),
+        patch("utils.stock.calcul_semis",           return_value={}),
     ):
         with TestClient(app) as c:
             yield c
@@ -75,7 +75,7 @@ def client_vide():
         patch("main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value={}),
         patch("utils.stock.calcul_godets",          return_value={}),
-        patch("main.Evenement",                     new_callable=MagicMock),
+        patch("utils.stock.calcul_semis",           return_value={}),
     ):
         with TestClient(app) as c:
             yield c
@@ -153,7 +153,7 @@ def test_us025_ca6_api_retourne_200_si_vide():
         patch("main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value={}),
         patch("utils.stock.calcul_godets",          return_value={}),
-        patch("main.Evenement",                     new_callable=MagicMock),
+        patch("utils.stock.calcul_semis",           return_value={}),
     ):
         with TestClient(app) as c:
             resp = c.get("/stats")

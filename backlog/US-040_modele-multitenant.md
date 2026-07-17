@@ -1,5 +1,6 @@
 **ID :** US-040
 **Titre :** Créer le socle de données multi-tenant (users / potagers / potager_membres) avec backfill
+**Épic :** ÉPIC 1 — Socle multi-tenant
 
 **Story :**
 En tant qu'administrateur de la plateforme

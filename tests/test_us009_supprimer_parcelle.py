@@ -152,7 +152,7 @@ async def test_us009_ca5_message_final_avec_evenements():
     mock_parc.actif = True
 
     mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = mock_parc
+    mock_db.get.return_value = mock_parc
     mock_db.query.return_value.filter.return_value.count.return_value = 5
     mock_db.query.return_value.filter.return_value.update.return_value = None
 
@@ -174,7 +174,7 @@ async def test_us009_ca6_callback_parcelle_inexistante():
     update = _make_callback("parcelle_suppr_confirm:999")
 
     mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = None
+    mock_db.get.return_value = None
 
     with patch("bot.SessionLocal", return_value=mock_db):
         mock_db.__enter__ = lambda s: mock_db
