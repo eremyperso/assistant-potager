@@ -1,13 +1,14 @@
 """
-app/services/evenements.py — CRUD et requêtes sur Evenement [US-041]
+app/services/evenements.py — CRUD et requêtes sur Evenement [US-041 / US-042]
 -----------------------------------------------------------------------
 Centralise tous les accès directs à la table `evenements` auparavant
-dispersés dans bot.py et main.py, afin que le scoping par potager_id
-(US-042) puisse être ajouté à un seul endroit par fonction.
+dispersés dans bot.py et main.py.
 
-⚠️ Aucun filtre potager_id ici : le scoping applicatif est le périmètre
-de US-042. `ctx: TenantContext` est déjà présent dans chaque signature
-pour que l'ajout du filtre ne change aucune signature appelante.
+[US-042] Toutes les requêtes de lecture filtrent désormais par
+`ctx.potager_id`, et toute création d'événement fixe `potager_id` sur la
+ligne créée. Les accès par id (`db.get`) sont suivis d'une vérification
+d'appartenance au tenant courant — un id d'un autre potager renvoie
+None/False, jamais la donnée.
 """
 import logging
 from typing import Optional
@@ -56,11 +57,15 @@ def _normalize_unite_semis(unite_brute: Optional[str]) -> str:
     return _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
 
 
-def _cond_localisation_culture():
+def _cond_localisation_culture(potager_id: int):
     """Une culture est "localisée" via une 'plantation' OU un 'semis' directement lié
     à une VRAIE parcelle de pleine terre (semis pleine terre). Voir bot.py historique
-    [US-037 / migration_v15] pour le détail du raisonnement agronomique."""
-    pepiniere_ids = select(Parcelle.id).where(Parcelle.est_pepiniere.is_(True))
+    [US-037 / migration_v15] pour le détail du raisonnement agronomique.
+    [US-042] pepiniere_ids scopé au potager courant — évite qu'un id de parcelle
+    pépinière d'un autre potager n'entre dans le NOT IN."""
+    pepiniere_ids = select(Parcelle.id).where(
+        Parcelle.est_pepiniere.is_(True), Parcelle.potager_id == potager_id
+    )
     return or_(
         Evenement.type_action == "plantation",
         and_(
@@ -74,7 +79,7 @@ def _cond_localisation_culture():
 # ── Compteurs simples ────────────────────────────────────────────────────────
 def compter_evenements(db: Session, ctx: TenantContext, jusqua=None) -> int:
     """Nombre total d'événements (cmd_start, /health, /stats avec date_ref optionnelle)."""
-    q = db.query(func.count(Evenement.id))
+    q = db.query(func.count(Evenement.id)).filter(Evenement.potager_id == ctx.potager_id)
     if jusqua is not None:
         from datetime import datetime as _dt
         q = q.filter(Evenement.date <= _dt(jusqua.year, jusqua.month, jusqua.day, 23, 59, 59))
@@ -83,20 +88,38 @@ def compter_evenements(db: Session, ctx: TenantContext, jusqua=None) -> int:
 
 def compter_evenements_parcelle(db: Session, ctx: TenantContext, parcelle_id: int) -> int:
     """Nombre d'événements rattachés à une parcelle (avant suppression)."""
-    return db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).count()
+    return (
+        db.query(Evenement)
+        .filter(Evenement.parcelle_id == parcelle_id, Evenement.potager_id == ctx.potager_id)
+        .count()
+    )
 
 
 # ── Lecture ───────────────────────────────────────────────────────────────────
 def get_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> Optional[Evenement]:
-    return db.get(Evenement, evenement_id)
+    event = db.get(Evenement, evenement_id)
+    if event is None or event.potager_id != ctx.potager_id:
+        return None
+    return event
 
 
 def dernier_evenement(db: Session, ctx: TenantContext) -> Optional[Evenement]:
-    return db.query(Evenement).order_by(Evenement.id.desc()).first()
+    return (
+        db.query(Evenement)
+        .filter(Evenement.potager_id == ctx.potager_id)
+        .order_by(Evenement.id.desc())
+        .first()
+    )
 
 
 def evenements_recents(db: Session, ctx: TenantContext, limit: int = 10) -> list[Evenement]:
-    return db.query(Evenement).order_by(Evenement.date.desc()).limit(limit).all()
+    return (
+        db.query(Evenement)
+        .filter(Evenement.potager_id == ctx.potager_id)
+        .order_by(Evenement.date.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 def lister_evenements(
@@ -117,6 +140,7 @@ def lister_evenements(
     q = (
         db.query(Evenement)
         .options(joinedload(Evenement.parcelle_rel))
+        .filter(Evenement.potager_id == ctx.potager_id)
         .order_by(Evenement.date.desc())
     )
     if action:
@@ -139,7 +163,11 @@ def lister_evenements(
 
 def find_candidates(db: Session, ctx: TenantContext, criteres: dict, limit: int = 3) -> list[Evenement]:
     """[/corriger] Retrouve les événements correspondant aux critères extraits par Groq."""
-    q = db.query(Evenement).options(selectinload(Evenement.parcelle_rel))
+    q = (
+        db.query(Evenement)
+        .options(selectinload(Evenement.parcelle_rel))
+        .filter(Evenement.potager_id == ctx.potager_id)
+    )
     if criteres.get("action"):
         q = q.filter(Evenement.type_action == criteres["action"])
     if criteres.get("culture"):
@@ -161,7 +189,7 @@ def godets_en_attente(db: Session, ctx: TenantContext) -> list[Evenement]:
     """[/godets] Plants en godet sans plantation postérieure de la même culture."""
     godets_all = (
         db.query(Evenement)
-        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.type_action == "mise_en_godet", Evenement.potager_id == ctx.potager_id)
         .order_by(Evenement.date.desc())
         .all()
     )
@@ -170,6 +198,7 @@ def godets_en_attente(db: Session, ctx: TenantContext) -> list[Evenement]:
         plantation = db.query(Evenement).filter(
             Evenement.type_action == "plantation",
             Evenement.culture == g.culture,
+            Evenement.potager_id == ctx.potager_id,
         )
         if g.date:
             plantation = plantation.filter(Evenement.date >= g.date)
@@ -182,7 +211,11 @@ def evenements_localises_exact(db: Session, ctx: TenantContext, culture: str) ->
     """[US-007] Plantations / semis pleine terre correspondant exactement à `culture`."""
     return (
         db.query(Evenement)
-        .filter(_cond_localisation_culture(), func.lower(Evenement.culture) == culture.lower())
+        .filter(
+            _cond_localisation_culture(ctx.potager_id),
+            func.lower(Evenement.culture) == culture.lower(),
+            Evenement.potager_id == ctx.potager_id,
+        )
         .all()
     )
 
@@ -191,7 +224,11 @@ def evenements_localises_recherche_partielle(db: Session, ctx: TenantContext, mo
     """[US-007] Recherche partielle (typos/accents/pluriel) sur culture localisée."""
     return (
         db.query(Evenement)
-        .filter(_cond_localisation_culture(), func.lower(Evenement.culture).ilike(f"%{motif}%"))
+        .filter(
+            _cond_localisation_culture(ctx.potager_id),
+            func.lower(Evenement.culture).ilike(f"%{motif}%"),
+            Evenement.potager_id == ctx.potager_id,
+        )
         .all()
     )
 
@@ -202,7 +239,9 @@ def evenements_localises_pour_maj(
     """[US-007] Plantations / semis pleine terre d'une culture (+ variété optionnelle),
     utilisé pour compter puis réassocier à une nouvelle parcelle."""
     q = db.query(Evenement).filter(
-        _cond_localisation_culture(), func.lower(Evenement.culture) == culture.lower()
+        _cond_localisation_culture(ctx.potager_id),
+        func.lower(Evenement.culture) == culture.lower(),
+        Evenement.potager_id == ctx.potager_id,
     )
     if variete is not None:
         q = q.filter(Evenement.variete == variete)
@@ -212,23 +251,28 @@ def evenements_localises_pour_maj(
 def liberer_evenements_parcelle(db: Session, ctx: TenantContext, parcelle_id: int) -> int:
     """[US-009] Compte puis détache (parcelle_id=NULL) tous les événements d'une parcelle
     supprimée. Ne commit pas — l'appelant commit avec la désactivation de la parcelle."""
-    nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).count()
-    db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).update(
-        {"parcelle_id": None}, synchronize_session="fetch"
+    q = db.query(Evenement).filter(
+        Evenement.parcelle_id == parcelle_id, Evenement.potager_id == ctx.potager_id
     )
+    nb = q.count()
+    q.update({"parcelle_id": None}, synchronize_session="fetch")
     return nb
 
 
 def compter_traitements(db: Session, ctx: TenantContext) -> int:
     """[cmd_stats bot.py] Nombre total d'événements de traitement."""
-    return db.query(func.count(Evenement.id)).filter(Evenement.type_action == "traitement").scalar()
+    return (
+        db.query(func.count(Evenement.id))
+        .filter(Evenement.type_action == "traitement", Evenement.potager_id == ctx.potager_id)
+        .scalar()
+    )
 
 
 def traitements_appliques(db: Session, ctx: TenantContext) -> list[tuple[str, int]]:
     """[/stats] Nombre d'applications par produit de traitement."""
     return (
         db.query(Evenement.traitement, func.count(Evenement.id))
-        .filter(Evenement.type_action == "traitement")
+        .filter(Evenement.type_action == "traitement", Evenement.potager_id == ctx.potager_id)
         .group_by(Evenement.traitement)
         .all()
     )
@@ -239,7 +283,7 @@ def cultures_avec_mise_en_godet(db: Session, ctx: TenantContext) -> set[str]:
     return {
         row[0].lower()
         for row in db.query(Evenement.culture)
-        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.type_action == "mise_en_godet", Evenement.potager_id == ctx.potager_id)
         .filter(Evenement.culture.isnot(None))
         .distinct()
         .all()
@@ -253,7 +297,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
     from database.models import CultureConfig
 
     nom_parcelle = parsed.get("parcelle")
-    parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
+    parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
     event = Evenement(
         type_action=normalize_action(parsed.get("action")),
         culture=parsed.get("culture"),
@@ -269,9 +313,17 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        potager_id=ctx.potager_id,
     )
     if event.culture:
-        cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
+        cfg = (
+            db.query(CultureConfig)
+            .filter(
+                CultureConfig.nom == event.culture,
+                or_(CultureConfig.potager_id == ctx.potager_id, CultureConfig.potager_id.is_(None)),
+            )
+            .first()
+        )
         if cfg:
             event.type_organe_recolte = cfg.type_organe_recolte
     db.add(event)
@@ -284,7 +336,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
     """[/parse multi-lignes bot.py] Crée un événement pour UNE ligne d'un message multi-actions
     (pas d'héritage type_organe — comportement historique de _parse_multi)."""
     nom_parcelle = parsed.get("parcelle")
-    parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
+    parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
     event = Evenement(
         type_action=normalize_action(parsed.get("action")),
         culture=parsed.get("culture"),
@@ -300,6 +352,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        potager_id=ctx.potager_id,
     )
     db.add(event)
     db.commit()
@@ -324,12 +377,13 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
 
         culture_semis = (parsed.get("culture") or "").strip()
         if culture_semis:
-            type_organe_semis = get_type_organe(db, culture_semis)
+            type_organe_semis = get_type_organe(db, culture_semis, potager_id=ctx.potager_id)
 
     source_evenement_ids: Optional[str] = parsed.get("source_evenement_ids")
     if normalize_action(parsed.get("action")) == "plantation" and parsed.get("culture"):
         variete_src, src_ids = _find_plantation_sources(
             db, parsed["culture"], parsed.get("variete"), float(parsed.get("quantite") or 0),
+            potager_id=ctx.potager_id,
         )
         if variete_src and not parsed.get("variete"):
             parsed["variete"] = variete_src
@@ -355,6 +409,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         source_evenement_ids=source_evenement_ids,
         type_organe_recolte=type_organe_semis,
+        potager_id=ctx.potager_id,
     )
     db.add(event)
     db.commit()
@@ -374,7 +429,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     origine_graines_id: Optional[int] = None
     semis_rows = (
         db.query(Evenement.id, Evenement.variete)
-        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.type_action == "semis", Evenement.potager_id == ctx.potager_id)
         .filter(func.lower(Evenement.culture) == culture_str.lower())
         .filter(Evenement.culture.isnot(None))
     )
@@ -406,6 +461,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_graines_id=origine_graines_id,
+        potager_id=ctx.potager_id,
     )
     db.add(event)
     db.commit()
@@ -419,7 +475,7 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
     parcelle_obj = None
     nom_parcelle = fields.get("parcelle")
     if nom_parcelle:
-        parcelle_obj = resolve_parcelle(db, nom_parcelle)
+        parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
         if parcelle_obj is None:
             log.warning(f"⚠️ [US-038] PARCELLE INCONNUE : {nom_parcelle!r} — note enregistrée sans parcelle")
 
@@ -433,6 +489,7 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
         commentaire=f"[{label}] {fields['constat']}",
         texte_original=texte,
         date=parse_date(fields.get("date")),
+        potager_id=ctx.potager_id,
     )
     db.add(event)
     db.commit()
@@ -453,6 +510,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         commentaire=item.get("commentaire"),
         texte_original=texte,
         date=parse_date(item.get("date")),
+        potager_id=ctx.potager_id,
     )
     db.add(event)
     db.commit()
@@ -464,7 +522,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
 def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corrections: dict, trace: str) -> Optional[Evenement]:
     """[/corriger étape 5] Applique les champs modifiés + trace d'auditabilité."""
     event = db.get(Evenement, evenement_id)
-    if event is None:
+    if event is None or event.potager_id != ctx.potager_id:
         return None
 
     mapping = {
@@ -497,7 +555,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
 def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> bool:
     """[/corriger — suppression] Supprime un événement. Retourne False si introuvable."""
     event = db.get(Evenement, evenement_id)
-    if event is None:
+    if event is None or event.potager_id != ctx.potager_id:
         return False
     db.delete(event)
     db.commit()
@@ -511,10 +569,11 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
     from sqlalchemy.orm import joinedload
 
     culture_lower = culture.lower()
+    pid = ctx.potager_id
 
     godet_q = (
         db.query(Evenement)
-        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.type_action == "mise_en_godet", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     godet_q = godet_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else godet_q.filter(Evenement.variete.is_(None))
@@ -526,7 +585,7 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
         db.query(Evenement)
         .options(joinedload(Evenement.parcelle_rel))
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
-        .filter(Evenement.type_action == "semis")
+        .filter(Evenement.type_action == "semis", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(or_(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
     )
@@ -536,7 +595,7 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
     plantation_candidates = (
         db.query(Evenement)
         .options(joinedload(Evenement.parcelle_rel))
-        .filter(Evenement.type_action == "plantation")
+        .filter(Evenement.type_action == "plantation", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.source_evenement_ids.isnot(None))
         .order_by(Evenement.date.asc())
@@ -548,7 +607,7 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
 
     vendu_q = (
         db.query(Evenement)
-        .filter(Evenement.type_action == "vendu")
+        .filter(Evenement.type_action == "vendu", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     vendu_q = vendu_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else vendu_q.filter(Evenement.variete.is_(None))
@@ -556,7 +615,7 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
 
     perte_q = (
         db.query(Evenement)
-        .filter(Evenement.type_action == "perte_godet")
+        .filter(Evenement.type_action == "perte_godet", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     perte_q = perte_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else perte_q.filter(Evenement.variete.is_(None))

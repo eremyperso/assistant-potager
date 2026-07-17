@@ -397,12 +397,13 @@ def get_rendement(annee: int = Query(default=None), date_ref: date = Query(defau
     """[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.
     [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
     from utils.stock import calcul_rendement_mensuel
+    from app.services.context import default_context
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        data = calcul_rendement_mensuel(db, annee_eff, dr)
+        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=default_context().potager_id)
         return {"annee": annee_eff, **data}
     finally:
         db.close()
@@ -413,12 +414,13 @@ def get_activite(annee: int = Query(default=None), date_ref: date = Query(defaul
     """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).
     [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
     from utils.stock import calcul_activite_quotidienne
+    from app.services.context import default_context
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        jours = calcul_activite_quotidienne(db, annee_eff, dr)
+        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=default_context().potager_id)
         return {
             "annee":         annee_eff,
             "jours":         jours,
@@ -550,12 +552,13 @@ def get_godets(date_ref: date = Query(default=None)):
     - tout_plante : cultures entièrement plantées (stock = 0), listées dans l'encart "Tout planté"
     """
     from utils.stock import calcul_godets
+    from app.services.context import default_context
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        tous = calcul_godets(db, include_epuises=True, date_ref=dr)
+        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=default_context().potager_id)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0]
         tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0 and not v.get("graines_en_germination")]
         return {

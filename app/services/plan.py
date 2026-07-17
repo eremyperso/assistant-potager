@@ -19,11 +19,11 @@ import utils.parcelles as _parcelles_mod
 def get_parcelles(db: Session, ctx: TenantContext) -> list[Parcelle]:
     # Appel qualifié (pas d'import direct de la fonction) pour que les patches de
     # test sur utils.parcelles.get_all_parcelles restent effectifs.
-    return _parcelles_mod.get_all_parcelles(db)
+    return _parcelles_mod.get_all_parcelles(db, potager_id=ctx.potager_id)
 
 
 def get_occupation(db: Session, ctx: TenantContext, date_ref: Optional[_date] = None) -> dict:
-    return _parcelles_mod.calcul_occupation_parcelles(db, date_ref)
+    return _parcelles_mod.calcul_occupation_parcelles(db, date_ref, potager_id=ctx.potager_id)
 
 
 def surface_par_culture(db: Session, ctx: TenantContext) -> dict[str, float]:

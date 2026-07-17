@@ -1,4 +1,18 @@
 
+## [v3.17.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Toutes les fonctions de `app/services/` (événements, parcelles, stats, stock, plan) filtrent désormais systématiquement par `potager_id` — aucune donnée d'un potager ne peut plus apparaître dans les réponses adressées à un autre potager (US-042)
+- `services.questions.repondre_question()` (mode `/ask`) applique une fenêtre glissante de 12 mois et une limite de 100 événements, et logue le nombre réel de tokens Groq consommés à chaque appel (cible < 1500, contre ~5000 avant l'agent SQL) (US-042)
+- `llm/sql_agent.QueryAgent` accepte désormais un `potager_id` et scope toutes ses requêtes en conséquence (US-042)
+- `utils/stock.py` et `utils/parcelles.py` acceptent un paramètre `potager_id` optionnel sur chacune de leurs fonctions de lecture — utilisé systématiquement par la couche services, sans impact sur les usages directs existants (US-042)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v17.sql` (+ rollback) : passe `potager_id` en `NOT NULL` sur `evenements` et `parcelles` une fois le backfill vérifié complet ; `culture_config.potager_id` reste volontairement nullable (fiches globales partagées entre potagers) (US-042)
+
+### ⚠️ Breaking changes
+- Aucun changement de comportement pour l'utilisateur final tant qu'un seul potager existe (potager #1) — le scoping devient significatif dès qu'un second potager sera créé (US-110/US-112)
+
 ## [v3.16.0] — 2026-07-16
 
 ### 🔧 Améliorations techniques

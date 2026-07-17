@@ -90,9 +90,16 @@ class Evenement(Base):
     # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
     source_evenement_ids = Column(String, nullable=True)
 
-    # [US-040] Rattachement tenant — NULLABLE à ce stade (backfill = potager #1),
-    # NOT NULL réservé à une US ultérieure de scoping applicatif
-    potager_id = Column(Integer, ForeignKey("potagers.id"), nullable=True)
+    # [US-040] Rattachement tenant, backfillé = potager #1.
+    # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
+    # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests
+    # SQLite existantes n'aient pas à fournir potager_id partout ; le scoping
+    # applicatif réel se fait par ctx.potager_id dans app/services/, pas par
+    # cette contrainte ORM. La contrainte NOT NULL réelle vit dans le schéma SQL.
+    # default=1 (= app.services.context.DEFAULT_POTAGER_ID) : toute création sans
+    # potager_id explicite (tests existants, scripts) tombe sur le potager #1,
+    # cohérent avec default_context() tant que le multi-potager réel n'existe pas.
+    potager_id = Column(Integer, ForeignKey("potagers.id"), nullable=True, default=1)
 
     # Relation vers la parcelle — permet d'accéder à e.parcelle_rel.nom
     parcelle_rel = relationship("Parcelle", foreign_keys=[parcelle_id])
@@ -155,5 +162,7 @@ class Parcelle(Base):
     actif         = Column(Boolean, default=True, nullable=False)
     est_pepiniere = Column(Boolean, default=False, nullable=False)
 
-    # [US-040] Rattachement tenant — NULLABLE à ce stade (backfill = potager #1)
-    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    # [US-040] Rattachement tenant, backfillé = potager #1.
+    # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent
+    # sur Evenement.potager_id (nullable=True + default=1 ORM volontairement conservés).
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True, default=1)
