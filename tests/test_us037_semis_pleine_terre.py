@@ -32,7 +32,8 @@ from utils.stock import (
     get_type_organe,
     _fmt_qte_unite,
 )
-from bot import _normalize_unite_semis, _UNITES_SEMIS_CANONIQUES, _do_save_items
+from app.services.evenements import _normalize_unite_semis, _UNITES_SEMIS_CANONIQUES
+from bot import _do_save_items
 
 
 # ──────────────────────────────────────────────────────────────────────────────

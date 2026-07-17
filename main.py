@@ -19,8 +19,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func, or_
-from sqlalchemy.orm import joinedload
 
 # ── Version [US-008] ────────────────────────────────────────────────────────────
 def _lire_version() -> str:
@@ -34,14 +32,16 @@ def _lire_version() -> str:
 _APP_VERSION = _lire_version()
 
 from database.db import Base, engine, SessionLocal
-from database.models import Evenement, CultureConfig, Parcelle
-from utils.actions import normalize_action
-from utils.parcelles import resolve_parcelle
-from utils.stock import calcul_stock_cultures, format_stock_stats_json
+import utils.stock as _stock_mod
 from utils.observations import build_observations_index
-from llm.groq_client import parse_commande, repondre_question, transcribe_audio, classify_intent_pwa
-from utils.date_utils import parse_date
+from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
 from llm.rag import add_to_rag
+from app.services.context import default_context
+from app.services import evenements as svc_evenements
+from app.services import stats as svc_stats
+from app.services import plan as svc_plan
+from app.services import questions as svc_questions
+from app.services import parcelles as svc_parcelles
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
@@ -112,7 +112,7 @@ class TexteRequest(BaseModel):
 def health():
     """Vérification que le serveur est opérationnel."""
     db = SessionLocal()
-    nb = db.query(Evenement).count()
+    nb = svc_evenements.compter_evenements(db, default_context())
     db.close()
     return {
         "status"          : "ok",
@@ -131,7 +131,7 @@ def get_cultures():
     """
     db = SessionLocal()
     try:
-        cultures = db.query(CultureConfig).order_by(CultureConfig.nom).all()
+        cultures = svc_parcelles.lister_cultures_config(db, default_context())
         result = [
             {
                 "nom": c.nom,
@@ -165,42 +165,11 @@ def parse(req: TexteRequest):
 
     # ── 2. Sauvegarde PostgreSQL ──────────────────────────────────────────────
     db = SessionLocal()
+    ctx = default_context()
     saved = []
     try:
         for parsed in items:
-            nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-            event = Evenement(
-                type_action       = normalize_action(parsed.get("action")),
-                culture           = parsed.get("culture"),
-                variete           = parsed.get("variete"),
-                quantite          = _to_float(parsed.get("quantite")),
-                unite             = parsed.get("unite"),
-                parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                rang              = parsed.get("rang"),
-                duree             = _to_int(parsed.get("duree_minutes")),
-                traitement        = parsed.get("traitement"),
-                commentaire       = parsed.get("commentaire"),
-                texte_original    = req.texte,
-                date              = parse_date(parsed.get("date")),
-                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-            )
-            
-            # Héritage automatique du type d'organe récolté depuis culture_config
-            if event.culture:
-                config = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                if config:
-                    event.type_organe_recolte = config.type_organe_recolte
-            
-            # [US-001] Héritage automatique du type d'organe récolté
-            if event.culture:
-                cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                if cfg:
-                    event.type_organe_recolte = cfg.type_organe_recolte
-            db.add(event)
-            db.commit()
-            db.refresh(event)
+            event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, req.texte)
             add_to_rag(event.id, parsed)
             saved.append({"event_id": event.id, "parsed": parsed})
 
@@ -269,35 +238,10 @@ async def voice(
 
     # 5a. INTERROGER — question analytique sur l'historique
     if intent == "INTERROGER":
-        db = SessionLocal()
         try:
-            events = db.query(Evenement).order_by(Evenement.date).all()
-            if not events:
-                reponse = "Aucune donnée enregistrée pour l'instant. Commencez par dicter quelques actions !"
-            else:
-                data = [
-                    {
-                        "id"         : e.id,
-                        "date"       : str(e.date)[:10] if e.date else None,
-                        "action"     : e.type_action,
-                        "culture"    : e.culture,
-                        "variete"    : e.variete,
-                        "quantite"   : e.quantite,
-                        "unite"      : e.unite,
-                        "parcelle"   : e.parcelle,
-                        "rang"       : e.rang,
-                        "duree_min"  : e.duree,
-                        "traitement" : e.traitement,
-                        "commentaire": e.commentaire,
-                    }
-                    for e in events
-                ]
-                try:
-                    reponse = repondre_question(texte, json.dumps(data, ensure_ascii=False))
-                except Exception as e:
-                    raise HTTPException(status_code=502, detail=f"Erreur Groq : {e}")
-        finally:
-            db.close()
+            reponse = svc_questions.repondre_question(default_context(), texte)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
         result = {
             "reponse"    : reponse,
@@ -317,34 +261,11 @@ async def voice(
             raise HTTPException(status_code=502, detail=f"Erreur parsing : {e}")
 
         db = SessionLocal()
+        ctx = default_context()
         saved_parsed: list[dict] = []
         try:
             for parsed in items:
-                nom_parcelle = parsed.get("parcelle")
-                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-                event = Evenement(
-                    type_action       = normalize_action(parsed.get("action")),
-                    culture           = parsed.get("culture"),
-                    variete           = parsed.get("variete"),
-                    quantite          = _to_float(parsed.get("quantite")),
-                    unite             = parsed.get("unite"),
-                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                    rang              = parsed.get("rang"),
-                    duree             = _to_int(parsed.get("duree_minutes")),
-                    traitement        = parsed.get("traitement"),
-                    commentaire       = parsed.get("commentaire"),
-                    texte_original    = texte,
-                    date              = parse_date(parsed.get("date")),
-                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-                )
-                if event.culture:
-                    cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                    if cfg:
-                        event.type_organe_recolte = cfg.type_organe_recolte
-                db.add(event)
-                db.commit()
-                db.refresh(event)
+                event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
                 add_to_rag(event.id, parsed)
                 saved_parsed.append(parsed)
         except Exception as e:
@@ -393,78 +314,31 @@ def ask(req: TexteRequest):
     Répond en langage naturel à une question sur l'historique du potager.
     Exemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'
     """
-    db = SessionLocal()
     try:
-        events = db.query(Evenement).order_by(Evenement.date).all()
-        if not events:
-            return {"reponse": "Aucune donnée enregistrée pour l'instant. Commencez par dicter quelques actions !"}
+        reponse = svc_questions.repondre_question(default_context(), req.texte)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
-        # Sérialiser l'historique pour le contexte LLM
-        data = [
-            {
-                "id"         : e.id,
-                "date"       : str(e.date)[:10] if e.date else None,
-                "action"     : e.type_action,
-                "culture"    : e.culture,
-                "variete"    : e.variete,
-                "quantite"   : e.quantite,
-                "unite"      : e.unite,
-                "parcelle"   : e.parcelle,
-                "rang"       : e.rang,
-                "duree_min"  : e.duree,
-                "traitement" : e.traitement,
-                "commentaire": e.commentaire,
-            }
-            for e in events
-        ]
-        contexte = json.dumps(data, ensure_ascii=False)
-
-        try:
-            reponse = repondre_question(req.texte, contexte)
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Erreur Groq API : {e}")
-
-        return {
-            "reponse"               : reponse,
-            "nb_evenements_analyses": len(events)
-        }
-    finally:
-        db.close()
+    return {"reponse": reponse}
 
 
 @app.get("/stats")
 def stats(date_ref: date = Query(default=None)):
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
-    from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets, calcul_semis
-    today = date.today()
-    dr = min(date_ref, today) if date_ref else None   # None = pas de filtre = comportement par défaut
-    date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        total_q = db.query(func.count(Evenement.id))
-        if dr:
-            from datetime import datetime as _dt
-            total_q = total_q.filter(Evenement.date <= _dt(dr.year, dr.month, dr.day, 23, 59, 59))
-        total  = total_q.scalar() or 0
-        stocks = calcul_stock_cultures(db, dr)
-        godets = calcul_godets(db, date_ref=dr)
-        traitements = (
-            db.query(Evenement.traitement, func.count(Evenement.id))
-            .filter(Evenement.type_action == "traitement")
-            .group_by(Evenement.traitement).all()
-        )
-        # Origine par culture : "pépinière" si mise_en_godet existe, sinon "pied_acheté"
-        cultures_avec_godet = {
-            row[0].lower() for row in
-            db.query(Evenement.culture)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .filter(Evenement.culture.isnot(None))
-            .distinct().all()
-        }
+        ctx = default_context()
+        result = svc_stats.calculer_stats(db, ctx, date_ref)
+        date_ref_effective = result.date_ref_effective
+        total = result.total_evenements
+        stocks = result.stocks
+        godets = result.godets
+        traitements = result.traitements
+        cultures_avec_godet = result.cultures_avec_godet
 
         # [US-026 / semis pleine terre] Semis directement associés à une parcelle
-        semis_data = calcul_semis(db, dr)
+        semis_data = result.semis
         cultures_semis_pt = {c.lower() for c, s in semis_data.items() if s.get("parcelles_pleine_terre")}
         semis_pleine_terre = [
             {
@@ -481,7 +355,7 @@ def stats(date_ref: date = Query(default=None)):
         # [US-039 / CA2, CA6] Indicateur d'observations agrégées par culture (Stocks)
         obs_index = build_observations_index(db)
 
-        stock_enrichi = format_stock_stats_json(stocks)
+        stock_enrichi = _stock_mod.format_stock_stats_json(stocks)
         for entry in stock_enrichi:
             nom = (entry.get("culture") or "").lower()
             if nom in cultures_avec_godet:
@@ -564,21 +438,17 @@ def get_plan(date_ref: date = Query(default=None)):
     Retourne la liste des parcelles actives avec leurs cultures en cours.
     Les parcelles sans culture sont incluses avec cultures=[].
     """
-    from utils.parcelles import calcul_occupation_parcelles, get_all_parcelles
-
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        parcelles     = get_all_parcelles(db)
-        occupation    = calcul_occupation_parcelles(db, dr)
+        ctx = default_context()
+        parcelles     = svc_plan.get_parcelles(db, ctx)
+        occupation    = svc_plan.get_occupation(db, ctx, dr)
 
         # Index surface_m2 par nom de culture (insensible à la casse)
-        configs = db.query(CultureConfig).all()
-        surface_par_culture = {
-            c.nom.lower(): (c.surface_m2 or 0.0) for c in configs
-        }
+        surface_par_culture = svc_plan.surface_par_culture(db, ctx)
 
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
@@ -707,90 +577,13 @@ def get_godet_detail(culture: str = Query(...), variete: str = Query(default=Non
     """
     db = SessionLocal()
     try:
-        culture_lower = culture.lower()
-
-        # 1. Godets pour cette culture/variété
-        godet_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-        )
-        if variete:
-            godet_q = godet_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            godet_q = godet_q.filter(Evenement.variete.is_(None))
-        godet_events = godet_q.order_by(Evenement.date.asc()).all()
-
-        godet_ids = {str(g.id) for g in godet_events}
-
-        # 2. Semis "pépinière" pour cette culture/variété — rattachés à un godet ou
-        # pas encore transformés (stade "en germination", voir calcul_godets /
-        # utils/stock.py). Filtre direct par culture/variété plutôt que via
-        # origine_graines_id : un semis sans mise_en_godet associée doit quand
-        # même apparaître ici.
-        # ⚠️ Un semis pleine terre (parcelle réelle non-pépinière, ex: 2 m² sur
-        # "planche-test") appartient à un cycle totalement différent — planté
-        # directement en terre, jamais transformé en godet. Le mélanger ici avec
-        # les semis pépinière du même couple culture/variété n'a pas de sens
-        # (unité différente en plus : m² vs graines) : on l'exclut avec le même
-        # critère que calcul_godets (parcelle_id NULL ou parcelle.est_pepiniere).
-        semis_q = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
-            .filter(Evenement.type_action == "semis")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-            .filter(or_(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
-        )
-        if variete:
-            semis_q = semis_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            semis_q = semis_q.filter(Evenement.variete.is_(None))
-        semis_events = semis_q.order_by(Evenement.date.asc()).all()
-
-        # 3. Plantations liées via source_evenement_ids
-        plantation_candidates = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .filter(Evenement.type_action == "plantation")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-            .filter(Evenement.source_evenement_ids.isnot(None))
-            .order_by(Evenement.date.asc())
-            .all()
-        )
-        linked_plantations = [
-            p for p in plantation_candidates
-            if godet_ids & set(p.source_evenement_ids.split(";"))
-        ]
-
-        # 4. Ventes (vendu) pour cette culture/variété
-        vendu_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "vendu")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-        )
-        if variete:
-            vendu_q = vendu_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            vendu_q = vendu_q.filter(Evenement.variete.is_(None))
-        vendu_events = vendu_q.order_by(Evenement.date.asc()).all()
-
-        # 5. Pertes godet (perte_godet) pour cette culture/variété
-        perte_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "perte_godet")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-        )
-        if variete:
-            perte_q = perte_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            perte_q = perte_q.filter(Evenement.variete.is_(None))
-        perte_events = perte_q.order_by(Evenement.date.asc()).all()
-
-        # 6. Taux de germination (plants godets / graines semis parents)
-        total_plants  = sum(g.nb_plants_godets or 0 for g in godet_events)
-        total_graines = sum(int(s.quantite or 0) for s in semis_events)
-        taux = round(total_plants / total_graines * 100) if total_graines and total_plants else None
+        cycle = svc_evenements.cycle_vie_culture(db, default_context(), culture, variete)
+        semis_events        = cycle["semis"]
+        godet_events        = cycle["godets"]
+        linked_plantations  = cycle["plantations"]
+        vendu_events        = cycle["ventes"]
+        perte_events        = cycle["pertes_godet"]
+        taux                = cycle["taux_germination"]
 
         return {
             "culture": culture,
@@ -909,26 +702,11 @@ def historique(
     effective_to = dr.isoformat() if dr else to_date
     db = SessionLocal()
     try:
-        q = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .order_by(Evenement.date.desc())
+        total, events = svc_evenements.lister_evenements(
+            db, default_context(),
+            limit=limit, offset=offset, action=action, culture=culture,
+            parcelle=parcelle, from_date=from_date, to_date=effective_to,
         )
-        if action:
-            q = q.filter(Evenement.type_action == action)
-        if culture:
-            q = q.filter(Evenement.culture.ilike(f"%{culture}%"))
-        if parcelle:
-            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
-                Parcelle.nom.ilike(f"%{parcelle}%")
-            )
-        if from_date:
-            q = q.filter(Evenement.date >= from_date)
-        if effective_to:
-            q = q.filter(Evenement.date <= effective_to + " 23:59:59")
-
-        total  = q.count()
-        events = q.offset(offset).limit(limit).all()
         return {
             "total": total,
             "date_ref_effective": date_ref_effective.isoformat(),
@@ -949,13 +727,3 @@ def historique(
         }
     finally:
         db.close()
-
-
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def _to_float(v):
-    try:    return float(v) if v is not None else None
-    except: return None
-
-def _to_int(v):
-    try:    return int(float(v)) if v is not None else None
-    except: return None
