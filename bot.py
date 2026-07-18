@@ -2217,6 +2217,35 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         )
         return
 
+    # [fix bug récolte culture jamais plantée] Une récolte (ou toute action qui
+    # suppose une culture déjà en place — perte, arrosage, taille...) sur une culture
+    # n'ayant jamais été semée/plantée/mise en godet dans le potager n'a aucun scénario
+    # légitime, contrairement à une parcelle incohérente (qui peut être une vraie
+    # nouveauté) : c'est soit une hallucination Groq, soit une faute de frappe. Bloqué
+    # avant même la confirmation, comme pour une parcelle inconnue.
+    if (
+        len(items) == 1
+        and items[0].get("culture")
+        and normalize_action(items[0].get("action") or items[0].get("type_action")) not in _ACTIONS_SOURCE
+    ):
+        from utils.culture_resolve import culture_deja_plantee
+        culture_chk = items[0]["culture"]
+        db_chk = SessionLocal()
+        try:
+            deja_plantee = culture_deja_plantee(db_chk, culture_chk)
+        finally:
+            db_chk.close()
+        if not deja_plantee:
+            log.warning(f"❌ CULTURE JAMAIS PLANTÉE : '{culture_chk}' — action bloquée | texte={texte!r}")
+            err = (
+                f"❌ Aucune trace de *{culture_chk}* dans votre potager "
+                f"(aucun semis, aucune plantation, aucune mise en godet enregistrée).\n\n"
+                f"Vérifiez le nom, ou enregistrez d'abord un semis/plantation de *{culture_chk}*."
+            )
+            if msg: await msg.edit_text(err, parse_mode="Markdown")
+            else:   await message.reply_text(err, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+            return
+
     # [US-037 / CA7] Semis d'une culture inconnue de CultureConfig — demander
     # à l'utilisateur si elle est végétative ou reproductive avant d'enregistrer.
     if (

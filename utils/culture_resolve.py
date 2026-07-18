@@ -68,6 +68,29 @@ def _meilleure_correspondance(brut: str, connus: list[str]) -> str | None:
     return None
 
 
+def culture_deja_plantee(db, culture: str) -> bool:
+    """
+    Vrai si `culture` a déjà été introduite dans le potager via un semis, une
+    plantation ou une mise en godet (comparaison insensible à la casse/accents).
+
+    Sert de garde-fou pour les actions qui supposent une culture déjà en place
+    (récolte, perte, arrosage...) : contrairement à une parcelle incohérente,
+    récolter une culture jamais semée/plantée n'a aucun scénario légitime —
+    c'est soit une hallucination Groq, soit une faute de frappe/homonymie.
+    """
+    if not culture or not culture.strip():
+        return True  # rien à vérifier, laisse passer (comportement neutre)
+    cible = _normalise(culture)
+    rows = (
+        db.query(Evenement.culture)
+        .filter(Evenement.type_action.in_(["semis", "plantation", "mise_en_godet"]))
+        .filter(Evenement.culture.isnot(None))
+        .distinct()
+        .all()
+    )
+    return any(_normalise(c) == cible for (c,) in rows)
+
+
 def resolve_culture(db, culture_brute: str | None) -> str | None:
     """
     Résout une culture saisie en langage libre vers son nom canonique en base.

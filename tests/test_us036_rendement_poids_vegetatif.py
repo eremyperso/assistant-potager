@@ -277,6 +277,7 @@ class TestClarificationPiecesManquantes:
             patch("bot._normalize_items", return_value=[parsed_item]),
             patch("utils.validation.validate_parsed_action", return_value=(True, "")),
             patch("utils.stock.get_type_organe", return_value="végétatif"),
+            patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
             patch("bot.SessionLocal"),
         ):
             _RECOLTE_PIECES_PENDING.pop(user_id, None)
