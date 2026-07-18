@@ -2642,6 +2642,53 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
     _ACTIONS_PEPINIERE = {"vendu", "perte_godet"}
 
+    # [fix bug variété/parcelle incohérente] Parcelle ET culture renseignées sur une
+    # action qui suppose une culture déjà en place (récolte, perte, arrosage...) →
+    # vérifier que cette culture/variété a bien un historique sur la parcelle citée.
+    # Si non : on ne fait PAS confiance à cette parcelle — elle est retirée pour que
+    # le bloc CA8 ci-dessous la redétermine (auto-assignation si une seule parcelle
+    # connue pour cette culture/variété, menu de choix sinon), exactement comme si
+    # l'utilisateur n'avait précisé aucune parcelle. L'avertissement reste affiché
+    # dans le récapitulatif final pour expliquer pourquoi la parcelle a changé
+    # (cf. bug rapporté : "tomate cerise, parcelle centrale" enregistré tel quel
+    # alors que la variété cerise n'existe que sur planche-ombre).
+    if (
+        len(items) == 1
+        and items[0].get("parcelle")
+        and items[0].get("culture")
+        and (items[0].get("type_action") or items[0].get("action") or "") not in _ACTIONS_SOURCE
+    ):
+        culture      = items[0]["culture"]
+        variete      = items[0].get("variete") or None
+        nom_parcelle = items[0]["parcelle"]
+        db_tmp = SessionLocal()
+        try:
+            parcelle_resolue = resolve_parcelle(db_tmp, nom_parcelle)
+            if parcelle_resolue is not None:
+                parcelles_ok = _get_parcelles_avec_culture(db_tmp, culture, variete)
+                if parcelle_resolue.id not in {p.id for p in parcelles_ok}:
+                    label = f"{culture} {variete}" if variete else culture
+                    autres = []
+                    if variete:
+                        # La variété n'est pas connue sur CETTE parcelle : indiquer où
+                        # elle a été plantée si elle existe ailleurs, pour aider au choix.
+                        parcelles_culture_seule = _get_parcelles_avec_culture(db_tmp, culture, None)
+                        autres = sorted({
+                            p.nom for p in parcelles_culture_seule if p.id != parcelle_resolue.id
+                        })
+                    suffixe = f" (trouvé sur : {', '.join(autres)})" if autres else ""
+                    items[0]["_avertissement_coherence"] = (
+                        f"⚠️ Aucune trace de *{label}* sur *{parcelle_resolue.nom}*{suffixe}."
+                    )
+                    log.warning(
+                        "[coherence-check] %s introuvable sur parcelle %r (id=%s) — parcelle "
+                        "retirée, redétection via CA8",
+                        label, parcelle_resolue.nom, parcelle_resolue.id,
+                    )
+                    del items[0]["parcelle"]
+        finally:
+            db_tmp.close()
+
     # [CA8/CA11] Parcelle absente sur action simple → sélection intelligente
     if len(items) == 1 and not items[0].get("parcelle"):
         action_type = items[0].get("type_action") or items[0].get("action") or ""
@@ -2713,47 +2760,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"
         )
         return
-
-    # [fix bug variété/parcelle incohérente] Parcelle ET culture renseignées sur une
-    # action qui suppose une culture déjà en place (récolte, perte, arrosage...) →
-    # vérifier que cette culture/variété a bien un historique sur la parcelle visée
-    # avant de demander confirmation. N'empêche jamais l'enregistrement (ça peut être
-    # une vraie nouveauté), mais rend l'incohérence visible dans le récapitulatif au
-    # lieu de la sauvegarder silencieusement (cf. tomate cerise/planche-centrale).
-    if (
-        len(items) == 1
-        and items[0].get("parcelle")
-        and items[0].get("culture")
-        and (items[0].get("type_action") or items[0].get("action") or "") not in _ACTIONS_SOURCE
-    ):
-        culture      = items[0]["culture"]
-        variete      = items[0].get("variete") or None
-        nom_parcelle = items[0]["parcelle"]
-        db_tmp = SessionLocal()
-        try:
-            parcelle_resolue = resolve_parcelle(db_tmp, nom_parcelle)
-            if parcelle_resolue is not None:
-                parcelles_ok = _get_parcelles_avec_culture(db_tmp, culture, variete)
-                if parcelle_resolue.id not in {p.id for p in parcelles_ok}:
-                    label = f"{culture} {variete}" if variete else culture
-                    autres = []
-                    if variete:
-                        # La variété n'est pas connue sur CETTE parcelle : indiquer où
-                        # elle a été plantée si elle existe ailleurs, pour aider au choix.
-                        parcelles_culture_seule = _get_parcelles_avec_culture(db_tmp, culture, None)
-                        autres = sorted({
-                            p.nom for p in parcelles_culture_seule if p.id != parcelle_resolue.id
-                        })
-                    suffixe = f" (trouvé sur : {', '.join(autres)})" if autres else ""
-                    items[0]["_avertissement_coherence"] = (
-                        f"⚠️ Aucune trace de *{label}* sur *{parcelle_resolue.nom}*{suffixe}."
-                    )
-                    log.warning(
-                        "[coherence-check] %s introuvable sur parcelle %r (id=%s) — avertissement affiché",
-                        label, parcelle_resolue.nom, parcelle_resolue.id,
-                    )
-        finally:
-            db_tmp.close()
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)
