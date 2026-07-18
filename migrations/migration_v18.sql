@@ -77,12 +77,18 @@
 BEGIN;
 
 -- [1] Rôle applicatif non-superuser, distinct du rôle admin/propriétaire.
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-        EXECUTE format('CREATE ROLE app_user LOGIN PASSWORD %L', :'app_user_password');
-    END IF;
-END $$;
+-- [Correctif déploiement réel] :'app_user_password' ne doit PAS être
+-- référencée à l'intérieur d'un bloc DO $$ ... $$ : psql n'interpole pas les
+-- variables à l'intérieur d'une chaîne dollar-quotée (c'est tout le principe
+-- du dollar-quoting — contenir du texte arbitraire sans interprétation), le
+-- texte littéral ":'app_user_password'" part alors tel quel vers le serveur,
+-- qui échoue avec "syntax error at or near ':'". \gexec s'exécute au niveau
+-- top-level du script, hors de tout dollar-quoting : l'interpolation
+-- fonctionne normalement, et n'exécute la commande générée QUE si la ligne
+-- est retournée (donc uniquement si le rôle n'existe pas déjà).
+SELECT format('CREATE ROLE app_user LOGIN PASSWORD %L', :'app_user_password')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user')
+\gexec
 
 -- [2] Droits nécessaires — RLS filtre les LIGNES, il ne remplace pas les
 -- droits SQL standards : app_user a besoin des GRANT habituels sur toutes
