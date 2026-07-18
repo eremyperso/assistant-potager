@@ -44,14 +44,12 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs sche
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    ContextTypes, filters, ConversationHandler, CallbackQueryHandler
+    ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
 )
 from groq import Groq
-from sqlalchemy import func, or_, and_, select
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
-from database.db import SessionLocal, Base, engine
-from database.models import Evenement, Parcelle
+from database.db import SessionLocal, Base, engine, tenant_scope, current_potager_id
 from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
@@ -68,6 +66,11 @@ from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_
 from utils.cultures_icons import get_emoji_culture
 from utils.notes import NOTE_CATEGORIES, is_note_request as _is_note_request, match_note_category  # [US-038]
 from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
+from app.services.context import default_context
+from app.services import evenements as svc_evenements
+from app.services import parcelles as svc_parcelles
+from app.services import plan as svc_plan
+from app.services import questions as svc_questions
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -293,7 +296,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message de bienvenue."""
     prenom = update.effective_user.first_name or "jardinier"
     db = SessionLocal()
-    nb = db.query(Evenement).count()
+    nb = svc_evenements.compter_evenements(db, default_context())
     db.close()
 
     tts_etat = "🔊 activée" if is_tts_enabled() else "🔇 désactivée"
@@ -1335,27 +1338,7 @@ async def _parse_multi(update, lignes: list, msg=None):
         db = SessionLocal()
         try:
             for parsed in items:
-                nom_parcelle = parsed.get("parcelle")
-                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-                event = Evenement(
-                    type_action       = normalize_action(parsed.get("action")),
-                    culture           = parsed.get("culture"),
-                    variete           = parsed.get("variete"),
-                    quantite          = _to_float(parsed.get("quantite")),
-                    unite             = parsed.get("unite"),
-                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                    rang              = _to_int(parsed.get("rang")),
-                    duree             = _to_int(parsed.get("duree_minutes")),
-                    traitement        = parsed.get("traitement"),
-                    commentaire       = parsed.get("commentaire"),
-                    texte_original    = ligne,   # ← texte propre à CETTE ligne
-                    date              = parse_date(parsed.get("date")),
-                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-                )
-                db.add(event)
-                db.commit()
-                db.refresh(event)
+                event = svc_evenements.creer_evenement_ligne(db, default_context(), parsed, ligne)
                 log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
                 total_saved.append((parsed, event.id))
         except Exception as e:
@@ -1386,8 +1369,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     )
     refreshed = SessionLocal()
     try:
-        from sqlalchemy import func
-        nb = refreshed.query(Evenement).count()
+        nb = svc_evenements.compter_evenements(refreshed, default_context())
         # pas de reply ici, juste log
         log.info(f"📦 TOTAL BASE     : {nb} événements")
     finally:
@@ -1413,25 +1395,8 @@ _NOTE_TIMEOUT = 60  # secondes
 
 _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
 
-# [US-037 / CA1, CA2, CA6, CA8] Unités valides pour un semis, normalisées vers
-# la forme canonique stockée en base : "graines" | "pieds" | "m²".
-# Le m² est une surface autonome — elle n'est JAMAIS convertie en graines/pieds.
-_UNITES_SEMIS_CANONIQUES: dict[str, str] = {
-    "graine": "graines", "graines": "graines",
-    "pied": "pieds", "pieds": "pieds", "plant": "pieds", "plants": "pieds",
-    "m2": "m²", "m²": "m²", "metre carre": "m²", "mètre carré": "m²",
-    "metres carres": "m²", "mètres carrés": "m²", "m^2": "m²",
-}
-
-
-def _normalize_unite_semis(unite_brute: str | None) -> str:
-    """[US-037 / CA1, CA2, CA6] Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²'.
-
-    Ne force JAMAIS une surface m² vers une autre unité — seule une unité
-    totalement inconnue retombe sur 'graines' par défaut (comportement historique).
-    """
-    cle = (unite_brute or "").lower().strip()
-    return _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+# [US-037] La normalisation d'unité de semis ("graines"|"pieds"|"m²") vit désormais
+# dans app/services/evenements.py (seul appelant : creer_evenement_confirme).
 
 _RECOLTE_PENDING: dict[int, dict] = {}
 _RECOLTE_TIMEOUT = 60  # secondes
@@ -1455,51 +1420,7 @@ async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
     db = SessionLocal()
     try:
-        culture_str = parsed.get("culture") or ""
-        variete_str = parsed.get("variete")
-
-        # [US-029 CA3/CA4] Auto-link au semis parent + héritage variété
-        origine_graines_id: int | None = None
-        from sqlalchemy import func as _sqlfunc
-        semis_rows = (
-            db.query(Evenement.id, Evenement.variete)
-            .filter(Evenement.type_action == "semis")
-            .filter(_sqlfunc.lower(Evenement.culture) == culture_str.lower())
-            .filter(Evenement.culture.isnot(None))
-        )
-        if variete_str:
-            semis_rows = semis_rows.filter(Evenement.variete == variete_str)
-        semis_list = semis_rows.order_by(Evenement.date.asc()).all()
-
-        if len(semis_list) == 1:
-            origine_graines_id = semis_list[0].id
-            if not variete_str and semis_list[0].variete:
-                parsed["variete"] = semis_list[0].variete
-                variete_str = semis_list[0].variete
-                log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
-            log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
-
-        event = Evenement(
-            type_action        = "mise_en_godet",
-            culture            = culture_str,
-            variete            = parsed.get("variete"),
-            quantite           = _to_float(parsed.get("quantite")),
-            unite              = parsed.get("unite"),
-            parcelle_id        = None,
-            rang               = None,
-            duree              = None,
-            traitement         = None,
-            commentaire        = parsed.get("commentaire"),
-            texte_original     = texte,
-            date               = parse_date(parsed.get("date")),
-            nb_graines_semees  = _to_int(parsed.get("nb_graines_semees")),
-            nb_plants_godets   = _to_int(parsed.get("nb_plants_godets")),
-            origine_graines_id = origine_graines_id,
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete} origine={origine_graines_id}")
+        event = svc_evenements.creer_evenement_godet(db, default_context(), parsed, texte)
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -1600,21 +1521,7 @@ async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
     """
     db = SessionLocal()
     try:
-        event = Evenement(
-            type_action    = item.get("action"),
-            culture        = item.get("culture"),
-            variete        = item.get("variete"),
-            quantite       = _to_float(item.get("quantite")),
-            unite          = item.get("unite") or "plants",
-            parcelle_id    = None,
-            commentaire    = item.get("commentaire"),
-            texte_original = texte,
-            date           = parse_date(item.get("date")),
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 PERTE SAVE : id={event.id} action={event.type_action} culture={event.culture} variete={event.variete} qte={event.quantite}")
+        event = svc_evenements.creer_evenement_perte(db, default_context(), item, texte)
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -1821,40 +1728,14 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 _ACTIONS_SOURCE = {"plantation", "semis", "mise_en_godet", "vendu", "perte_godet"}
 
 
-def _cond_localisation_culture():
-    """[US-037 / migration_v15] Une culture est "localisée" via une 'plantation' OU un
-    'semis' directement lié à une VRAIE parcelle de pleine terre (semis pleine terre).
-    Un semis SANS parcelle_id (pépinière, destiné à un godet), ou rattaché à une
-    parcelle marquée est_pepiniere=true (serre, pépinière, ou la parcelle factice
-    "Non localisé"), n'est jamais considéré comme une localisation.
-
-    Utilise une sous-requête plutôt qu'un join sur Parcelle : cette condition est
-    réutilisée dans des requêtes sur Evenement seul, sans jointure Parcelle."""
-    pepiniere_ids = select(Parcelle.id).where(Parcelle.est_pepiniere.is_(True))
-    return or_(
-        Evenement.type_action == "plantation",
-        and_(
-            Evenement.type_action == "semis",
-            Evenement.parcelle_id.isnot(None),
-            Evenement.parcelle_id.notin_(pepiniere_ids),
-        ),
-    )
+    # [US-037] La condition de "localisation" d'une culture (_cond_localisation_culture)
+    # vit désormais dans app/services/evenements.py, seul module qui construit encore
+    # des requêtes sur Evenement/Parcelle pour cette logique.
 
 
 def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
     """Retourne les parcelles distinctes où cette culture a été plantée ou semée en pleine terre."""
-    q = (
-        db.query(Parcelle)
-        .join(Evenement, Evenement.parcelle_id == Parcelle.id)
-        .filter(
-            Parcelle.actif == True,
-            _cond_localisation_culture(),
-            Evenement.culture == culture,
-        )
-    )
-    if variete:
-        q = q.filter(Evenement.variete == variete)
-    return q.distinct().all()
+    return svc_parcelles.parcelles_avec_culture(db, default_context(), culture, variete)
 
 
 def _build_action_summary(items: list[dict]) -> str:
@@ -1913,64 +1794,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                     else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                     return
 
-            # [US-037 / CA1, CA2, CA6] Normalisation unité semis : graines | pieds | m².
-            # Le m² n'est JAMAIS reconverti en graines/pieds — seule une unité vraiment
-            # inconnue retombe sur 'graines' par défaut (comportement historique).
-            type_organe_semis: str | None = None
-            if normalize_action(parsed.get("action")) == "semis":
-                unite_normalisee = _normalize_unite_semis(parsed.get("unite"))
-                if unite_normalisee != (parsed.get("unite") or "").lower().strip():
-                    log.info(
-                        "[US-037] Unité semis '%s' normalisée en '%s' (culture=%s)",
-                        parsed.get("unite"), unite_normalisee, parsed.get("culture"),
-                    )
-                parsed["unite"] = unite_normalisee
-
-                # [US-037 / CA3] Résolution type_organe_recolte via CultureConfig
-                culture_semis = (parsed.get("culture") or "").strip()
-                if culture_semis:
-                    from utils.stock import get_type_organe
-                    type_organe_semis = get_type_organe(db, culture_semis)
-
-            # [US-029 CA5/CA7/CA8] Plantation : héritage variété + source_evenement_ids
-            source_evenement_ids: str | None = parsed.get("source_evenement_ids")
-            if normalize_action(parsed.get("action")) == "plantation" and parsed.get("culture"):
-                from utils.stock import _find_plantation_sources
-                variete_src, src_ids = _find_plantation_sources(
-                    db,
-                    parsed["culture"],
-                    parsed.get("variete"),
-                    float(parsed.get("quantite") or 0),
-                )
-                if variete_src and not parsed.get("variete"):
-                    parsed["variete"] = variete_src
-                    log.info(f"[US-029 CA5] Variété '{variete_src}' héritée du godet → plantation '{parsed['culture']}'")
-                if src_ids:
-                    source_evenement_ids = src_ids
-                    log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
-
-            event = Evenement(
-                type_action          = normalize_action(parsed.get("action")),
-                culture              = parsed.get("culture"),
-                variete              = parsed.get("variete"),
-                quantite             = _to_float(parsed.get("quantite")),
-                unite                = parsed.get("unite"),
-                parcelle_id          = parcelle_obj.id if parcelle_obj else None,
-                rang                 = _to_int(parsed.get("rang")),
-                duree                = _to_int(parsed.get("duree_minutes")),
-                traitement           = parsed.get("traitement"),
-                commentaire          = parsed.get("commentaire"),
-                texte_original       = texte,
-                date                 = parse_date(parsed.get("date")),
-                nb_graines_semees    = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets     = _to_int(parsed.get("nb_plants_godets")),
-                source_evenement_ids = source_evenement_ids,
-                type_organe_recolte  = type_organe_semis,
-            )
-            db.add(event)
-            db.commit()
-            db.refresh(event)
-            log.info(f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} | qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}")
+            event = svc_evenements.creer_evenement_confirme(db, default_context(), parsed, texte, parcelle_obj)
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -2036,11 +1860,10 @@ async def _semis_organe_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
 
     db = SessionLocal()
     try:
-        from database.models import CultureConfig
-        cfg = db.query(CultureConfig).filter(CultureConfig.nom == culture).first()
+        tenant_ctx = default_context()
+        cfg = svc_parcelles.get_culture_config(db, tenant_ctx, culture)
         if cfg is None:
-            db.add(CultureConfig(nom=culture, type_organe_recolte=type_organe))
-            db.commit()
+            svc_parcelles.creer_culture_config(db, tenant_ctx, culture, type_organe)
             log.info(f"[US-037 CA7] CultureConfig créée : '{culture}' → {type_organe}")
     finally:
         db.close()
@@ -2235,28 +2058,7 @@ async def _save_note_event(update: Update, pending: dict) -> None:
 
     db = SessionLocal()
     try:
-        parcelle_obj = None
-        nom_parcelle = fields.get("parcelle")
-        if nom_parcelle:
-            parcelle_obj = resolve_parcelle(db, nom_parcelle)
-            if parcelle_obj is None:
-                log.warning(f"⚠️ [US-038] PARCELLE INCONNUE : {nom_parcelle!r} — note enregistrée sans parcelle")
-
-        event = Evenement(
-            type_action    = normalize_action("observation"),
-            culture        = fields.get("culture"),
-            variete        = fields.get("variete"),
-            parcelle_id    = parcelle_obj.id if parcelle_obj else None,
-            duree          = _to_int(fields.get("duree_minutes")),
-            traitement     = fields.get("traitement"),
-            commentaire    = f"[{label}] {fields['constat']}",
-            texte_original = pending["texte"],
-            date           = parse_date(fields.get("date")),
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 DB SAVE [US-038] : id={event.id} | categorie={categorie} | culture={event.culture} | parcelle_id={event.parcelle_id}")
+        event = svc_evenements.creer_evenement_observation(db, default_context(), fields, pending["texte"], label)
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -3007,13 +2809,7 @@ async def _ask_question(update: Update, question: str):
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        from llm.groq_client import extract_intent_query
-        from llm.sql_agent import query_agent_answer
-
-        intent = extract_intent_query(question)
-        log.info(f"🎯 INTENT QUERY   : {intent}")
-
-        reponse = query_agent_answer(question, intent)
+        reponse = svc_questions.repondre_question(default_context(), question)
         log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
@@ -3036,22 +2832,7 @@ async def _consulter_godets(update) -> None:
     """[US_mise_en_godet] Affiche les plants en godet sans plantation postérieure."""
     db = SessionLocal()
     try:
-        godets_all = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .order_by(Evenement.date.desc())
-            .all()
-        )
-        en_attente = []
-        for g in godets_all:
-            plantation = db.query(Evenement).filter(
-                Evenement.type_action == "plantation",
-                Evenement.culture == g.culture,
-            )
-            if g.date:
-                plantation = plantation.filter(Evenement.date >= g.date)
-            if not plantation.first():
-                en_attente.append(g)
+        en_attente = svc_evenements.godets_en_attente(db, default_context())
 
         if not en_attente:
             await update.message.reply_text(
@@ -3578,7 +3359,7 @@ async def cmd_parcelle(update, ctx) -> None:
                     parse_mode="Markdown",
                 )
                 return
-            nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count()
+            nb = svc_evenements.compter_evenements_parcelle(db, default_context(), parcelle.id)
             nb_str = (
                 f"⚠️ *{nb} événement{'s' if nb > 1 else ''}* seront réaffectés en *Non localisé*."
                 if nb > 0 else "Aucun événement associé."
@@ -3850,11 +3631,7 @@ async def cmd_stats(update, ctx):
                 lines_out.append(f"  • {key} : *{residuel} plants*{detail}{taux_str}")
 
         # ── Traitements (bonus) ───────────────────────────────────────────────
-        nb_traitements = (
-            db.query(func.count(Evenement.id))
-            .filter(Evenement.type_action == "traitement")
-            .scalar()
-        )
+        nb_traitements = svc_evenements.compter_traitements(db, default_context())
         if nb_traitements:
             lines_out.append(f"\n💊 *Traitements :* {nb_traitements} applications")
 
@@ -3877,12 +3654,7 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """20 derniers événements."""
     db = SessionLocal()
     try:
-        events = (
-            db.query(Evenement)
-            .order_by(Evenement.date.desc())
-            .limit(10)
-            .all()
-        )
+        events = svc_evenements.evenements_recents(db, default_context(), limit=10)
         if not events:
             await update.message.reply_text("📭 Aucun événement enregistré.")
             return
@@ -4066,29 +3838,9 @@ JSON brut uniquement."""
 
     log.info(f"🔎 CRITÈRES RECHERCHE : {criteres}")
 
-    from unidecode import unidecode as _uni
-    from sqlalchemy.orm import selectinload
-
     db = SessionLocal()
     try:
-        q = db.query(Evenement).options(selectinload(Evenement.parcelle_rel))
-        if criteres.get("action"):
-            q = q.filter(Evenement.type_action == criteres["action"])
-        if criteres.get("culture"):
-            culture_val = criteres["culture"].strip()
-            q = q.filter(Evenement.culture.ilike(f"%{culture_val}%"))
-        if criteres.get("variete"):
-            variete_val = criteres["variete"].strip()
-            q = q.filter(Evenement.variete.ilike(f"%{variete_val}%"))
-        if criteres.get("parcelle"):
-            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
-                Parcelle.nom.ilike(f"%{criteres['parcelle']}%")
-            )
-        if criteres.get("date_debut"):
-            q = q.filter(Evenement.date >= criteres["date_debut"])
-        if criteres.get("date_fin"):
-            q = q.filter(Evenement.date <= criteres["date_fin"] + " 23:59:59")
-        results = q.order_by(Evenement.date.desc()).limit(limit).all()
+        results = svc_evenements.find_candidates(db, default_context(), criteres, limit=limit)
         log.info(f"🔎 RÉSULTATS SQL   : {len(results)} trouvé(s)")
         return results
     finally:
@@ -4099,7 +3851,7 @@ async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Propose correction ou suppression du dernier événement."""
     db = SessionLocal()
     try:
-        event = db.query(Evenement).order_by(Evenement.id.desc()).first()
+        event = svc_evenements.dernier_evenement(db, default_context())
         if not event:
             await update.message.reply_text("❌ Aucun événement en base.")
             return
@@ -4123,7 +3875,7 @@ async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Étape 1 — Demande à l'utilisateur de décrire l'événement à corriger."""
     db = SessionLocal()
     try:
-        last = db.query(Evenement).order_by(Evenement.id.desc()).first()
+        last = svc_evenements.dernier_evenement(db, default_context())
         last_id  = last.id          if last else None
         last_fmt = _fmt_event(last) if last else None
     finally:
@@ -4153,7 +3905,7 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     if texte.strip() == "1" and ctx.user_data.get('corr_last_id'):
         db = SessionLocal()
         try:
-            event = db.get(Evenement, ctx.user_data['corr_last_id'])
+            event = svc_evenements.get_evenement(db, default_context(), ctx.user_data['corr_last_id'])
             candidates = [event] if event else []
             candidates_fmt = [_fmt_event(e) for e in candidates]
         finally:
@@ -4235,7 +3987,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     # Relire l'événement
     db = SessionLocal()
     try:
-        event = db.get(Evenement, event_id)
+        event = svc_evenements.get_evenement(db, default_context(), event_id)
         event_fmt = _fmt_event(event) if event else None
     finally:
         db.close()
@@ -4311,11 +4063,7 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
     if "oui" in t or "supprimer" in t:
         db = SessionLocal()
         try:
-            event = db.get(Evenement, event_id)
-            if event:
-                db.delete(event)
-                db.commit()
-                log.info(f"🗑 SUPPRESSION     : id={event_id}")
+            svc_evenements.supprimer_evenement(db, default_context(), event_id)
         finally:
             db.close()
         ctx.user_data['mode'] = None
@@ -4345,7 +4093,7 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
             ctx.user_data['mode'] = 'corr_confirm_delete'
             db = SessionLocal()
             try:
-                ev = db.get(Evenement, event_id)
+                ev = svc_evenements.get_evenement(db, default_context(), event_id)
                 txt = _fmt_event(ev) if ev else f"#{event_id}"
             finally:
                 db.close()
@@ -4365,7 +4113,7 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
 
     db = SessionLocal()
     try:
-        event = db.get(Evenement, event_id)
+        event = svc_evenements.get_evenement(db, default_context(), event_id)
         if not event:
             await update.message.reply_text("❌ Événement introuvable.")
             ctx.user_data['mode'] = None
@@ -4509,7 +4257,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         ctx.user_data['mode'] = 'corr_apply'
         db = SessionLocal()
         try:
-            event = db.get(Evenement, ctx.user_data['corr_event_id'])
+            event = svc_evenements.get_evenement(db, default_context(), ctx.user_data['corr_event_id'])
             event_fmt = _fmt_event(event) if event else "?"
         finally:
             db.close()
@@ -4524,49 +4272,25 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         event_id    = ctx.user_data.get('corr_event_id')
         corrections = ctx.user_data.get('corr_pending', {})
         event_actuel= ctx.user_data.get('corr_event_actuel', {})
-        mapping = {
-            "action": "type_action", "culture": "culture", "variete": "variete",
-            "quantite": "quantite", "unite": "unite", "parcelle": "parcelle",
-            "rang": "rang", "duree_minutes": "duree", "traitement": "traitement",
-            "commentaire": "commentaire"
+
+        # ── Trace de correction dans texte_original ───────────────────
+        LABELS = {
+            "action": "action", "culture": "culture", "variete": "variété",
+            "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
+            "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
+            "commentaire": "commentaire", "date": "date"
         }
+        details = ", ".join(
+            f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
+            for k, v in corrections.items()
+            if not k.startswith("_")   # ignorer champs internes (_parcelle_id…)
+        )
+        trace = f" | [CORR {date.today().isoformat()}] {details}"
+
         db = SessionLocal()
         try:
-            event = db.get(Evenement, event_id)
-            for champ, valeur in corrections.items():
-                if champ == "_parcelle_id":
-                    # champ interne — géré ci-dessous avec "parcelle"
-                    continue
-                col = mapping.get(champ, champ)
-                if champ == "date":
-                    setattr(event, "date", parse_date(valeur))
-                elif champ == "quantite":
-                    setattr(event, col, _to_float(valeur))
-                elif champ in ("rang", "duree_minutes"):
-                    setattr(event, col, _to_int(valeur))
-                elif champ == "parcelle":
-                    # [migration_v12] seule la FK parcelle_id est persistée
-                    event.parcelle_id = corrections.get("_parcelle_id")
-                elif hasattr(event, col):
-                    setattr(event, col, valeur)
-
-            # ── Trace de correction dans texte_original ───────────────────
-            LABELS = {
-                "action": "action", "culture": "culture", "variete": "variété",
-                "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
-                "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
-                "commentaire": "commentaire", "date": "date"
-            }
-            details = ", ".join(
-                f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
-                for k, v in corrections.items()
-                if not k.startswith("_")   # ignorer champs internes (_parcelle_id…)
-            )
-            trace = f" | [CORR {date.today().isoformat()}] {details}"
-            event.texte_original = (event.texte_original or "") + trace
+            event = svc_evenements.corriger_evenement(db, default_context(), event_id, corrections, trace)
             log.info(f"📝 TRACE CORRECTION: {trace}")
-            db.commit()
-            db.refresh(event)
             log.info(f"✅ CORRIGÉ         : id={event_id} → {_fmt_event(event)}")
             result_fmt = _fmt_event(event)
         except Exception as e:
@@ -4628,24 +4352,10 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
     db = SessionLocal()
     try:
         # Essai 1 : correspondance exacte (insensible casse)
-        rows = (
-            db.query(Evenement)
-            .filter(
-                _cond_localisation_culture(),
-                func.lower(Evenement.culture) == culture,
-            )
-            .all()
-        )
+        rows = svc_evenements.evenements_localises_exact(db, default_context(), culture)
         # Essai 2 : correspondance partielle (gère typos, accents, pluriel)
         if not rows:
-            rows = (
-                db.query(Evenement)
-                .filter(
-                    _cond_localisation_culture(),
-                    func.lower(Evenement.culture).ilike(f"%{culture_norm[:6]}%"),
-                )
-                .all()
-            )
+            rows = svc_evenements.evenements_localises_recherche_partielle(db, default_context(), culture_norm[:6])
             if rows:
                 # Utiliser le nom exact stocké en base pour la suite du flux
                 culture = rows[0].culture.lower()
@@ -4767,13 +4477,7 @@ async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
         nom_affiche = parcelle_obj.nom.upper() if parcelle_obj else nom_parcelle.upper()
 
         # Compter les enregistrements plantation/semis pleine terre concernés
-        q = db.query(Evenement).filter(
-            _cond_localisation_culture(),
-            func.lower(Evenement.culture) == culture.lower(),
-        )
-        if variete is not None:
-            q = q.filter(Evenement.variete == variete)
-        nb_records = q.count()
+        nb_records = len(svc_evenements.evenements_localises_pour_maj(db, default_context(), culture, variete))
     finally:
         db.close()
 
@@ -4843,32 +4547,14 @@ async def _depl_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
                 nom_affiche = new_p.nom.upper()
                 log.info(f"[US-007 CA6] Nouvelle parcelle créée : {nom_affiche!r}")
         else:
-            parc = db.get(Parcelle, parcelle_id)
+            parc = svc_parcelles.get_parcelle(db, default_context(), parcelle_id)
             nom_affiche = parc.nom.upper() if parc else nom_parcelle.upper()
 
-        # [US-037] Récupérer les événements à mettre à jour : plantations ET semis
-        # pleine terre (parcelle_id déjà renseigné) — un semis pépinière n'est jamais
-        # concerné puisqu'il n'a pas de localisation à déplacer.
-        q = db.query(Evenement).filter(
-            _cond_localisation_culture(),
-            func.lower(Evenement.culture) == culture.lower(),
+        # [US-037] Réassocie les événements localisés (plantations ET semis pleine
+        # terre) — un semis pépinière n'est jamais concerné (pas de localisation).
+        nb_updated = svc_evenements.deplacer_evenements(
+            db, default_context(), culture, variete, parcelle_id, nom_affiche
         )
-        if variete is not None:
-            q = q.filter(Evenement.variete == variete)
-        events = q.all()
-
-        today = date.today().isoformat()
-        nb_updated = 0
-        for event in events:
-            ancienne = event.parcelle_rel.nom if event.parcelle_rel else "Non localisé"
-            event.parcelle_id = parcelle_id
-            # CA8 — trace d'auditabilité identique au flux correction
-            trace = f" | [DÉPL {today}] parcelle: {ancienne} → {nom_affiche}"
-            event.texte_original = (event.texte_original or "") + trace
-            nb_updated += 1
-
-        db.commit()
-        log.info(f"[US-007 CA8] UPDATE : {nb_updated} plantation(s) de '{culture}' → parcelle_id={parcelle_id}")
     except Exception as e:
         db.rollback()
         log.error(f"[US-007] Erreur UPDATE : {e}")
@@ -4942,9 +4628,13 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
     Zéro token Groq consommé.
     """
     log.info("🌅 JOB MÉTÉO       : déclenchement automatique 05h00")
+    # [US-043] Job de fond hors dispatch Telegram (JobQueue, pas d'Update) :
+    # doit armer app.potager_id lui-même. Un seul potager aujourd'hui — à
+    # boucler potager par potager le jour où ce job devient multi-tenant.
     db = SessionLocal()
     try:
-        meteo = save_meteo_observation(db)
+        with tenant_scope(default_context().potager_id):
+            meteo = save_meteo_observation(db)
         if meteo:
             log.info(
                 f"🌤️  MÉTÉO AUTO      : {meteo['emoji']} {meteo['label']} | "
@@ -4979,15 +4669,13 @@ async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
 
     db = SessionLocal()
     try:
-        parcelle = db.query(Parcelle).filter(Parcelle.id == parcelle_id).first()
+        tenant_ctx = default_context()
+        parcelle = svc_parcelles.get_parcelle(db, tenant_ctx, parcelle_id)
         if parcelle is None or not parcelle.actif:
             await query.edit_message_text("❌ Parcelle introuvable ou déjà supprimée.", reply_markup=None)
             return
         nom = parcelle.nom
-        nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).count()
-        db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).update(
-            {"parcelle_id": None}, synchronize_session="fetch"
-        )
+        nb = svc_evenements.liberer_evenements_parcelle(db, tenant_ctx, parcelle_id)
         parcelle.actif = False
         db.commit()
         log.info(f"[US-009] Parcelle supprimée : {nom!r} — {nb} événements réaffectés")
@@ -5056,6 +4744,16 @@ async def cmd_vendre(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 # LANCEMENT
 # ══════════════════════════════════════════════════════════════════════════════
+# [US-043] Arme app.potager_id (défense en profondeur RLS) pour tout le
+# traitement de cet Update — PTB v20 traite tous les groupes de handlers d'un
+# même Update séquentiellement dans une seule Task asyncio, donc un simple
+# .set() (sans reset) ici reste visible pour les handlers des groupes
+# suivants ; chaque nouvel Update est traité dans sa propre Task, donc sans
+# fuite entre mises à jour concurrentes (sémantique standard de contextvars).
+async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    current_potager_id.set(default_context().potager_id)
+
+
 def main():
     print("🌿 Démarrage du bot Telegram potager...")
     print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
@@ -5071,6 +4769,11 @@ def main():
         .pool_timeout(30)
         .build()
     )
+
+    # [US-043] Arme app.potager_id (défense en profondeur RLS) avant tout autre
+    # handler, pour chaque Update entrant — groupe -1 = exécuté en premier,
+    # ne bloque pas la propagation vers les handlers des groupes suivants.
+    app.add_handler(TypeHandler(Update, _arm_tenant_context), group=-1)
 
     # Commandes
     app.add_handler(CommandHandler("start",      cmd_start))

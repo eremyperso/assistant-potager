@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import date as _date, datetime
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from database.models import Evenement, CultureConfig, Parcelle
 
@@ -131,13 +131,22 @@ class StockCulture:
         return self.type_organe == "reproducteur"
 
 
-def get_type_organe(db: Session, culture: str) -> Optional[str]:
-    """Retourne le type d'organe pour une culture depuis culture_config."""
-    cfg = db.query(CultureConfig).filter(CultureConfig.nom == culture).first()
+def get_type_organe(db: Session, culture: str, potager_id: Optional[int] = None) -> Optional[str]:
+    """Retourne le type d'organe pour une culture depuis culture_config.
+    [US-042] potager_id=None (défaut) = comportement historique non scopé, réservé
+    aux tests unitaires directs de utils/. Les appelants applicatifs (app/services/)
+    passent toujours potager_id=ctx.potager_id — une fiche globale (potager_id NULL)
+    reste visible dans tous les cas."""
+    q = db.query(CultureConfig).filter(CultureConfig.nom == culture)
+    if potager_id is not None:
+        q = q.filter(or_(CultureConfig.potager_id == potager_id, CultureConfig.potager_id.is_(None)))
+    cfg = q.first()
     return cfg.type_organe_recolte if cfg else None
 
 
-def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict[str, StockCulture]:
+def calcul_stock_cultures(
+    db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> Dict[str, StockCulture]:
     """
     [US-002] Calcule le stock réel de toutes les cultures plantées.
     [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
@@ -167,6 +176,8 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.isnot(None))
     )
+    if potager_id is not None:
+        _q_plant = _q_plant.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations_raw = _q_plant.all()
@@ -201,6 +212,8 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         .filter(Evenement.culture.isnot(None))
         .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
     )
+    if potager_id is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
     semis_pt_raw = _q_semis_pt.all()
@@ -222,6 +235,8 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
     )
+    if potager_id is not None:
+        _q_pertes = _q_pertes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
@@ -249,6 +264,8 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.unite)
     )
+    if potager_id is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
     recoltes_raw = _q_recoltes.all()
@@ -276,7 +293,7 @@ def calcul_stock_cultures(db: Session, date_ref: Optional[_date] = None) -> Dict
     # ── 4. Construction des objets StockCulture ─────────────────────────────
     result: Dict[str, StockCulture] = {}
     for culture, (total_plants, unite) in sorted(plantes.items()):
-        type_organe = get_type_organe(db, culture)
+        type_organe = get_type_organe(db, culture, potager_id=potager_id)
         rec = recoltes.get(culture, (0, 0.0, ""))
         rdt = rendements.get(culture, (0, 0.0, ""))
 
@@ -355,7 +372,9 @@ def format_stock_ligne_telegram(s: StockCulture) -> str:
         return base
 
 
-def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dict]:
+def calcul_semis(
+    db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> Dict[str, dict]:
     """
     [US-014 / CA1] Agrège les semis par culture.
     [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
@@ -375,6 +394,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
     )
+    if potager_id is not None:
+        _q_semis = _q_semis.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis = _q_semis.filter(Evenement.date <= cutoff)
     semis_rows = _q_semis.all()
@@ -406,6 +427,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
     )
+    if potager_id is not None:
+        _q_godets = _q_godets.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_godets = _q_godets.filter(Evenement.date <= cutoff)
     godets_brut = _q_godets.all()
@@ -424,6 +447,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         .filter(Evenement.culture.isnot(None))
         .distinct()
     )
+    if potager_id is not None:
+        _q_cultures_g = _q_cultures_g.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_cultures_g = _q_cultures_g.filter(Evenement.date <= cutoff)
     cultures_avec_godets = {row[0].lower() for row in _q_cultures_g.all()}
@@ -435,6 +460,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
     )
+    if potager_id is not None:
+        _q_pertes_s = _q_pertes_s.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes_s = _q_pertes_s.filter(Evenement.date <= cutoff)
     pertes_semis_raw = _q_pertes_s.all()
@@ -459,6 +486,8 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
             _sa_and(Parcelle.est_pepiniere.is_(False), Parcelle.actif.is_(True)),
         ))
     )
+    if potager_id is not None:
+        _q_parcelles_pt = _q_parcelles_pt.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_parcelles_pt = _q_parcelles_pt.filter(Evenement.date <= cutoff)
     parcelles_pt_raw = _q_parcelles_pt.all()
@@ -479,7 +508,7 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
             "nb_semis":               nb,
             "total_seme":             total_seme,
             "unite":                  unites.get(culture, "graines"),
-            "type_organe":            get_type_organe(db, culture),
+            "type_organe":            get_type_organe(db, culture, potager_id=potager_id),
             "plants_en_godet":        plants_en_godet.get(culture, 0),
             "stock_residuel":         max(0, int(total_seme) - consommees - perte_semis),
             "parcelles_pleine_terre": parcelles_pt.get(culture, []),
@@ -487,7 +516,9 @@ def calcul_semis(db: Session, date_ref: Optional[_date] = None) -> Dict[str, dic
     return dict(sorted(result.items()))
 
 
-def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
+def calcul_semis_par_culture(
+    db: Session, culture: str, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> List[dict]:
     """
     [US-014 / CA3, CA4, CA5 | US-017 / CA2] Retourne les semis par variété pour une culture donnée.
     [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
@@ -509,6 +540,8 @@ def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "semis")
     )
+    if potager_id is not None:
+        _q_semis = _q_semis.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis = _q_semis.filter(Evenement.date <= cutoff)
     semis_raw = _q_semis.all()
@@ -526,6 +559,8 @@ def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "mise_en_godet")
     )
+    if potager_id is not None:
+        _q_godets_var = _q_godets_var.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_godets_var = _q_godets_var.filter(Evenement.date <= cutoff)
     godets_brut_var = _q_godets_var.all()
@@ -582,7 +617,7 @@ def calcul_semis_par_culture(db: Session, culture: str, date_ref: Optional[_date
 
 
 def calcul_activite_quotidienne(
-    db: Session, annee: int, date_ref: Optional[_date] = None
+    db: Session, annee: int, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
 ) -> Dict[str, int]:
     """
     [US_Stats_activite_potager] Compte le nombre d'événements par jour pour une année donnée.
@@ -595,17 +630,20 @@ def calcul_activite_quotidienne(
     cutoff = _cutoff_dt(date_ref)
     fin = min(fin_annee, cutoff) if cutoff else fin_annee
 
-    rows = (
+    _q = (
         db.query(func.date(Evenement.date), func.count(Evenement.id))
         .filter(Evenement.date >= debut)
         .filter(Evenement.date <= fin)
-        .group_by(func.date(Evenement.date))
-        .all()
     )
+    if potager_id is not None:
+        _q = _q.filter(Evenement.potager_id == potager_id)
+    rows = _q.group_by(func.date(Evenement.date)).all()
     return {str(jour): nb for jour, nb in rows}
 
 
-def calcul_rendement_mensuel(db: Session, annee: int, date_ref: Optional[_date] = None) -> dict:
+def calcul_rendement_mensuel(
+    db: Session, annee: int, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> dict:
     """
     [US_Stats_rendement_timeline] Agrège les récoltes par culture et par mois pour une année donnée.
     [US-030] date_ref optionnel : plafonne la borne haute à cette date (sinon 31/12 de l'année).
@@ -633,14 +671,16 @@ def calcul_rendement_mensuel(db: Session, annee: int, date_ref: Optional[_date] 
     cutoff = _cutoff_dt(date_ref)
     fin = min(fin_annee, cutoff) if cutoff else fin_annee
 
-    rows = (
+    _q_rows = (
         db.query(Evenement.culture, Evenement.unite, Evenement.quantite, Evenement.date)
         .filter(Evenement.type_action == "recolte")
         .filter(Evenement.culture.isnot(None))
         .filter(Evenement.date >= debut)
         .filter(Evenement.date <= fin)
-        .all()
     )
+    if potager_id is not None:
+        _q_rows = _q_rows.filter(Evenement.potager_id == potager_id)
+    rows = _q_rows.all()
     if not rows:
         return {"cultures": [], "mois_range": [], "total_general_kg": 0.0}
 
@@ -717,7 +757,9 @@ def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
 # [US_Stats_detail_par_variete] Détail par variété
 # ══════════════════════════════════════════════════════════════════════════════
 
-def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
+def calcul_stock_par_variete(
+    db: Session, culture: str, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> List[dict]:
     """
     [US_Stats_detail_par_variete / CA3, CA4, CA5, CA6, CA7] [US-036]
     Agrège les événements par variété pour une culture donnée.
@@ -750,6 +792,8 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "plantation")
     )
+    if potager_id is not None:
+        _q_plant = _q_plant.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations_raw = _q_plant.all()
@@ -769,6 +813,8 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         .filter(Evenement.type_action == "semis")
         .filter(_cond_semis_pleine_terre(Evenement, Parcelle))
     )
+    if potager_id is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
     semis_pt_raw = _q_semis_pt.all()
@@ -784,6 +830,8 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         .filter(Evenement.type_action == "perte")
         .group_by(Evenement.variete)
     )
+    if potager_id is not None:
+        _q_pertes = _q_pertes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
@@ -800,16 +848,17 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.type_action == "recolte")
     )
+    if potager_id is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
     recoltes_raw = _q_recoltes.all()
 
     # ── 4. type_organe depuis culture_config ────────────────────────────────
-    cfg = (
-        db.query(CultureConfig)
-        .filter(func.lower(CultureConfig.nom) == culture_lower)
-        .first()
-    )
+    _q_cfg = db.query(CultureConfig).filter(func.lower(CultureConfig.nom) == culture_lower)
+    if potager_id is not None:
+        _q_cfg = _q_cfg.filter(or_(CultureConfig.potager_id == potager_id, CultureConfig.potager_id.is_(None)))
+    cfg = _q_cfg.first()
     type_organe: Optional[str] = cfg.type_organe_recolte if cfg else None
 
     # ── 5. Agrégation plantations + semis pleine terre par variété ──────────
@@ -939,7 +988,10 @@ def calcul_stock_par_variete(db: Session, culture: str, date_ref: Optional[_date
     return result
 
 
-def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional[_date] = None) -> Dict[str, dict]:
+def calcul_godets(
+    db: Session, include_epuises: bool = False, date_ref: Optional[_date] = None,
+    potager_id: Optional[int] = None,
+) -> Dict[str, dict]:
     """
     [US_mise_en_godet | US-022 | US-026] Agrège les mise_en_godet par culture/variété.
     Déduit les plantations du stock godet.
@@ -968,6 +1020,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_rows = _q_rows.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
@@ -982,13 +1036,18 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
     )
+    if potager_id is not None:
+        _q_links = _q_links.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_links = _q_links.filter(Evenement.date <= cutoff)
     _godet_links = _q_links.all()
     _semis_ids_all = {r.origine_graines_id for r in _godet_links if r.origine_graines_id}
     _semis_qtites_all: Dict[int, int] = {}
     if _semis_ids_all:
-        for sid, sqte in db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_all)).all():
+        _q_semis_qte = db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_all))
+        if potager_id is not None:
+            _q_semis_qte = _q_semis_qte.filter(Evenement.potager_id == potager_id)
+        for sid, sqte in _q_semis_qte.all():
             _semis_qtites_all[sid] = int(sqte or 0)
     graines_par_cv: Dict[tuple, int] = {}
     _seen_cv: Dict[tuple, set] = {}
@@ -1009,6 +1068,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_plant = _q_plant.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plant_rows = _q_plant.all()
@@ -1048,6 +1109,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_sorties = _q_sorties.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_sorties = _q_sorties.filter(Evenement.date <= cutoff)
     sorties_rows = _q_sorties.all()
@@ -1069,6 +1132,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_vendus = _q_vendus.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_vendus = _q_vendus.filter(Evenement.date <= cutoff)
     vendus_rows = _q_vendus.all()
@@ -1080,6 +1145,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_pertes_g = _q_pertes_g.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes_g = _q_pertes_g.filter(Evenement.date <= cutoff)
     pertes_godet_rows = _q_pertes_g.all()
@@ -1129,6 +1196,8 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
         .filter(Evenement.culture.isnot(None))
         .filter(_sa_or(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
     )
+    if potager_id is not None:
+        _q_semis_pep = _q_semis_pep.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis_pep = _q_semis_pep.filter(Evenement.date <= cutoff)
     semis_par_cv: Dict[tuple, Dict[str, float]] = {}
@@ -1169,7 +1238,9 @@ def calcul_godets(db: Session, include_epuises: bool = False, date_ref: Optional
     return dict(sorted(result.items()))
 
 
-def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_date] = None) -> List[dict]:
+def calcul_godets_par_culture(
+    db: Session, culture: str, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> List[dict]:
     """
     [US-018 / CA1, CA2, CA6 | US-022 / CA1-CA6] Retourne les godets actifs par variété.
     [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
@@ -1199,6 +1270,8 @@ def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_dat
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete)
     )
+    if potager_id is not None:
+        _q_rows = _q_rows.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
@@ -1213,13 +1286,18 @@ def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_dat
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
     )
+    if potager_id is not None:
+        _q_links_var = _q_links_var.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_links_var = _q_links_var.filter(Evenement.date <= cutoff)
     _godet_links_var = _q_links_var.all()
     _semis_ids_var = {r.origine_graines_id for r in _godet_links_var if r.origine_graines_id}
     _semis_qtites_var: Dict[int, int] = {}
     if _semis_ids_var:
-        for sid, sqte in db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_var)).all():
+        _q_semis_qte_var = db.query(Evenement.id, Evenement.quantite).filter(Evenement.id.in_(_semis_ids_var))
+        if potager_id is not None:
+            _q_semis_qte_var = _q_semis_qte_var.filter(Evenement.potager_id == potager_id)
+        for sid, sqte in _q_semis_qte_var.all():
             _semis_qtites_var[sid] = int(sqte or 0)
     graines_par_variete: Dict[Optional[str], int] = {}
     _seen_var: Dict[Optional[str], set] = {}
@@ -1239,6 +1317,8 @@ def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_dat
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete)
     )
+    if potager_id is not None:
+        _q_plant_var = _q_plant_var.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
     plant_rows = _q_plant_var.all()
@@ -1281,6 +1361,8 @@ def calcul_godets_par_culture(db: Session, culture: str, date_ref: Optional[_dat
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete, Evenement.type_action)
     )
+    if potager_id is not None:
+        _q_sorties_var = _q_sorties_var.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_sorties_var = _q_sorties_var.filter(Evenement.date <= cutoff)
     sorties_par_variete_rows = _q_sorties_var.all()
@@ -1337,6 +1419,7 @@ def _find_plantation_sources(
     culture: str,
     variete: str | None,
     quantite: float,
+    potager_id: Optional[int] = None,
 ) -> tuple[str | None, str | None]:
     """
     [US-029 CA5/CA7/CA8] Trouve la variété héritée et les IDs de godets sources pour une plantation.
@@ -1354,27 +1437,30 @@ def _find_plantation_sources(
     culture_lower = culture.lower()
 
     # Charger tous les godets pour cette culture, FIFO (plus ancien d'abord)
-    godet_events = (
+    _q_godet_events = (
         db.query(Evenement.id, Evenement.variete, Evenement.nb_plants_godets, Evenement.date)
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
         .filter(Evenement.nb_plants_godets.isnot(None))
-        .order_by(Evenement.date.asc().nullsfirst(), Evenement.id.asc())
-        .all()
     )
+    if potager_id is not None:
+        _q_godet_events = _q_godet_events.filter(Evenement.potager_id == potager_id)
+    godet_events = _q_godet_events.order_by(Evenement.date.asc().nullsfirst(), Evenement.id.asc()).all()
 
     if not godet_events:
         return (variete, None)
 
     # Calculer les consommations déjà enregistrées via source_evenement_ids
-    plant_linked = (
+    _q_plant_linked = (
         db.query(Evenement.source_evenement_ids, Evenement.quantite)
         .filter(Evenement.type_action == "plantation")
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.source_evenement_ids.isnot(None))
-        .all()
     )
+    if potager_id is not None:
+        _q_plant_linked = _q_plant_linked.filter(Evenement.potager_id == potager_id)
+    plant_linked = _q_plant_linked.all()
     consumed: dict[int, float] = {}
     for src_ids_str, p_qte in plant_linked:
         for part in (src_ids_str or "").split(";"):

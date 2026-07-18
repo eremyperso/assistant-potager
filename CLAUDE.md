@@ -322,6 +322,29 @@ Conf côté serveur (déjà appliquée, à reproduire si le serveur est réinsta
 pgAdmin (sans tunnel) : Host `162.55.57.49`, Port `5432`, Username `potager_user`,
 SSL mode `Require`.
 
+### Rôle applicatif `app_user` — Row-Level Security (US-043)
+
+Depuis `migration_v18.sql`, un rôle PostgreSQL non-superuser `app_user` protège
+`evenements`, `parcelles`, `culture_config` par Row-Level Security (défense en
+profondeur, indépendante du scoping applicatif `ctx.potager_id` de US-042).
+
+- `potager_user` (owner des tables) reste le rôle des migrations/`pg_dump` —
+  RLS ne s'applique jamais à lui (comportement standard PostgreSQL).
+- **`DATABASE_URL` (`.env.dev` / `.env.prod`) doit pointer vers `app_user`**
+  pour que la protection RLS soit effective côté bot/API — tant que
+  l'application se connecte avec `potager_user`, RLS reste inactif pour elle.
+- `database/db.py` arme le GUC de session `app.potager_id` (via `SET LOCAL`)
+  à partir du `TenantContext` courant — voir `bot.py::_arm_tenant_context`
+  (handler Telegram, groupe -1) et `main.py::_tenant_context_middleware`
+  (middleware FastAPI). Toute session DB sans ce GUC positionné échoue en
+  fail-fast dès qu'elle touche une table protégée (`current_setting`
+  lève une erreur explicite) — jamais un simple zéro ligne silencieux.
+- Jobs de fond hors dispatch Telegram/HTTP (ex. `job_meteo_quotidienne`)
+  doivent positionner `app.potager_id` eux-mêmes via
+  `database.db.tenant_scope(potager_id)` avant toute requête.
+- Rollback : `migrations/rollback_v18.sql` (supprime policies, désactive RLS,
+  supprime `app_user` — remettre `DATABASE_URL` sur `potager_user` si besoin).
+
 ## Déploiement & Docker
 
 ### ⚠️ IMPORTANT — Protocole de déploiement

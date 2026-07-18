@@ -90,26 +90,31 @@ def levenshtein_distance(a: str, b: str) -> int:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def find_doublon(
-    db: Session, nom_normalise: str
+    db: Session, nom_normalise: str, potager_id: Optional[int] = None
 ) -> Tuple[Optional[Parcelle], Optional[Parcelle]]:
     """
     [CA10, CA12] Recherche un doublon exact ou une variante proche (Levenshtein ≤ 2).
+    [US-042] potager_id=None (défaut) = comportement historique non scopé, réservé
+    aux tests unitaires directs de utils/. Les appelants applicatifs passent toujours
+    potager_id=ctx.potager_id.
 
     Retourne (exact_match, proche_match) :
     - exact_match  : Parcelle dont nom_normalise == nom_normalise fourni
     - proche_match : Parcelle dont la distance Levenshtein ≤ 2 (si pas d'exact)
     """
     # Doublon exact
-    exact = (
-        db.query(Parcelle)
-        .filter(Parcelle.nom_normalise == nom_normalise)
-        .first()
-    )
+    _q_exact = db.query(Parcelle).filter(Parcelle.nom_normalise == nom_normalise)
+    if potager_id is not None:
+        _q_exact = _q_exact.filter(Parcelle.potager_id == potager_id)
+    exact = _q_exact.first()
     if exact:
         return exact, None
 
     # Variante proche (Levenshtein ≤ 2)
-    toutes = db.query(Parcelle).filter(Parcelle.actif.is_(True)).all()
+    _q_toutes = db.query(Parcelle).filter(Parcelle.actif.is_(True))
+    if potager_id is not None:
+        _q_toutes = _q_toutes.filter(Parcelle.potager_id == potager_id)
+    toutes = _q_toutes.all()
     for p in toutes:
         if levenshtein_distance(nom_normalise, p.nom_normalise) <= 2:
             return None, p
@@ -121,7 +126,7 @@ def find_doublon(
 # [US_Plan_occupation_parcelles / CA13] Création d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-def resolve_parcelle(db: Session, nom: str) -> Optional[Parcelle]:
+def resolve_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) -> Optional[Parcelle]:
     """
     Résout un nom de parcelle libre (issu du LLM) vers l'objet Parcelle en base.
 
@@ -133,6 +138,7 @@ def resolve_parcelle(db: Session, nom: str) -> Optional[Parcelle]:
     Args:
         db  : session SQLAlchemy
         nom : nom brut extrait par le LLM (ex : "Ouest", "NORD", "cote est")
+        potager_id : [US-042] tenant courant — None (défaut) = non scopé (tests directs).
 
     Returns:
         Parcelle correspondante ou None
@@ -140,7 +146,7 @@ def resolve_parcelle(db: Session, nom: str) -> Optional[Parcelle]:
     if not nom or not nom.strip():
         return None
     nom_normalise = normalize_parcelle_name(nom)
-    exact, proche = find_doublon(db, nom_normalise)
+    exact, proche = find_doublon(db, nom_normalise, potager_id=potager_id)
     if exact:
         return exact
     if proche:
@@ -152,7 +158,10 @@ def resolve_parcelle(db: Session, nom: str) -> Optional[Parcelle]:
 
     # Correspondance par sous-chaîne : "planchecentrale" contient "centrale"
     # Couvre les cas où l'utilisateur préfixe le nom ("planche-centrale" → "CENTRALE")
-    parcelles_actives = db.query(Parcelle).filter(Parcelle.actif == True).all()
+    _q_pa = db.query(Parcelle).filter(Parcelle.actif == True)
+    if potager_id is not None:
+        _q_pa = _q_pa.filter(Parcelle.potager_id == potager_id)
+    parcelles_actives = _q_pa.all()
     for p in parcelles_actives:
         p_norm = p.nom_normalise
         if p_norm and (p_norm in nom_normalise or nom_normalise in p_norm):
@@ -169,19 +178,26 @@ def create_parcelle(
     nom: str,
     exposition: Optional[str] = None,
     superficie_m2: Optional[float] = None,
+    potager_id: Optional[int] = None,
 ) -> Parcelle:
     """
     [CA13] Crée une nouvelle parcelle avec nom_normalise calculé.
     ordre = nombre de parcelles existantes + 1.
     Lève ValueError si un doublon exact existe déjà.
+    [US-042] potager_id=None (défaut) = comportement historique non scopé (tests
+    directs) ; les appelants applicatifs passent toujours potager_id=ctx.potager_id
+    et la parcelle créée est rattachée à ce potager.
     """
     nom_normalise = normalize_parcelle_name(nom)
-    exact, _ = find_doublon(db, nom_normalise)
+    exact, _ = find_doublon(db, nom_normalise, potager_id=potager_id)
     if exact:
         raise ValueError(f"La parcelle « {exact.nom.upper()} » existe déjà.")
 
-    nb_existantes = db.query(Parcelle).count()
-    parcelle = Parcelle(
+    _q_nb = db.query(Parcelle)
+    if potager_id is not None:
+        _q_nb = _q_nb.filter(Parcelle.potager_id == potager_id)
+    nb_existantes = _q_nb.count()
+    parcelle_kwargs = dict(
         nom=nom,
         nom_normalise=nom_normalise,
         exposition=exposition,
@@ -189,6 +205,11 @@ def create_parcelle(
         ordre=nb_existantes + 1,
         actif=True,
     )
+    # [US-042] potager_id omis si None : laisse le default=1 de la colonne
+    # (database/models.py) s'appliquer, plutôt que d'écraser explicitement avec None.
+    if potager_id is not None:
+        parcelle_kwargs["potager_id"] = potager_id
+    parcelle = Parcelle(**parcelle_kwargs)
     db.add(parcelle)
     db.commit()
     db.refresh(parcelle)
@@ -204,7 +225,7 @@ _CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere"}
 
 
 def update_parcelle(
-    db: Session, nom: str, **kwargs
+    db: Session, nom: str, potager_id: Optional[int] = None, **kwargs
 ) -> Tuple[Parcelle, List[str]]:
     """
     Met à jour les métadonnées d'une parcelle existante.
@@ -225,11 +246,10 @@ def update_parcelle(
         )
 
     nom_normalise = normalize_parcelle_name(nom)
-    parcelle = (
-        db.query(Parcelle)
-        .filter(Parcelle.nom_normalise == nom_normalise)
-        .first()
-    )
+    _q_parcelle = db.query(Parcelle).filter(Parcelle.nom_normalise == nom_normalise)
+    if potager_id is not None:
+        _q_parcelle = _q_parcelle.filter(Parcelle.potager_id == potager_id)
+    parcelle = _q_parcelle.first()
     if parcelle is None:
         raise LookupError(nom)
 
@@ -275,6 +295,7 @@ def rename_parcelle(
     db: Session,
     ancien_nom: str,
     nouveau_nom: str,
+    potager_id: Optional[int] = None,
 ) -> Tuple[Parcelle, int]:
     """
     [US-006] Renomme une parcelle et propage le nouveau nom sur tous les événements liés.
@@ -293,20 +314,19 @@ def rename_parcelle(
         ValueError  : si nouveau_nom est déjà utilisé par une autre parcelle
     """
     # Résolution de l'ancienne parcelle via nom_normalise
-    parcelle = resolve_parcelle(db, ancien_nom)
+    parcelle = resolve_parcelle(db, ancien_nom, potager_id=potager_id)
     if parcelle is None:
         raise LookupError(ancien_nom)
 
     # Vérification que le nouveau nom n'est pas déjà utilisé par une autre parcelle
     nouveau_normalise = normalize_parcelle_name(nouveau_nom)
-    conflit = (
-        db.query(Parcelle)
-        .filter(
-            Parcelle.nom_normalise == nouveau_normalise,
-            Parcelle.id != parcelle.id,
-        )
-        .first()
+    _q_conflit = db.query(Parcelle).filter(
+        Parcelle.nom_normalise == nouveau_normalise,
+        Parcelle.id != parcelle.id,
     )
+    if potager_id is not None:
+        _q_conflit = _q_conflit.filter(Parcelle.potager_id == potager_id)
+    conflit = _q_conflit.first()
     if conflit is not None:
         raise ValueError(f"Ce nom est déjà utilisé par une autre parcelle : {conflit.nom!r}")
 
@@ -314,11 +334,10 @@ def rename_parcelle(
 
     # [migration_v12] la colonne evenements.parcelle n'existe plus :
     # les événements sont liés via parcelle_id — compter suffit, pas besoin de propager
-    nb_evenements = (
-        db.query(Evenement)
-        .filter(Evenement.parcelle_id == parcelle.id)
-        .count()
-    )
+    _q_nb_evt = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id)
+    if potager_id is not None:
+        _q_nb_evt = _q_nb_evt.filter(Evenement.potager_id == potager_id)
+    nb_evenements = _q_nb_evt.count()
 
     # Mise à jour de la parcelle elle-même
     parcelle.nom = nouveau_nom
@@ -338,7 +357,7 @@ def rename_parcelle(
 # [US-009] Suppression (soft-delete) d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-def supprimer_parcelle(db: Session, nom: str) -> Tuple[Parcelle, int]:
+def supprimer_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) -> Tuple[Parcelle, int]:
     """
     [US-009] Soft-delete d'une parcelle : actif=False + réaffectation atomique
     des événements liés (parcelle_id → NULL).
@@ -349,14 +368,15 @@ def supprimer_parcelle(db: Session, nom: str) -> Tuple[Parcelle, int]:
     Raises:
         LookupError : si la parcelle est introuvable ou déjà supprimée
     """
-    parcelle = resolve_parcelle(db, nom)
+    parcelle = resolve_parcelle(db, nom, potager_id=potager_id)
     if parcelle is None:
         raise LookupError(nom)
 
-    nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count()
-    db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).update(
-        {"parcelle_id": None}, synchronize_session="fetch"
-    )
+    _q_evt = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id)
+    if potager_id is not None:
+        _q_evt = _q_evt.filter(Evenement.potager_id == potager_id)
+    nb = _q_evt.count()
+    _q_evt.update({"parcelle_id": None}, synchronize_session="fetch")
     parcelle.actif = False
     db.commit()
 
@@ -368,23 +388,24 @@ def supprimer_parcelle(db: Session, nom: str) -> Tuple[Parcelle, int]:
 # [US_Plan_occupation_parcelles / CA4] Liste des parcelles
 # ──────────────────────────────────────────────────────────────────────────────
 
-def get_all_parcelles(db: Session) -> List[Parcelle]:
+def get_all_parcelles(db: Session, potager_id: Optional[int] = None) -> List[Parcelle]:
     """
     [CA4] Retourne toutes les parcelles actives triées par ordre croissant.
+    [US-042] potager_id=None (défaut) = non scopé (tests directs).
     """
-    return (
-        db.query(Parcelle)
-        .filter(Parcelle.actif.is_(True))
-        .order_by(Parcelle.ordre)
-        .all()
-    )
+    q = db.query(Parcelle).filter(Parcelle.actif.is_(True))
+    if potager_id is not None:
+        q = q.filter(Parcelle.potager_id == potager_id)
+    return q.order_by(Parcelle.ordre).all()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # [US_Plan_occupation_parcelles / CA1-CA7] Structure d'occupation
 # ──────────────────────────────────────────────────────────────────────────────
 
-def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -> Dict[Optional[str], list]:
+def calcul_occupation_parcelles(
+    db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
+) -> Dict[Optional[str], list]:
     """
     [CA1-CA7] Calcule la structure d'occupation du potager par parcelle.
     [US-030] date_ref optionnel : limite les événements pris en compte à date <= date_ref.
@@ -413,7 +434,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
     ref_day = date_ref if date_ref is not None else datetime.now().date()
 
     # ── 1. Cultures actives (stock > 0) ──────────────────────────────────────
-    stocks = calcul_stock_cultures(db, date_ref)
+    stocks = calcul_stock_cultures(db, date_ref, potager_id=potager_id)
     cultures_actives = {c for c, s in stocks.items() if s.stock_plants > 0}
 
     # ── 2. Événements de plantation pour cultures actives ────────────────────
@@ -435,6 +456,8 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         .filter(Evenement.culture.in_(list(cultures_actives)))
         .order_by(Evenement.date)
     )
+    if potager_id is not None:
+        _q_rows = _q_rows.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
@@ -495,6 +518,8 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         )
         .order_by(Evenement.date)
     )
+    if potager_id is not None:
+        _q_semis_pt = _q_semis_pt.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_semis_pt = _q_semis_pt.filter(Evenement.date <= cutoff)
     semis_pt_rows = _q_semis_pt.all()
@@ -537,6 +562,8 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_pertes = _q_pertes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
@@ -562,6 +589,8 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
         .filter(~func.lower(func.coalesce(Evenement.unite, "")).in_(_UNITES_POIDS))
         .group_by(Evenement.culture, Evenement.variete)
     )
+    if potager_id is not None:
+        _q_recoltes = _q_recoltes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
     recoltes_raw = _q_recoltes.all()
@@ -644,7 +673,7 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
             "variete": variete,
             "nb_plants": data["nb_plants"],
             "unite": data["unite"],
-            "type_organe": get_type_organe(db, culture),
+            "type_organe": get_type_organe(db, culture, potager_id=potager_id),
             "date_plantation": date_semis,
             "age_jours": max(0, age_jours),
             "type_action": "semis",     # distingue des plantations dans l'affichage

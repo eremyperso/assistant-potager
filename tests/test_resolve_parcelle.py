@@ -207,6 +207,7 @@ class TestCorrApplyParcelleValidation:
         event_mock.traitement = None
         event_mock.commentaire = None
         event_mock.date = None
+        event_mock.potager_id = 1  # [US-042] doit correspondre à default_context().potager_id
 
         # Simuler la réponse Groq → correction parcelle inconnue
         groq_resp = MagicMock()
@@ -257,6 +258,7 @@ class TestCorrApplyParcelleValidation:
         event_mock.traitement = None
         event_mock.commentaire = None
         event_mock.date = None
+        event_mock.potager_id = 1  # [US-042] doit correspondre à default_context().potager_id
 
         parcelle_nord = MagicMock()
         parcelle_nord.nom = "Nord"

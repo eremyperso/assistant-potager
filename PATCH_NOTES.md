@@ -1,4 +1,45 @@
 
+## [v3.18.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Ajoute une seconde ligne de défense contre les fuites de données entre potagers, au niveau PostgreSQL lui-même (Row-Level Security) — indépendante du scoping applicatif : même un futur bug de service qui oublierait un filtre `potager_id` ne pourrait plus exposer les données d'un autre potager (US-043)
+- `database/db.py` arme automatiquement le contexte tenant (`SET LOCAL app.potager_id`) à l'ouverture de chaque requête entrante (bot Telegram, API FastAPI) à partir du `TenantContext` courant — une session sans ce contexte échoue explicitement plutôt que de renvoyer silencieusement aucune donnée (US-043)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v18.sql` (+ rollback) : crée le rôle applicatif non-superuser `app_user` (distinct du rôle admin des migrations/sauvegardes) et active Row-Level Security avec policies d'isolation par `potager_id` sur `evenements`, `parcelles`, `culture_config` (US-043)
+
+### ⚠️ Breaking changes
+- `DATABASE_URL` doit être reconfiguré pour utiliser `app_user` (et non plus le rôle admin) après application de `migration_v18.sql`, sans quoi la protection RLS reste inactive pour l'application — voir CLAUDE.md § « Rôle applicatif app_user » (US-043)
+
+## [v3.17.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Toutes les fonctions de `app/services/` (événements, parcelles, stats, stock, plan) filtrent désormais systématiquement par `potager_id` — aucune donnée d'un potager ne peut plus apparaître dans les réponses adressées à un autre potager (US-042)
+- `services.questions.repondre_question()` (mode `/ask`) applique une fenêtre glissante de 12 mois et une limite de 100 événements, et logue le nombre réel de tokens Groq consommés à chaque appel (cible < 1500, contre ~5000 avant l'agent SQL) (US-042)
+- `llm/sql_agent.QueryAgent` accepte désormais un `potager_id` et scope toutes ses requêtes en conséquence (US-042)
+- `utils/stock.py` et `utils/parcelles.py` acceptent un paramètre `potager_id` optionnel sur chacune de leurs fonctions de lecture — utilisé systématiquement par la couche services, sans impact sur les usages directs existants (US-042)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v17.sql` (+ rollback) : passe `potager_id` en `NOT NULL` sur `evenements` et `parcelles` une fois le backfill vérifié complet ; `culture_config.potager_id` reste volontairement nullable (fiches globales partagées entre potagers) (US-042)
+
+### ⚠️ Breaking changes
+- Aucun changement de comportement pour l'utilisateur final tant qu'un seul potager existe (potager #1) — le scoping devient significatif dès qu'un second potager sera créé (US-110/US-112)
+
+## [v3.16.0] — 2026-07-16
+
+### 🔧 Améliorations techniques
+- Extrait toute la logique métier (événements, stats, stock, plan, questions) dans une nouvelle couche `app/services/`, appelée désormais par `bot.py` et `main.py` à la place de leurs propres accès directs à la base — l'isolation par potager à venir se codera à un seul endroit par fonction au lieu d'être dupliquée entre le bot et l'API (US-041)
+- `POST /ask` et la branche `INTERROGER` de `POST /voice` (PWA) répondent désormais via l'agent SQL déjà utilisé côté Telegram (`services.questions.repondre_question`) au lieu d'envoyer tout l'historique brut au LLM — réponse plus rapide et coût Groq réduit sur ces deux points d'entrée (US-041)
+- Supprime la duplication de l'héritage `type_organe_recolte` dans `POST /parse` (le même lookup `CultureConfig` était exécuté deux fois de suite)
+
+## [v3.15.0] — 2026-07-12
+
+### 🔧 Améliorations techniques
+- Pose le socle de données multi-tenant (`users`, `potagers`, `potager_membres`) — chaque table métier (`evenements`, `parcelles`, `culture_config`) porte désormais une colonne `potager_id` optionnelle, sans aucun changement de comportement du bot ni de la PWA (US-040)
+
+### 💾 Base de données
+- Ajoute les tables `users`, `potagers`, `potager_membres` et la colonne `potager_id` sur `evenements`, `parcelles`, `culture_config` (migration_v16, rollback_v16) — préparation à l'isolation des données entre jardins, aucune donnée existante impactée (US-040)
+
 ## [v3.14.0] — 2026-07-10
 
 ### 🚀 Nouveautés
