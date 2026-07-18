@@ -71,6 +71,7 @@ jobs:
         run: |
           ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
             sudo -u postgres psql -d potager_dev -c 'CREATE EXTENSION IF NOT EXISTS unaccent;'
+            sudo -u postgres psql -c 'ALTER ROLE potager_user CREATEROLE;'
           "
 
       - name: Apply SQL migrations
