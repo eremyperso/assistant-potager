@@ -81,10 +81,19 @@ Le fichier DOIT être nommé : `backlog/US-NNN_titre-court-kebab.md`
 - "Patcher", "appliquer", "déployer" quoi que ce soit
 - Chercher des alternatives si `createFiles` échoue (→ écrire dans le chat à la place)
 
+## Épics définis — noms exacts à recopier tels quels
+
+Si l'US rédigée appartient à l'un de ces épics (voir `BACKLOG_US_MULTITENANT.md`), recopie le nom **exactement** (il sert à assigner le Milestone GitHub correspondant) :
+- `ÉPIC 1 — Socle multi-tenant`
+- `ÉPIC 2 — Identité & accès`
+- `ÉPIC 3 — Fiabilité & coût`
+- `ÉPIC 4 — Commercialisation`
+
 ## Format de l'US
 
 **ID :** US-XXX  
 **Titre :** [verbe d'action + objet]
+**Épic :** [optionnel — uniquement si l'US appartient à un épic défini, ex: "ÉPIC 1 — Socle multi-tenant" ; omettre cette ligne pour une US indépendante]
 
 **Story :**
 En tant que [jardinier | administrateur]
