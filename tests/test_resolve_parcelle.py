@@ -69,19 +69,50 @@ class TestResolveParcelle:
         """Nom avec espaces seuls → retourne None sans erreur."""
         assert resolve_parcelle(db_avec_parcelles, "   ") is None
 
+    def test_resolution_sous_chaine_simple(self, test_db):
+        """[bug tomate cerise] 'centrale' doit résoudre vers 'planche-centrale'."""
+        test_db.add(Parcelle(nom="Planche-Centrale", nom_normalise="planchecentrale", ordre=1, actif=True))
+        test_db.add(Parcelle(nom="Planche-Ombre",    nom_normalise="plancheombre",    ordre=2, actif=True))
+        test_db.commit()
+
+        result = resolve_parcelle(test_db, "centrale")
+        assert result is not None
+        assert result.nom == "Planche-Centrale"
+
+    def test_resolution_sous_chaine_ambigue_retient_le_plus_specifique(self, test_db):
+        """Si plusieurs parcelles matchent par sous-chaîne (aucune exacte/proche par
+        Levenshtein), retient celle dont la longueur normalisée est la plus proche
+        du nom fourni — pas la première trouvée dans l'ordre SQL."""
+        test_db.add(Parcelle(nom="Jardin-Nord",       nom_normalise="jardinnord",       ordre=1, actif=True))
+        test_db.add(Parcelle(nom="Jardin-Nord-Ouest", nom_normalise="jardinnordouest",  ordre=2, actif=True))
+        test_db.commit()
+
+        # "jardinnordouestbas" contient les deux nom_normalise en sous-chaîne, mais
+        # est plus proche en longueur de "jardinnordouest" (+3) que de "jardinnord" (+8)
+        result = resolve_parcelle(test_db, "jardin nord ouest bas")
+        assert result is not None
+        assert result.nom == "Jardin-Nord-Ouest"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Tests d'intégration bot.py — _parse_and_save avec parcelle inconnue
+# Tests d'intégration bot.py — _do_save_items avec parcelle inconnue
+#
+# [US-021] La validation "parcelle inconnue" a migré de _parse_and_save (qui ne
+# fait plus que construire le récapitulatif de confirmation) vers _do_save_items,
+# appelée après que l'utilisateur ait tapé "✅ Confirmer". Ces tests ciblaient
+# encore _parse_and_save et étaient cassés depuis ce refactor — ils testaient
+# donc une garde-fou qui n'était en réalité plus jamais exercée par eux.
 # ──────────────────────────────────────────────────────────────────────────────
 
-class TestParseAndSaveParcelleBloquee:
-    """Vérifie que _parse_and_save bloque si la parcelle est introuvable."""
+class TestDoSaveItemsParcelleBloquee:
+    """Vérifie que _do_save_items bloque si la parcelle est introuvable."""
 
     @pytest.mark.asyncio
     async def test_parcelle_inconnue_bloque_sauvegarde(self, test_db):
         """Si la parcelle extraite par Groq n'existe pas, aucun événement n'est créé."""
         update_mock = MagicMock()
-        update_mock.message.reply_text = AsyncMock()
+        update_mock.effective_message = AsyncMock()
+        update_mock.effective_message.reply_text = AsyncMock()
 
         parsed_item = {
             "action": "plantation",
@@ -90,41 +121,34 @@ class TestParseAndSaveParcelleBloquee:
             "unite": "plants",
             "parcelle": "Ouest",  # parcelle inexistante
             "date": None,
-            "rang": None,
-            "duree_minutes": None,
-            "traitement": None,
-            "variete": None,
-            "commentaire": None,
         }
 
-        with patch("bot.parse_commande", return_value=[parsed_item]), \
-             patch("bot._normalize_items", return_value=[parsed_item]), \
-             patch("bot.SessionLocal") as mock_session_local, \
+        with patch("bot.SessionLocal", return_value=test_db), \
              patch("bot.resolve_parcelle", return_value=None):
 
-            mock_db = MagicMock()
-            mock_session_local.return_value = mock_db
-
-            from bot import _parse_and_save
-            await _parse_and_save(update_mock, "planter 10 courgettes parcelle Ouest")
+            from bot import _do_save_items
+            await _do_save_items(update_mock, [parsed_item], "planter 10 courgettes parcelle Ouest")
 
         # Vérifie que le message d'erreur a été envoyé
-        update_mock.message.reply_text.assert_called_once()
-        call_args = update_mock.message.reply_text.call_args
+        update_mock.effective_message.reply_text.assert_called_once()
+        call_args = update_mock.effective_message.reply_text.call_args
         assert "Ouest" in call_args[0][0]
         assert "n'existe pas" in call_args[0][0]
 
         # Vérifie qu'aucun événement n'a été persisté
-        mock_db.add.assert_not_called()
-        mock_db.commit.assert_not_called()
+        assert test_db.query(Evenement).count() == 0
 
     @pytest.mark.asyncio
     async def test_parcelle_connue_sauvegarde_avec_fk(self, test_db):
         """Si la parcelle est résolue, l'événement est créé avec parcelle_id renseigné."""
-        parcelle_nord = Parcelle(id=1, nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+        parcelle_nord = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+        test_db.add(parcelle_nord)
+        test_db.commit()
+        nord_id = parcelle_nord.id
 
         update_mock = MagicMock()
-        update_mock.message.reply_text = AsyncMock()
+        update_mock.effective_message = AsyncMock()
+        update_mock.effective_message.reply_text = AsyncMock()
 
         parsed_item = {
             "action": "plantation",
@@ -133,47 +157,18 @@ class TestParseAndSaveParcelleBloquee:
             "unite": "plants",
             "parcelle": "Nord",
             "date": None,
-            "rang": None,
-            "duree_minutes": None,
-            "traitement": None,
-            "variete": None,
-            "commentaire": None,
-            "nb_graines_semees": None,
-            "nb_plants_godets": None,
         }
 
-        evenement_mock = MagicMock()
-        evenement_mock.id = 42
-        evenement_mock.type_action = "plantation"
-        evenement_mock.culture = "tomate"
-        evenement_mock.quantite = 5.0
-        evenement_mock.unite = "plants"
-        evenement_mock.parcelle = "Nord"
-        evenement_mock.parcelle_id = 1
-        evenement_mock.rang = None
-        evenement_mock.date = None
-
-        with patch("bot.parse_commande", return_value=[parsed_item]), \
-             patch("bot._normalize_items", return_value=[parsed_item]), \
-             patch("bot.SessionLocal") as mock_session_local, \
+        with patch("bot.SessionLocal", return_value=test_db), \
              patch("bot.resolve_parcelle", return_value=parcelle_nord), \
-             patch("bot.Evenement", return_value=evenement_mock), \
-             patch("bot._build_recap", return_value="✅ recap"), \
-             patch("bot.send_voice_reply", new_callable=AsyncMock), \
-             patch("bot.MENU_KEYBOARD", None), \
-             patch("bot.AFTER_RECORD_KEYBOARD", None):
+             patch("bot.send_voice_reply", new_callable=AsyncMock):
 
-            mock_db = MagicMock()
-            mock_db.__enter__ = MagicMock(return_value=mock_db)
-            mock_db.__exit__ = MagicMock(return_value=False)
-            mock_session_local.return_value = mock_db
+            from bot import _do_save_items
+            await _do_save_items(update_mock, [parsed_item], "planter 5 tomates parcelle Nord")
 
-            from bot import _parse_and_save
-            await _parse_and_save(update_mock, "planter 5 tomates parcelle Nord")
-
-        # L'événement doit avoir été ajouté
-        mock_db.add.assert_called_once_with(evenement_mock)
-        mock_db.commit.assert_called()
+        # L'événement doit avoir été persisté avec la FK vers Nord
+        saved = test_db.query(Evenement).filter(Evenement.culture == "tomate").one()
+        assert saved.parcelle_id == nord_id
 
 
 # ──────────────────────────────────────────────────────────────────────────────

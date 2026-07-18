@@ -1761,6 +1761,8 @@ def _build_action_summary(items: list[dict]) -> str:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        if p.get("_avertissement_coherence"):
+            lines.append(f"\n{p['_avertissement_coherence']}")
         lines.append("\nC'est correct ?")
         return "\n".join(lines)
     else:
@@ -2141,6 +2143,29 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         items[i] = strip_culture_hallucinee(item, texte)
         if culture_avant and items[i].get("culture") is None:
             log.warning(f"⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | texte={texte!r}")
+
+    # [fix doublons orthographiques] Résout culture/variété vers les valeurs canoniques
+    # déjà en base (ex: "creme"/"cerise" dictés → variété déjà connue), pour ce pipeline
+    # de dictée directe. Jusqu'ici cette canonisation n'existait que dans le flux "notes"
+    # (_note_details_received) — le flux normal enregistrait la variété brute telle
+    # quelle, fragmentant silencieusement les variétés en base au moindre écart d'orthographe.
+    if any(item.get("culture") for item in items):
+        db_resolve = SessionLocal()
+        try:
+            for item in items:
+                if not item.get("culture"):
+                    continue
+                culture_resolue = resolve_culture(db_resolve, item["culture"])
+                if culture_resolue != item["culture"]:
+                    log.info(f"[resolve] Culture '{item['culture']}' → '{culture_resolue}'")
+                item["culture"] = culture_resolue
+                if item.get("variete"):
+                    variete_resolue = resolve_variete(db_resolve, culture_resolue, item["variete"])
+                    if variete_resolue != item["variete"]:
+                        log.info(f"[resolve] Variété '{item['variete']}' → '{variete_resolue}'")
+                    item["variete"] = variete_resolue
+        finally:
+            db_resolve.close()
 
     # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
     from utils.validation import validate_parsed_action
@@ -2688,6 +2713,47 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"
         )
         return
+
+    # [fix bug variété/parcelle incohérente] Parcelle ET culture renseignées sur une
+    # action qui suppose une culture déjà en place (récolte, perte, arrosage...) →
+    # vérifier que cette culture/variété a bien un historique sur la parcelle visée
+    # avant de demander confirmation. N'empêche jamais l'enregistrement (ça peut être
+    # une vraie nouveauté), mais rend l'incohérence visible dans le récapitulatif au
+    # lieu de la sauvegarder silencieusement (cf. tomate cerise/planche-centrale).
+    if (
+        len(items) == 1
+        and items[0].get("parcelle")
+        and items[0].get("culture")
+        and (items[0].get("type_action") or items[0].get("action") or "") not in _ACTIONS_SOURCE
+    ):
+        culture      = items[0]["culture"]
+        variete      = items[0].get("variete") or None
+        nom_parcelle = items[0]["parcelle"]
+        db_tmp = SessionLocal()
+        try:
+            parcelle_resolue = resolve_parcelle(db_tmp, nom_parcelle)
+            if parcelle_resolue is not None:
+                parcelles_ok = _get_parcelles_avec_culture(db_tmp, culture, variete)
+                if parcelle_resolue.id not in {p.id for p in parcelles_ok}:
+                    label = f"{culture} {variete}" if variete else culture
+                    autres = []
+                    if variete:
+                        # La variété n'est pas connue sur CETTE parcelle : indiquer où
+                        # elle a été plantée si elle existe ailleurs, pour aider au choix.
+                        parcelles_culture_seule = _get_parcelles_avec_culture(db_tmp, culture, None)
+                        autres = sorted({
+                            p.nom for p in parcelles_culture_seule if p.id != parcelle_resolue.id
+                        })
+                    suffixe = f" (trouvé sur : {', '.join(autres)})" if autres else ""
+                    items[0]["_avertissement_coherence"] = (
+                        f"⚠️ Aucune trace de *{label}* sur *{parcelle_resolue.nom}*{suffixe}."
+                    )
+                    log.warning(
+                        "[coherence-check] %s introuvable sur parcelle %r (id=%s) — avertissement affiché",
+                        label, parcelle_resolue.nom, parcelle_resolue.id,
+                    )
+        finally:
+            db_tmp.close()
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     summary = _build_action_summary(items)

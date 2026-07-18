@@ -162,15 +162,29 @@ def resolve_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) ->
     if potager_id is not None:
         _q_pa = _q_pa.filter(Parcelle.potager_id == potager_id)
     parcelles_actives = _q_pa.all()
-    for p in parcelles_actives:
-        p_norm = p.nom_normalise
-        if p_norm and (p_norm in nom_normalise or nom_normalise in p_norm):
-            log.warning(
-                f"[resolve_parcelle] Correspondance sous-chaîne : "
-                f"{nom!r} → {p.nom!r}"
-            )
-            return p
-    return None
+    candidats = [
+        p for p in parcelles_actives
+        if p.nom_normalise and (p.nom_normalise in nom_normalise or nom_normalise in p.nom_normalise)
+    ]
+    if not candidats:
+        return None
+    if len(candidats) > 1:
+        # Ambiguïté : plusieurs parcelles matchent par sous-chaîne (ex: "est" dans
+        # "planche-est" et "planche-nord-est"). Retenir la correspondance la plus
+        # proche en longueur (la plus spécifique) plutôt que l'ordre SQL arbitraire,
+        # et tracer les alternatives écartées pour pouvoir diagnostiquer un mauvais choix.
+        candidats.sort(key=lambda p: abs(len(p.nom_normalise) - len(nom_normalise)))
+        log.warning(
+            f"[resolve_parcelle] Correspondance sous-chaîne AMBIGUË pour {nom!r} : "
+            f"candidats={[c.nom for c in candidats]} → retenu {candidats[0].nom!r}"
+        )
+        return candidats[0]
+
+    log.warning(
+        f"[resolve_parcelle] Correspondance sous-chaîne : "
+        f"{nom!r} → {candidats[0].nom!r}"
+    )
+    return candidats[0]
 
 
 def create_parcelle(
