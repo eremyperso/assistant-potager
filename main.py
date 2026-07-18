@@ -190,6 +190,9 @@ def parse(req: TexteRequest):
             "parsed"         : saved[0]["parsed"]   if saved else None,
             "texte_original" : req.texte,
         }
+    except svc_evenements.EvenementInvalideError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
@@ -277,6 +280,9 @@ async def voice(
                 event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
                 add_to_rag(event.id, parsed)
                 saved_parsed.append(parsed)
+        except svc_evenements.EvenementInvalideError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erreur base : {e}")

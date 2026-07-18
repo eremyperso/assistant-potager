@@ -241,6 +241,11 @@ def test_us038_build_note_summary_contient_categorie_et_constat():
 
 @pytest.mark.asyncio
 async def test_us038_ca6_ca7_confirmation_enregistre_evenement(test_db):
+    # [US-049] "tomate" doit avoir un historique de plantation pour que l'observation
+    # passe la validation centrale (garde-fou "culture jamais plantée").
+    test_db.add(Evenement(type_action="plantation", culture="tomate", quantite=2, unite="plants"))
+    test_db.commit()
+
     user_id = 7
     fields = {
         "culture": "tomate", "variete": None, "parcelle": None,

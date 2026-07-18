@@ -26,6 +26,109 @@ from utils.stock import get_type_organe, _find_plantation_sources
 log = logging.getLogger("potager")
 
 
+class EvenementInvalideError(Exception):
+    """[US-049] Classe de base — levée par `valider_evenement` quand un événement ne
+    respecte pas les invariants métier du potager. Les appelants (bot.py, main.py)
+    attrapent cette exception et la traduisent en message utilisateur — jamais de
+    sauvegarde silencieuse d'un événement invalide, quel que soit le chemin
+    d'écriture emprunté. Deux sous-classes distinctes pour permettre à l'appelant
+    d'appliquer un traitement différent (blocage dur vs correction assistée) sans
+    avoir à réévaluer lui-même la règle qui a échoué."""
+
+
+class CultureInconnueError(EvenementInvalideError):
+    """Culture jamais introduite dans le potager (aucun semis/plantation/mise en
+    godet) — aucun scénario légitime, blocage dur systématique."""
+
+    def __init__(self, culture: str):
+        self.culture = culture
+        super().__init__(
+            f"Aucune trace de « {culture} » dans ce potager (aucun semis, aucune "
+            f"plantation, aucune mise en godet enregistrée)."
+        )
+
+
+class ParcelleInconnueError(EvenementInvalideError):
+    """Un nom de parcelle a été fourni mais ne résout vers aucune parcelle réelle du
+    potager — distinct de `ParcelleIncoherenteError` (parcelle réelle, mais culture/
+    variété jamais associée à elle)."""
+
+    def __init__(self, nom_parcelle: str):
+        self.nom_parcelle = nom_parcelle
+        super().__init__(f"La parcelle « {nom_parcelle} » n'existe pas dans votre potager.")
+
+
+class ParcelleIncoherenteError(EvenementInvalideError):
+    """Culture/variété sans historique sur la parcelle précise citée, alors que la
+    culture existe bien ailleurs dans le potager — peut légitimement être corrigée
+    (ex: sélection assistée de la bonne parcelle) plutôt que bloquée sèchement."""
+
+    def __init__(self, culture: str, variete: Optional[str], parcelle_nom: str):
+        self.culture = culture
+        self.variete = variete
+        self.parcelle_nom = parcelle_nom
+        label = f"{culture} {variete}" if variete else culture
+        super().__init__(f"Aucune trace de « {label} » sur « {parcelle_nom} ».")
+
+
+# [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
+# (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
+# c'est justement leur rôle de faire exister la culture pour la première fois.
+_ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet"}
+
+
+def valider_evenement(
+    db: Session,
+    ctx: TenantContext,
+    *,
+    action: Optional[str],
+    culture: Optional[str],
+    variete: Optional[str] = None,
+    parcelle: Optional[Parcelle] = None,
+    nom_parcelle_brut: Optional[str] = None,
+) -> None:
+    """
+    [US-049] Garde-fou unique et non contournable — appelé par TOUTE fonction de ce
+    module qui crée ou modifie un Evenement, indépendamment du canal (Telegram,
+    corrections, notes, API) et du nombre d'items traités dans un même appel.
+
+    Trois règles :
+    0. Si `nom_parcelle_brut` est fourni (un nom de parcelle a été cité) mais que
+       `parcelle` est None (la résolution a échoué), la parcelle citée n'existe pas
+       dans le potager — `ParcelleInconnueError`. Appliquée quel que soit l'action/
+       culture : contrairement aux règles 1-2, ce n'est pas affaire de cohérence
+       agronomique mais d'existence pure de la ligne référencée.
+    1-2. Applicables uniquement aux actions qui supposent une culture déjà en place
+       (récolte, perte, arrosage... — cf. `_ACTIONS_SOURCE_CULTURE` pour les actions
+       exemptées) :
+       1. La culture doit avoir été introduite au moins une fois via un semis, une
+          plantation ou une mise en godet — sinon `CultureInconnueError`.
+       2. Si une parcelle réelle est fournie, la culture/variété doit avoir un
+          historique sur CETTE parcelle précise — sinon `ParcelleIncoherenteError`.
+          En pratique, bot.py corrige déjà ce cas en amont via une sélection
+          assistée (US-021 CA8) avant d'atteindre ce point ; cette règle est le
+          filet de sécurité qui garantit qu'aucun appelant, présent ou futur, ne
+          peut persister une incohérence en contournant cette correction.
+    """
+    if nom_parcelle_brut and parcelle is None:
+        raise ParcelleInconnueError(nom_parcelle_brut)
+
+    from utils.culture_resolve import culture_deja_plantee
+
+    action_norm = normalize_action(action)
+    if not culture or action_norm in _ACTIONS_SOURCE_CULTURE:
+        return
+
+    if not culture_deja_plantee(db, culture):
+        raise CultureInconnueError(culture)
+
+    if parcelle is not None:
+        from app.services.parcelles import parcelles_avec_culture
+        parcelles_ok = parcelles_avec_culture(db, ctx, culture, variete)
+        if parcelle.id not in {p.id for p in parcelles_ok}:
+            raise ParcelleIncoherenteError(culture, variete, parcelle.nom)
+
+
 def _to_float(v):
     try:
         return float(v) if v is not None else None
@@ -298,6 +401,11 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
 
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
+    valider_evenement(
+        db, ctx,
+        action=parsed.get("action"), culture=parsed.get("culture"),
+        variete=parsed.get("variete"), parcelle=parcelle_obj,
+    )
     event = Evenement(
         type_action=normalize_action(parsed.get("action")),
         culture=parsed.get("culture"),
@@ -337,6 +445,11 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
     (pas d'héritage type_organe — comportement historique de _parse_multi)."""
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
+    valider_evenement(
+        db, ctx,
+        action=parsed.get("action"), culture=parsed.get("culture"),
+        variete=parsed.get("variete"), parcelle=parcelle_obj,
+    )
     event = Evenement(
         type_action=normalize_action(parsed.get("action")),
         culture=parsed.get("culture"),
@@ -392,6 +505,13 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
             source_evenement_ids = src_ids
             log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
 
+    valider_evenement(
+        db, ctx,
+        action=parsed.get("action"), culture=parsed.get("culture"),
+        variete=parsed.get("variete"), parcelle=parcelle_obj,
+        nom_parcelle_brut=parsed.get("parcelle"),
+    )
+
     event = Evenement(
         type_action=normalize_action(parsed.get("action")),
         culture=parsed.get("culture"),
@@ -445,6 +565,12 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
             log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
         log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
 
+    # [US-049] Appel systématique — "mise_en_godet" est une action source (introduit
+    # légitimement une nouvelle culture), donc toujours un no-op ici, mais l'appel
+    # reste présent pour que ce point d'écriture ne soit jamais oublié si les règles
+    # évoluent (cf. CA5 : parcourir toutes les fonctions d'écriture).
+    valider_evenement(db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str, parcelle=None)
+
     event = Evenement(
         type_action="mise_en_godet",
         culture=culture_str,
@@ -479,6 +605,12 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
         if parcelle_obj is None:
             log.warning(f"⚠️ [US-038] PARCELLE INCONNUE : {nom_parcelle!r} — note enregistrée sans parcelle")
 
+    valider_evenement(
+        db, ctx,
+        action="observation", culture=fields.get("culture"),
+        variete=fields.get("variete"), parcelle=parcelle_obj,
+    )
+
     event = Evenement(
         type_action=normalize_action("observation"),
         culture=fields.get("culture"),
@@ -500,6 +632,11 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
 
 def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: str) -> Evenement:
     """[perte / perte_godet] Sauvegarde directe depuis un callback inline (ex-_save_perte_item)."""
+    valider_evenement(
+        db, ctx,
+        action=item.get("action"), culture=item.get("culture"),
+        variete=item.get("variete"), parcelle=None,   # cette fonction ne localise jamais (parcelle_id toujours None)
+    )
     event = Evenement(
         type_action=item.get("action"),
         culture=item.get("culture"),
@@ -524,6 +661,25 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     event = db.get(Evenement, evenement_id)
     if event is None or event.potager_id != ctx.potager_id:
         return None
+
+    # [US-049] Calcule l'état final (action/culture/variété/parcelle) qu'aurait
+    # l'événement APRÈS application des corrections, et le valide AVANT toute
+    # mutation — une correction manuelle reste soumise aux mêmes invariants
+    # qu'une création (ex: corriger la parcelle vers un endroit incohérent avec
+    # la culture/variété doit être refusé, pas seulement pour les nouveaux events).
+    action_final  = corrections.get("action", event.type_action)
+    culture_final = corrections.get("culture", event.culture)
+    variete_final = corrections.get("variete", event.variete)
+    if "parcelle" in corrections:
+        parcelle_id_final = corrections.get("_parcelle_id")
+    else:
+        parcelle_id_final = event.parcelle_id
+    parcelle_final = db.get(Parcelle, parcelle_id_final) if parcelle_id_final else None
+    valider_evenement(
+        db, ctx,
+        action=action_final, culture=culture_final,
+        variete=variete_final, parcelle=parcelle_final,
+    )
 
     mapping = {
         "action": "type_action", "culture": "culture", "variete": "variete",
@@ -641,6 +797,15 @@ def deplacer_evenements(
     """[US-007 CA8] Réassocie tous les événements localisés d'une culture (+variété) vers
     une nouvelle parcelle, avec trace d'auditabilité. Retourne le nombre mis à jour."""
     from datetime import date as _date
+
+    # [US-049] Appel de cohérence (CA5/CA7), délibérément neutralisé ici : cette
+    # fonction sert PRÉCISÉMENT à établir qu'une culture est désormais localisée sur
+    # une nouvelle parcelle (correction manuelle d'une association erronée, US-007).
+    # action="plantation" (action source) rend l'appel un no-op assumé — appliquer
+    # la règle d'incohérence culture ↔ parcelle rejetterait systématiquement
+    # l'opération qu'elle a justement pour but de réaliser. `events` ne contient de
+    # toute façon que des événements déjà localisés : la culture existe forcément.
+    valider_evenement(db, ctx, action="plantation", culture=culture, variete=variete, parcelle=None)
 
     events = evenements_localises_pour_maj(db, ctx, culture, variete)
     today = _date.today().isoformat()
