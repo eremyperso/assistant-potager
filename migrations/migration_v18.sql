@@ -48,6 +48,13 @@
 -- charge elle-même de l'échapper en littéral SQL) pour ne jamais l'écrire en
 -- clair dans ce fichier versionné :
 --
+-- ⚠️ Environnement dev (déploiement automatique via .github/workflows/deploy-dev.yml
+-- sur push vers `dev`) : la variable est déjà câblée depuis le secret GitHub
+-- `APP_USER_PASSWORD` — le créer AVANT tout merge/déploiement déclenchant cette
+-- migration, sinon app_user est créé avec un mot de passe vide. Préférer un mot
+-- de passe alphanumérique (sans guillemet ni espace) pour rester compatible avec
+-- l'échappement shell utilisé par le workflow.
+--
 --   psql -U potager_user -d potager_dev -h localhost \
 --        -v app_user_password="un-mot-de-passe-fort" \
 --        -f migrations/migration_v18.sql
