@@ -48,12 +48,22 @@
 -- charge elle-même de l'échapper en littéral SQL) pour ne jamais l'écrire en
 -- clair dans ce fichier versionné :
 --
--- ⚠️ Environnement dev (déploiement automatique via .github/workflows/deploy-dev.yml
--- sur push vers `dev`) : la variable est déjà câblée depuis le secret GitHub
--- `APP_USER_PASSWORD` — le créer AVANT tout merge/déploiement déclenchant cette
--- migration, sinon app_user est créé avec un mot de passe vide. Préférer un mot
--- de passe alphanumérique (sans guillemet ni espace) pour rester compatible avec
--- l'échappement shell utilisé par le workflow.
+-- ⚠️ Déploiement automatique (deploy-dev.yml sur push vers `dev`, deploy.yml sur
+-- push vers `main`) : la variable est déjà câblée depuis le secret GitHub
+-- `APP_USER_PASSWORD` (même secret dans les deux workflows) — le créer AVANT
+-- tout merge/déploiement déclenchant cette migration, sinon app_user est créé
+-- avec un mot de passe vide. Préférer un mot de passe alphanumérique (sans
+-- guillemet, backtick, `$`, `\` ni espace) pour rester compatible avec
+-- l'échappement shell (double niveau : runner GitHub Actions puis SSH distant).
+--
+-- ⚠️ potager_dev et potager_prod vivent sur le MÊME cluster PostgreSQL — les
+-- rôles PostgreSQL sont globaux au cluster (pas par base), donc `app_user` est
+-- un seul et même rôle partagé entre les deux environnements. Conséquence :
+-- seul le PREMIER déploiement à exécuter cette migration (dev, en pratique)
+-- crée réellement le rôle avec ce mot de passe — le second (`IF NOT EXISTS`)
+-- ne fait que (re)appliquer les GRANT, qui eux sont bien par base. C'est
+-- pourquoi les deux workflows doivent utiliser LE MÊME secret : un mot de
+-- passe différent pour prod serait silencieusement ignoré.
 --
 --   psql -U potager_user -d potager_dev -h localhost \
 --        -v app_user_password="un-mot-de-passe-fort" \
