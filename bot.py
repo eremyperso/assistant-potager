@@ -44,12 +44,12 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs sche
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    ContextTypes, filters, ConversationHandler, CallbackQueryHandler
+    ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
 )
 from groq import Groq
 
 from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
-from database.db import SessionLocal, Base, engine
+from database.db import SessionLocal, Base, engine, tenant_scope, current_potager_id
 from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
@@ -4628,9 +4628,13 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
     Zéro token Groq consommé.
     """
     log.info("🌅 JOB MÉTÉO       : déclenchement automatique 05h00")
+    # [US-043] Job de fond hors dispatch Telegram (JobQueue, pas d'Update) :
+    # doit armer app.potager_id lui-même. Un seul potager aujourd'hui — à
+    # boucler potager par potager le jour où ce job devient multi-tenant.
     db = SessionLocal()
     try:
-        meteo = save_meteo_observation(db)
+        with tenant_scope(default_context().potager_id):
+            meteo = save_meteo_observation(db)
         if meteo:
             log.info(
                 f"🌤️  MÉTÉO AUTO      : {meteo['emoji']} {meteo['label']} | "
@@ -4740,6 +4744,16 @@ async def cmd_vendre(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 # LANCEMENT
 # ══════════════════════════════════════════════════════════════════════════════
+# [US-043] Arme app.potager_id (défense en profondeur RLS) pour tout le
+# traitement de cet Update — PTB v20 traite tous les groupes de handlers d'un
+# même Update séquentiellement dans une seule Task asyncio, donc un simple
+# .set() (sans reset) ici reste visible pour les handlers des groupes
+# suivants ; chaque nouvel Update est traité dans sa propre Task, donc sans
+# fuite entre mises à jour concurrentes (sémantique standard de contextvars).
+async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    current_potager_id.set(default_context().potager_id)
+
+
 def main():
     print("🌿 Démarrage du bot Telegram potager...")
     print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
@@ -4755,6 +4769,11 @@ def main():
         .pool_timeout(30)
         .build()
     )
+
+    # [US-043] Arme app.potager_id (défense en profondeur RLS) avant tout autre
+    # handler, pour chaque Update entrant — groupe -1 = exécuté en premier,
+    # ne bloque pas la propagation vers les handlers des groupes suivants.
+    app.add_handler(TypeHandler(Update, _arm_tenant_context), group=-1)
 
     # Commandes
     app.add_handler(CommandHandler("start",      cmd_start))

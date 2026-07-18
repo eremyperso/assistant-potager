@@ -1,4 +1,16 @@
 
+## [v3.18.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Ajoute une seconde ligne de défense contre les fuites de données entre potagers, au niveau PostgreSQL lui-même (Row-Level Security) — indépendante du scoping applicatif : même un futur bug de service qui oublierait un filtre `potager_id` ne pourrait plus exposer les données d'un autre potager (US-043)
+- `database/db.py` arme automatiquement le contexte tenant (`SET LOCAL app.potager_id`) à l'ouverture de chaque requête entrante (bot Telegram, API FastAPI) à partir du `TenantContext` courant — une session sans ce contexte échoue explicitement plutôt que de renvoyer silencieusement aucune donnée (US-043)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v18.sql` (+ rollback) : crée le rôle applicatif non-superuser `app_user` (distinct du rôle admin des migrations/sauvegardes) et active Row-Level Security avec policies d'isolation par `potager_id` sur `evenements`, `parcelles`, `culture_config` (US-043)
+
+### ⚠️ Breaking changes
+- `DATABASE_URL` doit être reconfiguré pour utiliser `app_user` (et non plus le rôle admin) après application de `migration_v18.sql`, sans quoi la protection RLS reste inactive pour l'application — voir CLAUDE.md § « Rôle applicatif app_user » (US-043)
+
 ## [v3.17.0] — 2026-07-17
 
 ### 🔧 Améliorations techniques

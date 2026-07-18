@@ -31,7 +31,7 @@ def _lire_version() -> str:
 
 _APP_VERSION = _lire_version()
 
-from database.db import Base, engine, SessionLocal
+from database.db import Base, engine, SessionLocal, tenant_scope
 import utils.stock as _stock_mod
 from utils.observations import build_observations_index
 from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
@@ -58,6 +58,15 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+# [US-043] Arme app.potager_id (défense en profondeur RLS) pour toute la durée
+# de traitement de chaque requête HTTP — à partir du TenantContext courant
+# (toujours default_context() en attendant l'authentification US-110/112).
+@app.middleware("http")
+async def _tenant_context_middleware(request, call_next):
+    with tenant_scope(default_context().potager_id):
+        return await call_next(request)
 
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
