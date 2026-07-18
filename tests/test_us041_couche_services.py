@@ -75,8 +75,8 @@ def ctx():
 
 
 @pytest.fixture
-def parcelle_nord(test_db):
-    p = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+def parcelle_nord(test_db, ctx):
+    p = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True, potager_id=ctx.potager_id)
     test_db.add(p)
     test_db.commit()
     return p
@@ -97,8 +97,8 @@ def test_ca3_enregistrer_evenement_resout_parcelle_et_herite_type_organe(test_db
 
 def test_ca3_lister_evenements_pagine_et_filtre(test_db, ctx, parcelle_nord):
     for i in range(3):
-        test_db.add(Evenement(type_action="arrosage", culture=None, parcelle_id=parcelle_nord.id))
-    test_db.add(Evenement(type_action="recolte", culture="tomate", parcelle_id=parcelle_nord.id))
+        test_db.add(Evenement(type_action="arrosage", culture=None, parcelle_id=parcelle_nord.id, potager_id=ctx.potager_id))
+    test_db.add(Evenement(type_action="recolte", culture="tomate", parcelle_id=parcelle_nord.id, potager_id=ctx.potager_id))
     test_db.commit()
 
     total, events = svc_evenements.lister_evenements(test_db, ctx, limit=2, offset=0)
@@ -111,7 +111,7 @@ def test_ca3_lister_evenements_pagine_et_filtre(test_db, ctx, parcelle_nord):
 
 
 def test_ca3_corriger_evenement_applique_les_champs_et_trace(test_db, ctx):
-    ev = Evenement(type_action="recolte", culture="tomate", quantite=2, unite="kg")
+    ev = Evenement(type_action="recolte", culture="tomate", quantite=2, unite="kg", potager_id=ctx.potager_id)
     test_db.add(ev)
     test_db.commit()
 
@@ -123,7 +123,7 @@ def test_ca3_corriger_evenement_applique_les_champs_et_trace(test_db, ctx):
 
 
 def test_ca3_supprimer_evenement(test_db, ctx):
-    ev = Evenement(type_action="arrosage")
+    ev = Evenement(type_action="arrosage", potager_id=ctx.potager_id)
     test_db.add(ev)
     test_db.commit()
     ev_id = ev.id
@@ -139,8 +139,8 @@ def test_ca3_supprimer_evenement(test_db, ctx):
 
 def test_ca4_calculer_stats_agrege_stock_et_traitements(test_db, ctx, parcelle_nord):
     test_db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
-    test_db.add(Evenement(type_action="plantation", culture="tomate", quantite=3, unite="plants", parcelle_id=parcelle_nord.id))
-    test_db.add(Evenement(type_action="traitement", traitement="purin d'ortie"))
+    test_db.add(Evenement(type_action="plantation", culture="tomate", quantite=3, unite="plants", parcelle_id=parcelle_nord.id, potager_id=ctx.potager_id))
+    test_db.add(Evenement(type_action="traitement", traitement="purin d'ortie", potager_id=ctx.potager_id))
     test_db.commit()
 
     result = svc_stats.calculer_stats(test_db, ctx)

@@ -98,7 +98,10 @@ def test_us040_ca4_potager_id_present_et_nullable(test_engine, model, table):
 
 
 def test_us040_ca4_evenement_creable_sans_potager_id(test_db):
-    """Non-régression : un événement reste créable sans potager_id renseigné."""
+    """Non-régression : un événement reste créable sans potager_id fourni explicitement.
+    [US-042] La colonne porte désormais un default=1 (DEFAULT_POTAGER_ID) côté ORM pour
+    que les fixtures de tests existantes retombent sur le potager #1 sans modification —
+    ce n'est plus NULL, contrairement au comportement d'origine de US-040."""
     parcelle = Parcelle(nom="Nord", nom_normalise="nord")
     test_db.add(parcelle)
     test_db.commit()
@@ -108,7 +111,7 @@ def test_us040_ca4_evenement_creable_sans_potager_id(test_db):
     test_db.commit()
 
     assert ev.id is not None
-    assert ev.potager_id is None
+    assert ev.potager_id == 1
 
 
 # ── CA6 — Index composite sur evenements(potager_id, date) ───────────────
@@ -129,22 +132,13 @@ def test_us040_ca6_index_potager_id_autres_tables(test_engine, table):
     assert "potager_id" in all_columns_indexed
 
 
-# ── CA7 — Aucune requête existante modifiée dans bot.py / main.py ────────
-
-def test_us040_ca7_aucune_requete_potager_id_dans_bot_et_main():
-    """
-    [US-040] Le socle de données est posé, mais aucune requête applicative
-    ne doit encore filtrer par potager_id — ce sera l'objet d'une US
-    ultérieure de scoping. On vérifie qu'aucune occurrence de 'potager_id'
-    n'a été introduite dans bot.py ou main.py.
-    """
-    repo_root = Path(__file__).resolve().parent.parent
-    for filename in ("bot.py", "main.py"):
-        content = (repo_root / filename).read_text(encoding="utf-8")
-        assert "potager_id" not in content, (
-            f"{filename} référence potager_id — hors périmètre de US-040 "
-            "(scoping applicatif réservé à une US ultérieure)"
-        )
+# ── CA7 — Le socle US-040 n'imposait pas de scoping dans bot.py / main.py ─
+# [US-042] Ce garde-fou est devenu obsolète : le scoping applicatif qu'il
+# interdisait explicitement est désormais le périmètre livré par US-042
+# (app/services/ + quelques appels résiduels utils/stock.py dans main.py,
+# voir app/services/*.py et migrations/migration_v17.sql). Le test précédent
+# ("aucune occurrence de potager_id dans bot.py/main.py") est supprimé car il
+# contredirait par construction tout scoping ajouté depuis.
 
 
 # ── CA9 — Script de rollback présent et cohérent ──────────────────────────
