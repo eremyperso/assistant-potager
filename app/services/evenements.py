@@ -88,6 +88,22 @@ class CultureManquanteError(EvenementInvalideError):
         )
 
 
+class TauxGerminationImpossibleError(EvenementInvalideError):
+    """[fix bug id=355] Une mise en godet ne peut jamais produire plus de plants
+    repiqués qu'il n'y avait de graines semées à l'origine (taux de réussite > 100%
+    impossible biologiquement) — cas réel : "30 fèves sur 5 graines" enregistré
+    tel quel, sans aucun garde-fou, affichant un taux de 600% de réussite. Blocage
+    dur : il n'existe aucun scénario légitime où nb_plants_godets > nb_graines_semees."""
+
+    def __init__(self, nb_plants_godets: int, nb_graines_semees: int):
+        self.nb_plants_godets = nb_plants_godets
+        self.nb_graines_semees = nb_graines_semees
+        super().__init__(
+            f"{nb_plants_godets} plants en godet pour seulement {nb_graines_semees} "
+            f"graines semées : taux de réussite > 100%, impossible."
+        )
+
+
 # [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
 # (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
 # c'est justement leur rôle de faire exister la culture pour la première fois.
@@ -605,6 +621,14 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     # reste présent pour que ce point d'écriture ne soit jamais oublié si les règles
     # évoluent (cf. CA5 : parcourir toutes les fonctions d'écriture).
     valider_evenement(db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str, parcelle=None)
+
+    # [fix bug id=355] nb_plants_godets ne peut jamais dépasser nb_graines_semees
+    # (taux de réussite > 100% impossible) — bloqué avant écriture, pas seulement
+    # affiché tel quel dans le récapitulatif.
+    nb_graines_val = _to_int(parsed.get("nb_graines_semees"))
+    nb_plants_val = _to_int(parsed.get("nb_plants_godets"))
+    if nb_graines_val and nb_plants_val and nb_plants_val > nb_graines_val:
+        raise TauxGerminationImpossibleError(nb_plants_val, nb_graines_val)
 
     event = Evenement(
         type_action="mise_en_godet",
