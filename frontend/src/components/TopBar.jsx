@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Moon, Sun, LogOut } from 'lucide-react'
+import { RefreshCw, Moon, Sun, LogOut, Send } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../lib/api.js'
+import LierTelegram from './LierTelegram.jsx'
 
 export default function TopBar({ title, onRefresh, loading }) {
   const { theme, toggle } = useTheme()
   const { logout } = useAuth()
   const [version, setVersion] = useState(null)
+  const [showLierTelegram, setShowLierTelegram] = useState(false)
 
   useEffect(() => {
     api.health().then(h => setVersion(h?.version)).catch(() => {})
@@ -33,10 +35,18 @@ export default function TopBar({ title, onRefresh, loading }) {
         <button onClick={toggle} aria-label="Basculer thème" className="hover:text-g-acc transition-colors">
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
+        <button
+          onClick={() => setShowLierTelegram(true)}
+          aria-label="Relier Telegram"
+          className="hover:text-g-acc transition-colors"
+        >
+          <Send size={16} />
+        </button>
         <button onClick={logout} aria-label="Se déconnecter" className="hover:text-g-red transition-colors">
           <LogOut size={17} />
         </button>
       </div>
+      {showLierTelegram && <LierTelegram onClose={() => setShowLierTelegram(false)} />}
     </header>
   )
 }

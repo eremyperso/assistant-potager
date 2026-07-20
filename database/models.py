@@ -5,6 +5,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-001] Ajout modèle CultureConfig (table culture_config)
 [US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
 [US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
+[US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
@@ -25,6 +26,18 @@ class User(Base):
     # [US-044] Credentials web — NULL pour un compte Telegram-only (US-045)
     mot_de_passe_hash = Column(String(255), nullable=True)
     email_verifie     = Column(Boolean, default=False, nullable=False)
+
+
+class LiaisonTelegram(Base):
+    """[US-045] Code à usage unique liant un telegram_chat_id à un compte web."""
+    __tablename__ = "liaisons_telegram"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    code       = Column(String(8), unique=True, nullable=False, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cree_le    = Column(DateTime, server_default=func.now())
+    expire_le  = Column(DateTime, nullable=False)
+    utilise_le = Column(DateTime, nullable=True)
 
 
 class Potager(Base):

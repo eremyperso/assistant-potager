@@ -48,7 +48,7 @@ from telegram.ext import (
 )
 from groq import Groq
 
-from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
+from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL, PWA_URL
 from database.db import SessionLocal, Base, engine, tenant_scope, current_potager_id
 from utils.actions import normalize_action
 from utils.parcelles import (
@@ -71,6 +71,7 @@ from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
+from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -544,6 +545,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/ask — Question analytique\n"
         "/corriger — Modifier un événement\n"
         "/note — Noter une observation (guidé)\n"
+        "/lier [code] — Relier ce chat à votre compte web\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
         "/version — Version déployée\n"
@@ -563,8 +565,112 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texte, parse_mode="Markdown")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-045] Liaison chat Telegram ⇄ compte web
+# ──────────────────────────────────────────────────────────────────────────────
+def _onboarding_liaison_msg() -> str:
+    """Message statique (aucun appel LLM — CA6) invitant à lier le chat.
+    Fonction (et non constante module) car `_md()` est défini plus bas dans ce
+    fichier — évite un NameError à l'import si l'ordre de définition change."""
+    return (
+        "👋 *Ce chat n'est pas encore relié à votre compte.*\n\n"
+        f"1️⃣ Inscrivez-vous ou connectez-vous sur {_md(PWA_URL)}\n"
+        "2️⃣ Générez un code de liaison depuis votre compte (menu profil)\n"
+        "3️⃣ Envoyez-moi ce code ici, ou tapez `/lier VOTRECODE`\n\n"
+        "_Tant que ce chat n'est pas relié, aucune donnée n'est enregistrée._"
+    )
+
+
+async def _verifier_liaison_ou_onboarding(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_brut: str | None = None
+) -> bool:
+    """[US-045 / CA6, CA7] Garde de priorité 0 — appelée en tout premier dans
+    handle_voice/handle_text, avant tout appel Groq (transcription ou
+    classification). Renvoie True si le chat est lié (ou vient d'être lié via
+    un code envoyé en texte brut) et le traitement normal peut continuer ;
+    False si un message d'onboarding ou d'erreur a déjà été envoyé et que le
+    handler appelant doit s'arrêter immédiatement (`return`).
+    """
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
+        if user_id is not None:
+            ctx.user_data['tenant_user_id'] = user_id  # [CA8] disponible pour construire un TenantContext
+            return True
+
+        # [CA2] Un message texte (pas vocal — pas d'appel Groq) ressemblant à un
+        # code peut être envoyé sans le préfixe /lier.
+        if texte_brut and svc_liaison_telegram.ressemble_a_un_code(texte_brut):
+            try:
+                user = svc_liaison_telegram.lier_chat_id(db, texte_brut, chat_id)
+                ctx.user_data['tenant_user_id'] = user.id
+                await update.message.reply_text(
+                    "✅ *Chat relié avec succès !* Vous pouvez maintenant dicter vos actions.",
+                    parse_mode="Markdown",
+                )
+                return True
+            except svc_liaison_telegram.CodeExpireError:
+                await update.message.reply_text(
+                    "⌛ Ce code a expiré (validité 10 minutes). Générez-en un nouveau depuis l'application web."
+                )
+                return False
+            except svc_liaison_telegram.CodeDejaUtiliseError:
+                await update.message.reply_text("❌ Ce code a déjà été utilisé.")
+                return False
+            except svc_liaison_telegram.ChatDejaLieError:
+                await update.message.reply_text("❌ Ce chat Telegram est déjà lié à un autre compte.")
+                return False
+            except svc_liaison_telegram.CodeInvalideError:
+                pass  # ne ressemble à aucun code connu → message d'onboarding générique ci-dessous
+
+        await update.message.reply_text(_onboarding_liaison_msg(), parse_mode="Markdown")
+        return False
+    finally:
+        db.close()
+
+
+async def cmd_lier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/lier <code> — [US-045] Relie ce chat Telegram à un compte web via un code à usage unique."""
+    if not ctx.args:
+        await update.message.reply_text(
+            "🔗 *Liaison de compte*\n\n"
+            "Usage : `/lier VOTRECODE`\n\n"
+            "Générez un code depuis l'application web (menu profil), valable 10 minutes.",
+            parse_mode="Markdown",
+        )
+        return
+
+    code = ctx.args[0]
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        try:
+            user = svc_liaison_telegram.lier_chat_id(db, code, chat_id)
+            ctx.user_data['tenant_user_id'] = user.id
+            await update.message.reply_text("✅ *Chat relié avec succès !*", parse_mode="Markdown")
+        except svc_liaison_telegram.CodeInvalideError:
+            await update.message.reply_text("❌ Code invalide.")
+        except svc_liaison_telegram.CodeExpireError:
+            await update.message.reply_text(
+                "⌛ Ce code a expiré (validité 10 minutes). Générez-en un nouveau depuis l'application web."
+            )
+        except svc_liaison_telegram.CodeDejaUtiliseError:
+            await update.message.reply_text("❌ Ce code a déjà été utilisé.")
+        except svc_liaison_telegram.ChatDejaLieError:
+            await update.message.reply_text("❌ Ce chat Telegram est déjà lié à un autre compte.")
+    finally:
+        db.close()
+
+
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message vocal → transcription Groq Whisper → parsing → PostgreSQL."""
+    # [US-045 / CA6, CA7] Priorité 0 — aucun appel Groq (Whisper) tant que le
+    # chat n'est pas lié à un compte. Pas de code déductible d'un vocal : on
+    # ne tente jamais la transcription pour un chat non lié.
+    if not await _verifier_liaison_ou_onboarding(update, ctx):
+        return
+
     msg = await update.message.reply_text("🎤 *Transcription en cours...*", parse_mode="Markdown")
 
     # ── 1. Télécharger le fichier audio ────────────────────────────────────────
@@ -1053,6 +1159,12 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
     texte     = texte_raw.lower()  # comparaison insensible à la casse
+
+    # [US-045 / CA6, CA7] Priorité 0 — avant tout log ou appel Groq. Un texte
+    # brut ressemblant à un code de liaison est tenté ici (CA2).
+    if not await _verifier_liaison_ou_onboarding(update, ctx, texte_raw):
+        return
+
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
     # [US-036 CA10] Nombre de pieds en attente (récolte végétative pesée) ?
@@ -4902,12 +5014,41 @@ async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE
     current_potager_id.set(default_context().potager_id)
 
 
-def main():
-    print("🌿 Démarrage du bot Telegram potager...")
-    print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
-    print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
-    print(f"   Météo : 🌤️ job planifié à 05h00 Europe/Paris · /meteo pour déclencher manuellement")
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-045 / CA6, CA7 révisés] Garde de liaison centralisé sur les commandes slash
+# ──────────────────────────────────────────────────────────────────────────────
+# Constat QA : une première implémentation ne posait le garde que sur
+# handle_voice/handle_text — les commandes slash métier (/plan, /parcelle
+# lister...) restaient accessibles sans liaison. Pour qu'aucune commande
+# (existante ou future) ne puisse y échapper par oubli, l'enregistrement de
+# CHAQUE CommandHandler passe obligatoirement par _enregistrer_commande()
+# ci-dessous plutôt que par un appel direct à app.add_handler(CommandHandler(...)).
+_COMMANDES_SANS_GARDE_LIAISON = {"start", "help", "lier"}  # [CA9] onboarding
 
+
+def _avec_garde_liaison(handler):
+    """[CA6, CA7] Enveloppe un handler de commande pour exiger une liaison active
+    avant d'exécuter le moindre traitement métier (priorité 0)."""
+    async def _handler_garde(update: Update, ctx: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if not await _verifier_liaison_ou_onboarding(update, ctx):
+            return
+        return await handler(update, ctx, *args, **kwargs)
+    _handler_garde._garde_liaison = True  # introspectable par les tests (CA6/CA7)
+    return _handler_garde
+
+
+def _enregistrer_commande(app: "Application", nom: str, handler) -> None:
+    """[US-045] Point d'enregistrement unique des CommandHandler — applique le
+    garde de liaison sauf pour les commandes d'onboarding (CA9)."""
+    if nom in _COMMANDES_SANS_GARDE_LIAISON:
+        app.add_handler(CommandHandler(nom, handler))
+    else:
+        app.add_handler(CommandHandler(nom, _avec_garde_liaison(handler)))
+
+
+def _construire_application() -> "Application":
+    """Construit l'Application PTB et enregistre tous les handlers (sans lancer
+    le polling) — séparé de main() pour être testable/introspectable (CA6/CA7)."""
     app = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)
@@ -4923,30 +5064,31 @@ def main():
     # ne bloque pas la propagation vers les handlers des groupes suivants.
     app.add_handler(TypeHandler(Update, _arm_tenant_context), group=-1)
 
-    # Commandes
-    app.add_handler(CommandHandler("start",      cmd_start))
-    app.add_handler(CommandHandler("help",       cmd_help))
-    app.add_handler(CommandHandler("version",    cmd_version))  # [US-008]
-    app.add_handler(CommandHandler("stats",      cmd_stats))
-    app.add_handler(CommandHandler("historique", cmd_historique))
-    app.add_handler(CommandHandler("ask",        cmd_ask))
-    app.add_handler(CommandHandler("corriger",   lambda u,c: _corr_start(u,c)))
-    app.add_handler(CommandHandler("note",       lambda u,c: _note_start(u,c)))  # [US-038]
+    # Commandes — TOUTES enregistrées via _enregistrer_commande (CA6/CA7/CA9)
+    _enregistrer_commande(app, "start",      cmd_start)
+    _enregistrer_commande(app, "help",       cmd_help)
+    _enregistrer_commande(app, "version",    cmd_version)  # [US-008]
+    _enregistrer_commande(app, "stats",      cmd_stats)
+    _enregistrer_commande(app, "historique", cmd_historique)
+    _enregistrer_commande(app, "ask",        cmd_ask)
+    _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
+    _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
+    _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
 
     # Commandes TTS
-    app.add_handler(CommandHandler("tts",        cmd_tts))
-    app.add_handler(CommandHandler("tts_on",     cmd_tts_on))
-    app.add_handler(CommandHandler("tts_off",    cmd_tts_off))
+    _enregistrer_commande(app, "tts",        cmd_tts)
+    _enregistrer_commande(app, "tts_on",     cmd_tts_on)
+    _enregistrer_commande(app, "tts_off",    cmd_tts_off)
 
     # Commande météo manuelle
-    app.add_handler(CommandHandler("meteo",      cmd_meteo))
+    _enregistrer_commande(app, "meteo",      cmd_meteo)
 
     # [US_Plan_occupation_parcelles / CA1, CA13] Plan et gestion des parcelles
-    app.add_handler(CommandHandler("plan",      cmd_plan))
-    app.add_handler(CommandHandler("parcelle",  cmd_parcelle))
-    app.add_handler(CommandHandler("parcelles", _cmd_parcelles_lister))  # alias /parcelle lister
+    _enregistrer_commande(app, "plan",      cmd_plan)
+    _enregistrer_commande(app, "parcelle",  cmd_parcelle)
+    _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
 
-    app.add_handler(CommandHandler("vendre",    cmd_vendre))
+    _enregistrer_commande(app, "vendre",    cmd_vendre)
 
     # [US-019] Sélection variété mise en godet — boutons inline
     app.add_handler(CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_"))
@@ -4982,6 +5124,17 @@ def main():
         name="meteo_quotidienne",
     )
     log.info("🌅 JOB MÉTÉO       : planifié à 05h00 Europe/Paris")
+
+    return app
+
+
+def main():
+    print("🌿 Démarrage du bot Telegram potager...")
+    print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
+    print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
+    print(f"   Météo : 🌤️ job planifié à 05h00 Europe/Paris · /meteo pour déclencher manuellement")
+
+    app = _construire_application()
 
     print("   Bot prêt ! Ouvrez Telegram et parlez à votre bot.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

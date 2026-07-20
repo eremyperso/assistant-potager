@@ -1,4 +1,26 @@
 
+## [v3.20.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la liaison d'un chat Telegram à un compte web via un code à usage unique (6 caractères, valable 10 minutes) : génération depuis la PWA (icône ✉️ dans la barre du haut), saisie côté bot via `/lier CODE` ou en envoyant simplement le code (US-045)
+- Un chat Telegram non relié reçoit désormais un message d'accueil expliquant la marche à suivre, au lieu d'être traité anonymement (US-045)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/liaison_telegram.py` : génération de code (alphabet sans caractères ambigus), validation (code inconnu, expiré, déjà utilisé, chat déjà lié à un autre compte) (US-045)
+- `bot.py` : la garde de liaison s'exécute en tout premier dans `handle_voice`, `handle_text`, **et sur chacune des commandes slash métier** (`/plan`, `/stats`, `/historique`, `/parcelle`, `/vendre`, `/corriger`, `/note`, `/meteo`, `/tts*`, `/version`...) — un chat non relié ne déclenche plus aucun appel Groq ni aucune lecture de données, quel que soit le point d'entrée utilisé ; seules `/start`, `/help` et `/lier` restent accessibles pour permettre l'onboarding (US-045)
+- L'enregistrement des commandes passe désormais par un point d'entrée unique (`_enregistrer_commande`) qui applique le garde automatiquement, pour qu'une future commande ne puisse pas y échapper par oubli (US-045)
+- Ajoute l'endpoint `POST /auth/lien/generer-code` (protégé par l'authentification web) et la commande `/lier` côté bot (US-045)
+
+### 🐛 Corrections
+- Corrige le décompte du TTL affiché sur la modale "Relier Telegram" qui indiquait systématiquement "Code expiré" dès la génération — le serveur renvoyait une heure d'expiration UTC sans indication de fuseau, que le navigateur interprétait à tort comme une heure locale (US-045)
+- Corrige l'angle mort détecté en test manuel : un chat Telegram non relié pouvait consulter les parcelles et autres données via les commandes slash (ex. `/parcelle lister`), le garde initial ne couvrant que les messages vocaux/texte libre (US-045)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v20.sql` (+ rollback) : table `liaisons_telegram` (US-045)
+
+### ⚠️ Breaking changes
+- Un chat Telegram non relié à un compte web ne peut plus interagir avec le bot d'aucune façon (vocal, texte, ou commande slash métier) — il doit d'abord s'inscrire sur la PWA (US-044) puis se relier via `/lier` (US-045)
+
 ## [v3.19.0] — 2026-07-20
 
 ### 🚀 Nouveautés

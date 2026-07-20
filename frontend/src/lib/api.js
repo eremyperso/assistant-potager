@@ -103,6 +103,12 @@ async function get(path) {
   return res.json()
 }
 
+async function post(path) {
+  const res = await requeteAvecRefresh(path, { method: 'POST', headers: headers() })
+  if (!res.ok) throw new Error(`Erreur API ${res.status} sur ${path}`)
+  return res.json()
+}
+
 function qs(params) {
   const s = new URLSearchParams(params).toString()
   return s ? '?' + s : ''
@@ -132,6 +138,8 @@ export const api = {
     if (variete) params.variete = variete
     return get(`/observations${qs(params)}`)
   },
+  // [US-045] Génère un code de liaison Telegram (TTL 10 min) pour le compte connecté
+  genererCodeLiaisonTelegram: () => post('/auth/lien/generer-code'),
 }
 
 // [US-044] Endpoints d'authentification — pas de token requis pour register/login,

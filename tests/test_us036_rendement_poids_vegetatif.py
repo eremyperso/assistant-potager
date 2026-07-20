@@ -343,7 +343,8 @@ class TestClarificationPiecesManquantes:
         update.message.text = "2"
         update.message.reply_text = AsyncMock()
 
-        with patch("bot._parse_and_save", new_callable=AsyncMock) as mock_parse_save:
+        with patch("bot._parse_and_save", new_callable=AsyncMock) as mock_parse_save, \
+             patch("bot._verifier_liaison_ou_onboarding", new_callable=AsyncMock, return_value=True):
             await bot_module.handle_text(update, MagicMock())
 
         assert user_id not in _RECOLTE_PIECES_PENDING

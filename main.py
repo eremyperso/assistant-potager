@@ -50,6 +50,7 @@ from llm.rag import add_to_rag
 from database.models import User
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
+from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import evenements as svc_evenements
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
@@ -204,6 +205,21 @@ def auth_refresh(req: RefreshRequest):
         "access_token": svc_auth.creer_access_token(int(payload["sub"])),
         "token_type": "bearer",
     }
+
+
+@app.post("/auth/lien/generer-code")
+def auth_generer_code_liaison(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce
+    compte web à un chat Telegram via la commande /lier du bot."""
+    db = SessionLocal()
+    try:
+        liaison = svc_liaison_telegram.creer_code_liaison(db, ctx.user_id)
+        # [Fix] expire_le est un datetime naïf en UTC (datetime.utcnow()) — sans
+        # suffixe "Z", le navigateur interprète l'ISO string comme une heure
+        # locale et décale le compte à rebours de l'offset du fuseau client.
+        return {"code": liaison.code, "expire_le": liaison.expire_le.isoformat() + "Z"}
+    finally:
+        db.close()
 
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
