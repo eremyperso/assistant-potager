@@ -22,7 +22,8 @@ from database.models import User, Potager, PotagerMembre, Evenement, Parcelle, C
 def test_us040_ca1_table_users_colonnes(test_engine):
     inspector = inspect(test_engine)
     columns = {c["name"] for c in inspector.get_columns("users")}
-    assert columns == {"id", "email", "telegram_chat_id", "nom", "cree_le"}
+    # [US-044] mot_de_passe_hash / email_verifie ajoutées pour l'auth web JWT
+    assert columns == {"id", "email", "telegram_chat_id", "nom", "cree_le", "mot_de_passe_hash", "email_verifie"}
 
 
 def test_us040_ca1_users_email_et_chat_id_uniques(test_db):

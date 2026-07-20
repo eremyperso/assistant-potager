@@ -22,6 +22,22 @@ from bot import _build_recap
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Auth [US-044] : neutraliser get_current_user_ctx pour tous les tests
+# Ce fichier teste mise_en_godet, pas l'authentification (qui a ses propres
+# tests dédiés) — plusieurs tests instancient leur propre TestClient(app)
+# inline, donc l'override est posé une seule fois ici pour tout le module.
+# ──────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _override_auth():
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
+    yield
+    app.dependency_overrides.pop(get_current_user_ctx, None)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ──────────────────────────────────────────────────────────────────────────────
 

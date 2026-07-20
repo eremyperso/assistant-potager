@@ -11,6 +11,12 @@ DATABASE_URL       = os.environ["DATABASE_URL"]
 GROQ_MODEL         = "openai/gpt-oss-120b"
 GROQ_WHISPER_MODEL = "whisper-large-v3-turbo"
 
+# [US-044] Authentification web JWT — secret jamais codé en dur ni versionné
+JWT_SECRET           = os.environ["JWT_SECRET"]
+JWT_ALGORITHM        = "HS256"
+JWT_ACCESS_TTL_MIN   = int(os.environ.get("JWT_ACCESS_TTL_MIN", "15"))
+JWT_REFRESH_TTL_DAYS = int(os.environ.get("JWT_REFRESH_TTL_DAYS", "30"))
+
 # Niveau de raisonnement Groq ("low" | "medium" | "high" | None).
 # Uniquement supporté par les modèles reasoning (ex: gpt-oss-120b, qwen3.6-27b).
 # Mettre à None pour les modèles non-reasoning (ex: llama-3.3-70b-versatile),

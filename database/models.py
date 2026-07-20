@@ -4,6 +4,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-001] Ajout colonne type_organe_recolte sur Evenement
 [US-001] Ajout modèle CultureConfig (table culture_config)
 [US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
+[US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
@@ -20,6 +21,10 @@ class User(Base):
     telegram_chat_id = Column(BigInteger, unique=True, nullable=True)
     nom              = Column(String(100), nullable=True)
     cree_le          = Column(DateTime, server_default=func.now())
+
+    # [US-044] Credentials web — NULL pour un compte Telegram-only (US-045)
+    mot_de_passe_hash = Column(String(255), nullable=True)
+    email_verifie     = Column(Boolean, default=False, nullable=False)
 
 
 class Potager(Base):

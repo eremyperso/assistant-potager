@@ -111,8 +111,13 @@ def test_fetch_meteo_history_reponse_malformee():
 
 @pytest.fixture
 def client():
-    from main import app
-    return TestClient(app)
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 def test_endpoint_meteo_history_ok(client):

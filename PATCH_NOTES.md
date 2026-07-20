@@ -1,4 +1,22 @@
 
+## [v3.19.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la création de compte et la connexion par e-mail / mot de passe sur la PWA, avec écran dédié affiché tant qu'aucune session n'est active (US-044)
+- La session reste active sans redemander le mot de passe : un token expiré déclenche un rafraîchissement automatique et transparent (US-044)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/auth.py` : hachage des mots de passe (argon2), émission et vérification des JWT (access 15 min / refresh 30 jours) (US-044)
+- Tous les endpoints métier de l'API (`/parse`, `/ask`, `/stats`, `/historique`, `/cultures`, `/plan`, `/godets`, etc.) exigent désormais un token JWT valide, sauf `/health` (US-044)
+- Ajoute un rate-limit sur `/auth/login` et `/auth/register` pour limiter le brute-force (US-044)
+- `frontend/src/lib/api.js` gère le stockage du token et rejoue automatiquement une requête après un rafraîchissement de session réussi (US-044)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v19.sql` (+ rollback) : colonnes `mot_de_passe_hash` et `email_verifie` sur `users` (US-044)
+
+### ⚠️ Breaking changes
+- La PWA et tout appelant de l'API doivent désormais s'authentifier (en-tête `Authorization: Bearer <token>`) pour accéder aux endpoints métier — un appel sans token valide renvoie `401` (US-044)
+
 ## [v3.18.1] — 2026-07-19
 
 ### 🐛 Corrections

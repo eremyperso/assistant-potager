@@ -39,7 +39,9 @@ MOCK_OCCUPATION = {
 
 @pytest.fixture
 def client():
-    from main import app
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal",              return_value=MagicMock()),
         patch("utils.parcelles.get_all_parcelles",          return_value=MOCK_PARCELLES),
@@ -47,6 +49,7 @@ def client():
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 # ── CA1 : /plan retourne 200 + clés parcelles/total ──────────────────────────

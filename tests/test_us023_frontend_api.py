@@ -30,7 +30,9 @@ def _db():
 
 @pytest.fixture
 def app_client():
-    from main import app
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal", return_value=_db()),
         patch("utils.stock.calcul_stock_cultures",   return_value=MOCK_STOCK),
@@ -39,6 +41,7 @@ def app_client():
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 # ─── CA1 : /health → 200 avec status, version, date ─────────────────────────

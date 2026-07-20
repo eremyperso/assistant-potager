@@ -19,7 +19,8 @@ import pytest
 from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
-from main import app
+from main import app, get_current_user_ctx
+from app.services.context import default_context
 
 # ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -63,23 +64,27 @@ def _db():
 @pytest.fixture
 def client_avec_godets():
     """Client avec courgette en attente + tomate tout plantée."""
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal", return_value=_db()),
         patch("utils.stock.calcul_godets", return_value=_GODETS_TOUS),
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 @pytest.fixture
 def client_vide():
     """Client sans aucun godet."""
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal", return_value=_db()),
         patch("utils.stock.calcul_godets", return_value=_GODETS_VIDES),
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
