@@ -90,6 +90,49 @@ jobs:
               return labels;
             }
 
+            // PAGINATION : récupère TOUS les milestones existants du repo (ouverts + fermés)
+            async function getAllRepoMilestones() {
+              const milestones = [];
+              let page = 1;
+              while (true) {
+                const res = await github.rest.issues.listMilestones({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  state: 'all',
+                  per_page: 100,
+                  page
+                });
+                if (res.data.length === 0) break;
+                milestones.push(...res.data);
+                if (res.data.length < 100) break;
+                page++;
+              }
+              return milestones;
+            }
+
+            // Crée le milestone (épic) s'il n'existe pas encore, retourne son numéro
+            async function ensureMilestoneExists(epicTitle, repoMilestones) {
+              const match = repoMilestones.find(m => isSameLabel(m.title, epicTitle));
+              if (match) return match.number;
+
+              console.log(`   🎯 Création du milestone (épic): "${epicTitle}"`);
+              try {
+                const res = await github.rest.issues.createMilestone({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: epicTitle
+                });
+                repoMilestones.push(res.data);
+                return res.data.number;
+              } catch (err) {
+                if (err.status === 422) {
+                  const existing = repoMilestones.find(m => isSameLabel(m.title, epicTitle));
+                  return existing ? existing.number : null;
+                }
+                throw err;
+              }
+            }
+
             // CRÉATION de label manquant avec couleur selon catégorie
             function getLabelColor(label) {
               const n = normalize(label);
@@ -153,6 +196,14 @@ jobs:
                 .filter(l => l.length > 0);
             }
 
+            // EXTRACTION de l'épic depuis la ligne "**Épic :**" (optionnelle)
+            function extractEpic(content) {
+              const line = content.match(/\*\*Épic\s*:\*\*\s*(.+)/i);
+              if (!line) return null;
+              const epic = cleanLabel(line[1]).trim();
+              return epic.length > 0 ? line[1].trim() : null;
+            }
+
             // SUPPRIME le préfixe "US-XXX : " pour comparer avec les anciens titres
             function stripUsPrefix(title) {
               return title.replace(/^US-\d+\s*:\s*/i, '').trim();
@@ -170,12 +221,13 @@ jobs:
 
             // ── MAIN ──────────────────────────────────────────────────────────
 
-            console.log('Chargement des labels et issues existants...');
-            const [repoLabels, allIssues] = await Promise.all([
+            console.log('Chargement des labels, milestones et issues existants...');
+            const [repoLabels, repoMilestones, allIssues] = await Promise.all([
               getAllRepoLabels(),
+              getAllRepoMilestones(),
               getAllIssues()
             ]);
-            console.log(`${repoLabels.length} labels, ${allIssues.length} issues chargés.`);
+            console.log(`${repoLabels.length} labels, ${repoMilestones.length} milestones, ${allIssues.length} issues chargés.`);
 
             const backlogDir = './backlog';
             const files = fs.readdirSync(backlogDir)
@@ -201,29 +253,48 @@ jobs:
                 resolvedLabels.push(exactName);
               }
 
+              const epicTitle = extractEpic(content);
+              const milestoneNumber = epicTitle
+                ? await ensureMilestoneExists(epicTitle, repoMilestones)
+                : null;
+
               console.log(`\nFichier : ${file}`);
               console.log(`Titre   : ${title}`);
               console.log(`Labels  : ${resolvedLabels.join(', ')}`);
+              console.log(`Épic    : ${epicTitle || '(aucun)'}`);
 
               const existing = findExistingIssue(title, allIssues);
 
               if (existing) {
-                if (existing.title.trim() === title.trim()) {
+                const needsTitleUpdate = existing.title.trim() !== title.trim();
+                const currentMilestoneNumber = existing.milestone ? existing.milestone.number : null;
+                const needsMilestoneUpdate = milestoneNumber !== null && currentMilestoneNumber !== milestoneNumber;
+
+                if (!needsTitleUpdate && !needsMilestoneUpdate) {
                   console.log(`⏭ Issue #${existing.number} déjà à jour — ignorée.`);
-                } else {
-                  // Titre a changé (ex: ajout préfixe US-XXX) → mise à jour
-                  try {
-                    await github.rest.issues.update({
-                      owner: context.repo.owner,
-                      repo: context.repo.repo,
-                      issue_number: existing.number,
-                      title
-                    });
+                  continue;
+                }
+
+                const patch = {};
+                if (needsTitleUpdate) patch.title = title;
+                if (needsMilestoneUpdate) patch.milestone = milestoneNumber;
+
+                try {
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: existing.number,
+                    ...patch
+                  });
+                  if (needsTitleUpdate) {
                     console.log(`✏️ Issue #${existing.number} renommée : "${existing.title}" → "${title}"`);
-                    existing.title = title; // mise à jour locale
-                  } catch (err) {
-                    console.error(`❌ Erreur renommage #${existing.number}: ${err.message}`);
                   }
+                  if (needsMilestoneUpdate) {
+                    console.log(`🎯 Issue #${existing.number} assignée à l'épic "${epicTitle}"`);
+                  }
+                  existing.title = title; // mise à jour locale
+                } catch (err) {
+                  console.error(`❌ Erreur mise à jour #${existing.number}: ${err.message}`);
                 }
                 continue;
               }
@@ -234,6 +305,7 @@ jobs:
                   repo: context.repo.repo,
                   title,
                   body: content,
+                  milestone: milestoneNumber || undefined,
                   labels: resolvedLabels
                 });
                 console.log(`✅ Issue créée : #${issue.data.number}`);
