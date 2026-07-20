@@ -103,6 +103,7 @@ async def test_us021_ca1_affiche_confirmation_apres_parsing():
         patch("bot.parse_commande", return_value=[parsed_item]),
         patch("utils.validation.validate_parsed_action", return_value=(True, "")),
         patch("bot._normalize_items", return_value=[parsed_item]),
+        patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
     ):
         _ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "récolté 2 kg de tomates")

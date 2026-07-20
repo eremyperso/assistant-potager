@@ -84,6 +84,10 @@ def parcelle_nord(test_db, ctx):
 
 def test_ca3_enregistrer_evenement_resout_parcelle_et_herite_type_organe(test_db, ctx, parcelle_nord):
     test_db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
+    # [US-049] "tomate" doit avoir un historique de plantation sur "nord" pour que
+    # la récolte passe la validation centrale (culture jamais plantée + cohérence parcelle).
+    test_db.add(Evenement(type_action="plantation", culture="tomate", quantite=2, unite="plants",
+                           parcelle_id=parcelle_nord.id, potager_id=ctx.potager_id))
     test_db.commit()
 
     parsed = {"action": "recolte", "culture": "tomate", "quantite": 2, "unite": "kg", "parcelle": "nord"}
@@ -111,6 +115,9 @@ def test_ca3_lister_evenements_pagine_et_filtre(test_db, ctx, parcelle_nord):
 
 
 def test_ca3_corriger_evenement_applique_les_champs_et_trace(test_db, ctx):
+    # [US-049] "tomate" doit avoir un historique de plantation pour que la correction
+    # (qui revalide l'événement dans son état final) passe la validation centrale.
+    test_db.add(Evenement(type_action="plantation", culture="tomate", quantite=2, unite="plants", potager_id=ctx.potager_id))
     ev = Evenement(type_action="recolte", culture="tomate", quantite=2, unite="kg", potager_id=ctx.potager_id)
     test_db.add(ev)
     test_db.commit()

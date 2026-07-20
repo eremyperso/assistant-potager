@@ -1761,15 +1761,23 @@ def _build_action_summary(items: list[dict]) -> str:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        if p.get("_avertissement_coherence"):
+            lines.append(f"\n{p['_avertissement_coherence']}")
         lines.append("\nC'est correct ?")
         return "\n".join(lines)
     else:
         lines = [f"📝 *Je vais enregistrer {len(items)} actions :*\n"]
+        avertissements = []
         for i, p in enumerate(items, 1):
             action  = p.get("action") or "action"
             culture = p.get("culture") or "?"
             qte_str = f" — {p['quantite']} {p.get('unite') or ''}".strip() if p.get("quantite") is not None else ""
             lines.append(f"{i}. *{action}* {culture}{qte_str}")
+            if p.get("_avertissement_coherence"):
+                avertissements.append(f"{i}. {p['_avertissement_coherence']}")
+        if avertissements:
+            lines.append("")
+            lines.extend(avertissements)
         lines.append("\nC'est correct ?")
         return "\n".join(lines)
 
@@ -1780,21 +1788,43 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     saved_items = []
     try:
         for parsed in items:
+            # [US-049] La résolution reste ici (nécessaire pour construire l'Evenement
+            # avec le bon parcelle_id), mais le BLOCAGE si la parcelle ne résout à rien
+            # est désormais décidé uniquement par la validation centrale à l'intérieur
+            # de creer_evenement_confirme (valider_evenement) — plus de duplication de
+            # la règle "parcelle inconnue" à cet endroit.
             nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = None
-            if nom_parcelle:
-                parcelle_obj = resolve_parcelle(db, nom_parcelle)
-                if parcelle_obj is None:
-                    log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
-                    err_msg = (
-                        f"❌ La parcelle *{nom_parcelle}* n'existe pas dans votre potager.\n\n"
-                        f"Créez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
-                    )
-                    if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
-                    else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                    return
+            parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
 
-            event = svc_evenements.creer_evenement_confirme(db, default_context(), parsed, texte, parcelle_obj)
+            try:
+                # [fix bug id=351] mise_en_godet doit toujours passer par
+                # creer_evenement_godet (parcelle_id forcé à None + auto-link au
+                # semis d'origine), jamais par creer_evenement_confirme — même
+                # quand la variété est déjà connue (seul cas jusqu'ici routé vers
+                # la fonction dédiée, via l'interception _GODET_PENDING plus haut).
+                if normalize_action(parsed.get("action")) == "mise_en_godet":
+                    event = svc_evenements.creer_evenement_godet(db, default_context(), parsed, texte)
+                else:
+                    event = svc_evenements.creer_evenement_confirme(db, default_context(), parsed, texte, parcelle_obj)
+            except svc_evenements.ParcelleInconnueError as e:
+                db.rollback()
+                log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
+                err_msg = f"❌ {e}\n\nCréez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
+                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
+            except svc_evenements.EvenementInvalideError as e:
+                # [US-049] Filet de sécurité final — la validation centrale a rejeté
+                # l'événement au moment même de l'écriture. Les contrôles amont dans
+                # _parse_and_save couvrent déjà l'UX normale ; ce cas ne devrait se
+                # produire que si l'état du potager a changé entre la confirmation et
+                # l'écriture, ou via un chemin qui aurait échappé aux contrôles amont.
+                db.rollback()
+                log.warning(f"❌ ÉVÉNEMENT INVALIDE (écriture) : {e} | texte={texte!r}")
+                err_msg = f"❌ {e}"
+                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -2142,6 +2172,29 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         if culture_avant and items[i].get("culture") is None:
             log.warning(f"⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | texte={texte!r}")
 
+    # [fix doublons orthographiques] Résout culture/variété vers les valeurs canoniques
+    # déjà en base (ex: "creme"/"cerise" dictés → variété déjà connue), pour ce pipeline
+    # de dictée directe. Jusqu'ici cette canonisation n'existait que dans le flux "notes"
+    # (_note_details_received) — le flux normal enregistrait la variété brute telle
+    # quelle, fragmentant silencieusement les variétés en base au moindre écart d'orthographe.
+    if any(item.get("culture") for item in items):
+        db_resolve = SessionLocal()
+        try:
+            for item in items:
+                if not item.get("culture"):
+                    continue
+                culture_resolue = resolve_culture(db_resolve, item["culture"])
+                if culture_resolue != item["culture"]:
+                    log.info(f"[resolve] Culture '{item['culture']}' → '{culture_resolue}'")
+                item["culture"] = culture_resolue
+                if item.get("variete"):
+                    variete_resolue = resolve_variete(db_resolve, culture_resolue, item["variete"])
+                    if variete_resolue != item["variete"]:
+                        log.info(f"[resolve] Variété '{item['variete']}' → '{variete_resolue}'")
+                    item["variete"] = variete_resolue
+        finally:
+            db_resolve.close()
+
     # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
     from utils.validation import validate_parsed_action
     validated = []
@@ -2191,6 +2244,39 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             reply_markup=MENU_KEYBOARD
         )
         return
+
+    # [US-049] Garde-fou "culture jamais plantée" — appelle la validation centrale
+    # unique (app/services/evenements.py::valider_evenement), qui reste de toute
+    # façon l'autorité finale au moment de l'écriture (défense en profondeur) ;
+    # l'appel ici n'est qu'un raccourci UX pour bloquer AVANT d'afficher un
+    # récapitulatif de confirmation voué à échouer. Contrôle appliqué à CHAQUE item,
+    # pas seulement au premier — c'est l'ancienne restriction `len(items) == 1` qui
+    # avait laissé passer une culture hallucinée quand Groq segmente une phrase
+    # multi-culture ("cueilli 2 kilos de cerise, tomates, nord") en plusieurs items
+    # dans la même réponse JSON.
+    from app.services.evenements import valider_evenement as _valider_evenement, CultureInconnueError
+    db_chk = SessionLocal()
+    try:
+        for _item_chk in items:
+            if not _item_chk.get("culture"):
+                continue
+            try:
+                _valider_evenement(
+                    db_chk, default_context(),
+                    action=_item_chk.get("action"), culture=_item_chk["culture"],
+                    variete=_item_chk.get("variete"), parcelle=None,
+                )
+            except CultureInconnueError as e:
+                log.warning(f"❌ CULTURE JAMAIS PLANTÉE : '{_item_chk['culture']}' — action bloquée | texte={texte!r}")
+                err = (
+                    f"❌ {e}\n\n"
+                    f"Vérifiez le nom, ou enregistrez d'abord un semis/plantation de *{_item_chk['culture']}*."
+                )
+                if msg: await msg.edit_text(err, parse_mode="Markdown")
+                else:   await message.reply_text(err, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
+    finally:
+        db_chk.close()
 
     # [US-037 / CA7] Semis d'une culture inconnue de CultureConfig — demander
     # à l'utilisateur si elle est végétative ou reproductive avant d'enregistrer.
@@ -2615,7 +2701,58 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
 
     # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
-    _ACTIONS_PEPINIERE = {"vendu", "perte_godet"}
+    # [fix bug id=351] mise_en_godet ajouté — un godet n'est jamais rattaché à une
+    # parcelle, cette liste doit rester alignée avec `parcelle_id=None` forcé par
+    # creer_evenement_godet (sinon CA8 propose une parcelle réelle, ex. "serre",
+    # qui finit par être assignée à un événement qui ne devrait jamais en avoir).
+    _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
+
+    # [US-049] Incohérence culture/variété ↔ parcelle citée — appelle la validation
+    # centrale (app/services/evenements.py::valider_evenement) au lieu de recalculer
+    # le prédicat ici, pour ne jamais diverger de la règle réellement appliquée à
+    # l'écriture. Si invalide, la parcelle citée n'est PAS retenue telle quelle —
+    # elle est retirée pour que le bloc CA8 ci-dessous la redétermine (auto-
+    # assignation ou menu, cas item unique), exactement comme si l'utilisateur
+    # n'avait rien précisé. Contrôle appliqué à CHAQUE item (CA3 US-049 : aucune
+    # règle ne doit dépendre du nombre d'items traités dans le même appel).
+    from app.services.evenements import valider_evenement as _valider_evenement2, ParcelleIncoherenteError
+    db_tmp = SessionLocal()
+    try:
+        for _item_coh in items:
+            if not (_item_coh.get("parcelle") and _item_coh.get("culture")):
+                continue
+            if (_item_coh.get("type_action") or _item_coh.get("action") or "") in _ACTIONS_SOURCE:
+                continue
+            culture      = _item_coh["culture"]
+            variete      = _item_coh.get("variete") or None
+            nom_parcelle = _item_coh["parcelle"]
+            parcelle_resolue = resolve_parcelle(db_tmp, nom_parcelle)
+            if parcelle_resolue is None:
+                continue   # parcelle inconnue : gérée séparément au moment de l'écriture
+            try:
+                _valider_evenement2(
+                    db_tmp, default_context(),
+                    action=_item_coh.get("action"), culture=culture,
+                    variete=variete, parcelle=parcelle_resolue,
+                )
+            except ParcelleIncoherenteError as e:
+                autres = []
+                if variete:
+                    # La variété n'est pas connue sur CETTE parcelle : indiquer où
+                    # elle a été plantée si elle existe ailleurs, pour aider au choix.
+                    parcelles_culture_seule = _get_parcelles_avec_culture(db_tmp, culture, None)
+                    autres = sorted({
+                        p.nom for p in parcelles_culture_seule if p.id != parcelle_resolue.id
+                    })
+                suffixe = f" (trouvé sur : {', '.join(autres)})" if autres else ""
+                label = f"{e.culture} {e.variete}" if e.variete else e.culture
+                _item_coh["_avertissement_coherence"] = (
+                    f"⚠️ Aucune trace de *{label}* sur *{e.parcelle_nom}*{suffixe}."
+                )
+                log.warning("[coherence-check] %s — parcelle retirée, redétection via CA8", str(e))
+                del _item_coh["parcelle"]
+    finally:
+        db_tmp.close()
 
     # [CA8/CA11] Parcelle absente sur action simple → sélection intelligente
     if len(items) == 1 and not items[0].get("parcelle"):
@@ -3791,7 +3928,7 @@ def _normalize_action_search(action: str) -> str:
 def _find_candidates(description: str, limit: int = 3) -> list:
     """Groq extrait les critères → SQL retrouve les événements."""
     from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
+    from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
     import json
 
     client = Groq(api_key=GROQ_API_KEY)
@@ -3822,7 +3959,18 @@ JSON brut uniquement."""
         resp = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=200
+            temperature=0.0, max_tokens=200,
+            # [fix bug id=357] Sans reasoning_effort, le modèle (gpt-oss, raisonneur)
+            # dépense tout le budget max_tokens dans son raisonnement interne caché
+            # et coupe avant d'écrire le JSON de réponse (finish_reason="length",
+            # content=""). Résultat en prod : "mise en godet fève du 20/07" ne
+            # retournait aucun critère exploité, la recherche retombait sur les 3
+            # derniers événements toutes cultures confondues (petit pois, tomate),
+            # sans lien avec "fève". Même garde-fou que _REASONING_KWARGS dans
+            # llm/groq_client.py, à répliquer ici (client Groq distinct, pas
+            # partagé) pour tout appel utilisant GROQ_MODEL avec un budget de
+            # tokens serré.
+            **({"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}),
         )
         raw = resp.choices[0].message.content.strip()
         if raw.startswith("```"):

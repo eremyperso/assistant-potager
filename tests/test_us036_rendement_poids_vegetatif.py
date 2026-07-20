@@ -239,7 +239,10 @@ class TestSauvegardeDoubleEvenement:
         fake_db = MagicMock()
         fake_db.refresh = MagicMock()
 
-        with patch("bot.SessionLocal", return_value=fake_db):
+        with (
+            patch("bot.SessionLocal", return_value=fake_db),
+            patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
+        ):
             await bot_module._do_save_items(update, items, "récolté 2 betteraves 250g")
 
         # Un Evenement ajouté par item, donc 2 appels à db.add()
@@ -277,6 +280,7 @@ class TestClarificationPiecesManquantes:
             patch("bot._normalize_items", return_value=[parsed_item]),
             patch("utils.validation.validate_parsed_action", return_value=(True, "")),
             patch("utils.stock.get_type_organe", return_value="végétatif"),
+            patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
             patch("bot.SessionLocal"),
         ):
             _RECOLTE_PIECES_PENDING.pop(user_id, None)

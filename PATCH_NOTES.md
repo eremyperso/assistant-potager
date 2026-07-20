@@ -1,4 +1,14 @@
 
+## [v3.18.1] — 2026-07-19
+
+### 🐛 Corrections
+- Corrige l'enregistrement possible d'une récolte (ou perte, arrosage...) sur une culture jamais semée ni plantée dans le potager — le garde-fou ajouté ne s'appliquait qu'aux messages parsés en un seul événement, et Groq segmente régulièrement une phrase citant plusieurs cultures ("cueilli 2 kilos de cerise, tomates, nord") en plusieurs événements dans la même réponse, ce qui laissait passer les cultures inconnues (US-049)
+- Corrige l'enregistrement silencieux d'une récolte sur une parcelle où la culture/variété citée n'a jamais été plantée — la parcelle incohérente est désormais traitée comme non renseignée et redéterminée automatiquement (US-049, suite du correctif terrain)
+
+### 🔧 Améliorations techniques
+- Ajoute un point de validation unique et non contournable (`valider_evenement`) dans `app/services/evenements.py`, appelé par chacune des fonctions qui créent ou modifient un événement (création directe, confirmation, godet, observation, perte, correction manuelle), au lieu de contrôles dispersés côté `bot.py` propres à un seul chemin d'écriture (US-049)
+- `bot.py` et `main.py` réutilisent cette validation unique pour l'expérience utilisateur (blocage avant confirmation, message explicite) au lieu de dupliquer la règle — élimine le risque de divergence entre deux implémentations du même contrôle ; `POST /parse` et `POST /voice` renvoient désormais `400` avec message explicite (au lieu de `500` générique) sur ce cas (US-049)
+
 ## [v3.18.0] — 2026-07-17
 
 ### 🔧 Améliorations techniques

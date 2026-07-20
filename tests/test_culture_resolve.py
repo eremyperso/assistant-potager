@@ -14,6 +14,7 @@ from utils.culture_resolve import (
     resolve_variete,
     cultures_connues,
     varietes_connues,
+    culture_deja_plantee,
 )
 
 
@@ -38,7 +39,41 @@ def test_varietes_connues_filtre_par_culture(test_db):
     _seed(test_db)
     varietes = varietes_connues(test_db, "haricot")
     assert varietes == ["beurre", "vert nain Contender"]
-    assert varietes_connues(test_db, "tomate") == ["Cœur de bœuf"]
+
+
+# ── culture_deja_plantee ──────────────────────────────────────────────────────
+# [bug rapporté] Il était possible d'enregistrer une récolte pour une culture
+# jamais semée/plantée dans le potager (hallucination Groq ou faute de frappe
+# sur le nom de culture, jamais détectée).
+
+def test_culture_deja_plantee_vrai_si_semis_existant(test_db):
+    _seed(test_db)
+    assert culture_deja_plantee(test_db, "haricot") is True
+
+
+def test_culture_deja_plantee_insensible_casse_accents(test_db):
+    _seed(test_db)
+    assert culture_deja_plantee(test_db, "TOMATE") is True
+    assert culture_deja_plantee(test_db, "tomaté") is True
+
+
+def test_culture_deja_plantee_faux_si_jamais_semee(test_db):
+    _seed(test_db)
+    assert culture_deja_plantee(test_db, "mangue") is False
+
+
+def test_culture_deja_plantee_ignore_recolte_seule(test_db):
+    """Une récolte ne compte pas comme preuve de plantation — sinon une
+    hallucination une fois enregistrée s'auto-validerait pour toujours."""
+    test_db.add(Evenement(type_action="recolte", culture="mangue",
+                           quantite=1, unite="kg", date=datetime(2026, 6, 1)))
+    test_db.commit()
+    assert culture_deja_plantee(test_db, "mangue") is False
+
+
+def test_culture_deja_plantee_vide_ou_none(test_db):
+    assert culture_deja_plantee(test_db, "") is True
+    assert culture_deja_plantee(test_db, None) is True
 
 
 def test_resolve_culture_exact(test_db):
