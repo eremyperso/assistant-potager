@@ -3928,7 +3928,7 @@ def _normalize_action_search(action: str) -> str:
 def _find_candidates(description: str, limit: int = 3) -> list:
     """Groq extrait les critères → SQL retrouve les événements."""
     from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
+    from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
     import json
 
     client = Groq(api_key=GROQ_API_KEY)
@@ -3959,7 +3959,18 @@ JSON brut uniquement."""
         resp = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=200
+            temperature=0.0, max_tokens=200,
+            # [fix bug id=357] Sans reasoning_effort, le modèle (gpt-oss, raisonneur)
+            # dépense tout le budget max_tokens dans son raisonnement interne caché
+            # et coupe avant d'écrire le JSON de réponse (finish_reason="length",
+            # content=""). Résultat en prod : "mise en godet fève du 20/07" ne
+            # retournait aucun critère exploité, la recherche retombait sur les 3
+            # derniers événements toutes cultures confondues (petit pois, tomate),
+            # sans lien avec "fève". Même garde-fou que _REASONING_KWARGS dans
+            # llm/groq_client.py, à répliquer ici (client Groq distinct, pas
+            # partagé) pour tout appel utilisant GROQ_MODEL avec un budget de
+            # tokens serré.
+            **({"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}),
         )
         raw = resp.choices[0].message.content.strip()
         if raw.startswith("```"):
