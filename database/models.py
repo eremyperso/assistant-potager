@@ -6,6 +6,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
 [US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
 [US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
+[US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.sql import func
@@ -26,6 +27,11 @@ class User(Base):
     # [US-044] Credentials web — NULL pour un compte Telegram-only (US-045)
     mot_de_passe_hash = Column(String(255), nullable=True)
     email_verifie     = Column(Boolean, default=False, nullable=False)
+
+    # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
+    # encore été fait (sélection auto silencieuse si un seul potager, sinon
+    # choix explicite via /potager ou le sélecteur PWA).
+    potager_actif_id = Column(Integer, ForeignKey("potagers.id"), nullable=True)
 
 
 class LiaisonTelegram(Base):

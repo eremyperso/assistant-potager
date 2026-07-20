@@ -140,6 +140,9 @@ export const api = {
   },
   // [US-045] Génère un code de liaison Telegram (TTL 10 min) pour le compte connecté
   genererCodeLiaisonTelegram: () => post('/auth/lien/generer-code'),
+  // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur
+  potagers: () => get('/potagers'),
+  activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
 }
 
 // [US-044] Endpoints d'authentification — pas de token requis pour register/login,

@@ -1,4 +1,23 @@
 
+## [v3.21.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la sélection et le changement de potager actif : un utilisateur membre d'un seul potager y est rattaché automatiquement, un utilisateur membre de plusieurs potagers choisit via la commande `/potager` (Telegram, boutons inline) ou le sélecteur de la barre du haut sur la PWA (US-046)
+- Le choix du potager actif est immédiat et mémorisé durablement — plus besoin de le refaire à chaque session (US-046)
+- Un compte qui n'appartient encore à aucun potager reçoit un message clair l'invitant à en créer un ou à en rejoindre un, aussi bien sur Telegram que sur la PWA (US-046)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potager_actif.py` : résolution du potager actif réel (`users.potager_actif_id` + `potager_membres`), remplace la valeur `DEFAULT_POTAGER_ID` figée en dur utilisée depuis US-040 (US-046)
+- `bot.py` : le `TenantContext` résolu par le garde de liaison (US-045) est désormais réellement utilisé pour chaque lecture/écriture (potager réel, plus potager #1 pour tout le monde) — voir `app/services/context.current_context()` (US-046)
+- `main.py` : sépare la dépendance FastAPI d'authentification en deux — `get_current_user` (identité seule, pour les endpoints qui n'ont pas besoin de potager, ex. génération de code de liaison Telegram) et `get_current_user_ctx` (identité + potager actif réel, pour tous les endpoints métier) (US-046)
+- Ajoute `GET /potagers` et `POST /potagers/{id}/activer` (US-046)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v21.sql` (+ rollback) : colonne `users.potager_actif_id` (US-046)
+
+### ⚠️ Breaking changes
+- Deux comptes distincts membres de potagers différents ne partagent plus les mêmes données — jusqu'ici, tous les comptes lisaient/écrivaient dans le même potager #1 quelle que soit leur identité réelle (US-046)
+
 ## [v3.20.0] — 2026-07-20
 
 ### 🚀 Nouveautés

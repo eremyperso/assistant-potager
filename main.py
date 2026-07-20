@@ -42,7 +42,7 @@ def _lire_version() -> str:
 
 _APP_VERSION = _lire_version()
 
-from database.db import Base, engine, SessionLocal, tenant_scope
+from database.db import Base, engine, SessionLocal, tenant_scope, current_potager_id
 import utils.stock as _stock_mod
 from utils.observations import build_observations_index
 from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
@@ -51,6 +51,7 @@ from database.models import User
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison_telegram
+from app.services import potager_actif as svc_potager_actif
 from app.services import evenements as svc_evenements
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
@@ -94,14 +95,18 @@ async def _tenant_context_middleware(request, call_next):
 _security = HTTPBearer(auto_error=False)
 
 
-def get_current_user_ctx(
+def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_security),
-) -> TenantContext:
-    """[CA4/CA5] Dépendance FastAPI : exige un access token JWT valide.
+) -> User:
+    """[CA4/CA5] Dépendance FastAPI : exige un access token JWT valide, renvoie
+    l'utilisateur authentifié — SANS résoudre de potager (identité seule).
 
     Renvoie 401 avec un `code` distinct selon le cas (absent / invalide /
     expiré) pour permettre au front de déclencher un refresh automatique
-    uniquement sur `token_expired`.
+    uniquement sur `token_expired`. Utilisée pour les endpoints qui n'ont pas
+    besoin de scope potager (ex. génération de code de liaison Telegram,
+    listing des potagers — un utilisateur peut agir sur ces endpoints avant
+    même d'appartenir à un potager).
     """
     if credentials is None:
         raise HTTPException(
@@ -124,16 +129,37 @@ def get_current_user_ctx(
     db = SessionLocal()
     try:
         user = svc_auth.obtenir_utilisateur_par_id(db, int(payload["sub"]))
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "token_invalid", "message": "Utilisateur introuvable"},
+            )
+        return user
     finally:
         db.close()
 
-    if user is None:
-        raise HTTPException(
-            status_code=401,
-            detail={"code": "token_invalid", "message": "Utilisateur introuvable"},
-        )
 
-    return TenantContext(user_id=user.id, potager_id=DEFAULT_POTAGER_ID, role="owner")
+def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContext:
+    """[US-046 / CA6] Dépendance FastAPI : identité + potager actif réel — pour
+    tous les endpoints métier qui lisent/écrivent des données scopées par
+    potager. Renvoie 409 explicite si l'utilisateur n'appartient à aucun
+    potager (CA5) — plus de DEFAULT_POTAGER_ID en dur."""
+    db = SessionLocal()
+    try:
+        try:
+            tenant_ctx = svc_potager_actif.resoudre_tenant_context(db, user.id)
+            # [US-043] Réarme le GUC RLS avec le vrai potager (le middleware
+            # l'avait initialisé sur default_context().potager_id avant que
+            # cette dépendance ne s'exécute).
+            current_potager_id.set(tenant_ctx.potager_id)
+            return tenant_ctx
+        except svc_potager_actif.AucunPotagerError:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "no_potager", "message": "Aucun potager associé à ce compte"},
+            )
+    finally:
+        db.close()
 
 
 class RegisterRequest(BaseModel):
@@ -208,16 +234,56 @@ def auth_refresh(req: RefreshRequest):
 
 
 @app.post("/auth/lien/generer-code")
-def auth_generer_code_liaison(ctx: TenantContext = Depends(get_current_user_ctx)):
+def auth_generer_code_liaison(user: User = Depends(get_current_user)):
     """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce
-    compte web à un chat Telegram via la commande /lier du bot."""
+    compte web à un chat Telegram via la commande /lier du bot. Identité seule
+    (pas de potager requis) : on doit pouvoir lier son Telegram avant même
+    d'appartenir à un potager."""
     db = SessionLocal()
     try:
-        liaison = svc_liaison_telegram.creer_code_liaison(db, ctx.user_id)
+        liaison = svc_liaison_telegram.creer_code_liaison(db, user.id)
         # [Fix] expire_le est un datetime naïf en UTC (datetime.utcnow()) — sans
         # suffixe "Z", le navigateur interprète l'ISO string comme une heure
         # locale et décale le compte à rebours de l'offset du fuseau client.
         return {"code": liaison.code, "expire_le": liaison.expire_le.isoformat() + "Z"}
+    finally:
+        db.close()
+
+
+@app.get("/potagers")
+def lister_potagers(user: User = Depends(get_current_user)):
+    """[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager
+    actif marqué. Identité seule : une liste vide est une réponse valide (CA5),
+    pas une erreur — c'est au frontend de proposer la création/adhésion."""
+    db = SessionLocal()
+    try:
+        potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id)
+        potager_actif_id = None
+        if potagers:
+            try:
+                potager_actif_id = svc_potager_actif.resoudre_tenant_context(db, user.id).potager_id
+            except svc_potager_actif.AucunPotagerError:
+                pass
+        return {
+            "potagers": [
+                {"id": p.id, "nom": p.nom, "actif": p.id == potager_actif_id}
+                for p in potagers
+            ],
+        }
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/activer")
+def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-046 / CA2, CA3, CA4] Change le potager actif de l'utilisateur connecté."""
+    db = SessionLocal()
+    try:
+        try:
+            nouveau_ctx = svc_potager_actif.definir_potager_actif(db, user.id, potager_id)
+        except svc_potager_actif.PotagerNonMembreError:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return {"potager_id": nouveau_ctx.potager_id, "role": nouveau_ctx.role}
     finally:
         db.close()
 

@@ -11,6 +11,7 @@ requêtes) : c'est le périmètre de US-042. TenantContext existe déjà pour
 que les signatures de services n'aient pas à changer quand le scoping
 sera ajouté.
 """
+import contextvars
 from dataclasses import dataclass
 from typing import Optional
 
@@ -37,3 +38,39 @@ DEFAULT_USER_ID = 1
 def default_context() -> TenantContext:
     """Contexte tenant temporaire — potager #1 en dur (transition US-040 → US-110/112)."""
     return TenantContext(user_id=DEFAULT_USER_ID, potager_id=DEFAULT_POTAGER_ID, role="owner")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-046] TenantContext réel résolu une fois par requête/Update
+# -----------------------------------------------------------------------------
+# `bot.py` appelle historiquement default_context() dans des dizaines de
+# fonctions utilitaires qui ne reçoivent pas toutes le `ctx` Telegram en
+# paramètre — plutôt que de re-threader `ctx` partout, on suit exactement le
+# même principe que `database.db.current_potager_id` (contextvar RLS, US-043) :
+# le garde de liaison (bot.py::_verifier_liaison_ou_onboarding) résout le
+# TenantContext réel UNE SEULE FOIS par Update et l'arme ici via
+# set_current_context() ; tout le code appelé dans la foulée (même hors
+# handlers, sans `ctx` en paramètre) le relit via current_context() au lieu de
+# default_context(). PTB v20 traite tous les groupes de handlers d'un même
+# Update dans une seule Task asyncio, donc le contextvar reste visible pour
+# tout le traitement de cet Update sans fuite entre Updates concurrents.
+#
+# Côté web (main.py), ce mécanisme n'est PAS utilisé : chaque endpoint reçoit
+# déjà son TenantContext explicitement via Depends(get_current_user_ctx).
+# -----------------------------------------------------------------------------
+_current_context: "contextvars.ContextVar[Optional[TenantContext]]" = contextvars.ContextVar(
+    "current_tenant_context", default=None
+)
+
+
+def set_current_context(ctx: TenantContext) -> None:
+    """[US-046] Arme le TenantContext résolu pour le reste du traitement de l'Update courant."""
+    _current_context.set(ctx)
+
+
+def current_context() -> TenantContext:
+    """[US-046] TenantContext résolu pour l'Update en cours (potager actif réel).
+    Retombe sur default_context() si rien n'a été armé (commandes d'onboarding
+    exemptées du garde — /start, /help, /lier — ou tests unitaires existants)."""
+    ctx = _current_context.get()
+    return ctx if ctx is not None else default_context()

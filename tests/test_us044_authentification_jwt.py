@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 import config
 from app.services import auth as svc_auth
 from database.db import Base
-from database.models import User
+from database.models import User, Potager, PotagerMembre
 
 
 @pytest.fixture
@@ -171,6 +171,12 @@ def test_us044_ca4_acces_refuse_sans_token(app_client, path):
 
 def test_us044_ca4_acces_autorise_avec_token_valide(app_client, test_db):
     user = _creer_utilisateur(test_db)
+    # [US-046] /cultures résout désormais un potager réel — l'utilisateur doit en être membre.
+    potager = Potager(nom="Potager test", proprietaire_id=user.id)
+    test_db.add(potager)
+    test_db.commit()
+    test_db.add(PotagerMembre(user_id=user.id, potager_id=potager.id, role="owner"))
+    test_db.commit()
     access_token = svc_auth.creer_access_token(user.id)
 
     resp = app_client.get("/cultures", headers={"Authorization": f"Bearer {access_token}"})

@@ -18,7 +18,7 @@ from sqlalchemy.pool import StaticPool
 from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison
 from database.db import Base
-from database.models import LiaisonTelegram, User
+from database.models import LiaisonTelegram, User, Potager, PotagerMembre
 from bot import (
     cmd_lier, handle_voice, handle_text, _verifier_liaison_ou_onboarding,
     _construire_application, _COMMANDES_SANS_GARDE_LIAISON,
@@ -195,11 +195,24 @@ async def test_us045_ca6_handle_voice_chat_non_lie_bloque_avant_whisper(test_db)
     assert "relié" in update.message.reply_text.call_args[0][0]
 
 
+def _donner_potager(db, user, nom="Potager test"):
+    """[US-046] Rattache `user` à un potager dont il est owner (résolution du
+    TenantContext exige désormais au moins un potager — CA5)."""
+    potager = Potager(nom=nom, proprietaire_id=user.id)
+    db.add(potager)
+    db.commit()
+    db.add(PotagerMembre(user_id=user.id, potager_id=potager.id, role="owner"))
+    db.commit()
+    return potager
+
+
 @pytest.mark.asyncio
 async def test_us045_ca8_chat_lie_expose_user_id_dans_user_data(test_db):
     user = User(email="jardinier@example.com", mot_de_passe_hash="x", telegram_chat_id=42424242)
     test_db.add(user)
     test_db.commit()
+    _donner_potager(test_db, user)
+    user_id = user.id  # capturé avant que la garde ne ferme la session (db.close())
 
     update = _mock_update_texte("récolté 2 kg de tomates")
     tg_ctx = MagicMock()
@@ -209,7 +222,7 @@ async def test_us045_ca8_chat_lie_expose_user_id_dans_user_data(test_db):
         resultat = await _verifier_liaison_ou_onboarding(update, tg_ctx)
 
     assert resultat is True
-    assert tg_ctx.user_data['tenant_user_id'] == user.id
+    assert tg_ctx.user_data['tenant_user_id'] == user_id
 
 
 # ── CA2 (bis) — Code brut envoyé en texte libre (sans /lier) ───────────────
@@ -219,7 +232,9 @@ async def test_us045_ca2_code_brut_en_texte_libre_lie_le_chat(test_db):
     user = User(email="jardinier@example.com", mot_de_passe_hash="x")
     test_db.add(user)
     test_db.commit()
-    liaison = svc_liaison.creer_code_liaison(test_db, user.id)
+    _donner_potager(test_db, user)
+    user_id = user.id  # capturé avant que la garde ne ferme/expire la session
+    liaison = svc_liaison.creer_code_liaison(test_db, user_id)
 
     update = _mock_update_texte(liaison.code, chat_id=13579)
     tg_ctx = MagicMock()
@@ -231,7 +246,7 @@ async def test_us045_ca2_code_brut_en_texte_libre_lie_le_chat(test_db):
     assert resultat is True
     # La session test_db a été fermée (db.close()) par la garde comme en
     # production — on revérifie via une requête fraîche plutôt qu'un refresh.
-    recharge = test_db.query(User).filter(User.id == user.id).first()
+    recharge = test_db.query(User).filter(User.id == user_id).first()
     assert recharge.telegram_chat_id == 13579
     update.message.reply_text.assert_awaited_once()
     assert "succès" in update.message.reply_text.call_args[0][0]
