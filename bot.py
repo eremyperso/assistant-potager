@@ -1797,7 +1797,15 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
             parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
 
             try:
-                event = svc_evenements.creer_evenement_confirme(db, default_context(), parsed, texte, parcelle_obj)
+                # [fix bug id=351] mise_en_godet doit toujours passer par
+                # creer_evenement_godet (parcelle_id forcé à None + auto-link au
+                # semis d'origine), jamais par creer_evenement_confirme — même
+                # quand la variété est déjà connue (seul cas jusqu'ici routé vers
+                # la fonction dédiée, via l'interception _GODET_PENDING plus haut).
+                if normalize_action(parsed.get("action")) == "mise_en_godet":
+                    event = svc_evenements.creer_evenement_godet(db, default_context(), parsed, texte)
+                else:
+                    event = svc_evenements.creer_evenement_confirme(db, default_context(), parsed, texte, parcelle_obj)
             except svc_evenements.ParcelleInconnueError as e:
                 db.rollback()
                 log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
@@ -2693,7 +2701,11 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
 
     # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
-    _ACTIONS_PEPINIERE = {"vendu", "perte_godet"}
+    # [fix bug id=351] mise_en_godet ajouté — un godet n'est jamais rattaché à une
+    # parcelle, cette liste doit rester alignée avec `parcelle_id=None` forcé par
+    # creer_evenement_godet (sinon CA8 propose une parcelle réelle, ex. "serre",
+    # qui finit par être assignée à un événement qui ne devrait jamais en avoir).
+    _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
 
     # [US-049] Incohérence culture/variété ↔ parcelle citée — appelle la validation
     # centrale (app/services/evenements.py::valider_evenement) au lieu de recalculer

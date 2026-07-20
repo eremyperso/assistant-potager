@@ -71,10 +71,35 @@ class ParcelleIncoherenteError(EvenementInvalideError):
         super().__init__(f"Aucune trace de « {label} » sur « {parcelle_nom} ».")
 
 
+class CultureManquanteError(EvenementInvalideError):
+    """[fix bug id=351] Action qui porte structurellement sur une culture précise
+    (semis/plantation/mise_en_godet/recolte/perte/perte_godet/vendu) mais sans
+    culture fournie — l'événement n'a aucun sens (ex: une "mise en godet" de rien,
+    cas réel où Groq avait renvoyé culture=null malgré variete="gourmand"
+    présente). Volontairement PAS étendue aux actions "zone" (observation,
+    paillage, arrosage, désherbage, taille, tuteurage, fertilisation, binage...)
+    qui s'appliquent légitimement à une parcelle entière sans viser une culture
+    précise — une règle globale casserait ces usages."""
+
+    def __init__(self, action: str):
+        self.action = action
+        super().__init__(
+            f"Impossible d'enregistrer une action « {action} » sans préciser de culture."
+        )
+
+
 # [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
 # (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
 # c'est justement leur rôle de faire exister la culture pour la première fois.
 _ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet"}
+
+# [fix bug id=351] Actions pour lesquelles une culture est structurellement
+# obligatoire — sans elle l'événement ne décrit rien d'exploitable. Sur-ensemble
+# de _ACTIONS_SOURCE_CULTURE (+ recolte, perte) : ces deux-là présupposent aussi
+# une culture déjà en place, donc passent par la suite de valider_evenement au
+# lieu d'un simple retour anticipé, mais doivent tout autant être rejetées si
+# culture est vide plutôt que silencieusement laissées passer.
+_ACTIONS_CULTURE_OBLIGATOIRE = _ACTIONS_SOURCE_CULTURE | {"recolte", "perte"}
 
 
 def valider_evenement(
@@ -92,18 +117,23 @@ def valider_evenement(
     module qui crée ou modifie un Evenement, indépendamment du canal (Telegram,
     corrections, notes, API) et du nombre d'items traités dans un même appel.
 
-    Trois règles :
+    Quatre règles :
     0. Si `nom_parcelle_brut` est fourni (un nom de parcelle a été cité) mais que
        `parcelle` est None (la résolution a échoué), la parcelle citée n'existe pas
        dans le potager — `ParcelleInconnueError`. Appliquée quel que soit l'action/
-       culture : contrairement aux règles 1-2, ce n'est pas affaire de cohérence
+       culture : contrairement aux règles 1-3, ce n'est pas affaire de cohérence
        agronomique mais d'existence pure de la ligne référencée.
-    1-2. Applicables uniquement aux actions qui supposent une culture déjà en place
-       (récolte, perte, arrosage... — cf. `_ACTIONS_SOURCE_CULTURE` pour les actions
+    1. [fix bug id=351] Si `culture` est vide ET que l'action fait partie de
+       `_ACTIONS_CULTURE_OBLIGATOIRE` (semis, plantation, mise_en_godet, recolte,
+       perte, perte_godet, vendu) — `CultureManquanteError`. Ne s'applique PAS aux
+       actions "zone" (observation, paillage, arrosage, désherbage...) qui restent
+       légitimement culture-optionnelles (comportement inchangé pour elles).
+    2-3. Applicables uniquement aux actions qui supposent une culture déjà en place
+       (récolte, perte... — cf. `_ACTIONS_SOURCE_CULTURE` pour les actions
        exemptées) :
-       1. La culture doit avoir été introduite au moins une fois via un semis, une
+       2. La culture doit avoir été introduite au moins une fois via un semis, une
           plantation ou une mise en godet — sinon `CultureInconnueError`.
-       2. Si une parcelle réelle est fournie, la culture/variété doit avoir un
+       3. Si une parcelle réelle est fournie, la culture/variété doit avoir un
           historique sur CETTE parcelle précise — sinon `ParcelleIncoherenteError`.
           En pratique, bot.py corrige déjà ce cas en amont via une sélection
           assistée (US-021 CA8) avant d'atteindre ce point ; cette règle est le
@@ -116,7 +146,12 @@ def valider_evenement(
     from utils.culture_resolve import culture_deja_plantee
 
     action_norm = normalize_action(action)
-    if not culture or action_norm in _ACTIONS_SOURCE_CULTURE:
+    if not culture:
+        if action_norm in _ACTIONS_CULTURE_OBLIGATOIRE:
+            raise CultureManquanteError(action_norm)
+        return
+
+    if action_norm in _ACTIONS_SOURCE_CULTURE:
         return
 
     if not culture_deja_plantee(db, culture):
