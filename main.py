@@ -251,6 +251,19 @@ def auth_generer_code_liaison(user: User = Depends(get_current_user)):
         db.close()
 
 
+@app.post("/auth/lien/delier")
+def auth_delier(user: User = Depends(get_current_user)):
+    """[US-050 / CA1] Dissocie le chat Telegram actuellement lié à ce compte.
+    Identité seule (pas de potager requis, CA5) — même dépendance que
+    /auth/lien/generer-code, jamais get_current_user_ctx pour cette action."""
+    db = SessionLocal()
+    try:
+        svc_liaison_telegram.delier_chat_id(db, user.id)
+        return {"success": True}
+    finally:
+        db.close()
+
+
 @app.get("/potagers")
 def lister_potagers(user: User = Depends(get_current_user)):
     """[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager

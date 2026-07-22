@@ -10,6 +10,7 @@ paramètre : `creer_code_liaison` s'exécute avec un user_id déjà authentifié
 qu'un TenantContext Telegram n'existe — c'est justement leur rôle de le rendre
 possible.
 """
+import logging
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
@@ -17,6 +18,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from database.models import LiaisonTelegram, User
+
+log = logging.getLogger("potager")
 
 # Alphabet sans caractères ambigus (pas de 0/O, 1/I/l) — code lisible à l'oral/écrit
 _ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
@@ -85,6 +88,19 @@ def lier_chat_id(db: Session, code: str, chat_id: int) -> User:
     liaison.utilise_le = datetime.utcnow()
     db.commit()
     db.refresh(user)
+    return user
+
+
+def delier_chat_id(db: Session, user_id: int) -> User:
+    """[US-050 / CA3, CA6, CA7] Dissocie le chat Telegram actuellement lié à `user_id`
+    — symétrique de `lier_chat_id`. N'affecte que `users.telegram_chat_id` ; aucune
+    donnée métier (événements, parcelles, potager_membres) n'est touchée (CA6)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    ancien_chat_id = user.telegram_chat_id
+    user.telegram_chat_id = None
+    db.commit()
+    db.refresh(user)
+    log.info("[US-050] Dissociation Telegram : user_id=%s ancien_chat_id=%s", user_id, ancien_chat_id)
     return user
 
 

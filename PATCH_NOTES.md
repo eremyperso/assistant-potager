@@ -1,4 +1,16 @@
 
+## [v3.23.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Ajoute la dissociation self-service d'un chat Telegram : depuis l'application web (paramètres de compte) ou via la commande `/delier` sur Telegram (avec confirmation explicite avant exécution), sans plus dépendre d'une intervention manuelle en base de données (US-050)
+- Une fois dissocié, le chat peut immédiatement être relié à nouveau — au même compte ou à un autre — via un nouveau code généré depuis la PWA (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `delier_chat_id` dans `app/services/liaison_telegram.py`, symétrique de `lier_chat_id` — aucune donnée métier (événements, parcelles, appartenance aux potagers) n'est touchée, seul le lien `telegram_chat_id ↔ user_id` est rompu (US-050)
+- Ajoute l'endpoint `POST /auth/lien/delier`, protégé par l'identité seule (`get_current_user`) — comme `POST /auth/lien/generer-code`, reste utilisable même sans potager (US-050)
+- `bot.py` : la commande `/delier` et sa confirmation restent volontairement hors du garde de rôle potager (US-047) et du garde de liaison standard (US-045) — c'est une action d'identité, pas une action potager (US-050)
+- Toute dissociation est journalisée (log structuré `potager`) pour traçabilité support (US-050)
+
 ## [v3.22.1] — 2026-07-22
 
 ### 🐛 Corrections

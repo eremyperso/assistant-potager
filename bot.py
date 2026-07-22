@@ -41,7 +41,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
 logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
 logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
@@ -549,6 +549,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/corriger — Modifier un événement\n"
         "/note — Noter une observation (guidé)\n"
         "/lier [code] — Relier ce chat à votre compte web\n"
+        "/delier — Dissocier ce chat de votre compte web\n"
         "/potager — Changer de potager actif\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
@@ -689,6 +690,67 @@ async def cmd_lier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ Ce chat Telegram est déjà lié à un autre compte.")
     finally:
         db.close()
+
+
+_DELIER_CLAVIER_CONFIRMATION = ReplyKeyboardMarkup(
+    [["✅ Oui, délier", "❌ Non, annuler"]], resize_keyboard=True, one_time_keyboard=True
+)
+
+
+async def cmd_delier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/delier — [US-050 / CA2] Dissocie ce chat Telegram de son compte web, après
+    confirmation. Volontairement HORS du garde de liaison standard
+    (_COMMANDES_SANS_GARDE_LIAISON) : l'action porte sur l'identité elle-même, pas
+    sur des données potager — elle doit rester utilisable même sans potager actif
+    (CA5, notes techniques US-050)."""
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
+    finally:
+        db.close()
+
+    if user_id is None:
+        # [notes techniques US-050] Chat non lié → même message d'onboarding que
+        # les autres commandes métier, pas de cas particulier.
+        await update.message.reply_text(_onboarding_liaison_msg(), parse_mode="Markdown")
+        return
+
+    ctx.user_data['mode'] = 'delier_confirm'
+    ctx.user_data['delier_user_id'] = user_id
+    await update.message.reply_text(
+        "⚠️ *Dissocier ce chat Telegram de votre compte ?*\n\n"
+        "Vous ne recevrez plus de réponses ici tant que vous n'aurez pas relié un "
+        "nouveau code depuis l'application web.",
+        parse_mode="Markdown",
+        reply_markup=_DELIER_CLAVIER_CONFIRMATION,
+    )
+
+
+async def _delier_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
+    """[US-050 / CA2, CA3] Étape 2 — applique ou annule la dissociation selon la
+    réponse à cmd_delier. Ne passe jamais par current_context()/TenantContext
+    (CA5) : `delier_user_id` vient de la résolution faite dans cmd_delier."""
+    t = texte.strip().lower()
+    user_id = ctx.user_data.get('delier_user_id')
+    ctx.user_data['mode'] = None
+    ctx.user_data.pop('delier_user_id', None)
+
+    if "oui" in t or "délier" in t or "delier" in t:
+        db = SessionLocal()
+        try:
+            svc_liaison_telegram.delier_chat_id(db, user_id)
+        finally:
+            db.close()
+        ctx.user_data.pop('tenant_user_id', None)
+        await update.message.reply_text(
+            "✅ *Chat dissocié.* Générez un nouveau code depuis l'application web "
+            "(menu profil) pour relier ce chat ou un autre avec `/lier`.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    else:
+        await update.message.reply_text("↩️ Dissociation annulée.", reply_markup=MENU_KEYBOARD)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1249,6 +1311,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
     texte     = texte_raw.lower()  # comparaison insensible à la casse
+
+    # [US-050 / CA5] Confirmation de dissociation : interceptée AVANT le garde de
+    # liaison standard, qui exige un potager actif (_resoudre_et_armer_contexte) —
+    # la dissociation doit rester utilisable même sans aucun potager.
+    if ctx.user_data.get('mode') == 'delier_confirm':
+        await _delier_confirm(update, ctx, texte_raw)
+        return
 
     # [US-045 / CA6, CA7] Priorité 0 — avant tout log ou appel Groq. Un texte
     # brut ressemblant à un code de liaison est tenté ici (CA2).
@@ -5149,7 +5218,7 @@ async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE
 # (existante ou future) ne puisse y échapper par oubli, l'enregistrement de
 # CHAQUE CommandHandler passe obligatoirement par _enregistrer_commande()
 # ci-dessous plutôt que par un appel direct à app.add_handler(CommandHandler(...)).
-_COMMANDES_SANS_GARDE_LIAISON = {"start", "help", "lier"}  # [CA9] onboarding
+_COMMANDES_SANS_GARDE_LIAISON = {"start", "help", "lier", "delier"}  # [CA9] onboarding + [US-050] identité seule
 
 
 def _avec_garde_liaison(handler):
@@ -5200,6 +5269,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
     _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
     _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
+    _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
 
     # Commandes TTS
