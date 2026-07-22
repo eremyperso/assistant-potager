@@ -53,6 +53,7 @@ from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from app.services import evenements as svc_evenements
+from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
@@ -383,6 +384,12 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     if not req.texte or len(req.texte.strip()) < 3:
         raise HTTPException(status_code=400, detail="Texte trop court")
 
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
+    try:
+        require_role(ctx, "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+
     # ── 1. Parsing LLM → liste d'événements ──────────────────────────────────
     try:
         items = parse_commande(req.texte)   # toujours une liste
@@ -411,6 +418,9 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     except svc_evenements.EvenementInvalideError as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
+    except PermissionInsuffisanteError as e:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
@@ -484,6 +494,12 @@ async def voice(
 
     # 5b. ACTION — enregistrement d'un événement potager
     else:
+        # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
+        try:
+            require_role(ctx, "editor", "enregistrer d'action")
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+
         try:
             items = parse_commande(texte)
         except json.JSONDecodeError as e:
@@ -501,6 +517,9 @@ async def voice(
         except svc_evenements.EvenementInvalideError as e:
             db.rollback()
             raise HTTPException(status_code=400, detail=str(e))
+        except PermissionInsuffisanteError as e:
+            db.rollback()
+            raise HTTPException(status_code=403, detail=str(e))
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erreur base : {e}")

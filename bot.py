@@ -73,6 +73,7 @@ from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
+from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from database.models import Potager as _Potager  # [US-046]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
@@ -1514,6 +1515,16 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── PARSING MULTI-LIGNES ─────────────────────────────────────────────────────────
 async def _parse_multi(update, lignes: list, msg=None):
     """Traite chaque ligne séparément → chaque événement a son propre texte_original et sa propre date."""
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM (parse_commande
+    # par ligne ci-dessous).
+    try:
+        require_role(current_context(), "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        txt = f"⛔ {e}"
+        if msg: await msg.edit_text(txt)
+        else:   await update.message.reply_text(txt)
+        return
+
     log.info(f"📋 MULTI-LIGNES    : {len(lignes)} phrases à traiter séparément")
     total_saved = []
 
@@ -2348,6 +2359,15 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     """
     # Gestion des callback queries : update.message peut être None
     message = update.message or (update.callback_query.message if update.callback_query else None)
+
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM (parse_commande
+    # ci-dessous) — un lecteur qui dicte une action n'y déclenche aucun appel Groq.
+    try:
+        require_role(current_context(), "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        if msg: await msg.edit_text(f"⛔ {e}")
+        else:   await message.reply_text(f"⛔ {e}")
+        return
 
     try:
         if pre_parsed_items is not None:
@@ -4200,6 +4220,13 @@ JSON brut uniquement."""
 
 async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Propose correction ou suppression du dernier événement."""
+    # [US-047 CA1] Garde de rôle — un lecteur ne peut ni corriger ni supprimer.
+    try:
+        require_role(current_context(), "editor", "corriger ou supprimer un événement")
+    except PermissionInsuffisanteError as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
     db = SessionLocal()
     try:
         event = svc_evenements.dernier_evenement(db, current_context())
@@ -4224,6 +4251,14 @@ async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Étape 1 — Demande à l'utilisateur de décrire l'événement à corriger."""
+    # [US-047 CA1, CA4] Garde de rôle avant d'entrer dans le flux de correction —
+    # bloque aussi, en amont, l'appel Groq de _corr_apply (étape 4).
+    try:
+        require_role(current_context(), "editor", "corriger un événement")
+    except PermissionInsuffisanteError as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
     db = SessionLocal()
     try:
         last = svc_evenements.dernier_evenement(db, current_context())

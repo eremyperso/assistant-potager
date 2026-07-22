@@ -1,4 +1,17 @@
 
+## [v3.22.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Un membre `lecteur` d'un potager partagé ne peut plus enregistrer, corriger ni supprimer d'événement — il garde un accès complet à la consultation (stats, historique, `/ask`) (US-047)
+- Un lecteur qui dicte une action reçoit immédiatement un message expliquant qu'il n'a pas les droits nécessaires, sans qu'aucun appel au parsing Groq ne soit déclenché (US-047)
+- Un membre `editor` peut saisir, corriger et supprimer des événements comme un `owner`, mais reste bloqué sur la gestion des membres et des paramètres du potager (réservée à l'`owner`) (US-047)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/permissions.py` : garde de rôle unique (`require_role`), matrice `lecteur < editor < owner` définie une seule fois, réutilisée par la couche services et par bot.py/main.py — jamais dupliquée (US-047)
+- Toutes les fonctions d'écriture de `app/services/evenements.py` (création, correction, suppression, déplacement d'événements) vérifient désormais le rôle avant d'agir, en défense en profondeur (US-047)
+- `bot.py` et `main.py` (`POST /parse`, `POST /voice`) appliquent le garde avant tout appel de parsing LLM, pour éviter la consommation de tokens Groq sur une action refusée (US-047)
+- Une tentative d'action non autorisée est journalisée (log structuré `potager`) sans jamais remonter d'exception non gérée à l'utilisateur (US-047)
+
 ## [v3.21.0] — 2026-07-20
 
 ### 🚀 Nouveautés

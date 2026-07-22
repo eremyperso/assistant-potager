@@ -17,6 +17,7 @@ from sqlalchemy import func, or_, and_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.services.context import TenantContext
+from app.services.permissions import require_role
 from database.models import Evenement, Parcelle
 from utils.actions import normalize_action
 from utils.date_utils import parse_date
@@ -448,6 +449,7 @@ def cultures_avec_mise_en_godet(db: Session, ctx: TenantContext) -> set[str]:
 def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
     """[POST /parse, POST /voice-ACTION] Crée un événement depuis un item parsé par Groq,
     avec héritage automatique de type_organe_recolte depuis culture_config."""
+    require_role(ctx, "editor", "enregistrer d'action")
     from database.models import CultureConfig
 
     nom_parcelle = parsed.get("parcelle")
@@ -494,6 +496,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
 def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
     """[/parse multi-lignes bot.py] Crée un événement pour UNE ligne d'un message multi-actions
     (pas d'héritage type_organe — comportement historique de _parse_multi)."""
+    require_role(ctx, "editor", "enregistrer d'action")
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
     valider_evenement(
@@ -529,6 +532,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     `parcelle_obj` est déjà résolu par l'appelant (qui gère le cas "parcelle inconnue" en
     interrompant le flux Telegram avant d'appeler cette fonction). Mute `parsed` en place
     (unité normalisée, variété héritée) — l'appelant l'utilise ensuite pour le récapitulatif."""
+    require_role(ctx, "editor", "enregistrer d'action")
     type_organe_semis: Optional[str] = None
     if normalize_action(parsed.get("action")) == "semis":
         unite_normalisee = _normalize_unite_semis(parsed.get("unite"))
@@ -594,6 +598,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
 
 def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: str) -> Evenement:
     """[US-029] Sauvegarde une mise en godet avec auto-link au semis parent + héritage variété."""
+    require_role(ctx, "editor", "enregistrer d'action")
     culture_str = parsed.get("culture") or ""
     variete_str = parsed.get("variete")
 
@@ -657,6 +662,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
 
 def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, texte: str, label: str) -> Evenement:
     """[US-038] Sauvegarde une note/observation comme Evenement(type_action='observation')."""
+    require_role(ctx, "editor", "enregistrer d'action")
     parcelle_obj = None
     nom_parcelle = fields.get("parcelle")
     if nom_parcelle:
@@ -691,6 +697,7 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
 
 def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: str) -> Evenement:
     """[perte / perte_godet] Sauvegarde directe depuis un callback inline (ex-_save_perte_item)."""
+    require_role(ctx, "editor", "enregistrer d'action")
     valider_evenement(
         db, ctx,
         action=item.get("action"), culture=item.get("culture"),
@@ -717,6 +724,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
 
 def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corrections: dict, trace: str) -> Optional[Evenement]:
     """[/corriger étape 5] Applique les champs modifiés + trace d'auditabilité."""
+    require_role(ctx, "editor", "corriger un événement")
     event = db.get(Evenement, evenement_id)
     if event is None or event.potager_id != ctx.potager_id:
         return None
@@ -769,6 +777,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
 
 def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> bool:
     """[/corriger — suppression] Supprime un événement. Retourne False si introuvable."""
+    require_role(ctx, "editor", "supprimer un événement")
     event = db.get(Evenement, evenement_id)
     if event is None or event.potager_id != ctx.potager_id:
         return False
@@ -855,6 +864,7 @@ def deplacer_evenements(
 ) -> int:
     """[US-007 CA8] Réassocie tous les événements localisés d'une culture (+variété) vers
     une nouvelle parcelle, avec trace d'auditabilité. Retourne le nombre mis à jour."""
+    require_role(ctx, "editor", "déplacer des événements")
     from datetime import date as _date
 
     # [US-049] Appel de cohérence (CA5/CA7), délibérément neutralisé ici : cette
