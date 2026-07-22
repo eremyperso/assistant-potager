@@ -1,4 +1,10 @@
 
+## [v3.22.1] — 2026-07-22
+
+### 🐛 Corrections
+- Corrige une fuite d'isolation multi-tenant critique : le garde-fou "culture jamais plantée" (US-049) ne filtrait jamais par potager — une culture plantée dans **n'importe quel autre potager** de la base neutralisait le garde-fou partout, permettant d'enregistrer une récolte sur une culture jamais introduite dans le potager courant (`culture_deja_plantee`, `cultures_connues`, `varietes_connues` dans `utils/culture_resolve.py`)
+- Corrige le même défaut de scoping sur la résolution automatique des noms de culture/variété (`resolve_culture`/`resolve_variete`), qui pouvait suggérer des noms appartenant à un autre potager
+
 ## [v3.22.0] — 2026-07-22
 
 ### 🚀 Nouveautés

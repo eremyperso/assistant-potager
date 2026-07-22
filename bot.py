@@ -2261,12 +2261,12 @@ async def _note_details_received(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     if fields.get("culture"):
         db = SessionLocal()
         try:
-            culture_resolue = resolve_culture(db, fields["culture"])
+            culture_resolue = resolve_culture(db, current_context().potager_id, fields["culture"])
             if culture_resolue != fields["culture"]:
                 log.info(f"[US-038] Culture résolue : '{fields['culture']}' → '{culture_resolue}'")
             fields["culture"] = culture_resolue
             if fields.get("variete"):
-                variete_resolue = resolve_variete(db, culture_resolue, fields["variete"])
+                variete_resolue = resolve_variete(db, current_context().potager_id, culture_resolue, fields["variete"])
                 if variete_resolue != fields["variete"]:
                     log.info(f"[US-038] Variété résolue : '{fields['variete']}' → '{variete_resolue}'")
                 fields["variete"] = variete_resolue
@@ -2405,12 +2405,12 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             for item in items:
                 if not item.get("culture"):
                     continue
-                culture_resolue = resolve_culture(db_resolve, item["culture"])
+                culture_resolue = resolve_culture(db_resolve, current_context().potager_id, item["culture"])
                 if culture_resolue != item["culture"]:
                     log.info(f"[resolve] Culture '{item['culture']}' → '{culture_resolue}'")
                 item["culture"] = culture_resolue
                 if item.get("variete"):
-                    variete_resolue = resolve_variete(db_resolve, culture_resolue, item["variete"])
+                    variete_resolue = resolve_variete(db_resolve, current_context().potager_id, culture_resolue, item["variete"])
                     if variete_resolue != item["variete"]:
                         log.info(f"[resolve] Variété '{item['variete']}' → '{variete_resolue}'")
                     item["variete"] = variete_resolue

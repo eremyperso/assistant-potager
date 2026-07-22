@@ -171,7 +171,7 @@ def valider_evenement(
     if action_norm in _ACTIONS_SOURCE_CULTURE:
         return
 
-    if not culture_deja_plantee(db, culture):
+    if not culture_deja_plantee(db, ctx.potager_id, culture):
         raise CultureInconnueError(culture)
 
     if parcelle is not None:
