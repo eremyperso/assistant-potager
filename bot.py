@@ -2586,7 +2586,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                     cb    = v["variete"] if v["variete"] else "__none__"
                     buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
                 buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
-                await update.message.reply_text(
+                await message.reply_text(
                     f"🌿 Quelle variété de *{_md(culture)}* au potager ?",
                     parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons),
                 )
@@ -2623,7 +2623,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                     cb  = g["variete"] if g["variete"] else "__none__"
                     buttons.append([InlineKeyboardButton(f"🪴 {var} ({g['stock_residuel_godet']} en godet)", callback_data=f"perte_var_p:{cb}")])
                 buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
-                await update.message.reply_text(
+                await message.reply_text(
                     f"🪴 Quelle variété de *{_md(culture)}* en pépinière ?",
                     parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons),
                 )
@@ -2657,7 +2657,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 [InlineKeyboardButton("❌ Annuler",   callback_data="perte_cancel")],
             ]
             var_lbl = f" *{variete}*" if variete else ""
-            await update.message.reply_text(
+            await message.reply_text(
                 f"🤔 Perte de *{qte} {culture_md}*{var_lbl} — au potager ou en pépinière ?",
                 parse_mode="Markdown",
                 reply_markup=InlineKeyboardMarkup(buttons),
@@ -2686,7 +2686,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                     for v in jardin_actif
                 ]
                 buttons_var.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
-                await update.message.reply_text(
+                await message.reply_text(
                     f"🌿 Quelle variété de *{_md(culture)}* avez-vous perdu ?",
                     parse_mode="Markdown",
                     reply_markup=InlineKeyboardMarkup(buttons_var),
@@ -2784,7 +2784,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                     ]
                     buttons.append([InlineKeyboardButton("📍 Sans parcelle", callback_data="action_parcelle_none")])
                     log.info(f"[US-021 CA8] {len(parcelles_culture)} parcelles pour {culture!r} — user_id={user_id}")
-                    await update.message.reply_text(
+                    await message.reply_text(
                         summary + f"\n\n*Dans quelle parcelle ?* _(parcelles avec {culture})_",
                         parse_mode="Markdown",
                         reply_markup=InlineKeyboardMarkup(buttons),
