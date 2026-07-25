@@ -97,6 +97,23 @@ def test_ca5_dernier_evenement_isole(test_db, deux_potagers):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# [fix bug rapporté] Isolation du garde-fou "culture jamais plantée"
+# (culture_deja_plantee ne filtrait pas par potager_id — une culture plantée
+# dans N'IMPORTE QUEL AUTRE potager neutralisait le garde-fou partout).
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_ca5_culture_jamais_plantee_dans_ce_potager_refusee_meme_si_plantee_ailleurs(test_db, deux_potagers):
+    """Le potager B a planté 'courgette', jamais 'tomate' — 'tomate' n'existe que
+    dans le potager A. Une récolte de tomate tentée sur B doit être refusée,
+    même si tomate est parfaitement connue ailleurs dans la base."""
+    with pytest.raises(svc_evenements.CultureInconnueError):
+        svc_evenements.valider_evenement(test_db, CTX_B, action="recolte", culture="tomate")
+
+    # Non-régression : la récolte reste bien autorisée sur le potager qui l'a plantée
+    svc_evenements.valider_evenement(test_db, CTX_A, action="recolte", culture="tomate")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Scénario Gherkin — Isolation des statistiques entre deux potagers
 # ──────────────────────────────────────────────────────────────────────────────
 

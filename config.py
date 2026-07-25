@@ -11,6 +11,17 @@ DATABASE_URL       = os.environ["DATABASE_URL"]
 GROQ_MODEL         = "openai/gpt-oss-120b"
 GROQ_WHISPER_MODEL = "whisper-large-v3-turbo"
 
+# [US-044] Authentification web JWT — secret jamais codé en dur ni versionné
+JWT_SECRET           = os.environ["JWT_SECRET"]
+JWT_ALGORITHM        = "HS256"
+JWT_ACCESS_TTL_MIN   = int(os.environ.get("JWT_ACCESS_TTL_MIN", "15"))
+JWT_REFRESH_TTL_DAYS = int(os.environ.get("JWT_REFRESH_TTL_DAYS", "30"))
+
+# [US-045] URL de la PWA — référencée dans le message d'onboarding Telegram
+# (chat non lié). Pas de domaine en dur : reste un placeholder générique tant
+# que PWA_URL n'est pas configurée en environnement.
+PWA_URL = os.environ.get("PWA_URL", "l'application web Assistant Potager")
+
 # Niveau de raisonnement Groq ("low" | "medium" | "high" | None).
 # Uniquement supporté par les modèles reasoning (ex: gpt-oss-120b, qwen3.6-27b).
 # Mettre à None pour les modèles non-reasoning (ex: llama-3.3-70b-versatile),

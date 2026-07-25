@@ -409,13 +409,14 @@ class TestOccupationParcelleCA10:
 
     def test_ca10_semis_m2_occupation_directe(self, db_plan):
         import main
+        from app.services.context import default_context
         nord = db_plan.query(Parcelle).filter_by(nom_normalise="nord").first()
         db_plan.add(Evenement(type_action="semis", culture="haricot", quantite=2, unite="m²",
                                parcelle_id=nord.id, date=datetime.now()))
         db_plan.commit()
 
         with patch("main.SessionLocal", return_value=db_plan):
-            data = main.get_plan(date_ref=None)
+            data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle_nord = next(p for p in data["parcelles"] if p["nom"] == "Nord")
         # 2 m² / 10 m² = 20% — PAS 2 × empreinte au pied
@@ -424,13 +425,14 @@ class TestOccupationParcelleCA10:
     def test_ca10_semis_graines_reste_multiplie_par_empreinte_au_pied(self, db_plan):
         """Non-régression : les unités graines/pieds continuent d'utiliser l'empreinte au pied."""
         import main
+        from app.services.context import default_context
         nord = db_plan.query(Parcelle).filter_by(nom_normalise="nord").first()
         db_plan.add(Evenement(type_action="semis", culture="carotte", quantite=100, unite="graines",
                                parcelle_id=nord.id, date=datetime.now()))
         db_plan.commit()
 
         with patch("main.SessionLocal", return_value=db_plan):
-            data = main.get_plan(date_ref=None)
+            data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle_nord = next(p for p in data["parcelles"] if p["nom"] == "Nord")
         # 100 graines × 0.03 m²/pied = 3 m² → 3/10 = 30%

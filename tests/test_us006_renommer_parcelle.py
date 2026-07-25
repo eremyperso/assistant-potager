@@ -216,7 +216,7 @@ class TestCmdParcelleRenommer:
 
             await cmd_parcelle(update, ctx)
 
-            mock_rename.assert_called_once_with(db_mock, "sud", "carré-sud")
+            mock_rename.assert_called_once_with(db_mock, "sud", "carré-sud", potager_id=1)
             update.message.reply_text.assert_called_once()
             texte = update.message.reply_text.call_args[0][0]
             assert "renommée" in texte.lower() or "Parcelle" in texte
@@ -276,4 +276,4 @@ class TestCmdParcelleRenommer:
             await cmd_parcelle(update, ctx)
 
             # Le nouveau nom doit être "grand nord" (espace reconstitué)
-            mock_rename.assert_called_once_with(ANY, "nord", "grand nord")
+            mock_rename.assert_called_once_with(ANY, "nord", "grand nord", potager_id=1)

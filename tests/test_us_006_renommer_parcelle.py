@@ -349,7 +349,7 @@ class TestCmdParcelleRenommerBot:
             await cmd_parcelle(mock_telegram_update, ctx)
 
         # Assert — rename_parcelle a bien été appelée avec les bons arguments
-        mock_rename.assert_called_once_with(ANY, "ancien-nom", "nouveau-nom")
+        mock_rename.assert_called_once_with(ANY, "ancien-nom", "nouveau-nom", potager_id=1)
 
     @pytest.mark.asyncio
     async def test_006_bot_ca1_nouveau_nom_multimots_reconstitue(
@@ -369,7 +369,7 @@ class TestCmdParcelleRenommerBot:
             await cmd_parcelle(mock_telegram_update, ctx)
 
         # Assert — les mots sont joints avec espace
-        mock_rename.assert_called_once_with(ANY, "nord", "grand nord")
+        mock_rename.assert_called_once_with(ANY, "nord", "grand nord", potager_id=1)
 
     # ── CA6 ───────────────────────────────────────────────────────────────────
 

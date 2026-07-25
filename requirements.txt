@@ -16,6 +16,16 @@ python-telegram-bot[job-queue]==21.6
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 
+# Authentification web JWT [US-044]
+# argon2 plutôt que bcrypt : passlib==1.7.4 (dernier release, non maintenu) est
+# incompatible avec bcrypt>=4.1 (detect_wrap_bug plante sur les secrets longs
+# lors de la détection du backend — voir passlib#180). argon2-cffi n'a pas ce
+# problème et est le hachage recommandé par l'OWASP.
+passlib[argon2]==1.7.4
+argon2-cffi>=23.1.0
+python-jose[cryptography]==3.3.0
+slowapi==0.1.9
+
 # Utilitaires
 unidecode==1.3.8
 python-dotenv==1.0.1

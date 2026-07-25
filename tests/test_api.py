@@ -5,7 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.db import Base, SessionLocal
 from database.models import Evenement, CultureConfig
-from main import app
+from main import app, get_current_user_ctx
+from app.services.context import default_context
 
 
 @pytest.fixture
@@ -15,14 +16,16 @@ def client(test_db):
     test_db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur", description_agronomique="Fruit"))
     test_db.add(CultureConfig(nom="salade", type_organe_recolte="végétatif", description_agronomique="Feuille"))
     test_db.commit()
-    
+
     def override_get_db():
         return test_db
-    
+
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with patch('llm.rag.add_to_rag', MagicMock()), \
          patch('main.SessionLocal', return_value=test_db):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 class TestAPI:

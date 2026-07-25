@@ -57,7 +57,9 @@ MOCK_STOCKS = {
 
 @pytest.fixture
 def client():
-    from main import app
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value=MOCK_STOCKS),
@@ -66,11 +68,14 @@ def client():
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 @pytest.fixture
 def client_vide():
-    from main import app
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with (
         patch("main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value={}),
@@ -79,6 +84,7 @@ def client_vide():
     ):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 # ── CA1 : /stats retourne stock_par_culture avec végétatif ET reproducteur ───
@@ -148,15 +154,20 @@ def test_us025_ca6_vide_liste_vide():
 
 def test_us025_ca6_api_retourne_200_si_vide():
     """CA6 — GET /stats retourne 200 même si aucune culture."""
-    from main import app
-    with (
-        patch("main.SessionLocal",                  return_value=MagicMock()),
-        patch("utils.stock.calcul_stock_cultures",  return_value={}),
-        patch("utils.stock.calcul_godets",          return_value={}),
-        patch("utils.stock.calcul_semis",           return_value={}),
-    ):
-        with TestClient(app) as c:
-            resp = c.get("/stats")
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
+    try:
+        with (
+            patch("main.SessionLocal",                  return_value=MagicMock()),
+            patch("utils.stock.calcul_stock_cultures",  return_value={}),
+            patch("utils.stock.calcul_godets",          return_value={}),
+            patch("utils.stock.calcul_semis",           return_value={}),
+        ):
+            with TestClient(app) as c:
+                resp = c.get("/stats")
+    finally:
+        app.dependency_overrides.pop(get_current_user_ctx, None)
     assert resp.status_code == 200
     assert resp.json()["stock_par_culture"] == []
 

@@ -1,4 +1,120 @@
 
+## [v3.24.1] — 2026-07-25
+
+### 🐛 Corrections
+- Corrige la création de parcelle dans un potager quand une autre parcelle du même nom existe déjà dans un potager différent (ex. "planche-tomate" dans deux potagers) : la contrainte d'unicité en base était globale alors que la logique applicative vérifie déjà les doublons potager par potager
+
+### 💾 Base de données
+- `migration_v23.sql` / `rollback_v23.sql` : remplace la contrainte `UNIQUE(nom_normalise)` sur `parcelles` par `UNIQUE(potager_id, nom_normalise)`
+
+## [v3.24.0] — 2026-07-25
+
+### 🚀 Nouveautés
+- Un utilisateur connecté peut créer un potager depuis la PWA (nom + localisation) — il en devient automatiquement `owner` et ce potager devient son potager actif (US-048)
+- Un `owner` peut inviter un membre par code à usage unique (rôle `editor` ou `lecteur` proposé) ; la personne invitée rejoint le potager en acceptant ce code, même si elle vient tout juste de s'inscrire (US-048)
+- Un `owner` peut consulter la liste des membres de son potager et en retirer un à tout moment ; le membre retiré perd l'accès immédiatement — son potager actif est invalidé s'il pointait vers ce potager (US-048)
+- Le parcours complet (inscription → création ou adhésion à un potager → liaison Telegram → première saisie) est désormais réalisable de bout en bout sans intervention manuelle en base de données, ce qui referme l'ÉPIC 2 — Identité & accès (US-048)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potagers.py` : `creer_potager`, `creer_invitation`, `accepter_invitation`, `lister_membres`, `retirer_membre` — invitations générées sur le même principe que les codes de liaison Telegram (US-045), TTL 7 jours (US-048)
+- Ajoute les endpoints `POST /potagers`, `POST /potagers/{id}/invitations`, `POST /invitations/{code}/accepter`, `GET /potagers/{id}/membres`, `DELETE /potagers/{id}/membres/{membre_user_id}` (US-048)
+- Ajoute `potager_actif.role_utilisateur()` (variante publique de la résolution de rôle) pour construire un `TenantContext` ciblé sur un potager précis, indépendamment du potager actif de l'appelant (US-048)
+- La garde de rôle `owner` (US-047, `require_role`) protège la création d'invitation et le retrait de membre — jamais de logique de comparaison de rôle dupliquée (US-048)
+- PWA : écran "aucun potager" complété avec les formulaires de création et d'adhésion par code ; ajoute la modale de gestion des membres (invitation + retrait), visible uniquement pour les owners (US-048)
+
+### 💾 Base de données
+- Ajoute la table `invitations` (`migration_v22.sql`, rollback `rollback_v22.sql`) : code à usage unique, potager cible, rôle proposé, TTL, horodatage d'utilisation (US-048)
+
+## [v3.23.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Ajoute la dissociation self-service d'un chat Telegram : depuis l'application web (paramètres de compte) ou via la commande `/delier` sur Telegram (avec confirmation explicite avant exécution), sans plus dépendre d'une intervention manuelle en base de données (US-050)
+- Une fois dissocié, le chat peut immédiatement être relié à nouveau — au même compte ou à un autre — via un nouveau code généré depuis la PWA (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `delier_chat_id` dans `app/services/liaison_telegram.py`, symétrique de `lier_chat_id` — aucune donnée métier (événements, parcelles, appartenance aux potagers) n'est touchée, seul le lien `telegram_chat_id ↔ user_id` est rompu (US-050)
+- Ajoute l'endpoint `POST /auth/lien/delier`, protégé par l'identité seule (`get_current_user`) — comme `POST /auth/lien/generer-code`, reste utilisable même sans potager (US-050)
+- `bot.py` : la commande `/delier` et sa confirmation restent volontairement hors du garde de rôle potager (US-047) et du garde de liaison standard (US-045) — c'est une action d'identité, pas une action potager (US-050)
+- Toute dissociation est journalisée (log structuré `potager`) pour traçabilité support (US-050)
+
+## [v3.22.1] — 2026-07-22
+
+### 🐛 Corrections
+- Corrige une fuite d'isolation multi-tenant critique : le garde-fou "culture jamais plantée" (US-049) ne filtrait jamais par potager — une culture plantée dans **n'importe quel autre potager** de la base neutralisait le garde-fou partout, permettant d'enregistrer une récolte sur une culture jamais introduite dans le potager courant (`culture_deja_plantee`, `cultures_connues`, `varietes_connues` dans `utils/culture_resolve.py`)
+- Corrige le même défaut de scoping sur la résolution automatique des noms de culture/variété (`resolve_culture`/`resolve_variete`), qui pouvait suggérer des noms appartenant à un autre potager
+
+## [v3.22.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Un membre `lecteur` d'un potager partagé ne peut plus enregistrer, corriger ni supprimer d'événement — il garde un accès complet à la consultation (stats, historique, `/ask`) (US-047)
+- Un lecteur qui dicte une action reçoit immédiatement un message expliquant qu'il n'a pas les droits nécessaires, sans qu'aucun appel au parsing Groq ne soit déclenché (US-047)
+- Un membre `editor` peut saisir, corriger et supprimer des événements comme un `owner`, mais reste bloqué sur la gestion des membres et des paramètres du potager (réservée à l'`owner`) (US-047)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/permissions.py` : garde de rôle unique (`require_role`), matrice `lecteur < editor < owner` définie une seule fois, réutilisée par la couche services et par bot.py/main.py — jamais dupliquée (US-047)
+- Toutes les fonctions d'écriture de `app/services/evenements.py` (création, correction, suppression, déplacement d'événements) vérifient désormais le rôle avant d'agir, en défense en profondeur (US-047)
+- `bot.py` et `main.py` (`POST /parse`, `POST /voice`) appliquent le garde avant tout appel de parsing LLM, pour éviter la consommation de tokens Groq sur une action refusée (US-047)
+- Une tentative d'action non autorisée est journalisée (log structuré `potager`) sans jamais remonter d'exception non gérée à l'utilisateur (US-047)
+
+## [v3.21.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la sélection et le changement de potager actif : un utilisateur membre d'un seul potager y est rattaché automatiquement, un utilisateur membre de plusieurs potagers choisit via la commande `/potager` (Telegram, boutons inline) ou le sélecteur de la barre du haut sur la PWA (US-046)
+- Le choix du potager actif est immédiat et mémorisé durablement — plus besoin de le refaire à chaque session (US-046)
+- Un compte qui n'appartient encore à aucun potager reçoit un message clair l'invitant à en créer un ou à en rejoindre un, aussi bien sur Telegram que sur la PWA (US-046)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potager_actif.py` : résolution du potager actif réel (`users.potager_actif_id` + `potager_membres`), remplace la valeur `DEFAULT_POTAGER_ID` figée en dur utilisée depuis US-040 (US-046)
+- `bot.py` : le `TenantContext` résolu par le garde de liaison (US-045) est désormais réellement utilisé pour chaque lecture/écriture (potager réel, plus potager #1 pour tout le monde) — voir `app/services/context.current_context()` (US-046)
+- `main.py` : sépare la dépendance FastAPI d'authentification en deux — `get_current_user` (identité seule, pour les endpoints qui n'ont pas besoin de potager, ex. génération de code de liaison Telegram) et `get_current_user_ctx` (identité + potager actif réel, pour tous les endpoints métier) (US-046)
+- Ajoute `GET /potagers` et `POST /potagers/{id}/activer` (US-046)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v21.sql` (+ rollback) : colonne `users.potager_actif_id` (US-046)
+
+### ⚠️ Breaking changes
+- Deux comptes distincts membres de potagers différents ne partagent plus les mêmes données — jusqu'ici, tous les comptes lisaient/écrivaient dans le même potager #1 quelle que soit leur identité réelle (US-046)
+
+## [v3.20.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la liaison d'un chat Telegram à un compte web via un code à usage unique (6 caractères, valable 10 minutes) : génération depuis la PWA (icône ✉️ dans la barre du haut), saisie côté bot via `/lier CODE` ou en envoyant simplement le code (US-045)
+- Un chat Telegram non relié reçoit désormais un message d'accueil expliquant la marche à suivre, au lieu d'être traité anonymement (US-045)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/liaison_telegram.py` : génération de code (alphabet sans caractères ambigus), validation (code inconnu, expiré, déjà utilisé, chat déjà lié à un autre compte) (US-045)
+- `bot.py` : la garde de liaison s'exécute en tout premier dans `handle_voice`, `handle_text`, **et sur chacune des commandes slash métier** (`/plan`, `/stats`, `/historique`, `/parcelle`, `/vendre`, `/corriger`, `/note`, `/meteo`, `/tts*`, `/version`...) — un chat non relié ne déclenche plus aucun appel Groq ni aucune lecture de données, quel que soit le point d'entrée utilisé ; seules `/start`, `/help` et `/lier` restent accessibles pour permettre l'onboarding (US-045)
+- L'enregistrement des commandes passe désormais par un point d'entrée unique (`_enregistrer_commande`) qui applique le garde automatiquement, pour qu'une future commande ne puisse pas y échapper par oubli (US-045)
+- Ajoute l'endpoint `POST /auth/lien/generer-code` (protégé par l'authentification web) et la commande `/lier` côté bot (US-045)
+
+### 🐛 Corrections
+- Corrige le décompte du TTL affiché sur la modale "Relier Telegram" qui indiquait systématiquement "Code expiré" dès la génération — le serveur renvoyait une heure d'expiration UTC sans indication de fuseau, que le navigateur interprétait à tort comme une heure locale (US-045)
+- Corrige l'angle mort détecté en test manuel : un chat Telegram non relié pouvait consulter les parcelles et autres données via les commandes slash (ex. `/parcelle lister`), le garde initial ne couvrant que les messages vocaux/texte libre (US-045)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v20.sql` (+ rollback) : table `liaisons_telegram` (US-045)
+
+### ⚠️ Breaking changes
+- Un chat Telegram non relié à un compte web ne peut plus interagir avec le bot d'aucune façon (vocal, texte, ou commande slash métier) — il doit d'abord s'inscrire sur la PWA (US-044) puis se relier via `/lier` (US-045)
+
+## [v3.19.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la création de compte et la connexion par e-mail / mot de passe sur la PWA, avec écran dédié affiché tant qu'aucune session n'est active (US-044)
+- La session reste active sans redemander le mot de passe : un token expiré déclenche un rafraîchissement automatique et transparent (US-044)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/auth.py` : hachage des mots de passe (argon2), émission et vérification des JWT (access 15 min / refresh 30 jours) (US-044)
+- Tous les endpoints métier de l'API (`/parse`, `/ask`, `/stats`, `/historique`, `/cultures`, `/plan`, `/godets`, etc.) exigent désormais un token JWT valide, sauf `/health` (US-044)
+- Ajoute un rate-limit sur `/auth/login` et `/auth/register` pour limiter le brute-force (US-044)
+- `frontend/src/lib/api.js` gère le stockage du token et rejoue automatiquement une requête après un rafraîchissement de session réussi (US-044)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v19.sql` (+ rollback) : colonnes `mot_de_passe_hash` et `email_verifie` sur `users` (US-044)
+
+### ⚠️ Breaking changes
+- La PWA et tout appelant de l'API doivent désormais s'authentifier (en-tête `Authorization: Bearer <token>`) pour accéder aux endpoints métier — un appel sans token valide renvoie `401` (US-044)
+
 ## [v3.18.1] — 2026-07-19
 
 ### 🐛 Corrections

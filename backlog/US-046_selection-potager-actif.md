@@ -11,12 +11,12 @@ Afin de ne jamais enregistrer ou consulter des données dans le mauvais potager
 Un même utilisateur peut appartenir à plusieurs potagers (table `potager_membres` du socle US-040). Depuis US-044/US-045, l'identité est établie côté web et Telegram, mais le `TenantContext` n'a pas encore de `potager_id` fiable dès qu'un utilisateur a plus d'un potager. Cette US introduit la notion de potager actif, mémorisée par utilisateur et utilisée pour construire le `TenantContext` de chaque requête, côté web comme côté Telegram.
 
 **Critères d'acceptance :**
-- [ ] CA1 : Un utilisateur membre d'un seul potager voit ce potager sélectionné automatiquement comme potager actif, sans action de sa part
-- [ ] CA2 : Un utilisateur membre de plusieurs potagers peut lister ses potagers via la commande `/potager` (Telegram, boutons inline) et via un sélecteur dans la PWA
-- [ ] CA3 : Le changement de potager actif est immédiatement pris en compte : toute saisie ou question suivante (bot ou PWA) porte sur le nouveau potager sélectionné
-- [ ] CA4 : Le potager actif est mémorisé par utilisateur (persistant entre sessions), pas seulement pour la durée d'une conversation
-- [ ] CA5 : Un utilisateur qui n'appartient à aucun potager reçoit un message clair l'invitant à en créer un ou à rejoindre un potager existant (renvoi vers le parcours de US-048)
-- [ ] CA6 : Le `TenantContext` construit à chaque requête (bot et API) utilise systématiquement le potager actif de l'utilisateur, sans valeur en dur
+- [x] CA1 : Un utilisateur membre d'un seul potager voit ce potager sélectionné automatiquement comme potager actif, sans action de sa part
+- [x] CA2 : Un utilisateur membre de plusieurs potagers peut lister ses potagers via la commande `/potager` (Telegram, boutons inline) et via un sélecteur dans la PWA
+- [x] CA3 : Le changement de potager actif est immédiatement pris en compte : toute saisie ou question suivante (bot ou PWA) porte sur le nouveau potager sélectionné
+- [x] CA4 : Le potager actif est mémorisé par utilisateur (persistant entre sessions), pas seulement pour la durée d'une conversation
+- [x] CA5 : Un utilisateur qui n'appartient à aucun potager reçoit un message clair l'invitant à en créer un ou à rejoindre un potager existant (renvoi vers le parcours de US-048)
+- [x] CA6 : Le `TenantContext` construit à chaque requête (bot et API) utilise systématiquement le potager actif de l'utilisateur, sans valeur en dur
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : interaction Telegram (commande `/potager`) + PWA (sélecteur de potager) + couche services (construction du `TenantContext`)
