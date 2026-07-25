@@ -7,8 +7,9 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
 [US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
 [US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
+[US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
@@ -66,6 +67,23 @@ class PotagerMembre(Base):
     user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
     potager_id = Column(Integer, ForeignKey("potagers.id"), primary_key=True)
     role       = Column(String(10), nullable=False)  # 'owner' | 'editor' | 'lecteur'
+
+
+class Invitation(Base):
+    """[US-048] Code à usage unique invitant un utilisateur à rejoindre un potager
+    avec un rôle proposé — même principe que LiaisonTelegram (US-045), TTL plus
+    long (jours, pas minutes) car destiné à être partagé hors ligne (e-mail, lien)."""
+    __tablename__ = "invitations"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    code          = Column(String(8), unique=True, nullable=False, index=True)
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    invite_par_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    email_invite  = Column(String(255), nullable=True)
+    role_propose  = Column(String(10), nullable=False)  # 'editor' | 'lecteur'
+    cree_le       = Column(DateTime, server_default=func.now())
+    expire_le     = Column(DateTime, nullable=False)
+    utilisee_le   = Column(DateTime, nullable=True)
 
 
 class Evenement(Base):
@@ -168,7 +186,9 @@ class Parcelle(Base):
     [US_Plan_occupation_parcelles / CA8]
     Représente une parcelle physique du potager.
 
-    - nom_normalise : forme canonique unique (strip + lower + unidecode + sans tirets/espaces)
+    - nom_normalise : forme canonique (strip + lower + unidecode + sans tirets/espaces),
+                      unique PAR POTAGER (migration_v23) — deux potagers différents
+                      peuvent chacun avoir une parcelle "planche-tomate"
     - ordre         : position pour l'affichage trié du plan
     - actif         : permet de désactiver sans supprimer
     - est_pepiniere : [migration_v13] une parcelle pépinière/serre n'est jamais comptée
@@ -179,7 +199,7 @@ class Parcelle(Base):
 
     id            = Column(Integer, primary_key=True, index=True)
     nom           = Column(String, nullable=False)
-    nom_normalise = Column(String, unique=True, nullable=False, index=True)
+    nom_normalise = Column(String, nullable=False, index=True)
     exposition    = Column(String, nullable=True)
     superficie_m2 = Column(Float, nullable=True)
     ordre         = Column(Integer, default=0)
@@ -190,3 +210,9 @@ class Parcelle(Base):
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent
     # sur Evenement.potager_id (nullable=True + default=1 ORM volontairement conservés).
     potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True, default=1)
+
+    __table_args__ = (
+        # [migration_v23] Unicité par potager, pas globale — remplace l'ancienne
+        # contrainte UNIQUE(nom_normalise) seule (parcelles_nom_normalise_key).
+        UniqueConstraint("potager_id", "nom_normalise", name="uq_parcelles_potager_nom_normalise"),
+    )

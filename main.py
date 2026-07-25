@@ -15,12 +15,20 @@ Authentification [US-044] :
   POST /auth/refresh    → nouvel access token à partir d'un refresh token valide
 Tous les endpoints métier ci-dessus exigent désormais un access token valide
 (en-tête `Authorization: Bearer <token>`), sauf /health.
+
+Onboarding self-service [US-048] :
+  POST   /potagers                              → créer un potager (owner + potager actif)
+  POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
+  POST   /invitations/{code}/accepter            → accepter une invitation
+  GET    /potagers/{id}/membres                  → lister les membres d'un potager
+  DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
 """
 import json
 import os
 import tempfile
 import uuid
 from datetime import date
+from typing import Optional
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +60,7 @@ from app.services.context import default_context, TenantContext, DEFAULT_POTAGER
 from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
+from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
 from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from app.services import stats as svc_stats
@@ -76,7 +85,7 @@ app.add_middleware(
         "http://localhost:5173",        # dev Vite local
         "https://*.netlify.app",        # frontend Netlify (prod)
     ],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],  # DELETE ajouté [US-048] pour /potagers/{id}/membres/{user_id}
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -280,7 +289,14 @@ def lister_potagers(user: User = Depends(get_current_user)):
                 pass
         return {
             "potagers": [
-                {"id": p.id, "nom": p.nom, "actif": p.id == potager_actif_id}
+                {
+                    "id": p.id,
+                    "nom": p.nom,
+                    "actif": p.id == potager_actif_id,
+                    # [US-048] rôle exposé pour que le frontend affiche la gestion
+                    # des membres (inviter/retirer) uniquement aux owners.
+                    "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
+                }
                 for p in potagers
             ],
         }
@@ -298,6 +314,108 @@ def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
         except svc_potager_actif.PotagerNonMembreError:
             raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
         return {"potager_id": nouveau_ctx.potager_id, "role": nouveau_ctx.role}
+    finally:
+        db.close()
+
+
+class CreerPotagerRequest(BaseModel):
+    nom: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class InviterMembreRequest(BaseModel):
+    role_propose: str
+    email_invite: Optional[str] = None
+
+
+@app.post("/potagers", status_code=201)
+def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_user)):
+    """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
+    ce potager devient son potager actif. Identité seule (pas de potager requis
+    au préalable, CA7)."""
+    if not req.nom or not req.nom.strip():
+        raise HTTPException(status_code=400, detail="Nom de potager requis")
+    db = SessionLocal()
+    try:
+        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.latitude, req.longitude)
+        return {"id": potager.id, "nom": potager.nom}
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/invitations", status_code=201)
+def creer_invitation(potager_id: int, req: InviterMembreRequest, user: User = Depends(get_current_user)):
+    """[US-048 / CA3] Un owner invite un membre par code, avec un rôle proposé
+    (editor|lecteur). Vise le potager de l'URL, pas nécessairement le potager
+    actif de l'appelant."""
+    db = SessionLocal()
+    try:
+        try:
+            invitation = svc_potagers.creer_invitation(
+                db, user.id, potager_id, req.role_propose, req.email_invite,
+            )
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.RoleInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {
+            "code": invitation.code,
+            "role_propose": invitation.role_propose,
+            "expire_le": invitation.expire_le.isoformat() + "Z",
+        }
+    finally:
+        db.close()
+
+
+@app.post("/invitations/{code}/accepter")
+def accepter_invitation(code: str, user: User = Depends(get_current_user)):
+    """[US-048 / CA4, CA8] Accepte une invitation — insère le membre dans
+    potager_membres avec le rôle proposé. Identité seule (l'utilisateur peut
+    n'avoir encore aucun potager, CA7)."""
+    db = SessionLocal()
+    try:
+        try:
+            membre = svc_potagers.accepter_invitation(db, user.id, code)
+        except svc_potagers.InvitationInvalideError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except svc_potagers.InvitationExpireeError as e:
+            raise HTTPException(status_code=410, detail=str(e))
+        except svc_potagers.InvitationDejaUtiliseeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except svc_potagers.DejaMembreError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {"potager_id": membre.potager_id, "role": membre.role}
+    finally:
+        db.close()
+
+
+@app.get("/potagers/{potager_id}/membres")
+def lister_membres_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-048] Liste les membres d'un potager — réservé à ses membres."""
+    db = SessionLocal()
+    try:
+        role = svc_potager_actif.role_utilisateur(db, user.id, potager_id)
+        if role is None:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return {"membres": svc_potagers.lister_membres(db, potager_id)}
+    finally:
+        db.close()
+
+
+@app.delete("/potagers/{potager_id}/membres/{membre_user_id}")
+def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = Depends(get_current_user)):
+    """[US-048 / CA5, CA6] Un owner retire un membre — celui-ci perd l'accès
+    immédiatement (potager actif invalidé s'il pointait vers ce potager)."""
+    db = SessionLocal()
+    try:
+        try:
+            svc_potagers.retirer_membre(db, user.id, potager_id, membre_user_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.MembreInconnuError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"success": True}
     finally:
         db.close()
 

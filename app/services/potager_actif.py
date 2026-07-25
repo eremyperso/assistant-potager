@@ -44,6 +44,13 @@ def _role_utilisateur(db: Session, user_id: int, potager_id: int) -> Optional[st
     return membre.role if membre else None
 
 
+def role_utilisateur(db: Session, user_id: int, potager_id: int) -> Optional[str]:
+    """[US-048] Rôle d'un utilisateur sur un potager donné, ou None s'il n'en est
+    pas membre — utilisé pour construire un TenantContext ciblé sur un potager
+    précis (invitation/retrait de membre), indépendamment du potager actif."""
+    return _role_utilisateur(db, user_id, potager_id)
+
+
 def resoudre_tenant_context(db: Session, user_id: int) -> TenantContext:
     """[CA1, CA5, CA6] Résout le TenantContext réel d'un utilisateur.
 

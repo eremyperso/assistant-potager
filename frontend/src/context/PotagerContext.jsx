@@ -28,13 +28,29 @@ export function PotagerContextProvider({ children }) {
     window.location.reload()
   }
 
+  // [US-048 / CA1] Crée un potager — devient owner + potager actif, rechargement
+  // complet pour repartir sur un état propre (même principe que `activer`).
+  async function creerPotager(nom, latitude, longitude) {
+    await api.creerPotager(nom, latitude, longitude)
+    window.location.reload()
+  }
+
+  // [US-048 / CA4] Accepte une invitation par code — devient membre du potager
+  // (potager actif si l'utilisateur n'en avait encore aucun).
+  async function accepterInvitation(code) {
+    await api.accepterInvitation(code)
+    window.location.reload()
+  }
+
   const potagerActif = potagers.find((p) => p.actif) || null
   // [CA5] Une liste vide (endpoint identité seule, jamais d'erreur) signifie
   // que le compte n'appartient encore à aucun potager.
   const aucunPotager = !loading && potagers.length === 0
 
   return (
-    <PotagerContext.Provider value={{ potagers, potagerActif, aucunPotager, loading, activer, recharger }}>
+    <PotagerContext.Provider
+      value={{ potagers, potagerActif, aucunPotager, loading, activer, recharger, creerPotager, accepterInvitation }}
+    >
       {children}
     </PotagerContext.Provider>
   )

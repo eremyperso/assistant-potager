@@ -103,9 +103,23 @@ async function get(path) {
   return res.json()
 }
 
-async function post(path) {
-  const res = await requeteAvecRefresh(path, { method: 'POST', headers: headers() })
-  if (!res.ok) throw new Error(`Erreur API ${res.status} sur ${path}`)
+async function post(path, body) {
+  const options = { method: 'POST', headers: headers() }
+  if (body !== undefined) options.body = JSON.stringify(body)
+  const res = await requeteAvecRefresh(path, options)
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+  }
+  return res.json()
+}
+
+async function del(path) {
+  const res = await requeteAvecRefresh(path, { method: 'DELETE', headers: headers() })
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+  }
   return res.json()
 }
 
@@ -143,6 +157,13 @@ export const api = {
   // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur
   potagers: () => get('/potagers'),
   activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
+  // [US-048] Création de potager, invitations et gestion des membres (owner)
+  creerPotager: (nom, latitude, longitude) => post('/potagers', { nom, latitude, longitude }),
+  creerInvitation: (potagerId, rolePropose, emailInvite) =>
+    post(`/potagers/${potagerId}/invitations`, { role_propose: rolePropose, email_invite: emailInvite }),
+  accepterInvitation: (code) => post(`/invitations/${code}/accepter`),
+  listerMembres: (potagerId) => get(`/potagers/${potagerId}/membres`),
+  retirerMembre: (potagerId, membreUserId) => del(`/potagers/${potagerId}/membres/${membreUserId}`),
 }
 
 // [US-044] Endpoints d'authentification — pas de token requis pour register/login,

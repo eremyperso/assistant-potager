@@ -1,11 +1,17 @@
 // [US-046 / CA2] Modal de sélection du potager actif.
+// [US-048 / CA4] Complétée avec la saisie d'un code d'invitation — seul
+// endroit accessible à tout moment (pas uniquement au premier onboarding,
+// cf. AucunPotager.jsx) pour rejoindre un potager supplémentaire.
 import { useState } from 'react'
 import { X, Sprout, Check } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 
 export default function PotagerSelector({ onClose }) {
-  const { potagers, activer } = usePotager()
+  const { potagers, activer, accepterInvitation } = usePotager()
   const [enCours, setEnCours] = useState(null)
+  const [code, setCode] = useState('')
+  const [error, setError] = useState(null)
+  const [rejoindre, setRejoindre] = useState(false)
 
   async function handleSelect(potagerId) {
     if (enCours) return
@@ -15,6 +21,20 @@ export default function PotagerSelector({ onClose }) {
       // activer() recharge la page — pas besoin de fermer la modale manuellement
     } catch {
       setEnCours(null)
+    }
+  }
+
+  async function handleRejoindre(e) {
+    e.preventDefault()
+    if (!code.trim() || rejoindre) return
+    setRejoindre(true)
+    setError(null)
+    try {
+      await accepterInvitation(code.trim())
+      // accepterInvitation() recharge la page en cas de succès
+    } catch (err) {
+      setError(err.message)
+      setRejoindre(false)
     }
   }
 
@@ -59,6 +79,37 @@ export default function PotagerSelector({ onClose }) {
               {enCours === p.id && <span style={{ fontSize: 12, color: 'var(--g-sec)' }}>…</span>}
             </button>
           ))}
+        </div>
+
+        <div style={{ borderTop: '1px solid var(--g-brd)', marginTop: 14, paddingTop: 14 }}>
+          <p style={{ fontSize: 12, color: 'var(--g-sec)', marginBottom: 8 }}>
+            Rejoindre un autre potager avec un code d'invitation
+          </p>
+          {error && <p style={{ color: 'var(--g-red)', fontSize: 13, marginBottom: 6 }}>{error}</p>}
+          <form onSubmit={handleRejoindre} className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              style={{
+                flex: 1, background: 'var(--g-sur)', border: '1px solid var(--g-brd)',
+                color: 'var(--g-pri)', borderRadius: 10, padding: '6px 10px', fontSize: 13,
+                fontFamily: 'monospace', letterSpacing: 1,
+              }}
+            />
+            <button
+              type="submit"
+              disabled={rejoindre || !code.trim()}
+              style={{
+                background: 'var(--g-acc)', color: 'var(--g-card)',
+                borderRadius: 10, padding: '6px 14px', fontSize: 13, fontWeight: 600,
+                opacity: rejoindre ? 0.6 : 1,
+              }}
+            >
+              {rejoindre ? '…' : 'Rejoindre'}
+            </button>
+          </form>
         </div>
       </div>
     </div>

@@ -1,4 +1,30 @@
 
+## [v3.24.1] — 2026-07-25
+
+### 🐛 Corrections
+- Corrige la création de parcelle dans un potager quand une autre parcelle du même nom existe déjà dans un potager différent (ex. "planche-tomate" dans deux potagers) : la contrainte d'unicité en base était globale alors que la logique applicative vérifie déjà les doublons potager par potager
+
+### 💾 Base de données
+- `migration_v23.sql` / `rollback_v23.sql` : remplace la contrainte `UNIQUE(nom_normalise)` sur `parcelles` par `UNIQUE(potager_id, nom_normalise)`
+
+## [v3.24.0] — 2026-07-25
+
+### 🚀 Nouveautés
+- Un utilisateur connecté peut créer un potager depuis la PWA (nom + localisation) — il en devient automatiquement `owner` et ce potager devient son potager actif (US-048)
+- Un `owner` peut inviter un membre par code à usage unique (rôle `editor` ou `lecteur` proposé) ; la personne invitée rejoint le potager en acceptant ce code, même si elle vient tout juste de s'inscrire (US-048)
+- Un `owner` peut consulter la liste des membres de son potager et en retirer un à tout moment ; le membre retiré perd l'accès immédiatement — son potager actif est invalidé s'il pointait vers ce potager (US-048)
+- Le parcours complet (inscription → création ou adhésion à un potager → liaison Telegram → première saisie) est désormais réalisable de bout en bout sans intervention manuelle en base de données, ce qui referme l'ÉPIC 2 — Identité & accès (US-048)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potagers.py` : `creer_potager`, `creer_invitation`, `accepter_invitation`, `lister_membres`, `retirer_membre` — invitations générées sur le même principe que les codes de liaison Telegram (US-045), TTL 7 jours (US-048)
+- Ajoute les endpoints `POST /potagers`, `POST /potagers/{id}/invitations`, `POST /invitations/{code}/accepter`, `GET /potagers/{id}/membres`, `DELETE /potagers/{id}/membres/{membre_user_id}` (US-048)
+- Ajoute `potager_actif.role_utilisateur()` (variante publique de la résolution de rôle) pour construire un `TenantContext` ciblé sur un potager précis, indépendamment du potager actif de l'appelant (US-048)
+- La garde de rôle `owner` (US-047, `require_role`) protège la création d'invitation et le retrait de membre — jamais de logique de comparaison de rôle dupliquée (US-048)
+- PWA : écran "aucun potager" complété avec les formulaires de création et d'adhésion par code ; ajoute la modale de gestion des membres (invitation + retrait), visible uniquement pour les owners (US-048)
+
+### 💾 Base de données
+- Ajoute la table `invitations` (`migration_v22.sql`, rollback `rollback_v22.sql`) : code à usage unique, potager cible, rôle proposé, TTL, horodatage d'utilisation (US-048)
+
 ## [v3.23.0] — 2026-07-22
 
 ### 🚀 Nouveautés
