@@ -187,7 +187,15 @@ export const authApi = {
       body: JSON.stringify({ email, mot_de_passe }),
     })
     const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body.detail || `Erreur connexion (${res.status})`)
+    if (!res.ok) {
+      // [CA11] body.detail est un objet {code, message} pour EMAIL_NOT_VERIFIED,
+      // une simple chaîne pour les autres erreurs (identifiants incorrects...).
+      const detail = body.detail
+      const message = typeof detail === 'string' ? detail : detail?.message
+      const err = new Error(message || `Erreur connexion (${res.status})`)
+      if (typeof detail === 'object' && detail?.code) err.code = detail.code
+      throw err
+    }
     setTokens(body)
     return body
   },
@@ -198,5 +206,26 @@ export const authApi = {
 
   hasSession() {
     return Boolean(getAccessToken())
+  },
+
+  // [CA10] Valide le token reçu par e-mail — pas de token requis (utilisateur pas encore connecté)
+  async verifyEmail(token) {
+    const res = await fetch(`${BASE}/auth/verify-email${qs({ token })}`)
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const detail = body.detail
+      throw new Error((typeof detail === 'string' ? detail : detail?.message) || `Erreur de vérification (${res.status})`)
+    }
+    return body
+  },
+
+  // [CA12] Réponse toujours générique (anti-énumération) — jamais d'erreur à afficher
+  async resendVerification(email) {
+    const res = await fetch(`${BASE}/auth/resend-verification`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    return res.json().catch(() => ({}))
   },
 }

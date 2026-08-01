@@ -1,4 +1,19 @@
 
+## [v3.25.0] — 2026-07-31
+
+### 🚀 Nouveautés
+- À l'inscription, un e-mail de vérification est désormais envoyé (via l'API Brevo) avec un lien unique valable 24h (US-044)
+- La connexion est refusée tant que l'e-mail du compte n'est pas vérifié (403 `EMAIL_NOT_VERIFIED`) ; les comptes déjà inscrits avant cette version restent utilisables sans action de leur part (US-044)
+- Un utilisateur peut redemander l'e-mail de vérification si besoin, sans révéler si le compte existe ou est déjà vérifié (US-044)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/email.py` : envoi via l'API HTTPS Brevo, avec mode dégradé (lien loggé) si `BREVO_API_KEY` n'est pas configurée — pas de SMTP sortant auto-hébergé (le port 25 est bloqué par défaut sur Hetzner Cloud) (US-044)
+- Ajoute `demarrer_verification_email`, `verifier_email`, `renvoyer_verification_email` dans `app/services/auth.py`, sur le même principe d'usage unique que les codes de liaison Telegram (US-045) (US-044)
+- Ajoute les endpoints `GET /auth/verify-email` et `POST /auth/resend-verification` (US-044)
+
+### 💾 Base de données
+- Ajoute `users.verification_token_hash`, `verification_token_expire_le`, `verification_token_utilise_le` (`migration_v24.sql`, rollback `rollback_v24.sql`) ; les comptes web déjà inscrits sont réputés vérifiés (backfill) (US-044)
+
 ## [v3.24.1] — 2026-07-25
 
 ### 🐛 Corrections

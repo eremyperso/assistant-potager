@@ -345,6 +345,102 @@ profondeur, indépendante du scoping applicatif `ctx.potager_id` de US-042).
 - Rollback : `migrations/rollback_v18.sql` (supprime policies, désactive RLS,
   supprime `app_user` — remettre `DATABASE_URL` sur `potager_user` si besoin).
 
+## Vérification d'e-mail (US-044) — Brevo, ImprovMX, Scaleway DNS
+
+Chaîne de services impliquée dans l'inscription web (`POST /auth/register` →
+mail de vérification → `GET /auth/verify-email`). Documentée ici pour pouvoir
+tout reconfigurer à l'identique en cas de perte totale d'accès à ces comptes
+tiers — les secrets eux-mêmes (clé API Brevo) ne sont **jamais** dans ce
+fichier, uniquement dans `.env.dev` / `.env.prod` (non versionnés).
+
+### Vue d'ensemble de l'architecture
+
+```
+Utilisateur → PWA → API FastAPI (serveur Hetzner)
+                        │
+                        │ POST https://api.brevo.com/v3/smtp/email
+                        ▼
+                     Brevo (envoi du mail de vérification)
+                        │
+                        ▼
+              noreply@potager.eremy.fr (adresse expéditrice)
+                        │  redirection (pas de vraie boîte mail)
+                        ▼
+                  ImprovMX → boîte Gmail personnelle
+                  (sert uniquement à recevoir le mail de
+                   confirmation d'expéditeur envoyé par Brevo)
+
+DNS de eremy.fr → géré chez Scaleway (Domains & Web Hosting > Domains & DNS)
+Serveur applicatif (bot + API + PWA) → hébergé chez Hetzner (VPS Cloud)
+```
+
+Point clé : **le domaine `eremy.fr` est enregistré et son DNS géré chez
+Scaleway**, alors que le serveur applicatif tourne chez **Hetzner** — deux
+hébergeurs distincts. L'enregistrement DNS `A` de `potager.eremy.fr` pointe
+vers le serveur Hetzner (site + API) ; les enregistrements `MX`/`TXT` ajoutés
+pour ImprovMX coexistent avec lui sans conflit.
+
+### Pourquoi Brevo plutôt qu'un SMTP auto-hébergé
+
+Hetzner bloque le port 25 sortant par défaut sur ses VPS Cloud (anti-spam ;
+déblocage possible sur ticket après ~1 mois d'ancienneté, au cas par cas) et
+ses plages d'IP sont fréquemment blacklistées par les grands webmails — la
+délivrabilité y serait mauvaise même débloqué. Brevo (société française,
+hébergement UE, 300 mails/jour gratuits à vie) est donc appelé exclusivement
+via son API HTTPS (`app/services/email.py`), jamais via SMTP sortant depuis
+le VPS.
+
+### Reconfiguration de zéro (perte totale d'accès)
+
+1. **Compte Brevo** (brevo.com, gratuit, sans CB) :
+   - Créer le compte, confirmer l'e-mail
+   - **SMTP & API → API Keys** : générer une clé API par environnement
+     (`assistant-potager-dev`, `assistant-potager-prod`) — le quota gratuit
+     de 300 mails/jour est partagé entre toutes les clés d'un même compte
+   - **Expéditeurs, domaine, IP → Expéditeurs → Ajouter un expéditeur** :
+     `noreply@potager.eremy.fr`, nom affiché `Assistant Potager`
+   - Sur la popup "Authentifier votre domaine maintenant ?" → **"Reporter à
+     plus tard"** (l'authentification complète du domaine — SPF/DKIM via
+     enregistrements DNS individuels, jamais la délégation NS qui casserait
+     le site web — est une amélioration de délivrabilité optionnelle, pas un
+     prérequis)
+   - Cliquer le lien de confirmation reçu sur `noreply@potager.eremy.fr`
+     (voir étape ImprovMX ci-dessous pour pouvoir le recevoir)
+
+2. **Compte ImprovMX** (improvmx.com, gratuit) — redirection de mail, sans
+   héberger de vraie boîte :
+   - **Add domain** → `potager.eremy.fr`
+   - Récupérer les enregistrements `MX` (x2, priorités 10/20) et `TXT` (SPF)
+     affichés par ImprovMX
+   - Les ajouter dans la zone DNS Scaleway (voir étape 3), avec `Name` =
+     `potager` (pas le domaine complet — Scaleway complète avec `.eremy.fr`)
+   - Configurer l'alias `noreply` (ou `*`) → adresse Gmail personnelle de
+     réception
+
+3. **Zone DNS Scaleway** (console.scaleway.com → Domains & Web Hosting →
+   Domains & DNS → `eremy.fr` → onglet **DNS Zones**) :
+   - Ajouter les enregistrements MX/TXT d'ImprovMX (étape 2) sur le nom
+     `potager`, **sans toucher** à l'enregistrement `A` existant qui pointe
+     `potager.eremy.fr` vers le serveur Hetzner
+   - Le domaine lui-même (registrar + zone DNS) reste chez Scaleway même si
+     rien d'autre n'y est hébergé — ne pas chercher ce domaine côté Hetzner
+
+4. **Variables d'environnement** à renseigner dans `.env.dev` / `.env.prod`
+   (jamais commitées, cf. `.gitignore`) :
+   ```
+   BREVO_API_KEY=<clé générée à l'étape 1, une par environnement>
+   EMAIL_FROM=noreply@potager.eremy.fr
+   EMAIL_FROM_NOM=Assistant Potager
+   FRONTEND_URL=<URL de la PWA — http://localhost:3000 en dev>
+   ```
+   `BREVO_API_KEY` vide → mode dégradé (`app/services/email.py` logue le
+   lien de vérification au lieu d'appeler l'API), utilisable sans aucun des
+   comptes ci-dessus tant qu'un envoi réel n'est pas nécessaire.
+
+5. **Migration BDD** : `migrations/migration_v24.sql` (colonnes
+   `verification_token_*` sur `users`) doit être rejouée si la base est
+   reconstruite de zéro — `update_dev.ps1` s'en charge automatiquement en dev.
+
 ## Déploiement & Docker
 
 ### ⚠️ IMPORTANT — Protocole de déploiement

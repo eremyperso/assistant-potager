@@ -58,8 +58,12 @@ def app_client(_auth_engine, monkeypatch):
         yield c
 
 
-def _creer_utilisateur(test_db, email="jardinier@example.com", mot_de_passe="motdepasse123"):
+def _creer_utilisateur(test_db, email="jardinier@example.com", mot_de_passe="motdepasse123", verifie=False):
     user = svc_auth.inscrire_utilisateur(test_db, email, mot_de_passe)
+    if verifie:
+        user.email_verifie = True
+        test_db.commit()
+        test_db.refresh(user)
     return user
 
 
@@ -99,7 +103,7 @@ def test_us044_ca1_email_invalide_rejete(app_client):
 # ── CA2 — Connexion ─────────────────────────────────────────────────────────
 
 def test_us044_ca2_connexion_reussie_renvoie_access_et_refresh_token(app_client, test_db):
-    _creer_utilisateur(test_db)
+    _creer_utilisateur(test_db, verifie=True)
 
     resp = app_client.post("/auth/login", json={
         "email": "jardinier@example.com",
@@ -262,6 +266,151 @@ def test_us044_ca8_rate_limit_register_bloque_apres_n_tentatives(app_client):
             "email": f"user{i}@example.com",
             "mot_de_passe": "motdepasse123",
         })
+        statuses.append(resp.status_code)
+
+    assert 429 in statuses
+
+
+# ── CA9 — Envoi de l'e-mail de vérification à l'inscription ───────────────
+
+def test_us044_ca9_inscription_envoie_email_verification(app_client, test_db):
+    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+        resp = app_client.post("/auth/register", json={
+            "email": "jardinier@example.com",
+            "mot_de_passe": "motdepasse123",
+        })
+    assert resp.status_code == 201
+    mock_envoi.assert_called_once()
+    destinataire, token = mock_envoi.call_args[0]
+    assert destinataire == "jardinier@example.com"
+    assert token  # valeur brute non vide
+
+
+def test_us044_ca9_compte_cree_non_verifie_avec_token_hache(app_client, test_db):
+    with patch("main.svc_email.envoyer_email_verification"):
+        app_client.post("/auth/register", json={
+            "email": "jardinier@example.com",
+            "mot_de_passe": "motdepasse123",
+        })
+
+    user = test_db.query(User).filter(User.email == "jardinier@example.com").first()
+    assert user.email_verifie is False
+    assert user.verification_token_hash is not None
+    assert user.verification_token_expire_le is not None
+
+
+# ── CA10 — Vérification du lien reçu par e-mail ────────────────────────────
+
+def _inscrire_et_capturer_token(app_client) -> str:
+    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+        app_client.post("/auth/register", json={
+            "email": "jardinier@example.com",
+            "mot_de_passe": "motdepasse123",
+        })
+    return mock_envoi.call_args[0][1]
+
+
+def test_us044_ca10_verification_reussie_marque_email_verifie(app_client, test_db):
+    token = _inscrire_et_capturer_token(app_client)
+
+    resp = app_client.get("/auth/verify-email", params={"token": token})
+    assert resp.status_code == 200
+
+    user = test_db.query(User).filter(User.email == "jardinier@example.com").first()
+    assert user.email_verifie is True
+
+
+def test_us044_ca10_token_invalide_renvoie_erreur_explicite(app_client):
+    resp = app_client.get("/auth/verify-email", params={"token": "ceci-nest-pas-un-token-connu"})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "TOKEN_INVALID"
+
+
+def test_us044_ca10_token_expire_renvoie_erreur_explicite(app_client, test_db):
+    token = _inscrire_et_capturer_token(app_client)
+    user = test_db.query(User).filter(User.email == "jardinier@example.com").first()
+    user.verification_token_expire_le = user.verification_token_expire_le.replace(year=2000)
+    test_db.commit()
+
+    resp = app_client.get("/auth/verify-email", params={"token": token})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "TOKEN_EXPIRED"
+
+
+def test_us044_ca10_token_usage_unique_rejeu_refuse(app_client):
+    token = _inscrire_et_capturer_token(app_client)
+
+    premier = app_client.get("/auth/verify-email", params={"token": token})
+    assert premier.status_code == 200
+
+    second = app_client.get("/auth/verify-email", params={"token": token})
+    assert second.status_code == 400
+    assert second.json()["detail"]["code"] == "TOKEN_INVALID"
+
+
+# ── CA11 — Connexion bloquée tant que l'e-mail n'est pas vérifié ──────────
+
+def test_us044_ca11_connexion_refusee_sans_verification(app_client, test_db):
+    _creer_utilisateur(test_db)  # email_verifie=False par défaut
+
+    resp = app_client.post("/auth/login", json={
+        "email": "jardinier@example.com",
+        "mot_de_passe": "motdepasse123",
+    })
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "EMAIL_NOT_VERIFIED"
+
+
+def test_us044_ca11_connexion_autorisee_apres_verification(app_client, test_db):
+    token = _inscrire_et_capturer_token(app_client)
+    app_client.get("/auth/verify-email", params={"token": token})
+
+    resp = app_client.post("/auth/login", json={
+        "email": "jardinier@example.com",
+        "mot_de_passe": "motdepasse123",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["access_token"]
+
+
+# ── CA12 — Renvoi de l'e-mail de vérification ──────────────────────────────
+
+def test_us044_ca12_resend_envoie_un_nouveau_token(app_client, test_db):
+    ancien_token = _inscrire_et_capturer_token(app_client)
+
+    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+        resp = app_client.post("/auth/resend-verification", json={"email": "jardinier@example.com"})
+    assert resp.status_code == 200
+    mock_envoi.assert_called_once()
+    nouveau_token = mock_envoi.call_args[0][1]
+    assert nouveau_token != ancien_token
+
+    # L'ancien token est invalidé, le nouveau fonctionne
+    assert app_client.get("/auth/verify-email", params={"token": ancien_token}).status_code == 400
+    assert app_client.get("/auth/verify-email", params={"token": nouveau_token}).status_code == 200
+
+
+def test_us044_ca12_resend_compte_inconnu_meme_reponse_generique(app_client):
+    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+        resp = app_client.post("/auth/resend-verification", json={"email": "inconnu@example.com"})
+    assert resp.status_code == 200
+    mock_envoi.assert_not_called()
+
+
+def test_us044_ca12_resend_compte_deja_verifie_meme_reponse_generique(app_client, test_db):
+    token = _inscrire_et_capturer_token(app_client)
+    app_client.get("/auth/verify-email", params={"token": token})
+
+    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+        resp = app_client.post("/auth/resend-verification", json={"email": "jardinier@example.com"})
+    assert resp.status_code == 200
+    mock_envoi.assert_not_called()
+
+
+def test_us044_ca12_rate_limit_resend_bloque_apres_n_tentatives(app_client):
+    statuses = []
+    for _ in range(10):
+        resp = app_client.post("/auth/resend-verification", json={"email": "jardinier@example.com"})
         statuses.append(resp.status_code)
 
     assert 429 in statuses

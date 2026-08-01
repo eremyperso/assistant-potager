@@ -5,6 +5,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-001] Ajout modèle CultureConfig (table culture_config)
 [US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
 [US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
+[US-044] Ajout token de vérification d'e-mail (verification_token_*) sur User
 [US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
 [US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
 [US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
@@ -28,6 +29,14 @@ class User(Base):
     # [US-044] Credentials web — NULL pour un compte Telegram-only (US-045)
     mot_de_passe_hash = Column(String(255), nullable=True)
     email_verifie     = Column(Boolean, default=False, nullable=False)
+
+    # [US-044] Token de vérification d'e-mail (CA9-CA12) — seul le hash est
+    # stocké, jamais la valeur brute (envoyée uniquement dans l'e-mail Brevo).
+    # Usage unique : verification_token_utilise_le suit le même pattern que
+    # LiaisonTelegram.utilise_le (US-045).
+    verification_token_hash      = Column(String(255), nullable=True)
+    verification_token_expire_le = Column(DateTime, nullable=True)
+    verification_token_utilise_le = Column(DateTime, nullable=True)
 
     # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
     # encore été fait (sélection auto silencieuse si un seul potager, sinon

@@ -11,7 +11,16 @@ import Pepiniere from './views/Pepiniere.jsx'
 import Historique from './views/Historique.jsx'
 import Stats     from './views/Stats.jsx'
 import Auth      from './views/Auth.jsx'
+import VerifyEmail from './views/VerifyEmail.jsx'
 import AucunPotager from './views/AucunPotager.jsx'
+
+// [US-044 / CA10] Lien de vérification reçu par e-mail : /verifier-email?token=...
+// Pas de librairie de routage dans ce projet — détection manuelle du chemin,
+// indépendante de AuthContext (l'utilisateur n'est pas encore connecté ici).
+function getVerificationToken() {
+  if (window.location.pathname !== '/verifier-email') return null
+  return new URLSearchParams(window.location.search).get('token')
+}
 
 const VIEWS = {
   plan:       { title: 'Plan des parcelles', Component: Plan      },
@@ -73,6 +82,20 @@ function AppGate() {
 }
 
 export default function App() {
+  const [token, setToken] = useState(getVerificationToken)
+
+  if (token) {
+    return (
+      <VerifyEmail
+        token={token}
+        onDone={() => {
+          window.history.replaceState({}, '', '/')
+          setToken(null)
+        }}
+      />
+    )
+  }
+
   return (
     <AuthContextProvider>
       <AppGate />
