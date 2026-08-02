@@ -7,6 +7,7 @@ const AuthContext = createContext(null)
 export function AuthContextProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(authApi.hasSession)
   const [error, setError] = useState(null)
+  const [errorCode, setErrorCode] = useState(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -20,12 +21,14 @@ export function AuthContextProvider({ children }) {
   const login = useCallback(async (email, motDePasse) => {
     setLoading(true)
     setError(null)
+    setErrorCode(null)
     try {
       await authApi.login(email, motDePasse)
       setIsAuthenticated(true)
       return true
     } catch (e) {
       setError(e.message)
+      setErrorCode(e.code || null)
       return false
     } finally {
       setLoading(false)
@@ -35,6 +38,7 @@ export function AuthContextProvider({ children }) {
   const register = useCallback(async (email, motDePasse) => {
     setLoading(true)
     setError(null)
+    setErrorCode(null)
     try {
       await authApi.register(email, motDePasse)
       return true
@@ -46,13 +50,26 @@ export function AuthContextProvider({ children }) {
     }
   }, [])
 
+  // [CA12] Renvoie un e-mail de vérification — réponse toujours générique côté API
+  const resendVerification = useCallback(async (email) => {
+    setLoading(true)
+    try {
+      await authApi.resendVerification(email)
+      return true
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const logout = useCallback(() => {
     clearTokens()
     setIsAuthenticated(false)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, loading, error, login, register, logout }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated, loading, error, errorCode, login, register, logout, resendVerification }}
+    >
       {children}
     </AuthContext.Provider>
   )

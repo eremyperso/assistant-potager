@@ -8,6 +8,8 @@ Hachage des mots de passe (passlib/bcrypt), émission et vérification des JWT
 aux autres services d'app/services/) : il s'exécute AVANT qu'un contexte
 utilisateur n'existe — c'est justement lui qui le produit.
 """
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -22,6 +24,9 @@ _pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 _TOKEN_TYPE_ACCESS = "access"
 _TOKEN_TYPE_REFRESH = "refresh"
+
+# [CA9] Durée de validité du token de vérification d'e-mail
+_VERIFICATION_TOKEN_TTL = timedelta(hours=24)
 
 
 class EmailDejaUtiliseError(Exception):
@@ -38,6 +43,18 @@ class TokenExpireError(Exception):
 
 class TokenInvalideError(Exception):
     """[CA5] Token JWT absent, malformé, signature invalide, ou mauvais type."""
+
+
+class EmailNonVerifieError(Exception):
+    """[CA11] Identifiants corrects mais e-mail pas encore vérifié — levée sur /auth/login."""
+
+
+class TokenVerificationInvalideError(Exception):
+    """[CA10] Token de vérification d'e-mail inconnu, déjà utilisé ou malformé."""
+
+
+class TokenVerificationExpireError(Exception):
+    """[CA10] Token de vérification d'e-mail expiré (> 24h)."""
 
 
 def hash_password(mot_de_passe: str) -> str:
@@ -110,16 +127,69 @@ def inscrire_utilisateur(db: Session, email: str, mot_de_passe: str) -> User:
 
 
 def authentifier_utilisateur(db: Session, email: str, mot_de_passe: str) -> User:
-    """[CA2] Vérifie les identifiants — lève IdentifiantsInvalidesError sinon."""
+    """[CA2] Vérifie les identifiants — lève IdentifiantsInvalidesError sinon.
+    [CA11] Lève EmailNonVerifieError si l'e-mail n'a pas encore été vérifié
+    (vérifié après le mot de passe : un mauvais mot de passe reste un 401,
+    jamais un indice sur l'état de vérification du compte)."""
     email_normalise = email.strip().lower()
     user = db.query(User).filter(User.email == email_normalise).first()
     if user is None or not user.mot_de_passe_hash:
         raise IdentifiantsInvalidesError("E-mail ou mot de passe incorrect")
     if not verifier_mot_de_passe(mot_de_passe, user.mot_de_passe_hash):
         raise IdentifiantsInvalidesError("E-mail ou mot de passe incorrect")
+    if not user.email_verifie:
+        raise EmailNonVerifieError("E-mail non vérifié")
     return user
 
 
 def obtenir_utilisateur_par_id(db: Session, user_id: int) -> Optional[User]:
     """[CA4] Résout l'utilisateur à partir du `sub` d'un access token décodé."""
     return db.query(User).filter(User.id == user_id).first()
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def demarrer_verification_email(db: Session, user: User) -> str:
+    """[CA9] Génère un token de vérification aléatoire (24h), stocke uniquement
+    son hash et renvoie la valeur brute — à transmettre exclusivement dans
+    l'e-mail envoyé (app/services/email.py), jamais loggée ni renvoyée en HTTP."""
+    token_brut = secrets.token_urlsafe(32)
+    user.verification_token_hash = _hash_token(token_brut)
+    user.verification_token_expire_le = datetime.utcnow() + _VERIFICATION_TOKEN_TTL
+    user.verification_token_utilise_le = None
+    db.commit()
+    return token_brut
+
+
+def verifier_email(db: Session, token: str) -> User:
+    """[CA10] Valide un token de vérification et marque le compte comme vérifié.
+    Usage unique (verification_token_utilise_le) : un rejeu du même token
+    retombe sur TokenVerificationInvalideError, jamais une seconde validation
+    silencieuse."""
+    token_hash = _hash_token(token)
+    user = db.query(User).filter(User.verification_token_hash == token_hash).first()
+    if user is None or user.verification_token_utilise_le is not None:
+        raise TokenVerificationInvalideError("Lien de vérification invalide")
+
+    if user.verification_token_expire_le is None or datetime.utcnow() > user.verification_token_expire_le:
+        raise TokenVerificationExpireError("Lien de vérification expiré")
+
+    user.email_verifie = True
+    user.verification_token_utilise_le = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def renvoyer_verification_email(db: Session, email: str) -> Optional[str]:
+    """[CA12] Régénère un token si un compte existe pour cet e-mail et n'est
+    pas encore vérifié. Renvoie None sinon (compte inconnu ou déjà vérifié) —
+    l'appelant doit renvoyer la même réponse générique dans tous les cas
+    (anti-énumération, cohérent avec CA7)."""
+    email_normalise = email.strip().lower()
+    user = db.query(User).filter(User.email == email_normalise).first()
+    if user is None or user.email_verifie:
+        return None
+    return demarrer_verification_email(db, user)

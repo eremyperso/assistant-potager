@@ -3,11 +3,17 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 
 export default function Auth() {
-  const { login, register, loading, error } = useAuth()
+  const { login, register, loading, error, errorCode, resendVerification } = useAuth()
   const [mode, setMode] = useState('login') // 'login' | 'register'
   const [email, setEmail] = useState('')
   const [motDePasse, setMotDePasse] = useState('')
   const [message, setMessage] = useState(null)
+
+  async function handleResend() {
+    setMessage(null)
+    await resendVerification(email)
+    setMessage('Si ce compte existe, un nouvel e-mail de vérification vient d\'être envoyé.')
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -65,6 +71,16 @@ export default function Auth() {
           />
 
           {error && <p style={{ color: 'var(--g-red)', fontSize: 13 }}>{error}</p>}
+          {errorCode === 'EMAIL_NOT_VERIFIED' && (
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={loading}
+              style={{ color: 'var(--g-acc)', fontSize: 13, textAlign: 'left' }}
+            >
+              Renvoyer l'e-mail de vérification
+            </button>
+          )}
           {message && <p style={{ color: 'var(--g-acc)', fontSize: 13 }}>{message}</p>}
 
           <button

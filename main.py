@@ -10,11 +10,16 @@ Endpoints :
   GET  /historique  → derniers événements avec filtres
 
 Authentification [US-044] :
-  POST /auth/register  → créer un compte (e-mail + mot de passe)
-  POST /auth/login      → connexion → access token (15 min) + refresh token (30 j)
-  POST /auth/refresh    → nouvel access token à partir d'un refresh token valide
+  POST /auth/register            → créer un compte (e-mail + mot de passe)
+  POST /auth/login                → connexion → access token (15 min) + refresh token (30 j)
+  POST /auth/refresh               → nouvel access token à partir d'un refresh token valide
+  GET  /auth/verify-email          → valide le lien de vérification reçu par e-mail (CA9/CA10)
+  POST /auth/resend-verification   → renvoie un e-mail de vérification (CA12)
 Tous les endpoints métier ci-dessus exigent désormais un access token valide
-(en-tête `Authorization: Bearer <token>`), sauf /health.
+(en-tête `Authorization: Bearer <token>`), sauf /health. La connexion est
+refusée (403 EMAIL_NOT_VERIFIED) tant que l'e-mail du compte n'est pas
+vérifié (CA11) — sauf pour les comptes créés avant cette fonctionnalité,
+réputés vérifiés (migration_v24.sql).
 
 Onboarding self-service [US-048] :
   POST   /potagers                              → créer un potager (owner + potager actif)
@@ -58,6 +63,7 @@ from llm.rag import add_to_rag
 from database.models import User
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
+from app.services import email as svc_email
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
@@ -186,6 +192,10 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
 def auth_register(request: Request, req: RegisterRequest):
@@ -199,6 +209,12 @@ def auth_register(request: Request, req: RegisterRequest):
     db = SessionLocal()
     try:
         user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe)
+        # [CA9] Envoi de l'e-mail de vérification — un échec d'envoi (réseau,
+        # API Brevo indisponible) est loggé côté service mais ne fait pas
+        # échouer l'inscription (l'utilisateur peut redemander via
+        # /auth/resend-verification).
+        token = svc_auth.demarrer_verification_email(db, user)
+        svc_email.envoyer_email_verification(user.email, token)
         return {"id": user.id, "email": user.email}
     except svc_auth.EmailDejaUtiliseError:
         db.rollback()
@@ -211,12 +227,18 @@ def auth_register(request: Request, req: RegisterRequest):
 @app.post("/auth/login")
 @limiter.limit("10/minute")
 def auth_login(request: Request, req: LoginRequest):
-    """[CA2] Connexion — renvoie un access token (15 min) et un refresh token (30 j)."""
+    """[CA2] Connexion — renvoie un access token (15 min) et un refresh token (30 j).
+    [CA11] 403 EMAIL_NOT_VERIFIED si l'e-mail du compte n'est pas encore vérifié."""
     db = SessionLocal()
     try:
         user = svc_auth.authentifier_utilisateur(db, req.email, req.mot_de_passe)
     except svc_auth.IdentifiantsInvalidesError:
         raise HTTPException(status_code=401, detail="E-mail ou mot de passe incorrect")
+    except svc_auth.EmailNonVerifieError:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "EMAIL_NOT_VERIFIED", "message": "Vérifiez votre e-mail avant de vous connecter"},
+        )
     finally:
         db.close()
 
@@ -241,6 +263,46 @@ def auth_refresh(req: RefreshRequest):
         "access_token": svc_auth.creer_access_token(int(payload["sub"])),
         "token_type": "bearer",
     }
+
+
+@app.get("/auth/verify-email")
+def auth_verify_email(token: str):
+    """[CA10] Valide le lien de vérification reçu par e-mail (clic direct, GET).
+    Usage unique : un rejeu du même token renvoie la même erreur qu'un token
+    invalide, sans distinction exploitable."""
+    db = SessionLocal()
+    try:
+        svc_auth.verifier_email(db, token)
+        return {"message": "E-mail vérifié avec succès"}
+    except svc_auth.TokenVerificationInvalideError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_INVALID", "message": "Lien de vérification invalide"},
+        )
+    except svc_auth.TokenVerificationExpireError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_EXPIRED", "message": "Lien de vérification expiré, demandez-en un nouveau"},
+        )
+    finally:
+        db.close()
+
+
+@app.post("/auth/resend-verification")
+@limiter.limit("5/minute")
+def auth_resend_verification(request: Request, req: ResendVerificationRequest):
+    """[CA12] Renvoie un e-mail de vérification si le compte existe et n'est
+    pas encore vérifié. Réponse générique identique dans tous les cas
+    (compte inconnu, déjà vérifié, ou renvoi effectif) — anti-énumération,
+    cohérent avec CA7."""
+    db = SessionLocal()
+    try:
+        token = svc_auth.renvoyer_verification_email(db, req.email)
+        if token:
+            svc_email.envoyer_email_verification(req.email, token)
+    finally:
+        db.close()
+    return {"message": "Si un compte existe pour cet e-mail, un lien de vérification a été envoyé"}
 
 
 @app.post("/auth/lien/generer-code")
@@ -1123,3 +1185,18 @@ def historique(
         }
     finally:
         db.close()
+
+
+# ── Repli SPA — sert index.html pour les routes front sans backend (US-044) ────
+# Enregistrée en dernier : toute route API définie plus haut (health, auth/*,
+# stats, historique...) est essayée en premier par Starlette (ordre
+# d'enregistrement) ; seuls les chemins non reconnus (ex. /verifier-email,
+# ouvert depuis le lien de vérification e-mail) retombent ici.
+if os.path.isdir(_DIST):
+    @app.get("/{chemin_complet:path}", include_in_schema=False)
+    def serve_frontend_spa_fallback(chemin_complet: str):
+        return FileResponse(os.path.join(_DIST, "index.html"))
+elif os.path.isdir(_STATIC):
+    @app.get("/{chemin_complet:path}", include_in_schema=False)
+    def serve_pwa_spa_fallback(chemin_complet: str):
+        return FileResponse(os.path.join(_STATIC, "index.html"))
