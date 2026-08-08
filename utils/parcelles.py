@@ -574,20 +574,33 @@ def calcul_occupation_parcelles(db: Session, date_ref: Optional[_date] = None) -
             recoltes_sans_variete[c] = recoltes_sans_variete.get(c, 0) + (q or 0)
 
     # Totaux plantés par culture (toutes varietes) pour distribution proportionnelle
+    # des pertes/récoltes "sans variété", et par (culture, variete) — toutes parcelles
+    # confondues — pour distribuer les pertes/récoltes "avec variété" au prorata de
+    # chaque parcelle (une variété peut être répartie sur plusieurs parcelles : la
+    # perte ne doit être imputée qu'à hauteur de la part plantée sur CETTE parcelle,
+    # jamais appliquée intégralement à chaque parcelle qui porte cette variété).
     total_plante_par_culture: Dict[str, float] = {}
+    total_plante_par_variete: Dict[tuple, float] = {}
     for (c, v, _p, _u), d in groupes.items():
         total_plante_par_culture[c] = total_plante_par_culture.get(c, 0) + d["nb_plants"]
+        total_plante_par_variete[(c, v)] = total_plante_par_variete.get((c, v), 0) + d["nb_plants"]
 
     def _perte_pour_groupe(culture: str, variete: str, nb_plants: float) -> float:
         """Retourne la part de perte + récolte à déduire pour ce groupe."""
         total_c = total_plante_par_culture.get(culture, 0)
+        total_v = total_plante_par_variete.get((culture, variete), 0)
 
-        perte = pertes_var.get((culture, variete), 0)
+        perte = 0.0
+        perte_variete = pertes_var.get((culture, variete), 0)
+        if perte_variete > 0 and total_v > 0:
+            perte += perte_variete * (nb_plants / total_v)
         perte_globale = pertes_sans_variete.get(culture, 0)
         if perte_globale > 0 and total_c > 0:
             perte += perte_globale * (nb_plants / total_c)
 
-        perte += recoltes_var.get((culture, variete), 0)
+        recolte_variete = recoltes_var.get((culture, variete), 0)
+        if recolte_variete > 0 and total_v > 0:
+            perte += recolte_variete * (nb_plants / total_v)
         recolte_globale = recoltes_sans_variete.get(culture, 0)
         if recolte_globale > 0 and total_c > 0:
             perte += recolte_globale * (nb_plants / total_c)
