@@ -1,4 +1,9 @@
 
+## [v3.14.1] — 2026-08-08
+
+### 🐛 Corrections
+- Corrige le plan d'occupation des parcelles (dashboard) qui pouvait afficher un stock à zéro sur plusieurs parcelles alors que le stock réel restait positif (`/stats` Telegram) — une perte avec variété était déduite intégralement de CHAQUE parcelle portant cette variété au lieu d'être répartie au prorata de la quantité plantée sur chacune (ex : perte de 10 basilics sur une parcelle faisait disparaître à tort 10 basilics sur une autre parcelle non touchée)
+
 ## [v3.14.0] — 2026-07-10
 
 ### 🚀 Nouveautés
