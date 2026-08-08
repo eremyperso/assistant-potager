@@ -598,6 +598,46 @@ class TestPerteDeduiteDuPlan:
         nb_b = next((c["nb_plants"] for c in b_cultures if c["culture"] == "tomate"), 0)
         assert nb_a + nb_b == 18.0  # 20 - 2 pertes au total
 
+    def test_perte_avec_variete_partagee_entre_parcelles_distribuee_au_prorata(self, test_db) -> None:
+        """[fix bug prod v3.14] Une perte AVEC variété ne doit être imputée qu'au
+        prorata de chaque parcelle plantée de cette variété — jamais appliquée
+        intégralement à chaque parcelle qui la porte (sinon une perte de 10 sur une
+        parcelle de 10 basilics fait disparaître aussi les 10 basilics d'une autre
+        parcelle non touchée, alors que /stats Telegram calcule le bon total global)."""
+        db = test_db
+        db.add(CultureConfig(nom="basilic", type_organe_recolte="végétatif"))
+        a = Parcelle(nom="A", nom_normalise="a", ordre=1, actif=True)
+        b = Parcelle(nom="B", nom_normalise="b", ordre=2, actif=True)
+        db.add(a); db.add(b)
+        db.commit()
+
+        today = datetime.now()
+        db.add(Evenement(
+            type_action="plantation", culture="basilic", variete="grand vert",
+            quantite=10.0, rang=1, unite="plants",
+            parcelle_id=a.id, date=today - timedelta(days=10),
+        ))
+        db.add(Evenement(
+            type_action="plantation", culture="basilic", variete="grand vert",
+            quantite=10.0, rang=1, unite="plants",
+            parcelle_id=b.id, date=today - timedelta(days=10),
+        ))
+        # Perte de 10 plants, tous sur la parcelle A, même variété que B.
+        db.add(Evenement(
+            type_action="perte", culture="basilic", variete="grand vert",
+            quantite=10.0, unite="plants", parcelle_id=a.id,
+        ))
+        db.commit()
+
+        result = calcul_occupation_parcelles(db)
+        a_cultures = result.get("A", [])
+        b_cultures = result.get("B", [])
+        nb_a = next((c["nb_plants"] for c in a_cultures if c["culture"] == "basilic"), 0)
+        nb_b = next((c["nb_plants"] for c in b_cultures if c["culture"] == "basilic"), 0)
+        # Le total doit rester cohérent avec /stats (20 plantés - 10 perdus = 10),
+        # pas 0 (bug : la perte était comptée une fois par parcelle partageant la variété).
+        assert nb_a + nb_b == 10.0
+
 
 class TestSemisPleineTerre:
     def test_semis_pleine_terre_dans_plan(self, db_with_semis_pleine_terre) -> None:
