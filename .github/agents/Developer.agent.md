@@ -44,3 +44,4 @@ Quand tu reçois une User Story :
 - Chaque fonction métier doit avoir au moins un test unitaire
 - Mocker systématiquement les appels externes (Telegram, Groq, PostgreSQL)
 - Toujours vérifier si une migration SQL existe déjà avant d'en créer une nouvelle
+- Pour toute US avec impact visuel/UI (PWA/dashboard) : avant de la marquer comme terminée, vérifier visuellement le rendu via chrome-devtools sur au moins la résolution mobile (375px). C'est un auto-contrôle rapide, pas la validation finale — elle reste du ressort du QA-tester.
