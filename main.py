@@ -349,6 +349,11 @@ def lister_potagers(user: User = Depends(get_current_user)):
                 potager_actif_id = svc_potager_actif.resoudre_tenant_context(db, user.id).potager_id
             except svc_potager_actif.AucunPotagerError:
                 pass
+        # [US-054 / CA1] Compteurs affichés dans le sélecteur de potager —
+        # deux requêtes groupées, indépendantes du nombre de potagers.
+        ids = [p.id for p in potagers]
+        nb_parcelles = svc_potager_actif.compter_parcelles_par_potager(db, ids)
+        nb_membres = svc_potager_actif.compter_membres_par_potager(db, ids)
         return {
             "potagers": [
                 {
@@ -358,6 +363,8 @@ def lister_potagers(user: User = Depends(get_current_user)):
                     # [US-048] rôle exposé pour que le frontend affiche la gestion
                     # des membres (inviter/retirer) uniquement aux owners.
                     "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
+                    "nb_parcelles": nb_parcelles.get(p.id, 0),
+                    "nb_membres": nb_membres.get(p.id, 0),
                 }
                 for p in potagers
             ],

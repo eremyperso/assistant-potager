@@ -1,4 +1,30 @@
 
+## [v3.26.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'interface web autour d'une navigation à deux niveaux : les six sections (Tableau de bord, Plan, Cultures, Pépinière, Stocks, Journal) passent dans le bandeau haut sur grand écran, et basculent en barre d'onglets basse sous 900 px (US-053)
+- Ajoute des tuiles de sous-navigation sous le titre de page pour le Tableau de bord (Vue d'ensemble / Statistiques) et le Plan (Parcelles / Vue plan / Rotation) (US-053)
+- Ajoute un en-tête de page avec titre et description sur chaque écran, absent jusqu'ici (US-053)
+- Ouvre l'application sur le Tableau de bord plutôt que sur le Plan ; Cultures, Vue plan et Rotation annoncent explicitement leur arrivée prochaine plutôt que d'être des liens morts (US-053)
+- Transforme le nom du potager en menu déroulant listant vos potagers avec leur rôle, leur nombre de parcelles et de membres, suivi de « Rejoindre un potager » et « Tous mes potagers » (US-054)
+- Adopte une palette verte unifiée, déclinée en thème clair et sombre (US-052)
+- Renomme « Historique » en « Journal » dans l'interface web, en cohérence avec le vocabulaire du bot Telegram (US-053)
+
+### 🐛 Corrections
+- Corrige le menu « Plus » de la barre d'onglets : un premier clic sur un autre onglet ne faisait que refermer le menu au lieu de changer de section (US-053)
+- Corrige les règles d'adaptation des composants, qui n'étaient pas compilées et restaient donc sans effet — le bandeau d'information, les cartes et les tuiles de statistiques ne se réagençaient jamais dans un conteneur étroit (US-052)
+- Corrige la barre de progression, invisible dès qu'une couleur explicite lui était passée (US-052)
+
+### 🔧 Améliorations techniques
+- Ajoute `frontend/src/components/ui/` : 13 composants réutilisables (Card, Btn, Badge, Stat, ProgressBar, MonthStrip, SearchField, Select, TileNav, InfoBanner, Tip, Placeholder, Pop), jusqu'ici dupliqués vue par vue (US-052)
+- Ajoute le plugin `@tailwindcss/container-queries` et la convention associée, gravée dans `CLAUDE.md` : breakpoints d'écran réservés à la structure de page, container queries par défaut pour tout composant réutilisable (US-052)
+- Ajoute `compter_parcelles_par_potager` et `compter_membres_par_potager` dans `app/services/potager_actif.py`, en requêtes groupées pour éviter un N+1, et expose `nb_parcelles` / `nb_membres` sur `GET /potagers` (US-054)
+- Conserve temporairement les anciens tokens `--g-*` en alias vers la nouvelle palette, le temps que chaque écran soit migré — dette suivie dans `docs/ANALYSE_REFONTE_UI_WEB_2026.md` (US-052)
+- Charge les pages de contrôle visuel `/design-system` et `/shell` à la demande : importées systématiquement, leurs données de démonstration remplaçaient les vrais potagers de l'utilisateur dans l'application (US-054)
+
+### ⚠️ Breaking changes
+- Aucun pour les utilisateurs. Côté frontend, `TopBar` et `BottomNav` changent de signature (`view` / `onGo` au lieu de `title` / `active` / `onChange`) et la contrainte `max-w-md` disparaît : les écrans non encore refondus s'étirent sur toute la largeur en desktop jusqu'à leur reprise
+
 ## [v3.25.1] — 2026-08-08
 
 ### 🐛 Corrections

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Moon, Sun, LogOut, Send, Sprout, Users, Leaf } from 'lucide-react'
+import { RefreshCw, Moon, Sun, LogOut, Send, Users, Leaf } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { NAV, NAV_OF } from '../navigation.js'
 import LierTelegram from './LierTelegram.jsx'
-import PotagerSelector from './PotagerSelector.jsx'
+import PotagerMenu from './PotagerMenu.jsx'
 import GestionMembres from './GestionMembres.jsx'
 
 /**
@@ -26,7 +26,6 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
   const { potagerActif } = usePotager()
   const [version, setVersion] = useState(null)
   const [showLierTelegram, setShowLierTelegram] = useState(false)
-  const [showPotagerSelector, setShowPotagerSelector] = useState(false)
   const [showGestionMembres, setShowGestionMembres] = useState(false)
 
   useEffect(() => {
@@ -49,17 +48,9 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
           <span className="font-serif text-[17.5px] font-bold tracking-tight whitespace-nowrap hidden min-[1340px]:inline">
             Mon Potager
           </span>
-          {potagerActif && (
-            // [US-048 / CA4] Seul accès permanent à « rejoindre un potager par code ».
-            <button
-              onClick={() => setShowPotagerSelector(true)}
-              aria-label="Changer de potager / rejoindre un potager"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-header-glass min-w-0"
-            >
-              <Sprout size={15} className="shrink-0" />
-              <span className="text-[13px] font-semibold truncate">{potagerActif.nom}</span>
-            </button>
-          )}
+          {/* [US-054] Menu déroulant de bascule/adhésion — reste le seul accès
+              permanent au code d'invitation (cf. US-048 / CA4). */}
+          <PotagerMenu />
         </div>
 
         {/* Navigation principale — desktop uniquement [CA1] */}
@@ -127,7 +118,6 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
       </div>
 
       {showLierTelegram && <LierTelegram onClose={() => setShowLierTelegram(false)} />}
-      {showPotagerSelector && <PotagerSelector onClose={() => setShowPotagerSelector(false)} />}
       {showGestionMembres && <GestionMembres onClose={() => setShowGestionMembres(false)} />}
     </header>
   )

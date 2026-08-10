@@ -39,7 +39,12 @@ export function CardHead({ icon: Icon, tint = 'brand', title, sub, right, classN
         <div className="font-serif font-semibold text-[17px] text-txt tracking-tight truncate">{title}</div>
         {sub && <div className="text-[12.5px] text-txt3 mt-px truncate">{sub}</div>}
       </div>
-      {right && <div className="@max-[24rem]/card:basis-full flex items-center gap-2">{right}</div>}
+      {/* Mobile-first : la zone d'actions passe à la ligne dans une carte étroite,
+          et revient en ligne dès 24rem de large (variantes `min-width` uniquement,
+          cf. commentaire dans InfoBanner). */}
+      {right && (
+        <div className="flex items-center gap-2 basis-full @[24rem]/card:basis-auto">{right}</div>
+      )}
     </div>
   )
 }

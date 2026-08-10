@@ -19,7 +19,9 @@ export function Stat({ icon: Icon, tint = 'brand', value, unit, label, tip, clas
     <div
       className={`@container/stat bg-card border border-border rounded-2xl shadow-card px-4 py-3.5 ${className}`}
     >
-      <div className="flex items-center gap-3 @max-[13rem]/stat:flex-col @max-[13rem]/stat:items-start">
+      {/* Mobile-first : empilé dans une tuile étroite, en ligne dès 13rem de large
+          (variantes `min-width` uniquement, cf. commentaire dans InfoBanner). */}
+      <div className="flex flex-col items-start gap-3 @[13rem]/stat:flex-row @[13rem]/stat:items-center">
         {Icon && (
           <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${TINTS[tint]}`}>
             <Icon size={21} />

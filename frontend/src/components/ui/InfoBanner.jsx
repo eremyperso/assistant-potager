@@ -43,9 +43,9 @@ export function InfoBanner({
           {body}
         </div>
       </div>
-      {action && (
-        <div className="@max-[620px]/banner:basis-full @max-[620px]/banner:mt-1 flex">{action}</div>
-      )}
+      {/* La croix reste sur la première ligne, à droite du texte : elle est placée
+          avant l'action dans le DOM, sinon le passage à la ligne de celle-ci
+          l'entraînerait sur une troisième ligne. */}
       {dismissible && (
         <button
           onClick={() => {
@@ -53,10 +53,17 @@ export function InfoBanner({
             onClose?.()
           }}
           aria-label="Fermer"
-          className="shrink-0 p-0.5"
+          className="shrink-0 p-0.5 @[620px]/banner:order-last"
         >
           <X size={16} className={t.icon} />
         </button>
+      )}
+      {action && (
+        // Mobile-first : pleine largeur sous le texte par défaut, puis remonté en
+        // ligne dès 620px de large. Le plugin container-queries de Tailwind 3 ne
+        // fournit que des variantes `min-width` — écrire `@max-[620px]:…` ne
+        // génère aucune règle et ne produit donc aucun effet.
+        <div className="flex basis-full mt-1 @[620px]/banner:basis-auto @[620px]/banner:mt-0">{action}</div>
       )}
     </div>
   )
