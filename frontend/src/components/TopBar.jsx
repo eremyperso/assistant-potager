@@ -1,79 +1,131 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Moon, Sun, LogOut, Send, Sprout, Users } from 'lucide-react'
+import { RefreshCw, Moon, Sun, LogOut, Send, Sprout, Users, Leaf } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
+import { NAV, NAV_OF } from '../navigation.js'
 import LierTelegram from './LierTelegram.jsx'
 import PotagerSelector from './PotagerSelector.jsx'
 import GestionMembres from './GestionMembres.jsx'
 
-export default function TopBar({ title, onRefresh, loading }) {
+/**
+ * Bandeau supérieur [US-053 / CA1].
+ *
+ * Porte la navigation principale à partir de 900px de large ; en dessous, la
+ * navigation passe dans la barre d'onglets basse (`BottomNav`) et seul le
+ * bandeau d'identité + actions reste ici.
+ *
+ * Les actions transverses (potager actif, actualisation, thème, Telegram,
+ * membres, déconnexion) sont conservées telles quelles : leur regroupement en
+ * menus « Potager » et « Compte » relève de US-054 / US-055.
+ */
+export default function TopBar({ view, onGo, onRefresh, loading }) {
   const { theme, toggle } = useTheme()
   const { logout } = useAuth()
-  const { potagers, potagerActif } = usePotager()
+  const { potagerActif } = usePotager()
   const [version, setVersion] = useState(null)
   const [showLierTelegram, setShowLierTelegram] = useState(false)
   const [showPotagerSelector, setShowPotagerSelector] = useState(false)
   const [showGestionMembres, setShowGestionMembres] = useState(false)
 
   useEffect(() => {
-    api.health().then(h => setVersion(h?.version)).catch(() => {})
+    api.health().then((h) => setVersion(h?.version)).catch(() => {})
   }, [])
 
+  const navId = NAV_OF[view]
+
   return (
-    <header className="flex items-center justify-between px-4 bg-g-sur border-b border-g-brd" style={{ height: 54, flexShrink: 0 }}>
-      <span className="text-xl font-bold text-g-pri font-serif tracking-tight leading-none">{title}</span>
-      <div className="flex items-center gap-4 text-g-sec">
-        {potagerActif && (
-          // [US-048 / CA4] Toujours cliquable, même avec un seul potager — c'est
-          // aussi le seul accès à "rejoindre un potager par code" hors du tout
-          // premier onboarding (cf. PotagerSelector.jsx).
-          <button
-            onClick={() => setShowPotagerSelector(true)}
-            aria-label="Changer de potager / rejoindre un potager"
-            className="flex items-center gap-1 hover:text-g-acc transition-colors"
-            style={{ fontSize: 11, fontWeight: 500 }}
-          >
-            <Sprout size={13} /> {potagerActif.nom}
-          </button>
-        )}
-        {version && (
-          <span className="text-[11px] font-medium" style={{ color: 'var(--g-sec)' }}>
-            v{version}
+    <header
+      className="shrink-0 text-header-txt"
+      style={{ background: 'linear-gradient(100deg, var(--header-from), var(--header-to))' }}
+    >
+      <div className="max-w-[1352px] mx-auto flex items-center gap-3.5 h-[58px] px-4 nav:px-6">
+        {/* Identité + potager actif */}
+        <div className="flex items-center gap-2.5 min-w-0 shrink">
+          <div className="w-8 h-8 rounded-[10px] bg-header-glass flex items-center justify-center shrink-0">
+            <Leaf size={19} />
+          </div>
+          <span className="font-serif text-[17.5px] font-bold tracking-tight whitespace-nowrap hidden min-[1340px]:inline">
+            Mon Potager
           </span>
-        )}
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          aria-label="Actualiser"
-          className="hover:text-g-acc transition-colors disabled:opacity-40"
-        >
-          <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
-        </button>
-        <button onClick={toggle} aria-label="Basculer thème" className="hover:text-g-acc transition-colors">
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-        <button
-          onClick={() => setShowLierTelegram(true)}
-          aria-label="Relier Telegram"
-          className="hover:text-g-acc transition-colors"
-        >
-          <Send size={16} />
-        </button>
-        {potagerActif?.role === 'owner' && (
+          {potagerActif && (
+            // [US-048 / CA4] Seul accès permanent à « rejoindre un potager par code ».
+            <button
+              onClick={() => setShowPotagerSelector(true)}
+              aria-label="Changer de potager / rejoindre un potager"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-header-glass min-w-0"
+            >
+              <Sprout size={15} className="shrink-0" />
+              <span className="text-[13px] font-semibold truncate">{potagerActif.nom}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Navigation principale — desktop uniquement [CA1] */}
+        <nav className="hidden nav:flex items-center gap-1" aria-label="Navigation principale">
+          {NAV.map(({ id, label, Icon }) => {
+            const on = id === navId
+            return (
+              <button
+                key={id}
+                onClick={() => onGo(id)}
+                aria-current={on ? 'page' : undefined}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] text-[13.5px] whitespace-nowrap transition-colors ${
+                  on ? 'bg-header-glass font-bold' : 'font-medium text-header-dim hover:text-header-txt'
+                }`}
+              >
+                <Icon size={16} strokeWidth={on ? 2 : 1.7} />
+                {label}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Actions transverses */}
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          {version && <span className="text-[11px] font-medium text-header-dim hidden sm:inline">v{version}</span>}
           <button
-            onClick={() => setShowGestionMembres(true)}
-            aria-label="Gérer les membres"
-            className="hover:text-g-acc transition-colors"
+            onClick={onRefresh}
+            disabled={loading}
+            aria-label="Actualiser"
+            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center disabled:opacity-40"
           >
-            <Users size={17} />
+            <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
-        )}
-        <button onClick={logout} aria-label="Se déconnecter" className="hover:text-g-red transition-colors">
-          <LogOut size={17} />
-        </button>
+          <button
+            onClick={toggle}
+            aria-label="Basculer thème"
+            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
+          >
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+          <button
+            onClick={() => setShowLierTelegram(true)}
+            aria-label="Relier Telegram"
+            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
+          >
+            <Send size={16} />
+          </button>
+          {potagerActif?.role === 'owner' && (
+            <button
+              onClick={() => setShowGestionMembres(true)}
+              aria-label="Gérer les membres"
+              className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
+            >
+              <Users size={17} />
+            </button>
+          )}
+          <button
+            onClick={logout}
+            aria-label="Se déconnecter"
+            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
+          >
+            <LogOut size={17} />
+          </button>
+        </div>
       </div>
+
       {showLierTelegram && <LierTelegram onClose={() => setShowLierTelegram(false)} />}
       {showPotagerSelector && <PotagerSelector onClose={() => setShowPotagerSelector(false)} />}
       {showGestionMembres && <GestionMembres onClose={() => setShowGestionMembres(false)} />}

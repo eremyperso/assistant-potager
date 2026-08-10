@@ -1,7 +1,12 @@
 # Analyse — Refonte de l'interface web (maquette Claude Design "potager 2026")
 
-> Document d'analyse préparatoire, **pas encore un backlog d'US**. Objectif : cadrer le
-> périmètre avant de découper le travail avec la Persona PO (`.github/agents/Personna PO.agent.md`).
+> Document de cadrage du chantier de refonte. Les §1 à §6 décrivent l'analyse et les
+> arbitrages produit ; le **§7 tient à jour le découpage en lots et la répartition des US**
+> (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
+> `.github/agents/Orchestrateur-US.agent.md`).
+>
+> **Dernière mise à jour** : lots A (US-052, US-053) implémentés ; A bis (US-054, US-055)
+> rédigé et prêt à implémenter.
 
 ## 1. Source
 
@@ -256,9 +261,11 @@ décision).
 2. ~~Choix technique responsive~~ — **tranché** : breakpoints Tailwind réservés à la
    structure de page globale, container queries par défaut pour tout composant réutilisable.
    Règle gravée dans `CLAUDE.md` (section « Responsive frontend »), applicable dès le Lot A.
-3. **Écran d'accueil par défaut** : passer de `Plan` à `Tableau de bord` change le premier
-   écran vu par tous les utilisateurs existants — reste à valider explicitement (aucune
-   objection soulevée à ce stade, mais pas formellement confirmé).
+3. ~~Écran d'accueil par défaut~~ — **tranché lors de l'implémentation d'US-053** :
+   « Tableau de bord » devient l'écran d'accueil dès maintenant, même si son contenu réel
+   relève du Lot D — l'app s'ouvre donc temporairement sur un écran « à venir ». Choix
+   assumé : la branche de refonte n'est pas déployée aux utilisateurs avant que le Lot D
+   n'ait livré le contenu.
 4. ~~Placeholders "Vue plan" et "Rotation"~~ — **tranché** : l'activité (tuiles de
    sous-navigation) est positionnée dans cette refonte, les vues fonctionnelles détaillées
    sont reportées à un chantier séparé.
@@ -273,31 +280,82 @@ décision).
    maquette de référence exportée (screenshot) par écran et par résolution pour l'US type
    "CA : rendu conforme à la maquette".
 
-## 7. Synthèse — pistes de découpage pour la Persona PO
+## 7. Découpage en lots et répartition des US
 
-Suggestion de regroupement (non contractuel, à affiner en atelier) :
+### 7.1 Vue d'ensemble des lots
 
-- **Lot A — Design system & shell** (prérequis technique) : tokens, composants UI
-  factorisés (container queries par défaut, cf. règle `CLAUDE.md`), TopBar + BottomNav +
-  PageHeader + stratégie responsive. Bloquant pour tout le reste.
-- **Lot A bis — Sélecteur de potager & menu Compte** (à traiter avec le Lot A, même shell) :
-  `PotagerMenu` (avec « Rejoindre un potager » / « Tous mes potagers »), `AccountMenu`
-  (identité, rôle, Telegram, membres, déconnexion, actualisation), et les 3 modales
-  associées — portage des fonctions déjà existantes (`PotagerSelector.jsx`,
-  `GestionMembres.jsx`, `LierTelegram.jsx`) vers le nouveau shell, **actions d'écriture
-  incluses** (confirmé, cf. §5.6/§6 point 5). L'authentification reste hors périmètre de ce
-  lot (aucun équivalent dans la maquette).
-- **Lot B — Refontes visuelles à iso-fonctionnalité** : Plan (avec tuiles "Vue plan" /
-  "Rotation" en `Placeholder`), Pépinière, Stocks, Journal (renommage inclus). Pas de
-  nouvelle donnée métier, juste nouvel habillage + responsive.
+| Lot | Périmètre | Dépend de | US rédigées | Statut |
+|---|---|---|---|---|
+| **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
+| **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | 📝 Rédigées, à implémenter |
+| **B** | Refontes visuelles à iso-fonctionnalité | A | *à rédiger* | ⏳ À cadrer |
+| **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
+| **D** | Tableau de bord | A, C | *à rédiger* | ⏳ À cadrer |
+| **E** | Cultures transverse | A | *à rédiger* | ⏳ À cadrer |
+| **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
+| **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
+
+Chemin critique : **Lot A bloque tout le reste**. Les lots B, C, E et F sont ensuite
+parallélisables ; seul D dépend de C (météo), et G de B.
+
+### 7.2 US rédigées — détail
+
+| US | Titre | Lot | Points | Épic | Statut |
+|---|---|---|---|---|---|
+| [US-052](../backlog/US-052_design-system-tokens-composants.md) | Fondations du design system (tokens + composants UI) | A | 5 | — | ✅ Implémentée |
+| [US-053](../backlog/US-053_navigation-deux-niveaux-shell.md) | Coquille applicative en navigation à deux niveaux | A | 8 | — | ✅ Implémentée |
+| [US-054](../backlog/US-054_selecteur-potager-menu-deroulant.md) | Sélecteur de potager en menu déroulant | A bis | 3 | ÉPIC 2 | 📝 À implémenter |
+| [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | 📝 À implémenter |
+
+**Total Lot A + A bis : 21 points.** Ordre de dépendance : US-052 → US-053 → (US-054 ∥ US-055).
+
+US-054 et US-055 sont du **portage visuel pur** : les fonctions sous-jacentes
+(`PotagerSelector.jsx`, `GestionMembres.jsx`, `LierTelegram.jsx`) sont déjà livrées et
+opérationnelles depuis les US-045 à US-048 — aucun développement métier nouveau.
+
+### 7.3 Contenu détaillé des lots non encore découpés en US
+
+- **Lot B — Refontes visuelles à iso-fonctionnalité** : Plan (les tuiles « Vue plan » /
+  « Rotation » sont déjà en place depuis US-053, en `Placeholder`), Pépinière, Stocks,
+  Journal. Pas de nouvelle donnée métier, juste nouvel habillage + responsive. Découpage
+  naturel : une US par écran (4 US).
 - **Lot C — Localisation du potager & météo personnalisée** : module de recherche de ville
   unifié, champs de localisation sur l'entité Potager (migration), endpoint météo web basé
-  sur la localisation réelle.
-- **Lot D — Tableau de bord** : todo list "à faire cette semaine", intégration météo (dépend
-  du Lot C), agrégats récoltes/journal déjà disponibles ailleurs.
+  sur la localisation réelle. Cf. §5.2.
+- **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
+  (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
 - **Lot E — Cultures transverse** : schéma étendu `CultureConfig` (migration + choix de la
-  source des métadonnées horticoles), vue agrégée (hors pépinière).
+  source des métadonnées horticoles), vue agrégée hors pépinière. Cf. §5.3.
 - **Lot F — Guide d'utilisation intégré** : parcours web (navigation) + volet explicatif sur
-  l'usage du bot Telegram comme backoffice.
-- **Lot G — Vues fonctionnelles détaillées "Vue plan" et "Rotation"** : hors périmètre
-  immédiat, chantier séparé une fois le Lot B livré.
+  l'usage du bot Telegram comme backoffice. Cf. §5.5.
+- **Lot G — Vues fonctionnelles détaillées « Vue plan » et « Rotation »** : hors périmètre
+  immédiat, chantier séparé une fois le Lot B livré. Cf. §5.3 bis.
+
+### 7.4 Dette technique connue, à résorber pendant le Lot B
+
+Deux points introduits volontairement par le Lot A, à traiter au fil des US du Lot B :
+
+1. **Alias de tokens `--g-*`** : plutôt que réécrire les 391 occurrences des anciens tokens
+   dans les 20 fichiers de vues (hors périmètre d'US-052 et à fort risque de régression),
+   les noms `--g-bg`, `--g-acc`, `--g-amb`… ont été redéfinis comme **alias pointant vers la
+   nouvelle palette**. Toute l'application affiche donc bien les nouvelles couleurs, mais
+   chaque US du Lot B doit migrer son écran vers les tokens sémantiques
+   (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias. Une
+   fois tous les écrans migrés, supprimer le bloc d'alias de `index.css` et de
+   `tailwind.config.js`.
+2. **Vues étirées en desktop** : la contrainte `max-w-md mx-auto` a été retirée d'`App.jsx`
+   (exigence de mise en page desktop d'US-053). Les écrans non encore refondus s'étirent
+   donc sur toute la largeur disponible sur grand écran — rendu imparfait assumé jusqu'à ce
+   que le Lot B leur donne une vraie mise en page multi-colonnes.
+
+### 7.5 Pages de contrôle visuel (outillage de développement)
+
+Deux routes hors navigation applicative, ajoutées pour la validation visuelle exigée par les
+agents Developer et QA-tester :
+
+- `/design-system` — tous les composants de `components/ui/` isolément (US-052)
+- `/shell` — la coquille de navigation sans dépendance aux données métier (US-053)
+
+À conserver tant que le chantier de refonte est en cours ; à supprimer (avec
+`src/views/_DesignSystemPreview.jsx`, `src/views/_ShellPreview.jsx` et le routage
+correspondant dans `main.jsx`) à la clôture du chantier.
