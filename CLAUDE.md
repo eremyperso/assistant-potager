@@ -225,6 +225,20 @@ User story tests follow the pattern `test_us*.py` and cover specific features en
 - **Type hints**: Python 3.9+ syntax (`dict[str, X]`, `list[X]`)
 - Parcelle name normalization: `strip().lower()` + `unidecode()` + remove spaces/dashes
 
+## Responsive frontend — partage breakpoints Tailwind / container queries (NON NÉGOCIABLE)
+
+Règle décidée lors de la refonte UI 2026 (voir `docs/ANALYSE_REFONTE_UI_WEB_2026.md`) — s'applique à tout code React ajouté ou modifié dans `frontend/` :
+
+- **Breakpoints Tailwind (`md:`, `lg:`…)** : réservés exclusivement à la structure de page
+  globale — afficher/masquer la bottom tab bar, basculer entre layout mobile et layout
+  desktop avec sidebar. C'est la seule couche qui répond légitimement à « quelle est la
+  taille de l'écran ? ».
+- **Container queries (`@container`)** : règle par défaut pour tout composant réutilisable
+  (`ParcelleCard`, `ObservationIcon`, panneaux, listes…). Dès qu'un composant est destiné à
+  apparaître dans plus d'un contexte de layout, il naît avec `container-type: inline-size`
+  sur son wrapper, point final — pas de discussion au cas par cas pendant le développement
+  des US.
+
 ## External Dependencies
 
 - **FFmpeg**: required for MP3→OGG/Opus conversion (Telegram voice replies); gracefully degraded if missing
