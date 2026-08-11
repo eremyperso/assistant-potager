@@ -129,29 +129,24 @@ export default function AccountMenu({ onRefresh, loading }) {
 
           <PopSep />
 
-          {/* [CA2] Même composant qu'avant, seul le point d'entrée change. */}
+          {/* [CA2] Une seule entrée reflétant l'état de la liaison : non liée,
+              elle ouvre l'appairage ; liée, elle ouvre directement la
+              dissociation (qui a sa propre confirmation) plutôt que de
+              proposer les deux actions en parallèle — un chat ne peut être
+              relié qu'à un seul compte à la fois (`telegram_chat_id` est
+              unique en base), donc "relier" n'a aucun sens tant qu'un lien
+              existe déjà. */}
           <PopItem
-            icon={Send}
-            label="Relier Telegram"
-            sub={telegramLie ? 'Relié' : 'Non relié'}
-            onClick={() => ouvrirModale('telegram')}
+            icon={telegramLie ? Unlink : Send}
+            label={telegramLie ? 'Compte Telegram' : 'Relier Telegram'}
+            sub={telegramLie ? 'Relié — cliquer pour dissocier' : 'Non relié'}
+            onClick={() => ouvrirModale(telegramLie ? 'delier' : 'telegram')}
             right={
               telegramLie
                 ? <Badge tint="brand">actif</Badge>
                 : <Badge tint="amber">à faire</Badge>
             }
           />
-          {/* [US-050 / CA1] N'a de sens que si un chat est actuellement lié ;
-              indépendante du rôle potager (CA5) — jamais conditionnée à `role`. */}
-          {telegramLie && (
-            <PopItem
-              icon={Unlink}
-              label="Dissocier Telegram"
-              sub="Délier ce compte du chat actuel"
-              danger
-              onClick={() => ouvrirModale('delier')}
-            />
-          )}
 
           {/* [CA3] Réservé à l'owner du potager actif — non-régression de la
               condition d'affichage actuelle de TopBar. */}
