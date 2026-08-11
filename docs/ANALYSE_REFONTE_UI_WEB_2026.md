@@ -5,8 +5,9 @@
 > (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
 > `.github/agents/Orchestrateur-US.agent.md`).
 >
-> **Dernière mise à jour** : lots A (US-052, US-053) implémentés ; A bis (US-054, US-055)
-> rédigé et prêt à implémenter.
+> **Dernière mise à jour** : lots A (US-052, US-053) et A bis (US-054, US-055) implémentés.
+> Le §5.6 documente désormais les écarts assumés entre la maquette `web-account.jsx` et le
+> menu Compte livré.
 
 ## 1. Source
 
@@ -247,6 +248,34 @@ fonctionnel nouveau — contrairement aux Lots C/D/E qui, eux, nécessitent rée
 nouvelles briques backend. L'administration du potager (membres, invitations, liaison
 Telegram) reste donc pleinement utilisable pendant toute la refonte.
 
+#### Mise en œuvre effective du menu Compte (US-055) — écarts assumés avec la maquette
+
+Le composant livré (`frontend/src/components/AccountMenu.jsx`) reprend la structure de
+`AccountMenu` (`web-account.jsx`) : bloc identité sur fond `brandSoft`, ligne « Sur ce
+potager » + pastille de rôle, intitulé « Compte & liaisons », groupe mobile
+(actualisation, notifications), « Relier Telegram » avec pastille d'état, « Gérer les
+membres » réservé au propriétaire, déconnexion, version d'API en pied de menu.
+
+Quatre écarts sont volontaires, tous dus à un décalage entre les données mockées de la
+maquette et ce que l'application sait réellement produire :
+
+| Point | Maquette | Livré | Raison |
+|---|---|---|---|
+| Notifications | Entrée mobile « 1 non lue » + icône cloche dans le bandeau desktop | Entrée désactivée « Bientôt disponible », visible à toutes les tailles | La fonctionnalité n'existe nulle part dans l'application (ni composant, ni endpoint). Sans icône cloche en desktop, restreindre l'entrée au mobile la ferait disparaître au-dessus de 900px |
+| Guide d'utilisation | Entrée mobile + icône dans le bandeau desktop | Absent | `GuideModal` relève du **Lot F**, non implémenté à ce jour (cf. §5.5) |
+| État Telegram | `Relié · @remy_potager` | `Relié` / `Non relié` | `GET /auth/me` n'expose qu'un booléen `telegram_lie` — l'identifiant du chat n'a pas à circuler côté navigateur |
+| Horodatage « synchronisé il y a 4 min » | Présent dans le bandeau de pied et le sous-titre d'actualisation | Absent | Aucune donnée de dernière synchronisation n'est suivie côté application |
+| Habillage des modales | `ModalTelegram` / `ModalMembres` redessinées (en-tête `brandSoft`, pied explicatif, barre de progression du code…) | `LierTelegram.jsx` / `GestionMembres.jsx` inchangées, encore sur les alias `--g-*` | US-055 / CA2 et CA3 les cadrent explicitement comme « reprenant le contenu fonctionnel actuel, sans changement de logique » : seul le **point d'entrée** change. **Leur restylage reste à faire** — à rattacher au Lot B avec la migration des alias (§7.4) |
+
+À noter également : la maquette nomme le rôle en lecture seule `viewer`, le backend
+`lecteur` (`PotagerMembre.role`). C'est la valeur backend qui fait foi ; les libellés
+affichés sont centralisés dans `frontend/src/lib/roles.js`, partagé par `PotagerMenu` et
+`AccountMenu`.
+
+Enfin, un seul ajout backend a été nécessaire pour alimenter le bloc identité :
+`GET /auth/me` (nom, e-mail, `telegram_lie`), en lecture seule sur des colonnes existantes
+de `users`, sans migration ni règle métier nouvelle.
+
 ## 6. Points ouverts / risques à trancher avant découpage en US
 
 Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque
@@ -304,8 +333,8 @@ parallélisables ; seul D dépend de C (météo), et G de B.
 |---|---|---|---|---|---|
 | [US-052](../backlog/US-052_design-system-tokens-composants.md) | Fondations du design system (tokens + composants UI) | A | 5 | — | ✅ Implémentée |
 | [US-053](../backlog/US-053_navigation-deux-niveaux-shell.md) | Coquille applicative en navigation à deux niveaux | A | 8 | — | ✅ Implémentée |
-| [US-054](../backlog/US-054_selecteur-potager-menu-deroulant.md) | Sélecteur de potager en menu déroulant | A bis | 3 | ÉPIC 2 | 📝 À implémenter |
-| [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | 📝 À implémenter |
+| [US-054](../backlog/US-054_selecteur-potager-menu-deroulant.md) | Sélecteur de potager en menu déroulant | A bis | 3 | ÉPIC 2 | ✅ Implémentée |
+| [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | ✅ Implémentée |
 
 **Total Lot A + A bis : 21 points.** Ordre de dépendance : US-052 → US-053 → (US-054 ∥ US-055).
 
@@ -354,7 +383,10 @@ Deux routes hors navigation applicative, ajoutées pour la validation visuelle e
 agents Developer et QA-tester :
 
 - `/design-system` — tous les composants de `components/ui/` isolément (US-052)
-- `/shell` — la coquille de navigation sans dépendance aux données métier (US-053)
+- `/shell` — la coquille de navigation sans dépendance aux données métier (US-053).
+  Deux paramètres d'URL ajoutés par US-055 pour couvrir les cas du menu Compte sans
+  manipuler de compte réel : `?role=owner|editor|lecteur` (conditionne « Gérer les
+  membres ») et `?telegram=0|1` (état de la liaison affiché).
 
 À conserver tant que le chantier de refonte est en cours ; à supprimer (avec
 `src/views/_DesignSystemPreview.jsx`, `src/views/_ShellPreview.jsx` et le routage

@@ -49,14 +49,35 @@ const TEINTES_ICONE = {
   violet: 'text-violet',
 }
 
-/** Entrée de menu : icône, libellé, sous-libellé et zone droite optionnelle. */
-export function PopItem({ icon: Icon, label, sub, right, onClick, danger = false, tint }) {
+/**
+ * Entrée de menu : icône, libellé, sous-libellé et zone droite optionnelle.
+ *
+ * `disabled` grise l'entrée sans la retirer du menu (fonctionnalité annoncée
+ * mais pas encore disponible) ; `className` permet de restreindre une entrée à
+ * une taille d'écran (ex. `nav:hidden` pour une action doublée dans le bandeau
+ * en desktop) [US-055].
+ */
+export function PopItem({
+  icon: Icon,
+  label,
+  sub,
+  right,
+  onClick,
+  danger = false,
+  disabled = false,
+  tint,
+  className = '',
+}) {
   const couleurIcone = danger ? 'text-red' : TEINTES_ICONE[tint] || 'text-txt2'
   return (
     <button
       role="menuitem"
       onClick={onClick}
-      className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-card-alt transition-colors"
+      disabled={disabled}
+      aria-disabled={disabled || undefined}
+      className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors ${
+        disabled ? 'opacity-45 cursor-default' : 'hover:bg-card-alt'
+      } ${className}`}
     >
       {Icon && <Icon size={16} className={`shrink-0 ${couleurIcone}`} />}
       <span className="flex-1 min-w-0">

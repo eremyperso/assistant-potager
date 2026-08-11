@@ -152,6 +152,8 @@ export const api = {
     if (variete) params.variete = variete
     return get(`/observations${qs(params)}`)
   },
+  // [US-055] Identité du compte connecté + état de la liaison Telegram (menu Compte)
+  moi: () => get('/auth/me'),
   // [US-045] Génère un code de liaison Telegram (TTL 10 min) pour le compte connecté
   genererCodeLiaisonTelegram: () => post('/auth/lien/generer-code'),
   // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur

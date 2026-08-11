@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
+import { libelleRole } from '../lib/roles.js'
 import PotagerSelector from './PotagerSelector.jsx'
 
 /**
@@ -15,16 +16,6 @@ import PotagerSelector from './PotagerSelector.jsx'
  * Aucune logique métier ici : la bascule et l'adhésion restent portées par
  * `PotagerContext` (US-046) et `PotagerSelector` (US-048).
  */
-const ROLES = {
-  owner: { label: 'Propriétaire', tint: 'brand' },
-  editor: { label: 'Éditeur', tint: 'blue' },
-  lecteur: { label: 'Lecture seule', tint: 'violet' },
-}
-
-function libelleRole(role) {
-  return ROLES[role]?.label ?? role ?? '—'
-}
-
 /** « Éditeur · 3 parcelles · 2 membres » — accorde les pluriels. */
 function sousTitrePotager({ role, nb_parcelles = 0, nb_membres = 0 }) {
   const parcelles = `${nb_parcelles} parcelle${nb_parcelles > 1 ? 's' : ''}`

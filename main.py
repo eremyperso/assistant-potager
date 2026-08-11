@@ -305,6 +305,28 @@ def auth_resend_verification(request: Request, req: ResendVerificationRequest):
     return {"message": "Si un compte existe pour cet e-mail, un lien de vérification a été envoyé"}
 
 
+@app.get("/auth/me")
+def auth_me(user: User = Depends(get_current_user)):
+    """[US-055 / CA1] Identité du compte connecté + état de la liaison Telegram,
+    pour le menu Compte de la PWA (nom, e-mail, « relié / à faire »).
+
+    Lecture seule sur des colonnes existantes — aucune règle métier nouvelle.
+    Identité seule (pas de potager requis, même dépendance que
+    /auth/lien/generer-code) : le menu Compte doit rester consultable par un
+    compte qui n'appartient encore à aucun potager (cf. US-046 / CA5).
+    Le rôle n'est volontairement pas renvoyé ici : il dépend du potager actif
+    et vient déjà de GET /potagers.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nom": user.nom,
+        # Booléen plutôt que le chat_id lui-même : le front n'a besoin que de
+        # l'état, et l'identifiant Telegram n'a pas à circuler côté navigateur.
+        "telegram_lie": user.telegram_chat_id is not None,
+    }
+
+
 @app.post("/auth/lien/generer-code")
 def auth_generer_code_liaison(user: User = Depends(get_current_user)):
     """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce

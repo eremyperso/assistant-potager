@@ -1,13 +1,8 @@
-import { useState, useEffect } from 'react'
-import { RefreshCw, Moon, Sun, LogOut, Send, Users, Leaf } from 'lucide-react'
+import { RefreshCw, Moon, Sun, Leaf } from 'lucide-react'
 import { useTheme } from '../hooks/useTheme.js'
-import { useAuth } from '../context/AuthContext.jsx'
-import { usePotager } from '../context/PotagerContext.jsx'
-import { api } from '../lib/api.js'
 import { NAV, NAV_OF } from '../navigation.js'
-import LierTelegram from './LierTelegram.jsx'
 import PotagerMenu from './PotagerMenu.jsx'
-import GestionMembres from './GestionMembres.jsx'
+import AccountMenu from './AccountMenu.jsx'
 
 /**
  * Bandeau supérieur [US-053 / CA1].
@@ -16,21 +11,13 @@ import GestionMembres from './GestionMembres.jsx'
  * navigation passe dans la barre d'onglets basse (`BottomNav`) et seul le
  * bandeau d'identité + actions reste ici.
  *
- * Les actions transverses (potager actif, actualisation, thème, Telegram,
- * membres, déconnexion) sont conservées telles quelles : leur regroupement en
- * menus « Potager » et « Compte » relève de US-054 / US-055.
+ * Les actions transverses sont regroupées dans deux menus déroulants — potager
+ * actif (US-054) à gauche, compte (US-055) à droite. Ne restent en icônes
+ * directes que le thème et, en desktop seulement, l'actualisation manuelle
+ * (doublée dans le menu Compte en mobile) [US-055 / CA4, CA5].
  */
 export default function TopBar({ view, onGo, onRefresh, loading }) {
   const { theme, toggle } = useTheme()
-  const { logout } = useAuth()
-  const { potagerActif } = usePotager()
-  const [version, setVersion] = useState(null)
-  const [showLierTelegram, setShowLierTelegram] = useState(false)
-  const [showGestionMembres, setShowGestionMembres] = useState(false)
-
-  useEffect(() => {
-    api.health().then((h) => setVersion(h?.version)).catch(() => {})
-  }, [])
 
   const navId = NAV_OF[view]
 
@@ -75,12 +62,13 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
 
         {/* Actions transverses */}
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
-          {version && <span className="text-[11px] font-medium text-header-dim hidden sm:inline">v{version}</span>}
+          {/* [CA4] Sous 900px, l'actualisation passe dans le menu Compte : seuls
+              le thème et l'avatar restent visibles en permanence. */}
           <button
             onClick={onRefresh}
             disabled={loading}
             aria-label="Actualiser"
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center disabled:opacity-40"
+            className="w-[34px] h-[34px] rounded-[10px] hidden nav:flex items-center justify-center disabled:opacity-40"
           >
             <RefreshCw size={17} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -91,34 +79,9 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
           >
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          <button
-            onClick={() => setShowLierTelegram(true)}
-            aria-label="Relier Telegram"
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
-          >
-            <Send size={16} />
-          </button>
-          {potagerActif?.role === 'owner' && (
-            <button
-              onClick={() => setShowGestionMembres(true)}
-              aria-label="Gérer les membres"
-              className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
-            >
-              <Users size={17} />
-            </button>
-          )}
-          <button
-            onClick={logout}
-            aria-label="Se déconnecter"
-            className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center"
-          >
-            <LogOut size={17} />
-          </button>
+          <AccountMenu onRefresh={onRefresh} loading={loading} />
         </div>
       </div>
-
-      {showLierTelegram && <LierTelegram onClose={() => setShowLierTelegram(false)} />}
-      {showGestionMembres && <GestionMembres onClose={() => setShowGestionMembres(false)} />}
     </header>
   )
 }

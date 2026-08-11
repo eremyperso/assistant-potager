@@ -160,7 +160,12 @@ def accepter_invitation(db: Session, user_id: int, code: str) -> PotagerMembre:
 
 
 def lister_membres(db: Session, potager_id: int) -> list[dict]:
-    """Membres d'un potager (email + rôle), triés par id utilisateur."""
+    """Membres d'un potager (email, nom, rôle), triés par id utilisateur.
+
+    [US-055] `nom` ajouté (colonne déjà existante sur `User`, aucune migration)
+    pour que le menu Compte affiche un nom plutôt qu'un e-mail brut, à l'image
+    de GET /auth/me qui l'expose déjà pour le compte connecté.
+    """
     rows = (
         db.query(PotagerMembre, User)
         .join(User, User.id == PotagerMembre.user_id)
@@ -168,7 +173,7 @@ def lister_membres(db: Session, potager_id: int) -> list[dict]:
         .order_by(User.id)
         .all()
     )
-    return [{"user_id": u.id, "email": u.email, "role": m.role} for m, u in rows]
+    return [{"user_id": u.id, "email": u.email, "nom": u.nom, "role": m.role} for m, u in rows]
 
 
 def retirer_membre(db: Session, user_id: int, potager_id: int, membre_user_id: int) -> None:
