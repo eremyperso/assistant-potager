@@ -26,11 +26,11 @@ export default function VerifyEmail({ token, onDone }) {
 
   return (
     <div
-      className="flex flex-col items-center justify-center h-dvh max-w-md mx-auto px-6 text-center"
+      className="flex flex-col items-center justify-center h-dvh w-full px-6 text-center"
       style={{ background: 'var(--g-bg)' }}
     >
       <div
-        className="w-full"
+        className="w-full max-w-md"
         style={{
           background: 'var(--g-card)',
           border: '1px solid var(--g-brd)',

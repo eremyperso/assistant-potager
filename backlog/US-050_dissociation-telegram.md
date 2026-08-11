@@ -11,7 +11,7 @@ Afin de pouvoir relier un autre chat Telegram (changement de téléphone, compte
 US-045 a délibérément laissé cette action hors périmètre : CA5 de US-045 mentionne explicitement qu'une tentative de liaison d'un `chat_id` déjà lié à un autre compte doit « proposer une procédure de déliaison, hors périmètre technique de cette US si elle nécessite une action de support ». En pratique, la seule procédure existante aujourd'hui est un `UPDATE users SET telegram_chat_id = NULL` manuel en base — un goulot d'étranglement dès qu'il y a plus d'un compte de test ou un utilisateur réel qui change de téléphone. Cette US referme ce trou en rendant la dissociation self-service, sans intervention d'un administrateur.
 
 **Critères d'acceptance :**
-- [ ] CA1 : Depuis la PWA (utilisateur authentifié), un écran/bouton permet de dissocier le chat Telegram actuellement lié à son compte
+- [x] CA1 : Depuis la PWA (utilisateur authentifié), un écran/bouton permet de dissocier le chat Telegram actuellement lié à son compte
 - [ ] CA2 : Depuis Telegram, la commande `/delier` (envoyée depuis le chat actuellement lié) propose une confirmation explicite avant d'exécuter la dissociation (même principe que la confirmation de suppression d'un événement, US existant `/corriger`)
 - [ ] CA3 : Après dissociation, `users.telegram_chat_id` repasse à `NULL` et le chat est immédiatement traité comme non lié dès l'interaction suivante — le garde de liaison déjà en place (US-045 CA6/CA7) s'applique sans aucune modification de sa part
 - [ ] CA4 : Une fois dissocié, l'utilisateur peut générer un nouveau code depuis la PWA (US-045 CA1) et lier le même chat ou un chat différent, sans délai d'attente artificiel

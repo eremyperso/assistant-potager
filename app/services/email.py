@@ -61,3 +61,41 @@ def envoyer_email_verification(destinataire: str, token: str) -> None:
         reponse.raise_for_status()
     except httpx.HTTPError as exc:
         log.error("[US-044] Échec de l'envoi de l'e-mail de vérification à %s : %s", destinataire, exc)
+
+
+def envoyer_email_reset_mdp(destinataire: str, token: str) -> None:
+    """[US-057 / CA1] Envoie l'e-mail de réinitialisation de mot de passe
+    contenant le lien unique (1h). Même mode dégradé et même tolérance aux
+    échecs d'envoi que envoyer_email_verification ci-dessus."""
+    lien = f"{FRONTEND_URL}/reinitialiser-mot-de-passe?token={token}"
+
+    if not BREVO_API_KEY:
+        log.info(
+            "[US-057] Mode dégradé (BREVO_API_KEY absente) — lien de réinitialisation pour %s : %s",
+            destinataire, lien,
+        )
+        return
+
+    payload = {
+        "sender": {"name": EMAIL_FROM_NOM, "email": EMAIL_FROM},
+        "to": [{"email": destinataire}],
+        "subject": "Réinitialisation de votre mot de passe — Assistant Potager",
+        "htmlContent": (
+            "<p>Vous avez demandé la réinitialisation de votre mot de passe.</p>"
+            "<p>Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 1 heure) :</p>"
+            f'<p><a href="{lien}">{lien}</a></p>'
+            "<p>Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail — "
+            "votre mot de passe actuel reste inchangé.</p>"
+        ),
+    }
+
+    try:
+        reponse = httpx.post(
+            _BREVO_ENDPOINT,
+            json=payload,
+            headers={"api-key": BREVO_API_KEY, "content-type": "application/json"},
+            timeout=_TIMEOUT_SECONDES,
+        )
+        reponse.raise_for_status()
+    except httpx.HTTPError as exc:
+        log.error("[US-057] Échec de l'envoi de l'e-mail de réinitialisation à %s : %s", destinataire, exc)

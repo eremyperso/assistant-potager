@@ -4,16 +4,19 @@
 // [US-055 / CA3] Habillage aligné sur `ModalMembres` de la maquette 2026
 // (`web-account.jsx`) — même logique (lister, inviter, retirer), nouveau rendu.
 import { useState, useEffect } from 'react'
-import { UserMinus, Users, Copy, Key } from 'lucide-react'
+import { UserMinus, Users, Copy, Key, Pencil, Eye } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { initiales, nomAffiche } from '../lib/identite.js'
 import { libelleRole, teinteRole } from '../lib/roles.js'
-import { Modal, Btn, Select, Badge } from './ui'
+import { Modal, Btn, RoleSelect, Badge } from './ui'
 
+// [US-055] Icône + description par rôle invitable — porté depuis `ROLE_OPTS`
+// de la maquette (`web-account.jsx`) ; libellé et teinte restent centralisés
+// dans `lib/roles.js`, seule source de vérité partagée avec PotagerMenu/AccountMenu.
 const ROLES_INVITABLES = [
-  { value: 'editor', label: 'Éditeur' },
-  { value: 'lecteur', label: 'Lecture seule' },
+  { value: 'editor', icon: Pencil, sub: 'Saisit récoltes, semis et cultures' },
+  { value: 'lecteur', icon: Eye, sub: 'Consulte sans rien modifier' },
 ]
 
 /** « expire dans 6 j » / « expire dans moins d'un jour » à partir d'un ISO. */
@@ -120,7 +123,7 @@ export default function GestionMembres({ moiId, onClose }) {
           <span className="text-[13.5px] font-bold text-brand-text">Inviter un membre</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select value={rolePropose} options={ROLES_INVITABLES} onChange={setRolePropose} />
+          <RoleSelect value={rolePropose} options={ROLES_INVITABLES} onChange={setRolePropose} />
           <Btn kind="primary" icon={Key} onClick={handleInviter}>Générer un code</Btn>
         </div>
 

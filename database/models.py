@@ -38,6 +38,13 @@ class User(Base):
     verification_token_expire_le = Column(DateTime, nullable=True)
     verification_token_utilise_le = Column(DateTime, nullable=True)
 
+    # [US-057] Token de réinitialisation de mot de passe — même principe que
+    # verification_token_* ci-dessus (hash seul stocké, usage unique, TTL 1h
+    # géré côté service plutôt qu'en base).
+    reset_mdp_token_hash      = Column(String(255), nullable=True)
+    reset_mdp_token_expire_le = Column(DateTime, nullable=True)
+    reset_mdp_token_utilise_le = Column(DateTime, nullable=True)
+
     # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
     # encore été fait (sélection auto silencieuse si un seul potager, sinon
     # choix explicite via /potager ou le sélecteur PWA).

@@ -1,4 +1,35 @@
 
+## [v3.28.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Permet de dissocier le chat Telegram depuis le menu Compte de l'application web, sans passer par la commande `/delier` — utile quand on n'a plus accès au chat lié (téléphone changé, compte Telegram perdu, liaison sur le mauvais chat) (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `api.delierTelegram()` et le composant `DelierTelegram`, qui appellent l'endpoint `POST /auth/lien/delier` déjà existant côté serveur (US-050)
+
+## [v3.27.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'écran de connexion et d'inscription : panneau de présentation à gauche sur grand écran, formulaire seul sous 900 px, thème clair/sombre conservé (US-056)
+- Ajoute un champ Nom à l'inscription (US-056)
+- Affiche trois connecteurs de connexion sociale (Google, Facebook, Telegram) sur l'écran de connexion, encore désactivés (« Bientôt disponible ») (US-056)
+- Permet de réinitialiser un mot de passe oublié via un lien envoyé par e-mail, valable 1 heure (US-057)
+
+### 🐛 Corrections
+- Corrige le fond des écrans « Lien invalide » (vérification d'e-mail, réinitialisation de mot de passe) et « Aucun potager », qui ne couvrait qu'une colonne étroite au centre au lieu de toute la page (US-056/US-057)
+- Corrige la vérification d'e-mail : un lien pré-chargé automatiquement par un client mail ou un scanner anti-virus avant le clic réel de l'utilisateur affichait à tort « lien invalide » alors que le compte venait d'être vérifié — la vérification est désormais idempotente (US-044)
+- Corrige le message « compte créé, vérifiez vos e-mails » qui n'apparaissait jamais après une inscription réussie (US-056)
+- Corrige la création de potager, qui pouvait se déclencher deux fois (double potager créé) en l'absence de garde contre une double soumission du formulaire (US-046)
+- Corrige le menu déroulant de rôle (« Inviter un membre ») qui pouvait être coupé par la modale lorsqu'il s'ouvrait vers le bas sans assez de place (US-055)
+
+### 🔧 Améliorations techniques
+- Ajoute le composant réutilisable `Field` (champ de formulaire avec libellé et affichage/masquage du mot de passe) dans `components/ui/` (US-056)
+- Ajoute `POST /auth/mot-de-passe-oublie` et `POST /auth/reinitialiser-mot-de-passe`, en réutilisant l'infrastructure d'envoi Brevo et le schéma de token à usage unique de la vérification d'e-mail (US-057)
+- Remplace la liste déroulante générique du rôle invité par `RoleSelect` (icône + description par rôle), portée depuis la maquette 2026 ; `Pop` gagne une option `placement="above"` pour s'ouvrir vers le haut (US-055)
+
+### 💾 Base de données
+- Ajoute les colonnes `reset_mdp_token_hash`, `reset_mdp_token_expire_le`, `reset_mdp_token_utilise_le` sur `users` (`migration_v25.sql`) (US-057)
+
 ## [v3.26.0] — 2026-08-11
 
 ### 🚀 Nouveautés
