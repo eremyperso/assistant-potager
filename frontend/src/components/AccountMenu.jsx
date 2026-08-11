@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronDown, RefreshCw, Bell, Send, Users, LogOut } from 'lucide-react'
+import { ChevronDown, RefreshCw, Bell, Send, Unlink, Users, LogOut } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
@@ -7,6 +7,7 @@ import { libelleRole, teinteRole } from '../lib/roles.js'
 import { initiales, nomAffiche, prenomAffiche } from '../lib/identite.js'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
 import LierTelegram from './LierTelegram.jsx'
+import DelierTelegram from './DelierTelegram.jsx'
 import GestionMembres from './GestionMembres.jsx'
 
 /**
@@ -27,7 +28,7 @@ export default function AccountMenu({ onRefresh, loading }) {
   const { logout } = useAuth()
   const { potagerActif } = usePotager()
   const [ouvert, setOuvert] = useState(false)
-  const [modale, setModale] = useState(null) // null | 'telegram' | 'membres'
+  const [modale, setModale] = useState(null) // null | 'telegram' | 'delier' | 'membres'
   const [moi, setMoi] = useState(null)
   const [version, setVersion] = useState(null)
 
@@ -140,6 +141,18 @@ export default function AccountMenu({ onRefresh, loading }) {
                 : <Badge tint="amber">à faire</Badge>
             }
           />
+          {/* [US-050 / CA1] N'a de sens que si un chat est actuellement lié ;
+              indépendante du rôle potager (CA5) — jamais conditionnée à `role`. */}
+          {telegramLie && (
+            <PopItem
+              icon={Unlink}
+              label="Dissocier Telegram"
+              sub="Délier ce compte du chat actuel"
+              danger
+              onClick={() => ouvrirModale('delier')}
+            />
+          )}
+
           {/* [CA3] Réservé à l'owner du potager actif — non-régression de la
               condition d'affichage actuelle de TopBar. */}
           {role === 'owner' && (
@@ -173,6 +186,9 @@ export default function AccountMenu({ onRefresh, loading }) {
 
       {modale === 'telegram' && (
         <LierTelegram telegramLie={telegramLie} onClose={() => { setModale(null); chargerIdentite() }} />
+      )}
+      {modale === 'delier' && (
+        <DelierTelegram onClose={() => { setModale(null); chargerIdentite() }} />
       )}
       {modale === 'membres' && <GestionMembres moiId={moi?.id} onClose={() => setModale(null)} />}
     </div>

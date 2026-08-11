@@ -181,6 +181,7 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
 class RegisterRequest(BaseModel):
     email: str
     mot_de_passe: str
+    nom: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -196,6 +197,15 @@ class ResendVerificationRequest(BaseModel):
     email: str
 
 
+class MotDePasseOublieRequest(BaseModel):
+    email: str
+
+
+class ReinitialiserMotDePasseRequest(BaseModel):
+    token: str
+    nouveau_mot_de_passe: str
+
+
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
 def auth_register(request: Request, req: RegisterRequest):
@@ -208,7 +218,7 @@ def auth_register(request: Request, req: RegisterRequest):
 
     db = SessionLocal()
     try:
-        user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe)
+        user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe, req.nom)
         # [CA9] Envoi de l'e-mail de vérification — un échec d'envoi (réseau,
         # API Brevo indisponible) est loggé côté service mais ne fait pas
         # échouer l'inscription (l'utilisateur peut redemander via
@@ -303,6 +313,50 @@ def auth_resend_verification(request: Request, req: ResendVerificationRequest):
     finally:
         db.close()
     return {"message": "Si un compte existe pour cet e-mail, un lien de vérification a été envoyé"}
+
+
+@app.post("/auth/mot-de-passe-oublie")
+@limiter.limit("5/minute")
+def auth_mot_de_passe_oublie(request: Request, req: MotDePasseOublieRequest):
+    """[US-057 / CA1] Envoie un e-mail de réinitialisation si le compte existe
+    et a un mot de passe défini. Réponse générique identique dans tous les cas
+    (compte inconnu, Telegram-only, ou envoi effectif) — anti-énumération,
+    même principe que /auth/resend-verification (CA12)."""
+    db = SessionLocal()
+    try:
+        token = svc_auth.demander_reset_mot_de_passe(db, req.email)
+        if token:
+            svc_email.envoyer_email_reset_mdp(req.email, token)
+    finally:
+        db.close()
+    return {"message": "Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé"}
+
+
+@app.post("/auth/reinitialiser-mot-de-passe")
+@limiter.limit("10/minute")
+def auth_reinitialiser_mot_de_passe(request: Request, req: ReinitialiserMotDePasseRequest):
+    """[US-057 / CA3, CA4] Valide le token reçu par e-mail et remplace le mot
+    de passe. Usage unique : un rejeu du même token renvoie la même erreur
+    qu'un token invalide, sans distinction exploitable."""
+    if not req.nouveau_mot_de_passe or len(req.nouveau_mot_de_passe) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe trop court (8 caractères minimum)")
+
+    db = SessionLocal()
+    try:
+        svc_auth.reinitialiser_mot_de_passe(db, req.token, req.nouveau_mot_de_passe)
+        return {"message": "Mot de passe mis à jour"}
+    except svc_auth.TokenResetMdpInvalideError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_INVALID", "message": "Lien de réinitialisation invalide"},
+        )
+    except svc_auth.TokenResetMdpExpireError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_EXPIRED", "message": "Lien de réinitialisation expiré, demandez-en un nouveau"},
+        )
+    finally:
+        db.close()
 
 
 @app.get("/auth/me")

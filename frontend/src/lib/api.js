@@ -156,6 +156,8 @@ export const api = {
   moi: () => get('/auth/me'),
   // [US-045] Génère un code de liaison Telegram (TTL 10 min) pour le compte connecté
   genererCodeLiaisonTelegram: () => post('/auth/lien/generer-code'),
+  // [US-050 / CA1] Dissocie le chat Telegram lié au compte — identité seule, sans corps de requête
+  delierTelegram: () => post('/auth/lien/delier'),
   // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur
   potagers: () => get('/potagers'),
   activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
@@ -171,11 +173,12 @@ export const api = {
 // [US-044] Endpoints d'authentification — pas de token requis pour register/login,
 // pas de logique de refresh automatique (ce sont eux qui produisent les tokens).
 export const authApi = {
-  async register(email, mot_de_passe) {
+  // [US-056 / CA3] `nom` optionnel côté API (colonne User.nom déjà existante)
+  async register(email, mot_de_passe, nom) {
     const res = await fetch(`${BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, mot_de_passe }),
+      body: JSON.stringify({ email, mot_de_passe, nom }),
     })
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body.detail || `Erreur inscription (${res.status})`)
@@ -229,5 +232,30 @@ export const authApi = {
       body: JSON.stringify({ email }),
     })
     return res.json().catch(() => ({}))
+  },
+
+  // [US-057 / CA1] Réponse toujours générique (anti-énumération) — jamais d'erreur à afficher
+  async motDePasseOublie(email) {
+    const res = await fetch(`${BASE}/auth/mot-de-passe-oublie`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    return res.json().catch(() => ({}))
+  },
+
+  // [US-057 / CA3, CA4] token issu du lien reçu par e-mail — pas de session requise
+  async reinitialiserMotDePasse(token, nouveau_mot_de_passe) {
+    const res = await fetch(`${BASE}/auth/reinitialiser-mot-de-passe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, nouveau_mot_de_passe }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const detail = body.detail
+      throw new Error((typeof detail === 'string' ? detail : detail?.message) || `Erreur de réinitialisation (${res.status})`)
+    }
+    return body
   },
 }

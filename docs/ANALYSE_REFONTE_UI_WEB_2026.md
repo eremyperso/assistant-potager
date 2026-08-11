@@ -5,9 +5,14 @@
 > (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
 > `.github/agents/Orchestrateur-US.agent.md`).
 >
-> **Dernière mise à jour** : lots A (US-052, US-053) et A bis (US-054, US-055) implémentés.
-> Le §5.6 documente désormais les écarts assumés entre la maquette `web-account.jsx` et le
-> menu Compte livré.
+> **Dernière mise à jour** : lots A (US-052, US-053), A bis (US-054, US-055) et A ter
+> (US-056, US-057) implémentés. Le §5.6 documente les écarts assumés entre la maquette
+> `web-account.jsx` et le menu Compte livré, le §5.7 ceux entre `login-screens.jsx` et
+> l'écran de connexion/inscription livré (US-056/US-057 implémentées sans QA dédiée pour
+> l'instant — vérification à chaud). Un lot **H — Onboarding « premier potager »** (§5.8,
+> US-058) a été ajouté à partir du module `onboarding-screens.jsx`, mais **volontairement
+> non prioritaire** (§7.1) : sa fonctionnalité complète dépend des lots C et E, pas encore
+> cadrés.
 
 ## 1. Source
 
@@ -23,6 +28,13 @@ statique, données mockées) :
   (`ModalPotagers`, `ModalMembres`, `ModalTelegram`) — voir §5.6
 - `web-shell.jsx` — coquille applicative (TopBar, PageHeader, BottomNav, GuideModal)
 - `web-screens.jsx` — les 7 écrans (Dashboard, Stats, Plan, Cultures, Pépinière, Stocks, Journal)
+- `login-screens.jsx` — **module ajouté depuis la deuxième lecture**, fichier focal
+  `Potager - Connexion.html` : écran de connexion/inscription scindé (`LoginSplit`),
+  formulaire (`AuthForm`, `Field`), connecteurs OAuth (`OAuthRow`) — voir §5.7
+- `onboarding-screens.jsx` — **module ajouté depuis la troisième lecture**, fichier focal
+  `Potager - Premier potager.html` : assistant de création du premier potager en 4 étapes
+  (`Onboarding`, `StepPotager`, `StepParcelle`, `StepCultures`, `StepPret`), affiché juste
+  après l'inscription — voir §5.8
 
 > Cette version du document intègre une **itération de la maquette** postérieure à
 > l'analyse initiale : ajout du module Compte/Potager ci-dessus, puis deux correctifs de
@@ -276,6 +288,80 @@ Enfin, un seul ajout backend a été nécessaire pour alimenter le bloc identit�
 `GET /auth/me` (nom, e-mail, `telegram_lie`), en lecture seule sur des colonnes existantes
 de `users`, sans migration ni règle métier nouvelle.
 
+### 5.7 Écran de connexion & inscription (répond au point ouvert « authentification non couverte »)
+
+Le point ouvert n°5 (§6, historique) signalait que l'écran de connexion était le seul
+élément de l'application non couvert par la maquette d'origine. Le module `login-screens.jsx`
+(fichier focal `Potager - Connexion.html`) comble ce manque avec un écran scindé :
+
+- **Layout** (`LoginSplit`, container queries sur `.device`) : sous 900px, formulaire seul
+  en pleine largeur (logo + bouton thème en tête, pied de page compact avec mentions
+  légales) ; à partir de 900px, un panneau de marque apparaît à gauche (accroche produit +
+  trois repères chiffrés) pendant que le formulaire reste à droite, plafonné à 404px.
+- **Formulaire** (`AuthForm`) : bascule Connexion / Créer un compte au sein du même
+  composant (pas de changement de route). Connexion = e-mail + mot de passe (avec lien
+  « Mot de passe oublié ? »). Inscription = mêmes champs + Prénom + Nom + case à cocher
+  CGU/confidentialité. Champ mot de passe avec bouton afficher/masquer (`Field`, icône
+  œil) — fonctionnalité déjà présente dans `Auth.jsx` actuel, portage visuel.
+- **Connecteurs OAuth** (`OAuthRow`) : trois boutons « Continuer avec Google / Facebook /
+  Telegram » au-dessus du séparateur « ou par e-mail », en une colonne avec libellé complet
+  sous 420px de conteneur, en trois colonnes avec icône seule à partir de 420px.
+- **Thème clair/sombre** : togglable depuis l'écran, cohérent avec le mécanisme existant.
+
+**Écarts assumés entre la maquette et le périmètre retenu pour le lot A ter** (US-056,
+US-057) :
+
+| Point | Maquette | Décision retenue | Raison |
+|---|---|---|---|
+| Repères chiffrés du panneau de gauche | Données d'un potager précis (« 5 parcelles suivies », « 61 plants en pépinière »…) | Accroche produit générique, non personnalisée | L'écran de connexion s'affiche **avant** authentification : aucune donnée de compte n'est disponible à ce stade, contrairement aux écrans internes de l'app |
+| Champs Prénom + Nom (inscription) | Deux champs distincts | Un seul champ « Nom » | `User.nom` (`database/models.py`) est une colonne unique — scinder en prénom/nom demanderait une migration hors périmètre d'un simple portage d'écran ; le champ existant suffit à afficher un nom dans le menu Compte (US-055) |
+| Connecteurs OAuth (Google/Facebook/Telegram) | Boutons fonctionnels déclenchant une authentification tierce | Boutons affichés mais désactivés (« Bientôt disponible ») | Aucune intégration OAuth n'existe côté backend (enregistrement d'app, credentials, redirection) ; Telegram en particulier a déjà un mécanisme distinct (liaison par code, US-045) qui ne doit pas être confondu avec une connexion initiale par Telegram. Le câblage réel est un chantier séparé, à cadrer ultérieurement |
+| Lien « Mot de passe oublié ? » | Présent, sans précision de comportement dans la maquette (prototype statique) | Fonctionnalité réelle à part entière | Aucun mécanisme de réinitialisation n'existe aujourd'hui côté backend — ce n'est pas un simple habillage, d'où une US dédiée (US-057) plutôt qu'une inclusion dans le portage visuel |
+
+Contrairement au menu Compte (§5.6, portage visuel à 90 %), ce lot combine donc un
+**portage visuel majoritaire** (US-056) et une **fonctionnalité réellement nouvelle**
+(réinitialisation de mot de passe, US-057) — la distinction est reflétée dans le découpage
+en deux US plutôt qu'une seule.
+
+### 5.8 Onboarding « premier potager » (nouveauté, dépendante des lots C et E)
+
+Le module `onboarding-screens.jsx` (fichier focal `Potager - Premier potager.html`)
+introduit un assistant en 4 étapes affiché juste après la création de compte, réutilisant
+le panneau de gauche de l'écran de connexion (§5.7) pour porter la progression :
+
+1. **Votre potager** — nom du potager + commune, avec un encart pour basculer vers la
+   saisie d'un code d'invitation si l'utilisateur rejoint un potager existant plutôt que
+   d'en créer un.
+2. **Première parcelle** — nature de l'espace (pleine terre / pépinière), nom, surface,
+   exposition, type de sol.
+3. **Cultures** — sélection multiple parmi 12 cultures courantes (Tomate, Courgette,
+   Salade, Carotte, Haricot vert, Radis, Pomme de terre, Oignon, Fraise, Poireau,
+   Concombre, Betterave), présentée comme un point de départ, le reste étant renvoyé au
+   futur écran Cultures (Lot E).
+4. **Récapitulatif** — relit les trois étapes précédentes et propose "Entrer dans mon
+   potager", avec une suggestion de relier Telegram (US-045) en prochaine étape.
+
+**Analyse de faisabilité au regard du backend actuel** — trois champs de la maquette n'ont
+aucun équivalent aujourd'hui :
+
+| Champ maquette | État actuel | Décision retenue pour US-058 |
+|---|---|---|
+| Commune (étape 1) | `Potager` n'a que `latitude`/`longitude` (`POST /potagers`, US-048), pas de texte libre | Nouvelle colonne `Potager.ville` (texte simple, migration), **sans géocodage** — la recherche/autocomplete et la précision lat/long réelles sont le périmètre du Lot C (§5.2), qui réutilisera cette même colonne plutôt que d'en ajouter une seconde |
+| Type de sol (étape 2) | Aucun champ équivalent sur `Parcelle` | Nouvelle colonne `Parcelle.type_sol` (texte simple, migration), purement informatif à ce stade — non exploité par le calcul de stock/plan |
+| Sélection de cultures (étape 3) | `CultureConfig` n'est créée qu'à la demande, avec un `type_organe_recolte` obligatoire (`app/services/parcelles.py::creer_culture_config`) — jamais pré-semée pour un catalogue de cultures courantes | Sélection **informative uniquement** dans le récapitulatif de cette US — aucune fiche `CultureConfig` ni événement n'est créé à partir des cultures cochées ; le rattachement à de vraies fiches est un point ouvert, à raccorder une fois le schéma `CultureConfig` étendu du Lot E disponible (§5.3) |
+
+Autre écart, mineur : la création de parcelle n'existe aujourd'hui que côté bot Telegram
+(`utils/parcelles.create_parcelle`, commande `/parcelle ajouter`) — aucun endpoint web
+équivalent n'existe. US-058 introduit donc un premier `POST /parcelles`, qui réutilise
+cette même fonction de service (pas de nouvelle règle métier de création de parcelle,
+seulement une nouvelle porte d'entrée HTTP).
+
+Contrairement aux lots A ter et A bis (portage visuel de fonctions déjà opérationnelles),
+ce lot dépend directement de l'avancement des Lots C (localisation) et E (catalogue de
+cultures) pour délivrer sa version pleinement fonctionnelle — d'où sa priorité volontairement
+basse (§7.1) : la version décrite ici (US-058) est livrable de façon autonome, mais restera
+plus simple que la maquette tant que C et E ne sont pas cadrés.
+
 ## 6. Points ouverts / risques à trancher avant découpage en US
 
 Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque
@@ -302,8 +388,11 @@ décision).
    propose désormais un `PotagerMenu` (contexte, gauche) et un `AccountMenu` (compte, droite)
    avec 3 modales dédiées (voir §5.6), **actions d'écriture réelles dès le Lot A bis**
    (décision confirmée — portage des fonctions déjà opérationnelles, pas de développement
-   fonctionnel nouveau). L'authentification (écran de connexion complet) reste le seul
-   élément non couvert par la maquette et à concevoir séparément.
+   fonctionnel nouveau). ~~L'authentification (écran de connexion complet) reste le seul
+   élément non couvert par la maquette~~ — **comblé** : le module `login-screens.jsx` couvre
+   désormais l'écran de connexion/inscription (voir §5.7, Lot A ter, US-056/US-057). Seule
+   l'authentification OAuth tierce (Google/Facebook/Telegram) reste hors périmètre, affichée
+   à l'état désactivé plutôt que développée dans ce lot.
 6. **Volet QA visuel** : la checklist ajoutée aux agents Developer/PO/QA-tester (validation
    à 375/768/1280 px via chrome-devtools) s'applique nativement à ce chantier — prévoir une
    maquette de référence exportée (screenshot) par écran et par résolution pour l'US type
@@ -316,16 +405,26 @@ décision).
 | Lot | Périmètre | Dépend de | US rédigées | Statut |
 |---|---|---|---|---|
 | **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
-| **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | 📝 Rédigées, à implémenter |
+| **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
+| **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
 | **B** | Refontes visuelles à iso-fonctionnalité | A | *à rédiger* | ⏳ À cadrer |
 | **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
 | **D** | Tableau de bord | A, C | *à rédiger* | ⏳ À cadrer |
 | **E** | Cultures transverse | A | *à rédiger* | ⏳ À cadrer |
 | **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
 | **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
+| **H** | Onboarding « premier potager » | A, A ter | US-058 | 📝 Rédigée, à implémenter — **priorité basse** |
 
-Chemin critique : **Lot A bloque tout le reste**. Les lots B, C, E et F sont ensuite
-parallélisables ; seul D dépend de C (météo), et G de B.
+Chemin critique : **Lot A bloque tout le reste**. Le **Lot A ter est priorisé juste après
+le Lot A** (et A bis, non bloquant) dans l'ordre d'implémentation — il ne dépend que du
+design system (A), pas du sélecteur de potager/menu Compte (A bis), mais couvre une surface
+utilisateur (l'écran pré-authentification) qui n'a de sens à traiter qu'une fois les tokens
+et composants du Lot A disponibles. Les lots B, C, E et F restent ensuite parallélisables ;
+seul D dépend de C (météo), et G de B. **Le Lot H (onboarding) est volontairement placé en
+fin de portefeuille** : il peut être développé dès que A et A ter sont livrés (aucun blocage
+technique), mais sa version pleinement fonctionnelle dépend des Lots C et E (§5.8) — inutile
+de le prioriser tant que ces deux lots ne sont pas au moins cadrés, sous peine de livrer une
+US-058 qu'il faudrait reprendre peu après.
 
 ### 7.2 US rédigées — détail
 
@@ -335,12 +434,25 @@ parallélisables ; seul D dépend de C (météo), et G de B.
 | [US-053](../backlog/US-053_navigation-deux-niveaux-shell.md) | Coquille applicative en navigation à deux niveaux | A | 8 | — | ✅ Implémentée |
 | [US-054](../backlog/US-054_selecteur-potager-menu-deroulant.md) | Sélecteur de potager en menu déroulant | A bis | 3 | ÉPIC 2 | ✅ Implémentée |
 | [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | ✅ Implémentée |
+| [US-056](../backlog/US-056_refonte-ecran-connexion-inscription.md) | Refonte de l'écran de connexion/inscription | A ter | 8 | ÉPIC 2 | ✅ Implémentée |
+| [US-057](../backlog/US-057_reinitialisation-mot-de-passe-oublie.md) | Réinitialisation du mot de passe oublié | A ter | 5 | ÉPIC 2 | ✅ Implémentée |
+| [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | 📝 Rédigée — **priorité basse, cf. §7.1** |
 
-**Total Lot A + A bis : 21 points.** Ordre de dépendance : US-052 → US-053 → (US-054 ∥ US-055).
+**Total Lot A + A bis + A ter : 34 points.** Ordre de dépendance : US-052 → US-053 →
+(US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors chemin critique) : 8 points
+supplémentaires**, dépendant de US-056 (déclenchement juste après l'écran de connexion) et
+US-048 (création de potager/invitations, logique réutilisée).
 
 US-054 et US-055 sont du **portage visuel pur** : les fonctions sous-jacentes
 (`PotagerSelector.jsx`, `GestionMembres.jsx`, `LierTelegram.jsx`) sont déjà livrées et
-opérationnelles depuis les US-045 à US-048 — aucun développement métier nouveau.
+opérationnelles depuis les US-045 à US-048 — aucun développement métier nouveau. US-056 est
+majoritairement un portage visuel (écran de connexion/inscription existant), à l'exception
+du champ Nom ajouté à l'inscription. US-057 est en revanche une **fonctionnalité backend
+nouvelle** (réinitialisation de mot de passe, migration BDD requise) — voir §5.7. US-058
+combine portage (parcours et navigation de la maquette) et petites fondations backend
+(`POST /parcelles`, deux colonnes minimales) tout en assumant explicitement de rester plus
+simple que la maquette sur la localisation et les cultures, en attendant les Lots C et E —
+voir §5.8.
 
 ### 7.3 Contenu détaillé des lots non encore découpés en US
 
@@ -350,7 +462,8 @@ opérationnelles depuis les US-045 à US-048 — aucun développement métier no
   naturel : une US par écran (4 US).
 - **Lot C — Localisation du potager & météo personnalisée** : module de recherche de ville
   unifié, champs de localisation sur l'entité Potager (migration), endpoint météo web basé
-  sur la localisation réelle. Cf. §5.2.
+  sur la localisation réelle. Cf. §5.2. Réutilisera la colonne `Potager.ville` déjà posée
+  par US-058 (§5.8) plutôt que d'en créer une seconde.
 - **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
   (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
 - **Lot E — Cultures transverse** : schéma étendu `CultureConfig` (migration + choix de la

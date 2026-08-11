@@ -4,10 +4,12 @@ import { useEffect, useRef } from 'react'
  * Menu déroulant contextuel du design system [US-054].
  *
  * Se ferme au clic extérieur et à la touche Échap. Le conteneur parent doit
- * porter `relative` — le menu s'ancre sous le bouton déclencheur.
+ * porter `relative` — le menu s'ancre sous le bouton déclencheur (`placement="above"`
+ * pour l'ancrer au-dessus, ex. déclencheur en bas d'une modale scrollable où
+ * l'espace sous le bouton est insuffisant, cf. `RoleSelect`).
  * Mutualisé avec le menu Compte (US-055).
  */
-export function Pop({ align = 'left', width = 286, onClose, children, className = '' }) {
+export function Pop({ align = 'left', placement = 'below', width = 286, onClose, children, className = '' }) {
   const ref = useRef(null)
 
   useEffect(() => {
@@ -31,7 +33,9 @@ export function Pop({ align = 'left', width = 286, onClose, children, className 
     <div
       ref={ref}
       role="menu"
-      className={`absolute top-full mt-1.5 z-50 max-w-[calc(100vw-1.5rem)] bg-card border border-border rounded-2xl shadow-[0_18px_46px_rgba(12,18,8,.26)] overflow-hidden ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
+      className={`absolute z-50 max-w-[calc(100vw-1.5rem)] bg-card border border-border rounded-2xl shadow-[0_18px_46px_rgba(12,18,8,.26)] overflow-hidden ${
+        placement === 'above' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+      } ${align === 'right' ? 'right-0' : 'left-0'} ${className}`}
       style={{ width }}
     >
       {children}

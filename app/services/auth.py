@@ -28,6 +28,9 @@ _TOKEN_TYPE_REFRESH = "refresh"
 # [CA9] Durée de validité du token de vérification d'e-mail
 _VERIFICATION_TOKEN_TTL = timedelta(hours=24)
 
+# [US-057 / CA1] Durée de validité du token de réinitialisation de mot de passe
+_RESET_MDP_TOKEN_TTL = timedelta(hours=1)
+
 
 class EmailDejaUtiliseError(Exception):
     """[CA7] E-mail déjà inscrit — levée sur /auth/register."""
@@ -55,6 +58,14 @@ class TokenVerificationInvalideError(Exception):
 
 class TokenVerificationExpireError(Exception):
     """[CA10] Token de vérification d'e-mail expiré (> 24h)."""
+
+
+class TokenResetMdpInvalideError(Exception):
+    """[US-057 / CA4] Token de réinitialisation inconnu, déjà utilisé ou malformé."""
+
+
+class TokenResetMdpExpireError(Exception):
+    """[US-057 / CA4] Token de réinitialisation expiré (> 1h)."""
 
 
 def hash_password(mot_de_passe: str) -> str:
@@ -112,14 +123,17 @@ def decoder_refresh_token(token: str) -> dict:
     return _decoder_token(token, _TOKEN_TYPE_REFRESH)
 
 
-def inscrire_utilisateur(db: Session, email: str, mot_de_passe: str) -> User:
-    """[CA1/CA7] Crée un compte — lève EmailDejaUtiliseError si l'e-mail existe déjà."""
+def inscrire_utilisateur(db: Session, email: str, mot_de_passe: str, nom: Optional[str] = None) -> User:
+    """[CA1/CA7] Crée un compte — lève EmailDejaUtiliseError si l'e-mail existe déjà.
+    [US-056 / CA3] `nom` optionnel, simplement stocké tel quel (colonne déjà
+    existante, alimentée par le formulaire d'inscription refondu)."""
     email_normalise = email.strip().lower()
     existant = db.query(User).filter(User.email == email_normalise).first()
     if existant is not None:
         raise EmailDejaUtiliseError("Cet e-mail est déjà utilisé")
 
-    user = User(email=email_normalise, mot_de_passe_hash=hash_password(mot_de_passe))
+    nom_normalise = nom.strip() if nom and nom.strip() else None
+    user = User(email=email_normalise, mot_de_passe_hash=hash_password(mot_de_passe), nom=nom_normalise)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -165,13 +179,23 @@ def demarrer_verification_email(db: Session, user: User) -> str:
 
 def verifier_email(db: Session, token: str) -> User:
     """[CA10] Valide un token de vérification et marque le compte comme vérifié.
-    Usage unique (verification_token_utilise_le) : un rejeu du même token
-    retombe sur TokenVerificationInvalideError, jamais une seconde validation
-    silencieuse."""
+
+    Idempotent une fois le compte vérifié : revisiter le même lien renvoie un
+    succès plutôt qu'une erreur. Nécessaire en pratique — de nombreux clients
+    mail et scanners anti-virus (Brevo lui-même via son tracking de clics,
+    Outlook Safe Links, etc.) déclenchent une requête GET automatique sur le
+    lien avant même que l'utilisateur ne clique, ce qui consommait le token à
+    son insu et lui affichait ensuite « lien invalide » alors que son compte
+    était déjà vérifié. Seul un token qui ne correspond à AUCUN compte reste
+    rejeté — impossible de vérifier un compte tiers avec un token volé qui ne
+    lui appartient pas."""
     token_hash = _hash_token(token)
     user = db.query(User).filter(User.verification_token_hash == token_hash).first()
-    if user is None or user.verification_token_utilise_le is not None:
+    if user is None:
         raise TokenVerificationInvalideError("Lien de vérification invalide")
+
+    if user.email_verifie:
+        return user
 
     if user.verification_token_expire_le is None or datetime.utcnow() > user.verification_token_expire_le:
         raise TokenVerificationExpireError("Lien de vérification expiré")
@@ -193,3 +217,40 @@ def renvoyer_verification_email(db: Session, email: str) -> Optional[str]:
     if user is None or user.email_verifie:
         return None
     return demarrer_verification_email(db, user)
+
+
+def demander_reset_mot_de_passe(db: Session, email: str) -> Optional[str]:
+    """[US-057 / CA1] Génère un token de réinitialisation (1h) si un compte web
+    (mot de passe défini) existe pour cet e-mail. Renvoie None sinon (compte
+    inconnu ou Telegram-only) — l'appelant renvoie la même réponse générique
+    dans tous les cas (anti-énumération, même principe que CA12/CA7)."""
+    email_normalise = email.strip().lower()
+    user = db.query(User).filter(User.email == email_normalise).first()
+    if user is None or not user.mot_de_passe_hash:
+        return None
+
+    token_brut = secrets.token_urlsafe(32)
+    user.reset_mdp_token_hash = _hash_token(token_brut)
+    user.reset_mdp_token_expire_le = datetime.utcnow() + _RESET_MDP_TOKEN_TTL
+    user.reset_mdp_token_utilise_le = None
+    db.commit()
+    return token_brut
+
+
+def reinitialiser_mot_de_passe(db: Session, token: str, nouveau_mot_de_passe: str) -> User:
+    """[US-057 / CA3, CA4] Valide un token de réinitialisation et remplace le
+    mot de passe. Usage unique (reset_mdp_token_utilise_le), même pattern que
+    verifier_email — un rejeu du même token retombe sur TokenResetMdpInvalideError."""
+    token_hash = _hash_token(token)
+    user = db.query(User).filter(User.reset_mdp_token_hash == token_hash).first()
+    if user is None or user.reset_mdp_token_utilise_le is not None:
+        raise TokenResetMdpInvalideError("Lien de réinitialisation invalide")
+
+    if user.reset_mdp_token_expire_le is None or datetime.utcnow() > user.reset_mdp_token_expire_le:
+        raise TokenResetMdpExpireError("Lien de réinitialisation expiré")
+
+    user.mot_de_passe_hash = hash_password(nouveau_mot_de_passe)
+    user.reset_mdp_token_utilise_le = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+    return user

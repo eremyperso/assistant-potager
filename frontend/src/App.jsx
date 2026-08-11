@@ -15,6 +15,7 @@ import Historique from './views/Historique.jsx'
 import Stats     from './views/Stats.jsx'
 import Auth      from './views/Auth.jsx'
 import VerifyEmail from './views/VerifyEmail.jsx'
+import ReinitialiserMotDePasse from './views/ReinitialiserMotDePasse.jsx'
 import AucunPotager from './views/AucunPotager.jsx'
 
 // [US-044 / CA10] Lien de vérification reçu par e-mail : /verifier-email?token=...
@@ -22,6 +23,12 @@ import AucunPotager from './views/AucunPotager.jsx'
 // indépendante de AuthContext (l'utilisateur n'est pas encore connecté ici).
 function getVerificationToken() {
   if (window.location.pathname !== '/verifier-email') return null
+  return new URLSearchParams(window.location.search).get('token')
+}
+
+// [US-057 / CA2] Lien de réinitialisation reçu par e-mail : /reinitialiser-mot-de-passe?token=...
+function getResetPasswordToken() {
+  if (window.location.pathname !== '/reinitialiser-mot-de-passe') return null
   return new URLSearchParams(window.location.search).get('token')
 }
 
@@ -116,6 +123,7 @@ function AppGate() {
 
 export default function App() {
   const [token, setToken] = useState(getVerificationToken)
+  const [resetToken, setResetToken] = useState(getResetPasswordToken)
 
   if (token) {
     return (
@@ -124,6 +132,18 @@ export default function App() {
         onDone={() => {
           window.history.replaceState({}, '', '/')
           setToken(null)
+        }}
+      />
+    )
+  }
+
+  if (resetToken) {
+    return (
+      <ReinitialiserMotDePasse
+        token={resetToken}
+        onDone={() => {
+          window.history.replaceState({}, '', '/')
+          setResetToken(null)
         }}
       />
     )
