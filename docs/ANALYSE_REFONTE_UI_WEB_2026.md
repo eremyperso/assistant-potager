@@ -6,7 +6,9 @@
 > `.github/agents/Orchestrateur-US.agent.md`).
 >
 > **Dernière mise à jour** : lots A (US-052, US-053), A bis (US-054, US-055) et A ter
-> (US-056, US-057) implémentés. Le §5.6 documente les écarts assumés entre la maquette
+> (US-056, US-057) implémentés ; **Lot B découpé en 6 US (US-059 → US-064), à implémenter**
+> — voir §7.3 pour le détail du découpage et §7.4 pour la répartition de la dette d'alias
+> qui en découle. Le §5.6 documente les écarts assumés entre la maquette
 > `web-account.jsx` et le menu Compte livré, le §5.7 ceux entre `login-screens.jsx` et
 > l'écran de connexion/inscription livré (US-056/US-057 implémentées sans QA dédiée pour
 > l'instant — vérification à chaud). Un lot **H — Onboarding « premier potager »** (§5.8,
@@ -277,7 +279,7 @@ maquette et ce que l'application sait réellement produire :
 | Guide d'utilisation | Entrée mobile + icône dans le bandeau desktop | Absent | `GuideModal` relève du **Lot F**, non implémenté à ce jour (cf. §5.5) |
 | État Telegram | `Relié · @remy_potager` | `Relié` / `Non relié` | `GET /auth/me` n'expose qu'un booléen `telegram_lie` — l'identifiant du chat n'a pas à circuler côté navigateur |
 | Horodatage « synchronisé il y a 4 min » | Présent dans le bandeau de pied et le sous-titre d'actualisation | Absent | Aucune donnée de dernière synchronisation n'est suivie côté application |
-| Habillage des modales | `ModalTelegram` / `ModalMembres` redessinées (en-tête `brandSoft`, pied explicatif, barre de progression du code…) | `LierTelegram.jsx` / `GestionMembres.jsx` inchangées, encore sur les alias `--g-*` | US-055 / CA2 et CA3 les cadrent explicitement comme « reprenant le contenu fonctionnel actuel, sans changement de logique » : seul le **point d'entrée** change. **Leur restylage reste à faire** — à rattacher au Lot B avec la migration des alias (§7.4) |
+| Habillage des modales | `ModalTelegram` / `ModalMembres` redessinées (en-tête `brandSoft`, pied explicatif, barre de progression du code…) | ~~`LierTelegram.jsx` / `GestionMembres.jsx` inchangées, encore sur les alias `--g-*`~~ → **résorbé** | US-055 / CA2 et CA3 ne cadraient que le changement de **point d'entrée**, et le restylage était renvoyé au Lot B. Il a en fait été fait dans une itération postérieure : vérification au cadrage du Lot B, ces deux fichiers ne portent plus aucun alias `--g-*`. **Écart clos, sans US dédiée** |
 
 À noter également : la maquette nomme le rôle en lecture seule `viewer`, le backend
 `lecteur` (`PotagerMembre.role`). C'est la valeur backend qui fait foi ; les libellés
@@ -407,9 +409,9 @@ décision).
 | **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
 | **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
 | **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
-| **B** | Refontes visuelles à iso-fonctionnalité | A | *à rédiger* | ⏳ À cadrer |
+| **B** | Refontes visuelles à iso-fonctionnalité | A | US-059 → US-064 | 📝 Rédigées, à implémenter |
 | **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
-| **D** | Tableau de bord | A, C | *à rédiger* | ⏳ À cadrer |
+| **D** | Tableau de bord **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
 | **E** | Cultures transverse | A | *à rédiger* | ⏳ À cadrer |
 | **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
 | **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
@@ -437,11 +439,24 @@ US-058 qu'il faudrait reprendre peu après.
 | [US-056](../backlog/US-056_refonte-ecran-connexion-inscription.md) | Refonte de l'écran de connexion/inscription | A ter | 8 | ÉPIC 2 | ✅ Implémentée |
 | [US-057](../backlog/US-057_reinitialisation-mot-de-passe-oublie.md) | Réinitialisation du mot de passe oublié | A ter | 5 | ÉPIC 2 | ✅ Implémentée |
 | [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | 📝 Rédigée — **priorité basse, cf. §7.1** |
+| [US-059](../backlog/US-059_socle-partage-composants-transverses.md) | Migrer les composants transverses de consultation vers le design system | B | 3 | — | 📝 Rédigée |
+| [US-060](../backlog/US-060_refonte-ecran-plan-parcelles.md) | Refondre l'écran Plan (liste des parcelles) | B | 5 | — | 📝 Rédigée |
+| [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière | B | 8 | — | 📝 Rédigée |
+| [US-062](../backlog/US-062_refonte-ecran-stocks.md) | Refondre l'écran Stocks avec bascule tableau / cartes | B | 5 | — | 📝 Rédigée |
+| [US-063](../backlog/US-063_refonte-ecran-journal.md) | Refondre l'écran Journal | B | 5 | — | 📝 Rédigée |
+| [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée |
 
 **Total Lot A + A bis + A ter : 34 points.** Ordre de dépendance : US-052 → US-053 →
 (US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors chemin critique) : 8 points
 supplémentaires**, dépendant de US-056 (déclenchement juste après l'écran de connexion) et
 US-048 (création de potager/invitations, logique réutilisée).
+
+**Total Lot B : 28 points.** Ordre de dépendance : US-059 (socle partagé) →
+(US-060 ∥ US-061 ∥ US-062 ∥ US-063, parallélisables une fois le socle livré) → US-064
+(clôture). Les six US du Lot B sont du **portage visuel pur, à iso-fonctionnalité** : aucune
+donnée nouvelle, aucun endpoint nouveau, aucune migration BDD — chaque US d'écran porte un CA
+de non-régression listant nommément les fonctions à préserver, y compris celles absentes de
+la maquette (date de référence, observations, bandeaux de métriques, filtres, pagination).
 
 US-054 et US-055 sont du **portage visuel pur** : les fonctions sous-jacentes
 (`PotagerSelector.jsx`, `GestionMembres.jsx`, `LierTelegram.jsx`) sont déjà livrées et
@@ -456,16 +471,32 @@ voir §5.8.
 
 ### 7.3 Contenu détaillé des lots non encore découpés en US
 
-- **Lot B — Refontes visuelles à iso-fonctionnalité** : Plan (les tuiles « Vue plan » /
-  « Rotation » sont déjà en place depuis US-053, en `Placeholder`), Pépinière, Stocks,
-  Journal. Pas de nouvelle donnée métier, juste nouvel habillage + responsive. Découpage
-  naturel : une US par écran (4 US).
+- ~~**Lot B — Refontes visuelles à iso-fonctionnalité**~~ — **découpé, cf. §7.2 (US-059 →
+  US-064)**. Périmètre livré : Plan (les tuiles « Vue plan » / « Rotation » restent en
+  `Placeholder` depuis US-053), Pépinière, Stocks, Journal. Pas de nouvelle donnée métier,
+  juste nouvel habillage + responsive. Le découpage retenu compte **6 US** et non 4 :
+  - une **US de socle en tête de lot** (US-059) migre les six composants transverses
+    partagés par les quatre écrans (sélecteur de date de référence, filtre culture, bandeau
+    de métriques, panneau d'observations, écrans de chargement et d'erreur — 42 alias à eux
+    seuls). Sans elle, les quatre US d'écran retoucheraient les mêmes fichiers en
+    concurrence ; avec elle, elles deviennent parallélisables ;
+  - quatre **US d'écran** (US-060 à US-063), chacune portant un CA de migration des alias et
+    un CA de non-régression nominatif — les fonctions absentes de la maquette (date de
+    référence US-030/031, observations US-039, bandeaux de métriques, filtres, pagination)
+    sont **toutes conservées et réhabillées**, aucune perte fonctionnelle assumée ;
+  - une **US de clôture** (US-064) qui constate la propreté du périmètre du lot sans
+    supprimer le bloc d'alias (cf. §7.4).
+  L'écran **Statistiques est explicitement hors Lot B** : devenant un sous-écran du Tableau
+  de bord, sa refonte visuelle est rattachée au Lot D pour éviter de le retoucher deux fois.
 - **Lot C — Localisation du potager & météo personnalisée** : module de recherche de ville
   unifié, champs de localisation sur l'entité Potager (migration), endpoint météo web basé
   sur la localisation réelle. Cf. §5.2. Réutilisera la colonne `Potager.ville` déjà posée
   par US-058 (§5.8) plutôt que d'en créer une seconde.
 - **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
   (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
+  **Inclut la refonte visuelle de l'écran Statistiques** (`views/Stats.jsx`, 78 alias), qui
+  en devient un sous-écran (§5.1), ainsi que la suppression finale du bloc d'alias `--g-*`
+  et la migration des trois vues orphelines qui le retiennent encore (cf. §7.4).
 - **Lot E — Cultures transverse** : schéma étendu `CultureConfig` (migration + choix de la
   source des métadonnées horticoles), vue agrégée hors pépinière. Cf. §5.3.
 - **Lot F — Guide d'utilisation intégré** : parcours web (navigation) + volet explicatif sur
@@ -482,9 +513,22 @@ Deux points introduits volontairement par le Lot A, à traiter au fil des US du 
    les noms `--g-bg`, `--g-acc`, `--g-amb`… ont été redéfinis comme **alias pointant vers la
    nouvelle palette**. Toute l'application affiche donc bien les nouvelles couleurs, mais
    chaque US du Lot B doit migrer son écran vers les tokens sémantiques
-   (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias. Une
-   fois tous les écrans migrés, supprimer le bloc d'alias de `index.css` et de
-   `tailwind.config.js`.
+   (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias.
+
+   **Répartition constatée au cadrage du Lot B** (comptage des occurrences restantes) :
+
+   | Fichiers | Occurrences | Traité par |
+   |---|---|---|
+   | `Pepiniere.jsx` (80), `Historique.jsx` (54), `Stocks.jsx` (39), `Plan.jsx` (29) | 202 | US-060 → US-063 |
+   | `Observations.jsx`, `DateRefPicker.jsx`, `MetricStrip.jsx`, `CultureFilter.jsx`, `LoadingSkeleton.jsx`, `ApiError.jsx` | 42 | **US-059** (socle, en tête de lot) |
+   | `Stats.jsx` | 78 | **Lot D** (Statistiques devient sous-écran du Tableau de bord) |
+   | `AucunPotager.jsx` (23), `PotagerSelector.jsx` (19), `VerifyEmail.jsx` (10) | 52 | **Lot D** (vues orphelines, hors périmètre des 4 écrans du Lot B) |
+
+   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle
+   vérifie que les quatre écrans et les six composants transverses sont propres, et met à
+   jour le commentaire du bloc pour recenser nommément les quatre fichiers qui le retiennent
+   encore. La suppression effective du bloc d'`index.css` et de `tailwind.config.js` est
+   reportée au **Lot D**, qui migrera `Stats.jsx` et les trois vues orphelines.
 2. **Vues étirées en desktop** : la contrainte `max-w-md mx-auto` a été retirée d'`App.jsx`
    (exigence de mise en page desktop d'US-053). Les écrans non encore refondus s'étirent
    donc sur toute la largeur disponible sur grand écran — rendu imparfait assumé jusqu'à ce
