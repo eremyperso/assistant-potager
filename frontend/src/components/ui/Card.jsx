@@ -4,11 +4,16 @@
  * `@container/card` : l'agencement interne s'adapte à la largeur de la carte
  * elle-même, pas à celle de l'écran — la même carte peut donc vivre en pleine
  * largeur ou dans une grille à 3 colonnes sans variante dédiée.
+ *
+ * `bg` : token de fond, `bg-card` par défaut. Passer `bg-surface` pour une carte
+ * imbriquée dans une autre carte, qui doit s'en détacher [US-059]. Prop dédiée
+ * plutôt que surcharge via `className` : deux utilitaires de même propriété se
+ * départagent sur l'ordre du CSS généré, pas sur l'ordre de la chaîne de classes.
  */
-export function Card({ children, className = '', pad = 'p-4', ...props }) {
+export function Card({ children, className = '', pad = 'p-4', bg = 'bg-card', ...props }) {
   return (
     <div
-      className={`@container/card bg-card border border-border rounded-2xl shadow-card ${pad} ${className}`}
+      className={`@container/card ${bg} border border-border rounded-2xl shadow-card ${pad} ${className}`}
       {...props}
     >
       {children}

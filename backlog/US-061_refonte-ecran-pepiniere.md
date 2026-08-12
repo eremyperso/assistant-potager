@@ -38,17 +38,55 @@ Déroulé de référence, lot de 10 graines de tomate :
 | Plantation de 5 godets | 70 % | 29 % (2/7) | 71 % (5/7) |
 
 **Critères d'acceptance :**
-- [ ] CA1 : Chaque carte affiche les trois stades **Germination / Godet / Terre** sous forme de barres de progression reprenant le composant du design system, chacune accompagnée de son pourcentage **et de la quantité réelle correspondante** — un pourcentage peut reposer sur un dénominateur provisoire, une quantité de plants ne ment jamais
+> **Arbitrage maquette (12/08/2026)** — trois CA ci-dessous contredisaient `ScreenPep`
+> (`web-screens.jsx`). La maquette l'emporte ; le détail des écarts est consigné au §5.9 de
+> `docs/ANALYSE_REFONTE_UI_WEB_2026.md`.
+
+- [x] CA1 : Chaque carte affiche les trois stades **Germination / Godet / Terre** sous forme
+  d'une **frise de trois segments côte à côte** (`StageBar` de la maquette), le stade courant
+  portant une pastille et son libellé en gras coloré. ~~chacune accompagnée de son pourcentage
+  et de la quantité réelle correspondante~~ → **arbitré en faveur de la maquette** : la frise
+  ne porte que les libellés `Germin. / Godet / Terre`. Les quantités réelles sont portées par
+  la ligne de décomposition (CA6), le pourcentage par le badge de germination (CA3) — un
+  pourcentage peut reposer sur un dénominateur provisoire, une quantité de plants ne ment jamais
 - [ ] CA2 : Les pourcentages respectent la règle ci-dessus, dénominateur variable compris, et le déroulé de référence en quatre événements donne exactement les valeurs du tableau
-- [ ] CA3 : Un badge de phase surmonte les barres et **nomme le stade plutôt que de répéter un chiffre** : `🌱 Germination X %` tant que la germination est en cours, `✓ Réussite X %` une fois close, et une mention explicite d'information manquante lorsque l'état est indéterminé (nombre de graines d'origine non déclaré sur au moins une mise en godet, cf. US-065). Le même pourcentage n'a pas le même sens selon la phase : « 70 %, ça peut encore monter » et « 70 %, c'est définitif » doivent être distinguables
+- [x] CA3 : Un badge sous la frise porte le **taux de germination**, coloré par sa valeur, et
+  une mention explicite d'information manquante lorsque celui-ci ne peut pas être établi
+  (nombre de graines d'origine non déclaré sur au moins une mise en godet, cf. US-065 ; ou
+  aucun semis rattaché au lot).
+  ~~`🌱 Germination X %` tant que la germination est en cours, `✓ Réussite X %` une fois close~~
+  → **arbitré en faveur de la maquette** (12/08/2026), qui n'affiche que `Germination N %`.
+  La distinction « en cours » / « close » n'est plus rendue : elle doublait la même valeur
+  sous deux libellés sans rien apprendre de plus au jardinier
 - [ ] CA4 : Une carte par **lot de semis**, identifiée par sa date de semis, de sorte que deux semis échelonnés d'une même variété soient lisibles séparément ; les mises en godet sans semis rattaché forment une carte distincte explicitement libellée comme telle
 - [ ] CA5 : Les cas où un pourcentage n'a pas de sens sont rendus explicitement plutôt que par un zéro trompeur : la barre Germination affiche « — » quand aucun semis n'est rattaché au lot, et une incohérence de saisie signalée par US-065 (plus de plants que de graines semées) est rendue visible sur la carte au lieu d'être bornée silencieusement à 100 %
 - [ ] CA6 : Les plants sortis de la pépinière autrement que par plantation — vendus, perdus en godet — ne sont comptés dans aucune des trois barres ; le reliquat est mentionné en clair sous les barres (par exemple « 2 vendus · 1 perdu »), de sorte que l'écart à 100 % soit toujours explicable
 - [ ] CA7 : Les trois barres remplacent la phrase de synthèse actuelle de la carte (« X plants en godet · Y plantés · Z en attente »), qui porte exactement la même information sous forme rédigée — changement de forme, pas perte d'information
-- [ ] CA8 : Les cartes reprennent l'habillage de carte du design system, avec la barre d'accent latérale reflétant le stock résiduel (vert au-dessus de 40 % du lot, ambre de 15 à 40 %, rouge en dessous) et le compteur circulaire de plants disponibles, conformément à la maquette
-- [ ] CA9 : Sur grand écran, les cartes se répartissent en plusieurs colonnes ; la bascule est pilotée par la largeur du conteneur (`container-type: inline-size` + `@container`) et non par un breakpoint d'écran (règle non négociable de `CLAUDE.md`)
+- [x] ~~CA8 : Les cartes reprennent l'habillage de carte du design system, avec la barre
+  d'accent latérale reflétant le stock résiduel (vert au-dessus de 40 % du lot, ambre de 15 à
+  40 %, rouge en dessous)~~ → **CA abandonné** : la maquette n'a pas de barre d'accent
+  latérale, la carte a un bord uniforme. Reste dû : le compteur circulaire de plants
+  disponibles (`PlantDonut`, anneau `brand` uni sur piste à 22 % d'opacité), conformément à la
+  maquette
+- [x] CA9 : Sur grand écran, les cartes se répartissent en plusieurs colonnes selon la règle
+  `.wpep-grid` de la maquette — `repeat(auto-fill, minmax(230px, 1fr))`, gouttière de 12 px.
+  La fiche a donc une largeur calée (230 px minimum) et **ne s'étire pas** pour occuper la
+  ligne : à 1440 px, cinq fiches s'alignent ; une rangée incomplète laisse ses colonnes vides.
+  ~~la bascule est pilotée par la largeur du conteneur (`container-type: inline-size` +
+  `@container`)~~ → sans objet : le dimensionnement est **intrinsèque**, il ne repose ni sur un
+  breakpoint d'écran ni sur une container query, ce qui satisfait *a fortiori* la règle de
+  `CLAUDE.md`
 - [ ] CA10 : Le panneau de détail s'ouvre dans la fenêtre modale du design system, **ciblé sur le lot de la carte ouverte**, et conserve intégralement sa timeline de traçabilité : semis avec son identifiant, son nombre de graines et sa parcelle d'origine, lots de godets numérotés, taux de germination, plantations avec la parcelle de destination et les identifiants des lots consommés, ventes, pertes en pépinière, ainsi que les mentions explicites « semis non lié » et « pas encore planté » quand le maillon est absent
-- [ ] CA11 : Aucune régression fonctionnelle sur la liste — sont conservés : la distinction entre lots en attente de mise en place et lots entièrement plantés, le badge de pieds vendus, le code couleur du taux de germination (vert à partir de 80 %, ambre de 50 à 79 %, rouge en dessous), et les trois métriques de tête (godets disponibles, réussite moyenne, nombre de cultures)
+- [x] CA11 : Aucune régression fonctionnelle sur la liste — sont conservés : **le code couleur
+  du taux de germination** (vert à partir de 80 %, ambre de 50 à 79 %, rouge en dessous), porté
+  par le badge de germination, et les métriques de tête, sous la forme du bandeau de repères en
+  ligne de la maquette (`N lots actifs · N plants en godet · N % germination`).
+  ~~la distinction entre lots en attente de mise en place et lots entièrement plantés~~ →
+  **arbitré en faveur de la maquette** : les lots sont regroupés par **famille botanique** en
+  sections repliables (`GroupHead`) ; le statut d'un lot reste lisible sur sa carte (badge de
+  stade + compteur à 0) et le bandeau « cultures entièrement plantées » (CA12) est conservé.
+  ~~le badge de pieds vendus~~ → remplacé par la ligne de décomposition du CA6, qui porte la
+  même information (`N vendus`) au format de la maquette
 - [ ] CA12 : Les deux bandeaux de récapitulatif — « cultures entièrement plantées » et « pieds vendus cette saison » — sont portés par le composant de bandeau d'information du design system, en conservant leur contenu et leur condition d'affichage
 - [ ] CA13 : Le sélecteur de date de référence et le filtre par culture (portant à la fois sur la culture et sur la variété) sont conservés et utilisent les composants migrés par US-059, y compris sur l'écran vide « aucun godet en pépinière » ; les trois barres reflètent l'état à la date de référence choisie
 - [ ] CA14 : L'écran ne contient plus aucun alias de couleur `--g-*` ni classe `bg-g-*` / `text-g-*` / `border-g-*` — uniquement les tokens sémantiques de la nouvelle palette

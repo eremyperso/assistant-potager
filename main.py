@@ -73,6 +73,7 @@ from app.services import stats as svc_stats
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
+from app.services import stock as svc_stock  # [US-065]
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
@@ -1104,19 +1105,73 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
 
 
 
+@app.get("/pepiniere/lots")
+def get_pepiniere_lots(
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """
+    [US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.
+
+    Un lot = un événement de semis en pépinière, identifié par sa date ; les mises
+    en godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).
+    Chaque lot porte son propre avancement (`taux_germination`), son état de
+    germination à trois valeurs (`etat_germination` : en_cours / close /
+    indeterminee) et le signalement d'une éventuelle incohérence de saisie
+    (`incoherence_saisie`).
+
+    Cette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui
+    conserve exactement son contrat actuel — écrans Stocks, Statistiques et bot
+    inchangés (CA5).
+
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    """
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    db = SessionLocal()
+    try:
+        lots = svc_stock.calcul_lots_pepiniere(db, ctx, date_ref=dr)
+        return {
+            "lots": [
+                {
+                    **lot,
+                    "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
+                    "date_derniere_mise_en_godet": (
+                        str(lot["date_derniere_mise_en_godet"])[:10]
+                        if lot["date_derniere_mise_en_godet"] else None
+                    ),
+                }
+                for lot in lots
+            ],
+            "total": len(lots),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/godets/detail")
 def get_godet_detail(
     culture: str = Query(...),
     variete: str = Query(default=None),
+    semis_id: int = Query(default=None, description="[US-065 CA6] Cible le lot issu de ce semis"),
+    sans_semis_rattache: bool = Query(default=False, description="[US-065 CA6] Cible le lot des godets sans semis parent"),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-029] Cycle de vie complet semis → godets → plantations pour une (culture, variété).
     Utilisé par le panneau de détail de la pépinière frontend.
+
+    [US-065 / CA6] `semis_id` (ou `sans_semis_rattache`) restreint le détail à un lot
+    précis. Sans ces paramètres, le comportement historique agrégé est conservé.
     """
     db = SessionLocal()
     try:
-        cycle = svc_evenements.cycle_vie_culture(db, ctx, culture, variete)
+        cycle = svc_evenements.cycle_vie_culture(
+            db, ctx, culture, variete,
+            semis_id=semis_id, sans_semis_rattache=sans_semis_rattache,
+        )
         semis_events        = cycle["semis"]
         godet_events        = cycle["godets"]
         linked_plantations  = cycle["plantations"]
@@ -1127,6 +1182,10 @@ def get_godet_detail(
         return {
             "culture": culture,
             "variete": variete,
+            # [US-065 CA6] Rappel du lot ciblé, pour que le panneau de détail sache
+            # ce qu'il affiche (lot précis vs agrégat culture + variété).
+            "semis_id": semis_id,
+            "sans_semis_rattache": sans_semis_rattache,
             "semis": [
                 {
                     "id":        s.id,

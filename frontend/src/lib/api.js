@@ -139,9 +139,16 @@ export const api = {
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
   activite:     (annee, dateRef) => get(`/stats/activite${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
   rendement:    (annee, dateRef) => get(`/stats/rendement${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
-  godetsDetail: (culture, variete) => {
+  // [US-065/US-061] Pépinière lot de semis par lot de semis — lecture distincte de
+  // `/godets`, qui reste agrégée par culture + variété pour Stocks, Stats et le bot.
+  pepiniereLots: (dateRef) => get(`/pepiniere/lots${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-061 CA10] `semisId` / `sansSemisRattache` ciblent le lot ouvert ; sans eux
+  // l'endpoint conserve son comportement agrégé (culture + variété).
+  godetsDetail: (culture, variete, { semisId, sansSemisRattache } = {}) => {
     const params = new URLSearchParams({ culture })
     if (variete) params.append('variete', variete)
+    if (semisId != null) params.append('semis_id', semisId)
+    if (sansSemisRattache) params.append('sans_semis_rattache', 'true')
     return get(`/godets/detail?${params}`)
   },
   // [US-039] parcelleId seul (carte parcelle) | parcelleId+culture+variete (ligne culture) | culture seule (Stocks)

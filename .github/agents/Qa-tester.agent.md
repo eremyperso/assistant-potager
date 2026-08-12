@@ -77,6 +77,24 @@ coexistent dans le même rapport.
 
 **Verdict global :** GO / GO avec réserves / NO-GO
 
+## Suivi d'avancement (kanban GitHub)
+
+**Une fois la validation prononcée**, et seulement si elle est favorable :
+
+```bash
+python tools/us_tracker.py US-XXX en_qa
+```
+
+- Verdict **GO** ou **GO avec réserves** → passer l'US en `en_qa`.
+- Verdict **NO-GO**, ou un critère d'acceptance non couvert → **ne rien
+  positionner** : l'US reste en `In Progress`, elle retourne au développement.
+  Marquer une US validée alors qu'elle est rejetée fausse l'état du produit.
+- Ne jamais positionner « Done » : cette colonne relève du déploiement, et
+  l'outil refuse ce statut. Détail : `.github/agents/Suivi-US.agent.md`.
+
+Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, GitHub
+indisponible), mentionne-le dans le rapport, le verdict reste valable.
+
 ## Règles
 - Un test = un seul comportement vérifié
 - Nommer les tests : `test_[numéro_us]_[composant]_[scenario]`

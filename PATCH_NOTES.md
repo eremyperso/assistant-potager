@@ -1,4 +1,74 @@
 
+## [v3.31.1] — 2026-08-12
+
+### 🐛 Corrections
+- Corrige des lots marqués « germination indéterminée » alors que leur taux était en réalité définitif : quand le cumul des graines soldées atteint déjà le nombre semé, plus aucune graine ne peut rester à lever, et un « sur N graines » manquant ne change rien à cette conclusion (US-065)
+
+### 🔧 Améliorations techniques
+- Supprime le libellé « Réussite N % » de l'écran Pépinière : un lot n'affiche plus que son taux de germination, comme la maquette de référence — les deux libellés portaient la même valeur (US-061)
+- Cale la largeur des fiches de lot sur la règle de la maquette (230 px minimum, autant de colonnes que la largeur en contient) : cinq fiches s'alignent sur un écran de 1440 px, et une rangée incomplète n'élargit plus les cartes qu'elle contient (US-061)
+
+## [v3.31.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Refond l'écran Pépinière sur le modèle de la maquette 2026 : une carte par lot de semis, avec sa frise des trois stades Germination → Godet → Terre, le stade courant mis en avant (US-061)
+- Affiche une carte par lot de semis, identifiée par sa date de semis et son ancienneté en jours, les godets sans semis rattaché formant une carte explicitement libellée comme telle (US-061)
+- Nomme la phase du lot plutôt que de répéter un chiffre : « Germination 70 % » tant qu'il reste des graines à lever, « Réussite 70 % » une fois la valeur définitive (US-061)
+- Signale une germination indéterminée comme une information manquante, et non comme un stade en cours, quand le nombre de graines d'origine n'a pas été déclaré (US-061)
+- Décompose chaque lot sous sa frise — graines semées, plants obtenus, mis en terre, vendus, perdus — de sorte que l'écart à 100 % soit toujours explicable (US-061)
+- Rend visible sur la carte une incohérence de saisie — plus de plants obtenus que de graines semées — au lieu de la borner en silence à 100 % (US-061)
+- Regroupe les lots par famille botanique, en sections repliables, et ajoute un tri par date de semis ou par culture (US-061)
+- Répartit les cartes sur deux à quatre colonnes selon la largeur disponible, au lieu de les étirer sur toute la largeur (US-061)
+- Ouvre le détail du cycle de vie dans la fenêtre modale de l'application, ciblé sur le lot de la carte ouverte et non sur l'ensemble d'une culture (US-061)
+
+### 🔧 Améliorations techniques
+- Migre l'écran Pépinière vers les tokens sémantiques de la palette 2026 : les 80 alias `--g-*` qu'il portait, le plus gros volume du lot, ont disparu (US-061)
+- Branche l'écran sur `GET /pepiniere/lots` (US-065), `GET /godets` restant la lecture agrégée des écrans Stocks et Statistiques et du bot (US-061)
+- Ajoute `GroupHead` et `useGroups` au design system, portés depuis la maquette pour les sections repliables par famille (US-061)
+- Ajoute `frontend/src/lib/familles.js`, table de familles botaniques provisoire en attendant le schéma étendu de `CultureConfig` du Lot E (US-061)
+- Isole les règles des stades dans `frontend/src/lib/pepiniere.js`, couvertes par `npm test` (`node --test`, sans dépendance supplémentaire) — le déroulé de référence de l'US y est vérifié valeur par valeur (US-061)
+- Fait dépendre la bascule multi-colonnes et le repli de la barre de filtres de la largeur du conteneur (`@container`) et non d'un breakpoint d'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-061)
+
+## [v3.30.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Suit la pépinière lot de semis par lot de semis : deux semis échelonnés d'une même variété apparaissent séparément, chacun avec son avancement et son état de germination — en cours, close, ou indéterminée (US-065)
+- Demande sur quel lot porte un repiquage lorsque plusieurs lots ont encore des graines en germination, au lieu de n'en rattacher aucun en silence
+- Réclame le nombre de graines d'origine d'une mise en godet quand il manque, en rappelant le lot concerné et ses graines restantes (US-066)
+- Permet de passer outre cette question en une action explicite, l'avancement du lot restant alors indéterminé plutôt que faussé par une valeur inventée (US-066)
+- Permet de consulter le détail du cycle de vie d'un lot précis, et plus seulement d'un couple culture + variété (US-065)
+
+### 🐛 Corrections
+- Corrige le solde anticipé du semis parent, jusqu'ici réputé entièrement consommé dès le premier repiquage : un repiquage échelonné ne fait plus sauter l'avancement du lot à sa valeur finale (US-065)
+- Signale une incohérence de saisie lorsqu'un lot cumule plus de plants obtenus que de graines semées, cas qu'aucun contrôle ne voyait jusqu'ici (US-065)
+- Refuse une mise en godet qui solderait plus de graines qu'il n'en reste sur son lot — le garde-fou existant ne comparait qu'un lot de godet à lui-même, jamais le cumul
+- Refuse une mise en godet lorsque des lots de semis existent mais qu'aucun ne peut la porter, au lieu de l'enregistrer sans rattachement et sans rien signaler
+- Refuse une mise en godet dont le lot reste indéterminé alors que plusieurs sont possibles, plutôt que d'en choisir un au hasard
+- Corrige le rattachement d'un godet à un semis de pleine terre, qui ne produit jamais de plants en godet
+- Corrige la proposition de lots d'une autre variété à un repiquage explicitement déclaré sans variété
+- Corrige l'unité d'un semis dicté sans unité (« semis de 50 choux »), enregistré en pieds au lieu de graines parce que le modèle en inventait une (US-037)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /pepiniere/lots`, lecture par lot qui s'ajoute à `GET /godets` sans en changer le contrat : écrans Stocks et Statistiques et statistiques du bot strictement inchangés (US-065)
+- Ajoute les paramètres `semis_id` et `sans_semis_rattache` à `GET /godets/detail`, sans toucher à son comportement agrégé par défaut (US-065)
+- Ajoute `calcul_lots_pepiniere()`, `lots_candidats_mise_en_godet()` et `lot_pepiniere_par_semis()` à `utils/stock.py`, avec leurs enveloppes tenant (US-065)
+- Vérifie que l'unité d'un semis figure réellement dans le texte dicté avant de la retenir, sur le modèle du garde-fou anti-hallucination de culture (US-011 bis)
+- Branche l'interception des réponses en attente dans `handle_voice`, qui n'en lisait aucune — les flux de clarification n'étaient jusqu'ici utilisables qu'au clavier (US-066)
+- Aucune migration nécessaire : `nb_graines_semees` et `origine_graines_id` existaient déjà, seul leur usage change (US-065, US-066)
+
+## [v3.29.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Uniformise l'apparence des éléments communs aux écrans Plan, Pépinière, Stocks et Journal : le sélecteur de date de référence et le filtre par culture ont désormais la même hauteur et le même dessin partout, et le bandeau de métriques reprend les tuiles de statistique du reste de l'application (US-059)
+- Détache visuellement le panneau d'observations de la carte qui le porte, jusqu'ici fondu dans le fond en thème clair (US-059)
+
+### 🔧 Améliorations techniques
+- Migre les six composants transverses de consultation (`DateRefPicker`, `CultureFilter`, `MetricStrip`, `Observations`, `LoadingSkeleton`, `ApiError`) vers les tokens sémantiques de la palette 2026 — plus aucun alias `--g-*` parmi eux (US-059)
+- Réduit `CultureFilter` à un habillage de `SearchField` et `MetricStrip` à un agencement de tuiles `Stat`, au lieu de redéfinir leur propre style (US-059)
+- Ajoute la prop `bg` à `Card` et les props `tone` / `valueColor` à `Stat`, pour couvrir la carte imbriquée et le chiffre coloré sans surcharge de classes au résultat dépendant de l'ordre du CSS généré (US-059)
+- Fait réagir le bandeau de métriques et le panneau d'observations à la largeur de leur conteneur (`@container`) et non à celle de l'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-059)
+- Ajoute les six composants transverses à la page de contrôle visuel `/design-system`, jusqu'ici limitée aux composants de `components/ui/` (US-059)
+
 ## [v3.28.0] — 2026-08-11
 
 ### 🚀 Nouveautés

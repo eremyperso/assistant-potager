@@ -8,7 +8,9 @@
 > **Dernière mise à jour** : lots A (US-052, US-053), A bis (US-054, US-055) et A ter
 > (US-056, US-057) implémentés ; **Lot B découpé en 6 US (US-059 → US-064), à implémenter**
 > — voir §7.3 pour le détail du découpage et §7.4 pour la répartition de la dette d'alias
-> qui en découle. Le §5.6 documente les écarts assumés entre la maquette
+> qui en découle. US-059, US-065 et US-061 sont livrées : le §5.9 documente les écarts
+> assumés entre `web-screens.jsx` et l'écran Pépinière livré, ainsi que la dette de famille
+> botanique qu'il ouvre et que **US-067** vient solder. Le §5.6 documente les écarts assumés entre la maquette
 > `web-account.jsx` et le menu Compte livré, le §5.7 ceux entre `login-screens.jsx` et
 > l'écran de connexion/inscription livré (US-056/US-057 implémentées sans QA dédiée pour
 > l'instant — vérification à chaud). Un lot **H — Onboarding « premier potager »** (§5.8,
@@ -364,6 +366,66 @@ cultures) pour délivrer sa version pleinement fonctionnelle — d'où sa priori
 basse (§7.1) : la version décrite ici (US-058) est livrable de façon autonome, mais restera
 plus simple que la maquette tant que C et E ne sont pas cadrés.
 
+### 5.9 Écran Pépinière (US-061) — écarts assumés avec la maquette
+
+L'écran livré porte `ScreenPep` (`web-screens.jsx`) sur les données réelles par lot
+d'US-065 : barre de filtres, carte de repères en ligne (`N lots actifs` · `N plants en
+godet` · `N % germination`), groupes repliables par famille botanique (`GroupHead`), et
+carte de lot avec badge de stade solide, nom serif + variété italique, `PlantDonut`,
+ligne `date · N jours`, frise `StageBar` à trois segments, décomposition `PlantRatio`,
+badge de germination coloré par le taux et lieu du lot.
+
+Deux critères d'acceptance d'US-061 contredisaient la maquette ; ils ont été arbitrés en
+faveur de celle-ci :
+
+| Point | US-061 | Maquette | Décision |
+|---|---|---|---|
+| Barre d'accent latérale colorée par le stock résiduel | CA8 | Absente — la carte a un bord uniforme, le stock est porté par le `PlantDonut` | **CA8 abandonné**, l'accent latéral est supprimé |
+| Regroupement des cartes | CA11 — « en attente de mise en place » / « entièrement plantés » | Groupes repliables par **famille botanique** | **Maquette retenue.** Le statut d'un lot reste lisible sur sa carte (badge de stade + compteur à 0), et le bandeau « cultures entièrement plantées » (CA12) est conservé. Du CA11 subsiste ce qui a été explicitement confirmé : **le code couleur du taux de germination** (vert ≥ 80 %, ambre 50–79 %, rouge en dessous), porté par le badge de germination |
+| Pourcentage par stade | CA1 — pourcentage **et** quantité pour chacun des trois stades | La frise ne porte que les libellés `Germin. / Godet / Terre` | **Frise maquette stricte.** Les quantités sont portées par `PlantRatio`, le pourcentage par le badge de germination. Les remplissages des trois segments restent les valeurs réelles du CA2 |
+| Libellé du badge de taux | CA3 — `Germination X %` en cours, `✓ Réussite X %` une fois close | `Germination N %`, toujours, coloré par le taux | **Maquette retenue.** La distinction en cours / close doublait la même valeur sous deux libellés sans rien apprendre de plus. Seuls les cas où le taux **n'existe pas** gardent un libellé propre : « Germination indéterminée » (déclaration manquante, cf. US-065 CA3) et « Germination inconnue » (aucun semis rattaché) |
+
+**Mise en page des cartes — la règle est intrinsèque, pas par paliers.** `.wpep-grid` vaut
+`repeat(auto-fill, minmax(230px, 1fr))` avec une gouttière de 12 px, sans aucun palier :
+c'est le seul écran du lot dont la grille ne comporte ni breakpoint ni container query. La
+fiche a donc une **largeur calée** — 230 px minimum — et ne s'étire jamais pour occuper la
+ligne. Avec la largeur de page de l'application (`max-w-[1320px]` + `px-6`), cela donne
+**cinq fiches alignées à 1440 px**, trois à 768 px, une à 375 px, et une rangée incomplète
+laisse ses colonnes vides au lieu d'élargir les cartes présentes.
+
+> À retenir pour les US d'écran restantes du Lot B : ne pas transposer ces grilles en
+> paliers `grid-cols-*`. Elles sont explicites dans le `<style>` de
+> `Potager - Application Web - Proposition.html` et diffèrent d'un écran à l'autre —
+> `.wcat-grid` et `.wcult-grid` sont à paliers (`@container dev`), `.wpep-grid` ne l'est pas.
+
+Trois écarts vont dans l'autre sens — la maquette est un prototype à données figées, elle
+ne pouvait pas les prévoir :
+
+- **Remplissages de la frise** : le prototype code en dur `100 / 62 / 0` selon le stade.
+  L'écran livré y met les pourcentages réels du lot (règle du CA2), la forme restant
+  identique.
+- **`PlantRatio`** : le prototype écrit « N semés » là où il énumère en réalité des
+  plants. Sur données réelles, graines semées et plants obtenus ne coïncident pas (c'est
+  précisément le taux de germination) — les deux sont donc distingués : `N semés ·
+  N obtenus · N mis en terre · N vendus · N perdus`.
+- **Ajouts fonctionnels absents de la maquette, conservés** : sélecteur de date de
+  référence (US-030/031) dans la barre de filtres, et ouverture de la timeline de
+  traçabilité (US-020/US-029) au clic sur une carte.
+
+Enfin, le regroupement par famille suppose une donnée que le backend n'a pas : la famille
+botanique. `frontend/src/lib/familles.js` porte une table de correspondance provisoire,
+reprise de `FAM_OF` (`web-tokens.jsx`), avec repli sur « Autres ».
+
+**Dette ouverte, tracée par [US-067](../backlog/US-067_famille-botanique-culture-config.md).**
+Cette table est figée dans le code et appariée exactement : sur les données réelles du
+potager, `pâtisson`, `petit pois`, `pois gourmand` et `haricot grimpant` tombent dans
+« Autres », et **toute culture nouvellement dictée au bot y tombera aussi** jusqu'à une
+prochaine livraison. US-067 déplace la famille dans `culture_config` — externalisée,
+pré-remplie et corrigeable depuis le bot — et supprime le fichier d'interface. Elle est
+rattachée au **Lot B** (elle solde une dette qu'il a créée) et non au Lot E, dont elle
+prépare néanmoins la vue « Cultures » : le schéma horticole complet (durée, exposition,
+besoin en eau, calendrier) reste, lui, du ressort du Lot E (§5.3).
+
 ## 6. Points ouverts / risques à trancher avant découpage en US
 
 Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque
@@ -409,7 +471,7 @@ décision).
 | **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
 | **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
 | **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
-| **B** | Refontes visuelles à iso-fonctionnalité | A | US-059 → US-064 | 📝 Rédigées, à implémenter |
+| **B** | Refontes visuelles à iso-fonctionnalité | A | US-059 → US-064, US-065, **US-067** | 📝 Rédigées, à implémenter |
 | **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
 | **D** | Tableau de bord **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
 | **E** | Cultures transverse | A | *à rédiger* | ⏳ À cadrer |
@@ -447,20 +509,27 @@ US-058 qu'il faudrait reprendre peu après.
 | [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée |
 | [US-065](../backlog/US-065_pepiniere-par-lot-etat-germination.md) | Exposer la pépinière par lot de semis avec un état de germination fiable | B | 8 | — | 📝 Rédigée — **bloquante pour US-061** |
 | [US-066](../backlog/US-066_bot-reclamer-graines-origine-mise-en-godet.md) | Réclamer le nombre de graines d'origine lors d'une mise en godet | — | 3 | — | 📝 Rédigée — saisie Telegram, hors Lot B |
+| [US-067](../backlog/US-067_famille-botanique-culture-config.md) | Externaliser la famille botanique des cultures dans `culture_config` | B | 5 | — | 📝 Rédigée — **dette ouverte par US-061, cf. §5.9** |
 
 **Total Lot A + A bis + A ter : 34 points.** Ordre de dépendance : US-052 → US-053 →
 (US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors chemin critique) : 8 points
 supplémentaires**, dépendant de US-056 (déclenchement juste après l'écran de connexion) et
 US-048 (création de potager/invitations, logique réutilisée).
 
-**Total Lot B : 33 points** (28 + US-065). Ordre de dépendance : US-059 (socle partagé) →
-(US-060 ∥ US-062 ∥ US-063 ∥ [US-065 → US-061], parallélisables une fois le socle livré) →
-US-064 (clôture). **US-066 (3 points) est hors Lot B** : elle relève de la saisie Telegram et
-peut être livrée indépendamment, mais plus elle est livrée tôt, moins l'historique accumule
-de lots en état indéterminé. Le Lot B est **à iso-fonctionnalité** : aucune donnée nouvelle, aucun endpoint
-nouveau, aucune migration BDD — chaque US d'écran porte un CA de non-régression listant
-nommément les fonctions à préserver, y compris celles absentes de la maquette (date de
-référence, observations, bandeaux de métriques, filtres, pagination).
+**Total Lot B : 38 points** (28 + US-065 + US-067). Ordre de dépendance : US-059 (socle
+partagé) → (US-060 ∥ US-062 ∥ US-063 ∥ [US-065 → US-061 → US-067], parallélisables une fois
+le socle livré) → US-064 (clôture). **US-066 (3 points) est hors Lot B** : elle relève de la
+saisie Telegram et peut être livrée indépendamment, mais plus elle est livrée tôt, moins
+l'historique accumule de lots en état indéterminé.
+
+Le Lot B se voulait **à iso-fonctionnalité** — aucune donnée nouvelle, aucun endpoint
+nouveau, aucune migration BDD. Chaque US d'écran porte à ce titre un CA de non-régression
+listant nommément les fonctions à préserver, y compris celles absentes de la maquette (date
+de référence, observations, bandeaux de métriques, filtres, pagination). **Deux US dérogent
+à ce principe, et toutes deux à cause de la Pépinière** : US-065 (lecture par lot, ci-dessous)
+et US-067 (famille botanique en base), l'une préalable à l'écran, l'autre conséquence de sa
+livraison. C'est le seul écran du lot dont la maquette supposait des données que
+l'application n'avait pas.
 
 **Une exception : la Pépinière demande une brique de données préalable (US-065).** La maquette
 y introduit trois barres d'avancement par lot — **Germination / Godet / Terre** — dont les

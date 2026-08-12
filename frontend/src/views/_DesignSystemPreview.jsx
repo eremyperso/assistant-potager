@@ -1,4 +1,12 @@
+import { useState } from 'react'
 import { Sprout, Leaf, ShoppingBasket, MapPin, BarChart3, Home, Calendar, Layers } from 'lucide-react'
+import { AppContextProvider } from '../context/AppContext.jsx'
+import DateRefPicker from '../components/DateRefPicker.jsx'
+import CultureFilter from '../components/CultureFilter.jsx'
+import MetricStrip from '../components/MetricStrip.jsx'
+import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
+import ApiError from '../components/ApiError.jsx'
+import { ObservationIcon, ObservationPanel } from '../components/Observations.jsx'
 import {
   Card,
   CardHead,
@@ -127,6 +135,85 @@ export default function DesignSystemPreview() {
           ]}
         />
       </section>
+
+      <TransversesPreview />
     </div>
+  )
+}
+
+/**
+ * Composants transverses aux quatre écrans de consultation [US-059].
+ * Ils vivent hors de `components/ui/` parce qu'ils portent une logique métier
+ * (date de référence persistée, filtre culture, observations chargées à la
+ * demande), mais leur habillage vient désormais du design system — d'où leur
+ * présence sur cette page de contrôle.
+ */
+function TransversesPreview() {
+  const [search, setSearch] = useState('')
+  const [obsOuvert, setObsOuvert] = useState(true)
+
+  return (
+    <AppContextProvider>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
+          US-059 — Filtres transverses (DateRefPicker + CultureFilter)
+        </h2>
+        <div className="flex items-center gap-2">
+          <DateRefPicker />
+          <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
+          US-059 — MetricStrip
+        </h2>
+        <MetricStrip
+          metrics={[
+            { value: 61, label: 'godets dispo', color: 'var(--g-pri)' },
+            { value: '78%', label: 'réussite moy.', color: 'var(--g-acc)' },
+            { value: 3, label: 'perdus', color: 'var(--g-red)' },
+          ]}
+        />
+        <p className="text-[11.5px] text-txt3">Deux métriques sur trois zones (la troisième reste vide) :</p>
+        <MetricStrip
+          metrics={[
+            { value: 5, label: 'parcelles actives', color: 'var(--g-acc)' },
+            { value: 21, label: 'cultures en place', color: 'var(--g-pri)' },
+          ]}
+        />
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
+          US-059 — Observations (icône + panneau)
+        </h2>
+        <Card>
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-[15px] font-semibold text-txt">Planche nord</span>
+            <ObservationIcon onClick={() => setObsOuvert((v) => !v)} active={obsOuvert} count={3} />
+          </div>
+          {obsOuvert && (
+            <ObservationPanel
+              items={[
+                { date: '12/04', texte: 'Quelques pucerons sur les jeunes pousses, à surveiller.' },
+                { date: '03/05', texte: 'Sol encore lourd après les pluies.' },
+                { date: '21/05', texte: 'Première fleur.' },
+                { date: '02/06', texte: 'Paillage renouvelé.' },
+              ]}
+              loading={false}
+            />
+          )}
+        </Card>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
+          US-059 — LoadingSkeleton + ApiError
+        </h2>
+        <LoadingSkeleton lines={2} />
+        <ApiError message="Données indisponibles" onRetry={() => {}} />
+      </section>
+    </AppContextProvider>
   )
 }
