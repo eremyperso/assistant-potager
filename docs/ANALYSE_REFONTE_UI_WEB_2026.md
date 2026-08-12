@@ -441,22 +441,69 @@ US-058 qu'il faudrait reprendre peu après.
 | [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | 📝 Rédigée — **priorité basse, cf. §7.1** |
 | [US-059](../backlog/US-059_socle-partage-composants-transverses.md) | Migrer les composants transverses de consultation vers le design system | B | 3 | — | 📝 Rédigée |
 | [US-060](../backlog/US-060_refonte-ecran-plan-parcelles.md) | Refondre l'écran Plan (liste des parcelles) | B | 5 | — | 📝 Rédigée |
-| [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière | B | 8 | — | 📝 Rédigée |
+| [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière avec les trois stades d'avancement | B | 5 | — | 📝 Rédigée — **dépend d'US-065, cf. §7.2** |
 | [US-062](../backlog/US-062_refonte-ecran-stocks.md) | Refondre l'écran Stocks avec bascule tableau / cartes | B | 5 | — | 📝 Rédigée |
 | [US-063](../backlog/US-063_refonte-ecran-journal.md) | Refondre l'écran Journal | B | 5 | — | 📝 Rédigée |
 | [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée |
+| [US-065](../backlog/US-065_pepiniere-par-lot-etat-germination.md) | Exposer la pépinière par lot de semis avec un état de germination fiable | B | 8 | — | 📝 Rédigée — **bloquante pour US-061** |
+| [US-066](../backlog/US-066_bot-reclamer-graines-origine-mise-en-godet.md) | Réclamer le nombre de graines d'origine lors d'une mise en godet | — | 3 | — | 📝 Rédigée — saisie Telegram, hors Lot B |
 
 **Total Lot A + A bis + A ter : 34 points.** Ordre de dépendance : US-052 → US-053 →
 (US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors chemin critique) : 8 points
 supplémentaires**, dépendant de US-056 (déclenchement juste après l'écran de connexion) et
 US-048 (création de potager/invitations, logique réutilisée).
 
-**Total Lot B : 28 points.** Ordre de dépendance : US-059 (socle partagé) →
-(US-060 ∥ US-061 ∥ US-062 ∥ US-063, parallélisables une fois le socle livré) → US-064
-(clôture). Les six US du Lot B sont du **portage visuel pur, à iso-fonctionnalité** : aucune
-donnée nouvelle, aucun endpoint nouveau, aucune migration BDD — chaque US d'écran porte un CA
-de non-régression listant nommément les fonctions à préserver, y compris celles absentes de
-la maquette (date de référence, observations, bandeaux de métriques, filtres, pagination).
+**Total Lot B : 33 points** (28 + US-065). Ordre de dépendance : US-059 (socle partagé) →
+(US-060 ∥ US-062 ∥ US-063 ∥ [US-065 → US-061], parallélisables une fois le socle livré) →
+US-064 (clôture). **US-066 (3 points) est hors Lot B** : elle relève de la saisie Telegram et
+peut être livrée indépendamment, mais plus elle est livrée tôt, moins l'historique accumule
+de lots en état indéterminé. Le Lot B est **à iso-fonctionnalité** : aucune donnée nouvelle, aucun endpoint
+nouveau, aucune migration BDD — chaque US d'écran porte un CA de non-régression listant
+nommément les fonctions à préserver, y compris celles absentes de la maquette (date de
+référence, observations, bandeaux de métriques, filtres, pagination).
+
+**Une exception : la Pépinière demande une brique de données préalable (US-065).** La maquette
+y introduit trois barres d'avancement par lot — **Germination / Godet / Terre** — dont les
+pourcentages doivent refléter les quantités réelles de plants à chaque stade (§3, colonne
+« stades germination/godet/terre »). Les simulations menées au cadrage ont montré deux
+obstacles, tous deux dans les données et non dans l'affichage :
+
+1. **Maille de suivi — décision produit, pas correction d'un défaut.** La pépinière est
+   agrégée par couple culture + variété. Ce niveau répond à « où en sont mes tomates Cœur de
+   bœuf globalement » — les chiffres agrégés ne sont pas faux — mais pas à la question que se
+   pose le jardinier devant sa pépinière : **quel lot est prêt à être repiqué ou planté**.
+   Deux semis échelonnés d'une même variété n'en sont pas au même point. **Décision produit :
+   un événement de semis = un lot = une carte**, règle délibérément simple. Argument
+   corroborant : l'état de germination est par nature une propriété d'un lot semé, pas d'une
+   variété — une variété avec un lot terminé et un lot qui lève tout juste n'a pas d'état de
+   germination unique. **Point laissé ouvert** : le regroupement de lots semés à des dates
+   très rapprochées n'est pas traité, il sera arbitré plus tard à l'usage.
+2. **Consommation des graines mal calculée** — `utils/stock.py` solde un semis parent
+   entièrement dès le premier repiquage (déduplication par `origine_graines_id`), si bien
+   qu'un repiquage échelonné fait sauter l'avancement à sa valeur finale alors qu'il reste
+   des graines à lever. L'information manquante existe déjà en base (`nb_graines_semees`,
+   le « sur N graines » déjà saisi et affiché dans la timeline) : **aucune migration**, seul
+   son usage change.
+
+Ces deux points sont portés par **US-065**, dont US-061 (ramenée à 5 points, habillage seul)
+dépend. Contrainte structurante de cette US : `calcul_godets()` et `GET /godets` alimentent
+quatre consommateurs — Pépinière, Stocks, `/stats` et les statistiques du bot — leur contrat
+agrégé **ne change pas**, la lecture par lot s'ajoute à côté. **Impact nul sur US-062**
+(Stocks) et sur le Lot D.
+
+**Fiabilité de l'état de germination.** Le système ne peut jamais savoir qu'une graine « a
+germé mais n'a pas été mise en godet » : il sait seulement que toutes les graines semées ont
+été soldées. Si le jardinier omet le « sur N graines », un lot de 10 graines ayant donné
+7 plants tous mis en terre affiche « Terre 70 % » au lieu de 100 %, et n'atteint jamais
+100 %. L'erreur va toujours dans le sens prudent — on sous-estime, jamais l'inverse — et les
+quantités brutes restent exactes. Garde-fous retenus : **état de germination à trois valeurs**
+(en cours / close / **indéterminée**, cette dernière n'étant jamais déguisée en « en cours »)
+et **signalement des incohérences d'agrégat** (plus de plants que de graines semées), tous
+deux dans US-065 ; plus, en amont, **US-066** — le bot réclame le nombre de graines d'origine
+quand il manque, seul garde-fou traitant la cause plutôt que le symptôme. Écartées : la
+clôture automatique après délai (elle déclarerait mortes des graines qui lèvent peut-être
+encore, fabriquant un faux définitif — pire que l'oubli, puisqu'invisible) et le marquage
+visuel des pourcentages provisoires (redondant avec le badge de phase).
 
 US-054 et US-055 sont du **portage visuel pur** : les fonctions sous-jacentes
 (`PotagerSelector.jsx`, `GestionMembres.jsx`, `LierTelegram.jsx`) sont déjà livrées et
