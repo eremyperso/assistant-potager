@@ -13,7 +13,9 @@ Le défaut est mesuré sur les données réelles du potager : `pâtisson`, `peti
 
 La famille botanique est une donnée horticole attachée à la culture, au même titre que son type d'organe de récolte — pas une constante d'interface. Sa place est dans `culture_config`, où elle devient consultable, corrigeable et durable.
 
-Cette US ne crée pas d'écran : elle déplace une donnée et branche dessus le regroupement déjà livré. Elle prépare également le **Lot E** (vue « Cultures » transverse, §5.3 de `docs/ANALYSE_REFONTE_UI_WEB_2026.md`), qui a besoin de la famille pour ses filtres et son classement — mais ne l'attend pas : le schéma horticole complet du Lot E (durée, exposition, besoin en eau) reste hors de ce périmètre.
+Cette US ne crée pas d'écran : elle déplace une donnée et branche dessus le regroupement déjà livré. Elle prépare également le **Lot E** (vue « Cultures » transverse, §5.3 de `docs/ANALYSE_REFONTE_UI_WEB_2026.md`), qui a besoin de la famille pour ses filtres et son classement — mais ne l'attend pas.
+
+**Périmètre volontairement resserré :** le calendrier cultural (fenêtres conseillées de semis et de récolte, durées germination/récolte, itinéraires, zones climatiques) a d'abord été envisagé ici, puis sorti de cette US — il constitue un référentiel à part entière, porté par **US-068**. Cette US ne traite que la famille botanique.
 
 **Critères d'acceptance :**
 - [ ] CA1 : La famille botanique est une propriété de la culture, portée par `culture_config`, et non plus une table figée dans le code de l'interface
@@ -32,6 +34,7 @@ Cette US ne crée pas d'écran : elle déplace une donnée et branche dessus le 
 - Zone fonctionnelle concernée : consultation et enregistrement (métadonnée de culture)
 - Migration BDD requise : **oui** — nouvelle métadonnée sur `culture_config`, avec son pré-remplissage
 - Dépendances : **US-061** (consommatrice du regroupement, livrée avec la table provisoire à retirer) ; prépare le **Lot E** (§5.3) sans en dépendre
+- Voisinage : **US-068** enrichit la même table avec le référentiel de calendrier cultural. Les deux US sont indépendantes et peuvent être jouées dans n'importe quel ordre, mais elles touchent le même fichier de migration — à séquencer si elles sont menées en parallèle
 - Point de vigilance : `culture_config` n'est créée qu'à la demande, jamais pré-semée pour un catalogue de cultures — le pré-remplissage du CA2 ne doit donc pas créer de configuration pour des cultures que le jardinier n'a jamais utilisées, sous peine de peupler ses écrans de cultures fantômes
 - Point laissé ouvert : l'édition de la famille depuis l'interface web n'est **pas** traitée ici — elle relève de la vue « Cultures » du Lot E. Le bot suffit à satisfaire l'exigence « modifiable dynamiquement »
 

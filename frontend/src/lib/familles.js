@@ -44,8 +44,15 @@ const FAMILLES = {
 const normalise = (s) =>
   (s || '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
 
-export function familleDe(culture) {
-  return FAMILLES[normalise(culture)] || 'Autres'
+/**
+ * `defaut` : valeur rendue pour une culture absente de la table. « Autres » est
+ * le repli du regroupement de l'écran Pépinière, qui a besoin d'un nom de groupe
+ * affichable. L'écran Plan passe `null` [US-060 / CA9] : sur une tuile de
+ * culture, un groupe fourre-tout n'aurait aucun sens — l'absence de métadonnée
+ * s'y affiche en tiret.
+ */
+export function familleDe(culture, defaut = 'Autres') {
+  return FAMILLES[normalise(culture)] || defaut
 }
 
 export default familleDe
