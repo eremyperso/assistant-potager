@@ -1,4 +1,27 @@
 
+## [v3.32.0] — 2026-08-13
+
+### 🚀 Nouveautés
+- Refond l'écran Plan sur le modèle de la maquette 2026 : la liste des parcelles d'un côté, le détail de celle qui est sélectionnée de l'autre, au lieu d'une longue colonne de cartes à faire défiler (US-060)
+- Affiche chaque parcelle en ligne compacte — épingle colorée par le taux d'occupation, nom, nombre de cultures, surface et pourcentage — pour comparer la charge de toutes ses parcelles d'un coup d'œil (US-060)
+- Donne à la parcelle sélectionnée une fiche dédiée : superficie, exposition, occupation de la surface avec son infobulle et sa jauge (US-060)
+- Transforme chaque culture en tuile portant sa famille botanique, sa durée de culture et son calendrier des douze mois, semis / plantation / récolte (US-060)
+- Suit la date de référence sur le calendrier des cultures : reculer l'écran au 15 mars met mars en évidence sur les frises, et non le mois du jour (US-060)
+- Affiche la quantité de chaque culture avec son unité de saisie : une carotte semée sur 2 m² reste en m², jamais convertie en nombre de plants (US-060)
+- Répartit les tuiles de culture sur une à trois colonnes selon la place disponible, et empile liste et détail sur téléphone sans écran intermédiaire ni bouton retour (US-060)
+
+### 🐛 Corrections
+- Corrige le filtre par culture de l'écran Plan : une parcelle retrouvée par son nom affiche de nouveau toutes ses cultures au lieu d'apparaître vide (US-060)
+- Omet la pastille d'exposition d'une parcelle dont la valeur enregistrée est la chaîne « NULL », au lieu d'afficher « Exposition NULL » (US-060)
+
+### 🔧 Améliorations techniques
+- Migre l'écran Plan vers les tokens sémantiques de la palette 2026 : ses 29 alias `--g-*` ont disparu, il reste 93 occurrences sur le périmètre du Lot B (Stocks, Journal) (US-060)
+- Ajoute `frontend/src/lib/calendrier.js`, table de calendrier cultural provisoire — valeurs conseillées génériques, mode dégradé sans aucune valeur inventée pour une culture inconnue — en attendant le référentiel en base de l'`EPIC_CALENDRIER_CULTURAL` (US-060)
+- Ajoute le paramètre `moisCourant` à `MonthStrip`, avec repli sur le mois courant pour les écrans qui ne le fournissent pas, et en extrait la légende des trois phases (`MonthStripLegend`) (US-060)
+- Isole les règles d'affichage du Plan dans `frontend/src/lib/plan.js`, couvertes par `npm test` (`node --test`) : sélection, filtre, unités, mois de référence et métadonnées horticoles (US-060)
+- Fait dépendre la bascule liste/détail et la grille de tuiles de la largeur du conteneur (`@container`, seuils 900 / 640 / 1400 px de la maquette) et non d'un breakpoint d'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-060)
+- Documente au §5.10 de `docs/ANALYSE_REFONTE_UI_WEB_2026.md` les écarts assumés avec la maquette et la dette de calendrier ouverte, et solde l'incohérence de chiffrage d'US-060 (5 → 8 points) (US-060)
+
 ## [v3.31.1] — 2026-08-12
 
 ### 🐛 Corrections
