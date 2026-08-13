@@ -2,7 +2,7 @@
 // (`node --test`, sans dépendance de test supplémentaire).
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { stades, phaseGermination, tauxTint, stadeCourant, joursDepuis } from './pepiniere.js'
+import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from './pepiniere.js'
 
 /** Lot minimal : seuls les champs pertinents au scénario sont renseignés. */
 const lot = (champs) => ({
@@ -20,30 +20,33 @@ const lot = (champs) => ({
   ...champs,
 })
 
-const trois = (l) => { const s = stades(l); return [s.germination, s.godet, s.terre] }
+// [s.germination] reste le taux de réussite affiché sur le badge ; les deux
+// autres champs de la frise mesurent l'avancement de chaque phase (combien en
+// est sorti), pas un stock restant — voir `stades()`.
+const trois = (l) => { const s = stades(l); return [s.germinationAvancement, s.godet, s.terre] }
 
 test('[CA2] déroulé de référence — semis de 10 graines de tomate', async (t) => {
   await t.test('semis de 10 graines : 0 % partout', () => {
     assert.deepEqual(trois(lot({ graines_semees: 10, graines_en_germination: 10 })), [0, 0, 0])
   })
 
-  await t.test('5 plants sur 5 graines : 50 / 50 / 0', () => {
+  await t.test('5 plants sur 5 graines, rien encore sorti du godet : 50 / 0 / 0', () => {
     assert.deepEqual(trois(lot({
       graines_semees: 10, plants_obtenus: 5, stock_residuel_godet: 5, graines_en_germination: 5,
-    })), [50, 50, 0])
+    })), [50, 0, 0])
   })
 
-  await t.test('2 plants de plus sur les 5 graines restantes : 70 / 100 / 0', () => {
+  await t.test('germination close (graines soldées), rien sorti du godet : 100 / 0 / 0', () => {
     assert.deepEqual(trois(lot({
       graines_semees: 10, plants_obtenus: 7, stock_residuel_godet: 7, etat_germination: 'close',
-    })), [70, 100, 0])
+    })), [100, 0, 0])
   })
 
-  await t.test('plantation de 5 godets : 70 / 29 / 71', () => {
+  await t.test('plantation de 5 godets sur 7 : 100 / 71 / 71', () => {
     assert.deepEqual(trois(lot({
       graines_semees: 10, plants_obtenus: 7, nb_plantes: 5, stock_residuel_godet: 2,
       etat_germination: 'close',
-    })), [70, 29, 71])
+    })), [100, 71, 71])
   })
 })
 
@@ -53,7 +56,11 @@ test('[CA5] germination sans référence connue : aucun pourcentage, pas un 0 %'
     etat_germination: 'close',
   }))
   assert.equal(s.germination, null)
-  assert.equal(s.godet, 100)
+  // `sans_semis_rattache` équivaut à une germination close (rien en attente) :
+  // la frise « Germin. » est pleine même sans taux connu. Rien n'est encore
+  // sorti du godet, donc `godet` reste à 0.
+  assert.equal(s.germinationAvancement, 100)
+  assert.equal(s.godet, 0)
   assert.equal(s.terre, 0)
 })
 
@@ -62,7 +69,9 @@ test('[CA6] ventes et pertes : 3 plantés, 2 vendus, 1 perdu sur 7 plants', () =
     graines_semees: 10, plants_obtenus: 7, nb_plantes: 3, stock_residuel_godet: 1,
     nb_vendus: 2, nb_pertes_godet: 1, etat_germination: 'close',
   })
-  assert.deepEqual(trois(l), [70, 14, 43])
+  // 6 des 7 plants obtenus ont quitté le godet (3 plantés + 2 vendus + 1 perdu) :
+  // avancement godet à 86 %, avancement terre (sous-ensemble) à 43 %.
+  assert.deepEqual(trois(l), [100, 86, 43])
   const s = stades(l)
   // La décomposition affichée sous la frise doit refermer le total du lot.
   assert.equal(s.T + s.V + s.L + s.G, s.P)
@@ -107,6 +116,16 @@ test('stade courant de la frise : Germination → Godet → Terre', () => {
   assert.equal(stadeCourant(lot({ plants_obtenus: 7, stock_residuel_godet: 7 })), 1)
   assert.equal(stadeCourant(lot({ plants_obtenus: 7, nb_plantes: 5, stock_residuel_godet: 2 })), 1)
   assert.equal(stadeCourant(lot({ plants_obtenus: 7, nb_plantes: 7 })), 2)
+})
+
+test('stade d’avancement de la pastille : va au plus loin, même si du stock reste au stade précédent', () => {
+  assert.equal(stadeAvancement(lot({ graines_semees: 10, graines_en_germination: 10 })), 0)
+  // Godet déjà produit malgré une germination pas encore close : la pastille avance.
+  assert.equal(stadeAvancement(lot({ plants_obtenus: 7, stock_residuel_godet: 7 })), 1)
+  // Mise en terre commencée malgré du stock godet restant : la pastille va jusqu'à Terre,
+  // alors que `stadeCourant` (le badge) reste sur Godet tant que du stock y est disponible.
+  assert.equal(stadeAvancement(lot({ plants_obtenus: 7, nb_plantes: 5, stock_residuel_godet: 2 })), 2)
+  assert.equal(stadeAvancement(lot({ plants_obtenus: 7, nb_plantes: 7 })), 2)
 })
 
 test('jours écoulés depuis le semis', () => {

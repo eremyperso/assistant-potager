@@ -34,10 +34,18 @@ export function stades(lot) {
   const D = close ? P : (S || P)
   const part = (n) => (D > 0 ? Math.round((n / D) * 100) : 0)
 
+  // [CA?] La frise représente l'avancement de chaque phase — combien en est
+  // sorti —, pas un taux de réussite ni un stock restant. Une phase encore
+  // ouverte (des graines pas toutes soldées, du stock godet non écoulé) se
+  // remplit au fil de ce qui en est sorti ; une phase close (plus rien en
+  // attente) est pleine même si rien n'en est jamais sorti par ailleurs.
+  const closeGodet = P > 0 && G === 0
+
   return {
     S, P, T, G, V, L,
     germination: lot.sans_semis_rattache || S <= 0 ? null : Math.round((P / S) * 100),
-    godet: part(G),
+    germinationAvancement: close ? 100 : part(P),
+    godet: closeGodet ? 100 : part(T + V + L),
     terre: part(T),
   }
 }
@@ -54,6 +62,23 @@ export function stadeCourant(lot, st = stades(lot)) {
   if (st.P === 0) return 0
   if (st.G === 0 && st.T > 0) return 2
   return 1
+}
+
+/**
+ * Segment de la frise portant la pastille de position — distinct de
+ * `stadeCourant` (le badge de tête, qui répond à « qu'est-ce qu'il me reste à
+ * faire ? » et reste sur Godet tant que du stock y est disponible).
+ *
+ * La pastille répond à une autre question : « où en est-on allé le plus
+ * loin ? ». Si de la mise en terre a déjà eu lieu, elle y est — même s'il
+ * reste du stock en godet à écouler ; ce stock restant continue simplement à
+ * se voir dans le remplissage de la barre Godet, qui reste sous les 100 %.
+ * Même raisonnement entre Germination et Godet.
+ */
+export function stadeAvancement(lot, st = stades(lot)) {
+  if (st.T > 0) return 2
+  if (st.P > 0) return 1
+  return 0
 }
 
 /**

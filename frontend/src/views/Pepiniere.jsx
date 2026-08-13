@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { familleDe } from '../lib/familles.js'
-import { stades, phaseGermination, tauxTint, stadeCourant, joursDepuis } from '../lib/pepiniere.js'
+import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -47,6 +47,15 @@ const TRIS = ['Récent → Ancien', 'Ancien → Récent', 'Culture A → Z']
  * 100 / 62 / 0 codés en dur du prototype.
  */
 function StageBar({ st, fills }) {
+  // La pastille ne saute sur le stade d'avancement (`st`) que s'il a
+  // réellement commencé (remplissage > 0). Sinon — un lot « sans semis
+  // rattaché » qui n'a encore rien sorti de son godet, par exemple — elle
+  // reste posée, avec sa couleur, sur le dernier stade qui, lui, est rempli :
+  // sauter sur un segment à 0 % la placerait pile à la jonction des deux
+  // segments, une position ambiguë entre les deux couleurs.
+  let pastille = st
+  while (pastille > 0 && (fills[pastille] ?? 0) <= 0) pastille -= 1
+
   return (
     <div>
       <div className="flex gap-[3px] items-center">
@@ -55,9 +64,18 @@ function StageBar({ st, fills }) {
           return (
             <div key={s.l} className="flex-1 relative h-[5px] rounded-[3px] bg-card-alt">
               <div className={`absolute inset-y-0 left-0 rounded-[3px] ${s.bg}`} style={{ width: `${fill}%` }} />
-              {i === st && (
+              {/* Pastille de position, centrée sur le point d'avancement — y compris
+                  à 0 % ou 100 %, bords compris : `box-content` ajoute la bordure de
+                  2px de chaque côté au 9px de contenu (soit 13px au total), le
+                  décalage de centrage doit donc être la moitié de 13, pas de 9 —
+                  l'ancien -4.5px décalait la pastille hors du centre réel de la barre.
+                  À 100 %, elle déborde du segment courant sur le suivant : les deux
+                  divs de segment sont `relative` (donc positionnés), le suivant vient
+                  après dans le DOM et peint par-dessus à z-index égal — sans `z-10`
+                  la pastille se retrouve à moitié recouverte, coupée en croissant. */}
+              {i === pastille && (
                 <span
-                  className={`absolute top-1/2 w-[9px] h-[9px] -mt-[4.5px] -ml-[4.5px] rounded-full border-2 border-card box-content ${s.bg}`}
+                  className={`absolute z-10 top-1/2 w-[9px] h-[9px] -mt-[6.5px] -ml-[6.5px] rounded-full border-2 border-card box-content ${s.bg}`}
                   style={{ left: `${fill}%` }}
                 />
               )}
@@ -144,6 +162,7 @@ function PlantRatio({ st }) {
 function LotCard({ lot, onOpen }) {
   const st = stades(lot)
   const stade = stadeCourant(lot, st)
+  const pastilleStade = stadeAvancement(lot, st)
   const ph = phaseGermination(lot, st)
   const jours = joursDepuis(lot.date_semis)
 
@@ -193,7 +212,7 @@ function LotCard({ lot, onOpen }) {
           )}
         </div>
 
-        <StageBar st={stade} fills={[st.germination ?? 0, st.godet, st.terre]} />
+        <StageBar st={pastilleStade} fills={[st.germinationAvancement, st.godet, st.terre]} />
 
         <PlantRatio st={st} />
 
