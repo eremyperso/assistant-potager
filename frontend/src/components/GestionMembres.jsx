@@ -1,18 +1,39 @@
 // [US-048 / CA3, CA5] Modal de gestion des membres du potager actif — réservée
 // à l'owner : générer une invitation (code + rôle proposé), lister les membres,
 // retirer un membre.
+// [US-055 / CA3] Habillage aligné sur `ModalMembres` de la maquette 2026
+// (`web-account.jsx`) — même logique (lister, inviter, retirer), nouveau rendu.
 import { useState, useEffect } from 'react'
-import { X, UserMinus, UserPlus } from 'lucide-react'
+import { UserMinus, Users, Copy, Key, Pencil, Eye } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { initiales, nomAffiche } from '../lib/identite.js'
+import { libelleRole, teinteRole } from '../lib/roles.js'
+import { Modal, Btn, RoleSelect, Badge } from './ui'
 
-export default function GestionMembres({ onClose }) {
+// [US-055] Icône + description par rôle invitable — porté depuis `ROLE_OPTS`
+// de la maquette (`web-account.jsx`) ; libellé et teinte restent centralisés
+// dans `lib/roles.js`, seule source de vérité partagée avec PotagerMenu/AccountMenu.
+const ROLES_INVITABLES = [
+  { value: 'editor', icon: Pencil, sub: 'Saisit récoltes, semis et cultures' },
+  { value: 'lecteur', icon: Eye, sub: 'Consulte sans rien modifier' },
+]
+
+/** « expire dans 6 j » / « expire dans moins d'un jour » à partir d'un ISO. */
+function expirationLisible(expireLe) {
+  const jours = Math.ceil((new Date(expireLe).getTime() - Date.now()) / 86_400_000)
+  if (jours <= 0) return "expire dans moins d'un jour"
+  return `expire dans ${jours} j`
+}
+
+export default function GestionMembres({ moiId, onClose }) {
   const { potagerActif } = usePotager()
   const [membres, setMembres] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [rolePropose, setRolePropose] = useState('editor')
   const [invitation, setInvitation] = useState(null)
+  const [copie, setCopie] = useState(false)
 
   async function recharger() {
     setLoading(true)
@@ -34,6 +55,7 @@ export default function GestionMembres({ onClose }) {
     try {
       const res = await api.creerInvitation(potagerActif.id, rolePropose)
       setInvitation(res)
+      setCopie(false)
     } catch (e) {
       setError(e.message)
     }
@@ -49,80 +71,72 @@ export default function GestionMembres({ onClose }) {
     }
   }
 
+  function copierCode() {
+    navigator.clipboard?.writeText(invitation.code).then(() => {
+      setCopie(true)
+      setTimeout(() => setCopie(false), 1500)
+    })
+  }
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-6"
-      style={{ background: 'rgba(0,0,0,0.5)' }}
-      onClick={onClose}
+    <Modal
+      title="Membres du potager"
+      icon={Users}
+      sub={`${potagerActif?.nom || '—'} · ${membres.length} membre${membres.length > 1 ? 's' : ''}`}
+      onClose={onClose}
+      width={520}
+      foot="Seul le propriétaire peut inviter ou retirer un membre."
     >
-      <div
-        className="w-full max-w-xs"
-        style={{ background: 'var(--g-card)', border: '1px solid var(--g-brd)', borderRadius: 18, padding: 20 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <span className="flex items-center gap-2 font-semibold text-g-pri">
-            <UserPlus size={16} /> Membres du potager
-          </span>
-          <button onClick={onClose} aria-label="Fermer" className="text-g-sec hover:text-g-pri">
-            <X size={18} />
-          </button>
+      {error && <p className="text-red text-[13px] mb-2">{error}</p>}
+
+      <div className="flex flex-col gap-2 mb-4">
+        {loading && <span className="text-[13px] text-txt3">Chargement…</span>}
+        {!loading && membres.map((m) => (
+          <div key={m.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-card-alt">
+            <span className="w-[34px] h-[34px] rounded-full bg-brand-soft text-brand-text flex items-center justify-center text-[13px] font-bold shrink-0">
+              {initiales(m.nom, m.email)}
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="flex items-center gap-1.5 text-[13.5px] font-semibold text-txt truncate">
+                {nomAffiche(m.nom, m.email)}
+                {m.user_id === moiId && <span className="text-[11px] font-medium text-txt3">(vous)</span>}
+              </span>
+              <span className="block text-[11.5px] text-txt3 truncate mt-px">{m.email}</span>
+            </span>
+            <Badge tint={teinteRole(m.role)}>{libelleRole(m.role)}</Badge>
+            {m.role !== 'owner' && (
+              <button
+                onClick={() => handleRetirer(m.user_id)}
+                aria-label={`Retirer ${m.email || m.user_id}`}
+                className="text-red hover:opacity-70 shrink-0"
+              >
+                <UserMinus size={15} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-brand-soft rounded-2xl p-3.5">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <Key size={16} className="text-brand" />
+          <span className="text-[13.5px] font-bold text-brand-text">Inviter un membre</span>
         </div>
-
-        {error && <p style={{ color: 'var(--g-red)', fontSize: 13, marginBottom: 8 }}>{error}</p>}
-
-        <div className="flex flex-col gap-2 mb-4">
-          {loading && <span style={{ fontSize: 13, color: 'var(--g-sec)' }}>Chargement…</span>}
-          {!loading && membres.map((m) => (
-            <div key={m.user_id} className="flex items-center justify-between" style={{ fontSize: 13 }}>
-              <span style={{ color: 'var(--g-pri)' }}>{m.email || `#${m.user_id}`} · {m.role}</span>
-              {m.role !== 'owner' && (
-                <button
-                  onClick={() => handleRetirer(m.user_id)}
-                  aria-label={`Retirer ${m.email || m.user_id}`}
-                  className="text-g-red hover:opacity-70"
-                >
-                  <UserMinus size={15} />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 mb-2">
-          <select
-            value={rolePropose}
-            onChange={(e) => setRolePropose(e.target.value)}
-            style={{
-              flex: 1, background: 'var(--g-sur)', border: '1px solid var(--g-brd)',
-              color: 'var(--g-pri)', borderRadius: 10, padding: '6px 8px', fontSize: 13,
-            }}
-          >
-            <option value="editor">Editor</option>
-            <option value="lecteur">Lecteur</option>
-          </select>
-          <button
-            onClick={handleInviter}
-            style={{
-              background: 'var(--g-acc)', color: 'var(--g-card)',
-              borderRadius: 10, padding: '6px 12px', fontSize: 13, fontWeight: 600,
-            }}
-          >
-            Inviter
-          </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <RoleSelect value={rolePropose} options={ROLES_INVITABLES} onChange={setRolePropose} />
+          <Btn kind="primary" icon={Key} onClick={handleInviter}>Générer un code</Btn>
         </div>
 
         {invitation && (
-          <div className="flex flex-col items-center gap-1" style={{ marginTop: 8 }}>
-            <span style={{ fontFamily: 'monospace', fontSize: 22, fontWeight: 700, letterSpacing: 3, color: 'var(--g-acc)' }}>
-              {invitation.code}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--g-sec)' }}>
-              Rôle proposé : {invitation.role_propose} — à partager avec la personne invitée
-            </span>
+          <div className="flex items-center gap-2.5 mt-3 bg-card rounded-[10px] px-3.5 py-2.5">
+            <span className="flex-1 text-[17px] font-bold tracking-[.2em] text-txt">{invitation.code}</span>
+            <span className="text-[11.5px] text-txt3">{expirationLisible(invitation.expire_le)}</span>
+            <Btn kind="soft" small icon={Copy} onClick={copierCode}>
+              {copie ? 'Copié' : 'Copier'}
+            </Btn>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }

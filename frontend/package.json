@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test \"src/**/*.test.js\""
   },
   "dependencies": {
     "lucide-react": "^0.400.0",
@@ -15,6 +16,7 @@
     "recharts": "^2.12.7"
   },
   "devDependencies": {
+    "@tailwindcss/container-queries": "^0.1.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

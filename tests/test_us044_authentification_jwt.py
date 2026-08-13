@@ -337,15 +337,24 @@ def test_us044_ca10_token_expire_renvoie_erreur_explicite(app_client, test_db):
     assert resp.json()["detail"]["code"] == "TOKEN_EXPIRED"
 
 
-def test_us044_ca10_token_usage_unique_rejeu_refuse(app_client):
+def test_us044_ca10_rejeu_du_token_deja_verifie_reste_idempotent(app_client):
+    """[Fix] Un lien déjà utilisé pour un compte déjà vérifié renvoie un succès
+    idempotent plutôt qu'une erreur — les scanners anti-virus/clients mail qui
+    préchargent automatiquement le lien avant le clic réel de l'utilisateur ne
+    doivent pas lui faire croire que la vérification a échoué."""
     token = _inscrire_et_capturer_token(app_client)
 
     premier = app_client.get("/auth/verify-email", params={"token": token})
     assert premier.status_code == 200
 
     second = app_client.get("/auth/verify-email", params={"token": token})
-    assert second.status_code == 400
-    assert second.json()["detail"]["code"] == "TOKEN_INVALID"
+    assert second.status_code == 200
+
+
+def test_us044_ca10_token_inconnu_rejete(app_client):
+    resp = app_client.get("/auth/verify-email", params={"token": "token-qui-nexiste-pas"})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "TOKEN_INVALID"
 
 
 # ── CA11 — Connexion bloquée tant que l'e-mail n'est pas vérifié ──────────

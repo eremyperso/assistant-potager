@@ -21,6 +21,24 @@ assistant-potager/
 └── backlog/                # User Stories au format markdown
 ```
 
+## Suivi d'avancement (kanban GitHub)
+
+Avant d'écrire la moindre ligne de code, signale que l'US est prise en charge :
+
+```bash
+python tools/us_tracker.py US-XXX en_cours
+```
+
+`In Progress` couvre le développement **en cours comme terminé** : ne repositionne
+rien en fin d'implémentation, c'est la validation QA qui fait avancer l'US.
+Ne positionne **jamais** « Done » — cette colonne relève du déploiement, et
+l'outil refuse ce statut. Détail complet : `.github/agents/Suivi-US.agent.md`.
+
+Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, GitHub
+indisponible), mentionne-le et poursuis l'implémentation normalement.
+
+Si l'Orchestrateur t'a invoqué, il a déjà passé cet appel — ne le double pas.
+
 ## Comportement
 Quand tu reçois une User Story :
 1. Lis TOUS les critères d'acceptance AVANT d'écrire la moindre ligne de code
@@ -44,3 +62,4 @@ Quand tu reçois une User Story :
 - Chaque fonction métier doit avoir au moins un test unitaire
 - Mocker systématiquement les appels externes (Telegram, Groq, PostgreSQL)
 - Toujours vérifier si une migration SQL existe déjà avant d'en créer une nouvelle
+- Pour toute US avec impact visuel/UI (PWA/dashboard) : avant de la marquer comme terminée, vérifier visuellement le rendu via chrome-devtools sur au moins la résolution mobile (375px). C'est un auto-contrôle rapide, pas la validation finale — elle reste du ressort du QA-tester.

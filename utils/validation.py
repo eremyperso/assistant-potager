@@ -65,6 +65,46 @@ def culture_grounded_dans_texte(culture: str, texte_original: str) -> bool:
     return any(c and c in mots_texte for c in candidats)
 
 
+# [fix unité semis hallucinée] Mots qui ancrent RÉELLEMENT une unité de semis dans
+# le texte dicté. "graines" en est absent : c'est l'unité par défaut d'un semis, elle
+# n'a rien à prouver.
+_ANCRES_UNITE_SEMIS: dict[str, tuple[str, ...]] = {
+    "pieds": (
+        "pied", "pieds", "plant", "plants", "plante", "plantes",
+        "plantule", "plantules", "poquet", "poquets",
+    ),
+    "m²": ("metre", "metres", "carre", "carres"),
+}
+
+
+def unite_semis_ancree_dans_texte(unite_canonique: str, texte_original: str) -> bool:
+    """
+    [fix unité semis hallucinée] Vrai si l'unité retenue pour un semis est bien
+    mentionnée dans le texte source.
+
+    Semer, par définition, met des graines en terre. Les unités "pieds" et "m²"
+    sont des exceptions légitimes (semis en poquets, semis à la volée sur une
+    surface — US-037), mais elles ne valent que si le jardinier les a
+    effectivement prononcées. Quand la phrase ne porte aucune unité ("semis de 50
+    choux"), Groq en invente une — le plus souvent "plants" — qui se normalise en
+    "pieds" et fait basculer le semis dans une unité qu'il n'a jamais eue.
+
+    Même esprit que `culture_grounded_dans_texte` : ce qui n'est pas dans le texte
+    source ne peut pas être tenu pour dit.
+    """
+    if unite_canonique == "graines":
+        return True  # unité par défaut d'un semis : rien à ancrer
+
+    texte_norm = _normalise_mot(texte_original or "")
+    # "m²" devient "m2" après unidecode et ne survit pas à un découpage en mots
+    # alphabétiques — on le cherche donc directement dans le texte compacté.
+    if unite_canonique == "m²" and "m2" in texte_norm.replace(" ", ""):
+        return True
+
+    mots_texte = {_normalise_mot(m) for m in re.findall(r"[^\W\d_]+", texte_norm, flags=re.UNICODE)}
+    return bool(set(_ANCRES_UNITE_SEMIS.get(unite_canonique, ())) & mots_texte)
+
+
 def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     """
     [US-011 bis] Retire `culture` (et `variete`) d'un item parsé si la culture

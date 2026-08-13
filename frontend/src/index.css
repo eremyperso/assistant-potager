@@ -8,57 +8,114 @@
   :root {
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 
-    /* ─── Mode clair — parchemin naturel ─── */
-    --g-bg:       #EEE8D5;
-    --g-sur:      #E6DFC9;
-    --g-card:     #FDFAF1;
-    --g-brd:      #D2C8B0;
-    --g-acc:      #3A6918;
-    --g-acc-dim:  #D6EAC0;
-    --g-pri:      #1A2808;
-    --g-sec:      #7A8A56;
-    --g-mid:      #567232;
-    --g-amb:      #966010;
-    --g-amb-dim:  #F5E6C8;
-    --g-red:      #8F3030;
-    --g-red-dim:  #F5DDDD;
+    /* ═══ Palette refonte 2026 — mode clair ═══ */
+    --bg:          #F5F7F1;
+    --surface:     #FFFFFF;
+    --card:        #FFFFFF;
+    --card-alt:    #F1F5EB;
+    --border:      #E2E7DA;
+    --border-soft: #EDF0E7;
+
+    --brand:       #4A7C22;
+    --brand-deep:  #2F5416;
+    --brand-soft:  #EAF3DE;
+    --brand-text:  #3B6A1B;
+
+    --txt:         #16210C;
+    --txt2:        #5A6B4B;
+    --txt3:        #8A9880;
+
+    --amber:       #B0740F;
+    --amber-soft:  #FBF1DC;
+    --red:         #AF3A2F;
+    --red-soft:    #FAE5E2;
+    --blue:        #2A6E8F;
+    --blue-soft:   #E3EFF4;
+    --violet:      #6B4FA0;
+    --violet-soft: #EDE8F7;
+
+    --header-from:  #2F5416;
+    --header-to:    #4E8226;
+    --header-txt:   #FFFFFF;
+    --header-dim:   rgba(255, 255, 255, .74);
+    --header-glass: rgba(255, 255, 255, .18);
+
+    --shadow: 0 1px 2px rgba(22, 33, 12, .06), 0 4px 14px rgba(22, 33, 12, .05);
+
     /* Météo — précipitations */
-    --g-rain:      #3D7A99;
-    --g-rain-dim:  #D7E6EC;
-    --g-rain-line: #2E6B8A;
+    --g-rain:      #2A6E8F;
+    --g-rain-dim:  #E3EFF4;
+    --g-rain-line: #1F5670;
     /* Paliers de chaleur (mode clair) */
-    --heat-0: #347D2C;
-    --heat-1: #5FA02E;
-    --heat-2: #C2941A;
+    --heat-0: #4A7C22;
+    --heat-1: #6E9A2E;
+    --heat-2: #B0740F;
     --heat-3: #C2691A;
-    --heat-4: #B2362A;
+    --heat-4: #AF3A2F;
+
+    /* ─── Alias de compatibilité (anciens noms → nouvelle palette) ───
+       Conservés le temps que les écrans du Lot B soient migrés un par un
+       vers les tokens sémantiques ci-dessus. Ne pas utiliser dans du code neuf. */
+    --g-bg:      var(--bg);
+    --g-sur:     var(--surface);
+    --g-card:    var(--card);
+    --g-brd:     var(--border);
+    --g-acc:     var(--brand);
+    --g-acc-dim: var(--brand-soft);
+    --g-pri:     var(--txt);
+    --g-sec:     var(--txt3);
+    --g-mid:     var(--brand-text);
+    --g-amb:     var(--amber);
+    --g-amb-dim: var(--amber-soft);
+    --g-red:     var(--red);
+    --g-red-dim: var(--red-soft);
   }
 
   .dark {
-    /* ─── Mode sombre — kaki forêt ─── */
-    --g-bg:       #0D1309;
-    --g-sur:      #14200C;
-    --g-card:     #1B2912;
-    --g-brd:      #243318;
-    --g-acc:      #8EC452;
-    --g-acc-dim:  #152210;
-    --g-pri:      #DFE9C8;
-    --g-sec:      #4C6430;
-    --g-mid:      #79A24E;
-    --g-amb:      #C98C26;
-    --g-amb-dim:  #291C07;
-    --g-red:      #BF4040;
-    --g-red-dim:  #270D0D;
+    /* ═══ Palette refonte 2026 — mode sombre ═══ */
+    --bg:          #0F1409;
+    --surface:     #161D0F;
+    --card:        #1A2313;
+    --card-alt:    #212C18;
+    --border:      #2C3822;
+    --border-soft: #232E19;
+
+    --brand:       #8EC452;
+    --brand-deep:  #A5D66A;
+    --brand-soft:  #1E2D12;
+    --brand-text:  #9FD164;
+
+    --txt:         #E4EDD3;
+    --txt2:        #93A57E;
+    --txt3:        #6B7C58;
+
+    --amber:       #D9A03C;
+    --amber-soft:  #2A1F0A;
+    --red:         #D06052;
+    --red-soft:    #2A100D;
+    --blue:        #6FAECB;
+    --blue-soft:   #12242C;
+    --violet:      #A48BD8;
+    --violet-soft: #1E1830;
+
+    --header-from:  #111A0A;
+    --header-to:    #243A17;
+    --header-txt:   #E4EDD3;
+    --header-dim:   rgba(228, 237, 211, .6);
+    --header-glass: rgba(228, 237, 211, .10);
+
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
+
     /* Météo — précipitations */
-    --g-rain:      #6AA6C2;
-    --g-rain-dim:  #142730;
-    --g-rain-line: #4F8DA8;
+    --g-rain:      #6FAECB;
+    --g-rain-dim:  #12242C;
+    --g-rain-line: #5794AF;
     /* Paliers de chaleur (mode sombre) */
-    --heat-0: #3E9E46;
+    --heat-0: #6BA83F;
     --heat-1: #8EC452;
-    --heat-2: #E2B53C;
+    --heat-2: #D9A03C;
     --heat-3: #E07B2E;
-    --heat-4: #D6493B;
+    --heat-4: #D06052;
   }
 
   * {
@@ -68,7 +125,8 @@
   body {
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
-    background-color: var(--g-bg);
+    background-color: var(--bg);
+    color: var(--txt);
   }
 
   /* Masquer la scrollbar sur mobile */

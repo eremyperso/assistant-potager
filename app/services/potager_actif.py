@@ -10,10 +10,11 @@ TenantContext en paramètre : c'est justement lui qui le produit.
 """
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
-from database.models import Potager, PotagerMembre, User
+from database.models import Parcelle, Potager, PotagerMembre, User
 
 
 class AucunPotagerError(Exception):
@@ -33,6 +34,42 @@ def lister_potagers_utilisateur(db: Session, user_id: int) -> list[Potager]:
         .order_by(Potager.id)
         .all()
     )
+
+
+def compter_parcelles_par_potager(db: Session, potager_ids: list[int]) -> dict[int, int]:
+    """[US-054 / CA1] Nombre de parcelles actives par potager, pour l'affichage du
+    sélecteur de potager.
+
+    Une seule requête groupée quel que soit le nombre de potagers (pas de N+1).
+    Les parcelles désactivées (`actif = False`, suppression douce) ne sont pas
+    comptées. Un potager sans parcelle est absent du dictionnaire — à l'appelant
+    de retomber sur 0.
+    """
+    if not potager_ids:
+        return {}
+    lignes = (
+        db.query(Parcelle.potager_id, func.count(Parcelle.id))
+        .filter(Parcelle.potager_id.in_(potager_ids), Parcelle.actif.is_(True))
+        .group_by(Parcelle.potager_id)
+        .all()
+    )
+    return {potager_id: nombre for potager_id, nombre in lignes}
+
+
+def compter_membres_par_potager(db: Session, potager_ids: list[int]) -> dict[int, int]:
+    """[US-054 / CA1] Nombre de membres par potager, tous rôles confondus.
+
+    Même principe que `compter_parcelles_par_potager` : une seule requête groupée.
+    """
+    if not potager_ids:
+        return {}
+    lignes = (
+        db.query(PotagerMembre.potager_id, func.count(PotagerMembre.user_id))
+        .filter(PotagerMembre.potager_id.in_(potager_ids))
+        .group_by(PotagerMembre.potager_id)
+        .all()
+    )
+    return {potager_id: nombre for potager_id, nombre in lignes}
 
 
 def _role_utilisateur(db: Session, user_id: int, potager_id: int) -> Optional[str]:

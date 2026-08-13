@@ -2,16 +2,23 @@
 // [US-048 / CA4] Complétée avec la saisie d'un code d'invitation — seul
 // endroit accessible à tout moment (pas uniquement au premier onboarding,
 // cf. AucunPotager.jsx) pour rejoindre un potager supplémentaire.
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { X, Sprout, Check } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 
-export default function PotagerSelector({ onClose }) {
+// [US-054 / CA2] `focusCode` : ouverture depuis « Rejoindre un potager » du menu
+// déroulant — le champ code prend le focus pour éviter un clic supplémentaire.
+export default function PotagerSelector({ onClose, focusCode = false }) {
   const { potagers, activer, accepterInvitation } = usePotager()
   const [enCours, setEnCours] = useState(null)
   const [code, setCode] = useState('')
   const [error, setError] = useState(null)
   const [rejoindre, setRejoindre] = useState(false)
+  const champCode = useRef(null)
+
+  useEffect(() => {
+    if (focusCode) champCode.current?.focus()
+  }, [focusCode])
 
   async function handleSelect(potagerId) {
     if (enCours) return
@@ -88,6 +95,7 @@ export default function PotagerSelector({ onClose }) {
           {error && <p style={{ color: 'var(--g-red)', fontSize: 13, marginBottom: 6 }}>{error}</p>}
           <form onSubmit={handleRejoindre} className="flex gap-2">
             <input
+              ref={champCode}
               type="text"
               placeholder="Code"
               value={code}

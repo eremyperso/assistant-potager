@@ -73,6 +73,7 @@ from app.services import stats as svc_stats
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
+from app.services import stock as svc_stock  # [US-065]
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
@@ -181,6 +182,7 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
 class RegisterRequest(BaseModel):
     email: str
     mot_de_passe: str
+    nom: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -196,6 +198,15 @@ class ResendVerificationRequest(BaseModel):
     email: str
 
 
+class MotDePasseOublieRequest(BaseModel):
+    email: str
+
+
+class ReinitialiserMotDePasseRequest(BaseModel):
+    token: str
+    nouveau_mot_de_passe: str
+
+
 @app.post("/auth/register", status_code=201)
 @limiter.limit("5/minute")
 def auth_register(request: Request, req: RegisterRequest):
@@ -208,7 +219,7 @@ def auth_register(request: Request, req: RegisterRequest):
 
     db = SessionLocal()
     try:
-        user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe)
+        user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe, req.nom)
         # [CA9] Envoi de l'e-mail de vérification — un échec d'envoi (réseau,
         # API Brevo indisponible) est loggé côté service mais ne fait pas
         # échouer l'inscription (l'utilisateur peut redemander via
@@ -305,6 +316,72 @@ def auth_resend_verification(request: Request, req: ResendVerificationRequest):
     return {"message": "Si un compte existe pour cet e-mail, un lien de vérification a été envoyé"}
 
 
+@app.post("/auth/mot-de-passe-oublie")
+@limiter.limit("5/minute")
+def auth_mot_de_passe_oublie(request: Request, req: MotDePasseOublieRequest):
+    """[US-057 / CA1] Envoie un e-mail de réinitialisation si le compte existe
+    et a un mot de passe défini. Réponse générique identique dans tous les cas
+    (compte inconnu, Telegram-only, ou envoi effectif) — anti-énumération,
+    même principe que /auth/resend-verification (CA12)."""
+    db = SessionLocal()
+    try:
+        token = svc_auth.demander_reset_mot_de_passe(db, req.email)
+        if token:
+            svc_email.envoyer_email_reset_mdp(req.email, token)
+    finally:
+        db.close()
+    return {"message": "Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé"}
+
+
+@app.post("/auth/reinitialiser-mot-de-passe")
+@limiter.limit("10/minute")
+def auth_reinitialiser_mot_de_passe(request: Request, req: ReinitialiserMotDePasseRequest):
+    """[US-057 / CA3, CA4] Valide le token reçu par e-mail et remplace le mot
+    de passe. Usage unique : un rejeu du même token renvoie la même erreur
+    qu'un token invalide, sans distinction exploitable."""
+    if not req.nouveau_mot_de_passe or len(req.nouveau_mot_de_passe) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe trop court (8 caractères minimum)")
+
+    db = SessionLocal()
+    try:
+        svc_auth.reinitialiser_mot_de_passe(db, req.token, req.nouveau_mot_de_passe)
+        return {"message": "Mot de passe mis à jour"}
+    except svc_auth.TokenResetMdpInvalideError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_INVALID", "message": "Lien de réinitialisation invalide"},
+        )
+    except svc_auth.TokenResetMdpExpireError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_EXPIRED", "message": "Lien de réinitialisation expiré, demandez-en un nouveau"},
+        )
+    finally:
+        db.close()
+
+
+@app.get("/auth/me")
+def auth_me(user: User = Depends(get_current_user)):
+    """[US-055 / CA1] Identité du compte connecté + état de la liaison Telegram,
+    pour le menu Compte de la PWA (nom, e-mail, « relié / à faire »).
+
+    Lecture seule sur des colonnes existantes — aucune règle métier nouvelle.
+    Identité seule (pas de potager requis, même dépendance que
+    /auth/lien/generer-code) : le menu Compte doit rester consultable par un
+    compte qui n'appartient encore à aucun potager (cf. US-046 / CA5).
+    Le rôle n'est volontairement pas renvoyé ici : il dépend du potager actif
+    et vient déjà de GET /potagers.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nom": user.nom,
+        # Booléen plutôt que le chat_id lui-même : le front n'a besoin que de
+        # l'état, et l'identifiant Telegram n'a pas à circuler côté navigateur.
+        "telegram_lie": user.telegram_chat_id is not None,
+    }
+
+
 @app.post("/auth/lien/generer-code")
 def auth_generer_code_liaison(user: User = Depends(get_current_user)):
     """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce
@@ -349,6 +426,11 @@ def lister_potagers(user: User = Depends(get_current_user)):
                 potager_actif_id = svc_potager_actif.resoudre_tenant_context(db, user.id).potager_id
             except svc_potager_actif.AucunPotagerError:
                 pass
+        # [US-054 / CA1] Compteurs affichés dans le sélecteur de potager —
+        # deux requêtes groupées, indépendantes du nombre de potagers.
+        ids = [p.id for p in potagers]
+        nb_parcelles = svc_potager_actif.compter_parcelles_par_potager(db, ids)
+        nb_membres = svc_potager_actif.compter_membres_par_potager(db, ids)
         return {
             "potagers": [
                 {
@@ -358,6 +440,8 @@ def lister_potagers(user: User = Depends(get_current_user)):
                     # [US-048] rôle exposé pour que le frontend affiche la gestion
                     # des membres (inviter/retirer) uniquement aux owners.
                     "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
+                    "nb_parcelles": nb_parcelles.get(p.id, 0),
+                    "nb_membres": nb_membres.get(p.id, 0),
                 }
                 for p in potagers
             ],
@@ -1021,19 +1105,73 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
 
 
 
+@app.get("/pepiniere/lots")
+def get_pepiniere_lots(
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """
+    [US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.
+
+    Un lot = un événement de semis en pépinière, identifié par sa date ; les mises
+    en godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).
+    Chaque lot porte son propre avancement (`taux_germination`), son état de
+    germination à trois valeurs (`etat_germination` : en_cours / close /
+    indeterminee) et le signalement d'une éventuelle incohérence de saisie
+    (`incoherence_saisie`).
+
+    Cette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui
+    conserve exactement son contrat actuel — écrans Stocks, Statistiques et bot
+    inchangés (CA5).
+
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    """
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    db = SessionLocal()
+    try:
+        lots = svc_stock.calcul_lots_pepiniere(db, ctx, date_ref=dr)
+        return {
+            "lots": [
+                {
+                    **lot,
+                    "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
+                    "date_derniere_mise_en_godet": (
+                        str(lot["date_derniere_mise_en_godet"])[:10]
+                        if lot["date_derniere_mise_en_godet"] else None
+                    ),
+                }
+                for lot in lots
+            ],
+            "total": len(lots),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/godets/detail")
 def get_godet_detail(
     culture: str = Query(...),
     variete: str = Query(default=None),
+    semis_id: int = Query(default=None, description="[US-065 CA6] Cible le lot issu de ce semis"),
+    sans_semis_rattache: bool = Query(default=False, description="[US-065 CA6] Cible le lot des godets sans semis parent"),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-029] Cycle de vie complet semis → godets → plantations pour une (culture, variété).
     Utilisé par le panneau de détail de la pépinière frontend.
+
+    [US-065 / CA6] `semis_id` (ou `sans_semis_rattache`) restreint le détail à un lot
+    précis. Sans ces paramètres, le comportement historique agrégé est conservé.
     """
     db = SessionLocal()
     try:
-        cycle = svc_evenements.cycle_vie_culture(db, ctx, culture, variete)
+        cycle = svc_evenements.cycle_vie_culture(
+            db, ctx, culture, variete,
+            semis_id=semis_id, sans_semis_rattache=sans_semis_rattache,
+        )
         semis_events        = cycle["semis"]
         godet_events        = cycle["godets"]
         linked_plantations  = cycle["plantations"]
@@ -1044,6 +1182,10 @@ def get_godet_detail(
         return {
             "culture": culture,
             "variete": variete,
+            # [US-065 CA6] Rappel du lot ciblé, pour que le panneau de détail sache
+            # ce qu'il affiche (lot précis vs agrégat culture + variété).
+            "semis_id": semis_id,
+            "sans_semis_rattache": sans_semis_rattache,
             "semis": [
                 {
                     "id":        s.id,

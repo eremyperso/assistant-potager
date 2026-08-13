@@ -35,12 +35,12 @@ export function AuthContextProvider({ children }) {
     }
   }, [])
 
-  const register = useCallback(async (email, motDePasse) => {
+  const register = useCallback(async (email, motDePasse, nom) => {
     setLoading(true)
     setError(null)
     setErrorCode(null)
     try {
-      await authApi.register(email, motDePasse)
+      await authApi.register(email, motDePasse, nom)
       return true
     } catch (e) {
       setError(e.message)

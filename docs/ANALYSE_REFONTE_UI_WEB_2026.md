@@ -1,0 +1,666 @@
+# Analyse — Refonte de l'interface web (maquette Claude Design "potager 2026")
+
+> Document de cadrage du chantier de refonte. Les §1 à §6 décrivent l'analyse et les
+> arbitrages produit ; le **§7 tient à jour le découpage en lots et la répartition des US**
+> (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
+> `.github/agents/Orchestrateur-US.agent.md`).
+>
+> **Dernière mise à jour** : lots A (US-052, US-053), A bis (US-054, US-055) et A ter
+> (US-056, US-057) implémentés ; **Lot B découpé en 6 US (US-059 → US-064), à implémenter**
+> — voir §7.3 pour le détail du découpage et §7.4 pour la répartition de la dette d'alias
+> qui en découle. US-059, US-065 et US-061 sont livrées : le §5.9 documente les écarts
+> assumés entre `web-screens.jsx` et l'écran Pépinière livré, ainsi que la dette de famille
+> botanique qu'il ouvre et que **US-067** vient solder. Le §5.6 documente les écarts assumés entre la maquette
+> `web-account.jsx` et le menu Compte livré, le §5.7 ceux entre `login-screens.jsx` et
+> l'écran de connexion/inscription livré (US-056/US-057 implémentées sans QA dédiée pour
+> l'instant — vérification à chaud). Un lot **H — Onboarding « premier potager »** (§5.8,
+> US-058) a été ajouté à partir du module `onboarding-screens.jsx`, mais **volontairement
+> non prioritaire** (§7.1) : sa fonctionnalité complète dépend des lots C et E, pas encore
+> cadrés.
+
+## 1. Source
+
+Maquette importée depuis le projet Claude Design **"potager 2026"**
+(`https://claude.ai/design/p/10f5afa7-58f8-4eb0-8dae-ca5834dfff59`), fichier focal
+`Potager - Application Web - Proposition.html`, composé de 5 modules React (prototype
+statique, données mockées) :
+
+- `web-tokens.jsx` — thèmes clair/sombre, icônes SVG, jeux de données de démo
+- `web-parts.jsx` — composants UI atomiques (Card, Btn, Stat, Badge, MonthStrip, TileNav…)
+- `web-account.jsx` — **module ajouté depuis la première lecture** : sélecteur de potager
+  (`PotagerMenu`), menu compte (`AccountMenu`), et les 3 modales d'administration
+  (`ModalPotagers`, `ModalMembres`, `ModalTelegram`) — voir §5.6
+- `web-shell.jsx` — coquille applicative (TopBar, PageHeader, BottomNav, GuideModal)
+- `web-screens.jsx` — les 7 écrans (Dashboard, Stats, Plan, Cultures, Pépinière, Stocks, Journal)
+- `login-screens.jsx` — **module ajouté depuis la deuxième lecture**, fichier focal
+  `Potager - Connexion.html` : écran de connexion/inscription scindé (`LoginSplit`),
+  formulaire (`AuthForm`, `Field`), connecteurs OAuth (`OAuthRow`) — voir §5.7
+- `onboarding-screens.jsx` — **module ajouté depuis la troisième lecture**, fichier focal
+  `Potager - Premier potager.html` : assistant de création du premier potager en 4 étapes
+  (`Onboarding`, `StepPotager`, `StepParcelle`, `StepCultures`, `StepPret`), affiché juste
+  après l'inscription — voir §5.8
+
+> Cette version du document intègre une **itération de la maquette** postérieure à
+> l'analyse initiale : ajout du module Compte/Potager ci-dessus, puis deux correctifs de
+> responsive (bandeau mobile, retour à la ligne du bandeau d'info, débordement du sélecteur
+> de potager). Le §5.6 et le §4 ont été mis à jour en conséquence ; le reste de l'analyse
+> (§5.1 à §5.5, §7) reste valable.
+
+C'est un **prototype de démonstration full web responsive** (mobile → desktop via
+container queries), pas un export prêt à l'emploi : aucune donnée réelle, pas d'appels API,
+pas de gestion multi-tenant/auth. Toute donnée du prototype (`WPARCELLES`, `WCULTURES`,
+`WSTOCKS`, etc.) est fictive et à remplacer par les endpoints existants de `main.py`.
+
+## 2. État actuel de l'interface (rappel factuel)
+
+Frontend React/Vite (`frontend/src/`), **mobile-only**, sans librairie de routing (state
+`activeTab` dans `App.jsx`).
+
+- **Navigation à un seul niveau** : `TopBar.jsx` (titre + actions transverses, pas de nav)
+  + `BottomNav.jsx` (5 onglets à plat : Plan, Stocks, Pépinière, Historique, Stats).
+- **Pas de vue "Tableau de bord"** : l'app s'ouvre directement sur `Plan`.
+- **Pas de vue "Cultures" transverse** : les cultures sont dispersées entre Plan (par
+  parcelle), Stocks (par stock) et Pépinière (par lot en godet).
+- **Aucun breakpoint desktop/tablette** : layout contraint en `max-w-md mx-auto`, zéro
+  `sm:`/`md:`/`lg:` Tailwind utilisés dans tout `src/`.
+- Design tokens existants : variables CSS (`--g-bg`, `--g-acc`, `--g-amb`, `--g-red`…),
+  thème clair "parchemin" (beige/vert `#3A6918`) et sombre "kaki forêt" (`#0D1309`), police
+  Lora pour les titres, Tailwind + styles inline, icônes `lucide-react`.
+- Composants UI dupliqués par vue (`ParcellCard`, `CultureCard`, `StatTile`, `DonutRing`…),
+  pas de dossier `components/ui/` unifié.
+
+## 3. Vue d'ensemble des écrans — mapping ancien ↔ nouveau
+
+| Écran maquette | Équivalent actuel | Nature du changement |
+|---|---|---|
+| **Tableau de bord** (vue d'ensemble + météo + à faire + récoltes + journal récent) | **Aucun** | **Nouvelle vue** — création, pas une refonte |
+| **Statistiques** (sous-onglet du tableau de bord) | `views/Stats.jsx` | Refonte visuelle + **changement d'architecture** (devient sous-section du Tableau de bord, plus un onglet racine) |
+| **Plan** (liste parcelles + détail + sous-tuiles "Vue plan"/"Rotation") | `views/Plan.jsx` | Refonte visuelle + **ajout d'un niveau de sous-navigation** (2 sous-écrans non implémentés dans la maquette : placeholders) |
+| **Cultures** (fiches + calendrier par famille botanique) | **Aucune vue dédiée** (dispersé Plan/Stocks/Pépinière) | **Nouvelle vue transverse** — changement d'architecture de l'info, pas juste un habillage |
+| **Pépinière** | `views/Pepiniere.jsx` | Refonte visuelle, structure de données proche (stades germination/godet/terre) |
+| **Stocks** | `views/Stocks.jsx` | Refonte visuelle + bascule table (desktop) / cartes (mobile) |
+| **Journal** | `views/Historique.jsx` | Refonte visuelle + **renommage** (Historique → Journal) |
+
+## 4. Changements purement visuels (CSS / breakpoints / thème)
+
+Ces points ne modifient ni la navigation ni le regroupement de l'information — ils sont
+adressables écran par écran, indépendamment les uns des autres.
+
+- **Palette et tokens** : nouvelle palette verte "dashboard" (`#4A7C22` clair / `#8EC452`
+  sombre) à la place du duo parchemin/kaki forêt actuel. Nécessite de réécrire les tokens
+  CSS (`--g-*`) plutôt que de les mapper 1:1 — les noms sémantiques diffèrent aussi
+  (`brand`, `brandSoft`, `amber`, `violet` vs `g-acc`, `g-amb`, `g-red`…).
+- **Composants atomiques** : `Card`, `Btn` (4 variantes primary/ghost/soft/quiet), `Badge`,
+  `Stat`, `ProgressBar`, `MonthStrip`, `SearchField`, `Select` — portage direct possible
+  vers un dossier `components/ui/` factorisé (actuellement dupliqués par vue).
+- **Responsive — règle tranchée** (gravée dans `CLAUDE.md`) : les breakpoints Tailwind
+  (`md:`, `lg:`…) sont réservés à la structure de page globale (bascule bottom nav ↔
+  sidebar desktop) ; **tout composant réutisable** (`ParcelleCard`, `ObservationIcon`,
+  panneaux, listes…) naît avec `container-type: inline-size` et des `@container` — pas de
+  débat au cas par cas pendant le développement des US. Ce n'est donc plus un point ouvert :
+  c'est une convention de code à appliquer dès le Lot A (design system).
+- **Cartes tableau ↔ cartes mobiles** : le pattern `wstock-table` / `wstock-cards` (Stocks)
+  bascule table HTML en desktop / cartes empilées en mobile à contenu identique — c'est un
+  changement purement présentationnel, la donnée et la hiérarchie ne changent pas.
+- **Bandeaux d'info contextuels** (`InfoBanner`) et infobulles `?` (`Tip`) : ajout d'une
+  couche d'aide contextuelle au survol, superposable sans toucher à la structure existante.
+- **Police** : Lora conservé pour les titres/valeurs, cohérent avec l'existant.
+- **Thème clair/sombre** : mécanisme conservé (toggle), seule la palette change.
+- **Correctifs de responsive apportés en itération** (purement CSS, aucun impact fonctionnel) :
+  - Bandeau haut en mobile (< 900 px) : seuls le thème et l'avatar restent visibles en
+    permanence ; actualisation, notifications et guide basculent dans la première section du
+    menu Compte (classe `.wmob-only`, cachée dès 900 px via `@container`). Déconnexion,
+    Telegram et gestion des membres restent accessibles depuis ce même menu à 390 px.
+  - Bandeau d'information (`InfoBanner`) : sous 620 px, le bouton d'action passe à la ligne
+    et prend toute la largeur (`.wbanner-act`), le texte gardant une largeur minimale de
+    190 px au lieu d'être écrasé.
+  - Sélecteur de potager (`PotagerMenu`) : contraint à sa boîte, nom tronqué en ellipse
+    plutôt que débordant sous le menu (`.wpotbtn`, `.wpotname`) ; le libellé "Mon Potager"
+    (`.wbrand`) ne réapparaît qu'à partir de 1340 px pour laisser la place au sélecteur en
+    tablette paysage.
+  - Ces trois points illustrent concrètement la règle « container queries par défaut pour
+    tout composant réutilisable » (cf. `CLAUDE.md`) : tous les seuils ci-dessus sont des
+    `@container dev (…)`, pas des media queries globales.
+
+## 5. Changements d'architecture de l'information (regroupement, hiérarchie, navigation)
+
+Ces points redéfinissent ce que l'utilisateur voit où, et demandent une réflexion produit
+avant tout chiffrage — impact potentiellement fort sur les habitudes des utilisateurs actuels.
+
+### 5.1 Navigation à deux niveaux (rupture structurante)
+
+- **Actuel** : 1 niveau (bottom nav, 5 onglets à plat), pas de header de page.
+- **Maquette** : 2 niveaux —
+  1. **Navigation principale** dans une top bar verte (6 entrées : Tableau de bord, Plan,
+     Cultures, Pépinière, Stocks, Journal), qui bascule en bottom nav sous 900 px (avec un
+     bouton "Plus" pour les onglets excédentaires, ici Stocks + Journal).
+  2. **Sous-navigation en tuiles** sous le titre de page (ex : Tableau de bord →
+     "Vue d'ensemble" / "Statistiques" ; Plan → "Parcelles" / "Vue plan" / "Rotation").
+- Conséquence : **Statistiques n'est plus un onglet racine** mais un sous-écran du Tableau
+  de bord. Si des utilisateurs ont pris l'habitude d'accéder aux stats en un tap depuis le
+  bottom nav actuel, ce changement ajoute un niveau de clic (compensé par le fait que
+  Stats devient accessible aussi via un raccourci "Détail"/"Voir" depuis le Tableau de bord).
+- Un `PageHeader` générique (titre H1 serif + sous-titre + actions contextuelles) apparaît
+  sur tous les écrans, ce qui n'existe pas aujourd'hui (TopBar actuelle n'affiche qu'un
+  titre court sans description).
+
+### 5.2 Création d'un "Tableau de bord" (nouvelle vue racine)
+
+- Agrège des informations aujourd'hui déjà présentes ailleurs (météo → nulle part
+  actuellement côté frontend bien que `utils/meteo.py` existe côté bot ; à faire cette
+  semaine → n'existe pas ; récoltes de la saison → dans Stats ; dernières actions → dans
+  Historique) **plus deux éléments réellement nouveaux** :
+  - Un module "À faire cette semaine" (todo list dérivée du calendrier cultures) —
+    fonctionnalité absente du backend actuel, à spécifier (règles de génération).
+  - Un module météo local dans le web (aujourd'hui la météo n'existe que côté bot Telegram,
+    job quotidien 5h — `utils/meteo.py`). **Précision produit** : un potager est situé
+    géographiquement — il faut donc rattacher une localisation (nom de ville a minima,
+    coordonnées idéalement) au potager, pas seulement afficher une météo générique. Ce
+    rattachement passera par un **module de recherche de ville unifié** (composant de
+    recherche/autocomplete réutilisable, détaillé dans une US dédiée), utilisé à la fois
+    pour la création/édition du potager et pour tout futur besoin de géolocalisation.
+    Une fois la localisation connue, l'endpoint météo web peut interroger Open-Meteo avec
+    les coordonnées du potager pour fournir une grille météo personnalisée (et non plus un
+    point fixe codé en dur comme dans `utils/meteo.py` actuellement, probablement lié à une
+    seule ville de configuration). **Impact modèle de données** : ajouter les champs de
+    localisation sur l'entité Potager (ville, éventuellement latitude/longitude), migration
+    à prévoir.
+- Devient le point d'entrée par défaut de l'app (remplace `Plan` comme onglet initial) —
+  changement de parcours utilisateur, pas seulement d'affichage.
+
+### 5.3 Nouvelle vue "Cultures" transverse
+
+- Aujourd'hui, une culture n'a pas de fiche unique : elle est vue à travers le prisme de la
+  parcelle (Plan), du stock (Stocks) ou du lot en godet (Pépinière). La maquette introduit
+  une **fiche culture agrégée** (famille botanique, durée, exposition, besoin en eau, lieu,
+  calendrier des 12 mois semis/plantation/récolte), groupée par famille (Solanacées,
+  Cucurbitacées…) avec recherche et filtre par famille.
+- **Décision produit** : cette vue s'appuie sur une **agrégation calculée à la volée**
+  depuis les données existantes (parcelles, stocks, événements), **sans inclure les
+  cultures en pépinière** (un lot en godet n'est pas encore une "culture en place" au sens
+  de cette vue — il reste rattaché à l'écran Pépinière). Ce n'est donc pas une nouvelle
+  entité front dédiée, mais une lecture transverse des entités déjà en base.
+- **Schéma de métadonnées à définir** : les champs affichés par fiche (famille botanique,
+  durée de culture, exposition, besoin en eau…) n'existent pas dans le `CultureConfig`
+  actuel — il faudra concevoir un schéma plus complet pour cette table (migration à
+  prévoir) et déterminer la source de ces données : génération/extraction depuis une base
+  de référence horticole existante si une source fiable et réutilisable est identifiée, ou
+  interrogation d'une API tierce (à évaluer en atelier technique — ce choix conditionne le
+  chiffrage, il n'est pas tranché à ce stade).
+
+### 5.3 bis Sous-écrans du Plan non implémentés dans le prototype
+
+- "Vue plan" (représentation graphique à l'échelle avec glisser-déposer) et "Rotation des
+  cultures" (historique 3 ans par famille botanique) n'existent que comme `Placeholder` dans
+  le prototype fourni — ce sont des promesses de navigation sans fonctionnalité derrière.
+- **Décision produit** : on **positionne l'activité** — les deux entrées de sous-navigation
+  sont livrées dès cette refonte (tuiles visibles, écrans en `Placeholder` explicite comme
+  dans le prototype) — mais les **vues fonctionnelles spécifiques seront traitées plus
+  tard**, dans un chantier séparé avec ses propres US. Ne pas bloquer le Lot B (Plan) sur
+  ces deux fonctionnalités.
+
+### 5.4 Renommage Historique → Journal
+
+- Impact mineur mais transverse : label affiché, éventuellement nom de route/variable côté
+  front (`views/Historique.jsx`). Le bot Telegram utilise déjà le terme "Journal du potager"
+  par endroits — à harmoniser.
+
+### 5.5 Guide d'utilisation intégré (nouveauté, périmètre élargi)
+
+- La maquette ajoute une modale "Guide d'utilisation" accessible depuis la top bar (icône
+  `?`), avec sommaire de sections et navigation pas-à-pas — fonctionnalité produit nouvelle,
+  absente de l'app actuelle (le bot Telegram a un `/help` textuel, mais rien d'équivalent
+  côté web). À traiter comme une fonctionnalité à part entière, pas un détail visuel.
+- **Périmètre confirmé et élargi** : il ne s'agit pas seulement d'un guide de navigation web
+  (écrans + didacticiel expliquant l'usage de l'interface), mais aussi d'un volet expliquant
+  **l'accès au « backoffice » via le bot Telegram** — c'est-à-dire documenter, dans ce même
+  guide intégré, comment utiliser le bot (commandes slash, saisie vocale, flux de
+  correction…) comme mode de saisie complémentaire à l'interface web. Le guide devient donc
+  un point d'entrée pédagogique unique pour les deux surfaces de l'application (web + bot),
+  et non un simple mode d'emploi de la navigation web.
+
+### 5.6 Sélecteur de potager & menu Compte (répond au point ouvert « réintégration TopBar »)
+
+La maquette ne laissait initialement aucun équivalent pour le sélecteur de potager, la
+gestion des membres, le lien Telegram et la déconnexion (cf. ancien point ouvert n°5). Le
+module `web-account.jsx` comble ce manque avec une proposition concrète, structurée en deux
+menus distincts + trois modales :
+
+- **Contexte (gauche du bandeau)** — le libellé statique "Mon Potager" devient un vrai
+  **sélecteur de potager** (`PotagerMenu`) : menu déroulant listant tous les potagers de
+  l'utilisateur avec rôle, nombre de parcelles et de membres, coche sur le potager actif,
+  puis deux actions : « Rejoindre un potager » (code d'invitation) et « Tous mes potagers »
+  (comparer/basculer). **C'est le seul accès permanent au code d'invitation**, comme dans le
+  code actuel (`PotagerSelector.jsx`) — point de continuité important à préserver. Le nom du
+  potager actif reste toujours visible, même avec un seul potager.
+- **Compte (menu avatar à droite)** — regroupe le personnel (`AccountMenu`) : identité,
+  rôle sur le potager actif, « Relier Telegram » avec état visible (relié / à faire),
+  « Gérer les membres » (visible uniquement pour le propriétaire), déconnexion, version
+  d'API en pied de menu. **L'actualisation manuelle des données** (icône `sync`) est aussi
+  remontée ici — elle existait dans le code actuel mais manquait dans la première version de
+  la maquette web.
+- **Trois modales** portent les actions concrètes :
+  - `ModalPotagers` — bascule entre potagers ou rejoindre via code d'invitation.
+  - `ModalMembres` — liste des membres + génération d'un code d'invitation (rôle + durée
+    d'expiration affichée).
+  - `ModalTelegram` — état de la liaison + génération d'un code de liaison à durée limitée
+    (10 minutes dans la maquette).
+
+**Point d'attention produit signalé par le designer, à trancher explicitement** : ces trois
+modales portent de **vraies actions** (rejoindre, inviter, retirer un membre, générer un
+code) — elles sortent donc du cadre « consultation seule » retenu jusqu'ici pour les autres
+données du potager dans cette refonte (Lots B à F sont des vues de lecture). L'administration
+du potager (membres, invitations, liaison Telegram) ne peut fonctionnellement pas se passer
+de ces actions d'écriture. Deux options possibles pour cette phase :
+1. Implémenter ces trois modales avec leurs actions réelles dès le Lot A bis (portage direct
+   des fonctions déjà existantes dans `PotagerSelector.jsx` / `GestionMembres.jsx` /
+   `LierTelegram.jsx`, seul l'habillage change) ;
+2. Les livrer en lecture seule pour cette phase (affichage sans les actions d'écriture), et
+   reporter le branchement des actions à un lot ultérieur.
+**Décision produit (confirmée)** : option 1 retenue — les trois modales portent leurs vraies
+actions d'écriture dès le Lot A bis. Ces fonctions existent déjà et sont opérationnelles dans
+le code actuel ; il s'agit d'un portage visuel vers le nouveau shell, pas d'un développement
+fonctionnel nouveau — contrairement aux Lots C/D/E qui, eux, nécessitent réellement de
+nouvelles briques backend. L'administration du potager (membres, invitations, liaison
+Telegram) reste donc pleinement utilisable pendant toute la refonte.
+
+#### Mise en œuvre effective du menu Compte (US-055) — écarts assumés avec la maquette
+
+Le composant livré (`frontend/src/components/AccountMenu.jsx`) reprend la structure de
+`AccountMenu` (`web-account.jsx`) : bloc identité sur fond `brandSoft`, ligne « Sur ce
+potager » + pastille de rôle, intitulé « Compte & liaisons », groupe mobile
+(actualisation, notifications), « Relier Telegram » avec pastille d'état, « Gérer les
+membres » réservé au propriétaire, déconnexion, version d'API en pied de menu.
+
+Quatre écarts sont volontaires, tous dus à un décalage entre les données mockées de la
+maquette et ce que l'application sait réellement produire :
+
+| Point | Maquette | Livré | Raison |
+|---|---|---|---|
+| Notifications | Entrée mobile « 1 non lue » + icône cloche dans le bandeau desktop | Entrée désactivée « Bientôt disponible », visible à toutes les tailles | La fonctionnalité n'existe nulle part dans l'application (ni composant, ni endpoint). Sans icône cloche en desktop, restreindre l'entrée au mobile la ferait disparaître au-dessus de 900px |
+| Guide d'utilisation | Entrée mobile + icône dans le bandeau desktop | Absent | `GuideModal` relève du **Lot F**, non implémenté à ce jour (cf. §5.5) |
+| État Telegram | `Relié · @remy_potager` | `Relié` / `Non relié` | `GET /auth/me` n'expose qu'un booléen `telegram_lie` — l'identifiant du chat n'a pas à circuler côté navigateur |
+| Horodatage « synchronisé il y a 4 min » | Présent dans le bandeau de pied et le sous-titre d'actualisation | Absent | Aucune donnée de dernière synchronisation n'est suivie côté application |
+| Habillage des modales | `ModalTelegram` / `ModalMembres` redessinées (en-tête `brandSoft`, pied explicatif, barre de progression du code…) | ~~`LierTelegram.jsx` / `GestionMembres.jsx` inchangées, encore sur les alias `--g-*`~~ → **résorbé** | US-055 / CA2 et CA3 ne cadraient que le changement de **point d'entrée**, et le restylage était renvoyé au Lot B. Il a en fait été fait dans une itération postérieure : vérification au cadrage du Lot B, ces deux fichiers ne portent plus aucun alias `--g-*`. **Écart clos, sans US dédiée** |
+
+À noter également : la maquette nomme le rôle en lecture seule `viewer`, le backend
+`lecteur` (`PotagerMembre.role`). C'est la valeur backend qui fait foi ; les libellés
+affichés sont centralisés dans `frontend/src/lib/roles.js`, partagé par `PotagerMenu` et
+`AccountMenu`.
+
+Enfin, un seul ajout backend a été nécessaire pour alimenter le bloc identité :
+`GET /auth/me` (nom, e-mail, `telegram_lie`), en lecture seule sur des colonnes existantes
+de `users`, sans migration ni règle métier nouvelle.
+
+### 5.7 Écran de connexion & inscription (répond au point ouvert « authentification non couverte »)
+
+Le point ouvert n°5 (§6, historique) signalait que l'écran de connexion était le seul
+élément de l'application non couvert par la maquette d'origine. Le module `login-screens.jsx`
+(fichier focal `Potager - Connexion.html`) comble ce manque avec un écran scindé :
+
+- **Layout** (`LoginSplit`, container queries sur `.device`) : sous 900px, formulaire seul
+  en pleine largeur (logo + bouton thème en tête, pied de page compact avec mentions
+  légales) ; à partir de 900px, un panneau de marque apparaît à gauche (accroche produit +
+  trois repères chiffrés) pendant que le formulaire reste à droite, plafonné à 404px.
+- **Formulaire** (`AuthForm`) : bascule Connexion / Créer un compte au sein du même
+  composant (pas de changement de route). Connexion = e-mail + mot de passe (avec lien
+  « Mot de passe oublié ? »). Inscription = mêmes champs + Prénom + Nom + case à cocher
+  CGU/confidentialité. Champ mot de passe avec bouton afficher/masquer (`Field`, icône
+  œil) — fonctionnalité déjà présente dans `Auth.jsx` actuel, portage visuel.
+- **Connecteurs OAuth** (`OAuthRow`) : trois boutons « Continuer avec Google / Facebook /
+  Telegram » au-dessus du séparateur « ou par e-mail », en une colonne avec libellé complet
+  sous 420px de conteneur, en trois colonnes avec icône seule à partir de 420px.
+- **Thème clair/sombre** : togglable depuis l'écran, cohérent avec le mécanisme existant.
+
+**Écarts assumés entre la maquette et le périmètre retenu pour le lot A ter** (US-056,
+US-057) :
+
+| Point | Maquette | Décision retenue | Raison |
+|---|---|---|---|
+| Repères chiffrés du panneau de gauche | Données d'un potager précis (« 5 parcelles suivies », « 61 plants en pépinière »…) | Accroche produit générique, non personnalisée | L'écran de connexion s'affiche **avant** authentification : aucune donnée de compte n'est disponible à ce stade, contrairement aux écrans internes de l'app |
+| Champs Prénom + Nom (inscription) | Deux champs distincts | Un seul champ « Nom » | `User.nom` (`database/models.py`) est une colonne unique — scinder en prénom/nom demanderait une migration hors périmètre d'un simple portage d'écran ; le champ existant suffit à afficher un nom dans le menu Compte (US-055) |
+| Connecteurs OAuth (Google/Facebook/Telegram) | Boutons fonctionnels déclenchant une authentification tierce | Boutons affichés mais désactivés (« Bientôt disponible ») | Aucune intégration OAuth n'existe côté backend (enregistrement d'app, credentials, redirection) ; Telegram en particulier a déjà un mécanisme distinct (liaison par code, US-045) qui ne doit pas être confondu avec une connexion initiale par Telegram. Le câblage réel est un chantier séparé, à cadrer ultérieurement |
+| Lien « Mot de passe oublié ? » | Présent, sans précision de comportement dans la maquette (prototype statique) | Fonctionnalité réelle à part entière | Aucun mécanisme de réinitialisation n'existe aujourd'hui côté backend — ce n'est pas un simple habillage, d'où une US dédiée (US-057) plutôt qu'une inclusion dans le portage visuel |
+
+Contrairement au menu Compte (§5.6, portage visuel à 90 %), ce lot combine donc un
+**portage visuel majoritaire** (US-056) et une **fonctionnalité réellement nouvelle**
+(réinitialisation de mot de passe, US-057) — la distinction est reflétée dans le découpage
+en deux US plutôt qu'une seule.
+
+### 5.8 Onboarding « premier potager » (nouveauté, dépendante des lots C et E)
+
+Le module `onboarding-screens.jsx` (fichier focal `Potager - Premier potager.html`)
+introduit un assistant en 4 étapes affiché juste après la création de compte, réutilisant
+le panneau de gauche de l'écran de connexion (§5.7) pour porter la progression :
+
+1. **Votre potager** — nom du potager + commune, avec un encart pour basculer vers la
+   saisie d'un code d'invitation si l'utilisateur rejoint un potager existant plutôt que
+   d'en créer un.
+2. **Première parcelle** — nature de l'espace (pleine terre / pépinière), nom, surface,
+   exposition, type de sol.
+3. **Cultures** — sélection multiple parmi 12 cultures courantes (Tomate, Courgette,
+   Salade, Carotte, Haricot vert, Radis, Pomme de terre, Oignon, Fraise, Poireau,
+   Concombre, Betterave), présentée comme un point de départ, le reste étant renvoyé au
+   futur écran Cultures (Lot E).
+4. **Récapitulatif** — relit les trois étapes précédentes et propose "Entrer dans mon
+   potager", avec une suggestion de relier Telegram (US-045) en prochaine étape.
+
+**Analyse de faisabilité au regard du backend actuel** — trois champs de la maquette n'ont
+aucun équivalent aujourd'hui :
+
+| Champ maquette | État actuel | Décision retenue pour US-058 |
+|---|---|---|
+| Commune (étape 1) | `Potager` n'a que `latitude`/`longitude` (`POST /potagers`, US-048), pas de texte libre | Nouvelle colonne `Potager.ville` (texte simple, migration), **sans géocodage** — la recherche/autocomplete et la précision lat/long réelles sont le périmètre du Lot C (§5.2), qui réutilisera cette même colonne plutôt que d'en ajouter une seconde |
+| Type de sol (étape 2) | Aucun champ équivalent sur `Parcelle` | Nouvelle colonne `Parcelle.type_sol` (texte simple, migration), purement informatif à ce stade — non exploité par le calcul de stock/plan |
+| Sélection de cultures (étape 3) | `CultureConfig` n'est créée qu'à la demande, avec un `type_organe_recolte` obligatoire (`app/services/parcelles.py::creer_culture_config`) — jamais pré-semée pour un catalogue de cultures courantes | Sélection **informative uniquement** dans le récapitulatif de cette US — aucune fiche `CultureConfig` ni événement n'est créé à partir des cultures cochées ; le rattachement à de vraies fiches est un point ouvert, à raccorder une fois le schéma `CultureConfig` étendu du Lot E disponible (§5.3) |
+
+Autre écart, mineur : la création de parcelle n'existe aujourd'hui que côté bot Telegram
+(`utils/parcelles.create_parcelle`, commande `/parcelle ajouter`) — aucun endpoint web
+équivalent n'existe. US-058 introduit donc un premier `POST /parcelles`, qui réutilise
+cette même fonction de service (pas de nouvelle règle métier de création de parcelle,
+seulement une nouvelle porte d'entrée HTTP).
+
+Contrairement aux lots A ter et A bis (portage visuel de fonctions déjà opérationnelles),
+ce lot dépend directement de l'avancement des Lots C (localisation) et E (catalogue de
+cultures) pour délivrer sa version pleinement fonctionnelle — d'où sa priorité volontairement
+basse (§7.1) : la version décrite ici (US-058) est livrable de façon autonome, mais restera
+plus simple que la maquette tant que C et E ne sont pas cadrés.
+
+### 5.9 Écran Pépinière (US-061) — écarts assumés avec la maquette
+
+L'écran livré porte `ScreenPep` (`web-screens.jsx`) sur les données réelles par lot
+d'US-065 : barre de filtres, carte de repères en ligne (`N lots actifs` · `N plants en
+godet` · `N % germination`), groupes repliables par famille botanique (`GroupHead`), et
+carte de lot avec badge de stade solide, nom serif + variété italique, `PlantDonut`,
+ligne `date · N jours`, frise `StageBar` à trois segments, décomposition `PlantRatio`,
+badge de germination coloré par le taux et lieu du lot.
+
+Deux critères d'acceptance d'US-061 contredisaient la maquette ; ils ont été arbitrés en
+faveur de celle-ci :
+
+| Point | US-061 | Maquette | Décision |
+|---|---|---|---|
+| Barre d'accent latérale colorée par le stock résiduel | CA8 | Absente — la carte a un bord uniforme, le stock est porté par le `PlantDonut` | **CA8 abandonné**, l'accent latéral est supprimé |
+| Regroupement des cartes | CA11 — « en attente de mise en place » / « entièrement plantés » | Groupes repliables par **famille botanique** | **Maquette retenue.** Le statut d'un lot reste lisible sur sa carte (badge de stade + compteur à 0), et le bandeau « cultures entièrement plantées » (CA12) est conservé. Du CA11 subsiste ce qui a été explicitement confirmé : **le code couleur du taux de germination** (vert ≥ 80 %, ambre 50–79 %, rouge en dessous), porté par le badge de germination |
+| Pourcentage par stade | CA1 — pourcentage **et** quantité pour chacun des trois stades | La frise ne porte que les libellés `Germin. / Godet / Terre` | **Frise maquette stricte.** Les quantités sont portées par `PlantRatio`, le pourcentage par le badge de germination. Les remplissages des trois segments restent les valeurs réelles du CA2 |
+| Libellé du badge de taux | CA3 — `Germination X %` en cours, `✓ Réussite X %` une fois close | `Germination N %`, toujours, coloré par le taux | **Maquette retenue.** La distinction en cours / close doublait la même valeur sous deux libellés sans rien apprendre de plus. Seuls les cas où le taux **n'existe pas** gardent un libellé propre : « Germination indéterminée » (déclaration manquante, cf. US-065 CA3) et « Germination inconnue » (aucun semis rattaché) |
+
+**Mise en page des cartes — la règle est intrinsèque, pas par paliers.** `.wpep-grid` vaut
+`repeat(auto-fill, minmax(230px, 1fr))` avec une gouttière de 12 px, sans aucun palier :
+c'est le seul écran du lot dont la grille ne comporte ni breakpoint ni container query. La
+fiche a donc une **largeur calée** — 230 px minimum — et ne s'étire jamais pour occuper la
+ligne. Avec la largeur de page de l'application (`max-w-[1320px]` + `px-6`), cela donne
+**cinq fiches alignées à 1440 px**, trois à 768 px, une à 375 px, et une rangée incomplète
+laisse ses colonnes vides au lieu d'élargir les cartes présentes.
+
+> À retenir pour les US d'écran restantes du Lot B : ne pas transposer ces grilles en
+> paliers `grid-cols-*`. Elles sont explicites dans le `<style>` de
+> `Potager - Application Web - Proposition.html` et diffèrent d'un écran à l'autre —
+> `.wcat-grid` et `.wcult-grid` sont à paliers (`@container dev`), `.wpep-grid` ne l'est pas.
+
+Trois écarts vont dans l'autre sens — la maquette est un prototype à données figées, elle
+ne pouvait pas les prévoir :
+
+- **Remplissages de la frise** : le prototype code en dur `100 / 62 / 0` selon le stade.
+  L'écran livré y met les pourcentages réels du lot (règle du CA2), la forme restant
+  identique.
+- **`PlantRatio`** : le prototype écrit « N semés » là où il énumère en réalité des
+  plants. Sur données réelles, graines semées et plants obtenus ne coïncident pas (c'est
+  précisément le taux de germination) — les deux sont donc distingués : `N semés ·
+  N obtenus · N mis en terre · N vendus · N perdus`.
+- **Ajouts fonctionnels absents de la maquette, conservés** : sélecteur de date de
+  référence (US-030/031) dans la barre de filtres, et ouverture de la timeline de
+  traçabilité (US-020/US-029) au clic sur une carte.
+
+Enfin, le regroupement par famille suppose une donnée que le backend n'a pas : la famille
+botanique. `frontend/src/lib/familles.js` porte une table de correspondance provisoire,
+reprise de `FAM_OF` (`web-tokens.jsx`), avec repli sur « Autres ».
+
+**Dette ouverte, tracée par [US-067](../backlog/US-067_famille-botanique-culture-config.md).**
+Cette table est figée dans le code et appariée exactement : sur les données réelles du
+potager, `pâtisson`, `petit pois`, `pois gourmand` et `haricot grimpant` tombent dans
+« Autres », et **toute culture nouvellement dictée au bot y tombera aussi** jusqu'à une
+prochaine livraison. US-067 déplace la famille dans `culture_config` — externalisée,
+pré-remplie et corrigeable depuis le bot — et supprime le fichier d'interface. Elle est
+rattachée au **Lot B** (elle solde une dette qu'il a créée) et non au Lot E, dont elle
+prépare néanmoins la vue « Cultures » : le schéma horticole complet (durée, exposition,
+besoin en eau, calendrier) reste, lui, du ressort du Lot E (§5.3).
+
+## 6. Points ouverts / risques à trancher avant découpage en US
+
+Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque
+décision).
+
+1. **Backend manquant — confirmé, à spécifier en US** : localisation du potager (ville +
+   module de recherche unifié) pour la météo personnalisée, schéma étendu de
+   `CultureConfig` (famille botanique, durée, exposition, besoin en eau — source à trancher
+   entre base de référence existante et API tierce), règle de génération de la todo-list
+   "à faire cette semaine". Sans ces briques, le Tableau de bord et la vue Cultures ne
+   peuvent pas être branchés sur des données réelles.
+2. ~~Choix technique responsive~~ — **tranché** : breakpoints Tailwind réservés à la
+   structure de page globale, container queries par défaut pour tout composant réutilisable.
+   Règle gravée dans `CLAUDE.md` (section « Responsive frontend »), applicable dès le Lot A.
+3. ~~Écran d'accueil par défaut~~ — **tranché lors de l'implémentation d'US-053** :
+   « Tableau de bord » devient l'écran d'accueil dès maintenant, même si son contenu réel
+   relève du Lot D — l'app s'ouvre donc temporairement sur un écran « à venir ». Choix
+   assumé : la branche de refonte n'est pas déployée aux utilisateurs avant que le Lot D
+   n'ait livré le contenu.
+4. ~~Placeholders "Vue plan" et "Rotation"~~ — **tranché** : l'activité (tuiles de
+   sous-navigation) est positionnée dans cette refonte, les vues fonctionnelles détaillées
+   sont reportées à un chantier séparé.
+5. ~~Réintégration des fonctions non couvertes par la maquette~~ — **tranché** : la maquette
+   propose désormais un `PotagerMenu` (contexte, gauche) et un `AccountMenu` (compte, droite)
+   avec 3 modales dédiées (voir §5.6), **actions d'écriture réelles dès le Lot A bis**
+   (décision confirmée — portage des fonctions déjà opérationnelles, pas de développement
+   fonctionnel nouveau). ~~L'authentification (écran de connexion complet) reste le seul
+   élément non couvert par la maquette~~ — **comblé** : le module `login-screens.jsx` couvre
+   désormais l'écran de connexion/inscription (voir §5.7, Lot A ter, US-056/US-057). Seule
+   l'authentification OAuth tierce (Google/Facebook/Telegram) reste hors périmètre, affichée
+   à l'état désactivé plutôt que développée dans ce lot.
+6. **Volet QA visuel** : la checklist ajoutée aux agents Developer/PO/QA-tester (validation
+   à 375/768/1280 px via chrome-devtools) s'applique nativement à ce chantier — prévoir une
+   maquette de référence exportée (screenshot) par écran et par résolution pour l'US type
+   "CA : rendu conforme à la maquette".
+
+## 7. Découpage en lots et répartition des US
+
+### 7.1 Vue d'ensemble des lots
+
+| Lot | Périmètre | Dépend de | US rédigées | Statut |
+|---|---|---|---|---|
+| **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
+| **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
+| **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
+| **B** | Refontes visuelles à iso-fonctionnalité | A | US-059 → US-064, US-065, **US-067** | 📝 Rédigées, à implémenter |
+| **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
+| **D** | Tableau de bord **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
+| **E** | Cultures transverse | A | *à rédiger* | ⏳ À cadrer |
+| **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
+| **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
+| **H** | Onboarding « premier potager » | A, A ter | US-058 | 📝 Rédigée, à implémenter — **priorité basse** |
+
+Chemin critique : **Lot A bloque tout le reste**. Le **Lot A ter est priorisé juste après
+le Lot A** (et A bis, non bloquant) dans l'ordre d'implémentation — il ne dépend que du
+design system (A), pas du sélecteur de potager/menu Compte (A bis), mais couvre une surface
+utilisateur (l'écran pré-authentification) qui n'a de sens à traiter qu'une fois les tokens
+et composants du Lot A disponibles. Les lots B, C, E et F restent ensuite parallélisables ;
+seul D dépend de C (météo), et G de B. **Le Lot H (onboarding) est volontairement placé en
+fin de portefeuille** : il peut être développé dès que A et A ter sont livrés (aucun blocage
+technique), mais sa version pleinement fonctionnelle dépend des Lots C et E (§5.8) — inutile
+de le prioriser tant que ces deux lots ne sont pas au moins cadrés, sous peine de livrer une
+US-058 qu'il faudrait reprendre peu après.
+
+### 7.2 US rédigées — détail
+
+| US | Titre | Lot | Points | Épic | Statut |
+|---|---|---|---|---|---|
+| [US-052](../backlog/US-052_design-system-tokens-composants.md) | Fondations du design system (tokens + composants UI) | A | 5 | — | ✅ Implémentée |
+| [US-053](../backlog/US-053_navigation-deux-niveaux-shell.md) | Coquille applicative en navigation à deux niveaux | A | 8 | — | ✅ Implémentée |
+| [US-054](../backlog/US-054_selecteur-potager-menu-deroulant.md) | Sélecteur de potager en menu déroulant | A bis | 3 | ÉPIC 2 | ✅ Implémentée |
+| [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | ✅ Implémentée |
+| [US-056](../backlog/US-056_refonte-ecran-connexion-inscription.md) | Refonte de l'écran de connexion/inscription | A ter | 8 | ÉPIC 2 | ✅ Implémentée |
+| [US-057](../backlog/US-057_reinitialisation-mot-de-passe-oublie.md) | Réinitialisation du mot de passe oublié | A ter | 5 | ÉPIC 2 | ✅ Implémentée |
+| [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | 📝 Rédigée — **priorité basse, cf. §7.1** |
+| [US-059](../backlog/US-059_socle-partage-composants-transverses.md) | Migrer les composants transverses de consultation vers le design system | B | 3 | — | 📝 Rédigée |
+| [US-060](../backlog/US-060_refonte-ecran-plan-parcelles.md) | Refondre l'écran Plan (liste des parcelles) | B | 5 | — | 📝 Rédigée |
+| [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière avec les trois stades d'avancement | B | 5 | — | 📝 Rédigée — **dépend d'US-065, cf. §7.2** |
+| [US-062](../backlog/US-062_refonte-ecran-stocks.md) | Refondre l'écran Stocks avec bascule tableau / cartes | B | 5 | — | 📝 Rédigée |
+| [US-063](../backlog/US-063_refonte-ecran-journal.md) | Refondre l'écran Journal | B | 5 | — | 📝 Rédigée |
+| [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée |
+| [US-065](../backlog/US-065_pepiniere-par-lot-etat-germination.md) | Exposer la pépinière par lot de semis avec un état de germination fiable | B | 8 | — | 📝 Rédigée — **bloquante pour US-061** |
+| [US-066](../backlog/US-066_bot-reclamer-graines-origine-mise-en-godet.md) | Réclamer le nombre de graines d'origine lors d'une mise en godet | — | 3 | — | 📝 Rédigée — saisie Telegram, hors Lot B |
+| [US-067](../backlog/US-067_famille-botanique-culture-config.md) | Externaliser la famille botanique des cultures dans `culture_config` | B | 5 | — | 📝 Rédigée — **dette ouverte par US-061, cf. §5.9** |
+
+**Total Lot A + A bis + A ter : 34 points.** Ordre de dépendance : US-052 → US-053 →
+(US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors chemin critique) : 8 points
+supplémentaires**, dépendant de US-056 (déclenchement juste après l'écran de connexion) et
+US-048 (création de potager/invitations, logique réutilisée).
+
+**Total Lot B : 38 points** (28 + US-065 + US-067). Ordre de dépendance : US-059 (socle
+partagé) → (US-060 ∥ US-062 ∥ US-063 ∥ [US-065 → US-061 → US-067], parallélisables une fois
+le socle livré) → US-064 (clôture). **US-066 (3 points) est hors Lot B** : elle relève de la
+saisie Telegram et peut être livrée indépendamment, mais plus elle est livrée tôt, moins
+l'historique accumule de lots en état indéterminé.
+
+Le Lot B se voulait **à iso-fonctionnalité** — aucune donnée nouvelle, aucun endpoint
+nouveau, aucune migration BDD. Chaque US d'écran porte à ce titre un CA de non-régression
+listant nommément les fonctions à préserver, y compris celles absentes de la maquette (date
+de référence, observations, bandeaux de métriques, filtres, pagination). **Deux US dérogent
+à ce principe, et toutes deux à cause de la Pépinière** : US-065 (lecture par lot, ci-dessous)
+et US-067 (famille botanique en base), l'une préalable à l'écran, l'autre conséquence de sa
+livraison. C'est le seul écran du lot dont la maquette supposait des données que
+l'application n'avait pas.
+
+**Une exception : la Pépinière demande une brique de données préalable (US-065).** La maquette
+y introduit trois barres d'avancement par lot — **Germination / Godet / Terre** — dont les
+pourcentages doivent refléter les quantités réelles de plants à chaque stade (§3, colonne
+« stades germination/godet/terre »). Les simulations menées au cadrage ont montré deux
+obstacles, tous deux dans les données et non dans l'affichage :
+
+1. **Maille de suivi — décision produit, pas correction d'un défaut.** La pépinière est
+   agrégée par couple culture + variété. Ce niveau répond à « où en sont mes tomates Cœur de
+   bœuf globalement » — les chiffres agrégés ne sont pas faux — mais pas à la question que se
+   pose le jardinier devant sa pépinière : **quel lot est prêt à être repiqué ou planté**.
+   Deux semis échelonnés d'une même variété n'en sont pas au même point. **Décision produit :
+   un événement de semis = un lot = une carte**, règle délibérément simple. Argument
+   corroborant : l'état de germination est par nature une propriété d'un lot semé, pas d'une
+   variété — une variété avec un lot terminé et un lot qui lève tout juste n'a pas d'état de
+   germination unique. **Point laissé ouvert** : le regroupement de lots semés à des dates
+   très rapprochées n'est pas traité, il sera arbitré plus tard à l'usage.
+2. **Consommation des graines mal calculée** — `utils/stock.py` solde un semis parent
+   entièrement dès le premier repiquage (déduplication par `origine_graines_id`), si bien
+   qu'un repiquage échelonné fait sauter l'avancement à sa valeur finale alors qu'il reste
+   des graines à lever. L'information manquante existe déjà en base (`nb_graines_semees`,
+   le « sur N graines » déjà saisi et affiché dans la timeline) : **aucune migration**, seul
+   son usage change.
+
+Ces deux points sont portés par **US-065**, dont US-061 (ramenée à 5 points, habillage seul)
+dépend. Contrainte structurante de cette US : `calcul_godets()` et `GET /godets` alimentent
+quatre consommateurs — Pépinière, Stocks, `/stats` et les statistiques du bot — leur contrat
+agrégé **ne change pas**, la lecture par lot s'ajoute à côté. **Impact nul sur US-062**
+(Stocks) et sur le Lot D.
+
+**Fiabilité de l'état de germination.** Le système ne peut jamais savoir qu'une graine « a
+germé mais n'a pas été mise en godet » : il sait seulement que toutes les graines semées ont
+été soldées. Si le jardinier omet le « sur N graines », un lot de 10 graines ayant donné
+7 plants tous mis en terre affiche « Terre 70 % » au lieu de 100 %, et n'atteint jamais
+100 %. L'erreur va toujours dans le sens prudent — on sous-estime, jamais l'inverse — et les
+quantités brutes restent exactes. Garde-fous retenus : **état de germination à trois valeurs**
+(en cours / close / **indéterminée**, cette dernière n'étant jamais déguisée en « en cours »)
+et **signalement des incohérences d'agrégat** (plus de plants que de graines semées), tous
+deux dans US-065 ; plus, en amont, **US-066** — le bot réclame le nombre de graines d'origine
+quand il manque, seul garde-fou traitant la cause plutôt que le symptôme. Écartées : la
+clôture automatique après délai (elle déclarerait mortes des graines qui lèvent peut-être
+encore, fabriquant un faux définitif — pire que l'oubli, puisqu'invisible) et le marquage
+visuel des pourcentages provisoires (redondant avec le badge de phase).
+
+US-054 et US-055 sont du **portage visuel pur** : les fonctions sous-jacentes
+(`PotagerSelector.jsx`, `GestionMembres.jsx`, `LierTelegram.jsx`) sont déjà livrées et
+opérationnelles depuis les US-045 à US-048 — aucun développement métier nouveau. US-056 est
+majoritairement un portage visuel (écran de connexion/inscription existant), à l'exception
+du champ Nom ajouté à l'inscription. US-057 est en revanche une **fonctionnalité backend
+nouvelle** (réinitialisation de mot de passe, migration BDD requise) — voir §5.7. US-058
+combine portage (parcours et navigation de la maquette) et petites fondations backend
+(`POST /parcelles`, deux colonnes minimales) tout en assumant explicitement de rester plus
+simple que la maquette sur la localisation et les cultures, en attendant les Lots C et E —
+voir §5.8.
+
+### 7.3 Contenu détaillé des lots non encore découpés en US
+
+- ~~**Lot B — Refontes visuelles à iso-fonctionnalité**~~ — **découpé, cf. §7.2 (US-059 →
+  US-064)**. Périmètre livré : Plan (les tuiles « Vue plan » / « Rotation » restent en
+  `Placeholder` depuis US-053), Pépinière, Stocks, Journal. Pas de nouvelle donnée métier,
+  juste nouvel habillage + responsive. Le découpage retenu compte **6 US** et non 4 :
+  - une **US de socle en tête de lot** (US-059) migre les six composants transverses
+    partagés par les quatre écrans (sélecteur de date de référence, filtre culture, bandeau
+    de métriques, panneau d'observations, écrans de chargement et d'erreur — 42 alias à eux
+    seuls). Sans elle, les quatre US d'écran retoucheraient les mêmes fichiers en
+    concurrence ; avec elle, elles deviennent parallélisables ;
+  - quatre **US d'écran** (US-060 à US-063), chacune portant un CA de migration des alias et
+    un CA de non-régression nominatif — les fonctions absentes de la maquette (date de
+    référence US-030/031, observations US-039, bandeaux de métriques, filtres, pagination)
+    sont **toutes conservées et réhabillées**, aucune perte fonctionnelle assumée ;
+  - une **US de clôture** (US-064) qui constate la propreté du périmètre du lot sans
+    supprimer le bloc d'alias (cf. §7.4).
+  L'écran **Statistiques est explicitement hors Lot B** : devenant un sous-écran du Tableau
+  de bord, sa refonte visuelle est rattachée au Lot D pour éviter de le retoucher deux fois.
+- **Lot C — Localisation du potager & météo personnalisée** : module de recherche de ville
+  unifié, champs de localisation sur l'entité Potager (migration), endpoint météo web basé
+  sur la localisation réelle. Cf. §5.2. Réutilisera la colonne `Potager.ville` déjà posée
+  par US-058 (§5.8) plutôt que d'en créer une seconde.
+- **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
+  (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
+  **Inclut la refonte visuelle de l'écran Statistiques** (`views/Stats.jsx`, 78 alias), qui
+  en devient un sous-écran (§5.1), ainsi que la suppression finale du bloc d'alias `--g-*`
+  et la migration des trois vues orphelines qui le retiennent encore (cf. §7.4).
+- **Lot E — Cultures transverse** : schéma étendu `CultureConfig` (migration + choix de la
+  source des métadonnées horticoles), vue agrégée hors pépinière. Cf. §5.3.
+- **Lot F — Guide d'utilisation intégré** : parcours web (navigation) + volet explicatif sur
+  l'usage du bot Telegram comme backoffice. Cf. §5.5.
+- **Lot G — Vues fonctionnelles détaillées « Vue plan » et « Rotation »** : hors périmètre
+  immédiat, chantier séparé une fois le Lot B livré. Cf. §5.3 bis.
+
+### 7.4 Dette technique connue, à résorber pendant le Lot B
+
+Deux points introduits volontairement par le Lot A, à traiter au fil des US du Lot B :
+
+1. **Alias de tokens `--g-*`** : plutôt que réécrire les 391 occurrences des anciens tokens
+   dans les 20 fichiers de vues (hors périmètre d'US-052 et à fort risque de régression),
+   les noms `--g-bg`, `--g-acc`, `--g-amb`… ont été redéfinis comme **alias pointant vers la
+   nouvelle palette**. Toute l'application affiche donc bien les nouvelles couleurs, mais
+   chaque US du Lot B doit migrer son écran vers les tokens sémantiques
+   (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias.
+
+   **Répartition constatée au cadrage du Lot B** (comptage des occurrences restantes) :
+
+   | Fichiers | Occurrences | Traité par |
+   |---|---|---|
+   | `Pepiniere.jsx` (80), `Historique.jsx` (54), `Stocks.jsx` (39), `Plan.jsx` (29) | 202 | US-060 → US-063 |
+   | `Observations.jsx`, `DateRefPicker.jsx`, `MetricStrip.jsx`, `CultureFilter.jsx`, `LoadingSkeleton.jsx`, `ApiError.jsx` | 42 | **US-059** (socle, en tête de lot) |
+   | `Stats.jsx` | 78 | **Lot D** (Statistiques devient sous-écran du Tableau de bord) |
+   | `AucunPotager.jsx` (23), `PotagerSelector.jsx` (19), `VerifyEmail.jsx` (10) | 52 | **Lot D** (vues orphelines, hors périmètre des 4 écrans du Lot B) |
+
+   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle
+   vérifie que les quatre écrans et les six composants transverses sont propres, et met à
+   jour le commentaire du bloc pour recenser nommément les quatre fichiers qui le retiennent
+   encore. La suppression effective du bloc d'`index.css` et de `tailwind.config.js` est
+   reportée au **Lot D**, qui migrera `Stats.jsx` et les trois vues orphelines.
+2. **Vues étirées en desktop** : la contrainte `max-w-md mx-auto` a été retirée d'`App.jsx`
+   (exigence de mise en page desktop d'US-053). Les écrans non encore refondus s'étirent
+   donc sur toute la largeur disponible sur grand écran — rendu imparfait assumé jusqu'à ce
+   que le Lot B leur donne une vraie mise en page multi-colonnes.
+
+### 7.5 Pages de contrôle visuel (outillage de développement)
+
+Deux routes hors navigation applicative, ajoutées pour la validation visuelle exigée par les
+agents Developer et QA-tester :
+
+- `/design-system` — tous les composants de `components/ui/` isolément (US-052)
+- `/shell` — la coquille de navigation sans dépendance aux données métier (US-053).
+  Deux paramètres d'URL ajoutés par US-055 pour couvrir les cas du menu Compte sans
+  manipuler de compte réel : `?role=owner|editor|lecteur` (conditionne « Gérer les
+  membres ») et `?telegram=0|1` (état de la liaison affiché).
+
+À conserver tant que le chantier de refonte est en cours ; à supprimer (avec
+`src/views/_DesignSystemPreview.jsx`, `src/views/_ShellPreview.jsx` et le routage
+correspondant dans `main.jsx`) à la clôture du chantier.

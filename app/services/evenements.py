@@ -22,7 +22,13 @@ from database.models import Evenement, Parcelle
 from utils.actions import normalize_action
 from utils.date_utils import parse_date
 from utils.parcelles import resolve_parcelle
-from utils.stock import get_type_organe, _find_plantation_sources
+from utils.stock import (
+    get_type_organe,
+    _find_plantation_sources,
+    lots_candidats_mise_en_godet,
+    lots_pepiniere_du_couple,
+    lot_pepiniere_par_semis,
+)
 
 log = logging.getLogger("potager")
 
@@ -86,6 +92,102 @@ class CultureManquanteError(EvenementInvalideError):
         self.action = action
         super().__init__(
             f"Impossible d'enregistrer une action « {action} » sans préciser de culture."
+        )
+
+
+class LotGrainesEpuiseesError(EvenementInvalideError):
+    """[fix garde-fou graines du lot] Une mise en godet solderait plus de graines
+    qu'il n'en reste sur son lot de semis parent.
+
+    Complète `TauxGerminationImpossibleError`, qui ne contrôle qu'UN lot de godet
+    isolé (`nb_plants_godets > nb_graines_semees` du même événement) et laisse donc
+    passer le cumul : un lot de 10 graines dont 6 sont déjà soldées accepte encore
+    10 plants de plus, aboutissant à 16 graines soldées sur 10 semées. US-065/CA4
+    avait identifié ce cas mais le SIGNALE seulement en lecture (`incoherence_saisie`) ;
+    ce garde-fou empêche d'en créer de nouveaux. Blocage dur : aucun scénario
+    biologique ne permet de tirer d'un lot plus de graines qu'il n'en contenait.
+
+    Le contrôle ne s'applique qu'aux godets rattachés à un lot dont la quantité
+    semée est connue — un semis sans quantité ne permet aucune déduction, et rien
+    ne doit être bloqué sur une information absente.
+    """
+
+    def __init__(self, semis_id: int, graines_demandees: int, graines_restantes: int, graines_semees: int):
+        self.semis_id = semis_id
+        self.graines_demandees = graines_demandees
+        self.graines_restantes = graines_restantes
+        self.graines_semees = graines_semees
+        super().__init__(
+            f"Ce lot de semis (#{semis_id}, {graines_semees} graines semées) n'a plus que "
+            f"{graines_restantes} graine(s) en germination : impossible d'en solder "
+            f"{graines_demandees} de plus. Vérifiez le lot choisi ou la quantité saisie."
+        )
+
+
+class AucunLotDisponibleError(EvenementInvalideError):
+    """[fix garde-fou graines du lot] Des lots de semis existent pour cette culture,
+    mais aucun n'a assez de graines en germination pour porter ce repiquage.
+
+    Sans cette règle, l'épuisement de tous les lots produisait l'effet pervers
+    inverse de celui recherché : plus aucun lot candidat → plus aucun rattachement
+    → plus rien à contrôler, et la mise en godet passait *orpheline*, sans le
+    moindre signalement. Le potager sait pourtant que tous les lots sont soldés.
+
+    Ne s'applique QUE si au moins un lot de pépinière existe pour le couple
+    (culture, variété). Aucun semis du tout reste un cas légitime — plants achetés
+    en jardinerie, bouture, don — et continue de produire un godet sans parent.
+    """
+
+    def __init__(self, culture: str, variete: Optional[str], graines_demandees: int, meilleur_reste: int):
+        self.culture = culture
+        self.variete = variete
+        self.graines_demandees = graines_demandees
+        self.meilleur_reste = meilleur_reste
+        label = f"{culture} {variete}" if variete else culture
+        if meilleur_reste <= 0:
+            detail = "tous vos lots de semis sont entièrement soldés"
+        else:
+            detail = f"le lot le mieux fourni n'a plus que {meilleur_reste} graine(s) en germination"
+        super().__init__(
+            f"Aucun lot de semis de « {label} » ne peut fournir {graines_demandees} plant(s) : "
+            f"{detail}. Enregistrez d'abord le semis correspondant, ou corrigez la quantité."
+        )
+
+
+class LotIndetermineError(EvenementInvalideError):
+    """[fix garde-fou graines du lot] Plusieurs lots de semis peuvent porter ce
+    repiquage, et aucun n'a été désigné.
+
+    Le jardinier est le seul à savoir de quelle barquette viennent ses plants :
+    aucune heuristique ne peut trancher. Enregistrer un godet sans parent « en
+    attendant » rouvrirait la porte que `AucunLotDisponibleError` ferme — des lots
+    existent et sont capables, seul le choix manque. Le bot pose la question avant
+    d'en arriver là (menu inline) ; cette erreur protège les autres canaux et le cas
+    où le choix a été escamoté.
+    """
+
+    def __init__(self, culture: str, variete: Optional[str], nb_lots: int):
+        self.culture = culture
+        self.variete = variete
+        self.nb_lots = nb_lots
+        label = f"{culture} {variete}" if variete else culture
+        super().__init__(
+            f"{nb_lots} lots de semis de « {label} » peuvent recevoir ce repiquage : "
+            f"précisez lequel, il ne peut pas être deviné."
+        )
+
+
+class LotSemisInconnuError(EvenementInvalideError):
+    """[fix rattachement lot godet] Un lot de semis a été explicitement désigné pour
+    une mise en godet, mais l'identifiant ne correspond à aucun semis du potager
+    courant — menu inline expiré, événement supprimé entre-temps, ou identifiant
+    d'un autre tenant. Jamais de rattachement silencieux à un autre lot : le lien
+    semis → godet porte tout l'avancement de la pépinière (US-065)."""
+
+    def __init__(self, semis_id: int):
+        self.semis_id = semis_id
+        super().__init__(
+            f"Le lot de semis #{semis_id} n'existe pas (ou plus) dans ce potager."
         )
 
 
@@ -206,10 +308,34 @@ _UNITES_SEMIS_CANONIQUES: dict[str, str] = {
 }
 
 
-def _normalize_unite_semis(unite_brute: Optional[str]) -> str:
-    """Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²' (jamais forcée si m²)."""
+def _normalize_unite_semis(unite_brute: Optional[str], texte_original: Optional[str] = None) -> str:
+    """Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²' (jamais forcée si m²).
+
+    [fix unité semis hallucinée] Quand `texte_original` est fourni, une unité autre
+    que "graines" n'est retenue que si elle est réellement mentionnée dans la
+    dictée. Sans unité prononcée ("semis de 50 choux"), Groq renvoie couramment
+    "plants" — que la table ci-dessus mappe légitimement sur "pieds" — et le semis
+    se retrouve compté en pieds au lieu de graines. Semer, par définition, met des
+    graines en terre : c'est le défaut, et il reprend la main dès que l'unité
+    inventée n'est pas ancrée dans le texte.
+
+    Sans `texte_original` (appels historiques, tests unitaires d'US-037), le
+    comportement d'origine est conservé à l'identique.
+    """
     cle = (unite_brute or "").lower().strip()
-    return _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+    canonique = _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+
+    if texte_original is not None and canonique != "graines":
+        from utils.validation import unite_semis_ancree_dans_texte
+        if not unite_semis_ancree_dans_texte(canonique, texte_original):
+            log.info(
+                "[fix unité semis hallucinée] Unité '%s' (→ '%s') absente du texte → "
+                "retour au défaut 'graines' | texte=%r",
+                unite_brute, canonique, texte_original,
+            )
+            return "graines"
+
+    return canonique
 
 
 def _cond_localisation_culture(potager_id: int):
@@ -535,7 +661,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     require_role(ctx, "editor", "enregistrer d'action")
     type_organe_semis: Optional[str] = None
     if normalize_action(parsed.get("action")) == "semis":
-        unite_normalisee = _normalize_unite_semis(parsed.get("unite"))
+        unite_normalisee = _normalize_unite_semis(parsed.get("unite"), texte)
         if unite_normalisee != (parsed.get("unite") or "").lower().strip():
             log.info(
                 "[US-037] Unité semis '%s' normalisée en '%s' (culture=%s)",
@@ -602,24 +728,82 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     culture_str = parsed.get("culture") or ""
     variete_str = parsed.get("variete")
 
-    origine_graines_id: Optional[int] = None
-    semis_rows = (
-        db.query(Evenement.id, Evenement.variete)
-        .filter(Evenement.type_action == "semis", Evenement.potager_id == ctx.potager_id)
-        .filter(func.lower(Evenement.culture) == culture_str.lower())
-        .filter(Evenement.culture.isnot(None))
-    )
-    if variete_str:
-        semis_rows = semis_rows.filter(Evenement.variete == variete_str)
-    semis_list = semis_rows.order_by(Evenement.date.asc()).all()
+    # [fix garde-fou graines du lot] Nombre de graines que ce repiquage solde sur son
+    # lot parent — même repli qu'US-065/CA2 : le « sur N graines » s'il est déclaré,
+    # sinon les plants repiqués. Calculé en tête car il conditionne le choix du lot.
+    nb_graines_val = _to_int(parsed.get("nb_graines_semees"))
+    nb_plants_val = _to_int(parsed.get("nb_plants_godets"))
+    graines_demandees = nb_graines_val or nb_plants_val or 0
 
-    if len(semis_list) == 1:
-        origine_graines_id = semis_list[0].id
-        if not variete_str and semis_list[0].variete:
-            parsed["variete"] = semis_list[0].variete
-            variete_str = semis_list[0].variete
-            log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
-        log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
+    # [fix rattachement lot godet] Trois chemins, dans cet ordre de priorité :
+    #   1. lot explicitement désigné par le jardinier (menu inline du bot) ;
+    #   2. déduction automatique s'il n'existe qu'un seul lot capable ;
+    #   3. aucun lien (godet orphelin) — mais uniquement si la culture n'a AUCUN
+    #      lot de semis, sinon c'est un refus (AucunLotDisponibleError).
+    # La déduction (2) ne considère plus TOUS les semis de la culture — elle se
+    # limite aux lots de PÉPINIÈRE capables d'absorber le repiquage. Un semis de
+    # pleine terre ne produit jamais de godet.
+    origine_graines_id: Optional[int] = _to_int(parsed.get("origine_graines_id"))
+    semis_parent_variete: Optional[str] = None
+
+    if origine_graines_id is not None:
+        semis_parent = db.get(Evenement, origine_graines_id)
+        if (
+            semis_parent is None
+            or semis_parent.potager_id != ctx.potager_id
+            or semis_parent.type_action != "semis"
+        ):
+            raise LotSemisInconnuError(origine_graines_id)
+        semis_parent_variete = semis_parent.variete
+        log.info(
+            "[fix rattachement lot godet] Godet rattaché au lot choisi id=%s (%s) pour '%s'",
+            origine_graines_id, str(semis_parent.date)[:10], culture_str,
+        )
+    else:
+        candidats = lots_candidats_mise_en_godet(
+            db, culture_str, variete_str, potager_id=ctx.potager_id,
+            graines_requises=graines_demandees,
+        )
+        if len(candidats) == 1:
+            origine_graines_id   = candidats[0]["semis_id"]
+            semis_parent_variete = candidats[0]["variete"]
+            log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
+        elif len(candidats) > 1:
+            # Ambiguïté non levée en amont. Enregistrer un orphelin ici rouvrirait
+            # la porte que `AucunLotDisponibleError` vient de fermer : des lots
+            # existent et peuvent porter ce repiquage, seul leur choix manque.
+            # Aucun lot n'est tiré au hasard — c'est un refus, pas un contournement.
+            log.warning(
+                "[fix garde-fou graines du lot] Refus : %d lots candidats pour '%s/%s', "
+                "aucun désigné — le lot doit être choisi, jamais deviné",
+                len(candidats), culture_str, variete_str,
+            )
+            raise LotIndetermineError(culture_str, variete_str, len(candidats))
+        elif graines_demandees > 0:
+            # [fix garde-fou graines du lot] Aucun lot capable. Deux situations que
+            # la liste vide ne distingue pas — et dont une seule est légitime.
+            tous_les_lots = lots_pepiniere_du_couple(
+                db, culture_str, variete_str, potager_id=ctx.potager_id
+            )
+            if tous_les_lots:
+                meilleur_reste = max(lot["graines_en_germination"] for lot in tous_les_lots)
+                log.warning(
+                    "[fix garde-fou graines du lot] Refus : %d plant(s) de '%s/%s' demandés alors "
+                    "qu'aucun des %d lot(s) de semis ne peut les fournir (meilleur reste : %d)",
+                    graines_demandees, culture_str, variete_str, len(tous_les_lots), meilleur_reste,
+                )
+                raise AucunLotDisponibleError(
+                    culture_str, variete_str, graines_demandees, meilleur_reste,
+                )
+            # Aucun semis du tout pour cette culture : godet sans parent légitime
+            # (plants achetés, bouture, don) — comportement historique conservé.
+
+    # [US-029 CA4] Héritage de la variété depuis le semis parent, quel que soit le
+    # chemin de rattachement emprunté ci-dessus.
+    if origine_graines_id is not None and not variete_str and semis_parent_variete:
+        parsed["variete"] = semis_parent_variete
+        variete_str = semis_parent_variete
+        log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
 
     # [US-049] Appel systématique — "mise_en_godet" est une action source (introduit
     # légitimement une nouvelle culture), donc toujours un no-op ici, mais l'appel
@@ -630,10 +814,27 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     # [fix bug id=355] nb_plants_godets ne peut jamais dépasser nb_graines_semees
     # (taux de réussite > 100% impossible) — bloqué avant écriture, pas seulement
     # affiché tel quel dans le récapitulatif.
-    nb_graines_val = _to_int(parsed.get("nb_graines_semees"))
-    nb_plants_val = _to_int(parsed.get("nb_plants_godets"))
     if nb_graines_val and nb_plants_val and nb_plants_val > nb_graines_val:
         raise TauxGerminationImpossibleError(nb_plants_val, nb_graines_val)
+
+    # [fix garde-fou graines du lot] Contrôle du CUMUL sur le lot parent, que le
+    # garde-fou ci-dessus ne voit pas : il ne compare qu'un lot de godet à lui-même.
+    # Dès lors que le lot est connu et sa quantité semée renseignée, on ne peut pas
+    # en solder plus de graines qu'il n'en reste.
+    if origine_graines_id is not None:
+        lot_parent = lot_pepiniere_par_semis(db, origine_graines_id, potager_id=ctx.potager_id)
+        if lot_parent and lot_parent["graines_semees"] > 0 and graines_demandees > 0:
+            restantes = lot_parent["graines_en_germination"]
+            if graines_demandees > restantes:
+                log.warning(
+                    "[fix garde-fou graines du lot] Refus : %d graines demandées sur le lot #%s "
+                    "qui n'en a plus que %d (sur %d semées) — culture='%s'",
+                    graines_demandees, origine_graines_id, restantes,
+                    lot_parent["graines_semees"], culture_str,
+                )
+                raise LotGrainesEpuiseesError(
+                    origine_graines_id, graines_demandees, restantes, lot_parent["graines_semees"],
+                )
 
     event = Evenement(
         type_action="mise_en_godet",
@@ -787,9 +988,26 @@ def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> b
     return True
 
 
-def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Optional[str]) -> dict:
+def cycle_vie_culture(
+    db: Session,
+    ctx: TenantContext,
+    culture: str,
+    variete: Optional[str],
+    semis_id: Optional[int] = None,
+    sans_semis_rattache: bool = False,
+) -> dict:
     """[GET /godets/detail] Cycle de vie complet semis → godets → plantations → ventes/pertes
-    pour une (culture, variété)."""
+    pour une (culture, variété).
+
+    [US-065 / CA6] Le détail peut désormais être demandé pour UN LOT PRÉCIS et non
+    plus seulement pour un couple culture + variété, afin que le panneau de détail
+    de la pépinière puisse cibler le lot affiché :
+      - `semis_id` : le lot issu de ce semis (le semis lui-même, les mises en godet
+        qui s'y rattachent, et les plantations issues de ces godets) ;
+      - `sans_semis_rattache=True` : le lot des mises en godet sans semis parent.
+    Sans aucun des deux, le comportement historique (agrégé culture + variété) est
+    conservé à l'identique.
+    """
     from sqlalchemy.orm import joinedload
 
     culture_lower = culture.lower()
@@ -801,6 +1019,11 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     godet_q = godet_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else godet_q.filter(Evenement.variete.is_(None))
+    # [US-065 CA6] Restriction au lot demandé
+    if semis_id is not None:
+        godet_q = godet_q.filter(Evenement.origine_graines_id == semis_id)
+    elif sans_semis_rattache:
+        godet_q = godet_q.filter(Evenement.origine_graines_id.is_(None))
     godet_events = godet_q.order_by(Evenement.date.asc()).all()
 
     godet_ids = {str(g.id) for g in godet_events}
@@ -813,7 +1036,16 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(or_(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
     )
-    semis_q = semis_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else semis_q.filter(Evenement.variete.is_(None))
+    if semis_id is not None:
+        # [US-065 CA6] Un lot = un semis : l'identifiant lève toute ambiguïté, le
+        # filtre sur la variété n'a plus lieu d'être (celui sur la culture reste,
+        # par sécurité, si la paire demandée est incohérente).
+        semis_q = semis_q.filter(Evenement.id == semis_id)
+    elif sans_semis_rattache:
+        # Lot sans semis parent : par construction, aucun semis à afficher.
+        semis_q = semis_q.filter(Evenement.id.is_(None))
+    else:
+        semis_q = semis_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else semis_q.filter(Evenement.variete.is_(None))
     semis_events = semis_q.order_by(Evenement.date.asc()).all()
 
     plantation_candidates = (
@@ -829,6 +1061,9 @@ def cycle_vie_culture(db: Session, ctx: TenantContext, culture: str, variete: Op
         p for p in plantation_candidates if godet_ids & set(p.source_evenement_ids.split(";"))
     ]
 
+    # [US-065 CA6] Ventes et pertes en godet ne portent aucun chaînage vers un lot
+    # (ni origine_graines_id, ni source_evenement_ids) : elles restent donc listées
+    # au niveau (culture, variété), même quand un lot précis est demandé.
     vendu_q = (
         db.query(Evenement)
         .filter(Evenement.type_action == "vendu", Evenement.potager_id == pid)

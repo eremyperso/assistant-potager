@@ -19,7 +19,10 @@ export default function AucunPotager() {
 
   async function handleCreer(e) {
     e.preventDefault()
-    if (!nom.trim()) return
+    // [Fix] Garde explicite contre la double soumission (touche Entrée suivie
+    // d'un clic, double-clic rapide…) : l'attribut `disabled` du bouton ne
+    // suffit pas, son application dépend d'un re-rendu qui n'est pas instantané.
+    if (loading || !nom.trim()) return
     setLoading(true)
     setError(null)
     try {
@@ -32,7 +35,7 @@ export default function AucunPotager() {
 
   async function handleRejoindre(e) {
     e.preventDefault()
-    if (!code.trim()) return
+    if (loading || !code.trim()) return
     setLoading(true)
     setError(null)
     try {
@@ -54,82 +57,84 @@ export default function AucunPotager() {
 
   return (
     <div
-      className="flex flex-col items-center justify-center h-dvh max-w-md mx-auto px-6 text-center"
+      className="flex flex-col items-center justify-center h-dvh w-full px-6 text-center"
       style={{ background: 'var(--g-bg)' }}
     >
-      <Sprout size={40} color="var(--g-acc)" style={{ marginBottom: 16 }} />
-      <h1 style={{ color: 'var(--g-pri)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-        Aucun potager pour l'instant
-      </h1>
-      <p style={{ color: 'var(--g-sec)', fontSize: 14, marginBottom: 20 }}>
-        Créez votre potager ou rejoignez-en un existant avec un code d'invitation.
-      </p>
+      <div className="w-full max-w-md flex flex-col items-center">
+        <Sprout size={40} color="var(--g-acc)" style={{ marginBottom: 16 }} />
+        <h1 style={{ color: 'var(--g-pri)', fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+          Aucun potager pour l'instant
+        </h1>
+        <p style={{ color: 'var(--g-sec)', fontSize: 14, marginBottom: 20 }}>
+          Créez votre potager ou rejoignez-en un existant avec un code d'invitation.
+        </p>
 
-      <div className="flex gap-2 mb-4" style={{ width: '100%' }}>
+        <div className="flex gap-2 mb-4" style={{ width: '100%' }}>
+          <button
+            onClick={() => setOnglet('creer')}
+            style={{
+              flex: 1, borderRadius: 10, padding: '6px 0', fontSize: 13, fontWeight: 600,
+              background: onglet === 'creer' ? 'var(--g-acc)' : 'var(--g-sur)',
+              color: onglet === 'creer' ? 'var(--g-card)' : 'var(--g-sec)',
+              border: '1px solid var(--g-brd)',
+            }}
+          >
+            Créer un potager
+          </button>
+          <button
+            onClick={() => setOnglet('rejoindre')}
+            style={{
+              flex: 1, borderRadius: 10, padding: '6px 0', fontSize: 13, fontWeight: 600,
+              background: onglet === 'rejoindre' ? 'var(--g-acc)' : 'var(--g-sur)',
+              color: onglet === 'rejoindre' ? 'var(--g-card)' : 'var(--g-sec)',
+              border: '1px solid var(--g-brd)',
+            }}
+          >
+            Rejoindre (code)
+          </button>
+        </div>
+
+        {error && <p style={{ color: 'var(--g-red)', fontSize: 13, marginBottom: 8 }}>{error}</p>}
+
+        {onglet === 'creer' ? (
+          <form onSubmit={handleCreer} style={{ width: '100%' }}>
+            <input
+              type="text"
+              placeholder="Nom du potager"
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              style={inputStyle}
+            />
+            <button type="submit" disabled={loading || !nom.trim()} style={boutonStyle}>
+              {loading ? '…' : 'Créer'}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleRejoindre} style={{ width: '100%' }}>
+            <input
+              type="text"
+              placeholder="Code d'invitation"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: 2, textAlign: 'center' }}
+            />
+            <button type="submit" disabled={loading || !code.trim()} style={boutonStyle}>
+              {loading ? '…' : 'Rejoindre'}
+            </button>
+          </form>
+        )}
+
         <button
-          onClick={() => setOnglet('creer')}
+          onClick={logout}
           style={{
-            flex: 1, borderRadius: 10, padding: '6px 0', fontSize: 13, fontWeight: 600,
-            background: onglet === 'creer' ? 'var(--g-acc)' : 'var(--g-sur)',
-            color: onglet === 'creer' ? 'var(--g-card)' : 'var(--g-sec)',
-            border: '1px solid var(--g-brd)',
+            marginTop: 20,
+            background: 'var(--g-sur)', border: '1px solid var(--g-brd)', color: 'var(--g-pri)',
+            borderRadius: 12, padding: '8px 16px', fontSize: 13,
           }}
         >
-          Créer un potager
-        </button>
-        <button
-          onClick={() => setOnglet('rejoindre')}
-          style={{
-            flex: 1, borderRadius: 10, padding: '6px 0', fontSize: 13, fontWeight: 600,
-            background: onglet === 'rejoindre' ? 'var(--g-acc)' : 'var(--g-sur)',
-            color: onglet === 'rejoindre' ? 'var(--g-card)' : 'var(--g-sec)',
-            border: '1px solid var(--g-brd)',
-          }}
-        >
-          Rejoindre (code)
+          Se déconnecter
         </button>
       </div>
-
-      {error && <p style={{ color: 'var(--g-red)', fontSize: 13, marginBottom: 8 }}>{error}</p>}
-
-      {onglet === 'creer' ? (
-        <form onSubmit={handleCreer} style={{ width: '100%' }}>
-          <input
-            type="text"
-            placeholder="Nom du potager"
-            value={nom}
-            onChange={(e) => setNom(e.target.value)}
-            style={inputStyle}
-          />
-          <button type="submit" disabled={loading || !nom.trim()} style={boutonStyle}>
-            {loading ? '…' : 'Créer'}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={handleRejoindre} style={{ width: '100%' }}>
-          <input
-            type="text"
-            placeholder="Code d'invitation"
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            style={{ ...inputStyle, fontFamily: 'monospace', letterSpacing: 2, textAlign: 'center' }}
-          />
-          <button type="submit" disabled={loading || !code.trim()} style={boutonStyle}>
-            {loading ? '…' : 'Rejoindre'}
-          </button>
-        </form>
-      )}
-
-      <button
-        onClick={logout}
-        style={{
-          marginTop: 20,
-          background: 'var(--g-sur)', border: '1px solid var(--g-brd)', color: 'var(--g-pri)',
-          borderRadius: 12, padding: '8px 16px', fontSize: 13,
-        }}
-      >
-        Se déconnecter
-      </button>
     </div>
   )
 }

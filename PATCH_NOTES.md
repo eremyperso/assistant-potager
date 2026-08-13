@@ -1,4 +1,131 @@
 
+## [v3.31.1] — 2026-08-12
+
+### 🐛 Corrections
+- Corrige des lots marqués « germination indéterminée » alors que leur taux était en réalité définitif : quand le cumul des graines soldées atteint déjà le nombre semé, plus aucune graine ne peut rester à lever, et un « sur N graines » manquant ne change rien à cette conclusion (US-065)
+
+### 🔧 Améliorations techniques
+- Supprime le libellé « Réussite N % » de l'écran Pépinière : un lot n'affiche plus que son taux de germination, comme la maquette de référence — les deux libellés portaient la même valeur (US-061)
+- Cale la largeur des fiches de lot sur la règle de la maquette (230 px minimum, autant de colonnes que la largeur en contient) : cinq fiches s'alignent sur un écran de 1440 px, et une rangée incomplète n'élargit plus les cartes qu'elle contient (US-061)
+
+## [v3.31.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Refond l'écran Pépinière sur le modèle de la maquette 2026 : une carte par lot de semis, avec sa frise des trois stades Germination → Godet → Terre, le stade courant mis en avant (US-061)
+- Affiche une carte par lot de semis, identifiée par sa date de semis et son ancienneté en jours, les godets sans semis rattaché formant une carte explicitement libellée comme telle (US-061)
+- Nomme la phase du lot plutôt que de répéter un chiffre : « Germination 70 % » tant qu'il reste des graines à lever, « Réussite 70 % » une fois la valeur définitive (US-061)
+- Signale une germination indéterminée comme une information manquante, et non comme un stade en cours, quand le nombre de graines d'origine n'a pas été déclaré (US-061)
+- Décompose chaque lot sous sa frise — graines semées, plants obtenus, mis en terre, vendus, perdus — de sorte que l'écart à 100 % soit toujours explicable (US-061)
+- Rend visible sur la carte une incohérence de saisie — plus de plants obtenus que de graines semées — au lieu de la borner en silence à 100 % (US-061)
+- Regroupe les lots par famille botanique, en sections repliables, et ajoute un tri par date de semis ou par culture (US-061)
+- Répartit les cartes sur deux à quatre colonnes selon la largeur disponible, au lieu de les étirer sur toute la largeur (US-061)
+- Ouvre le détail du cycle de vie dans la fenêtre modale de l'application, ciblé sur le lot de la carte ouverte et non sur l'ensemble d'une culture (US-061)
+
+### 🔧 Améliorations techniques
+- Migre l'écran Pépinière vers les tokens sémantiques de la palette 2026 : les 80 alias `--g-*` qu'il portait, le plus gros volume du lot, ont disparu (US-061)
+- Branche l'écran sur `GET /pepiniere/lots` (US-065), `GET /godets` restant la lecture agrégée des écrans Stocks et Statistiques et du bot (US-061)
+- Ajoute `GroupHead` et `useGroups` au design system, portés depuis la maquette pour les sections repliables par famille (US-061)
+- Ajoute `frontend/src/lib/familles.js`, table de familles botaniques provisoire en attendant le schéma étendu de `CultureConfig` du Lot E (US-061)
+- Isole les règles des stades dans `frontend/src/lib/pepiniere.js`, couvertes par `npm test` (`node --test`, sans dépendance supplémentaire) — le déroulé de référence de l'US y est vérifié valeur par valeur (US-061)
+- Fait dépendre la bascule multi-colonnes et le repli de la barre de filtres de la largeur du conteneur (`@container`) et non d'un breakpoint d'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-061)
+
+## [v3.30.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Suit la pépinière lot de semis par lot de semis : deux semis échelonnés d'une même variété apparaissent séparément, chacun avec son avancement et son état de germination — en cours, close, ou indéterminée (US-065)
+- Demande sur quel lot porte un repiquage lorsque plusieurs lots ont encore des graines en germination, au lieu de n'en rattacher aucun en silence
+- Réclame le nombre de graines d'origine d'une mise en godet quand il manque, en rappelant le lot concerné et ses graines restantes (US-066)
+- Permet de passer outre cette question en une action explicite, l'avancement du lot restant alors indéterminé plutôt que faussé par une valeur inventée (US-066)
+- Permet de consulter le détail du cycle de vie d'un lot précis, et plus seulement d'un couple culture + variété (US-065)
+
+### 🐛 Corrections
+- Corrige le solde anticipé du semis parent, jusqu'ici réputé entièrement consommé dès le premier repiquage : un repiquage échelonné ne fait plus sauter l'avancement du lot à sa valeur finale (US-065)
+- Signale une incohérence de saisie lorsqu'un lot cumule plus de plants obtenus que de graines semées, cas qu'aucun contrôle ne voyait jusqu'ici (US-065)
+- Refuse une mise en godet qui solderait plus de graines qu'il n'en reste sur son lot — le garde-fou existant ne comparait qu'un lot de godet à lui-même, jamais le cumul
+- Refuse une mise en godet lorsque des lots de semis existent mais qu'aucun ne peut la porter, au lieu de l'enregistrer sans rattachement et sans rien signaler
+- Refuse une mise en godet dont le lot reste indéterminé alors que plusieurs sont possibles, plutôt que d'en choisir un au hasard
+- Corrige le rattachement d'un godet à un semis de pleine terre, qui ne produit jamais de plants en godet
+- Corrige la proposition de lots d'une autre variété à un repiquage explicitement déclaré sans variété
+- Corrige l'unité d'un semis dicté sans unité (« semis de 50 choux »), enregistré en pieds au lieu de graines parce que le modèle en inventait une (US-037)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /pepiniere/lots`, lecture par lot qui s'ajoute à `GET /godets` sans en changer le contrat : écrans Stocks et Statistiques et statistiques du bot strictement inchangés (US-065)
+- Ajoute les paramètres `semis_id` et `sans_semis_rattache` à `GET /godets/detail`, sans toucher à son comportement agrégé par défaut (US-065)
+- Ajoute `calcul_lots_pepiniere()`, `lots_candidats_mise_en_godet()` et `lot_pepiniere_par_semis()` à `utils/stock.py`, avec leurs enveloppes tenant (US-065)
+- Vérifie que l'unité d'un semis figure réellement dans le texte dicté avant de la retenir, sur le modèle du garde-fou anti-hallucination de culture (US-011 bis)
+- Branche l'interception des réponses en attente dans `handle_voice`, qui n'en lisait aucune — les flux de clarification n'étaient jusqu'ici utilisables qu'au clavier (US-066)
+- Aucune migration nécessaire : `nb_graines_semees` et `origine_graines_id` existaient déjà, seul leur usage change (US-065, US-066)
+
+## [v3.29.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Uniformise l'apparence des éléments communs aux écrans Plan, Pépinière, Stocks et Journal : le sélecteur de date de référence et le filtre par culture ont désormais la même hauteur et le même dessin partout, et le bandeau de métriques reprend les tuiles de statistique du reste de l'application (US-059)
+- Détache visuellement le panneau d'observations de la carte qui le porte, jusqu'ici fondu dans le fond en thème clair (US-059)
+
+### 🔧 Améliorations techniques
+- Migre les six composants transverses de consultation (`DateRefPicker`, `CultureFilter`, `MetricStrip`, `Observations`, `LoadingSkeleton`, `ApiError`) vers les tokens sémantiques de la palette 2026 — plus aucun alias `--g-*` parmi eux (US-059)
+- Réduit `CultureFilter` à un habillage de `SearchField` et `MetricStrip` à un agencement de tuiles `Stat`, au lieu de redéfinir leur propre style (US-059)
+- Ajoute la prop `bg` à `Card` et les props `tone` / `valueColor` à `Stat`, pour couvrir la carte imbriquée et le chiffre coloré sans surcharge de classes au résultat dépendant de l'ordre du CSS généré (US-059)
+- Fait réagir le bandeau de métriques et le panneau d'observations à la largeur de leur conteneur (`@container`) et non à celle de l'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-059)
+- Ajoute les six composants transverses à la page de contrôle visuel `/design-system`, jusqu'ici limitée aux composants de `components/ui/` (US-059)
+
+## [v3.28.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Permet de dissocier le chat Telegram depuis le menu Compte de l'application web, sans passer par la commande `/delier` — utile quand on n'a plus accès au chat lié (téléphone changé, compte Telegram perdu, liaison sur le mauvais chat) (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `api.delierTelegram()` et le composant `DelierTelegram`, qui appellent l'endpoint `POST /auth/lien/delier` déjà existant côté serveur (US-050)
+
+## [v3.27.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'écran de connexion et d'inscription : panneau de présentation à gauche sur grand écran, formulaire seul sous 900 px, thème clair/sombre conservé (US-056)
+- Ajoute un champ Nom à l'inscription (US-056)
+- Affiche trois connecteurs de connexion sociale (Google, Facebook, Telegram) sur l'écran de connexion, encore désactivés (« Bientôt disponible ») (US-056)
+- Permet de réinitialiser un mot de passe oublié via un lien envoyé par e-mail, valable 1 heure (US-057)
+
+### 🐛 Corrections
+- Corrige le fond des écrans « Lien invalide » (vérification d'e-mail, réinitialisation de mot de passe) et « Aucun potager », qui ne couvrait qu'une colonne étroite au centre au lieu de toute la page (US-056/US-057)
+- Corrige la vérification d'e-mail : un lien pré-chargé automatiquement par un client mail ou un scanner anti-virus avant le clic réel de l'utilisateur affichait à tort « lien invalide » alors que le compte venait d'être vérifié — la vérification est désormais idempotente (US-044)
+- Corrige le message « compte créé, vérifiez vos e-mails » qui n'apparaissait jamais après une inscription réussie (US-056)
+- Corrige la création de potager, qui pouvait se déclencher deux fois (double potager créé) en l'absence de garde contre une double soumission du formulaire (US-046)
+- Corrige le menu déroulant de rôle (« Inviter un membre ») qui pouvait être coupé par la modale lorsqu'il s'ouvrait vers le bas sans assez de place (US-055)
+
+### 🔧 Améliorations techniques
+- Ajoute le composant réutilisable `Field` (champ de formulaire avec libellé et affichage/masquage du mot de passe) dans `components/ui/` (US-056)
+- Ajoute `POST /auth/mot-de-passe-oublie` et `POST /auth/reinitialiser-mot-de-passe`, en réutilisant l'infrastructure d'envoi Brevo et le schéma de token à usage unique de la vérification d'e-mail (US-057)
+- Remplace la liste déroulante générique du rôle invité par `RoleSelect` (icône + description par rôle), portée depuis la maquette 2026 ; `Pop` gagne une option `placement="above"` pour s'ouvrir vers le haut (US-055)
+
+### 💾 Base de données
+- Ajoute les colonnes `reset_mdp_token_hash`, `reset_mdp_token_expire_le`, `reset_mdp_token_utilise_le` sur `users` (`migration_v25.sql`) (US-057)
+
+## [v3.26.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'interface web autour d'une navigation à deux niveaux : les six sections (Tableau de bord, Plan, Cultures, Pépinière, Stocks, Journal) passent dans le bandeau haut sur grand écran, et basculent en barre d'onglets basse sous 900 px (US-053)
+- Ajoute des tuiles de sous-navigation sous le titre de page pour le Tableau de bord (Vue d'ensemble / Statistiques) et le Plan (Parcelles / Vue plan / Rotation) (US-053)
+- Ajoute un en-tête de page avec titre et description sur chaque écran, absent jusqu'ici (US-053)
+- Ouvre l'application sur le Tableau de bord plutôt que sur le Plan ; Cultures, Vue plan et Rotation annoncent explicitement leur arrivée prochaine plutôt que d'être des liens morts (US-053)
+- Transforme le nom du potager en menu déroulant listant vos potagers avec leur rôle, leur nombre de parcelles et de membres, suivi de « Rejoindre un potager » et « Tous mes potagers » (US-054)
+- Adopte une palette verte unifiée, déclinée en thème clair et sombre (US-052)
+- Renomme « Historique » en « Journal » dans l'interface web, en cohérence avec le vocabulaire du bot Telegram (US-053)
+
+### 🐛 Corrections
+- Corrige le menu « Plus » de la barre d'onglets : un premier clic sur un autre onglet ne faisait que refermer le menu au lieu de changer de section (US-053)
+- Corrige les règles d'adaptation des composants, qui n'étaient pas compilées et restaient donc sans effet — le bandeau d'information, les cartes et les tuiles de statistiques ne se réagençaient jamais dans un conteneur étroit (US-052)
+- Corrige la barre de progression, invisible dès qu'une couleur explicite lui était passée (US-052)
+
+### 🔧 Améliorations techniques
+- Ajoute `frontend/src/components/ui/` : 13 composants réutilisables (Card, Btn, Badge, Stat, ProgressBar, MonthStrip, SearchField, Select, TileNav, InfoBanner, Tip, Placeholder, Pop), jusqu'ici dupliqués vue par vue (US-052)
+- Ajoute le plugin `@tailwindcss/container-queries` et la convention associée, gravée dans `CLAUDE.md` : breakpoints d'écran réservés à la structure de page, container queries par défaut pour tout composant réutilisable (US-052)
+- Ajoute `compter_parcelles_par_potager` et `compter_membres_par_potager` dans `app/services/potager_actif.py`, en requêtes groupées pour éviter un N+1, et expose `nb_parcelles` / `nb_membres` sur `GET /potagers` (US-054)
+- Conserve temporairement les anciens tokens `--g-*` en alias vers la nouvelle palette, le temps que chaque écran soit migré — dette suivie dans `docs/ANALYSE_REFONTE_UI_WEB_2026.md` (US-052)
+- Charge les pages de contrôle visuel `/design-system` et `/shell` à la demande : importées systématiquement, leurs données de démonstration remplaçaient les vrais potagers de l'utilisateur dans l'application (US-054)
+
+### ⚠️ Breaking changes
+- Aucun pour les utilisateurs. Côté frontend, `TopBar` et `BottomNav` changent de signature (`view` / `onGo` au lieu de `title` / `active` / `onChange`) et la contrainte `max-w-md` disparaît : les écrans non encore refondus s'étirent sur toute la largeur en desktop jusqu'à leur reprise
+
 ## [v3.25.1] — 2026-08-08
 
 ### 🐛 Corrections
