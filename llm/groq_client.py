@@ -71,6 +71,49 @@ def extract_intent_query(question: str) -> dict:
     return extract_intent(question)
 
 
+def extract_intent_query_mesuree(question: str) -> tuple[dict, int]:
+    """
+    [US-042 CA7] Variante de extract_intent_query() qui retourne aussi le nombre réel
+    de tokens consommés par l'appel Groq (chat.usage.total_tokens si l'API l'expose,
+    sinon 0). Utilisée par app/services/questions.py pour mesurer et loguer le coût
+    réel de repondre_question() (cible : < 1500 tokens/appel).
+    """
+    chat = _client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": INTENT_PROMPT},
+            {"role": "user", "content": question}
+        ],
+        temperature=0.0,
+        max_tokens=128,
+        stream=False,
+        **_REASONING_KWARGS
+    )
+    intent = _parse_intent_response(chat)
+    usage = getattr(chat, "usage", None)
+    total_tokens = getattr(usage, "total_tokens", None) if usage is not None else None
+    return intent, (total_tokens if isinstance(total_tokens, int) else 0)
+
+
+def _parse_intent_response(chat) -> dict:
+    raw = chat.choices[0].message.content.strip()
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
+
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {"action": None, "culture": None, "date_from": None}
+
+    return {
+        "action":     parsed.get("action"),
+        "culture":    parsed.get("culture"),
+        "date_from":  parsed.get("date_from"),
+        "query_type": parsed.get("query_type", "quantite"),
+    }
+
+
 def extract_intent(question: str) -> dict:
     chat = _client.chat.completions.create(
         model=GROQ_MODEL,

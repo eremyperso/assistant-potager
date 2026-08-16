@@ -127,6 +127,81 @@ Le schéma inclut une table `evenements` avec :
 - `quantite` : Quantité concernée
 - `details` : Informations supplémentaires
 
+## 📋 User Stories
+
+État d'implémentation des User Stories du projet, reconstitué à partir de `PATCH_NOTES.md`, de l'historique Git et de `docs/BACKLOG_US_MULTITENANT.md`.
+
+### US numérotées classiques
+
+| US | Fonctionnalité | Implémenté | Version |
+|---|---|---|---|
+| US-004 | Séparation environnements dev/prod (`.env`) | ✅ Oui | v2.3.0 |
+| US-005 | Déploiement automatisé Scaleway | ✅ Oui | v2.4.0 |
+| US-006 | Renommer une parcelle (propagation historique) | ✅ Oui | v2.14.0 |
+| US-007 | Réassocier/déplacer une culture vers une autre parcelle | ✅ Oui | v2.25.0 |
+| US-008 | Commande `/version` | ✅ Oui | v2.15.0 |
+| US-009 | Supprimer une parcelle (soft-delete) | ✅ Oui | v2.23.0 |
+| US-010 | Classification intent (question vs action) | ✅ Oui | v2.16.0 (fix v2.19.0) |
+| US-011 | Validation post-parsing / anti-hallucination | ✅ Oui | v2.17.0 (fixes v2.19.0, v3.14.0) |
+| US-012 | Agent SQL pour questions analytiques | ✅ Oui | v2.17.0 |
+| US-014 | `/stats [culture]` — semis visibles par culture | ✅ Oui | v2.18.0 / v2.19.0 |
+| US-016 | Sémantique mise en godet (graines vs plants) | ✅ Oui | v2.20.0 |
+| US-017 | Stock résiduel de semis par variété | ✅ Oui | v2.20.0 |
+| US-018 | Section Pépinière dans `/stats <culture>` | ✅ Oui | v2.20.0 |
+| US-019 | Sélection assistée de variété (mise en godet) | ✅ Oui | v2.21.0 |
+| US-021 | Confirmation avant enregistrement (✅/❌) | ✅ Oui | v2.22.0 (+ v2.24.0, v3.7.2) |
+| US-022 | Déduction stock godet lors de plantation | ✅ Oui | v2.27.0 |
+| US-023 | Dashboard frontend React/Vite (socle) | ✅ Oui | v3.0.0 |
+| US-024 | Vue Plan (dashboard) | ✅ Oui | v3.1.0 |
+| US-025 | Vue Stocks cultures (dashboard) | ✅ Oui | v3.2.0 |
+| US-026 | Vue Pépinière (dashboard) | ✅ Oui | v3.4.0 |
+| US-027 | Vue Historique (dashboard) | ✅ Oui | v3.3.0 |
+| US-029 | Chaînage semis → godet → plantation | ✅ Oui | v3.5.0 / v3.6.0 |
+| US-030 | Paramètre `date_ref` sur les endpoints | ✅ Oui | v3.7.0 |
+| US-031 | Sélecteur de date de référence global (PWA) | ✅ Oui | v3.8.0 |
+| US-036 | Rendement en poids (cultures végétatives) | ✅ Oui | v3.11.0 |
+| US-037 | Semis en m² / statut pépinière sur parcelle | ✅ Oui | v3.12.0 / v3.13.0 |
+| US-038 | Commande `/note` — observations guidées | ✅ Oui | v3.14.0 |
+| US-039 | Affichage des notes dans le dashboard | ✅ Oui | v3.14.0 |
+| US-049 | Validation centrale non contournable | ✅ Oui | v3.18.1 |
+
+### US nommées (sans numéro, `US_xxx`)
+
+| US | Fonctionnalité | Implémenté | Version |
+|---|---|---|---|
+| US_Commande_help_aide_mobile | Commande `/help` | ✅ Oui | v2.9.0 |
+| US_Enregistrer_mise_en_godet | Enregistrement mise en godet + taux germination | ✅ Oui | v2.10.0 |
+| US_Stats_detail_par_variete | `/stats [culture]` détail par variété | ✅ Oui | v2.11.0 |
+| US_Plan_occupation_parcelles | `/plan`, `/parcelle ajouter/modifier/lister` | ✅ Oui | v2.12.0 / v2.13.0 |
+| US_Aide_contextuelle_par_commande | `/help <mot-clé>` | ✅ Oui | v2.13.0 |
+| US_Afficher_synthese_semis_dans_stats | Synthèse semis dans `/stats` | ✅ Oui | v2.8.0 |
+
+### Épic Multi-tenant (`docs/BACKLOG_US_MULTITENANT.md`)
+
+> ⚠️ Le backlog planifie la numérotation **US-100 à US-133**, mais l'implémentation réelle a suivi une numérotation différente (**US-040 à US-049**) pour les mêmes chantiers.
+
+| US backlog | US réellement livrée | Fonctionnalité | Implémenté | Version |
+|---|---|---|---|---|
+| US-100 | US-040 | Socle multi-tenant (`users`/`potagers`/`potager_membres`) | ✅ Oui | v3.15.0 |
+| US-101 | US-041 | Couche `services/` partagée bot ⇄ PWA | ✅ Oui | v3.16.0 |
+| US-102 | US-042 | Scoping systématique par `potager_id` | ✅ Oui | v3.17.0 |
+| US-103 | US-043 | Row-Level Security PostgreSQL | ✅ Oui | v3.18.0 |
+| US-110 | US-044 | Authentification web JWT | ✅ Oui | v3.19.0 |
+| US-111 | US-045 | Liaison Telegram ⇄ compte web | ✅ Oui | v3.20.0 |
+| US-112 | US-046 | Sélection du potager actif | ✅ Oui | v3.21.0 |
+| US-113 | — | Rôles & permissions (owner/editor/lecteur) | ❌ Non | — |
+| US-114 | — | Invitations & onboarding self-service | ❌ Non | — |
+| US-120 | — | État conversationnel persistant (Redis) | ❌ Non | — |
+| US-121 | — | LLM à étages + parsing déterministe + cache | ❌ Non | — |
+| US-122 | — | RAG scopé et pré-agrégé pour `/ask` | ❌ Non | — |
+| US-123 | — | Quotas tokens & rate-limiting par tenant | ❌ Non | — |
+| US-124 | — | Jobs de fond par potager (météo, sauvegardes) | ❌ Non | — |
+| US-125 | — | Migrations Alembic + CI/CD | ❌ Non | — |
+| US-130 | — | PostgreSQL managé + sauvegardes auto | ❌ Non | — |
+| US-131 | — | Observabilité (Sentry, métriques) | ❌ Non | — |
+| US-132 | — | RGPD & conformité | ❌ Non | — |
+| US-133 | — | Facturation Stripe (freemium) | ❌ Non | — |
+
 ## 🤝 Contribution
 
 Les contributions sont les bienvenues ! 

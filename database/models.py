@@ -3,10 +3,103 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 -----------------------------------------------------------------
 [US-001] Ajout colonne type_organe_recolte sur Evenement
 [US-001] Ajout modèle CultureConfig (table culture_config)
+[US-040] Ajout socle multi-tenant (User, Potager, PotagerMembre) + potager_id
+[US-044] Ajout credentials web (mot_de_passe_hash, email_verifie) sur User
+[US-044] Ajout token de vérification d'e-mail (verification_token_*) sur User
+[US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
+[US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
+[US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
+
+
+class User(Base):
+    """[US-040] Utilisateur de la plateforme (compte web et/ou Telegram lié)."""
+    __tablename__ = "users"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    email            = Column(String(255), unique=True, nullable=True)
+    telegram_chat_id = Column(BigInteger, unique=True, nullable=True)
+    nom              = Column(String(100), nullable=True)
+    cree_le          = Column(DateTime, server_default=func.now())
+
+    # [US-044] Credentials web — NULL pour un compte Telegram-only (US-045)
+    mot_de_passe_hash = Column(String(255), nullable=True)
+    email_verifie     = Column(Boolean, default=False, nullable=False)
+
+    # [US-044] Token de vérification d'e-mail (CA9-CA12) — seul le hash est
+    # stocké, jamais la valeur brute (envoyée uniquement dans l'e-mail Brevo).
+    # Usage unique : verification_token_utilise_le suit le même pattern que
+    # LiaisonTelegram.utilise_le (US-045).
+    verification_token_hash      = Column(String(255), nullable=True)
+    verification_token_expire_le = Column(DateTime, nullable=True)
+    verification_token_utilise_le = Column(DateTime, nullable=True)
+
+    # [US-057] Token de réinitialisation de mot de passe — même principe que
+    # verification_token_* ci-dessus (hash seul stocké, usage unique, TTL 1h
+    # géré côté service plutôt qu'en base).
+    reset_mdp_token_hash      = Column(String(255), nullable=True)
+    reset_mdp_token_expire_le = Column(DateTime, nullable=True)
+    reset_mdp_token_utilise_le = Column(DateTime, nullable=True)
+
+    # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
+    # encore été fait (sélection auto silencieuse si un seul potager, sinon
+    # choix explicite via /potager ou le sélecteur PWA).
+    potager_actif_id = Column(Integer, ForeignKey("potagers.id"), nullable=True)
+
+
+class LiaisonTelegram(Base):
+    """[US-045] Code à usage unique liant un telegram_chat_id à un compte web."""
+    __tablename__ = "liaisons_telegram"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    code       = Column(String(8), unique=True, nullable=False, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    cree_le    = Column(DateTime, server_default=func.now())
+    expire_le  = Column(DateTime, nullable=False)
+    utilise_le = Column(DateTime, nullable=True)
+
+
+class Potager(Base):
+    """[US-040] Un potager (jardin partagé) — le tenant de l'application."""
+    __tablename__ = "potagers"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    nom              = Column(String(100), nullable=False)
+    latitude         = Column(Float, nullable=True)
+    longitude        = Column(Float, nullable=True)
+    proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
+    plan             = Column(String(20), default="free")
+    cree_le          = Column(DateTime, server_default=func.now())
+
+
+class PotagerMembre(Base):
+    """[US-040] Appartenance d'un utilisateur à un potager, avec son rôle."""
+    __tablename__ = "potager_membres"
+
+    user_id    = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    potager_id = Column(Integer, ForeignKey("potagers.id"), primary_key=True)
+    role       = Column(String(10), nullable=False)  # 'owner' | 'editor' | 'lecteur'
+
+
+class Invitation(Base):
+    """[US-048] Code à usage unique invitant un utilisateur à rejoindre un potager
+    avec un rôle proposé — même principe que LiaisonTelegram (US-045), TTL plus
+    long (jours, pas minutes) car destiné à être partagé hors ligne (e-mail, lien)."""
+    __tablename__ = "invitations"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    code          = Column(String(8), unique=True, nullable=False, index=True)
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    invite_par_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    email_invite  = Column(String(255), nullable=True)
+    role_propose  = Column(String(10), nullable=False)  # 'editor' | 'lecteur'
+    cree_le       = Column(DateTime, server_default=func.now())
+    expire_le     = Column(DateTime, nullable=False)
+    utilisee_le   = Column(DateTime, nullable=True)
 
 
 class Evenement(Base):
@@ -55,8 +148,23 @@ class Evenement(Base):
     # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
     source_evenement_ids = Column(String, nullable=True)
 
+    # [US-040] Rattachement tenant, backfillé = potager #1.
+    # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
+    # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests
+    # SQLite existantes n'aient pas à fournir potager_id partout ; le scoping
+    # applicatif réel se fait par ctx.potager_id dans app/services/, pas par
+    # cette contrainte ORM. La contrainte NOT NULL réelle vit dans le schéma SQL.
+    # default=1 (= app.services.context.DEFAULT_POTAGER_ID) : toute création sans
+    # potager_id explicite (tests existants, scripts) tombe sur le potager #1,
+    # cohérent avec default_context() tant que le multi-potager réel n'existe pas.
+    potager_id = Column(Integer, ForeignKey("potagers.id"), nullable=True, default=1)
+
     # Relation vers la parcelle — permet d'accéder à e.parcelle_rel.nom
     parcelle_rel = relationship("Parcelle", foreign_keys=[parcelle_id])
+
+    __table_args__ = (
+        Index("idx_evenements_potager_date", "potager_id", "date"),
+    )
 
     @property
     def parcelle(self) -> str | None:
@@ -83,13 +191,20 @@ class CultureConfig(Base):
     espacement              = Column(String, nullable=True)    # ex: "30 × 40 cm"
     surface_m2              = Column(Float,  nullable=True)    # surface au sol par plant en m²
 
+    # [US-040] NULL = fiche référentiel globale partagée entre potagers ;
+    # non NULL = fiche personnalisée à un potager (le backfill ne force pas
+    # cette colonne, contrairement aux tables purement métier)
+    potager_id               = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+
 
 class Parcelle(Base):
     """
     [US_Plan_occupation_parcelles / CA8]
     Représente une parcelle physique du potager.
 
-    - nom_normalise : forme canonique unique (strip + lower + unidecode + sans tirets/espaces)
+    - nom_normalise : forme canonique (strip + lower + unidecode + sans tirets/espaces),
+                      unique PAR POTAGER (migration_v23) — deux potagers différents
+                      peuvent chacun avoir une parcelle "planche-tomate"
     - ordre         : position pour l'affichage trié du plan
     - actif         : permet de désactiver sans supprimer
     - est_pepiniere : [migration_v13] une parcelle pépinière/serre n'est jamais comptée
@@ -100,9 +215,20 @@ class Parcelle(Base):
 
     id            = Column(Integer, primary_key=True, index=True)
     nom           = Column(String, nullable=False)
-    nom_normalise = Column(String, unique=True, nullable=False, index=True)
+    nom_normalise = Column(String, nullable=False, index=True)
     exposition    = Column(String, nullable=True)
     superficie_m2 = Column(Float, nullable=True)
     ordre         = Column(Integer, default=0)
     actif         = Column(Boolean, default=True, nullable=False)
     est_pepiniere = Column(Boolean, default=False, nullable=False)
+
+    # [US-040] Rattachement tenant, backfillé = potager #1.
+    # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent
+    # sur Evenement.potager_id (nullable=True + default=1 ORM volontairement conservés).
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True, default=1)
+
+    __table_args__ = (
+        # [migration_v23] Unicité par potager, pas globale — remplace l'ancienne
+        # contrainte UNIQUE(nom_normalise) seule (parcelles_nom_normalise_key).
+        UniqueConstraint("potager_id", "nom_normalise", name="uq_parcelles_potager_nom_normalise"),
+    )

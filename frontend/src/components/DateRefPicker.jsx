@@ -1,4 +1,5 @@
 // [US-031 CA5-CA11] Sélecteur de date de référence.
+// [US-059 CA1] Migré sur les tokens sémantiques de la palette 2026.
 import { Calendar, X } from 'lucide-react'
 import { useDateRef } from '../context/AppContext.jsx'
 
@@ -18,12 +19,12 @@ export default function DateRefPicker({ className = 'flex items-center gap-1.5' 
     <div className={className}>
       <div className="relative inline-flex items-center">
         {/* décoration visuelle — l'input overlay intercepte les événements */}
-        <div className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium select-none cursor-pointer transition-colors ${
+        <div className={`flex items-center gap-1.5 px-3 h-[38px] rounded-[10px] border text-[13.5px] font-medium select-none cursor-pointer transition-colors ${
           isPast
-            ? 'bg-g-amb-dim border-g-amb text-g-amb'
-            : 'bg-g-card border-g-brd text-g-sec'
+            ? 'bg-amber-soft border-amber text-amber'
+            : 'bg-card border-border text-txt3'
         }`}>
-          <Calendar size={14} aria-hidden="true" />
+          <Calendar size={15} aria-hidden="true" />
           <span>{fmtFR(dateRef)}</span>
         </div>
 
@@ -44,7 +45,7 @@ export default function DateRefPicker({ className = 'flex items-center gap-1.5' 
         <button
           onClick={() => setDateRef(null)}
           title="Revenir à aujourd'hui"
-          className="p-1 rounded text-g-amb hover:text-g-pri transition-colors"
+          className="p-1 rounded text-amber hover:text-txt transition-colors"
           aria-label="Revenir à aujourd'hui"
         >
           <X size={14} />

@@ -41,17 +41,15 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
 logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
 logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
 
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
-    ContextTypes, filters, ConversationHandler, CallbackQueryHandler
+    ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
 )
 from groq import Groq
-from sqlalchemy import func, or_, and_, select
 
-from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL
-from database.db import SessionLocal, Base, engine
-from database.models import Evenement, Parcelle
+from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL, PWA_URL
+from database.db import SessionLocal, Base, engine, tenant_scope, current_potager_id
 from utils.actions import normalize_action
 from utils.parcelles import (
     calcul_occupation_parcelles, normalize_parcelle_name,
@@ -68,6 +66,16 @@ from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_
 from utils.cultures_icons import get_emoji_culture
 from utils.notes import NOTE_CATEGORIES, is_note_request as _is_note_request, match_note_category  # [US-038]
 from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
+from app.services.context import default_context, current_context, set_current_context
+from app.services import evenements as svc_evenements
+from app.services import parcelles as svc_parcelles
+from app.services import plan as svc_plan
+from app.services import questions as svc_questions
+from app.services import stock as svc_stock  # [fix rattachement lot godet]
+from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
+from app.services import potager_actif as svc_potager_actif  # [US-046]
+from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from database.models import Potager as _Potager  # [US-046]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -293,7 +301,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message de bienvenue."""
     prenom = update.effective_user.first_name or "jardinier"
     db = SessionLocal()
-    nb = db.query(Evenement).count()
+    nb = svc_evenements.compter_evenements(db, current_context())
     db.close()
 
     tts_etat = "🔊 activée" if is_tts_enabled() else "🔇 désactivée"
@@ -541,6 +549,9 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/ask — Question analytique\n"
         "/corriger — Modifier un événement\n"
         "/note — Noter une observation (guidé)\n"
+        "/lier [code] — Relier ce chat à votre compte web\n"
+        "/delier — Dissocier ce chat de votre compte web\n"
+        "/potager — Changer de potager actif\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
         "/version — Version déployée\n"
@@ -560,8 +571,259 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texte, parse_mode="Markdown")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-045] Liaison chat Telegram ⇄ compte web
+# ──────────────────────────────────────────────────────────────────────────────
+def _onboarding_liaison_msg() -> str:
+    """Message statique (aucun appel LLM — CA6) invitant à lier le chat.
+    Fonction (et non constante module) car `_md()` est défini plus bas dans ce
+    fichier — évite un NameError à l'import si l'ordre de définition change."""
+    return (
+        "👋 *Ce chat n'est pas encore relié à votre compte.*\n\n"
+        f"1️⃣ Inscrivez-vous ou connectez-vous sur {_md(PWA_URL)}\n"
+        "2️⃣ Générez un code de liaison depuis votre compte (menu profil)\n"
+        "3️⃣ Envoyez-moi ce code ici, ou tapez `/lier VOTRECODE`\n\n"
+        "_Tant que ce chat n'est pas relié, aucune donnée n'est enregistrée._"
+    )
+
+
+_MSG_AUCUN_POTAGER = (
+    "🌱 *Vous n'êtes membre d'aucun potager pour l'instant.*\n\n"
+    "Créez ou rejoignez un potager depuis l'application web pour commencer à l'utiliser ici."
+)
+
+
+async def _resoudre_et_armer_contexte(update: Update, ctx: ContextTypes.DEFAULT_TYPE, db, user_id: int) -> bool:
+    """[US-046 / CA1, CA5, CA6] Résout le TenantContext réel (potager actif) de
+    `user_id` et l'arme pour tout le reste du traitement de cet Update — via
+    set_current_context() (relu par current_context() partout dans bot.py) et
+    en réarmant le GUC RLS current_potager_id (US-043) avec le vrai potager.
+    Renvoie False (et bloque, message CA5) si l'utilisateur n'a aucun potager.
+    """
+    try:
+        tenant_ctx = svc_potager_actif.resoudre_tenant_context(db, user_id)
+    except svc_potager_actif.AucunPotagerError:
+        await update.message.reply_text(_MSG_AUCUN_POTAGER, parse_mode="Markdown")
+        return False
+    set_current_context(tenant_ctx)
+    current_potager_id.set(tenant_ctx.potager_id)
+    return True
+
+
+async def _verifier_liaison_ou_onboarding(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_brut: str | None = None
+) -> bool:
+    """[US-045 / CA6, CA7] Garde de priorité 0 — appelée en tout premier dans
+    handle_voice/handle_text, avant tout appel Groq (transcription ou
+    classification). Renvoie True si le chat est lié (ou vient d'être lié via
+    un code envoyé en texte brut) ET rattaché à un potager (US-046 / CA5,
+    sinon bloqué) et que le traitement normal peut continuer ; False si un
+    message d'onboarding/d'erreur a déjà été envoyé et que le handler
+    appelant doit s'arrêter immédiatement (`return`).
+    """
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
+        if user_id is not None:
+            ctx.user_data['tenant_user_id'] = user_id  # [CA8] disponible pour construire un TenantContext
+            return await _resoudre_et_armer_contexte(update, ctx, db, user_id)
+
+        # [CA2] Un message texte (pas vocal — pas d'appel Groq) ressemblant à un
+        # code peut être envoyé sans le préfixe /lier.
+        if texte_brut and svc_liaison_telegram.ressemble_a_un_code(texte_brut):
+            try:
+                user = svc_liaison_telegram.lier_chat_id(db, texte_brut, chat_id)
+                ctx.user_data['tenant_user_id'] = user.id
+                await update.message.reply_text(
+                    "✅ *Chat relié avec succès !* Vous pouvez maintenant dicter vos actions.",
+                    parse_mode="Markdown",
+                )
+                return await _resoudre_et_armer_contexte(update, ctx, db, user.id)
+            except svc_liaison_telegram.CodeExpireError:
+                await update.message.reply_text(
+                    "⌛ Ce code a expiré (validité 10 minutes). Générez-en un nouveau depuis l'application web."
+                )
+                return False
+            except svc_liaison_telegram.CodeDejaUtiliseError:
+                await update.message.reply_text("❌ Ce code a déjà été utilisé.")
+                return False
+            except svc_liaison_telegram.ChatDejaLieError:
+                await update.message.reply_text("❌ Ce chat Telegram est déjà lié à un autre compte.")
+                return False
+            except svc_liaison_telegram.CodeInvalideError:
+                pass  # ne ressemble à aucun code connu → message d'onboarding générique ci-dessous
+
+        await update.message.reply_text(_onboarding_liaison_msg(), parse_mode="Markdown")
+        return False
+    finally:
+        db.close()
+
+
+async def cmd_lier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/lier <code> — [US-045] Relie ce chat Telegram à un compte web via un code à usage unique."""
+    if not ctx.args:
+        await update.message.reply_text(
+            "🔗 *Liaison de compte*\n\n"
+            "Usage : `/lier VOTRECODE`\n\n"
+            "Générez un code depuis l'application web (menu profil), valable 10 minutes.",
+            parse_mode="Markdown",
+        )
+        return
+
+    code = ctx.args[0]
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        try:
+            user = svc_liaison_telegram.lier_chat_id(db, code, chat_id)
+            ctx.user_data['tenant_user_id'] = user.id
+            await update.message.reply_text("✅ *Chat relié avec succès !*", parse_mode="Markdown")
+        except svc_liaison_telegram.CodeInvalideError:
+            await update.message.reply_text("❌ Code invalide.")
+        except svc_liaison_telegram.CodeExpireError:
+            await update.message.reply_text(
+                "⌛ Ce code a expiré (validité 10 minutes). Générez-en un nouveau depuis l'application web."
+            )
+        except svc_liaison_telegram.CodeDejaUtiliseError:
+            await update.message.reply_text("❌ Ce code a déjà été utilisé.")
+        except svc_liaison_telegram.ChatDejaLieError:
+            await update.message.reply_text("❌ Ce chat Telegram est déjà lié à un autre compte.")
+    finally:
+        db.close()
+
+
+_DELIER_CLAVIER_CONFIRMATION = ReplyKeyboardMarkup(
+    [["✅ Oui, délier", "❌ Non, annuler"]], resize_keyboard=True, one_time_keyboard=True
+)
+
+
+async def cmd_delier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/delier — [US-050 / CA2] Dissocie ce chat Telegram de son compte web, après
+    confirmation. Volontairement HORS du garde de liaison standard
+    (_COMMANDES_SANS_GARDE_LIAISON) : l'action porte sur l'identité elle-même, pas
+    sur des données potager — elle doit rester utilisable même sans potager actif
+    (CA5, notes techniques US-050)."""
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
+    finally:
+        db.close()
+
+    if user_id is None:
+        # [notes techniques US-050] Chat non lié → même message d'onboarding que
+        # les autres commandes métier, pas de cas particulier.
+        await update.message.reply_text(_onboarding_liaison_msg(), parse_mode="Markdown")
+        return
+
+    ctx.user_data['mode'] = 'delier_confirm'
+    ctx.user_data['delier_user_id'] = user_id
+    await update.message.reply_text(
+        "⚠️ *Dissocier ce chat Telegram de votre compte ?*\n\n"
+        "Vous ne recevrez plus de réponses ici tant que vous n'aurez pas relié un "
+        "nouveau code depuis l'application web.",
+        parse_mode="Markdown",
+        reply_markup=_DELIER_CLAVIER_CONFIRMATION,
+    )
+
+
+async def _delier_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str):
+    """[US-050 / CA2, CA3] Étape 2 — applique ou annule la dissociation selon la
+    réponse à cmd_delier. Ne passe jamais par current_context()/TenantContext
+    (CA5) : `delier_user_id` vient de la résolution faite dans cmd_delier."""
+    t = texte.strip().lower()
+    user_id = ctx.user_data.get('delier_user_id')
+    ctx.user_data['mode'] = None
+    ctx.user_data.pop('delier_user_id', None)
+
+    if "oui" in t or "délier" in t or "delier" in t:
+        db = SessionLocal()
+        try:
+            svc_liaison_telegram.delier_chat_id(db, user_id)
+        finally:
+            db.close()
+        ctx.user_data.pop('tenant_user_id', None)
+        await update.message.reply_text(
+            "✅ *Chat dissocié.* Générez un nouveau code depuis l'application web "
+            "(menu profil) pour relier ce chat ou un autre avec `/lier`.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove(),
+        )
+    else:
+        await update.message.reply_text("↩️ Dissociation annulée.", reply_markup=MENU_KEYBOARD)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-046] Sélection du potager actif
+# ──────────────────────────────────────────────────────────────────────────────
+
+async def cmd_potager(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/potager — [US-046 / CA2] Liste les potagers de l'utilisateur, potager
+    actif marqué, boutons inline pour en changer."""
+    user_id = ctx.user_data.get('tenant_user_id')
+    db = SessionLocal()
+    try:
+        potagers = svc_potager_actif.lister_potagers_utilisateur(db, user_id)
+        if not potagers:
+            await update.message.reply_text(_MSG_AUCUN_POTAGER, parse_mode="Markdown")
+            return
+
+        actif_id = current_context().potager_id
+        boutons = [
+            [InlineKeyboardButton(
+                f"{'✅ ' if p.id == actif_id else ''}{p.nom}",
+                callback_data=f"potager_select_{p.id}",
+            )]
+            for p in potagers
+        ]
+        await update.message.reply_text(
+            "🌻 *Vos potagers* — sélectionnez le potager actif :",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(boutons),
+        )
+    finally:
+        db.close()
+
+
+async def _potager_select_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[US-046 / CA2, CA3, CA4] Callback inline — change le potager actif."""
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        potager_id = int(query.data[len("potager_select_"):])
+    except ValueError:
+        await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+        return
+
+    user_id = ctx.user_data.get('tenant_user_id')
+    db = SessionLocal()
+    try:
+        try:
+            tenant_ctx = svc_potager_actif.definir_potager_actif(db, user_id, potager_id)
+        except svc_potager_actif.PotagerNonMembreError:
+            await query.edit_message_text("❌ Vous n'êtes pas membre de ce potager.", reply_markup=None)
+            return
+
+        set_current_context(tenant_ctx)
+        current_potager_id.set(tenant_ctx.potager_id)
+
+        potager = db.query(_Potager).filter(_Potager.id == potager_id).first()
+        nom = potager.nom if potager else str(potager_id)
+        await query.edit_message_text(f"✅ Potager actif : *{nom}*", parse_mode="Markdown", reply_markup=None)
+    finally:
+        db.close()
+
+
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message vocal → transcription Groq Whisper → parsing → PostgreSQL."""
+    # [US-045 / CA6, CA7] Priorité 0 — aucun appel Groq (Whisper) tant que le
+    # chat n'est pas lié à un compte. Pas de code déductible d'un vocal : on
+    # ne tente jamais la transcription pour un chat non lié.
+    if not await _verifier_liaison_ou_onboarding(update, ctx):
+        return
+
     msg = await update.message.reply_text("🎤 *Transcription en cours...*", parse_mode="Markdown")
 
     # ── 1. Télécharger le fichier audio ────────────────────────────────────────
@@ -594,6 +856,17 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     log.info(f"🎤 TRANSCRIPTION  : {texte}")
 
     await msg.edit_text(f"🗣 _\"{texte}\"_\n\n⏳ Analyse en cours...", parse_mode="Markdown")
+
+    # ── 2b. [US-066 / CA6] Nombre de graines d'origine en attente ? ────────────
+    # Le flux doit fonctionner à la voix comme au clavier : la transcription est
+    # ici une réponse à une question déjà posée, jamais une nouvelle action à
+    # classifier. (Les autres flux en attente — _QUANTITE_PENDING,
+    # _RECOLTE_PIECES_PENDING — ne sont interceptés que dans handle_text : limite
+    # existante, hors périmètre d'US-066.)
+    if update.effective_user.id in _GODET_GRAINES_PENDING:
+        await msg.delete()
+        await _godet_graines_reponse(update, texte)
+        return
 
     # ── 3. Modes correction actifs : bypass intent classification ──────────────
     # Quand on est en pleine conversation de correction, on ne reclassifie pas —
@@ -1050,10 +1323,29 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
     texte     = texte_raw.lower()  # comparaison insensible à la casse
+
+    # [US-050 / CA5] Confirmation de dissociation : interceptée AVANT le garde de
+    # liaison standard, qui exige un potager actif (_resoudre_et_armer_contexte) —
+    # la dissociation doit rester utilisable même sans aucun potager.
+    if ctx.user_data.get('mode') == 'delier_confirm':
+        await _delier_confirm(update, ctx, texte_raw)
+        return
+
+    # [US-045 / CA6, CA7] Priorité 0 — avant tout log ou appel Groq. Un texte
+    # brut ressemblant à un code de liaison est tenté ici (CA2).
+    if not await _verifier_liaison_ou_onboarding(update, ctx, texte_raw):
+        return
+
     log.info(f"💬 MESSAGE TEXTE  : {texte_raw}")
 
-    # [US-036 CA10] Nombre de pieds en attente (récolte végétative pesée) ?
+    # [US-066 / CA6] Nombre de graines d'origine en attente ? Intercepté avant tout
+    # parsing : la réponse est un nombre, pas une nouvelle action à analyser.
     user_id = update.effective_user.id
+    if user_id in _GODET_GRAINES_PENDING:
+        await _godet_graines_reponse(update, texte_raw)
+        return
+
+    # [US-036 CA10] Nombre de pieds en attente (récolte végétative pesée) ?
     if user_id in _RECOLTE_PIECES_PENDING:
         pending = _RECOLTE_PIECES_PENDING.pop(user_id)
         items = pending["items"]
@@ -1234,6 +1526,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                             db, nom,
                             exposition=pending.get("exposition"),
                             superficie_m2=pending.get("superficie_m2"),
+                            potager_id=current_context().potager_id,
                         )
                         log.info(f"[US_Plan_occupation_parcelles] Parcelle confirmée : {new_p.nom!r}")
                         details = []
@@ -1309,6 +1602,16 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── PARSING MULTI-LIGNES ─────────────────────────────────────────────────────────
 async def _parse_multi(update, lignes: list, msg=None):
     """Traite chaque ligne séparément → chaque événement a son propre texte_original et sa propre date."""
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM (parse_commande
+    # par ligne ci-dessous).
+    try:
+        require_role(current_context(), "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        txt = f"⛔ {e}"
+        if msg: await msg.edit_text(txt)
+        else:   await update.message.reply_text(txt)
+        return
+
     log.info(f"📋 MULTI-LIGNES    : {len(lignes)} phrases à traiter séparément")
     total_saved = []
 
@@ -1335,27 +1638,7 @@ async def _parse_multi(update, lignes: list, msg=None):
         db = SessionLocal()
         try:
             for parsed in items:
-                nom_parcelle = parsed.get("parcelle")
-                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-                event = Evenement(
-                    type_action       = normalize_action(parsed.get("action")),
-                    culture           = parsed.get("culture"),
-                    variete           = parsed.get("variete"),
-                    quantite          = _to_float(parsed.get("quantite")),
-                    unite             = parsed.get("unite"),
-                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                    rang              = _to_int(parsed.get("rang")),
-                    duree             = _to_int(parsed.get("duree_minutes")),
-                    traitement        = parsed.get("traitement"),
-                    commentaire       = parsed.get("commentaire"),
-                    texte_original    = ligne,   # ← texte propre à CETTE ligne
-                    date              = parse_date(parsed.get("date")),
-                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-                )
-                db.add(event)
-                db.commit()
-                db.refresh(event)
+                event = svc_evenements.creer_evenement_ligne(db, current_context(), parsed, ligne)
                 log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
                 total_saved.append((parsed, event.id))
         except Exception as e:
@@ -1386,8 +1669,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     )
     refreshed = SessionLocal()
     try:
-        from sqlalchemy import func
-        nb = refreshed.query(Evenement).count()
+        nb = svc_evenements.compter_evenements(refreshed, current_context())
         # pas de reply ici, juste log
         log.info(f"📦 TOTAL BASE     : {nb} événements")
     finally:
@@ -1413,25 +1695,8 @@ _NOTE_TIMEOUT = 60  # secondes
 
 _UNITES_SEMIS_VALIDES: frozenset[str] = frozenset({"graine", "graines", "plant", "plants"})
 
-# [US-037 / CA1, CA2, CA6, CA8] Unités valides pour un semis, normalisées vers
-# la forme canonique stockée en base : "graines" | "pieds" | "m²".
-# Le m² est une surface autonome — elle n'est JAMAIS convertie en graines/pieds.
-_UNITES_SEMIS_CANONIQUES: dict[str, str] = {
-    "graine": "graines", "graines": "graines",
-    "pied": "pieds", "pieds": "pieds", "plant": "pieds", "plants": "pieds",
-    "m2": "m²", "m²": "m²", "metre carre": "m²", "mètre carré": "m²",
-    "metres carres": "m²", "mètres carrés": "m²", "m^2": "m²",
-}
-
-
-def _normalize_unite_semis(unite_brute: str | None) -> str:
-    """[US-037 / CA1, CA2, CA6] Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²'.
-
-    Ne force JAMAIS une surface m² vers une autre unité — seule une unité
-    totalement inconnue retombe sur 'graines' par défaut (comportement historique).
-    """
-    cle = (unite_brute or "").lower().strip()
-    return _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+# [US-037] La normalisation d'unité de semis ("graines"|"pieds"|"m²") vit désormais
+# dans app/services/evenements.py (seul appelant : creer_evenement_confirme).
 
 _RECOLTE_PENDING: dict[int, dict] = {}
 _RECOLTE_TIMEOUT = 60  # secondes
@@ -1450,56 +1715,280 @@ _RECOLTE_PIECES_TIMEOUT = 60  # secondes
 _SEMIS_CULTURE_PENDING: dict[int, dict] = {}
 _SEMIS_CULTURE_TIMEOUT = 90  # secondes
 
+# [fix rattachement lot godet] Plusieurs lots de semis candidats → choix du lot parent
+_GODET_LOT_PENDING: dict[int, dict] = {}
+_GODET_LOT_TIMEOUT = 120  # secondes
+
+# [US-066] Mise en godet sans « sur N graines » → réclamation du nombre d'origine
+_GODET_GRAINES_PENDING: dict[int, dict] = {}
+_GODET_GRAINES_TIMEOUT = 180  # secondes
+
+
+def _lot_pressenti_pour_godet(parsed: dict) -> "dict | None":
+    """
+    [US-066 / CA1, CA4] Lot de semis auquel cette mise en godet va se rattacher,
+    tel que `creer_evenement_godet` le résoudra : lot explicitement désigné, sinon
+    unique candidat capable. Retourne None dès que le rattachement est incertain
+    (aucun candidat, ou plusieurs) — il n'y a alors aucun reste précis à annoncer,
+    donc aucune question à poser.
+    """
+    graines_requises = int(parsed.get("nb_graines_semees") or parsed.get("nb_plants_godets") or 0)
+    db = SessionLocal()
+    try:
+        semis_id = parsed.get("origine_graines_id")
+        if semis_id is not None:
+            return svc_stock.lot_pepiniere_par_semis(db, current_context(), int(semis_id))
+        candidats = svc_stock.lots_candidats_mise_en_godet(
+            db, current_context(), parsed.get("culture") or "", parsed.get("variete"),
+            graines_requises=graines_requises,
+        )
+        return candidats[0] if len(candidats) == 1 else None
+    finally:
+        db.close()
+
+
+async def _demander_graines_godet_si_manquant(update: Update, parsed: dict, texte: str) -> bool:
+    """
+    [US-066 / CA1, CA2, CA4] Réclame le « sur N graines » d'une mise en godet quand
+    il manque et qu'un lot de semis rattachable a encore des graines non soldées.
+
+    Sans cette information, le lot reste en germination « indéterminée » à vie
+    (US-065 / CA3) : le système ne peut pas savoir que ses graines sont soldées,
+    donc son avancement n'atteint jamais 100 %. Le jardinier est le seul à la
+    connaître, et seulement au moment du repiquage — d'où la question immédiate.
+
+    Retourne True si la question a été posée (l'appelant s'arrête là).
+    """
+    # [CA4] Déjà fourni dans la dictée, déjà demandé, ou rien à rapporter à un lot
+    if parsed.get("nb_graines_semees") or parsed.get("_graines_demandees"):
+        return False
+    if not parsed.get("nb_plants_godets"):
+        return False
+
+    lot = _lot_pressenti_pour_godet(parsed)
+    # [CA4] Aucun semis rattachable, ou lot déjà entièrement soldé → pas de question
+    if not lot or lot.get("graines_en_germination", 0) <= 0:
+        return False
+
+    import time as _time_gr
+    user_id = update.effective_user.id
+    _GODET_GRAINES_PENDING[user_id] = {
+        "parsed": parsed, "texte": texte, "ts": _time_gr.time(), "lot": lot,
+    }
+
+    # [CA3] Une action explicite pour passer outre — jamais de valeur inventée
+    buttons = [[
+        InlineKeyboardButton("🤷 Je ne sais pas", callback_data="godetgraines_skip"),
+        InlineKeyboardButton("❌ Annuler",        callback_data="godetgraines_cancel"),
+    ]]
+
+    # [CA2] Contexte utile : culture, variété et reste réel du lot concerné
+    label = f"{lot['culture']} *{lot['variete']}*" if lot.get("variete") else f"*{lot['culture']}*"
+    date_lot = _fmt_date_lot(lot.get("date_semis"))
+    await update.effective_message.reply_text(
+        f"🌾 Sur combien de graines avez-vous repiqué ces "
+        f"*{parsed['nb_plants_godets']}* plants de {label} ?\n\n"
+        f"_Lot semé le {date_lot} : il reste {lot['graines_en_germination']} "
+        f"graine(s) non soldée(s)._",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info(
+        "[US-066] Nombre de graines réclamé pour le lot #%s (%d restantes) — user_id=%s",
+        lot["semis_id"], lot["graines_en_germination"], user_id,
+    )
+    return True
+
+
+async def _godet_graines_reponse(update: Update, texte_reponse: str) -> None:
+    """
+    [US-066 / CA5] Traite la réponse chiffrée du jardinier. Toute valeur incohérente
+    est signalée et redemandée, jamais enregistrée : moins de graines que de plants
+    (taux > 100 % impossible), ou plus que le lot n'en a encore.
+    """
+    import re as _re_gr
+    import time as _time_gr
+
+    user_id = update.effective_user.id
+    pending = _GODET_GRAINES_PENDING.pop(user_id, None)
+    if pending is None:
+        return
+
+    if _time_gr.time() - pending["ts"] > _GODET_GRAINES_TIMEOUT:
+        await update.effective_message.reply_text(
+            "⏱ *Action annulée* (délai dépassé). Veuillez re-saisir votre mise en godet.",
+            parse_mode="Markdown",
+        )
+        return
+
+    parsed = pending["parsed"]
+    lot    = pending["lot"]
+    nb_plants = int(parsed.get("nb_plants_godets") or 0)
+
+    async def _redemander(message: str) -> None:
+        """Remet en attente sans consommer la question — CA5."""
+        _GODET_GRAINES_PENDING[user_id] = pending
+        await update.effective_message.reply_text(message, parse_mode="Markdown")
+
+    match = _re_gr.search(r"(\d+)", texte_reponse or "")
+    if not match:
+        await _redemander("❌ Nombre non reconnu. Indiquez un nombre de graines (ex: _10_).")
+        return
+
+    nb_graines = int(match.group(1))
+
+    if nb_graines < nb_plants:
+        await _redemander(
+            f"❌ Impossible : *{nb_plants}* plants ne peuvent pas venir de "
+            f"*{nb_graines}* graines. Indiquez au moins {nb_plants}."
+        )
+        return
+
+    restantes = lot["graines_en_germination"]
+    if nb_graines > restantes:
+        await _redemander(
+            f"❌ Ce lot n'a plus que *{restantes}* graine(s) en germination : "
+            f"*{nb_graines}* est impossible. Corrigez la valeur, ou choisissez "
+            f"« Je ne sais pas » pour enregistrer sans."
+        )
+        return
+
+    parsed["nb_graines_semees"] = nb_graines
+    parsed["_graines_demandees"] = True
+    log.info("[US-066] Nombre de graines saisi : %d — user_id=%s", nb_graines, user_id)
+    await _save_godet_item(update, parsed, pending["texte"])
+
+
+async def _godet_graines_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-066 / CA3] Callback inline — passer outre ou annuler."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _GODET_GRAINES_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre mise en godet.")
+        return
+
+    if query.data == "godetgraines_cancel":
+        await query.edit_message_text("❌ Mise en godet annulée.", reply_markup=None)
+        return
+
+    # [CA3] Enregistrement sans nombre de graines — le lot restera en germination
+    # « indéterminée » (US-065 / CA3), ce que le message annonce sans détour.
+    parsed = pending["parsed"]
+    parsed["_graines_demandees"] = True
+    log.info("[US-066 CA3] Nombre de graines non renseigné (choix explicite) — user_id=%s", user_id)
+    await query.edit_message_text(
+        "✅ Enregistrement *sans* nombre de graines.\n"
+        "_L'avancement de ce lot restera indéterminé._",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+    await _save_godet_item(update, parsed, pending["texte"])
+
+
+def _fmt_date_lot(dt) -> str:
+    """Libellé court et lisible d'une date de semis pour les boutons de choix de lot."""
+    return dt.strftime("%d/%m/%Y") if dt else "date inconnue"
+
+
+async def _demander_lot_godet_si_ambigu(update: Update, parsed: dict, texte: str) -> bool:
+    """
+    [fix rattachement lot godet] Demande sur quel lot de semis porte le repiquage
+    lorsque plusieurs lots de la culture ont encore des graines en germination.
+
+    Sans ce choix, `creer_evenement_godet` ne pouvait rattacher le godet que s'il
+    existait un unique semis pour la culture : deux semis échelonnés laissaient
+    `origine_graines_id` à NULL, et aucun des deux lots n'avançait dans la pépinière
+    (US-065). Le jardinier est le seul à savoir de quel lot vient le repiquage —
+    aucune heuristique ne peut le deviner, d'où la question explicite.
+
+    Retourne True si la question a été posée (l'appelant doit s'arrêter là),
+    False s'il peut poursuivre l'enregistrement immédiatement.
+    """
+    # Choix déjà fait (lot désigné ou refus explicite) → ne jamais redemander
+    if parsed.get("_lot_choisi") or parsed.get("origine_graines_id") is not None:
+        return False
+
+    # [fix garde-fou graines du lot] Ne proposer que des lots capables d'absorber ce
+    # repiquage : un lot trop petit serait refusé à l'écriture, l'afficher au menu
+    # ne ferait que promettre un choix impossible.
+    graines_requises = int(parsed.get("nb_graines_semees") or parsed.get("nb_plants_godets") or 0)
+
+    db = SessionLocal()
+    try:
+        candidats = svc_stock.lots_candidats_mise_en_godet(
+            db, current_context(), parsed.get("culture") or "", parsed.get("variete"),
+            graines_requises=graines_requises,
+        )
+    finally:
+        db.close()
+
+    if len(candidats) < 2:
+        # 0 candidat  → le service tranche (rattachement impossible : refus ou
+        #               godet sans parent selon qu'il existe des lots ou non) ;
+        # 1 candidat  → déduction automatique, aucune question à poser.
+        return False
+
+    import time as _time_lot
+    user_id = update.effective_user.id
+    _GODET_LOT_PENDING[user_id] = {
+        "parsed": parsed,
+        "texte":  texte,
+        "ts":     _time_lot.time(),
+        "labels": {lot["semis_id"]: _fmt_date_lot(lot["date_semis"]) for lot in candidats},
+    }
+
+    buttons = [
+        [InlineKeyboardButton(
+            f"{_fmt_date_lot(lot['date_semis'])} — {lot['graines_en_germination']} graines restantes",
+            callback_data=f"godetlot:{lot['semis_id']}",
+        )]
+        for lot in candidats
+    ]
+    # Pas d'échappatoire « je ne sais pas » : elle produirait un godet sans parent
+    # alors que des lots existent et peuvent le porter — exactement le trou que
+    # `AucunLotDisponibleError` ferme côté service. Choisir, ou annuler.
+    buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="godetlot_cancel")])
+
+    culture = parsed.get("culture") or "cette culture"
+    variete = parsed.get("variete")
+    label   = f"{culture} *{variete}*" if variete else f"*{culture}* (sans variété)"
+    await update.effective_message.reply_text(
+        f"🌱 Plusieurs semis de {label} ont encore des graines en germination.\n\n"
+        "Sur quel lot ce repiquage a-t-il été fait ?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info(
+        "[fix rattachement lot godet] %d lots candidats proposés pour '%s' — user_id=%s",
+        len(candidats), parsed.get("culture"), user_id,
+    )
+    return True
+
 
 async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
+    # [fix rattachement lot godet] Point de passage obligé des chemins de saisie
+    # godet (US-019 et confirmation directe) : le lot parent se choisit ici.
+    if await _demander_lot_godet_si_ambigu(update, parsed, texte):
+        return
+
+    # [US-066] Puis, le lot étant connu, le nombre de graines qu'il solde. L'ordre
+    # compte : CA2 exige d'annoncer le reste du lot concerné, ce qui suppose de
+    # savoir de quel lot il s'agit.
+    if await _demander_graines_godet_si_manquant(update, parsed, texte):
+        return
+
     db = SessionLocal()
     try:
-        culture_str = parsed.get("culture") or ""
-        variete_str = parsed.get("variete")
-
-        # [US-029 CA3/CA4] Auto-link au semis parent + héritage variété
-        origine_graines_id: int | None = None
-        from sqlalchemy import func as _sqlfunc
-        semis_rows = (
-            db.query(Evenement.id, Evenement.variete)
-            .filter(Evenement.type_action == "semis")
-            .filter(_sqlfunc.lower(Evenement.culture) == culture_str.lower())
-            .filter(Evenement.culture.isnot(None))
-        )
-        if variete_str:
-            semis_rows = semis_rows.filter(Evenement.variete == variete_str)
-        semis_list = semis_rows.order_by(Evenement.date.asc()).all()
-
-        if len(semis_list) == 1:
-            origine_graines_id = semis_list[0].id
-            if not variete_str and semis_list[0].variete:
-                parsed["variete"] = semis_list[0].variete
-                variete_str = semis_list[0].variete
-                log.info(f"[US-029 CA4] Variété '{variete_str}' héritée du semis id={origine_graines_id} pour '{culture_str}'")
-            log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
-
-        event = Evenement(
-            type_action        = "mise_en_godet",
-            culture            = culture_str,
-            variete            = parsed.get("variete"),
-            quantite           = _to_float(parsed.get("quantite")),
-            unite              = parsed.get("unite"),
-            parcelle_id        = None,
-            rang               = None,
-            duree              = None,
-            traitement         = None,
-            commentaire        = parsed.get("commentaire"),
-            texte_original     = texte,
-            date               = parse_date(parsed.get("date")),
-            nb_graines_semees  = _to_int(parsed.get("nb_graines_semees")),
-            nb_plants_godets   = _to_int(parsed.get("nb_plants_godets")),
-            origine_graines_id = origine_graines_id,
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete} origine={origine_graines_id}")
+        event = svc_evenements.creer_evenement_godet(db, current_context(), parsed, texte)
+    except svc_evenements.EvenementInvalideError as e:
+        db.rollback()
+        log.warning(f"❌ MISE EN GODET INVALIDE : {e} | texte={texte!r}")
+        await update.effective_message.reply_text(f"❌ {e}")
+        return
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -1600,21 +2089,7 @@ async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
     """
     db = SessionLocal()
     try:
-        event = Evenement(
-            type_action    = item.get("action"),
-            culture        = item.get("culture"),
-            variete        = item.get("variete"),
-            quantite       = _to_float(item.get("quantite")),
-            unite          = item.get("unite") or "plants",
-            parcelle_id    = None,
-            commentaire    = item.get("commentaire"),
-            texte_original = texte,
-            date           = parse_date(item.get("date")),
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 PERTE SAVE : id={event.id} action={event.type_action} culture={event.culture} variete={event.variete} qte={event.quantite}")
+        event = svc_evenements.creer_evenement_perte(db, current_context(), item, texte)
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -1664,6 +2139,47 @@ async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
         parse_mode="Markdown",
         reply_markup=None,
     )
+    await _save_godet_item(update, parsed, texte)
+
+
+async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[fix rattachement lot godet] Callback inline — choix du lot de semis parent
+    d'une mise en godet, quand plusieurs lots sont encore en germination."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _GODET_LOT_PENDING.pop(user_id, None)
+
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre mise en godet.")
+        return
+
+    import time
+    if time.time() - pending["ts"] > _GODET_LOT_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 2 min). Veuillez re-saisir.", parse_mode="Markdown")
+        return
+
+    data = query.data  # godetlot:{semis_id} | godetlot_cancel
+
+    if data == "godetlot_cancel":
+        await query.edit_message_text("❌ Mise en godet annulée.", reply_markup=None)
+        return
+
+    parsed = pending["parsed"]
+    texte  = pending["texte"]
+
+    semis_id = int(data[len("godetlot:"):])
+    parsed["origine_graines_id"] = semis_id
+    # Marqueur de décision : empêche _save_godet_item de reposer la question.
+    parsed["_lot_choisi"] = True
+    log.info("[fix rattachement lot godet] Lot id=%s choisi — user_id=%s", semis_id, user_id)
+    await query.edit_message_text(
+        f"✅ Lot de semis du *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+
     await _save_godet_item(update, parsed, texte)
 
 
@@ -1821,40 +2337,14 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
 _ACTIONS_SOURCE = {"plantation", "semis", "mise_en_godet", "vendu", "perte_godet"}
 
 
-def _cond_localisation_culture():
-    """[US-037 / migration_v15] Une culture est "localisée" via une 'plantation' OU un
-    'semis' directement lié à une VRAIE parcelle de pleine terre (semis pleine terre).
-    Un semis SANS parcelle_id (pépinière, destiné à un godet), ou rattaché à une
-    parcelle marquée est_pepiniere=true (serre, pépinière, ou la parcelle factice
-    "Non localisé"), n'est jamais considéré comme une localisation.
-
-    Utilise une sous-requête plutôt qu'un join sur Parcelle : cette condition est
-    réutilisée dans des requêtes sur Evenement seul, sans jointure Parcelle."""
-    pepiniere_ids = select(Parcelle.id).where(Parcelle.est_pepiniere.is_(True))
-    return or_(
-        Evenement.type_action == "plantation",
-        and_(
-            Evenement.type_action == "semis",
-            Evenement.parcelle_id.isnot(None),
-            Evenement.parcelle_id.notin_(pepiniere_ids),
-        ),
-    )
+    # [US-037] La condition de "localisation" d'une culture (_cond_localisation_culture)
+    # vit désormais dans app/services/evenements.py, seul module qui construit encore
+    # des requêtes sur Evenement/Parcelle pour cette logique.
 
 
 def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
     """Retourne les parcelles distinctes où cette culture a été plantée ou semée en pleine terre."""
-    q = (
-        db.query(Parcelle)
-        .join(Evenement, Evenement.parcelle_id == Parcelle.id)
-        .filter(
-            Parcelle.actif == True,
-            _cond_localisation_culture(),
-            Evenement.culture == culture,
-        )
-    )
-    if variete:
-        q = q.filter(Evenement.variete == variete)
-    return q.distinct().all()
+    return svc_parcelles.parcelles_avec_culture(db, current_context(), culture, variete)
 
 
 def _build_action_summary(items: list[dict]) -> str:
@@ -1880,15 +2370,23 @@ def _build_action_summary(items: list[dict]) -> str:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        if p.get("_avertissement_coherence"):
+            lines.append(f"\n{p['_avertissement_coherence']}")
         lines.append("\nC'est correct ?")
         return "\n".join(lines)
     else:
         lines = [f"📝 *Je vais enregistrer {len(items)} actions :*\n"]
+        avertissements = []
         for i, p in enumerate(items, 1):
             action  = p.get("action") or "action"
             culture = p.get("culture") or "?"
             qte_str = f" — {p['quantite']} {p.get('unite') or ''}".strip() if p.get("quantite") is not None else ""
             lines.append(f"{i}. *{action}* {culture}{qte_str}")
+            if p.get("_avertissement_coherence"):
+                avertissements.append(f"{i}. {p['_avertissement_coherence']}")
+        if avertissements:
+            lines.append("")
+            lines.extend(avertissements)
         lines.append("\nC'est correct ?")
         return "\n".join(lines)
 
@@ -1899,78 +2397,43 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     saved_items = []
     try:
         for parsed in items:
+            # [US-049] La résolution reste ici (nécessaire pour construire l'Evenement
+            # avec le bon parcelle_id), mais le BLOCAGE si la parcelle ne résout à rien
+            # est désormais décidé uniquement par la validation centrale à l'intérieur
+            # de creer_evenement_confirme (valider_evenement) — plus de duplication de
+            # la règle "parcelle inconnue" à cet endroit.
             nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = None
-            if nom_parcelle:
-                parcelle_obj = resolve_parcelle(db, nom_parcelle)
-                if parcelle_obj is None:
-                    log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
-                    err_msg = (
-                        f"❌ La parcelle *{nom_parcelle}* n'existe pas dans votre potager.\n\n"
-                        f"Créez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
-                    )
-                    if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
-                    else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                    return
+            parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=current_context().potager_id) if nom_parcelle else None
 
-            # [US-037 / CA1, CA2, CA6] Normalisation unité semis : graines | pieds | m².
-            # Le m² n'est JAMAIS reconverti en graines/pieds — seule une unité vraiment
-            # inconnue retombe sur 'graines' par défaut (comportement historique).
-            type_organe_semis: str | None = None
-            if normalize_action(parsed.get("action")) == "semis":
-                unite_normalisee = _normalize_unite_semis(parsed.get("unite"))
-                if unite_normalisee != (parsed.get("unite") or "").lower().strip():
-                    log.info(
-                        "[US-037] Unité semis '%s' normalisée en '%s' (culture=%s)",
-                        parsed.get("unite"), unite_normalisee, parsed.get("culture"),
-                    )
-                parsed["unite"] = unite_normalisee
-
-                # [US-037 / CA3] Résolution type_organe_recolte via CultureConfig
-                culture_semis = (parsed.get("culture") or "").strip()
-                if culture_semis:
-                    from utils.stock import get_type_organe
-                    type_organe_semis = get_type_organe(db, culture_semis)
-
-            # [US-029 CA5/CA7/CA8] Plantation : héritage variété + source_evenement_ids
-            source_evenement_ids: str | None = parsed.get("source_evenement_ids")
-            if normalize_action(parsed.get("action")) == "plantation" and parsed.get("culture"):
-                from utils.stock import _find_plantation_sources
-                variete_src, src_ids = _find_plantation_sources(
-                    db,
-                    parsed["culture"],
-                    parsed.get("variete"),
-                    float(parsed.get("quantite") or 0),
-                )
-                if variete_src and not parsed.get("variete"):
-                    parsed["variete"] = variete_src
-                    log.info(f"[US-029 CA5] Variété '{variete_src}' héritée du godet → plantation '{parsed['culture']}'")
-                if src_ids:
-                    source_evenement_ids = src_ids
-                    log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
-
-            event = Evenement(
-                type_action          = normalize_action(parsed.get("action")),
-                culture              = parsed.get("culture"),
-                variete              = parsed.get("variete"),
-                quantite             = _to_float(parsed.get("quantite")),
-                unite                = parsed.get("unite"),
-                parcelle_id          = parcelle_obj.id if parcelle_obj else None,
-                rang                 = _to_int(parsed.get("rang")),
-                duree                = _to_int(parsed.get("duree_minutes")),
-                traitement           = parsed.get("traitement"),
-                commentaire          = parsed.get("commentaire"),
-                texte_original       = texte,
-                date                 = parse_date(parsed.get("date")),
-                nb_graines_semees    = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets     = _to_int(parsed.get("nb_plants_godets")),
-                source_evenement_ids = source_evenement_ids,
-                type_organe_recolte  = type_organe_semis,
-            )
-            db.add(event)
-            db.commit()
-            db.refresh(event)
-            log.info(f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} | qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}")
+            try:
+                # [fix bug id=351] mise_en_godet doit toujours passer par
+                # creer_evenement_godet (parcelle_id forcé à None + auto-link au
+                # semis d'origine), jamais par creer_evenement_confirme — même
+                # quand la variété est déjà connue (seul cas jusqu'ici routé vers
+                # la fonction dédiée, via l'interception _GODET_PENDING plus haut).
+                if normalize_action(parsed.get("action")) == "mise_en_godet":
+                    event = svc_evenements.creer_evenement_godet(db, current_context(), parsed, texte)
+                else:
+                    event = svc_evenements.creer_evenement_confirme(db, current_context(), parsed, texte, parcelle_obj)
+            except svc_evenements.ParcelleInconnueError as e:
+                db.rollback()
+                log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
+                err_msg = f"❌ {e}\n\nCréez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
+                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
+            except svc_evenements.EvenementInvalideError as e:
+                # [US-049] Filet de sécurité final — la validation centrale a rejeté
+                # l'événement au moment même de l'écriture. Les contrôles amont dans
+                # _parse_and_save couvrent déjà l'UX normale ; ce cas ne devrait se
+                # produire que si l'état du potager a changé entre la confirmation et
+                # l'écriture, ou via un chemin qui aurait échappé aux contrôles amont.
+                db.rollback()
+                log.warning(f"❌ ÉVÉNEMENT INVALIDE (écriture) : {e} | texte={texte!r}")
+                err_msg = f"❌ {e}"
+                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -2036,11 +2499,10 @@ async def _semis_organe_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
 
     db = SessionLocal()
     try:
-        from database.models import CultureConfig
-        cfg = db.query(CultureConfig).filter(CultureConfig.nom == culture).first()
+        tenant_ctx = current_context()
+        cfg = svc_parcelles.get_culture_config(db, tenant_ctx, culture)
         if cfg is None:
-            db.add(CultureConfig(nom=culture, type_organe_recolte=type_organe))
-            db.commit()
+            svc_parcelles.creer_culture_config(db, tenant_ctx, culture, type_organe)
             log.info(f"[US-037 CA7] CultureConfig créée : '{culture}' → {type_organe}")
     finally:
         db.close()
@@ -2195,12 +2657,12 @@ async def _note_details_received(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     if fields.get("culture"):
         db = SessionLocal()
         try:
-            culture_resolue = resolve_culture(db, fields["culture"])
+            culture_resolue = resolve_culture(db, current_context().potager_id, fields["culture"])
             if culture_resolue != fields["culture"]:
                 log.info(f"[US-038] Culture résolue : '{fields['culture']}' → '{culture_resolue}'")
             fields["culture"] = culture_resolue
             if fields.get("variete"):
-                variete_resolue = resolve_variete(db, culture_resolue, fields["variete"])
+                variete_resolue = resolve_variete(db, current_context().potager_id, culture_resolue, fields["variete"])
                 if variete_resolue != fields["variete"]:
                     log.info(f"[US-038] Variété résolue : '{fields['variete']}' → '{variete_resolue}'")
                 fields["variete"] = variete_resolue
@@ -2235,28 +2697,7 @@ async def _save_note_event(update: Update, pending: dict) -> None:
 
     db = SessionLocal()
     try:
-        parcelle_obj = None
-        nom_parcelle = fields.get("parcelle")
-        if nom_parcelle:
-            parcelle_obj = resolve_parcelle(db, nom_parcelle)
-            if parcelle_obj is None:
-                log.warning(f"⚠️ [US-038] PARCELLE INCONNUE : {nom_parcelle!r} — note enregistrée sans parcelle")
-
-        event = Evenement(
-            type_action    = normalize_action("observation"),
-            culture        = fields.get("culture"),
-            variete        = fields.get("variete"),
-            parcelle_id    = parcelle_obj.id if parcelle_obj else None,
-            duree          = _to_int(fields.get("duree_minutes")),
-            traitement     = fields.get("traitement"),
-            commentaire    = f"[{label}] {fields['constat']}",
-            texte_original = pending["texte"],
-            date           = parse_date(fields.get("date")),
-        )
-        db.add(event)
-        db.commit()
-        db.refresh(event)
-        log.info(f"💾 DB SAVE [US-038] : id={event.id} | categorie={categorie} | culture={event.culture} | parcelle_id={event.parcelle_id}")
+        event = svc_evenements.creer_evenement_observation(db, current_context(), fields, pending["texte"], label)
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -2315,6 +2756,15 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # Gestion des callback queries : update.message peut être None
     message = update.message or (update.callback_query.message if update.callback_query else None)
 
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM (parse_commande
+    # ci-dessous) — un lecteur qui dicte une action n'y déclenche aucun appel Groq.
+    try:
+        require_role(current_context(), "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        if msg: await msg.edit_text(f"⛔ {e}")
+        else:   await message.reply_text(f"⛔ {e}")
+        return
+
     try:
         if pre_parsed_items is not None:
             items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
@@ -2339,6 +2789,29 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         items[i] = strip_culture_hallucinee(item, texte)
         if culture_avant and items[i].get("culture") is None:
             log.warning(f"⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | texte={texte!r}")
+
+    # [fix doublons orthographiques] Résout culture/variété vers les valeurs canoniques
+    # déjà en base (ex: "creme"/"cerise" dictés → variété déjà connue), pour ce pipeline
+    # de dictée directe. Jusqu'ici cette canonisation n'existait que dans le flux "notes"
+    # (_note_details_received) — le flux normal enregistrait la variété brute telle
+    # quelle, fragmentant silencieusement les variétés en base au moindre écart d'orthographe.
+    if any(item.get("culture") for item in items):
+        db_resolve = SessionLocal()
+        try:
+            for item in items:
+                if not item.get("culture"):
+                    continue
+                culture_resolue = resolve_culture(db_resolve, current_context().potager_id, item["culture"])
+                if culture_resolue != item["culture"]:
+                    log.info(f"[resolve] Culture '{item['culture']}' → '{culture_resolue}'")
+                item["culture"] = culture_resolue
+                if item.get("variete"):
+                    variete_resolue = resolve_variete(db_resolve, current_context().potager_id, culture_resolue, item["variete"])
+                    if variete_resolue != item["variete"]:
+                        log.info(f"[resolve] Variété '{item['variete']}' → '{variete_resolue}'")
+                    item["variete"] = variete_resolue
+        finally:
+            db_resolve.close()
 
     # [US-011] Validation post-parsing — filtre les hallucinations Groq en Python pur
     from utils.validation import validate_parsed_action
@@ -2389,6 +2862,39 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             reply_markup=MENU_KEYBOARD
         )
         return
+
+    # [US-049] Garde-fou "culture jamais plantée" — appelle la validation centrale
+    # unique (app/services/evenements.py::valider_evenement), qui reste de toute
+    # façon l'autorité finale au moment de l'écriture (défense en profondeur) ;
+    # l'appel ici n'est qu'un raccourci UX pour bloquer AVANT d'afficher un
+    # récapitulatif de confirmation voué à échouer. Contrôle appliqué à CHAQUE item,
+    # pas seulement au premier — c'est l'ancienne restriction `len(items) == 1` qui
+    # avait laissé passer une culture hallucinée quand Groq segmente une phrase
+    # multi-culture ("cueilli 2 kilos de cerise, tomates, nord") en plusieurs items
+    # dans la même réponse JSON.
+    from app.services.evenements import valider_evenement as _valider_evenement, CultureInconnueError
+    db_chk = SessionLocal()
+    try:
+        for _item_chk in items:
+            if not _item_chk.get("culture"):
+                continue
+            try:
+                _valider_evenement(
+                    db_chk, current_context(),
+                    action=_item_chk.get("action"), culture=_item_chk["culture"],
+                    variete=_item_chk.get("variete"), parcelle=None,
+                )
+            except CultureInconnueError as e:
+                log.warning(f"❌ CULTURE JAMAIS PLANTÉE : '{_item_chk['culture']}' — action bloquée | texte={texte!r}")
+                err = (
+                    f"❌ {e}\n\n"
+                    f"Vérifiez le nom, ou enregistrez d'abord un semis/plantation de *{_item_chk['culture']}*."
+                )
+                if msg: await msg.edit_text(err, parse_mode="Markdown")
+                else:   await message.reply_text(err, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+                return
+    finally:
+        db_chk.close()
 
     # [US-037 / CA7] Semis d'une culture inconnue de CultureConfig — demander
     # à l'utilisateur si elle est végétative ou reproductive avant d'enregistrer.
@@ -2442,7 +2948,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         db_tmp = SessionLocal()
         try:
             semis_var = [
-                s for s in calcul_semis_par_culture(db_tmp, culture)
+                s for s in calcul_semis_par_culture(db_tmp, culture, potager_id=current_context().potager_id)
                 if s["stock_residuel"] > 0
             ]
         finally:
@@ -2493,6 +2999,24 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             )
         return  # attente callback — pas de sauvegarde immédiate
 
+    # [fix rattachement lot godet] Mise en godet dont la variété est DÉJÀ connue :
+    # le bloc US-019 ci-dessus ne s'est pas déclenché, mais le lot parent peut
+    # rester ambigu (plusieurs semis échelonnés encore en germination).
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "mise_en_godet"
+        and await _demander_lot_godet_si_ambigu(update, items[0], texte)
+    ):
+        return  # attente callback — pas de sauvegarde immédiate
+
+    # [US-066] Même chemin : réclamer le « sur N graines » manquant avant d'écrire.
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "mise_en_godet"
+        and await _demander_graines_godet_si_manquant(update, items[0], texte)
+    ):
+        return  # attente réponse — pas de sauvegarde immédiate
+
     # ── Disambiguation récolte — variété + parcelle ──────────────────────────────
     if (
         len(items) == 1
@@ -2508,7 +3032,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         db_tmp = SessionLocal()
         try:
             varietes_stock = [
-                v for v in calcul_stock_par_variete(db_tmp, culture)
+                v for v in calcul_stock_par_variete(db_tmp, culture, potager_id=current_context().potager_id)
                 if (v["plants_plantes"] - v["plants_perdus"]) > 0
                 and v["variete"] != "Variété non précisée"
             ]
@@ -2813,7 +3337,58 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
 
     # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
-    _ACTIONS_PEPINIERE = {"vendu", "perte_godet"}
+    # [fix bug id=351] mise_en_godet ajouté — un godet n'est jamais rattaché à une
+    # parcelle, cette liste doit rester alignée avec `parcelle_id=None` forcé par
+    # creer_evenement_godet (sinon CA8 propose une parcelle réelle, ex. "serre",
+    # qui finit par être assignée à un événement qui ne devrait jamais en avoir).
+    _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
+
+    # [US-049] Incohérence culture/variété ↔ parcelle citée — appelle la validation
+    # centrale (app/services/evenements.py::valider_evenement) au lieu de recalculer
+    # le prédicat ici, pour ne jamais diverger de la règle réellement appliquée à
+    # l'écriture. Si invalide, la parcelle citée n'est PAS retenue telle quelle —
+    # elle est retirée pour que le bloc CA8 ci-dessous la redétermine (auto-
+    # assignation ou menu, cas item unique), exactement comme si l'utilisateur
+    # n'avait rien précisé. Contrôle appliqué à CHAQUE item (CA3 US-049 : aucune
+    # règle ne doit dépendre du nombre d'items traités dans le même appel).
+    from app.services.evenements import valider_evenement as _valider_evenement2, ParcelleIncoherenteError
+    db_tmp = SessionLocal()
+    try:
+        for _item_coh in items:
+            if not (_item_coh.get("parcelle") and _item_coh.get("culture")):
+                continue
+            if (_item_coh.get("type_action") or _item_coh.get("action") or "") in _ACTIONS_SOURCE:
+                continue
+            culture      = _item_coh["culture"]
+            variete      = _item_coh.get("variete") or None
+            nom_parcelle = _item_coh["parcelle"]
+            parcelle_resolue = resolve_parcelle(db_tmp, nom_parcelle, potager_id=current_context().potager_id)
+            if parcelle_resolue is None:
+                continue   # parcelle inconnue : gérée séparément au moment de l'écriture
+            try:
+                _valider_evenement2(
+                    db_tmp, current_context(),
+                    action=_item_coh.get("action"), culture=culture,
+                    variete=variete, parcelle=parcelle_resolue,
+                )
+            except ParcelleIncoherenteError as e:
+                autres = []
+                if variete:
+                    # La variété n'est pas connue sur CETTE parcelle : indiquer où
+                    # elle a été plantée si elle existe ailleurs, pour aider au choix.
+                    parcelles_culture_seule = _get_parcelles_avec_culture(db_tmp, culture, None)
+                    autres = sorted({
+                        p.nom for p in parcelles_culture_seule if p.id != parcelle_resolue.id
+                    })
+                suffixe = f" (trouvé sur : {', '.join(autres)})" if autres else ""
+                label = f"{e.culture} {e.variete}" if e.variete else e.culture
+                _item_coh["_avertissement_coherence"] = (
+                    f"⚠️ Aucune trace de *{label}* sur *{e.parcelle_nom}*{suffixe}."
+                )
+                log.warning("[coherence-check] %s — parcelle retirée, redétection via CA8", str(e))
+                del _item_coh["parcelle"]
+    finally:
+        db_tmp.close()
 
     # [CA8/CA11] Parcelle absente sur action simple → sélection intelligente
     if len(items) == 1 and not items[0].get("parcelle"):
@@ -2854,7 +3429,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
 
                 else:
                     # Aucune plantation connue ou action source → liste complète
-                    parcelles_actives = get_all_parcelles(db_tmp)
+                    parcelles_actives = get_all_parcelles(db_tmp, potager_id=current_context().potager_id)
                     if parcelles_actives:
                         items[0]["_parcelle_demandee"] = True
                         summary = _build_action_summary(items)
@@ -3007,13 +3582,7 @@ async def _ask_question(update: Update, question: str):
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        from llm.groq_client import extract_intent_query
-        from llm.sql_agent import query_agent_answer
-
-        intent = extract_intent_query(question)
-        log.info(f"🎯 INTENT QUERY   : {intent}")
-
-        reponse = query_agent_answer(question, intent)
+        reponse = svc_questions.repondre_question(current_context(), question)
         log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
@@ -3036,22 +3605,7 @@ async def _consulter_godets(update) -> None:
     """[US_mise_en_godet] Affiche les plants en godet sans plantation postérieure."""
     db = SessionLocal()
     try:
-        godets_all = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .order_by(Evenement.date.desc())
-            .all()
-        )
-        en_attente = []
-        for g in godets_all:
-            plantation = db.query(Evenement).filter(
-                Evenement.type_action == "plantation",
-                Evenement.culture == g.culture,
-            )
-            if g.date:
-                plantation = plantation.filter(Evenement.date >= g.date)
-            if not plantation.first():
-                en_attente.append(g)
+        en_attente = svc_evenements.godets_en_attente(db, current_context())
 
         if not en_attente:
             await update.message.reply_text(
@@ -3127,8 +3681,8 @@ async def cmd_plan(update, ctx) -> None:
             else:
                 args_sans_date.append(a)
 
-        occupation = calcul_occupation_parcelles(db, date_ref)
-        parcelles_bdd = get_all_parcelles(db)
+        occupation = calcul_occupation_parcelles(db, date_ref, potager_id=current_context().potager_id)
+        parcelles_bdd = get_all_parcelles(db, potager_id=current_context().potager_id)
 
         # ── [US-030] Bannière date de référence ───────────────────────────────
         date_banner = ""
@@ -3361,7 +3915,7 @@ async def cmd_parcelle(update, ctx) -> None:
     if sous_cmd == "lister":
         db = SessionLocal()
         try:
-            parcelles = get_all_parcelles(db)
+            parcelles = get_all_parcelles(db, potager_id=current_context().potager_id)
             if not parcelles:
                 await update.message.reply_text(
                     "📋 Aucune parcelle enregistrée.\n"
@@ -3416,13 +3970,13 @@ async def cmd_parcelle(update, ctx) -> None:
 
         db = SessionLocal()
         try:
-            parc, modifs = update_parcelle(db, nom, **kwargs)
+            parc, modifs = update_parcelle(db, nom, potager_id=current_context().potager_id, **kwargs)
             lignes = [f"✅ Parcelle *{parc.nom.upper()}* mise à jour :"]
             for m in modifs:
                 lignes.append(f"  · {m}")
             await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
         except LookupError:
-            all_p = get_all_parcelles(db)
+            all_p = get_all_parcelles(db, potager_id=current_context().potager_id)
             noms = ", ".join(p.nom.lower() for p in all_p) or "(aucune)"
             await update.message.reply_text(
                 f"❌ Parcelle *{nom}* introuvable.\nParcelles connues : {noms}",
@@ -3461,7 +4015,7 @@ async def cmd_parcelle(update, ctx) -> None:
 
         db = SessionLocal()
         try:
-            exact, proche = find_doublon(db, nom_normalise)
+            exact, proche = find_doublon(db, nom_normalise, potager_id=current_context().potager_id)
 
             # [CA10] Doublon exact
             if exact:
@@ -3490,7 +4044,7 @@ async def cmd_parcelle(update, ctx) -> None:
                 return
 
             # [CA13] Pas de doublon → récapitulatif + confirmation
-            parcelles_existantes = get_all_parcelles(db)
+            parcelles_existantes = get_all_parcelles(db, potager_id=current_context().potager_id)
             lignes = ["📋 *Parcelles existantes :*"]
             for p in parcelles_existantes:
                 lignes.append(f"  · {_md(p.nom.upper())}")
@@ -3535,7 +4089,7 @@ async def cmd_parcelle(update, ctx) -> None:
         nouveau = " ".join(ctx.args[2:]).strip()  # supporte noms avec espaces
         db = SessionLocal()
         try:
-            parc, nb = rename_parcelle(db, ancien, nouveau)
+            parc, nb = rename_parcelle(db, ancien, nouveau, potager_id=current_context().potager_id)
             await update.message.reply_text(
                 f"✅ Parcelle renommée : *{ancien}* → *{parc.nom}* "
                 f"({nb} événement{'s' if nb > 1 else ''} mis à jour)",
@@ -3569,16 +4123,16 @@ async def cmd_parcelle(update, ctx) -> None:
         nom = " ".join(ctx.args[1:]).strip()
         db = SessionLocal()
         try:
-            parcelle = resolve_parcelle(db, nom)
+            parcelle = resolve_parcelle(db, nom, potager_id=current_context().potager_id)
             if parcelle is None:
-                all_p = get_all_parcelles(db)
+                all_p = get_all_parcelles(db, potager_id=current_context().potager_id)
                 noms = ", ".join(p.nom.lower() for p in all_p) or "(aucune)"
                 await update.message.reply_text(
                     f"❌ Parcelle introuvable : *{nom}*\nParcelles connues : {noms}",
                     parse_mode="Markdown",
                 )
                 return
-            nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count()
+            nb = svc_evenements.compter_evenements_parcelle(db, current_context(), parcelle.id)
             nb_str = (
                 f"⚠️ *{nb} événement{'s' if nb > 1 else ''}* seront réaffectés en *Non localisé*."
                 if nb > 0 else "Aucun événement associé."
@@ -3687,9 +4241,10 @@ async def cmd_stats(update, ctx):
     try:
         # ── [US_Stats_detail_par_variete / CA3] Mode détail variété ──────────
         if culture_arg:
-            varietes      = calcul_stock_par_variete(db, culture_arg, date_ref)
-            semis_culture = calcul_semis_par_culture(db, culture_arg, date_ref)
-            godets_culture = calcul_godets_par_culture(db, culture_arg, date_ref)  # [US-018]
+            _pid = current_context().potager_id
+            varietes      = calcul_stock_par_variete(db, culture_arg, date_ref, potager_id=_pid)
+            semis_culture = calcul_semis_par_culture(db, culture_arg, date_ref, potager_id=_pid)
+            godets_culture = calcul_godets_par_culture(db, culture_arg, date_ref, potager_id=_pid)  # [US-018]
 
             # [US-014 / CA5] Culture sans plantation mais avec semis → on continue
             if not varietes and not semis_culture and not godets_culture:
@@ -3767,7 +4322,7 @@ async def cmd_stats(update, ctx):
         lines_out = [date_banner + "📊 *Statistiques potager*\n"]
 
         # ── [US-002] Calcul stock agronomique différencié ──────────────────────
-        stocks = calcul_stock_cultures(db, date_ref)
+        stocks = calcul_stock_cultures(db, date_ref, potager_id=current_context().potager_id)
 
         if stocks:
             # [US-003 / CA3] Séparer végétatif et reproducteur
@@ -3790,7 +4345,7 @@ async def cmd_stats(update, ctx):
             lines_out.append("_Aucune plantation enregistrée._")
 
         # ── Semis ──────────────────────────────────────────────────────────────
-        semis = calcul_semis(db, date_ref)
+        semis = calcul_semis(db, date_ref, potager_id=current_context().potager_id)
         if semis:
             # Pleine terre : semis directement associés à une parcelle
             semis_pt = {c: s for c, s in semis.items() if s.get("parcelles_pleine_terre")}
@@ -3838,7 +4393,7 @@ async def cmd_stats(update, ctx):
                             lines_out.append(_ligne_semis_pep(culture, s))
 
         # ── Pépinière (godets) ─────────────────────────────────────────────────
-        godets_stats = calcul_godets(db, date_ref=date_ref)
+        godets_stats = calcul_godets(db, date_ref=date_ref, potager_id=current_context().potager_id)
         if godets_stats:
             lines_out.append("\n🪴 *Pépinière :*")
             for key, g in godets_stats.items():
@@ -3850,11 +4405,7 @@ async def cmd_stats(update, ctx):
                 lines_out.append(f"  • {key} : *{residuel} plants*{detail}{taux_str}")
 
         # ── Traitements (bonus) ───────────────────────────────────────────────
-        nb_traitements = (
-            db.query(func.count(Evenement.id))
-            .filter(Evenement.type_action == "traitement")
-            .scalar()
-        )
+        nb_traitements = svc_evenements.compter_traitements(db, current_context())
         if nb_traitements:
             lines_out.append(f"\n💊 *Traitements :* {nb_traitements} applications")
 
@@ -3877,12 +4428,7 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """20 derniers événements."""
     db = SessionLocal()
     try:
-        events = (
-            db.query(Evenement)
-            .order_by(Evenement.date.desc())
-            .limit(10)
-            .all()
-        )
+        events = svc_evenements.evenements_recents(db, current_context(), limit=10)
         if not events:
             await update.message.reply_text("📭 Aucun événement enregistré.")
             return
@@ -4019,7 +4565,7 @@ def _normalize_action_search(action: str) -> str:
 def _find_candidates(description: str, limit: int = 3) -> list:
     """Groq extrait les critères → SQL retrouve les événements."""
     from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
+    from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
     import json
 
     client = Groq(api_key=GROQ_API_KEY)
@@ -4050,7 +4596,18 @@ JSON brut uniquement."""
         resp = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=200
+            temperature=0.0, max_tokens=200,
+            # [fix bug id=357] Sans reasoning_effort, le modèle (gpt-oss, raisonneur)
+            # dépense tout le budget max_tokens dans son raisonnement interne caché
+            # et coupe avant d'écrire le JSON de réponse (finish_reason="length",
+            # content=""). Résultat en prod : "mise en godet fève du 20/07" ne
+            # retournait aucun critère exploité, la recherche retombait sur les 3
+            # derniers événements toutes cultures confondues (petit pois, tomate),
+            # sans lien avec "fève". Même garde-fou que _REASONING_KWARGS dans
+            # llm/groq_client.py, à répliquer ici (client Groq distinct, pas
+            # partagé) pour tout appel utilisant GROQ_MODEL avec un budget de
+            # tokens serré.
+            **({"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}),
         )
         raw = resp.choices[0].message.content.strip()
         if raw.startswith("```"):
@@ -4066,29 +4623,9 @@ JSON brut uniquement."""
 
     log.info(f"🔎 CRITÈRES RECHERCHE : {criteres}")
 
-    from unidecode import unidecode as _uni
-    from sqlalchemy.orm import selectinload
-
     db = SessionLocal()
     try:
-        q = db.query(Evenement).options(selectinload(Evenement.parcelle_rel))
-        if criteres.get("action"):
-            q = q.filter(Evenement.type_action == criteres["action"])
-        if criteres.get("culture"):
-            culture_val = criteres["culture"].strip()
-            q = q.filter(Evenement.culture.ilike(f"%{culture_val}%"))
-        if criteres.get("variete"):
-            variete_val = criteres["variete"].strip()
-            q = q.filter(Evenement.variete.ilike(f"%{variete_val}%"))
-        if criteres.get("parcelle"):
-            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
-                Parcelle.nom.ilike(f"%{criteres['parcelle']}%")
-            )
-        if criteres.get("date_debut"):
-            q = q.filter(Evenement.date >= criteres["date_debut"])
-        if criteres.get("date_fin"):
-            q = q.filter(Evenement.date <= criteres["date_fin"] + " 23:59:59")
-        results = q.order_by(Evenement.date.desc()).limit(limit).all()
+        results = svc_evenements.find_candidates(db, current_context(), criteres, limit=limit)
         log.info(f"🔎 RÉSULTATS SQL   : {len(results)} trouvé(s)")
         return results
     finally:
@@ -4097,9 +4634,16 @@ JSON brut uniquement."""
 
 async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Propose correction ou suppression du dernier événement."""
+    # [US-047 CA1] Garde de rôle — un lecteur ne peut ni corriger ni supprimer.
+    try:
+        require_role(current_context(), "editor", "corriger ou supprimer un événement")
+    except PermissionInsuffisanteError as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
     db = SessionLocal()
     try:
-        event = db.query(Evenement).order_by(Evenement.id.desc()).first()
+        event = svc_evenements.dernier_evenement(db, current_context())
         if not event:
             await update.message.reply_text("❌ Aucun événement en base.")
             return
@@ -4121,9 +4665,17 @@ async def _corr_annuler_dernier(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def _corr_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Étape 1 — Demande à l'utilisateur de décrire l'événement à corriger."""
+    # [US-047 CA1, CA4] Garde de rôle avant d'entrer dans le flux de correction —
+    # bloque aussi, en amont, l'appel Groq de _corr_apply (étape 4).
+    try:
+        require_role(current_context(), "editor", "corriger un événement")
+    except PermissionInsuffisanteError as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return
+
     db = SessionLocal()
     try:
-        last = db.query(Evenement).order_by(Evenement.id.desc()).first()
+        last = svc_evenements.dernier_evenement(db, current_context())
         last_id  = last.id          if last else None
         last_fmt = _fmt_event(last) if last else None
     finally:
@@ -4153,7 +4705,7 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     if texte.strip() == "1" and ctx.user_data.get('corr_last_id'):
         db = SessionLocal()
         try:
-            event = db.get(Evenement, ctx.user_data['corr_last_id'])
+            event = svc_evenements.get_evenement(db, current_context(), ctx.user_data['corr_last_id'])
             candidates = [event] if event else []
             candidates_fmt = [_fmt_event(e) for e in candidates]
         finally:
@@ -4235,7 +4787,7 @@ async def _corr_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
     # Relire l'événement
     db = SessionLocal()
     try:
-        event = db.get(Evenement, event_id)
+        event = svc_evenements.get_evenement(db, current_context(), event_id)
         event_fmt = _fmt_event(event) if event else None
     finally:
         db.close()
@@ -4311,11 +4863,7 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
     if "oui" in t or "supprimer" in t:
         db = SessionLocal()
         try:
-            event = db.get(Evenement, event_id)
-            if event:
-                db.delete(event)
-                db.commit()
-                log.info(f"🗑 SUPPRESSION     : id={event_id}")
+            svc_evenements.supprimer_evenement(db, current_context(), event_id)
         finally:
             db.close()
         ctx.user_data['mode'] = None
@@ -4345,7 +4893,7 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
             ctx.user_data['mode'] = 'corr_confirm_delete'
             db = SessionLocal()
             try:
-                ev = db.get(Evenement, event_id)
+                ev = svc_evenements.get_evenement(db, current_context(), event_id)
                 txt = _fmt_event(ev) if ev else f"#{event_id}"
             finally:
                 db.close()
@@ -4365,7 +4913,7 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
 
     db = SessionLocal()
     try:
-        event = db.get(Evenement, event_id)
+        event = svc_evenements.get_evenement(db, current_context(), event_id)
         if not event:
             await update.message.reply_text("❌ Événement introuvable.")
             ctx.user_data['mode'] = None
@@ -4435,7 +4983,7 @@ JSON brut uniquement."""
     if nom_parcelle_corr is not None:
         db_check = SessionLocal()
         try:
-            parcelle_resolue = resolve_parcelle(db_check, nom_parcelle_corr)
+            parcelle_resolue = resolve_parcelle(db_check, nom_parcelle_corr, potager_id=current_context().potager_id)
         finally:
             db_check.close()
         if parcelle_resolue is None:
@@ -4509,7 +5057,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         ctx.user_data['mode'] = 'corr_apply'
         db = SessionLocal()
         try:
-            event = db.get(Evenement, ctx.user_data['corr_event_id'])
+            event = svc_evenements.get_evenement(db, current_context(), ctx.user_data['corr_event_id'])
             event_fmt = _fmt_event(event) if event else "?"
         finally:
             db.close()
@@ -4524,49 +5072,25 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         event_id    = ctx.user_data.get('corr_event_id')
         corrections = ctx.user_data.get('corr_pending', {})
         event_actuel= ctx.user_data.get('corr_event_actuel', {})
-        mapping = {
-            "action": "type_action", "culture": "culture", "variete": "variete",
-            "quantite": "quantite", "unite": "unite", "parcelle": "parcelle",
-            "rang": "rang", "duree_minutes": "duree", "traitement": "traitement",
-            "commentaire": "commentaire"
+
+        # ── Trace de correction dans texte_original ───────────────────
+        LABELS = {
+            "action": "action", "culture": "culture", "variete": "variété",
+            "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
+            "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
+            "commentaire": "commentaire", "date": "date"
         }
+        details = ", ".join(
+            f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
+            for k, v in corrections.items()
+            if not k.startswith("_")   # ignorer champs internes (_parcelle_id…)
+        )
+        trace = f" | [CORR {date.today().isoformat()}] {details}"
+
         db = SessionLocal()
         try:
-            event = db.get(Evenement, event_id)
-            for champ, valeur in corrections.items():
-                if champ == "_parcelle_id":
-                    # champ interne — géré ci-dessous avec "parcelle"
-                    continue
-                col = mapping.get(champ, champ)
-                if champ == "date":
-                    setattr(event, "date", parse_date(valeur))
-                elif champ == "quantite":
-                    setattr(event, col, _to_float(valeur))
-                elif champ in ("rang", "duree_minutes"):
-                    setattr(event, col, _to_int(valeur))
-                elif champ == "parcelle":
-                    # [migration_v12] seule la FK parcelle_id est persistée
-                    event.parcelle_id = corrections.get("_parcelle_id")
-                elif hasattr(event, col):
-                    setattr(event, col, valeur)
-
-            # ── Trace de correction dans texte_original ───────────────────
-            LABELS = {
-                "action": "action", "culture": "culture", "variete": "variété",
-                "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
-                "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
-                "commentaire": "commentaire", "date": "date"
-            }
-            details = ", ".join(
-                f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
-                for k, v in corrections.items()
-                if not k.startswith("_")   # ignorer champs internes (_parcelle_id…)
-            )
-            trace = f" | [CORR {date.today().isoformat()}] {details}"
-            event.texte_original = (event.texte_original or "") + trace
+            event = svc_evenements.corriger_evenement(db, current_context(), event_id, corrections, trace)
             log.info(f"📝 TRACE CORRECTION: {trace}")
-            db.commit()
-            db.refresh(event)
             log.info(f"✅ CORRIGÉ         : id={event_id} → {_fmt_event(event)}")
             result_fmt = _fmt_event(event)
         except Exception as e:
@@ -4628,24 +5152,10 @@ async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: s
     db = SessionLocal()
     try:
         # Essai 1 : correspondance exacte (insensible casse)
-        rows = (
-            db.query(Evenement)
-            .filter(
-                _cond_localisation_culture(),
-                func.lower(Evenement.culture) == culture,
-            )
-            .all()
-        )
+        rows = svc_evenements.evenements_localises_exact(db, current_context(), culture)
         # Essai 2 : correspondance partielle (gère typos, accents, pluriel)
         if not rows:
-            rows = (
-                db.query(Evenement)
-                .filter(
-                    _cond_localisation_culture(),
-                    func.lower(Evenement.culture).ilike(f"%{culture_norm[:6]}%"),
-                )
-                .all()
-            )
+            rows = svc_evenements.evenements_localises_recherche_partielle(db, current_context(), culture_norm[:6])
             if rows:
                 # Utiliser le nom exact stocké en base pour la suite du flux
                 culture = rows[0].culture.lower()
@@ -4701,8 +5211,8 @@ async def _depl_show_parcelles(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     db = SessionLocal()
     try:
-        parcelles = get_all_parcelles(db)
-        occupation = calcul_occupation_parcelles(db)
+        parcelles = get_all_parcelles(db, potager_id=current_context().potager_id)
+        occupation = calcul_occupation_parcelles(db, potager_id=current_context().potager_id)
     finally:
         db.close()
 
@@ -4762,18 +5272,12 @@ async def _depl_parcelle_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE, 
     db = SessionLocal()
     try:
         # Résoudre la parcelle (CA6 : accepter une parcelle inconnue)
-        parcelle_obj = resolve_parcelle(db, nom_parcelle)
+        parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=current_context().potager_id)
         parcelle_id_cible = parcelle_obj.id if parcelle_obj else None
         nom_affiche = parcelle_obj.nom.upper() if parcelle_obj else nom_parcelle.upper()
 
         # Compter les enregistrements plantation/semis pleine terre concernés
-        q = db.query(Evenement).filter(
-            _cond_localisation_culture(),
-            func.lower(Evenement.culture) == culture.lower(),
-        )
-        if variete is not None:
-            q = q.filter(Evenement.variete == variete)
-        nb_records = q.count()
+        nb_records = len(svc_evenements.evenements_localises_pour_maj(db, current_context(), culture, variete))
     finally:
         db.close()
 
@@ -4833,42 +5337,24 @@ async def _depl_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
         # CA6 : créer la parcelle si elle n'existe pas encore
         if parcelle_id is None:
             from utils.parcelles import create_parcelle, find_doublon
-            doublon = find_doublon(db, nom_parcelle)
+            doublon = find_doublon(db, nom_parcelle, potager_id=current_context().potager_id)
             if doublon:
                 parcelle_id = doublon.id
                 nom_affiche = doublon.nom.upper()
             else:
-                new_p = create_parcelle(db, nom_parcelle)
+                new_p = create_parcelle(db, nom_parcelle, potager_id=current_context().potager_id)
                 parcelle_id = new_p.id
                 nom_affiche = new_p.nom.upper()
                 log.info(f"[US-007 CA6] Nouvelle parcelle créée : {nom_affiche!r}")
         else:
-            parc = db.get(Parcelle, parcelle_id)
+            parc = svc_parcelles.get_parcelle(db, current_context(), parcelle_id)
             nom_affiche = parc.nom.upper() if parc else nom_parcelle.upper()
 
-        # [US-037] Récupérer les événements à mettre à jour : plantations ET semis
-        # pleine terre (parcelle_id déjà renseigné) — un semis pépinière n'est jamais
-        # concerné puisqu'il n'a pas de localisation à déplacer.
-        q = db.query(Evenement).filter(
-            _cond_localisation_culture(),
-            func.lower(Evenement.culture) == culture.lower(),
+        # [US-037] Réassocie les événements localisés (plantations ET semis pleine
+        # terre) — un semis pépinière n'est jamais concerné (pas de localisation).
+        nb_updated = svc_evenements.deplacer_evenements(
+            db, current_context(), culture, variete, parcelle_id, nom_affiche
         )
-        if variete is not None:
-            q = q.filter(Evenement.variete == variete)
-        events = q.all()
-
-        today = date.today().isoformat()
-        nb_updated = 0
-        for event in events:
-            ancienne = event.parcelle_rel.nom if event.parcelle_rel else "Non localisé"
-            event.parcelle_id = parcelle_id
-            # CA8 — trace d'auditabilité identique au flux correction
-            trace = f" | [DÉPL {today}] parcelle: {ancienne} → {nom_affiche}"
-            event.texte_original = (event.texte_original or "") + trace
-            nb_updated += 1
-
-        db.commit()
-        log.info(f"[US-007 CA8] UPDATE : {nb_updated} plantation(s) de '{culture}' → parcelle_id={parcelle_id}")
     except Exception as e:
         db.rollback()
         log.error(f"[US-007] Erreur UPDATE : {e}")
@@ -4942,9 +5428,13 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
     Zéro token Groq consommé.
     """
     log.info("🌅 JOB MÉTÉO       : déclenchement automatique 05h00")
+    # [US-043] Job de fond hors dispatch Telegram (JobQueue, pas d'Update) :
+    # doit armer app.potager_id lui-même. Un seul potager aujourd'hui — à
+    # boucler potager par potager le jour où ce job devient multi-tenant.
     db = SessionLocal()
     try:
-        meteo = save_meteo_observation(db)
+        with tenant_scope(default_context().potager_id):
+            meteo = save_meteo_observation(db)
         if meteo:
             log.info(
                 f"🌤️  MÉTÉO AUTO      : {meteo['emoji']} {meteo['label']} | "
@@ -4979,15 +5469,13 @@ async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
 
     db = SessionLocal()
     try:
-        parcelle = db.query(Parcelle).filter(Parcelle.id == parcelle_id).first()
+        tenant_ctx = current_context()
+        parcelle = svc_parcelles.get_parcelle(db, tenant_ctx, parcelle_id)
         if parcelle is None or not parcelle.actif:
             await query.edit_message_text("❌ Parcelle introuvable ou déjà supprimée.", reply_markup=None)
             return
         nom = parcelle.nom
-        nb = db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).count()
-        db.query(Evenement).filter(Evenement.parcelle_id == parcelle_id).update(
-            {"parcelle_id": None}, synchronize_session="fetch"
-        )
+        nb = svc_evenements.liberer_evenements_parcelle(db, tenant_ctx, parcelle_id)
         parcelle.actif = False
         db.commit()
         log.info(f"[US-009] Parcelle supprimée : {nom!r} — {nb} événements réaffectés")
@@ -5056,12 +5544,51 @@ async def cmd_vendre(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 # LANCEMENT
 # ══════════════════════════════════════════════════════════════════════════════
-def main():
-    print("🌿 Démarrage du bot Telegram potager...")
-    print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
-    print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
-    print(f"   Météo : 🌤️ job planifié à 05h00 Europe/Paris · /meteo pour déclencher manuellement")
+# [US-043] Arme app.potager_id (défense en profondeur RLS) pour tout le
+# traitement de cet Update — PTB v20 traite tous les groupes de handlers d'un
+# même Update séquentiellement dans une seule Task asyncio, donc un simple
+# .set() (sans reset) ici reste visible pour les handlers des groupes
+# suivants ; chaque nouvel Update est traité dans sa propre Task, donc sans
+# fuite entre mises à jour concurrentes (sémantique standard de contextvars).
+async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    current_potager_id.set(default_context().potager_id)
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-045 / CA6, CA7 révisés] Garde de liaison centralisé sur les commandes slash
+# ──────────────────────────────────────────────────────────────────────────────
+# Constat QA : une première implémentation ne posait le garde que sur
+# handle_voice/handle_text — les commandes slash métier (/plan, /parcelle
+# lister...) restaient accessibles sans liaison. Pour qu'aucune commande
+# (existante ou future) ne puisse y échapper par oubli, l'enregistrement de
+# CHAQUE CommandHandler passe obligatoirement par _enregistrer_commande()
+# ci-dessous plutôt que par un appel direct à app.add_handler(CommandHandler(...)).
+_COMMANDES_SANS_GARDE_LIAISON = {"start", "help", "lier", "delier"}  # [CA9] onboarding + [US-050] identité seule
+
+
+def _avec_garde_liaison(handler):
+    """[CA6, CA7] Enveloppe un handler de commande pour exiger une liaison active
+    avant d'exécuter le moindre traitement métier (priorité 0)."""
+    async def _handler_garde(update: Update, ctx: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        if not await _verifier_liaison_ou_onboarding(update, ctx):
+            return
+        return await handler(update, ctx, *args, **kwargs)
+    _handler_garde._garde_liaison = True  # introspectable par les tests (CA6/CA7)
+    return _handler_garde
+
+
+def _enregistrer_commande(app: "Application", nom: str, handler) -> None:
+    """[US-045] Point d'enregistrement unique des CommandHandler — applique le
+    garde de liaison sauf pour les commandes d'onboarding (CA9)."""
+    if nom in _COMMANDES_SANS_GARDE_LIAISON:
+        app.add_handler(CommandHandler(nom, handler))
+    else:
+        app.add_handler(CommandHandler(nom, _avec_garde_liaison(handler)))
+
+
+def _construire_application() -> "Application":
+    """Construit l'Application PTB et enregistre tous les handlers (sans lancer
+    le polling) — séparé de main() pour être testable/introspectable (CA6/CA7)."""
     app = (
         Application.builder()
         .token(TELEGRAM_BOT_TOKEN)
@@ -5072,33 +5599,46 @@ def main():
         .build()
     )
 
-    # Commandes
-    app.add_handler(CommandHandler("start",      cmd_start))
-    app.add_handler(CommandHandler("help",       cmd_help))
-    app.add_handler(CommandHandler("version",    cmd_version))  # [US-008]
-    app.add_handler(CommandHandler("stats",      cmd_stats))
-    app.add_handler(CommandHandler("historique", cmd_historique))
-    app.add_handler(CommandHandler("ask",        cmd_ask))
-    app.add_handler(CommandHandler("corriger",   lambda u,c: _corr_start(u,c)))
-    app.add_handler(CommandHandler("note",       lambda u,c: _note_start(u,c)))  # [US-038]
+    # [US-043] Arme app.potager_id (défense en profondeur RLS) avant tout autre
+    # handler, pour chaque Update entrant — groupe -1 = exécuté en premier,
+    # ne bloque pas la propagation vers les handlers des groupes suivants.
+    app.add_handler(TypeHandler(Update, _arm_tenant_context), group=-1)
+
+    # Commandes — TOUTES enregistrées via _enregistrer_commande (CA6/CA7/CA9)
+    _enregistrer_commande(app, "start",      cmd_start)
+    _enregistrer_commande(app, "help",       cmd_help)
+    _enregistrer_commande(app, "version",    cmd_version)  # [US-008]
+    _enregistrer_commande(app, "stats",      cmd_stats)
+    _enregistrer_commande(app, "historique", cmd_historique)
+    _enregistrer_commande(app, "ask",        cmd_ask)
+    _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
+    _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
+    _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
+    _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
+    _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
 
     # Commandes TTS
-    app.add_handler(CommandHandler("tts",        cmd_tts))
-    app.add_handler(CommandHandler("tts_on",     cmd_tts_on))
-    app.add_handler(CommandHandler("tts_off",    cmd_tts_off))
+    _enregistrer_commande(app, "tts",        cmd_tts)
+    _enregistrer_commande(app, "tts_on",     cmd_tts_on)
+    _enregistrer_commande(app, "tts_off",    cmd_tts_off)
 
     # Commande météo manuelle
-    app.add_handler(CommandHandler("meteo",      cmd_meteo))
+    _enregistrer_commande(app, "meteo",      cmd_meteo)
 
     # [US_Plan_occupation_parcelles / CA1, CA13] Plan et gestion des parcelles
-    app.add_handler(CommandHandler("plan",      cmd_plan))
-    app.add_handler(CommandHandler("parcelle",  cmd_parcelle))
-    app.add_handler(CommandHandler("parcelles", _cmd_parcelles_lister))  # alias /parcelle lister
+    _enregistrer_commande(app, "plan",      cmd_plan)
+    _enregistrer_commande(app, "parcelle",  cmd_parcelle)
+    _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
 
-    app.add_handler(CommandHandler("vendre",    cmd_vendre))
+    _enregistrer_commande(app, "vendre",    cmd_vendre)
 
     # [US-019] Sélection variété mise en godet — boutons inline
     app.add_handler(CallbackQueryHandler(_godet_variete_cb, pattern=r"^godet_"))
+    # [fix rattachement lot godet] Motif distinct de "^godet_" (pas d'underscore
+    # après "godet") — les deux handlers ne se recouvrent jamais.
+    app.add_handler(CallbackQueryHandler(_godet_lot_cb, pattern=r"^godetlot"))
+    # [US-066] Motif également disjoint de "^godet_" et de "^godetlot".
+    app.add_handler(CallbackQueryHandler(_godet_graines_cb, pattern=r"^godetgraines"))
 
     # Sélection variété récolte — boutons inline
     app.add_handler(CallbackQueryHandler(_recolte_variete_cb, pattern=r"^recolte_"))
@@ -5117,6 +5657,9 @@ def main():
     # [US-009] Suppression parcelle — boutons inline
     app.add_handler(CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_"))
 
+    # [US-046] Sélection du potager actif — boutons inline
+    app.add_handler(CallbackQueryHandler(_potager_select_cb, pattern=r"^potager_select_"))
+
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
@@ -5131,6 +5674,17 @@ def main():
         name="meteo_quotidienne",
     )
     log.info("🌅 JOB MÉTÉO       : planifié à 05h00 Europe/Paris")
+
+    return app
+
+
+def main():
+    print("🌿 Démarrage du bot Telegram potager...")
+    print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
+    print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
+    print(f"   Météo : 🌤️ job planifié à 05h00 Europe/Paris · /meteo pour déclencher manuellement")
+
+    app = _construire_application()
 
     print("   Bot prêt ! Ouvrez Telegram et parlez à votre bot.")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

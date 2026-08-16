@@ -110,102 +110,7 @@ Copy `.env.example` to `.env.dev` and fill in:
 
 Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
-## Architecture
 
-### Entry Points
-
-**bot.py** — Telegram bot. Handles voice notes (transcribed via Whisper) and text commands. Runs a daily 5am job to fetch weather via Open-Meteo.
-
-#### Telegram Bot — Commandes slash
-
-| Commande | Paramètres | Description |
-|----------|------------|-------------|
-| `/start` | — | Menu principal + compteur d'événements |
-| `/help` | `[parcelle\|semis\|godet\|recolte\|stock\|stats]` | Aide générale ou ciblée par mot-clé |
-| `/version` | — | Affiche la version de l'app (`bot.py:458`) |
-| `/stats` | — | Statistiques saison (végétatif vs reproducteur) |
-| `/stats <culture>` | `<culture>` | Détail par variété pour une culture donnée |
-| `/stats <culture> <date>` | `[culture] [JJ/MM/AAAA\|AAAA-MM-JJ]` | Stats à une date de référence (`bot.py:3191`) |
-| `/historique` | — | 10 derniers événements |
-| `/ask` | `[question en langage naturel]` | Question analytique (ou saisie interactive si sans arg) |
-| `/corriger` | — | Lancer le flux de correction d'un événement existant |
-| `/plan` | — | Plan d'occupation global du potager |
-| `/plan <parcelle>` | `<nom_parcelle>` | Plan filtré sur une parcelle spécifique |
-| `/plan <date>` | `[JJ/MM/AAAA\|AAAA-MM-JJ]` | État du potager à une date de référence (`bot.py:2677`) |
-| `/parcelle ajouter <nom> [exposition] [superficie]` | `<nom> [exposition] [superficie_m2]` | Créer une parcelle (détection de doublons) |
-| `/parcelle modifier <nom> clé=valeur …` | `<nom> exposition=X superficie=X ordre=X` | Modifier les métadonnées |
-| `/parcelle renommer <ancien> <nouveau>` | `<ancien_nom> <nouveau_nom>` | Renommer (propagation sur tout l'historique) |
-| `/parcelle lister` | — | Lister toutes les parcelles actives |
-| `/parcelles` | — | Alias de `/parcelle lister` (`bot.py:4665`) |
-| `/vendre <culture> [variété] <quantité>` | `<culture> [variété] <quantité>` | Enregistrer une vente de plants pépinière (`bot.py:4585`) |
-| `/meteo` | — | Déclencher la météo manuellement (job auto à 05h00) |
-| `/tts` | — | Afficher l'état de la synthèse vocale |
-| `/tts_on` | — | Activer les réponses vocales |
-| `/tts_off` | — | Désactiver les réponses vocales |
-
-#### Clavier inline (boutons persistants)
-
-Menu principal : `🎤 Nouvelle action vocale` · `🔍 Interroger` · `📋 Historique` · `📊 Stats` · `✏️ Corriger`
-
-Après enregistrement : `➕ Autre action` · `🔍 Interroger mes données` · `📋 Historique` · `🏠 Menu principal`
-
-#### Callbacks inline (patterns, `bot.py:4670`)
-
-| Pattern | Déclencheur |
-|---------|-------------|
-| `godet_*` | Sélection de variété lors d'une mise en godet |
-| `recolte_*` | Sélection de variété lors d'une récolte |
-| `vendu_*` | Sélection de variété lors d'une vente |
-| `perte_*` | Confirmation de perte |
-| `action_*` | Confirmation d'une action enregistrée |
-| `parcelle_suppr_*` | Confirmation de suppression de parcelle |
-
-#### Intents vocaux reconnus (classification Groq)
-
-`ACTION` · `INTERROGER` · `STATS` · `HISTORIQUE` · `PLAN` · `CORRIGER` · `SUPPRIMER` · `MENU` · `NOUVELLE`
-
-#### Messages non-slash (handlers, `bot.py:4686`)
-
-| Type | Pipeline |
-|------|----------|
-| **Message vocal** | Transcription Whisper → classification intent → action correspondante |
-| **Message texte libre** | Même pipeline que vocal (classification intent → action) |
-
-#### Flux de correction conversationnel (`/corriger`)
-
-1. Décrire l'événement à retrouver (ou taper `1` pour le dernier)
-2. Sélectionner parmi les candidats trouvés
-3. Dicter la correction en langage naturel
-4. Confirmer le résumé des modifications
-
-**main.py** — FastAPI server. Key endpoints: `POST /parse`, `POST /ask`, `GET /stats`, `GET /historique`, `GET /cultures`. Serves PWA static files.
-
-### Core Modules
-
-| Module | Role |
-|--------|------|
-| `database/models.py` | SQLAlchemy models: `Evenement`, `Parcelle`, `CultureConfig` |
-| `llm/groq_client.py` | `parse_commande()`, `repondre_question()`, `extract_intent()` |
-| `utils/stock.py` | `calcul_stock_cultures()` — vegetative vs reproducteur crop logic |
-| `utils/parcelles.py` | Plot management, `normalize_parcelle_name()`, occupancy calc |
-| `utils/actions.py` | `normalize_action()`, `ACTION_MAP` keyword→canonical mapping |
-| `utils/date_utils.py` | `parse_date()` — ISO strings to datetime |
-| `utils/tts.py` | `send_voice_reply()`, TTS on/off state persisted in `utils/.tts_state.json` |
-| `utils/meteo.py` | Weather fetch from Open-Meteo (free, no API key) |
-
-### Data Model
-
-**Parcelles** — garden plots with a normalized name (`nom_normalise`: lowercase, no accents, no spaces/dashes). Soft-deleted via `actif` flag.
-
-**Evenements** — gardening events (plantings, harvests, losses, waterings, etc.) always linked to a `Parcelle` via `parcelle_id` (NOT NULL since migration v12). Key fields: `type_action`, `culture`, `variete`, `quantite`, `unite`, `date`, `type_organe_recolte`.
-
-**CultureConfig** — crop metadata, especially `type_organe_recolte`:
-- `végétatif` (lettuce, carrot, radish): harvest destroys the plant → stock decreases on harvest
-- `reproducteur` (tomato, zucchini, pepper): harvest is independent → stock only decreases on loss
-
-### Canonical Action Names
-
-`recolte`, `semis`, `plantation`, `arrosage`, `desherbage`, `taille`, `paillage`, `tuteurage`, `fertilisation`, `observation`, `perte`, `mise_en_godet`
 
 ## Database Migrations
 
@@ -225,125 +130,24 @@ User story tests follow the pattern `test_us*.py` and cover specific features en
 - **Type hints**: Python 3.9+ syntax (`dict[str, X]`, `list[X]`)
 - Parcelle name normalization: `strip().lower()` + `unidecode()` + remove spaces/dashes
 
+## Responsive frontend — partage breakpoints Tailwind / container queries (NON NÉGOCIABLE)
+
+Règle décidée lors de la refonte UI 2026 (voir `docs/ANALYSE_REFONTE_UI_WEB_2026.md`) — s'applique à tout code React ajouté ou modifié dans `frontend/` :
+
+- **Breakpoints Tailwind (`md:`, `lg:`…)** : réservés exclusivement à la structure de page
+  globale — afficher/masquer la bottom tab bar, basculer entre layout mobile et layout
+  desktop avec sidebar. C'est la seule couche qui répond légitimement à « quelle est la
+  taille de l'écran ? ».
+- **Container queries (`@container`)** : règle par défaut pour tout composant réutilisable
+  (`ParcelleCard`, `ObservationIcon`, panneaux, listes…). Dès qu'un composant est destiné à
+  apparaître dans plus d'un contexte de layout, il naît avec `container-type: inline-size`
+  sur son wrapper, point final — pas de discussion au cas par cas pendant le développement
+  des US.
+
 ## External Dependencies
 
 - **FFmpeg**: required for MP3→OGG/Opus conversion (Telegram voice replies); gracefully degraded if missing
 - **Open-Meteo**: weather API (free, no key)
 - **Groq**: LLM API — models configured in `.env` as `GROQ_MODEL` and `GROQ_WHISPER_MODEL`
 
-## Roadmap v2.0 — Fix hallucinations mode interrogation
 
-### Mission
-Implémenter le fix critique hallucinations mode interrogation en 20h (10 jours).
-
-### Documentation disponible
-
-Tous les docs sont dans `docs/` :
-- `docs/00_INDEX_NAVIGATION.md` — guide de navigation
-- `docs/RESUME_EXECUTIF_1PAGE.md` — synthèse 5 min
-- `docs/SCHEMAS_ARCHITECTURE_ASCII.md` — diagrammes avant/après + TEST MATRIX
-- `docs/PLAN_IMPLEMENTATION_20h.md` — code exact à implémenter (référence quotidienne)
-- `docs/AUDIT_ARCHITECTURAL_ASSISTANT_POTAGER_v2.0.md` — contexte complet
-
-### Quick Start
-
-1. Lire `docs/RESUME_EXECUTIF_1PAGE.md` (5 min)
-2. Implémenter `docs/PLAN_IMPLEMENTATION_20h.md` → section Jour 1–2
-3. Tester via `docs/SCHEMAS_ARCHITECTURE_ASCII.md` → TEST MATRIX
-
-### Bug critique
-
-`classify_intent()` (bot.py ~l.730) classifie mal les questions en ACTION → `_parse_and_save()` est appelée sur une question → Groq hallucine un JSON avec `culture` seule → la garde-fou passe → fausse entrée sauvegardée en base (3–5/jour). Coût additionnel : ~5000 tokens/question (frôle quota 100k/jour).
-
-### Impact attendu
-
-- 0 fausses entrées (avant : 3–5/jour)
-- -56% tokens Groq (avant : ~94k/jour, après : ~41k/jour)
-- Effort : 20h (10 jours × 2h)
-
-### Fichiers à modifier / créer
-
-| Fichier | Action | Changement |
-|---------|--------|-----------|
-| `bot.py` ~l.730 | MODIFIER | Enrichir `_CLASSIFY_PROMPT` (30+ exemples questions) |
-| `bot.py` ~l.1283 | MODIFIER | Refactorer `_ask_question()` → ne plus appeler `parse_commande()` |
-| `llm/groq_client.py` ~l.44 | MODIFIER | Ajouter `extract_intent_query()` (~100 tokens) |
-| `utils/validation.py` | CRÉER | `validate_parsed_action()` — whitelist + règles strictes |
-| `llm/sql_agent.py` | CRÉER | `build_sql_query()` + `query_agent_answer()` — Python pur, zéro Groq |
-| `tests/test_validation.py` | CRÉER | Tests unitaires validation |
-
-> Lire `docs/PLAN_IMPLEMENTATION_20h.md` section du jour avant de coder — le code exact y est, zéro ambiguïté.
-
-## Base de données — Serveur Scaleway
-
-PostgreSQL hébergé sur un VPS Scaleway. Deux bases en production :
-
-| Base | Owner | Usage |
-|------|-------|-------|
-| `potager_dev` | `potager_user` | Environnement de développement |
-| `potager_prod` | `potager_user` | Environnement de production |
-
-### Accès local via tunnel SSH
-
-```powershell
-# Ouvrir le tunnel (laisser tourner)
-ssh -L 5433:localhost:5432 root@<IP_SERVEUR> -N
-```
-
-Puis dans pgAdmin (ou tout client PostgreSQL) :
-- Host : `localhost`
-- Port : `5433`
-- Username : `potager_user`
-- DB dev : `potager_dev` / DB prod : `potager_prod`
-
-### Serveur Hetzner (`162.55.57.49`) — accès direct sans tunnel
-
-PostgreSQL 14 (cluster `main`), mêmes bases/owner que ci-dessus. Accès direct configuré
-depuis pgAdmin, restreint à l'IP fixe du poste client (whitelist, pas d'ouverture publique).
-
-Conf côté serveur (déjà appliquée, à reproduire si le serveur est réinstallé) :
-
-1. `/etc/postgresql/14/main/postgresql.conf` :
-   ```
-   listen_addresses = '*'
-   ssl = on
-   ```
-2. `/etc/postgresql/14/main/pg_hba.conf` (ligne ajoutée en bas) :
-   ```
-   host    potager_dev,potager_prod    potager_user    <IP_CLIENTE>/32    scram-sha-256
-   ```
-3. `systemctl restart postgresql`
-4. Hetzner Cloud Firewall (`potager-firewall`, console web, pas depuis le serveur) :
-   règle inbound TCP port `5432`, source = `<IP_CLIENTE>/32` (jamais `0.0.0.0/0`)
-
-⚠️ Si l'IP publique du poste client change, il faut mettre à jour à la fois la ligne
-`pg_hba.conf` et la règle du firewall Hetzner, sinon la connexion est refusée.
-
-pgAdmin (sans tunnel) : Host `162.55.57.49`, Port `5432`, Username `potager_user`,
-SSL mode `Require`.
-
-## Déploiement & Docker
-
-### ⚠️ IMPORTANT — Protocole de déploiement
-
-**JAMAIS** faire `pg_dump > file.sql` + import manuel. Cela crée des problèmes d'encodage (UTF-8 vs WIN1252) et de collation imprévisibles.
-
-### ✅ Solution recommandée : Docker Compose
-
-**TODO** — À mettre en place ASAP avant le prochain déploiement :
-
-1. Créer `Dockerfile` (Python + dépendances)
-2. Créer `docker-compose.yml` (API + PostgreSQL)
-3. Utiliser **scripts de migration versionnés** (Alembic), pas de dumps manuels
-4. Toutes les config via variables d'env (`.env.local`, `.env.prod`)
-
-**Bénéfices** :
-- ✅ Encodage UTF-8 natif (Linux)
-- ✅ Marche identique Windows/Mac/Linux
-- ✅ Zéro soucis de collation
-- ✅ Redéploiement = `docker-compose up`
-- ✅ Pas de stato "c'était bon sur ma machine"
-
-**Effort estimé** : 4h (une seule fois)
-
-**Retour sur investissement** : éviter 10h+ de galère lors du prochain déploiement

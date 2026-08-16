@@ -35,3 +35,10 @@ frontend/dist/
 
 # Claude Code local settings
 .claude/
+
+# Claude Design sync (/design-sync) — regenerated build output, not source
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules

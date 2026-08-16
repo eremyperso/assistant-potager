@@ -193,6 +193,7 @@ def test_us039_tri_plus_recent_en_premier(test_db):
 # déjà tests/test_api.py indépendamment de cette US.
 
 import main
+from app.services.context import default_context
 
 
 class TestObservationsEndpoints:
@@ -208,7 +209,7 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_plan(date_ref=None)
+            data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle = next(x for x in data["parcelles"] if x["nom"] == "Nord")
         assert parcelle["id"] == p.id
@@ -221,7 +222,7 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_plan(date_ref=None)
+            data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle = next(x for x in data["parcelles"] if x["nom"] == "Sud")
         assert parcelle["has_observations"] is False
@@ -235,7 +236,7 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.stats(date_ref=None)
+            data = main.stats(date_ref=None, ctx=default_context())
 
         stock = next((c for c in data["stock_par_culture"] if c["culture"] == "courgette"), None)
         assert stock is not None
@@ -253,7 +254,7 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_plan(date_ref=None)
+            data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle = next(x for x in data["parcelles"] if x["nom"] == "Nord")
         culture = next(c for c in parcelle["cultures"] if c["culture"] == "tomate")
@@ -271,7 +272,7 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_observations(parcelle_id=p.id, culture=None, variete=None)
+            data = main.get_observations(parcelle_id=p.id, culture=None, variete=None, ctx=default_context())
 
         assert len(data["items"]) == 1
         assert data["items"][0]["texte"] == "[Arrosage (remarque)] sol sec"
@@ -282,12 +283,12 @@ class TestObservationsEndpoints:
         test_db.commit()
 
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_observations(parcelle_id=None, culture="poireau", variete=None)
+            data = main.get_observations(parcelle_id=None, culture="poireau", variete=None, ctx=default_context())
 
         assert data["items"][0]["texte"] == "[Paillage] paille ajoutée"
 
     def test_observations_endpoint_vide_si_rien(self, test_db):
         with patch('main.SessionLocal', return_value=test_db):
-            data = main.get_observations(parcelle_id=None, culture="inexistante", variete=None)
+            data = main.get_observations(parcelle_id=None, culture="inexistante", variete=None, ctx=default_context())
 
         assert data["items"] == []

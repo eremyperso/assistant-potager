@@ -43,10 +43,13 @@ def _ev(db, type_action, date_, culture="tomate"):
 
 @pytest.fixture
 def client():
-    from main import app
+    from main import app, get_current_user_ctx
+    from app.services.context import default_context
+    app.dependency_overrides[get_current_user_ctx] = default_context
     with patch("main.SessionLocal", return_value=MagicMock()):
         with TestClient(app) as c:
             yield c
+    app.dependency_overrides.pop(get_current_user_ctx, None)
 
 
 # ── calcul_activite_quotidienne ─────────────────────────────────────────────

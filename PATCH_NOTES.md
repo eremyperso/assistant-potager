@@ -1,8 +1,356 @@
 
-## [v3.14.1] — 2026-08-08
+## [v3.33.0] — 2026-08-16
+
+### 🚀 Nouveautés
+- Fusionne les trois sections de l'écran Stocks (au potager / semis pleine terre / pépinière) en une seule liste groupée par famille botanique, l'état devenant un badge par ligne (US-072, US-073)
+- Détaille chaque ligne par variété plutôt que par culture seule, avec la liste réelle des parcelles où elle se trouve (US-072)
+- Ajoute à l'écran Stocks des chips de filtre par famille, un rail alphabétique secondaire et un filtre par origine (Pépinière / Pied acheté / Semis pleine terre / Non localisé) (US-073)
+- Ajoute l'export CSV et JSON des lignes actuellement visibles de l'écran Stocks, généré côté navigateur sans appel serveur supplémentaire (US-073)
+- Ajoute sur chaque ligne un lien « N récolte(s) » ouvrant une modale du détail chronologique des récoltes pesées de cette variété, avec le total cumulé (US-073)
+- Ajoute un bandeau de 4 métriques en tête de l'écran Stocks : unités au potager, godets à replanter, kilogrammes récoltés sur la saison, unités perdues (US-073)
+- Bascule l'écran Stocks entre vue tableau (grand écran) et cartes empilées (petit écran) via container query, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-073)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /stats/varietes`, nouvelle agrégation en lecture seule par couple culture + variété toutes cultures et tous états confondus, sans modifier les endpoints existants `/stats` et `/godets` (US-072)
+- Ajoute `utils/stock.py::calcul_stock_varietes`, qui généralise `calcul_stock_par_variete` — jusqu'ici limitée à une culture à la fois et réservée au bot Telegram — à l'ensemble d'un potager en un seul appel, avec la liste réelle des parcelles par variété (US-072)
+- Rend caduques US-062 et US-071, remplacées par US-072 (données) et US-073 (écran) suite au gel de la nouvelle maquette Stocks du 15/08/2026 (US-072, US-073)
+
+## [v3.32.0] — 2026-08-13
+
+### 🚀 Nouveautés
+- Refond l'écran Plan sur le modèle de la maquette 2026 : la liste des parcelles d'un côté, le détail de celle qui est sélectionnée de l'autre, au lieu d'une longue colonne de cartes à faire défiler (US-060)
+- Affiche chaque parcelle en ligne compacte — épingle colorée par le taux d'occupation, nom, nombre de cultures, surface et pourcentage — pour comparer la charge de toutes ses parcelles d'un coup d'œil (US-060)
+- Donne à la parcelle sélectionnée une fiche dédiée : superficie, exposition, occupation de la surface avec son infobulle et sa jauge (US-060)
+- Transforme chaque culture en tuile portant sa famille botanique, sa durée de culture et son calendrier des douze mois, semis / plantation / récolte (US-060)
+- Suit la date de référence sur le calendrier des cultures : reculer l'écran au 15 mars met mars en évidence sur les frises, et non le mois du jour (US-060)
+- Affiche la quantité de chaque culture avec son unité de saisie : une carotte semée sur 2 m² reste en m², jamais convertie en nombre de plants (US-060)
+- Répartit les tuiles de culture sur une à trois colonnes selon la place disponible, et empile liste et détail sur téléphone sans écran intermédiaire ni bouton retour (US-060)
+
+### 🐛 Corrections
+- Corrige le filtre par culture de l'écran Plan : une parcelle retrouvée par son nom affiche de nouveau toutes ses cultures au lieu d'apparaître vide (US-060)
+- Omet la pastille d'exposition d'une parcelle dont la valeur enregistrée est la chaîne « NULL », au lieu d'afficher « Exposition NULL » (US-060)
+
+### 🔧 Améliorations techniques
+- Migre l'écran Plan vers les tokens sémantiques de la palette 2026 : ses 29 alias `--g-*` ont disparu, il reste 93 occurrences sur le périmètre du Lot B (Stocks, Journal) (US-060)
+- Ajoute `frontend/src/lib/calendrier.js`, table de calendrier cultural provisoire — valeurs conseillées génériques, mode dégradé sans aucune valeur inventée pour une culture inconnue — en attendant le référentiel en base de l'`EPIC_CALENDRIER_CULTURAL` (US-060)
+- Ajoute le paramètre `moisCourant` à `MonthStrip`, avec repli sur le mois courant pour les écrans qui ne le fournissent pas, et en extrait la légende des trois phases (`MonthStripLegend`) (US-060)
+- Isole les règles d'affichage du Plan dans `frontend/src/lib/plan.js`, couvertes par `npm test` (`node --test`) : sélection, filtre, unités, mois de référence et métadonnées horticoles (US-060)
+- Fait dépendre la bascule liste/détail et la grille de tuiles de la largeur du conteneur (`@container`, seuils 900 / 640 / 1400 px de la maquette) et non d'un breakpoint d'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-060)
+- Documente au §5.10 de `docs/ANALYSE_REFONTE_UI_WEB_2026.md` les écarts assumés avec la maquette et la dette de calendrier ouverte, et solde l'incohérence de chiffrage d'US-060 (5 → 8 points) (US-060)
+
+## [v3.31.1] — 2026-08-12
+
+### 🐛 Corrections
+- Corrige des lots marqués « germination indéterminée » alors que leur taux était en réalité définitif : quand le cumul des graines soldées atteint déjà le nombre semé, plus aucune graine ne peut rester à lever, et un « sur N graines » manquant ne change rien à cette conclusion (US-065)
+
+### 🔧 Améliorations techniques
+- Supprime le libellé « Réussite N % » de l'écran Pépinière : un lot n'affiche plus que son taux de germination, comme la maquette de référence — les deux libellés portaient la même valeur (US-061)
+- Cale la largeur des fiches de lot sur la règle de la maquette (230 px minimum, autant de colonnes que la largeur en contient) : cinq fiches s'alignent sur un écran de 1440 px, et une rangée incomplète n'élargit plus les cartes qu'elle contient (US-061)
+
+## [v3.31.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Refond l'écran Pépinière sur le modèle de la maquette 2026 : une carte par lot de semis, avec sa frise des trois stades Germination → Godet → Terre, le stade courant mis en avant (US-061)
+- Affiche une carte par lot de semis, identifiée par sa date de semis et son ancienneté en jours, les godets sans semis rattaché formant une carte explicitement libellée comme telle (US-061)
+- Nomme la phase du lot plutôt que de répéter un chiffre : « Germination 70 % » tant qu'il reste des graines à lever, « Réussite 70 % » une fois la valeur définitive (US-061)
+- Signale une germination indéterminée comme une information manquante, et non comme un stade en cours, quand le nombre de graines d'origine n'a pas été déclaré (US-061)
+- Décompose chaque lot sous sa frise — graines semées, plants obtenus, mis en terre, vendus, perdus — de sorte que l'écart à 100 % soit toujours explicable (US-061)
+- Rend visible sur la carte une incohérence de saisie — plus de plants obtenus que de graines semées — au lieu de la borner en silence à 100 % (US-061)
+- Regroupe les lots par famille botanique, en sections repliables, et ajoute un tri par date de semis ou par culture (US-061)
+- Répartit les cartes sur deux à quatre colonnes selon la largeur disponible, au lieu de les étirer sur toute la largeur (US-061)
+- Ouvre le détail du cycle de vie dans la fenêtre modale de l'application, ciblé sur le lot de la carte ouverte et non sur l'ensemble d'une culture (US-061)
+
+### 🔧 Améliorations techniques
+- Migre l'écran Pépinière vers les tokens sémantiques de la palette 2026 : les 80 alias `--g-*` qu'il portait, le plus gros volume du lot, ont disparu (US-061)
+- Branche l'écran sur `GET /pepiniere/lots` (US-065), `GET /godets` restant la lecture agrégée des écrans Stocks et Statistiques et du bot (US-061)
+- Ajoute `GroupHead` et `useGroups` au design system, portés depuis la maquette pour les sections repliables par famille (US-061)
+- Ajoute `frontend/src/lib/familles.js`, table de familles botaniques provisoire en attendant le schéma étendu de `CultureConfig` du Lot E (US-061)
+- Isole les règles des stades dans `frontend/src/lib/pepiniere.js`, couvertes par `npm test` (`node --test`, sans dépendance supplémentaire) — le déroulé de référence de l'US y est vérifié valeur par valeur (US-061)
+- Fait dépendre la bascule multi-colonnes et le repli de la barre de filtres de la largeur du conteneur (`@container`) et non d'un breakpoint d'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-061)
+
+## [v3.30.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Suit la pépinière lot de semis par lot de semis : deux semis échelonnés d'une même variété apparaissent séparément, chacun avec son avancement et son état de germination — en cours, close, ou indéterminée (US-065)
+- Demande sur quel lot porte un repiquage lorsque plusieurs lots ont encore des graines en germination, au lieu de n'en rattacher aucun en silence
+- Réclame le nombre de graines d'origine d'une mise en godet quand il manque, en rappelant le lot concerné et ses graines restantes (US-066)
+- Permet de passer outre cette question en une action explicite, l'avancement du lot restant alors indéterminé plutôt que faussé par une valeur inventée (US-066)
+- Permet de consulter le détail du cycle de vie d'un lot précis, et plus seulement d'un couple culture + variété (US-065)
+
+### 🐛 Corrections
+- Corrige le solde anticipé du semis parent, jusqu'ici réputé entièrement consommé dès le premier repiquage : un repiquage échelonné ne fait plus sauter l'avancement du lot à sa valeur finale (US-065)
+- Signale une incohérence de saisie lorsqu'un lot cumule plus de plants obtenus que de graines semées, cas qu'aucun contrôle ne voyait jusqu'ici (US-065)
+- Refuse une mise en godet qui solderait plus de graines qu'il n'en reste sur son lot — le garde-fou existant ne comparait qu'un lot de godet à lui-même, jamais le cumul
+- Refuse une mise en godet lorsque des lots de semis existent mais qu'aucun ne peut la porter, au lieu de l'enregistrer sans rattachement et sans rien signaler
+- Refuse une mise en godet dont le lot reste indéterminé alors que plusieurs sont possibles, plutôt que d'en choisir un au hasard
+- Corrige le rattachement d'un godet à un semis de pleine terre, qui ne produit jamais de plants en godet
+- Corrige la proposition de lots d'une autre variété à un repiquage explicitement déclaré sans variété
+- Corrige l'unité d'un semis dicté sans unité (« semis de 50 choux »), enregistré en pieds au lieu de graines parce que le modèle en inventait une (US-037)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /pepiniere/lots`, lecture par lot qui s'ajoute à `GET /godets` sans en changer le contrat : écrans Stocks et Statistiques et statistiques du bot strictement inchangés (US-065)
+- Ajoute les paramètres `semis_id` et `sans_semis_rattache` à `GET /godets/detail`, sans toucher à son comportement agrégé par défaut (US-065)
+- Ajoute `calcul_lots_pepiniere()`, `lots_candidats_mise_en_godet()` et `lot_pepiniere_par_semis()` à `utils/stock.py`, avec leurs enveloppes tenant (US-065)
+- Vérifie que l'unité d'un semis figure réellement dans le texte dicté avant de la retenir, sur le modèle du garde-fou anti-hallucination de culture (US-011 bis)
+- Branche l'interception des réponses en attente dans `handle_voice`, qui n'en lisait aucune — les flux de clarification n'étaient jusqu'ici utilisables qu'au clavier (US-066)
+- Aucune migration nécessaire : `nb_graines_semees` et `origine_graines_id` existaient déjà, seul leur usage change (US-065, US-066)
+
+## [v3.29.0] — 2026-08-12
+
+### 🚀 Nouveautés
+- Uniformise l'apparence des éléments communs aux écrans Plan, Pépinière, Stocks et Journal : le sélecteur de date de référence et le filtre par culture ont désormais la même hauteur et le même dessin partout, et le bandeau de métriques reprend les tuiles de statistique du reste de l'application (US-059)
+- Détache visuellement le panneau d'observations de la carte qui le porte, jusqu'ici fondu dans le fond en thème clair (US-059)
+
+### 🔧 Améliorations techniques
+- Migre les six composants transverses de consultation (`DateRefPicker`, `CultureFilter`, `MetricStrip`, `Observations`, `LoadingSkeleton`, `ApiError`) vers les tokens sémantiques de la palette 2026 — plus aucun alias `--g-*` parmi eux (US-059)
+- Réduit `CultureFilter` à un habillage de `SearchField` et `MetricStrip` à un agencement de tuiles `Stat`, au lieu de redéfinir leur propre style (US-059)
+- Ajoute la prop `bg` à `Card` et les props `tone` / `valueColor` à `Stat`, pour couvrir la carte imbriquée et le chiffre coloré sans surcharge de classes au résultat dépendant de l'ordre du CSS généré (US-059)
+- Fait réagir le bandeau de métriques et le panneau d'observations à la largeur de leur conteneur (`@container`) et non à celle de l'écran, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-059)
+- Ajoute les six composants transverses à la page de contrôle visuel `/design-system`, jusqu'ici limitée aux composants de `components/ui/` (US-059)
+
+## [v3.28.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Permet de dissocier le chat Telegram depuis le menu Compte de l'application web, sans passer par la commande `/delier` — utile quand on n'a plus accès au chat lié (téléphone changé, compte Telegram perdu, liaison sur le mauvais chat) (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `api.delierTelegram()` et le composant `DelierTelegram`, qui appellent l'endpoint `POST /auth/lien/delier` déjà existant côté serveur (US-050)
+
+## [v3.27.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'écran de connexion et d'inscription : panneau de présentation à gauche sur grand écran, formulaire seul sous 900 px, thème clair/sombre conservé (US-056)
+- Ajoute un champ Nom à l'inscription (US-056)
+- Affiche trois connecteurs de connexion sociale (Google, Facebook, Telegram) sur l'écran de connexion, encore désactivés (« Bientôt disponible ») (US-056)
+- Permet de réinitialiser un mot de passe oublié via un lien envoyé par e-mail, valable 1 heure (US-057)
+
+### 🐛 Corrections
+- Corrige le fond des écrans « Lien invalide » (vérification d'e-mail, réinitialisation de mot de passe) et « Aucun potager », qui ne couvrait qu'une colonne étroite au centre au lieu de toute la page (US-056/US-057)
+- Corrige la vérification d'e-mail : un lien pré-chargé automatiquement par un client mail ou un scanner anti-virus avant le clic réel de l'utilisateur affichait à tort « lien invalide » alors que le compte venait d'être vérifié — la vérification est désormais idempotente (US-044)
+- Corrige le message « compte créé, vérifiez vos e-mails » qui n'apparaissait jamais après une inscription réussie (US-056)
+- Corrige la création de potager, qui pouvait se déclencher deux fois (double potager créé) en l'absence de garde contre une double soumission du formulaire (US-046)
+- Corrige le menu déroulant de rôle (« Inviter un membre ») qui pouvait être coupé par la modale lorsqu'il s'ouvrait vers le bas sans assez de place (US-055)
+
+### 🔧 Améliorations techniques
+- Ajoute le composant réutilisable `Field` (champ de formulaire avec libellé et affichage/masquage du mot de passe) dans `components/ui/` (US-056)
+- Ajoute `POST /auth/mot-de-passe-oublie` et `POST /auth/reinitialiser-mot-de-passe`, en réutilisant l'infrastructure d'envoi Brevo et le schéma de token à usage unique de la vérification d'e-mail (US-057)
+- Remplace la liste déroulante générique du rôle invité par `RoleSelect` (icône + description par rôle), portée depuis la maquette 2026 ; `Pop` gagne une option `placement="above"` pour s'ouvrir vers le haut (US-055)
+
+### 💾 Base de données
+- Ajoute les colonnes `reset_mdp_token_hash`, `reset_mdp_token_expire_le`, `reset_mdp_token_utilise_le` sur `users` (`migration_v25.sql`) (US-057)
+
+## [v3.26.0] — 2026-08-11
+
+### 🚀 Nouveautés
+- Refond l'interface web autour d'une navigation à deux niveaux : les six sections (Tableau de bord, Plan, Cultures, Pépinière, Stocks, Journal) passent dans le bandeau haut sur grand écran, et basculent en barre d'onglets basse sous 900 px (US-053)
+- Ajoute des tuiles de sous-navigation sous le titre de page pour le Tableau de bord (Vue d'ensemble / Statistiques) et le Plan (Parcelles / Vue plan / Rotation) (US-053)
+- Ajoute un en-tête de page avec titre et description sur chaque écran, absent jusqu'ici (US-053)
+- Ouvre l'application sur le Tableau de bord plutôt que sur le Plan ; Cultures, Vue plan et Rotation annoncent explicitement leur arrivée prochaine plutôt que d'être des liens morts (US-053)
+- Transforme le nom du potager en menu déroulant listant vos potagers avec leur rôle, leur nombre de parcelles et de membres, suivi de « Rejoindre un potager » et « Tous mes potagers » (US-054)
+- Adopte une palette verte unifiée, déclinée en thème clair et sombre (US-052)
+- Renomme « Historique » en « Journal » dans l'interface web, en cohérence avec le vocabulaire du bot Telegram (US-053)
+
+### 🐛 Corrections
+- Corrige le menu « Plus » de la barre d'onglets : un premier clic sur un autre onglet ne faisait que refermer le menu au lieu de changer de section (US-053)
+- Corrige les règles d'adaptation des composants, qui n'étaient pas compilées et restaient donc sans effet — le bandeau d'information, les cartes et les tuiles de statistiques ne se réagençaient jamais dans un conteneur étroit (US-052)
+- Corrige la barre de progression, invisible dès qu'une couleur explicite lui était passée (US-052)
+
+### 🔧 Améliorations techniques
+- Ajoute `frontend/src/components/ui/` : 13 composants réutilisables (Card, Btn, Badge, Stat, ProgressBar, MonthStrip, SearchField, Select, TileNav, InfoBanner, Tip, Placeholder, Pop), jusqu'ici dupliqués vue par vue (US-052)
+- Ajoute le plugin `@tailwindcss/container-queries` et la convention associée, gravée dans `CLAUDE.md` : breakpoints d'écran réservés à la structure de page, container queries par défaut pour tout composant réutilisable (US-052)
+- Ajoute `compter_parcelles_par_potager` et `compter_membres_par_potager` dans `app/services/potager_actif.py`, en requêtes groupées pour éviter un N+1, et expose `nb_parcelles` / `nb_membres` sur `GET /potagers` (US-054)
+- Conserve temporairement les anciens tokens `--g-*` en alias vers la nouvelle palette, le temps que chaque écran soit migré — dette suivie dans `docs/ANALYSE_REFONTE_UI_WEB_2026.md` (US-052)
+- Charge les pages de contrôle visuel `/design-system` et `/shell` à la demande : importées systématiquement, leurs données de démonstration remplaçaient les vrais potagers de l'utilisateur dans l'application (US-054)
+
+### ⚠️ Breaking changes
+- Aucun pour les utilisateurs. Côté frontend, `TopBar` et `BottomNav` changent de signature (`view` / `onGo` au lieu de `title` / `active` / `onChange`) et la contrainte `max-w-md` disparaît : les écrans non encore refondus s'étirent sur toute la largeur en desktop jusqu'à leur reprise
+
+## [v3.25.1] — 2026-08-08
 
 ### 🐛 Corrections
 - Corrige le plan d'occupation des parcelles (dashboard) qui pouvait afficher un stock à zéro sur plusieurs parcelles alors que le stock réel restait positif (`/stats` Telegram) — une perte avec variété était déduite intégralement de CHAQUE parcelle portant cette variété au lieu d'être répartie au prorata de la quantité plantée sur chacune (ex : perte de 10 basilics sur une parcelle faisait disparaître à tort 10 basilics sur une autre parcelle non touchée)
+
+## [v3.25.0] — 2026-07-31
+
+### 🚀 Nouveautés
+- À l'inscription, un e-mail de vérification est désormais envoyé (via l'API Brevo) avec un lien unique valable 24h (US-044)
+- La connexion est refusée tant que l'e-mail du compte n'est pas vérifié (403 `EMAIL_NOT_VERIFIED`) ; les comptes déjà inscrits avant cette version restent utilisables sans action de leur part (US-044)
+- Un utilisateur peut redemander l'e-mail de vérification si besoin, sans révéler si le compte existe ou est déjà vérifié (US-044)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/email.py` : envoi via l'API HTTPS Brevo, avec mode dégradé (lien loggé) si `BREVO_API_KEY` n'est pas configurée — pas de SMTP sortant auto-hébergé (le port 25 est bloqué par défaut sur Hetzner Cloud) (US-044)
+- Ajoute `demarrer_verification_email`, `verifier_email`, `renvoyer_verification_email` dans `app/services/auth.py`, sur le même principe d'usage unique que les codes de liaison Telegram (US-045) (US-044)
+- Ajoute les endpoints `GET /auth/verify-email` et `POST /auth/resend-verification` (US-044)
+
+### 💾 Base de données
+- Ajoute `users.verification_token_hash`, `verification_token_expire_le`, `verification_token_utilise_le` (`migration_v24.sql`, rollback `rollback_v24.sql`) ; les comptes web déjà inscrits sont réputés vérifiés (backfill) (US-044)
+
+## [v3.24.1] — 2026-07-25
+
+### 🐛 Corrections
+- Corrige la création de parcelle dans un potager quand une autre parcelle du même nom existe déjà dans un potager différent (ex. "planche-tomate" dans deux potagers) : la contrainte d'unicité en base était globale alors que la logique applicative vérifie déjà les doublons potager par potager
+
+### 💾 Base de données
+- `migration_v23.sql` / `rollback_v23.sql` : remplace la contrainte `UNIQUE(nom_normalise)` sur `parcelles` par `UNIQUE(potager_id, nom_normalise)`
+
+## [v3.24.0] — 2026-07-25
+
+### 🚀 Nouveautés
+- Un utilisateur connecté peut créer un potager depuis la PWA (nom + localisation) — il en devient automatiquement `owner` et ce potager devient son potager actif (US-048)
+- Un `owner` peut inviter un membre par code à usage unique (rôle `editor` ou `lecteur` proposé) ; la personne invitée rejoint le potager en acceptant ce code, même si elle vient tout juste de s'inscrire (US-048)
+- Un `owner` peut consulter la liste des membres de son potager et en retirer un à tout moment ; le membre retiré perd l'accès immédiatement — son potager actif est invalidé s'il pointait vers ce potager (US-048)
+- Le parcours complet (inscription → création ou adhésion à un potager → liaison Telegram → première saisie) est désormais réalisable de bout en bout sans intervention manuelle en base de données, ce qui referme l'ÉPIC 2 — Identité & accès (US-048)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potagers.py` : `creer_potager`, `creer_invitation`, `accepter_invitation`, `lister_membres`, `retirer_membre` — invitations générées sur le même principe que les codes de liaison Telegram (US-045), TTL 7 jours (US-048)
+- Ajoute les endpoints `POST /potagers`, `POST /potagers/{id}/invitations`, `POST /invitations/{code}/accepter`, `GET /potagers/{id}/membres`, `DELETE /potagers/{id}/membres/{membre_user_id}` (US-048)
+- Ajoute `potager_actif.role_utilisateur()` (variante publique de la résolution de rôle) pour construire un `TenantContext` ciblé sur un potager précis, indépendamment du potager actif de l'appelant (US-048)
+- La garde de rôle `owner` (US-047, `require_role`) protège la création d'invitation et le retrait de membre — jamais de logique de comparaison de rôle dupliquée (US-048)
+- PWA : écran "aucun potager" complété avec les formulaires de création et d'adhésion par code ; ajoute la modale de gestion des membres (invitation + retrait), visible uniquement pour les owners (US-048)
+
+### 💾 Base de données
+- Ajoute la table `invitations` (`migration_v22.sql`, rollback `rollback_v22.sql`) : code à usage unique, potager cible, rôle proposé, TTL, horodatage d'utilisation (US-048)
+
+## [v3.23.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Ajoute la dissociation self-service d'un chat Telegram : depuis l'application web (paramètres de compte) ou via la commande `/delier` sur Telegram (avec confirmation explicite avant exécution), sans plus dépendre d'une intervention manuelle en base de données (US-050)
+- Une fois dissocié, le chat peut immédiatement être relié à nouveau — au même compte ou à un autre — via un nouveau code généré depuis la PWA (US-050)
+
+### 🔧 Améliorations techniques
+- Ajoute `delier_chat_id` dans `app/services/liaison_telegram.py`, symétrique de `lier_chat_id` — aucune donnée métier (événements, parcelles, appartenance aux potagers) n'est touchée, seul le lien `telegram_chat_id ↔ user_id` est rompu (US-050)
+- Ajoute l'endpoint `POST /auth/lien/delier`, protégé par l'identité seule (`get_current_user`) — comme `POST /auth/lien/generer-code`, reste utilisable même sans potager (US-050)
+- `bot.py` : la commande `/delier` et sa confirmation restent volontairement hors du garde de rôle potager (US-047) et du garde de liaison standard (US-045) — c'est une action d'identité, pas une action potager (US-050)
+- Toute dissociation est journalisée (log structuré `potager`) pour traçabilité support (US-050)
+
+## [v3.22.1] — 2026-07-22
+
+### 🐛 Corrections
+- Corrige une fuite d'isolation multi-tenant critique : le garde-fou "culture jamais plantée" (US-049) ne filtrait jamais par potager — une culture plantée dans **n'importe quel autre potager** de la base neutralisait le garde-fou partout, permettant d'enregistrer une récolte sur une culture jamais introduite dans le potager courant (`culture_deja_plantee`, `cultures_connues`, `varietes_connues` dans `utils/culture_resolve.py`)
+- Corrige le même défaut de scoping sur la résolution automatique des noms de culture/variété (`resolve_culture`/`resolve_variete`), qui pouvait suggérer des noms appartenant à un autre potager
+
+## [v3.22.0] — 2026-07-22
+
+### 🚀 Nouveautés
+- Un membre `lecteur` d'un potager partagé ne peut plus enregistrer, corriger ni supprimer d'événement — il garde un accès complet à la consultation (stats, historique, `/ask`) (US-047)
+- Un lecteur qui dicte une action reçoit immédiatement un message expliquant qu'il n'a pas les droits nécessaires, sans qu'aucun appel au parsing Groq ne soit déclenché (US-047)
+- Un membre `editor` peut saisir, corriger et supprimer des événements comme un `owner`, mais reste bloqué sur la gestion des membres et des paramètres du potager (réservée à l'`owner`) (US-047)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/permissions.py` : garde de rôle unique (`require_role`), matrice `lecteur < editor < owner` définie une seule fois, réutilisée par la couche services et par bot.py/main.py — jamais dupliquée (US-047)
+- Toutes les fonctions d'écriture de `app/services/evenements.py` (création, correction, suppression, déplacement d'événements) vérifient désormais le rôle avant d'agir, en défense en profondeur (US-047)
+- `bot.py` et `main.py` (`POST /parse`, `POST /voice`) appliquent le garde avant tout appel de parsing LLM, pour éviter la consommation de tokens Groq sur une action refusée (US-047)
+- Une tentative d'action non autorisée est journalisée (log structuré `potager`) sans jamais remonter d'exception non gérée à l'utilisateur (US-047)
+
+## [v3.21.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la sélection et le changement de potager actif : un utilisateur membre d'un seul potager y est rattaché automatiquement, un utilisateur membre de plusieurs potagers choisit via la commande `/potager` (Telegram, boutons inline) ou le sélecteur de la barre du haut sur la PWA (US-046)
+- Le choix du potager actif est immédiat et mémorisé durablement — plus besoin de le refaire à chaque session (US-046)
+- Un compte qui n'appartient encore à aucun potager reçoit un message clair l'invitant à en créer un ou à en rejoindre un, aussi bien sur Telegram que sur la PWA (US-046)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/potager_actif.py` : résolution du potager actif réel (`users.potager_actif_id` + `potager_membres`), remplace la valeur `DEFAULT_POTAGER_ID` figée en dur utilisée depuis US-040 (US-046)
+- `bot.py` : le `TenantContext` résolu par le garde de liaison (US-045) est désormais réellement utilisé pour chaque lecture/écriture (potager réel, plus potager #1 pour tout le monde) — voir `app/services/context.current_context()` (US-046)
+- `main.py` : sépare la dépendance FastAPI d'authentification en deux — `get_current_user` (identité seule, pour les endpoints qui n'ont pas besoin de potager, ex. génération de code de liaison Telegram) et `get_current_user_ctx` (identité + potager actif réel, pour tous les endpoints métier) (US-046)
+- Ajoute `GET /potagers` et `POST /potagers/{id}/activer` (US-046)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v21.sql` (+ rollback) : colonne `users.potager_actif_id` (US-046)
+
+### ⚠️ Breaking changes
+- Deux comptes distincts membres de potagers différents ne partagent plus les mêmes données — jusqu'ici, tous les comptes lisaient/écrivaient dans le même potager #1 quelle que soit leur identité réelle (US-046)
+
+## [v3.20.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la liaison d'un chat Telegram à un compte web via un code à usage unique (6 caractères, valable 10 minutes) : génération depuis la PWA (icône ✉️ dans la barre du haut), saisie côté bot via `/lier CODE` ou en envoyant simplement le code (US-045)
+- Un chat Telegram non relié reçoit désormais un message d'accueil expliquant la marche à suivre, au lieu d'être traité anonymement (US-045)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/liaison_telegram.py` : génération de code (alphabet sans caractères ambigus), validation (code inconnu, expiré, déjà utilisé, chat déjà lié à un autre compte) (US-045)
+- `bot.py` : la garde de liaison s'exécute en tout premier dans `handle_voice`, `handle_text`, **et sur chacune des commandes slash métier** (`/plan`, `/stats`, `/historique`, `/parcelle`, `/vendre`, `/corriger`, `/note`, `/meteo`, `/tts*`, `/version`...) — un chat non relié ne déclenche plus aucun appel Groq ni aucune lecture de données, quel que soit le point d'entrée utilisé ; seules `/start`, `/help` et `/lier` restent accessibles pour permettre l'onboarding (US-045)
+- L'enregistrement des commandes passe désormais par un point d'entrée unique (`_enregistrer_commande`) qui applique le garde automatiquement, pour qu'une future commande ne puisse pas y échapper par oubli (US-045)
+- Ajoute l'endpoint `POST /auth/lien/generer-code` (protégé par l'authentification web) et la commande `/lier` côté bot (US-045)
+
+### 🐛 Corrections
+- Corrige le décompte du TTL affiché sur la modale "Relier Telegram" qui indiquait systématiquement "Code expiré" dès la génération — le serveur renvoyait une heure d'expiration UTC sans indication de fuseau, que le navigateur interprétait à tort comme une heure locale (US-045)
+- Corrige l'angle mort détecté en test manuel : un chat Telegram non relié pouvait consulter les parcelles et autres données via les commandes slash (ex. `/parcelle lister`), le garde initial ne couvrant que les messages vocaux/texte libre (US-045)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v20.sql` (+ rollback) : table `liaisons_telegram` (US-045)
+
+### ⚠️ Breaking changes
+- Un chat Telegram non relié à un compte web ne peut plus interagir avec le bot d'aucune façon (vocal, texte, ou commande slash métier) — il doit d'abord s'inscrire sur la PWA (US-044) puis se relier via `/lier` (US-045)
+
+## [v3.19.0] — 2026-07-20
+
+### 🚀 Nouveautés
+- Ajoute la création de compte et la connexion par e-mail / mot de passe sur la PWA, avec écran dédié affiché tant qu'aucune session n'est active (US-044)
+- La session reste active sans redemander le mot de passe : un token expiré déclenche un rafraîchissement automatique et transparent (US-044)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/auth.py` : hachage des mots de passe (argon2), émission et vérification des JWT (access 15 min / refresh 30 jours) (US-044)
+- Tous les endpoints métier de l'API (`/parse`, `/ask`, `/stats`, `/historique`, `/cultures`, `/plan`, `/godets`, etc.) exigent désormais un token JWT valide, sauf `/health` (US-044)
+- Ajoute un rate-limit sur `/auth/login` et `/auth/register` pour limiter le brute-force (US-044)
+- `frontend/src/lib/api.js` gère le stockage du token et rejoue automatiquement une requête après un rafraîchissement de session réussi (US-044)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v19.sql` (+ rollback) : colonnes `mot_de_passe_hash` et `email_verifie` sur `users` (US-044)
+
+### ⚠️ Breaking changes
+- La PWA et tout appelant de l'API doivent désormais s'authentifier (en-tête `Authorization: Bearer <token>`) pour accéder aux endpoints métier — un appel sans token valide renvoie `401` (US-044)
+
+## [v3.18.1] — 2026-07-19
+
+### 🐛 Corrections
+- Corrige l'enregistrement possible d'une récolte (ou perte, arrosage...) sur une culture jamais semée ni plantée dans le potager — le garde-fou ajouté ne s'appliquait qu'aux messages parsés en un seul événement, et Groq segmente régulièrement une phrase citant plusieurs cultures ("cueilli 2 kilos de cerise, tomates, nord") en plusieurs événements dans la même réponse, ce qui laissait passer les cultures inconnues (US-049)
+- Corrige l'enregistrement silencieux d'une récolte sur une parcelle où la culture/variété citée n'a jamais été plantée — la parcelle incohérente est désormais traitée comme non renseignée et redéterminée automatiquement (US-049, suite du correctif terrain)
+
+### 🔧 Améliorations techniques
+- Ajoute un point de validation unique et non contournable (`valider_evenement`) dans `app/services/evenements.py`, appelé par chacune des fonctions qui créent ou modifient un événement (création directe, confirmation, godet, observation, perte, correction manuelle), au lieu de contrôles dispersés côté `bot.py` propres à un seul chemin d'écriture (US-049)
+- `bot.py` et `main.py` réutilisent cette validation unique pour l'expérience utilisateur (blocage avant confirmation, message explicite) au lieu de dupliquer la règle — élimine le risque de divergence entre deux implémentations du même contrôle ; `POST /parse` et `POST /voice` renvoient désormais `400` avec message explicite (au lieu de `500` générique) sur ce cas (US-049)
+
+## [v3.18.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Ajoute une seconde ligne de défense contre les fuites de données entre potagers, au niveau PostgreSQL lui-même (Row-Level Security) — indépendante du scoping applicatif : même un futur bug de service qui oublierait un filtre `potager_id` ne pourrait plus exposer les données d'un autre potager (US-043)
+- `database/db.py` arme automatiquement le contexte tenant (`SET LOCAL app.potager_id`) à l'ouverture de chaque requête entrante (bot Telegram, API FastAPI) à partir du `TenantContext` courant — une session sans ce contexte échoue explicitement plutôt que de renvoyer silencieusement aucune donnée (US-043)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v18.sql` (+ rollback) : crée le rôle applicatif non-superuser `app_user` (distinct du rôle admin des migrations/sauvegardes) et active Row-Level Security avec policies d'isolation par `potager_id` sur `evenements`, `parcelles`, `culture_config` (US-043)
+
+### ⚠️ Breaking changes
+- `DATABASE_URL` doit être reconfiguré pour utiliser `app_user` (et non plus le rôle admin) après application de `migration_v18.sql`, sans quoi la protection RLS reste inactive pour l'application — voir CLAUDE.md § « Rôle applicatif app_user » (US-043)
+
+## [v3.17.0] — 2026-07-17
+
+### 🔧 Améliorations techniques
+- Toutes les fonctions de `app/services/` (événements, parcelles, stats, stock, plan) filtrent désormais systématiquement par `potager_id` — aucune donnée d'un potager ne peut plus apparaître dans les réponses adressées à un autre potager (US-042)
+- `services.questions.repondre_question()` (mode `/ask`) applique une fenêtre glissante de 12 mois et une limite de 100 événements, et logue le nombre réel de tokens Groq consommés à chaque appel (cible < 1500, contre ~5000 avant l'agent SQL) (US-042)
+- `llm/sql_agent.QueryAgent` accepte désormais un `potager_id` et scope toutes ses requêtes en conséquence (US-042)
+- `utils/stock.py` et `utils/parcelles.py` acceptent un paramètre `potager_id` optionnel sur chacune de leurs fonctions de lecture — utilisé systématiquement par la couche services, sans impact sur les usages directs existants (US-042)
+
+### 💾 Base de données
+- Ajoute `migrations/migration_v17.sql` (+ rollback) : passe `potager_id` en `NOT NULL` sur `evenements` et `parcelles` une fois le backfill vérifié complet ; `culture_config.potager_id` reste volontairement nullable (fiches globales partagées entre potagers) (US-042)
+
+### ⚠️ Breaking changes
+- Aucun changement de comportement pour l'utilisateur final tant qu'un seul potager existe (potager #1) — le scoping devient significatif dès qu'un second potager sera créé (US-110/US-112)
+
+## [v3.16.0] — 2026-07-16
+
+### 🔧 Améliorations techniques
+- Extrait toute la logique métier (événements, stats, stock, plan, questions) dans une nouvelle couche `app/services/`, appelée désormais par `bot.py` et `main.py` à la place de leurs propres accès directs à la base — l'isolation par potager à venir se codera à un seul endroit par fonction au lieu d'être dupliquée entre le bot et l'API (US-041)
+- `POST /ask` et la branche `INTERROGER` de `POST /voice` (PWA) répondent désormais via l'agent SQL déjà utilisé côté Telegram (`services.questions.repondre_question`) au lieu d'envoyer tout l'historique brut au LLM — réponse plus rapide et coût Groq réduit sur ces deux points d'entrée (US-041)
+- Supprime la duplication de l'héritage `type_organe_recolte` dans `POST /parse` (le même lookup `CultureConfig` était exécuté deux fois de suite)
+
+## [v3.15.0] — 2026-07-12
+
+### 🔧 Améliorations techniques
+- Pose le socle de données multi-tenant (`users`, `potagers`, `potager_membres`) — chaque table métier (`evenements`, `parcelles`, `culture_config`) porte désormais une colonne `potager_id` optionnelle, sans aucun changement de comportement du bot ni de la PWA (US-040)
+
+### 💾 Base de données
+- Ajoute les tables `users`, `potagers`, `potager_membres` et la colonne `potager_id` sur `evenements`, `parcelles`, `culture_config` (migration_v16, rollback_v16) — préparation à l'isolation des données entre jardins, aucune donnée existante impactée (US-040)
 
 ## [v3.14.0] — 2026-07-10
 

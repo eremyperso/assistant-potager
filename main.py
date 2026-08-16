@@ -8,19 +8,41 @@ Endpoints :
   POST /ask         → poser une question analytique
   GET  /stats       → stats JSON instantanées (sans LLM)
   GET  /historique  → derniers événements avec filtres
+
+Authentification [US-044] :
+  POST /auth/register            → créer un compte (e-mail + mot de passe)
+  POST /auth/login                → connexion → access token (15 min) + refresh token (30 j)
+  POST /auth/refresh               → nouvel access token à partir d'un refresh token valide
+  GET  /auth/verify-email          → valide le lien de vérification reçu par e-mail (CA9/CA10)
+  POST /auth/resend-verification   → renvoie un e-mail de vérification (CA12)
+Tous les endpoints métier ci-dessus exigent désormais un access token valide
+(en-tête `Authorization: Bearer <token>`), sauf /health. La connexion est
+refusée (403 EMAIL_NOT_VERIFIED) tant que l'e-mail du compte n'est pas
+vérifié (CA11) — sauf pour les comptes créés avant cette fonctionnalité,
+réputés vérifiés (migration_v24.sql).
+
+Onboarding self-service [US-048] :
+  POST   /potagers                              → créer un potager (owner + potager actif)
+  POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
+  POST   /invitations/{code}/accepter            → accepter une invitation
+  GET    /potagers/{id}/membres                  → lister les membres d'un potager
+  DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
 """
 import json
 import os
 import tempfile
 import uuid
 from datetime import date
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import func, or_
-from sqlalchemy.orm import joinedload
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # ── Version [US-008] ────────────────────────────────────────────────────────────
 def _lire_version() -> str:
@@ -33,19 +55,34 @@ def _lire_version() -> str:
 
 _APP_VERSION = _lire_version()
 
-from database.db import Base, engine, SessionLocal
-from database.models import Evenement, CultureConfig, Parcelle
-from utils.actions import normalize_action
-from utils.parcelles import resolve_parcelle
-from utils.stock import calcul_stock_cultures, format_stock_stats_json
+from database.db import Base, engine, SessionLocal, tenant_scope, current_potager_id
+import utils.stock as _stock_mod
 from utils.observations import build_observations_index
-from llm.groq_client import parse_commande, repondre_question, transcribe_audio, classify_intent_pwa
-from utils.date_utils import parse_date
+from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
 from llm.rag import add_to_rag
+from database.models import User
+from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
+from app.services import auth as svc_auth
+from app.services import email as svc_email
+from app.services import liaison_telegram as svc_liaison_telegram
+from app.services import potager_actif as svc_potager_actif
+from app.services import potagers as svc_potagers
+from app.services import evenements as svc_evenements
+from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from app.services import stats as svc_stats
+from app.services import plan as svc_plan
+from app.services import questions as svc_questions
+from app.services import parcelles as svc_parcelles
+from app.services import stock as svc_stock  # [US-065]
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
 Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
+
+# ── Rate limiting [US-044 / CA8] — protège /auth/login et /auth/register ──────
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── CORS — autorise le frontend Netlify + dev local ────────────────────────────
 app.add_middleware(
@@ -55,9 +92,478 @@ app.add_middleware(
         "http://localhost:5173",        # dev Vite local
         "https://*.netlify.app",        # frontend Netlify (prod)
     ],
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],  # DELETE ajouté [US-048] pour /potagers/{id}/membres/{user_id}
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+# [US-043] Arme app.potager_id (défense en profondeur RLS) pour toute la durée
+# de traitement de chaque requête HTTP. [US-044] Le potager_id reste celui de
+# default_context() (DEFAULT_POTAGER_ID) tant que US-046 (potager actif choisi
+# par l'utilisateur authentifié) n'est pas livrée — seul user_id/role varient
+# désormais avec get_current_user_ctx() ci-dessous.
+@app.middleware("http")
+async def _tenant_context_middleware(request, call_next):
+    with tenant_scope(default_context().potager_id):
+        return await call_next(request)
+
+
+# ── Authentification [US-044] ──────────────────────────────────────────────────
+_security = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_security),
+) -> User:
+    """[CA4/CA5] Dépendance FastAPI : exige un access token JWT valide, renvoie
+    l'utilisateur authentifié — SANS résoudre de potager (identité seule).
+
+    Renvoie 401 avec un `code` distinct selon le cas (absent / invalide /
+    expiré) pour permettre au front de déclencher un refresh automatique
+    uniquement sur `token_expired`. Utilisée pour les endpoints qui n'ont pas
+    besoin de scope potager (ex. génération de code de liaison Telegram,
+    listing des potagers — un utilisateur peut agir sur ces endpoints avant
+    même d'appartenir à un potager).
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "token_missing", "message": "Authentification requise"},
+        )
+    try:
+        payload = svc_auth.decoder_access_token(credentials.credentials)
+    except svc_auth.TokenExpireError:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "token_expired", "message": "Session expirée, veuillez la rafraîchir"},
+        )
+    except svc_auth.TokenInvalideError:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "token_invalid", "message": "Token invalide"},
+        )
+
+    db = SessionLocal()
+    try:
+        user = svc_auth.obtenir_utilisateur_par_id(db, int(payload["sub"]))
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail={"code": "token_invalid", "message": "Utilisateur introuvable"},
+            )
+        return user
+    finally:
+        db.close()
+
+
+def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContext:
+    """[US-046 / CA6] Dépendance FastAPI : identité + potager actif réel — pour
+    tous les endpoints métier qui lisent/écrivent des données scopées par
+    potager. Renvoie 409 explicite si l'utilisateur n'appartient à aucun
+    potager (CA5) — plus de DEFAULT_POTAGER_ID en dur."""
+    db = SessionLocal()
+    try:
+        try:
+            tenant_ctx = svc_potager_actif.resoudre_tenant_context(db, user.id)
+            # [US-043] Réarme le GUC RLS avec le vrai potager (le middleware
+            # l'avait initialisé sur default_context().potager_id avant que
+            # cette dépendance ne s'exécute).
+            current_potager_id.set(tenant_ctx.potager_id)
+            return tenant_ctx
+        except svc_potager_actif.AucunPotagerError:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "no_potager", "message": "Aucun potager associé à ce compte"},
+            )
+    finally:
+        db.close()
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    mot_de_passe: str
+    nom: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    mot_de_passe: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+class MotDePasseOublieRequest(BaseModel):
+    email: str
+
+
+class ReinitialiserMotDePasseRequest(BaseModel):
+    token: str
+    nouveau_mot_de_passe: str
+
+
+@app.post("/auth/register", status_code=201)
+@limiter.limit("5/minute")
+def auth_register(request: Request, req: RegisterRequest):
+    """[CA1/CA7] Inscription par e-mail + mot de passe. Mot de passe haché (bcrypt),
+    jamais stocké ni loggé en clair. 409 si l'e-mail est déjà utilisé."""
+    if not req.email or "@" not in req.email:
+        raise HTTPException(status_code=400, detail="E-mail invalide")
+    if not req.mot_de_passe or len(req.mot_de_passe) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe trop court (8 caractères minimum)")
+
+    db = SessionLocal()
+    try:
+        user = svc_auth.inscrire_utilisateur(db, req.email, req.mot_de_passe, req.nom)
+        # [CA9] Envoi de l'e-mail de vérification — un échec d'envoi (réseau,
+        # API Brevo indisponible) est loggé côté service mais ne fait pas
+        # échouer l'inscription (l'utilisateur peut redemander via
+        # /auth/resend-verification).
+        token = svc_auth.demarrer_verification_email(db, user)
+        svc_email.envoyer_email_verification(user.email, token)
+        return {"id": user.id, "email": user.email}
+    except svc_auth.EmailDejaUtiliseError:
+        db.rollback()
+        # [CA7] Message générique — ne confirme pas explicitement que le compte existe
+        raise HTTPException(status_code=409, detail="Inscription impossible avec ces informations")
+    finally:
+        db.close()
+
+
+@app.post("/auth/login")
+@limiter.limit("10/minute")
+def auth_login(request: Request, req: LoginRequest):
+    """[CA2] Connexion — renvoie un access token (15 min) et un refresh token (30 j).
+    [CA11] 403 EMAIL_NOT_VERIFIED si l'e-mail du compte n'est pas encore vérifié."""
+    db = SessionLocal()
+    try:
+        user = svc_auth.authentifier_utilisateur(db, req.email, req.mot_de_passe)
+    except svc_auth.IdentifiantsInvalidesError:
+        raise HTTPException(status_code=401, detail="E-mail ou mot de passe incorrect")
+    except svc_auth.EmailNonVerifieError:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "EMAIL_NOT_VERIFIED", "message": "Vérifiez votre e-mail avant de vous connecter"},
+        )
+    finally:
+        db.close()
+
+    return {
+        "access_token": svc_auth.creer_access_token(user.id),
+        "refresh_token": svc_auth.creer_refresh_token(user.id),
+        "token_type": "bearer",
+    }
+
+
+@app.post("/auth/refresh")
+def auth_refresh(req: RefreshRequest):
+    """[CA3] Nouvel access token à partir d'un refresh token valide, sans redemander le mot de passe."""
+    try:
+        payload = svc_auth.decoder_refresh_token(req.refresh_token)
+    except svc_auth.TokenExpireError:
+        raise HTTPException(status_code=401, detail={"code": "token_expired", "message": "Refresh token expiré"})
+    except svc_auth.TokenInvalideError:
+        raise HTTPException(status_code=401, detail={"code": "token_invalid", "message": "Refresh token invalide"})
+
+    return {
+        "access_token": svc_auth.creer_access_token(int(payload["sub"])),
+        "token_type": "bearer",
+    }
+
+
+@app.get("/auth/verify-email")
+def auth_verify_email(token: str):
+    """[CA10] Valide le lien de vérification reçu par e-mail (clic direct, GET).
+    Usage unique : un rejeu du même token renvoie la même erreur qu'un token
+    invalide, sans distinction exploitable."""
+    db = SessionLocal()
+    try:
+        svc_auth.verifier_email(db, token)
+        return {"message": "E-mail vérifié avec succès"}
+    except svc_auth.TokenVerificationInvalideError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_INVALID", "message": "Lien de vérification invalide"},
+        )
+    except svc_auth.TokenVerificationExpireError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_EXPIRED", "message": "Lien de vérification expiré, demandez-en un nouveau"},
+        )
+    finally:
+        db.close()
+
+
+@app.post("/auth/resend-verification")
+@limiter.limit("5/minute")
+def auth_resend_verification(request: Request, req: ResendVerificationRequest):
+    """[CA12] Renvoie un e-mail de vérification si le compte existe et n'est
+    pas encore vérifié. Réponse générique identique dans tous les cas
+    (compte inconnu, déjà vérifié, ou renvoi effectif) — anti-énumération,
+    cohérent avec CA7."""
+    db = SessionLocal()
+    try:
+        token = svc_auth.renvoyer_verification_email(db, req.email)
+        if token:
+            svc_email.envoyer_email_verification(req.email, token)
+    finally:
+        db.close()
+    return {"message": "Si un compte existe pour cet e-mail, un lien de vérification a été envoyé"}
+
+
+@app.post("/auth/mot-de-passe-oublie")
+@limiter.limit("5/minute")
+def auth_mot_de_passe_oublie(request: Request, req: MotDePasseOublieRequest):
+    """[US-057 / CA1] Envoie un e-mail de réinitialisation si le compte existe
+    et a un mot de passe défini. Réponse générique identique dans tous les cas
+    (compte inconnu, Telegram-only, ou envoi effectif) — anti-énumération,
+    même principe que /auth/resend-verification (CA12)."""
+    db = SessionLocal()
+    try:
+        token = svc_auth.demander_reset_mot_de_passe(db, req.email)
+        if token:
+            svc_email.envoyer_email_reset_mdp(req.email, token)
+    finally:
+        db.close()
+    return {"message": "Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé"}
+
+
+@app.post("/auth/reinitialiser-mot-de-passe")
+@limiter.limit("10/minute")
+def auth_reinitialiser_mot_de_passe(request: Request, req: ReinitialiserMotDePasseRequest):
+    """[US-057 / CA3, CA4] Valide le token reçu par e-mail et remplace le mot
+    de passe. Usage unique : un rejeu du même token renvoie la même erreur
+    qu'un token invalide, sans distinction exploitable."""
+    if not req.nouveau_mot_de_passe or len(req.nouveau_mot_de_passe) < 8:
+        raise HTTPException(status_code=400, detail="Mot de passe trop court (8 caractères minimum)")
+
+    db = SessionLocal()
+    try:
+        svc_auth.reinitialiser_mot_de_passe(db, req.token, req.nouveau_mot_de_passe)
+        return {"message": "Mot de passe mis à jour"}
+    except svc_auth.TokenResetMdpInvalideError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_INVALID", "message": "Lien de réinitialisation invalide"},
+        )
+    except svc_auth.TokenResetMdpExpireError:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "TOKEN_EXPIRED", "message": "Lien de réinitialisation expiré, demandez-en un nouveau"},
+        )
+    finally:
+        db.close()
+
+
+@app.get("/auth/me")
+def auth_me(user: User = Depends(get_current_user)):
+    """[US-055 / CA1] Identité du compte connecté + état de la liaison Telegram,
+    pour le menu Compte de la PWA (nom, e-mail, « relié / à faire »).
+
+    Lecture seule sur des colonnes existantes — aucune règle métier nouvelle.
+    Identité seule (pas de potager requis, même dépendance que
+    /auth/lien/generer-code) : le menu Compte doit rester consultable par un
+    compte qui n'appartient encore à aucun potager (cf. US-046 / CA5).
+    Le rôle n'est volontairement pas renvoyé ici : il dépend du potager actif
+    et vient déjà de GET /potagers.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "nom": user.nom,
+        # Booléen plutôt que le chat_id lui-même : le front n'a besoin que de
+        # l'état, et l'identifiant Telegram n'a pas à circuler côté navigateur.
+        "telegram_lie": user.telegram_chat_id is not None,
+    }
+
+
+@app.post("/auth/lien/generer-code")
+def auth_generer_code_liaison(user: User = Depends(get_current_user)):
+    """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce
+    compte web à un chat Telegram via la commande /lier du bot. Identité seule
+    (pas de potager requis) : on doit pouvoir lier son Telegram avant même
+    d'appartenir à un potager."""
+    db = SessionLocal()
+    try:
+        liaison = svc_liaison_telegram.creer_code_liaison(db, user.id)
+        # [Fix] expire_le est un datetime naïf en UTC (datetime.utcnow()) — sans
+        # suffixe "Z", le navigateur interprète l'ISO string comme une heure
+        # locale et décale le compte à rebours de l'offset du fuseau client.
+        return {"code": liaison.code, "expire_le": liaison.expire_le.isoformat() + "Z"}
+    finally:
+        db.close()
+
+
+@app.post("/auth/lien/delier")
+def auth_delier(user: User = Depends(get_current_user)):
+    """[US-050 / CA1] Dissocie le chat Telegram actuellement lié à ce compte.
+    Identité seule (pas de potager requis, CA5) — même dépendance que
+    /auth/lien/generer-code, jamais get_current_user_ctx pour cette action."""
+    db = SessionLocal()
+    try:
+        svc_liaison_telegram.delier_chat_id(db, user.id)
+        return {"success": True}
+    finally:
+        db.close()
+
+
+@app.get("/potagers")
+def lister_potagers(user: User = Depends(get_current_user)):
+    """[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager
+    actif marqué. Identité seule : une liste vide est une réponse valide (CA5),
+    pas une erreur — c'est au frontend de proposer la création/adhésion."""
+    db = SessionLocal()
+    try:
+        potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id)
+        potager_actif_id = None
+        if potagers:
+            try:
+                potager_actif_id = svc_potager_actif.resoudre_tenant_context(db, user.id).potager_id
+            except svc_potager_actif.AucunPotagerError:
+                pass
+        # [US-054 / CA1] Compteurs affichés dans le sélecteur de potager —
+        # deux requêtes groupées, indépendantes du nombre de potagers.
+        ids = [p.id for p in potagers]
+        nb_parcelles = svc_potager_actif.compter_parcelles_par_potager(db, ids)
+        nb_membres = svc_potager_actif.compter_membres_par_potager(db, ids)
+        return {
+            "potagers": [
+                {
+                    "id": p.id,
+                    "nom": p.nom,
+                    "actif": p.id == potager_actif_id,
+                    # [US-048] rôle exposé pour que le frontend affiche la gestion
+                    # des membres (inviter/retirer) uniquement aux owners.
+                    "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
+                    "nb_parcelles": nb_parcelles.get(p.id, 0),
+                    "nb_membres": nb_membres.get(p.id, 0),
+                }
+                for p in potagers
+            ],
+        }
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/activer")
+def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-046 / CA2, CA3, CA4] Change le potager actif de l'utilisateur connecté."""
+    db = SessionLocal()
+    try:
+        try:
+            nouveau_ctx = svc_potager_actif.definir_potager_actif(db, user.id, potager_id)
+        except svc_potager_actif.PotagerNonMembreError:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return {"potager_id": nouveau_ctx.potager_id, "role": nouveau_ctx.role}
+    finally:
+        db.close()
+
+
+class CreerPotagerRequest(BaseModel):
+    nom: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class InviterMembreRequest(BaseModel):
+    role_propose: str
+    email_invite: Optional[str] = None
+
+
+@app.post("/potagers", status_code=201)
+def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_user)):
+    """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
+    ce potager devient son potager actif. Identité seule (pas de potager requis
+    au préalable, CA7)."""
+    if not req.nom or not req.nom.strip():
+        raise HTTPException(status_code=400, detail="Nom de potager requis")
+    db = SessionLocal()
+    try:
+        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.latitude, req.longitude)
+        return {"id": potager.id, "nom": potager.nom}
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/invitations", status_code=201)
+def creer_invitation(potager_id: int, req: InviterMembreRequest, user: User = Depends(get_current_user)):
+    """[US-048 / CA3] Un owner invite un membre par code, avec un rôle proposé
+    (editor|lecteur). Vise le potager de l'URL, pas nécessairement le potager
+    actif de l'appelant."""
+    db = SessionLocal()
+    try:
+        try:
+            invitation = svc_potagers.creer_invitation(
+                db, user.id, potager_id, req.role_propose, req.email_invite,
+            )
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.RoleInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        return {
+            "code": invitation.code,
+            "role_propose": invitation.role_propose,
+            "expire_le": invitation.expire_le.isoformat() + "Z",
+        }
+    finally:
+        db.close()
+
+
+@app.post("/invitations/{code}/accepter")
+def accepter_invitation(code: str, user: User = Depends(get_current_user)):
+    """[US-048 / CA4, CA8] Accepte une invitation — insère le membre dans
+    potager_membres avec le rôle proposé. Identité seule (l'utilisateur peut
+    n'avoir encore aucun potager, CA7)."""
+    db = SessionLocal()
+    try:
+        try:
+            membre = svc_potagers.accepter_invitation(db, user.id, code)
+        except svc_potagers.InvitationInvalideError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except svc_potagers.InvitationExpireeError as e:
+            raise HTTPException(status_code=410, detail=str(e))
+        except svc_potagers.InvitationDejaUtiliseeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except svc_potagers.DejaMembreError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {"potager_id": membre.potager_id, "role": membre.role}
+    finally:
+        db.close()
+
+
+@app.get("/potagers/{potager_id}/membres")
+def lister_membres_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-048] Liste les membres d'un potager — réservé à ses membres."""
+    db = SessionLocal()
+    try:
+        role = svc_potager_actif.role_utilisateur(db, user.id, potager_id)
+        if role is None:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return {"membres": svc_potagers.lister_membres(db, potager_id)}
+    finally:
+        db.close()
+
+
+@app.delete("/potagers/{potager_id}/membres/{membre_user_id}")
+def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = Depends(get_current_user)):
+    """[US-048 / CA5, CA6] Un owner retire un membre — celui-ci perd l'accès
+    immédiatement (potager actif invalidé s'il pointait vers ce potager)."""
+    db = SessionLocal()
+    try:
+        try:
+            svc_potagers.retirer_membre(db, user.id, potager_id, membre_user_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.MembreInconnuError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"success": True}
+    finally:
+        db.close()
 
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
@@ -112,7 +618,7 @@ class TexteRequest(BaseModel):
 def health():
     """Vérification que le serveur est opérationnel."""
     db = SessionLocal()
-    nb = db.query(Evenement).count()
+    nb = svc_evenements.compter_evenements(db, default_context())
     db.close()
     return {
         "status"          : "ok",
@@ -124,14 +630,14 @@ def health():
 
 
 @app.get("/cultures")
-def get_cultures():
+def get_cultures(ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     Retourne la liste des cultures configurées avec leur type d'organe récolté.
     Utile pour l'interface PWA et la validation des saisies.
     """
     db = SessionLocal()
     try:
-        cultures = db.query(CultureConfig).order_by(CultureConfig.nom).all()
+        cultures = svc_parcelles.lister_cultures_config(db, ctx)
         result = [
             {
                 "nom": c.nom,
@@ -146,7 +652,7 @@ def get_cultures():
 
 
 @app.post("/parse")
-def parse(req: TexteRequest):
+def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     Reçoit une phrase dictée → parse via Groq → sauvegarde en base.
     Gère les phrases multiples (ex: tomates ET courgettes → 2 événements).
@@ -154,6 +660,12 @@ def parse(req: TexteRequest):
     """
     if not req.texte or len(req.texte.strip()) < 3:
         raise HTTPException(status_code=400, detail="Texte trop court")
+
+    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
+    try:
+        require_role(ctx, "editor", "enregistrer d'action")
+    except PermissionInsuffisanteError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
     # ── 1. Parsing LLM → liste d'événements ──────────────────────────────────
     try:
@@ -168,39 +680,7 @@ def parse(req: TexteRequest):
     saved = []
     try:
         for parsed in items:
-            nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-            event = Evenement(
-                type_action       = normalize_action(parsed.get("action")),
-                culture           = parsed.get("culture"),
-                variete           = parsed.get("variete"),
-                quantite          = _to_float(parsed.get("quantite")),
-                unite             = parsed.get("unite"),
-                parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                rang              = parsed.get("rang"),
-                duree             = _to_int(parsed.get("duree_minutes")),
-                traitement        = parsed.get("traitement"),
-                commentaire       = parsed.get("commentaire"),
-                texte_original    = req.texte,
-                date              = parse_date(parsed.get("date")),
-                nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-            )
-            
-            # Héritage automatique du type d'organe récolté depuis culture_config
-            if event.culture:
-                config = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                if config:
-                    event.type_organe_recolte = config.type_organe_recolte
-            
-            # [US-001] Héritage automatique du type d'organe récolté
-            if event.culture:
-                cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                if cfg:
-                    event.type_organe_recolte = cfg.type_organe_recolte
-            db.add(event)
-            db.commit()
-            db.refresh(event)
+            event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, req.texte)
             add_to_rag(event.id, parsed)
             saved.append({"event_id": event.id, "parsed": parsed})
 
@@ -212,6 +692,12 @@ def parse(req: TexteRequest):
             "parsed"         : saved[0]["parsed"]   if saved else None,
             "texte_original" : req.texte,
         }
+    except svc_evenements.EvenementInvalideError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    except PermissionInsuffisanteError as e:
+        db.rollback()
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
@@ -223,6 +709,7 @@ def parse(req: TexteRequest):
 async def voice(
     audio: UploadFile = File(...),
     session_id: str   = Form(default=""),
+    ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [PWA iPhone] Reçoit un blob audio MediaRecorder →
@@ -269,35 +756,10 @@ async def voice(
 
     # 5a. INTERROGER — question analytique sur l'historique
     if intent == "INTERROGER":
-        db = SessionLocal()
         try:
-            events = db.query(Evenement).order_by(Evenement.date).all()
-            if not events:
-                reponse = "Aucune donnée enregistrée pour l'instant. Commencez par dicter quelques actions !"
-            else:
-                data = [
-                    {
-                        "id"         : e.id,
-                        "date"       : str(e.date)[:10] if e.date else None,
-                        "action"     : e.type_action,
-                        "culture"    : e.culture,
-                        "variete"    : e.variete,
-                        "quantite"   : e.quantite,
-                        "unite"      : e.unite,
-                        "parcelle"   : e.parcelle,
-                        "rang"       : e.rang,
-                        "duree_min"  : e.duree,
-                        "traitement" : e.traitement,
-                        "commentaire": e.commentaire,
-                    }
-                    for e in events
-                ]
-                try:
-                    reponse = repondre_question(texte, json.dumps(data, ensure_ascii=False))
-                except Exception as e:
-                    raise HTTPException(status_code=502, detail=f"Erreur Groq : {e}")
-        finally:
-            db.close()
+            reponse = svc_questions.repondre_question(ctx, texte)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
         result = {
             "reponse"    : reponse,
@@ -309,6 +771,12 @@ async def voice(
 
     # 5b. ACTION — enregistrement d'un événement potager
     else:
+        # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
+        try:
+            require_role(ctx, "editor", "enregistrer d'action")
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+
         try:
             items = parse_commande(texte)
         except json.JSONDecodeError as e:
@@ -320,33 +788,15 @@ async def voice(
         saved_parsed: list[dict] = []
         try:
             for parsed in items:
-                nom_parcelle = parsed.get("parcelle")
-                parcelle_obj = resolve_parcelle(db, nom_parcelle) if nom_parcelle else None
-                event = Evenement(
-                    type_action       = normalize_action(parsed.get("action")),
-                    culture           = parsed.get("culture"),
-                    variete           = parsed.get("variete"),
-                    quantite          = _to_float(parsed.get("quantite")),
-                    unite             = parsed.get("unite"),
-                    parcelle_id       = parcelle_obj.id if parcelle_obj else None,
-                    rang              = parsed.get("rang"),
-                    duree             = _to_int(parsed.get("duree_minutes")),
-                    traitement        = parsed.get("traitement"),
-                    commentaire       = parsed.get("commentaire"),
-                    texte_original    = texte,
-                    date              = parse_date(parsed.get("date")),
-                    nb_graines_semees = _to_int(parsed.get("nb_graines_semees")),
-                    nb_plants_godets  = _to_int(parsed.get("nb_plants_godets")),
-                )
-                if event.culture:
-                    cfg = db.query(CultureConfig).filter(CultureConfig.nom == event.culture).first()
-                    if cfg:
-                        event.type_organe_recolte = cfg.type_organe_recolte
-                db.add(event)
-                db.commit()
-                db.refresh(event)
+                event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
                 add_to_rag(event.id, parsed)
                 saved_parsed.append(parsed)
+        except svc_evenements.EvenementInvalideError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(e))
+        except PermissionInsuffisanteError as e:
+            db.rollback()
+            raise HTTPException(status_code=403, detail=str(e))
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erreur base : {e}")
@@ -388,83 +838,35 @@ async def voice(
 
 
 @app.post("/ask")
-def ask(req: TexteRequest):
+def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     Répond en langage naturel à une question sur l'historique du potager.
     Exemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'
     """
-    db = SessionLocal()
     try:
-        events = db.query(Evenement).order_by(Evenement.date).all()
-        if not events:
-            return {"reponse": "Aucune donnée enregistrée pour l'instant. Commencez par dicter quelques actions !"}
+        reponse = svc_questions.repondre_question(ctx, req.texte)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
-        # Sérialiser l'historique pour le contexte LLM
-        data = [
-            {
-                "id"         : e.id,
-                "date"       : str(e.date)[:10] if e.date else None,
-                "action"     : e.type_action,
-                "culture"    : e.culture,
-                "variete"    : e.variete,
-                "quantite"   : e.quantite,
-                "unite"      : e.unite,
-                "parcelle"   : e.parcelle,
-                "rang"       : e.rang,
-                "duree_min"  : e.duree,
-                "traitement" : e.traitement,
-                "commentaire": e.commentaire,
-            }
-            for e in events
-        ]
-        contexte = json.dumps(data, ensure_ascii=False)
-
-        try:
-            reponse = repondre_question(req.texte, contexte)
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Erreur Groq API : {e}")
-
-        return {
-            "reponse"               : reponse,
-            "nb_evenements_analyses": len(events)
-        }
-    finally:
-        db.close()
+    return {"reponse": reponse}
 
 
 @app.get("/stats")
-def stats(date_ref: date = Query(default=None)):
+def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
-    from utils.stock import calcul_stock_cultures, format_stock_stats_json, calcul_godets, calcul_semis
-    today = date.today()
-    dr = min(date_ref, today) if date_ref else None   # None = pas de filtre = comportement par défaut
-    date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        total_q = db.query(func.count(Evenement.id))
-        if dr:
-            from datetime import datetime as _dt
-            total_q = total_q.filter(Evenement.date <= _dt(dr.year, dr.month, dr.day, 23, 59, 59))
-        total  = total_q.scalar() or 0
-        stocks = calcul_stock_cultures(db, dr)
-        godets = calcul_godets(db, date_ref=dr)
-        traitements = (
-            db.query(Evenement.traitement, func.count(Evenement.id))
-            .filter(Evenement.type_action == "traitement")
-            .group_by(Evenement.traitement).all()
-        )
-        # Origine par culture : "pépinière" si mise_en_godet existe, sinon "pied_acheté"
-        cultures_avec_godet = {
-            row[0].lower() for row in
-            db.query(Evenement.culture)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .filter(Evenement.culture.isnot(None))
-            .distinct().all()
-        }
+        result = svc_stats.calculer_stats(db, ctx, date_ref)
+        date_ref_effective = result.date_ref_effective
+        total = result.total_evenements
+        stocks = result.stocks
+        godets = result.godets
+        traitements = result.traitements
+        cultures_avec_godet = result.cultures_avec_godet
 
         # [US-026 / semis pleine terre] Semis directement associés à une parcelle
-        semis_data = calcul_semis(db, dr)
+        semis_data = result.semis
         cultures_semis_pt = {c.lower() for c, s in semis_data.items() if s.get("parcelles_pleine_terre")}
         semis_pleine_terre = [
             {
@@ -481,7 +883,7 @@ def stats(date_ref: date = Query(default=None)):
         # [US-039 / CA2, CA6] Indicateur d'observations agrégées par culture (Stocks)
         obs_index = build_observations_index(db)
 
-        stock_enrichi = format_stock_stats_json(stocks)
+        stock_enrichi = _stock_mod.format_stock_stats_json(stocks)
         for entry in stock_enrichi:
             nom = (entry.get("culture") or "").lower()
             if nom in cultures_avec_godet:
@@ -518,8 +920,43 @@ def stats(date_ref: date = Query(default=None)):
         db.close()
 
 
+@app.get("/stats/varietes")
+def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-072] Détail par variété, toutes cultures et tous états confondus (potager /
+    semis / pépinière), avec leurs parcelles d'origine réelles — alimente l'écran Stocks
+    transverse (US-073). Nouvelle agrégation en lecture seule : ne modifie ni /stats ni
+    /godets (CA8), aucune migration BDD (CA9).
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    db = SessionLocal()
+    try:
+        varietes = svc_stock.calcul_stock_varietes(db, ctx, date_ref=dr)
+        # [US-073 CA15] Observations agrégées par culture, même index que /stats —
+        # pas de granularité variété côté observations (US-039), le badge remonte
+        # donc sur chaque ligne d'une même culture.
+        obs_index = build_observations_index(db)
+        for entry in varietes:
+            nom = (entry.get("culture") or "").lower()
+            nb_obs = len(obs_index["stocks"].get(nom, []))
+            entry["has_observations"] = nb_obs > 0
+            entry["nb_observations"]  = nb_obs
+        return {
+            "varietes":           varietes,
+            "total":              len(varietes),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/stats/rendement")
-def get_rendement(annee: int = Query(default=None), date_ref: date = Query(default=None)):
+def get_rendement(
+    annee: int = Query(default=None),
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.
     [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
     from utils.stock import calcul_rendement_mensuel
@@ -528,14 +965,18 @@ def get_rendement(annee: int = Query(default=None), date_ref: date = Query(defau
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        data = calcul_rendement_mensuel(db, annee_eff, dr)
+        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=ctx.potager_id)
         return {"annee": annee_eff, **data}
     finally:
         db.close()
 
 
 @app.get("/stats/activite")
-def get_activite(annee: int = Query(default=None), date_ref: date = Query(default=None)):
+def get_activite(
+    annee: int = Query(default=None),
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).
     [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
     from utils.stock import calcul_activite_quotidienne
@@ -544,7 +985,7 @@ def get_activite(annee: int = Query(default=None), date_ref: date = Query(defaul
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        jours = calcul_activite_quotidienne(db, annee_eff, dr)
+        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=ctx.potager_id)
         return {
             "annee":         annee_eff,
             "jours":         jours,
@@ -556,7 +997,7 @@ def get_activite(annee: int = Query(default=None), date_ref: date = Query(defaul
 
 
 @app.get("/plan")
-def get_plan(date_ref: date = Query(default=None)):
+def get_plan(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     [US-024] Plan d'occupation des parcelles pour le dashboard frontend.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
@@ -564,21 +1005,16 @@ def get_plan(date_ref: date = Query(default=None)):
     Retourne la liste des parcelles actives avec leurs cultures en cours.
     Les parcelles sans culture sont incluses avec cultures=[].
     """
-    from utils.parcelles import calcul_occupation_parcelles, get_all_parcelles
-
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        parcelles     = get_all_parcelles(db)
-        occupation    = calcul_occupation_parcelles(db, dr)
+        parcelles     = svc_plan.get_parcelles(db, ctx)
+        occupation    = svc_plan.get_occupation(db, ctx, dr)
 
         # Index surface_m2 par nom de culture (insensible à la casse)
-        configs = db.query(CultureConfig).all()
-        surface_par_culture = {
-            c.nom.lower(): (c.surface_m2 or 0.0) for c in configs
-        }
+        surface_par_culture = svc_plan.surface_par_culture(db, ctx)
 
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
@@ -645,6 +1081,7 @@ def get_observations(
     parcelle_id: int = Query(default=None),
     culture: str = Query(default=None),
     variete: str = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-039 / CA3] Détail des observations pour un point d'accès du dashboard :
@@ -669,7 +1106,7 @@ def get_observations(
 
 
 @app.get("/godets")
-def get_godets(date_ref: date = Query(default=None)):
+def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     [US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
@@ -685,7 +1122,7 @@ def get_godets(date_ref: date = Query(default=None)):
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        tous = calcul_godets(db, include_epuises=True, date_ref=dr)
+        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=ctx.potager_id)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0]
         tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0 and not v.get("graines_en_germination")]
         return {
@@ -699,102 +1136,87 @@ def get_godets(date_ref: date = Query(default=None)):
 
 
 
+@app.get("/pepiniere/lots")
+def get_pepiniere_lots(
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """
+    [US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.
+
+    Un lot = un événement de semis en pépinière, identifié par sa date ; les mises
+    en godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).
+    Chaque lot porte son propre avancement (`taux_germination`), son état de
+    germination à trois valeurs (`etat_germination` : en_cours / close /
+    indeterminee) et le signalement d'une éventuelle incohérence de saisie
+    (`incoherence_saisie`).
+
+    Cette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui
+    conserve exactement son contrat actuel — écrans Stocks, Statistiques et bot
+    inchangés (CA5).
+
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    """
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    db = SessionLocal()
+    try:
+        lots = svc_stock.calcul_lots_pepiniere(db, ctx, date_ref=dr)
+        return {
+            "lots": [
+                {
+                    **lot,
+                    "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
+                    "date_derniere_mise_en_godet": (
+                        str(lot["date_derniere_mise_en_godet"])[:10]
+                        if lot["date_derniere_mise_en_godet"] else None
+                    ),
+                }
+                for lot in lots
+            ],
+            "total": len(lots),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/godets/detail")
-def get_godet_detail(culture: str = Query(...), variete: str = Query(default=None)):
+def get_godet_detail(
+    culture: str = Query(...),
+    variete: str = Query(default=None),
+    semis_id: int = Query(default=None, description="[US-065 CA6] Cible le lot issu de ce semis"),
+    sans_semis_rattache: bool = Query(default=False, description="[US-065 CA6] Cible le lot des godets sans semis parent"),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """
     [US-029] Cycle de vie complet semis → godets → plantations pour une (culture, variété).
     Utilisé par le panneau de détail de la pépinière frontend.
+
+    [US-065 / CA6] `semis_id` (ou `sans_semis_rattache`) restreint le détail à un lot
+    précis. Sans ces paramètres, le comportement historique agrégé est conservé.
     """
     db = SessionLocal()
     try:
-        culture_lower = culture.lower()
-
-        # 1. Godets pour cette culture/variété
-        godet_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "mise_en_godet")
-            .filter(func.lower(Evenement.culture) == culture_lower)
+        cycle = svc_evenements.cycle_vie_culture(
+            db, ctx, culture, variete,
+            semis_id=semis_id, sans_semis_rattache=sans_semis_rattache,
         )
-        if variete:
-            godet_q = godet_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            godet_q = godet_q.filter(Evenement.variete.is_(None))
-        godet_events = godet_q.order_by(Evenement.date.asc()).all()
-
-        godet_ids = {str(g.id) for g in godet_events}
-
-        # 2. Semis "pépinière" pour cette culture/variété — rattachés à un godet ou
-        # pas encore transformés (stade "en germination", voir calcul_godets /
-        # utils/stock.py). Filtre direct par culture/variété plutôt que via
-        # origine_graines_id : un semis sans mise_en_godet associée doit quand
-        # même apparaître ici.
-        # ⚠️ Un semis pleine terre (parcelle réelle non-pépinière, ex: 2 m² sur
-        # "planche-test") appartient à un cycle totalement différent — planté
-        # directement en terre, jamais transformé en godet. Le mélanger ici avec
-        # les semis pépinière du même couple culture/variété n'a pas de sens
-        # (unité différente en plus : m² vs graines) : on l'exclut avec le même
-        # critère que calcul_godets (parcelle_id NULL ou parcelle.est_pepiniere).
-        semis_q = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
-            .filter(Evenement.type_action == "semis")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-            .filter(or_(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
-        )
-        if variete:
-            semis_q = semis_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            semis_q = semis_q.filter(Evenement.variete.is_(None))
-        semis_events = semis_q.order_by(Evenement.date.asc()).all()
-
-        # 3. Plantations liées via source_evenement_ids
-        plantation_candidates = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .filter(Evenement.type_action == "plantation")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-            .filter(Evenement.source_evenement_ids.isnot(None))
-            .order_by(Evenement.date.asc())
-            .all()
-        )
-        linked_plantations = [
-            p for p in plantation_candidates
-            if godet_ids & set(p.source_evenement_ids.split(";"))
-        ]
-
-        # 4. Ventes (vendu) pour cette culture/variété
-        vendu_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "vendu")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-        )
-        if variete:
-            vendu_q = vendu_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            vendu_q = vendu_q.filter(Evenement.variete.is_(None))
-        vendu_events = vendu_q.order_by(Evenement.date.asc()).all()
-
-        # 5. Pertes godet (perte_godet) pour cette culture/variété
-        perte_q = (
-            db.query(Evenement)
-            .filter(Evenement.type_action == "perte_godet")
-            .filter(func.lower(Evenement.culture) == culture_lower)
-        )
-        if variete:
-            perte_q = perte_q.filter(func.lower(Evenement.variete) == variete.lower())
-        else:
-            perte_q = perte_q.filter(Evenement.variete.is_(None))
-        perte_events = perte_q.order_by(Evenement.date.asc()).all()
-
-        # 6. Taux de germination (plants godets / graines semis parents)
-        total_plants  = sum(g.nb_plants_godets or 0 for g in godet_events)
-        total_graines = sum(int(s.quantite or 0) for s in semis_events)
-        taux = round(total_plants / total_graines * 100) if total_graines and total_plants else None
+        semis_events        = cycle["semis"]
+        godet_events        = cycle["godets"]
+        linked_plantations  = cycle["plantations"]
+        vendu_events        = cycle["ventes"]
+        perte_events        = cycle["pertes_godet"]
+        taux                = cycle["taux_germination"]
 
         return {
             "culture": culture,
             "variete": variete,
+            # [US-065 CA6] Rappel du lot ciblé, pour que le panneau de détail sache
+            # ce qu'il affiche (lot précis vs agrégat culture + variété).
+            "semis_id": semis_id,
+            "sans_semis_rattache": sans_semis_rattache,
             "semis": [
                 {
                     "id":        s.id,
@@ -853,6 +1275,7 @@ def meteo_history(
     lat     : float = Query(default=None, description="Latitude GPS (défaut : potager configuré)"),
     lon     : float = Query(default=None, description="Longitude GPS (défaut : potager configuré)"),
     timezone: str   = Query(default=None, description="Fuseau IANA (défaut : Europe/Paris)"),
+    ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     Historique météo journalier (températures min/max + précipitations) depuis Open-Meteo Archive.
@@ -895,6 +1318,7 @@ def historique(
     from_date : str  = Query(default=None, alias="from"),
     to_date   : str  = Query(default=None, alias="to"),
     date_ref  : date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-027] Retourne les événements paginés avec filtres optionnels.
@@ -909,26 +1333,11 @@ def historique(
     effective_to = dr.isoformat() if dr else to_date
     db = SessionLocal()
     try:
-        q = (
-            db.query(Evenement)
-            .options(joinedload(Evenement.parcelle_rel))
-            .order_by(Evenement.date.desc())
+        total, events = svc_evenements.lister_evenements(
+            db, ctx,
+            limit=limit, offset=offset, action=action, culture=culture,
+            parcelle=parcelle, from_date=from_date, to_date=effective_to,
         )
-        if action:
-            q = q.filter(Evenement.type_action == action)
-        if culture:
-            q = q.filter(Evenement.culture.ilike(f"%{culture}%"))
-        if parcelle:
-            q = q.join(Parcelle, Evenement.parcelle_id == Parcelle.id, isouter=True).filter(
-                Parcelle.nom.ilike(f"%{parcelle}%")
-            )
-        if from_date:
-            q = q.filter(Evenement.date >= from_date)
-        if effective_to:
-            q = q.filter(Evenement.date <= effective_to + " 23:59:59")
-
-        total  = q.count()
-        events = q.offset(offset).limit(limit).all()
         return {
             "total": total,
             "date_ref_effective": date_ref_effective.isoformat(),
@@ -951,11 +1360,16 @@ def historique(
         db.close()
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def _to_float(v):
-    try:    return float(v) if v is not None else None
-    except: return None
-
-def _to_int(v):
-    try:    return int(float(v)) if v is not None else None
-    except: return None
+# ── Repli SPA — sert index.html pour les routes front sans backend (US-044) ────
+# Enregistrée en dernier : toute route API définie plus haut (health, auth/*,
+# stats, historique...) est essayée en premier par Starlette (ordre
+# d'enregistrement) ; seuls les chemins non reconnus (ex. /verifier-email,
+# ouvert depuis le lien de vérification e-mail) retombent ici.
+if os.path.isdir(_DIST):
+    @app.get("/{chemin_complet:path}", include_in_schema=False)
+    def serve_frontend_spa_fallback(chemin_complet: str):
+        return FileResponse(os.path.join(_DIST, "index.html"))
+elif os.path.isdir(_STATIC):
+    @app.get("/{chemin_complet:path}", include_in_schema=False)
+    def serve_pwa_spa_fallback(chemin_complet: str):
+        return FileResponse(os.path.join(_STATIC, "index.html"))

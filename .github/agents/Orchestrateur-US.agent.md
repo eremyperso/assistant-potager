@@ -27,13 +27,20 @@ dans le bon ordre pour implémenter une User Story complète de bout en bout.
 2. Si les Scénarios Gherkin sont vides OU si les critères d'acceptance sont ambigus :
    → Appliquer toutes les règles du fichier PO pour compléter l'US AVANT de coder
 3. Si l'US est complète avec ses scénarios Gherkin → passer directement à l'étape 2
+4. **Suivi** : `python tools/us_tracker.py US-XXX a_faire` — l'US est prête à être
+   prise en charge. C'est l'Orchestrateur qui le fait, jamais le PO : sa règle
+   absolue lui interdit tout terminal, et ses `tools` n'ont pas `execute`.
 
 ### ÉTAPE 2 — Implémentation Developer
-1. **Lire** `.github/agents/Developer.agent.md` intégralement avant d'agir en tant que Developer
-2. Appliquer toutes les règles du fichier Developer en fournissant :
+1. **Suivi** : `python tools/us_tracker.py US-XXX en_cours` — AVANT d'écrire la
+   moindre ligne, pour que le kanban reflète le travail réellement engagé
+2. **Lire** `.github/agents/Developer.agent.md` intégralement avant d'agir en tant que Developer
+3. Appliquer toutes les règles du fichier Developer en fournissant :
    - Le contenu complet de l'US (critères d'acceptance + Gherkin)
    - Le contenu réel des fichiers impactés (code existant)
-3. Résultat attendu : code Python modifié + migration SQL si nécessaire
+4. Résultat attendu : code Python modifié + migration SQL si nécessaire
+   (l'US reste en `In Progress` : cette colonne couvre le développement en cours
+   **comme** terminé, jusqu'à la validation QA)
 
 ### ÉTAPE 3 — Validation QA
 1. **Lire** `.github/agents/Qa-tester.agent.md` intégralement avant d'agir en tant que QA
@@ -42,6 +49,9 @@ dans le bon ordre pour implémenter une User Story complète de bout en bout.
    - Les critères d'acceptance de l'US
    - Les scénarios Gherkin
 3. Résultat attendu : fichier `tests/test_us_XXX_[composant].py` avec couverture ≥ 80 %
+4. **Suivi** : `python tools/us_tracker.py US-XXX en_qa` — uniquement si la QA
+   **valide**. Si elle rejette, l'US reste en `In Progress` et l'étape 4 n'a pas
+   lieu (cf. règle « ne jamais passer à l'étape suivante sur une étape en erreur »)
 
 ### ÉTAPE 4 — Documentation
 1. **Lire** `.github/agents/patch-notes.prompt.agent.md` intégralement avant d'agir en tant que Patch Notes Writer
@@ -49,6 +59,21 @@ dans le bon ordre pour implémenter une User Story complète de bout en bout.
    - Étape 6 obligatoire : calculer et mettre à jour le fichier `VERSION`
    - Étape 7 obligatoire : insérer la nouvelle entrée EN HAUT de `PATCH_NOTES.md`
 3. Résultat attendu : `PATCH_NOTES.md` mis à jour ET `VERSION` incrémenté
+
+## Suivi d'avancement (kanban GitHub)
+
+Les quatre appels ci-dessus sont décrits en détail dans
+`.github/agents/Suivi-US.agent.md` — **le lire avant le premier appel**. Trois
+points à retenir :
+
+- **Ne jamais positionner « Done »** : cette colonne est appliquée par le
+  déploiement. L'outil refuse ce statut.
+- Le suivi **ne bloque jamais** : sans `GITHUB_TOKEN` ou si GitHub est
+  indisponible, la commande logue un `WARNING` et rend la main en code retour 0.
+  Lis la sortie et mentionne l'échec dans ta confirmation d'étape, mais
+  **n'interromps pas** le cycle pour autant.
+- Un échec de suivi n'est pas une « étape en erreur » au sens de la règle
+  ci-dessous : c'est de l'observabilité, pas un livrable.
 
 ## Règles
 - **RÈGLE ABSOLUE** : lire le fichier `.agent.md` du sous-agent AVANT de l'exécuter — jamais de mémoire
@@ -68,3 +93,4 @@ Résultat attendu :
 - `tests/test_us_002_stats.py` créé
 - `PATCH_NOTES.md` mis à jour
 - `VERSION` incrémenté
+- Kanban GitHub : US-002 passée en `Todo` → `In Progress` → `In QA` au fil des étapes
