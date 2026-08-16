@@ -920,6 +920,37 @@ def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get
         db.close()
 
 
+@app.get("/stats/varietes")
+def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-072] Détail par variété, toutes cultures et tous états confondus (potager /
+    semis / pépinière), avec leurs parcelles d'origine réelles — alimente l'écran Stocks
+    transverse (US-073). Nouvelle agrégation en lecture seule : ne modifie ni /stats ni
+    /godets (CA8), aucune migration BDD (CA9).
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    today = date.today()
+    dr = min(date_ref, today) if date_ref else None
+    date_ref_effective = dr or today
+    db = SessionLocal()
+    try:
+        varietes = svc_stock.calcul_stock_varietes(db, ctx, date_ref=dr)
+        # [US-073 CA15] Observations agrégées par culture, même index que /stats —
+        # pas de granularité variété côté observations (US-039), le badge remonte
+        # donc sur chaque ligne d'une même culture.
+        obs_index = build_observations_index(db)
+        for entry in varietes:
+            nom = (entry.get("culture") or "").lower()
+            nb_obs = len(obs_index["stocks"].get(nom, []))
+            entry["has_observations"] = nb_obs > 0
+            entry["nb_observations"]  = nb_obs
+        return {
+            "varietes":           varietes,
+            "total":              len(varietes),
+            "date_ref_effective": date_ref_effective.isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/stats/rendement")
 def get_rendement(
     annee: int = Query(default=None),

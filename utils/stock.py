@@ -988,6 +988,197 @@ def calcul_stock_par_variete(
     return result
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-072] Détail par variété, toutes cultures confondues, avec parcelles
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _parcelles_par_variete(
+    db: Session, culture: str, date_ref: Optional[_date] = None, potager_id: Optional[int] = None,
+) -> Dict[str, List[str]]:
+    """
+    [US-072 / CA4] Parcelles où chaque variété d'une culture est effectivement présente,
+    déduites des événements réels de plantation et de semis pleine terre — jamais un lieu
+    unique ni une parcelle par défaut. "Non localisé" quand l'événement n'a pas de
+    parcelle_id ou pointe vers une parcelle soft-deletée (actif=False), même convention
+    que utils/parcelles.py::calcul_occupation_parcelles et calcul_semis ci-dessus.
+
+    Retourne { variete_ou_"Variété non précisée": [nom_parcelle, ...] }, sans doublon,
+    ordre d'apparition.
+    """
+    from sqlalchemy import case as sa_case
+
+    cutoff = _cutoff_dt(date_ref)
+    culture_lower = culture.lower()
+    _parcelle_nom = sa_case((Parcelle.actif.is_(True), Parcelle.nom), else_=None)
+
+    _q_plant = (
+        db.query(Evenement.variete, _parcelle_nom)
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "plantation")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+    )
+    if potager_id is not None:
+        _q_plant = _q_plant.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_plant = _q_plant.filter(Evenement.date <= cutoff)
+
+    _cond_semis = (Evenement.parcelle_id.is_(None)) | _cond_semis_pleine_terre(Evenement, Parcelle)
+    _q_semis = (
+        db.query(Evenement.variete, _parcelle_nom)
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(func.lower(Evenement.culture) == culture_lower)
+        .filter(_cond_semis)
+    )
+    if potager_id is not None:
+        _q_semis = _q_semis.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_semis = _q_semis.filter(Evenement.date <= cutoff)
+
+    result: Dict[str, List[str]] = {}
+    for variete, parcelle_nom in _q_plant.all() + _q_semis.all():
+        v_key = variete if variete is not None else "Variété non précisée"
+        noms = result.setdefault(v_key, [])
+        nom = parcelle_nom or "Non localisé"
+        if nom not in noms:
+            noms.append(nom)
+    return result
+
+
+def calcul_stock_varietes(
+    db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None,
+) -> List[dict]:
+    """
+    [US-072] Détail par variété, toutes cultures confondues, avec leurs parcelles
+    d'origine réelles. Généralise calcul_stock_par_variete (une seule culture à la
+    fois) à l'ensemble d'un potager en un seul appel, pour alimenter GET /stats/varietes
+    (US-073 — écran Stocks transverse).
+
+    [CA2] Trois états, mêmes règles déjà en vigueur pour distinguer stock_par_culture /
+    semis_pleine_terre / en_attente dans GET /stats et GET /godets aujourd'hui, mais
+    portées à la granularité variété (CA7) :
+      - "potager" : la variété a au moins un événement de "plantation" propre.
+      - "semis"   : la variété n'a AUCUNE plantation, mais contribue au stock de sa
+        culture via un semis pleine terre localisé (parcelle réelle, non pépinière) —
+        c'est exactement ce sous-ensemble de calcul_stock_par_variete qui, aujourd'hui,
+        n'a pas de section dédiée alors que la culture entière apparaît dans
+        stock_par_culture (1b de calcul_stock_cultures fusionne déjà plantation et
+        semis pleine terre localisé dans le même total).
+        Un semis SANS parcelle n'entre jamais ici : calcul_godets le traite déjà comme
+        un stade "en germination" (état "pep") — un semis rattaché à une parcelle ou
+        sans parcelle du tout n'est jamais un doublon entre "semis" et "pep" (CA7).
+      - "pep"     : variétés encore en godet ou en germination, non plantées —
+        calcul_godets (mêmes lignes que GET /godets → en_attente), parcelles
+        toujours vides [CA4] : le lieu "pépinière" est déjà porté par l'état.
+
+    Aucune règle métier nouvelle [CA9] : recombine des fonctions de calcul existantes.
+    """
+    stocks_cultures = calcul_stock_cultures(db, date_ref, potager_id=potager_id)
+    cultures_potager = sorted(stocks_cultures.keys())
+
+    semis_data = calcul_semis(db, date_ref, potager_id=potager_id)
+    cultures_semis_pt_lower = {
+        c.lower() for c, s in semis_data.items() if s.get("parcelles_pleine_terre")
+    }
+
+    _q_godet_cultures = (
+        db.query(Evenement.culture)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+        .distinct()
+    )
+    if potager_id is not None:
+        _q_godet_cultures = _q_godet_cultures.filter(Evenement.potager_id == potager_id)
+    cultures_avec_godet = {row[0].lower() for row in _q_godet_cultures.all()}
+
+    cutoff = _cutoff_dt(date_ref)
+    result: List[dict] = []
+
+    # ── États "potager" / "semis" ────────────────────────────────────────────
+    for culture in cultures_potager:
+        nom_l = culture.lower()
+        if nom_l in cultures_avec_godet:
+            origine_culture = "pépinière"
+        elif nom_l in cultures_semis_pt_lower:
+            origine_culture = "semis_pleine_terre"
+        else:
+            origine_culture = "pied_acheté"
+
+        _q_plant_var = (
+            db.query(Evenement.variete)
+            .filter(Evenement.type_action == "plantation")
+            .filter(func.lower(Evenement.culture) == nom_l)
+            .distinct()
+        )
+        if potager_id is not None:
+            _q_plant_var = _q_plant_var.filter(Evenement.potager_id == potager_id)
+        if cutoff is not None:
+            _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
+        varietes_avec_plantation = {
+            (row[0] if row[0] is not None else "Variété non précisée") for row in _q_plant_var.all()
+        }
+
+        parcelles_var = _parcelles_par_variete(db, culture, date_ref, potager_id)
+        for v in calcul_stock_par_variete(db, culture, date_ref, potager_id=potager_id):
+            if v["type_organe"] == "reproducteur":
+                stock_actuel = max(0.0, v["plants_plantes"] - v["plants_perdus"])
+            else:
+                stock_actuel = max(0.0, v["plants_plantes"] - v["plants_perdus"] - v["recoltes_total"])
+            unite_v = v["unite_plant"] or "plants"
+            etat = "potager" if v["variete"] in varietes_avec_plantation else "semis"
+
+            parcelles = parcelles_var.get(v["variete"], [])
+            if origine_culture == "pied_acheté" and (not parcelles or all(p == "Non localisé" for p in parcelles)):
+                origine = "non_localisé"
+            else:
+                origine = origine_culture
+
+            result.append({
+                "culture":           culture,
+                "variete":           v["variete"],
+                "etat":              etat,
+                "origine":           origine,
+                "parcelles":         parcelles,
+                "total_entre":       _fmt_qte_unite(v["plants_plantes"], unite_v),
+                "unite":             unite_v,
+                "stock_actuel":      _fmt_qte_unite(stock_actuel, unite_v),
+                "plants_perdus":     _fmt_qte_unite(v["plants_perdus"], unite_v),
+                "vendu":             None,
+                "rendement_total":   round(v["rendement_total"], 3) if v["rendement_total"] else 0.0,
+                "unite_rendement":   v["unite_rendement"],
+                "nb_recoltes_poids": v["nb_recoltes_poids"],
+            })
+
+    # ── État "pep" ───────────────────────────────────────────────────────────
+    godets_tous = calcul_godets(db, include_epuises=True, date_ref=date_ref, potager_id=potager_id)
+    en_attente = [
+        v for v in godets_tous.values()
+        if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0
+    ]
+    for g in sorted(en_attente, key=lambda v: (v["culture"], v["variete"] or "")):
+        en_godet = g["nb_plants_godets"] > 0
+        total_entre = g["nb_plants_godets"] if en_godet else g.get("graines_en_germination", 0)
+        stock_actuel = g["stock_residuel_godet"] if en_godet else g.get("graines_en_germination", 0)
+        unite_v = "plants" if en_godet else g.get("unite_germination", "graines")
+        result.append({
+            "culture":           g["culture"],
+            "variete":           g["variete"] if g["variete"] is not None else "Variété non précisée",
+            "etat":              "pep",
+            "origine":           "pépinière",
+            "parcelles":         [],
+            "total_entre":       total_entre,
+            "unite":             unite_v,
+            "stock_actuel":      stock_actuel,
+            "plants_perdus":     g.get("nb_pertes_godet", 0),
+            "vendu":             g.get("nb_vendus", 0),
+            "rendement_total":   0.0,
+            "unite_rendement":   "",
+            "nb_recoltes_poids": 0,
+        })
+
+    return result
+
+
 def calcul_godets(
     db: Session, include_epuises: bool = False, date_ref: Optional[_date] = None,
     potager_id: Optional[int] = None,

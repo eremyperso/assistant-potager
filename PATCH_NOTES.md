@@ -1,4 +1,20 @@
 
+## [v3.33.0] — 2026-08-16
+
+### 🚀 Nouveautés
+- Fusionne les trois sections de l'écran Stocks (au potager / semis pleine terre / pépinière) en une seule liste groupée par famille botanique, l'état devenant un badge par ligne (US-072, US-073)
+- Détaille chaque ligne par variété plutôt que par culture seule, avec la liste réelle des parcelles où elle se trouve (US-072)
+- Ajoute à l'écran Stocks des chips de filtre par famille, un rail alphabétique secondaire et un filtre par origine (Pépinière / Pied acheté / Semis pleine terre / Non localisé) (US-073)
+- Ajoute l'export CSV et JSON des lignes actuellement visibles de l'écran Stocks, généré côté navigateur sans appel serveur supplémentaire (US-073)
+- Ajoute sur chaque ligne un lien « N récolte(s) » ouvrant une modale du détail chronologique des récoltes pesées de cette variété, avec le total cumulé (US-073)
+- Ajoute un bandeau de 4 métriques en tête de l'écran Stocks : unités au potager, godets à replanter, kilogrammes récoltés sur la saison, unités perdues (US-073)
+- Bascule l'écran Stocks entre vue tableau (grand écran) et cartes empilées (petit écran) via container query, conformément à la règle « Responsive frontend » de `CLAUDE.md` (US-073)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /stats/varietes`, nouvelle agrégation en lecture seule par couple culture + variété toutes cultures et tous états confondus, sans modifier les endpoints existants `/stats` et `/godets` (US-072)
+- Ajoute `utils/stock.py::calcul_stock_varietes`, qui généralise `calcul_stock_par_variete` — jusqu'ici limitée à une culture à la fois et réservée au bot Telegram — à l'ensemble d'un potager en un seul appel, avec la liste réelle des parcelles par variété (US-072)
+- Rend caduques US-062 et US-071, remplacées par US-072 (données) et US-073 (écran) suite au gel de la nouvelle maquette Stocks du 15/08/2026 (US-072, US-073)
+
 ## [v3.32.0] — 2026-08-13
 
 ### 🚀 Nouveautés

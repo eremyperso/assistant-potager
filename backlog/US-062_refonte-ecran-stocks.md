@@ -1,3 +1,14 @@
+> **CADUQUE (2026-08-15).** Cette US cadrait Stocks comme une refonte strictement
+> visuelle, à données inchangées. Ce cadrage ne tient plus : la maquette figée du
+> 15/08/2026 fait de Stocks l'écran transverse unique de toutes les cultures
+> (au potager, en pépinière, en semis pleine terre), groupées par famille
+> botanique — un changement réel de structure de l'information, pas seulement
+> d'habillage. Voir `docs/BRIEF_REFONTE_STOCKS_TRANSVERSE.md` et
+> `docs/ANALYSE_REFONTE_UI_WEB_2026.md` §5.11. **Remplacée intégralement par
+> [US-072](US-072_detail-varietes-toutes-cultures-parcelles.md) (données) et
+> [US-073](US-073_refonte-ecran-stocks-transverse.md) (écran).** Conservée ici
+> pour l'historique, à ne plus implémenter.
+
 **ID :** US-062
 **Titre :** Refondre l'écran Stocks avec bascule tableau / cartes
 

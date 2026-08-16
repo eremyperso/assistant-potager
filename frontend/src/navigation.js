@@ -81,7 +81,7 @@ export const NAV = [
     shortLabel: 'Stocks',
     Icon: Package,
     title: 'Stocks',
-    sub: 'Graines, plants et unités disponibles',
+    sub: 'Toutes les cultures de la saison, regroupées par famille botanique',
   },
   {
     // [US-053 / CA5] Renommage « Historique » → « Journal » côté interface.

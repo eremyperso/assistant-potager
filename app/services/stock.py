@@ -62,6 +62,11 @@ def calcul_stock_par_variete(db: Session, ctx: TenantContext, culture: str, date
     return _stock.calcul_stock_par_variete(db, culture, date_ref, potager_id=ctx.potager_id)
 
 
+def calcul_stock_varietes(db: Session, ctx: TenantContext, date_ref: Optional[_date] = None):
+    """[US-072] Détail par variété toutes cultures confondues, avec parcelles."""
+    return _stock.calcul_stock_varietes(db, date_ref, potager_id=ctx.potager_id)
+
+
 def calcul_rendement_mensuel(db: Session, ctx: TenantContext, annee: int, date_ref: Optional[_date] = None):
     return _stock.calcul_rendement_mensuel(db, annee, date_ref, potager_id=ctx.potager_id)
 

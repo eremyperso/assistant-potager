@@ -133,6 +133,8 @@ export const api = {
   // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
   plan:       (dateRef) => get(`/plan${dateRef ? qs({ date_ref: dateRef }) : ''}`),
   stats:      (dateRef) => get(`/stats${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-072] Détail par variété toutes cultures confondues, avec parcelles — écran Stocks (US-073)
+  statsVarietes: (dateRef) => get(`/stats/varietes${dateRef ? qs({ date_ref: dateRef }) : ''}`),
   godets:     (dateRef) => get(`/godets${dateRef ? qs({ date_ref: dateRef }) : ''}`),
   cultures:   () => get('/cultures'),
   historique: (params = {}) => get(`/historique${qs(params)}`),
