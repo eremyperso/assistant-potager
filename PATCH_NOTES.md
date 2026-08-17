@@ -1,4 +1,23 @@
 
+## [v3.34.0] — 2026-08-17
+
+### 🚀 Nouveautés
+- Ajoute un module de recherche de ville pour localiser un potager, à la création ou depuis « Modifier le potager » (US-074)
+- Ajoute une météo web personnalisée sur la localisation réelle du potager actif, au lieu d'un point fixe partagé par tous (US-075)
+- Ajoute le widget météo sur l'écran Vue d'ensemble du Tableau de bord : ville, température, ressenti, prévision 5 jours, avec une invitation à localiser le potager quand c'est nécessaire (US-076)
+- Ajoute un bouton « Personnaliser l'affichage » pour choisir quels widgets du Tableau de bord restent visibles, mémorisé par appareil (US-077)
+- Ajoute au widget météo le lever et le coucher du soleil du jour, ainsi qu'un conseil potager du jour (arrosage, gel, vent…), avec un texte dépliable quand le conseil est long (US-078)
+- Précise les libellés « Humidité » et « Vent » sur la carte météo, au lieu de valeurs juxtaposées sans étiquette (US-078)
+
+### 🔧 Améliorations techniques
+- Ajoute `PATCH /potagers/{id}` (owner) pour corriger nom, ville ou localisation d'un potager déjà créé (US-074)
+- Généralise `fetch_meteo()` (`utils/meteo.py`) avec des paramètres `lat`/`lon`/`timezone` optionnels, sans changer le comportement du job météo quotidien ni de `/meteo` Telegram (US-075)
+- Ajoute `GET /meteo`, distinct de `GET /meteo/history`, exposant la météo du jour et 5 jours de prévision pour le potager actif (US-075)
+- Stocke le choix des widgets affichés du Tableau de bord côté navigateur (`localStorage`) plutôt qu'en base, sans synchronisation entre appareils (US-077)
+
+### 💾 Base de données
+- Ajoute la colonne `ville` sur `potagers` (`migrations/migration_v26.sql`) (US-074)
+
 ## [v3.33.0] — 2026-08-16
 
 ### 🚀 Nouveautés

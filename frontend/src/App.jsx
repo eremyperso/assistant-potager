@@ -8,6 +8,7 @@ import BottomNav from './components/BottomNav.jsx'
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
 import { VUE_PAR_DEFAUT } from './navigation.js'
+import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
@@ -36,12 +37,9 @@ function getResetPasswordToken() {
 // Les sections dont le contenu relève d'un lot ultérieur sont rendues en
 // `Placeholder` explicite plutôt qu'en lien mort [CA6].
 const VIEWS = {
-  bord: () => (
-    <Placeholder
-      title="Tableau de bord"
-      body="Vue d'ensemble de votre potager : météo locale, tâches de la semaine, récoltes de la saison et dernières interventions."
-    />
-  ),
+  // [US-076] Le widget météo est réel ; les trois autres restent en
+  // `Placeholder` à l'intérieur même de la vue (cf. `views/Dashboard.jsx`).
+  bord: (props) => <Dashboard {...props} />,
   stats: (props) => <Stats {...props} />,
   plan: (props) => <Plan {...props} />,
   'plan-vue': () => (

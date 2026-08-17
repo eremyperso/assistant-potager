@@ -69,6 +69,7 @@ class Potager(Base):
 
     id               = Column(Integer, primary_key=True, index=True)
     nom              = Column(String(100), nullable=False)
+    ville            = Column(String(255), nullable=True)  # [US-074] libellé affichable, jamais géocodé côté serveur
     latitude         = Column(Float, nullable=True)
     longitude        = Column(Float, nullable=True)
     proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)

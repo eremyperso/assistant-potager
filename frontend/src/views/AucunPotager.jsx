@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Sprout } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { VilleSearch } from '../components/ui'
 
 export default function AucunPotager() {
   const { logout } = useAuth()
@@ -13,6 +14,7 @@ export default function AucunPotager() {
 
   const [onglet, setOnglet] = useState('creer') // 'creer' | 'rejoindre'
   const [nom, setNom] = useState('')
+  const [localisation, setLocalisation] = useState(null) // [US-074] { ville, latitude, longitude } | null
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -26,7 +28,10 @@ export default function AucunPotager() {
     setLoading(true)
     setError(null)
     try {
-      await creerPotager(nom.trim())
+      // [US-074 / CA3, CA7] La localisation est facultative — un champ non
+      // renseigné (ou une recherche restée sans sélection) ne bloque jamais
+      // la création du potager.
+      await creerPotager(nom.trim(), localisation?.ville, localisation?.latitude, localisation?.longitude)
     } catch (err) {
       setError(err.message)
       setLoading(false)
@@ -105,6 +110,17 @@ export default function AucunPotager() {
               onChange={(e) => setNom(e.target.value)}
               style={inputStyle}
             />
+            {/* [US-074 / CA1, CA3] Localisation facultative — module de recherche
+                de ville unifié, réutilisé tel quel par « Modifier le potager ». */}
+            <div style={{ marginTop: 10, textAlign: 'left' }}>
+              <VilleSearch
+                id="onboarding-ville"
+                label={null}
+                value={localisation}
+                onSelect={setLocalisation}
+                placeholder="Ville (facultatif)"
+              />
+            </div>
             <button type="submit" disabled={loading || !nom.trim()} style={boutonStyle}>
               {loading ? '…' : 'Créer'}
             </button>

@@ -116,18 +116,42 @@ def _conseil_potager(wmo_code: int, temp_matin: float, temp_aprem: float,
     return " · ".join(conseils) if conseils else "🌿 Conditions normales"
 
 
-def fetch_meteo() -> dict | None:
+def fetch_meteo(
+    lat: float = METEO_LATITUDE,
+    lon: float = METEO_LONGITUDE,
+    timezone: str = METEO_TIMEZONE,
+) -> dict | None:
     """
     Interroge l'API Open-Meteo et retourne un dict avec les données météo
     pertinentes pour le potager.
 
+    [US-075] `lat`/`lon`/`timezone` optionnels — repli sur les coordonnées du
+    bot par défaut (comportement inchangé pour le job 5h et /meteo Telegram),
+    même pattern que `fetch_meteo_history()`. Permet à `GET /meteo` d'interroger
+    la localisation réelle d'un potager (US-074).
+
+    Le dict retourné gagne trois ajouts par rapport à la version d'origine, sans
+    retirer ni renommer aucune clé existante (non-régression bot, US-075/CA5) :
+    - `previsions` : jusqu'à 5 jours suivants (`date`, `wmo_code`, `emoji`,
+      `label`, `temp_max`, `temp_min`)
+    - `temp_actuelle`/`ressenti`/`humidite`/`vent_actuel_kmh` : instantané
+      courant Open-Meteo, absents (`None`) si l'API ne les fournit pas.
+
     Retourne None en cas d'erreur réseau.
     """
     params = {
-        "latitude"            : METEO_LATITUDE,
-        "longitude"           : METEO_LONGITUDE,
-        "timezone"            : METEO_TIMEZONE,
-        "forecast_days"       : 1,
+        "latitude"            : lat,
+        "longitude"           : lon,
+        "timezone"            : timezone,
+        "forecast_days"       : 6,  # aujourd'hui + 5 jours de prévision (US-075 / CA2)
+        # Instantané courant — température ressentie, humidité, vent (US-075 / CA3)
+        "current"              : [
+            "temperature_2m",
+            "apparent_temperature",
+            "relative_humidity_2m",
+            "wind_speed_10m",
+            "weather_code",
+        ],
         # Données horaires
         "hourly"              : [
             "temperature_2m",
@@ -162,6 +186,7 @@ def fetch_meteo() -> dict | None:
     try:
         daily   = raw["daily"]
         hourly  = raw["hourly"]
+        current = raw.get("current") or {}
         times   = hourly["time"]  # liste de "2026-03-25T00:00", "...T01:00"...
 
         # Extraire la valeur horaire pour une heure cible (ex: 8 → 08:00)
@@ -191,23 +216,48 @@ def fetch_meteo() -> dict | None:
         conseil       = _conseil_potager(wmo_code, temp_matin, temp_aprem,
                                          precipitations, vent_max)
 
+        # [US-075 / CA2] Prévision des jours suivants (jour 0 = aujourd'hui, déjà
+        # couvert ci-dessus) — jusqu'à 5 jours, selon ce que renvoie Open-Meteo.
+        previsions = []
+        for i in range(1, min(6, len(daily["time"]))):
+            p_code = daily["weathercode"][i]
+            p_emoji, p_label = _wmo_label(p_code)
+            previsions.append({
+                "date"     : daily["time"][i],
+                "wmo_code" : p_code,
+                "emoji"    : p_emoji,
+                "label"    : p_label,
+                "temp_max" : round(daily["temperature_2m_max"][i], 1),
+                "temp_min" : round(daily["temperature_2m_min"][i], 1),
+            })
+
+        def _round_or_none(v):
+            return round(v, 1) if v is not None else None
+
         return {
-            "wmo_code"       : wmo_code,
-            "emoji"          : emoji,
-            "label"          : label,
-            "temp_min"       : round(temp_min, 1),
-            "temp_max"       : round(temp_max, 1),
-            "temp_matin"     : round(temp_matin, 1),
-            "temp_aprem"     : round(temp_aprem, 1),
-            "precipitations" : round(precipitations, 1),
-            "proba_pluie"    : proba_pluie,
-            "proba_matin"    : proba_matin,
-            "proba_aprem"    : proba_aprem,
-            "vent_max_kmh"   : round(vent_max, 1),
-            "lever_soleil"   : lever_soleil[-5:],   # "HH:MM"
-            "coucher_soleil" : coucher_soleil[-5:], # "HH:MM"
-            "conseil"        : conseil,
-            "date"           : date.today().isoformat(),
+            "wmo_code"        : wmo_code,
+            "emoji"           : emoji,
+            "label"           : label,
+            "temp_min"        : round(temp_min, 1),
+            "temp_max"        : round(temp_max, 1),
+            "temp_matin"      : round(temp_matin, 1),
+            "temp_aprem"      : round(temp_aprem, 1),
+            "precipitations"  : round(precipitations, 1),
+            "proba_pluie"     : proba_pluie,
+            "proba_matin"     : proba_matin,
+            "proba_aprem"     : proba_aprem,
+            "vent_max_kmh"    : round(vent_max, 1),
+            "lever_soleil"    : lever_soleil[-5:],   # "HH:MM"
+            "coucher_soleil"  : coucher_soleil[-5:], # "HH:MM"
+            "conseil"         : conseil,
+            "date"            : date.today().isoformat(),
+            # [US-075 / CA2, CA3] Ajouts — absents de la version d'origine, sans
+            # impact sur les consommateurs existants (bot, /meteo/history).
+            "previsions"      : previsions,
+            "temp_actuelle"   : _round_or_none(current.get("temperature_2m")),
+            "ressenti"        : _round_or_none(current.get("apparent_temperature")),
+            "humidite"        : current.get("relative_humidity_2m"),
+            "vent_actuel_kmh" : _round_or_none(current.get("wind_speed_10m")),
         }
 
     except (KeyError, IndexError, TypeError) as e:

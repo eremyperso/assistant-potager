@@ -67,12 +67,21 @@ def _ctx_pour_potager(db: Session, user_id: int, potager_id: int) -> TenantConte
 
 
 def creer_potager(
-    db: Session, user_id: int, nom: str, latitude: Optional[float] = None, longitude: Optional[float] = None
+    db: Session,
+    user_id: int,
+    nom: str,
+    ville: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> Potager:
     """[CA1, CA2] Crée un potager — l'utilisateur en devient owner et ce potager
     devient immédiatement son potager actif. La localisation est simplement
-    capturée et stockée (alimentera la météo par potager en US-124)."""
-    potager = Potager(nom=nom, latitude=latitude, longitude=longitude, proprietaire_id=user_id)
+    capturée et stockée (alimente la météo par potager, US-074/US-075).
+
+    [US-074] `ville` est le libellé choisi par l'utilisateur dans le module de
+    recherche de ville (géocodage Open-Meteo côté frontend) — jamais recalculé
+    côté serveur."""
+    potager = Potager(nom=nom, ville=ville, latitude=latitude, longitude=longitude, proprietaire_id=user_id)
     db.add(potager)
     db.commit()
     db.refresh(potager)
@@ -83,6 +92,38 @@ def creer_potager(
     db.commit()
 
     log.info("[US-048] Potager créé : potager_id=%s nom=%r owner_id=%s", potager.id, nom, user_id)
+    return potager
+
+
+def modifier_potager(
+    db: Session,
+    user_id: int,
+    potager_id: int,
+    nom: Optional[str] = None,
+    ville: Optional[str] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+) -> Potager:
+    """[US-074 / CA4] Un owner corrige nom/ville/localisation d'un potager déjà
+    créé — seul moyen de localiser un potager créé avant l'existence de cette
+    fonctionnalité (CA6 : rien n'est jamais réécrit à une valeur inventée, un
+    paramètre omis (`None`) laisse la colonne existante inchangée)."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "modifier le potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    if nom is not None:
+        potager.nom = nom
+    if ville is not None:
+        potager.ville = ville
+    if latitude is not None:
+        potager.latitude = latitude
+    if longitude is not None:
+        potager.longitude = longitude
+    db.commit()
+    db.refresh(potager)
+
+    log.info("[US-074] Potager modifié : potager_id=%s par=%s", potager_id, user_id)
     return potager
 
 
