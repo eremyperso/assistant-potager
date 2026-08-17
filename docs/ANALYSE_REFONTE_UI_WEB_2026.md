@@ -20,8 +20,9 @@
 > l'écran de connexion/inscription livré (US-056/US-057 implémentées sans QA dédiée pour
 > l'instant — vérification à chaud). Un lot **H — Onboarding « premier potager »** (§5.8,
 > US-058) a été ajouté à partir du module `onboarding-screens.jsx`, mais **volontairement
-> non prioritaire** (§7.1) : sa fonctionnalité complète dépend des lots C et E, pas encore
-> cadrés.
+> non prioritaire** (§7.1) : sa fonctionnalité complète dépend des lots C et E — au
+> 15/08/2026, aucun des deux n'était encore cadré (voir la révision du 17/08/2026 ci-dessous
+> pour l'avancement du Lot C depuis).
 >
 > **Révision du 15/08/2026 — l'écran Stocks devient l'écran transverse unique des
 > cultures.** Une maquette figée (« gel » du 15/08/2026, fichier faisant foi `Potager -
@@ -31,6 +32,28 @@
 > seule liste groupée par famille botanique, et absorbe l'ambition de l'écran Cultures
 > transverse du Lot E. Conséquence : **US-062 et US-071 deviennent caduques**, remplacées
 > par **US-072** (données) et **US-073** (écran) — détail au §5.11.
+>
+> **Révision du 17/08/2026 — le Lot C sort de l'état « à cadrer », est intégralement livré,
+> et reçoit un premier enrichissement (US-078).** Quatre US composent le lot : **US-074**
+> (recherche de ville unifiée + localisation du potager) et **US-075** (météo web
+> personnalisée) sont **implémentées** ; **US-076** (widget météo du Tableau de bord) et
+> **US-077** (personnalisation des widgets affichés) le sont également, dans la foulée —
+> détail au §5.2 bis, §5.2 ter et §7.1/§7.2. US-074/US-075 ont été menées **sans les étapes
+> QA et Patch Notes Writer de l'Orchestrateur** (demande explicite) : le code et ses tests
+> pytest sont livrés, mais aucune QA dédiée ne les a encore relues. US-076/US-077 (purement
+> frontend) sont, elles, passées par l'étape QA de l'Orchestrateur — **verdict GO** (rapport
+> visuel 375/768/1280, dont les états localisation manquante et erreur API ; pas de test
+> pytest artificiel pour un changement sans logique serveur).
+>
+> **US-078** (lever/coucher du soleil, libellés humidité/vent, conseil potager du jour avec
+> troncature/dépliage) enrichit ensuite la carte météo déjà livrée par US-076 — cycle complet
+> PO → Developer → QA → Documentation cette fois, **verdict QA GO** lui aussi (mêmes
+> résolutions, dont un conseil du jour simulé long pour valider la troncature et le dépliage).
+> C'est cette exécution qui déclenche enfin l'étape Patch Notes Writer, différée jusqu'ici :
+> `PATCH_NOTES.md`/`VERSION` sont mis à jour d'un coup pour l'ensemble des US non encore
+> documentées du lot (**US-074 à US-078**, entrée `[v3.34.0]`), plutôt que d'ouvrir une entrée
+> par US rétroactivement — US-074/US-075 restent malgré tout sans QA dédiée, point encore
+> ouvert (cf. §7.2).
 
 ## 1. Source
 
@@ -181,6 +204,59 @@ avant tout chiffrage — impact potentiellement fort sur les habitudes des utili
     à prévoir.
 - Devient le point d'entrée par défaut de l'app (remplace `Plan` comme onglet initial) —
   changement de parcours utilisateur, pas seulement d'affichage.
+
+### 5.2 bis Localisation du potager & météo web (US-074, US-075) — mise en œuvre
+
+Les deux premières briques backend que le §5.2 laissait ouvertes — localisation réelle du
+potager et météo personnalisée — sont livrées. Trois écarts avec le cadrage initial, tous
+des précisions d'implémentation plutôt que des changements de périmètre :
+
+| Point | Cadrage (§5.2, §6) | Livré | Raison |
+|---|---|---|---|
+| Recherche de ville | « module de recherche de ville unifié » sans précision d'architecture | `VilleSearch` (`frontend/src/components/ui/VilleSearch.jsx`) interroge le géocodage Open-Meteo **directement depuis le navigateur** — aucun endpoint backend de recherche | L'API de géocodage Open-Meteo est gratuite, sans clé, et ouverte en CORS ; passer par le backend n'aurait ajouté qu'un relais sans valeur (pas de donnée sensible, rien à filtrer côté serveur) |
+| Fuseau horaire du potager | Non tranché explicitement | `GET /meteo` retombe toujours sur `METEO_TIMEZONE` (Europe/Paris) — `Potager` ne porte pas de colonne fuseau | Application francophone à ce stade ; ajouter un fuseau par potager sans besoin identifié aurait été une colonne spéculative (cf. CLAUDE.md, « ne pas concevoir pour des besoins hypothétiques ») |
+| Correction d'un potager déjà créé | « aucun moyen de modifier la localisation d'un potager déjà créé » (constat du problème, §_Contexte fonctionnel_ US-074) | `PATCH /potagers/{id}` (owner uniquement) + entrée « Modifier le potager » dans `PotagerMenu` | C'était un CA explicite d'US-074 (CA4/CA5), pas une extension de périmètre — mentionné ici pour mémoire, `GET /potagers` expose désormais aussi `ville`/`latitude`/`longitude` par potager pour pré-remplir ce formulaire |
+
+**CA6 (jamais de valeur inventée) tenu de bout en bout** : `Potager.ville`/`latitude`/`longitude`
+restent `null` tant qu'ils n'ont pas été renseignés, aussi bien à la création
+(`creer_potager`) qu'à la lecture (`GET /potagers`, `GET /meteo` → `localisation_manquante:
+true` plutôt qu'un repli silencieux sur les coordonnées du bot Telegram).
+
+**`fetch_meteo()` (`utils/meteo.py`) généralisée sans rien retirer** : `lat`/`lon`/`timezone`
+deviennent des paramètres optionnels (repli sur les constantes globales du bot, comportement
+du job 5h et de `/meteo` Telegram strictement inchangé), et le dict retourné gagne
+`previsions` (5 jours), `temp_actuelle`, `ressenti`, `humidite`, `vent_actuel_kmh` — des
+ajouts, aucune clé existante renommée ni supprimée. `GET /meteo` (nouvel endpoint, distinct
+de `GET /meteo/history` qui ne couvre que le passé) expose ces données pour le potager actif.
+
+**Dette restante après US-074/US-075** : le formulaire de création de potager
+(`AucunPotager.jsx`) intègre déjà `VilleSearch` mais reste par ailleurs sur les alias `--g-*`
+(non retouché, hors périmètre d'US-074) — dette d'alias déjà tracée au §7.4 (non comptée dans
+le Lot B, cet écran n'en fait pas partie). La carte météo du Tableau de bord elle-même
+(`ScreenDashboard` de la maquette, consommant `GET /meteo`) est livrée par US-076 — voir
+§5.2 ter.
+
+### 5.2 ter Widget météo & personnalisation du Tableau de bord (US-076, US-077) — mise en œuvre
+
+Les deux dernières briques du Lot C sont livrées. Le widget météo (`views/Dashboard.jsx`)
+porte la carte `ScreenDashboard` de la maquette figée sur `GET /meteo` (US-075) ; la
+personnalisation (`ModalPersonnaliserDashboard.jsx` + `hooks/useDashboardWidgets.js`) reste
+générique dès sa livraison, conformément au CA5 d'US-077.
+
+| Point | Cadrage (US-076/US-077) | Livré | Raison |
+|---|---|---|---|
+| Emplacement du bouton « Personnaliser l'affichage » | « en tête d'écran, aux côtés du titre de page » — aucune maquette Claude Design ne couvre ce composant précis | Ajouté dans `PageHeader.jsx`, sur la même ligne que le `<h1>`, visible uniquement quand `view === 'bord'` (pas sur « Statistiques », qui partage la même entrée de navigation) | `PageHeader` est un composant transverse à tous les écrans ; un ajout conditionnel minimal évite de lui inventer une API générique d'actions pour un unique bouton d'un seul écran |
+| Partage de l'état entre le bouton (dans `PageHeader`) et la vue `Dashboard` | Non précisé — les deux vivent dans des arbres React distincts, sans provider commun | `useSyncExternalStore` sur un état de module + `localStorage` (`hooks/useDashboardWidgets.js`), plutôt qu'un contexte React | Évite d'imposer un `Provider` supplémentaire à toute l'application pour un besoin de lecture/écriture partagée entre deux composants seulement |
+| Widgets encore `Placeholder` (à faire cette semaine, récoltes, dernières interventions) | CA6 : « aucun traitement spécial pour les widgets non encore implémentés » | Le composant `Placeholder` existant (US-053) est réutilisé tel quel dans la grille du Tableau de bord, piloté par le même catalogue que le widget météo | Tenir le CA6 à la lettre : la préférence d'affichage ne distingue pas un widget réel d'un widget en attente de données |
+| Repli si `temp_actuelle`/`ressenti`/`humidite`/`vent_actuel_kmh` sont `None` (Open-Meteo « current » indisponible, cf. §5.2 bis) | Non couvert explicitement par les CA | Repli sur `temp_max` pour la température affichée, `—` pour les trois indicateurs secondaires — jamais de valeur inventée (même principe que le CA6 « jamais de valeur inventée » d'US-074) | Cohérence avec la règle déjà posée pour la localisation ; `fetch_meteo()` documente déjà ces trois champs comme potentiellement absents |
+
+**Grille 2×2 en `@container`, pas en breakpoint Tailwind** : `views/Dashboard.jsx` bascule sa
+grille de widgets à `@[720px]/dash:grid-cols-2` — même convention que `ScreenPlan`
+(`@[900px]/plan`, US-060) — conformément à la règle du CLAUDE.md (« Responsive frontend »).
+La largeur de bascule n'est pas dictée par la maquette (dont le prototype ne fige pas de
+seuil pour cette grille) ; 720px a été choisi pour que chaque carte du Tableau de bord garde
+une largeur confortable en deux colonnes, cohérent avec les seuils déjà retenus ailleurs dans
+l'écran (`plan-vue`/`plan-rot` restant en `Placeholder`, cf. §5.3 bis).
 
 ### 5.3 Nouvelle vue "Cultures" transverse
 
@@ -364,7 +440,7 @@ aucun équivalent aujourd'hui :
 
 | Champ maquette | État actuel | Décision retenue pour US-058 |
 |---|---|---|
-| Commune (étape 1) | `Potager` n'a que `latitude`/`longitude` (`POST /potagers`, US-048), pas de texte libre | Nouvelle colonne `Potager.ville` (texte simple, migration), **sans géocodage** — la recherche/autocomplete et la précision lat/long réelles sont le périmètre du Lot C (§5.2), qui réutilisera cette même colonne plutôt que d'en ajouter une seconde |
+| Commune (étape 1) | `Potager` n'a que `latitude`/`longitude` (`POST /potagers`, US-048), pas de texte libre | ~~Nouvelle colonne `Potager.ville`~~ — **posée entre-temps par US-074** (`migration_v26.sql`, livrée avant US-058) avec sa recherche/autocomplete réelle (`VilleSearch`, géocodage Open-Meteo) : US-058 réutilisera cette colonne et ce composant tels quels, sans rien ajouter ni géocoder elle-même — cf. §5.2 bis |
 | Type de sol (étape 2) | Aucun champ équivalent sur `Parcelle` | Nouvelle colonne `Parcelle.type_sol` (texte simple, migration), purement informatif à ce stade — non exploité par le calcul de stock/plan |
 | Sélection de cultures (étape 3) | `CultureConfig` n'est créée qu'à la demande, avec un `type_organe_recolte` obligatoire (`app/services/parcelles.py::creer_culture_config`) — jamais pré-semée pour un catalogue de cultures courantes | Sélection **informative uniquement** dans le récapitulatif de cette US — aucune fiche `CultureConfig` ni événement n'est créé à partir des cultures cochées ; le rattachement à de vraies fiches est un point ouvert, à raccorder une fois le schéma `CultureConfig` étendu du Lot E disponible (§5.3) |
 
@@ -586,12 +662,16 @@ de Plan et Pépinière, dans leur périmètre déjà tracé.
 Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque
 décision).
 
-1. **Backend manquant — confirmé, à spécifier en US** : localisation du potager (ville +
-   module de recherche unifié) pour la météo personnalisée, schéma étendu de
-   `CultureConfig` (famille botanique, durée, exposition, besoin en eau — source à trancher
-   entre base de référence existante et API tierce), règle de génération de la todo-list
-   "à faire cette semaine". Sans ces briques, le Tableau de bord et la vue Cultures ne
-   peuvent pas être branchés sur des données réelles.
+1. **Backend manquant** — ~~localisation du potager (ville + module de recherche unifié)
+   pour la météo personnalisée~~ **comblé (17/08/2026)** : `Potager.ville` (migration_v26,
+   US-074), `PATCH /potagers/{id}`, module `VilleSearch`, `GET /meteo` (US-075) et le widget
+   météo du Tableau de bord avec sa personnalisation (US-076, US-077) sont livrés — détail
+   aux §5.2 bis et §5.2 ter. Restent ouverts : schéma étendu de `CultureConfig` (famille
+   botanique, durée, exposition, besoin en eau — source à trancher entre base de référence
+   existante et API tierce) et règle de génération de la todo-list "à faire cette semaine".
+   Sans ces deux briques, la vue Cultures et les trois widgets non météo du Tableau de bord
+   (déjà positionnés en `Placeholder`, personnalisables comme le widget météo) ne peuvent
+   pas être branchés sur des données réelles — c'est tout le périmètre restant du Lot D.
 2. ~~Choix technique responsive~~ — **tranché** : breakpoints Tailwind réservés à la
    structure de page globale, container queries par défaut pour tout composant réutilisable.
    Règle gravée dans `CLAUDE.md` (section « Responsive frontend »), applicable dès le Lot A.
@@ -627,8 +707,8 @@ décision).
 | **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
 | **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
 | **B** | Refontes visuelles (à iso-fonctionnalité, **sauf Stocks**) | A | US-059 → US-065, **US-067**, **US-072/US-073** | 🔨 **En cours** — US-059, US-065, US-061, US-060 ✅ ; US-072, US-073, US-063, US-067, US-064 à faire |
-| **C** | Localisation du potager & météo personnalisée | A | *à rédiger* | ⏳ À cadrer |
-| **D** | Tableau de bord **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
+| **C** | Localisation du potager, météo personnalisée & widget météo du Tableau de bord | A | US-074, US-075, US-076, US-077 | ✅ **Implémenté** — US-074, US-075, US-076, US-077 |
+| **D** | Tableau de bord (hors widget météo, cf. Lot C) **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
 | **E** | Cultures transverse | A | ~~*à rédiger*~~ | 🚫 **Écran absorbé par Stocks (US-073), cf. §5.11** — ne reste, si besoin futur, que le schéma horticole étendu de `CultureConfig` |
 | **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
 | **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
@@ -641,9 +721,15 @@ utilisateur (l'écran pré-authentification) qui n'a de sens à traiter qu'une f
 et composants du Lot A disponibles. Les lots B, C, E et F restent ensuite parallélisables ;
 seul D dépend de C (météo), et G de B. **Le Lot H (onboarding) est volontairement placé en
 fin de portefeuille** : il peut être développé dès que A et A ter sont livrés (aucun blocage
-technique), mais sa version pleinement fonctionnelle dépend des Lots C et E (§5.8) — inutile
-de le prioriser tant que ces deux lots ne sont pas au moins cadrés, sous peine de livrer une
-US-058 qu'il faudrait reprendre peu après.
+technique), mais sa version pleinement fonctionnelle dépend des Lots C et E (§5.8). **Mise à
+jour du 17/08/2026** : le volet localisation du Lot C (recherche de ville, `Potager.ville`)
+est désormais livré via US-074 et directement réutilisable par US-058 (cf. §7.3) ; le volet
+catalogue de cultures du Lot E reste, lui, non cadré (absorbé par Stocks pour son seul écran,
+cf. §5.11 — le schéma horticole étendu de `CultureConfig` qu'attend US-058 n'existe toujours
+pas). US-058 reste donc en priorité basse tant que ce second point n'est pas au moins cadré. **Le Lot C a suivi une chaîne de dépendance stricte, désormais intégralement livrée**
+— US-074 (localisation) → US-075 (météo, consomme la localisation) → US-076 (widget, consomme
+`GET /meteo`) → US-077 (personnalisation, consomme le widget) — le Lot D pourra s'appuyer sur
+une météo réelle pour le Tableau de bord dès qu'il sera cadré.
 
 ### 7.2 US rédigées — détail
 
@@ -672,18 +758,27 @@ indiquée pour pouvoir remonter à l'entrée correspondante.
 | [US-071](../backlog/US-071_refonte-ecran-cultures-transverse.md) | ~~Refondre l'écran Cultures (vue transverse par famille botanique)~~ | E | ~~5~~ | — | 🚫 **Caduque (15/08/2026)** — écran absorbé par Stocks (US-073), cf. §5.11 |
 | [US-072](../backlog/US-072_detail-varietes-toutes-cultures-parcelles.md) | Exposer un détail par variété, toutes cultures confondues, avec leurs parcelles d'origine | B | 5 | — | 📝 Rédigée — **remplace US-062, bloquante pour US-073, cf. §5.11** |
 | [US-073](../backlog/US-073_refonte-ecran-stocks-transverse.md) | Refondre l'écran Stocks en vue transverse unique, groupée par famille botanique | B | 8 | — | 📝 Rédigée — **remplace US-062, absorbe US-071, cf. §5.11** |
+| [US-074](../backlog/US-074_localisation-potager-recherche-ville.md) | Localiser un potager via une recherche de ville unifiée et réutilisable | C | 5 | — | ✅ Implémentée — `migration_v26.sql`, tests pytest ; entrée `PATCH_NOTES.md` [v3.34.0] ; **pas de QA dédiée à ce stade, cf. note du 17/08/2026 et §5.2 bis** |
+| [US-075](../backlog/US-075_endpoint-meteo-web-personnalisee.md) | Exposer une météo web personnalisée sur la localisation réelle du potager | C | 5 | — | ✅ Implémentée — `GET /meteo`, tests pytest (dont non-régression bot) ; entrée `PATCH_NOTES.md` [v3.34.0] ; **même réserve QA que US-074, cf. §5.2 bis** |
+| [US-076](../backlog/US-076_dashboard-widget-meteo.md) | Afficher le widget météo sur l'écran Vue d'ensemble du Tableau de bord | C | 5 | — | ✅ Implémentée — `views/Dashboard.jsx` ; **QA visuelle GO** (375/768/1280, dont états localisation manquante et erreur API) ; entrée `PATCH_NOTES.md` [v3.34.0], cf. §5.2 ter |
+| [US-077](../backlog/US-077_personnaliser-affichage-dashboard.md) | Personnaliser les widgets affichés sur la Vue d'ensemble du Tableau de bord | C | 3 | — | ✅ Implémentée — `ModalPersonnaliserDashboard.jsx`, `hooks/useDashboardWidgets.js` ; **QA visuelle GO**, persistance et verrou CA4 vérifiés ; entrée `PATCH_NOTES.md` [v3.34.0], cf. §5.2 ter |
+| [US-078](../backlog/US-078_widget-meteo-conseil-potager-horaires.md) | Enrichir le widget météo (horaires soleil, libellés, conseil potager) | — | 3 | — | ✅ Implémentée — v3.34.0, **hors Lot C** (déjà clos) ; lever/coucher, libellés Humidité/Vent, conseil du jour tronqué/dépliable (`ConseilPotager`, `views/Dashboard.jsx`) ; **QA visuelle GO** (dont troncature/dépliage simulés sur un conseil long) ; cycle complet PO→Dev→QA→Documentation ; aucune migration (champs déjà exposés par US-075) |
 
-**Avancement au 15/08/2026 — 94 points rédigés, 61 livrés (65 %), 33 restants.**
-Le total passe de 86 à 94 points : US-062 (5 points) devient caduque et sort du décompte,
-remplacée par US-072 (5) et US-073 (8) — cf. §5.11. Net : +8 points sur le Lot B, la
-décomposition détaillée de son évolution passée (83 → 86 points) reste valable pour le
-reste du lot.
+**Avancement au 17/08/2026 — 115 points rédigés, 82 livrés (71 %), 33 restants.**
+Le total était passé de 94 à 112 points avec la sortie du Lot C de l'état « à cadrer » (4 US
+d'un coup, US-074 à US-077, 18 points, toutes livrées le même jour — les deux premières au
+cadrage, les deux suivantes juste après, cf. §5.2 bis et §5.2 ter) ; il passe maintenant à
+115 avec **US-078** (3 points), enrichissement du widget météo livré dans la foulée, hors
+décompte du Lot C (déjà clos) au même titre qu'US-066 pour le Lot B. Le reste de la
+décomposition (Lots A/A bis/A ter/B/H) est inchangé depuis le 15/08/2026.
 
 | Ensemble | Points rédigés | Livrés | Restants |
 |---|---|---|---|
 | Lots A + A bis + A ter | 34 | **34** | 0 |
 | Lot B | 49 | **24** (US-059, US-065, US-061, US-060) | 25 (US-072, US-073, US-063, US-067, US-064) |
+| Lot C | 18 | **18** (US-074, US-075, US-076, US-077) | 0 |
 | US-066 (hors lot, saisie Telegram) | 3 | **3** | 0 |
+| US-078 (hors lot, enrichissement Lot C) | 3 | **3** | 0 |
 | Lot H (US-058, priorité basse) | 8 | 0 | 8 |
 
 **Total Lot A + A bis + A ter : 34 points, intégralement livrés.** Ordre de dépendance
@@ -702,6 +797,20 @@ US-067**, puis **US-064 en clôture** — cette dernière constate la propreté 
 peut donc être jouée qu'en dernier. **US-066 (3 points) était hors Lot B** : relevant de la
 saisie Telegram, elle a été livrée avec US-065 (v3.30.0), ce qui arrête au plus tôt
 l'accumulation de lots en état indéterminé dans l'historique.
+
+**Total Lot C : 18 points, intégralement livrés.** Ordre de dépendance strict (pas de
+parallélisation possible, contrairement au Lot B) : US-074 (localisation) → US-075 (météo,
+lit la localisation posée par US-074) → US-076 (widget, lit `GET /meteo` d'US-075) → US-077
+(personnalisation, agit sur le widget d'US-076) — chaîne suivie de bout en bout jusqu'à la
+livraison des quatre US. Les quatre ont désormais leur entrée `PATCH_NOTES.md`/`VERSION`
+(`[v3.34.0]`, cf. ci-dessous) ; US-074/US-075 restent en revanche sans QA dédiée — point
+encore ouvert malgré le lot livré et documenté.
+
+**US-078 (3 points, hors décompte du Lot C) : enrichissement du widget météo, livré le même
+jour.** Seule US du lot à avoir suivi le cycle complet de l'Orchestrateur — PO (validation
+US existante) → Developer → QA (verdict GO) → Documentation (`PATCH_NOTES.md`/`VERSION`,
+`[v3.34.0]`, la même entrée que US-074 à US-077, ouverte à cette occasion pour l'ensemble du
+lot non encore documenté).
 
 Le Lot B se voulait **à iso-fonctionnalité** — aucune donnée nouvelle, aucun endpoint
 nouveau, aucune migration BDD. Chaque US d'écran porte à ce titre un CA de non-régression
@@ -797,10 +906,13 @@ voir §5.8.
     du lot sans supprimer le bloc d'alias (cf. §7.4).
   L'écran **Statistiques est explicitement hors Lot B** : devenant un sous-écran du Tableau
   de bord, sa refonte visuelle est rattachée au Lot D pour éviter de le retoucher deux fois.
-- **Lot C — Localisation du potager & météo personnalisée** : module de recherche de ville
-  unifié, champs de localisation sur l'entité Potager (migration), endpoint météo web basé
-  sur la localisation réelle. Cf. §5.2. Réutilisera la colonne `Potager.ville` déjà posée
-  par US-058 (§5.8) plutôt que d'en créer une seconde.
+- ~~**Lot C — Localisation du potager & météo personnalisée**~~ — **découpé et intégralement
+  livré, cf. §7.2 (US-074 → US-075 → US-076 → US-077)**. US-074 (module de recherche de
+  ville, colonne `Potager.ville`, `PATCH /potagers/{id}`) et US-075 (`GET /meteo`) — cf. §5.2
+  bis — puis US-076 (widget météo du Tableau de bord) et US-077 (personnalisation des
+  widgets) — cf. §5.2 ter — sont livrées. **US-074 a posé `Potager.ville` la première** :
+  c'est désormais US-058 (§5.8, Lot H, non livrée) qui réutilisera cette colonne plutôt que
+  l'inverse — la note du §5.8 anticipait l'ordre de livraison sans le figer.
 - **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
   (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
   **Inclut la refonte visuelle de l'écran Statistiques** (`views/Stats.jsx`, 78 alias), qui

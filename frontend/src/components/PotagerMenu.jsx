@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight } from 'lucide-react'
+import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight, MapPinned } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
 import { libelleRole } from '../lib/roles.js'
 import PotagerSelector from './PotagerSelector.jsx'
+import ModalModifierPotager from './ModalModifierPotager.jsx'
 
 /**
  * Sélecteur de potager [US-054].
@@ -102,11 +103,28 @@ export default function PotagerMenu() {
               setModale('liste')
             }}
           />
+
+          {/* [US-074 / CA5] Seul moyen de localiser (ou corriger) un potager déjà
+              créé — réservé au owner, même garde que la gestion des membres. */}
+          {potagerActif.role === 'owner' && (
+            <PopItem
+              icon={MapPinned}
+              label="Modifier le potager"
+              sub="Nom, ville"
+              onClick={() => {
+                setOuvert(false)
+                setModale('modifier')
+              }}
+            />
+          )}
         </Pop>
       )}
 
-      {modale && (
+      {(modale === 'liste' || modale === 'rejoindre') && (
         <PotagerSelector focusCode={modale === 'rejoindre'} onClose={() => setModale(null)} />
+      )}
+      {modale === 'modifier' && (
+        <ModalModifierPotager potager={potagerActif} onClose={() => setModale(null)} />
       )}
     </div>
   )

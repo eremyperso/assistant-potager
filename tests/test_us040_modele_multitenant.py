@@ -48,7 +48,8 @@ def test_us040_ca1_users_email_et_chat_id_uniques(test_db):
 def test_us040_ca2_table_potagers_colonnes(test_engine):
     inspector = inspect(test_engine)
     columns = {c["name"] for c in inspector.get_columns("potagers")}
-    assert columns == {"id", "nom", "latitude", "longitude", "proprietaire_id", "plan", "cree_le"}
+    # [US-074] "ville" ajoutée pour la localisation du potager (migration_v26)
+    assert columns == {"id", "nom", "ville", "latitude", "longitude", "proprietaire_id", "plan", "cree_le"}
 
 
 def test_us040_ca2_potager_plan_par_defaut_free(test_db):
