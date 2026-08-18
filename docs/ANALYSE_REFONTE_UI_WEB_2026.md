@@ -54,6 +54,20 @@
 > documentées du lot (**US-074 à US-078**, entrée `[v3.34.0]`), plutôt que d'ouvrir une entrée
 > par US rétroactivement — US-074/US-075 restent malgré tout sans QA dédiée, point encore
 > ouvert (cf. §7.2).
+>
+> **Révision du 18/08/2026 — le Lot H (onboarding) est livré, dernier lot du portefeuille
+> initial.** US-058 introduit l'assistant en 4 étapes (`views/Onboarding.jsx`), qui remplace
+> l'ancien écran minimal `AucunPotager.jsx`, ainsi qu'un premier `POST /parcelles` côté web
+> (jusqu'ici réservé au bot Telegram) et la colonne informative `Parcelle.type_sol`
+> (`migration_v28.sql`) — détail au §5.8. Les deux limites anticipées dès la première
+> rédaction se confirment telles quelles à la livraison : le type de sol reste purement
+> informatif (non exploité par le calcul de stock/plan) et la sélection de cultures de
+> l'étape 3 reste indicative dans le récapitulatif, sans fiche `CultureConfig` créée — le
+> schéma horticole étendu qu'attendait le Lot E reste non cadré (absorbé par Stocks, cf.
+> §5.11). Cycle complet PO → Developer → QA → Documentation ; QA backend par tests pytest
+> (`tests/test_us058_onboarding_premier_potager.py`) et QA visuelle par rapport 375/768/1280
+> (verdict GO, dont le parcours complet et le parcours minimal du scénario Gherkin) — entrée
+> `PATCH_NOTES.md` [v3.35.0].
 
 ## 1. Source
 
@@ -417,11 +431,13 @@ Contrairement au menu Compte (§5.6, portage visuel à 90 %), ce lot combine don
 (réinitialisation de mot de passe, US-057) — la distinction est reflétée dans le découpage
 en deux US plutôt qu'une seule.
 
-### 5.8 Onboarding « premier potager » (nouveauté, dépendante des lots C et E)
+### 5.8 Onboarding « premier potager » (US-058, livrée le 18/08/2026 — périmètre réduit assumé)
 
 Le module `onboarding-screens.jsx` (fichier focal `Potager - Premier potager.html`)
 introduit un assistant en 4 étapes affiché juste après la création de compte, réutilisant
-le panneau de gauche de l'écran de connexion (§5.7) pour porter la progression :
+le panneau de gauche de l'écran de connexion (§5.7) pour porter la progression. Livré par
+`frontend/src/views/Onboarding.jsx`, qui remplace l'ancien écran minimal
+`AucunPotager.jsx` (seule porte d'entrée « Créer un potager », CA1) :
 
 1. **Votre potager** — nom du potager + commune, avec un encart pour basculer vers la
    saisie d'un code d'invitation si l'utilisateur rejoint un potager existant plutôt que
@@ -444,17 +460,20 @@ aucun équivalent aujourd'hui :
 | Type de sol (étape 2) | Aucun champ équivalent sur `Parcelle` | Nouvelle colonne `Parcelle.type_sol` (texte simple, migration), purement informatif à ce stade — non exploité par le calcul de stock/plan |
 | Sélection de cultures (étape 3) | `CultureConfig` n'est créée qu'à la demande, avec un `type_organe_recolte` obligatoire (`app/services/parcelles.py::creer_culture_config`) — jamais pré-semée pour un catalogue de cultures courantes | Sélection **informative uniquement** dans le récapitulatif de cette US — aucune fiche `CultureConfig` ni événement n'est créé à partir des cultures cochées ; le rattachement à de vraies fiches est un point ouvert, à raccorder une fois le schéma `CultureConfig` étendu du Lot E disponible (§5.3) |
 
-Autre écart, mineur : la création de parcelle n'existe aujourd'hui que côté bot Telegram
+Autre écart, mineur : la création de parcelle n'existait jusqu'ici que côté bot Telegram
 (`utils/parcelles.create_parcelle`, commande `/parcelle ajouter`) — aucun endpoint web
-équivalent n'existe. US-058 introduit donc un premier `POST /parcelles`, qui réutilise
-cette même fonction de service (pas de nouvelle règle métier de création de parcelle,
-seulement une nouvelle porte d'entrée HTTP).
+équivalent n'existait. US-058 introduit donc un premier `POST /parcelles`, qui réutilise
+cette même fonction de service, étendue avec `est_pepiniere`/`type_sol` (pas de nouvelle
+règle métier de création de parcelle, seulement une nouvelle porte d'entrée HTTP et deux
+paramètres optionnels supplémentaires).
 
 Contrairement aux lots A ter et A bis (portage visuel de fonctions déjà opérationnelles),
-ce lot dépend directement de l'avancement des Lots C (localisation) et E (catalogue de
-cultures) pour délivrer sa version pleinement fonctionnelle — d'où sa priorité volontairement
-basse (§7.1) : la version décrite ici (US-058) est livrable de façon autonome, mais restera
-plus simple que la maquette tant que C et E ne sont pas cadrés.
+ce lot dépendait de l'avancement des Lots C (localisation) et E (catalogue de cultures) pour
+délivrer sa version pleinement fonctionnelle — d'où sa priorité volontairement basse (§7.1).
+Le Lot C est désormais intégralement livré et réutilisé tel quel (`VilleSearch`,
+`Potager.ville`) ; le Lot E, lui, reste non cadré (§5.11) — la version livrée d'US-058 reste
+donc, comme anticipé, plus simple que la maquette sur le type de sol et le catalogue de
+cultures (tableau ci-dessus), sans que cela bloque sa livraison.
 
 ### 5.9 Écran Pépinière (US-061) — écarts assumés avec la maquette
 
@@ -712,21 +731,25 @@ décision).
 | **E** | Cultures transverse | A | ~~*à rédiger*~~ | 🚫 **Écran absorbé par Stocks (US-073), cf. §5.11** — ne reste, si besoin futur, que le schéma horticole étendu de `CultureConfig` |
 | **F** | Guide d'utilisation intégré | A | *à rédiger* | ⏳ À cadrer |
 | **G** | Vues « Vue plan » et « Rotation » | B | *à rédiger* | 🔮 Chantier séparé |
-| **H** | Onboarding « premier potager » | A, A ter | US-058 | 📝 Rédigée, à implémenter — **priorité basse** |
+| **H** | Onboarding « premier potager » | A, A ter | US-058 | ✅ **Implémenté** — v3.35.0, périmètre réduit assumé (§5.8) |
 
 Chemin critique : **Lot A bloque tout le reste**. Le **Lot A ter est priorisé juste après
 le Lot A** (et A bis, non bloquant) dans l'ordre d'implémentation — il ne dépend que du
 design system (A), pas du sélecteur de potager/menu Compte (A bis), mais couvre une surface
 utilisateur (l'écran pré-authentification) qui n'a de sens à traiter qu'une fois les tokens
 et composants du Lot A disponibles. Les lots B, C, E et F restent ensuite parallélisables ;
-seul D dépend de C (météo), et G de B. **Le Lot H (onboarding) est volontairement placé en
-fin de portefeuille** : il peut être développé dès que A et A ter sont livrés (aucun blocage
-technique), mais sa version pleinement fonctionnelle dépend des Lots C et E (§5.8). **Mise à
-jour du 17/08/2026** : le volet localisation du Lot C (recherche de ville, `Potager.ville`)
-est désormais livré via US-074 et directement réutilisable par US-058 (cf. §7.3) ; le volet
-catalogue de cultures du Lot E reste, lui, non cadré (absorbé par Stocks pour son seul écran,
-cf. §5.11 — le schéma horticole étendu de `CultureConfig` qu'attend US-058 n'existe toujours
-pas). US-058 reste donc en priorité basse tant que ce second point n'est pas au moins cadré. **Le Lot C a suivi une chaîne de dépendance stricte, désormais intégralement livrée**
+seul D dépend de C (météo), et G de B. **Le Lot H (onboarding) avait été volontairement
+placé en fin de portefeuille** : il pouvait être développé dès que A et A ter étaient livrés
+(aucun blocage technique), mais sa version pleinement fonctionnelle dépendait des Lots C et E
+(§5.8). **Mise à jour du 17/08/2026** : le volet localisation du Lot C (recherche de ville,
+`Potager.ville`) est livré via US-074 et directement réutilisable par US-058 (cf. §7.3) ; le
+volet catalogue de cultures du Lot E reste, lui, non cadré (absorbé par Stocks pour son seul
+écran, cf. §5.11 — le schéma horticole étendu de `CultureConfig` qu'attendait US-058 n'existe
+toujours pas). **Mise à jour du 18/08/2026** : US-058 est livrée malgré ce second point non
+cadré — le périmètre réduit anticipé au §5.8 (type de sol informatif, cultures non
+persistées) absorbe l'écart sans bloquer la livraison ; c'était le dernier lot du
+portefeuille initial. **Le Lot C a suivi une chaîne de dépendance stricte, désormais
+intégralement livrée**
 — US-074 (localisation) → US-075 (météo, consomme la localisation) → US-076 (widget, consomme
 `GET /meteo`) → US-077 (personnalisation, consomme le widget) — le Lot D pourra s'appuyer sur
 une météo réelle pour le Tableau de bord dès qu'il sera cadré.
@@ -745,7 +768,7 @@ indiquée pour pouvoir remonter à l'entrée correspondante.
 | [US-055](../backlog/US-055_menu-compte-unifie.md) | Menu Compte unifié (Telegram, membres, déconnexion) | A bis | 5 | ÉPIC 2 | ✅ Implémentée — v3.26.0, correctifs v3.27.0 |
 | [US-056](../backlog/US-056_refonte-ecran-connexion-inscription.md) | Refonte de l'écran de connexion/inscription | A ter | 8 | ÉPIC 2 | ✅ Implémentée — v3.27.0 |
 | [US-057](../backlog/US-057_reinitialisation-mot-de-passe-oublie.md) | Réinitialisation du mot de passe oublié | A ter | 5 | ÉPIC 2 | ✅ Implémentée — v3.27.0 (`migration_v25.sql`) |
-| [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | 📝 Rédigée — **priorité basse, cf. §7.1** |
+| [US-058](../backlog/US-058_onboarding-premier-potager.md) | Assistant de création du premier potager (4 étapes) | H | 8 | ÉPIC 2 | ✅ Implémentée — `views/Onboarding.jsx`, `POST /parcelles`, `migration_v28.sql` ; **QA visuelle GO** (375/768/1280) + tests pytest ; entrée `PATCH_NOTES.md` [v3.35.0] ; périmètre réduit assumé, cf. §5.8 |
 | [US-059](../backlog/US-059_socle-partage-composants-transverses.md) | Migrer les composants transverses de consultation vers le design system | B | 3 | — | ✅ Implémentée — v3.29.0 (42 alias soldés) |
 | [US-060](../backlog/US-060_refonte-ecran-plan-parcelles.md) | Refondre l'écran Plan (liste des parcelles et détail) | B | 8 | — | ✅ Implémentée — v3.32.0 (29 alias soldés) ; **écarts assumés et dette de calendrier, cf. §5.10** |
 | [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière avec les trois stades d'avancement | B | 5 | — | ✅ Implémentée — v3.31.0/v3.31.1 ; **CA8 et CA11 arbitrés en faveur de la maquette, cf. §5.9** |
@@ -764,13 +787,14 @@ indiquée pour pouvoir remonter à l'entrée correspondante.
 | [US-077](../backlog/US-077_personnaliser-affichage-dashboard.md) | Personnaliser les widgets affichés sur la Vue d'ensemble du Tableau de bord | C | 3 | — | ✅ Implémentée — `ModalPersonnaliserDashboard.jsx`, `hooks/useDashboardWidgets.js` ; **QA visuelle GO**, persistance et verrou CA4 vérifiés ; entrée `PATCH_NOTES.md` [v3.34.0], cf. §5.2 ter |
 | [US-078](../backlog/US-078_widget-meteo-conseil-potager-horaires.md) | Enrichir le widget météo (horaires soleil, libellés, conseil potager) | — | 3 | — | ✅ Implémentée — v3.34.0, **hors Lot C** (déjà clos) ; lever/coucher, libellés Humidité/Vent, conseil du jour tronqué/dépliable (`ConseilPotager`, `views/Dashboard.jsx`) ; **QA visuelle GO** (dont troncature/dépliage simulés sur un conseil long) ; cycle complet PO→Dev→QA→Documentation ; aucune migration (champs déjà exposés par US-075) |
 
-**Avancement au 17/08/2026 — 115 points rédigés, 82 livrés (71 %), 33 restants.**
+**Avancement au 18/08/2026 — 115 points rédigés, 90 livrés (78 %), 25 restants.**
 Le total était passé de 94 à 112 points avec la sortie du Lot C de l'état « à cadrer » (4 US
 d'un coup, US-074 à US-077, 18 points, toutes livrées le même jour — les deux premières au
-cadrage, les deux suivantes juste après, cf. §5.2 bis et §5.2 ter) ; il passe maintenant à
-115 avec **US-078** (3 points), enrichissement du widget météo livré dans la foulée, hors
-décompte du Lot C (déjà clos) au même titre qu'US-066 pour le Lot B. Le reste de la
-décomposition (Lots A/A bis/A ter/B/H) est inchangé depuis le 15/08/2026.
+cadrage, les deux suivantes juste après, cf. §5.2 bis et §5.2 ter), puis à 115 avec **US-078**
+(3 points), enrichissement du widget météo livré dans la foulée, hors décompte du Lot C (déjà
+clos) au même titre qu'US-066 pour le Lot B. Le 18/08/2026, **US-058 (Lot H, 8 points)** est
+livrée à son tour — dernier lot du portefeuille initial restant à faire. Seul le Lot B reste
+désormais en cours.
 
 | Ensemble | Points rédigés | Livrés | Restants |
 |---|---|---|---|
@@ -779,12 +803,12 @@ décomposition (Lots A/A bis/A ter/B/H) est inchangé depuis le 15/08/2026.
 | Lot C | 18 | **18** (US-074, US-075, US-076, US-077) | 0 |
 | US-066 (hors lot, saisie Telegram) | 3 | **3** | 0 |
 | US-078 (hors lot, enrichissement Lot C) | 3 | **3** | 0 |
-| Lot H (US-058, priorité basse) | 8 | 0 | 8 |
+| Lot H (US-058) | 8 | **8** | 0 |
 
 **Total Lot A + A bis + A ter : 34 points, intégralement livrés.** Ordre de dépendance
 respecté : US-052 → US-053 → (US-054 ∥ US-055 ∥ US-056) → US-057. **US-058 (Lot H, hors
-chemin critique) : 8 points supplémentaires**, dépendant de US-056 (déclenchement juste après
-l'écran de connexion) et US-048 (création de potager/invitations, logique réutilisée).
+chemin critique) : 8 points, livrés le 18/08/2026**, dépendant de US-056 (déclenchement juste
+après l'écran de connexion) et US-048 (création de potager/invitations, logique réutilisée).
 
 **Total Lot B : 49 points** (36 + US-065 + US-072 + US-073, cf. calcul ci-dessus), **dont 24
 livrés**. Ordre de dépendance : US-059 (socle partagé) → (US-060 ∥ [US-072 → US-073] ∥ US-063
@@ -911,8 +935,8 @@ voir §5.8.
   ville, colonne `Potager.ville`, `PATCH /potagers/{id}`) et US-075 (`GET /meteo`) — cf. §5.2
   bis — puis US-076 (widget météo du Tableau de bord) et US-077 (personnalisation des
   widgets) — cf. §5.2 ter — sont livrées. **US-074 a posé `Potager.ville` la première** :
-  c'est désormais US-058 (§5.8, Lot H, non livrée) qui réutilisera cette colonne plutôt que
-  l'inverse — la note du §5.8 anticipait l'ordre de livraison sans le figer.
+  c'est ensuite US-058 (§5.8, Lot H, livrée le 18/08/2026) qui a réutilisé cette colonne
+  plutôt que l'inverse — la note du §5.8 anticipait cet ordre de livraison sans le figer.
 - **Lot D — Tableau de bord** : todo list « à faire cette semaine », intégration météo
   (dépend du Lot C), agrégats récoltes/journal déjà disponibles ailleurs. Cf. §5.2.
   **Inclut la refonte visuelle de l'écran Statistiques** (`views/Stats.jsx`, 78 alias), qui

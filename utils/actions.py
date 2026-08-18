@@ -115,6 +115,16 @@ def normalize_action(action: str | None) -> str | None:
             value = value[len(noise):].strip()
             break
 
+    # 0) [fix normalize_action perte_godet] égalité exacte avec une clé canonique
+    # elle-même, prioritaire sur le matching flou ci-dessous. Sans cette étape,
+    # "perte_godet" (déjà canonique, ex: réémis par bot.py après une
+    # désambiguation) se fait absorber par le variant "perte" du canonique
+    # "perte" — "perte godet" nettoyé commence bien par "perte" — et retombe à
+    # tort sur "perte" au lieu de rester "perte_godet".
+    for canonical in ACTION_MAP:
+        if value == _clean_text(canonical):
+            return canonical
+
     # 1) startswith (le plus fiable)
     for canonical, variants in ACTION_MAP.items():
         for v in variants:

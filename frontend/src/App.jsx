@@ -12,12 +12,12 @@ import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
-import Historique from './views/Historique.jsx'
+import Journal    from './views/Journal.jsx'
 import Stats     from './views/Stats.jsx'
 import Auth      from './views/Auth.jsx'
 import VerifyEmail from './views/VerifyEmail.jsx'
 import ReinitialiserMotDePasse from './views/ReinitialiserMotDePasse.jsx'
-import AucunPotager from './views/AucunPotager.jsx'
+import Onboarding from './views/Onboarding.jsx'
 
 // [US-044 / CA10] Lien de vérification reçu par e-mail : /verifier-email?token=...
 // Pas de librairie de routage dans ce projet — détection manuelle du chemin,
@@ -62,7 +62,7 @@ const VIEWS = {
   ),
   pepiniere: (props) => <Pepiniere {...props} />,
   stocks: (props) => <Stocks {...props} />,
-  journal: (props) => <Historique {...props} />,
+  journal: (props) => <Journal {...props} />,
 }
 
 function AppInner() {
@@ -99,7 +99,10 @@ function AppInner() {
 function PotagerGate() {
   const { aucunPotager, loading } = usePotager()
   if (loading) return null
-  if (aucunPotager) return <AucunPotager />
+  // [US-058 / CA1] Assistant en 4 étapes — déclenché automatiquement pour un
+  // compte sans potager, et seule porte d'entrée pour « Créer un potager »
+  // (US-048/US-054), qu'il remplace.
+  if (aucunPotager) return <Onboarding />
 
   return (
     <AppContextProvider>

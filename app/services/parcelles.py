@@ -15,7 +15,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
+from app.services.permissions import require_role
 from database.models import CultureConfig, Evenement, Parcelle
+from utils.parcelles import create_parcelle as _create_parcelle
 
 
 def get_parcelle(db: Session, ctx: TenantContext, parcelle_id: int) -> Optional[Parcelle]:
@@ -23,6 +25,31 @@ def get_parcelle(db: Session, ctx: TenantContext, parcelle_id: int) -> Optional[
     if parcelle is None or parcelle.potager_id != ctx.potager_id:
         return None
     return parcelle
+
+
+def creer_parcelle(
+    db: Session,
+    ctx: TenantContext,
+    nom: str,
+    exposition: Optional[str] = None,
+    superficie_m2: Optional[float] = None,
+    est_pepiniere: bool = False,
+    type_sol: Optional[str] = None,
+) -> Parcelle:
+    """[US-058 / CA3, CA5] Première porte d'entrée HTTP pour créer une parcelle
+    (jusqu'ici réservé au bot Telegram, `/parcelle ajouter`) — réutilise la même
+    fonction de service `utils.parcelles.create_parcelle`, aucune nouvelle règle
+    métier. Lève ValueError (doublon) si une parcelle du même nom existe déjà
+    dans ce potager — à traduire en 409 côté appelant HTTP."""
+    require_role(ctx, "editor", "créer une parcelle")
+    return _create_parcelle(
+        db, nom,
+        exposition=exposition,
+        superficie_m2=superficie_m2,
+        potager_id=ctx.potager_id,
+        est_pepiniere=est_pepiniere,
+        type_sol=type_sol,
+    )
 
 
 def lister_cultures_config(db: Session, ctx: TenantContext) -> list[CultureConfig]:

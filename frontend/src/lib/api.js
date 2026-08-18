@@ -193,6 +193,12 @@ export const api = {
     patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude }),
   creerInvitation: (potagerId, rolePropose, emailInvite) =>
     post(`/potagers/${potagerId}/invitations`, { role_propose: rolePropose, email_invite: emailInvite }),
+  // [US-058] Première parcelle créée depuis l'assistant d'onboarding — rattachée
+  // au potager actif de l'appelant (le potager tout juste créé, cf. creerPotager).
+  creerParcelle: ({ nom, exposition, superficieM2, estPepiniere, typeSol } = {}) =>
+    post('/parcelles', {
+      nom, exposition, superficie_m2: superficieM2, est_pepiniere: estPepiniere, type_sol: typeSol,
+    }),
   accepterInvitation: (code) => post(`/invitations/${code}/accepter`),
   listerMembres: (potagerId) => get(`/potagers/${potagerId}/membres`),
   retirerMembre: (potagerId, membreUserId) => del(`/potagers/${potagerId}/membres/${membreUserId}`),

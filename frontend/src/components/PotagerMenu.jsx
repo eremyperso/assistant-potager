@@ -31,7 +31,7 @@ export default function PotagerMenu() {
   const [bascule, setBascule] = useState(null)
 
   // [CA3] Sans potager actif, rien à afficher : l'utilisateur est alors dirigé
-  // vers l'écran d'onboarding (AucunPotager) par le PotagerGate d'App.jsx.
+  // vers l'assistant d'onboarding (Onboarding.jsx, US-058) par le PotagerGate d'App.jsx.
   if (!potagerActif) return null
 
   async function basculerVers(potagerId) {

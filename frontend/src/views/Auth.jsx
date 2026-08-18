@@ -247,7 +247,7 @@ export default function Auth() {
                       id="nom"
                       label="Nom"
                       required
-                      placeholder="Rémy Eremy"
+                      placeholder="Pierre Dupont"
                       autoComplete="name"
                       value={nom}
                       onChange={(e) => setNom(e.target.value)}

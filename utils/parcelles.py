@@ -193,6 +193,8 @@ def create_parcelle(
     exposition: Optional[str] = None,
     superficie_m2: Optional[float] = None,
     potager_id: Optional[int] = None,
+    est_pepiniere: bool = False,
+    type_sol: Optional[str] = None,
 ) -> Parcelle:
     """
     [CA13] Crée une nouvelle parcelle avec nom_normalise calculé.
@@ -201,6 +203,8 @@ def create_parcelle(
     [US-042] potager_id=None (défaut) = comportement historique non scopé (tests
     directs) ; les appelants applicatifs passent toujours potager_id=ctx.potager_id
     et la parcelle créée est rattachée à ce potager.
+    [US-058] est_pepiniere/type_sol : renseignables dès la création (jusqu'ici
+    réservés à update_parcelle) — utilisés par l'assistant de premier potager.
     """
     nom_normalise = normalize_parcelle_name(nom)
     exact, _ = find_doublon(db, nom_normalise, potager_id=potager_id)
@@ -218,6 +222,8 @@ def create_parcelle(
         superficie_m2=superficie_m2,
         ordre=nb_existantes + 1,
         actif=True,
+        est_pepiniere=est_pepiniere,
+        type_sol=type_sol,
     )
     # [US-042] potager_id omis si None : laisse le default=1 de la colonne
     # (database/models.py) s'appliquer, plutôt que d'écraser explicitement avec None.
