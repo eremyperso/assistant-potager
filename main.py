@@ -24,6 +24,7 @@ réputés vérifiés (migration_v24.sql).
 Onboarding self-service [US-048] :
   POST   /potagers                              → créer un potager (owner + potager actif)
   PATCH  /potagers/{id}                          → modifier nom/ville/localisation (owner) [US-074]
+  POST   /parcelles                              → créer une parcelle (editor min.) [US-058]
   POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
   POST   /invitations/{code}/accepter            → accepter une invitation
   GET    /potagers/{id}/membres                  → lister les membres d'un potager
@@ -505,6 +506,44 @@ def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_use
     try:
         potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude)
         return {"id": potager.id, "nom": potager.nom, "ville": potager.ville}
+    finally:
+        db.close()
+
+
+class CreerParcelleRequest(BaseModel):
+    nom: str
+    exposition: Optional[str] = None
+    superficie_m2: Optional[float] = None
+    est_pepiniere: bool = False
+    type_sol: Optional[str] = None
+
+
+@app.post("/parcelles", status_code=201)
+def creer_parcelle(req: CreerParcelleRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-058 / CA3, CA5] Première porte d'entrée HTTP pour créer une parcelle —
+    jusqu'ici réservée au bot Telegram (`utils/parcelles.create_parcelle`, commande
+    `/parcelle ajouter`). Utilisée par l'assistant de création du premier potager
+    juste après POST /potagers (le potager créé est déjà le potager actif à ce
+    moment, cf. `svc_potagers.creer_potager`)."""
+    if not req.nom or not req.nom.strip():
+        raise HTTPException(status_code=400, detail="Nom de parcelle requis")
+    db = SessionLocal()
+    try:
+        try:
+            parcelle = svc_parcelles.creer_parcelle(
+                db, ctx, req.nom.strip(),
+                exposition=req.exposition, superficie_m2=req.superficie_m2,
+                est_pepiniere=req.est_pepiniere, type_sol=req.type_sol,
+            )
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {
+            "id": parcelle.id, "nom": parcelle.nom, "exposition": parcelle.exposition,
+            "superficie_m2": parcelle.superficie_m2, "est_pepiniere": parcelle.est_pepiniere,
+            "type_sol": parcelle.type_sol,
+        }
     finally:
         db.close()
 

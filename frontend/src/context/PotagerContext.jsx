@@ -73,6 +73,20 @@ export function PotagerContextProvider({ children }) {
     window.location.reload()
   }
 
+  // [US-058 / CA5] Finalise l'assistant de premier potager : crée le potager
+  // (avec sa localisation) puis, seulement si une parcelle a été renseignée,
+  // la première parcelle — dans cet ordre, une seule fois « Entrer dans mon
+  // potager » validé. `creerPotager` rend ce potager actif côté serveur avant
+  // que ce await ne résolve, donc `creerParcelle` (résolu via le potager actif
+  // de la requête suivante) cible déjà le bon potager sans rechargement intermédiaire.
+  async function finaliserOnboarding({ nom, ville, latitude, longitude, parcelle }) {
+    await api.creerPotager(nom, ville, latitude, longitude)
+    if (parcelle?.nom?.trim()) {
+      await api.creerParcelle(parcelle)
+    }
+    window.location.reload()
+  }
+
   const potagerActif = potagers.find((p) => p.actif) || null
   // [CA5] Une liste vide (endpoint identité seule, jamais d'erreur) signifie
   // que le compte n'appartient encore à aucun potager.
@@ -82,7 +96,7 @@ export function PotagerContextProvider({ children }) {
     <PotagerContext.Provider
       value={{
         potagers, potagerActif, aucunPotager, loading,
-        activer, recharger, creerPotager, modifierPotager, accepterInvitation,
+        activer, recharger, creerPotager, modifierPotager, accepterInvitation, finaliserOnboarding,
       }}
     >
       {children}

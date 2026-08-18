@@ -211,6 +211,8 @@ class Parcelle(Base):
     - est_pepiniere : [migration_v13] une parcelle pépinière/serre n'est jamais comptée
                       comme "pleine terre" pour un semis, même avec un parcelle_id renseigné
                       (voir utils.stock._cond_semis_pleine_terre)
+    - type_sol      : [migration_v28 / US-058] texte libre informatif (ex. "Limoneux"),
+                      non exploité par le calcul de stock/plan
     """
     __tablename__ = "parcelles"
 
@@ -222,6 +224,7 @@ class Parcelle(Base):
     ordre         = Column(Integer, default=0)
     actif         = Column(Boolean, default=True, nullable=False)
     est_pepiniere = Column(Boolean, default=False, nullable=False)
+    type_sol      = Column(String, nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent

@@ -1,7 +1,7 @@
 // [US-046 / CA2] Modal de sélection du potager actif.
 // [US-048 / CA4] Complétée avec la saisie d'un code d'invitation — seul
 // endroit accessible à tout moment (pas uniquement au premier onboarding,
-// cf. AucunPotager.jsx) pour rejoindre un potager supplémentaire.
+// cf. views/Onboarding.jsx, US-058) pour rejoindre un potager supplémentaire.
 import { useState, useRef, useEffect } from 'react'
 import { X, Sprout, Check } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'

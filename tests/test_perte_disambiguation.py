@@ -315,7 +315,13 @@ def _make_message_update(user_id: int, text: str):
 
 
 def _setup_db_tomate(session, pid):
-    """Crée une situation avec godets ET jardin pour tomate."""
+    """Crée une situation avec godets ET jardin pour tomate.
+
+    [fix contrôle quantité perte] nb_plants_godets doit rester strictement
+    supérieur à la quantité plantée : sinon stock_residuel_godet retombe à 0
+    (tout a été repiqué), et le garde-fou de quantité rejette à raison toute
+    perte en pépinière — ce test veut un stock godet réellement disponible.
+    """
     session.add(Evenement(
         type_action="plantation", culture="tomate", variete="cerise",
         quantite=10.0, rang=1, unite="plants",
@@ -323,7 +329,7 @@ def _setup_db_tomate(session, pid):
     ))
     session.add(Evenement(
         type_action="mise_en_godet", culture="tomate", variete="cerise",
-        nb_plants_godets=5, nb_graines_semees=8, date=datetime(2026, 4, 1),
+        nb_plants_godets=15, nb_graines_semees=20, date=datetime(2026, 4, 1),
     ))
     session.commit()
 

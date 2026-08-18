@@ -28,6 +28,9 @@ from utils.stock import (
     lots_candidats_mise_en_godet,
     lots_pepiniere_du_couple,
     lot_pepiniere_par_semis,
+    calcul_godets_par_culture,
+    calcul_stock_par_variete,
+    stock_actif_variete,
 )
 
 log = logging.getLogger("potager")
@@ -207,6 +210,51 @@ class TauxGerminationImpossibleError(EvenementInvalideError):
         )
 
 
+class StockInsuffisantError(EvenementInvalideError):
+    """[fix contrôle quantité perte] Une perte (jardin ou godet) réclame plus de
+    plants que ce qu'il reste réellement en stock pour cette culture/variété dans
+    ce potager. Sans ce garde-fou, une perte pouvait être enregistrée pour une
+    quantité qui dépasse ce qui existe (ex: perte de 5 navets « jaune » alors que
+    seuls 2 plants « jaune » sont encore actifs au jardin), ou même pour une
+    variété totalement absente du potager. Blocage dur, même logique que les
+    autres garde-fous de quantité de ce module (LotGrainesEpuiseesError,
+    TauxGerminationImpossibleError) : aucun scénario légitime ne permet de perdre
+    plus de plants qu'il n'en reste."""
+
+    def __init__(self, action: str, culture: str, variete: Optional[str], quantite: float, stock_disponible: float):
+        self.action = action
+        self.culture = culture
+        self.variete = variete
+        self.quantite = quantite
+        self.stock_disponible = stock_disponible
+        label = f"{culture} {variete}" if variete else culture
+        lieu = "en godet" if action == "perte_godet" else "au jardin"
+        super().__init__(
+            f"Perte de {quantite:g} « {label} » impossible : il n'y a que "
+            f"{stock_disponible:g} plant(s) {lieu} actuellement dans ce potager."
+        )
+
+
+def _stock_disponible_perte(
+    db: Session, ctx: TenantContext, action_norm: str, culture: str, variete: Optional[str]
+) -> float:
+    """[fix contrôle quantité perte] Stock actif utilisable pour valider une perte :
+    godets en pépinière pour `perte_godet`, plants actifs au jardin pour `perte`.
+    Somme sur toutes les variétés si `variete` n'est pas précisé — une perte non
+    qualifiée porte sur l'ensemble du stock de la culture, pas sur une seule
+    variété."""
+    if action_norm == "perte_godet":
+        rows = calcul_godets_par_culture(db, culture, potager_id=ctx.potager_id)
+        stock_ligne = lambda r: r.get("stock_residuel_godet") or 0
+    else:
+        rows = calcul_stock_par_variete(db, culture, potager_id=ctx.potager_id)
+        stock_ligne = stock_actif_variete
+    if variete:
+        variete_lower = variete.strip().lower()
+        rows = [r for r in rows if (r.get("variete") or "").strip().lower() == variete_lower]
+    return sum(stock_ligne(r) for r in rows)
+
+
 # [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
 # (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
 # c'est justement leur rôle de faire exister la culture pour la première fois.
@@ -230,13 +278,14 @@ def valider_evenement(
     variete: Optional[str] = None,
     parcelle: Optional[Parcelle] = None,
     nom_parcelle_brut: Optional[str] = None,
+    quantite: Optional[float] = None,
 ) -> None:
     """
     [US-049] Garde-fou unique et non contournable — appelé par TOUTE fonction de ce
     module qui crée ou modifie un Evenement, indépendamment du canal (Telegram,
     corrections, notes, API) et du nombre d'items traités dans un même appel.
 
-    Quatre règles :
+    Cinq règles :
     0. Si `nom_parcelle_brut` est fourni (un nom de parcelle a été cité) mais que
        `parcelle` est None (la résolution a échoué), la parcelle citée n'existe pas
        dans le potager — `ParcelleInconnueError`. Appliquée quel que soit l'action/
@@ -258,6 +307,12 @@ def valider_evenement(
           assistée (US-021 CA8) avant d'atteindre ce point ; cette règle est le
           filet de sécurité qui garantit qu'aucun appelant, présent ou futur, ne
           peut persister une incohérence en contournant cette correction.
+    4. [fix contrôle quantité perte] Pour `perte`/`perte_godet`, si `quantite` est
+       fournie, elle ne peut pas dépasser le stock réellement disponible (plants
+       actifs au jardin, ou godets en pépinière) pour cette culture/variété dans
+       CE potager — sinon `StockInsuffisantError`. S'applique aussi à `perte_godet`
+       bien qu'il fasse partie de `_ACTIONS_SOURCE_CULTURE` : cette exemption ne
+       porte que sur l'historique de plantation, pas sur le stock de godets.
     """
     if nom_parcelle_brut and parcelle is None:
         raise ParcelleInconnueError(nom_parcelle_brut)
@@ -270,11 +325,27 @@ def valider_evenement(
             raise CultureManquanteError(action_norm)
         return
 
+    # [fix contrôle quantité perte] perte_godet quitte la fonction juste après
+    # (via _ACTIONS_SOURCE_CULTURE, il n'est jamais soumis à culture_deja_plantee)
+    # mais reste soumis au contrôle de stock godet, fait ici avant ce départ.
+    if action_norm == "perte_godet" and quantite is not None:
+        stock_disponible = _stock_disponible_perte(db, ctx, action_norm, culture, variete)
+        if quantite > stock_disponible:
+            raise StockInsuffisantError(action_norm, culture, variete, quantite, stock_disponible)
+
     if action_norm in _ACTIONS_SOURCE_CULTURE:
         return
 
     if not culture_deja_plantee(db, ctx.potager_id, culture):
         raise CultureInconnueError(culture)
+
+    # `perte` : la culture est confirmée introduite (ligne ci-dessus) avant de
+    # contrôler le stock — une culture jamais plantée doit lever
+    # CultureInconnueError, pas StockInsuffisantError.
+    if action_norm == "perte" and quantite is not None:
+        stock_disponible = _stock_disponible_perte(db, ctx, action_norm, culture, variete)
+        if quantite > stock_disponible:
+            raise StockInsuffisantError(action_norm, culture, variete, quantite, stock_disponible)
 
     if parcelle is not None:
         from app.services.parcelles import parcelles_avec_culture
@@ -691,6 +762,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
         nom_parcelle_brut=parsed.get("parcelle"),
+        quantite=_to_float(parsed.get("quantite")),
     )
 
     event = Evenement(
@@ -903,6 +975,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         db, ctx,
         action=item.get("action"), culture=item.get("culture"),
         variete=item.get("variete"), parcelle=None,   # cette fonction ne localise jamais (parcelle_id toujours None)
+        quantite=_to_float(item.get("quantite")),
     )
     event = Evenement(
         type_action=item.get("action"),
@@ -935,9 +1008,10 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     # mutation — une correction manuelle reste soumise aux mêmes invariants
     # qu'une création (ex: corriger la parcelle vers un endroit incohérent avec
     # la culture/variété doit être refusé, pas seulement pour les nouveaux events).
-    action_final  = corrections.get("action", event.type_action)
-    culture_final = corrections.get("culture", event.culture)
-    variete_final = corrections.get("variete", event.variete)
+    action_final   = corrections.get("action", event.type_action)
+    culture_final  = corrections.get("culture", event.culture)
+    variete_final  = corrections.get("variete", event.variete)
+    quantite_final = corrections.get("quantite", event.quantite)
     if "parcelle" in corrections:
         parcelle_id_final = corrections.get("_parcelle_id")
     else:
@@ -947,6 +1021,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         db, ctx,
         action=action_final, culture=culture_final,
         variete=variete_final, parcelle=parcelle_final,
+        quantite=_to_float(quantite_final),
     )
 
     mapping = {

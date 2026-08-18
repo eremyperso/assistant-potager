@@ -757,6 +757,17 @@ def format_stock_stats_json(stocks: Dict[str, StockCulture]) -> dict:
 # [US_Stats_detail_par_variete] Détail par variété
 # ══════════════════════════════════════════════════════════════════════════════
 
+def stock_actif_variete(v: dict) -> int:
+    """Stock actif au jardin pour une ligne de `calcul_stock_par_variete` : plants
+    plantés moins pertes, et moins récoltes déjà prélevées si la culture n'est pas
+    reproductrice (une récolte reproductrice ne retire pas le plant du jardin).
+    Partagé entre l'affichage bot.py et le garde-fou de quantité de `valider_evenement`."""
+    plants = (v.get("plants_plantes") or 0) - (v.get("plants_perdus") or 0)
+    if v.get("type_organe") != "reproducteur":
+        plants -= (v.get("recoltes_total") or 0)
+    return max(0, int(plants))
+
+
 def calcul_stock_par_variete(
     db: Session, culture: str, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
 ) -> List[dict]:

@@ -2090,6 +2090,11 @@ async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
     db = SessionLocal()
     try:
         event = svc_evenements.creer_evenement_perte(db, current_context(), item, texte)
+    except svc_evenements.EvenementInvalideError as e:
+        db.rollback()
+        log.warning(f"❌ PERTE INVALIDE : {e} | texte={texte!r}")
+        await update.effective_message.reply_text(f"❌ {e}")
+        return
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
@@ -2187,10 +2192,8 @@ async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _stock_variete_jardin(v: dict) -> int:
     """Calcule le stock actif d'une variété au jardin."""
-    plants = (v.get("plants_plantes") or 0) - (v.get("plants_perdus") or 0)
-    if v.get("type_organe") != "reproducteur":
-        plants -= (v.get("recoltes_total") or 0)
-    return max(0, int(plants))
+    from utils.stock import stock_actif_variete
+    return stock_actif_variete(v)
 
 
 async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -3104,7 +3107,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         from utils.stock import calcul_godets_par_culture as _cgpc_v
         db_tmp = SessionLocal()
         try:
-            godets_dispo = _cgpc_v(db_tmp, culture)
+            godets_dispo = _cgpc_v(db_tmp, culture, potager_id=current_context().potager_id)
         finally:
             db_tmp.close()
 
@@ -3165,8 +3168,8 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         from utils.parcelles import levenshtein_distance as _lev
         db_perte = SessionLocal()
         try:
-            godets_dispo    = _cgpc(db_perte, culture)
-            varietes_jardin = _csv(db_perte, culture)
+            godets_dispo    = _cgpc(db_perte, culture, potager_id=current_context().potager_id)
+            varietes_jardin = _csv(db_perte, culture, potager_id=current_context().potager_id)
         finally:
             db_perte.close()
 

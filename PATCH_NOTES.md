@@ -1,4 +1,17 @@
 
+## [v3.35.0] — 2026-08-18
+
+### 🚀 Nouveautés
+- Ajoute un assistant en 4 étapes pour créer son premier potager juste après l'inscription : nom et commune, première parcelle (nature, nom, surface, exposition, type de sol), sélection de cultures courantes, puis récapitulatif avant validation (US-058)
+- Permet de rejoindre un potager existant par code d'invitation directement depuis l'assistant, sans terminer les étapes restantes (US-058)
+
+### 🔧 Améliorations techniques
+- Ajoute `POST /parcelles`, première porte d'entrée HTTP pour créer une parcelle — jusqu'ici réservée au bot Telegram (US-058)
+- Étend `utils/parcelles.py::create_parcelle` pour accepter `est_pepiniere` et `type_sol` dès la création, en plus de `update_parcelle` (US-058)
+
+### 💾 Base de données
+- Ajoute la colonne `type_sol` sur `parcelles`, informative (`migrations/migration_v28.sql`) (US-058)
+
 ## [v3.34.0] — 2026-08-17
 
 ### 🚀 Nouveautés
