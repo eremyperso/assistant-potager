@@ -486,7 +486,15 @@ def lister_evenements(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
 ) -> tuple[int, list[Evenement]]:
-    """[US-027] Historique paginé avec filtres — utilisé par GET /historique."""
+    """[US-027] Historique paginé avec filtres — utilisé par GET /historique.
+
+    [US-063] `action` accepte plusieurs types séparés par des virgules
+    (`perte,perte_godet`). Les catégories de filtre du journal recouvrent en effet
+    plusieurs `type_action` réels — « Entretien » à lui seul en couvre six. Filtrer
+    côté client sur la page déjà chargée fausserait la pagination, qui est calculée
+    côté serveur : le filtre doit donc porter sur la requête. Une valeur unique
+    reste traitée exactement comme avant.
+    """
     from sqlalchemy.orm import joinedload
 
     q = (
@@ -496,7 +504,9 @@ def lister_evenements(
         .order_by(Evenement.date.desc())
     )
     if action:
-        q = q.filter(Evenement.type_action == action)
+        types = [a.strip() for a in str(action).split(",") if a.strip()]
+        if types:
+            q = q.filter(Evenement.type_action.in_(types))
     if culture:
         q = q.filter(Evenement.culture.ilike(f"%{culture}%"))
     if parcelle:

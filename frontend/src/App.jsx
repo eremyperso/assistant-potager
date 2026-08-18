@@ -12,7 +12,7 @@ import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
-import Historique from './views/Historique.jsx'
+import Journal    from './views/Journal.jsx'
 import Stats     from './views/Stats.jsx'
 import Auth      from './views/Auth.jsx'
 import VerifyEmail from './views/VerifyEmail.jsx'
@@ -62,7 +62,7 @@ const VIEWS = {
   ),
   pepiniere: (props) => <Pepiniere {...props} />,
   stocks: (props) => <Stocks {...props} />,
-  journal: (props) => <Historique {...props} />,
+  journal: (props) => <Journal {...props} />,
 }
 
 function AppInner() {

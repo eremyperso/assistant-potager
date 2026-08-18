@@ -1,4 +1,26 @@
 
+## [v3.36.0] — 2026-08-18
+
+### 🚀 Nouveautés
+- Refond l'écran Journal en une véritable liste : les interventions sont groupées par journée, chaque jour formant une carte dont les lignes se lisent à la suite (US-063)
+- Rédige chaque intervention en une phrase lisible — « Récolte de 1,2 kg de courgette Jaune », « Plantation de 3 pieds d'aubergine » — au lieu de champs juxtaposés, en omettant ce qui n'est pas renseigné plutôt qu'en affichant des tirets (US-063)
+- Affiche enfin la quantité des lots godet, qui apparaissaient jusqu'ici sans aucun compte (US-063)
+- Remplace les pastilles de filtre par un menu d'actions à icônes colorées reprenant les 9 catégories de la maquette : Récoltes, Semis, Lots godet, Plantations, Arrosages, Ventes, Pertes, Entretien, Notes (US-063)
+- Regroupe sous une même entrée de filtre les actions qui vont ensemble : « Pertes » couvre pertes au jardin et en godet, « Entretien » couvre désherbage, paillage, fertilisation, traitement, taille et tuteurage (US-063)
+- Ajoute l'export CSV et JSON des interventions affichées, généré côté navigateur sans appel serveur supplémentaire (US-063)
+- Remplace le sélecteur de période à deux dates par un filtre sur une date précise (US-063)
+
+### 🔧 Améliorations techniques
+- Ajoute `IconSelect` au design system : liste déroulante dont chaque option porte l'icône et la teinte de ce qu'elle désigne, pour les filtres dont les valeurs ont déjà une identité visuelle à l'écran (US-063)
+- Permet à `GET /historique` de filtrer sur plusieurs types d'action à la fois (`action=perte,perte_godet`) — une valeur seule se comporte exactement comme avant ; sans cela, un filtre de catégorie aurait faussé la pagination, calculée côté serveur (US-063)
+- Expose `nb_plants_godets` dans `GET /historique` : une mise en godet ne renseigne pas `quantite`, son compte ne vit que dans ce champ (US-063)
+- Isole la composition de la phrase et le regroupement par jour dans `frontend/src/lib/journal.js`, testables sans rendu React (US-063)
+- Renomme la vue `Historique.jsx` en `Journal.jsx`, dernier reliquat du renommage « Historique → Journal » (US-063)
+- Supprime les derniers alias de couleurs `--g-*` de l'écran Journal, dont la couleur d'arrosage écrite en dur et sa table de correspondance dédiée au thème sombre, désormais inutiles (US-063)
+
+### ⚠️ Breaking changes
+- Le sélecteur de date de référence ne s'applique plus à l'écran Journal, qui a désormais son propre filtre de date ; il continue de s'appliquer normalement au Tableau de bord, aux Stocks et à la Pépinière (US-063)
+
 ## [v3.35.0] — 2026-08-18
 
 ### 🚀 Nouveautés

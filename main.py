@@ -1466,6 +1466,10 @@ def historique(
                     "variete"    : e.variete,
                     "quantite"   : e.quantite,
                     "unite"      : e.unite,
+                    # [US-063] Une mise en godet ne renseigne pas `quantite` : son
+                    # compte réel vit dans `nb_plants_godets`. Sans ce champ, le
+                    # journal affichait ces événements sans aucune quantité.
+                    "nb_plants_godets": e.nb_plants_godets,
                     "parcelle"   : e.parcelle,
                     "traitement" : e.traitement,
                 }
