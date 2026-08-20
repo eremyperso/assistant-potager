@@ -22,6 +22,24 @@ Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/a
 3. **Confirmation d'étape** : après chaque étape de l'Orchestrateur, indiquer explicitement
    "Étape X terminée" avec les fichiers modifiés. Ne pas enchaîner silencieusement.
 
+## Pull requests (NON NÉGOCIABLE)
+
+Toute description de PR (quelle que soit la branche source ou cible — feature, hotfix,
+release `dev` → `main`…) qui livre au moins une US DOIT se terminer par une section :
+
+```markdown
+## Jira US
+**US-XXX** : PIA-YY
+```
+
+listant chaque US livrée dans la PR avec sa clé Jira correspondante — une ligne par US.
+
+Il n'existe **aucun fichier local de correspondance** US ↔ clé Jira dans ce repo : la clé
+DOIT être retrouvée en interrogeant Jira en direct via le MCP Atlassian (`searchJiraIssuesUsingJql`),
+en cherchant dans le projet `PIA` les tickets dont le `summary` contient `US-XXX` (convention
+de titrage des tickets : `US-XXX : <description>`). Ne jamais inventer ou deviner une clé
+Jira, et ne jamais omettre cette section faute de l'avoir vérifiée.
+
 ## Project Overview
 
 **Assistant Potager** is an intelligent gardening tracker for amateur gardeners. It combines:
