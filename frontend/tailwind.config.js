@@ -46,7 +46,10 @@ export default {
         'header-dim':   'var(--header-dim)',
         'header-glass': 'var(--header-glass)',
 
-        // ─── Alias de compatibilité (écrans non encore migrés, cf. Lot B) ───
+        // ─── Alias de compatibilité (anciens noms → nouvelle palette) ───
+        // [US-064] Lot B clôturé, cf. le commentaire jumeau dans src/index.css pour
+        // la liste nominative des fichiers qui retiennent encore ce bloc et la
+        // condition de sa suppression (docs/ANALYSE_REFONTE_UI_WEB_2026.md §7.4).
         'g-bg':      'var(--g-bg)',
         'g-sur':     'var(--g-sur)',
         'g-card':    'var(--g-card)',

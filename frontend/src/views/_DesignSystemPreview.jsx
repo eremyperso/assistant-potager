@@ -170,16 +170,16 @@ function TransversesPreview() {
         </h2>
         <MetricStrip
           metrics={[
-            { value: 61, label: 'godets dispo', color: 'var(--g-pri)' },
-            { value: '78%', label: 'réussite moy.', color: 'var(--g-acc)' },
-            { value: 3, label: 'perdus', color: 'var(--g-red)' },
+            { value: 61, label: 'godets dispo', color: 'var(--txt)' },
+            { value: '78%', label: 'réussite moy.', color: 'var(--brand)' },
+            { value: 3, label: 'perdus', color: 'var(--red)' },
           ]}
         />
         <p className="text-[11.5px] text-txt3">Deux métriques sur trois zones (la troisième reste vide) :</p>
         <MetricStrip
           metrics={[
-            { value: 5, label: 'parcelles actives', color: 'var(--g-acc)' },
-            { value: 21, label: 'cultures en place', color: 'var(--g-pri)' },
+            { value: 5, label: 'parcelles actives', color: 'var(--brand)' },
+            { value: 21, label: 'cultures en place', color: 'var(--txt)' },
           ]}
         />
       </section>

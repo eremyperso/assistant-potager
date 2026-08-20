@@ -1,4 +1,11 @@
 
+## [v3.36.1] — 2026-08-20
+
+### 🔧 Améliorations techniques
+- Clôture la dette d'alias de couleurs `--g-*` sur le périmètre du Lot B : les quatre écrans (Plan, Pépinière, Stocks, Journal) et les six composants transverses d'US-059 étaient déjà propres, désormais vérifié par test automatisé (US-064)
+- Documente nommément dans `index.css` et `tailwind.config.js` les trois derniers fichiers qui retiennent le bloc d'alias (`Stats.jsx`, `PotagerSelector.jsx`, `VerifyEmail.jsx`) ainsi que la condition de sa suppression, portée par le Lot D (US-064)
+- Retire les dernières références à l'alias de la page de contrôle visuel `/design-system` (US-064)
+
 ## [v3.36.0] — 2026-08-18
 
 ### 🚀 Nouveautés
