@@ -339,3 +339,146 @@ le VPS.
 **Effort estimé** : 4h (une seule fois)
 
 **Retour sur investissement** : éviter 10h+ de galère lors du prochain déploiement
+
+# Diagnostic — emails (reset mot de passe / création de compte) non reçus sur le dev Hetzner (v3.32.0)
+
+## Contexte
+
+Sur l'environnement de dev déployé (Hetzner), les emails de vérification à
+l'inscription (`POST /auth/register`) et de réinitialisation de mot de passe
+(`POST /auth/mot-de-passe-oublie`) ne sont plus reçus. L'exploration du code
+(`app/services/email.py`, `config.py`, `docs/SETUP.md`) montre que :
+
+- L'envoi ne passe **jamais par SMTP** mais par l'API HTTPS de **Brevo**
+  (Hetzner bloque le port 25 sortant sur ses VPS).
+- Le code a un **mode dégradé silencieux** : si `BREVO_API_KEY` est vide, la
+  fonction ne fait aucun appel réseau — elle logue juste le lien en `INFO` et
+  retourne `None` **sans erreur** (`app/services/email.py:35-40` et `72-77`).
+- Un échec d'appel Brevo (clé invalide, quota dépassé, réseau) est loggé en
+  `ERROR` mais **ne fait jamais échouer la requête HTTP** — `/auth/register`
+  et `/auth/mot-de-passe-oublie` renvoient toujours un succès générique
+  (anti-énumération), donc le frontend ne peut pas révéler le problème.
+- `git log` sur `app/services/email.py` et `config.py` ne montre **aucune
+  modification récente** (derniers changements bien avant v3.27.0/v3.32.0) —
+  la régression est très probablement **externe au code** : config serveur
+  (`.env.dev`), clé Brevo expirée/révoquée, quota partagé épuisé, ou service
+  non redémarré après une modif de `.env.dev`.
+
+Objectif : un runbook de diagnostic pas-à-pas, du plus probable/rapide au
+plus profond, exécuté par l'utilisateur directement sur le serveur Hetzner
+(pas d'accès SSH disponible depuis cette session).
+
+## Étape 1 — Lire les logs applicatifs (le plus rapide, source de vérité)
+
+Sur le serveur Hetzner, le service dev est **`potager-dev.service`**
+(`infra/potager-dev.service`, `WorkingDirectory=/opt/potager-dev`,
+`EnvironmentFile=/opt/potager-dev/.env.dev`). Provoquer un renvoi de mot de
+passe ou une inscription de test depuis la PWA de dev, puis immédiatement :
+
+```bash
+journalctl -u potager-dev.service -f
+# ou pour l'historique récent sans suivre en direct :
+journalctl -u potager-dev.service --since "10 min ago" | grep -E "US-044|US-057"
+```
+
+Trois cas, à distinguer immédiatement :
+
+- **`[US-057] Mode dégradé (BREVO_API_KEY absente)`** → la clé n'est pas
+  chargée par le service (voir Étape 2). C'est le cas le plus probable vu
+  qu'aucun email n'est envoyé du tout, ni en dev ni via un autre canal.
+- **`[US-057] Échec de l'envoi de l'e-mail de réinitialisation à ... : <erreur httpx>`**
+  → l'appel à l'API Brevo a été tenté mais a échoué (voir Étape 3, le
+  message d'erreur httpx donne le code HTTP retourné par Brevo).
+- **Aucune ligne du tout** → la route n'est même pas atteinte (vérifier que
+  la requête part bien du frontend vers `https://<host-dev>/auth/mot-de-passe-oublie`,
+  pas une erreur 404/CORS avant d'arriver au service email).
+
+## Étape 2 — Vérifier la configuration chargée par le service
+
+```bash
+# Le fichier existe-t-il et contient-il bien les 4 variables ?
+cat /opt/potager-dev/.env.dev | grep -E "BREVO_API_KEY|EMAIL_FROM|FRONTEND_URL"
+
+# La variable est-elle bien vue par le PROCESS en cours (pas juste le fichier) ?
+systemctl show potager-dev.service -p EnvironmentFiles
+cat /proc/$(systemctl show potager-dev.service -p MainPID --value)/environ | tr '\0' '\n' | grep BREVO_API_KEY
+```
+
+Points d'attention :
+- `BREVO_API_KEY` vide ou absente → mode dégradé confirmé, il faut la
+  renseigner (voir Étape 4 pour regénérer si besoin) puis
+  **`systemctl restart potager-dev.service`** — une modif de `.env.dev` sans
+  redémarrage du service ne prend jamais effet (`EnvironmentFile` n'est lu
+  qu'au démarrage du process).
+- `FRONTEND_URL` pointant vers `http://localhost:3000` au lieu de l'URL
+  réelle du dev → n'empêche pas l'envoi mais génère un lien cliquable cassé
+  dans l'email (à vérifier séparément, pas la cause de « email non reçu »).
+
+## Étape 3 — Tester la clé Brevo directement (isoler l'appli du provider)
+
+Si l'étape 1 montre un `Échec de l'envoi`, ou pour valider une clé après
+correction de l'étape 2, appeler l'API Brevo directement avec la même clé :
+
+```bash
+curl -i -X POST https://api.brevo.com/v3/smtp/email \
+  -H "api-key: <BREVO_API_KEY_du_.env.dev>" \
+  -H "content-type: application/json" \
+  -d '{
+    "sender": {"name": "Assistant Potager", "email": "noreply@potager.eremy.fr"},
+    "to": [{"email": "<adresse_de_test>"}],
+    "subject": "Test diagnostic",
+    "htmlContent": "<p>test</p>"
+  }'
+```
+
+Interprétation du code retourné :
+- **`401 Unauthorized`** → clé invalide/révoquée → régénérer une clé
+  `assistant-potager-dev` dans Brevo (SMTP & API → API Keys) et mettre à jour
+  `.env.dev`.
+- **`402`/message de quota** → quota de 300 mails/jour épuisé, **partagé
+  entre toutes les clés du compte Brevo** (dev + prod) → vérifier dans le
+  dashboard Brevo (Statistiques → Emails transactionnels) si le prod a
+  consommé tout le quota du jour.
+- **`400` avec message sur l'expéditeur** → l'adresse `noreply@potager.eremy.fr`
+  n'est plus un expéditeur validé côté Brevo (Expéditeurs, domaine, IP →
+  Expéditeurs) — a pu être supprimée ou la validation a expiré.
+- **`200/201`** → Brevo accepte l'envoi ; si l'utilisateur ne reçoit
+  toujours rien, le problème est en aval (Étape 4 — ImprovMX/DNS), ou
+  l'email atterrit en spam côté destinataire.
+
+## Étape 4 — Vérifier la chaîne de délivrabilité en aval (ImprovMX / DNS)
+
+Uniquement si l'étape 3 confirme que Brevo accepte l'envoi (200/201) mais
+que rien n'arrive :
+
+- Dashboard **Brevo** → Statistiques → l'email de test apparaît-il comme
+  `delivered` ou `bounced`/`blocked` ?
+- Si le destinataire de test est `noreply@potager.eremy.fr` lui-même
+  (redirection via ImprovMX vers une boîte Gmail perso) : vérifier sur
+  **improvmx.com** que le domaine `potager.eremy.fr` est toujours actif et
+  que l'alias de redirection n'a pas été désactivé/expiré.
+- Vérifier côté **Scaleway DNS** (console.scaleway.com → Domains & DNS →
+  `eremy.fr`) que les enregistrements `MX`/`TXT` ImprovMX sur `potager` sont
+  toujours présents (une modif DNS accidentelle ailleurs sur la zone aurait
+  pu les supprimer).
+
+Référence complète de cette chaîne : `docs/SETUP.md:221-315`.
+
+## Étape 5 — Si tout est correct : couverture de test manquante
+
+Noter en marge du diagnostic (pas à corriger dans l'immédiat, juste
+consigné) : `envoyer_email_reset_mdp` et les routes
+`/auth/mot-de-passe-oublie` / `/auth/reinitialiser-mot-de-passe` n'ont
+**aucun test automatisé** (`tests/test_us044_authentification_jwt.py` ne
+couvre que la vérification d'email à l'inscription). Ce trou de couverture
+explique qu'une régression de config sur ce flux ne soit détectée qu'en
+production/dev, jamais en CI.
+
+## Vérification
+
+Ce plan est un runbook de diagnostic, pas un changement de code — pas de
+tests à lancer. Le critère de succès est l'obtention, à l'Étape 1 ou 3, d'un
+message d'erreur explicite qui pointe la cause racine (clé absente,
+invalide, quota, ou expéditeur invalide), puis correction de `.env.dev` +
+`systemctl restart potager-dev.service`, suivie d'un renvoi de mot de passe
+de test pour confirmer la réception réelle de l'email.

@@ -15,6 +15,8 @@ export function Field({
   required = false,
   hint,
   right,
+  icon: Icon,
+  suffix,
   className = '',
   ...props
 }) {
@@ -29,6 +31,7 @@ export function Field({
         {right && <span className="ml-auto">{right}</span>}
       </label>
       <div className="flex items-center gap-2 bg-card border border-border rounded-[11px] h-[46px] px-3 has-[input:focus]:border-brand has-[input:focus]:ring-[3px] has-[input:focus]:ring-brand-soft transition-shadow">
+        {Icon && <Icon size={16} className="text-txt3 shrink-0" />}
         <input
           id={id}
           type={estMdp && afficher ? 'text' : type}
@@ -36,6 +39,7 @@ export function Field({
           className="flex-1 min-w-0 h-full border-none outline-none bg-transparent text-[14.5px] text-txt placeholder:text-txt3"
           {...props}
         />
+        {suffix && <span className="text-[13px] text-txt3 font-semibold shrink-0">{suffix}</span>}
         {estMdp && (
           <button
             type="button"

@@ -8,15 +8,16 @@ import BottomNav from './components/BottomNav.jsx'
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
 import { VUE_PAR_DEFAUT } from './navigation.js'
+import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
-import Historique from './views/Historique.jsx'
+import Journal    from './views/Journal.jsx'
 import Stats     from './views/Stats.jsx'
 import Auth      from './views/Auth.jsx'
 import VerifyEmail from './views/VerifyEmail.jsx'
 import ReinitialiserMotDePasse from './views/ReinitialiserMotDePasse.jsx'
-import AucunPotager from './views/AucunPotager.jsx'
+import Onboarding from './views/Onboarding.jsx'
 
 // [US-044 / CA10] Lien de vérification reçu par e-mail : /verifier-email?token=...
 // Pas de librairie de routage dans ce projet — détection manuelle du chemin,
@@ -36,12 +37,9 @@ function getResetPasswordToken() {
 // Les sections dont le contenu relève d'un lot ultérieur sont rendues en
 // `Placeholder` explicite plutôt qu'en lien mort [CA6].
 const VIEWS = {
-  bord: () => (
-    <Placeholder
-      title="Tableau de bord"
-      body="Vue d'ensemble de votre potager : météo locale, tâches de la semaine, récoltes de la saison et dernières interventions."
-    />
-  ),
+  // [US-076] Le widget météo est réel ; les trois autres restent en
+  // `Placeholder` à l'intérieur même de la vue (cf. `views/Dashboard.jsx`).
+  bord: (props) => <Dashboard {...props} />,
   stats: (props) => <Stats {...props} />,
   plan: (props) => <Plan {...props} />,
   'plan-vue': () => (
@@ -64,7 +62,7 @@ const VIEWS = {
   ),
   pepiniere: (props) => <Pepiniere {...props} />,
   stocks: (props) => <Stocks {...props} />,
-  journal: (props) => <Historique {...props} />,
+  journal: (props) => <Journal {...props} />,
 }
 
 function AppInner() {
@@ -101,7 +99,10 @@ function AppInner() {
 function PotagerGate() {
   const { aucunPotager, loading } = usePotager()
   if (loading) return null
-  if (aucunPotager) return <AucunPotager />
+  // [US-058 / CA1] Assistant en 4 étapes — déclenché automatiquement pour un
+  // compte sans potager, et seule porte d'entrée pour « Créer un potager »
+  // (US-048/US-054), qu'il remplace.
+  if (aucunPotager) return <Onboarding />
 
   return (
     <AppContextProvider>

@@ -23,10 +23,15 @@ réputés vérifiés (migration_v24.sql).
 
 Onboarding self-service [US-048] :
   POST   /potagers                              → créer un potager (owner + potager actif)
+  PATCH  /potagers/{id}                          → modifier nom/ville/localisation (owner) [US-074]
+  POST   /parcelles                              → créer une parcelle (editor min.) [US-058]
   POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
   POST   /invitations/{code}/accepter            → accepter une invitation
   GET    /potagers/{id}/membres                  → lister les membres d'un potager
   DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
+
+Météo personnalisée [US-075] :
+  GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
 """
 import json
 import os
@@ -60,7 +65,7 @@ import utils.stock as _stock_mod
 from utils.observations import build_observations_index
 from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
 from llm.rag import add_to_rag
-from database.models import User
+from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
 from app.services import email as svc_email
@@ -92,7 +97,7 @@ app.add_middleware(
         "http://localhost:5173",        # dev Vite local
         "https://*.netlify.app",        # frontend Netlify (prod)
     ],
-    allow_methods=["GET", "POST", "DELETE"],  # DELETE ajouté [US-048] pour /potagers/{id}/membres/{user_id}
+    allow_methods=["GET", "POST", "DELETE", "PATCH"],  # DELETE [US-048] membres, PATCH [US-074] modifier_potager
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -442,6 +447,12 @@ def lister_potagers(user: User = Depends(get_current_user)):
                     "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
                     "nb_parcelles": nb_parcelles.get(p.id, 0),
                     "nb_membres": nb_membres.get(p.id, 0),
+                    # [US-074 / CA5, CA6] Pré-remplissage du formulaire « Modifier le
+                    # potager » — jamais de valeur par défaut inventée, `None` tel quel
+                    # tant que la localisation n'a pas été renseignée.
+                    "ville": p.ville,
+                    "latitude": p.latitude,
+                    "longitude": p.longitude,
                 }
                 for p in potagers
             ],
@@ -466,6 +477,14 @@ def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
 
 class CreerPotagerRequest(BaseModel):
     nom: str
+    ville: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class ModifierPotagerRequest(BaseModel):
+    nom: Optional[str] = None
+    ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
@@ -479,13 +498,78 @@ class InviterMembreRequest(BaseModel):
 def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_user)):
     """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
     ce potager devient son potager actif. Identité seule (pas de potager requis
-    au préalable, CA7)."""
+    au préalable, CA7). [US-074 / CA3] `ville` est optionnelle, choisie via le
+    module de recherche de ville unifié."""
     if not req.nom or not req.nom.strip():
         raise HTTPException(status_code=400, detail="Nom de potager requis")
     db = SessionLocal()
     try:
-        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.latitude, req.longitude)
-        return {"id": potager.id, "nom": potager.nom}
+        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude)
+        return {"id": potager.id, "nom": potager.nom, "ville": potager.ville}
+    finally:
+        db.close()
+
+
+class CreerParcelleRequest(BaseModel):
+    nom: str
+    exposition: Optional[str] = None
+    superficie_m2: Optional[float] = None
+    est_pepiniere: bool = False
+    type_sol: Optional[str] = None
+
+
+@app.post("/parcelles", status_code=201)
+def creer_parcelle(req: CreerParcelleRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-058 / CA3, CA5] Première porte d'entrée HTTP pour créer une parcelle —
+    jusqu'ici réservée au bot Telegram (`utils/parcelles.create_parcelle`, commande
+    `/parcelle ajouter`). Utilisée par l'assistant de création du premier potager
+    juste après POST /potagers (le potager créé est déjà le potager actif à ce
+    moment, cf. `svc_potagers.creer_potager`)."""
+    if not req.nom or not req.nom.strip():
+        raise HTTPException(status_code=400, detail="Nom de parcelle requis")
+    db = SessionLocal()
+    try:
+        try:
+            parcelle = svc_parcelles.creer_parcelle(
+                db, ctx, req.nom.strip(),
+                exposition=req.exposition, superficie_m2=req.superficie_m2,
+                est_pepiniere=req.est_pepiniere, type_sol=req.type_sol,
+            )
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {
+            "id": parcelle.id, "nom": parcelle.nom, "exposition": parcelle.exposition,
+            "superficie_m2": parcelle.superficie_m2, "est_pepiniere": parcelle.est_pepiniere,
+            "type_sol": parcelle.type_sol,
+        }
+    finally:
+        db.close()
+
+
+@app.patch("/potagers/{potager_id}")
+def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = Depends(get_current_user)):
+    """[US-074 / CA4] Un owner corrige nom/ville/latitude/longitude d'un potager
+    déjà créé — seul moyen de localiser un potager existant qui n'a jamais eu
+    de localisation. Vise le potager de l'URL, pas nécessairement le potager
+    actif de l'appelant (même principe que POST /potagers/{id}/invitations)."""
+    if req.nom is not None and not req.nom.strip():
+        raise HTTPException(status_code=400, detail="Nom de potager requis")
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.modifier_potager(
+                db, user.id, potager_id,
+                nom=req.nom.strip() if req.nom is not None else None,
+                ville=req.ville, latitude=req.latitude, longitude=req.longitude,
+            )
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return {
+            "id": potager.id, "nom": potager.nom, "ville": potager.ville,
+            "latitude": potager.latitude, "longitude": potager.longitude,
+        }
     finally:
         db.close()
 
@@ -1269,6 +1353,38 @@ def get_godet_detail(
         db.close()
 
 
+@app.get("/meteo")
+def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """
+    [US-075 / CA3, CA4] Météo du jour + prévision 5 jours, calculées sur la
+    localisation réelle du potager actif (`Potager.ville`/`latitude`/`longitude`,
+    US-074) — pas les coordonnées globales du bot Telegram.
+
+    Si le potager actif n'a pas encore de localisation renseignée, retourne
+    `localisation_manquante: true` plutôt qu'un repli silencieux sur une météo
+    qui ne correspondrait à aucun lieu réel du potager (CA4).
+    """
+    from utils.meteo import fetch_meteo, METEO_TIMEZONE
+
+    db = SessionLocal()
+    try:
+        potager = db.query(Potager).filter(Potager.id == ctx.potager_id).first()
+        if potager is None or potager.latitude is None or potager.longitude is None:
+            return {"localisation_manquante": True}
+
+        meteo = fetch_meteo(lat=potager.latitude, lon=potager.longitude, timezone=METEO_TIMEZONE)
+        if meteo is None:
+            raise HTTPException(status_code=502, detail="Impossible de récupérer les données Open-Meteo")
+
+        return {
+            "localisation_manquante": False,
+            "ville": potager.ville,
+            **meteo,
+        }
+    finally:
+        db.close()
+
+
 @app.get("/meteo/history")
 def meteo_history(
     days    : int   = Query(default=30, ge=7, le=365, description="Nombre de jours d'historique"),
@@ -1350,6 +1466,10 @@ def historique(
                     "variete"    : e.variete,
                     "quantite"   : e.quantite,
                     "unite"      : e.unite,
+                    # [US-063] Une mise en godet ne renseigne pas `quantite` : son
+                    # compte réel vit dans `nb_plants_godets`. Sans ce champ, le
+                    # journal affichait ces événements sans aucune quantité.
+                    "nb_plants_godets": e.nb_plants_godets,
                     "parcelle"   : e.parcelle,
                     "traitement" : e.traitement,
                 }

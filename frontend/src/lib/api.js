@@ -114,6 +114,18 @@ async function post(path, body) {
   return res.json()
 }
 
+// [US-074] PATCH /potagers/{id} — mêmes conventions d'erreur que post()
+async function patch(path, body) {
+  const options = { method: 'PATCH', headers: headers() }
+  if (body !== undefined) options.body = JSON.stringify(body)
+  const res = await requeteAvecRefresh(path, options)
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+  }
+  return res.json()
+}
+
 async function del(path) {
   const res = await requeteAvecRefresh(path, { method: 'DELETE', headers: headers() })
   if (!res.ok) {
@@ -139,6 +151,9 @@ export const api = {
   cultures:   () => get('/cultures'),
   historique: (params = {}) => get(`/historique${qs(params)}`),
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
+  // [US-075/US-076] Météo du jour + prévision 5 jours sur la localisation du
+  // potager actif — `{ localisation_manquante: true }` si non renseignée (CA4).
+  meteo: () => get('/meteo'),
   activite:     (annee, dateRef) => get(`/stats/activite${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
   rendement:    (annee, dateRef) => get(`/stats/rendement${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
   // [US-065/US-061] Pépinière lot de semis par lot de semis — lecture distincte de
@@ -171,9 +186,19 @@ export const api = {
   potagers: () => get('/potagers'),
   activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
   // [US-048] Création de potager, invitations et gestion des membres (owner)
-  creerPotager: (nom, latitude, longitude) => post('/potagers', { nom, latitude, longitude }),
+  // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch (géocodage Open-Meteo)
+  creerPotager: (nom, ville, latitude, longitude) => post('/potagers', { nom, ville, latitude, longitude }),
+  // [US-074 / CA4, CA5] Modification (nom/ville/localisation) d'un potager déjà créé — owner uniquement
+  modifierPotager: (potagerId, { nom, ville, latitude, longitude } = {}) =>
+    patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude }),
   creerInvitation: (potagerId, rolePropose, emailInvite) =>
     post(`/potagers/${potagerId}/invitations`, { role_propose: rolePropose, email_invite: emailInvite }),
+  // [US-058] Première parcelle créée depuis l'assistant d'onboarding — rattachée
+  // au potager actif de l'appelant (le potager tout juste créé, cf. creerPotager).
+  creerParcelle: ({ nom, exposition, superficieM2, estPepiniere, typeSol } = {}) =>
+    post('/parcelles', {
+      nom, exposition, superficie_m2: superficieM2, est_pepiniere: estPepiniere, type_sol: typeSol,
+    }),
   accepterInvitation: (code) => post(`/invitations/${code}/accepter`),
   listerMembres: (potagerId) => get(`/potagers/${potagerId}/membres`),
   retirerMembre: (potagerId, membreUserId) => del(`/potagers/${potagerId}/membres/${membreUserId}`),
