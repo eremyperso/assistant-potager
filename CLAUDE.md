@@ -22,10 +22,10 @@ Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/a
 3. **Confirmation d'étape** : après chaque étape de l'Orchestrateur, indiquer explicitement
    "Étape X terminée" avec les fichiers modifiés. Ne pas enchaîner silencieusement.
 
-## Pull requests `dev` → `main` (NON NÉGOCIABLE)
+## Pull requests (NON NÉGOCIABLE)
 
-Toute description de PR de bascule `dev` → `main` (release) DOIT se terminer par une
-section :
+Toute description de PR (quelle que soit la branche source ou cible — feature, hotfix,
+release `dev` → `main`…) qui livre au moins une US DOIT se terminer par une section :
 
 ```markdown
 ## Jira US
