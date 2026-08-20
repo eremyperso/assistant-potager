@@ -5,13 +5,14 @@
 > (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
 > `.github/agents/Orchestrateur-US.agent.md`).
 >
-> **Dernière mise à jour (18/08/2026)** : lots A (US-052, US-053), A bis (US-054,
-> US-055) et A ter (US-056, US-057) implémentés. **Le Lot B est en cours** : sur ses US,
+> **Dernière mise à jour (20/08/2026)** : lots A (US-052, US-053), A bis (US-054,
+> US-055) et A ter (US-056, US-057) implémentés. **Le Lot B est quasi clos** : sur ses US,
 > **US-059 (socle), US-065 (pépinière par lot), US-061 (écran Pépinière), US-060 (écran
-> Plan), US-072 et US-073 (Stocks, cf. ci-dessous) sont livrées**, ainsi qu'**US-066** (saisie
-> Telegram, hors lot) ; restent **US-063 (Journal), US-067 (famille botanique) et US-064
-> (clôture)** — voir §7.1 et §7.2 pour le détail, §7.3 pour le découpage et §7.4 pour la
-> dette d'alias restante (recomptée après les livraisons). Le §5.9 documente les écarts
+> Plan), US-072 et US-073 (Stocks), US-063 (Journal) et US-064 (clôture) sont livrées**,
+> ainsi qu'**US-066** (saisie Telegram, hors lot) ; ne reste ouverte que **US-067** (famille
+> botanique, dette propre à la Pépinière, indépendante de la clôture d'alias) — voir §7.1 et
+> §7.2 pour le détail, §7.3 pour le découpage et §7.4 pour la dette d'alias résiduelle après
+> clôture du Lot B. Le §5.9 documente les écarts
 > assumés entre `web-screens.jsx` et l'écran Pépinière livré, ainsi que la dette de famille
 > botanique qu'il ouvre et que **US-067** vient solder ; le §5.10 fait de même pour l'écran
 > Plan et la dette de **calendrier cultural** qu'il ouvre, soldée par l'`EPIC_CALENDRIER_CULTURAL`
@@ -79,6 +80,26 @@
 > (`tests/test_us058_onboarding_premier_potager.py`) et QA visuelle par rapport 375/768/1280
 > (verdict GO, dont le parcours complet et le parcours minimal du scénario Gherkin) — entrée
 > `PATCH_NOTES.md` [v3.35.0].
+>
+> **Révision du 20/08/2026 — Journal livré (US-063) et Lot B clôturé côté alias (US-064).**
+> US-063 a refondu `views/Historique.jsx`, renommée `views/Journal.jsx` à cette occasion,
+> soldant les 54 dernières occurrences d'alias `--g-*` du périmètre du Lot B (`PATCH_NOTES.md`
+> [v3.36.0]). US-064 constate ensuite, par recherche exhaustive de `--g-*` / `bg-g-*` /
+> `text-g-*` / `border-g-*` dans `frontend/src`, que les quatre écrans du lot (Plan,
+> Pépinière, Stocks, Journal) et les six composants transverses d'US-059 sont intégralement
+> sur les tokens sémantiques, et met à jour le commentaire du bloc d'alias
+> (`frontend/src/index.css` et son pendant `frontend/tailwind.config.js`) pour recenser
+> nommément les trois fichiers qui le retiennent encore : `views/Stats.jsx` (78 occurrences,
+> Lot D), `components/PotagerSelector.jsx` (19, ancien sélecteur de potager) et
+> `views/VerifyEmail.jsx` (10, écran de vérification d'e-mail). **Une quatrième vue orpheline
+> recensée au cadrage, `AucunPotager.jsx` (23 occurrences), a disparu sans action de migration
+> dédiée** : US-058 (Lot H, livrée le 18/08/2026) l'a remplacée par `views/Onboarding.jsx`,
+> écrit sur les tokens sémantiques dès sa création — sa dette est donc soldée par ricochet,
+> hors Lot B. US-064 nettoie aussi les 5 occurrences résiduelles de `_DesignSystemPreview.jsx`
+> (page de contrôle visuel, §7.5, sans impact production). Détail chiffré et condition de
+> suppression du bloc au §7.4 — **le bloc n'est pas supprimé**, sa suppression reste portée
+> par le **Lot D**, qui migrera `Stats.jsx` en même temps que sa refonte visuelle et les deux
+> vues orphelines restantes. Cycle complet PO → Developer → QA → Documentation pour les deux US.
 
 ## 1. Source
 
@@ -979,34 +1000,38 @@ Deux points introduits volontairement par le Lot A, à traiter au fil des US du 
    chaque US du Lot B doit migrer son écran vers les tokens sémantiques
    (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias.
 
-   **Répartition recomptée au 13/08/2026**, après les livraisons d'US-059 et d'US-061. Le
-   comptage retient les deux formes d'usage d'un alias — `var(--g-*)` et les classes Tailwind
-   dérivées (`bg-g-bg`, `text-g-txt2`…) — comme au cadrage, afin que les chiffres restent
-   comparables d'une ligne à l'autre :
+   **Répartition recomptée au 20/08/2026**, à la clôture du Lot B (US-064), après les
+   livraisons d'US-059, US-060, US-061, US-063 et US-073. Le comptage retient les deux formes
+   d'usage d'un alias — `var(--g-*)` et les classes Tailwind dérivées (`bg-g-bg`,
+   `text-g-txt2`…) — comme au cadrage, afin que les chiffres restent comparables d'une ligne
+   à l'autre :
 
    | Fichiers | Occurrences | Traité par | État |
    |---|---|---|---|
    | `Observations.jsx`, `DateRefPicker.jsx`, `MetricStrip.jsx`, `CultureFilter.jsx`, `LoadingSkeleton.jsx`, `ApiError.jsx` | 42 → **0** | **US-059** (socle, en tête de lot) | ✅ soldé (v3.29.0) |
    | `Pepiniere.jsx` | 80 → **0** | **US-061** | ✅ soldé (v3.31.0) |
    | `Plan.jsx` | 29 → **0** | **US-060** | ✅ soldé (v3.32.0) |
-   | `Historique.jsx` | **54** | US-063 | ⏳ à faire |
    | `Stocks.jsx` | 39 → **0** | **US-073** (remplace US-062, cf. §5.11) | ✅ soldé (v3.33.0) |
-   | `Stats.jsx` | **78** | **Lot D** (Statistiques devient sous-écran du Tableau de bord) | ⏳ hors Lot B |
-   | `AucunPotager.jsx` (23), `PotagerSelector.jsx` (19), `VerifyEmail.jsx` (10) | **52** | **Lot D** (vues orphelines, hors périmètre des 4 écrans du Lot B) | ⏳ hors Lot B |
-   | `_DesignSystemPreview.jsx` | **5** | — | Page de contrôle visuel (§7.5), supprimée à la clôture du chantier |
+   | `Journal.jsx` (ex-`Historique.jsx`) | 54 → **0** | **US-063** | ✅ soldé (v3.36.0) |
+   | ~~`AucunPotager.jsx`~~ | 23 → **0** (fichier remplacé) | **US-058** (Lot H — remplacé par `Onboarding.jsx`, sans alias dès sa création) | ✅ soldé par ricochet (v3.35.0), hors Lot B |
+   | `_DesignSystemPreview.jsx` | 5 → **0** | **US-064** (données de démo, sans impact production) | ✅ soldé — page de contrôle visuel (§7.5), supprimée à la clôture du chantier |
+   | `Stats.jsx` | **78** (inchangé) | **Lot D** (Statistiques devient sous-écran du Tableau de bord) | ⏳ hors Lot B |
+   | `PotagerSelector.jsx` | **19** (inchangé) | **Lot D** (vue orpheline, ancien sélecteur de potager) | ⏳ hors Lot B |
+   | `VerifyEmail.jsx` | **10** (inchangé) | **Lot D** (vue orpheline, écran de vérification d'e-mail) | ⏳ hors Lot B |
 
-   **Périmètre du Lot B : 54 occurrences restantes sur 244** (Journal seul, désormais que
-   Stocks est soldé), les 190 autres ayant été soldées par US-059, US-061, US-060 et US-073.
-   Total tous fichiers confondus : **208 occurrences** dans `frontend/src`. Le compteur de
-   Journal n'a pas bougé depuis le cadrage.
+   **Lot B intégralement soldé côté alias : 0 occurrence dans les quatre écrans et les six
+   composants transverses.** Reste, hors périmètre du Lot B et donc hors CA d'US-064 : **107
+   occurrences réparties sur trois fichiers** — `Stats.jsx` (78), `PotagerSelector.jsx` (19),
+   `VerifyEmail.jsx` (10) — toutes portées par le **Lot D**. Aucune des trois n'a bougé depuis
+   le cadrage : ni US-064 ni aucune autre US du Lot B ne les a retouchées, conformément à leur
+   statut de vues hors périmètre.
 
-   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle
-   vérifie que les quatre écrans et les six composants transverses sont propres, et met à
-   jour le commentaire du bloc pour recenser nommément les fichiers qui le retiennent
-   encore (Journal, dans le périmètre du Lot B ; `Stats.jsx` et les trois vues orphelines,
-   hors périmètre). La suppression effective du bloc d'`index.css` et de
-   `tailwind.config.js` est reportée au **Lot D**, qui migrera `Stats.jsx` et les trois vues
-   orphelines.
+   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle a
+   vérifié que les quatre écrans et les six composants transverses sont propres, et a mis à
+   jour le commentaire du bloc (`frontend/src/index.css`, `frontend/tailwind.config.js`) pour
+   recenser nommément les trois fichiers qui le retiennent encore. La suppression effective
+   du bloc d'`index.css` et de `tailwind.config.js` reste reportée au **Lot D**, dès que
+   `Stats.jsx`, `PotagerSelector.jsx` et `VerifyEmail.jsx` auront été migrés.
 2. **Vues étirées en desktop** : la contrainte `max-w-md mx-auto` a été retirée d'`App.jsx`
    (exigence de mise en page desktop d'US-053). Les écrans non encore refondus s'étirent
    donc sur toute la largeur disponible sur grand écran — rendu imparfait assumé jusqu'à ce
