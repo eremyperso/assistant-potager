@@ -75,14 +75,17 @@ Le fichier DOIT être nommé : `backlog/US-NNN_titre-court-kebab.md`
 
 ## Suivi d'avancement — ce n'est PAS ton rôle
 
-Une US nouvellement rédigée doit apparaître en `Todo` sur le kanban GitHub. Ce
-n'est **pas toi** qui le fais : cela passe par `python tools/us_tracker.py`, donc
-par un terminal, ce que ta règle absolue t'interdit (et `execute` n'est pas dans
-tes `tools`). C'est l'Orchestrateur qui déclenche cet appel juste après ton
-étape — voir `.github/agents/Suivi-US.agent.md`.
+Une US nouvellement rédigée doit être créée comme **ticket Jira** en statut
+`To Do`. Ce n'est **pas toi** qui le fais : cela passe par
+`python tools/jira_tracker.py create-issue backlog/US-NNN_titre.md`, donc par un
+terminal, ce que ta règle absolue t'interdit (et `execute` n'est pas dans tes
+`tools`). C'est l'Orchestrateur qui déclenche cet appel juste après ton étape,
+en lisant directement le fichier markdown que tu viens de créer — voir
+`.github/agents/Suivi-US-Jira.agent.md`.
 
 Si tu es invoqué seul, hors orchestration, **signale simplement dans le chat** que
-l'US reste à positionner en `Todo`. Ne cherche aucun moyen de le faire toi-même.
+le ticket Jira reste à créer à partir du fichier que tu as rédigé. Ne cherche
+aucun moyen de le faire toi-même.
 
 ## Ce que tu ne fais jamais — liste exhaustive
 - Modifier ou lire des fichiers `.py`, `.sql`, `.json`, `.yml`, `.env`

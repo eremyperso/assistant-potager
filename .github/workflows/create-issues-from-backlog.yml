@@ -1,12 +1,9 @@
+# Déclenchement automatique désactivé (2026-08-19) : le backlog est géré dans
+# Jira, pas via des Issues GitHub. Conservé en workflow_dispatch (manuel) au
+# cas où d'anciens fichiers backlog/*.md doivent encore être synchronisés.
 name: Create Issues from Backlog
 
 on:
-  push:
-    paths:
-      - 'backlog/*.md'
-    branches:
-      - main
-      - dev
   workflow_dispatch:
 
 permissions:

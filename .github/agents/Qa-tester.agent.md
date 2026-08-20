@@ -77,12 +77,12 @@ coexistent dans le même rapport.
 
 **Verdict global :** GO / GO avec réserves / NO-GO
 
-## Suivi d'avancement (kanban GitHub)
+## Suivi d'avancement (kanban Jira)
 
 **Une fois la validation prononcée**, et seulement si elle est favorable :
 
 ```bash
-python tools/us_tracker.py US-XXX en_qa
+python tools/jira_tracker.py US-XXX en_qa
 ```
 
 - Verdict **GO** ou **GO avec réserves** → passer l'US en `en_qa`.
@@ -90,9 +90,9 @@ python tools/us_tracker.py US-XXX en_qa
   positionner** : l'US reste en `In Progress`, elle retourne au développement.
   Marquer une US validée alors qu'elle est rejetée fausse l'état du produit.
 - Ne jamais positionner « Done » : cette colonne relève du déploiement, et
-  l'outil refuse ce statut. Détail : `.github/agents/Suivi-US.agent.md`.
+  l'outil refuse ce statut. Détail : `.github/agents/Suivi-US-Jira.agent.md`.
 
-Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, GitHub
+Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, Jira
 indisponible), mentionne-le dans le rapport, le verdict reste valable.
 
 ## Règles

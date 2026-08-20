@@ -21,20 +21,20 @@ assistant-potager/
 └── backlog/                # User Stories au format markdown
 ```
 
-## Suivi d'avancement (kanban GitHub)
+## Suivi d'avancement (kanban Jira)
 
 Avant d'écrire la moindre ligne de code, signale que l'US est prise en charge :
 
 ```bash
-python tools/us_tracker.py US-XXX en_cours
+python tools/jira_tracker.py US-XXX en_cours
 ```
 
 `In Progress` couvre le développement **en cours comme terminé** : ne repositionne
 rien en fin d'implémentation, c'est la validation QA qui fait avancer l'US.
 Ne positionne **jamais** « Done » — cette colonne relève du déploiement, et
-l'outil refuse ce statut. Détail complet : `.github/agents/Suivi-US.agent.md`.
+l'outil refuse ce statut. Détail complet : `.github/agents/Suivi-US-Jira.agent.md`.
 
-Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, GitHub
+Le suivi ne bloque jamais : en cas de `WARNING` (jeton absent, Jira
 indisponible), mentionne-le et poursuis l'implémentation normalement.
 
 Si l'Orchestrateur t'a invoqué, il a déjà passé cet appel — ne le double pas.
