@@ -8,6 +8,9 @@ const PotagerContext = createContext(null)
 export function PotagerContextProvider({ children }) {
   const [potagers, setPotagers] = useState([])
   const [loading, setLoading] = useState(true)
+  // [US-083 / CA7] Potager consulté en lecture seule (e.g. un potager archivé)
+  // — distinct du potager actif, permet de visualiser sans rendre actif
+  const [potagerId, setPotagerId] = useState(null)
 
   // `silencieux` évite de repasser `loading` à true : PotagerGate (App.jsx)
   // démonte tout l'arbre applicatif tant que `loading` est vrai, ce qui est
@@ -106,6 +109,7 @@ export function PotagerContextProvider({ children }) {
       value={{
         potagers, potagerActif, aucunPotager, loading,
         activer, recharger, creerPotager, modifierPotager, accepterInvitation, finaliserOnboarding,
+        potagerId, setPotagerId,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight, Settings, Plus, Archive } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
@@ -28,10 +28,14 @@ function sousTitrePotager({ role, nb_parcelles = 0, nb_membres = 0 }) {
 }
 
 export default function PotagerMenu() {
-  const { potagers, potagerActif, activer } = usePotager()
+  const { potagers, potagerActif, activer, potagerId, setPotagerId } = usePotager()
   const [ouvert, setOuvert] = useState(false)
   const [modale, setModale] = useState(null) // null | 'liste' | 'rejoindre' | 'creer'
   const [bascule, setBascule] = useState(null)
+  // [US-083 / CA6 révisé] Détail du potager consulté (archivé) — le bouton de
+  // sélection en en-tête doit refléter le potager réellement affiché, pas
+  // seulement le potager actif serveur ; `potagers` ne connaît que les actifs.
+  const [potagerConsulteDetail, setPotagerConsulteDetail] = useState(null)
   // [US-083 / CA6] Potager ciblé par l'écran Paramètres — le potager actif via
   // l'entrée de menu, ou un potager archivé consulté explicitement depuis la
   // liste ci-dessous (jamais activable, CA6).
@@ -42,20 +46,40 @@ export default function PotagerMenu() {
   const [archives, setArchives] = useState([])
   const [chargementArchives, setChargementArchives] = useState(false)
 
+  useEffect(() => {
+    if (!potagerId) { setPotagerConsulteDetail(null); return }
+    api.potager(potagerId).then(setPotagerConsulteDetail).catch(() => {})
+  }, [potagerId])
+
   // [CA3] Sans potager actif, rien à afficher : l'utilisateur est alors dirigé
   // vers l'assistant d'onboarding (Onboarding.jsx, US-058) par le PotagerGate d'App.jsx.
   if (!potagerActif) return null
 
-  async function basculerVers(potagerId) {
-    if (bascule || potagerId === potagerActif.id) {
+  // [US-083 / CA6 révisé] Le geste de sélection reste unique, qu'un potager
+  // soit archivé ou non : `selectionneId` est le potager réellement affiché
+  // (consulté s'il y en a un, sinon l'actif serveur) — il pilote l'indicateur
+  // de sélection courante du menu déroulant, indépendant du badge « actif ».
+  const consultationArchive = potagerId != null
+  const selectionneId = potagerId ?? potagerActif.id
+  const nomAffiche = consultationArchive ? (potagerConsulteDetail?.nom ?? '…') : potagerActif.nom
+
+  async function basculerVers(id) {
+    if (bascule) {
       setOuvert(false)
       return
     }
-    setBascule(potagerId)
+    if (id === potagerActif.id) {
+      // [US-083 / CA6 révisé] Revenir sur son potager actif depuis une
+      // consultation archivée : même geste, pas d'activation serveur inutile.
+      setPotagerId(null)
+      setOuvert(false)
+      return
+    }
+    setBascule(id)
     try {
       // [CA4] `activer()` recharge la page (comportement d'origine US-046 :
       // évite tout état obsolète dans les vues déjà montées).
-      await activer(potagerId)
+      await activer(id)
     } catch {
       setBascule(null)
     }
@@ -82,11 +106,17 @@ export default function PotagerMenu() {
         aria-haspopup="menu"
         aria-expanded={ouvert}
         aria-label="Changer de potager / rejoindre un potager"
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] bg-header-glass max-w-[230px] min-w-0"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-[10px] max-w-[230px] min-w-0 ${
+          consultationArchive ? 'bg-amber-soft text-amber' : 'bg-header-glass'
+        }`}
       >
-        <Sprout size={15} className="shrink-0" />
+        {/* [US-083 / CA6 révisé] Variante « archivé » : icône et couleur
+            reflètent le potager réellement affiché, pas le potager actif serveur. */}
+        {consultationArchive
+          ? <Archive size={15} className="shrink-0" />
+          : <Sprout size={15} className="shrink-0" />}
         {/* [CA5] Troncature en ellipse plutôt que débordement du bandeau. */}
-        <span className="text-[13px] font-semibold truncate min-w-0">{potagerActif.nom}</span>
+        <span className="text-[13px] font-semibold truncate min-w-0">{nomAffiche}</span>
         <ChevronDown size={14} className="shrink-0" />
       </button>
 
@@ -99,8 +129,11 @@ export default function PotagerMenu() {
           {potagers.map((p) => (
             <PopItem
               key={p.id}
-              icon={p.actif ? Check : Sprout}
-              tint={p.actif ? 'brand' : undefined}
+              // [US-083 / CA6 révisé] L'indicateur de sélection suit le potager
+              // affiché (`selectionneId`), le badge « actif » reste indépendant
+              // et reflète toujours l'état serveur réel (`p.actif`).
+              icon={p.id === selectionneId ? Check : Sprout}
+              tint={p.id === selectionneId ? 'brand' : undefined}
               label={p.nom}
               sub={bascule === p.id ? 'Basculement…' : sousTitrePotager(p)}
               onClick={() => basculerVers(p.id)}
@@ -120,12 +153,16 @@ export default function PotagerMenu() {
           {voirArchives && archives.map((p) => (
             <PopItem
               key={p.id}
-              icon={Archive}
+              // [US-083 / CA6 révisé] Même indicateur de sélection que la liste
+              // active, indépendant du badge « archivé » (toujours affiché ici).
+              icon={p.id === selectionneId ? Check : Archive}
+              tint={p.id === selectionneId ? 'brand' : undefined}
               label={p.nom}
               sub={sousTitrePotager(p)}
+              // [US-083 / CA7] Clic sur potager archivé : le consulter en lecture seule
               onClick={() => {
                 setOuvert(false)
-                setParametresPotagerId(p.id)
+                setPotagerId(p.id)
               }}
               right={<Badge tint="amber">archivé</Badge>}
             />

@@ -13,6 +13,7 @@ import { Leaf, Sprout, Scale, AlertTriangle, FileDown, FileJson, ChevronRight } 
 import { api } from '../lib/api.js'
 import { familleDe } from '../lib/familles.js'
 import { useDateRef } from '../context/AppContext.jsx'
+import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -400,6 +401,7 @@ const ORIGINE_OPTIONS = ['Toutes origines', 'Pépinière', 'Pied acheté', 'Semi
 
 export default function Stocks({ refresh }) {
   const { dateRef } = useDateRef()
+  const { potagerId } = usePotager()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -412,12 +414,12 @@ export default function Stocks({ refresh }) {
 
   async function load() {
     setLoading(true); setError(null)
-    try { setData(await api.statsVarietes(dateRef)) }
+    try { setData(await api.statsVarietes(dateRef, potagerId)) }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [refresh, dateRef])
+  useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
   const varietes = useMemo(() => (data?.varietes ?? []).map((d) => ({ ...d, fam: familleDe(d.culture) })), [data])
 

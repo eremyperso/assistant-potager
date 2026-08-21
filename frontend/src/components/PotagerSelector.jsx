@@ -12,7 +12,7 @@ import ParametresPotager from '../views/ParametresPotager.jsx'
 // [US-054 / CA2] `focusCode` : ouverture depuis « Rejoindre un potager » du menu
 // déroulant — le champ code prend le focus pour éviter un clic supplémentaire.
 export default function PotagerSelector({ onClose, focusCode = false }) {
-  const { potagers, activer, accepterInvitation } = usePotager()
+  const { potagers, activer, accepterInvitation, setPotagerId } = usePotager()
   const [enCours, setEnCours] = useState(null)
   const [code, setCode] = useState('')
   const [error, setError] = useState(null)
@@ -134,7 +134,11 @@ export default function PotagerSelector({ onClose, focusCode = false }) {
             {archives.map((p) => (
               <button
                 key={p.id}
-                onClick={() => setParametresPotagerId(p.id)}
+                // [US-083 / CA7] Clic sur potager archivé : le consulter en lecture seule
+                onClick={() => {
+                  setPotagerId(p.id)
+                  onClose()
+                }}
                 className="flex items-center justify-between"
                 style={{
                   background: 'var(--g-sur)', border: '1px dashed var(--g-brd)',

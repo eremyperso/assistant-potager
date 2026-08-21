@@ -105,18 +105,20 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
     }
   }
 
-  // [US-083 / CA8] Désarchiver ne rebascule le potager actif de personne —
-  // un simple rafraîchissement silencieux suffit, jamais de rechargement complet.
+  // [US-083 / CA7 révisé] Même convention que activer/creerPotager/accepterInvitation
+  // (PotagerContext.jsx) : un rechargement complet plutôt qu'une synchronisation
+  // manuelle multi-composants (bandeau + bouton + menu) — cette dernière est la
+  // cause directe de la régression « on reste sur cette modale » observée en
+  // retour terrain. [CA8] Le potager actif de personne n'est rebasculé : le
+  // reload ne fait que rafraîchir l'affichage client, pas l'état serveur.
   async function handleDesarchiver() {
     setLoadingLifecycle(true)
     setErreurLifecycle(null)
     try {
       await api.desarchiverPotager(potagerId)
-      await recharger({ silencieux: true })
-      charger()
+      window.location.reload()
     } catch (e) {
       setErreurLifecycle(e.message)
-    } finally {
       setLoadingLifecycle(false)
     }
   }

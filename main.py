@@ -187,6 +187,25 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
         db.close()
 
 
+def ctx_pour_potager_consulte(db, ctx: TenantContext, potager_id: Optional[int]) -> TenantContext:
+    """[US-083 / CA7] `potager_id` optionnel permet de consulter un autre
+    potager que l'actif (typiquement un potager archivé, en lecture seule) —
+    vérifie l'accès de l'utilisateur et renvoie un TenantContext ciblant ce
+    potager. Sans `potager_id`, renvoie `ctx` (potager actif) inchangé.
+
+    [Test] `isinstance` plutôt que `is None` : les tests qui appellent les
+    fonctions d'endpoint directement (hors résolution FastAPI, cf.
+    `test_us039_observations_frontend.py`) laissent `potager_id` à sa valeur
+    par défaut `Query(default=None)` quand il n'est pas explicitement passé —
+    jamais résolue en `None` puisque `Depends`/`Query` ne s'exécutent pas."""
+    if not isinstance(potager_id, int):
+        return ctx
+    potager_detail = svc_potager_actif.obtenir_potager(db, ctx.user_id, potager_id)
+    if potager_detail is None:
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+    return TenantContext(user_id=ctx.user_id, potager_id=potager_id, role=potager_detail.get("role"))
+
+
 class RegisterRequest(BaseModel):
     email: str
     mot_de_passe: str
@@ -1036,12 +1055,19 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
 
 
 @app.get("/stats")
-def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def stats(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx)
+):
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié.
-    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     db = SessionLocal()
     try:
-        result = svc_stats.calculer_stats(db, ctx, date_ref)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
+        result = svc_stats.calculer_stats(db, use_ctx, date_ref)
         date_ref_effective = result.date_ref_effective
         total = result.total_evenements
         stocks = result.stocks
@@ -1105,18 +1131,24 @@ def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get
 
 
 @app.get("/stats/varietes")
-def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_stats_varietes(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """[US-072] Détail par variété, toutes cultures et tous états confondus (potager /
     semis / pépinière), avec leurs parcelles d'origine réelles — alimente l'écran Stocks
     transverse (US-073). Nouvelle agrégation en lecture seule : ne modifie ni /stats ni
     /godets (CA8), aucune migration BDD (CA9).
-    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        varietes = svc_stock.calcul_stock_varietes(db, ctx, date_ref=dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        varietes = svc_stock.calcul_stock_varietes(db, use_ctx, date_ref=dr)
         # [US-073 CA15] Observations agrégées par culture, même index que /stats —
         # pas de granularité variété côté observations (US-039), le badge remonte
         # donc sur chaque ligne d'une même culture.
@@ -1139,17 +1171,20 @@ def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext 
 def get_rendement(
     annee: int = Query(default=None),
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.
-    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     from utils.stock import calcul_rendement_mensuel
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=use_ctx.potager_id)
         return {"annee": annee_eff, **data}
     finally:
         db.close()
@@ -1159,17 +1194,20 @@ def get_rendement(
 def get_activite(
     annee: int = Query(default=None),
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).
-    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     from utils.stock import calcul_activite_quotidienne
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=use_ctx.potager_id)
         return {
             "annee":         annee_eff,
             "jours":         jours,
@@ -1181,10 +1219,15 @@ def get_activite(
 
 
 @app.get("/plan")
-def get_plan(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_plan(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx)
+):
     """
     [US-024] Plan d'occupation des parcelles pour le dashboard frontend.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
 
     Retourne la liste des parcelles actives avec leurs cultures en cours.
     Les parcelles sans culture sont incluses avec cultures=[].
@@ -1194,11 +1237,13 @@ def get_plan(date_ref: date = Query(default=None), ctx: TenantContext = Depends(
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        parcelles     = svc_plan.get_parcelles(db, ctx)
-        occupation    = svc_plan.get_occupation(db, ctx, dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
+        parcelles     = svc_plan.get_parcelles(db, use_ctx)
+        occupation    = svc_plan.get_occupation(db, use_ctx, dr)
 
         # Index surface_m2 par nom de culture (insensible à la casse)
-        surface_par_culture = svc_plan.surface_par_culture(db, ctx)
+        surface_par_culture = svc_plan.surface_par_culture(db, use_ctx)
 
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
@@ -1290,10 +1335,15 @@ def get_observations(
 
 
 @app.get("/godets")
-def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_godets(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """
     [US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
 
     Utilise calcul_godets() pour un stock agrégé par (culture, variété) avec déduction
     des plantations. Retourne deux listes :
@@ -1306,7 +1356,8 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=use_ctx.potager_id)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0]
         tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0 and not v.get("graines_en_germination")]
         return {
@@ -1323,6 +1374,7 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
 @app.get("/pepiniere/lots")
 def get_pepiniere_lots(
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
@@ -1340,13 +1392,15 @@ def get_pepiniere_lots(
     inchangés (CA5).
 
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
     """
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        lots = svc_stock.calcul_lots_pepiniere(db, ctx, date_ref=dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
         return {
             "lots": [
                 {
@@ -1534,11 +1588,13 @@ def historique(
     from_date : str  = Query(default=None, alias="from"),
     to_date   : str  = Query(default=None, alias="to"),
     date_ref  : date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-027] Retourne les événements paginés avec filtres optionnels.
     [US-030] date_ref optionnel (YYYY-MM-DD) : borne haute, prioritaire sur to_date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
     Ex: /historique?culture=tomate&action=recolte&from=2026-05-01&to=2026-05-31&offset=20
     Retourne : { total: int, evenements: [...], date_ref_effective: str }
     """
@@ -1549,8 +1605,10 @@ def historique(
     effective_to = dr.isoformat() if dr else to_date
     db = SessionLocal()
     try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
         total, events = svc_evenements.lister_evenements(
-            db, ctx,
+            db, use_ctx,
             limit=limit, offset=offset, action=action, culture=culture,
             parcelle=parcelle, from_date=from_date, to_date=effective_to,
         )

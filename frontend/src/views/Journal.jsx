@@ -22,6 +22,7 @@ import {
   NotebookText, MoreHorizontal,
 } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { usePotager } from '../context/PotagerContext.jsx'
 import { phraseEvenement, libelleAction, grouperParJour } from '../lib/journal.js'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -211,6 +212,7 @@ function EventRow({ e, last }) {
 // ── Vue principale ────────────────────────────────────────────────────────────
 
 export default function Journal({ refresh }) {
+  const { potagerId } = usePotager()
   const [data, setData]                 = useState({ total: 0, evenements: [] })
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
@@ -228,6 +230,8 @@ export default function Journal({ refresh }) {
       const categorie = CATEGORIE_PAR_LABEL[actionFilter]
       if (categorie) params.action = categorie.valeurs.join(',')
       if (dateFilter) { params.from = dateFilter; params.to = dateFilter }
+      // [US-083 / CA7] Si on consulte un potager archivé, passer son ID
+      if (potagerId) params.potager_id = potagerId
       setData(await api.historique(params))
     } catch (e) {
       setError(e.message)
@@ -239,7 +243,7 @@ export default function Journal({ refresh }) {
   // [CA4] Un changement de filtre transmis au serveur ramène à la première page.
   // Le filtre culture reste un filtrage local de la page déjà chargée : il ne
   // recharge rien et ne modifie donc pas la pagination (comme avant la refonte).
-  useEffect(() => { setPage(0); load(0) }, [refresh, actionFilter, dateFilter])
+  useEffect(() => { setPage(0); load(0) }, [refresh, actionFilter, dateFilter, potagerId])
   useEffect(() => { load(page) }, [page])
 
   const evenements = data.evenements || []

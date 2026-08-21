@@ -17,6 +17,7 @@ import {
   filtrerParcelles, parcelleSelectionnee,
 } from '../lib/plan.js'
 import { useDateRef } from '../context/AppContext.jsx'
+import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -229,6 +230,7 @@ function DetailParcelle({ parcelle, moisRef }) {
 
 export default function Plan({ refresh }) {
   const { dateRef } = useDateRef()
+  const { potagerId } = usePotager()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -239,7 +241,8 @@ export default function Plan({ refresh }) {
     setLoading(true)
     setError(null)
     try {
-      setData(await api.plan(dateRef))
+      // [US-083 / CA7] Si on consulte un potager archivé, passer son ID
+      setData(await api.plan(dateRef, potagerId))
     } catch (e) {
       setError(e.message)
     } finally {
@@ -247,7 +250,7 @@ export default function Plan({ refresh }) {
     }
   }
 
-  useEffect(() => { load() }, [refresh, dateRef])
+  useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
   const parcelles = data?.parcelles ?? []
 

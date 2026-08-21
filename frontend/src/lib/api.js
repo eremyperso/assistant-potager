@@ -143,22 +143,24 @@ function qs(params) {
 export const api = {
   health:     () => get('/health'),
   // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
-  plan:       (dateRef) => get(`/plan${dateRef ? qs({ date_ref: dateRef }) : ''}`),
-  stats:      (dateRef) => get(`/stats${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
+  plan:       (dateRef, potagerId) => get(`/plan${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  stats:      (dateRef, potagerId) => get(`/stats${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-072] Détail par variété toutes cultures confondues, avec parcelles — écran Stocks (US-073)
-  statsVarietes: (dateRef) => get(`/stats/varietes${dateRef ? qs({ date_ref: dateRef }) : ''}`),
-  godets:     (dateRef) => get(`/godets${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  godets:     (dateRef, potagerId) => get(`/godets${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   cultures:   () => get('/cultures'),
   historique: (params = {}) => get(`/historique${qs(params)}`),
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
   // [US-075/US-076] Météo du jour + prévision 5 jours sur la localisation du
   // potager actif — `{ localisation_manquante: true }` si non renseignée (CA4).
   meteo: () => get('/meteo'),
-  activite:     (annee, dateRef) => get(`/stats/activite${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
-  rendement:    (annee, dateRef) => get(`/stats/rendement${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
+  activite:     (annee, dateRef, potagerId) => get(`/stats/activite${qs({ annee, ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  rendement:    (annee, dateRef, potagerId) => get(`/stats/rendement${qs({ annee, ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-065/US-061] Pépinière lot de semis par lot de semis — lecture distincte de
   // `/godets`, qui reste agrégée par culture + variété pour Stocks, Stats et le bot.
-  pepiniereLots: (dateRef) => get(`/pepiniere/lots${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
+  pepiniereLots: (dateRef, potagerId) => get(`/pepiniere/lots${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-061 CA10] `semisId` / `sansSemisRattache` ciblent le lot ouvert ; sans eux
   // l'endpoint conserve son comportement agrégé (culture + variété).
   godetsDetail: (culture, variete, { semisId, sansSemisRattache } = {}) => {
