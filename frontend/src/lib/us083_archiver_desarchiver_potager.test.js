@@ -2,10 +2,14 @@
 // `npm test` (`node --test`, même approche que us081/us082).
 //
 // Verrouille mécaniquement : la double confirmation (CA3), le masquage par
-// défaut des archivés + bascule d'affichage dans PotagerMenu et PotagerSelector
-// (CA6), le bandeau permanent de consultation (CA7), et le fait que le
-// désarchivage ne rebascule jamais le potager actif (CA8). Le rendu visuel
-// (badges, bandeau, positionnement) relève de la validation visuelle du QA.
+// défaut des archivés + bascule d'affichage dans PotagerMenu (CA6), le
+// bandeau permanent de consultation (CA7), et le fait que le désarchivage ne
+// rebascule jamais le potager actif (CA8). Le rendu visuel (badges, bandeau,
+// positionnement) relève de la validation visuelle du QA.
+//
+// [Refonte visuelle 2026] `PotagerSelector.jsx` (Lot D, jamais migré au
+// design system) a été supprimé avec son unique point d'entrée (« Tous mes
+// potagers ») — la vérification CA6 ne porte plus que sur PotagerMenu.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -16,7 +20,6 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..')
 const lireSrc = (chemin) => readFileSync(join(SRC, chemin), 'utf8')
 
 const MENU = lireSrc('components/PotagerMenu.jsx')
-const SELECTOR = lireSrc('components/PotagerSelector.jsx')
 const ECRAN = lireSrc('views/ParametresPotager.jsx')
 const MODALE_ARCHIVER = lireSrc('components/ModalArchiverPotager.jsx')
 const API = lireSrc('lib/api.js')
@@ -61,9 +64,9 @@ test("[CA8] désarchiver ne recharge jamais la page entière — pas de rebascul
   assert.match(bloc, /recharger\(\{ silencieux: true \}\)/)
 })
 
-// ── CA6 — Masquage par défaut + bascule d'affichage, PotagerMenu et Selector ─
+// ── CA6 — Masquage par défaut + bascule d'affichage, PotagerMenu ────────────
 
-for (const [nom, source] of [['PotagerMenu', MENU], ['PotagerSelector', SELECTOR]]) {
+for (const [nom, source] of [['PotagerMenu', MENU]]) {
   test(`[CA6] ${nom} masque les archivés par défaut et propose une bascule d'affichage`, () => {
     assert.match(source, /voirArchives/)
     assert.match(source, /etat === 'archive'/)

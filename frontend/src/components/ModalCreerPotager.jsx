@@ -5,9 +5,8 @@
 // Action rare et explicite : ni étape parcelles, ni étape cultures (CA2) —
 // l'utilisateur est déjà expérimenté et complétera dans les écrans dédiés.
 //
-// [CA8] Un seul composant pour les deux points d'entrée : le menu potager
-// (PotagerMenu) et la vue « Tous mes potagers » (PotagerSelector). Le wrapper
-// porte donc `@container` et non des breakpoints d'écran (cf. CLAUDE.md).
+// Composant réutilisable au sens de CLAUDE.md (règle des container queries) :
+// le wrapper porte donc `@container`, jamais de breakpoint d'écran.
 import { useState } from 'react'
 import { Sprout, AlertTriangle } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'

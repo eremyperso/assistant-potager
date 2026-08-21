@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight, Settings, Plus, Archive, Trash2 } from 'lucide-react'
+import { Sprout, ChevronDown, Check, Settings, Plus, Archive } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
 import { libelleRole } from '../lib/roles.js'
-import PotagerSelector from './PotagerSelector.jsx'
 import ParametresPotager from '../views/ParametresPotager.jsx'
 import ModalCreerPotager from './ModalCreerPotager.jsx'
+import ModalRejoindrePotager from './ModalRejoindrePotager.jsx'
 import ModalCorbeillePotagers from './ModalCorbeillePotagers.jsx'
 
 /**
@@ -15,11 +15,11 @@ import ModalCorbeillePotagers from './ModalCorbeillePotagers.jsx'
  * Remplace le bouton texte qui ouvrait directement une modale : le nom du
  * potager actif ouvre désormais un menu déroulant listant les potagers de
  * l'utilisateur (rôle, parcelles, membres), suivi des actions « Créer un
- * nouveau potager » (US-081), « Rejoindre un potager » et « Tous mes
- * potagers » [CA1, CA2].
+ * nouveau potager » (US-081) et « Rejoindre un potager » (code d'invitation,
+ * US-048) [CA1, CA2].
  *
  * Aucune logique métier ici : la bascule et l'adhésion restent portées par
- * `PotagerContext` (US-046) et `PotagerSelector` (US-048).
+ * `PotagerContext` (US-046).
  */
 /** « Éditeur · 3 parcelles · 2 membres » — accorde les pluriels. */
 function sousTitrePotager({ role, nb_parcelles = 0, nb_membres = 0 }) {
@@ -28,10 +28,19 @@ function sousTitrePotager({ role, nb_parcelles = 0, nb_membres = 0 }) {
   return `${libelleRole(role)} · ${parcelles} · ${membres}`
 }
 
+/** Lien texte du bandeau d'actions secondaires — plus discret qu'un `PopItem`. */
+function PopLink({ label, onClick }) {
+  return (
+    <button onClick={onClick} className="text-left text-[11.5px] font-semibold text-txt3 hover:text-txt2">
+      {label}
+    </button>
+  )
+}
+
 export default function PotagerMenu() {
   const { potagers, potagerActif, activer, potagerId, setPotagerId } = usePotager()
   const [ouvert, setOuvert] = useState(false)
-  const [modale, setModale] = useState(null) // null | 'liste' | 'rejoindre' | 'creer' | 'corbeille'
+  const [modale, setModale] = useState(null) // null | 'rejoindre' | 'creer' | 'corbeille'
   const [bascule, setBascule] = useState(null)
   // [US-083 / CA6 révisé] Détail du potager consulté (archivé) — le bouton de
   // sélection en en-tête doit refléter le potager réellement affiché, pas
@@ -185,45 +194,11 @@ export default function PotagerMenu() {
             }}
           />
 
-          {/* [US-084 / CA6] Corbeille — point d'accès dédié à la restauration.
-              Voisine immédiate de « Voir les potagers archivés » : les deux
-              montrent des potagers absents de la liste principale, à un stade
-              différent du cycle de vie. Le décompte n'est pas préchargé ici :
-              la corbeille est vide en régime normal, la charger à chaque
-              ouverture du menu coûterait une requête pour rien. */}
-          <PopItem
-            icon={Trash2}
-            label="Corbeille"
-            sub="Restaurer un potager supprimé"
-            onClick={() => {
-              setOuvert(false)
-              setModale('corbeille')
-            }}
-          />
-
-          {/* [CA2] Seul accès permanent au code d'invitation (cf. US-048 / CA4). */}
-          <PopItem
-            icon={KeyRound}
-            label="Rejoindre un potager"
-            sub="Avec un code d'invitation"
-            onClick={() => {
-              setOuvert(false)
-              setModale('rejoindre')
-            }}
-          />
-          <PopItem
-            icon={ArrowLeftRight}
-            label="Tous mes potagers"
-            sub="Comparer et basculer"
-            onClick={() => {
-              setOuvert(false)
-              setModale('liste')
-            }}
-          />
-
           {/* [US-082 / CA1, CA6] Remplace « Modifier le potager » (US-074) — pas de
               doublon d'accès. Visible quel que soit le rôle : l'écran lui-même
-              adapte son contenu (lecture seule pour editor/lecteur, CA6). */}
+              adapte son contenu (lecture seule pour editor/lecteur, CA6).
+              Regroupée avec « Créer » : les deux actions structurantes sur le
+              potager actif, juste avant les actions secondaires. */}
           <PopItem
             icon={Settings}
             label="Paramètres du potager"
@@ -233,12 +208,37 @@ export default function PotagerMenu() {
               setParametresPotagerId(potagerActif.id)
             }}
           />
+
+          {/* Bandeau d'actions secondaires — fond distinct, en liens texte plutôt
+              qu'en items pleine largeur : ce sont des accès de repli (code
+              d'invitation, restauration), pas des actions structurantes sur le
+              potager actif. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3.5 py-2.5 border-t border-border-soft bg-card-alt">
+            {/* [CA2] Seul accès permanent au code d'invitation (cf. US-048 / CA4). */}
+            <PopLink
+              label="Rejoindre un potager"
+              onClick={() => {
+                setOuvert(false)
+                setModale('rejoindre')
+              }}
+            />
+            {/* [US-084 / CA6] Corbeille — point d'accès dédié à la restauration,
+                distinct de « Voir les potagers archivés » ci-dessus (deux stades
+                différents du cycle de vie). Le décompte n'est pas préchargé ici :
+                la corbeille est vide en régime normal, la charger à chaque
+                ouverture du menu coûterait une requête pour rien. */}
+            <PopLink
+              label="Corbeille"
+              onClick={() => {
+                setOuvert(false)
+                setModale('corbeille')
+              }}
+            />
+          </div>
         </Pop>
       )}
 
-      {(modale === 'liste' || modale === 'rejoindre') && (
-        <PotagerSelector focusCode={modale === 'rejoindre'} onClose={() => setModale(null)} />
-      )}
+      {modale === 'rejoindre' && <ModalRejoindrePotager onClose={() => setModale(null)} />}
       {parametresPotagerId != null && (
         <ParametresPotager potagerId={parametresPotagerId} onClose={() => setParametresPotagerId(null)} />
       )}

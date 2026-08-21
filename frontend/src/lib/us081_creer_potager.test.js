@@ -3,9 +3,14 @@
 // même approche que us064_dette_alias.test.js).
 //
 // Verrouille mécaniquement ce qui est vérifiable sans moteur de rendu : présence
-// des deux points d'entrée (CA1, CA8), composition de la modale (CA2, CA3, CA6),
+// du point d'entrée (CA1), composition de la modale (CA2, CA3, CA6),
 // réutilisation du design system et règle projet des container queries.
 // L'apparence elle-même relève de la validation visuelle du QA.
+//
+// [Refonte visuelle 2026] CA8 (miroir dans « Tous mes potagers ») retiré avec
+// l'entrée elle-même : la liste des potagers en tête de `PotagerMenu` remplit
+// déjà ce rôle, et `PotagerSelector.jsx` (Lot D, jamais migré au design
+// system) a été supprimé plutôt que laissé orphelin.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
@@ -17,7 +22,6 @@ const lireSrc = (chemin) => readFileSync(join(SRC, chemin), 'utf8')
 
 const MODALE = lireSrc('components/ModalCreerPotager.jsx')
 const MENU = lireSrc('components/PotagerMenu.jsx')
-const SELECTOR = lireSrc('components/PotagerSelector.jsx')
 const CONTEXTE = lireSrc('context/PotagerContext.jsx')
 const API = lireSrc('lib/api.js')
 
@@ -32,10 +36,9 @@ test("[CA1] l'entrée est placée après la liste des potagers et avant « Rejoi
   const liste = MENU.indexOf('potagers.map(')
   const creer = MENU.indexOf('label="Créer un nouveau potager"')
   const rejoindre = MENU.indexOf('label="Rejoindre un potager"')
-  const tous = MENU.indexOf('label="Tous mes potagers"')
-  assert.ok(liste !== -1 && creer !== -1 && rejoindre !== -1 && tous !== -1)
+  assert.ok(liste !== -1 && creer !== -1 && rejoindre !== -1)
   assert.ok(liste < creer, "l'entrée doit venir après la liste des potagers")
-  assert.ok(creer < rejoindre && creer < tous, "l'entrée doit précéder Rejoindre / Tous mes potagers")
+  assert.ok(creer < rejoindre, "l'entrée doit précéder Rejoindre un potager")
 })
 
 test("[CA1] l'entrée ne dépend d'aucun rôle, contrairement à « Modifier le potager »", () => {
@@ -44,24 +47,6 @@ test("[CA1] l'entrée ne dépend d'aucun rôle, contrairement à « Modifier le 
   const garde = MENU.indexOf("potagerActif.role === 'owner'")
   const creer = MENU.indexOf('label="Créer un nouveau potager"')
   assert.ok(garde === -1 || creer < garde, "l'entrée de création ne doit pas être sous la garde owner")
-})
-
-// ── CA8 — Miroir dans « Tous mes potagers » ────────────────────────────────
-
-test('[CA8] PotagerSelector expose le même point d\'entrée et réutilise la même modale', () => {
-  assert.match(SELECTOR, /Créer un nouveau potager/)
-  assert.match(SELECTOR, /import ModalCreerPotager from '\.\/ModalCreerPotager\.jsx'/)
-})
-
-test('[CA8] une seule implémentation de modale de création dans tout le frontend', () => {
-  // Deux chemins, un seul composant : personne ne duplique le formulaire.
-  for (const [nom, source] of [['PotagerMenu', MENU], ['PotagerSelector', SELECTOR]]) {
-    assert.equal(
-      /<form/.test(source) && /creerPotager/.test(source),
-      false,
-      `${nom} ne doit pas embarquer son propre formulaire de création`
-    )
-  }
 })
 
 // ── CA2 — Modale légère : nom + ville, rien d'autre ────────────────────────
