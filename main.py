@@ -23,12 +23,15 @@ réputés vérifiés (migration_v24.sql).
 
 Onboarding self-service [US-048] :
   POST   /potagers                              → créer un potager (owner + potager actif)
+  GET    /potagers/{id}                          → détail d'un potager, réservé à ses membres [US-082]
   PATCH  /potagers/{id}                          → modifier nom/ville/localisation (owner) [US-074]
   POST   /parcelles                              → créer une parcelle (editor min.) [US-058]
   POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
   POST   /invitations/{code}/accepter            → accepter une invitation
   GET    /potagers/{id}/membres                  → lister les membres d'un potager
   DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
+  POST   /potagers/{id}/archiver                 → archiver un potager, lecture seule (owner) [US-083]
+  POST   /potagers/{id}/desarchiver              → désarchiver un potager (owner) [US-083]
 
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
@@ -73,7 +76,7 @@ from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
-from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
@@ -418,13 +421,19 @@ def auth_delier(user: User = Depends(get_current_user)):
 
 
 @app.get("/potagers")
-def lister_potagers(user: User = Depends(get_current_user)):
+def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user)):
     """[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager
     actif marqué. Identité seule : une liste vide est une réponse valide (CA5),
-    pas une erreur — c'est au frontend de proposer la création/adhésion."""
+    pas une erreur — c'est au frontend de proposer la création/adhésion.
+
+    [US-080 / CA5] `etat` filtre le cycle de vie : `actif` (défaut),
+    `archive` ou `tous`. Un potager supprimé n'apparaît dans aucun cas."""
     db = SessionLocal()
     try:
-        potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id)
+        try:
+            potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id, etat)
+        except svc_potager_actif.FiltreEtatInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         potager_actif_id = None
         if potagers:
             try:
@@ -442,6 +451,10 @@ def lister_potagers(user: User = Depends(get_current_user)):
                     "id": p.id,
                     "nom": p.nom,
                     "actif": p.id == potager_actif_id,
+                    # [US-080 / CA5] État du cycle de vie ('actif' | 'archive'),
+                    # à ne pas confondre avec `actif` ci-dessus qui désigne le
+                    # potager actuellement sélectionné par l'utilisateur.
+                    "etat": p.etat,
                     # [US-048] rôle exposé pour que le frontend affiche la gestion
                     # des membres (inviter/retirer) uniquement aux owners.
                     "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
@@ -461,6 +474,24 @@ def lister_potagers(user: User = Depends(get_current_user)):
         db.close()
 
 
+@app.get("/potagers/{potager_id}")
+def detail_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-082 / CA2, CA6, CA7, CA8] Détail d'un potager pour l'écran Paramètres
+    — réservé à ses membres, quel que soit leur rôle (CA6 : le frontend adapte
+    l'affichage aux droits, cette lecture reste ouverte à tout membre). Un
+    potager inexistant, supprimé ou dont l'appelant n'est pas membre reçoit le
+    même refus générique, sans révéler laquelle de ces situations s'applique
+    (même principe que GET /potagers/{id}/membres)."""
+    db = SessionLocal()
+    try:
+        detail = svc_potager_actif.obtenir_potager(db, user.id, potager_id)
+        if detail is None:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return detail
+    finally:
+        db.close()
+
+
 @app.post("/potagers/{potager_id}/activer")
 def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
     """[US-046 / CA2, CA3, CA4] Change le potager actif de l'utilisateur connecté."""
@@ -470,6 +501,10 @@ def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
             nouveau_ctx = svc_potager_actif.definir_potager_actif(db, user.id, potager_id)
         except svc_potager_actif.PotagerNonMembreError:
             raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        except svc_potager_actif.PotagerInactifError as e:
+            # [US-080 / CA6] 409 et non 403 : les droits sont là, c'est l'état du
+            # potager qui bloque — le désarchivage (US-083) lève l'obstacle.
+            raise HTTPException(status_code=409, detail=str(e))
         return {"potager_id": nouveau_ctx.potager_id, "role": nouveau_ctx.role}
     finally:
         db.close()
@@ -480,6 +515,9 @@ class CreerPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-081 / CA3, CA4] Bascule sur le potager créé. `True` par défaut :
+    # l'onboarding (US-058) n'envoie pas ce champ et ne doit rien changer.
+    activer: bool = True
 
 
 class ModifierPotagerRequest(BaseModel):
@@ -499,13 +537,29 @@ def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_use
     """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
     ce potager devient son potager actif. Identité seule (pas de potager requis
     au préalable, CA7). [US-074 / CA3] `ville` est optionnelle, choisie via le
-    module de recherche de ville unifié."""
+    module de recherche de ville unifié.
+
+    [US-081 / CA3, CA4, CA7] Sert aussi la création d'un potager **additionnel**
+    depuis la PWA : `activer=false` crée le potager sans quitter le potager
+    courant. Un nom déjà porté par un autre potager de l'utilisateur reste
+    autorisé (l'avertissement est purement informatif, côté interface)."""
     if not req.nom or not req.nom.strip():
         raise HTTPException(status_code=400, detail="Nom de potager requis")
     db = SessionLocal()
     try:
-        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude)
-        return {"id": potager.id, "nom": potager.nom, "ville": potager.ville}
+        potager = svc_potagers.creer_potager(
+            db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude, activer=req.activer,
+        )
+        utilisateur = db.query(User).filter(User.id == user.id).first()
+        return {
+            "id": potager.id,
+            "nom": potager.nom,
+            "ville": potager.ville,
+            "etat": potager.etat,  # [US-080] toujours 'actif' à la création
+            # Bascule réellement effectuée : `activer=false` reste sans effet
+            # pour un utilisateur qui n'avait encore aucun potager actif.
+            "actif": utilisateur.potager_actif_id == potager.id,
+        }
     finally:
         db.close()
 
@@ -649,6 +703,46 @@ def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = De
     finally:
         db.close()
 
+
+def _potager_lifecycle_response(potager: Potager) -> dict:
+    return {
+        "id": potager.id,
+        "etat": potager.etat,
+        "archive_le": potager.archive_le.isoformat() + "Z" if potager.archive_le else None,
+    }
+
+
+@app.post("/potagers/{potager_id}/archiver")
+def archiver_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-083 / CA1, CA2, CA5, CA9] Archive un potager — owner uniquement.
+    Passe en lecture seule (CA4) ; invalide le potager actif des membres qui
+    pointaient dessus (CA5) ; notifie les autres membres liés à Telegram (CA9)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.archiver_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/desarchiver")
+def desarchiver_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-083 / CA2, CA8, CA9] Désarchive un potager — owner uniquement.
+    Rend l'écriture immédiatement possible, sans rebasculer le potager actif
+    de qui que ce soit (CA8) ; notifie les autres membres liés à Telegram (CA9)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.desarchiver_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
 _sessions: dict[str, list[dict]] = {}
@@ -782,6 +876,9 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     except PermissionInsuffisanteError as e:
         db.rollback()
         raise HTTPException(status_code=403, detail=str(e))
+    except PotagerArchiveError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
@@ -881,6 +978,9 @@ async def voice(
         except PermissionInsuffisanteError as e:
             db.rollback()
             raise HTTPException(status_code=403, detail=str(e))
+        except PotagerArchiveError as e:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(e))
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erreur base : {e}")

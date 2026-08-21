@@ -3,8 +3,11 @@
 // endroit accessible à tout moment (pas uniquement au premier onboarding,
 // cf. views/Onboarding.jsx, US-058) pour rejoindre un potager supplémentaire.
 import { useState, useRef, useEffect } from 'react'
-import { X, Sprout, Check } from 'lucide-react'
+import { X, Sprout, Check, Plus, Archive } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { api } from '../lib/api.js'
+import ModalCreerPotager from './ModalCreerPotager.jsx'
+import ParametresPotager from '../views/ParametresPotager.jsx'
 
 // [US-054 / CA2] `focusCode` : ouverture depuis « Rejoindre un potager » du menu
 // déroulant — le champ code prend le focus pour éviter un clic supplémentaire.
@@ -14,7 +17,30 @@ export default function PotagerSelector({ onClose, focusCode = false }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState(null)
   const [rejoindre, setRejoindre] = useState(false)
+  // [US-081 / CA8] Miroir du menu potager : le même composant de modale de
+  // creation est accessible depuis cette vue « Tous mes potagers ».
+  const [creation, setCreation] = useState(false)
+  // [US-083 / CA6] Archivés masqués par défaut, chargés à la demande ; un clic
+  // ouvre Paramètres en lecture (CA7) plutôt qu'une activation refusée (CA6).
+  const [voirArchives, setVoirArchives] = useState(false)
+  const [archives, setArchives] = useState([])
+  const [chargementArchives, setChargementArchives] = useState(false)
+  const [parametresPotagerId, setParametresPotagerId] = useState(null)
   const champCode = useRef(null)
+
+  async function basculerVoirArchives() {
+    const prochain = !voirArchives
+    setVoirArchives(prochain)
+    if (prochain && archives.length === 0) {
+      setChargementArchives(true)
+      try {
+        const res = await api.potagers('tous')
+        setArchives(res.potagers.filter((p) => p.etat === 'archive'))
+      } finally {
+        setChargementArchives(false)
+      }
+    }
+  }
 
   useEffect(() => {
     if (focusCode) champCode.current?.focus()
@@ -46,6 +72,7 @@ export default function PotagerSelector({ onClose, focusCode = false }) {
   }
 
   return (
+    <>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-6"
       style={{ background: 'rgba(0,0,0,0.5)' }}
@@ -88,6 +115,52 @@ export default function PotagerSelector({ onClose, focusCode = false }) {
           ))}
         </div>
 
+        {/* [US-083 / CA6] Bascule d'affichage des potagers archivés. */}
+        <button
+          onClick={basculerVoirArchives}
+          className="flex items-center gap-2 w-full"
+          style={{
+            marginTop: 8, background: 'transparent', border: 'none',
+            padding: '6px 2px', color: 'var(--g-sec)', fontSize: 12,
+          }}
+        >
+          <Archive size={13} />
+          {chargementArchives
+            ? 'Chargement…'
+            : voirArchives ? 'Masquer les potagers archivés' : 'Voir les potagers archivés'}
+        </button>
+        {voirArchives && (
+          <div className="flex flex-col gap-2" style={{ marginTop: 4 }}>
+            {archives.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setParametresPotagerId(p.id)}
+                className="flex items-center justify-between"
+                style={{
+                  background: 'var(--g-sur)', border: '1px dashed var(--g-brd)',
+                  borderRadius: 12, padding: '10px 12px', color: 'var(--g-sec)',
+                }}
+              >
+                <span className="flex items-center gap-2"><Archive size={14} />{p.nom}</span>
+                <span style={{ fontSize: 11 }}>archivé</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* [US-081 / CA8] Meme point d'entree que dans PotagerMenu, place apres
+            la liste et avant l'adhesion par code — deux chemins, une modale. */}
+        <button
+          onClick={() => setCreation(true)}
+          className="flex items-center gap-2 w-full"
+          style={{
+            marginTop: 10, background: 'var(--g-sur)', border: '1px dashed var(--g-brd)',
+            borderRadius: 12, padding: '10px 12px', color: 'var(--g-pri)', fontSize: 13,
+          }}
+        >
+          <Plus size={16} /> Créer un nouveau potager
+        </button>
+
         <div style={{ borderTop: '1px solid var(--g-brd)', marginTop: 14, paddingTop: 14 }}>
           <p style={{ fontSize: 12, color: 'var(--g-sec)', marginBottom: 8 }}>
             Rejoindre un autre potager avec un code d'invitation
@@ -121,5 +194,12 @@ export default function PotagerSelector({ onClose, focusCode = false }) {
         </div>
       </div>
     </div>
+    {/* Frere de l'overlay, jamais enfant : un clic hors de la modale de creation
+        ne doit fermer que celle-ci, pas la vue « Tous mes potagers » derriere. */}
+    {creation && <ModalCreerPotager onClose={() => setCreation(false)} />}
+    {parametresPotagerId != null && (
+      <ParametresPotager potagerId={parametresPotagerId} onClose={() => setParametresPotagerId(null)} />
+    )}
+    </>
   )
 }

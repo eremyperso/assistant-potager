@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.services.context import TenantContext
 from app.services.permissions import require_role
 from app.services import potager_actif as svc_potager_actif
+from app.services import telegram_notify as svc_telegram_notify
 from database.models import Invitation, Potager, PotagerMembre, User
 
 log = logging.getLogger("potager")
@@ -73,6 +74,7 @@ def creer_potager(
     ville: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    activer: bool = True,
 ) -> Potager:
     """[CA1, CA2] Crée un potager — l'utilisateur en devient owner et ce potager
     devient immédiatement son potager actif. La localisation est simplement
@@ -80,7 +82,17 @@ def creer_potager(
 
     [US-074] `ville` est le libellé choisi par l'utilisateur dans le module de
     recherche de ville (géocodage Open-Meteo côté frontend) — jamais recalculé
-    côté serveur."""
+    côté serveur.
+
+    [US-081 / CA4] `activer` pilote la bascule. Sa valeur par défaut reproduit
+    le comportement historique (l'onboarding US-058 en dépend) ; un jardinier
+    qui crée un potager additionnel en pleine saison peut au contraire rester
+    sur son potager courant. Dans les deux cas la création est atomique et le
+    potager naît à l'état `actif` (US-080) — jamais de brouillon.
+
+    Un utilisateur qui n'a encore aucun potager actif se voit toujours attribuer
+    celui-ci, même avec `activer=False` : le laisser sans potager actif le
+    renverrait sur l'onboarding (409 « aucun potager », cf. US-046 / CA5)."""
     potager = Potager(nom=nom, ville=ville, latitude=latitude, longitude=longitude, proprietaire_id=user_id)
     db.add(potager)
     db.commit()
@@ -88,10 +100,14 @@ def creer_potager(
 
     db.add(PotagerMembre(user_id=user_id, potager_id=potager.id, role="owner"))
     user = db.query(User).filter(User.id == user_id).first()
-    user.potager_actif_id = potager.id
+    if activer or user.potager_actif_id is None:
+        user.potager_actif_id = potager.id
     db.commit()
 
-    log.info("[US-048] Potager créé : potager_id=%s nom=%r owner_id=%s", potager.id, nom, user_id)
+    log.info(
+        "[US-048] Potager créé : potager_id=%s nom=%r owner_id=%s actif=%s",
+        potager.id, nom, user_id, user.potager_actif_id == potager.id,
+    )
     return potager
 
 
@@ -124,6 +140,77 @@ def modifier_potager(
     db.refresh(potager)
 
     log.info("[US-074] Potager modifié : potager_id=%s par=%s", potager_id, user_id)
+    return potager
+
+
+def _notifier_cycle_vie(db: Session, potager: Potager, acteur_id: int, texte_action: str) -> None:
+    """[US-083 / CA9] Notifie chaque AUTRE membre du potager ayant un compte
+    Telegram lié — l'acteur de l'action n'a pas besoin de se notifier lui-même.
+    Best-effort : `telegram_notify.envoyer_message` n'échoue jamais bruyamment,
+    donc l'absence de liaison ou une panne Telegram ne remonte jamais ici."""
+    acteur = db.query(User).filter(User.id == acteur_id).first()
+    nom_acteur = (acteur.nom or acteur.email) if acteur else "Un membre"
+
+    membres = (
+        db.query(PotagerMembre, User)
+        .join(User, User.id == PotagerMembre.user_id)
+        .filter(PotagerMembre.potager_id == potager.id, PotagerMembre.user_id != acteur_id)
+        .all()
+    )
+    for _membre, membre_user in membres:
+        if membre_user.telegram_chat_id is None:
+            continue
+        texte = f"{nom_acteur} a {texte_action} le potager « {potager.nom} »."
+        svc_telegram_notify.envoyer_message(membre_user.telegram_chat_id, texte)
+
+
+def archiver_potager(db: Session, user_id: int, potager_id: int) -> Potager:
+    """[US-083 / CA1, CA2, CA5, CA9] Un owner archive son potager : il passe en
+    lecture seule (CA4 refuse toute écriture d'événement tant qu'il le reste).
+
+    [CA5] Pour chaque membre dont ce potager était le potager actif, celui-ci
+    est invalidé — même mécanisme que `retirer_membre` (US-048), généralisé à
+    tous les membres plutôt qu'à un seul. La ré-sélection automatique d'un
+    autre potager (ou le retour à `NULL`) reste portée par
+    `resoudre_tenant_context`, appelée paresseusement à la prochaine requête de
+    chaque membre concerné — aucune bascule ne doit être recalculée ici."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "archiver ce potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    potager.etat = svc_potager_actif.ETAT_ARCHIVE
+    potager.archive_le = datetime.utcnow()
+
+    membres = db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id).all()
+    for membre in membres:
+        membre_user = db.query(User).filter(User.id == membre.user_id).first()
+        if membre_user.potager_actif_id == potager_id:
+            membre_user.potager_actif_id = None  # [CA5] invalidation, bascule reprise au prochain accès
+
+    db.commit()
+    db.refresh(potager)
+
+    log.info("[US-083] Potager archivé : potager_id=%s par=%s", potager_id, user_id)
+    _notifier_cycle_vie(db, potager, user_id, "archivé")
+    return potager
+
+
+def desarchiver_potager(db: Session, user_id: int, potager_id: int) -> Potager:
+    """[US-083 / CA2, CA8, CA9] Un owner désarchive son potager : l'écriture y
+    redevient immédiatement possible. Ne rebascule le potager actif de
+    personne (CA8) — aucune invalidation ni ré-sélection ici, contrairement à
+    l'archivage."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "désarchiver ce potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    potager.etat = svc_potager_actif.ETAT_ACTIF
+    potager.archive_le = None
+    db.commit()
+    db.refresh(potager)
+
+    log.info("[US-083] Potager désarchivé : potager_id=%s par=%s", potager_id, user_id)
+    _notifier_cycle_vie(db, potager, user_id, "désarchivé")
     return potager
 
 

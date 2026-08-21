@@ -183,11 +183,20 @@ export const api = {
   // [US-050 / CA1] Dissocie le chat Telegram lié au compte — identité seule, sans corps de requête
   delierTelegram: () => post('/auth/lien/delier'),
   // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur
-  potagers: () => get('/potagers'),
+  // [US-083 / CA6] `etat` optionnel : 'tous' inclut les potagers archivés (défaut serveur : 'actif' seul)
+  potagers: (etat) => get(`/potagers${etat ? qs({ etat }) : ''}`),
+  // [US-082 / CA2, CA7] Détail d'un potager pour l'écran Paramètres — réservé à ses membres
+  potager: (potagerId) => get(`/potagers/${potagerId}`),
   activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
+  // [US-083 / CA1] Archiver/désarchiver un potager — owner uniquement
+  archiverPotager: (potagerId) => post(`/potagers/${potagerId}/archiver`),
+  desarchiverPotager: (potagerId) => post(`/potagers/${potagerId}/desarchiver`),
   // [US-048] Création de potager, invitations et gestion des membres (owner)
   // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch (géocodage Open-Meteo)
-  creerPotager: (nom, ville, latitude, longitude) => post('/potagers', { nom, ville, latitude, longitude }),
+  // [US-081 / CA3, CA4] `activer` pilote la bascule sur le potager créé — omis,
+  // le serveur bascule (comportement d'origine, dont dépend l'onboarding US-058).
+  creerPotager: (nom, ville, latitude, longitude, activer = true) =>
+    post('/potagers', { nom, ville, latitude, longitude, activer }),
   // [US-074 / CA4, CA5] Modification (nom/ville/localisation) d'un potager déjà créé — owner uniquement
   modifierPotager: (potagerId, { nom, ville, latitude, longitude } = {}) =>
     patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude }),

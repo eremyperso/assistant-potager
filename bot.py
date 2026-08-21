@@ -805,6 +805,14 @@ async def _potager_select_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         except svc_potager_actif.PotagerNonMembreError:
             await query.edit_message_text("❌ Vous n'êtes pas membre de ce potager.", reply_markup=None)
             return
+        except svc_potager_actif.PotagerInactifError:
+            # [US-080 / CA6] Le potager a été archivé entre l'affichage de la
+            # liste et le clic — le bouton pointe sur un potager devenu inactif.
+            await query.edit_message_text(
+                "📦 Ce potager est archivé. Désarchivez-le depuis l'application web pour l'utiliser.",
+                reply_markup=None,
+            )
+            return
 
         set_current_context(tenant_ctx)
         current_potager_id.set(tenant_ctx.potager_id)
@@ -4867,6 +4875,11 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
         db = SessionLocal()
         try:
             svc_evenements.supprimer_evenement(db, current_context(), event_id)
+        except Exception as e:
+            db.rollback()
+            log.error(f"Erreur suppression : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+            return
         finally:
             db.close()
         ctx.user_data['mode'] = None

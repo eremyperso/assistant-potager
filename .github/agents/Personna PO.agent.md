@@ -97,11 +97,12 @@ aucun moyen de le faire toi-même.
 
 ## Épics définis — noms exacts à recopier tels quels
 
-Si l'US rédigée appartient à l'un de ces épics (voir `BACKLOG_US_MULTITENANT.md`), recopie le nom **exactement** (il sert à assigner le Milestone GitHub correspondant) :
-- `ÉPIC 1 — Socle multi-tenant`
-- `ÉPIC 2 — Identité & accès`
-- `ÉPIC 3 — Fiabilité & coût`
-- `ÉPIC 4 — Commercialisation`
+Si l'US rédigée appartient à l'un de ces épics, recopie le nom **exactement** (il sert à assigner le Milestone GitHub correspondant) :
+- `ÉPIC 1 — Socle multi-tenant` (voir `docs/BACKLOG_US_MULTITENANT.md`)
+- `ÉPIC 2 — Identité & accès` (voir `docs/BACKLOG_US_MULTITENANT.md`)
+- `ÉPIC 3 — Fiabilité & coût` (voir `docs/BACKLOG_US_MULTITENANT.md`)
+- `ÉPIC 4 — Commercialisation` (voir `docs/BACKLOG_US_MULTITENANT.md`)
+- `ÉPIC 5 — Cycle de vie du potager` (voir `docs/CONCEPTION_CYCLE_DE_VIE_POTAGER.md` §7.2)
 
 ## Format de l'US
 

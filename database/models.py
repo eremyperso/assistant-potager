@@ -75,6 +75,12 @@ class Potager(Base):
     proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
     plan             = Column(String(20), default="free")
     cree_le          = Column(DateTime, server_default=func.now())
+    # [US-080] Cycle de vie du LIEU physique — 'actif' | 'archive' | 'supprime'
+    # (valeurs sans accent en base, libellés accentués côté affichage uniquement).
+    # Axe indépendant de `plan` : un potager gratuit comme payant peut être archivé.
+    etat             = Column(String(20), nullable=False, default="actif", server_default="actif")
+    archive_le       = Column(DateTime, nullable=True)   # renseigné par US-083
+    supprime_le      = Column(DateTime, nullable=True)   # soft-delete + délai de grâce, US-084
 
 
 class PotagerMembre(Base):
