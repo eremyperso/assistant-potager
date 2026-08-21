@@ -7,7 +7,16 @@ import { X } from 'lucide-react'
  * modèle `Modal` de la maquette 2026 (`web-account.jsx`) — en-tête à pastille
  * d'icône sur fond `brand-soft`, corps scrollable, pied optionnel.
  */
-export function Modal({ title, icon: Icon, sub, onClose, width = 460, children, foot }) {
+export function Modal({
+  title,
+  icon: Icon,
+  sub,
+  onClose,
+  width = 460,
+  children,
+  foot,
+  bodyClassName = 'p-4 overflow-y-auto min-h-0',
+}) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-5"
@@ -34,7 +43,7 @@ export function Modal({ title, icon: Icon, sub, onClose, width = 460, children, 
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto min-h-0">{children}</div>
+        <div className={bodyClassName}>{children}</div>
 
         {foot && <div className="px-4 py-3 border-t border-border bg-card-alt text-[12px] text-txt3">{foot}</div>}
       </div>

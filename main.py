@@ -23,12 +23,19 @@ réputés vérifiés (migration_v24.sql).
 
 Onboarding self-service [US-048] :
   POST   /potagers                              → créer un potager (owner + potager actif)
+  GET    /potagers/{id}                          → détail d'un potager, réservé à ses membres [US-082]
   PATCH  /potagers/{id}                          → modifier nom/ville/localisation (owner) [US-074]
   POST   /parcelles                              → créer une parcelle (editor min.) [US-058]
   POST   /potagers/{id}/invitations              → inviter un membre par code (owner)
   POST   /invitations/{code}/accepter            → accepter une invitation
   GET    /potagers/{id}/membres                  → lister les membres d'un potager
   DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
+  POST   /potagers/{id}/archiver                 → archiver un potager, lecture seule (owner) [US-083]
+  POST   /potagers/{id}/desarchiver              → désarchiver un potager (owner) [US-083]
+  GET    /potagers/{id}/impact-suppression       → décompte réel avant suppression (owner) [US-084]
+  DELETE /potagers/{id}                          → supprimer un potager archivé, délai de grâce 30 j (owner) [US-084]
+  GET    /potagers/corbeille                     → potagers supprimés restaurables (owner) [US-084]
+  POST   /potagers/{id}/restaurer                → restaurer un potager supprimé (owner) [US-084]
 
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
@@ -73,7 +80,7 @@ from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
-from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
 from app.services import questions as svc_questions
@@ -182,6 +189,25 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
             )
     finally:
         db.close()
+
+
+def ctx_pour_potager_consulte(db, ctx: TenantContext, potager_id: Optional[int]) -> TenantContext:
+    """[US-083 / CA7] `potager_id` optionnel permet de consulter un autre
+    potager que l'actif (typiquement un potager archivé, en lecture seule) —
+    vérifie l'accès de l'utilisateur et renvoie un TenantContext ciblant ce
+    potager. Sans `potager_id`, renvoie `ctx` (potager actif) inchangé.
+
+    [Test] `isinstance` plutôt que `is None` : les tests qui appellent les
+    fonctions d'endpoint directement (hors résolution FastAPI, cf.
+    `test_us039_observations_frontend.py`) laissent `potager_id` à sa valeur
+    par défaut `Query(default=None)` quand il n'est pas explicitement passé —
+    jamais résolue en `None` puisque `Depends`/`Query` ne s'exécutent pas."""
+    if not isinstance(potager_id, int):
+        return ctx
+    potager_detail = svc_potager_actif.obtenir_potager(db, ctx.user_id, potager_id)
+    if potager_detail is None:
+        raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+    return TenantContext(user_id=ctx.user_id, potager_id=potager_id, role=potager_detail.get("role"))
 
 
 class RegisterRequest(BaseModel):
@@ -418,13 +444,19 @@ def auth_delier(user: User = Depends(get_current_user)):
 
 
 @app.get("/potagers")
-def lister_potagers(user: User = Depends(get_current_user)):
+def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user)):
     """[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager
     actif marqué. Identité seule : une liste vide est une réponse valide (CA5),
-    pas une erreur — c'est au frontend de proposer la création/adhésion."""
+    pas une erreur — c'est au frontend de proposer la création/adhésion.
+
+    [US-080 / CA5] `etat` filtre le cycle de vie : `actif` (défaut),
+    `archive` ou `tous`. Un potager supprimé n'apparaît dans aucun cas."""
     db = SessionLocal()
     try:
-        potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id)
+        try:
+            potagers = svc_potager_actif.lister_potagers_utilisateur(db, user.id, etat)
+        except svc_potager_actif.FiltreEtatInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         potager_actif_id = None
         if potagers:
             try:
@@ -442,6 +474,10 @@ def lister_potagers(user: User = Depends(get_current_user)):
                     "id": p.id,
                     "nom": p.nom,
                     "actif": p.id == potager_actif_id,
+                    # [US-080 / CA5] État du cycle de vie ('actif' | 'archive'),
+                    # à ne pas confondre avec `actif` ci-dessus qui désigne le
+                    # potager actuellement sélectionné par l'utilisateur.
+                    "etat": p.etat,
                     # [US-048] rôle exposé pour que le frontend affiche la gestion
                     # des membres (inviter/retirer) uniquement aux owners.
                     "role": svc_potager_actif.role_utilisateur(db, user.id, p.id),
@@ -461,6 +497,52 @@ def lister_potagers(user: User = Depends(get_current_user)):
         db.close()
 
 
+@app.get("/potagers/corbeille")
+def lister_corbeille_potagers(user: User = Depends(get_current_user)):
+    """[US-084 / CA6] Potagers supprimés restaurables — point d'accès dédié du
+    droit au remords, réservé à leur owner.
+
+    ⚠️ Déclarée AVANT `/potagers/{potager_id}` : FastAPI résout les routes dans
+    l'ordre de déclaration, l'ordre inverse ferait tomber « corbeille » dans le
+    paramètre entier `potager_id` (422). Un potager supprimé n'apparaît nulle
+    part ailleurs (US-080 / CA7), y compris avec `etat=tous`."""
+    db = SessionLocal()
+    try:
+        return {
+            "potagers": [
+                {
+                    "id": p["id"],
+                    "nom": p["nom"],
+                    "etat": p["etat"],
+                    "supprime_le": p["supprime_le"].isoformat() + "Z" if p["supprime_le"] else None,
+                    "purge_prevue_le": p["purge_prevue_le"].isoformat() + "Z" if p["purge_prevue_le"] else None,
+                }
+                for p in svc_potagers.lister_potagers_supprimes(db, user.id)
+            ],
+            "delai_grace_jours": svc_potagers.DELAI_GRACE_JOURS,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/potagers/{potager_id}")
+def detail_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-082 / CA2, CA6, CA7, CA8] Détail d'un potager pour l'écran Paramètres
+    — réservé à ses membres, quel que soit leur rôle (CA6 : le frontend adapte
+    l'affichage aux droits, cette lecture reste ouverte à tout membre). Un
+    potager inexistant, supprimé ou dont l'appelant n'est pas membre reçoit le
+    même refus générique, sans révéler laquelle de ces situations s'applique
+    (même principe que GET /potagers/{id}/membres)."""
+    db = SessionLocal()
+    try:
+        detail = svc_potager_actif.obtenir_potager(db, user.id, potager_id)
+        if detail is None:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        return detail
+    finally:
+        db.close()
+
+
 @app.post("/potagers/{potager_id}/activer")
 def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
     """[US-046 / CA2, CA3, CA4] Change le potager actif de l'utilisateur connecté."""
@@ -470,6 +552,10 @@ def activer_potager(potager_id: int, user: User = Depends(get_current_user)):
             nouveau_ctx = svc_potager_actif.definir_potager_actif(db, user.id, potager_id)
         except svc_potager_actif.PotagerNonMembreError:
             raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        except svc_potager_actif.PotagerInactifError as e:
+            # [US-080 / CA6] 409 et non 403 : les droits sont là, c'est l'état du
+            # potager qui bloque — le désarchivage (US-083) lève l'obstacle.
+            raise HTTPException(status_code=409, detail=str(e))
         return {"potager_id": nouveau_ctx.potager_id, "role": nouveau_ctx.role}
     finally:
         db.close()
@@ -480,6 +566,9 @@ class CreerPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-081 / CA3, CA4] Bascule sur le potager créé. `True` par défaut :
+    # l'onboarding (US-058) n'envoie pas ce champ et ne doit rien changer.
+    activer: bool = True
 
 
 class ModifierPotagerRequest(BaseModel):
@@ -499,13 +588,29 @@ def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_use
     """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
     ce potager devient son potager actif. Identité seule (pas de potager requis
     au préalable, CA7). [US-074 / CA3] `ville` est optionnelle, choisie via le
-    module de recherche de ville unifié."""
+    module de recherche de ville unifié.
+
+    [US-081 / CA3, CA4, CA7] Sert aussi la création d'un potager **additionnel**
+    depuis la PWA : `activer=false` crée le potager sans quitter le potager
+    courant. Un nom déjà porté par un autre potager de l'utilisateur reste
+    autorisé (l'avertissement est purement informatif, côté interface)."""
     if not req.nom or not req.nom.strip():
         raise HTTPException(status_code=400, detail="Nom de potager requis")
     db = SessionLocal()
     try:
-        potager = svc_potagers.creer_potager(db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude)
-        return {"id": potager.id, "nom": potager.nom, "ville": potager.ville}
+        potager = svc_potagers.creer_potager(
+            db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude, activer=req.activer,
+        )
+        utilisateur = db.query(User).filter(User.id == user.id).first()
+        return {
+            "id": potager.id,
+            "nom": potager.nom,
+            "ville": potager.ville,
+            "etat": potager.etat,  # [US-080] toujours 'actif' à la création
+            # Bascule réellement effectuée : `activer=false` reste sans effet
+            # pour un utilisateur qui n'avait encore aucun potager actif.
+            "actif": utilisateur.potager_actif_id == potager.id,
+        }
     finally:
         db.close()
 
@@ -649,6 +754,132 @@ def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = De
     finally:
         db.close()
 
+
+def _potager_lifecycle_response(potager: Potager) -> dict:
+    """[US-083, US-084] Forme unique des réponses de cycle de vie — un seul
+    contrat pour archiver/désarchiver/supprimer/restaurer, chaque champ à
+    `None` quand l'état courant ne le concerne pas."""
+    purge_prevue_le = svc_potagers.date_purge_prevue(potager)
+    return {
+        "id": potager.id,
+        "etat": potager.etat,
+        "archive_le": potager.archive_le.isoformat() + "Z" if potager.archive_le else None,
+        # [US-084 / CA2, CA7] Date de suppression logique et date effective de purge.
+        "supprime_le": potager.supprime_le.isoformat() + "Z" if potager.supprime_le else None,
+        "purge_prevue_le": purge_prevue_le.isoformat() + "Z" if purge_prevue_le else None,
+    }
+
+
+@app.post("/potagers/{potager_id}/archiver")
+def archiver_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-083 / CA1, CA2, CA5, CA9] Archive un potager — owner uniquement.
+    Passe en lecture seule (CA4) ; invalide le potager actif des membres qui
+    pointaient dessus (CA5) ; notifie les autres membres liés à Telegram (CA9)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.archiver_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/desarchiver")
+def desarchiver_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-083 / CA2, CA8, CA9] Désarchive un potager — owner uniquement.
+    Rend l'écriture immédiatement possible, sans rebasculer le potager actif
+    de qui que ce soit (CA8) ; notifie les autres membres liés à Telegram (CA9)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.desarchiver_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+class SupprimerPotagerRequest(BaseModel):
+    # [US-084 / CA4] Re-saisie du mot de passe du compte web (US-044) — la
+    # confirmation ne peut pas être un simple clic sur une action irréversible.
+    mot_de_passe: str
+
+
+@app.get("/potagers/{potager_id}/impact-suppression")
+def impact_suppression_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-084 / CA3, CA10] Décompte réel de ce que la suppression fera perdre —
+    alimente l'écran de confirmation, owner uniquement (un editor/lecteur n'a
+    même pas à connaître ce décompte, l'action lui étant interdite)."""
+    db = SessionLocal()
+    try:
+        try:
+            return svc_potagers.compter_impact_suppression(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.delete("/potagers/{potager_id}")
+def supprimer_potager(
+    potager_id: int, req: SupprimerPotagerRequest, user: User = Depends(get_current_user)
+):
+    """[US-084 / CA1, CA2, CA4, CA5, CA10] Supprime un potager ARCHIVÉ — owner
+    uniquement. Suppression logique : le potager disparaît immédiatement pour
+    tous les membres (CA5), ses données ne sont effacées qu'au terme du délai
+    de grâce (CA7), pendant lequel il reste restaurable (CA6).
+
+    409 (et non 403) sur un potager non archivé : les droits sont là, c'est
+    l'état qui bloque — même convention que POST /potagers/{id}/activer face à
+    un potager archivé (US-080 / CA6)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.supprimer_potager(db, user.id, potager_id, req.mot_de_passe)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.PotagerNonArchiveError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except svc_potagers.MotDePasseInvalideError as e:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "mot_de_passe_invalide",
+                    "message": str(e),
+                    "tentatives_restantes": e.tentatives_restantes,
+                },
+            )
+        except svc_potagers.TropDEchecsMotDePasseError as e:
+            # [CA4] L'opération est abandonnée, pas seulement refusée : le
+            # frontend referme la confirmation au lieu de proposer un 4e essai.
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "trop_d_echecs", "message": str(e)},
+            )
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/restaurer")
+def restaurer_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-084 / CA6] Droit au remords — restaure un potager supprimé encore
+    dans son délai de grâce. Il revient à l'état `archive`, jamais `actif`."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.restaurer_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.PotagerNonSupprimeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
 _sessions: dict[str, list[dict]] = {}
@@ -782,6 +1013,9 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     except PermissionInsuffisanteError as e:
         db.rollback()
         raise HTTPException(status_code=403, detail=str(e))
+    except PotagerArchiveError as e:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
@@ -881,6 +1115,9 @@ async def voice(
         except PermissionInsuffisanteError as e:
             db.rollback()
             raise HTTPException(status_code=403, detail=str(e))
+        except PotagerArchiveError as e:
+            db.rollback()
+            raise HTTPException(status_code=409, detail=str(e))
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Erreur base : {e}")
@@ -936,12 +1173,19 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
 
 
 @app.get("/stats")
-def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def stats(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx)
+):
     """[US-002/CA4] Statistiques JSON avec stock agronomique différencié.
-    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     db = SessionLocal()
     try:
-        result = svc_stats.calculer_stats(db, ctx, date_ref)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
+        result = svc_stats.calculer_stats(db, use_ctx, date_ref)
         date_ref_effective = result.date_ref_effective
         total = result.total_evenements
         stocks = result.stocks
@@ -1005,18 +1249,24 @@ def stats(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get
 
 
 @app.get("/stats/varietes")
-def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_stats_varietes(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """[US-072] Détail par variété, toutes cultures et tous états confondus (potager /
     semis / pépinière), avec leurs parcelles d'origine réelles — alimente l'écran Stocks
     transverse (US-073). Nouvelle agrégation en lecture seule : ne modifie ni /stats ni
     /godets (CA8), aucune migration BDD (CA9).
-    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        varietes = svc_stock.calcul_stock_varietes(db, ctx, date_ref=dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        varietes = svc_stock.calcul_stock_varietes(db, use_ctx, date_ref=dr)
         # [US-073 CA15] Observations agrégées par culture, même index que /stats —
         # pas de granularité variété côté observations (US-039), le badge remonte
         # donc sur chaque ligne d'une même culture.
@@ -1039,17 +1289,20 @@ def get_stats_varietes(date_ref: date = Query(default=None), ctx: TenantContext 
 def get_rendement(
     annee: int = Query(default=None),
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.
-    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     from utils.stock import calcul_rendement_mensuel
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        data = calcul_rendement_mensuel(db, annee_eff, dr, potager_id=use_ctx.potager_id)
         return {"annee": annee_eff, **data}
     finally:
         db.close()
@@ -1059,17 +1312,20 @@ def get_rendement(
 def get_activite(
     annee: int = Query(default=None),
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).
-    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date."""
+    [US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif)."""
     from utils.stock import calcul_activite_quotidienne
     today = date.today()
     annee_eff = annee or today.year
     dr = min(date_ref, today) if date_ref else None
     db = SessionLocal()
     try:
-        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        jours = calcul_activite_quotidienne(db, annee_eff, dr, potager_id=use_ctx.potager_id)
         return {
             "annee":         annee_eff,
             "jours":         jours,
@@ -1081,10 +1337,15 @@ def get_activite(
 
 
 @app.get("/plan")
-def get_plan(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_plan(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx)
+):
     """
     [US-024] Plan d'occupation des parcelles pour le dashboard frontend.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
 
     Retourne la liste des parcelles actives avec leurs cultures en cours.
     Les parcelles sans culture sont incluses avec cultures=[].
@@ -1094,11 +1355,13 @@ def get_plan(date_ref: date = Query(default=None), ctx: TenantContext = Depends(
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        parcelles     = svc_plan.get_parcelles(db, ctx)
-        occupation    = svc_plan.get_occupation(db, ctx, dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
+        parcelles     = svc_plan.get_parcelles(db, use_ctx)
+        occupation    = svc_plan.get_occupation(db, use_ctx, dr)
 
         # Index surface_m2 par nom de culture (insensible à la casse)
-        surface_par_culture = svc_plan.surface_par_culture(db, ctx)
+        surface_par_culture = svc_plan.surface_par_culture(db, use_ctx)
 
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
@@ -1190,10 +1453,15 @@ def get_observations(
 
 
 @app.get("/godets")
-def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depends(get_current_user_ctx)):
+def get_godets(
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
     """
     [US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
 
     Utilise calcul_godets() pour un stock agrégé par (culture, variété) avec déduction
     des plantations. Retourne deux listes :
@@ -1206,7 +1474,8 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=ctx.potager_id)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        tous = calcul_godets(db, include_epuises=True, date_ref=dr, potager_id=use_ctx.potager_id)
         en_attente  = [v for v in tous.values() if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0]
         tout_plante = [v for v in tous.values() if v["stock_residuel_godet"] == 0 and not v.get("graines_en_germination")]
         return {
@@ -1223,6 +1492,7 @@ def get_godets(date_ref: date = Query(default=None), ctx: TenantContext = Depend
 @app.get("/pepiniere/lots")
 def get_pepiniere_lots(
     date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
@@ -1240,13 +1510,15 @@ def get_pepiniere_lots(
     inchangés (CA5).
 
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
     """
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
     date_ref_effective = dr or today
     db = SessionLocal()
     try:
-        lots = svc_stock.calcul_lots_pepiniere(db, ctx, date_ref=dr)
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
         return {
             "lots": [
                 {
@@ -1434,11 +1706,13 @@ def historique(
     from_date : str  = Query(default=None, alias="from"),
     to_date   : str  = Query(default=None, alias="to"),
     date_ref  : date = Query(default=None),
+    potager_id: int = Query(default=None),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """
     [US-027] Retourne les événements paginés avec filtres optionnels.
     [US-030] date_ref optionnel (YYYY-MM-DD) : borne haute, prioritaire sur to_date.
+    [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
     Ex: /historique?culture=tomate&action=recolte&from=2026-05-01&to=2026-05-31&offset=20
     Retourne : { total: int, evenements: [...], date_ref_effective: str }
     """
@@ -1449,8 +1723,10 @@ def historique(
     effective_to = dr.isoformat() if dr else to_date
     db = SessionLocal()
     try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+
         total, events = svc_evenements.lister_evenements(
-            db, ctx,
+            db, use_ctx,
             limit=limit, offset=offset, action=action, culture=culture,
             parcelle=parcelle, from_date=from_date, to_date=effective_to,
         )

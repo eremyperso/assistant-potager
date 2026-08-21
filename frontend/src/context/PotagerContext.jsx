@@ -8,6 +8,9 @@ const PotagerContext = createContext(null)
 export function PotagerContextProvider({ children }) {
   const [potagers, setPotagers] = useState([])
   const [loading, setLoading] = useState(true)
+  // [US-083 / CA7] Potager consulté en lecture seule (e.g. un potager archivé)
+  // — distinct du potager actif, permet de visualiser sans rendre actif
+  const [potagerId, setPotagerId] = useState(null)
 
   // `silencieux` évite de repasser `loading` à true : PotagerGate (App.jsx)
   // démonte tout l'arbre applicatif tant que `loading` est vrai, ce qui est
@@ -52,9 +55,18 @@ export function PotagerContextProvider({ children }) {
   // [US-048 / CA1] Crée un potager — devient owner + potager actif, rechargement
   // complet pour repartir sur un état propre (même principe que `activer`).
   // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch.
-  async function creerPotager(nom, ville, latitude, longitude) {
-    await api.creerPotager(nom, ville, latitude, longitude)
-    window.location.reload()
+  // [US-081 / CA5] Sans bascule (`activer: false`), rien à recharger : le
+  // potager courant et toutes les vues montées restent valides, un simple
+  // rafraîchissement silencieux de la liste suffit à faire apparaître le
+  // nouveau potager dans le menu.
+  async function creerPotager(nom, ville, latitude, longitude, activer = true) {
+    const cree = await api.creerPotager(nom, ville, latitude, longitude, activer)
+    if (cree.actif) {
+      window.location.reload()
+    } else {
+      await recharger({ silencieux: true })
+    }
+    return cree
   }
 
   // [US-074 / CA4, CA5] Modifie nom/ville/localisation d'un potager déjà créé —
@@ -97,6 +109,7 @@ export function PotagerContextProvider({ children }) {
       value={{
         potagers, potagerActif, aucunPotager, loading,
         activer, recharger, creerPotager, modifierPotager, accepterInvitation, finaliserOnboarding,
+        potagerId, setPotagerId,
       }}
     >
       {children}

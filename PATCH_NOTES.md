@@ -1,4 +1,18 @@
 
+## [v3.37.1] — 2026-08-21
+
+### 🐛 Corrections
+- Retire « Gérer les membres » du menu Compte, redondant avec l'onglet Membres de l'écran Paramètres du potager qui affiche déjà la même liste (US-082)
+
+### 🔧 Améliorations techniques
+- Aligne le menu potager sur la maquette 2026 : regroupe « Créer un potager » et « Paramètres du potager » juste après la liste, déplace « Rejoindre un potager » et « Corbeille » dans un bandeau de liens en pied de menu (US-081, US-084)
+- Remplace la modale « Rejoindre un potager » par un formulaire réduit à sa saisie de code, focus automatique, sans plus afficher la liste des potagers (US-048)
+- Restructure l'écran Paramètres du potager en navigation à onglets (Identité, Membres, Zone sensible) — colonne latérale en desktop, onglets horizontaux en dessous de 640px via container query (US-082)
+- Supprime `PotagerSelector.jsx`, dernier composant du menu potager resté hors du design system (Lot D), devenu inutile une fois son point d'entrée « Tous mes potagers » retiré
+
+### ⚠️ Breaking changes
+- Retire l'entrée « Tous mes potagers » du menu potager : la liste des potagers, déjà visible en tête du même menu, en faisait un doublon
+
 ## [v3.36.1] — 2026-08-20
 
 ### 🔧 Améliorations techniques

@@ -3,6 +3,16 @@
 // retirer un membre.
 // [US-055 / CA3] Habillage aligné sur `ModalMembres` de la maquette 2026
 // (`web-account.jsx`) — même logique (lister, inviter, retirer), nouveau rendu.
+// [US-082 / CA4] `embedded` : rend le contenu seul, sans le shell `Modal` — pour
+// vivre comme section « Membres » de ParametresPotager.jsx, sans dupliquer la
+// logique liste/invitation/retrait. `lectureSeule` : masque l'encart d'invitation
+// et les boutons de retrait (CA6, membre non-owner sur l'écran Paramètres) —
+// AccountMenu, qui n'ouvre cette modale qu'aux owners, n'utilise ni l'un ni l'autre.
+// [US-083 / CA7] `potagerId` : cible explicite, par défaut le potager actif —
+// nécessaire pour consulter les membres d'un potager archivé consulté
+// explicitement (jamais le potager actif, CA6), sans quoi cette modale
+// afficherait toujours les membres du potager actif quel que soit l'écran
+// Paramètres réellement ouvert.
 import { useState, useEffect } from 'react'
 import { UserMinus, Users, Copy, Key, Pencil, Eye } from 'lucide-react'
 import { api } from '../lib/api.js'
@@ -26,8 +36,9 @@ function expirationLisible(expireLe) {
   return `expire dans ${jours} j`
 }
 
-export default function GestionMembres({ moiId, onClose }) {
+export default function GestionMembres({ moiId, onClose, embedded = false, lectureSeule = false, potagerId: potagerIdProp }) {
   const { potagerActif } = usePotager()
+  const potagerId = potagerIdProp ?? potagerActif?.id
   const [membres, setMembres] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -39,7 +50,7 @@ export default function GestionMembres({ moiId, onClose }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await api.listerMembres(potagerActif.id)
+      const res = await api.listerMembres(potagerId)
       setMembres(res.membres)
     } catch (e) {
       setError(e.message)
@@ -48,12 +59,12 @@ export default function GestionMembres({ moiId, onClose }) {
     }
   }
 
-  useEffect(() => { if (potagerActif) recharger() }, [potagerActif])
+  useEffect(() => { if (potagerId) recharger() }, [potagerId])
 
   async function handleInviter() {
     setError(null)
     try {
-      const res = await api.creerInvitation(potagerActif.id, rolePropose)
+      const res = await api.creerInvitation(potagerId, rolePropose)
       setInvitation(res)
       setCopie(false)
     } catch (e) {
@@ -64,7 +75,7 @@ export default function GestionMembres({ moiId, onClose }) {
   async function handleRetirer(membreUserId) {
     setError(null)
     try {
-      await api.retirerMembre(potagerActif.id, membreUserId)
+      await api.retirerMembre(potagerId, membreUserId)
       recharger()
     } catch (e) {
       setError(e.message)
@@ -78,15 +89,8 @@ export default function GestionMembres({ moiId, onClose }) {
     })
   }
 
-  return (
-    <Modal
-      title="Membres du potager"
-      icon={Users}
-      sub={`${potagerActif?.nom || '—'} · ${membres.length} membre${membres.length > 1 ? 's' : ''}`}
-      onClose={onClose}
-      width={520}
-      foot="Seul le propriétaire peut inviter ou retirer un membre."
-    >
+  const contenu = (
+    <>
       {error && <p className="text-red text-[13px] mb-2">{error}</p>}
 
       <div className="flex flex-col gap-2 mb-4">
@@ -104,7 +108,9 @@ export default function GestionMembres({ moiId, onClose }) {
               <span className="block text-[11.5px] text-txt3 truncate mt-px">{m.email}</span>
             </span>
             <Badge tint={teinteRole(m.role)}>{libelleRole(m.role)}</Badge>
-            {m.role !== 'owner' && (
+            {/* [US-082 / CA6] Retrait masqué en lecture seule — le back refuse déjà
+                toute tentative, mais le front ne propose pas une action inutilisable. */}
+            {!lectureSeule && m.role !== 'owner' && (
               <button
                 onClick={() => handleRetirer(m.user_id)}
                 aria-label={`Retirer ${m.email || m.user_id}`}
@@ -117,26 +123,43 @@ export default function GestionMembres({ moiId, onClose }) {
         ))}
       </div>
 
-      <div className="bg-brand-soft rounded-2xl p-3.5">
-        <div className="flex items-center gap-1.5 mb-2.5">
-          <Key size={16} className="text-brand" />
-          <span className="text-[13.5px] font-bold text-brand-text">Inviter un membre</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <RoleSelect value={rolePropose} options={ROLES_INVITABLES} onChange={setRolePropose} />
-          <Btn kind="primary" icon={Key} onClick={handleInviter}>Générer un code</Btn>
-        </div>
-
-        {invitation && (
-          <div className="flex items-center gap-2.5 mt-3 bg-card rounded-[10px] px-3.5 py-2.5">
-            <span className="flex-1 text-[17px] font-bold tracking-[.2em] text-txt">{invitation.code}</span>
-            <span className="text-[11.5px] text-txt3">{expirationLisible(invitation.expire_le)}</span>
-            <Btn kind="soft" small icon={Copy} onClick={copierCode}>
-              {copie ? 'Copié' : 'Copier'}
-            </Btn>
+      {!lectureSeule && (
+        <div className="bg-brand-soft rounded-2xl p-3.5">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <Key size={16} className="text-brand" />
+            <span className="text-[13.5px] font-bold text-brand-text">Inviter un membre</span>
           </div>
-        )}
-      </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <RoleSelect value={rolePropose} options={ROLES_INVITABLES} onChange={setRolePropose} />
+            <Btn kind="primary" icon={Key} onClick={handleInviter}>Générer un code</Btn>
+          </div>
+
+          {invitation && (
+            <div className="flex items-center gap-2.5 mt-3 bg-card rounded-[10px] px-3.5 py-2.5">
+              <span className="flex-1 text-[17px] font-bold tracking-[.2em] text-txt">{invitation.code}</span>
+              <span className="text-[11.5px] text-txt3">{expirationLisible(invitation.expire_le)}</span>
+              <Btn kind="soft" small icon={Copy} onClick={copierCode}>
+                {copie ? 'Copié' : 'Copier'}
+              </Btn>
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  )
+
+  if (embedded) return contenu
+
+  return (
+    <Modal
+      title="Membres du potager"
+      icon={Users}
+      sub={`${potagerActif?.nom || '—'} · ${membres.length} membre${membres.length > 1 ? 's' : ''}`}
+      onClose={onClose}
+      width={520}
+      foot="Seul le propriétaire peut inviter ou retirer un membre."
+    >
+      {contenu}
     </Modal>
   )
 }

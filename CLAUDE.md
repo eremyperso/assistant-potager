@@ -63,6 +63,11 @@ pytest tests/ -k "test_name"                   # single test by name
 
 # Apply latest database migration
 psql -d potager -f migrations/migration_v12.sql
+
+# Purge des potagers supprimés au-delà du délai de grâce de 30 jours [US-084]
+# (aussi planifiée quotidiennement à 04h00 par le job_queue du bot)
+python tools/purger_potagers.py --dry-run   # liste sans rien effacer
+python tools/purger_potagers.py             # purge réelle, idempotente
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

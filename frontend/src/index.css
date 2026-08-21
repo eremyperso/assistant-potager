@@ -59,8 +59,9 @@
        utiliser dans du code neuf. Fichiers qui le retiennent encore, à retirer
        avant de supprimer ce bloc (et son pendant dans tailwind.config.js) :
          - frontend/src/views/Stats.jsx (Lot D — devient sous-écran du Tableau de bord)
-         - frontend/src/components/PotagerSelector.jsx (Lot D — ancien sélecteur de potager)
          - frontend/src/views/VerifyEmail.jsx (Lot D — écran de vérification d'e-mail)
+       (PotagerSelector.jsx, seul autre fichier qui le retenait, a été supprimé lors
+       de la refonte visuelle du menu potager plutôt que migré — cf. ModalRejoindrePotager.jsx.)
        Cf. docs/ANALYSE_REFONTE_UI_WEB_2026.md §7.4 pour le détail et le comptage. */
     --g-bg:      var(--bg);
     --g-sur:     var(--surface);

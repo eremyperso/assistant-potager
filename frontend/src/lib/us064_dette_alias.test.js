@@ -35,7 +35,6 @@ const COMPOSANTS_TRANSVERSES_US059 = [
 // §7.4) : elles continuent d'utiliser l'alias, leur migration relève du Lot D.
 const VUES_HORS_PERIMETRE = [
   'views/Stats.jsx',
-  'components/PotagerSelector.jsx',
   'views/VerifyEmail.jsx',
 ]
 

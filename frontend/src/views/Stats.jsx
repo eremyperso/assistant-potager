@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
+import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
@@ -597,6 +598,7 @@ export default function Stats({ refresh }) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
   const { dateRef } = useDateRef()
+  const { potagerId } = usePotager()
 
   const [meteo, setMeteo]           = useState(null)
   const [meteoLoading, setMeteoLoading] = useState(true)
@@ -625,21 +627,21 @@ export default function Stats({ refresh }) {
 
   async function loadActivite() {
     setActiviteLoading(true); setActiviteError(null)
-    try   { setActivite(await api.activite(activiteAnnee, dateRef)) }
+    try   { setActivite(await api.activite(activiteAnnee, dateRef, potagerId)) }
     catch (e) { setActiviteError(e.message) }
     finally   { setActiviteLoading(false) }
   }
 
   async function loadRendement() {
     setRendementLoading(true); setRendementError(null)
-    try   { setRendement(await api.rendement(activiteAnnee, dateRef)) }
+    try   { setRendement(await api.rendement(activiteAnnee, dateRef, potagerId)) }
     catch (e) { setRendementError(e.message) }
     finally   { setRendementLoading(false) }
   }
 
   useEffect(() => { loadMeteo() }, [days])
-  useEffect(() => { loadActivite() }, [refresh, dateRef, activiteAnnee])
-  useEffect(() => { loadRendement() }, [refresh, dateRef, activiteAnnee])
+  useEffect(() => { loadActivite() }, [refresh, dateRef, activiteAnnee, potagerId])
+  useEffect(() => { loadRendement() }, [refresh, dateRef, activiteAnnee, potagerId])
 
   // ─── KPIs météo ─────────────────────────────────────────────────────────────
   const jours    = meteo?.jours || []

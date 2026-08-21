@@ -74,6 +74,7 @@ from app.services import questions as svc_questions
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
+from app.services import potagers as svc_potagers  # [US-084] purge planifiée
 from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from database.models import Potager as _Potager  # [US-046]
 
@@ -804,6 +805,14 @@ async def _potager_select_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             tenant_ctx = svc_potager_actif.definir_potager_actif(db, user_id, potager_id)
         except svc_potager_actif.PotagerNonMembreError:
             await query.edit_message_text("❌ Vous n'êtes pas membre de ce potager.", reply_markup=None)
+            return
+        except svc_potager_actif.PotagerInactifError:
+            # [US-080 / CA6] Le potager a été archivé entre l'affichage de la
+            # liste et le clic — le bouton pointe sur un potager devenu inactif.
+            await query.edit_message_text(
+                "📦 Ce potager est archivé. Désarchivez-le depuis l'application web pour l'utiliser.",
+                reply_markup=None,
+            )
             return
 
         set_current_context(tenant_ctx)
@@ -4867,6 +4876,11 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
         db = SessionLocal()
         try:
             svc_evenements.supprimer_evenement(db, current_context(), event_id)
+        except Exception as e:
+            db.rollback()
+            log.error(f"Erreur suppression : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+            return
         finally:
             db.close()
         ctx.user_data['mode'] = None
@@ -5452,6 +5466,31 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
+    """[US-084 / CA7, CA8] Job planifié à 04h00 chaque matin (Europe/Paris).
+
+    Efface physiquement les potagers supprimés dont le délai de grâce de 30
+    jours est écoulé. Aucune logique de purge ici : tout est porté par la
+    fonction de service unique `svc_potagers.purger_potagers_supprimes`,
+    également appelée par `tools/purger_potagers.py` (déclenchement manuel).
+
+    Le job n'arme pas `tenant_scope` lui-même, contrairement à
+    `job_meteo_quotidienne` : la purge est multi-tenant par nature et pose le
+    contexte potager par potager (US-043).
+
+    [CA8] Une exécution sans rien à purger est le cas normal, pas une erreur.
+    """
+    log.info("🗑️  JOB PURGE       : déclenchement automatique 04h00")
+    db = SessionLocal()
+    try:
+        resultats = svc_potagers.purger_potagers_supprimes(db)
+        log.info("🗑️  PURGE AUTO      : %s potager(s) effacé(s) définitivement", len(resultats))
+    except Exception as e:
+        log.error(f"❌ JOB PURGE ERREUR : {e}")
+    finally:
+        db.close()
+
+
 # ── [US-009] CALLBACK SUPPRESSION PARCELLE ──────────────────────────────────────
 
 async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -5677,6 +5716,16 @@ def _construire_application() -> "Application":
         name="meteo_quotidienne",
     )
     log.info("🌅 JOB MÉTÉO       : planifié à 05h00 Europe/Paris")
+
+    # ── [US-084 / CA7] Job de purge quotidien à 04h00 (Europe/Paris) ──────────
+    # Avant le job météo : la purge nettoie, la météo écrit — inutile de créer
+    # des observations sur un potager que la purge va effacer dans la foulée.
+    app.job_queue.run_daily(
+        job_purge_potagers,
+        time=dtime(hour=4, minute=0, second=0, tzinfo=tz_paris),
+        name="purge_potagers_supprimes",
+    )
+    log.info("🗑️  JOB PURGE       : planifié à 04h00 Europe/Paris")
 
     return app
 
