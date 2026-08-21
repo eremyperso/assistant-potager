@@ -17,13 +17,14 @@
 // vérité : `potagerActif` décrit un potager différent, le préremplissage
 // optimiste ne s'applique qu'en consultant son propre potager actif.
 import { useState, useEffect, useCallback } from 'react'
-import { Settings, Archive, ArchiveRestore } from 'lucide-react'
+import { Settings, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { libelleRole, teinteRole } from '../lib/roles.js'
 import { Modal, Card, SectionLabel, Field, VilleSearch, Btn, Badge, InfoBanner } from '../components/ui'
 import GestionMembres from '../components/GestionMembres.jsx'
 import ModalArchiverPotager from '../components/ModalArchiverPotager.jsx'
+import ModalSupprimerPotager from '../components/ModalSupprimerPotager.jsx'
 
 const LIBELLE_ETAT = { actif: 'Actif', archive: 'Archivé', supprime: 'Supprimé' }
 
@@ -37,6 +38,9 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
   const [detail, setDetail] = useState(null)
   const [moiId, setMoiId] = useState(null)
   const [modaleArchiver, setModaleArchiver] = useState(false)
+  // [US-084 / CA1] Suppression définitive — proposée uniquement sur un potager
+  // déjà archivé (l'action n'existe pas ailleurs, elle n'est pas juste désactivée).
+  const [modaleSupprimer, setModaleSupprimer] = useState(false)
   const [erreurLifecycle, setErreurLifecycle] = useState(null)
   const [loadingLifecycle, setLoadingLifecycle] = useState(false)
 
@@ -222,7 +226,10 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
         {/* [US-083 / CA5, CA8] Zone sensible — n'affiche que les actions
             réellement disponibles pour cet état (jamais de bouton factice) :
             archiver sur un potager actif, désarchiver sur un potager archivé.
-            US-084/085/086 y ajouteront leurs propres actions. */}
+            [US-084 / CA1, CA10] La suppression définitive s'y ajoute, visible
+            du seul owner d'un potager DÉJÀ ARCHIVÉ : sur un potager actif elle
+            est absente, pas grisée — c'est l'archivage qui est le geste
+            attendu à ce stade. US-085/086 y ajouteront leurs propres actions. */}
         {estOwner && (
           <Card bg="bg-red-soft">
             <SectionLabel>Zone sensible</SectionLabel>
@@ -248,10 +255,44 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
                   {loadingLifecycle ? 'Désarchivage…' : 'Désarchiver ce potager'}
                 </Btn>
               )}
+
+              {/* [US-084 / CA type] Séparée des actions réversibles par un
+                  filet et traitée en rouge plein : archiver/désarchiver se
+                  défont d'un clic, supprimer ouvre un délai de grâce de 30
+                  jours au terme duquel les données n'existent plus. */}
+              {estArchive && (
+                <>
+                  <div className="border-t border-red/20 my-1" />
+                  <Btn
+                    kind="ghost"
+                    icon={Trash2}
+                    onClick={() => setModaleSupprimer(true)}
+                    className="justify-start text-red border-red/30"
+                  >
+                    Supprimer définitivement ce potager
+                  </Btn>
+                </>
+              )}
             </div>
           </Card>
         )}
       </div>
+
+      {/* [US-084 / CA5] Le potager disparaît pour tous les membres dès la
+          suppression logique : un rechargement complet est la seule façon
+          honnête de refléter l'état serveur (même convention qu'US-083/CA7
+          révisé, cf. handleDesarchiver ci-dessus). */}
+      {modaleSupprimer && (
+        <ModalSupprimerPotager
+          potagerId={potagerId}
+          nom={nomAffiche}
+          onClose={() => setModaleSupprimer(false)}
+          onSupprime={() => {
+            setModaleSupprimer(false)
+            window.location.reload()
+          }}
+        />
+      )}
 
       {modaleArchiver && (
         <ModalArchiverPotager

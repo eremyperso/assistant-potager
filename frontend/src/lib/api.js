@@ -126,11 +126,20 @@ async function patch(path, body) {
   return res.json()
 }
 
-async function del(path) {
-  const res = await requeteAvecRefresh(path, { method: 'DELETE', headers: headers() })
+// [US-084 / CA4] `body` optionnel : DELETE /potagers/{id} transporte la
+// re-saisie du mot de passe. `err.code` reporte le code métier renvoyé par
+// l'API (`mot_de_passe_invalide`, `trop_d_echecs`) — l'appelant doit pouvoir
+// distinguer « tentative refusée, on reste dans la confirmation » de
+// « opération abandonnée, on referme », ce qu'un message seul ne permet pas.
+async function del(path, body) {
+  const options = { method: 'DELETE', headers: headers() }
+  if (body !== undefined) options.body = JSON.stringify(body)
+  const res = await requeteAvecRefresh(path, options)
   if (!res.ok) {
     const detail = await res.clone().json().catch(() => ({}))
-    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    const err = new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    err.code = detail?.detail?.code
+    throw err
   }
   return res.json()
 }
@@ -193,6 +202,13 @@ export const api = {
   // [US-083 / CA1] Archiver/désarchiver un potager — owner uniquement
   archiverPotager: (potagerId) => post(`/potagers/${potagerId}/archiver`),
   desarchiverPotager: (potagerId) => post(`/potagers/${potagerId}/desarchiver`),
+  // [US-084 / CA3] Décompte réel de ce que la suppression fera perdre — owner uniquement
+  impactSuppressionPotager: (potagerId) => get(`/potagers/${potagerId}/impact-suppression`),
+  // [US-084 / CA1, CA4] Suppression d'un potager archivé, confirmée par mot de passe
+  supprimerPotager: (potagerId, motDePasse) => del(`/potagers/${potagerId}`, { mot_de_passe: motDePasse }),
+  // [US-084 / CA6] Corbeille : potagers supprimés encore restaurables (délai de grâce)
+  corbeillePotagers: () => get('/potagers/corbeille'),
+  restaurerPotager: (potagerId) => post(`/potagers/${potagerId}/restaurer`),
   // [US-048] Création de potager, invitations et gestion des membres (owner)
   // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch (géocodage Open-Meteo)
   // [US-081 / CA3, CA4] `activer` pilote la bascule sur le potager créé — omis,

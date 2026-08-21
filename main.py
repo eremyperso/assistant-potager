@@ -32,6 +32,10 @@ Onboarding self-service [US-048] :
   DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
   POST   /potagers/{id}/archiver                 → archiver un potager, lecture seule (owner) [US-083]
   POST   /potagers/{id}/desarchiver              → désarchiver un potager (owner) [US-083]
+  GET    /potagers/{id}/impact-suppression       → décompte réel avant suppression (owner) [US-084]
+  DELETE /potagers/{id}                          → supprimer un potager archivé, délai de grâce 30 j (owner) [US-084]
+  GET    /potagers/corbeille                     → potagers supprimés restaurables (owner) [US-084]
+  POST   /potagers/{id}/restaurer                → restaurer un potager supprimé (owner) [US-084]
 
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
@@ -493,6 +497,34 @@ def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user))
         db.close()
 
 
+@app.get("/potagers/corbeille")
+def lister_corbeille_potagers(user: User = Depends(get_current_user)):
+    """[US-084 / CA6] Potagers supprimés restaurables — point d'accès dédié du
+    droit au remords, réservé à leur owner.
+
+    ⚠️ Déclarée AVANT `/potagers/{potager_id}` : FastAPI résout les routes dans
+    l'ordre de déclaration, l'ordre inverse ferait tomber « corbeille » dans le
+    paramètre entier `potager_id` (422). Un potager supprimé n'apparaît nulle
+    part ailleurs (US-080 / CA7), y compris avec `etat=tous`."""
+    db = SessionLocal()
+    try:
+        return {
+            "potagers": [
+                {
+                    "id": p["id"],
+                    "nom": p["nom"],
+                    "etat": p["etat"],
+                    "supprime_le": p["supprime_le"].isoformat() + "Z" if p["supprime_le"] else None,
+                    "purge_prevue_le": p["purge_prevue_le"].isoformat() + "Z" if p["purge_prevue_le"] else None,
+                }
+                for p in svc_potagers.lister_potagers_supprimes(db, user.id)
+            ],
+            "delai_grace_jours": svc_potagers.DELAI_GRACE_JOURS,
+        }
+    finally:
+        db.close()
+
+
 @app.get("/potagers/{potager_id}")
 def detail_potager(potager_id: int, user: User = Depends(get_current_user)):
     """[US-082 / CA2, CA6, CA7, CA8] Détail d'un potager pour l'écran Paramètres
@@ -724,10 +756,17 @@ def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = De
 
 
 def _potager_lifecycle_response(potager: Potager) -> dict:
+    """[US-083, US-084] Forme unique des réponses de cycle de vie — un seul
+    contrat pour archiver/désarchiver/supprimer/restaurer, chaque champ à
+    `None` quand l'état courant ne le concerne pas."""
+    purge_prevue_le = svc_potagers.date_purge_prevue(potager)
     return {
         "id": potager.id,
         "etat": potager.etat,
         "archive_le": potager.archive_le.isoformat() + "Z" if potager.archive_le else None,
+        # [US-084 / CA2, CA7] Date de suppression logique et date effective de purge.
+        "supprime_le": potager.supprime_le.isoformat() + "Z" if potager.supprime_le else None,
+        "purge_prevue_le": purge_prevue_le.isoformat() + "Z" if purge_prevue_le else None,
     }
 
 
@@ -761,6 +800,85 @@ def desarchiver_potager(potager_id: int, user: User = Depends(get_current_user))
         return _potager_lifecycle_response(potager)
     finally:
         db.close()
+
+class SupprimerPotagerRequest(BaseModel):
+    # [US-084 / CA4] Re-saisie du mot de passe du compte web (US-044) — la
+    # confirmation ne peut pas être un simple clic sur une action irréversible.
+    mot_de_passe: str
+
+
+@app.get("/potagers/{potager_id}/impact-suppression")
+def impact_suppression_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-084 / CA3, CA10] Décompte réel de ce que la suppression fera perdre —
+    alimente l'écran de confirmation, owner uniquement (un editor/lecteur n'a
+    même pas à connaître ce décompte, l'action lui étant interdite)."""
+    db = SessionLocal()
+    try:
+        try:
+            return svc_potagers.compter_impact_suppression(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.delete("/potagers/{potager_id}")
+def supprimer_potager(
+    potager_id: int, req: SupprimerPotagerRequest, user: User = Depends(get_current_user)
+):
+    """[US-084 / CA1, CA2, CA4, CA5, CA10] Supprime un potager ARCHIVÉ — owner
+    uniquement. Suppression logique : le potager disparaît immédiatement pour
+    tous les membres (CA5), ses données ne sont effacées qu'au terme du délai
+    de grâce (CA7), pendant lequel il reste restaurable (CA6).
+
+    409 (et non 403) sur un potager non archivé : les droits sont là, c'est
+    l'état qui bloque — même convention que POST /potagers/{id}/activer face à
+    un potager archivé (US-080 / CA6)."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.supprimer_potager(db, user.id, potager_id, req.mot_de_passe)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.PotagerNonArchiveError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except svc_potagers.MotDePasseInvalideError as e:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "mot_de_passe_invalide",
+                    "message": str(e),
+                    "tentatives_restantes": e.tentatives_restantes,
+                },
+            )
+        except svc_potagers.TropDEchecsMotDePasseError as e:
+            # [CA4] L'opération est abandonnée, pas seulement refusée : le
+            # frontend referme la confirmation au lieu de proposer un 4e essai.
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "trop_d_echecs", "message": str(e)},
+            )
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/restaurer")
+def restaurer_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-084 / CA6] Droit au remords — restaure un potager supprimé encore
+    dans son délai de grâce. Il revient à l'état `archive`, jamais `actif`."""
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_potagers.restaurer_potager(db, user.id, potager_id)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.PotagerNonSupprimeError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return _potager_lifecycle_response(potager)
+    finally:
+        db.close()
+
 
 # ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
 # { session_id: [{"role": "user"|"assistant", "content": str}, ...] }

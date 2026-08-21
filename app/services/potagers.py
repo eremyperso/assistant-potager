@@ -21,9 +21,13 @@ from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
 from app.services.permissions import require_role
+from app.services import auth as svc_auth
 from app.services import potager_actif as svc_potager_actif
 from app.services import telegram_notify as svc_telegram_notify
-from database.models import Invitation, Potager, PotagerMembre, User
+from database.db import tenant_scope
+from database.models import (
+    CultureConfig, Evenement, Invitation, Parcelle, Potager, PotagerMembre, User,
+)
 
 log = logging.getLogger("potager")
 
@@ -32,6 +36,14 @@ _ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 _LONGUEUR_CODE = 8
 _TTL_JOURS = 7
 _ROLES_INVITABLES = {"editor", "lecteur"}
+
+# [US-084 / CA7] Délai de grâce entre la suppression logique (soft-delete) et la
+# purge physique — l'owner peut restaurer son potager pendant toute cette durée.
+DELAI_GRACE_JOURS = 30
+
+# [US-084 / CA4] Nombre d'échecs consécutifs de re-saisie du mot de passe au
+# terme duquel l'opération est abandonnée.
+MAX_ECHECS_MOT_DE_PASSE = 3
 
 
 class RoleInvalideError(Exception):
@@ -56,6 +68,48 @@ class DejaMembreError(Exception):
 
 class MembreInconnuError(Exception):
     """[CA5] Tentative de retrait d'un utilisateur qui n'est pas membre du potager."""
+
+
+class PotagerNonArchiveError(Exception):
+    """[US-084 / CA1] Suppression demandée sur un potager qui n'est pas archivé.
+
+    Volontairement distincte de `PermissionInsuffisanteError` : les droits sont
+    là, c'est le cycle de vie qui bloque — l'archivage (US-083) lève l'obstacle,
+    exactement comme `PotagerInactifError` face à une activation refusée."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Ce potager doit d'abord être archivé avant de pouvoir être supprimé."
+        )
+
+
+class MotDePasseInvalideError(Exception):
+    """[US-084 / CA4] Re-saisie du mot de passe incorrecte — tentative comptée."""
+
+    def __init__(self, tentatives_restantes: int):
+        self.tentatives_restantes = tentatives_restantes
+        super().__init__(
+            f"Mot de passe incorrect — {tentatives_restantes} tentative"
+            f"{'s' if tentatives_restantes > 1 else ''} restante"
+            f"{'s' if tentatives_restantes > 1 else ''}."
+        )
+
+
+class TropDEchecsMotDePasseError(Exception):
+    """[US-084 / CA4] Trois échecs consécutifs : l'opération est abandonnée."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            f"{MAX_ECHECS_MOT_DE_PASSE} tentatives infructueuses — suppression abandonnée."
+        )
+
+
+class PotagerNonSupprimeError(Exception):
+    """[US-084 / CA6] Restauration demandée sur un potager qui n'est pas à l'état
+    `supprime` — rien à restaurer."""
+
+    def __init__(self) -> None:
+        super().__init__("Ce potager n'est pas supprimé — il n'y a rien à restaurer.")
 
 
 def _generer_code() -> str:
@@ -143,11 +197,17 @@ def modifier_potager(
     return potager
 
 
-def _notifier_cycle_vie(db: Session, potager: Potager, acteur_id: int, texte_action: str) -> None:
+def _notifier_cycle_vie(
+    db: Session, potager: Potager, acteur_id: int, texte_action: str, precision: str = ""
+) -> None:
     """[US-083 / CA9] Notifie chaque AUTRE membre du potager ayant un compte
     Telegram lié — l'acteur de l'action n'a pas besoin de se notifier lui-même.
     Best-effort : `telegram_notify.envoyer_message` n'échoue jamais bruyamment,
-    donc l'absence de liaison ou une panne Telegram ne remonte jamais ici."""
+    donc l'absence de liaison ou une panne Telegram ne remonte jamais ici.
+
+    [US-084 / CA9] `precision` complète la phrase pour les actions dont la
+    conséquence n'est pas évidente au seul énoncé de l'action (date effective
+    de purge après une suppression)."""
     acteur = db.query(User).filter(User.id == acteur_id).first()
     nom_acteur = (acteur.nom or acteur.email) if acteur else "Un membre"
 
@@ -161,6 +221,8 @@ def _notifier_cycle_vie(db: Session, potager: Potager, acteur_id: int, texte_act
         if membre_user.telegram_chat_id is None:
             continue
         texte = f"{nom_acteur} a {texte_action} le potager « {potager.nom} »."
+        if precision:
+            texte = f"{texte} {precision}"
         svc_telegram_notify.envoyer_message(membre_user.telegram_chat_id, texte)
 
 
@@ -212,6 +274,286 @@ def desarchiver_potager(db: Session, user_id: int, potager_id: int) -> Potager:
     log.info("[US-083] Potager désarchivé : potager_id=%s par=%s", potager_id, user_id)
     _notifier_cycle_vie(db, potager, user_id, "désarchivé")
     return potager
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-084] Suppression définitive avec délai de grâce
+# -----------------------------------------------------------------------------
+# Cycle complet : `archive` --supprimer--> `supprime` (soft-delete, CA2)
+#                            <--restaurer--                (CA6, droit au remords)
+#                                        --purge J+30-->  effacement physique (CA7)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# [CA4] Compteur d'échecs consécutifs de re-saisie du mot de passe, par
+# (utilisateur, potager). Volontairement en mémoire du process : il ne protège
+# pas d'une attaque distribuée (le rate-limit HTTP et le hachage argon2 s'en
+# chargent) mais matérialise l'abandon d'UNE opération de suppression en cours,
+# qui n'a pas de sens au-delà de la session courante. Remis à zéro dès qu'une
+# vérification réussit ou que l'opération est abandonnée.
+_echecs_mot_de_passe: dict[tuple[int, int], int] = {}
+
+
+def _verifier_mot_de_passe_ou_abandonner(
+    db: Session, user_id: int, potager_id: int, mot_de_passe: str
+) -> None:
+    """[CA4] Vérifie la re-saisie du mot de passe du compte web. Lève
+    `MotDePasseInvalideError` tant qu'il reste des tentatives, puis
+    `TropDEchecsMotDePasseError` au troisième échec consécutif.
+
+    Un compte sans mot de passe web (compte Telegram-only, US-045) ne peut pas
+    confirmer : la suppression lui est refusée de la même manière qu'un mot de
+    passe erroné, sans compter de tentative — aucune re-saisie ne pourrait
+    aboutir."""
+    cle = (user_id, potager_id)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user.mot_de_passe_hash:
+        raise MotDePasseInvalideError(MAX_ECHECS_MOT_DE_PASSE)
+
+    if svc_auth.verifier_mot_de_passe(mot_de_passe or "", user.mot_de_passe_hash):
+        _echecs_mot_de_passe.pop(cle, None)
+        return
+
+    echecs = _echecs_mot_de_passe.get(cle, 0) + 1
+    if echecs >= MAX_ECHECS_MOT_DE_PASSE:
+        _echecs_mot_de_passe.pop(cle, None)
+        log.warning(
+            "[US-084] Suppression abandonnée après %s échecs de mot de passe : user_id=%s potager_id=%s",
+            MAX_ECHECS_MOT_DE_PASSE, user_id, potager_id,
+        )
+        raise TropDEchecsMotDePasseError()
+
+    _echecs_mot_de_passe[cle] = echecs
+    log.warning(
+        "[US-084] Mot de passe incorrect à la confirmation de suppression : user_id=%s potager_id=%s tentative=%s",
+        user_id, potager_id, echecs,
+    )
+    raise MotDePasseInvalideError(MAX_ECHECS_MOT_DE_PASSE - echecs)
+
+
+def compter_impact_suppression(db: Session, user_id: int, potager_id: int) -> dict:
+    """[CA3] Décompte réel de ce qui sera perdu — jamais approximé : chaque
+    nombre vient d'un COUNT sur la table concernée.
+
+    `nb_photos` vaut structurellement 0 aujourd'hui : le projet ne stocke aucune
+    photo (aucune table ni colonne média, cf. `database/models.py`). Le champ est
+    exposé quand même, pour que l'écran de confirmation n'ait pas à changer de
+    forme le jour où le stockage de photos existera — mais il n'affiche jamais un
+    chiffre inventé : il affiche le compte réel, qui est nul.
+
+    Réservé à l'owner : c'est l'écran de confirmation de SA suppression."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "supprimer ce potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    return {
+        "potager_id": potager_id,
+        "nom": potager.nom if potager else None,
+        "etat": potager.etat if potager else None,
+        "nb_evenements": db.query(Evenement).filter(Evenement.potager_id == potager_id).count(),
+        "nb_parcelles": db.query(Parcelle).filter(Parcelle.potager_id == potager_id).count(),
+        "nb_photos": 0,
+        "nb_membres": db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id).count(),
+        "delai_grace_jours": DELAI_GRACE_JOURS,
+    }
+
+
+def date_purge_prevue(potager: Potager) -> Optional[datetime]:
+    """[CA7] Date effective de purge d'un potager supprimé, `None` s'il ne l'est pas."""
+    if potager.supprime_le is None:
+        return None
+    return potager.supprime_le + timedelta(days=DELAI_GRACE_JOURS)
+
+
+def supprimer_potager(db: Session, user_id: int, potager_id: int, mot_de_passe: str) -> Potager:
+    """[CA1, CA2, CA4, CA5, CA9, CA10] Suppression LOGIQUE d'un potager archivé.
+
+    Owner uniquement (CA1/CA10), potager obligatoirement à l'état `archive`
+    (CA1 : on ne supprime jamais un potager en cours d'usage), confirmation par
+    re-saisie du mot de passe (CA4). Aucune donnée n'est détruite ici (CA2) :
+    seul l'état bascule, la purge physique attend le délai de grâce (CA7).
+
+    [CA5] Le potager actif de chaque membre qui pointait dessus est invalidé —
+    même mécanisme qu'`archiver_potager` (US-083/CA5) ; la ré-sélection reste
+    paresseuse, portée par `resoudre_tenant_context`."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "supprimer ce potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    if potager.etat != svc_potager_actif.ETAT_ARCHIVE:
+        log.warning(
+            "[US-084] Suppression refusée, potager non archivé : potager_id=%s etat=%s",
+            potager_id, potager.etat,
+        )
+        raise PotagerNonArchiveError()
+
+    _verifier_mot_de_passe_ou_abandonner(db, user_id, potager_id, mot_de_passe)
+
+    potager.etat = svc_potager_actif.ETAT_SUPPRIME
+    potager.supprime_le = datetime.utcnow()
+
+    membres = db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id).all()
+    for membre in membres:
+        membre_user = db.query(User).filter(User.id == membre.user_id).first()
+        if membre_user.potager_actif_id == potager_id:
+            membre_user.potager_actif_id = None  # [CA5] invalidation, bascule reprise au prochain accès
+
+    db.commit()
+    db.refresh(potager)
+
+    purge_le = date_purge_prevue(potager)
+    log.info(
+        "[US-084] Potager supprimé (logique) : potager_id=%s par=%s purge_prevue=%s",
+        potager_id, user_id, purge_le.isoformat(),
+    )
+    _notifier_cycle_vie(
+        db, potager, user_id, "supprimé",
+        precision=f"Ses données seront définitivement effacées le {purge_le.strftime('%d/%m/%Y')}.",
+    )
+    return potager
+
+
+def restaurer_potager(db: Session, user_id: int, potager_id: int) -> Potager:
+    """[CA6] Droit au remords : pendant le délai de grâce, l'owner restaure son
+    potager. Il repasse à l'état `archive` — jamais directement `actif` : la
+    remise en écriture reste un geste explicite de désarchivage (US-083)."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "restaurer ce potager")
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    if potager is None or potager.etat != svc_potager_actif.ETAT_SUPPRIME:
+        raise PotagerNonSupprimeError()
+
+    potager.etat = svc_potager_actif.ETAT_ARCHIVE
+    potager.supprime_le = None
+    if potager.archive_le is None:
+        potager.archive_le = datetime.utcnow()
+    db.commit()
+    db.refresh(potager)
+
+    log.info("[US-084] Potager restauré : potager_id=%s par=%s", potager_id, user_id)
+    _notifier_cycle_vie(
+        db, potager, user_id, "restauré", precision="Il est de nouveau consultable, en lecture seule."
+    )
+    return potager
+
+
+def lister_potagers_supprimes(db: Session, user_id: int) -> list[dict]:
+    """[CA6] Point d'accès dédié à la restauration : potagers supprimés dont
+    l'utilisateur est owner, encore dans leur délai de grâce.
+
+    Volontairement hors de `lister_potagers_utilisateur` (US-080/CA7 : un
+    potager supprimé n'apparaît dans AUCUNE liste, `etat=tous` compris) — cette
+    corbeille est le seul endroit qui les montre, et uniquement à qui peut les
+    restaurer."""
+    potagers = (
+        db.query(Potager)
+        .join(PotagerMembre, PotagerMembre.potager_id == Potager.id)
+        .filter(
+            PotagerMembre.user_id == user_id,
+            PotagerMembre.role == "owner",
+            Potager.etat == svc_potager_actif.ETAT_SUPPRIME,
+        )
+        .order_by(Potager.id)
+        .all()
+    )
+    return [
+        {
+            "id": p.id,
+            "nom": p.nom,
+            "etat": p.etat,
+            "supprime_le": p.supprime_le,
+            "purge_prevue_le": date_purge_prevue(p),
+        }
+        for p in potagers
+    ]
+
+
+def purger_potager(db: Session, potager_id: int) -> dict:
+    """[CA7] Effacement PHYSIQUE d'un potager et de toutes ses données rattachées.
+
+    Fonction de purge UNIQUE (note technique de l'US) : la tâche planifiée
+    (`bot.py::job_purge_potagers`), la commande d'administration
+    (`tools/purger_potagers.py`) et la future suppression de compte (RGPD)
+    passent toutes par ici, jamais par une seconde implémentation.
+
+    Ordre imposé par les clés étrangères : pointeurs `users.potager_actif_id`
+    d'abord (ils référencent `potagers`), puis les tables métier de la plus
+    dépendante à la moins dépendante, le potager en dernier — aucun orphelin
+    ne subsiste.
+
+    [US-043] La suppression s'exécute sous `tenant_scope(potager_id)` : les
+    policies RLS sur `evenements`/`parcelles`/`culture_config` restent armées,
+    la purge ne contourne pas l'isolation, elle s'y conforme potager par potager.
+    """
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    if potager is None:
+        return {"potager_id": potager_id, "purge": False}
+
+    nom = potager.nom
+    with tenant_scope(potager_id):
+        db.query(User).filter(User.potager_actif_id == potager_id).update(
+            {User.potager_actif_id: None}, synchronize_session=False
+        )
+        volumes = {
+            "evenements": db.query(Evenement).filter(Evenement.potager_id == potager_id)
+                            .delete(synchronize_session=False),
+            "parcelles": db.query(Parcelle).filter(Parcelle.potager_id == potager_id)
+                           .delete(synchronize_session=False),
+            "invitations": db.query(Invitation).filter(Invitation.potager_id == potager_id)
+                             .delete(synchronize_session=False),
+            "culture_config": db.query(CultureConfig).filter(CultureConfig.potager_id == potager_id)
+                                .delete(synchronize_session=False),
+            "membres": db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id)
+                         .delete(synchronize_session=False),
+        }
+        db.delete(potager)
+        db.commit()
+
+    # [CA7] Seule trace qui subsiste après effacement — d'où le détail des volumes.
+    log.info(
+        "[US-084] Purge physique : potager_id=%s nom=%r evenements=%s parcelles=%s "
+        "invitations=%s culture_config=%s membres=%s",
+        potager_id, nom, volumes["evenements"], volumes["parcelles"],
+        volumes["invitations"], volumes["culture_config"], volumes["membres"],
+    )
+    return {"potager_id": potager_id, "nom": nom, "purge": True, "volumes": volumes}
+
+
+def potagers_a_purger(db: Session, maintenant: Optional[datetime] = None) -> list[Potager]:
+    """[CA7, CA8] Potagers éligibles à la purge : supprimés ET hors délai de grâce.
+
+    Sélection isolée dans sa propre fonction pour que le mode `--dry-run` de
+    `tools/purger_potagers.py` montre exactement ce que la purge effacerait —
+    et non une requête écrite une seconde fois, qui pourrait diverger."""
+    reference = (maintenant or datetime.utcnow()) - timedelta(days=DELAI_GRACE_JOURS)
+    return (
+        db.query(Potager)
+        .filter(Potager.etat == svc_potager_actif.ETAT_SUPPRIME, Potager.supprime_le <= reference)
+        .order_by(Potager.id)
+        .all()
+    )
+
+
+def purger_potagers_supprimes(db: Session, maintenant: Optional[datetime] = None) -> list[dict]:
+    """[CA7, CA8] Purge tous les potagers supprimés dont le délai de grâce est
+    écoulé, et eux seuls.
+
+    [CA8] Idempotente et rejouable : la sélection ne retient que
+    `etat = 'supprime'` ET `supprime_le <= maintenant - 30 jours`. Relancée
+    aussitôt, elle ne trouve plus rien (les potagers purgés n'existent plus) et
+    ne touche jamais un potager encore dans son délai de grâce. N'avoir aucun
+    potager à purger est une exécution normale, pas une erreur.
+
+    `maintenant` est injectable pour les tests — jamais renseigné en production.
+    """
+    potagers = potagers_a_purger(db, maintenant)
+    if not potagers:
+        log.info("[US-084] Purge : aucun potager au-delà du délai de grâce (%s jours)", DELAI_GRACE_JOURS)
+        return []
+
+    resultats = [purger_potager(db, p.id) for p in potagers]
+    log.info("[US-084] Purge terminée : %s potager(s) effacé(s)", len(resultats))
+    return resultats
 
 
 def creer_invitation(

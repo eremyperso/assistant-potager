@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight, Settings, Plus, Archive } from 'lucide-react'
+import { Sprout, ChevronDown, Check, KeyRound, ArrowLeftRight, Settings, Plus, Archive, Trash2 } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
@@ -7,6 +7,7 @@ import { libelleRole } from '../lib/roles.js'
 import PotagerSelector from './PotagerSelector.jsx'
 import ParametresPotager from '../views/ParametresPotager.jsx'
 import ModalCreerPotager from './ModalCreerPotager.jsx'
+import ModalCorbeillePotagers from './ModalCorbeillePotagers.jsx'
 
 /**
  * Sélecteur de potager [US-054].
@@ -30,7 +31,7 @@ function sousTitrePotager({ role, nb_parcelles = 0, nb_membres = 0 }) {
 export default function PotagerMenu() {
   const { potagers, potagerActif, activer, potagerId, setPotagerId } = usePotager()
   const [ouvert, setOuvert] = useState(false)
-  const [modale, setModale] = useState(null) // null | 'liste' | 'rejoindre' | 'creer'
+  const [modale, setModale] = useState(null) // null | 'liste' | 'rejoindre' | 'creer' | 'corbeille'
   const [bascule, setBascule] = useState(null)
   // [US-083 / CA6 révisé] Détail du potager consulté (archivé) — le bouton de
   // sélection en en-tête doit refléter le potager réellement affiché, pas
@@ -184,6 +185,22 @@ export default function PotagerMenu() {
             }}
           />
 
+          {/* [US-084 / CA6] Corbeille — point d'accès dédié à la restauration.
+              Voisine immédiate de « Voir les potagers archivés » : les deux
+              montrent des potagers absents de la liste principale, à un stade
+              différent du cycle de vie. Le décompte n'est pas préchargé ici :
+              la corbeille est vide en régime normal, la charger à chaque
+              ouverture du menu coûterait une requête pour rien. */}
+          <PopItem
+            icon={Trash2}
+            label="Corbeille"
+            sub="Restaurer un potager supprimé"
+            onClick={() => {
+              setOuvert(false)
+              setModale('corbeille')
+            }}
+          />
+
           {/* [CA2] Seul accès permanent au code d'invitation (cf. US-048 / CA4). */}
           <PopItem
             icon={KeyRound}
@@ -226,6 +243,15 @@ export default function PotagerMenu() {
         <ParametresPotager potagerId={parametresPotagerId} onClose={() => setParametresPotagerId(null)} />
       )}
       {modale === 'creer' && <ModalCreerPotager onClose={() => setModale(null)} />}
+      {/* [US-084 / CA6] Un potager restauré revient ARCHIVÉ : il ne réapparaît
+          pas dans `potagers` (actifs seuls) mais dans la liste des archivés,
+          rechargée à la demande — d'où la remise à zéro de ce cache local. */}
+      {modale === 'corbeille' && (
+        <ModalCorbeillePotagers
+          onClose={() => setModale(null)}
+          onRestaure={() => { setArchives([]); setVoirArchives(false) }}
+        />
+      )}
     </div>
   )
 }
