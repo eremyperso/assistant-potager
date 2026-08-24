@@ -25,16 +25,17 @@ export default function DelierTelegram({ onClose }) {
 
   return (
     <Modal
-      title="Dissocier Telegram"
+      title="Désactiver votre compagnon"
       icon={Unlink}
       sub="Rompre le lien avec le chat actuellement relié"
       onClose={onClose}
       width={430}
-      foot="Vous pourrez relier ce compte à tout moment avec un nouveau code."
+      foot="Vous pourrez le réactiver à tout moment avec un nouveau lien."
     >
       <p className="text-[13.5px] text-txt leading-relaxed mb-2">
-        Le chat Telegram actuellement relié ne pourra plus dicter d'actions ni
-        interroger vos données tant qu'il ne sera pas relié de nouveau.
+        Votre compagnon de terrain ne pourra plus dicter d'actions ni
+        interroger vos données, ni vous envoyer de rappels, tant qu'il ne sera
+        pas réactivé.
       </p>
       {/* [CA6] Aucune donnée métier n'est touchée par la dissociation — seul le
           lien telegram_chat_id ↔ user_id est rompu. */}

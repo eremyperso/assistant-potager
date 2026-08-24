@@ -15,6 +15,11 @@ Authentification [US-044] :
   POST /auth/refresh               → nouvel access token à partir d'un refresh token valide
   GET  /auth/verify-email          → valide le lien de vérification reçu par e-mail (CA9/CA10)
   POST /auth/resend-verification   → renvoie un e-mail de vérification (CA12)
+
+Connexion Google — OpenID Connect [US-090] :
+  GET  /auth/oauth/providers          → connecteurs réellement disponibles ici (CA4)
+  GET  /auth/oauth/google/start       → redirige vers Google (Authorization Code + PKCE)
+  GET  /auth/oauth/google/callback    → retour Google → jetons applicatifs US-044
 Tous les endpoints métier ci-dessus exigent désormais un access token valide
 (en-tête `Authorization: Bearer <token>`), sauf /health. La connexion est
 refusée (403 EMAIL_NOT_VERIFIED) tant que l'e-mail du compte n'est pas
@@ -41,15 +46,18 @@ Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
 """
 import json
+import logging
 import os
+import re
 import tempfile
 import uuid
 from datetime import date
 from typing import Optional
+from urllib.parse import urlencode
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -77,6 +85,8 @@ from app.services.context import default_context, TenantContext, DEFAULT_POTAGER
 from app.services import auth as svc_auth
 from app.services import email as svc_email
 from app.services import liaison_telegram as svc_liaison_telegram
+from app.services import telegram_notify as svc_telegram_notify  # [US-091]
+from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
@@ -86,6 +96,36 @@ from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
+from config import FRONTEND_URL  # [US-090] retour de fédération vers la PWA
+
+log = logging.getLogger("potager")
+
+
+# ── [US-090 / CA19] Masquage des secrets OAuth dans les logs d'accès ───────────
+# Le code d'autorisation Google transite en clair dans la query string du
+# callback : sans ce filtre, le logger d'accès d'uvicorn l'écrirait tel quel
+# dans les journaux du serveur. Le filtre s'applique à la source (le logger
+# `uvicorn.access`) plutôt qu'au format de log, pour couvrir aussi les
+# éventuelles traces d'exception qui reprennent l'URL.
+class _FiltreSecretsOAuth(logging.Filter):
+    """Remplace la valeur des paramètres sensibles par `[masqué]` dans les logs."""
+
+    _MOTIF = re.compile(r"\b(code|id_token|code_verifier|client_secret)=[^&\s\"']+")
+
+    def _masquer(self, texte: str) -> str:
+        return self._MOTIF.sub(r"\1=[masqué]", texte)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = self._masquer(record.msg)
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                self._masquer(arg) if isinstance(arg, str) else arg for arg in record.args
+            )
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_FiltreSecretsOAuth())
 
 # ── Initialisation ─────────────────────────────────────────────────────────────
 app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
@@ -95,6 +135,28 @@ Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+def _cle_rate_limit_par_compte(request: Request) -> str:
+    """[US-091 / CA17] Clé de débit par compte plutôt que par IP — un même
+    utilisateur ne doit pas pouvoir contourner la limite en changeant de
+    réseau, et plusieurs comptes derrière la même IP (box familiale, réseau
+    partagé) ne doivent pas se limiter mutuellement, alors que le deep-link
+    multiplie les appels à cet endpoint.
+
+    Décode directement le Bearer token plutôt que de dépendre de
+    `get_current_user` (les dépendances FastAPI ne sont pas résolues avant que
+    slowapi n'évalue la clé) — retombe sur l'IP si l'en-tête est absent ou
+    invalide, la dépendance de la route rejettera alors la requête avec le bon
+    code d'erreur ; la limite par IP reste un filet de sécurité dans ce cas."""
+    entete = request.headers.get("authorization", "")
+    if entete.lower().startswith("bearer "):
+        try:
+            payload = svc_auth.decoder_access_token(entete[7:].strip())
+            return f"user:{payload['sub']}"
+        except (svc_auth.TokenExpireError, svc_auth.TokenInvalideError):
+            pass
+    return get_remote_address(request)
 
 # ── CORS — autorise le frontend Netlify + dev local ────────────────────────────
 app.add_middleware(
@@ -356,9 +418,13 @@ def auth_mot_de_passe_oublie(request: Request, req: MotDePasseOublieRequest):
     même principe que /auth/resend-verification (CA12)."""
     db = SessionLocal()
     try:
-        token = svc_auth.demander_reset_mot_de_passe(db, req.email)
-        if token:
-            svc_email.envoyer_email_reset_mdp(req.email, token)
+        # [US-090 / CA17] Un compte créé via Google est éligible lui aussi —
+        # l'e-mail envoyé l'oriente alors vers « Continuer avec Google » ou vers
+        # la définition d'un premier mot de passe.
+        resultat = svc_auth.demander_reset_mot_de_passe(db, req.email)
+        if resultat:
+            token, definition_initiale = resultat
+            svc_email.envoyer_email_reset_mdp(req.email, token, definition_initiale=definition_initiale)
     finally:
         db.close()
     return {"message": "Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé"}
@@ -391,6 +457,140 @@ def auth_reinitialiser_mot_de_passe(request: Request, req: ReinitialiserMotDePas
         db.close()
 
 
+# ── Connexion Google — OpenID Connect [US-090] ────────────────────────────────
+# Cookie d'état signé (state + nonce + code_verifier), `HttpOnly` + `SameSite=Lax`
+# et cantonné au chemin du flux : jamais de `localStorage` (CA6). `Lax` suffit —
+# le retour de Google est une navigation GET de premier niveau, le seul cas où
+# un cookie `Lax` est bien transmis depuis un site tiers.
+_COOKIE_OAUTH_GOOGLE = "potager_oauth_google"
+_CHEMIN_COOKIE_OAUTH = "/auth/oauth/google"
+
+
+def _retour_pwa(**fragment: str) -> RedirectResponse:
+    """Renvoie l'utilisateur sur la PWA, résultat de la fédération dans le
+    fragment d'URL.
+
+    Le fragment (`#…`) plutôt que la query string : il n'est jamais transmis au
+    serveur, n'apparaît donc ni dans les logs d'accès ni dans l'en-tête
+    `Referer` (CA19). L'URL de destination vient de la configuration, jamais
+    d'un paramètre de la requête — aucune redirection ouverte possible.
+    Le cookie d'état est détruit dans tous les cas : succès comme échec."""
+    url = f"{FRONTEND_URL.rstrip('/')}/auth/callback#{urlencode(fragment)}"
+    reponse = RedirectResponse(url, status_code=302)
+    reponse.delete_cookie(_COOKIE_OAUTH_GOOGLE, path=_CHEMIN_COOKIE_OAUTH)
+    return reponse
+
+
+@app.get("/auth/oauth/providers")
+def auth_oauth_providers():
+    """[CA4] Connecteurs réellement utilisables dans cet environnement.
+
+    La PWA masque purement et simplement le bouton Google quand il vaut `false`
+    — pas de bouton en erreur, pas de « bientôt disponible » : sans identifiants
+    Google configurés, le connecteur n'existe pas pour l'utilisateur."""
+    return {"google": svc_oauth_google.est_configure()}
+
+
+@app.get("/auth/oauth/google/start")
+@limiter.limit("10/minute")
+def auth_oauth_google_start(request: Request):
+    """[CA5, CA6] Démarre le flux Authorization Code + PKCE et redirige vers
+    l'écran de consentement Google.
+
+    Rien de sensible n'est confié au navigateur : `code_verifier`, `state` et
+    `nonce` partent dans un cookie signé `HttpOnly`, seul le `code_challenge`
+    (leur empreinte) circule dans l'URL."""
+    if not svc_oauth_google.est_configure():
+        raise HTTPException(status_code=404, detail="Connexion Google non disponible")
+
+    demande = svc_oauth_google.preparer_autorisation()
+    reponse = RedirectResponse(demande.url, status_code=302)
+    reponse.set_cookie(
+        key=_COOKIE_OAUTH_GOOGLE,
+        value=svc_oauth_google.signer_etat(demande),
+        max_age=600,
+        httponly=True,
+        samesite="lax",
+        # `Secure` dès que le flux est en HTTPS — laissé à False en dev local
+        # sur http://localhost, où le navigateur refuserait le cookie sinon.
+        secure=demande.redirect_uri.startswith("https://"),
+        path=_CHEMIN_COOKIE_OAUTH,
+    )
+    log.info("[US-090] Demande d'autorisation émise — fournisseur=google")
+    return reponse
+
+
+@app.get("/auth/oauth/google/callback")
+def auth_oauth_google_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """[CA3, CA5, CA7, CA10-CA14] Retour de Google : vérifie l'état, échange le
+    code côté serveur, valide l'id_token, puis résout ou crée le compte et émet
+    les jetons **applicatifs** US-044 (access 15 min + refresh 30 j).
+
+    Aucun jeton Google n'est conservé. Tous les chemins d'échec ramènent
+    l'utilisateur sur l'écran de connexion avec un code de message
+    compréhensible (CA3) — jamais de page blanche ni de trace technique."""
+    if error:
+        # Consentement refusé, fenêtre fermée, accès révoqué côté compte Google.
+        log.info("[US-090] Autorisation non accordée (%s) — fournisseur=google", error)
+        return _retour_pwa(erreur="acces_refuse")
+
+    try:
+        etat = svc_oauth_google.lire_etat(request.cookies.get(_COOKIE_OAUTH_GOOGLE), state)
+    except svc_oauth_google.EtatOAuthInvalideError:
+        log.warning("[US-090] État de connexion invalide — fournisseur=google")
+        return _retour_pwa(erreur="etat_invalide")
+
+    if not code:
+        return _retour_pwa(erreur="echec_google")
+
+    try:
+        profil = svc_oauth_google.recuperer_profil(
+            code=code,
+            code_verifier=etat["code_verifier"],
+            redirect_uri=etat["redirect_uri"],
+            nonce=etat["nonce"],
+        )
+    except svc_oauth_google.OAuthGoogleError:
+        return _retour_pwa(erreur="echec_google")
+
+    db = SessionLocal()
+    try:
+        try:
+            resultat = svc_auth.connecter_ou_creer_via_google(
+                db,
+                sub=profil.sub,
+                email=profil.email,
+                email_verifie=profil.email_verifie,
+                nom=profil.nom,
+            )
+        except svc_auth.RattachementNonVerifieError:
+            # [CA13] Compte existant + e-mail non attesté : pas de rattachement
+            # automatique, l'utilisateur passe par son mot de passe.
+            return _retour_pwa(erreur="email_non_verifie")
+        except (svc_auth.EmailGoogleAbsentError, svc_auth.FederationImpossibleError):
+            return _retour_pwa(erreur="echec_google")
+
+        if resultat.evenement == svc_auth.FEDERATION_CREATION_NON_VERIFIEE:
+            # [CA13] Création avec un e-mail non attesté : le compte reste non
+            # vérifié et repasse par le parcours Brevo d'US-044.
+            token = svc_auth.demarrer_verification_email(db, resultat.user)
+            svc_email.envoyer_email_verification(resultat.user.email, token)
+            return _retour_pwa(info="verification_requise")
+
+        return _retour_pwa(
+            access_token=svc_auth.creer_access_token(resultat.user.id),
+            refresh_token=svc_auth.creer_refresh_token(resultat.user.id),
+            evenement=resultat.evenement,
+        )
+    finally:
+        db.close()
+
+
 @app.get("/auth/me")
 def auth_me(user: User = Depends(get_current_user)):
     """[US-055 / CA1] Identité du compte connecté + état de la liaison Telegram,
@@ -410,15 +610,27 @@ def auth_me(user: User = Depends(get_current_user)):
         # Booléen plutôt que le chat_id lui-même : le front n'a besoin que de
         # l'état, et l'identifiant Telegram n'a pas à circuler côté navigateur.
         "telegram_lie": user.telegram_chat_id is not None,
+        # [US-091] Identifiant public du bot, déduit du token via l'API
+        # Telegram (getMe, mis en cache) — jamais une variable d'environnement
+        # séparée à maintenir en double par environnement, cf.
+        # app/services/telegram_notify.py::obtenir_username_bot. Vide en cas
+        # d'échec : le front retombe alors sur le seul code manuel, sans
+        # bouton ni QR.
+        "bot_username": svc_telegram_notify.obtenir_username_bot(),
     }
 
 
 @app.post("/auth/lien/generer-code")
-def auth_generer_code_liaison(user: User = Depends(get_current_user)):
-    """[US-045 / CA1] Génère un code à usage unique (TTL 10 min) pour lier ce
-    compte web à un chat Telegram via la commande /lier du bot. Identité seule
-    (pas de potager requis) : on doit pouvoir lier son Telegram avant même
-    d'appartenir à un potager."""
+@limiter.limit("5/hour", key_func=_cle_rate_limit_par_compte)
+def auth_generer_code_liaison(request: Request, user: User = Depends(get_current_user)):
+    """[US-045 / CA1 ; US-091 / CA17] Génère un code à usage unique (TTL 10 min)
+    pour lier ce compte web à un chat Telegram via la commande /lier du bot (ou
+    le deep-link /start). Identité seule (pas de potager requis) : on doit
+    pouvoir lier son Telegram avant même d'appartenir à un potager.
+
+    Limité à 5 générations/heure/compte (CA17) : le deep-link et le QR de
+    l'écran d'activation en multiplient les appels par rapport à la simple
+    modale existante."""
     db = SessionLocal()
     try:
         liaison = svc_liaison_telegram.creer_code_liaison(db, user.id)

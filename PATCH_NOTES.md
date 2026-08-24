@@ -1,4 +1,22 @@
 
+## [v3.38.0] — 2026-08-24
+
+### 🚀 Nouveautés
+- Ajoute l'écran d'activation du compagnon de terrain Telegram en un seul geste (deep-link + QR code) à l'issue de la création du premier potager (US-091)
+- `/start <code>` sur Telegram active directement le compagnon et accueille le jardinier en nommant son potager, sans passer par `/lier` (US-091)
+- Ajoute un bandeau de relance au tableau de bord tant que le compagnon Telegram n'est pas activé (US-091)
+- Réécrit les intitulés Telegram du menu Compte et des modales associées : « activer/désactiver son compagnon » plutôt que « connecter/relier Telegram » (US-091)
+
+### 🐛 Corrections
+- Corrige `/start` (sans code) qui affichait toujours le nombre d'événements du potager #1 par défaut au lieu de celui réellement actif du jardinier lié (US-091)
+- Corrige le bouton d'activation qui remplaçait l'onglet de l'application par la page Telegram, faisant perdre la session en cours, au lieu de l'ouvrir dans un nouvel onglet (US-091)
+- Retire le connecteur « Continuer avec Telegram » de l'écran de connexion, resté désactivé et promettant une activation qui n'aura finalement jamais lieu (US-091 / CA19)
+
+### 🔧 Améliorations techniques
+- Limite la génération de codes de liaison Telegram à 5 par heure et par compte (US-091)
+- Journalise chaque liaison Telegram réussie (compte, chat, horodatage) pour l'auditabilité, sans jamais écrire le code lui-même (US-091)
+- Résout le nom public du bot Telegram depuis son token via l'API Telegram plutôt qu'une variable d'environnement à synchroniser à la main entre dev et prod (US-091)
+
 ## [v3.37.1] — 2026-08-21
 
 ### 🐛 Corrections

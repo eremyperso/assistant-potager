@@ -88,6 +88,14 @@ def lier_chat_id(db: Session, code: str, chat_id: int) -> User:
     liaison.utilise_le = datetime.utcnow()
     db.commit()
     db.refresh(user)
+    # [US-091 / CA18] Auditabilité de chaque liaison réussie — jamais le code
+    # lui-même, ici implicitement absent du message. Point unique (/lier,
+    # /start <code>, code envoyé en texte brut passent tous par cette fonction)
+    # garantit la couverture sans dupliquer le log à chaque appelant.
+    log.info(
+        "[US-091] Liaison Telegram réussie : user_id=%s chat_id=%s horodatage=%s",
+        user.id, chat_id, liaison.utilise_le.isoformat(),
+    )
     return user
 
 

@@ -9,16 +9,21 @@ aux autres services d'app/services/) : il s'exécute AVANT qu'un contexte
 utilisateur n'existe — c'est justement lui qui le produit.
 """
 import hashlib
+import logging
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import JWT_SECRET, JWT_ALGORITHM, JWT_ACCESS_TTL_MIN, JWT_REFRESH_TTL_DAYS
 from database.models import User
+
+log = logging.getLogger("potager")
 
 _pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -66,6 +71,22 @@ class TokenResetMdpInvalideError(Exception):
 
 class TokenResetMdpExpireError(Exception):
     """[US-057 / CA4] Token de réinitialisation expiré (> 1h)."""
+
+
+class RattachementNonVerifieError(Exception):
+    """[US-090 / CA13] Un compte existe déjà pour cette adresse, mais Google
+    n'atteste pas sa vérification (`email_verified = false`) — le rattachement
+    automatique est refusé."""
+
+
+class EmailGoogleAbsentError(Exception):
+    """[US-090] L'id_token Google ne porte aucune adresse e-mail : impossible
+    d'identifier ou de créer un compte."""
+
+
+class FederationImpossibleError(Exception):
+    """[US-090] Collision concurrente sur `google_sub` ou `email` — la création
+    du compte fédéré n'a pas abouti."""
 
 
 def hash_password(mot_de_passe: str) -> str:
@@ -161,6 +182,116 @@ def obtenir_utilisateur_par_id(db: Session, user_id: int) -> Optional[User]:
     return db.query(User).filter(User.id == user_id).first()
 
 
+# ── Fédération d'identité Google [US-090] ──────────────────────────────────────
+
+# Nature de l'événement de connexion fédérée — journalisée et exploitée par
+# l'endpoint de callback, jamais stockée sur l'utilisateur (CA15).
+FEDERATION_CONNEXION = "connexion"
+FEDERATION_RATTACHEMENT = "rattachement"
+FEDERATION_CREATION = "creation"
+FEDERATION_CREATION_NON_VERIFIEE = "creation_non_verifiee"
+
+
+@dataclass(frozen=True)
+class ResultatFederation:
+    """Compte résolu + nature de l'événement, pour que l'appelant sache s'il doit
+    émettre des jetons (CA11/CA12) ou déclencher la vérification Brevo (CA13)."""
+    user: User
+    evenement: str
+
+
+def connecter_ou_creer_via_google(
+    db: Session,
+    sub: str,
+    email: Optional[str],
+    email_verifie: bool,
+    nom: Optional[str] = None,
+) -> ResultatFederation:
+    """[US-090 / CA11, CA12, CA13, CA14] Résout le compte correspondant à une
+    identité Google déjà validée (cf. `app/services/oauth_google.py`).
+
+    Trois chemins, dans cet ordre :
+
+    1. `google_sub` déjà connu → connexion d'un compte déjà fédéré.
+    2. E-mail déjà utilisé par un compte local :
+       - Google atteste la vérification → rattachement automatique et silencieux
+         (CA12), l'utilisateur retrouve ses potagers, aucun doublon, et son mot
+         de passe continue de fonctionner (CA15 : deux méthodes coexistent).
+       - Google ne l'atteste pas → refus (CA13), pour ne pas offrir la prise de
+         contrôle d'un compte à qui contrôle un annuaire Workspace mal réglé.
+    3. Aucun compte → création, `mot_de_passe_hash` à NULL, `email_verifie`
+       recopié de l'attestation Google (CA11/CA13).
+
+    La création écrit le compte **et** son `google_sub` dans le même INSERT : un
+    compte créé sans son `sub` serait inconnectable au coup suivant tout en
+    réservant définitivement l'adresse e-mail."""
+    sub = (sub or "").strip()
+    if not sub:
+        raise FederationImpossibleError("Identité Google sans sub")
+
+    user = db.query(User).filter(User.google_sub == sub).first()
+    if user is not None:
+        # [CA14] Compte déjà fédéré : le `sub` prime sur l'e-mail, qui peut avoir
+        # changé côté Google depuis la première connexion.
+        log.info("[US-090] Connexion fédérée — user_id=%s fournisseur=google", user.id)
+        return ResultatFederation(user=user, evenement=FEDERATION_CONNEXION)
+
+    email_normalise = (email or "").strip().lower()
+    if not email_normalise:
+        raise EmailGoogleAbsentError("Identité Google sans adresse e-mail")
+
+    existant = db.query(User).filter(User.email == email_normalise).first()
+    if existant is not None:
+        if not email_verifie:
+            log.info(
+                "[US-090] Rattachement refusé (e-mail non attesté) — user_id=%s fournisseur=google",
+                existant.id,
+            )
+            raise RattachementNonVerifieError("E-mail Google non attesté vérifié")
+
+        existant.google_sub = sub
+        # L'attestation Google vaut vérification : un compte local resté non
+        # vérifié devient vérifié, sans repasser par Brevo.
+        existant.email_verifie = True
+        if not existant.nom and nom:
+            existant.nom = nom.strip()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            log.warning("[US-090] Rattachement en conflit — fournisseur=google")
+            raise FederationImpossibleError("Rattachement impossible")
+        db.refresh(existant)
+        log.info("[US-090] Rattachement automatique — user_id=%s fournisseur=google", existant.id)
+        return ResultatFederation(user=existant, evenement=FEDERATION_RATTACHEMENT)
+
+    user = User(
+        email=email_normalise,
+        nom=(nom.strip() if nom and nom.strip() else None),
+        mot_de_passe_hash=None,          # [CA11] compte sans mot de passe
+        email_verifie=bool(email_verifie),
+        google_sub=sub,
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Deux connexions simultanées pour la même identité : la seconde
+        # retombe sur le compte créé par la première plutôt que d'échouer.
+        db.rollback()
+        deja_cree = db.query(User).filter(User.google_sub == sub).first()
+        if deja_cree is not None:
+            log.info("[US-090] Connexion fédérée (création concurrente) — user_id=%s fournisseur=google", deja_cree.id)
+            return ResultatFederation(user=deja_cree, evenement=FEDERATION_CONNEXION)
+        log.warning("[US-090] Création fédérée en conflit — fournisseur=google")
+        raise FederationImpossibleError("Création du compte fédéré impossible")
+
+    db.refresh(user)
+    evenement = FEDERATION_CREATION if user.email_verifie else FEDERATION_CREATION_NON_VERIFIEE
+    log.info("[US-090] Création de compte fédéré — user_id=%s fournisseur=google", user.id)
+    return ResultatFederation(user=user, evenement=evenement)
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -219,14 +350,25 @@ def renvoyer_verification_email(db: Session, email: str) -> Optional[str]:
     return demarrer_verification_email(db, user)
 
 
-def demander_reset_mot_de_passe(db: Session, email: str) -> Optional[str]:
+def demander_reset_mot_de_passe(db: Session, email: str) -> Optional[tuple[str, bool]]:
     """[US-057 / CA1] Génère un token de réinitialisation (1h) si un compte web
-    (mot de passe défini) existe pour cet e-mail. Renvoie None sinon (compte
-    inconnu ou Telegram-only) — l'appelant renvoie la même réponse générique
-    dans tous les cas (anti-énumération, même principe que CA12/CA7)."""
+    existe pour cet e-mail. Renvoie None sinon (compte inconnu ou Telegram-only)
+    — l'appelant renvoie la même réponse générique dans tous les cas
+    (anti-énumération, même principe que CA12/CA7).
+
+    [US-090 / CA17] Un compte créé via Google n'a pas de mot de passe : il est
+    désormais éligible lui aussi, mais pour en **définir** un premier plutôt que
+    d'en remplacer un. Le booléen renvoyé (`definition_initiale`) permet à
+    l'appelant d'adapter l'e-mail — orienter vers la connexion Google ou vers la
+    définition d'un mot de passe — au lieu de laisser croire que le compte
+    n'existe pas. La preuve de possession de l'adresse reste la même : le lien
+    n'arrive que dans la boîte du titulaire."""
     email_normalise = email.strip().lower()
     user = db.query(User).filter(User.email == email_normalise).first()
-    if user is None or not user.mot_de_passe_hash:
+    if user is None:
+        return None
+    if not user.mot_de_passe_hash and not user.google_sub:
+        # Compte Telegram-only : rien à réinitialiser ni à définir ici.
         return None
 
     token_brut = secrets.token_urlsafe(32)
@@ -234,7 +376,7 @@ def demander_reset_mot_de_passe(db: Session, email: str) -> Optional[str]:
     user.reset_mdp_token_expire_le = datetime.utcnow() + _RESET_MDP_TOKEN_TTL
     user.reset_mdp_token_utilise_le = None
     db.commit()
-    return token_brut
+    return token_brut, not user.mot_de_passe_hash
 
 
 def reinitialiser_mot_de_passe(db: Session, token: str, nouveau_mot_de_passe: str) -> User:

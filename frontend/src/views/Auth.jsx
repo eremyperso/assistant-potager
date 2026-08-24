@@ -2,7 +2,7 @@
 // qu'aucune session JWT n'est active. Layout scindé (panneau de marque + formulaire)
 // à partir de 900px de conteneur, formulaire seul en dessous — cf. maquette
 // `login-screens.jsx` et docs/ANALYSE_REFONTE_UI_WEB_2026.md §5.7.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sun, Moon, Leaf, KeyRound, Sprout, LayoutGrid, Send } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
@@ -20,28 +20,42 @@ function GoogleMark({ s = 18 }) {
   )
 }
 
-function FacebookMark({ s = 18 }) {
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" className="shrink-0 block">
-      <path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.09 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.96h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.09 24 18.1 24 12.07z" />
-    </svg>
-  )
+// [US-090 / CA2] Facebook n'a jamais été retenu — l'API Graph ne garantit
+// jamais l'attestation de vérification de l'e-mail, ce qui interdit le
+// rattachement automatique d'un compte existant (CA12). [US-091 / CA19]
+// Telegram non plus : un Login Widget ouvrirait un second chemin d'identité
+// concurrent (compte sans e-mail, sans canal de récupération) pour un gain
+// nul face à la liaison existante (menu Compte) — l'utilisateur déjà lié se
+// reconnecte par e-mail ou par Google (US-090). Google reste donc le seul
+// connecteur de cet écran. Écart assumé avec la maquette 2026
+// (docs/ANALYSE_REFONTE_UI_WEB_2026.md §5.7, qui en dessine trois).
+
+// [CA3] Chaque échec possible du parcours Google a son message — l'utilisateur
+// revient toujours sur cet écran avec une explication, jamais une trace technique.
+const MESSAGES_ERREUR_OAUTH = {
+  acces_refuse:
+    "Connexion Google interrompue. Vous pouvez réessayer, ou vous connecter avec votre e-mail et votre mot de passe.",
+  etat_invalide:
+    "La demande de connexion Google a expiré. Cliquez à nouveau sur « Continuer avec Google ».",
+  email_non_verifie:
+    "Google n'atteste pas la vérification de cette adresse e-mail : elle ne peut pas être rattachée automatiquement à un compte existant. Connectez-vous avec votre e-mail et votre mot de passe.",
+  echec_google:
+    "La connexion avec Google n'a pas abouti. Réessayez dans un instant, ou connectez-vous avec votre e-mail et votre mot de passe.",
 }
 
-function TelegramMark({ s = 18 }) {
-  return (
-    <svg width={s} height={s} viewBox="0 0 24 24" className="shrink-0 block">
-      <circle cx="12" cy="12" r="12" fill="#29A9EB" />
-      <path fill="#fff" d="M5.5 11.9l11-4.25c.51-.18.96.13.79.9l-1.87 8.83c-.14.63-.52.78-1.05.49l-2.9-2.14-1.4 1.35c-.15.15-.29.29-.59.29l.21-3 5.46-4.93c.24-.21-.05-.33-.36-.13l-6.75 4.25-2.91-.91c-.63-.2-.65-.63.13-.93z" />
-    </svg>
-  )
-}
+const MESSAGE_VERIFICATION_REQUISE =
+  "Votre compte a bien été créé, mais Google n'atteste pas la vérification de votre adresse : un e-mail de vérification vient de vous être envoyé. Cliquez sur le lien reçu, puis revenez vous connecter."
 
-const PROVIDERS = [
-  { id: 'google', label: 'Google', Mark: GoogleMark },
-  { id: 'facebook', label: 'Facebook', Mark: FacebookMark },
-  { id: 'telegram', label: 'Telegram', Mark: TelegramMark },
-]
+function alerteDepuisRetourOAuth(retour) {
+  if (!retour) return null
+  if (retour.erreur) {
+    return { ton: 'erreur', texte: MESSAGES_ERREUR_OAUTH[retour.erreur] || MESSAGES_ERREUR_OAUTH.echec_google }
+  }
+  if (retour.info === 'verification_requise') {
+    return { ton: 'info', texte: MESSAGE_VERIFICATION_REQUISE }
+  }
+  return null
+}
 
 // [CA1] Repères génériques, non liés à un compte réel : cet écran s'affiche
 // avant authentification, aucune donnée personnelle n'est disponible ici
@@ -65,28 +79,21 @@ function LogoMark({ light }) {
   )
 }
 
-// [CA5] Boutons affichés conformément à la maquette mais désactivés — aucune
-// intégration OAuth n'existe côté backend (cf. docs §5.7, écart assumé).
-function OAuthRow() {
+// [US-090 / CA1, CA4] Actif dès que l'API déclare le connecteur configuré, et
+// purement absent sinon — masqué, jamais en erreur : sans identifiants Google
+// dans l'environnement, le bouton n'existe pas (dev local et tests compris).
+function OAuthRow({ googleActif }) {
+  if (!googleActif) return null
+
   return (
-    <div>
-      <div className="grid grid-cols-1 gap-[9px] @[420px]/auth:grid-cols-3">
-        {PROVIDERS.map(({ id, label, Mark }) => (
-          <button
-            key={id}
-            type="button"
-            disabled
-            title="Bientôt disponible"
-            aria-label={`Continuer avec ${label} — bientôt disponible`}
-            className="h-[46px] rounded-[11px] bg-card border border-border text-txt text-[13.5px] font-semibold flex items-center justify-center gap-2 opacity-50 cursor-not-allowed"
-          >
-            <Mark s={19} />
-            <span className="@[420px]/auth:hidden">Continuer avec {label}</span>
-          </button>
-        ))}
-      </div>
-      <p className="text-[11px] text-txt3 mt-1.5 text-center">Bientôt disponible</p>
-    </div>
+    <button
+      type="button"
+      onClick={() => { window.location.href = authApi.googleStartUrl() }}
+      className="w-full h-[46px] rounded-[11px] bg-card border border-border text-txt text-[13.5px] font-semibold flex items-center justify-center gap-2"
+    >
+      <GoogleMark s={19} />
+      Continuer avec Google
+    </button>
   )
 }
 
@@ -100,7 +107,7 @@ function Sep({ children }) {
   )
 }
 
-export default function Auth() {
+export default function Auth({ retourOAuth = null }) {
   const { theme, toggle } = useTheme()
   const { login, register, loading, error, errorCode, resendVerification } = useAuth()
   const [mode, setMode] = useState('login') // 'login' | 'signup' | 'forgot'
@@ -111,10 +118,24 @@ export default function Auth() {
   const [message, setMessage] = useState(null)
   const [envoiForgotEnCours, setEnvoiForgotEnCours] = useState(false)
   const [forgotEnvoye, setForgotEnvoye] = useState(false)
+  // [US-090 / CA4] Faux par défaut : tant que l'API n'a pas répondu, aucun
+  // bouton Google n'apparaît — mieux vaut un connecteur qui s'affiche avec un
+  // instant de retard qu'un bouton qui s'avère inopérant.
+  const [googleActif, setGoogleActif] = useState(false)
+  const [alerteOAuth, setAlerteOAuth] = useState(() => alerteDepuisRetourOAuth(retourOAuth))
+
+  useEffect(() => {
+    let annule = false
+    authApi.oauthProviders().then((connecteurs) => {
+      if (!annule) setGoogleActif(Boolean(connecteurs.google))
+    })
+    return () => { annule = true }
+  }, [])
 
   function changerMode(m) {
     setMode(m)
     setMessage(null)
+    setAlerteOAuth(null)
     setMotDePasse('')
     setForgotEnvoye(false)
   }
@@ -228,9 +249,29 @@ export default function Auth() {
                 <p className="text-[13.5px] text-txt2 mt-1.5">{sousTitre}</p>
               </div>
 
+              {alerteOAuth && (
+                <div
+                  role={alerteOAuth.ton === 'erreur' ? 'alert' : 'status'}
+                  className={`rounded-xl text-[13px] leading-relaxed p-3.5 mb-4 ${
+                    alerteOAuth.ton === 'erreur' ? 'bg-red-soft text-red' : 'bg-brand-soft text-brand-text'
+                  }`}
+                >
+                  {alerteOAuth.texte}
+                </div>
+              )}
+
               {mode !== 'forgot' && (
                 <>
-                  <OAuthRow />
+                  <OAuthRow googleActif={googleActif} />
+                  {/* [CA16] La fusion de deux comptes ouverts sur deux adresses
+                      différentes n'existe pas en v1 : le dire avant, plutôt que
+                      de laisser découvrir un potager vide après coup. */}
+                  {googleActif && mode === 'login' && (
+                    <p className="text-[11px] text-txt3 mt-1.5 text-center leading-relaxed">
+                      Une adresse e-mail = un compte : deux comptes ouverts sur deux adresses
+                      différentes ne peuvent pas encore être fusionnés.
+                    </p>
+                  )}
                   <Sep>ou par e-mail</Sep>
                 </>
               )}
@@ -297,9 +338,22 @@ export default function Auth() {
                         onChange={(e) => setCguOk(e.target.checked)}
                         className="w-4 h-4 mt-0.5 accent-brand shrink-0"
                       />
+                      {/* [US-090 / CA20] Le consentement nomme explicitement
+                          Google comme fournisseur d'identité et les données
+                          récupérées. Les liens restent inertes tant que les
+                          documents n'existent pas — leur rédaction relève
+                          d'US-132 (RGPD & conformité), cf.
+                          docs/RGPD_FEDERATION_GOOGLE.md. */}
                       <span>
                         J'accepte les <a href="#" className="text-brand-text font-semibold">conditions d'utilisation</a>{' '}
                         et la <a href="#" className="text-brand-text font-semibold">politique de confidentialité</a>.
+                        {googleActif && (
+                          <>
+                            {' '}En choisissant « Continuer avec Google », j'accepte que Google agisse comme
+                            fournisseur d'identité et transmette à Assistant Potager mon identifiant technique
+                            de compte, mon adresse e-mail et mon nom.
+                          </>
+                        )}
                       </span>
                     </label>
                   )}

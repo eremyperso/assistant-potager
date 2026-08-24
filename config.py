@@ -30,6 +30,21 @@ EMAIL_FROM_NOM = os.environ.get("EMAIL_FROM_NOM", "Assistant Potager")
 # qui est un texte d'affichage Telegram, pas forcément une URL cliquable.
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
+# [US-090] Fédération d'identité Google (OpenID Connect) — identifiants lus
+# exclusivement depuis l'environnement, jamais codés en dur ni versionnés (CA9).
+# Absents ou vides → connecteur Google totalement masqué côté PWA (CA4) : le
+# développement local et les tests fonctionnent sans compte Google Cloud.
+GOOGLE_CLIENT_ID     = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+# [CA8] Liste blanche des `redirect_uri` acceptées, séparées par des virgules.
+# Elles pointent sur l'API (l'échange du code se fait côté serveur, CA5), pas
+# sur le frontend — ex. http://localhost:8000/auth/oauth/google/callback en dev.
+GOOGLE_REDIRECT_URIS = [
+    uri.strip()
+    for uri in os.environ.get("GOOGLE_REDIRECT_URIS", "").split(",")
+    if uri.strip()
+]
+
 # [US-045] URL de la PWA — référencée dans le message d'onboarding Telegram
 # (chat non lié). Pas de domaine en dur : reste un placeholder générique tant
 # que PWA_URL n'est pas configurée en environnement.

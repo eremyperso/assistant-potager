@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import { Field, VilleSearch, Badge, Tip, InfoBanner, Btn } from '../components/ui'
+import ActivationCompagnon from '../components/ActivationCompagnon.jsx'
 
 const STEPS = [
   { id: 'potager', label: 'Votre potager', sub: 'Nom et emplacement' },
@@ -399,6 +400,9 @@ export default function Onboarding() {
   const { theme, toggle } = useTheme()
 
   const [step, setStep] = useState(0)
+  // [US-091 / CA1] Écran d'activation du compagnon Telegram, affiché une fois
+  // le potager créé, avant de rejoindre le tableau de bord.
+  const [activation, setActivation] = useState(false)
   // [CA2, CA3, CA4] État local le temps de l'assistant — aucun appel API avant
   // la validation finale du récapitulatif (CA5, CA6).
   const [st, setSt] = useState({
@@ -447,7 +451,8 @@ export default function Onboarding() {
             }
           : null,
       })
-      // finaliserOnboarding() recharge la page en cas de succès.
+      // [US-091 / CA1] Plus de rechargement ici : place à l'écran d'activation.
+      setActivation(true)
     } catch (err) {
       setError(err.message)
       setLoading(false)
@@ -455,6 +460,15 @@ export default function Onboarding() {
   }
 
   const Body = [StepPotager, StepParcelle, StepCultures, StepRecap][step]
+
+  // [US-091 / CA1, CA6] Potager créé — écran d'activation plein écran, hors du
+  // stepper (ni « Précédent » ni renumérotation : revenir en arrière recréerait
+  // un second potager via handleFinish). « Plus tard » comme une activation
+  // réussie mènent tous deux au tableau de bord via le même rechargement complet
+  // que l'ancien comportement de finaliserOnboarding.
+  if (activation) {
+    return <ActivationCompagnon onSkip={() => window.location.reload()} />
+  }
 
   return (
     <div className="@container/onb h-dvh bg-bg flex flex-col">
