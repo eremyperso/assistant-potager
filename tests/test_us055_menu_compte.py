@@ -36,6 +36,9 @@ def app_client(_auth_engine, monkeypatch):
     import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
+    # [US-091] /auth/me résout désormais bot_username via un appel Telegram
+    # (getMe) — mocké ici pour ne jamais toucher le réseau depuis les tests.
+    monkeypatch.setattr(main.svc_telegram_notify, "obtenir_username_bot", lambda: "test_bot")
     main.app.state.limiter.reset()
     with TestClient(main.app) as c:
         yield c
@@ -126,7 +129,17 @@ def test_us055_ca1_aucun_secret_dans_la_reponse(app_client, _auth_engine):
 
     corps = app_client.get("/auth/me", headers=_entetes(token)).json()
 
-    assert set(corps) == {"id", "email", "nom", "telegram_lie"}
+    assert set(corps) == {"id", "email", "nom", "telegram_lie", "bot_username"}
+
+
+def test_us091_bot_username_expose_pour_construire_le_deep_link(app_client, _auth_engine):
+    """[US-091] bot_username est renvoyé (résolu côté serveur via getMe, ici
+    mocké) pour que le frontend construise le deep-link d'activation."""
+    _, token = _compte(_auth_engine)
+
+    corps = app_client.get("/auth/me", headers=_entetes(token)).json()
+
+    assert corps["bot_username"] == "test_bot"
 
 
 # ── CA1 — Identité seule : le menu Compte s'affiche sans potager ────────────

@@ -33,7 +33,9 @@ const POTAGERS_DEMO = [
   { id: 3, nom: 'Balcon', actif: false, role: 'lecteur', nb_parcelles: 1, nb_membres: 1 },
 ]
 
-const MOI_DEMO = { id: 1, nom: 'Rémy Eremy', email: 'remy@eremy.fr' }
+// bot_username [US-091] : identifiant factice pour contrôler visuellement le
+// deep-link + QR du panneau d'activation sans dépendre de la config serveur.
+const MOI_DEMO = { id: 1, nom: 'Rémy Eremy', email: 'remy@eremy.fr', bot_username: 'AssistantPotagerDemo_bot' }
 
 const ROLES_DEMO = ['owner', 'editor', 'lecteur']
 

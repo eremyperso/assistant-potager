@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { useTheme } from './hooks/useTheme.js'
 import { AppContextProvider } from './context/AppContext.jsx'
 import { AuthContextProvider, useAuth } from './context/AuthContext.jsx'
+import { setTokens } from './lib/api.js'
 import { PotagerContextProvider, usePotager } from './context/PotagerContext.jsx'
 import TopBar    from './components/TopBar.jsx'
 import BottomNav from './components/BottomNav.jsx'
@@ -32,6 +33,33 @@ function getResetPasswordToken() {
   if (window.location.pathname !== '/reinitialiser-mot-de-passe') return null
   return new URLSearchParams(window.location.search).get('token')
 }
+
+// [US-090 / CA3] Retour de la fédération Google : /auth/callback#access_token=…
+// Le résultat arrive dans le fragment d'URL, jamais dans la query string — le
+// fragment n'est pas envoyé au serveur et n'apparaît donc ni dans les logs
+// d'accès ni dans l'en-tête Referer. Consommé une seule fois, à l'initialisation
+// de App, puis effacé de la barre d'adresse : ni jeton ni code de message ne
+// subsiste dans l'historique de navigation.
+function consommerRetourOAuth() {
+  if (window.location.pathname !== '/auth/callback') return null
+
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const access_token = params.get('access_token')
+  if (access_token) setTokens({ access_token, refresh_token: params.get('refresh_token') })
+
+  window.history.replaceState({}, '', '/')
+  return {
+    connecte: Boolean(access_token),
+    erreur: params.get('erreur'),
+    info: params.get('info'),
+  }
+}
+
+// Évalué une seule fois, au chargement du module. L'opération n'est PAS
+// idempotente — elle efface le fragment — et React.StrictMode invoque deux fois
+// les initialisateurs de `useState` en développement : passer la fonction à
+// `useState` ferait perdre le résultat du premier appel, seul à voir le fragment.
+const RETOUR_OAUTH = consommerRetourOAuth()
 
 // Écrans de la navigation à deux niveaux [US-053].
 // Les sections dont le contenu relève d'un lot ultérieur sont rendues en
@@ -111,9 +139,12 @@ function PotagerGate() {
   )
 }
 
-function AppGate() {
+function AppGate({ retourOAuth }) {
   const { isAuthenticated } = useAuth()
-  if (!isAuthenticated) return <Auth />
+  // [US-090 / CA3, CA11] Un retour Google en échec ramène ici, sur l'écran de
+  // connexion, avec de quoi expliquer ce qui s'est passé ; un retour réussi a
+  // déjà posé les jetons et traverse cette porte sans s'arrêter.
+  if (!isAuthenticated) return <Auth retourOAuth={retourOAuth} />
 
   return (
     <PotagerContextProvider>
@@ -125,6 +156,9 @@ function AppGate() {
 export default function App() {
   const [token, setToken] = useState(getVerificationToken)
   const [resetToken, setResetToken] = useState(getResetPasswordToken)
+  // Consommé à l'import, donc avant le montage de AuthContextProvider : les
+  // jetons éventuels sont déjà en place quand celui-ci lit l'état de session.
+  const [retourOAuth] = useState(RETOUR_OAUTH)
 
   if (token) {
     return (
@@ -152,7 +186,7 @@ export default function App() {
 
   return (
     <AuthContextProvider>
-      <AppGate />
+      <AppGate retourOAuth={retourOAuth} />
     </AuthContextProvider>
   )
 }

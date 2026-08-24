@@ -14,14 +14,25 @@ export function Btn({
   kind = 'ghost',
   small = false,
   className = '',
+  href,
   ...props
 }) {
   const size = small ? 'text-[12.5px] px-3 py-1.5 gap-1.5' : 'text-[13.5px] px-4 py-2.5 gap-2'
+  const cls = `inline-flex items-center justify-center rounded-[10px] font-semibold whitespace-nowrap transition-colors disabled:opacity-40 ${size} ${KINDS[kind]} ${className}`
+  // [US-091] `href` fait rendre un <a> plutôt qu'un <button> — même habillage,
+  // pour un CTA qui navigue réellement (ex. deep-link Telegram) au lieu de
+  // déclencher une action JS ; sémantique HTML correcte et ouvrable au clic
+  // droit ("ouvrir dans un nouvel onglet"), ce qu'un onClick ne permet pas.
+  if (href) {
+    return (
+      <a href={href} className={cls} {...props}>
+        {Icon && <Icon size={small ? 14 : 16} />}
+        {children}
+      </a>
+    )
+  }
   return (
-    <button
-      className={`inline-flex items-center justify-center rounded-[10px] font-semibold whitespace-nowrap transition-colors disabled:opacity-40 ${size} ${KINDS[kind]} ${className}`}
-      {...props}
-    >
+    <button className={cls} {...props}>
       {Icon && <Icon size={small ? 14 : 16} />}
       {children}
     </button>

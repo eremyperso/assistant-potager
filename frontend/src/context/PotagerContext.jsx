@@ -91,12 +91,17 @@ export function PotagerContextProvider({ children }) {
   // potager » validé. `creerPotager` rend ce potager actif côté serveur avant
   // que ce await ne résolve, donc `creerParcelle` (résolu via le potager actif
   // de la requête suivante) cible déjà le bon potager sans rechargement intermédiaire.
+  //
+  // [US-091 / CA1] Ne recharge plus la page ici : l'appelant (Onboarding.jsx)
+  // enchaîne sur l'écran d'activation du compagnon Telegram avant de rejoindre
+  // le tableau de bord — tant qu'aucun rechargement n'a eu lieu, `potagers`
+  // reste vide côté contexte, donc `aucunPotager` reste vrai et `PotagerGate`
+  // continue d'afficher `<Onboarding/>`, ce qui est justement l'effet recherché.
   async function finaliserOnboarding({ nom, ville, latitude, longitude, parcelle }) {
     await api.creerPotager(nom, ville, latitude, longitude)
     if (parcelle?.nom?.trim()) {
       await api.creerParcelle(parcelle)
     }
-    window.location.reload()
   }
 
   const potagerActif = potagers.find((p) => p.actif) || null

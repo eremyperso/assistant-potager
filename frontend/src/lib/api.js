@@ -274,6 +274,26 @@ export const authApi = {
     return Boolean(getAccessToken())
   },
 
+  // [US-090 / CA4] Connecteurs de fédération réellement configurés côté API.
+  // Un échec réseau est traité comme « aucun connecteur » : l'écran de
+  // connexion par e-mail reste pleinement fonctionnel, sans bouton en erreur.
+  async oauthProviders() {
+    try {
+      const res = await fetch(`${BASE}/auth/oauth/providers`)
+      if (!res.ok) return {}
+      return await res.json()
+    } catch {
+      return {}
+    }
+  },
+
+  // [US-090 / CA5] Le flux OAuth est une suite de redirections HTTP : on quitte
+  // la PWA par une navigation pleine page, jamais par fetch (la réponse de
+  // Google n'est pas exploitable en CORS, et le cookie d'état doit suivre).
+  googleStartUrl() {
+    return `${BASE}/auth/oauth/google/start`
+  },
+
   // [CA10] Valide le token reçu par e-mail — pas de token requis (utilisateur pas encore connecté)
   async verifyEmail(token) {
     const res = await fetch(`${BASE}/auth/verify-email${qs({ token })}`)

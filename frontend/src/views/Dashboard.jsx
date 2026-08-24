@@ -14,15 +14,16 @@
 // libellés explicites humidité/vent, conseil potager du jour — les trois
 // champs (`lever_soleil`, `coucher_soleil`, `conseil`) étaient déjà renvoyés
 // par `GET /meteo` (US-075) sans être consommés ici.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Sun, MapPinned, CheckSquare, ShoppingBasket, ScrollText, Sunrise, Sunset } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
+import { Sun, MapPinned, CheckSquare, ShoppingBasket, ScrollText, Sunrise, Sunset, Send } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useDashboardWidgets } from '../hooks/useDashboardWidgets.js'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import ModalModifierPotager from '../components/ModalModifierPotager.jsx'
-import { Card, CardHead, Btn, Placeholder } from '../components/ui'
+import LierTelegram from '../components/LierTelegram.jsx'
+import { Card, CardHead, Btn, Placeholder, InfoBanner } from '../components/ui'
 
 const JOUR_LABEL = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
 
@@ -135,6 +136,16 @@ export default function Dashboard({ refresh }) {
   const [error, setError] = useState(null)
   const [modaleLocalisation, setModaleLocalisation] = useState(false)
 
+  // [US-091 / CA14] Bandeau de relance tant que le compagnon Telegram n'est
+  // pas activé — l'état est déjà exposé par GET /auth/me (US-055), rechargé à
+  // la fermeture de la modale pour disparaître dès la liaison effectuée.
+  const [telegramLie, setTelegramLie] = useState(true) // true par défaut : pas de flash du bandeau le temps du premier chargement
+  const [modaleTelegram, setModaleTelegram] = useState(false)
+  const chargerIdentite = useCallback(() => {
+    api.moi().then((m) => setTelegramLie(m.telegram_lie === true)).catch(() => {})
+  }, [])
+  useEffect(() => { chargerIdentite() }, [chargerIdentite])
+
   async function chargerMeteo() {
     setLoading(true); setError(null)
     try { setMeteo(await api.meteo()) }
@@ -148,6 +159,18 @@ export default function Dashboard({ refresh }) {
 
   return (
     <div className="@container/dash">
+      {!telegramLie && (
+        <InfoBanner
+          className="mb-4"
+          tint="blue"
+          icon={Send}
+          dismissible={false}
+          title="Activez votre compagnon de terrain"
+          body="Dictez vos observations à la voix et recevez vos rappels directement sur Telegram."
+          action={<Btn kind="primary" small onClick={() => setModaleTelegram(true)}>Activer</Btn>}
+        />
+      )}
+
       <div className="grid gap-4 @[720px]/dash:grid-cols-2">
         {visible.includes('todo') && (
           <Placeholder
@@ -183,6 +206,13 @@ export default function Dashboard({ refresh }) {
 
       {modaleLocalisation && potagerActif && (
         <ModalModifierPotager potager={potagerActif} onClose={() => setModaleLocalisation(false)} />
+      )}
+
+      {modaleTelegram && (
+        <LierTelegram
+          telegramLie={telegramLie}
+          onClose={() => { setModaleTelegram(false); chargerIdentite() }}
+        />
       )}
     </div>
   )

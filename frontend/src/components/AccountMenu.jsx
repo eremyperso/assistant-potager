@@ -137,10 +137,13 @@ export default function AccountMenu({ onRefresh, loading }) {
               relié qu'à un seul compte à la fois (`telegram_chat_id` est
               unique en base), donc "relier" n'a aucun sens tant qu'un lien
               existe déjà. */}
+          {/* [US-091 / CA15] Reframing éditorial — jamais « Connecter/Relier
+              Telegram » : c'est un compagnon de terrain à activer, pas un
+              compte à connecter. */}
           <PopItem
             icon={telegramLie ? Unlink : Send}
-            label={telegramLie ? 'Compte Telegram' : 'Relier Telegram'}
-            sub={telegramLie ? 'Relié — cliquer pour dissocier' : 'Non relié'}
+            label={telegramLie ? 'Mon compagnon de terrain' : 'Activer mon compagnon'}
+            sub={telegramLie ? 'Actif — cliquer pour désactiver' : 'Non activé'}
             onClick={() => ouvrirModale(telegramLie ? 'delier' : 'telegram')}
             right={
               telegramLie

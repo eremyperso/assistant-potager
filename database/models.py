@@ -45,6 +45,16 @@ class User(Base):
     reset_mdp_token_expire_le = Column(DateTime, nullable=True)
     reset_mdp_token_utilise_le = Column(DateTime, nullable=True)
 
+    # [US-090] Identité fédérée Google — claim `sub` de l'id_token OIDC, stable
+    # et opaque (jamais l'e-mail, qui peut changer côté Google). UNIQUE : un
+    # même compte Google ne peut être rattaché qu'à un seul utilisateur (CA14).
+    # Volontairement PAS de colonne `auth_provider` mono-valuée (CA15) : un
+    # compte peut cumuler mot de passe, Google et Telegram — les méthodes
+    # actives se déduisent de mot_de_passe_hash / google_sub / telegram_chat_id,
+    # et le fournisseur utilisé est une propriété de l'événement de connexion
+    # (journalisé), pas de l'utilisateur.
+    google_sub = Column(String(255), unique=True, nullable=True)
+
     # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
     # encore été fait (sélection auto silencieuse si un seul potager, sinon
     # choix explicite via /potager ou le sélecteur PWA).

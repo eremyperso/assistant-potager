@@ -26,11 +26,13 @@ def test_us040_ca1_table_users_colonnes(test_engine):
     # [US-044] verification_token_* ajoutées pour la vérification d'e-mail (CA9-CA12)
     # [US-046] potager_actif_id ajoutée pour le potager sélectionné
     # [US-057] reset_mdp_token_* ajoutées pour la réinitialisation de mot de passe
+    # [US-090] google_sub ajoutée pour l'identité fédérée Google (CA14)
     assert columns == {
         "id", "email", "telegram_chat_id", "nom", "cree_le",
         "mot_de_passe_hash", "email_verifie", "potager_actif_id",
         "verification_token_hash", "verification_token_expire_le", "verification_token_utilise_le",
         "reset_mdp_token_hash", "reset_mdp_token_expire_le", "reset_mdp_token_utilise_le",
+        "google_sub",
     }
 
 
