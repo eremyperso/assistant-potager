@@ -74,6 +74,7 @@ from app.services import questions as svc_questions
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
+from app.services import potagers as svc_potagers  # [US-084] purge planifiée
 from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from database.models import Potager as _Potager  # [US-046]
 
@@ -297,13 +298,97 @@ WAITING_ASK = 1
 # HANDLERS PRINCIPAUX
 # ══════════════════════════════════════════════════════════════════════════════
 
-async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Message de bienvenue."""
-    prenom = update.effective_user.first_name or "jardinier"
+async def _demarrer_avec_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE, code: str) -> None:
+    """[US-091 / CA8-CA11] `/start <code>` — variante deep-link de `/lier` :
+    mêmes refus (CA8), mais accueil contextualisé en cas de succès (CA10) et
+    tolérance à l'absence de potager (CA11) plutôt que le message générique de
+    `/lier`. `lier_chat_id` applique déjà tous les cas de refus, y compris
+    CA9 (chat déjà lié) — seul le libellé du refus CA9 est adapté ici pour
+    renvoyer vers la déliaison PWA plutôt que répéter le message générique."""
+    chat_id = update.effective_chat.id
     db = SessionLocal()
-    nb = svc_evenements.compter_evenements(db, current_context())
-    db.close()
+    try:
+        try:
+            user = svc_liaison_telegram.lier_chat_id(db, code, chat_id)
+        except svc_liaison_telegram.CodeInvalideError:
+            await update.message.reply_text("❌ Code invalide.")
+            return
+        except svc_liaison_telegram.CodeExpireError:
+            await update.message.reply_text(
+                "⌛ Ce lien d'activation a expiré (validité 10 minutes). "
+                "Générez-en un nouveau depuis l'application web."
+            )
+            return
+        except svc_liaison_telegram.CodeDejaUtiliseError:
+            await update.message.reply_text("❌ Ce lien d'activation a déjà été utilisé.")
+            return
+        except svc_liaison_telegram.ChatDejaLieError:
+            # [CA9] Cas légitime (changement de téléphone) : deux gestes, pas
+            # d'écrasement silencieux — cf. app/services/liaison_telegram.py.
+            await update.message.reply_text(
+                "❌ Ce chat Telegram est déjà lié à un autre compte.\n\n"
+                "Déliez-le d'abord depuis l'application web (menu Compte), "
+                "puis réessayez ce lien d'activation."
+            )
+            return
 
+        ctx.user_data['tenant_user_id'] = user.id
+        prenom = _md(update.effective_user.first_name or "jardinier")  # non-régression US-007
+
+        try:
+            tenant_ctx = svc_potager_actif.resoudre_tenant_context(db, user.id)
+        except svc_potager_actif.AucunPotagerError:
+            # [CA11] La liaison réussit quand même — aucun blocage, aucune erreur.
+            await update.message.reply_text(
+                f"✅ *Compagnon activé, {prenom} !*\n\n{_MSG_AUCUN_POTAGER}",
+                parse_mode="Markdown",
+            )
+            return
+
+        set_current_context(tenant_ctx)
+        current_potager_id.set(tenant_ctx.potager_id)
+        potager = db.query(_Potager).filter(_Potager.id == tenant_ctx.potager_id).first()
+        nom_potager = _md(potager.nom) if potager else ""
+
+        await update.message.reply_text(
+            f"✅ *Compagnon activé, {prenom} !*\n\n"
+            f"Votre potager *{nom_potager}* est prêt. Dictez-moi votre première "
+            f"observation, à la voix ou par texte — je m'occupe du reste.\n\n"
+            f"Ex : _\"Récolté 3 kg de tomates variété cerise parcelle nord\"_",
+            parse_mode="Markdown",
+            reply_markup=MENU_KEYBOARD,
+        )
+    finally:
+        db.close()
+
+
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Message de bienvenue — gère aussi le deep-link d'activation
+    `/start <code>` [US-091 / CA8-CA12]. Volontairement hors du garde de
+    liaison (_COMMANDES_SANS_GARDE_LIAISON) : c'est justement le point
+    d'entrée qui doit pouvoir lire le payload du deep-link avant tout blocage."""
+    if ctx.args:
+        await _demarrer_avec_code(update, ctx, ctx.args[0])
+        return
+
+    chat_id = update.effective_chat.id
+    db = SessionLocal()
+    try:
+        user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
+        if user_id is None:
+            # [CA12] Visiteur non lié arrivé sans code (recherche Telegram) —
+            # message d'onboarding, aucune donnée enregistrée.
+            await update.message.reply_text(_onboarding_liaison_msg(), parse_mode="Markdown")
+            return
+
+        ctx.user_data['tenant_user_id'] = user_id
+        if not await _resoudre_et_armer_contexte(update, ctx, db, user_id):
+            return
+        nb = svc_evenements.compter_evenements(db, current_context())
+    finally:
+        db.close()
+
+    prenom = update.effective_user.first_name or "jardinier"
     tts_etat = "🔊 activée" if is_tts_enabled() else "🔇 désactivée"
 
     await update.message.reply_text(
@@ -581,8 +666,10 @@ def _onboarding_liaison_msg() -> str:
     return (
         "👋 *Ce chat n'est pas encore relié à votre compte.*\n\n"
         f"1️⃣ Inscrivez-vous ou connectez-vous sur {_md(PWA_URL)}\n"
-        "2️⃣ Générez un code de liaison depuis votre compte (menu profil)\n"
-        "3️⃣ Envoyez-moi ce code ici, ou tapez `/lier VOTRECODE`\n\n"
+        # [US-091 / CA12] Enrichi du geste d'activation en un clic (deep-link +
+        # QR), sans retirer le repli manuel /lier — non-régression US-045.
+        "2️⃣ Générez votre lien d'activation depuis l'application (écran d'accueil ou menu Compte)\n"
+        "3️⃣ Ouvrez-le ici, ou envoyez-moi le code affiché, ou tapez `/lier VOTRECODE`\n\n"
         "_Tant que ce chat n'est pas relié, aucune donnée n'est enregistrée._"
     )
 
@@ -804,6 +891,14 @@ async def _potager_select_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             tenant_ctx = svc_potager_actif.definir_potager_actif(db, user_id, potager_id)
         except svc_potager_actif.PotagerNonMembreError:
             await query.edit_message_text("❌ Vous n'êtes pas membre de ce potager.", reply_markup=None)
+            return
+        except svc_potager_actif.PotagerInactifError:
+            # [US-080 / CA6] Le potager a été archivé entre l'affichage de la
+            # liste et le clic — le bouton pointe sur un potager devenu inactif.
+            await query.edit_message_text(
+                "📦 Ce potager est archivé. Désarchivez-le depuis l'application web pour l'utiliser.",
+                reply_markup=None,
+            )
             return
 
         set_current_context(tenant_ctx)
@@ -4867,6 +4962,11 @@ async def _corr_confirm_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE, t
         db = SessionLocal()
         try:
             svc_evenements.supprimer_evenement(db, current_context(), event_id)
+        except Exception as e:
+            db.rollback()
+            log.error(f"Erreur suppression : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
+            return
         finally:
             db.close()
         ctx.user_data['mode'] = None
@@ -5452,6 +5552,31 @@ async def job_meteo_quotidienne(context: ContextTypes.DEFAULT_TYPE):
         db.close()
 
 
+async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
+    """[US-084 / CA7, CA8] Job planifié à 04h00 chaque matin (Europe/Paris).
+
+    Efface physiquement les potagers supprimés dont le délai de grâce de 30
+    jours est écoulé. Aucune logique de purge ici : tout est porté par la
+    fonction de service unique `svc_potagers.purger_potagers_supprimes`,
+    également appelée par `tools/purger_potagers.py` (déclenchement manuel).
+
+    Le job n'arme pas `tenant_scope` lui-même, contrairement à
+    `job_meteo_quotidienne` : la purge est multi-tenant par nature et pose le
+    contexte potager par potager (US-043).
+
+    [CA8] Une exécution sans rien à purger est le cas normal, pas une erreur.
+    """
+    log.info("🗑️  JOB PURGE       : déclenchement automatique 04h00")
+    db = SessionLocal()
+    try:
+        resultats = svc_potagers.purger_potagers_supprimes(db)
+        log.info("🗑️  PURGE AUTO      : %s potager(s) effacé(s) définitivement", len(resultats))
+    except Exception as e:
+        log.error(f"❌ JOB PURGE ERREUR : {e}")
+    finally:
+        db.close()
+
+
 # ── [US-009] CALLBACK SUPPRESSION PARCELLE ──────────────────────────────────────
 
 async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -5677,6 +5802,16 @@ def _construire_application() -> "Application":
         name="meteo_quotidienne",
     )
     log.info("🌅 JOB MÉTÉO       : planifié à 05h00 Europe/Paris")
+
+    # ── [US-084 / CA7] Job de purge quotidien à 04h00 (Europe/Paris) ──────────
+    # Avant le job météo : la purge nettoie, la météo écrit — inutile de créer
+    # des observations sur un potager que la purge va effacer dans la foulée.
+    app.job_queue.run_daily(
+        job_purge_potagers,
+        time=dtime(hour=4, minute=0, second=0, tzinfo=tz_paris),
+        name="purge_potagers_supprimes",
+    )
+    log.info("🗑️  JOB PURGE       : planifié à 04h00 Europe/Paris")
 
     return app
 

@@ -5,13 +5,14 @@
 > (rédigées via `.github/agents/Personna PO.agent.md`, implémentées via
 > `.github/agents/Orchestrateur-US.agent.md`).
 >
-> **Dernière mise à jour (15/08/2026)** : lots A (US-052, US-053), A bis (US-054,
-> US-055) et A ter (US-056, US-057) implémentés. **Le Lot B est en cours** : sur ses US,
-> **US-059 (socle), US-065 (pépinière par lot), US-061 (écran Pépinière) et US-060 (écran
-> Plan) sont livrées**, ainsi qu'**US-066** (saisie Telegram, hors lot) ; restent **US-072 et
-> US-073 (Stocks, cf. ci-dessous), US-063 (Journal), US-067 (famille botanique) et US-064
-> (clôture)** — voir §7.1 et §7.2 pour le détail, §7.3 pour le découpage et §7.4 pour la
-> dette d'alias restante (recomptée après les livraisons). Le §5.9 documente les écarts
+> **Dernière mise à jour (20/08/2026)** : lots A (US-052, US-053), A bis (US-054,
+> US-055) et A ter (US-056, US-057) implémentés. **Le Lot B est quasi clos** : sur ses US,
+> **US-059 (socle), US-065 (pépinière par lot), US-061 (écran Pépinière), US-060 (écran
+> Plan), US-072 et US-073 (Stocks), US-063 (Journal) et US-064 (clôture) sont livrées**,
+> ainsi qu'**US-066** (saisie Telegram, hors lot) ; ne reste ouverte que **US-067** (famille
+> botanique, dette propre à la Pépinière, indépendante de la clôture d'alias) — voir §7.1 et
+> §7.2 pour le détail, §7.3 pour le découpage et §7.4 pour la dette d'alias résiduelle après
+> clôture du Lot B. Le §5.9 documente les écarts
 > assumés entre `web-screens.jsx` et l'écran Pépinière livré, ainsi que la dette de famille
 > botanique qu'il ouvre et que **US-067** vient solder ; le §5.10 fait de même pour l'écran
 > Plan et la dette de **calendrier cultural** qu'il ouvre, soldée par l'`EPIC_CALENDRIER_CULTURAL`
@@ -32,6 +33,17 @@
 > seule liste groupée par famille botanique, et absorbe l'ambition de l'écran Cultures
 > transverse du Lot E. Conséquence : **US-062 et US-071 deviennent caduques**, remplacées
 > par **US-072** (données) et **US-073** (écran) — détail au §5.11.
+>
+> **Révision du 16/08/2026 — US-072 et US-073 livrées (Stocks).** `GET /stats/varietes`
+> (US-072, généralisation de `calcul_stock_par_variete` à toutes les cultures d'un potager,
+> 17 tests dans `tests/test_us072_stock_varietes.py`) et la refonte de `views/Stocks.jsx`
+> (US-073 : liste unique groupée par famille, chips de filtre, rail alphabétique, filtre par
+> origine, export CSV/JSON, bandeau de métriques, modale des récoltes par variété) sont
+> livrées le même jour, tracées dans `PATCH_NOTES.md` [v3.33.0]. L'écran ne référence plus
+> aucun alias `--g-*` (39 occurrences soldées, cf. §7.4). **Cette mise à jour corrige un
+> retard de documentation** : les deux US avaient bien été implémentées et testées à cette
+> date, mais ce document — dont la copie sur cette branche provient d'un état antérieur à la
+> fusion — était resté sur le statut « à faire » jusqu'à la relecture du 18/08/2026.
 >
 > **Révision du 17/08/2026 — le Lot C sort de l'état « à cadrer », est intégralement livré,
 > et reçoit un premier enrichissement (US-078).** Quatre US composent le lot : **US-074**
@@ -68,6 +80,26 @@
 > (`tests/test_us058_onboarding_premier_potager.py`) et QA visuelle par rapport 375/768/1280
 > (verdict GO, dont le parcours complet et le parcours minimal du scénario Gherkin) — entrée
 > `PATCH_NOTES.md` [v3.35.0].
+>
+> **Révision du 20/08/2026 — Journal livré (US-063) et Lot B clôturé côté alias (US-064).**
+> US-063 a refondu `views/Historique.jsx`, renommée `views/Journal.jsx` à cette occasion,
+> soldant les 54 dernières occurrences d'alias `--g-*` du périmètre du Lot B (`PATCH_NOTES.md`
+> [v3.36.0]). US-064 constate ensuite, par recherche exhaustive de `--g-*` / `bg-g-*` /
+> `text-g-*` / `border-g-*` dans `frontend/src`, que les quatre écrans du lot (Plan,
+> Pépinière, Stocks, Journal) et les six composants transverses d'US-059 sont intégralement
+> sur les tokens sémantiques, et met à jour le commentaire du bloc d'alias
+> (`frontend/src/index.css` et son pendant `frontend/tailwind.config.js`) pour recenser
+> nommément les trois fichiers qui le retiennent encore : `views/Stats.jsx` (78 occurrences,
+> Lot D), `components/PotagerSelector.jsx` (19, ancien sélecteur de potager) et
+> `views/VerifyEmail.jsx` (10, écran de vérification d'e-mail). **Une quatrième vue orpheline
+> recensée au cadrage, `AucunPotager.jsx` (23 occurrences), a disparu sans action de migration
+> dédiée** : US-058 (Lot H, livrée le 18/08/2026) l'a remplacée par `views/Onboarding.jsx`,
+> écrit sur les tokens sémantiques dès sa création — sa dette est donc soldée par ricochet,
+> hors Lot B. US-064 nettoie aussi les 5 occurrences résiduelles de `_DesignSystemPreview.jsx`
+> (page de contrôle visuel, §7.5, sans impact production). Détail chiffré et condition de
+> suppression du bloc au §7.4 — **le bloc n'est pas supprimé**, sa suppression reste portée
+> par le **Lot D**, qui migrera `Stats.jsx` en même temps que sa refonte visuelle et les deux
+> vues orphelines restantes. Cycle complet PO → Developer → QA → Documentation pour les deux US.
 
 ## 1. Source
 
@@ -595,7 +627,7 @@ qui supprime `calendrier.js`), **US-069** (contexte de semis) et **US-070** (rec
 réel, qui réutilise le paramètre `moisCourant` posé ici). La famille botanique suit le même
 chemin avec **US-067**, qui supprime `familles.js`.
 
-### 5.11 Écran Stocks — évolution en écran transverse unique (US-072, US-073)
+### 5.11 Écran Stocks — évolution en écran transverse unique (US-072, US-073) — ✅ livrées (16/08/2026, v3.33.0)
 
 Contrairement aux autres écrans du Lot B, Stocks n'a **pas** été cadré à iso-fonctionnalité.
 Le brief `docs/BRIEF_REFONTE_STOCKS_TRANSVERSE.md` (14/08/2026) acte que l'écran devient le
@@ -604,19 +636,19 @@ maquette dédiée a été produite en conséquence puis gelée le 15/08/2026 (`M
 du projet Claude Design, fichier faisant foi `Potager - Application Web - FIGE
 2026-08-15.html` ; `web-screens.jsx`, fonction `ScreenStocks`).
 
-**Fusion des trois sections en une seule liste groupée par famille.** L'écran livré
-aujourd'hui (`views/Stocks.jsx`) affiche deux sections indépendantes — « Au potager »
-(cultures plantées, agrégées par culture) et « En pépinière » (lots en godet, agrégés par
-variété) —, avec une ligne « semis pleine terre » glissée dans la première. La maquette
-gelée fusionne les trois en une **liste unique**, groupée par **famille botanique** en
-premier niveau (confirmé par l'infobulle du filtre : « La famille botanique est le
-regroupement principal de cet écran : c'est elle qui commande les rotations de culture »),
-l'état (au potager / en pépinière / semis pleine terre) devenant un badge par ligne plutôt
-qu'une section. Ce choix tranche explicitement les trois points laissés ouverts par le
-brief — calendrier en vue tableau (la maquette gelée n'affiche aucun `MonthStrip` sur cet
-écran), niveau de groupement principal (famille, pas état) et coexistence avec l'index
-alphabétique (rail secondaire combiné à la recherche, jamais une structure de liste à lui
-seul) — plus aucun n'est un point ouvert.
+**Fusion des trois sections en une seule liste groupée par famille.** L'écran affichait
+jusqu'ici deux sections indépendantes — « Au potager » (cultures plantées, agrégées par
+culture) et « En pépinière » (lots en godet, agrégés par variété) —, avec une ligne « semis
+pleine terre » glissée dans la première. La maquette gelée fusionne les trois en une
+**liste unique**, groupée par **famille botanique** en premier niveau (confirmé par
+l'infobulle du filtre : « La famille botanique est le regroupement principal de cet écran :
+c'est elle qui commande les rotations de culture »), l'état (au potager / en pépinière /
+semis pleine terre) devenant un badge par ligne plutôt qu'une section — **c'est la structure
+livrée par US-073** dans `views/Stocks.jsx`. Ce choix tranche explicitement les trois points
+laissés ouverts par le brief — calendrier en vue tableau (la maquette gelée n'affiche aucun
+`MonthStrip` sur cet écran), niveau de groupement principal (famille, pas état) et
+coexistence avec l'index alphabétique (rail secondaire combiné à la recherche, jamais une
+structure de liste à lui seul) — plus aucun n'est un point ouvert.
 
 **Absorption de l'écran Cultures transverse (Lot E).** L'ambition d'**US-071** (« Refondre
 l'écran Cultures — vue transverse par famille botanique »), rédigée mais jamais implémentée,
@@ -626,7 +658,7 @@ déjà groupée par famille avec la liste de ses parcelles d'origine. US-071 dev
 culture + variété, jamais la culture seule ; liste de parcelles plutôt qu'un lieu unique ;
 famille et calendrier cultural en mode dégradé sur les tables provisoires existantes ;
 exposition et besoin en eau hors périmètre, aucune donnée ni table provisoire) sont reprises
-telles quelles par US-072 et US-073 plutôt que rediscutées. Le Lot E, dans son état actuel
+telles quelles par US-072 et US-073 (livrées) plutôt que rediscutées. Le Lot E, dans son état actuel
 (« *à rédiger* », jamais chiffré), perd donc son seul écran dédié ; il ne resterait, si le
 besoin se confirme un jour, que la question du schéma horticole étendu de `CultureConfig`
 (exposition, besoin en eau, source de données) — indépendante d'un écran.
@@ -638,25 +670,26 @@ un changement réel de structure de l'information. Plutôt que de la retoucher, 
 remplacée intégralement par deux nouvelles US, sur le modèle déjà appliqué à la Pépinière
 (une US de données en amont d'une US d'écran, cf. §7.2) :
 
-- **US-072** — nouvelle agrégation par variété, toutes cultures confondues, avec la liste
-  réelle des parcelles d'origine. Aujourd'hui, `GET /stats` (`stock_par_culture`,
-  `semis_pleine_terre`) agrège **par culture uniquement** — deux variétés d'une même culture
-  y sont fondues en un seul total, sans liste de parcelles. Une fonction de détail par
-  variété existe déjà (`utils/stock.py::calcul_stock_par_variete`, portée par
-  `US_Stats_detail_par_variete`/US-036/US-037) mais ne traite qu'**une seule culture à la
-  fois** et n'est utilisée que par le bot Telegram, jamais exposée en HTTP. US-072
-  généralise cette fonction à toutes les cultures d'un appel, lui ajoute la collecte des
-  parcelles, et l'expose via un nouvel endpoint. Aucune migration : toute la donnée existe
-  déjà sous forme d'événements.
-- **US-073** — l'écran lui-même, consommant US-072 : regroupement par famille avec chips de
-  filtre, rail alphabétique secondaire, bascule tableau/cartes par container query, bandeau
-  de métriques, et les deux ajouts explicitement demandés par l'utilisateur au cadrage —
-  l'**export CSV/JSON** (déjà présent dans la maquette gelée, deux boutons dans la barre de
-  filtres, générés côté navigateur à partir des données déjà affichées, sans nouvel
-  endpoint) et le **lien vers la synthèse des récoltes par variété** (déjà présent dans la
-  maquette gelée sous la forme d'un lien « N récoltes » ouvrant une modale — `RecLink` /
-  `ModalRecoltes` — listant chronologiquement chaque récolte pesée d'une variété précise,
-  alimentée par `GET /historique` filtré par culture et action de récolte).
+- **US-072** ✅ livrée — nouvelle agrégation par variété, toutes cultures confondues, avec la
+  liste réelle des parcelles d'origine. `GET /stats` (`stock_par_culture`,
+  `semis_pleine_terre`) agrégeait **par culture uniquement** — deux variétés d'une même
+  culture y étaient fondues en un seul total, sans liste de parcelles. Une fonction de
+  détail par variété existait déjà (`utils/stock.py::calcul_stock_par_variete`, portée par
+  `US_Stats_detail_par_variete`/US-036/US-037) mais ne traitait qu'**une seule culture à la
+  fois** et n'était utilisée que par le bot Telegram, jamais exposée en HTTP. US-072
+  généralise cette fonction (`calcul_stock_varietes`) à toutes les cultures d'un appel, lui
+  ajoute la collecte des parcelles, et l'expose via `GET /stats/varietes` — aucune migration,
+  aucun changement des endpoints existants. 17 tests dans
+  `tests/test_us072_stock_varietes.py`.
+- **US-073** ✅ livrée — l'écran lui-même, consommant US-072 : regroupement par famille avec
+  chips de filtre, rail alphabétique secondaire, bascule tableau/cartes par container query,
+  bandeau de métriques, et les deux ajouts explicitement demandés par l'utilisateur au
+  cadrage — l'**export CSV/JSON** (deux boutons dans la barre de filtres, générés côté
+  navigateur à partir des données déjà affichées, sans nouvel endpoint) et le **lien vers la
+  synthèse des récoltes par variété** (lien « N récoltes » ouvrant une modale listant
+  chronologiquement chaque récolte pesée d'une variété précise, alimentée par
+  `GET /historique` filtré par culture et action de récolte). Les deux US sont tracées dans
+  `PATCH_NOTES.md` [v3.33.0], 2026-08-16.
 
 **Écart de domaine détecté entre la maquette et le modèle métier — décision retenue sans
 retour utilisateur, sur le principe déjà appliqué ailleurs (« jamais de valeur inventée »,
@@ -725,7 +758,7 @@ décision).
 | **A** | Design system & coquille applicative | — | US-052, US-053 | ✅ Implémenté |
 | **A bis** | Sélecteur de potager & menu Compte | A | US-054, US-055 | ✅ Implémenté |
 | **A ter** | Écran de connexion & inscription | A | US-056, US-057 | ✅ Implémenté |
-| **B** | Refontes visuelles (à iso-fonctionnalité, **sauf Stocks**) | A | US-059 → US-065, **US-067**, **US-072/US-073** | 🔨 **En cours** — US-059, US-065, US-061, US-060 ✅ ; US-072, US-073, US-063, US-067, US-064 à faire |
+| **B** | Refontes visuelles (à iso-fonctionnalité, **sauf Stocks**) | A | US-059 → US-065, **US-067**, **US-072/US-073** | 🔨 **En cours** — US-059, US-065, US-061, US-060, US-072, US-073 ✅ ; US-063, US-067, US-064 à faire |
 | **C** | Localisation du potager, météo personnalisée & widget météo du Tableau de bord | A | US-074, US-075, US-076, US-077 | ✅ **Implémenté** — US-074, US-075, US-076, US-077 |
 | **D** | Tableau de bord (hors widget météo, cf. Lot C) **+ refonte de l'écran Statistiques** | A, C | *à rédiger* | ⏳ À cadrer |
 | **E** | Cultures transverse | A | ~~*à rédiger*~~ | 🚫 **Écran absorbé par Stocks (US-073), cf. §5.11** — ne reste, si besoin futur, que le schéma horticole étendu de `CultureConfig` |
@@ -756,7 +789,7 @@ une météo réelle pour le Tableau de bord dès qu'il sera cadré.
 
 ### 7.2 US rédigées — détail
 
-Statut arrêté au 13/08/2026 (v3.31.1). « Implémentée » = livrée sur la branche
+Statut arrêté au 18/08/2026 (v3.35.0). « Implémentée » = livrée sur la branche
 `refonte/ui-web-2026-lots` et tracée dans `PATCH_NOTES.md` ; la version de livraison est
 indiquée pour pouvoir remonter à l'entrée correspondante.
 
@@ -774,32 +807,35 @@ indiquée pour pouvoir remonter à l'entrée correspondante.
 | [US-061](../backlog/US-061_refonte-ecran-pepiniere.md) | Refondre l'écran Pépinière avec les trois stades d'avancement | B | 5 | — | ✅ Implémentée — v3.31.0/v3.31.1 ; **CA8 et CA11 arbitrés en faveur de la maquette, cf. §5.9** |
 | [US-062](../backlog/US-062_refonte-ecran-stocks.md) | ~~Refondre l'écran Stocks avec bascule tableau / cartes~~ | B | ~~5~~ | — | 🚫 **Caduque (15/08/2026)** — remplacée par US-072 + US-073, cf. §5.11 |
 | [US-063](../backlog/US-063_refonte-ecran-journal.md) | Refondre l'écran Journal | B | 5 | — | 📝 Rédigée — **à implémenter** |
-| [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée — **dernière du lot**, après US-060/063/072/073 |
+| [US-064](../backlog/US-064_cloture-dette-alias-lot-b.md) | Clôturer la dette d'alias de couleurs sur le périmètre du Lot B | B | 2 | — | 📝 Rédigée — **dernière du lot**, après US-060 ✅/US-072 ✅/US-073 ✅/US-063 (reste à faire) |
 | [US-065](../backlog/US-065_pepiniere-par-lot-etat-germination.md) | Exposer la pépinière par lot de semis avec un état de germination fiable | B | 8 | — | ✅ Implémentée — v3.30.0 (`GET /pepiniere/lots`, sans migration) |
 | [US-066](../backlog/US-066_bot-reclamer-graines-origine-mise-en-godet.md) | Réclamer le nombre de graines d'origine lors d'une mise en godet | — | 3 | — | ✅ Implémentée — v3.30.0, saisie Telegram, hors Lot B |
 | [US-067](../backlog/US-067_famille-botanique-culture-config.md) | Externaliser la famille botanique des cultures dans `culture_config` | B | 5 | — | 📝 Rédigée — **dette ouverte par US-061, cf. §5.9** |
 | [US-071](../backlog/US-071_refonte-ecran-cultures-transverse.md) | ~~Refondre l'écran Cultures (vue transverse par famille botanique)~~ | E | ~~5~~ | — | 🚫 **Caduque (15/08/2026)** — écran absorbé par Stocks (US-073), cf. §5.11 |
-| [US-072](../backlog/US-072_detail-varietes-toutes-cultures-parcelles.md) | Exposer un détail par variété, toutes cultures confondues, avec leurs parcelles d'origine | B | 5 | — | 📝 Rédigée — **remplace US-062, bloquante pour US-073, cf. §5.11** |
-| [US-073](../backlog/US-073_refonte-ecran-stocks-transverse.md) | Refondre l'écran Stocks en vue transverse unique, groupée par famille botanique | B | 8 | — | 📝 Rédigée — **remplace US-062, absorbe US-071, cf. §5.11** |
+| [US-072](../backlog/US-072_detail-varietes-toutes-cultures-parcelles.md) | Exposer un détail par variété, toutes cultures confondues, avec leurs parcelles d'origine | B | 5 | — | ✅ Implémentée — v3.33.0, `GET /stats/varietes`, 17 tests ; **remplace US-062, cf. §5.11** |
+| [US-073](../backlog/US-073_refonte-ecran-stocks-transverse.md) | Refondre l'écran Stocks en vue transverse unique, groupée par famille botanique | B | 8 | — | ✅ Implémentée — v3.33.0, `views/Stocks.jsx` (39 alias soldés) ; **remplace US-062, absorbe US-071, cf. §5.11** |
 | [US-074](../backlog/US-074_localisation-potager-recherche-ville.md) | Localiser un potager via une recherche de ville unifiée et réutilisable | C | 5 | — | ✅ Implémentée — `migration_v26.sql`, tests pytest ; entrée `PATCH_NOTES.md` [v3.34.0] ; **pas de QA dédiée à ce stade, cf. note du 17/08/2026 et §5.2 bis** |
 | [US-075](../backlog/US-075_endpoint-meteo-web-personnalisee.md) | Exposer une météo web personnalisée sur la localisation réelle du potager | C | 5 | — | ✅ Implémentée — `GET /meteo`, tests pytest (dont non-régression bot) ; entrée `PATCH_NOTES.md` [v3.34.0] ; **même réserve QA que US-074, cf. §5.2 bis** |
 | [US-076](../backlog/US-076_dashboard-widget-meteo.md) | Afficher le widget météo sur l'écran Vue d'ensemble du Tableau de bord | C | 5 | — | ✅ Implémentée — `views/Dashboard.jsx` ; **QA visuelle GO** (375/768/1280, dont états localisation manquante et erreur API) ; entrée `PATCH_NOTES.md` [v3.34.0], cf. §5.2 ter |
 | [US-077](../backlog/US-077_personnaliser-affichage-dashboard.md) | Personnaliser les widgets affichés sur la Vue d'ensemble du Tableau de bord | C | 3 | — | ✅ Implémentée — `ModalPersonnaliserDashboard.jsx`, `hooks/useDashboardWidgets.js` ; **QA visuelle GO**, persistance et verrou CA4 vérifiés ; entrée `PATCH_NOTES.md` [v3.34.0], cf. §5.2 ter |
 | [US-078](../backlog/US-078_widget-meteo-conseil-potager-horaires.md) | Enrichir le widget météo (horaires soleil, libellés, conseil potager) | — | 3 | — | ✅ Implémentée — v3.34.0, **hors Lot C** (déjà clos) ; lever/coucher, libellés Humidité/Vent, conseil du jour tronqué/dépliable (`ConseilPotager`, `views/Dashboard.jsx`) ; **QA visuelle GO** (dont troncature/dépliage simulés sur un conseil long) ; cycle complet PO→Dev→QA→Documentation ; aucune migration (champs déjà exposés par US-075) |
 
-**Avancement au 18/08/2026 — 115 points rédigés, 90 livrés (78 %), 25 restants.**
+**Avancement au 18/08/2026 — 115 points rédigés, 103 livrés (90 %), 12 restants.**
 Le total était passé de 94 à 112 points avec la sortie du Lot C de l'état « à cadrer » (4 US
 d'un coup, US-074 à US-077, 18 points, toutes livrées le même jour — les deux premières au
 cadrage, les deux suivantes juste après, cf. §5.2 bis et §5.2 ter), puis à 115 avec **US-078**
 (3 points), enrichissement du widget météo livré dans la foulée, hors décompte du Lot C (déjà
-clos) au même titre qu'US-066 pour le Lot B. Le 18/08/2026, **US-058 (Lot H, 8 points)** est
-livrée à son tour — dernier lot du portefeuille initial restant à faire. Seul le Lot B reste
-désormais en cours.
+clos) au même titre qu'US-066 pour le Lot B. Entre-temps, **US-072 et US-073 (13 points) ont
+été livrées le 16/08/2026** (v3.33.0), avant même les Lots C et H — un retard de mise à jour
+de ce document avait laissé croire, jusqu'à la relecture du 18/08/2026, qu'elles restaient à
+faire (cf. révision du 16/08/2026 ci-dessus). Le 18/08/2026, **US-058 (Lot H, 8 points)** est
+également livrée — dernier lot du portefeuille initial restant à faire. Seul le Lot B reste
+désormais en cours, réduit à ses trois dernières US (US-063, US-067, US-064).
 
 | Ensemble | Points rédigés | Livrés | Restants |
 |---|---|---|---|
 | Lots A + A bis + A ter | 34 | **34** | 0 |
-| Lot B | 49 | **24** (US-059, US-065, US-061, US-060) | 25 (US-072, US-073, US-063, US-067, US-064) |
+| Lot B | 49 | **37** (US-059, US-065, US-061, US-060, US-072, US-073) | 12 (US-063, US-067, US-064) |
 | Lot C | 18 | **18** (US-074, US-075, US-076, US-077) | 0 |
 | US-066 (hors lot, saisie Telegram) | 3 | **3** | 0 |
 | US-078 (hors lot, enrichissement Lot C) | 3 | **3** | 0 |
@@ -810,17 +846,18 @@ respecté : US-052 → US-053 → (US-054 ∥ US-055 ∥ US-056) → US-057. **U
 chemin critique) : 8 points, livrés le 18/08/2026**, dépendant de US-056 (déclenchement juste
 après l'écran de connexion) et US-048 (création de potager/invitations, logique réutilisée).
 
-**Total Lot B : 49 points** (36 + US-065 + US-072 + US-073, cf. calcul ci-dessus), **dont 24
+**Total Lot B : 49 points** (36 + US-065 + US-072 + US-073, cf. calcul ci-dessus), **dont 37
 livrés**. Ordre de dépendance : US-059 (socle partagé) → (US-060 ∥ [US-072 → US-073] ∥ US-063
-∥ [US-065 → US-061 → US-067], parallélisables une fois le socle livré) → US-064 (clôture). La
-branche déjà parcourue est celle de la Pépinière (US-065 → US-061), la plus longue du lot ;
-**US-067 reste à faire après coup** — elle solde la dette de famille botanique ouverte par
-US-061 (§5.9) et n'est pas bloquante pour les écrans restants. **Reste donc à implémenter :
-US-072 puis US-073 (Stocks, dans cet ordre — US-073 dépend de US-072), US-063 (Journal) et
-US-067**, puis **US-064 en clôture** — cette dernière constate la propreté du périmètre et ne
-peut donc être jouée qu'en dernier. **US-066 (3 points) était hors Lot B** : relevant de la
-saisie Telegram, elle a été livrée avec US-065 (v3.30.0), ce qui arrête au plus tôt
-l'accumulation de lots en état indéterminé dans l'historique.
+∥ [US-065 → US-061 → US-067], parallélisables une fois le socle livré) → US-064 (clôture).
+Deux branches sont désormais closes : celle de la Pépinière (US-065 → US-061, la plus longue
+du lot) et celle de Stocks (US-072 → US-073, livrée le 16/08/2026 en v3.33.0, avant même le
+Plan). **US-067 reste à faire après coup** — elle solde la dette de famille botanique ouverte
+par US-061 (§5.9) et n'est pas bloquante pour les écrans restants. **Reste donc à
+implémenter : US-063 (Journal) et US-067** (famille botanique), puis **US-064 en clôture** —
+cette dernière constate la propreté du périmètre et ne peut donc être jouée qu'en dernier.
+**US-066 (3 points) était hors Lot B** : relevant de la saisie Telegram, elle a été livrée
+avec US-065 (v3.30.0), ce qui arrête au plus tôt l'accumulation de lots en état indéterminé
+dans l'historique.
 
 **Total Lot C : 18 points, intégralement livrés.** Ordre de dépendance strict (pas de
 parallélisation possible, contrairement au Lot B) : US-074 (localisation) → US-075 (météo,
@@ -917,15 +954,16 @@ voir §5.8.
     culture, bandeau de métriques, panneau d'observations, écrans de chargement et d'erreur —
     42 alias à eux seuls). Sans elle, les quatre US d'écran auraient retouché les mêmes
     fichiers en concurrence ; avec elle, elles sont devenues parallélisables ;
-  - quatre **US d'écran** (US-060, US-073, US-063, dont **US-061 ✅ livrée**), chacune portant
-    un CA de migration des alias et un CA de non-régression nominatif — les fonctions
-    absentes de la maquette (date de référence US-030/031, observations US-039, bandeaux de
-    métriques, filtres, pagination) sont **toutes conservées et réhabillées**, aucune perte
-    fonctionnelle assumée (Stocks excepté sur le seul point du champ « vendu », cf. §5.11) ;
+  - quatre **US d'écran** (US-060, US-073, US-063, dont **US-061, US-060 et US-073 ✅
+    livrées**), chacune portant un CA de migration des alias et un CA de non-régression
+    nominatif — les fonctions absentes de la maquette (date de référence US-030/031,
+    observations US-039, bandeaux de métriques, filtres, pagination) sont **toutes
+    conservées et réhabillées**, aucune perte fonctionnelle assumée (Stocks excepté sur le
+    seul point du champ « vendu », cf. §5.11) ;
   - trois **US de données propres à un écran** : US-065 (✅ livrée, lecture par lot) en amont
     d'US-061 et US-067 (à faire, famille botanique en base) en aval, pour la Pépinière —
-    cf. §5.9 ; **US-072** (à faire, détail par variété toutes cultures) en amont d'US-073,
-    pour Stocks — cf. §5.11 ;
+    cf. §5.9 ; **US-072** (✅ livrée, détail par variété toutes cultures) en amont d'US-073
+    (✅ livrée elle aussi), pour Stocks — cf. §5.11 ;
   - une **US de clôture** (US-064, à jouer en dernier) qui constate la propreté du périmètre
     du lot sans supprimer le bloc d'alias (cf. §7.4).
   L'écran **Statistiques est explicitement hors Lot B** : devenant un sous-écran du Tableau
@@ -962,40 +1000,45 @@ Deux points introduits volontairement par le Lot A, à traiter au fil des US du 
    chaque US du Lot B doit migrer son écran vers les tokens sémantiques
    (`bg-surface`, `text-txt2`, `border-border`…) et retirer ses références aux alias.
 
-   **Répartition recomptée au 13/08/2026**, après les livraisons d'US-059 et d'US-061. Le
-   comptage retient les deux formes d'usage d'un alias — `var(--g-*)` et les classes Tailwind
-   dérivées (`bg-g-bg`, `text-g-txt2`…) — comme au cadrage, afin que les chiffres restent
-   comparables d'une ligne à l'autre :
+   **Répartition recomptée au 20/08/2026**, à la clôture du Lot B (US-064), après les
+   livraisons d'US-059, US-060, US-061, US-063 et US-073. Le comptage retient les deux formes
+   d'usage d'un alias — `var(--g-*)` et les classes Tailwind dérivées (`bg-g-bg`,
+   `text-g-txt2`…) — comme au cadrage, afin que les chiffres restent comparables d'une ligne
+   à l'autre :
 
    | Fichiers | Occurrences | Traité par | État |
    |---|---|---|---|
    | `Observations.jsx`, `DateRefPicker.jsx`, `MetricStrip.jsx`, `CultureFilter.jsx`, `LoadingSkeleton.jsx`, `ApiError.jsx` | 42 → **0** | **US-059** (socle, en tête de lot) | ✅ soldé (v3.29.0) |
    | `Pepiniere.jsx` | 80 → **0** | **US-061** | ✅ soldé (v3.31.0) |
    | `Plan.jsx` | 29 → **0** | **US-060** | ✅ soldé (v3.32.0) |
-   | `Historique.jsx` | **54** | US-063 | ⏳ à faire |
-   | `Stocks.jsx` | **39** | **US-073** (remplace US-062, cf. §5.11) | ⏳ à faire |
-   | `Stats.jsx` | **78** | **Lot D** (Statistiques devient sous-écran du Tableau de bord) | ⏳ hors Lot B |
-   | `AucunPotager.jsx` (23), `PotagerSelector.jsx` (19), `VerifyEmail.jsx` (10) | **52** | **Lot D** (vues orphelines, hors périmètre des 4 écrans du Lot B) | ⏳ hors Lot B |
-   | `_DesignSystemPreview.jsx` | **5** | — | Page de contrôle visuel (§7.5), supprimée à la clôture du chantier |
+   | `Stocks.jsx` | 39 → **0** | **US-073** (remplace US-062, cf. §5.11) | ✅ soldé (v3.33.0) |
+   | `Journal.jsx` (ex-`Historique.jsx`) | 54 → **0** | **US-063** | ✅ soldé (v3.36.0) |
+   | ~~`AucunPotager.jsx`~~ | 23 → **0** (fichier remplacé) | **US-058** (Lot H — remplacé par `Onboarding.jsx`, sans alias dès sa création) | ✅ soldé par ricochet (v3.35.0), hors Lot B |
+   | `_DesignSystemPreview.jsx` | 5 → **0** | **US-064** (données de démo, sans impact production) | ✅ soldé — page de contrôle visuel (§7.5), supprimée à la clôture du chantier |
+   | `Stats.jsx` | **78** (inchangé) | **Lot D** (Statistiques devient sous-écran du Tableau de bord) | ⏳ hors Lot B |
+   | `PotagerSelector.jsx` | **19** (inchangé) | **Lot D** (vue orpheline, ancien sélecteur de potager) | ⏳ hors Lot B |
+   | `VerifyEmail.jsx` | **10** (inchangé) | **Lot D** (vue orpheline, écran de vérification d'e-mail) | ⏳ hors Lot B |
 
-   **Périmètre du Lot B : 93 occurrences restantes sur 244** (Journal, Stocks), les 151
-   autres ayant été soldées par US-059, US-061 et US-060. Total tous fichiers confondus :
-   **247 occurrences** dans `frontend/src`. Les deux écrans restants n'ont pas bougé depuis
-   le cadrage — leurs compteurs sont inchangés, et non revus à la baisse par ricochet des
-   US déjà livrées.
+   **Lot B intégralement soldé côté alias : 0 occurrence dans les quatre écrans et les six
+   composants transverses.** Reste, hors périmètre du Lot B et donc hors CA d'US-064 : **107
+   occurrences réparties sur trois fichiers** — `Stats.jsx` (78), `PotagerSelector.jsx` (19),
+   `VerifyEmail.jsx` (10) — toutes portées par le **Lot D**. Aucune des trois n'a bougé depuis
+   le cadrage : ni US-064 ni aucune autre US du Lot B ne les a retouchées, conformément à leur
+   statut de vues hors périmètre.
 
-   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle
-   vérifie que les quatre écrans et les six composants transverses sont propres, et met à
-   jour le commentaire du bloc pour recenser nommément les quatre fichiers qui le retiennent
-   encore. La suppression effective du bloc d'`index.css` et de `tailwind.config.js` est
-   reportée au **Lot D**, qui migrera `Stats.jsx` et les trois vues orphelines.
+   **Conséquence : la clôture du Lot B (US-064) ne supprime pas le bloc d'alias.** Elle a
+   vérifié que les quatre écrans et les six composants transverses sont propres, et a mis à
+   jour le commentaire du bloc (`frontend/src/index.css`, `frontend/tailwind.config.js`) pour
+   recenser nommément les trois fichiers qui le retiennent encore. La suppression effective
+   du bloc d'`index.css` et de `tailwind.config.js` reste reportée au **Lot D**, dès que
+   `Stats.jsx`, `PotagerSelector.jsx` et `VerifyEmail.jsx` auront été migrés.
 2. **Vues étirées en desktop** : la contrainte `max-w-md mx-auto` a été retirée d'`App.jsx`
    (exigence de mise en page desktop d'US-053). Les écrans non encore refondus s'étirent
    donc sur toute la largeur disponible sur grand écran — rendu imparfait assumé jusqu'à ce
    que le Lot B leur donne une vraie mise en page multi-colonnes. **Reste concerné au
-   13/08/2026 : Stocks, Journal** (et Statistiques, jusqu'au Lot D) ; la Pépinière est sortie
-   de cet état avec US-061 (§5.9) et le Plan avec US-060, dont le maître-détail et les
-   paliers de grille sont décrits au §5.10.
+   18/08/2026 : Journal** (et Statistiques, jusqu'au Lot D) ; la Pépinière est sortie de cet
+   état avec US-061 (§5.9), le Plan avec US-060 (§5.10), et Stocks avec US-073 (bascule
+   tableau/cartes par `@container`, §5.11).
 
 ### 7.5 Pages de contrôle visuel (outillage de développement)
 

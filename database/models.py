@@ -45,6 +45,16 @@ class User(Base):
     reset_mdp_token_expire_le = Column(DateTime, nullable=True)
     reset_mdp_token_utilise_le = Column(DateTime, nullable=True)
 
+    # [US-090] Identité fédérée Google — claim `sub` de l'id_token OIDC, stable
+    # et opaque (jamais l'e-mail, qui peut changer côté Google). UNIQUE : un
+    # même compte Google ne peut être rattaché qu'à un seul utilisateur (CA14).
+    # Volontairement PAS de colonne `auth_provider` mono-valuée (CA15) : un
+    # compte peut cumuler mot de passe, Google et Telegram — les méthodes
+    # actives se déduisent de mot_de_passe_hash / google_sub / telegram_chat_id,
+    # et le fournisseur utilisé est une propriété de l'événement de connexion
+    # (journalisé), pas de l'utilisateur.
+    google_sub = Column(String(255), unique=True, nullable=True)
+
     # [US-046] Potager actuellement sélectionné — NULL tant qu'aucun choix n'a
     # encore été fait (sélection auto silencieuse si un seul potager, sinon
     # choix explicite via /potager ou le sélecteur PWA).
@@ -75,6 +85,12 @@ class Potager(Base):
     proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
     plan             = Column(String(20), default="free")
     cree_le          = Column(DateTime, server_default=func.now())
+    # [US-080] Cycle de vie du LIEU physique — 'actif' | 'archive' | 'supprime'
+    # (valeurs sans accent en base, libellés accentués côté affichage uniquement).
+    # Axe indépendant de `plan` : un potager gratuit comme payant peut être archivé.
+    etat             = Column(String(20), nullable=False, default="actif", server_default="actif")
+    archive_le       = Column(DateTime, nullable=True)   # renseigné par US-083
+    supprime_le      = Column(DateTime, nullable=True)   # soft-delete + délai de grâce, US-084
 
 
 class PotagerMembre(Base):

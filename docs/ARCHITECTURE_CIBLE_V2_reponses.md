@@ -441,3 +441,98 @@ Cette table alimente trois canaux **sans coût LLM** : un **digest Telegram mati
 **Pourquoi c'est stratégique :** un concurrent peut brancher un LLM sur un carnet ; il ne peut pas copier un moteur de règles agronomiques recalé sur les données réelles de l'utilisateur. C'est la réponse directe au risque « carnet multi-utilisateurs facilement copiable » du backlog. Le compagnon naît des **règles**, pas du RAG — le RAG répond, les règles anticipent.
 
 **Prérequis :** Épic 5 (référentiel + recalage) et US-124 (jobs par potager) — déjà cadrés. Il ne manque qu'une US « moteur d'insights » + une US « digest Telegram ». À instruire une fois la cascade réactive stabilisée.
+
+
+# Analyse de l'architecture cible V2 — Assistant Potager Telegram -- Ox Alpha IA
+
+> **Document analysé :** `ARCHITECTURE_CIBLE_V2_reponses.md`
+> **Type d'analyse :** revue d'architecture + propositions d'amélioration
+
+---
+
+## Verdict global
+
+C'est un document de très bonne qualité : le principe directeur (« le LLM en dernier recours ») est le bon, la cascade est bien pensée, les invariants techniques sont solides (isolation multi-tenant, Gateway unique, mode dégradé 429). Voici une analyse critique et des pistes d'amélioration.
+
+---
+
+## ✅ Points forts à conserver
+
+1. **La cascade du moins cher au plus cher** — pattern éprouvé, bon dimensionnement.
+2. **FTS d'abord, pgvector ensuite** — décision pragmatique et juste. Le FTS français couvre 80 % des cas agronomiques (vocabulaire technique précis).
+3. **Le RAG ne génère jamais** — séparation récupération/génération propre.
+4. **Le mode dégradé 429 comme invariant** — rarement pensé, ici bien traité, et doublement stratégique (freemium).
+5. **Le Gateway comme point unique** — prérequis qui rend le BYOK trivial.
+6. **L'Annexe A (moteur d'insights déterministes)** — c'est effectivement le vrai différenciateur produit.
+
+---
+
+## ⚠️ Faiblesses et risques identifiés
+
+### 1. Le routeur est le maillon faible sous-estimé
+
+Le document identifie le risque mais ne propose pas de mitigation structurée :
+
+- Un routeur 8B à ~100 tokens par question = **1 appel LLM systématique**, ce qui contredit partiellement l'objectif « 0 token sur 95 % des questions ». À ~10 questions/jour/utilisateur, ça consomme déjà 1 000 tokens/jour/user rien qu'en routage.
+
+**Améliorations :**
+- Router d'abord par règles (regex, détection `/commande`, patterns « combien/quand/stock »), LLM seulement en cas d'ambiguïté.
+- Mettre en cache la classification question normalisée → étage (comme l'étage 0bis).
+- Prévoir un **fallback de routage** : si l'étage SQL renvoie vide/confiance nulle, remonter vers RAG plutôt que répondre « je ne sais pas ». Une cascade purement descendante sans remontée produira des frustrations.
+
+### 2. Étage 0bis (cache) : invalidation non traitée
+
+Le schéma a `valide_jusqu_au`, mais rien sur **l'invalidation événementielle**. Exemple : réponse cachée « stock tomates : 3 kg », puis l'utilisateur saisit « récolté 5 kg tomates » → réponse fausse pendant des heures.
+
+**Amélioration :** invalidation par dépendance — chaque entrée de cache porte les entités dont elle dépend (`culture`, `type_donnee`), et toute écriture d'événement invalide les motifs liés. C'est peu coûteux et évite le pire défaut d'un assistant : donner une information fausse avec assurance.
+
+### 3. Estimations de distribution à risque
+
+Les ~40 % / ~35 % / ~20 % / ~5 % sont présentés comme hypothèses 🔶, bien. Mais le coût moyen visé (~180 tokens/question) oublie le **coût du routage lui-même** (~100 tokens/question si LLM). À corriger dans le modèle.
+
+### 4. Famille A (référentiel agronomique) : le vrai goulot
+
+Le risque licence est identifié mais la solution « saisir à la main ~30 cultures » est sous-dimensionnée : une fiche culture complète (semis, maladies, associations, rotation, calendrier) = plusieurs heures chacune.
+
+**Améliorations :**
+- Sources ouvertes à explorer dès maintenant : Wikipédia/Wikidata (CC-BY-SA), données publiques INRAE/GNIS, fiches sous licence ouverte.
+- Démarrer famille A avec seulement les 8–10 cultures réellement les plus utilisées (données `texte_original`), pas 30.
+
+### 5. Whisper : risque plus grand qu'annoncé
+
+Le document note que Whisper saturera peut-être avant le LLM, mais ne propose rien. Or en voice-first, c'est le chemin critique UX.
+
+**Améliorations :**
+- Fallback transcription locale (faster-whisper sur VPS si compatible SentinelOne/polling).
+- Ou limitation du free tier vocal + incitation BYOK audio en phase 2.
+
+### 6. Points manquants
+
+- **Observabilité de la cascade** : aucune mention de métriques par étage (taux de résolution, taux de mauvais routage, latence p95). Indispensable pour valider les hypothèses 🔶. Une table `routage_logs` simple suffirait au départ.
+- **Boucle feedback utilisateur** : 👍/👎 sur les réponses RAG/LLM pour détecter les mauvaises réponses et alimenter le corpus de test du routeur.
+- **Sécurité SQL agent** : l'étage 1 repose sur un agent SQL ; rappeler explicitement lecture seule + allowlist de requêtes + timeout (peut-être déjà couvert par US-102, mais à inscrire comme invariant ici).
+- **Versionnement du contenu RAG** : quand une fiche agronomique est corrigée, invalider les réponses figées issues de cette fiche (`source_etage` aide, mais il faut un lien chunk → réponses figées dérivées).
+
+---
+
+## 🎯 Améliorations prioritaires suggérées
+
+| # | Amélioration | Effort | Impact |
+|---|---|---|---|
+| 1 | Invalidation événementielle du cache (étage 0bis) | Moyen | **Critique** (justesse) |
+| 2 | Routage règles-first + cache de classification + remontée de cascade | Moyen | Fort (coût + qualité) |
+| 3 | Table `routage_logs` + dashboard métriques par étage | Faible | Fort (validation des 🔶) |
+| 4 | Feedback 👍/👎 sur réponses | Faible | Moyen |
+| 5 | Réduire famille A initiale à ~10 cultures + sourcer licences ouvertes tôt | Moyen | Fort (délai) |
+| 6 | Plan B transcription vocale | Moyen | Fort (UX voice-first) |
+
+---
+
+## Séquencement proposé (ajustement)
+
+L'ordre proposé dans le document est bon ; deux ajustements :
+
+1. Insérer la **métrique de routage** (point 3) *dans* US-121, pas après — sinon impossible de valider l'hypothèse centrale du dimensionnement.
+2. Anticiper l'arbitrage **source référentiel agronomique** en parallèle de l'US-140 (c'est un travail humain/recherche, pas technique — il peut avancer pendant le dev).
+
+

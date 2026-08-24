@@ -23,6 +23,11 @@ US-103 RLS PostgreSQL      ──► US-113 Rôles & permissions ──► US-12
 **Chemin critique :** `US-100 → US-101 → US-102 → US-103 → US-110 → US-111 → US-113`.
 Tout le reste peut être parallélisé une fois son épic amont livré.
 
+**ÉPIC 5 — Cycle de vie du potager** (hors de ce document) : création d'un potager additionnel,
+archivage, suppression avec délai de grâce, transfert de propriété, départ volontaire, cohérence
+bot ⇄ PWA. Cadré et suivi dans `CONCEPTION_CYCLE_DE_VIE_POTAGER.md` §7.2, US-080 → US-088. Postérieur
+à l'ÉPIC 2, antérieur à la facturation (US-133). Le numéro 5 évite la collision avec l'ÉPIC 3 ci-dessus.
+
 **Chantier parallèle (hors périmètre de ce backlog, à ne pas oublier) :** la base de connaissance *fiches cultures* (`US_Base_fiches_cultures`), qui conditionne la valeur produit de l'offre payante. À mener en parallèle des épics 1–2, car sans elle on commercialise « un carnet multi-utilisateurs », facilement copiable.
 
 ---

@@ -1,4 +1,43 @@
 
+## [v3.38.0] — 2026-08-24
+
+### 🚀 Nouveautés
+- Ajoute l'écran d'activation du compagnon de terrain Telegram en un seul geste (deep-link + QR code) à l'issue de la création du premier potager (US-091)
+- `/start <code>` sur Telegram active directement le compagnon et accueille le jardinier en nommant son potager, sans passer par `/lier` (US-091)
+- Ajoute un bandeau de relance au tableau de bord tant que le compagnon Telegram n'est pas activé (US-091)
+- Réécrit les intitulés Telegram du menu Compte et des modales associées : « activer/désactiver son compagnon » plutôt que « connecter/relier Telegram » (US-091)
+
+### 🐛 Corrections
+- Corrige `/start` (sans code) qui affichait toujours le nombre d'événements du potager #1 par défaut au lieu de celui réellement actif du jardinier lié (US-091)
+- Corrige le bouton d'activation qui remplaçait l'onglet de l'application par la page Telegram, faisant perdre la session en cours, au lieu de l'ouvrir dans un nouvel onglet (US-091)
+- Retire le connecteur « Continuer avec Telegram » de l'écran de connexion, resté désactivé et promettant une activation qui n'aura finalement jamais lieu (US-091 / CA19)
+
+### 🔧 Améliorations techniques
+- Limite la génération de codes de liaison Telegram à 5 par heure et par compte (US-091)
+- Journalise chaque liaison Telegram réussie (compte, chat, horodatage) pour l'auditabilité, sans jamais écrire le code lui-même (US-091)
+- Résout le nom public du bot Telegram depuis son token via l'API Telegram plutôt qu'une variable d'environnement à synchroniser à la main entre dev et prod (US-091)
+
+## [v3.37.1] — 2026-08-21
+
+### 🐛 Corrections
+- Retire « Gérer les membres » du menu Compte, redondant avec l'onglet Membres de l'écran Paramètres du potager qui affiche déjà la même liste (US-082)
+
+### 🔧 Améliorations techniques
+- Aligne le menu potager sur la maquette 2026 : regroupe « Créer un potager » et « Paramètres du potager » juste après la liste, déplace « Rejoindre un potager » et « Corbeille » dans un bandeau de liens en pied de menu (US-081, US-084)
+- Remplace la modale « Rejoindre un potager » par un formulaire réduit à sa saisie de code, focus automatique, sans plus afficher la liste des potagers (US-048)
+- Restructure l'écran Paramètres du potager en navigation à onglets (Identité, Membres, Zone sensible) — colonne latérale en desktop, onglets horizontaux en dessous de 640px via container query (US-082)
+- Supprime `PotagerSelector.jsx`, dernier composant du menu potager resté hors du design system (Lot D), devenu inutile une fois son point d'entrée « Tous mes potagers » retiré
+
+### ⚠️ Breaking changes
+- Retire l'entrée « Tous mes potagers » du menu potager : la liste des potagers, déjà visible en tête du même menu, en faisait un doublon
+
+## [v3.36.1] — 2026-08-20
+
+### 🔧 Améliorations techniques
+- Clôture la dette d'alias de couleurs `--g-*` sur le périmètre du Lot B : les quatre écrans (Plan, Pépinière, Stocks, Journal) et les six composants transverses d'US-059 étaient déjà propres, désormais vérifié par test automatisé (US-064)
+- Documente nommément dans `index.css` et `tailwind.config.js` les trois derniers fichiers qui retiennent le bloc d'alias (`Stats.jsx`, `PotagerSelector.jsx`, `VerifyEmail.jsx`) ainsi que la condition de sa suppression, portée par le Lot D (US-064)
+- Retire les dernières références à l'alias de la page de contrôle visuel `/design-system` (US-064)
+
 ## [v3.36.0] — 2026-08-18
 
 ### 🚀 Nouveautés

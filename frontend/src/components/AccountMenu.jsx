@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronDown, RefreshCw, Bell, Send, Unlink, Users, LogOut } from 'lucide-react'
+import { ChevronDown, RefreshCw, Bell, Send, Unlink, LogOut } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
@@ -8,27 +8,29 @@ import { initiales, nomAffiche, prenomAffiche } from '../lib/identite.js'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
 import LierTelegram from './LierTelegram.jsx'
 import DelierTelegram from './DelierTelegram.jsx'
-import GestionMembres from './GestionMembres.jsx'
 
 /**
  * Menu Compte [US-055].
  *
  * Regroupe derrière l'avatar ce qui était dispersé en icônes isolées dans le
  * bandeau : identité, rôle sur le potager actif, actualisation des données,
- * liaison Telegram, gestion des membres, déconnexion et version de l'API [CA1].
- * Structure reprise du composant `AccountMenu` de la maquette 2026
- * (`web-account.jsx`).
+ * liaison Telegram, déconnexion et version de l'API [CA1]. Structure reprise
+ * du composant `AccountMenu` de la maquette 2026 (`web-account.jsx`).
  *
  * Aucune logique métier ici : les deux modales gardent le comportement de
- * `LierTelegram` (US-045) et `GestionMembres` (US-048) [CA2, CA3] — seul leur
- * habillage a été aligné sur `ModalTelegram`/`ModalMembres` de la maquette.
+ * `LierTelegram` (US-045) [CA2] — seul leur habillage a été aligné sur
+ * `ModalTelegram` de la maquette.
+ *
+ * [Refonte visuelle 2026] « Gérer les membres » retiré : redondant avec
+ * l'onglet Membres de l'écran Paramètres du potager (US-082), qui réutilise
+ * déjà `GestionMembres` en mode `embedded` — un seul point d'accès désormais.
  */
 
 export default function AccountMenu({ onRefresh, loading }) {
   const { logout } = useAuth()
   const { potagerActif } = usePotager()
   const [ouvert, setOuvert] = useState(false)
-  const [modale, setModale] = useState(null) // null | 'telegram' | 'delier' | 'membres'
+  const [modale, setModale] = useState(null) // null | 'telegram' | 'delier'
   const [moi, setMoi] = useState(null)
   const [version, setVersion] = useState(null)
 
@@ -54,7 +56,6 @@ export default function AccountMenu({ onRefresh, loading }) {
 
   const role = potagerActif?.role
   const telegramLie = moi?.telegram_lie === true
-  const nbMembres = potagerActif?.nb_membres ?? 0
 
   function ouvrirModale(nom) {
     setOuvert(false)
@@ -136,10 +137,13 @@ export default function AccountMenu({ onRefresh, loading }) {
               relié qu'à un seul compte à la fois (`telegram_chat_id` est
               unique en base), donc "relier" n'a aucun sens tant qu'un lien
               existe déjà. */}
+          {/* [US-091 / CA15] Reframing éditorial — jamais « Connecter/Relier
+              Telegram » : c'est un compagnon de terrain à activer, pas un
+              compte à connecter. */}
           <PopItem
             icon={telegramLie ? Unlink : Send}
-            label={telegramLie ? 'Compte Telegram' : 'Relier Telegram'}
-            sub={telegramLie ? 'Relié — cliquer pour dissocier' : 'Non relié'}
+            label={telegramLie ? 'Mon compagnon de terrain' : 'Activer mon compagnon'}
+            sub={telegramLie ? 'Actif — cliquer pour désactiver' : 'Non activé'}
             onClick={() => ouvrirModale(telegramLie ? 'delier' : 'telegram')}
             right={
               telegramLie
@@ -147,17 +151,6 @@ export default function AccountMenu({ onRefresh, loading }) {
                 : <Badge tint="amber">à faire</Badge>
             }
           />
-
-          {/* [CA3] Réservé à l'owner du potager actif — non-régression de la
-              condition d'affichage actuelle de TopBar. */}
-          {role === 'owner' && (
-            <PopItem
-              icon={Users}
-              label="Gérer les membres"
-              sub={`${nbMembres} membre${nbMembres > 1 ? 's' : ''} · invitations`}
-              onClick={() => ouvrirModale('membres')}
-            />
-          )}
 
           <PopSep />
 
@@ -185,7 +178,6 @@ export default function AccountMenu({ onRefresh, loading }) {
       {modale === 'delier' && (
         <DelierTelegram onClose={() => { setModale(null); chargerIdentite() }} />
       )}
-      {modale === 'membres' && <GestionMembres moiId={moi?.id} onClose={() => setModale(null)} />}
     </div>
   )
 }

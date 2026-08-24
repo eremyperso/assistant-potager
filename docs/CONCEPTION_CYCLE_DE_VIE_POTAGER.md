@@ -4,6 +4,7 @@
 
 > Document de conception — associé développeur senior.
 > Destiné à alimenter la rédaction d'US par l'agent PO (`.github/agents/Personna PO.agent.md`).
+> **Suivi d'avancement de l'épic : §7.2** — US rédigées le 2026-08-20 (`backlog/US-080` → `US-088`).
 > S'inscrit dans la lignée de `REFLEXION_STRATEGIQUE_multi_utilisateurs.md` (§5.2 auth, §7 trajectoire)
 > et complète `BACKLOG_US_MULTITENANT.md` (US-058, US-112, US-114 déjà cadrées mais partielles).
 >
@@ -320,37 +321,87 @@ Rien de neuf : le `TenantContext(user_id, potager_id, role)` cadré en US-101 fo
 
 ## 7. Découpage en User Stories suggéré
 
-À rédiger au format US-XXX habituel (critères d'acceptance + Gherkin) par l'agent PO, dans la lignée de `BACKLOG_US_MULTITENANT.md`. Numérotation à aligner avec la trame existante (les US actuelles vont jusqu'à ~US-133).
+Les US ont été **rédigées** par l'agent PO le 2026-08-20 dans `backlog/`, au format habituel
+(critères d'acceptance + Gherkin). Le §7.2 ci-dessous est le **tableau de suivi de référence** de
+l'épic : il est mis à jour à chaque livraison.
 
-### 7.1 Épic dédié suggéré — « Cycle de vie du potager »
+⚠️ **Numérotation** : ce document raisonnait sur la trame abandonnée `US-100 → US-133`
+(`BACKLOG_US_MULTITENANT.md`). Les US réelles suivent la numérotation du backlog livré et occupent
+**US-080 → US-088** (dernier numéro pris avant elles : US-079). La correspondance avec le découpage
+initialement proposé (US-150 → US-157) figure en §7.4.
 
-**Positionnement dans la trajectoire** : postérieur à US-112 et US-114, antérieur à US-133 (Stripe). Ces US complètent l'Épic 2 (Identité & accès) plutôt que d'en constituer un nouveau. Alternative : créer un mini-épic transverse « Gestion du tenant » qui regroupe ces US + US-112 + US-114.
+### 7.1 Épic dédié — « Cycle de vie du potager »
 
-### 7.2 US proposées
+**Positionnement dans la trajectoire** : postérieur à US-046 (potager actif) et US-048 (invitations),
+antérieur à la facturation Stripe/freemium. Les US sont regroupées dans un épic dédié,
+**ÉPIC 5 — Cycle de vie du potager**, déclaré dans `.github/agents/Personna PO.agent.md` à la suite
+des quatre épics de `BACKLOG_US_MULTITENANT.md`.
 
-| US | Titre | Périmètre synthétique | Dépendances |
-|---|---|---|---|
-| **US-150** | Modèle d'état du potager (`actif` / `archivé` / `supprimé`) | Migration `potagers.etat` + colonnes horodatage. Backfill à `actif`. Services lecture filtrent par état par défaut. | US-100 |
-| **US-151** | Créer un potager additionnel depuis la PWA | Bouton « + Créer » dans `PotagerMenu`, modale légère (nom, ville, lat/lon, case « rendre actif »). Réutilise `POST /potagers` enrichi. | US-100, US-055, US-112 |
-| **US-152** | Écran « Paramètres du potager » (renommer, modifier localisation) | Nouvel écran PWA accessible depuis `PotagerMenu`. Endpoints `PATCH /potagers/{id}`. Rôle `owner` requis pour écrire. | US-150 |
-| **US-153** | Archivage et désarchivage d'un potager (PWA) | Boutons dans « Paramètres », endpoints `POST /potagers/{id}/archiver` et `desarchiver`. Bascule auto du potager actif si nécessaire. Case « voir les archivés » dans `PotagerMenu`. | US-150 |
-| **US-154** | Suppression définitive avec délai de grâce | `DELETE /potagers/{id}` → soft-delete `supprimé_le`, purge physique + 30 j via job US-124. Re-saisie mot de passe. Interdit si potager `actif`. | US-150, US-124 |
-| **US-155** | Quitter un potager (membre non-owner) | `POST /potagers/{id}/quitter`. Interdit pour owner unique. Bascule potager actif si nécessaire. | US-113 |
-| **US-156** | Bot Telegram — commande `/rejoindre <code>` | Ajout commande côté bot, vérif code (réutilise US-114), rattachement au potager, message de confirmation. | US-111, US-114 |
-| **US-157** | Cohérence bot ⇄ PWA du potager actif | Le bot lit `users.potager_actif_id` à chaque message ; message d'info si changement détecté (« Tu es passé sur *Potager X* depuis le web »). | US-112, US-150 |
+> **Numéro d'épic** : le numéro 3 est déjà pris par `ÉPIC 3 — Fiabilité & maîtrise du coût`
+> (Redis, LLM à étages, quotas, jobs de fond, Alembic — §120 du backlog multi-tenant), dont la
+> trajectoire est indépendante. Le nouvel épic prend donc le numéro **5**. La branche de travail
+> `epic-3-cycle-vie-potager` conserve son nom, antérieur à cet arbitrage — son « 3 » ne désigne pas
+> le numéro d'épic.
+
+### 7.2 ÉPIC 5 — Cycle de vie du potager
+
+**Statuts** : 📋 à faire · 🚧 en cours · ✅ livrée (indiquer la version `PATCH_NOTES.md`).
+**Total : 31 points** — 9 US.
+
+| US | Titre | Description | Effort | Dépendances | Statut | Jira |
+|---|---|---|---|---|---|---|
+| **US-080** | Modéliser le cycle de vie d'un potager | Colonnes `potagers.etat` (`actif`/`archive`/`supprime`), `archive_le`, `supprime_le` ; backfill à `actif` ; filtrage par état par défaut dans les services et `GET /potagers?etat=` ; un potager non actif ne peut plus être le potager actif. Aucun changement visible pour l'utilisateur. | 3 | US-040, US-046, US-054 | 📋 | — |
+| **US-081** | Créer un potager additionnel depuis la PWA | Entrée « + Créer un nouveau potager » dans `PotagerMenu` et « Tous mes potagers » ; modale légère (nom + `VilleSearch`) ; case « en faire mon potager actif » ; encart « nouvelle saison ≠ nouveau potager ». **Résout le trou fonctionnel principal du §1.3.** | 3 | US-080, US-054, US-074, US-048 | 📋 | — |
+| **US-082** | Écran « Paramètres du potager » | Regroupe identité (nom/localisation, US-074 absorbée), membres (US-048 intégrée) et une « zone sensible » qui accueille les actions de cycle de vie ; nouvel endpoint `GET /potagers/{id}` ; lecture seule pour `editor`/`lecteur`. | 5 | US-080, US-074, US-048, US-047, US-052/053 | 📋 | — |
+| **US-083** | Archiver et désarchiver un potager | `POST /potagers/{id}/archiver` et `/desarchiver` (owner) ; archivé = **lecture seule** gardée dans les services ; invalidation du potager actif de chaque membre concerné ; filtre « voir les archivés » ; notification Telegram des membres. | 5 | US-080, US-082, US-047, US-045 | 📋 | — |
+| **US-084** | Supprimer définitivement (délai de grâce 30 j) | `DELETE /potagers/{id}` refusé hors état archivé ; décompte réel de ce qui sera perdu ; re-saisie du mot de passe ; soft-delete puis purge physique idempotente à J+30 ; restauration possible pendant le délai. | 5 | US-080, US-083, US-082, US-044 | 📋 | — |
+| **US-085** | Changer le rôle d'un membre / transférer la propriété | **US non prévue par ce document** (cf. §7.5) : aucun mécanisme de changement de rôle n'existe aujourd'hui. Permet la promotion `owner`, la correction `lecteur`↔`editor`, et pose la garde « dernier owner » réutilisée par US-084 et US-086. | 3 | US-047, US-048, US-082 | 📋 | — |
+| **US-086** | Quitter un potager | `POST /potagers/{id}/quitter` ; refusé au dernier owner (renvoi vers US-085) ; invalidation du potager actif ; les données saisies restent dans le potager. | 2 | US-085, US-048, US-082 | 📋 | — |
+| **US-087** | Bot — commande `/rejoindre <code>` | Seule action de cycle de vie exposée au bot (§4.2) ; réutilise `accepter_invitation()` sans dupliquer de règle ; messages dédiés par cas d'échec ; ne bascule le potager actif que si l'utilisateur n'en avait aucun. Zéro token Groq. | 2 | US-045, US-048, US-046 | 📋 | — |
+| **US-088** | Cohérence bot ⇄ PWA du potager actif | Le bot annonce **une seule fois** tout changement de potager actif venu du web, en distinguant bascule volontaire et bascule subie (archivage) ; symétrie côté `PotagerGate`. Silencieux pour un utilisateur mono-potager. | 3 | US-046, US-080, US-083 | 📋 | — |
 
 ### 7.3 Ordre de livraison recommandé
 
 ```
-US-150 (modèle) ──► US-151 (créer additionnel) ──┐
-                                                  ├──► US-152 (paramètres)
-                    US-156 (bot /rejoindre)       │
-                    US-157 (cohérence actif) ─────┼──► US-153 (archivage)
-                                                  │
-                                                  └──► US-155 (quitter)  ──► US-154 (suppression)
+US-080 (modèle) ──► US-081 (créer additionnel)
+       │
+       ├──► US-082 (paramètres) ──► US-083 (archivage) ──► US-084 (suppression)
+       │                                   ▲                        ▲
+       │                    US-085 (rôles / propriété) ─────────────┘
+       │                                   └──► US-086 (quitter)
+       │
+       ├──► US-088 (cohérence actif)
+       └──► US-087 (bot /rejoindre)   [livrable en parallèle, dépend seulement de l'existant]
 ```
 
-**Chemin critique produit** : `US-150 → US-151` (résout le trou fonctionnel principal). Le reste peut être livré itérativement.
+**Chemin critique produit** : `US-080 → US-081` (résout le trou fonctionnel principal). Le reste peut
+être livré itérativement. `US-085` est un **pré-requis dur** de `US-086` et du transfert RGPD (§5.5).
+
+### 7.4 Correspondance avec le découpage initialement proposé
+
+| Proposition d'origine | US réelle | Écart |
+|---|---|---|
+| US-150 — Modèle d'état | **US-080** | Périmètre identique ; valeurs d'état sans accent en base (`archive`, `supprime`), libellés accentués à l'affichage. |
+| US-151 — Créer un potager additionnel | **US-081** | Identique. Quota freemium laissé hors périmètre (§8.4 non tranché), emplacement du message prévu. |
+| US-152 — Écran « Paramètres » | **US-082** | **Rescopée** : renommer/localiser est déjà livré par US-074 (`PATCH /potagers/{id}` + `ModalModifierPotager`). L'US devient un regroupement, pas une création de fonctionnalité. |
+| US-153 — Archivage / désarchivage | **US-083** | Identique + notification Telegram des membres (arbitrage §8.7 tranché : oui). |
+| US-154 — Suppression définitive | **US-084** | Identique + droit au remords explicite (restauration pendant le délai de grâce). |
+| — | **US-085** | **Ajout** — voir §7.5. |
+| US-155 — Quitter un potager | **US-086** | Identique, mais dépend désormais de US-085 pour le cas de l'owner unique. |
+| US-156 — Bot `/rejoindre` | **US-087** | Identique. Garde de liaison US-045 exigée (un chat non lié est renvoyé vers `/lier`). |
+| US-157 — Cohérence bot ⇄ PWA | **US-088** | **Rescopée à la baisse** : la lecture de `users.potager_actif_id` à chaque message et la priorité 0 bis sont **déjà implémentées** (US-046). Reste la visibilité du changement et la symétrie PWA. |
+
+### 7.5 Écart de cadrage relevé à la rédaction — US-085
+
+Le §5.5 pose la règle « l'owner unique ne peut quitter son potager qu'après avoir désigné un autre
+owner », et le §8.6 prévoit un transfert de propriété au titre du RGPD. Or **aucun mécanisme de
+changement de rôle n'existe** : le rôle est figé au moment de l'invitation (`invitations.role_propose`,
+US-048) et `app/services/potagers.py` sait inviter, lister et retirer un membre — jamais promouvoir.
+
+Sans US-085, US-086 enferme définitivement tout owner unique et le transfert RGPD est irréalisable.
+D'où son ajout, avec une décision de modèle : **plusieurs owners sont autorisés** sur un potager
+(`potager_membres` ne l'interdit pas), le transfert consistant à promouvoir puis, éventuellement, à se
+rétrograder soi-même — jamais à laisser le potager orphelin.
 
 ---
 
@@ -390,8 +441,17 @@ Trois décisions produit à valider par Emmanuel avant que l'agent PO ne rédige
 2. ⚖️ **Création réservée à la PWA**, consultation/switch dans les deux canaux, commande `/rejoindre` ajoutée au bot. → **Cadre la répartition front/bot (§4).**
 3. ⚖️ **Cycle de vie à 3 états** : `actif` → `archivé` → `supprimé` (avec délai de grâce). Pas de `DRAFT`. → **Simplifie US-150.**
 
-Une fois ces trois arbitrages tranchés, le découpage US du §7.2 peut être décliné en 8 US formelles pour Claude Code, avec le chemin critique **US-150 → US-151** qui résout immédiatement le trou fonctionnel identifié.
+✅ **Arbitrages tranchés et US rédigées** (2026-08-20) : les trois décisions ci-dessus ont été retenues
+telles que recommandées, et le découpage a été décliné en **9 US formelles** (`backlog/US-080` à
+`US-088`, 31 points), suivies dans le tableau du **§7.2**. Chemin critique : **US-080 → US-081**, qui
+résout immédiatement le trou fonctionnel identifié.
+
+Points ouverts **encore non tranchés** et sans US associée : le potager de démo (§8.2), la
+recalibration de la volumétrie cible (§8.3), le plafond freemium (§8.4, laissé hors périmètre
+d'US-081) et l'encart de documentation utilisateur « saison ≠ potager » (§8.8, dont la partie produit
+est couverte par US-081/CA6).
 
 ---
 
-*Fin du document. Prêt à décliner chaque section §7.2 en User Story détaillée par l'agent Persona PO.*
+*Fin du document. Le §7.2 est le tableau de suivi vivant de l'épic — le mettre à jour à chaque
+livraison d'US (statut, version `PATCH_NOTES.md`, clé Jira).*

@@ -314,6 +314,69 @@ le VPS.
    `verification_token_*` sur `users`) doit être rejouée si la base est
    reconstruite de zéro — `update_dev.ps1` s'en charge automatiquement en dev.
 
+## Connexion Google (US-090) — OpenID Connect
+
+Flux **Authorization Code + PKCE**, échange du code côté serveur : le
+`client_secret` ne quitte jamais l'API, aucun jeton Google n'est conservé, les
+scopes se limitent à `openid email profile`.
+
+### Provisionnement (une fois par environnement)
+
+1. **Console Google Cloud** (https://console.cloud.google.com) → créer ou
+   sélectionner un projet dédié.
+2. **APIs & Services → Écran de consentement OAuth** : type « Externe »,
+   renseigner nom de l'application, e-mail d'assistance et domaine. Tant que
+   l'application est en mode « Test », seuls les comptes explicitement ajoutés
+   comme testeurs peuvent se connecter — penser à publier avant la prod.
+3. **APIs & Services → Identifiants → Créer des identifiants → ID client OAuth**,
+   type **Application Web**. Déclarer les **URI de redirection autorisées**,
+   une par environnement, **pointant sur l'API** (jamais sur le frontend :
+   l'échange du code est serveur à serveur) :
+   ```
+   http://localhost:8000/auth/oauth/google/callback        (dev local)
+   https://<domaine-api-dev>/auth/oauth/google/callback    (dev Hetzner)
+   https://<domaine-api-prod>/auth/oauth/google/callback   (prod)
+   ```
+   Ces mêmes valeurs, à l'octet près, alimentent `GOOGLE_REDIRECT_URIS` : la
+   liste blanche côté API (CA8) rejette toute autre valeur.
+
+4. **Variables d'environnement** dans `.env.dev` / `.env.prod` (jamais
+   commitées) :
+   ```
+   GOOGLE_CLIENT_ID=<ID client OAuth de CET environnement>
+   GOOGLE_CLIENT_SECRET=<secret client associé>
+   GOOGLE_REDIRECT_URIS=<URI de callback, séparées par des virgules>
+   ```
+   Variables absentes ou vides → **mode masqué** : `GET /auth/oauth/providers`
+   répond `{"google": false}`, la PWA n'affiche aucun bouton Google et les
+   endpoints `/auth/oauth/google/*` répondent 404. Le développement local et
+   la suite de tests fonctionnent ainsi sans aucun compte Google.
+
+### Rotation du `client_secret`
+
+Même principe que `BREVO_API_KEY` et `JWT_SECRET` — un secret par
+environnement, jamais partagé entre dev et prod :
+
+1. Console Google Cloud → l'ID client concerné → **Ajouter un secret**. Google
+   accepte deux secrets actifs simultanément : le nouveau est utilisable
+   immédiatement sans invalider l'ancien.
+2. Mettre à jour `GOOGLE_CLIENT_SECRET` dans le `.env.<env>` du serveur, puis
+   redémarrer le service API (`systemctl restart potager-prod` / `potager-dev`) :
+   `config.py` ne relit l'environnement qu'au démarrage.
+3. Vérifier une connexion réelle de bout en bout, puis **supprimer l'ancien
+   secret** depuis la console. Aucune session utilisateur n'est affectée : les
+   jetons applicatifs US-044 sont signés avec `JWT_SECRET`, pas avec le secret
+   Google.
+4. Une rotation de `JWT_SECRET`, elle, invalide aussi bien les sessions que les
+   cookies d'état OAuth en cours (les connexions Google entamées dans les
+   10 minutes précédentes échouent avec « la demande a expiré », l'utilisateur
+   n'a qu'à recliquer).
+
+### Migration BDD
+
+`migrations/migration_v30.sql` (colonne `users.google_sub` + index unique).
+Rollback : `migrations/rollback_v30.sql`.
+
 ## Déploiement & Docker
 
 ### ⚠️ IMPORTANT — Protocole de déploiement

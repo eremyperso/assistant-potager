@@ -126,11 +126,20 @@ async function patch(path, body) {
   return res.json()
 }
 
-async function del(path) {
-  const res = await requeteAvecRefresh(path, { method: 'DELETE', headers: headers() })
+// [US-084 / CA4] `body` optionnel : DELETE /potagers/{id} transporte la
+// re-saisie du mot de passe. `err.code` reporte le code métier renvoyé par
+// l'API (`mot_de_passe_invalide`, `trop_d_echecs`) — l'appelant doit pouvoir
+// distinguer « tentative refusée, on reste dans la confirmation » de
+// « opération abandonnée, on referme », ce qu'un message seul ne permet pas.
+async function del(path, body) {
+  const options = { method: 'DELETE', headers: headers() }
+  if (body !== undefined) options.body = JSON.stringify(body)
+  const res = await requeteAvecRefresh(path, options)
   if (!res.ok) {
     const detail = await res.clone().json().catch(() => ({}))
-    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    const err = new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    err.code = detail?.detail?.code
+    throw err
   }
   return res.json()
 }
@@ -143,22 +152,24 @@ function qs(params) {
 export const api = {
   health:     () => get('/health'),
   // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
-  plan:       (dateRef) => get(`/plan${dateRef ? qs({ date_ref: dateRef }) : ''}`),
-  stats:      (dateRef) => get(`/stats${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
+  plan:       (dateRef, potagerId) => get(`/plan${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  stats:      (dateRef, potagerId) => get(`/stats${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-072] Détail par variété toutes cultures confondues, avec parcelles — écran Stocks (US-073)
-  statsVarietes: (dateRef) => get(`/stats/varietes${dateRef ? qs({ date_ref: dateRef }) : ''}`),
-  godets:     (dateRef) => get(`/godets${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  godets:     (dateRef, potagerId) => get(`/godets${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   cultures:   () => get('/cultures'),
   historique: (params = {}) => get(`/historique${qs(params)}`),
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
   // [US-075/US-076] Météo du jour + prévision 5 jours sur la localisation du
   // potager actif — `{ localisation_manquante: true }` si non renseignée (CA4).
   meteo: () => get('/meteo'),
-  activite:     (annee, dateRef) => get(`/stats/activite${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
-  rendement:    (annee, dateRef) => get(`/stats/rendement${qs({ annee, ...(dateRef ? { date_ref: dateRef } : {}) })}`),
+  activite:     (annee, dateRef, potagerId) => get(`/stats/activite${qs({ annee, ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  rendement:    (annee, dateRef, potagerId) => get(`/stats/rendement${qs({ annee, ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-065/US-061] Pépinière lot de semis par lot de semis — lecture distincte de
   // `/godets`, qui reste agrégée par culture + variété pour Stocks, Stats et le bot.
-  pepiniereLots: (dateRef) => get(`/pepiniere/lots${dateRef ? qs({ date_ref: dateRef }) : ''}`),
+  // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
+  pepiniereLots: (dateRef, potagerId) => get(`/pepiniere/lots${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-061 CA10] `semisId` / `sansSemisRattache` ciblent le lot ouvert ; sans eux
   // l'endpoint conserve son comportement agrégé (culture + variété).
   godetsDetail: (culture, variete, { semisId, sansSemisRattache } = {}) => {
@@ -183,11 +194,27 @@ export const api = {
   // [US-050 / CA1] Dissocie le chat Telegram lié au compte — identité seule, sans corps de requête
   delierTelegram: () => post('/auth/lien/delier'),
   // [US-046] Potagers du compte connecté — liste vide = CA5 (aucun potager), pas une erreur
-  potagers: () => get('/potagers'),
+  // [US-083 / CA6] `etat` optionnel : 'tous' inclut les potagers archivés (défaut serveur : 'actif' seul)
+  potagers: (etat) => get(`/potagers${etat ? qs({ etat }) : ''}`),
+  // [US-082 / CA2, CA7] Détail d'un potager pour l'écran Paramètres — réservé à ses membres
+  potager: (potagerId) => get(`/potagers/${potagerId}`),
   activerPotager: (potagerId) => post(`/potagers/${potagerId}/activer`),
+  // [US-083 / CA1] Archiver/désarchiver un potager — owner uniquement
+  archiverPotager: (potagerId) => post(`/potagers/${potagerId}/archiver`),
+  desarchiverPotager: (potagerId) => post(`/potagers/${potagerId}/desarchiver`),
+  // [US-084 / CA3] Décompte réel de ce que la suppression fera perdre — owner uniquement
+  impactSuppressionPotager: (potagerId) => get(`/potagers/${potagerId}/impact-suppression`),
+  // [US-084 / CA1, CA4] Suppression d'un potager archivé, confirmée par mot de passe
+  supprimerPotager: (potagerId, motDePasse) => del(`/potagers/${potagerId}`, { mot_de_passe: motDePasse }),
+  // [US-084 / CA6] Corbeille : potagers supprimés encore restaurables (délai de grâce)
+  corbeillePotagers: () => get('/potagers/corbeille'),
+  restaurerPotager: (potagerId) => post(`/potagers/${potagerId}/restaurer`),
   // [US-048] Création de potager, invitations et gestion des membres (owner)
   // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch (géocodage Open-Meteo)
-  creerPotager: (nom, ville, latitude, longitude) => post('/potagers', { nom, ville, latitude, longitude }),
+  // [US-081 / CA3, CA4] `activer` pilote la bascule sur le potager créé — omis,
+  // le serveur bascule (comportement d'origine, dont dépend l'onboarding US-058).
+  creerPotager: (nom, ville, latitude, longitude, activer = true) =>
+    post('/potagers', { nom, ville, latitude, longitude, activer }),
   // [US-074 / CA4, CA5] Modification (nom/ville/localisation) d'un potager déjà créé — owner uniquement
   modifierPotager: (potagerId, { nom, ville, latitude, longitude } = {}) =>
     patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude }),
@@ -245,6 +272,26 @@ export const authApi = {
 
   hasSession() {
     return Boolean(getAccessToken())
+  },
+
+  // [US-090 / CA4] Connecteurs de fédération réellement configurés côté API.
+  // Un échec réseau est traité comme « aucun connecteur » : l'écran de
+  // connexion par e-mail reste pleinement fonctionnel, sans bouton en erreur.
+  async oauthProviders() {
+    try {
+      const res = await fetch(`${BASE}/auth/oauth/providers`)
+      if (!res.ok) return {}
+      return await res.json()
+    } catch {
+      return {}
+    }
+  },
+
+  // [US-090 / CA5] Le flux OAuth est une suite de redirections HTTP : on quitte
+  // la PWA par une navigation pleine page, jamais par fetch (la réponse de
+  // Google n'est pas exploitable en CORS, et le cookie d'état doit suivre).
+  googleStartUrl() {
+    return `${BASE}/auth/oauth/google/start`
   },
 
   // [CA10] Valide le token reçu par e-mail — pas de token requis (utilisateur pas encore connecté)
