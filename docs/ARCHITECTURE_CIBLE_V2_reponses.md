@@ -410,6 +410,46 @@ Ce document ne crée pas d'US — il cadre celles que l'agent PO déclinera. Cor
 8. Annexe A — moteur d'insights proactif
 ```
 
+### 9.1 Déclinaison réelle en US — tableau de suivi
+
+> ⚠️ **Numérotation.** Les numéros du tableau et de l'ordre ci-dessus relèvent de l'**ancienne
+> numérotation** du plan multi-tenant (US-121, US-122, US-140 « RAG », US-141 « BYOK »). La
+> déclinaison effective par l'agent PO suit la numérotation réelle du répertoire `backlog/` :
+> **US-092 à US-099**, puis **US-140 à US-143**, la bande 100-133 étant volontairement sautée
+> (voir `README.md` §mapping). « US-140 » ne désigne donc **pas** la même chose ci-dessus (le RAG)
+> et ci-dessous (le corpus agronomique).
+
+**12 US · 70 points · `ÉPIC 3 — Fiabilité & coût`**
+
+| US | Titre | Pts | Rôle | Dépend de |
+|---|---|---|---|---|
+| [US-092](../backlog/US-092_passerelle-llm-unique.md) | Passerelle LLM unique | 5 | Socle — mesure conso, mode dégradé 429, point d'extension BYOK | — |
+| [US-093](../backlog/US-093_routeur-demandes-regles-first.md) | Routeur règles-first | 5 | Aiguillage + cache de classification + remontée de cascade | 092 |
+| [US-094](../backlog/US-094_parseur-deterministe-saisies-courantes.md) | Parseur déterministe des saisies | 8 | Étage 0 — saisie sans LLM | 092 |
+| [US-095](../backlog/US-095_cache-questions-invalidation-evenementielle.md) | Cache de questions types | 5 | Étage 0bis — invalidation événementielle | 093, 096 |
+| [US-096](../backlog/US-096_reponses-chiffrees-gabarits-sql.md) | Gabarits sur agrégats SQL | 5 | Étage 1 — réponses chiffrées + garde-fous SQL | 093 |
+| [US-097](../backlog/US-097_observabilite-cascade-retour-jardinier.md) | Observabilité + retour 👍/👎 | 3 | Valide les hypothèses 40/35/20/5 du §7.1 | 092, 093 |
+| [US-098](../backlog/US-098_socle-connaissance-recherche-fts.md) | Socle de connaissance + FTS | 8 | Étage 2 — le contenant | 093 |
+| [US-099](../backlog/US-099_corpus-fonctionnement-application.md) | Corpus « fonctionnement app » | 5 | Famille B — contenu | 098 |
+| [US-140](../backlog/US-140_corpus-agronomique-cultures-prioritaires.md) | Corpus agronomique (10 cultures) | 8 | Famille A — contenu, risque licence | 098, 067 |
+| [US-141](../backlog/US-141_memoire-potager-observations-indexees.md) | Mémoire du potager | 5 | Famille C — observations indexées | 098 |
+| [US-142](../backlog/US-142_conseil-personnalise-multi-sources.md) | Conseil personnalisé multi-sources | 5 | Étage 3 — le seul où le LLM rédige | 092, 093, 096, 098 |
+| [US-143](../backlog/US-143_brancher-sa-propre-cle-ia.md) | BYOK — clé et modèle du potager | 8 | Sort du quota mutualisé | 092 |
+
+**Ordre recommandé :** `092` → `093` + `097` → `094` / `095` / `096` → `098` → `099` / `141` →
+`140` → `142` → `143`. L'arbitrage de la **source du référentiel agronomique** (risque 🔴, commun à
+US-140 et à l'Épic 5 calendrier) est un travail de recherche, pas de développement : il est mené en
+tâche de fond dès le début, sans bloquer la cascade.
+
+**Trois corrections apportées à ce document par la déclinaison :**
+- `guide_assistant_potager.md` (§4.1) **n'existe pas dans le dépôt** : le corpus de la famille B est
+  à **écrire**, pas à ingérer. Sa matière première est constituée des textes d'aide `/help`.
+- Le coût moyen visé de ~180 tokens/question (§7.1) **omet le coût du routage** : il est recalculé
+  routage inclus par US-097.
+- L'Épic 5 calendrier **n'est prérequis d'aucune** de ces 12 US : seule US-142 le touche, en mode
+  dégradé explicite (aucune date annoncée tant que le référentiel n'existe pas). En revanche il
+  reste prérequis dur de l'**Annexe A** ci-dessous.
+
 ---
 
 ## Annexe A — La couche proactive (jalon suivant)
