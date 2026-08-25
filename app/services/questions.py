@@ -28,7 +28,9 @@ def repondre_question(ctx: TenantContext, question: str) -> str:
     scopée au potager courant (ctx.potager_id). Gère elle-même sa session DB (via
     query_agent_answer) — pas de `db` en paramètre, conformément à la signature
     définie par l'US (US-041 / CA7)."""
-    intent, tokens = extract_intent_query_mesuree(question)
+    # [US-092 / CA2] Le contexte tenant est transmis explicitement à la
+    # passerelle : c'est lui qui rend l'appel imputable au bon potager.
+    intent, tokens = extract_intent_query_mesuree(question, ctx=ctx)
     reponse = query_agent_answer(question, intent, potager_id=ctx.potager_id)
     log.info(
         "[US-042 CA7] repondre_question potager_id=%s tokens_groq=%d (cible <1500)",

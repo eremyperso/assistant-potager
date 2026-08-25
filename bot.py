@@ -46,9 +46,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
 )
-from groq import Groq
-
-from config import GROQ_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN, GROQ_WHISPER_MODEL, PWA_URL
+from config import DATABASE_URL, TELEGRAM_BOT_TOKEN, PWA_URL
 from database.db import SessionLocal, Base, engine, tenant_scope, current_potager_id
 from utils.actions import normalize_action
 from utils.parcelles import (
@@ -56,7 +54,11 @@ from utils.parcelles import (
     find_doublon, create_parcelle, update_parcelle, get_all_parcelles,
     resolve_parcelle, rename_parcelle, supprimer_parcelle,
 )
-from llm.groq_client import parse_commande, repondre_question, parse_message, extract_note_fields
+from llm.groq_client import parse_commande, parse_message, extract_note_fields
+# [US-092] Toute sortie vers le fournisseur de modèles passe par la passerelle —
+# aucun client Groq n'est instancié ici (audit : tools/audit_appels_llm.py).
+from llm import passerelle
+from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
@@ -269,7 +271,7 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
             normalized.append(new_item)
 
     return normalized
-groq_client = Groq(api_key=GROQ_API_KEY)
+
 
 # ── Clavier principal ────────────────────────────────────────────────────────────
 MENU_KEYBOARD = ReplyKeyboardMarkup(
@@ -928,17 +930,25 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         tmp_path = tmp.name
         await voice_file.download_to_drive(tmp_path)
 
-    # ── 2. Transcrire via Groq Whisper ──────────────────────────────────────────
+    # ── 2. Transcrire via la passerelle LLM [US-092 / CA4] ─────────────────────
     try:
-        with open(tmp_path, "rb") as audio:
-            transcription = groq_client.audio.transcriptions.create(
-                file=("message.ogg", audio),
-                model=GROQ_WHISPER_MODEL,
-                language="fr",
-                response_format="text"
-            )
-        texte = transcription.strip()
+        texte = passerelle.transcrire(
+            ctx=current_context(),
+            chemin_fichier=tmp_path,
+            nom_fichier="message.ogg",
+        ).texte
         os.unlink(tmp_path)
+    except LLMIndisponibleError:
+        # [CA9] Pas de repli utile pour un vocal : sans transcription il n'y a
+        # rien à enregistrer. Message explicite, et invitation à passer au
+        # clavier — le reste du bot (déterministe) fonctionne toujours.
+        os.unlink(tmp_path)
+        await msg.edit_text(
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "En attendant, tape ton action ou ta question au clavier : "
+            "/stats, /plan, /historique et le stock restent disponibles."
+        )
+        return
     except Exception as e:
         os.unlink(tmp_path)
         await msg.edit_text(f"❌ Erreur transcription : {e}")
@@ -1010,8 +1020,20 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _ask_question(update, texte)
         return
 
-    # ── 5. Analyse unifiée intent + parsing via Groq (single-pass) ───────────
-    parsed = parse_message(texte)
+    # ── 5. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
+    try:
+        parsed = parse_message(texte, ctx=current_context())
+    except LLMIndisponibleError:
+        # [US-092 / CA9, CA10] Repli déclaré : le routage par le modèle est
+        # indisponible, mais tout le bot déterministe reste accessible — on
+        # oriente vers les commandes qui ne consomment aucun appel LLM.
+        log.warning("⏳ ROUTAGE         : IA indisponible → orientation commandes déterministes")
+        await msg.edit_text(
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "En attendant, ces commandes fonctionnent normalement :\n"
+            "/stats · /plan · /historique · /meteo · /parcelles"
+        )
+        return
     intent = parsed["intent"]
 
     # ── 6. Routage selon intent ────────────────────────────────────────────────
@@ -1189,7 +1211,7 @@ INTENTS = {
     "DEPLACER",     # [US-007] réassocier une culture à une nouvelle parcelle
 }
 
-_CLASSIFY_PROMPT = """Tu es un assistant potager spécialisé dans la classification de messages.
+_CLASSIFY_PROMPT_FIXE = """Tu es un assistant potager spécialisé dans la classification de messages.
 L'utilisateur t'envoie un message (vocal transcrit ou texte).
 
 CLASSE CE MESSAGE EN UNE SEULE CATÉGORIE :
@@ -1300,6 +1322,12 @@ RÈGLE IMPORTANTE #4 :
 Si le message contient "dernière", "dernier", "première", "premier", "ce mois-ci", "cette semaine"
 SANS verbe d'action au passé → c'est INTERROGER (consultation de données existantes).
 
+"""
+
+# [US-092 / CA6] Suffixe variable — le seul morceau qui change d'un appel à
+# l'autre. Il est concaténé APRÈS _CLASSIFY_PROMPT_FIXE par la passerelle, de
+# sorte que tout le préfixe reste identique et donc éligible au cache de prompt.
+_CLASSIFY_SUFFIXE = """
 Message utilisateur : "{texte}"
 
 Réponds avec UN SEUL MOT en majuscules parmi :
@@ -1308,18 +1336,22 @@ STATS | HISTORIQUE | INTERROGER | CORRIGER | SUPPRIMER | MENU | NOUVELLE | ACTIO
 Réponse :"""
 
 def classify_intent(texte: str) -> str:
-    """Utilise Groq pour classer l'intention du message en un intent canonique."""
-    from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
-    client = Groq(api_key=GROQ_API_KEY)
+    """Classe l'intention du message en un intent canonique, via la passerelle.
+
+    [US-092 / CA6] Le message de l'utilisateur, seule partie variable, part en
+    fin de prompt — la consigne de classification reste un préfixe stable.
+    """
     try:
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": _CLASSIFY_PROMPT.format(texte=texte)}],
-            temperature=0.0,
+        reponse = passerelle.appeler_chat(
+            appel_type=passerelle.TYPE_CLASSIFICATION,
+            ctx=current_context(),
+            prompt_fixe=_CLASSIFY_PROMPT_FIXE,
+            prompt_variable=_CLASSIFY_SUFFIXE.format(texte=texte),
             max_tokens=10,
+            reasoning=False,   # comportement constant : cet appel n'en passait pas
+            role_prompt="user",
         )
-        intent = resp.choices[0].message.content.strip().upper().rstrip(".!? ")
+        intent = reponse.texte.upper().rstrip(".!? ")
         if intent not in INTENTS:
             log.warning(f"⚠️ INTENT INCONNU  : '{intent}' → fallback ACTION")
             intent = "ACTION"
@@ -1713,7 +1745,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     for i, ligne in enumerate(lignes, 1):
         log.info(f"  [{i}/{len(lignes)}] Traitement : {ligne}")
         try:
-            items = parse_commande(ligne)
+            items = parse_commande(ligne, ctx=current_context())
             items = _normalize_items(items, ligne)
             from utils.validation import strip_culture_hallucinee
             for j, item in enumerate(items):
@@ -1721,6 +1753,19 @@ async def _parse_multi(update, lignes: list, msg=None):
                 items[j] = strip_culture_hallucinee(item, ligne)
                 if culture_avant and items[j].get("culture") is None:
                     log.warning(f"  [{i}] ⚠️ CULTURE HALLUCINÉE : '{culture_avant}' absente du texte → retirée | ligne={ligne!r}")
+        except LLMIndisponibleError:
+            # [US-092 / CA9] Inutile de tenter les lignes suivantes : le
+            # fournisseur est saturé, chacune consommerait une nouvelle
+            # tentative pour le même échec. On arrête et on le dit.
+            log.warning(f"  [{i}] ⏳ IA indisponible → arrêt du traitement multi-lignes")
+            txt = (
+                f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+                f"{len(total_saved)} action(s) enregistrée(s) avant l'interruption — "
+                "redis les suivantes dans quelques minutes."
+            )
+            if msg: await msg.edit_text(txt)
+            else:   await update.message.reply_text(txt)
+            return
         except Exception as e:
             log.error(f"  [{i}] Erreur parsing : {e}")
             continue
@@ -2748,7 +2793,19 @@ async def _note_details_received(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
         await _note_start(update, ctx)
         return
 
-    fields = extract_note_fields(categorie, texte)
+    try:
+        fields = extract_note_fields(categorie, texte, ctx=current_context())
+    except LLMIndisponibleError:
+        # [US-092 / CA9] Repli déclaré : la note n'est pas perdue mais elle n'est
+        # pas structurée non plus — on garde le flux ouvert et on le dit.
+        log.warning("⏳ NOTE            : IA indisponible, extraction des champs impossible")
+        await update.effective_message.reply_text(
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "Ta note n'a pas été enregistrée — retente dans quelques minutes.",
+            reply_markup=MENU_KEYBOARD,
+        )
+        _note_reset(ctx)
+        return
 
     # [feedback] Résout culture/variete vers les valeurs canoniques déjà en base
     # (Groq peut renvoyer "haricot"/"nain" alors que la BDD a "haricot"/"vert nain Contender")
@@ -2867,7 +2924,18 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         if pre_parsed_items is not None:
             items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
         else:
-            items = parse_commande(texte)   # fallback : parse_commande classique
+            items = parse_commande(texte, ctx=current_context())
+    except LLMIndisponibleError:
+        # [US-092 / CA9] Aucun repli utile : sans parsing, rien à enregistrer.
+        # On le dit explicitement plutôt que d'inventer un événement.
+        log.warning("⏳ PARSING         : IA indisponible, action non enregistrée")
+        txt = (
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "Ton action n'a pas été enregistrée — redis-la dans quelques minutes."
+        )
+        if msg: await msg.edit_text(txt)
+        else:   await message.reply_text(txt)
+        return
     except Exception as e:
         log.error(f"❌ ERREUR PARSING  : {e}")
         txt = f"❌ Erreur parsing : {e}\n\nEssayez de reformuler votre action."
@@ -3694,6 +3762,14 @@ async def _ask_question(update: Update, question: str):
             reply_markup=AFTER_RECORD_KEYBOARD
         )
         await send_voice_reply(update, reponse)
+    except LLMIndisponibleError:
+        # [US-092 / CA9, CA10] L'extraction d'intention est indisponible, mais
+        # les consultations déterministes, elles, ne consomment aucun appel LLM.
+        log.warning("⏳ QUESTION        : IA indisponible → orientation consultations déterministes")
+        await msg.edit_text(
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "/stats, /plan, /historique et /meteo restent disponibles."
+        )
     except Exception as e:
         log.error(f"❌ Erreur _ask_question: {e}")
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
@@ -4661,19 +4737,20 @@ def _normalize_action_search(action: str) -> str:
 
 
 def _find_candidates(description: str, limit: int = 3) -> list:
-    """Groq extrait les critères → SQL retrouve les événements."""
-    from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL, GROQ_REASONING_EFFORT
+    """Le modèle extrait les critères → SQL retrouve les événements.
+
+    [US-092 / CA6] La description dictée par l'utilisateur — seule partie
+    variable d'un appel à l'autre — passe en message utilisateur séparé, après
+    la consigne, au lieu d'être enchâssée en tête du prompt.
+    """
     import json
 
-    client = Groq(api_key=GROQ_API_KEY)
     today     = date.today()
     last_week = (today - timedelta(days=7)).isoformat()
     last_month= (today - timedelta(days=30)).isoformat()
 
     prompt = f"""Aujourd'hui : {today.isoformat()} (année {today.year}).
-L'utilisateur veut retrouver un événement potager.
-Description : "{description}"
+L'utilisateur veut retrouver un événement potager, décrit dans le message suivant.
 
 Retourne UNIQUEMENT ce JSON (null si non mentionné) :
 {{"action": string|null, "culture": string|null, "variete": string|null, "date_debut": "YYYY-MM-DD"|null, "date_fin": "YYYY-MM-DD"|null, "parcelle": string|null}}
@@ -4691,28 +4768,32 @@ RÈGLES :
 JSON brut uniquement."""
 
     try:
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=200,
-            # [fix bug id=357] Sans reasoning_effort, le modèle (gpt-oss, raisonneur)
-            # dépense tout le budget max_tokens dans son raisonnement interne caché
-            # et coupe avant d'écrire le JSON de réponse (finish_reason="length",
-            # content=""). Résultat en prod : "mise en godet fève du 20/07" ne
-            # retournait aucun critère exploité, la recherche retombait sur les 3
-            # derniers événements toutes cultures confondues (petit pois, tomate),
-            # sans lien avec "fève". Même garde-fou que _REASONING_KWARGS dans
-            # llm/groq_client.py, à répliquer ici (client Groq distinct, pas
-            # partagé) pour tout appel utilisant GROQ_MODEL avec un budget de
-            # tokens serré.
-            **({"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}),
+        # [fix bug id=357] `reasoning=True` (défaut) : sans reasoning_effort, le
+        # modèle (gpt-oss, raisonneur) dépense tout le budget max_tokens dans son
+        # raisonnement interne caché et coupe avant d'écrire le JSON de réponse
+        # (finish_reason="length", content=""). Résultat en prod : "mise en godet
+        # fève du 20/07" ne retournait aucun critère exploité, la recherche
+        # retombait sur les 3 derniers événements toutes cultures confondues.
+        # [US-092] Le garde-fou n'a plus à être répliqué ici : la passerelle
+        # l'applique pour tout appel de chat.
+        reponse = passerelle.appeler_chat(
+            appel_type=passerelle.TYPE_PARSING,
+            ctx=current_context(),
+            prompt_fixe=prompt,
+            message_utilisateur=description,
+            max_tokens=200,
         )
-        raw = resp.choices[0].message.content.strip()
+        raw = reponse.texte
         if raw.startswith("```"):
             raw = "\n".join(raw.split("\n")[1:-1])
         criteres = json.loads(raw)
+    except LLMIndisponibleError:
+        # [CA9] Pas de repli utile : sans critères, la recherche retomberait sur
+        # les 3 derniers événements toutes cultures confondues et proposerait de
+        # corriger le mauvais. Mieux vaut ne rien proposer et le dire.
+        raise
     except Exception as e:
-        log.error(f"Groq critères erreur : {e}")
+        log.error(f"Extraction de critères en échec : {e}")
         criteres = {}
 
     # Normaliser l'action
@@ -4810,7 +4891,19 @@ async def _corr_search(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: st
             db.close()
     else:
         msg_wait = await update.message.reply_text("🔎 Recherche en cours...")
-        candidates = _find_candidates(texte)  # charge déjà parcelle_rel via selectinload
+        try:
+            candidates = _find_candidates(texte)  # charge déjà parcelle_rel via selectinload
+        except LLMIndisponibleError:
+            # [US-092 / CA9] Le raccourci "1" (dernier événement) reste, lui,
+            # entièrement déterministe : on le rappelle plutôt que de proposer
+            # des candidats devinés au hasard.
+            log.warning("⏳ RECHERCHE       : IA indisponible, recherche par description impossible")
+            await msg_wait.edit_text(
+                f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+                "Tape *1* pour corriger directement le dernier événement enregistré.",
+                parse_mode="Markdown",
+            )
+            return
         candidates_fmt = [_fmt_event(e) for e in candidates]
         try:
             await msg_wait.delete()
@@ -5034,17 +5127,12 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
 
     msg_wait = await update.message.reply_text("⏳ Analyse de la correction...")
 
-    from groq import Groq
-    from config import GROQ_API_KEY, GROQ_MODEL
     import json
 
-    client = Groq(api_key=GROQ_API_KEY)
     today     = date.today()
     yesterday = (today - timedelta(days=1)).isoformat()
 
     prompt = f"""Aujourd'hui : {today.isoformat()}. Hier : {yesterday}.
-Événement actuel : {json.dumps(event_actuel, ensure_ascii=False)}
-Correction demandée : "{texte}"
 
 Retourne UNIQUEMENT un JSON avec les champs MODIFIÉS (seulement ceux qui changent) :
 {{"champ": nouvelle_valeur, ...}}
@@ -5058,18 +5146,37 @@ Exemples :
 "c'était 4 plants et non 5" → {{"quantite": 4}}
 JSON brut uniquement."""
 
+    # [US-092 / CA6] L'événement à corriger et la demande de l'utilisateur — les
+    # deux seules parties variables — passent après la consigne, pas avant.
+    prompt_variable = (
+        f"\nÉvénement actuel : {json.dumps(event_actuel, ensure_ascii=False)}\n"
+    )
+
     try:
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0, max_tokens=300
+        reponse = passerelle.appeler_chat(
+            appel_type=passerelle.TYPE_PARSING,
+            ctx=current_context(),
+            prompt_fixe=prompt,
+            prompt_variable=prompt_variable,
+            message_utilisateur=f'Correction demandée : "{texte}"',
+            max_tokens=300,
+            reasoning=False,   # comportement constant : cet appel n'en passait pas
         )
-        raw = resp.choices[0].message.content.strip()
+        raw = reponse.texte
         if raw.startswith("```"):
             raw = "\n".join(raw.split("\n")[1:-1])
         corrections = json.loads(raw)
+    except LLMIndisponibleError:
+        # [CA9] Aucun repli utile : appliquer une correction devinée serait pire
+        # que ne rien faire. L'événement reste intact, la correction est différée.
+        log.warning("⏳ CORRECTION      : IA indisponible, correction différée")
+        await msg_wait.edit_text(
+            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+            "Ton événement n'a pas été modifié — retente la correction dans un moment."
+        )
+        return
     except Exception as e:
-        log.error(f"Groq correction erreur : {e}")
+        log.error(f"Analyse de correction en échec : {e}")
         await msg_wait.edit_text("❌ Je n'ai pas compris la correction. Reformulez.")
         return
 

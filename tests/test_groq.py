@@ -6,7 +6,7 @@ from llm.groq_client import parse_commande, extract_intent, repondre_question
 class TestParseCommande:
     """Tests pour parse_commande (parsing avec Groq)."""
 
-    @patch('llm.groq_client._client')
+    @patch('llm.passerelle._client')
     def test_parse_perte(self, mock_client):
         """Test parsing d'une phrase de perte."""
         # Mock de la réponse Groq
@@ -30,7 +30,7 @@ class TestParseCommande:
         assert event['unite'] == 'plants'
         assert event['commentaire'] == 'gel nocturne'
 
-    @patch('llm.groq_client._client')
+    @patch('llm.passerelle._client')
     def test_parse_multiple_events(self, mock_client):
         """Test parsing de phrases multiples."""
         mock_response = MagicMock()
@@ -51,7 +51,7 @@ class TestParseCommande:
 class TestExtractIntent:
     """Tests pour extract_intent."""
 
-    @patch('llm.groq_client._client')
+    @patch('llm.passerelle._client')
     def test_extract_intent_perte(self, mock_client):
         """Test extraction d'intent pour question sur pertes."""
         mock_response = MagicMock()
@@ -68,7 +68,7 @@ class TestExtractIntent:
 class TestRepondreQuestion:
     """Tests pour repondre_question."""
 
-    @patch('llm.groq_client._client')
+    @patch('llm.passerelle._client')
     def test_repondre_stock_reel(self, mock_client):
         """Test réponse sur stock réel."""
         mock_response = MagicMock()

@@ -210,16 +210,16 @@ class TestCorrApplyParcelleValidation:
 
         with patch("bot.SessionLocal") as mock_session_cls, \
              patch("bot.resolve_parcelle", return_value=None) as mock_resolve, \
-             patch("groq.Groq") as mock_groq_cls, \
+             patch("llm.passerelle._client") as mock_groq_instance, \
              patch("bot.MENU_KEYBOARD", None):
 
             mock_db = MagicMock()
             mock_db.get.return_value = event_mock
             mock_session_cls.return_value = mock_db
 
-            mock_groq_instance = MagicMock()
+            # [US-092] L'appel passe par la passerelle unique : on intercepte
+            # son client plutôt que le constructeur du SDK Groq.
             mock_groq_instance.chat.completions.create.return_value = groq_resp
-            mock_groq_cls.return_value = mock_groq_instance
 
             from bot import _corr_apply
             await _corr_apply(update_mock, ctx_mock, "plantation sur parcelle bretagne")
@@ -264,16 +264,16 @@ class TestCorrApplyParcelleValidation:
 
         with patch("bot.SessionLocal") as mock_session_cls, \
              patch("bot.resolve_parcelle", return_value=parcelle_nord), \
-             patch("groq.Groq") as mock_groq_cls, \
+             patch("llm.passerelle._client") as mock_groq_instance, \
              patch("bot.MENU_KEYBOARD", None):
 
             mock_db = MagicMock()
             mock_db.get.return_value = event_mock
             mock_session_cls.return_value = mock_db
 
-            mock_groq_instance = MagicMock()
+            # [US-092] L'appel passe par la passerelle unique : on intercepte
+            # son client plutôt que le constructeur du SDK Groq.
             mock_groq_instance.chat.completions.create.return_value = groq_resp
-            mock_groq_cls.return_value = mock_groq_instance
 
             from bot import _corr_apply
             await _corr_apply(update_mock, ctx_mock, "plantation sur parcelle nord")

@@ -26,7 +26,9 @@ def _classify(texte: str, groq_returns: str) -> str:
     """Appelle classify_intent() avec Groq mocké."""
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = _mock_groq_response(groq_returns)
-    with patch("groq.Groq", return_value=mock_client):
+    # [US-092] Le client Groq vit desormais dans la passerelle unique :
+    # c'est lui qu'on intercepte, plus le constructeur du SDK.
+    with patch("llm.passerelle._client", mock_client):
         from bot import classify_intent
         return classify_intent(texte)
 
@@ -140,7 +142,9 @@ def test_us010_erreur_groq_fallback_action():
     """Erreur API Groq → fallback sécurisé sur ACTION."""
     mock_client = MagicMock()
     mock_client.chat.completions.create.side_effect = Exception("Groq timeout")
-    with patch("groq.Groq", return_value=mock_client):
+    # [US-092] Le client Groq vit desormais dans la passerelle unique :
+    # c'est lui qu'on intercepte, plus le constructeur du SDK.
+    with patch("llm.passerelle._client", mock_client):
         from bot import classify_intent
         result = classify_intent("Combien de tomates ?")
     assert result == "ACTION"  # fallback défini dans classify_intent()

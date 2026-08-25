@@ -9,8 +9,9 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-045] Ajout modèle LiaisonTelegram (codes de liaison chat_id ⇄ compte web)
 [US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
 [US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
+[US-092] Ajout modèle ConsoTokens (mesure de consommation LLM par potager)
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
@@ -251,4 +252,47 @@ class Parcelle(Base):
         # [migration_v23] Unicité par potager, pas globale — remplace l'ancienne
         # contrainte UNIQUE(nom_normalise) seule (parcelles_nom_normalise_key).
         UniqueConstraint("potager_id", "nom_normalise", name="uq_parcelles_potager_nom_normalise"),
+    )
+
+
+class ConsoTokens(Base):
+    """
+    [US-092 / CA5] Consommation LLM mesurée, une ligne par appel passé par la
+    passerelle (`llm/passerelle.py`) — succès comme échec.
+
+    Cette table **mesure**, elle ne plafonne pas : les budgets par potager, le
+    blocage au dépassement et l'incitation à l'abonnement relèvent de l'US de
+    quotas, qui consommera ces lignes. Nom et colonnes repris du cadrage initial
+    d'US-123 pour ne pas créer une table concurrente.
+
+    - date         : jour d'imputation (agrégation quotidienne par potager)
+    - appel_type   : classification | parsing | question | synthese | transcription
+    - modele       : modèle réellement appelé (les quotas Groq sont par modèle)
+    - tokens_cache : [CA6] jetons servis depuis le cache de prompt du fournisseur,
+                     distingués des jetons facturés plein tarif — 0 tant que le
+                     fournisseur ne les expose pas
+    - latence_ms   : durée de l'appel, échecs et nouvelle tentative comprises
+    - issue        : ok | quota | delai | erreur
+    - user_id      : [CA2] auteur de l'appel, en complément du potager — ajout au
+                     cadrage initial, nullable (appels de fond sans utilisateur)
+    """
+    __tablename__ = "conso_tokens"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    potager_id   = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    user_id      = Column(Integer, ForeignKey("users.id"), nullable=True)
+    date         = Column(Date, nullable=False, index=True)
+    appel_type   = Column(String(32), nullable=False, index=True)
+    modele       = Column(String(120), nullable=False)
+    tokens_in    = Column(Integer, nullable=False, default=0)
+    tokens_out   = Column(Integer, nullable=False, default=0)
+    tokens_cache = Column(Integer, nullable=False, default=0)
+    latence_ms   = Column(Integer, nullable=False, default=0)
+    issue        = Column(String(16), nullable=False, default="ok")
+    cree_le      = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        # Agrégation type « consommation du potager X sur le mois » — c'est la
+        # requête que l'US de quotas exécutera à chaque appel.
+        Index("idx_conso_tokens_potager_date", "potager_id", "date"),
     )

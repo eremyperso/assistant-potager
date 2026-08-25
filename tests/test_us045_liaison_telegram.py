@@ -185,12 +185,14 @@ async def test_us045_ca6_handle_voice_chat_non_lie_bloque_avant_whisper(test_db)
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
+    # [US-092] La transcription passe par la passerelle unique : c'est elle
+    # qui doit rester muette pour un chat non lié, pas un client Groq local.
     with patch('bot.SessionLocal', return_value=test_db), \
-         patch('bot.groq_client') as mock_groq:
+         patch('llm.passerelle.transcrire') as mock_transcrire:
         await handle_voice(update, tg_ctx)
 
     update.message.voice.get_file.assert_not_called()
-    mock_groq.audio.transcriptions.create.assert_not_called()
+    mock_transcrire.assert_not_called()
     update.message.reply_text.assert_awaited_once()
     assert "relié" in update.message.reply_text.call_args[0][0]
 
