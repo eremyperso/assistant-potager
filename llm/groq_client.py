@@ -1,26 +1,41 @@
 """
-groq_client.py — LLM Groq pour parsing et questions
-----------------------------------------------------
+groq_client.py — Prompts et parsing des réponses du modèle
+-----------------------------------------------------------
 Corrections v2.1 :
   - Date réelle extraite (hier, avant-hier, lundi dernier...)
   - Détection phrases multiples → liste de JSONs
 v2.24 :
   - transcribe_audio() — Whisper côté serveur pour la PWA
   - classify_intent_pwa() — ACTION vs INTERROGER (PWA /voice)
+
+[US-092] Ce module ne parle plus au fournisseur : il **assemble des prompts et
+interprète des réponses**. Tous les appels passent désormais par la passerelle
+unique `llm/passerelle.py`, qui les type, les impute à un potager, les mesure
+et sait échouer proprement. Deux conséquences pour les appelants :
+
+  * chaque fonction publique accepte un `ctx` (TenantContext) — explicite côté
+    API (`main.py`, qui l'a déjà par `Depends`), résolu via `current_context()`
+    (US-046) côté bot, où le potager actif est armé une fois par Update ;
+  * une indisponibilité du fournisseur remonte en `LLMIndisponibleError` typée
+    (quota / délai / panne) et jamais en erreur brute : c'est à l'appelant de
+    déclarer son repli (CA9).
 """
 import json
 import os
 import re
 import tempfile
 from datetime import date, timedelta
-from groq import Groq
-from config import GROQ_API_KEY, GROQ_MODEL, GROQ_WHISPER_MODEL, GROQ_REASONING_EFFORT
+from typing import Optional
 
-_client = Groq(api_key=GROQ_API_KEY)
-
-# Passé aux appels chat.completions.create() — vide pour les modèles non-reasoning
-# (ex: llama-3.3-70b-versatile), où l'API Groq rejette ce paramètre.
-_REASONING_KWARGS = {"reasoning_effort": GROQ_REASONING_EFFORT} if GROQ_REASONING_EFFORT else {}
+from app.services.context import TenantContext
+from llm import passerelle
+from llm.passerelle import (
+    TYPE_CLASSIFICATION,
+    TYPE_PARSING,
+    TYPE_QUESTION,
+    TYPE_SYNTHESE,
+    LLMIndisponibleError,
+)
 
 # ── Date du jour injectée dans le prompt ──────────────────────────────────────
 def _today_context() -> str:
@@ -61,48 +76,50 @@ Exemples :
 """ 
 
 
-def extract_intent_query(question: str) -> dict:
+def _nettoyer_backticks(raw: str) -> str:
+    """Retire l'éventuel bloc ```…``` dont le modèle entoure parfois son JSON."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        lines = raw.split("\n")
+        raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
+    return raw.strip()
+
+
+def extract_intent_query(question: str, *, ctx: Optional[TenantContext] = None) -> dict:
     """
-    [US-012] Extrait l'intention d'une question analytique (~100 tokens Groq).
+    [US-012] Extrait l'intention d'une question analytique (~100 tokens).
 
     Retourne {"action": ..., "culture": ..., "date_from": ...}.
     Alias orienté questions — utilise le même INTENT_PROMPT qu'extract_intent().
     """
-    return extract_intent(question)
+    return extract_intent(question, ctx=ctx)
 
 
-def extract_intent_query_mesuree(question: str) -> tuple[dict, int]:
+def extract_intent_query_mesuree(
+    question: str, *, ctx: Optional[TenantContext] = None
+) -> tuple[dict, int]:
     """
     [US-042 CA7] Variante de extract_intent_query() qui retourne aussi le nombre réel
-    de tokens consommés par l'appel Groq (chat.usage.total_tokens si l'API l'expose,
-    sinon 0). Utilisée par app/services/questions.py pour mesurer et loguer le coût
-    réel de repondre_question() (cible : < 1500 tokens/appel).
+    de tokens consommés par l'appel (0 si le fournisseur ne l'expose pas). Utilisée
+    par app/services/questions.py pour mesurer et loguer le coût réel de
+    repondre_question() (cible : < 1500 tokens/appel).
+
+    [US-092] La mesure fine est désormais enregistrée par la passerelle dans
+    `conso_tokens` ; le total retourné ici reste pour le log historique d'US-042.
     """
-    chat = _client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": INTENT_PROMPT},
-            {"role": "user", "content": question}
-        ],
-        temperature=0.0,
+    reponse = passerelle.appeler_chat(
+        appel_type=TYPE_QUESTION,
+        ctx=ctx or passerelle.contexte_courant(),
+        prompt_fixe=INTENT_PROMPT,
+        message_utilisateur=question,
         max_tokens=128,
-        stream=False,
-        **_REASONING_KWARGS
     )
-    intent = _parse_intent_response(chat)
-    usage = getattr(chat, "usage", None)
-    total_tokens = getattr(usage, "total_tokens", None) if usage is not None else None
-    return intent, (total_tokens if isinstance(total_tokens, int) else 0)
+    return _parse_intent_response(reponse.texte), reponse.tokens_total
 
 
-def _parse_intent_response(chat) -> dict:
-    raw = chat.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
-
+def _parse_intent_response(raw: str) -> dict:
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(_nettoyer_backticks(raw))
     except Exception:
         return {"action": None, "culture": None, "date_from": None}
 
@@ -114,37 +131,17 @@ def _parse_intent_response(chat) -> dict:
     }
 
 
-def extract_intent(question: str) -> dict:
-    chat = _client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": INTENT_PROMPT},
-            {"role": "user", "content": question}
-        ],
-        temperature=0.0,
+def extract_intent(question: str, *, ctx: Optional[TenantContext] = None) -> dict:
+    reponse = passerelle.appeler_chat(
+        appel_type=TYPE_QUESTION,
+        ctx=ctx or passerelle.contexte_courant(),
+        prompt_fixe=INTENT_PROMPT,
+        message_utilisateur=question,
         max_tokens=128,
-        stream=False,
-        **_REASONING_KWARGS
     )
-
-    raw = chat.choices[0].message.content.strip()
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
-
-    try:
-        parsed = json.loads(raw)
-    except Exception as e:
-        # fallback conservatif
-        return {"action": None, "culture": None, "date_from": None}
-
-    # normalisation des clés
-    return {
-        "action":     parsed.get("action"),
-        "culture":    parsed.get("culture"),
-        "date_from":  parsed.get("date_from"),
-        "query_type": parsed.get("query_type", "quantite"),
-    }
+    # fallback conservatif si le JSON est illisible — le repli d'indisponibilité,
+    # lui, est déclaré par l'appelant (LLMIndisponibleError remonte telle quelle).
+    return _parse_intent_response(reponse.texte)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # [US-038] EXTRACTION DES CHAMPS D'UNE NOTE GUIDÉE
@@ -152,8 +149,9 @@ def extract_intent(question: str) -> dict:
 _NOTE_FIELDS_PROMPT = """Tu es un extracteur de données pour un potager maraîcher français.
 {date_context}
 
-L'utilisateur vient de répondre à une question guidée pour noter une observation
-de catégorie "{categorie}". Analyse sa réponse et retourne UNIQUEMENT un JSON avec :
+L'utilisateur vient de répondre à une question guidée pour noter une observation.
+La catégorie de cette observation t'est précisée en toute fin de consigne.
+Analyse sa réponse et retourne UNIQUEMENT un JSON avec :
 {{
   "culture"    : string|null,   // légume/plante au singulier minuscule concerné, si mentionné
   "variete"    : string|null,   // variété si mentionnée
@@ -181,43 +179,48 @@ Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
 """
 
 
-def extract_note_fields(categorie: str, texte: str) -> dict:
+def extract_note_fields(
+    categorie: str, texte: str, *, ctx: Optional[TenantContext] = None
+) -> dict:
     """
     [US-038] Extrait les champs pertinents d'une réponse libre à une question
     guidée de note (catégorie observation/maladie/arrosage/paillage).
 
     Retourne toujours un dict avec les clés culture/variete/parcelle/constat/
-    traitement/duree_minutes/date. En cas d'erreur, "constat" retombe sur le
-    texte brut de l'utilisateur pour ne jamais perdre l'information saisie.
+    traitement/duree_minutes/date. En cas d'erreur de lecture du JSON, "constat"
+    retombe sur le texte brut de l'utilisateur pour ne jamais perdre
+    l'information saisie.
+
+    [US-092 / CA9] Une indisponibilité du fournisseur n'est PAS traitée ici :
+    elle remonte en LLMIndisponibleError pour que l'appelant (bot.py) serve le
+    message de repli — retomber silencieusement sur le texte brut ferait passer
+    une saturation pour une extraction pauvre.
     """
     today      = date.today()
     yesterday  = today - timedelta(days=1)
     day_before = today - timedelta(days=2)
-    prompt = _NOTE_FIELDS_PROMPT.format(
+    # [CA6] Partie fixe (stable d'un appel à l'autre au sein de la journée) en
+    # tête ; la catégorie, qui change à chaque note, part en fin de consigne.
+    prompt_fixe = _NOTE_FIELDS_PROMPT.format(
         date_context = _today_context(),
-        categorie    = categorie,
         today_iso    = today.isoformat(),
         yesterday    = yesterday.isoformat(),
         day_before   = day_before.isoformat(),
     )
+    prompt_variable = f'\nCatégorie de cette observation : "{categorie}"\n'
 
     try:
-        chat = _client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user",   "content": texte},
-            ],
-            temperature=0.0,
+        reponse = passerelle.appeler_chat(
+            appel_type=TYPE_PARSING,
+            ctx=ctx or passerelle.contexte_courant(),
+            prompt_fixe=prompt_fixe,
+            prompt_variable=prompt_variable,
+            message_utilisateur=texte,
             max_tokens=256,
-            stream=False,
-            **_REASONING_KWARGS
         )
-        raw = chat.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
-        parsed = json.loads(raw.strip())
+        parsed = json.loads(_nettoyer_backticks(reponse.texte))
+    except LLMIndisponibleError:
+        raise
     except Exception:
         return {
             "culture": None, "variete": None, "parcelle": None,
@@ -336,7 +339,7 @@ Retourne UNIQUEMENT le JSON brut, sans texte ni backticks.
 Si plusieurs cultures dans la même phrase → tableau de JSONs.
 """
 
-def parse_commande(texte: str) -> list[dict]:
+def parse_commande(texte: str, *, ctx: Optional[TenantContext] = None) -> list[dict]:
     """
     Parse une commande vocale.
     Retourne TOUJOURS une liste de dicts (1 élément ou plusieurs).
@@ -351,25 +354,14 @@ def parse_commande(texte: str) -> list[dict]:
         day_before   = day_before.isoformat(),
     )
 
-    chat = _client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {"role": "system", "content": prompt},
-            {"role": "user",   "content": texte}
-        ],
-        temperature=0.0,
+    reponse = passerelle.appeler_chat(
+        appel_type=TYPE_PARSING,
+        ctx=ctx or passerelle.contexte_courant(),
+        prompt_fixe=prompt,
+        message_utilisateur=texte,
         max_tokens=1024,
-        stream=False,
-        **_REASONING_KWARGS
     )
-    raw = chat.choices[0].message.content.strip()
-
-    # Nettoyage backticks éventuels
-    if raw.startswith("```"):
-        lines = raw.split("\n")
-        raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
-
-    parsed = json.loads(raw.strip())
+    parsed = json.loads(_nettoyer_backticks(reponse.texte))
 
     # Normaliser : toujours retourner une liste
     if isinstance(parsed, dict):
@@ -419,42 +411,42 @@ REGLE CALCUL STOCK REEL :
 - Exemple : "salade : 19 plants (planté 25, perdu 4, récolté 2)"
 """
 
-def repondre_question(question: str, contexte_json: str) -> str:
-    """Repond a une question analytique sur l'historique."""
-    chat = _client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": QUERY_PROMPT.format(today_iso=date.today().isoformat())
-                           + f"\n\nHistorique potager :\n{contexte_json}"
-            },
-            {"role": "user", "content": question}
-        ],
-        temperature=0.0,
+def repondre_question(
+    question: str, contexte_json: str, *, ctx: Optional[TenantContext] = None
+) -> str:
+    """Repond a une question analytique sur l'historique.
+
+    [CA6] La consigne fixe est en tête ; l'historique du potager, qui change à
+    chaque appel, est envoyé en fin de prompt — c'est ce qui rend le préfixe
+    éligible au cache du fournisseur.
+    """
+    reponse = passerelle.appeler_chat(
+        appel_type=TYPE_SYNTHESE,
+        ctx=ctx or passerelle.contexte_courant(),
+        prompt_fixe=QUERY_PROMPT.format(today_iso=date.today().isoformat()),
+        prompt_variable=f"\n\nHistorique potager :\n{contexte_json}",
+        message_utilisateur=question,
         max_tokens=200,
-        stream=False,
-        **_REASONING_KWARGS
     )
-    return chat.choices[0].message.content.strip()
+    return reponse.texte
 
 
 # ── Transcription Whisper (PWA /voice) ────────────────────────────────────────
 
-def transcribe_audio(audio_path: str, ext: str = ".webm") -> str:
+def transcribe_audio(
+    audio_path: str, ext: str = ".webm", *, ctx: Optional[TenantContext] = None
+) -> str:
     """
-    Transcrit un fichier audio via Groq Whisper.
+    Transcrit un fichier audio via la passerelle (type `transcription`, CA4).
     Supporte mp4 (iOS), webm (Android/Chrome), ogg, wav, mp3.
-    Retourne le texte transcrit ou '' si silence/échec.
+    Retourne le texte transcrit ou '' si silence.
     """
-    with open(audio_path, "rb") as f:
-        tr = _client.audio.transcriptions.create(
-            file=(f"audio{ext}", f),
-            model=GROQ_WHISPER_MODEL,
-            language="fr",
-            response_format="text",
-        )
-    return (tr or "").strip()
+    reponse = passerelle.transcrire(
+        ctx=ctx or passerelle.contexte_courant(),
+        chemin_fichier=audio_path,
+        nom_fichier=f"audio{ext}",
+    )
+    return reponse.texte
 
 
 # ── Classificateur d'intention pour la PWA ────────────────────────────────────
@@ -605,7 +597,7 @@ _INTENTS_VALIDES = {
 }
 
 
-def parse_message(texte: str) -> dict:
+def parse_message(texte: str, *, ctx: Optional[TenantContext] = None) -> dict:
     """
     Single-pass : classifie l'intention ET parse les champs en un seul appel LLM.
 
@@ -613,8 +605,13 @@ def parse_message(texte: str) -> dict:
       {intent, culture, parcelle, action_filtre, items}
 
     'items' est une liste de dicts action si intent == 'ACTION', sinon None.
-    En cas d'erreur → fallback {"intent": "ACTION", "items": None} pour déclencher
-    le chemin de parse_commande() existant.
+    En cas de réponse illisible → fallback {"intent": "ACTION", "items": None}
+    pour déclencher le chemin de parse_commande() existant.
+
+    [US-092 / CA9] Le fallback ACTION ne couvre PAS l'indisponibilité du
+    fournisseur : elle remonte telle quelle, sinon on enchaînerait sur
+    parse_commande() qui échouerait à son tour, en doublant l'attente du
+    jardinier avant de lui servir le même message de repli.
     """
     import logging as _log
     _logger = _log.getLogger("potager")
@@ -631,23 +628,14 @@ def parse_message(texte: str) -> dict:
     )
 
     try:
-        chat = _client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user",   "content": texte},
-            ],
-            temperature=0.0,
+        reponse = passerelle.appeler_chat(
+            appel_type=TYPE_PARSING,
+            ctx=ctx or passerelle.contexte_courant(),
+            prompt_fixe=prompt,
+            message_utilisateur=texte,
             max_tokens=1024,
-            stream=False,
-            **_REASONING_KWARGS
         )
-        raw = chat.choices[0].message.content.strip()
-        if raw.startswith("```"):
-            lines = raw.split("\n")
-            raw = "\n".join(lines[1:-1]) if len(lines) > 2 else raw
-
-        result = json.loads(raw.strip())
+        result = json.loads(_nettoyer_backticks(reponse.texte))
 
         intent = str(result.get("intent", "ACTION")).strip().upper()
         if intent not in _INTENTS_VALIDES:
@@ -670,31 +658,34 @@ def parse_message(texte: str) -> dict:
                      len(result["items"]) if result["items"] else 0)
         return result
 
+    except LLMIndisponibleError:
+        raise
     except Exception as e:
         _logger.error("[parse_message] erreur → fallback ACTION : %s", e)
         return {"intent": "ACTION", "culture": None, "parcelle": None,
                 "action_filtre": None, "items": None}
 
 
-def classify_intent_pwa(texte: str) -> str:
+def classify_intent_pwa(texte: str, *, ctx: Optional[TenantContext] = None) -> str:
     """
     Classifie l'intention d'un message vocal (PWA).
-    Retourne 'ACTION' ou 'INTERROGER'.
-    Utilise Groq LLM (~150 tokens, très rapide).
+    Retourne 'ACTION' ou 'INTERROGER' (~150 tokens, très rapide).
+
+    [US-092 / CA9] Le fallback conservatif 'ACTION' reste pour une réponse
+    illisible, mais pas pour une indisponibilité : classer en ACTION pour
+    échouer juste après au parsing ne rendrait service à personne, l'appelant
+    doit pouvoir servir le message de repli.
     """
     try:
-        chat = _client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": _PWA_CLASSIFY_PROMPT},
-                {"role": "user",   "content": texte},
-            ],
-            temperature=0.0,
+        reponse = passerelle.appeler_chat(
+            appel_type=TYPE_CLASSIFICATION,
+            ctx=ctx or passerelle.contexte_courant(),
+            prompt_fixe=_PWA_CLASSIFY_PROMPT,
+            message_utilisateur=texte,
             max_tokens=100,
-            stream=False,
-            **_REASONING_KWARGS
         )
-        result = chat.choices[0].message.content.strip().upper()
-        return "INTERROGER" if "INTERROGER" in result else "ACTION"
+        return "INTERROGER" if "INTERROGER" in reponse.texte.upper() else "ACTION"
+    except LLMIndisponibleError:
+        raise
     except Exception:
         return "ACTION"  # fallback conservatif

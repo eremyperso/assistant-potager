@@ -55,3 +55,32 @@ PWA_URL = os.environ.get("PWA_URL", "l'application web Assistant Potager")
 # Mettre à None pour les modèles non-reasoning (ex: llama-3.3-70b-versatile),
 # sinon l'API Groq renvoie une erreur 400 "reasoning_effort is not supported".
 GROQ_REASONING_EFFORT = "low"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-092 / CA3] Passerelle LLM — un modèle configurable PAR TYPE D'APPEL
+# -----------------------------------------------------------------------------
+# Les quotas Groq sont comptés *par modèle* : pouvoir router la classification
+# (petit modèle rapide) et le parsing/la synthèse (grand modèle) séparément est
+# ce qui rendra possible la répartition multi-modèles. Changer de modèle pour un
+# type est un changement de configuration, jamais un changement de code.
+#
+# Défaut volontaire : tous les types retombent sur GROQ_MODEL (et la
+# transcription sur GROQ_WHISPER_MODEL) — la passerelle est livrée à
+# comportement constant, l'exercice réel de la répartition relève d'US-093.
+# ─────────────────────────────────────────────────────────────────────────────
+GROQ_MODELE_PAR_TYPE = {
+    "classification": os.environ.get("GROQ_MODEL_CLASSIFICATION", GROQ_MODEL),
+    "parsing":        os.environ.get("GROQ_MODEL_PARSING",        GROQ_MODEL),
+    "question":       os.environ.get("GROQ_MODEL_QUESTION",       GROQ_MODEL),
+    "synthese":       os.environ.get("GROQ_MODEL_SYNTHESE",       GROQ_MODEL),
+    "transcription":  os.environ.get("GROQ_MODEL_TRANSCRIPTION",  GROQ_WHISPER_MODEL),
+}
+
+# [US-092 / CA12] Délai maximal par appel LLM, en secondes. Un appel qui
+# n'aboutit pas dans ce délai emprunte le même chemin de repli qu'un 429.
+GROQ_TIMEOUT_S = float(os.environ.get("GROQ_TIMEOUT_S", "30"))
+
+# [US-092 / CA12] Plafond de la temporisation avant l'unique nouvelle tentative.
+# La passerelle est appelée depuis des handlers Telegram et des endpoints HTTP :
+# au-delà de ce plafond on bascule en mode dégradé plutôt que de faire attendre.
+GROQ_RETRY_MAX_S = float(os.environ.get("GROQ_RETRY_MAX_S", "2"))

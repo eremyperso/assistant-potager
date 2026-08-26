@@ -18,7 +18,7 @@ import logging
 
 from app.services.context import TenantContext
 from llm.groq_client import extract_intent_query_mesuree
-from llm.sql_agent import query_agent_answer
+from llm.sql_agent import query_agent_answer, query_agent_answer_avec_confiance
 
 log = logging.getLogger("potager")
 
@@ -28,10 +28,21 @@ def repondre_question(ctx: TenantContext, question: str) -> str:
     scopée au potager courant (ctx.potager_id). Gère elle-même sa session DB (via
     query_agent_answer) — pas de `db` en paramètre, conformément à la signature
     définie par l'US (US-041 / CA7)."""
-    intent, tokens = extract_intent_query_mesuree(question)
-    reponse = query_agent_answer(question, intent, potager_id=ctx.potager_id)
+    texte, _ = repondre_question_avec_confiance(ctx, question)
+    return texte
+
+
+def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple[str, bool]:
+    """[US-093 / CA6] Variante de `repondre_question()` qui signale en plus si
+    l'étage data a produit une réponse exploitable. Utilisée par le routeur pour
+    décider d'une remontée de cascade vers l'étage suivant sans avoir à
+    réinterpréter le texte produit."""
+    # [US-092 / CA2] Le contexte tenant est transmis explicitement à la
+    # passerelle : c'est lui qui rend l'appel imputable au bon potager.
+    intent, tokens = extract_intent_query_mesuree(question, ctx=ctx)
+    reponse, confiant = query_agent_answer_avec_confiance(question, intent, potager_id=ctx.potager_id)
     log.info(
         "[US-042 CA7] repondre_question potager_id=%s tokens_groq=%d (cible <1500)",
         ctx.potager_id, tokens,
     )
-    return reponse
+    return reponse, confiant

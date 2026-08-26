@@ -71,9 +71,9 @@ def _call_find_candidates_with_groq(description: str, groq_json: dict, db_sessio
     mock_client = MagicMock()
     mock_client.chat.completions.create.return_value = mock_resp
 
-    # Groq est importé localement dans _find_candidates via `from groq import Groq`
-    # → on patche groq.Groq pour intercepter cet import
-    with patch("groq.Groq", return_value=mock_client), \
+    # [US-092] _find_candidates passe par llm/passerelle.py : on intercepte
+    # le client de la passerelle, plus un import local du SDK.
+    with patch("llm.passerelle._client", mock_client), \
          patch("bot.SessionLocal", return_value=db_session):
         results = _find_candidates(description)
     return results

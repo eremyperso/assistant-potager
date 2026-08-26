@@ -79,6 +79,9 @@ from database.db import Base, engine, SessionLocal, tenant_scope, current_potage
 import utils.stock as _stock_mod
 from utils.observations import build_observations_index
 from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
+# [US-092] Mode dégradé : une indisponibilité du fournisseur de modèles est
+# convertie en 503 explicite portant le message de repli, jamais en erreur brute.
+from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from llm.rag import add_to_rag
 from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
@@ -1196,11 +1199,15 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
 
     # ── 1. Parsing LLM → liste d'événements ──────────────────────────────────
     try:
-        items = parse_commande(req.texte)   # toujours une liste
+        items = parse_commande(req.texte, ctx=ctx)   # toujours une liste
+    except LLMIndisponibleError:
+        # [US-092 / CA8, CA9] Repli déclaré : rien n'est enregistré, et le client
+        # reçoit le message d'indisponibilité, jamais la trace technique du 429.
+        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"JSON invalide retourné par Groq : {e}")
+        raise HTTPException(status_code=502, detail=f"JSON invalide retourné par le modèle : {e}")
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erreur Groq API : {e}")
+        raise HTTPException(status_code=502, detail=f"Erreur d'appel au modèle : {e}")
 
     # ── 2. Sauvegarde PostgreSQL ──────────────────────────────────────────────
     db = SessionLocal()
@@ -1258,7 +1265,11 @@ async def voice(
 
     # 2. Transcription Whisper
     try:
-        texte = transcribe_audio(tmp_path, ext)
+        texte = transcribe_audio(tmp_path, ext, ctx=ctx)
+    except LLMIndisponibleError:
+        # [US-092 / CA4, CA9] Le quota de transcription est distinct de celui du
+        # chat : c'est celui qui saturera le premier en usage vocal.
+        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur Whisper : {e}")
     finally:
@@ -1282,12 +1293,17 @@ async def voice(
     history = _sessions.get(session_id, [])
 
     # 4. Classification de l'intention
-    intent = classify_intent_pwa(texte)
+    try:
+        intent = classify_intent_pwa(texte, ctx=ctx)
+    except LLMIndisponibleError:
+        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
 
     # 5a. INTERROGER — question analytique sur l'historique
     if intent == "INTERROGER":
         try:
             reponse = svc_questions.repondre_question(ctx, texte)
+        except LLMIndisponibleError:
+            raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
@@ -1308,9 +1324,11 @@ async def voice(
             raise HTTPException(status_code=403, detail=str(e))
 
         try:
-            items = parse_commande(texte)
+            items = parse_commande(texte, ctx=ctx)
+        except LLMIndisponibleError:
+            raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=502, detail=f"JSON invalide Groq : {e}")
+            raise HTTPException(status_code=502, detail=f"JSON invalide retourné par le modèle : {e}")
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Erreur parsing : {e}")
 
@@ -1378,6 +1396,10 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     try:
         reponse = svc_questions.repondre_question(ctx, req.texte)
+    except LLMIndisponibleError:
+        # [US-092 / CA9, CA10] /stats, /plan, la météo et la consultation web
+        # restent fonctionnels : seule l'analyse en langage naturel est dégradée.
+        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 

@@ -1,4 +1,14 @@
 
+## [v3.39.0] — 2026-08-26
+
+### 🚀 Nouveautés
+- Les questions posées au bot sont désormais aiguillées vers la bonne source de réponse (données du potager, connaissance générale, ou les deux) avant tout appel à l'IA, pour une réponse plus rapide sur les formulations les plus fréquentes (US-093)
+- Une question sur une donnée absente du potager (ex. une récolte jamais enregistrée) n'est plus laissée sans réponse : elle est désormais réessayée automatiquement via un raisonnement plus général (US-093)
+
+### 🔧 Améliorations techniques
+- Ajoute un cache de classification des questions (24h, en mémoire) qui évite de rappeler l'IA pour une question déjà posée (US-093)
+- Mesure le taux de bon aiguillage sur un corpus de plus de 100 questions réelles et journalise chaque décision de routage (nature, origine, confiance, latence) (US-093)
+
 ## [v3.38.0] — 2026-08-24
 
 ### 🚀 Nouveautés

@@ -102,7 +102,7 @@ def test_us012_ca4_extract_intent_query_max_tokens():
     mock_resp.choices[0].message.content = '{"action":"recolte","culture":"tomate","date_from":null}'
     mock_client.chat.completions.create.return_value = mock_resp
 
-    with patch("llm.groq_client._client", mock_client):
+    with patch("llm.passerelle._client", mock_client):
         from llm.groq_client import extract_intent_query
         extract_intent_query("Combien de tomates ?")
 
@@ -207,7 +207,7 @@ def test_us012_edge_extract_intent_query_json_invalide():
     mock_resp.choices[0].message.content = "réponse invalide non JSON"
     mock_client.chat.completions.create.return_value = mock_resp
 
-    with patch("llm.groq_client._client", mock_client):
+    with patch("llm.passerelle._client", mock_client):
         from llm.groq_client import extract_intent_query
         result = extract_intent_query("Combien de tomates ?")
 

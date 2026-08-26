@@ -18,6 +18,13 @@ suivantes — fonctionnement de l'application (US-099), agronomie (US-140), mém
 (US-141) — pour une raison de séquencement : le contenu est un travail éditorial long, la mécanique
 est un travail technique court, et il n'y a aucune raison de les livrer ensemble.
 
+> **⚠️ US amendée le 25/08/2026** — voir `docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md` §1.3.
+> La métadonnée de culture des fragments devient une **référence** à `culture_config`, et non un
+> libellé texte. C'est exactement l'erreur corrigée par `migration_v12` sur `evenements.parcelle` :
+> une culture renommée depuis le bot orphelinerait silencieusement ses fragments. CA2 est reformulé
+> et CA2bis est ajouté. Estimation inchangée : l'amendement est gratuit tant que l'US n'est pas
+> implémentée, coûteux ensuite.
+
 **Deux décisions de conception sont reprises telles quelles du document, et ne sont pas rouvertes :**
 - **Recherche plein texte d'abord, sémantique ensuite.** La recherche lexicale PostgreSQL en
   français est excellente sur le vocabulaire précis du jardinage (« mildiou tomate », « purin de
@@ -31,7 +38,8 @@ est un travail technique court, et il n'y a aucune raison de les livrer ensemble
 
 *Structure*
 - [ ] CA1 : Une table `knowledge_documents` porte : `potager_id` (nul = savoir global partagé), `titre`, `famille` (`agronomie`, `doc_app`, `memoire_potager`), `source`, `niveau_confiance` (`verifie` ou `indicatif`), dates de création et de mise à jour
-- [ ] CA2 : Une table `knowledge_chunks` porte : référence au document, `potager_id` dénormalisé pour le filtrage direct, `contenu`, `culture`, `type` (`maladie`, `semis`, `association`, `rotation`…), `saison`, un vecteur de recherche plein texte, et une colonne d'embedding **créée, nullable et inutilisée**
+- [ ] CA2 : Une table `knowledge_chunks` porte : référence au document, `potager_id` dénormalisé pour le filtrage direct, `contenu`, une **référence à la culture** (et non son libellé — voir l'amendement ci-dessus), nullable, `type` (`maladie`, `semis`, `association`, `rotation`…), `saison`, un vecteur de recherche plein texte, et une colonne d'embedding **créée, nullable et inutilisée**
+- [ ] CA2bis : Renommer une culture depuis le bot **n'orpheline aucun fragment** : les fragments rattachés suivent la culture renommée, et un test le démontre
 - [ ] CA3 : Le motif de séparation est celui, déjà éprouvé sur `culture_config`, du `potager_id` nullable : nul signifie partagé entre tous les potagers, une valeur signifie privé. Une seule fiche « tomate » sert ainsi tous les jardins
 
 *Recherche*
@@ -59,7 +67,8 @@ est un travail technique court, et il n'y a aucune raison de les livrer ensemble
 - **Arbitrage tranché — pas de pgvector à ce stade :** aucune extension nouvelle, aucune dépendance nouvelle. La colonne d'embedding est créée vide pour éviter une migration lourde le jour venu. L'activation de la recherche sémantique sera décidée quand la mesure du CA13 montrera que les questions de diagnostic mal formulées échouent réellement — pas avant
 - **Arbitrage tranché — pas de reclassement fin ni de techniques avancées :** reclassement par second passage, auto-évaluation, questions hypothétiques, interrogations multiples systématiques sont tous écartés. Ils ajoutent latence et jetons, à contre-emploi de l'objectif de rapidité, et ne se justifieront que le jour où la qualité de la recherche plafonnera
 - **Arbitrage tranché — le contenu vit dans le dépôt, pas dans la base :** la base est l'index, le dépôt est la source. Les fiches sont relues, versionnées et corrigées comme du code. Une base éditable en ligne serait un chantier d'interface d'administration sans valeur à ce stade
-- Dépendances : **US-093** (aiguillage vers l'étage savoir). Prérequis de **US-099**, **US-140**, **US-141**, **US-142**
+- **Arbitrage tranché — la culture est une référence, pas un libellé :** `migration_v12` a déjà retiré la colonne texte dénormalisée `evenements.parcelle` au profit d'une clé étrangère. Reproduire le motif sur `knowledge_chunks.culture` reviendrait à rejouer la même migration six mois plus tard, sur une table qui portera alors du contenu rédigé. La référence est nullable : un fragment de la famille « fonctionnement de l'application » (US-099) ne se rattache à aucune culture
+- Dépendances : **US-093** (aiguillage vers l'étage savoir). Prérequis de **US-099**, **US-140**, **US-141**, **US-142**. Le CA2 amendé crée un lien avec `culture_config` — **aucune dépendance à US-067** pour autant : la référence porte sur la culture, pas sur sa famille
 - Invariants projet : isolation inter-potagers testée ; migration idempotente avec rollback ; `db.get()` jamais `db.query().get()`
 
 **Notes techniques (pour Persona Developer) :**
@@ -94,6 +103,12 @@ Scénario: Isolation d'un savoir privé
   Given un fragment privé appartenant au potager A
   When un membre du potager B pose une question qui correspond exactement à ce fragment
   Then aucun résultat issu du potager A ne lui est retourné
+
+Scénario: Une culture renommée n'orpheline pas ses fragments
+  Given des fragments rattachés à la culture "courgette"
+  When le jardinier renomme cette culture en "courgette verte" depuis le bot
+  Then les fragments restent rattachés à la culture renommée
+  And une recherche sur cette culture les retrouve toujours
 
 Scénario: Réingestion sans doublon
   Given un document déjà ingéré

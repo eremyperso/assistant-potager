@@ -99,6 +99,23 @@ class QueryAgent:
         Returns:
             Réponse texte prête à afficher
         """
+        texte, _ = self.answer_avec_confiance(question, intent)
+        return texte
+
+    def answer_avec_confiance(self, question: str, intent: dict) -> tuple[str, bool]:
+        """
+        [US-093 / CA6] Variante explicite de `answer()` : signale en plus si la
+        réponse est exploitable (`confiant=True`) ou si l'étage n'a rien trouvé
+        (`confiant=False`). Le signal est produit ICI, au point exact où on sait
+        déjà qu'aucune ligne n'a été trouvée — jamais reconstitué à distance par
+        un appelant qui devrait sinon deviner en inspectant le texte produit.
+
+        Args:
+            question: Question utilisateur (pour le fallback message)
+            intent: {"action": ..., "culture": ..., "date_from": ..., "query_type": ...}
+        Returns:
+            (réponse texte, confiant)
+        """
         action     = intent.get("action")
         culture    = intent.get("culture")
         query_type = intent.get("query_type", "quantite")
@@ -116,9 +133,9 @@ class QueryAgent:
         if action and not culture:
             return self._answer_action_stats(action)
 
-        return "Je n'ai pas compris la question. Formulez autrement."
+        return "Je n'ai pas compris la question. Formulez autrement.", False
 
-    def _answer_quantity(self, action: str, culture: str) -> str:
+    def _answer_quantity(self, action: str, culture: str) -> tuple[str, bool]:
         """Répond à : "Combien de [culture] [action] ?"."""
         q = self._scoped(
             self.db.query(
@@ -132,12 +149,12 @@ class QueryAgent:
         rows = q.group_by(Evenement.unite).all()
 
         if not rows or all(r.total is None for r in rows):
-            return f"Aucune donnée enregistrée pour {culture} / {action}."
+            return f"Aucune donnée enregistrée pour {culture} / {action}.", False
 
         total_str = _aggregate([(r.unite, r.total) for r in rows])
-        return f"Total {culture} {action} : {total_str}"
+        return f"Total {culture} {action} : {total_str}", True
 
-    def _answer_date(self, action: str, culture: str) -> str:
+    def _answer_date(self, action: str, culture: str) -> tuple[str, bool]:
         """Répond à : "À quelle date ai-je [action] de [culture] ?"."""
         q = self._scoped(
             self.db.query(Evenement).filter(
@@ -147,14 +164,14 @@ class QueryAgent:
         )
         events = q.order_by(Evenement.date.desc()).limit(5).all()
         if not events:
-            return f"Aucune {action} de {culture} enregistrée."
+            return f"Aucune {action} de {culture} enregistrée.", False
 
         if len(events) == 1:
             e = events[0]
             date_str = e.date.strftime("%d/%m/%Y") if e.date else "?"
             variete_str = f" ({e.variete})" if e.variete else ""
             qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
-            return f"{action.capitalize()} de {culture}{variete_str} : le {date_str}{qte_str}"
+            return f"{action.capitalize()} de {culture}{variete_str} : le {date_str}{qte_str}", True
 
         lines = [f"{action.capitalize()} de {culture} ({len(events)} entrées) :"]
         for e in events:
@@ -162,9 +179,9 @@ class QueryAgent:
             variete_str = f" {e.variete}" if e.variete else ""
             qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
             lines.append(f"  • {date_str}{variete_str}{qte_str}")
-        return "\n".join(lines)
+        return "\n".join(lines), True
 
-    def _answer_history_culture(self, culture: str, action: str | None = None) -> str:
+    def _answer_history_culture(self, culture: str, action: str | None = None) -> tuple[str, bool]:
         """Répond à : "Historique de [culture]" ou "Mes [action] de [culture]"."""
         q = self._scoped(self.db.query(Evenement).filter(Evenement.culture == culture))
         if action:
@@ -173,7 +190,7 @@ class QueryAgent:
 
         if not events:
             label = f"{action} de {culture}" if action else culture
-            return f"Aucun événement enregistré pour {label}."
+            return f"Aucun événement enregistré pour {label}.", False
 
         label = f"{action} de {culture}" if action else culture
         lines = [f"Historique {label} (5 derniers) :"]
@@ -182,9 +199,9 @@ class QueryAgent:
             variete_str = f" {e.variete}" if e.variete else ""
             qte_str = f" — {e.quantite:g} {e.unite or ''}".rstrip() if e.quantite else ""
             lines.append(f"  • {date_str}{variete_str} {e.type_action}{qte_str}")
-        return "\n".join(lines)
+        return "\n".join(lines), True
 
-    def _answer_action_stats(self, action: str) -> str:
+    def _answer_action_stats(self, action: str) -> tuple[str, bool]:
         """Répond à : "Stats [action]"."""
         q = self._scoped(
             self.db.query(
@@ -201,7 +218,7 @@ class QueryAgent:
             .all()
         )
         if not rows:
-            return f"Aucun événement de type {action} enregistré."
+            return f"Aucun événement de type {action} enregistré.", False
 
         # Regroupe par culture, agrège les unités avec conversion
         pairs_by_culture: dict[str, list[tuple]] = defaultdict(list)
@@ -216,7 +233,7 @@ class QueryAgent:
             has_qty = any(total for _, total in pairs)
             qte_str = _aggregate(pairs) if has_qty else f"{nb_by_culture[culture]} fois"
             lines.append(f"  • {culture} : {qte_str}")
-        return "\n".join(lines)
+        return "\n".join(lines), True
 
 
 def query_agent_answer(question: str, intent: dict, potager_id: Optional[int] = None) -> str:
@@ -231,8 +248,18 @@ def query_agent_answer(question: str, intent: dict, potager_id: Optional[int] = 
     Returns:
         Réponse texte
     """
+    texte, _ = query_agent_answer_avec_confiance(question, intent, potager_id=potager_id)
+    return texte
+
+
+def query_agent_answer_avec_confiance(
+    question: str, intent: dict, potager_id: Optional[int] = None
+) -> tuple[str, bool]:
+    """[US-093 / CA6] Variante de `query_agent_answer()` qui signale en plus si
+    l'étage data a trouvé quelque chose d'exploitable — utilisée par le routeur
+    pour décider d'une remontée de cascade sans interpréter le texte produit."""
     db = SessionLocal()
     try:
-        return QueryAgent(db, potager_id=potager_id).answer(question, intent)
+        return QueryAgent(db, potager_id=potager_id).answer_avec_confiance(question, intent)
     finally:
         db.close()
