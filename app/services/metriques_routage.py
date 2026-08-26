@@ -100,6 +100,31 @@ def jetons_moyens_par_question(
     return float(moyenne) if moyenne is not None else None
 
 
+def taux_donnees_sans_modele(
+    db: Session, depuis: Optional[datetime] = None, jusqu_a: Optional[datetime] = None
+) -> Optional[float]:
+    """[US-096 / CA6] Part des questions de données résolues **sans aucun appel
+    au modèle** — l'indicateur principal de succès des gabarits sur agrégats SQL.
+
+    Se lit directement sur `routage_logs`, sans colonne nouvelle : une cascade
+    dont `tokens_consommes` vaut 0 n'a déclenché aucun appel modèle, pas même la
+    classification (le total est cumulé sur toute la cascade par
+    `llm.passerelle.cumul_mesure_cascade`). Renvoie `None` si aucune question de
+    données n'a été servie sur la période — rien à rapporter, ce qui est
+    différent de « 0 % sans modèle ».
+    """
+    lignes = (
+        _requete_periode(db, depuis, jusqu_a)
+        .filter(RoutageLog.etage_resolveur == ETAGE_DONNEE)
+        .with_entities(RoutageLog.tokens_consommes)
+        .all()
+    )
+    if not lignes:
+        return None
+    sans_modele = sum(1 for (tokens,) in lignes if not tokens)
+    return sans_modele / len(lignes)
+
+
 def taux_remontee_cascade(
     db: Session, depuis: Optional[datetime] = None, jusqu_a: Optional[datetime] = None
 ) -> float:

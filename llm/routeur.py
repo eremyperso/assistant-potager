@@ -150,6 +150,16 @@ _MARQUEURS_DATA: tuple[str, ...] = (
     "historique de ma", "historique de mon", "quelle quantité de mes",
     "quelle quantité de ma", "date de mes", "date de ma", "liste de mes",
     "liste de mon", "mes plantations", "mes semis", "mes traitements",
+    # [US-096] Formulations servies par un gabarit sur agrégat SQL, à coût nul.
+    # Sans ces marqueurs, elles tombaient dans la frange ambiguë : le routeur
+    # payait une classification, puis l'étage hybride payait un raisonnement —
+    # pour une question dont la réponse exacte était déjà calculable en SQL.
+    # Constaté en usage réel le 26/08/2026 sur « qu'est-ce qu'il y a en
+    # pépinière ? » et « quel est le rendement de la saison ? ».
+    "pépinière", "pepiniere", "en godet", "mes godets", "semis en cours",
+    "rendement", "ma production", "mes récoltes", "combien de pieds",
+    "combien de plants", "où en sont", "ou en sont", "où en est", "ou en est",
+    "dans la parcelle", "sur la parcelle", "occupation",
 )
 
 
@@ -170,6 +180,32 @@ def _regle_par_mots_cles(texte: str) -> Optional[str]:
     if any(m in t for m in _MARQUEURS_DATA):
         return NATURE_QUESTION_DATA
     return None
+
+
+def _regle_par_catalogue(texte: str, ctx: Optional[TenantContext]) -> Optional[str]:
+    """[US-096] Le catalogue de réponses chiffrées est lui-même une règle.
+
+    Si `app.services.reponses_chiffrees` reconnaît une de ses familles, la
+    demande porte sur les données du potager — par construction, sans qu'aucune
+    liste de mots-clés n'ait à le prévoir ici. C'est ce qui évite d'entretenir
+    deux listes de motifs, celle du routeur et celle du catalogue, qui
+    divergeraient dès la première famille ajoutée.
+
+    Coût : deux lectures SQL brèves, zéro jeton — à comparer à l'appel de
+    classification qu'elle remplace. N'est consultée qu'après les mots-clés
+    ci-dessus, qui, eux, ne touchent pas la base.
+    """
+    if ctx is None:
+        return None
+    try:
+        # Import local : `app.services` importe déjà `llm`, un import de module
+        # créerait un cycle.
+        from app.services.reponses_chiffrees import reconnait_famille
+
+        return NATURE_QUESTION_DATA if reconnait_famille(ctx, texte) else None
+    except Exception as e:
+        log.debug("ROUTEUR CATALOGUE : indisponible (%s)", type(e).__name__)
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -296,8 +332,10 @@ def _journaliser(texte: str, decision: DecisionRoutage) -> None:
 def classer_demande(texte: str, ctx: Optional[TenantContext] = None) -> DecisionRoutage:
     """Classe une demande entrante en une des quatre natures (CA1).
 
-    Ordre strict : règles (CA2) → cache (CA3) → modèle (CA4). Le modèle n'est
-    donc appelé que pour la frange réellement ambiguë. `ctx` n'est nécessaire
+    Ordre strict : règles (CA2) → catalogue chiffré (US-096) → cache (CA3) →
+    modèle (CA4). Le modèle n'est donc appelé que pour la frange réellement
+    ambiguë — et une question que les gabarits savent servir n'en fait jamais
+    partie, quelle que soit sa formulation. `ctx` n'est nécessaire
     que si l'appel modèle a lieu — les chemins règle/cache n'y touchent jamais.
     """
     debut = time.monotonic()
@@ -307,6 +345,15 @@ def classer_demande(texte: str, ctx: Optional[TenantContext] = None) -> Decision
     if nature_regle is not None:
         decision = DecisionRoutage(
             nature=nature_regle, origine=ORIGINE_REGLE, confiance=1.0,
+            latence_ms=int((time.monotonic() - debut) * 1000),
+        )
+        _journaliser(texte_brut, decision)
+        return decision
+
+    nature_catalogue = _regle_par_catalogue(texte_brut, ctx)
+    if nature_catalogue is not None:
+        decision = DecisionRoutage(
+            nature=nature_catalogue, origine=ORIGINE_REGLE, confiance=1.0,
             latence_ms=int((time.monotonic() - debut) * 1000),
         )
         _journaliser(texte_brut, decision)

@@ -1463,6 +1463,8 @@ def admin_routage_metriques(_admin: User = Depends(require_admin_user)):
             "par_etage": svc_metriques_routage.resume_par_etage(db),
             "jetons_moyens_par_question": svc_metriques_routage.jetons_moyens_par_question(db),
             "taux_remontee_cascade": svc_metriques_routage.taux_remontee_cascade(db),
+            # [US-096 / CA6] Indicateur principal des gabarits sur agrégats SQL.
+            "taux_donnees_sans_modele": svc_metriques_routage.taux_donnees_sans_modele(db),
             "taux_service_cache": svc_metriques_routage.taux_service_cache(db),
             "part_parseur_deterministe": svc_metriques_routage.part_parseur_deterministe(db),
             "comparaison_hypotheses": svc_metriques_routage.comparaison_hypotheses(db),

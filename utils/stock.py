@@ -25,6 +25,26 @@ from sqlalchemy import func, or_
 from database.models import Evenement, CultureConfig, Parcelle
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-096 / CA4] Référentiel de conversion et d'arrondi des poids récoltés.
+# Extrait tel quel des corps de calcul_stock_cultures() / calcul_rendement_mensuel(),
+# où il était dupliqué à l'identique, pour qu'un gabarit de réponse chiffrée
+# (app/services/reponses_chiffrees.py) affiche EXACTEMENT le même chiffre que
+# /stats Telegram et que l'écran web — le bot et la PWA ne doivent jamais
+# annoncer deux valeurs différentes pour la même réalité.
+# ─────────────────────────────────────────────────────────────────────────────
+UNITES_POIDS_EN_G: Dict[str, float] = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+
+
+def poids_lisible(total_g: float) -> tuple:
+    """[US-002 / US-096 / CA4] Convertit un total en grammes vers le couple
+    (valeur arrondie, unité) affiché partout ailleurs : kg à 2 décimales
+    au-delà de 1 kg, g à 1 décimale en deçà."""
+    if total_g >= 1000:
+        return round(total_g / 1000, 2), "kg"
+    return round(total_g, 1), "g"
+
+
 def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
     """[US-030] Borne haute inclusive (23:59:59) pour filtrage temporel par date de référence."""
     if date_ref is None:
@@ -246,12 +266,8 @@ def calcul_stock_cultures(
     # [US-036] pool "pièces" (déduction de stock) vs pool "poids" (rendement) :
     # un même couple (culture, unite="g") ne doit JAMAIS alimenter le stock,
     # et un couple (culture, unite="plants") ne doit JAMAIS alimenter le rendement.
-    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
-
-    def _best_unite(total_g: float) -> tuple:
-        if total_g >= 1000:
-            return round(total_g / 1000, 2), "kg"
-        return round(total_g, 1), "g"
+    _UNITE_TO_G = UNITES_POIDS_EN_G
+    _best_unite = poids_lisible
 
     _q_recoltes = (
         db.query(
@@ -323,6 +339,11 @@ def _fmt_qte_unite(valeur: float, unite: str) -> float | int:
         arrondi = round(valeur, 2)
         return int(arrondi) if arrondi == int(arrondi) else arrondi
     return int(valeur)
+
+
+# [US-096 / CA4] Alias public du formateur de quantité : les gabarits de réponses
+# chiffrées arrondissent comme /stats et comme l'API web, sans importer un nom privé.
+quantite_lisible = _fmt_qte_unite
 
 
 def format_stock_ligne_telegram(s: StockCulture) -> str:
@@ -684,7 +705,7 @@ def calcul_rendement_mensuel(
     if not rows:
         return {"cultures": [], "mois_range": [], "total_general_kg": 0.0}
 
-    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+    _UNITE_TO_G = UNITES_POIDS_EN_G
 
     par_culture: Dict[str, dict] = {}
     mois_avec_recolte: set = set()
@@ -1786,8 +1807,16 @@ def calcul_lots_pepiniere(
     cutoff = _cutoff_dt(date_ref)
 
     # ── 1. Les lots : un semis en pépinière = un lot (CA1) ──────────────────
+    # [US-096 / CA11] `joinedload` plutôt que l'accès paresseux à `parcelle_rel`
+    # plus bas : le nom de la parcelle est ramené par CETTE requête, déjà scopée
+    # par potager. Sans cela, chaque lot déclenchait un `SELECT … FROM parcelles
+    # WHERE id = ?` sans filtre de potager — un N+1 pour l'écran pépinière, et
+    # une lecture non isolée que le garde du catalogue refuse à juste titre.
+    from sqlalchemy.orm import joinedload as _joinedload
+
     _q_semis = (
         db.query(Evenement)
+        .options(_joinedload(Evenement.parcelle_rel))
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))

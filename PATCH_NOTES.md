@@ -1,4 +1,17 @@
 
+## [v3.40.0] — 2026-08-26
+
+### 🚀 Nouveautés
+- Répond désormais aux questions sur ses propres chiffres (récolte totale d'une culture, dernière récolte/semis, stock courant, pieds actifs, rendement de la saison, contenu de la pépinière, parcelles libres, occupation d'une parcelle) sans passer par l'IA, avec une réponse exacte et immédiate (US-096)
+- Reconnaît ces questions quelle que soit leur formulation exacte (fautes de frappe, tournures elliptiques, dictée vocale) grâce au même catalogue qui produit la réponse (US-096)
+
+### 🔧 Améliorations techniques
+- Ajoute un catalogue fermé d'agrégations SQL en lecture seule, avec délai maximal et vérification systématique de l'isolation par potager à l'exécution — aucune requête composée librement par l'IA n'est possible (US-096)
+- Le routeur de questions (US-093) consulte ce catalogue comme une règle supplémentaire, avant tout appel au modèle, pour aiguiller ces questions à coût nul (US-096)
+- Mesure la part des questions sur les données résolues sans aucun appel au modèle, exposée dans les métriques de routage (US-096)
+- Une liste tronquée dans une réponse (ex. pépinière de plus de 25 lots) annonce désormais explicitement combien d'éléments manquent, au lieu de laisser croire à une liste complète
+- Corrige une lecture répétée (N+1) du nom de parcelle sur l'écran pépinière
+
 ## [v3.39.0] — 2026-08-26
 
 ### 🚀 Nouveautés
