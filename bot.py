@@ -58,6 +58,9 @@ from llm.groq_client import parse_commande, parse_message, extract_note_fields
 # [US-092] Toute sortie vers le fournisseur de modèles passe par la passerelle —
 # aucun client Groq n'est instancié ici (audit : tools/audit_appels_llm.py).
 from llm import passerelle
+# [US-093] Routeur règles-first : aiguille une question déjà détectée comme
+# telle (data / savoir / hybride) avant de la confier à l'étage qui répond.
+from llm import routeur
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
@@ -72,7 +75,6 @@ from app.services.context import default_context, current_context, set_current_c
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
 from app.services import plan as svc_plan
-from app.services import questions as svc_questions
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
@@ -3741,15 +3743,19 @@ def _build_recap(p: dict, event_id: int) -> str:
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
     """
-    [US-012] Interroge l'historique via SQL agent — zéro hallucination, zéro Groq pour la réponse.
+    [US-012 / US-093] Interroge l'historique via SQL agent, ou bascule vers le
+    savoir/raisonnement selon l'aiguillage du routeur — zéro hallucination sur
+    l'étage data, zéro appel modèle sur la frange non ambiguë (règles/cache).
 
-    Flux : extract_intent_query() [~100 tokens] → query_agent_answer() [0 tokens] → réponse.
+    Flux : routeur.classer_demande() [0 token la plupart du temps] →
+    étage data (SQL, 0 token) ou raisonnement, avec au plus une remontée de
+    cascade si l'étage data ne trouve rien d'exploitable (US-093 / CA6).
     """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        reponse = svc_questions.repondre_question(current_context(), question)
-        log.info(f"💡 RÉPONSE SQL    : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
+        reponse = routeur.repondre_avec_cascade(current_context(), question)
+        log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
