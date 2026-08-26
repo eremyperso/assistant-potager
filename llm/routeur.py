@@ -53,6 +53,8 @@ from typing import Optional
 from unidecode import unidecode
 
 from app.services.context import TenantContext
+from database.db import SessionLocal
+from database.models import RoutageLog
 from llm import passerelle
 
 log = logging.getLogger("potager")
@@ -79,6 +81,16 @@ ORIGINE_MODELE = "modele"
 # faible : on préfère une réponse un peu plus chère (étage hybride) à une
 # non-réponse forcée dans un étage trop étroit.
 SEUIL_CONFIANCE_FAIBLE = 0.6
+
+# [US-097 / CA1] Étage ayant produit la réponse FINALE — distinct de l'origine
+# de la classification (regle/cache/modele ci-dessus). ETAGE_SAVOIR est déjà
+# défini pour le contrat de journalisation, mais n'est encore jamais écrit :
+# l'étage 2 (RAG, US-098) n'existe pas, les demandes SAVOIR sont aujourd'hui
+# honnêtement journalisées sous ETAGE_RAISONNEMENT (voir repondre_avec_cascade)
+# — c'est précisément l'écart que CA6 doit publier tel quel.
+ETAGE_DONNEE       = "donnee"
+ETAGE_SAVOIR       = "savoir"
+ETAGE_RAISONNEMENT = "raisonnement"
 
 
 @dataclass(frozen=True)
@@ -353,29 +365,116 @@ def _repondre_raisonnement(ctx: TenantContext, question: str, contexte_donnees: 
     return reponse.texte
 
 
+@dataclass(frozen=True)
+class ReponseCascade:
+    """[US-097] Réponse enrichie des métadonnées nécessaires à l'observabilité
+    et au retour du jardinier (CA9-CA10). `texte` reste le seul élément visible
+    du jardinier ; `etage_resolveur` et `routage_log_id` servent à bot.py/main.py
+    pour proposer les boutons 👍/👎 et les rattacher à l'entrée de journal.
+    `routage_log_id` est `None` si l'écriture du journal a échoué — l'échec de
+    l'écriture ne doit jamais empêcher la réponse d'être servie (note technique
+    de l'US), il désactive simplement le retour pour cette réponse-là."""
+
+    texte: str
+    etage_resolveur: str
+    routage_log_id: Optional[int]
+
+
+def _persister_routage_log(
+    ctx: TenantContext,
+    question: str,
+    decision: DecisionRoutage,
+    etage_resolveur: str,
+    cascade_remontee: bool,
+    latence_ms: int,
+    tokens_consommes: int,
+) -> Optional[int]:
+    """[CA1, CA2, CA4] Écrit une ligne dans `routage_logs`. Ne lève jamais : la
+    journalisation est de l'observabilité, une panne d'écriture ne doit pas
+    faire échouer une réponse déjà produite."""
+    db = None
+    try:
+        db = SessionLocal()
+        entree = RoutageLog(
+            potager_id=ctx.potager_id,
+            question_normalisee=_normaliser_question(question),
+            nature=decision.nature,
+            origine_classification=decision.origine,
+            etage_resolveur=etage_resolveur,
+            cascade_remontee=cascade_remontee,
+            confiance=decision.confiance,
+            latence_ms=latence_ms,
+            tokens_consommes=tokens_consommes,
+        )
+        db.add(entree)
+        db.commit()
+        db.refresh(entree)
+        return entree.id
+    except Exception as e:
+        log.warning("⚠️  ROUTAGE LOG    │ enregistrement impossible : %s", type(e).__name__)
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        return None
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # API publique — cascade complète [CA6, CA7, CA8]
 # ─────────────────────────────────────────────────────────────────────────────
-def repondre_avec_cascade(ctx: TenantContext, question: str) -> str:
+def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     """Classe la demande puis produit une réponse, avec au plus une remontée
     de cascade (CA7). Ne renvoie jamais de message intermédiaire — seule la
-    réponse finale est visible du jardinier (CA8)."""
+    réponse finale est visible du jardinier (CA8).
+
+    [US-097 / CA1] Journalise la cascade dans `routage_logs` une fois la
+    réponse produite (succès uniquement — une cascade qui lève une exception,
+    ex. `LLMIndisponibleError`, n'a rien à journaliser : aucune réponse n'a été
+    servie). Le total de jetons journalisé (CA5) couvre tout appel modèle
+    déclenché pendant la cascade, y compris la classification elle-même
+    (`passerelle.demarrer_mesure_cascade`/`cumul_mesure_cascade`)."""
     from app.services.questions import repondre_question_avec_confiance
 
+    debut = time.monotonic()
+    jeton_mesure = passerelle.demarrer_mesure_cascade()
     decision = classer_demande(question, ctx)
+    cascade_remontee = False
+    etage_resolveur = ETAGE_RAISONNEMENT
 
-    if decision.nature == NATURE_QUESTION_DATA:
-        texte, confiant = repondre_question_avec_confiance(ctx, question)
-        if confiant:
-            return texte
-        log.info(f"↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : '{question[:80]}'")
-        return _repondre_raisonnement(ctx, question)
+    try:
+        if decision.nature == NATURE_QUESTION_DATA:
+            texte, confiant = repondre_question_avec_confiance(ctx, question)
+            if confiant:
+                etage_resolveur = ETAGE_DONNEE
+            else:
+                log.info(f"↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : '{question[:80]}'")
+                cascade_remontee = True
+                texte = _repondre_raisonnement(ctx, question)
+        elif decision.nature == NATURE_QUESTION_SAVOIR:
+            # [CA6] Étage 2 (RAG, US-098) non livré — journalisé honnêtement
+            # sous ETAGE_RAISONNEMENT, voir docstring d'ETAGE_SAVOIR ci-dessus.
+            texte = _repondre_raisonnement(ctx, question)
+        else:
+            # QUESTION_HYBRIDE (et ACTION mal aiguillée jusqu'ici) : tente
+            # d'enrichir le raisonnement avec la donnée si elle existe, sans
+            # remontée dédiée — cet étage héberge déjà le raisonnement, un
+            # second saut n'aurait pas de sens.
+            texte_donnees, confiant = repondre_question_avec_confiance(ctx, question)
+            texte = _repondre_raisonnement(ctx, question, contexte_donnees=texte_donnees if confiant else "")
+    except Exception:
+        passerelle.cumul_mesure_cascade(jeton_mesure)  # désarme sans persister
+        raise
 
-    if decision.nature == NATURE_QUESTION_SAVOIR:
-        return _repondre_raisonnement(ctx, question)
-
-    # QUESTION_HYBRIDE : tente d'enrichir le raisonnement avec la donnée si
-    # elle existe, sans remontée dédiée — cet étage héberge déjà le
-    # raisonnement, un second saut n'aurait pas de sens.
-    texte_donnees, confiant = repondre_question_avec_confiance(ctx, question)
-    return _repondre_raisonnement(ctx, question, contexte_donnees=texte_donnees if confiant else "")
+    latence_ms = int((time.monotonic() - debut) * 1000)
+    tokens_consommes = passerelle.cumul_mesure_cascade(jeton_mesure)
+    routage_log_id = _persister_routage_log(
+        ctx, question, decision, etage_resolveur, cascade_remontee, latence_ms, tokens_consommes,
+    )
+    return ReponseCascade(texte=texte, etage_resolveur=etage_resolveur, routage_log_id=routage_log_id)

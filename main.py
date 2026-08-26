@@ -44,6 +44,11 @@ Onboarding self-service [US-048] :
 
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
+
+Observabilité de la cascade de réponses + retour du jardinier [US-097] :
+  POST /routage/{routage_log_id}/retour  → avis 👍/👎 sur une réponse de savoir/raisonnement
+  GET  /admin/routage/metriques          → métriques de routage (réservé à ADMIN_EMAIL)
+  GET  /admin/routage/retours-negatifs   → questions les plus souvent jugées mauvaises (réservé)
 """
 import json
 import logging
@@ -99,7 +104,9 @@ from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
-from config import FRONTEND_URL  # [US-090] retour de fédération vers la PWA
+from app.services import retours as svc_retours  # [US-097]
+from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
 
 log = logging.getLogger("potager")
 
@@ -254,6 +261,15 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
             )
     finally:
         db.close()
+
+
+def require_admin_user(user: User = Depends(get_current_user)) -> User:
+    """[US-097 / CA7] Dépendance FastAPI : réserve un endpoint au compte
+    administrateur de la plateforme (`ADMIN_EMAIL`, variable d'environnement).
+    `ADMIN_EMAIL` absent/vide → 403 systématique, jamais de repli implicite."""
+    if not ADMIN_EMAIL or (user.email or "").strip().lower() != ADMIN_EMAIL.strip().lower():
+        raise HTTPException(status_code=403, detail="Réservé à l'administrateur de la plateforme")
+    return user
 
 
 def ctx_pour_potager_consulte(db, ctx: TenantContext, potager_id: Optional[int]) -> TenantContext:
@@ -1140,6 +1156,10 @@ class TexteRequest(BaseModel):
     texte: str
 
 
+class RetourRequest(BaseModel):
+    avis: str  # 'positif' | 'negatif'
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1404,6 +1424,66 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
         raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
     return {"reponse": reponse}
+
+
+@app.post("/routage/{routage_log_id}/retour")
+def deposer_retour_routage(
+    routage_log_id: int,
+    req: RetourRequest,
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-097 / CA9-CA11] Dépose un avis 👍/👎 sur une réponse de savoir ou de
+    raisonnement, rattaché à son entrée de journal. Facultatif, ne bloque
+    rien : un doublon (avis déjà donné) renvoie 409, pas une erreur bloquante
+    pour l'appelant. Point d'accroche pour un futur contrôle web (CA9) — aucune
+    vue Q&A n'existe encore côté PWA pour l'exposer directement."""
+    db = SessionLocal()
+    try:
+        try:
+            svc_retours.enregistrer_retour(db, ctx.potager_id, routage_log_id, req.avis)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except svc_retours.RoutageLogIntrouvableError:
+            raise HTTPException(status_code=404, detail="Réponse introuvable pour ce potager")
+        except svc_retours.RetourDejaEnregistreError:
+            raise HTTPException(status_code=409, detail="Un avis a déjà été enregistré pour cette réponse")
+    finally:
+        db.close()
+    return {"ok": True}
+
+
+@app.get("/admin/routage/metriques")
+def admin_routage_metriques(_admin: User = Depends(require_admin_user)):
+    """[US-097 / CA5-CA8] Métriques de routage — lecture seule, réservée à
+    l'administrateur de la plateforme. Aucun calcul ici n'appelle un modèle
+    (CA8) ; aucun tableau de bord graphique n'est construit (CA7)."""
+    db = SessionLocal()
+    try:
+        return {
+            "par_etage": svc_metriques_routage.resume_par_etage(db),
+            "jetons_moyens_par_question": svc_metriques_routage.jetons_moyens_par_question(db),
+            "taux_remontee_cascade": svc_metriques_routage.taux_remontee_cascade(db),
+            "taux_service_cache": svc_metriques_routage.taux_service_cache(db),
+            "part_parseur_deterministe": svc_metriques_routage.part_parseur_deterministe(db),
+            "comparaison_hypotheses": svc_metriques_routage.comparaison_hypotheses(db),
+        }
+    finally:
+        db.close()
+
+
+@app.get("/admin/routage/retours-negatifs")
+def admin_routage_retours_negatifs(
+    limite: int = Query(default=20, ge=1, le=200),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-097 / CA12] Questions les plus souvent jugées mauvaises — alimente
+    le corpus de routage (US-093/CA9) et la liste des lacunes de la base de
+    connaissance."""
+    db = SessionLocal()
+    try:
+        return {"questions": svc_metriques_routage.top_questions_mal_notees(db, limite=limite)}
+    finally:
+        db.close()
 
 
 @app.get("/stats")

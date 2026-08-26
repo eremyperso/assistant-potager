@@ -384,8 +384,10 @@ def test_ca7_purge_efface_le_potager_et_toutes_ses_donnees(test_db):
 
     assert len(resultats) == 1
     # [CA7] Volumes journalisés — la seule trace qui subsiste après effacement.
+    # [US-097 / CA3] routage_logs/routage_retours purgés avec le potager, à 0 ici (aucun n'en a été créé).
     assert resultats[0]["volumes"] == {
         "evenements": 2, "parcelles": 1, "invitations": 1, "culture_config": 1, "membres": 2,
+        "routage_retours": 0, "routage_logs": 0,
     }
     assert test_db.query(Potager).filter(Potager.id == potager.id).first() is None
     assert test_db.query(Evenement).filter(Evenement.potager_id == potager.id).count() == 0

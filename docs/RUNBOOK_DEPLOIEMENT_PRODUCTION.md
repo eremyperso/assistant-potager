@@ -718,3 +718,248 @@ perdre de vue pour la résilience de l'infra :
 - **Noms des secrets GitHub Actions** (`SCALEWAY_*`) qui pointent en réalité
   vers un serveur **Hetzner** — piège documenté en A13, à ne pas retomber
   dedans lors d'une reconstruction sous pression.
+
+---
+
+## 7. Exploitation courante — accès aux données et aux logs
+
+> Chapitre distinct des parties A/B : ici l'infrastructure existe déjà et
+> tourne normalement. Aucun redémarrage de service n'est nécessaire pour les
+> opérations décrites ci-dessous — il s'agit de **consulter et diagnostiquer**,
+> jamais de modifier en direct. Toute correction de données doit passer par
+> l'application (bot/PWA) ou par un fichier `migration_vX.sql` versionné (voir
+> A8) — pas par un `UPDATE`/`DELETE` manuel improvisé en session pgAdmin/psql.
+
+### 7.1 Connexion à PostgreSQL depuis un poste local (pgAdmin4, DBeaver…)
+
+Deux méthodes possibles. La première est recommandée par défaut.
+
+**Méthode recommandée — tunnel SSH (n'ouvre aucun port supplémentaire)**
+
+```bash
+ssh -L 5433:localhost:5432 <user>@<IP_SERVEUR> -N
+```
+Laisser ce terminal ouvert (ou lancer la commande en arrière-plan), puis dans
+pgAdmin, déclarer un nouveau serveur qui pointe sur le tunnel plutôt que sur
+le serveur distant :
+
+| Champ pgAdmin | Valeur |
+|---|---|
+| Host name/address | `localhost` |
+| Port | `5433` (le port local du tunnel, pas `5432`) |
+| Maintenance database | `potager_prod` ou `potager_dev` |
+| Username | `potager_user` (ou `app_user` — voir choix du rôle ci-dessous) |
+| SSL mode | `Prefer` (le tunnel SSH chiffre déjà le transport) |
+
+Avantage : fonctionne même si le port 5432 n'est ouvert à aucune IP dans le
+firewall Hetzner — le tunnel passe entièrement par le port 22 (SSH), déjà
+nécessaire pour l'administration du serveur.
+
+**Méthode alternative — connexion directe**
+
+Uniquement si le port 5432 a déjà été ouvert pour votre IP dans le firewall
+Hetzner et déclaré dans `pg_hba.conf` (voir A2, étape 5) :
+
+| Champ pgAdmin | Valeur |
+|---|---|
+| Host name/address | IP publique du serveur |
+| Port | `5432` |
+| Maintenance database | `potager_prod` ou `potager_dev` |
+| Username | `potager_user` (ou `app_user`) |
+| SSL mode | `Require` (`ssl = on` est configuré côté serveur, voir A2) |
+
+⚠️ Rappel déjà documenté en A2/section 6 : cette méthode casse silencieusement
+dès que votre IP cliente change (`pg_hba.conf` **et** règle firewall à refaire
+des deux côtés) — c'est la raison pour laquelle le tunnel SSH est préférable
+au quotidien.
+
+**Quel rôle utiliser pour l'exploitation ?**
+
+| Rôle | Comportement RLS | Cas d'usage |
+|---|---|---|
+| `potager_user` | Propriétaire des tables → **contourne la RLS**, voit tous les potagers | Diagnostic transverse, support multi-tenant — **toujours** ajouter un `WHERE potager_id = …` explicite pour ne pas mélanger les jardins par erreur |
+| `app_user` | Soumis à la RLS (`migration_v18.sql`) → ne voit **rien** tant que `app.potager_id` n'est pas positionné dans la session | Reproduire exactement ce que voit l'application pour un potager donné (voir 7.2) |
+
+### 7.2 Requêtes SQL courantes en ligne de commande (psql)
+
+Connexion, soit via le tunnel ouvert en 7.1 :
+```bash
+psql "postgresql://potager_user:<mot_de_passe>@localhost:5433/potager_prod"
+```
+soit en SSH direct sur le serveur :
+```bash
+ssh <user>@<IP_SERVEUR>
+sudo -u postgres psql -d potager_prod
+```
+
+⚠️ **Si vous vous connectez avec `app_user`**, la RLS masque toutes les
+lignes tant que la variable de session n'est pas positionnée (comportement
+silencieux : `0 ligne`, pas d'erreur) — à faire en tout début de session,
+avant toute requête :
+```sql
+SET app.potager_id = '1';   -- remplacer 1 par l'id du potager à consulter
+```
+Avec `potager_user`, cette étape n'est pas nécessaire (la RLS ne s'applique
+pas au propriétaire des tables) — mais filtrez alors manuellement.
+
+**Requêtes prêtes à l'emploi :**
+
+```sql
+-- 1. Derniers événements d'un potager, tous types confondus
+SELECT id, date, type_action, culture, variete, quantite, unite, texte_original
+FROM   evenements
+WHERE  potager_id = 1
+ORDER BY date DESC
+LIMIT 20;
+
+-- 2. Récoltes des 30 derniers jours, agrégées par culture
+SELECT culture, unite, SUM(quantite) AS total
+FROM   evenements
+WHERE  potager_id = 1
+  AND  type_action = 'recolte'
+  AND  date >= now() - interval '30 days'
+GROUP BY culture, unite
+ORDER BY total DESC;
+
+-- 3. Événements « orphelins » sans type_action (nettoyage, backlog #5)
+SELECT id, date, texte_original
+FROM   evenements
+WHERE  potager_id = 1
+  AND  type_action IS NULL;
+
+-- 4. Liste des potagers et nombre de membres (vue d'ensemble multi-tenant)
+SELECT p.id, p.nom, p.plan, COUNT(m.user_id) AS nb_membres
+FROM   potagers p
+LEFT JOIN potager_membres m ON m.potager_id = p.id
+GROUP BY p.id, p.nom, p.plan
+ORDER BY p.id;
+
+-- 5. Vérifier avec quel rôle la session est ouverte (RLS active ou non)
+SELECT current_user;   -- doit répondre app_user pour l'app en prod (voir A15/8)
+```
+
+### 7.3 Consulter les logs — API, bot Telegram, PWA
+
+**7.3.1 Backend (API FastAPI + bot Telegram)**
+
+Aucun fichier de log dédié n'existe côté serveur aujourd'hui (l'observabilité
+reste volontairement minimale à ce stade — logs structurés en stdout
+uniquement, capturés par `systemd`/`journald`) : `journalctl` est donc le
+point d'entrée unique pour les 4 services.
+
+```bash
+# Suivre en direct (Ctrl+C pour quitter)
+journalctl -u potager-prod.service     -f
+journalctl -u potager-prod-bot.service -f
+journalctl -u potager-dev.service      -f
+journalctl -u potager-dev-bot.service  -f
+
+# Fenêtre temporelle précise (utile pour corréler avec un message Telegram)
+journalctl -u potager-prod-bot.service --since "2026-08-26 14:00" --until "2026-08-26 14:30"
+
+# Uniquement les erreurs
+journalctl -u potager-prod-bot.service -p err
+
+# Repérer un motif précis sans suivre en direct
+journalctl -u potager-prod-bot.service --since today | grep -i "erreur"
+```
+
+Le format de log applicatif est constant sur tout le projet
+(`HH:MM:SS │ LEVEL │ emoji MESSAGE`) — quelques motifs réels à connaître pour
+grep efficacement :
+
+| Motif à chercher | Ce qu'il indique |
+|---|---|
+| `[parse_message] intent=` | Résultat de la classification Groq (intent retenu + culture/action_filtre détectés) |
+| `[parse_message] erreur → fallback ACTION` | Échec de l'appel Groq, repli automatique sur le chemin ACTION |
+| `❓ QUESTION AUTO` | Détection automatique d'une question (contournement de `classify_intent`) |
+| `🔀 DEPLACER TEXTE` / `📝 NOTE TEXTE` / `🪴 GODETS` | Routage vers un flux spécifique (déplacement de culture, note, godets) |
+| `🌅 JOB MÉTÉO planifié` / `🗑️ JOB PURGE planifié` | Confirmation au démarrage du bot que les jobs planifiés (météo 5h, purge 4h) sont bien programmés (voir A14/A15) |
+
+⚠️ **Point de vigilance à garder en tête pendant ces investigations :** il
+n'existe pas encore de table persistée du coût par appel LLM (`conso_tokens`)
+— ce chantier est au backlog (US-121 *LLM à étages*, US-123 *Quotas tokens
+par tenant*), pas encore livré. Les logs `journalctl` ci-dessus donnent une
+trace fonctionnelle (quel intent, quelle culture) mais **pas** un historique
+de consommation tokens interrogeable en SQL — seule l'estimation figurant
+dans ce runbook (§ Contraintes Groq Free Tier de la mission projet) fait foi
+pour l'instant.
+
+**7.3.2 Frontend (PWA React)**
+
+La PWA est une SPA statique (`frontend/dist`, servie par l'API — voir A9) :
+il n'y a **pas de runtime serveur côté frontend**, donc pas de log applicatif
+équivalent à ceux du bot. Deux sources restent exploitables :
+
+- **Erreurs côté client** : uniquement visibles dans la console du
+  navigateur (F12 → Console/Network) **sur l'appareil de l'utilisateur** —
+  rien n'est rapatrié côté serveur pour l'instant (pas de Sentry ni
+  d'agrégateur, cf. point de vigilance « Observabilité minimale » déjà
+  identifié dans les documents de réflexion stratégique du projet).
+- **Requêtes HTTP de la PWA vers l'API** : visibles côté serveur via les logs
+  Nginx (accès aux assets statiques et aux appels `fetch`/XHR vers l'API) et,
+  pour toute erreur applicative qu'elles déclenchent, dans
+  `journalctl -u potager-prod.service` au même titre qu'un appel Telegram.
+
+```bash
+# Logs Nginx (chemin standard Debian/Ubuntu — à adapter si personnalisé, cf. A4)
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+
+# Isoler uniquement les appels API déclenchés par la PWA (exemple : /auth, /ask)
+sudo grep "potager.eremy.fr" /var/log/nginx/access.log | grep "/auth"
+```
+
+### 7.4 Cas pratiques d'investigation
+
+**Exemple A — vérifier/rechercher une fiche culture**
+
+Un jardinier signale que les repères agronomiques d'une culture semblent
+faux, ou qu'une culture qu'il utilise n'a pas de fiche :
+
+```sql
+-- La fiche existe-t-elle (référentiel global, potager_id NULL = partagé) ?
+SELECT nom, type_organe_recolte, espacement, surface_m2, potager_id
+FROM   culture_config
+WHERE  nom ILIKE '%tomate%'
+ORDER BY nom;
+
+-- Cultures saisies dans ce potager sans fiche culture_config correspondante
+SELECT DISTINCT e.culture
+FROM   evenements e
+LEFT JOIN culture_config cc ON LOWER(e.culture) = LOWER(cc.nom)
+WHERE  e.potager_id = 1
+  AND  cc.id IS NULL;
+```
+
+**Exemple B — retrouver la trace LLM d'un message précis**
+
+Un jardinier signale qu'un message vocal/texte a été mal interprété (mauvais
+intent, mauvaise action enregistrée) :
+
+1. Repérer l'heure approximative de l'échange (le jardinier la donne, ou
+   `SELECT date, texte_original FROM evenements WHERE potager_id = 1 ORDER BY date DESC LIMIT 5;`
+   pour localiser l'événement créé).
+2. Rejouer la fenêtre correspondante côté bot :
+   ```bash
+   journalctl -u potager-prod-bot.service --since "2026-08-26 14:00" --until "2026-08-26 14:10" \
+     | grep -E "parse_message|classify_intent|erreur"
+   ```
+3. Confronter avec `texte_original` en base : la colonne conserve la phrase
+   dictée **et** les traces de correction ultérieures (`[CORR AAAA-MM-JJ]
+   champ: avant → après`, voir le système de correction) — utile pour
+   distinguer une erreur de classification initiale d'une correction
+   manuelle faite après coup.
+
+### 7.5 Aide-mémoire
+
+| Besoin | Où / comment |
+|---|---|
+| Explorer les données à la souris (pgAdmin, DBeaver) | Tunnel SSH `-L 5433:localhost:5432` + connexion sur `localhost:5433` |
+| Requête SQL ponctuelle rapide | `psql` via le même tunnel, ou `sudo -u postgres psql -d potager_prod` en SSH direct |
+| Logs API prod/dev | `journalctl -u potager-prod.service -f` / `-u potager-dev.service -f` |
+| Logs bot prod/dev | `journalctl -u potager-prod-bot.service -f` / `-u potager-dev-bot.service -f` |
+| Trace d'une décision LLM (intent, culture détectée) | `journalctl` + `grep "parse_message"` sur la fenêtre horaire concernée |
+| Erreurs PWA (client) | Console navigateur (F12) sur l'appareil de l'utilisateur — rien côté serveur |
+| Requêtes PWA vers l'API (serveur) | `/var/log/nginx/access.log` + `journalctl -u potager-prod.service` |
+| Santé rapide de l'API | `curl -sf https://potager.eremy.fr/health` (voir A15) |

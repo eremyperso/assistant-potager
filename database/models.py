@@ -10,6 +10,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
 [US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
 [US-092] Ajout modèle ConsoTokens (mesure de consommation LLM par potager)
+[US-097] Ajout modèles RoutageLog et RoutageRetour (observabilité cascade + retour jardinier)
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
@@ -296,3 +297,59 @@ class ConsoTokens(Base):
         # requête que l'US de quotas exécutera à chaque appel.
         Index("idx_conso_tokens_potager_date", "potager_id", "date"),
     )
+
+
+class RoutageLog(Base):
+    """
+    [US-097 / CA1] Une ligne par question passée par le routeur
+    (`llm/routeur.py::repondre_avec_cascade`) — succès comme remontée de
+    cascade.
+
+    - question_normalisee    : [CA2] question NORMALISÉE, jamais le message brut
+    - nature                 : ACTION | QUESTION_DATA | QUESTION_SAVOIR | QUESTION_HYBRIDE
+    - origine_classification : regle | cache | modele — origine de la DÉCISION
+                                de classification (llm.routeur.DecisionRoutage.origine)
+    - etage_resolveur        : donnee | savoir | raisonnement — étage ayant
+                                produit la réponse FINALE (distinct de la
+                                classification : peut différer en cas de
+                                remontée de cascade)
+    - cascade_remontee       : vrai si l'étage data n'a pas su répondre et que
+                                le raisonnement a pris le relais (US-093 CA7)
+    - tokens_consommes       : [CA5] jetons consommés pour cette réponse,
+                                routage (appel de classification) inclus
+    """
+    __tablename__ = "routage_logs"
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    potager_id             = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    cree_le                = Column(DateTime, server_default=func.now())
+    question_normalisee    = Column(String, nullable=False)
+    nature                 = Column(String(20), nullable=False)
+    origine_classification = Column(String(10), nullable=False)
+    etage_resolveur        = Column(String(20), nullable=False)
+    cascade_remontee       = Column(Boolean, nullable=False, default=False)
+    confiance              = Column(Float, nullable=True)
+    latence_ms             = Column(Integer, nullable=False, default=0)
+    tokens_consommes       = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),
+    )
+
+
+class RoutageRetour(Base):
+    """
+    [US-097 / CA9-CA11] Avis 👍/👎 du jardinier sur une réponse de savoir ou de
+    raisonnement — au plus un par ligne de `routage_logs` (contrainte UNIQUE,
+    CA11 : jamais redemandé pour la même réponse).
+
+    potager_id est dénormalisé depuis routage_logs : évite une jointure pour la
+    purge potager (CA3) et pour le scoping tenant d'un futur endpoint web.
+    """
+    __tablename__ = "routage_retours"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    routage_log_id = Column(Integer, ForeignKey("routage_logs.id"), nullable=False, unique=True)
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    avis           = Column(String(10), nullable=False)  # 'positif' | 'negatif'
+    cree_le        = Column(DateTime, server_default=func.now())

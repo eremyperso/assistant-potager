@@ -310,9 +310,11 @@ def test_us093_ca6_ca7_remontee_sur_donnee_absente():
 
     mock_data.assert_called_once()
     mock_llm.assert_called_once()  # [CA7] un seul saut, jamais répété
-    assert resultat == reponse_raisonnement.texte
+    assert resultat.texte == reponse_raisonnement.texte
+    # [US-097] remontée de cascade correctement journalisée
+    assert resultat.etage_resolveur == routeur.ETAGE_RAISONNEMENT
     # [CA8] aucun message intermédiaire — seule la réponse finale est renvoyée
-    assert "cherche ailleurs" not in resultat.lower()
+    assert "cherche ailleurs" not in resultat.texte.lower()
 
 
 def test_us093_ca6_pas_de_remontee_si_donnee_deja_exploitable():
@@ -328,7 +330,9 @@ def test_us093_ca6_pas_de_remontee_si_donnee_deja_exploitable():
         resultat = routeur.repondre_avec_cascade(CTX, question)
 
     mock_llm.assert_not_called()
-    assert resultat == "Total tomate récolte : 4 kg"
+    assert resultat.texte == "Total tomate récolte : 4 kg"
+    # [US-097] pas de remontée : l'étage donnée a directement résolu la demande
+    assert resultat.etage_resolveur == routeur.ETAGE_DONNEE
 
 
 def test_us093_edge_echec_llm_sur_etage_data_nest_pas_une_remontee():

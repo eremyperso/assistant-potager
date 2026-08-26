@@ -60,6 +60,7 @@ mesurable vient du cache de prompt (CA6), désormais visible appel par appel.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 from dataclasses import dataclass
@@ -497,6 +498,12 @@ def appeler_chat(
     _enregistrer_conso(ctx, appel_type, modele, tokens_in, tokens_out, tokens_cache,
                        latence_ms, ISSUE_OK)
 
+    # [US-097 / CA5] Alimente l'accumulateur de cascade s'il est armé — voir
+    # demarrer_mesure_cascade(). N'a aucun effet hors d'une cascade en cours.
+    accumulateur = _accumulateur_cascade.get()
+    if accumulateur is not None:
+        accumulateur[0] += tokens_in + tokens_out
+
     contenu = chat.choices[0].message.content
     return ReponseLLM(
         texte        = (contenu or "").strip(),
@@ -551,6 +558,37 @@ def transcrire(
         appel_type = TYPE_TRANSCRIPTION,
         latence_ms = latence_ms,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-097 / CA5] Mesure des jetons d'une cascade complète (routage inclus)
+# -----------------------------------------------------------------------------
+# `conso_tokens` compte chaque appel isolément ; le routeur (`llm/routeur.py`)
+# a besoin du TOTAL des jetons consommés pour produire UNE réponse, y compris
+# l'appel de classification qui la précède. Plutôt qu'une nouvelle table ou un
+# identifiant de corrélation à threader partout, un accumulateur de contexte
+# borné à la durée de la cascade suffit : `demarrer_mesure_cascade()` l'arme,
+# chaque `appeler_chat()` qui s'exécute pendant que l'accumulateur est actif y
+# ajoute ses jetons, `cumul_mesure_cascade()` lit le total et désarme.
+# ─────────────────────────────────────────────────────────────────────────────
+_accumulateur_cascade: "contextvars.ContextVar[Optional[list[int]]]" = contextvars.ContextVar(
+    "accumulateur_tokens_cascade", default=None
+)
+
+
+def demarrer_mesure_cascade() -> contextvars.Token:
+    """[US-097] Arme l'accumulateur pour la cascade en cours. Retourne un jeton
+    à passer à `cumul_mesure_cascade()` une fois la cascade terminée."""
+    return _accumulateur_cascade.set([0])
+
+
+def cumul_mesure_cascade(jeton: contextvars.Token) -> int:
+    """[US-097] Total des jetons consommés depuis `demarrer_mesure_cascade()`,
+    puis désarme l'accumulateur (restaure l'état précédent)."""
+    accumulateur = _accumulateur_cascade.get()
+    total = accumulateur[0] if accumulateur else 0
+    _accumulateur_cascade.reset(jeton)
+    return total
 
 
 def contexte_courant() -> TenantContext:

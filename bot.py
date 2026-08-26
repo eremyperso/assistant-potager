@@ -79,6 +79,8 @@ from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
 from app.services import potagers as svc_potagers  # [US-084] purge planifiée
+from app.services import retours as svc_retours  # [US-097] retour du jardinier
+from app.services import metriques_routage as svc_metriques_routage  # [US-097] purge rétention
 from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from database.models import Potager as _Potager  # [US-046]
 
@@ -3743,24 +3745,47 @@ def _build_recap(p: dict, event_id: int) -> str:
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
     """
-    [US-012 / US-093] Interroge l'historique via SQL agent, ou bascule vers le
-    savoir/raisonnement selon l'aiguillage du routeur — zéro hallucination sur
-    l'étage data, zéro appel modèle sur la frange non ambiguë (règles/cache).
+    [US-012 / US-093 / US-097] Interroge l'historique via SQL agent, ou bascule
+    vers le savoir/raisonnement selon l'aiguillage du routeur — zéro
+    hallucination sur l'étage data, zéro appel modèle sur la frange non
+    ambiguë (règles/cache).
 
     Flux : routeur.classer_demande() [0 token la plupart du temps] →
     étage data (SQL, 0 token) ou raisonnement, avec au plus une remontée de
     cascade si l'étage data ne trouve rien d'exploitable (US-093 / CA6).
+    Chaque cascade menée à son terme est journalisée (US-097 / CA1) ; les
+    réponses de savoir/raisonnement proposent en plus un retour 👍/👎
+    (US-097 / CA9).
     """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        reponse = routeur.repondre_avec_cascade(current_context(), question)
+        resultat = routeur.repondre_avec_cascade(current_context(), question)
+        reponse = resultat.texte
         log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+
+        # [US-097 / CA9] Retour 👍/👎 uniquement pour les réponses de savoir ou
+        # de raisonnement (étages 2 et 3) — jamais pour une donnée du potager,
+        # qui n'est pas un avis à recueillir. Rien à proposer si le journal
+        # n'a pas pu être écrit (routage_log_id absent) : il n'y aurait rien
+        # à rattacher (CA10).
+        if resultat.routage_log_id is not None and resultat.etage_resolveur in (
+            routeur.ETAGE_SAVOIR, routeur.ETAGE_RAISONNEMENT,
+        ):
+            boutons = [[
+                InlineKeyboardButton("👍", callback_data=f"retour_routage:positif:{resultat.routage_log_id}"),
+                InlineKeyboardButton("👎", callback_data=f"retour_routage:negatif:{resultat.routage_log_id}"),
+            ]]
+            await update.message.reply_text(
+                "_Cette réponse t'a aidé ?_",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(boutons),
+            )
 
         await update.message.reply_text(
             "_Autre question ou action ?_",
@@ -5684,8 +5709,48 @@ async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
     try:
         resultats = svc_potagers.purger_potagers_supprimes(db)
         log.info("🗑️  PURGE AUTO      : %s potager(s) effacé(s) définitivement", len(resultats))
+        # [US-097 / CA3] Rétention documentée du journal de routage (12 mois) —
+        # même job quotidien, la purge des entrées expirées n'a pas besoin
+        # d'une planification dédiée.
+        nb_routage = svc_metriques_routage.purger_routage_logs_expires(db)
+        if nb_routage:
+            log.info("🗑️  PURGE AUTO      : %s entrée(s) de routage_logs expirée(s) effacée(s)", nb_routage)
     except Exception as e:
         log.error(f"❌ JOB PURGE ERREUR : {e}")
+    finally:
+        db.close()
+
+
+# ── [US-097] CALLBACK RETOUR SUR RÉPONSE (savoir/raisonnement) ──────────────────
+
+async def _retour_routage_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-097 / CA9-CA13] Callback inline — avis 👍/👎 sur une réponse de
+    savoir/raisonnement. Point d'écriture pur : aucun avis, positif ou
+    négatif, ne déclenche de nouvel appel modèle (CA13)."""
+    query = update.callback_query
+    await query.answer()
+
+    # retour_routage:<positif|negatif>:<routage_log_id>
+    try:
+        _, avis, routage_log_id_str = query.data.split(":")
+        routage_log_id = int(routage_log_id_str)
+    except (ValueError, IndexError):
+        await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+        return
+
+    db = SessionLocal()
+    try:
+        svc_retours.enregistrer_retour(db, current_context().potager_id, routage_log_id, avis)
+        emoji = "👍" if avis == svc_retours.AVIS_POSITIF else "👎"
+        await query.edit_message_text(f"{emoji} Merci, ton avis est enregistré.", reply_markup=None)
+    except svc_retours.RetourDejaEnregistreError:
+        # [CA11] Jamais redemandé — un second clic (double-tap) ne casse rien.
+        await query.edit_message_text("Un avis a déjà été enregistré pour cette réponse.", reply_markup=None)
+    except svc_retours.RoutageLogIntrouvableError:
+        await query.edit_message_text("❌ Cette réponse n'est plus disponible.", reply_markup=None)
+    except Exception as e:
+        log.error(f"❌ Erreur retour routage : {e}")
+        await query.edit_message_text("❌ Erreur lors de l'enregistrement de l'avis.", reply_markup=None)
     finally:
         db.close()
 
@@ -5900,6 +5965,9 @@ def _construire_application() -> "Application":
 
     # [US-046] Sélection du potager actif — boutons inline
     app.add_handler(CallbackQueryHandler(_potager_select_cb, pattern=r"^potager_select_"))
+
+    # [US-097] Retour 👍/👎 sur une réponse de savoir/raisonnement
+    app.add_handler(CallbackQueryHandler(_retour_routage_cb, pattern=r"^retour_routage:"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
