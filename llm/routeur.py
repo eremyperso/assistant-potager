@@ -56,6 +56,7 @@ from app.services.context import TenantContext
 from database.db import SessionLocal
 from database.models import RoutageLog
 from llm import passerelle
+from utils.actions import ACTION_MAP
 
 log = logging.getLogger("potager")
 
@@ -163,6 +164,68 @@ _MARQUEURS_DATA: tuple[str, ...] = (
 )
 
 
+# [Action 0, vague 2] Gestes attestés en production mais absents d'ACTION_MAP.
+# `binage` et `eclaircissage` sont des actions canoniques manquantes que
+# l'insertion 1 doit ajouter au référentiel unique (§3 du document de
+# décisions) ; les autres sont des variantes de surface réellement dictées.
+# ⚠️ Supplément TEMPORAIRE : il n'a pas vocation à devenir un quatrième
+# référentiel. Dès que l'insertion 1 aura tranché la source de vérité unique,
+# ces entrées y sont versées et cette constante disparaît.
+_GESTES_HORS_REFERENTIEL: tuple[str, ...] = (
+    "semi", "binage", "biner", "bine", "eclaircir", "eclairci", "eclaircie",
+    "eclaircissage", "ajout", "ajoute", "apport", "apporte", "plantation",
+    "plantations", "recoltes", "ecolte", "recolde", "vente", "engrais",
+)
+
+# Nombre de mots de tête examinés par `_regle_par_geste`. Une saisie annonce
+# son geste d'emblée (« mise en godet 20 tomates ») ; une question de savoir
+# ne le mentionne, s'il apparaît, que dans une subordonnée de contexte
+# (« … sur les tiges après la récolte »). Quatre mots suffisent à couvrir
+# « mise en godet » sans mordre sur la subordonnée : mesuré le 27/08/2026 sur
+# les 205 saisies de production (97 % captées) et les 44 questions du corpus
+# CA11 (2 faux positifs). Élargir à 5 mots n'apporte rien.
+_FENETRE_GESTE_MOTS = 4
+
+
+def _construire_motif_geste() -> "re.Pattern[str]":
+    """Motif des gestes de jardinage, bâti sur `utils.actions.ACTION_MAP`.
+
+    Le référentiel lexical du parseur est réutilisé tel quel plutôt que
+    recopié : deux listes de gestes divergeraient à la première action
+    ajoutée, et la divergence ne se verrait pas — elle se paierait en saisies
+    routées vers une réponse au lieu d'être enregistrées.
+    """
+    gestes = set(_GESTES_HORS_REFERENTIEL)
+    for canonique, variantes in ACTION_MAP.items():
+        for forme in (canonique, *variantes):
+            gestes.add(unidecode(forme.lower().replace("_", " ")).strip())
+    gestes.discard("")
+    # Les plus longs d'abord : « mise en godet » doit l'emporter sur « godet ».
+    alternatives = "|".join(re.escape(g) for g in sorted(gestes, key=len, reverse=True))
+    return re.compile(rf"\b({alternatives})\b")
+
+
+_MOTIF_GESTE = _construire_motif_geste()
+
+
+def _regle_par_geste(texte: str) -> Optional[str]:
+    """[Action 0] ACTION si l'un des premiers mots nomme un geste de jardinage.
+
+    Comble le trou entre `_VERBES_ACTION` — un test de préfixe, qui n'attrape
+    donc pas les formes nominales (« plantation 14 plants… ») — et les
+    marqueurs DATA, testés eux par sous-chaîne n'importe où dans la phrase.
+    Une saisie qui ne commençait pas par un verbe connu tombait de ce fait
+    dans un marqueur DATA fortuit : « mise en godet 20 tomates » était classée
+    QUESTION_DATA par « en godet », et le jardinier recevait un agrégat SQL au
+    lieu de voir son évènement enregistré. 28 saisies sur 205 dans ce cas.
+
+    Testée APRÈS les marqueurs HYBRIDE et SAVOIR, qui sont explicites et
+    gardent la priorité, mais AVANT les marqueurs DATA et le catalogue.
+    """
+    tete = " ".join(unidecode((texte or "").strip().lower()).split()[:_FENETRE_GESTE_MOTS])
+    return NATURE_ACTION if tete and _MOTIF_GESTE.search(tete) else None
+
+
 def _regle_par_mots_cles(texte: str) -> Optional[str]:
     """[CA2] Retourne la nature si un motif fréquent et non ambigu matche,
     sinon `None` (la demande passe alors au cache puis au modèle)."""
@@ -177,6 +240,9 @@ def _regle_par_mots_cles(texte: str) -> Optional[str]:
         return NATURE_QUESTION_HYBRIDE
     if any(m in t for m in _MARQUEURS_SAVOIR):
         return NATURE_QUESTION_SAVOIR
+    nature_geste = _regle_par_geste(t)
+    if nature_geste is not None and not t.endswith("?"):
+        return nature_geste
     if any(m in t for m in _MARQUEURS_DATA):
         return NATURE_QUESTION_DATA
     return None
@@ -269,12 +335,32 @@ def vider_cache() -> None:
 # (GROQ_MODEL_CLASSIFICATION), avec repli grand modèle possible par simple
 # configuration (CA14) — jamais en dur ici.
 # ─────────────────────────────────────────────────────────────────────────────
+# [Action 0, vague 2] La formulation « mélange une donnée personnelle et une
+# demande de raisonnement » faisait basculer en HYBRIDE toute question portant
+# un possessif : « mes salades sont mangées la nuit » était classée HYBRIDE à
+# 0,93 de confiance, alors qu'y répondre (les limaces) ne demande aucune donnée
+# enregistrée. Mesuré le 27/08/2026 sur le corpus CA11 : 40 questions de savoir
+# sur 44 aiguillées vers HYBRIDE. Le discriminant explicité ci-dessous est donc
+# « faut-il LIRE l'historique pour répondre ? », et non « le message parle-t-il
+# de SES plantes ? » — un symptôme décrit est du contexte, pas une donnée.
 _PROMPT_FIXE_ROUTEUR = """Tu es le routeur de l'assistant potager. Classe le message ci-dessous en une seule des quatre natures suivantes :
 
 ACTION            : décrit une action potager déjà réalisée (semis, arrosage, récolte...)
-QUESTION_DATA     : demande une donnée déjà enregistrée dans CE potager (stock, historique, quantité)
-QUESTION_SAVOIR    : demande une connaissance générale (agronomie, maladies, fonctionnement de l'application)
-QUESTION_HYBRIDE  : mélange une donnée personnelle et une demande de raisonnement/diagnostic/conseil
+QUESTION_DATA     : demande une donnée déjà enregistrée dans CE potager (stock, historique, quantité, dates)
+QUESTION_SAVOIR   : demande une connaissance générale (agronomie, maladies, ravageurs, fonctionnement de l'application)
+QUESTION_HYBRIDE  : exige À LA FOIS de consulter les données enregistrées du potager ET de raisonner dessus
+
+Test décisif entre QUESTION_SAVOIR et QUESTION_HYBRIDE : pour répondre, faut-il aller
+LIRE l'historique enregistré du potager (dates, quantités, parcelles) ? Si non, la
+réponse est QUESTION_SAVOIR. Un possessif (« mes tomates », « mon ail ») ne suffit PAS
+à rendre une question hybride : décrire un symptôme que l'on observe, c'est fournir du
+contexte, ce n'est pas interroger une donnée enregistrée.
+
+Exemples :
+mes salades sont mangées la nuit, il reste que le trognon -> QUESTION_SAVOIR|0.9
+mes semis de tomates font des tiges toutes fines et molles -> QUESTION_SAVOIR|0.9
+combien de tomates ai-je récolté cette saison ? -> QUESTION_DATA|0.95
+mes courgettes jaunissent et j'ai beaucoup arrosé cette semaine, qu'en penses-tu ? -> QUESTION_HYBRIDE|0.9
 
 Réponds STRICTEMENT au format : NATURE|CONFIANCE
 où NATURE est un des quatre mots ci-dessus et CONFIANCE un nombre entre 0 et 1.
@@ -307,8 +393,27 @@ def _appeler_modele_classification(texte: str, ctx: Optional[TenantContext]) -> 
             prompt_fixe=_PROMPT_FIXE_ROUTEUR,
             prompt_variable="",
             message_utilisateur=texte,
-            max_tokens=16,
-            reasoning=False,
+            # ⚠️ NE PAS DESCENDRE SOUS ~120, et NE PAS REPASSER À
+            # `reasoning=False` : les deux réglages se tiennent.
+            #
+            # `openai/gpt-oss-120b` émet des jetons de raisonnement AVANT son
+            # contenu, et `max_tokens` plafonne les deux ensemble. À 16 — la
+            # valeur d'origine, calibrée sur la réponse « NATURE|confiance »
+            # qui tient en 8 jetons — le budget partait intégralement dans le
+            # raisonnement : le contenu revenait vide, `_parser_reponse_modele`
+            # repliait sur QUESTION_HYBRIDE/0.0, et l'étage modèle n'a jamais
+            # rien classé. Mesuré le 27/08/2026 : 210 classifications, toutes à
+            # confiance 0.00, `issue=ok`, `tokens_out=16` exactement.
+            #
+            # `reasoning=True` ne demande pas au modèle de raisonner davantage :
+            # il n'active que l'ENVOI de `GROQ_REASONING_EFFORT` (= "low"), que
+            # `reasoning=False` supprimait — laissant le modèle raisonner à son
+            # effort par défaut, bien plus bavard. Sans lui, 200 jetons ne
+            # suffisent toujours pas sur les formulations confuses
+            # (« Carotte manque d'eau trop petit . Culture perdu » :
+            # `out=200` pile, contenu vide).
+            max_tokens=200,
+            reasoning=True,
             role_prompt="user",
         )
         return _parser_reponse_modele(reponse.texte)
