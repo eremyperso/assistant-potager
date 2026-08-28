@@ -164,19 +164,6 @@ _MARQUEURS_DATA: tuple[str, ...] = (
 )
 
 
-# [Action 0, vague 2] Gestes attestés en production mais absents d'ACTION_MAP.
-# `binage` et `eclaircissage` sont des actions canoniques manquantes que
-# l'insertion 1 doit ajouter au référentiel unique (§3 du document de
-# décisions) ; les autres sont des variantes de surface réellement dictées.
-# ⚠️ Supplément TEMPORAIRE : il n'a pas vocation à devenir un quatrième
-# référentiel. Dès que l'insertion 1 aura tranché la source de vérité unique,
-# ces entrées y sont versées et cette constante disparaît.
-_GESTES_HORS_REFERENTIEL: tuple[str, ...] = (
-    "semi", "binage", "biner", "bine", "eclaircir", "eclairci", "eclaircie",
-    "eclaircissage", "ajout", "ajoute", "apport", "apporte", "plantation",
-    "plantations", "recoltes", "ecolte", "recolde", "vente", "engrais",
-)
-
 # Nombre de mots de tête examinés par `_regle_par_geste`. Une saisie annonce
 # son geste d'emblée (« mise en godet 20 tomates ») ; une question de savoir
 # ne le mentionne, s'il apparaît, que dans une subordonnée de contexte
@@ -194,8 +181,14 @@ def _construire_motif_geste() -> "re.Pattern[str]":
     recopié : deux listes de gestes divergeraient à la première action
     ajoutée, et la divergence ne se verrait pas — elle se paierait en saisies
     routées vers une réponse au lieu d'être enregistrées.
+
+    [US-168 CA13] Le supplément temporaire `_GESTES_HORS_REFERENTIEL` (gestes
+    attestés en production mais absents d'ACTION_MAP — binage, eclaircie,
+    pluriels, coquilles de transcription...) a disparu : ses entrées ont été
+    versées dans ACTION_MAP (utils/actions.py), le référentiel unique. Ce motif
+    n'a donc plus qu'une seule source lexicale.
     """
-    gestes = set(_GESTES_HORS_REFERENTIEL)
+    gestes: set[str] = set()
     for canonique, variantes in ACTION_MAP.items():
         for forme in (canonique, *variantes):
             gestes.add(unidecode(forme.lower().replace("_", " ")).strip())

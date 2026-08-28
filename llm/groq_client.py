@@ -53,7 +53,7 @@ def _today_context() -> str:
 INTENT_PROMPT = """Tu es un assistant potager spécialisé dans l'analyse de questions en langage naturel.
 Donne uniquement du JSON sans texte additionnel, sans guillemets, avec ces champs:
 {
-  "action": "semis|plantation|arrosage|recolte|repiquage|traitement|desherbage|taille|paillage|observation|perte|null",
+  "action": "semis|plantation|arrosage|recolte|repiquage|traitement|desherbage|taille|paillage|observation|perte|binage|eclaircie|null",
   "culture": string|null,
   "date_from": string|null,
   "query_type": "date|quantite|historique|stats"
@@ -250,7 +250,7 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
@@ -279,6 +279,11 @@ RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne �
 - un avec quantite=nombre de pieds et unite="plants"
 - un avec quantite=poids et unite="kg" ou "g"
 Si seul un nombre de pieds OU seul un poids est mentionné (cas normal), un seul objet recolte suffit comme d'habitude.
+
+RÈGLE binage / éclaircie / désherbage : ce sont TROIS gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :
+- "binage"/"biner" (ameublir la terre en surface, casser la croûte) → action="binage"
+- "éclaircie"/"éclaircir" (retirer des plants en surnombre pour espacer les autres) → action="eclaircie"
+- "désherbage"/"désherber"/"sarclage" (retirer les mauvaises herbes) → action="desherbage"
 
 Exemples :
 "J'ai paillé les tomates hier"
@@ -313,6 +318,12 @@ Exemples :
 
 "J'ai perdu 3 plants de tomates à cause du gel"
 → {{"action":"perte","culture":"tomate","quantite":3,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":"gel"}}
+
+"binage des carottes"
+→ {{"action":"binage","culture":"carotte","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
+
+"j'ai éclairci mes rangs de carottes hier"
+→ {{"action":"eclaircie","culture":"carotte","quantite":null,"unite":null,"date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
 
 "J'ai planté 15 oignons blancs et 10 radis hier"
 → [{{"action":"plantation","culture":"oignon","variete":"blanc","quantite":15,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}},{{"action":"plantation","culture":"radis","variete":null,"quantite":10,"unite":"plants","date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"commentaire":null}}]
@@ -522,7 +533,7 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
   "action_filtre": null,
   "items": [
     {{
-      "action": "recolte|semis|plantation|arrosage|traitement|desherbage|taille|paillage|observation|perte|mise_en_godet|repiquage|fertilisation|tuteurage",
+      "action": "recolte|semis|plantation|arrosage|traitement|desherbage|taille|paillage|observation|perte|mise_en_godet|repiquage|fertilisation|tuteurage|binage|eclaircie",
       "culture": string|null,
       "variete": string|null,
       "quantite": number|null,
@@ -544,6 +555,12 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 - "X graines" ou semis en barquette destiné à germer avant repiquage → unite="graines"
 - "X pieds" / "X plants" semés directement en terre → unite="pieds"
 
+=== RÈGLE binage / éclaircie / désherbage ===
+Trois gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :
+- "binage"/"biner" (ameublir la terre en surface, casser la croûte) → action="binage"
+- "éclaircie"/"éclaircir" (retirer des plants en surnombre pour espacer les autres) → action="eclaircie"
+- "désherbage"/"désherber"/"sarclage" (retirer les mauvaises herbes) → action="desherbage"
+
 === EXEMPLES ===
 "récolté 800g de tomates en A1"
 → {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"recolte","culture":"tomate","variete":null,"quantite":800,"unite":"g","parcelle":"A1","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
@@ -553,6 +570,12 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 
 "semé 30 pieds de radis en pleine terre carré nord"
 → {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"semis","culture":"radis","variete":null,"quantite":30,"unite":"pieds","parcelle":"nord","rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"binage sur les plants de carotte"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"binage","culture":"carotte","variete":null,"quantite":null,"unite":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"date":null,"commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
+
+"hier j'ai éclairci mes rangs de carotte"
+→ {{"intent":"ACTION","culture":null,"parcelle":null,"action_filtre":null,"items":[{{"action":"eclaircie","culture":"carotte","variete":null,"quantite":null,"unite":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"date":"{yesterday}","commentaire":null,"nb_graines_semees":null,"nb_plants_godets":null}}]}}
 
 "je veux noter une observation sur mes tomates"
 → {{"intent":"NOTE","culture":null,"parcelle":null,"action_filtre":null,"items":null}}

@@ -11,12 +11,30 @@ Règles appliquées en Python pur (zéro appel Groq) :
 import re
 from unidecode import unidecode
 
-ACTIONS_VALIDES = {
-    "semis", "plantation", "repiquage", "arrosage", "desherbage",
-    "paillage", "fertilisation", "traitement", "taille", "tuteurage",
-    "recolte", "perte", "observation", "mise_en_godet",
-    "vendu", "perte_godet",   # actions pépinière
+from utils.actions import ACTION_MAP
+
+# [US-168 CA1] Vocabulaire d'ENTRÉE : les mots que Groq peut renvoyer bruts dans
+# le champ `action` (prompt llm/groq_client.py) et que `validate_parsed_action`
+# accepte AVANT toute normalisation (utils.actions.normalize_action, appelé
+# séparément à l'écriture — app/services/evenements.py). Dérivé PAR CONSTRUCTION
+# du vocabulaire de SORTIE (ACTION_MAP, les `type_action` canoniques stockés en
+# base) : un `type_action` canonique ne peut plus devenir inatteignable faute
+# d'être repris ici (CA2, CA3) — c'était le défaut qui laissait passer
+# "amendement"/"protection" sans jamais pouvoir être écrits, et qui aurait
+# laissé "binage"/"eclaircie" hors d'atteinte si on les avait ajoutés d'un seul
+# côté.
+#
+# Les deux vocabulaires n'ont pourtant aucune raison d'être identiques : un mot
+# d'entrée peut légitimement normaliser vers un canonique différent de
+# lui-même ("fertilisation" → "amendement", "repiquage" → "plantation"). Ces
+# synonymes d'entrée-seule sont la SEULE liste encore tenue à la main — tout le
+# reste dérive de ACTION_MAP.
+_SYNONYMES_ENTREE_SEULE = {
+    "fertilisation",  # normalise vers "amendement"
+    "repiquage",       # normalise vers "plantation"
 }
+
+ACTIONS_VALIDES = set(ACTION_MAP.keys()) | _SYNONYMES_ENTREE_SEULE
 
 QUESTION_MARKERS = {
     "combien", "quand", "quel", "quelle", "quels", "quelles",

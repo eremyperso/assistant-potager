@@ -368,6 +368,30 @@ def _to_int(v):
         return None
 
 
+# [US-168 / CA5, CA6] Unité canonique de DÉNOMBREMENT (hors semis, qui a sa
+# propre convention "pieds" héritée d'US-037 — voir _UNITES_SEMIS_CANONIQUES /
+# _normalize_unite_semis ci-dessous, hors périmètre de cette US par CA7).
+# "plants" est l'unité dominante mesurée en production (84 lignes contre 6 en
+# pied/pieds pour le même concept) ; pied(s) désigne la même réalité et ne doit
+# plus jamais être exclu du total par le garde-fou [US-037 CA2]
+# (utils/stock.py::_resoudre_unite_dominante) faute d'avoir été normalisé.
+_UNITES_DENOMBREMENT_CANONIQUES: dict[str, str] = {
+    "pied": "plants", "pieds": "plants",
+}
+
+
+def _normalize_unite_denombrement(unite_brute: Optional[str], action_norm: Optional[str]) -> Optional[str]:
+    """[US-168 / CA6] Normalise pied/pieds → plants à l'écriture, pour toute
+    action AUTRE que semis. Un semis garde sa propre normalisation
+    (_normalize_unite_semis) — "pieds" y désigne un semis en poquets, une
+    convention distincte établie par US-037 et hors périmètre ici (CA7).
+    Toute autre unité (g, kg, graines, m², None...) traverse inchangée."""
+    if unite_brute is None or action_norm == "semis":
+        return unite_brute
+    cle = unite_brute.lower().strip()
+    return _UNITES_DENOMBREMENT_CANONIQUES.get(cle, unite_brute)
+
+
 # [US-037] Unités valides pour un semis, normalisées vers la forme canonique
 # stockée en base : "graines" | "pieds" | "m²". Déplacé depuis bot.py (seul
 # appelant : creer_evenement_confirme, ex-_do_save_items).
@@ -667,12 +691,13 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
     )
+    action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
-        type_action=normalize_action(parsed.get("action")),
+        type_action=action_norm,
         culture=parsed.get("culture"),
         variete=parsed.get("variete"),
         quantite=_to_float(parsed.get("quantite")),
-        unite=parsed.get("unite"),
+        unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=parsed.get("rang"),
         duree=_to_int(parsed.get("duree_minutes")),
@@ -713,12 +738,13 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
     )
+    action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
-        type_action=normalize_action(parsed.get("action")),
+        type_action=action_norm,
         culture=parsed.get("culture"),
         variete=parsed.get("variete"),
         quantite=_to_float(parsed.get("quantite")),
-        unite=parsed.get("unite"),
+        unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=_to_int(parsed.get("rang")),
         duree=_to_int(parsed.get("duree_minutes")),
@@ -778,12 +804,13 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         quantite=_to_float(parsed.get("quantite")),
     )
 
+    action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
-        type_action=normalize_action(parsed.get("action")),
+        type_action=action_norm,
         culture=parsed.get("culture"),
         variete=parsed.get("variete"),
         quantite=_to_float(parsed.get("quantite")),
-        unite=parsed.get("unite"),
+        unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=_to_int(parsed.get("rang")),
         duree=_to_int(parsed.get("duree_minutes")),
@@ -927,7 +954,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         culture=culture_str,
         variete=parsed.get("variete"),
         quantite=_to_float(parsed.get("quantite")),
-        unite=parsed.get("unite"),
+        unite=_normalize_unite_denombrement(parsed.get("unite"), "mise_en_godet"),
         parcelle_id=None,
         rang=None,
         duree=None,
@@ -998,7 +1025,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         culture=item.get("culture"),
         variete=item.get("variete"),
         quantite=_to_float(item.get("quantite")),
-        unite=item.get("unite") or "plants",
+        unite=_normalize_unite_denombrement(item.get("unite"), item.get("action")) or "plants",
         parcelle_id=None,
         commentaire=item.get("commentaire"),
         texte_original=texte,

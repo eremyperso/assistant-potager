@@ -1,22 +1,35 @@
 # app/utils/actions.py
 from __future__ import annotations
+import logging
 import re
 from unidecode import unidecode
 
-# 12 actions canoniques (80% potager)
+log = logging.getLogger("potager")
+
+# 18 actions canoniques — référentiel unique [US-168 CA1] : c'est
+# la seule liste tenue à la main. utils.validation.ACTIONS_VALIDES (vocabulaire
+# d'ENTRÉE, ce que Groq peut renvoyer brut dans `action`) en DÉRIVE par
+# construction plutôt que de la dupliquer à la main — voir le commentaire de
+# ACTIONS_VALIDES pour le sens précis des deux vocabulaires.
 ACTION_MAP: dict[str, list[str]] = {
     "recolte": [
         "recolte", "recolter", "recolte de", "recolte des",
         "cueillir", "cueilli", "cueillie",
-        "ramasser", "ramasse", "ramassees", "ramasses"
+        "ramasser", "ramasse", "ramassees", "ramasses",
+        # [US-168] Absorbées depuis le supplément temporaire du routeur
+        # (llm/routeur.py) — pluriel et coquilles de transcription vocale
+        # réellement rencontrées en production.
+        "recoltes", "ecolte", "recolde",
     ],
     "semis": [
-        "semis", "semer", "seme", "semee", "semes", "semees"
+        "semis", "semer", "seme", "semee", "semes", "semees",
+        "semi",  # [US-168] idem, forme sans "s" dictée
     ],
     "plantation": [
         "planter", "plante", "plantee", "plantes", "plantees",
         "repiquer", "repique", "repiquee", "repiquees", "repiquage",
-        "mise en terre", "mettre en terre", "transplanter"
+        "mise en terre", "mettre en terre", "transplanter",
+        "plantations",  # [US-168] idem, pluriel
     ],
     "arrosage": [
         "arrosage", "arroser", "arrose", "arrose", "arrosees",
@@ -34,7 +47,9 @@ ACTION_MAP: dict[str, list[str]] = {
     "amendement": [
         "amender", "amendement",
         "ajouter du compost", "mettre du compost", "compost",
-        "fumier", "terreau", "engrais", "fertiliser", "fertilisation", "fertilisé"
+        "fumier", "terreau", "engrais", "fertiliser", "fertilisation", "fertilisé",
+        # [US-168] Absorbées depuis le supplément temporaire du routeur.
+        "ajout", "ajoute", "apport", "apporte",
     ],
     "taille": [
         "taille", "tailler", "taillé", "couper", "pincer", "elaguer", "rabattre"
@@ -78,6 +93,20 @@ ACTION_MAP: dict[str, list[str]] = {
         "perdu en pepiniere", "perdu pepiniere",
         "perte pepiniere", "perte semis",
         "perdu en semis", "graines perdues", "graines perdus",
+    ],
+    # [US-168 CA2] Gestes réels attestés en production (Action 0, vague 2),
+    # jusqu'ici absents du référentiel et donc silencieusement jetés à la
+    # validation (utils/validation.ACTIONS_VALIDES) avant d'atteindre cette
+    # normalisation.
+    "binage": [
+        "binage", "biner", "bine", "binee",
+    ],
+    "eclaircie": [
+        # La forme réellement stockée en base est "eclaircie", pas
+        # "eclaircissage" — c'est donc elle la clé canonique ; "eclaircissage"
+        # n'est qu'une variante d'entrée, sous peine de laisser la ligne
+        # existante orpheline.
+        "eclaircie", "eclaircir", "eclairci", "eclaircissage",
     ],
 }
 
@@ -139,5 +168,15 @@ def normalize_action(action: str | None) -> str | None:
             if v_clean and v_clean in value:
                 return canonical
 
-    # fallback (permet de loguer/voir les actions inconnues)
+    # [US-168 CA4] Repli passant — décision tranchée : CONSERVÉ, pas supprimé.
+    # Le supprimer rendrait le système strict mais aveugle aux gestes réels pas
+    # encore référencés (c'est ce repli qui a révélé `binage`/`eclaircie` avant
+    # cette US). Mais un repli silencieux redevient exactement le défaut qu'il
+    # a fallu corriger : toute valeur qui l'atteint est donc désormais journalisée,
+    # jamais muette (CA4). En pratique il ne se déclenche plus sur le chemin
+    # d'écriture principal — validate_parsed_action rejette déjà tout ce qui
+    # n'est pas dans ACTIONS_VALIDES avant que normalize_action() soit appelé —
+    # mais reste atteignable par les appels directs (corrections, recherche).
+    if value:
+        log.warning("[normalize_action] action inconnue, repli passant : '%s' (brut='%s')", value, action)
     return value or None
