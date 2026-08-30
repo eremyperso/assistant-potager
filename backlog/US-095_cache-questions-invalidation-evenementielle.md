@@ -32,6 +32,30 @@ Le document distingue deux natures de réponses mémorisées, qu'il ne faut jama
 *Structure*
 - [ ] CA1 : Une table `questions_cache` porte : `potager_id` (nul = savoir général partageable entre tous les potagers), `motif_normalise`, `type_reponse` (`template_sql` ou `figee`), `template`, `reponse_figee`, `source_etage` (`sql`, `rag`, `llm` — pour audit), `valide_jusqu_au`, `cree_le`
 - [ ] CA2 : Le motif de recherche est dérivé de la question normalisée (minuscules, sans accents, culture détectée extraite) — la même normalisation que le routeur (US-093), jamais une variante
+
+  > **Précision apportée le 29/08/2026, après constat en usage réel.** La
+  > formulation ci-dessus était ambiguë sur « culture détectée extraite », et la
+  > première implémentation l'a lue comme « enregistrée dans sa propre colonne »,
+  > en gardant la phrase entière comme clé de recherche. Résultat mesuré en
+  > production : « quel est ma production de concombre », « ma production de
+  > concombre » et « production de concombre » ont créé **trois lignes en 29
+  > secondes sans jamais servir une seule réponse**. L'espace des formulations
+  > n'est pas borné ; celui des aiguillages l'est (≈280 valeurs pour un potager
+  > de 30 cultures et 10 parcelles).
+  >
+  > **Lecture retenue — deux natures de réponse, donc deux espaces de clés :**
+  > - une réponse `template_sql` est clefée sur son **aiguillage**
+  >   (`famille|culture|parcelle`), jamais sur la phrase. La période et le type
+  >   d'action n'entrent pas dans la clé : ils sont redérivés de la phrase
+  >   vivante à chaque service, ce qui permet à deux questions de même
+  >   aiguillage mais de période différente de partager l'entrée en recevant
+  >   chacune sa réponse exacte ;
+  > - une réponse `figee` reste clefée sur la **phrase normalisée** — du savoir
+  >   général n'a pas d'aiguillage, la phrase est tout ce qu'on a.
+  >
+  > `motif_normalise` reste renseigné sur toute entrée, produit par la
+  > normalisation du routeur comme l'exige ce CA ; sur une entrée paramétrée il
+  > ne sert qu'à l'**audit** — il dit quelle formulation a créé l'entrée.
 - [ ] CA3 : Une réponse `template_sql` ne stocke **que** la structure et l'aiguillage ; ses valeurs sont recalculées à chaque service par l'étage des données (US-096). Elle est donc personnalisée à chaque appel tout en coûtant zéro jeton
 
 *Justesse — critère bloquant*
@@ -47,6 +71,15 @@ Le document distingue deux natures de réponses mémorisées, qu'il ne faut jama
 *Durée de vie*
 - [ ] CA10 : Une réponse `figee` porte une durée de validité (90 jours par défaut) **et** un lien vers le fragment de connaissance dont elle est issue : quand ce fragment est corrigé ou réingéré (US-098 / CA9), les réponses figées qui en dérivent sont invalidées. Corriger une fiche agronomique ne doit pas laisser vivre des mois une réponse erronée
 - [ ] CA11 : Les entrées périmées sont écartées à la lecture et nettoyées au fil de l'eau ; aucun nouveau job planifié n'est ajouté pour cela
+
+  > **Précision du 29/08/2026.** La clé par aiguillage (CA2) borne l'espace des
+  > clés **par construction** : familles × cultures + familles × parcelles, soit
+  > quelques centaines de valeurs par potager. La borne haute évoquée en notes
+  > techniques cesse donc d'être une contrainte de fonctionnement — elle
+  > redevient un filet contre un potager pathologique, et l'éviction par
+  > ancienneté redevient sûre puisque plus aucun quasi-doublon ne concourt pour
+  > une place. La latence de lecture, elle, n'a jamais été en cause : la
+  > recherche est une égalité indexée, mesurée à 0,2 ms de 200 à 100 000 lignes.
 
 *Mesure*
 - [ ] CA12 : Le taux de service depuis le cache est mesuré et exposé (US-097). L'hypothèse de ~40 % des questions résolues à cet étage, la plus structurante du dimensionnement de l'architecture, est **vérifiée par la mesure ou corrigée**, jamais affirmée
@@ -65,6 +98,16 @@ Le document distingue deux natures de réponses mémorisées, qu'il ne faut jama
 - L'invalidation doit être branchée dans la **couche services** d'écriture des événements, en un point unique — jamais dupliquée dans le bot et dans l'API, sous peine de diverger au premier ajout de fonctionnalité
 - Le lien fragment de connaissance vers réponses figées dérivées (CA10) est une simple référence stockée sur l'entrée de cache ; ne pas le concevoir comme un mécanisme d'événements
 - Ne pas mettre en cache les réponses produites en mode dégradé (429) : elles seraient mémorisées comme des non-réponses
+
+  > **Élargi le 29/08/2026, après constat en usage réel.** Le mode dégradé lève
+  > une exception, donc ne mémorise rien — mais un appel qui **réussit** et dont
+  > le modèle répond « je n'ai pas accès à cette information » produit
+  > exactement le même défaut, en pire : l'entrée est du savoir général, donc
+  > partagée à TOUS les potagers pendant 90 jours. Observé sur « quelle météo le
+  > 10/04 dernier ». Deux gardes supplémentaires à l'écriture d'une réponse
+  > figée : refus des non-réponses du modèle, et refus des questions ancrées
+  > dans le temps (chiffre ou déictique) — une réponse figée doit être vraie
+  > indépendamment du moment où elle a été mémorisée.
 - Prévoir une borne haute au nombre d'entrées par potager, pour qu'une saisie erratique ne fasse pas croître la table indéfiniment
 
 **Estimation :** 5 points

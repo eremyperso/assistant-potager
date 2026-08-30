@@ -23,7 +23,13 @@ from sqlalchemy.orm import Session
 
 from database.models import ConsoTokens, RoutageLog, RoutageRetour
 from llm.passerelle import ISSUE_OK, TYPE_PARSING
-from llm.routeur import ETAGE_DONNEE, ETAGE_RAISONNEMENT, ETAGE_SAVOIR, ORIGINE_CACHE
+from llm.routeur import (
+    ETAGE_CACHE,
+    ETAGE_DONNEE,
+    ETAGE_RAISONNEMENT,
+    ETAGE_SAVOIR,
+    ORIGINE_CACHE,
+)
 from app.services.retours import AVIS_NEGATIF
 
 log = logging.getLogger("potager")
@@ -31,7 +37,9 @@ log = logging.getLogger("potager")
 # [CA3] Rétention documentée : 12 mois.
 RETENTION_JOURS = 365
 
-ETAGES_CONNUS: tuple[str, ...] = (ETAGE_DONNEE, ETAGE_SAVOIR, ETAGE_RAISONNEMENT)
+# [US-095] ETAGE_CACHE en tete : c'est le premier etage traverse par une
+# question, et celui dont la part conditionne tout le dimensionnement.
+ETAGES_CONNUS: tuple[str, ...] = (ETAGE_CACHE, ETAGE_DONNEE, ETAGE_SAVOIR, ETAGE_RAISONNEMENT)
 
 # [CA6] Hypothèses de répartition du document d'architecture cible
 # (docs/ARCHITECTURE_CIBLE_V2_reponses.md §7.1) : ~40 % commande ou cache,
@@ -148,8 +156,70 @@ def taux_service_cache(
     total = requete.count()
     if not total:
         return 0.0
-    depuis_cache = requete.filter(RoutageLog.origine_classification == ORIGINE_CACHE).count()
+    # [US-095] Les reponses servies par l'etage 0bis portent elles aussi
+    # `origine_classification = 'cache'` — a juste titre, leur classification
+    # vient bien d'un cache. Elles sont exclues ici pour que cet indicateur
+    # continue de mesurer ce qu'il annonce : le cache en memoire des
+    # CLASSIFICATIONS. Le cache de REPONSES se mesure par
+    # `taux_service_cache_reponses()` ci-dessous.
+    depuis_cache = (
+        requete.filter(RoutageLog.origine_classification == ORIGINE_CACHE)
+        .filter(RoutageLog.etage_resolveur != ETAGE_CACHE)
+        .count()
+    )
     return depuis_cache / total
+
+
+def taux_service_cache_reponses(
+    db: Session, depuis: Optional[datetime] = None, jusqu_a: Optional[datetime] = None
+) -> dict:
+    """[US-095 / CA12] Part des questions servies par le cache de RÉPONSES
+    (étage 0bis, `etage_resolveur = 'cache'`), confrontée à l'hypothèse de
+    dimensionnement.
+
+    L'hypothèse de ~40 % de questions résolues à cet étage est la plus
+    structurante du document d'architecture cible (§7.1) : c'est elle qui
+    justifie l'existence même de la cascade. L'US impose qu'elle soit
+    **vérifiée par la mesure ou corrigée, jamais affirmée** — ce qui est publié
+    ici est donc le chiffre observé ET l'écart, sans renormalisation ni
+    arrondi flatteur.
+
+    `taux` vaut `None` si aucune question n'a été journalisée sur la période :
+    rien à rapporter, ce qui est différent de « 0 % servi depuis le cache ».
+    Cette distinction compte : la première itération après le déploiement
+    affichera légitimement un taux très bas — un cache vide ne sert rien tant
+    qu'il ne s'est pas rempli de ce qui est réellement demandé (aucun
+    préchauffage, arbitrage tranché de l'US).
+    """
+    requete = _requete_periode(db, depuis, jusqu_a)
+    total = requete.count()
+    if not total:
+        return {
+            "taux": None,
+            "nb_servies": 0,
+            "nb_questions": 0,
+            "hypothese": HYPOTHESES_REPARTITION["commande_ou_cache"],
+            "ecart": None,
+        }
+    nb_servies = requete.filter(RoutageLog.etage_resolveur == ETAGE_CACHE).count()
+    taux = nb_servies / total
+    hypothese = HYPOTHESES_REPARTITION["commande_ou_cache"]
+    return {
+        "taux": taux,
+        "nb_servies": nb_servies,
+        "nb_questions": total,
+        "hypothese": hypothese,
+        # Négatif = la mesure est en dessous de l'hypothèse. Publié tel quel :
+        # c'est l'hypothèse qui se corrige dans le document, pas la mesure qui
+        # s'ajuste ici.
+        "ecart": taux - hypothese,
+        "note": (
+            "L'hypothèse 'commande_ou_cache' du document d'architecture (40 %) "
+            "couvre aussi les saisies d'action, qui ne transitent pas par "
+            "routage_logs : la comparaison est une borne basse du taux "
+            "d'hypothèse, pas une égalité de périmètre."
+        ),
+    }
 
 
 def part_parseur_deterministe(
@@ -189,8 +259,10 @@ def comparaison_hypotheses(
 
     Correspondance approximative, documentée pour ne pas laisser croire à une
     précision qu'elle n'a pas : `routage_logs` ne journalise que les demandes
-    qui atteignent le routeur (questions, `_is_question`) — les commandes
-    d'action ne transitent pas par cette table tant que US-094 n'existe pas.
+    dont la cascade va à son terme (`routeur.repondre_avec_cascade`) — les
+    commandes d'action, classées par le même `routeur.classer_demande` depuis
+    US-170 mais qui ne traversent jamais la cascade, ne transitent pas par
+    cette table.
     Le taux réel de la catégorie "commande_ou_cache" ne peut donc PAS être
     déduit d'ici ; seules QUESTION_DATA / QUESTION_SAVOIR / QUESTION_HYBRIDE
     sont mesurables aujourd'hui.

@@ -1466,6 +1466,11 @@ def admin_routage_metriques(_admin: User = Depends(require_admin_user)):
             # [US-096 / CA6] Indicateur principal des gabarits sur agrégats SQL.
             "taux_donnees_sans_modele": svc_metriques_routage.taux_donnees_sans_modele(db),
             "taux_service_cache": svc_metriques_routage.taux_service_cache(db),
+            # [US-095 / CA12] Cache de RÉPONSES (étage 0bis) — à ne pas
+            # confondre avec `taux_service_cache` ci-dessus, qui mesure le
+            # cache en mémoire des classifications. Publié avec son écart à
+            # l'hypothèse de 40 %, jamais renormalisé.
+            "taux_service_cache_reponses": svc_metriques_routage.taux_service_cache_reponses(db),
             "part_parseur_deterministe": svc_metriques_routage.part_parseur_deterministe(db),
             "comparaison_hypotheses": svc_metriques_routage.comparaison_hypotheses(db),
         }

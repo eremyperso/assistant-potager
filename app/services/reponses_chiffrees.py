@@ -44,11 +44,17 @@ Ce qui est délibérément écrit ici, et pourquoi :
 - **[CA9, CA10, CA11] Les garde-fous ne sont pas ici.** Ils sont dans
   `app/services/catalogue_sql.py`, seul point d'exécution autorisé : catalogue
   fermé, lecture seule, délai maximal, `potager_id` vérifié à l'exécution.
+- **[US-095] Une famille est rejouable.** Chaque réponse porte son
+  *aiguillage* (`_aiguillage`) — famille, culture, parcelle, dépendances — et
+  `servir_aiguillage()` sait le rejouer en recalculant les valeurs. C'est ce
+  qui permet au cache de questions de mémoriser une réponse chiffrée sans
+  jamais mémoriser un chiffre. Chaque famille déclare aussi les natures de
+  donnée dont elle dérive (`dependances`), qui commandent son invalidation.
 
 [CA1] Familles couvertes, toutes sans appel modèle : total récolté par culture et
 par période · dernière occurrence d'un type d'action · stock courant · nombre de
-pieds actifs · rendement cumulé de la saison · contenu de la pépinière ·
-occupation d'une parcelle.
+pieds actifs · nombre de godets produits [US-170] · rendement cumulé de la
+saison · contenu de la pépinière · occupation d'une parcelle.
 """
 from __future__ import annotations
 
@@ -71,6 +77,14 @@ from utils import parcelles as _parcelles
 from utils import stock as _stock
 from utils.actions import ACTION_MAP
 from utils.culture_resolve import cultures_connues
+from utils.dependances_donnee import (
+    NATURE_JOURNAL,
+    NATURE_PEPINIERE,
+    NATURE_PLAN,
+    NATURE_RECOLTE,
+    NATURE_SEMIS,
+    NATURE_STOCK,
+)
 
 log = logging.getLogger("potager")
 
@@ -131,6 +145,10 @@ GABARITS: dict[str, str] = {
 
     # Nombre de pieds actifs
     "pieds_actifs":             "{pieds} {unite} de {culture} sont en place aujourd'hui (planté {plantes}{details}).",
+
+    # Nombre de godets produits — distinct du rendement récolté [chantier 3 / US-170]
+    "godets_produits":          "Tu as mis en godet {total} plant(s) de {culture} {periode} ({nb}).",
+    "godets_produits_vide":     "Je n'ai aucune mise en godet de {culture} enregistrée {periode}.",
 
     # Rendement cumulé de la saison — les deux grandeurs restent distinctes [CA3]
     "rendement_reproducteur":   "Rendement cumulé de {culture} {periode} : {rendement} ({nb}). Et {pieds} {unite} sont toujours en place.",
@@ -429,6 +447,37 @@ def _agreger_total_recolte(db: Session, ctx: TenantContext, culture: str, period
     }
 
 
+@catalogue_sql.enregistrer("total_mise_en_godet")
+def _agreger_total_mise_en_godet(db: Session, ctx: TenantContext, culture: str, periode: Periode) -> dict:
+    """[Chantier 3 / US-170] Total de plants mis en godet d'une culture sur une
+    période — le nombre de GODETS produits, une grandeur distincte du rendement
+    récolté que le motif trop large de `rendement_saison` confondait avec elle
+    (« combien de godet de tomate produit cette saison ? » rendait un poids
+    récolté). `nb_plants_godets` est le champ dédié de `Evenement`, déjà utilisé
+    comme source unique par `utils/stock.calcul_godets` [CA4]."""
+    debut, fin = _bornes(periode)
+    requete = (
+        db.query(func.count(Evenement.id), func.sum(Evenement.nb_plants_godets))
+        .filter(
+            Evenement.potager_id == ctx.potager_id,
+            Evenement.type_action == "mise_en_godet",
+            func.lower(Evenement.culture) == culture.lower(),
+        )
+    )
+    if debut is not None:
+        requete = requete.filter(Evenement.date >= debut)
+    if fin is not None:
+        requete = requete.filter(Evenement.date <= fin)
+    nb, total = requete.one()
+    total = int(total or 0)
+    return {
+        "present": total > 0,
+        "periode": periode.libelle,
+        "nb": nb or 0,
+        "total": total,
+    }
+
+
 @catalogue_sql.enregistrer("derniere_occurrence")
 def _agreger_derniere_occurrence(
     db: Session, ctx: TenantContext, action: str, culture: Optional[str]
@@ -621,6 +670,10 @@ def _fois(nb: int) -> str:
     return "1 récolte" if nb == 1 else f"{nb} récoltes"
 
 
+def _mises(nb: int) -> str:
+    return "1 mise en godet" if nb == 1 else f"{nb} mises en godet"
+
+
 def _details_stock(agregat: dict) -> str:
     unite = agregat["unite"]
     details: list[str] = []
@@ -643,6 +696,14 @@ def _rendu_total_recolte(params: Parametres, agregat: dict) -> str:
         return _remplir(GABARITS["total_recolte_vide"], valeurs)
     valeurs |= {"total": _formater_recolte(agregat), "nb": _fois(agregat["nb"])}
     return _remplir(GABARITS["total_recolte"], valeurs)
+
+
+def _rendu_godets_produits(params: Parametres, agregat: dict) -> str:
+    valeurs = {"culture": _sur(params.culture), "periode": agregat["periode"]}
+    if not agregat["present"]:
+        return _remplir(GABARITS["godets_produits_vide"], valeurs)
+    valeurs |= {"total": agregat["total"], "nb": _mises(agregat["nb"])}
+    return _remplir(GABARITS["godets_produits"], valeurs)
 
 
 def _rendu_derniere_occurrence(params: Parametres, agregat: dict) -> str:
@@ -826,6 +887,12 @@ class Famille:
     exige: tuple[str, ...]
     arguments: Callable[[Parametres], dict]
     rendu: Callable[[Parametres, dict], str]
+    # [US-095 / CA4] Natures de donnée dont la réponse de cette famille dérive.
+    # Déclarées ICI, au plus près de l'agrégation qui les lit, et jamais dans
+    # le cache : une famille ajoutée sans ses dépendances serait une famille
+    # dont les réponses mémorisées survivraient à l'évènement qui les
+    # contredit. Le champ est obligatoire pour que l'oubli soit impossible.
+    dependances: tuple[str, ...]
     # Motif de disqualification : ce qui, s'il apparaît, retire la question à
     # cette famille même si `motif` a matché. Sert aux familles volontairement
     # larges, qui doivent rendre la main plutôt que servir un chiffre à une
@@ -836,6 +903,7 @@ class Famille:
 FAMILLES: tuple[Famille, ...] = (
     Famille(
         nom="pepiniere",
+        dependances=(NATURE_PEPINIERE, NATURE_SEMIS),
         agregation="pepiniere",
         motif=re.compile(r"\bpepiniere\b|\ben godet\b|\bmes godets\b|\bsemis en cours\b"),
         exige=(),
@@ -844,6 +912,7 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="parcelles_libres",
+        dependances=(NATURE_PLAN, NATURE_STOCK),
         agregation="parcelles_libres",
         motif=re.compile(
             r"\bparcelles? (?:vides?|libres?|disponibles?)\b|"
@@ -856,6 +925,10 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="derniere_occurrence",
+        # La dernière occurrence d'un geste ne dépend d'aucun agrégat mais
+        # de l'existence des lignes : c'est `journal`, impacté par TOUTE
+        # écriture, y compris un simple arrosage.
+        dependances=(NATURE_JOURNAL,),
         agregation="derniere_occurrence",
         motif=re.compile(
             r"\bquand ai je\b|\bquand j ai\b|\bdernier(?:e|es|s)? \w+|\ba quelle date\b|"
@@ -866,15 +939,41 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_derniere_occurrence,
     ),
     Famille(
+        # [Chantier 3 / US-170] AVANT rendement_saison, exprès : sans cet ordre,
+        # « combien de godet de tomate produit cette saison ? » atteindrait
+        # rendement_saison en premier et rendrait un poids récolté à la place
+        # d'un nombre de godets — une réponse fausse d'apparence juste, pire
+        # que l'ancienne interception hors sujet de `bot._is_requete_godets`.
+        nom="godets_produits",
+        dependances=(NATURE_PEPINIERE, NATURE_SEMIS),
+        agregation="total_mise_en_godet",
+        motif=re.compile(
+            r"\bgodets? produits?\b|\bcombien de godets?\b|\bcombien de plants? en godet\b"
+        ),
+        exige=("culture",),
+        arguments=lambda p: {"culture": p.culture, "periode": _periode_saison(p.periode)},
+        rendu=_rendu_godets_produits,
+    ),
+    Famille(
         nom="rendement_saison",
+        dependances=(NATURE_RECOLTE, NATURE_STOCK),
         agregation="rendement_saison",
-        motif=re.compile(r"\brendement\b|\bou en sont\b|\bou en est\b|\bproduction de\b|\bproduit\b"),
+        # [Chantier 3 / US-170] `\bproduit\b` seul a été retiré : « produit »
+        # est aussi un nom commun du jardinage (« quel produit contre le
+        # mildiou ? »), et le motif bare captait ces questions de savoir comme
+        # des questions de rendement. Les tournures ci-dessous exigent un verbe
+        # conjugué juste avant « produit », qui désigne réellement une récolte.
+        motif=re.compile(
+            r"\brendement\b|\bou en sont\b|\bou en est\b|\bproduction de\b|"
+            r"\b(?:j ai|a|as|ont|avons|avez) (?:bien |beaucoup |peu |deja )?produit\b"
+        ),
         exige=("culture",),
         arguments=lambda p: {"culture": p.culture, "periode": _periode_saison(p.periode)},
         rendu=_rendu_rendement,
     ),
     Famille(
         nom="rendement_global",
+        dependances=(NATURE_RECOLTE, NATURE_STOCK),
         agregation="rendement_global",
         # « mes récoltes » est volontairement absent : c'est une demande
         # d'historique (« quelles sont mes récoltes ? »), pas de rendement
@@ -886,6 +985,7 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="total_recolte",
+        dependances=(NATURE_RECOLTE, NATURE_STOCK),
         agregation="total_recolte",
         motif=re.compile(
             r"\bcombien de .*recolt|\bcombien ai je recolt|\bcombien j ai recolt|"
@@ -897,6 +997,7 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="pieds_actifs",
+        dependances=(NATURE_STOCK, NATURE_PLAN),
         agregation="stock_culture",
         motif=re.compile(
             r"\bpieds? (?:actifs?|en place|vivants?|encore)\b|\bcombien de pieds?\b|"
@@ -908,6 +1009,7 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="stock_courant",
+        dependances=(NATURE_STOCK, NATURE_RECOLTE, NATURE_SEMIS, NATURE_PLAN),
         agregation="stock_culture",
         motif=re.compile(
             r"\bil me reste\b|\bcombien me reste\b|\bstock de\b|\bmon stock\b|\bmes stocks\b|"
@@ -919,6 +1021,7 @@ FAMILLES: tuple[Famille, ...] = (
     ),
     Famille(
         nom="stock_global",
+        dependances=(NATURE_STOCK, NATURE_RECOLTE, NATURE_SEMIS, NATURE_PLAN),
         agregation="stock_global",
         motif=re.compile(
             r"\bmon stock\b|\bmes stocks\b|\bquel est mon stock\b|\betat du stock\b|"
@@ -939,6 +1042,7 @@ FAMILLES: tuple[Famille, ...] = (
         # formes qu'aucune liste littérale ne rattrapera jamais toutes. Ce qui
         # identifie la question, c'est la parcelle résolue, pas la grammaire.
         nom="occupation_parcelle",
+        dependances=(NATURE_PLAN, NATURE_STOCK),
         agregation="occupation_parcelle",
         motif=re.compile(r"\b(?:parcelles?|planches?|carre|carreau|zone|butte|bac)\b"),
         # …mais une question de savoir ou de conseil qui mentionne une parcelle
@@ -978,6 +1082,17 @@ def _choisir_famille(params: Parametres) -> Optional[Famille]:
     return None
 
 
+_FAMILLES_PAR_NOM: dict[str, Famille] = {famille.nom: famille for famille in FAMILLES}
+
+
+def famille_par_nom(nom: str) -> Optional[Famille]:
+    """[US-095] Famille du catalogue portant ce nom, ou `None` si le nom ne
+    correspond à rien — cas d'une entrée de cache mémorisée par une version
+    antérieure du catalogue, dont la famille a depuis été renommée ou retirée.
+    L'appelant rend alors la main à la cascade plutôt que d'échouer."""
+    return _FAMILLES_PAR_NOM.get(nom)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # API publique
 # ═════════════════════════════════════════════════════════════════════════════
@@ -991,6 +1106,12 @@ class ReponseChiffree:
     texte: str
     famille: str
     present: bool
+    # [US-095 / CA3] Aiguillage de la réponse : ce qui suffit à la REJOUER, et
+    # rien de plus — famille du catalogue, culture, parcelle, dépendances.
+    # Aucune valeur chiffrée n'y figure : c'est précisément ce qui permet de
+    # mémoriser cette réponse sans jamais mémoriser un chiffre qui pourrait
+    # devenir faux. Vide si la famille n'est pas rejouable telle quelle.
+    aiguillage: dict = field(default_factory=dict)
 
     @property
     def resume(self) -> str:
@@ -1005,23 +1126,20 @@ class ReponseChiffree:
         return "\n".join(garde)
 
 
-def reconnait_famille(
+def reconnaitre(
     ctx: TenantContext, question: str, db: Optional[Session] = None
-) -> Optional[str]:
-    """Nom de la famille qui saurait servir cette question, ou `None`.
+) -> Optional[tuple[Famille, Parametres]]:
+    """Famille qui saurait servir cette question, ET les paramètres extraits.
 
     Reconnaître n'est pas répondre : aucune agrégation n'est exécutée ici, on
     s'arrête à l'extraction des paramètres et au choix de la famille. C'est ce
     qui permet au routeur (US-093) de s'en servir comme d'une règle
     supplémentaire, à coût nul en jetons.
 
-    **Pourquoi le routeur interroge le catalogue plutôt que d'énumérer ses
-    propres motifs :** parce que deux listes de motifs, une ici et une là-bas,
-    divergent à la première famille ajoutée — et la divergence ne se voit pas,
-    elle se paie en appels au modèle. « qu'est-ce que j'ai en parcelle sud ? »
-    l'a montré le 26/08/2026 : le catalogue savait répondre, le routeur ne le
-    savait pas, et la question a coûté deux appels pour une réponse que le
-    gabarit avait déjà produite gratuitement.
+    [US-095] Rend aussi les paramètres, et pas seulement la famille : le cache
+    de questions en a besoin pour construire la clé d'aiguillage
+    (`cle_aiguillage`), qui porte la culture et la parcelle. Sans eux, il
+    faudrait refaire l'extraction immédiatement après.
 
     Ne lève jamais : une reconnaissance impossible se lit « je ne reconnais
     pas », et la classification se poursuit normalement.
@@ -1032,9 +1150,142 @@ def reconnait_famille(
         with catalogue_sql.garde_lecture_seule(session):
             params = _extraire_parametres(session, ctx, question)
         famille = _choisir_famille(params)
-        return famille.nom if famille is not None else None
+        return (famille, params) if famille is not None else None
     except Exception as erreur:
         log.debug("GABARIT SQL : reconnaissance impossible (%s)", type(erreur).__name__)
+        return None
+    finally:
+        if session_locale:
+            session.close()
+
+
+def reconnait_famille(
+    ctx: TenantContext, question: str, db: Optional[Session] = None
+) -> Optional[str]:
+    """Nom de la famille qui saurait servir cette question, ou `None`.
+
+    **Pourquoi le routeur interroge le catalogue plutôt que d'énumérer ses
+    propres motifs :** parce que deux listes de motifs, une ici et une là-bas,
+    divergent à la première famille ajoutée — et la divergence ne se voit pas,
+    elle se paie en appels au modèle. « qu'est-ce que j'ai en parcelle sud ? »
+    l'a montré le 26/08/2026 : le catalogue savait répondre, le routeur ne le
+    savait pas, et la question a coûté deux appels pour une réponse que le
+    gabarit avait déjà produite gratuitement.
+
+    Contrat inchangé pour le routeur, qui n'a besoin que du nom.
+    """
+    reconnue = reconnaitre(ctx, question, db=db)
+    return reconnue[0].nom if reconnue is not None else None
+
+
+def aiguillage_de(famille: Famille, params: Parametres) -> dict:
+    """[US-095 / CA3, CA4] Ce qui suffit à rejouer cette famille plus tard.
+
+    **Seuls la culture et la parcelle y figurent** — les deux paramètres dont
+    l'extraction demande une lecture en base (liste des cultures connues,
+    résolution du nom de parcelle). La période et le type d'action, eux, sont
+    RE-dérivés du motif au moment de servir, par pure analyse de la phrase
+    (`_detecter_periode`, `_detecter_action`).
+
+    Ce n'est pas une économie, c'est une question de justesse : une période
+    résolue en décembre (« cette saison » → 2026-01-01…2026-12-31) et
+    mémorisée telle quelle servirait encore les chiffres de 2026 en janvier
+    suivant. Une réponse fausse d'un an, sans qu'aucun évènement ne l'ait
+    contredite — donc qu'aucune invalidation n'aurait rattrapée. Redériver la
+    période à chaque service rend cette classe d'erreur impossible, au même
+    titre que le paramétré la rend impossible pour les valeurs.
+    """
+    return {
+        "famille": famille.nom,
+        "culture": params.culture,
+        "parcelle": params.parcelle,
+        "dependances": list(famille.dependances),
+    }
+
+
+def cle_aiguillage(aiguillage: dict) -> str:
+    """[US-095 / CA2] Clé canonique d'un aiguillage — l'identité d'une question,
+    débarrassée de la façon dont elle a été formulée.
+
+    « quel est ma production de concombre », « ma production de concombre » et
+    « production de concombre » sont trois phrases pour une seule question :
+    elles produisent le même aiguillage, donc la même clé, donc une seule entrée
+    de cache. Constaté en usage réel le 29/08/2026 — trois formulations en 29
+    secondes avaient créé trois entrées et n'avaient jamais servi une seule
+    réponse depuis le cache.
+
+    Les `dependances` n'entrent PAS dans la clé : elles se déduisent de la
+    famille, les inclure ne distinguerait rien et rendrait la clé instable au
+    premier ajustement d'une déclaration de dépendances.
+
+    Le type d'action et la période n'y entrent pas non plus, et c'est
+    volontaire : `servir_aiguillage()` les redérive de la phrase vivante. Deux
+    questions de même aiguillage mais de période différente (« récolté en
+    juillet » / « en août ») partagent donc l'entrée et reçoivent chacune leur
+    réponse exacte. L'entrée dit « cette forme de question est connue » ; la
+    réponse, elle, vient toujours de l'état réel.
+    """
+    aiguillage = aiguillage or {}
+    return "|".join((
+        aiguillage.get("famille") or "",
+        (aiguillage.get("culture") or "").lower(),
+        (aiguillage.get("parcelle") or "").lower(),
+    ))
+
+
+def servir_aiguillage(
+    ctx: TenantContext, aiguillage: dict, question: str, db: Optional[Session] = None
+) -> Optional[ReponseChiffree]:
+    """[US-095 / CA3] Rejoue une famille déjà mémorisée : **les valeurs sont
+    recalculées**, seul l'aiguillage vient du cache.
+
+    C'est la fonction qui fait qu'une réponse `template_sql` ne peut pas être
+    périmée : elle exécute la même agrégation, sur la base telle qu'elle est
+    maintenant, et la met en forme avec le même gabarit. Le cache ne fait donc
+    jamais l'économie de la vérité — seulement celle du choix de la famille et
+    de l'extraction de ses paramètres.
+
+    Retourne `None` si la famille n'existe plus au catalogue ou si l'agrégation
+    échoue : l'appelant reprend alors la cascade normale, comme si aucune
+    entrée n'avait été trouvée.
+    """
+    famille = famille_par_nom((aiguillage or {}).get("famille") or "")
+    if famille is None:
+        return None
+
+    session_locale = db is None
+    session = db if db is not None else SessionLocal()
+    try:
+        normalisee = _normaliser(question)
+        params = Parametres(
+            question=question,
+            normalisee=normalisee,
+            culture=aiguillage.get("culture"),
+            # Redérivés de la phrase, jamais relus du cache — voir `_aiguillage`.
+            action=_detecter_action(normalisee),
+            parcelle=aiguillage.get("parcelle"),
+            periode=_detecter_periode(normalisee, _date.today()),
+        )
+        if not all(getattr(params, nom) for nom in famille.exige):
+            return None
+
+        agregat = catalogue_sql.executer(
+            famille.agregation, session, ctx, **famille.arguments(params)
+        )
+        return ReponseChiffree(
+            texte=famille.rendu(params, agregat),
+            famille=famille.nom,
+            present=bool(agregat["present"]),
+            aiguillage=aiguillage_de(famille, params),
+        )
+    except GardeCatalogueError as erreur:
+        catalogue_sql.journaliser_refus(erreur, question)
+        return None
+    except Exception as erreur:
+        log.warning(
+            "⚠️ GABARIT SQL     │ rejeu d'aiguillage impossible (%s) → poursuite de la cascade : '%s'",
+            type(erreur).__name__, (question or "")[:80],
+        )
         return None
     finally:
         if session_locale:
@@ -1071,7 +1322,10 @@ def repondre_chiffre(
             "📐 GABARIT SQL     │ famille=%-19s │ donnee=%s │ 0 jeton │ '%s'",
             famille.nom, "oui" if agregat["present"] else "aucune", question[:60],
         )
-        return ReponseChiffree(texte=texte, famille=famille.nom, present=bool(agregat["present"]))
+        return ReponseChiffree(
+            texte=texte, famille=famille.nom, present=bool(agregat["present"]),
+            aiguillage=aiguillage_de(famille, params),
+        )
     except GardeCatalogueError as erreur:
         catalogue_sql.journaliser_refus(erreur, question)
         return None

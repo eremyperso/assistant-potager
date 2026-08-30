@@ -1,0 +1,74 @@
+type,valeur,rattachement
+parcelle,planche-oignon,
+parcelle,maison,
+parcelle,serre,
+parcelle,planche-courges,
+parcelle,planche-centrale,
+parcelle,planche-ombre,
+parcelle,Non localisé,pepiniere
+parcelle,planche-aromatique,
+parcelle,planche-haricot,
+parcelle,big-serre,pepiniere
+parcelle,planche-tomate,
+parcelle,planche-courge,
+parcelle,Planche jardin,
+culture,aubergine,
+culture,basilic,
+culture,betterave,
+culture,blette,
+culture,butternut,
+culture,carotte,
+culture,ciboulette,
+culture,concombre,
+culture,cornichon,
+culture,courge,
+culture,courgette,
+culture,estragon,
+culture,fenouil,
+culture,fraise,
+culture,framboise,
+culture,menthe,
+culture,navet,
+culture,oignon,
+culture,poivron,
+culture,potiron,
+culture,pâtisson,
+culture,radi,
+culture,radis,
+culture,rhubarbe,
+culture,roquette,
+culture,rutabaga,
+culture,salade,
+culture,thym,
+culture,tomate,
+culture,échalote,
+variete,greffé,aubergine
+variete,cannelle,basilic
+variete,rouge,betterave
+variete,poirées,blette
+variete,récolte de 2025,butternut
+variete,nantaise,carotte
+variete,Allium schoenoprasum,ciboulette
+variete,Corinto,concombre
+variete,petit Paris,cornichon
+variete,musqué de Provence,courge
+variete,jaune,courgette
+variete,verte,courgette
+variete,Artemisia dracunculus,estragon
+variete,autre,fraise
+variete,gariguette,fraise
+variete,marocaine,menthe
+variete,jaune,navet
+variete,blanc,oignon
+variete,rouge,oignon
+variete,divers,poivron
+variete,année 2024,pâtisson
+variete,Variété non précisée,rutabaga
+variete,diverses,salade
+variete,feuille de chêne,salade
+variete,citronné,thym
+variete,commun,thym
+variete,cerise,tomate
+variete,cœur de bœuf,tomate
+variete,noire de Crimée,tomate
+variete,ronde type F1 Hybride,tomate

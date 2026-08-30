@@ -315,8 +315,8 @@ def test_us093_ca6_ca7_remontee_sur_donnee_absente():
 
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("Aucune donnée enregistrée pour physalis / recolte.", False),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("Aucune donnée enregistrée pour physalis / recolte.", False, None),
         ) as mock_data,
         patch("llm.passerelle.appeler_chat", return_value=reponse_raisonnement) as mock_llm,
     ):
@@ -336,8 +336,8 @@ def test_us093_ca6_pas_de_remontee_si_donnee_deja_exploitable():
     question = "combien de tomates ai-je récolté cette saison ?"
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("Total tomate récolte : 4 kg", True),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("Total tomate récolte : 4 kg", True, None),
         ),
         patch("llm.passerelle.appeler_chat") as mock_llm,
     ):
@@ -356,7 +356,7 @@ def test_us093_edge_echec_llm_sur_etage_data_nest_pas_une_remontee():
     avant cette US (US-092 / CA9, CA10), pas être avalée en silence."""
     question = "combien de tomates ai-je récolté cette saison ?"
     with patch(
-        "app.services.questions.repondre_question_avec_confiance",
+        "app.services.questions.repondre_question_detaille",
         side_effect=LLMIndisponibleError("quota dépassé"),
     ):
         with pytest.raises(LLMIndisponibleError):

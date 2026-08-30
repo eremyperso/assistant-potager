@@ -9,6 +9,13 @@ dispersés dans bot.py et main.py.
 ligne créée. Les accès par id (`db.get`) sont suivis d'une vérification
 d'appartenance au tenant courant — un id d'un autre potager renvoie
 None/False, jamais la donnée.
+
+[US-095 / CA5] Ce module est aussi le **point unique d'invalidation** du cache
+de réponses : toute écriture d'événement — création, correction, suppression,
+déplacement, libération de parcelle — appelle `_invalider_cache()` avant son
+commit. C'est la raison pour laquelle bot.py et main.py n'ont rien à savoir du
+cache : quel que soit le chemin emprunté pour enregistrer un geste, les
+réponses que ce geste contredit tombent avec lui.
 """
 import logging
 from typing import Optional
@@ -19,8 +26,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.services.context import TenantContext
 from app.services.permissions import require_role, require_potager_non_archive
 from database.models import Evenement, Parcelle
+from llm.parseur_deterministe import ORIGINE_LLM
 from utils.actions import normalize_action
-from utils.date_utils import parse_date
+from utils.date_utils import SOURCE_MODELE_INCERTAIN, SOURCE_PRESUMEE, parse_date
 from utils.parcelles import resolve_parcelle
 from utils.stock import (
     get_type_organe,
@@ -354,6 +362,41 @@ def valider_evenement(
             raise ParcelleIncoherenteError(culture, variete, parcelle.nom)
 
 
+def _origine_parsing(source: dict) -> Optional[str]:
+    """[US-094 / CA10] Chemin ayant produit l'item : "deterministe" | "llm" | None.
+
+    Lue telle quelle depuis l'item parsé, jamais devinée ici : c'est le site de
+    parsing qui sait par où il est passé. Une valeur absente reste None — avant
+    US-094 l'information n'existait pas, et NULL est la seule chose vraie qu'on
+    puisse dire de ces lignes."""
+    valeur = source.get("origine_parsing")
+    return str(valeur) if valeur else None
+
+
+def _date_source(source: dict) -> Optional[str]:
+    """[US-169 / CA5, CA6, CA7] Origine de `date` : "explicite" |
+    "relative_resolue" | "presumee" | "modele_incertain" | None.
+
+    Deux façons de la connaître, jamais une troisième :
+    * le chemin déterministe l'a DÉJÀ écrite sur l'item (CA5) — sa grammaire
+      est la seule source légitime pour "explicite"/"relative_resolue", donc
+      on la lit ici telle quelle, jamais recalculée ;
+    * le chemin modèle ne l'écrit jamais lui-même (CA6 : aucun nouveau
+      détecteur) — ce site de repli la déduit du seul signal déjà
+      disponible, la présence ou non d'une date rendue par le modèle, sans
+      jamais affirmer "explicite" ou "relative_resolue" à sa place.
+    Tout autre chemin (origine_parsing absente : correction, note, callback
+    inline sans parsing...) ne sait pas conclure et reste à None (CA7) —
+    NULL, jamais "présumée", pour ne pas fausser la mesure dans le sens qui
+    arrange."""
+    valeur = source.get("date_source")
+    if valeur:
+        return str(valeur)
+    if source.get("origine_parsing") != ORIGINE_LLM:
+        return None
+    return SOURCE_MODELE_INCERTAIN if source.get("date") else SOURCE_PRESUMEE
+
+
 def _to_float(v):
     try:
         return float(v) if v is not None else None
@@ -642,6 +685,13 @@ def liberer_evenements_parcelle(db: Session, ctx: TenantContext, parcelle_id: in
     )
     nb = q.count()
     q.update({"parcelle_id": None}, synchronize_session="fetch")
+    # [US-095 / CA5] La parcelle disparaît : toute réponse mémorisée sur
+    # l'occupation ou la place disponible est fausse à partir d'ici. Culture
+    # non précisée → toutes les entrées du potager tombent, conformément à
+    # l'arbitrage « invalider large plutôt que fin ». Pas de commit : cette
+    # fonction n'en fait pas, l'invalidation part avec la transaction de
+    # l'appelant, qui supprime la parcelle.
+    _invalider_cache(db, ctx, None, None)
     return nb
 
 
@@ -676,6 +726,30 @@ def cultures_avec_mise_en_godet(db: Session, ctx: TenantContext) -> set[str]:
     }
 
 
+# ── Invalidation du cache de réponses [US-095 / CA5, CA7] ────────────────────
+def _invalider_cache(db: Session, ctx: TenantContext, culture, type_action) -> None:
+    """[US-095 / CA5] Rend caduques les réponses mémorisées que cette écriture
+    contredit. **Le seul point de branchement de l'invalidation dans toute
+    l'application** : chaque fonction d'écriture de ce module l'appelle, ni
+    `bot.py` ni `main.py` ne la connaissent.
+
+    Pourquoi ici et nulle part ailleurs : une invalidation dupliquée dans le
+    bot et dans l'API divergerait au premier chemin d'écriture ajouté, et
+    l'oubli ne se verrait pas — il se paierait en réponse fausse servie avec
+    assurance au jardinier qui vient justement d'enregistrer le contraire.
+
+    Appelée AVANT le `commit()` de la fonction appelante : l'invalidation et
+    l'écriture qui la motive partent dans la même transaction. Un
+    enregistrement annulé n'invalide donc rien, et un enregistrement réussi ne
+    peut pas laisser derrière lui une entrée périmée.
+    """
+    # Import local : `app.services.cache_questions` importe `llm.routeur`, qui
+    # importe lui-même des services — un import de module créerait un cycle.
+    from app.services import cache_questions
+
+    cache_questions.invalider_pour_evenement(db, ctx.potager_id, culture, type_action)
+
+
 # ── Écriture ──────────────────────────────────────────────────────────────────
 def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
     """[POST /parse, POST /voice-ACTION] Crée un événement depuis un item parsé par Groq,
@@ -707,6 +781,8 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        origine_parsing=_origine_parsing(parsed),
+        date_source=_date_source(parsed),
         potager_id=ctx.potager_id,
     )
     if event.culture:
@@ -720,6 +796,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         )
         if cfg:
             event.type_organe_recolte = cfg.type_organe_recolte
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -754,8 +831,11 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        origine_parsing=_origine_parsing(parsed),
+        date_source=_date_source(parsed),
         potager_id=ctx.potager_id,
     )
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -822,8 +902,11 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         source_evenement_ids=source_evenement_ids,
         type_organe_recolte=type_organe_semis,
+        origine_parsing=_origine_parsing(parsed),
+        date_source=_date_source(parsed),
         potager_id=ctx.potager_id,
     )
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -965,8 +1048,11 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_graines_id=origine_graines_id,
+        origine_parsing=_origine_parsing(parsed),
+        date_source=_date_source(parsed),
         potager_id=ctx.potager_id,
     )
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -1003,6 +1089,7 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
         date=parse_date(fields.get("date")),
         potager_id=ctx.potager_id,
     )
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -1030,8 +1117,11 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         commentaire=item.get("commentaire"),
         texte_original=texte,
         date=parse_date(item.get("date")),
+        origine_parsing=_origine_parsing(item),
+        date_source=_date_source(item),
         potager_id=ctx.potager_id,
     )
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
     db.commit()
     db.refresh(event)
@@ -1052,6 +1142,14 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     # mutation — une correction manuelle reste soumise aux mêmes invariants
     # qu'une création (ex: corriger la parcelle vers un endroit incohérent avec
     # la culture/variété doit être refusé, pas seulement pour les nouveaux events).
+    # [US-095 / CA7] État AVANT correction, capturé ici parce qu'il aura
+    # disparu après les mutations : corriger « récolte de tomates » en
+    # « récolte de courgettes » périme les réponses des DEUX cultures, pas
+    # seulement de la nouvelle. Invalider l'une sans l'autre laisserait le
+    # stock de tomates figé sur une récolte qui n'existe plus.
+    culture_avant = event.culture
+    action_avant  = event.type_action
+
     action_final   = corrections.get("action", event.type_action)
     culture_final  = corrections.get("culture", event.culture)
     variete_final  = corrections.get("variete", event.variete)
@@ -1090,6 +1188,10 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
             setattr(event, col, valeur)
 
     event.texte_original = (event.texte_original or "") + trace
+    # [US-095 / CA7] Une correction périme au même titre qu'une création — les
+    # deux états, l'ancien et le nouveau.
+    _invalider_cache(db, ctx, culture_avant, action_avant)
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.commit()
     db.refresh(event)
     return event
@@ -1102,6 +1204,10 @@ def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> b
     event = db.get(Evenement, evenement_id)
     if event is None or event.potager_id != ctx.potager_id:
         return False
+    # [US-095 / CA7] Lu AVANT la suppression : après, il n'y a plus rien à lire
+    # — et une réponse mémorisée qui survivrait à la disparition de la ligne
+    # dont elle dérive est exactement le défaut que l'US interdit.
+    _invalider_cache(db, ctx, event.culture, event.type_action)
     db.delete(event)
     db.commit()
     log.info(f"🗑 SUPPRESSION     : id={evenement_id}")
@@ -1241,6 +1347,9 @@ def deplacer_evenements(
         trace = f" | [DÉPL {today}] parcelle: {ancienne} → {nom_affiche}"
         event.texte_original = (event.texte_original or "") + trace
         nb_updated += 1
+    # [US-095 / CA5] Les événements changent de parcelle : l'occupation des
+    # deux parcelles, l'ancienne comme la nouvelle, est périmée.
+    _invalider_cache(db, ctx, culture, None)
     db.commit()
     log.info(f"[US-007 CA8] UPDATE : {nb_updated} plantation(s) de '{culture}' → parcelle_id={parcelle_id_cible}")
     return nb_updated

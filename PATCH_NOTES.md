@@ -1,4 +1,27 @@
 
+## [v3.41.0] — 2026-08-30
+
+### 🚀 Nouveautés
+- Les questions déjà posées reçoivent une réponse immédiate, servie sans aucun appel à l'IA, et impossible à distinguer d'une réponse fraîche (US-095)
+- Une réponse mémorisée sur les données du potager ne peut jamais être périmée : seule la façon d'y répondre est retenue, les chiffres sont recalculés à chaque fois (US-095)
+- Enregistrer, corriger ou supprimer un évènement efface immédiatement les réponses mémorisées que ce geste contredit — demander son stock, récolter, puis redemander donne bien le nouveau stock (US-095)
+- Les réponses de connaissance générale (profondeur de semis, maladies…) sont mémorisées une fois et partagées entre tous les potagers (US-095)
+
+### 🔧 Améliorations techniques
+- Ajoute l'étage 0bis de la cascade de réponses (`app/services/cache_questions.py`), consulté avant toute classification et à coût nul en jetons (US-095)
+- Mémorise une réponse par question et non par formulation : « ma production de concombre » et « quel est ma production de concombre » partagent la même entrée, ce qui borne la table à quelques centaines de lignes par potager (US-095)
+- Refuse de mémoriser en savoir partagé une réponse où le modèle avoue ne pas savoir, ou une question ancrée dans le temps — ni l'une ni l'autre n'est du savoir général (US-095)
+- Refuse à l'écriture toute réponse partagée qui citerait un nom de parcelle ou une variété d'un potager, et vérifie l'absence de fuite inter-potagers par test (US-095)
+- Déclare, pour chaque famille de question chiffrée, les natures de donnée dont elle dérive — support de l'invalidation ciblée (US-095)
+- Branche l'invalidation en un point unique, la couche services d'écriture des évènements : ni le bot ni l'API ne la connaissent (US-095)
+- Écarte les réponses périmées à la lecture et les nettoie au fil de l'eau, sans ajouter de tâche planifiée ; borne le nombre d'entrées par potager (US-095)
+- Expose le taux de service depuis le cache et son écart à l'hypothèse de 40 % du document d'architecture, publié tel quel plutôt qu'affirmé (US-095)
+- Distingue dans les métriques le cache de réponses du cache de classification, qui ne mesuraient pas la même chose (US-095)
+
+### 💾 Base de données
+- Ajoute la table `questions_cache` et le modèle `QuestionCache`, clefée sur l'aiguillage de la question pour les réponses sur données et sur la phrase pour le savoir général (migration `migration_v36.sql`, rollback fourni) (US-095)
+- La purge définitive d'un potager efface désormais aussi ses entrées de cache (US-095)
+
 ## [v3.40.0] — 2026-08-26
 
 ### 🚀 Nouveautés

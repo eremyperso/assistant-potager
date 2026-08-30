@@ -11,6 +11,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
 [US-092] Ajout modèle ConsoTokens (mesure de consommation LLM par potager)
 [US-097] Ajout modèles RoutageLog et RoutageRetour (observabilité cascade + retour jardinier)
+[US-095] Ajout modèle QuestionCache (table questions_cache — cache de réponses)
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
@@ -166,6 +167,21 @@ class Evenement(Base):
 
     # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
     source_evenement_ids = Column(String, nullable=True)
+
+    # [US-094 / CA10 / migration_v34] Chemin qui a produit cet évènement :
+    # "deterministe" (grammaire de llm/parseur_deterministe.py, zéro jeton) |
+    # "llm" (parsing par le modèle) | NULL (antérieur à l'US).
+    # Instrumentation seule : aucune condition métier, aucun gabarit et aucun
+    # message utilisateur ne lit cette colonne.
+    origine_parsing = Column(String, nullable=True)
+
+    # [US-169 / CA1 / migration_v35] Origine de `date` : "explicite" (dictée en
+    # clair) | "relative_resolue" (ex. "hier") | "presumee" (aucun ancrage,
+    # convention "aujourd'hui") | "modele_incertain" (date rendue par le
+    # modèle, origine non connaissable) | NULL (antérieur à l'US, ou chemin
+    # d'écriture qui ne sait pas conclure — jamais deviné, voir CA7).
+    # Instrumentation seule, même invariant que `origine_parsing` ci-dessus.
+    date_source = Column(String, nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
@@ -353,3 +369,78 @@ class RoutageRetour(Base):
     potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
     avis           = Column(String(10), nullable=False)  # 'positif' | 'negatif'
     cree_le        = Column(DateTime, server_default=func.now())
+
+
+class QuestionCache(Base):
+    """
+    [US-095 / CA1] Réponse mémorisée — étage 0bis de la cascade
+    (`llm/routeur.py::repondre_avec_cascade`), servie par
+    `app/services/cache_questions.py`.
+
+    Deux natures de réponse, qu'il ne faut jamais confondre :
+
+    - `type_reponse='template_sql'` : seuls le motif et l'**aiguillage** sont
+      mémorisés (`template` = famille du catalogue + culture + parcelle, en
+      JSON). Les valeurs sont recalculées à chaque service par l'étage des
+      données (US-096) : la réponse est donc juste *par construction*,
+      personnalisée à chaque appel, et coûte zéro jeton (CA3).
+    - `type_reponse='figee'` : `reponse_figee` est le texte servi tel quel,
+      réservé au savoir général. `potager_id` est alors NULL — l'entrée est
+      partageable entre tous les potagers (CA1), ce qui est précisément la
+      raison pour laquelle elle ne peut contenir aucune donnée de potager
+      (CA8, contrôle à l'écriture dans le service).
+
+    **Deux natures de réponse, donc deux espaces de clés** (CA2) :
+
+    - `cle_aiguillage` (`famille|culture|parcelle`) est la clé des entrées
+      `template_sql`. Elle est bornée par construction — quelques centaines de
+      valeurs pour un potager — là où l'espace des formulations ne l'est pas.
+      « quel est ma production de concombre », « ma production de concombre » et
+      « production de concombre » sont trois phrases pour une seule question :
+      une seule ligne. Corrigé le 29/08/2026 après constat en usage réel, où
+      ces trois formulations avaient créé trois lignes et servi zéro réponse.
+    - `motif_normalise` est la clé des entrées `figee` — pour du savoir général
+      il n'existe aucun aiguillage, la phrase est tout ce qu'on a. Sur une
+      entrée `template_sql`, la colonne reste renseignée mais ne sert qu'à
+      l'**audit** : elle dit quelle formulation a créé l'entrée.
+
+    - motif_normalise : question normalisée par `llm.routeur.normaliser_question`,
+                        la MÊME fonction que le routeur, jamais une variante (CA2)
+    - source_etage    : sql | rag | llm — étage ayant produit la réponse, pour audit
+    - culture         : [CA4] culture dont dérive l'entrée, NULL si elle porte
+                        sur l'ensemble du potager (stock global, rendement global)
+    - natures         : [CA4] natures de donnée dont dérive l'entrée, encadrées
+                        de « | » (ex. `|stock|recolte|journal|`) — support de
+                        l'invalidation événementielle (CA5), voir
+                        `utils/dependances_donnee.py`
+    - fragment_id     : [CA10] fragment de connaissance dont une réponse figée
+                        est issue ; NULL tant qu'US-098 n'existe pas
+    - valide_jusqu_au : [CA11] écartée à la lecture au-delà, nettoyée au fil de
+                        l'eau — aucun job planifié n'est ajouté pour cela
+    """
+    __tablename__ = "questions_cache"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    # Nullable : NULL = savoir général partageable entre tous les potagers.
+    potager_id      = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    motif_normalise = Column(String(500), nullable=False)
+    # [US-095 / CA2] Clé des entrées `template_sql` — NULL sur une entrée figée,
+    # qui n'a pas d'aiguillage.
+    cle_aiguillage  = Column(String(300), nullable=True)
+    type_reponse    = Column(String(16), nullable=False)
+    template        = Column(String, nullable=True)
+    reponse_figee   = Column(String, nullable=True)
+    source_etage    = Column(String(8), nullable=False)
+    culture         = Column(String(120), nullable=True)
+    natures         = Column(String(200), nullable=False, default="")
+    fragment_id     = Column(String(120), nullable=True)
+    valide_jusqu_au = Column(DateTime, nullable=True)
+    cree_le         = Column(DateTime, server_default=func.now(), default=func.now())
+
+    __table_args__ = (
+        # Requête de service d'une réponse paramétrée : « ce potager a-t-il déjà
+        # répondu à cette question, quelle qu'en soit la formulation ? »
+        Index("idx_questions_cache_aiguillage", "cle_aiguillage", "potager_id"),
+        # Requête de service d'une réponse figée : la phrase est la seule clé.
+        Index("idx_questions_cache_motif", "motif_normalise", "potager_id"),
+    )

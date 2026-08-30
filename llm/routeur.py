@@ -1,11 +1,16 @@
 """
 llm/routeur.py — Routeur des demandes, règles avant tout appel au LLM [US-093]
 ================================================================================
-Enrichissement de la classification d'intention existante (`bot.classify_intent`,
-`bot._is_question`) : ce module ajoute la distinction *data / savoir / hybride*
-au-dessus de ce qui distingue déjà action et question. Il ne remplace rien de
-l'existant, il vient s'insérer **après** les gardes de conversation (modes
-`corr_*`, mode `ask`, navigation, `_is_question`) — jamais avant (CA13).
+[US-170 / CA17 — révision de CA13] `classer_demande()` décide désormais
+lui-même la nature ACTION / QUESTION_* de la demande, appelé depuis
+`bot.handle_text` à la place de `bot._is_question` (supprimée) — et non plus
+seulement en aval d'elle. Le motif : la moitié du critère de `_is_question`
+reposait sur le point d'interrogation, un signal absent de la dictée vocale
+(mesuré le 30/08/2026 : 55 % des questions du corpus de routage rejetées une
+fois le `?` retiré). Ce module ne remplace toujours pas les gardes de
+**conversation** (modes `corr_*`, mode `ask`, navigation), qui restent
+consultées avant lui sans exception — elles portent un état de dialogue, pas
+une classification, et les déplacer casserait les dialogues en cours.
 
 Principe : **les règles d'abord** (CA2). Le modèle n'est sollicité que si les
 règles et le cache échouent (CA4) — un routeur qui appellerait le LLM à chaque
@@ -23,6 +28,15 @@ jamais par interprétation à distance d'une réponse vide. C'est pour cela que
 booléen `confiant` : la décision « je n'ai pas su » est prise à la source, pas
 reconstituée ici en inspectant le texte produit. Aucun message intermédiaire
 (« je cherche ailleurs ») n'est jamais visible du jardinier (CA8).
+
+[US-170 / CA18 — révision de CA6/CA7, sur le *quand* remonter, pas sur le
+principe] `repondre_avec_cascade` ne remonte plus sur le seul `confiant=False`
+côté QUESTION_DATA : une famille du catalogue qui a matché a *produit* une
+phrase (`chiffree is not None`), même quand elle porte `present=False` — « je
+n'ai aucune récolte de concombre enregistrée » est une réponse exacte, pas un
+échec. `confiant` (donc `present`) ne tranche plus seul cette remontée ; seule
+l'absence de toute famille matchée, ou un agent SQL qui n'a lui-même rien
+trouvé, la déclenche encore. Voir le commentaire au point d'appel.
 
 Portée volontairement limitée à ce que le code sait déjà faire aujourd'hui :
 l'étage 2 (RAG / connaissance, US-098) et l'étage 3 (raisonnement multi-sources,
@@ -92,6 +106,12 @@ SEUIL_CONFIANCE_FAIBLE = 0.6
 ETAGE_DONNEE       = "donnee"
 ETAGE_SAVOIR       = "savoir"
 ETAGE_RAISONNEMENT = "raisonnement"
+# [US-095] Étage 0bis — réponse servie depuis `questions_cache`, avant toute
+# classification. C'est par cette valeur, et non par `origine_classification`,
+# que se mesure le taux de service du cache de RÉPONSES (US-097 / CA12) : la
+# colonne `origine_classification = 'cache'` désigne, elle, le cache en mémoire
+# des CLASSIFICATIONS, qui est une tout autre chose.
+ETAGE_CACHE        = "cache"
 
 
 @dataclass(frozen=True)
@@ -107,7 +127,8 @@ class DecisionRoutage:
 # ─────────────────────────────────────────────────────────────────────────────
 # Étage 0 — règles [CA2]
 # -----------------------------------------------------------------------------
-# Auto-suffisant (ne réutilise PAS bot.ACTION_VERBS / bot.QUESTION_STARTERS) :
+# Auto-suffisant (bot.py n'a plus d'équivalent depuis US-170 — _is_question,
+# ACTION_VERBS et QUESTION_STARTERS ont disparu avec elle) : de toute façon,
 # bot.py importe déjà des modules de llm/, un import inverse créerait un cycle.
 # Les motifs ci-dessous reprennent volontairement le même esprit.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,19 +298,40 @@ _PONCTUATION = re.compile(r"[^\w\s]", re.UNICODE)
 _ESPACES_MULTIPLES = re.compile(r"\s+")
 
 
-def _normaliser_question(texte: str) -> str:
+def normaliser_question(texte: str) -> str:
+    """[CA3] Forme normalisée d'une question — clé du cache de classification,
+    de la journalisation (`routage_logs.question_normalisee`) et du motif du
+    cache de réponses (US-095 / CA2).
+
+    Publique parce qu'elle est partagée : US-095 exige explicitement « la même
+    normalisation que le routeur, jamais une variante ». Une seconde
+    implémentation, même identique le jour où elle est écrite, divergerait au
+    premier ajustement — et la divergence se paierait en entrées de cache
+    jamais retrouvées, donc en réponses repayées.
+    """
     s = unidecode((texte or "").strip().lower())
     s = _PONCTUATION.sub("", s)
     s = _ESPACES_MULTIPLES.sub(" ", s).strip()
     return s
 
 
+# Nom historique, conservé pour les appels internes de ce module.
+_normaliser_question = normaliser_question
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Étage 0bis — cache de classification [CA3]
+# Cache de CLASSIFICATION [CA3] — à ne pas confondre avec le cache de RÉPONSES
 # -----------------------------------------------------------------------------
-# En mémoire du processus, borné, éviction par ancienneté. Alimenté uniquement
-# par les décisions issues du modèle (les décisions par règle sont déjà
-# gratuites — les mettre en cache n'apporterait rien).
+# Celui-ci mémorise « de quelle nature est cette demande ? », en mémoire du
+# processus, borné, éviction par ancienneté. Alimenté uniquement par les
+# décisions issues du modèle (les décisions par règle sont déjà gratuites — les
+# mettre en cache n'apporterait rien).
+#
+# Le cache de RÉPONSES (US-095, `app/services/cache_questions.py`) est un autre
+# objet : il vit en base, mémorise « comment répondre à cette question », et
+# intervient AVANT celui-ci, dans `repondre_avec_cascade`. Les deux se mesurent
+# séparément (US-097) : `origine_classification='cache'` pour celui-ci,
+# `etage_resolveur='cache'` pour celui-là.
 # ─────────────────────────────────────────────────────────────────────────────
 _TTL_CACHE_S = 24 * 3600
 _CACHE_MAX_ENTREES = 2000
@@ -585,22 +627,58 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     servie). Le total de jetons journalisé (CA5) couvre tout appel modèle
     déclenché pendant la cascade, y compris la classification elle-même
     (`passerelle.demarrer_mesure_cascade`/`cumul_mesure_cascade`)."""
-    from app.services.questions import repondre_question_avec_confiance
+    # Imports locaux : `app.services` importe déjà `llm`, un import de module
+    # créerait un cycle (même raison que `_regle_par_catalogue` ci-dessus).
+    from app.services import cache_questions
+    from app.services.questions import repondre_question_detaille
 
     debut = time.monotonic()
     jeton_mesure = passerelle.demarrer_mesure_cascade()
+
+    # ── Étage 0bis — cache de questions [US-095] ─────────────────────────────
+    # AVANT la classification : une question déjà rencontrée n'a pas à être
+    # reclassée, et une entrée `template_sql` recalcule ses valeurs, donc ne
+    # peut pas servir un chiffre périmé. Le jardinier ne voit aucune différence
+    # (US-095 / CA13) — seul le journal garde trace de l'origine.
+    depuis_cache = cache_questions.servir(ctx, question)
+    if depuis_cache is not None:
+        decision_cache = DecisionRoutage(
+            nature=(NATURE_QUESTION_SAVOIR if depuis_cache.type_reponse == cache_questions.TYPE_FIGEE
+                    else NATURE_QUESTION_DATA),
+            origine=ORIGINE_CACHE,
+            confiance=1.0,
+        )
+        routage_log_id = _persister_routage_log(
+            ctx, question, decision_cache, ETAGE_CACHE, False,
+            int((time.monotonic() - debut) * 1000),
+            passerelle.cumul_mesure_cascade(jeton_mesure),
+        )
+        return ReponseCascade(
+            texte=depuis_cache.texte, etage_resolveur=ETAGE_CACHE, routage_log_id=routage_log_id,
+        )
+
     decision = classer_demande(question, ctx)
     cascade_remontee = False
     etage_resolveur = ETAGE_RAISONNEMENT
+    chiffree = None
 
     try:
         if decision.nature == NATURE_QUESTION_DATA:
-            texte, confiant = repondre_question_avec_confiance(ctx, question)
-            if confiant:
+            texte, confiant, chiffree = repondre_question_detaille(ctx, question)
+            # [Chantier 2 / US-170, révise CA6-CA7] Une famille du catalogue qui a
+            # matché a PRODUIT une phrase, même quand `present=False` : « je n'ai
+            # aucune récolte de concombre enregistrée » est une réponse exacte, pas
+            # une non-réponse. Remonter la cascade dans ce cas remplaçait une
+            # réponse juste par un conseil d'agronomie hors sujet (mesuré le
+            # 30/08/2026, 1 087 jetons pour quatre formulations). Seule l'absence
+            # de TOUTE famille matchée — `chiffree is None` — ou un agent SQL qui
+            # n'a lui-même pas su répondre justifie encore la remontée.
+            if chiffree is not None or confiant:
                 etage_resolveur = ETAGE_DONNEE
             else:
                 log.info(f"↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : '{question[:80]}'")
                 cascade_remontee = True
+                chiffree = None
                 texte = _repondre_raisonnement(ctx, question)
         elif decision.nature == NATURE_QUESTION_SAVOIR:
             # [CA6] Étage 2 (RAG, US-098) non livré — journalisé honnêtement
@@ -611,7 +689,7 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
             # d'enrichir le raisonnement avec la donnée si elle existe, sans
             # remontée dédiée — cet étage héberge déjà le raisonnement, un
             # second saut n'aurait pas de sens.
-            texte_donnees, confiant = repondre_question_avec_confiance(ctx, question)
+            texte_donnees, confiant, _ = repondre_question_detaille(ctx, question)
             texte = _repondre_raisonnement(ctx, question, contexte_donnees=texte_donnees if confiant else "")
     except Exception:
         passerelle.cumul_mesure_cascade(jeton_mesure)  # désarme sans persister
@@ -622,4 +700,63 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     routage_log_id = _persister_routage_log(
         ctx, question, decision, etage_resolveur, cascade_remontee, latence_ms, tokens_consommes,
     )
+    # [US-095] Mémorisation APRÈS coup, et seulement sur une réponse réellement
+    # produite : une cascade qui lève (mode dégradé 429, US-092) n'arrive jamais
+    # ici — mémoriser une non-réponse la ferait servir comme une réponse.
+    _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte)
     return ReponseCascade(texte=texte, etage_resolveur=etage_resolveur, routage_log_id=routage_log_id)
+
+
+def _memoriser_reponse(
+    ctx: TenantContext,
+    question: str,
+    decision: DecisionRoutage,
+    etage_resolveur: str,
+    chiffree,
+    texte: str,
+) -> None:
+    """[US-095 / CA1, CA3, CA8] Alimente l'étage 0bis avec la réponse qui vient
+    d'être produite — quand, et seulement quand, elle est mémorisable.
+
+    Deux cas, et aucun autre :
+
+    - l'étage des données a répondu par un gabarit du catalogue → on mémorise
+      son **aiguillage** (`template_sql`). Les valeurs seront recalculées à
+      chaque service : c'est ce qui rend cette entrée incapable de mentir ;
+    - la demande était de la connaissance générale (QUESTION_SAVOIR), à
+      laquelle aucune donnée du potager n'a été transmise → on mémorise le
+      texte (`figee`), partagé entre tous les potagers, sous réserve du
+      contrôle d'absence de donnée de potager (CA8).
+
+    Une réponse HYBRIDE n'est jamais mémorisée : elle mêle par définition du
+    raisonnement et des données du potager, donc ni rejouable ni partageable.
+    Une réponse de l'agent SQL non plus (aucune famille à rejouer, et son texte
+    porte des chiffres). Ne lève jamais : rater une mémorisation coûte un
+    recalcul, la faire échouer coûterait la réponse.
+    """
+    from app.services import cache_questions
+
+    db = None
+    try:
+        if chiffree is not None and chiffree.present and chiffree.aiguillage:
+            db = SessionLocal()
+            cache_questions.memoriser_template_sql(db, ctx, question, chiffree.aiguillage)
+        elif (
+            decision.nature == NATURE_QUESTION_SAVOIR
+            and etage_resolveur in (ETAGE_SAVOIR, ETAGE_RAISONNEMENT)
+        ):
+            db = SessionLocal()
+            cache_questions.memoriser_figee(db, ctx, question, texte)
+    except Exception as e:
+        log.warning("⚠️ CACHE QUESTION │ mémorisation impossible (%s)", type(e).__name__)
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass

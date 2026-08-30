@@ -23,6 +23,7 @@ appelle toujours `repondre_question_avec_confiance()`, dont le contrat est
 inchangé — c'est ce qui permet d'étendre le catalogue sans y toucher.
 """
 import logging
+from typing import Optional
 
 from app.services import reponses_chiffrees
 from app.services.context import TenantContext
@@ -46,6 +47,23 @@ def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple
     l'étage data a produit une réponse exploitable. Utilisée par le routeur pour
     décider d'une remontée de cascade vers l'étage suivant sans avoir à
     réinterpréter le texte produit."""
+    texte, confiant, _ = repondre_question_detaille(ctx, question)
+    return texte, confiant
+
+
+def repondre_question_detaille(
+    ctx: TenantContext, question: str
+) -> tuple[str, bool, Optional[reponses_chiffrees.ReponseChiffree]]:
+    """[US-095] Même réponse, plus la réponse chiffrée d'origine quand c'est le
+    catalogue de gabarits qui a répondu.
+
+    Le troisième élément porte l'**aiguillage** de la réponse (famille, culture,
+    parcelle, dépendances) : c'est ce que le cache de questions mémorise, et
+    lui seul — jamais le texte, jamais les chiffres. Le routeur en a besoin
+    pour alimenter l'étage 0bis ; les appelants historiques, eux, continuent
+    d'utiliser `repondre_question_avec_confiance()` dont le contrat est
+    inchangé.
+    """
     # [US-096 / CA1] Étage 1, premier passage : les familles de questions
     # chiffrées du catalogue (`app/services/reponses_chiffrees.py`) sont servies
     # par un gabarit, AVANT toute extraction d'intention — donc avant le seul
@@ -59,7 +77,7 @@ def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple
             "[US-096 CA1] repondre_question potager_id=%s famille=%s tokens_groq=0 donnee=%s",
             ctx.potager_id, chiffree.famille, "oui" if chiffree.present else "aucune",
         )
-        return chiffree.texte, chiffree.present
+        return chiffree.texte, chiffree.present, chiffree
 
     # [US-092 / CA2] Le contexte tenant est transmis explicitement à la
     # passerelle : c'est lui qui rend l'appel imputable au bon potager.
@@ -69,4 +87,8 @@ def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple
         "[US-042 CA7] repondre_question potager_id=%s tokens_groq=%d (cible <1500)",
         ctx.potager_id, tokens,
     )
-    return reponse, confiant
+    # [US-095] Pas d'aiguillage : l'agent SQL compose sa réponse question par
+    # question, il n'existe pas de famille à rejouer. Rien n'est donc mémorisé
+    # pour ce chemin — mémoriser son TEXTE reviendrait à figer un chiffre,
+    # exactement ce que l'US interdit.
+    return reponse, confiant, None

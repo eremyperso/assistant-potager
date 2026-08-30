@@ -112,6 +112,9 @@ def session_applicative(potager, monkeypatch):
 FAMILLES_ATTENDUES = {
     "total_recolte", "derniere_occurrence", "stock_courant", "pieds_actifs",
     "rendement_saison", "pepiniere", "occupation_parcelle",
+    # [Chantier 3 / US-170] Nombre de godets produits — distinct du rendement
+    # récolté, que le motif `\bproduit\b` de rendement_saison confondait avec lui.
+    "godets_produits",
     # Variantes « toutes cultures » des deux familles qui se posent aussi sans
     # culture nommée — ajoutées après les essais en conditions réelles du
     # 26/08/2026, où « quel est le rendement de la saison ? » et « quel est mon
@@ -357,21 +360,33 @@ def test_us096_ca8_resultat_vide_rend_la_main(session_applicative):
     assert "aucune récolte" in texte
 
 
-def test_us096_ca8_cascade_remonte_effectivement(session_applicative):
+def test_us096_ca8_cascade_remonte_effectivement():
     """CA8 — vue de la cascade complète : l'étage donnée passe la main une fois,
-    et c'est l'étage de raisonnement qui produit la réponse finale."""
+    et c'est l'étage de raisonnement qui produit la réponse finale.
+
+    [US-170 / CA18 — révision de CA6/CA7] `repondre_question_detaille` est mocké
+    pour renvoyer `chiffree=None` : c'est désormais le SEUL signal de remontée
+    (aucune famille du catalogue n'a matché — culture inconnue du potager, par
+    exemple). Avant US-170, ce test portait sur « combien de fraises ai-je
+    récolté cette année ? » contre le potager réel — une culture semée mais
+    jamais récoltée, donc une famille qui MATCHE avec `present=False` : la
+    remontée y était précisément le bug corrigé par le chantier 2 (« Je n'ai
+    aucune récolte de fraise enregistrée » est une réponse exacte, pas un
+    échec — voir `tests/test_us170_routage_questions.py` pour ce cas précis,
+    servi directement sans remontée)."""
     from llm import routeur
 
     routeur.vider_cache()
     with patch.object(routeur, "_repondre_raisonnement", return_value="réponse d'expert"), \
          patch.object(routeur, "_persister_routage_log", return_value=None), \
          patch(
-             "app.services.questions.extract_intent_query_mesuree",
-             side_effect=AssertionError("CA8 violé : appel modèle sur l'étage donnée"),
-         ):
+             "app.services.questions.repondre_question_detaille",
+             return_value=("Aucune donnée enregistrée pour physalis / recolte.", False, None),
+         ) as mock_data:
         resultat = routeur.repondre_avec_cascade(
-            CTX, "combien de fraises ai-je récolté cette année ?"
+            CTX, "combien de physalis ai-je récolté cette année ?"
         )
+    mock_data.assert_called_once()  # [CA7] un seul saut, jamais répété
     assert resultat.texte == "réponse d'expert"
     assert resultat.etage_resolveur == routeur.ETAGE_RAISONNEMENT
 

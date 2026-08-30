@@ -21,6 +21,7 @@ Lancement :
 """
 
 import os
+import re
 import json
 import asyncio
 import tempfile
@@ -61,6 +62,7 @@ from llm import passerelle
 # [US-093] Routeur règles-first : aiguille une question déjà détectée comme
 # telle (data / savoir / hybride) avant de la confier à l'étage qui répond.
 from llm import routeur
+from llm.parseur_deterministe import ORIGINE_LLM, parser_saisie
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
@@ -222,6 +224,29 @@ def _infer_date(texte: str) -> str | None:
         if mot in t:
             return fn()
     return None
+
+
+def _parser_items(texte: str) -> list:
+    """[US-094 / CA1] Étage 0 de la saisie : grammaire déterministe, puis repli modèle.
+
+    Un seul point de décision pour tous les chemins de saisie (texte, vocal,
+    multi-lignes) — sans quoi la couverture mesurée dépendrait du canal
+    emprunté, ce que l'arbitrage « la voix ne change rien » exclut.
+
+    Ne touche à aucune garde en amont : les modes de correction, le mode `ask`
+    et la navigation ont déjà tranché quand on arrive ici. Peut lever
+    `LLMIndisponibleError` — mais seulement quand le repli modèle a dû être
+    tenté, jamais pour une forme couverte par la grammaire (CA12).
+    """
+    resultat = parser_saisie(texte, current_context())
+    if resultat.reconnu:
+        return resultat.items
+
+    items = parse_commande(texte, ctx=current_context())
+    for item in items:
+        if isinstance(item, dict):
+            item.setdefault("origine_parsing", ORIGINE_LLM)
+    return items
 
 
 def _normalize_items(items: list, texte_original: str = "") -> list:
@@ -1024,7 +1049,18 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _ask_question(update, texte)
         return
 
-    # ── 5. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
+    # ── 5. [US-094 / CA1] Étage 0 — la grammaire déterministe d'abord ────────
+    # Une forme qu'elle reconnaît est une saisie par construction : elle porte
+    # un geste en tête, une culture connue du potager et rien d'inexpliqué.
+    # Aucune classification n'est donc à payer, et le mode dégradé 429 laisse
+    # cette voie entièrement ouverte (CA12). Placé ici, après toutes les gardes
+    # de conversation ci-dessus, l'ordre critique des flux reste intact.
+    resultat_deterministe = parser_saisie(texte, current_context())
+    if resultat_deterministe.reconnu:
+        await _parse_and_save(update, texte, msg, pre_parsed_items=resultat_deterministe.items)
+        return
+
+    # ── 5bis. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
     try:
         parsed = parse_message(texte, ctx=current_context())
     except LLMIndisponibleError:
@@ -1124,52 +1160,35 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _parse_and_save(update, texte, msg, pre_parsed_items=parsed.get("items"))
 
 
-# Mots déclencheurs de QUESTION analytique (début de phrase)
-QUESTION_STARTERS = (
-    "combien", "quand", "quel", "quelle", "quels", "quelles",
-    "est-ce", "depuis", "total", "bilan de", "liste des",
-    "montre", "donne", "rappelle", "résume", "résumé de",
-    "quelle quantité", "quelle date", "à quelle", "a quelle",
-    "date des", "dates des", "date de", "dates de",
-    "liste de", "liste des", "historique de", "historique des",
-    "dernière", "dernier", "derniers", "dernières",
-    "quelles cultures", "quel traitement", "quels traitements",
-    "mes récoltes", "mes semis", "mes plantations", "mes arrosages",
-)
-
-# Verbes d'action potager — ne jamais les traiter comme des questions
-ACTION_VERBS = (
-    "arros", "semé", "semer", "planté", "planter", "récolté", "récolter",
-    "cueilli", "cueillir", "ramassé", "ramasser", "repiqué", "repiquer",
-    "traité", "traiter", "désherbé", "désherber", "paillé", "pailler",
-    "taillé", "tailler", "tuteurer", "tuteuré", "fertilisé", "fertiliser",
-    "observé", "observer", "constaté", "constater", "mis en", "mis ",
-    "posé", "appliqué", "installé", "sorti",
-    "godet", "mis en godet", "mise en godet",
-)
-
 _GODETS_KEYWORDS = (
     "liste des godets", "liste godets", "quels plants en godet",
     "quels plants sont en godet", "plants en godet", "godets en attente",
     "mes godets", "voir les godets", "mes plants en godet",
 )
 
+# [US-170 / CA9] Ce qui distingue une consultation des godets EN ATTENTE de
+# plantation (liste, sans chiffre à produire — aucun équivalent catalogue) d'une
+# question de PRODUCTION/rendement, que le catalogue sait désormais servir
+# (famille `godets_produits`, chantier 3). Sans cette exclusion, « combien de
+# godet de tomate produit cette saison ? » matchait ci-dessous ("godet" +
+# "combien") et n'atteignait jamais le routeur : une réponse fausse d'apparence
+# juste (un poids récolté présenté comme un nombre de godets), constatée le
+# 30/08/2026. `_is_deplacer_request`/`_is_note_request`, eux, déclenchent des
+# flux GUIDÉS de saisie (un geste, pas une question) sans équivalent catalogue
+# possible : les déplacer après le routeur les ferait manquer sur toute phrase
+# que le routeur classerait ACTION avant d'atteindre leur propre motif — ils
+# restent donc, comme avant US-170, consultés avant lui.
+_GODETS_EXCLUSION_PRODUCTION = re.compile(r"\bproduits?\b|\brendement\b|\brecolt")
+
 
 def _is_requete_godets(texte: str) -> bool:
     """Retourne True si la phrase porte sur la consultation des godets en attente."""
     t = texte.lower().strip()
+    if _GODETS_EXCLUSION_PRODUCTION.search(t):
+        return False
     return any(kw in t for kw in _GODETS_KEYWORDS) or (
         "godet" in t and any(w in t for w in ("liste", "quels", "combien", "voir", "etat", "état"))
     )
-
-
-def _is_question(texte: str) -> bool:
-    """Retourne True si la phrase ressemble à une question analytique."""
-    t = texte.lower().strip()
-    # Si ça commence par un verbe d'action → jamais une question
-    if t.startswith(ACTION_VERBS):
-        return False
-    return t.startswith(QUESTION_STARTERS) or t.endswith("?")
 
 
 # [US-007] _is_deplacer_request et _extract_culture_deplacer sont importées de utils/deplacer.py
@@ -1710,9 +1729,16 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _note_start(update, ctx)
         return
 
-    # ── PRIORITÉ 4 : détection automatique question
-    if _is_question(texte_raw):
-        log.info(f"❓ QUESTION AUTO   : détectée → reroutage vers _ask_question")
+    # ── PRIORITÉ 4 : nature de la demande décidée par le routeur [US-170 CA6, CA7]
+    # Remplace _is_question(), dont la moitié du critère (le point d'interrogation
+    # en fin de phrase) est absente du canal vocal — voir
+    # docs/ANALYSE_ROUTAGE_QUESTIONS_2026-08-30.md. Le routeur porte déjà les
+    # règles, la règle de geste, le catalogue, le cache de classification et le
+    # modèle en dernier recours (US-093) ; le filet US-011 plus bas reste le
+    # rattrapage des cas résiduels (CA10), inchangé.
+    decision_routage = routeur.classer_demande(texte_raw, current_context())
+    if decision_routage.nature != routeur.NATURE_ACTION:
+        log.info(f"❓ QUESTION AUTO   : nature={decision_routage.nature} → reroutage vers _ask_question")
         await _ask_question(update, texte_raw)
         return
 
@@ -1749,7 +1775,7 @@ async def _parse_multi(update, lignes: list, msg=None):
     for i, ligne in enumerate(lignes, 1):
         log.info(f"  [{i}/{len(lignes)}] Traitement : {ligne}")
         try:
-            items = parse_commande(ligne, ctx=current_context())
+            items = _parser_items(ligne)
             items = _normalize_items(items, ligne)
             from utils.validation import strip_culture_hallucinee
             for j, item in enumerate(items):
@@ -2928,7 +2954,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         if pre_parsed_items is not None:
             items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
         else:
-            items = parse_commande(texte, ctx=current_context())
+            items = _parser_items(texte)
     except LLMIndisponibleError:
         # [US-092 / CA9] Aucun repli utile : sans parsing, rien à enregistrer.
         # On le dit explicitement plutôt que d'inventer un événement.
@@ -2947,7 +2973,13 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         else:   await message.reply_text(txt)
         return
 
-    log.info(f"🤖 GROQ PARSING   : {json.dumps(items, ensure_ascii=False)}")
+    # [US-094 / CA10] Un item déjà parsé porte son origine ; celui qui n'en a
+    # pas vient du modèle (pre_parsed_items de parse_message, flux en attente).
+    for _item in items:
+        if isinstance(_item, dict):
+            _item.setdefault("origine_parsing", ORIGINE_LLM)
+
+    log.info(f"🤖 PARSING        : {json.dumps(items, ensure_ascii=False)}")
     items = _normalize_items(items, texte)
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")

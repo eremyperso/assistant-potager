@@ -57,8 +57,8 @@ def test_us097_ca1_entree_journal_creee_apres_reponse_donnee_confiante(routage_e
     """Scénario Gherkin « Chaque demande laisse une trace exploitable »."""
     question = "combien de tomates ai-je récolté cette saison ?"
     with patch(
-        "app.services.questions.repondre_question_avec_confiance",
-        return_value=("Total tomate récolte : 4 kg", True),
+        "app.services.questions.repondre_question_detaille",
+        return_value=("Total tomate récolte : 4 kg", True, None),
     ):
         resultat = routeur.repondre_avec_cascade(CTX, question)
 
@@ -78,8 +78,8 @@ def test_us097_ca1_remontee_de_cascade_journalisee(routage_en_base):
     question = "combien de physalis ai-je récolté ?"
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("Rien trouvé.", False),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("Rien trouvé.", False, None),
         ),
         patch("llm.passerelle.appeler_chat", return_value=_reponse_modele("Aucune récolte connue.")),
     ):
@@ -94,8 +94,8 @@ def test_us097_ca1_remontee_de_cascade_journalisee(routage_en_base):
 def test_us097_ca2_question_normalisee_pas_le_message_brut(routage_en_base):
     question_brute = "Combien de Tomates ai-je RÉCOLTÉ ?!"
     with patch(
-        "app.services.questions.repondre_question_avec_confiance",
-        return_value=("4 kg", True),
+        "app.services.questions.repondre_question_detaille",
+        return_value=("4 kg", True, None),
     ):
         routeur.repondre_avec_cascade(CTX, question_brute)
 
@@ -148,8 +148,8 @@ def test_us097_ecriture_journal_en_echec_ne_casse_pas_la_reponse():
     question = "combien de tomates ai-je récolté cette saison ?"
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("4 kg", True),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("4 kg", True, None),
         ),
         patch("llm.routeur.SessionLocal", side_effect=RuntimeError("base indisponible")),
     ):
