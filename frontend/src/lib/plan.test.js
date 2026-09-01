@@ -12,7 +12,6 @@ import {
   filtrerParcelles, parcelleSelectionnee,
 } from './plan.js'
 import { calendrierDe } from './calendrier.js'
-import { familleDe } from './familles.js'
 
 /** Parcelle minimale : seuls les champs utiles au scénario sont renseignés. */
 const parcelle = (champs) => ({
@@ -194,10 +193,9 @@ test('[CA1] une seule parcelle sélectionnée, la première à l’ouverture', a
 // ── CA8 / CA9 — calendrier cultural standard ─────────────────────────────────
 
 test('[CA8] une culture connue porte les fenêtres conseillées standard', async (t) => {
-  await t.test('scénario « courgette » : Cucurbitacée · 50-60 j', () => {
+  await t.test('scénario « courgette » : 50-60 j', () => {
     const meta = calendrierDe('courgette')
     assert.equal(meta.duree, '50-60 j')
-    assert.equal(familleDe('courgette', null), 'Cucurbitacée')
   })
 
   await t.test('la frise de la courgette colore ses mois conseillés', () => {
@@ -220,14 +218,6 @@ test('[CA8] une culture connue porte les fenêtres conseillées standard', async
 test('[CA9] une culture inconnue s’affiche en mode dégradé, sans valeur inventée', async (t) => {
   await t.test('scénario « topinambour » : aucune métadonnée horticole', () => {
     assert.equal(calendrierDe('topinambour'), null)
-  })
-
-  await t.test('la famille tombe en tiret plutôt qu’en groupe fourre-tout', () => {
-    assert.equal(familleDe('topinambour', null), null)
-  })
-
-  await t.test('l’écran Pépinière garde son repli « Autres » (US-061 inchangée)', () => {
-    assert.equal(familleDe('topinambour'), 'Autres')
   })
 
   await t.test('un nom composé absent de la table n’est pas deviné', () => {

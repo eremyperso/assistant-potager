@@ -113,9 +113,11 @@ const normalise = (s) =>
  * la table — le `null` est significatif : c'est lui qui déclenche l'affichage
  * dégradé du CA9 (frise neutre, famille et durée en tiret).
  *
- * Le rapprochement est un **appariement exact** sur le nom normalisé, comme
- * `familleDe` : « petit pois » ou « haricot grimpant » ne trouvent pas leur
- * genre, et c'est assumé tant que la donnée n'est pas en base.
+ * Le rapprochement est un **appariement exact** sur le nom normalisé — même
+ * limite que l'ancienne table `familles.js` avant qu'US-067 ne la remplace
+ * par une donnée serveur : « petit pois » ou « haricot grimpant » ne trouvent
+ * pas leur fenêtre ici, et c'est assumé tant que CETTE table (calendrier
+ * cultural, US-068) reste provisoire.
  */
 export function calendrierDe(culture) {
   return CALENDRIER[normalise(culture)] || null

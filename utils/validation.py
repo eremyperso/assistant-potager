@@ -53,10 +53,24 @@ def _normalise_mot(mot: str) -> str:
     return unidecode(mot).lower().strip()
 
 
+def _variantes_pluriel(mot: str) -> set[str]:
+    """Variantes plurielles/singulières simples (français) d'un mot, pour ne
+    pas rater une culture citée au pluriel dans le texte alors qu'elle a été
+    extraite au singulier (ou l'inverse)."""
+    candidats = {mot, mot + "s", mot + "es"}
+    if mot.endswith("es"):
+        candidats.add(mot[:-2])
+    elif mot.endswith("s"):
+        candidats.add(mot[:-1])
+    return candidats
+
+
 def culture_grounded_dans_texte(culture: str, texte_original: str) -> bool:
     """
-    [US-011 bis] Vrai si `culture` apparaît comme un MOT du texte_original
-    (insensible à la casse, aux accents, et au pluriel simple en 's'/'es').
+    [US-011 bis] Vrai si chaque mot de `culture` apparaît comme un MOT du
+    texte_original (insensible à la casse, aux accents, et au pluriel simple
+    en 's'/'es') — une culture composée ("petit pois", "pomme de terre") doit
+    donc y retrouver TOUS ses mots, pas nécessairement contigus.
 
     Comparaison mot-à-mot (pas une sous-chaîne brute) pour éviter les faux
     positifs — ex : "ail" est une sous-chaîne de "paillage" mais n'y est pas
@@ -68,19 +82,16 @@ def culture_grounded_dans_texte(culture: str, texte_original: str) -> bool:
     if not culture:
         return True  # rien à vérifier
 
-    culture_norm = _normalise_mot(str(culture))
-    # Variantes plurielles/singulières simples (français) pour ne pas rater
-    # une culture citée au pluriel dans le texte alors que Groq l'a renvoyée
-    # au singulier (ou l'inverse).
-    candidats = {culture_norm, culture_norm + "s", culture_norm + "es"}
-    if culture_norm.endswith("es"):
-        candidats.add(culture_norm[:-2])
-    elif culture_norm.endswith("s"):
-        candidats.add(culture_norm[:-1])
+    mots_culture = _normalise_mot(str(culture)).split()
+    if not mots_culture:
+        return True
 
     mots_texte = {_normalise_mot(m) for m in re.findall(r"[^\W\d_]+", texte_original, flags=re.UNICODE)}
 
-    return any(c and c in mots_texte for c in candidats)
+    return all(
+        any(c and c in mots_texte for c in _variantes_pluriel(mot))
+        for mot in mots_culture
+    )
 
 
 # [fix unité semis hallucinée] Mots qui ancrent RÉELLEMENT une unité de semis dans

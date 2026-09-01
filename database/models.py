@@ -231,6 +231,39 @@ class CultureConfig(Base):
     # cette colonne, contrairement aux tables purement métier)
     potager_id               = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
 
+    # [US-067 / CA1] Famille botanique — référence vers la table dédiée, jamais
+    # un libellé texte ici : le délai de retour (FamilleBotanique) est un
+    # attribut de la FAMILLE, pas de la culture (voir FamilleBotanique
+    # ci-dessous). NULL = famille non renseignée, affichée "Autres" (CA3).
+    famille_id                = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    famille_rel               = relationship("FamilleBotanique", foreign_keys=[famille_id])
+
+
+class FamilleBotanique(Base):
+    """
+    [US-067] Table de référence des familles botaniques.
+
+    Table à part plutôt que colonne texte sur `culture_config` (CA1) : le délai
+    de retour recommandé est un attribut de la FAMILLE, pas de la culture — en
+    colonne sur `culture_config`, il se dupliquerait sur chaque culture de la
+    famille et deviendrait incohérent à la première correction (le jardinier
+    corrige "Solanacées : 4 ans" sur la tomate, la pomme de terre reste à 3).
+
+    Aucune colonne `potager_id` : une famille botanique est un fait, identique
+    quel que soit le potager (CA7) — jamais une préférence de jardinier.
+    """
+    __tablename__ = "familles_botaniques"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    nom                  = Column(String, unique=True, nullable=False)
+    # [CA6] Casse/accents indifférents à la résolution — même stratégie que
+    # Parcelle.nom_normalise (strip + lower + unidecode).
+    nom_normalise        = Column(String, unique=True, nullable=False, index=True)
+    # [CA12/CA13] Délai de retour recommandé, en années. Nullable : une famille
+    # sans délai renseigné n'empêche aucun affichage, elle rend seulement
+    # l'avertissement de rotation indisponible pour ses cultures (US-163).
+    delai_retour_annees  = Column(Integer, nullable=True)
+
 
 class Parcelle(Base):
     """

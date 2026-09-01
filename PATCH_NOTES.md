@@ -1,4 +1,22 @@
 
+## [v3.42.0] — 2026-08-31
+
+### 🚀 Nouveautés
+- Enregistre la famille botanique de chaque culture en base, corrigeable depuis le bot sans attendre une nouvelle version de l'application (US-067)
+- Ajoute `/culture famille <culture> <famille>` pour corriger ou renseigner la famille d'une culture, et `/culture delai_retour <famille> <années>` pour corriger le délai de retour recommandé d'une famille entière en une seule commande (US-067)
+
+### 🐛 Corrections
+- Corrige le regroupement de l'écran Pépinière pour pâtisson, petit pois, pois gourmand et haricot grimpant, qui tombaient jusqu'ici dans « Autres » faute d'appariement exact sur un nom composé (US-067)
+
+### 🔧 Améliorations techniques
+- Supprime la table de familles botaniques figée côté frontend (`frontend/src/lib/familles.js`) : les écrans Pépinière, Stocks et Plan lisent désormais la famille exposée par l'API (US-067)
+- Résout la famille d'une culture indépendamment de la casse et des accents, cohérent avec la normalisation déjà appliquée aux noms de culture ailleurs dans l'application (US-067)
+- Applique une correction de famille ou de délai de retour à toutes les fiches culture_config partageant le même nom, y compris entre potagers différents — la famille botanique est un fait, pas une préférence de jardinier (US-067)
+
+### 💾 Base de données
+- Ajoute la table de référence `familles_botaniques` (libellé + délai de retour recommandé en années, nullable) et la colonne `culture_config.famille_id` (migration `migration_v37.sql`, rollback fourni) (US-067)
+- Pré-remplit la famille des cultures déjà connues à la livraison, sans jamais écraser une correction déjà saisie (US-067)
+
 ## [v3.41.0] — 2026-08-30
 
 ### 🚀 Nouveautés

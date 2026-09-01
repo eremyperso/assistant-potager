@@ -104,6 +104,8 @@ from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
+from app.services import familles as svc_familles  # [US-067]
+from utils.culture_resolve import normaliser_culture
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
@@ -1592,11 +1594,16 @@ def get_stats_varietes(
         # pas de granularité variété côté observations (US-039), le badge remonte
         # donc sur chaque ligne d'une même culture.
         obs_index = build_observations_index(db)
+        # [US-067 / CA5, CA6] Famille botanique par culture, relue à chaque appel
+        # (pas de copie mémorisée) — None si non renseignée, l'écran Stocks
+        # applique son propre repli "Autres" (CA3), comme avant cette US.
+        familles = svc_familles.familles_par_culture(db, use_ctx)
         for entry in varietes:
             nom = (entry.get("culture") or "").lower()
             nb_obs = len(obs_index["stocks"].get(nom, []))
             entry["has_observations"] = nb_obs > 0
             entry["nb_observations"]  = nb_obs
+            entry["famille"] = familles.get(normaliser_culture(entry.get("culture") or ""), None)
         return {
             "varietes":           varietes,
             "total":              len(varietes),
@@ -1684,6 +1691,12 @@ def get_plan(
         # Index surface_m2 par nom de culture (insensible à la casse)
         surface_par_culture = svc_plan.surface_par_culture(db, use_ctx)
 
+        # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
+        # table figée frontend/src/lib/familles.js (supprimée), relue à chaque
+        # appel. None si non renseignée : Plan.jsx affiche "—", pas "Autres"
+        # (une tuile de culture seule n'a pas besoin d'un groupe fourre-tout).
+        familles_par_culture = svc_familles.familles_par_culture(db, use_ctx)
+
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
 
@@ -1701,6 +1714,9 @@ def get_plan(
                     "type_organe": c.get("type_organe") or "végétatif",
                     "surface_m2_par_plant": surface_par_culture.get(
                         (c.get("culture") or "").lower(), None
+                    ),
+                    "famille": familles_par_culture.get(
+                        normaliser_culture(c.get("culture") or ""), None
                     ),
                     "nb_observations": (
                         len(obs_index["culture_row"].get((p.id, c["culture"].lower(), c["variete"]), []))
@@ -1840,6 +1856,12 @@ def get_pepiniere_lots(
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
+        # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
+        # table figée frontend/src/lib/familles.js (supprimée) qui alimentait le
+        # regroupement de cet écran (US-061). Relue à chaque appel : une
+        # correction de famille depuis le bot (CA4) se reflète au rechargement
+        # suivant, sans copie mémorisée nulle part.
+        familles = svc_familles.familles_par_culture(db, use_ctx)
         return {
             "lots": [
                 {
@@ -1849,6 +1871,7 @@ def get_pepiniere_lots(
                         str(lot["date_derniere_mise_en_godet"])[:10]
                         if lot["date_derniere_mise_en_godet"] else None
                     ),
+                    "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
                 }
                 for lot in lots
             ],

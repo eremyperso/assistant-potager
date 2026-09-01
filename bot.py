@@ -76,6 +76,7 @@ from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
 from app.services.context import default_context, current_context, set_current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
+from app.services import familles as svc_familles  # [US-067]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
@@ -582,7 +583,21 @@ _HELP_NOTE = (
     "en langage naturel. Un récapitulatif s'affiche avant enregistrement définitif."
 )
 
-_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note"
+_HELP_CULTURE = (
+    "🌿 *Aide — Famille botanique*\n"
+    "Corriger ou renseigner la famille d'une culture, sans livraison ni "
+    "intervention en base (US-067).\n\n"
+    "*Corriger la famille d'une culture :*\n"
+    "  → /culture famille pâtisson Cucurbitacée\n"
+    "  → /culture famille petit\\_pois Fabacée\n"
+    "_La culture doit avoir déjà été dictée au moins une fois._\n\n"
+    "*Corriger le délai de retour d'une famille (années) :*\n"
+    "  → /culture delai\\_retour Solanacée 4\n"
+    "_S'applique aussitôt à toutes les cultures de cette famille — "
+    "un délai de retour est un fait de la famille, pas de chaque culture._"
+)
+
+_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note · culture"
 
 _HELP_CONTEXTUEL: dict[str, str] = {
     "parcelle":  _HELP_PARCELLE,
@@ -599,6 +614,8 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "statistiques": _HELP_STATS,
     "note":      _HELP_NOTE,
     "notes":     _HELP_NOTE,
+    "culture":   _HELP_CULTURE,
+    "famille":   _HELP_CULTURE,
 }
 
 
@@ -660,6 +677,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/start — Menu principal\n"
         "/plan — Plan d'occupation des parcelles\n"
         "/parcelle ajouter [nom] — Créer une parcelle\n"
+        "/culture famille [culture] [famille] — Corriger une famille botanique\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
@@ -4401,6 +4419,115 @@ async def _cmd_parcelles_lister(update, ctx) -> None:
     await cmd_parcelle(update, ctx)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-067 / CA4, CA12, CA14] Commande /culture — famille botanique + délai de retour
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_culture(update, ctx) -> None:
+    """
+    /culture <sous-commande> — Famille botanique et délai de retour de rotation.
+
+    Sous-commandes :
+      famille <culture> <famille>       — corriger/renseigner la famille d'une culture (CA4)
+      delai_retour <famille> <années>   — corriger le délai de retour d'une famille (CA14)
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /culture famille <culture> <famille>\n"
+        "  /culture delai_retour <famille> <années>\n\n"
+        "Exemples :\n"
+        "  /culture famille pâtisson Cucurbitacée\n"
+        "  /culture delai_retour Solanacée 4"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = ctx.args[0].lower()
+
+    # ── /culture famille <culture> <famille> ──────────────────────────────────
+    if sous_cmd == "famille":
+        if len(ctx.args) < 3:
+            await update.message.reply_text(
+                "❌ Usage : /culture famille <culture> <famille>\n"
+                "Exemple : /culture famille pâtisson Cucurbitacée",
+                parse_mode="Markdown",
+            )
+            return
+        culture = ctx.args[1].strip()
+        famille_nom = " ".join(ctx.args[2:]).strip()
+        db = SessionLocal()
+        try:
+            fiches, ancienne = svc_familles.corriger_famille_culture(db, culture, famille_nom)
+            avant = _md(ancienne) if ancienne else "Autres"
+            log.info(
+                f"[US-067] Famille corrigée : '{culture}' : '{ancienne or 'Autres'}' → "
+                f"'{fiches[0].famille_rel.nom}' ({len(fiches)} fiche(s))"
+            )
+            await update.message.reply_text(
+                f"✅ Famille de *{_md(culture)}* : *{avant}* → *{_md(fiches[0].famille_rel.nom)}*",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-067] cmd_culture famille erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture delai_retour <famille> <années> ──────────────────────────────
+    if sous_cmd in ("delai_retour", "delai"):
+        if len(ctx.args) < 3:
+            await update.message.reply_text(
+                "❌ Usage : /culture delai_retour <famille> <années>\n"
+                "Exemple : /culture delai_retour Solanacée 4",
+                parse_mode="Markdown",
+            )
+            return
+        *famille_tokens, annees_brut = ctx.args[1:]
+        famille_nom = " ".join(famille_tokens).strip()
+        try:
+            annees = int(annees_brut)
+            if annees < 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text(
+                f"❌ Le délai de retour doit être un nombre entier positif d'années "
+                f"(reçu : *{_md(annees_brut)}*)",
+                parse_mode="Markdown",
+            )
+            return
+        db = SessionLocal()
+        try:
+            famille, ancien = svc_familles.corriger_delai_retour(db, famille_nom, annees)
+            avant = f"{ancien} ans" if ancien is not None else "non renseigné"
+            log.info(f"[US-067] Délai de retour corrigé : '{famille.nom}' : {avant} → {annees} ans")
+            await update.message.reply_text(
+                f"✅ Délai de retour de *{_md(famille.nom)}* : {avant} → *{annees} ans*",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Famille inconnue : *{_md(famille_nom)}*",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-067] cmd_culture delai_retour erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # Sous-commande inconnue
+    await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
 async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
     """Envoie un texte long en découpant par blocs de ≤4096 chars sur des sauts de ligne."""
     MAX = 4096
@@ -5967,6 +6094,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "plan",      cmd_plan)
     _enregistrer_commande(app, "parcelle",  cmd_parcelle)
     _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
+    _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
 
     _enregistrer_commande(app, "vendre",    cmd_vendre)
 

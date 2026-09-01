@@ -10,7 +10,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { MapPin, Leaf } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { familleDe } from '../lib/familles.js'
 import { calendrierDe } from '../lib/calendrier.js'
 import {
   occTint, pctDe, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
@@ -106,7 +105,11 @@ function CultureTile({ c, parcelleId, moisRef }) {
   )
 
   const meta = calendrierDe(c.culture)
-  const famille = meta ? familleDe(c.culture, null) : null
+  // [US-067 / CA5, CA6, CA8] Famille lue depuis GET /plan (culture_config →
+  // familles_botaniques côté serveur), plus de familles.js. Repli `null` —
+  // pas "Autres" — conservé à l'identique (US-060/CA9) : sur une tuile de
+  // culture seule, un groupe fourre-tout n'a aucun sens.
+  const famille = meta ? (c.famille ?? null) : null
 
   return (
     <div className="bg-card-alt rounded-xl p-[13px]">

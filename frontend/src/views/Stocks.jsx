@@ -11,7 +11,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Leaf, Sprout, Scale, AlertTriangle, FileDown, FileJson, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { familleDe } from '../lib/familles.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
@@ -421,7 +420,9 @@ export default function Stocks({ refresh }) {
 
   useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
-  const varietes = useMemo(() => (data?.varietes ?? []).map((d) => ({ ...d, fam: familleDe(d.culture) })), [data])
+  // [US-067 / CA5, CA6, CA8] La famille vient de GET /stats/varietes
+  // (culture_config → familles_botaniques côté serveur), plus de familles.js.
+  const varietes = useMemo(() => (data?.varietes ?? []).map((d) => ({ ...d, fam: d.famille || 'Autres' })), [data])
 
   const fams = useMemo(() => [...new Set(varietes.map((d) => d.fam))].sort((a, b) =>
     a === 'Autres' ? 1 : b === 'Autres' ? -1 : a.localeCompare(b)), [varietes])
