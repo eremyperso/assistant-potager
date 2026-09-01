@@ -1,0 +1,1562 @@
+{
+  "_lisez_moi": [
+    "[US-161] Extraction BRUTE et NON RÉVISÉE des associations de cultures.",
+    "Matière première pour US-163 — ce fichier n'est PAS un manifeste d'import",
+    "et ne doit pas être passé à tools/importer_referentiel.py.",
+    "",
+    "⚠️ AUDIT DU 01/09/2026 SUR LA RELEASE v1.0.0 — à traiter avant tout usage :",
+    "",
+    "  • 41 paires de libellés doublonnés désignent le même compagnon :",
+    "    'Marigold'/'Marigolds', 'Onion'/'Onions', 'Black Walnut'/'Walnut Trees'…",
+    "    La déduplication compare les libellés à l'identique et ne les fusionne pas.",
+    "",
+    "  • Au moins 1 contradiction est masquée par ces doublons : courgette ×",
+    "    herbes aromatiques est donnée favorable sous 'Aromatic Herbs' et",
+    "    défavorable sous 'Aromatic herbs (Sage)'. Les 3 contradictions détectées",
+    "    ne sont donc pas les seules.",
+    "",
+    "  • 8 motifs décrivent une AUTRE plante que la culture — texte recyclé d'une",
+    "    variété à l'autre dans la source amont : 'tomate × Catnip' explique qu'il",
+    "    protège « eggplant foliage », 'tomate × Alyssum' parle de « rose pests »,",
+    "    'haricot × Mint' de « pea seeds and pods ».",
+    "",
+    "  • 1 auto-association : 'tomate × Tomatoes = favorable'.",
+    "",
+    "  • Les libellés de compagnons sont en ANGLAIS et non appariés à nos cultures.",
+    "    Beaucoup sont hors du potager (Black Walnut, Apricot Trees, Gladiolus).",
+    "",
+    "  • niveau_preuve vaut 'traditionnel' partout : la source ne distingue pas",
+    "    l'établi du traditionnel, et on n'affirme pas plus qu'elle (§6.5)."
+  ],
+  "source": {
+    "code": "wind_river_greens",
+    "libelle": "Wind River Greens Plant Database",
+    "licence": "CC BY 4.0",
+    "attribution": "Plant variety data from Wind River Greens Plant Database (https://plants.windrivergreens.com), CC BY 4.0",
+    "url": "https://github.com/bripatch/plant-variety-database",
+    "partageable": true
+  },
+  "extrait_le": "v1.0.0",
+  "revise": false,
+  "cultures_associations": [
+    {
+      "culture": "ail",
+      "compagnon_source": "Asparagus",
+      "nature": "defavorable",
+      "motif_source": "Garlic's strong allelopathic properties can inhibit asparagus spear development and root growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Beans",
+      "nature": "defavorable",
+      "motif_source": "Garlic's allelopathic compounds can inhibit nitrogen fixation and stunt bean growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Cabbage",
+      "nature": "favorable",
+      "motif_source": "Garlic deters cabbage worms, cabbage loopers, and aphids that damage brassicas",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Garlic repels carrot flies while carrots help break up soil for garlic bulb development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Garlic protects lettuce from aphids and slugs without competing for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Peas",
+      "nature": "defavorable",
+      "motif_source": "Garlic interferes with the symbiotic relationship between peas and nitrogen-fixing bacteria",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Peppers",
+      "nature": "favorable",
+      "motif_source": "Garlic deters aphids, spider mites, and various insects that attack pepper plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Roses",
+      "nature": "favorable",
+      "motif_source": "Garlic deters aphids, Japanese beetles, and may reduce black spot disease",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Spinach",
+      "nature": "favorable",
+      "motif_source": "Garlic protects against aphids and leaf miners while both have similar water requirements",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Strawberries",
+      "nature": "favorable",
+      "motif_source": "Garlic repels slugs, aphids, and spider mites that damage strawberry plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon_source": "Tomatoes",
+      "nature": "favorable",
+      "motif_source": "Garlic repels aphids, spider mites, and hornworms that commonly attack tomatoes",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Deep taproot breaks up soil while chard's shallow roots don't compete",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Corn",
+      "nature": "defavorable",
+      "motif_source": "Creates too much shade and competes heavily for nutrients, stunting chard growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Allelopathic properties inhibit growth of most garden plants including chard",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Garlic",
+      "nature": "favorable",
+      "motif_source": "Natural pest deterrent, repels aphids and reduces fungal diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Shallow roots don't compete, provides living mulch and maximizes space usage",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Repel aphids, whiteflies, and nematodes while attracting beneficial insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Act as trap crop for aphids and flea beetles, drawing pests away from chard",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Onions",
+      "nature": "favorable",
+      "motif_source": "Repel aphids, flea beetles, and other pests that commonly attack chard",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Pole Beans",
+      "nature": "defavorable",
+      "motif_source": "Can shade chard excessively and compete for nutrients in the root zone",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Quick-growing, helps break up soil and can be harvested before chard needs full space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon_source": "Spinach",
+      "nature": "favorable",
+      "motif_source": "Similar growing requirements and compatible root systems, good succession planting",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Chives",
+      "nature": "favorable",
+      "motif_source": "Repels carrot flies and aphids with strong sulfur compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Coriander",
+      "nature": "defavorable",
+      "motif_source": "Can attract carrot flies and may inhibit carrot seed germination",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Dill",
+      "nature": "defavorable",
+      "motif_source": "Can stunt carrot growth and reduce yields when planted too close",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Releases allelopathic compounds that inhibit carrot germination and growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Leeks",
+      "nature": "favorable",
+      "motif_source": "Deters carrot rust flies while carrots repel leek moths",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Shallow roots don't compete, provides ground cover to retain soil moisture",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Repels nematodes and carrot flies through root secretions and scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Onions",
+      "nature": "favorable",
+      "motif_source": "Sulfur compounds strongly repel carrot flies and root maggots",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Parsnips",
+      "nature": "defavorable",
+      "motif_source": "Compete for same soil nutrients and space, attract similar pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Peas",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil and light foliage doesn't shade small carrots",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Break up compacted soil for carrot root development and mature quickly",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Rosemary",
+      "nature": "favorable",
+      "motif_source": "Strong aromatic oils mask carrot scent from carrot flies",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Sage",
+      "nature": "favorable",
+      "motif_source": "Repels carrot flies and root flies while attracting beneficial insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon_source": "Tomatoes",
+      "nature": "favorable",
+      "motif_source": "Carrots help break up soil for tomato roots, tomatoes provide shade",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Help break up soil and don't compete for nutrients, good space utilization",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Celery",
+      "nature": "favorable",
+      "motif_source": "Repels cabbage white butterflies and improves growth through complementary root systems",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Chamomile",
+      "nature": "favorable",
+      "motif_source": "Improves soil health and may enhance cabbage flavor while attracting beneficial insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Dill",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like parasitic wasps that control cabbage worms",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Garlic",
+      "nature": "favorable",
+      "motif_source": "Natural fungicide properties help prevent clubroot and black rot diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Provides ground cover and efficient space use without competing for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Repels cabbage worms, aphids, and other harmful insects with strong scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Deters cabbage worms, aphids, and nematodes while attracting beneficial predatory insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for aphids and flea beetles, draws pests away from cabbage",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Act as trap crop for aphids and flea beetles, drawing pests away from cabbage",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Onion",
+      "nature": "favorable",
+      "motif_source": "Repels cabbage maggots, aphids, and flea beetles with sulfur compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Onions",
+      "nature": "favorable",
+      "motif_source": "Repels cabbage moths, aphids, and other brassica pests with strong sulfur compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Pole Bean",
+      "nature": "defavorable",
+      "motif_source": "Can shade cabbage excessively and compete for nitrogen in soil",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Pole Beans",
+      "nature": "defavorable",
+      "motif_source": "Tall growth creates excessive shade and competes for nitrogen that cabbage needs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Rue",
+      "nature": "defavorable",
+      "motif_source": "Allelopathic compounds inhibit brassica growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Spinach",
+      "nature": "favorable",
+      "motif_source": "Provides living mulch and utilizes different soil nutrients without competing",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Strawberries",
+      "nature": "defavorable",
+      "motif_source": "Cabbage can inhibit strawberry growth and both attract similar soil-borne diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Strawberry",
+      "nature": "defavorable",
+      "motif_source": "Both plants attract similar pests and compete for soil nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Thyme",
+      "nature": "favorable",
+      "motif_source": "Deters cabbage worms and flea beetles while attracting beneficial pollinators",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Tomato",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and may stunt cabbage growth due to allelopathic effects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon_source": "Tomatoes",
+      "nature": "defavorable",
+      "motif_source": "Compete for similar nutrients and may stunt cabbage growth through root competition",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Aromatic herbs",
+      "nature": "defavorable",
+      "motif_source": "Strong scents from sage, rosemary can inhibit cucumber growth and flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Aromatic herbs (strong)",
+      "nature": "defavorable",
+      "motif_source": "Strong oils from herbs like rosemary can stunt cucumber growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, spider mites, and thrips while potentially improving cucumber flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Bean",
+      "nature": "favorable",
+      "motif_source": "Fixes nitrogen in soil and provides natural trellis support",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil to benefit cucumber growth and provide natural trellis support",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Bush Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil and provide ground cover without competing for space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Catnip",
+      "nature": "favorable",
+      "motif_source": "Repels cucumber beetles, ants, and aphids more effectively than DEET",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Corn",
+      "nature": "favorable",
+      "motif_source": "Provides natural shade and wind protection for cucumber vines",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Dill",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like parasitic wasps that control cucumber pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Releases allelopathic compounds that inhibit cucumber growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Provides ground cover to retain soil moisture and suppress weeds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Deters cucumber beetles, aphids, and nematodes with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Deter cucumber beetles, aphids, and nematodes with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Melon",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and space, increases risk of shared diseases like bacterial wilt",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Melons",
+      "nature": "defavorable",
+      "motif_source": "Compete for same nutrients and space, can cross-pollinate affecting fruit quality",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for cucumber beetles and squash bugs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for cucumber beetles and aphids, repels squash bugs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Potato",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and may increase disease susceptibility",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Potatoes",
+      "nature": "defavorable",
+      "motif_source": "Compete for nutrients and space, may increase disease susceptibility",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Radish",
+      "nature": "favorable",
+      "motif_source": "Repels cucumber beetles and doesn't compete for space due to quick harvest",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Repel cucumber beetles and squash bugs while improving soil structure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Sage",
+      "nature": "defavorable",
+      "motif_source": "Inhibits cucumber growth through allelopathic compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Sunflower",
+      "nature": "favorable",
+      "motif_source": "Provides natural trellis support and attracts beneficial pollinators",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Sunflowers",
+      "nature": "favorable",
+      "motif_source": "Attract beneficial insects and provide vertical growing support",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon_source": "Tomato",
+      "nature": "defavorable",
+      "motif_source": "Both are heavy feeders competing for nutrients, increased risk of shared diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Aromatic Herbs (Oregano, Thyme)",
+      "nature": "defavorable",
+      "motif_source": "Strong oils can inhibit cucumber germination and growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Aromatic herbs",
+      "nature": "defavorable",
+      "motif_source": "Strong essential oils from herbs like rosemary can stunt cucumber family growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, spider mites, and thrips while potentially improving cucumber flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil and provide beneficial ground cover",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Bush Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil and provide ground cover without competing for space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Catnip",
+      "nature": "favorable",
+      "motif_source": "Repels cucumber beetles, ants, and flea beetles more effectively than DEET",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Corn",
+      "nature": "favorable",
+      "motif_source": "Provides natural trellis support and partial shade",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Dill",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like predatory wasps that control cucumber pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Inhibits growth of cucumbers through allelopathic root secretions",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Benefits from cucumber's shade and efficient use of garden space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, whiteflies, and nematodes with strong scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Deter aphids, whiteflies, and cucumber beetles with their strong scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Melon",
+      "nature": "defavorable",
+      "motif_source": "Attracts same pests and diseases, leading to increased cucumber beetle pressure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Melons",
+      "nature": "defavorable",
+      "motif_source": "Cross-pollination concerns and increased competition for space and nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for cucumber beetles and aphids",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Act as trap crops for cucumber beetles and squash bugs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Potato",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and may increase disease susceptibility",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Potatoes",
+      "nature": "defavorable",
+      "motif_source": "Compete for nutrients and may increase disease susceptibility",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Radish",
+      "nature": "favorable",
+      "motif_source": "Deters cucumber beetles and squash bugs while improving soil structure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Repel cucumber beetles and squash bugs while improving soil structure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Sage",
+      "nature": "defavorable",
+      "motif_source": "Can inhibit cucumber growth through allelopathic compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Sunflower",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects and provides afternoon shade in hot climates",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon_source": "Sunflowers",
+      "nature": "favorable",
+      "motif_source": "Attract beneficial insects and provide windbreak protection",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Aromatic Herbs",
+      "nature": "favorable",
+      "motif_source": "Oregano, thyme, and mint repel various squash pests through strong scents",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Aromatic herbs (Sage)",
+      "nature": "defavorable",
+      "motif_source": "Strong essential oils can inhibit squash growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Aromatic herbs (Sage, Rosemary)",
+      "nature": "defavorable",
+      "motif_source": "Strong scents may inhibit squash growth and reduce pollinator activity",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Aromatic herbs (sage, rosemary)",
+      "nature": "defavorable",
+      "motif_source": "Strong essential oils can inhibit squash growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Aromatic herbs (strong)",
+      "nature": "defavorable",
+      "motif_source": "Sage, rosemary, and other strong herbs may inhibit zucchini growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids and whiteflies, may improve flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil to benefit heavy-feeding squash plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Black Walnut",
+      "nature": "defavorable",
+      "motif_source": "Produces juglone toxin that inhibits growth and can kill squash plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Borage",
+      "nature": "favorable",
+      "motif_source": "Attracts pollinators essential for squash fruit production, may improve growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Brassicas",
+      "nature": "defavorable",
+      "motif_source": "Compete for nutrients and may stunt squash growth due to different soil needs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Brassicas (Broccoli)",
+      "nature": "defavorable",
+      "motif_source": "Compete heavily for nutrients and may stunt squash growth due to different soil pH preferences",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Bush Beans",
+      "nature": "favorable",
+      "motif_source": "Fix nitrogen in soil and don't compete for space with sprawling zucchini vines",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Catnip",
+      "nature": "favorable",
+      "motif_source": "Strongly repels squash bugs, cucumber beetles, and flea beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Corn",
+      "nature": "favorable",
+      "motif_source": "Provides vertical structure and partial shade, part of traditional Three Sisters planting",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Cucumbers",
+      "nature": "defavorable",
+      "motif_source": "Compete for same nutrients and space, attract similar pests like cucumber beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Dill",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like parasitic wasps that control squash pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Inhibits growth of squash through allelopathic compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Garlic",
+      "nature": "favorable",
+      "motif_source": "Deters aphids, squash bugs, and fungal diseases with sulfur compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Benefits from zucchini's shade, efficient use of garden space as ground cover",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Deters cucumber beetles, squash bugs, and nematodes with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Deters squash bugs, cucumber beetles, and nematodes with strong scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Melons",
+      "nature": "defavorable",
+      "motif_source": "Attract same pests like cucumber beetles and squash bugs, increasing pest pressure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for squash bugs and cucumber beetles, repels aphids",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for squash bugs and cucumber beetles, repels aphids",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Oregano",
+      "nature": "favorable",
+      "motif_source": "Repels cucumber beetles and provides general pest deterrent properties",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Potato",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and space, both are heavy feeders requiring similar resources",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Potatoes",
+      "nature": "defavorable",
+      "motif_source": "Compete for similar nutrients and space, both are heavy feeders",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Pumpkins",
+      "nature": "defavorable",
+      "motif_source": "Cross-pollination can affect fruit quality, compete for space and nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Radish",
+      "nature": "favorable",
+      "motif_source": "Repels squash vine borers and cucumber beetles, improves soil structure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Deters squash vine borers and cucumber beetles, breaks up soil",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon_source": "Sunflowers",
+      "nature": "favorable",
+      "motif_source": "Attract pollinators and beneficial predatory insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, spider mites, and thrips that commonly attack beans",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Carrot",
+      "nature": "favorable",
+      "motif_source": "Loosens soil for bean roots and doesn't compete for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Loosens soil for bean roots and doesn't compete for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Catnip",
+      "nature": "favorable",
+      "motif_source": "Repels flea beetles and ants that can damage bean plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Chives",
+      "nature": "favorable",
+      "motif_source": "Repel aphids and improve overall garden health through pest deterrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Corn",
+      "nature": "favorable",
+      "motif_source": "Provides natural support structure for climbing beans in Three Sisters planting",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Cucumber",
+      "nature": "favorable",
+      "motif_source": "Both benefit from similar growing conditions and beans provide nitrogen",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Cucumbers",
+      "nature": "favorable",
+      "motif_source": "Benefit from nitrogen fixed by peas and can use pea trellises after harvest",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Inhibits growth of most garden plants including beans through allelopathy",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Garlic",
+      "nature": "defavorable",
+      "motif_source": "Allelopathic compounds can stunt bean growth and reduce yields",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Gladiolus",
+      "nature": "defavorable",
+      "motif_source": "Competes aggressively for nutrients and can inhibit pea pod development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Kohlrabi",
+      "nature": "defavorable",
+      "motif_source": "Competes heavily for nutrients and may stunt bean development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Benefits from nitrogen fixed by beans, provides living mulch",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Repels bean beetles, aphids, and nematodes while attracting beneficial insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Repel Mexican bean beetles and other harmful insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Mint",
+      "nature": "favorable",
+      "motif_source": "Deters rodents and ants that may damage pea seeds and pods",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for aphids and cucumber beetles, repels bean beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Act as trap crop for aphids and cucumber beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Onion",
+      "nature": "defavorable",
+      "motif_source": "Inhibits bean growth and nitrogen fixation through root secretions",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Onions",
+      "nature": "defavorable",
+      "motif_source": "Can inhibit bean growth and nitrogen fixation through root secretions",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Radish",
+      "nature": "favorable",
+      "motif_source": "Quick-growing companion that breaks up soil and deters bean beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Radishes",
+      "nature": "favorable",
+      "motif_source": "Break up soil for bean roots, mature quickly before beans need full space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Rosemary",
+      "nature": "favorable",
+      "motif_source": "Repels Mexican bean beetles and carrot flies",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Spinach",
+      "nature": "favorable",
+      "motif_source": "Utilizes nitrogen fixed by beans, different root depth prevents competition",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Squash",
+      "nature": "favorable",
+      "motif_source": "Ground cover reduces weeds and retains soil moisture for bean roots",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Strawberries",
+      "nature": "favorable",
+      "motif_source": "Low-growing strawberries use different soil levels, benefit from nitrogen fixation by beans",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Summer Savory",
+      "nature": "favorable",
+      "motif_source": "Repels bean beetles and may improve bean flavor and growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Summer Squash",
+      "nature": "favorable",
+      "motif_source": "Large leaves provide ground cover and moisture retention, part of Three Sisters planting",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Sunflower",
+      "nature": "defavorable",
+      "motif_source": "Allelopathic compounds inhibit bean germination and growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Sunflowers",
+      "nature": "defavorable",
+      "motif_source": "Allelopathic compounds inhibit bean germination and growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon_source": "Sweet Corn",
+      "nature": "favorable",
+      "motif_source": "Provides natural climbing support, benefits from nitrogen fixed by bean roots",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Apricot Trees",
+      "nature": "defavorable",
+      "motif_source": "Can harbor verticillium wilt which easily spreads to peppers",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, spider mites, and thrips while potentially improving pepper flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Black Walnut",
+      "nature": "defavorable",
+      "motif_source": "Produces juglone toxin that causes wilting and stunted growth in peppers",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Black Walnut Trees",
+      "nature": "defavorable",
+      "motif_source": "Produce juglone toxin that inhibits pepper growth and can cause wilting",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Brassicas",
+      "nature": "defavorable",
+      "motif_source": "Compete heavily for nutrients and may stunt pepper growth through root competition",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Help break up soil for pepper roots and don't compete for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Chives",
+      "nature": "favorable",
+      "motif_source": "Repels aphids and may help deter cutworms with sulfur compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Releases allelopathic compounds that inhibit pepper growth and development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Kohlrabi",
+      "nature": "defavorable",
+      "motif_source": "Competes heavily for nutrients and may stunt pepper plant development",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Provides living mulch, conserves soil moisture, and harvested before peppers need full space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Deters nematodes, aphids, and whiteflies with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Repel nematodes, aphids, and whiteflies with their strong scent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for aphids and cucumber beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Act as trap crops for aphids and cucumber beetles, protecting peppers",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Onions",
+      "nature": "favorable",
+      "motif_source": "Repel aphids, thrips, and other pests that commonly attack peppers",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Oregano",
+      "nature": "favorable",
+      "motif_source": "Repels cucumber beetles and provides ground cover to retain soil moisture",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Parsley",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like hoverflies and parasitic wasps that control pepper pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Tomato",
+      "nature": "favorable",
+      "motif_source": "Similar growing requirements and can share support structures",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Tomatoes",
+      "nature": "favorable",
+      "motif_source": "Similar growing requirements and can share space efficiently, both benefit from same soil conditions",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon_source": "Walnut Trees",
+      "nature": "defavorable",
+      "motif_source": "Produce juglone toxin that causes wilting and stunted growth in pepper plants",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Alyssum",
+      "nature": "favorable",
+      "motif_source": "Attracts predatory insects that control aphids and other rose pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Asparagus",
+      "nature": "favorable",
+      "motif_source": "Tomatoes repel asparagus beetles while asparagus doesn't compete for space",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Basil",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, whiteflies, and hornworms while potentially improving tomato flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Black Walnut",
+      "nature": "defavorable",
+      "motif_source": "Produces juglone toxin that causes tomato wilt and stunted growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Black Walnut Trees",
+      "nature": "defavorable",
+      "motif_source": "Release juglone toxin that causes tomato wilt and stunted growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Borage",
+      "nature": "favorable",
+      "motif_source": "Repels tomato hornworms and attracts pollinators",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Brassicas",
+      "nature": "defavorable",
+      "motif_source": "Compete for nutrients and may stunt tomato growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Brassicas (Cabbage family)",
+      "nature": "defavorable",
+      "motif_source": "Compete heavily for nutrients and may stunt tomato growth",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Carrots",
+      "nature": "favorable",
+      "motif_source": "Loosens soil for tomato roots and doesn't compete for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Catmint",
+      "nature": "favorable",
+      "motif_source": "Deters ants, aphids, and rodents while attracting beneficial insects",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Catnip",
+      "nature": "favorable",
+      "motif_source": "Repels flea beetles, ants, and aphids that damage eggplant foliage",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Chives",
+      "nature": "favorable",
+      "motif_source": "Repels aphids and may help prevent fungal diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Clematis",
+      "nature": "favorable",
+      "motif_source": "Provides complementary root depth and attracts pollinators without competing for nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Corn",
+      "nature": "defavorable",
+      "motif_source": "Both attract corn earworm/tomato fruitworm, increasing pest pressure",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Fennel",
+      "nature": "defavorable",
+      "motif_source": "Inhibits growth of most garden plants through allelopathy",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Garlic",
+      "nature": "favorable",
+      "motif_source": "Natural fungicide properties help prevent blight and repel various pests",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Hot Peppers",
+      "nature": "favorable",
+      "motif_source": "Deter larger pests like rabbits and deer from eating eggplant leaves",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Large Trees",
+      "nature": "defavorable",
+      "motif_source": "Competes for nutrients and water while creating excessive shade that promotes fungal diseases",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Lavender",
+      "nature": "favorable",
+      "motif_source": "Repels aphids, spider mites, and other rose pests while attracting beneficial pollinators",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Lettuce",
+      "nature": "favorable",
+      "motif_source": "Benefits from tomato shade and doesn't compete for deep nutrients",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Marigold",
+      "nature": "favorable",
+      "motif_source": "Deters nematodes, aphids, and whiteflies with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Marigolds",
+      "nature": "favorable",
+      "motif_source": "Deters nematodes, aphids, and whiteflies with natural compounds",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Nasturtium",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for aphids and cucumber beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Nasturtiums",
+      "nature": "favorable",
+      "motif_source": "Acts as trap crop for aphids and cucumber beetles",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Oregano",
+      "nature": "favorable",
+      "motif_source": "Repels pests and may enhance tomato flavor",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Parsley",
+      "nature": "favorable",
+      "motif_source": "Attracts beneficial insects like hoverflies and parasitic wasps",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Peppers",
+      "nature": "favorable",
+      "motif_source": "Similar growing requirements and compatible root systems",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Pole Beans",
+      "nature": "defavorable",
+      "motif_source": "Can climb and shade eggplants, reducing their heat and sunlight requirements",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Tomatoes",
+      "nature": "favorable",
+      "motif_source": "Share similar growing conditions and can confuse pests that target nightshades",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon_source": "Walnut Trees",
+      "nature": "defavorable",
+      "motif_source": "Produces juglone toxin that severely stunts tomato growth",
+      "niveau_preuve": "traditionnel"
+    }
+  ]
+}
