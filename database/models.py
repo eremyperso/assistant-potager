@@ -12,6 +12,11 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-092] Ajout modèle ConsoTokens (mesure de consommation LLM par potager)
 [US-097] Ajout modèles RoutageLog et RoutageRetour (observabilité cascade + retour jardinier)
 [US-095] Ajout modèle QuestionCache (table questions_cache — cache de réponses)
+[US-166] Ajout modèle ReferentielSource (registre de sources) + rattachement
+         source_id sur familles_botaniques et famille_source_id sur culture_config
+[US-161] Ajout des attributs agronomiques de conduite sur culture_config
+         (exposition, besoin_eau, profondeur_semis_cm, rusticite_min_c) et de
+         leur source respective
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
@@ -238,6 +243,48 @@ class CultureConfig(Base):
     famille_id                = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
     famille_rel               = relationship("FamilleBotanique", foreign_keys=[famille_id])
 
+    # [US-166 / CA1-CA3] Origine du rattachement `famille_id` — jamais l'origine
+    # de la fiche culture_config elle-même, qui naît de la dictée du jardinier.
+    # Renseignée que la famille vienne d'un import (`wikidata`) ou d'une
+    # correction au bot (`saisie_manuelle`) : il n'existe aucune donnée sans
+    # origine. NULL = rattachement antérieur à l'US, origine non connaissable —
+    # jamais devinée après coup.
+    famille_source_id         = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True, index=True)
+    famille_source_rel        = relationship("ReferentielSource", foreign_keys=[famille_source_id])
+
+    # ── [US-161 / CA1, CA2] Attributs agronomiques de conduite ────────────────
+    # Rien que des attributs : de la donnée qui s'affiche, se filtre et se trie
+    # sans jamais passer par un modèle de langage. Tous nullables — un attribut
+    # non renseigné se lit « non renseigné » (CA4), jamais deviné ni moyenné.
+    #
+    # ⚠️ Aucun attribut de calendrier ici (CA8) : ni fenêtre de semis, ni durée
+    # de germination, ni date — ils appartiennent au référentiel calendrier
+    # d'US-068. Ni aucune relation (CA9) : associations, rotations et
+    # bioagresseurs sont des arêtes (US-162, US-163), pas des colonnes.
+
+    # [CA2] Vocabulaire fermé — app.services.attributs_culture.EXPOSITIONS.
+    # Stocké en VARCHAR plutôt qu'en ENUM Postgres : ajouter une valeur au
+    # vocabulaire resterait un ALTER TYPE, alors que la validation vit déjà en
+    # un seul endroit applicatif que l'import comme le bot traversent.
+    exposition                = Column(String, nullable=True)
+    # [CA2] Vocabulaire fermé — app.services.attributs_culture.BESOINS_EAU.
+    besoin_eau                = Column(String, nullable=True)
+    # [CA10] Chiffres : jamais produits par un modèle de langage, exclusivement
+    # importés (US-166) ou saisis par le jardinier. L'unité est dans le nom,
+    # comme `surface_m2`, pour qu'aucune lecture n'ait à la supposer.
+    profondeur_semis_cm       = Column(Float, nullable=True)
+    rusticite_min_c           = Column(Float, nullable=True)
+
+    # [CA3] Une source PAR attribut, et non une source de ligne : c'est ce qui
+    # permet à une profondeur corrigée à la main de survivre à un rejeu d'import
+    # (CA6) sans figer pour autant l'exposition, que l'import doit continuer de
+    # rafraîchir. Aucun attribut orphelin : une valeur renseignée porte toujours
+    # son origine. NULL = attribut non renseigné.
+    exposition_source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    besoin_eau_source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    profondeur_semis_source_id = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    rusticite_min_source_id   = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+
 
 class FamilleBotanique(Base):
     """
@@ -263,6 +310,63 @@ class FamilleBotanique(Base):
     # sans délai renseigné n'empêche aucun affichage, elle rend seulement
     # l'avertissement de rotation indisponible pour ses cultures (US-163).
     delai_retour_annees  = Column(Integer, nullable=True)
+
+    # [US-166] Nom scientifique de la famille ('Solanaceae') — c'est l'apport
+    # propre de Wikidata (CC0) au référentiel structuré, et le champ prévu par
+    # `docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md` §4.1. Nullable :
+    # une famille saisie au bot n'a aucune raison d'en porter un.
+    nom_scientifique     = Column(String, nullable=True)
+
+    # [US-166 / CA1-CA3] Origine de la ligne — import (`wikidata`), saisie du
+    # jardinier (`saisie_manuelle`) ou rédaction interne. C'est cette colonne
+    # que l'import relit pour ne jamais écraser une correction humaine (CA5) et
+    # que la requête de retrait de source suit pour identifier tout ce qui
+    # dérive d'une source (CA4).
+    source_id            = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True, index=True)
+    source_rel           = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class ReferentielSource(Base):
+    """
+    [US-166] Registre des sources du référentiel — d'où vient chaque donnée.
+
+    Une ligne par origine, importée ou non (CA3) : `wikidata` et `ephy_anses`
+    sont des sources d'import ; `saisie_manuelle` (le jardinier corrige au bot)
+    et `redaction_interne` (contenu écrit par le projet) n'importent rien mais
+    sont des origines à part entière — il n'existe aucune donnée sans origine.
+
+    L'attribution est portée par la ligne, jamais par un README : c'est une
+    obligation par enregistrement (CA1), et c'est ce qui rend le retrait d'une
+    source répondable six mois plus tard, quand plus personne ne se souvient de
+    ce qui venait d'où (CA4, voir `app.services.referentiel_sources.donnees_derivees`).
+    """
+    __tablename__ = "referentiel_source"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    # [CA1] Code stable, c'est lui que citent les scripts d'import et les
+    # requêtes de traçabilité — jamais l'id, qui dépend de l'ordre d'insertion.
+    code                = Column(String, unique=True, nullable=False, index=True)
+    libelle             = Column(String, nullable=False)
+    # [CA6] Valeur du socle uniquement — voir LICENCES_SOCLE dans
+    # app/services/referentiel_sources.py, qui refuse tout le reste.
+    licence             = Column(String, nullable=False)
+    # [CA1] Mention à afficher. NOT NULL : une source sans attribution connue
+    # n'entre pas au registre, donc rien ne peut en dériver.
+    attribution         = Column(String, nullable=False)
+    url                 = Column(String, nullable=True)
+    # [CA1] Date du dernier import réussi. NULL pour les origines non importées
+    # (CA3) comme pour une source déclarée mais jamais encore rejouée.
+    date_dernier_import = Column(DateTime, nullable=True)
+    # [CA2] Exclut d'un éventuel export les sources contaminantes. `true` pour
+    # toutes les sources retenues aujourd'hui (arbitrage option A,
+    # docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md §2.1) : la colonne existe
+    # pour rendre l'option B réversiblement atteignable, pas parce qu'un cas
+    # `false` existe déjà.
+    partageable         = Column(Boolean, nullable=False, default=True)
+    # [CA3] False = origine non importée (saisie, rédaction interne). C'est
+    # aussi ce qui distingue les licences acceptables : `proprietaire` n'est
+    # légitime que pour une origine interne, jamais pour un contenu importé.
+    importee            = Column(Boolean, nullable=False, default=True)
 
 
 class Parcelle(Base):

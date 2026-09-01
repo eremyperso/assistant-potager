@@ -1,0 +1,64 @@
+{
+  "_lisez_moi": [
+    "[US-161] Manifeste produit par tools/adapter_wind_river.py — NE PAS ÉDITER À LA MAIN.",
+    "Régénérer avec l'adaptateur après toute mise à jour des CSV source.",
+    "Pour corriger une valeur : /culture <attribut> <culture> <valeur> au bot.",
+    "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA6).",
+    "",
+    "Le bloc 'cultures_associations' n'est PAS importé aujourd'hui : sa table",
+    "d'accueil relève d'US-163. Il est extrait ici pour ne pas refaire le travail."
+  ],
+  "source": {
+    "code": "wind_river_greens",
+    "libelle": "Wind River Greens Plant Database",
+    "licence": "CC BY 4.0",
+    "attribution": "Plant variety data from Wind River Greens Plant Database (https://plants.windrivergreens.com), CC BY 4.0",
+    "url": "https://github.com/bripatch/plant-variety-database",
+    "partageable": true
+  },
+  "extrait_le": "v1.0.0",
+  "cultures_attributs": [
+    {
+      "culture": "tomate",
+      "exposition": "plein soleil",
+      "besoin_eau": "élevé"
+    },
+    {
+      "culture": "haricot",
+      "exposition": "plein soleil"
+    },
+    {
+      "culture": "courgette",
+      "exposition": "plein soleil",
+      "besoin_eau": "élevé"
+    },
+    {
+      "culture": "chou",
+      "exposition": "plein soleil",
+      "besoin_eau": "élevé"
+    },
+    {
+      "culture": "carotte",
+      "exposition": "plein soleil",
+      "besoin_eau": "moyen"
+    },
+    {
+      "culture": "concombre",
+      "exposition": "plein soleil",
+      "besoin_eau": "élevé"
+    },
+    {
+      "culture": "cornichon",
+      "exposition": "plein soleil"
+    },
+    {
+      "culture": "poivron",
+      "exposition": "plein soleil"
+    },
+    {
+      "culture": "ail",
+      "exposition": "plein soleil",
+      "besoin_eau": "moyen"
+    }
+  ]
+}

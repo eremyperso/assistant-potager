@@ -1,3 +1,65 @@
+## [v3.44.0] — 2026-09-01
+
+### 🚀 Nouveautés
+- Ajoute quatre caractéristiques de conduite à chaque culture — exposition, besoin en eau, profondeur de semis et rusticité minimale — restituées telles quelles, sans jamais passer par l'IA (US-161)
+- Ajoute `/culture attributs <culture>` pour consulter ces caractéristiques et leur source, en zéro jeton (US-161)
+- Ajoute `/culture exposition|eau|profondeur|rusticite <culture> <valeur>` pour corriger une caractéristique depuis le bot, sans livraison ni intervention en base ; la commande confirme l'ancienne et la nouvelle valeur (US-161)
+- Affiche « non renseigné » pour toute caractéristique inconnue : l'application ne devine jamais, ne moyenne jamais et ne complète jamais par un modèle de langage (US-161)
+
+### 🔧 Améliorations techniques
+- Restreint l'exposition à « plein soleil / mi-ombre / ombre » et le besoin en eau à « faible / moyen / élevé » : une valeur hors de ces listes est refusée et la caractéristique conserve sa valeur précédente, condition pour que la future vue Cultures puisse filtrer et trier (US-161)
+- Accepte les variantes de saisie — casse, accents, tirets, virgule décimale — mais n'enregistre jamais que la valeur canonique (US-161)
+- Fait primer toute correction du jardinier sur les reprises d'import : rejouer l'import du référentiel ne réécrit jamais une valeur saisie à la main, et le compte rendu la signale comme préservée (US-161)
+- Trace l'origine caractéristique par caractéristique, et non ligne par ligne : corriger la profondeur de semis n'empêche pas l'import de continuer à rafraîchir l'exposition (US-161)
+- Limite le pré-remplissage aux dix cultures du périmètre initial et interdit toute création de fiche culture, pour ne pas peupler les écrans de cultures jamais cultivées (US-161)
+- Refuse à l'import une valeur hors vocabulaire sans abandonner le reste de la ligne : un fichier source partiellement fautif enrichit ce qu'il peut (US-161)
+- Étend la requête de retrait d'une source (`--derive-de`) aux quatre nouvelles caractéristiques (US-161)
+- Ajoute `data/referentiel/attributs_redaction_interne.json`, gabarit versionné à remplir à la main : les caractéristiques rédigées par le projet s'importent par le même script que les sources ouvertes, sans second mécanisme (US-161)
+- Autorise un manifeste d'origine interne à échapper au contrôle de licence, qui n'a de sens que pour du contenu tiers — la porte reste fermée à toute source externe qui s'annoncerait interne, et un fichier interne ne peut ni se donner une autre licence ni une autre attribution (US-161)
+
+### 🚀 Nouveautés
+- Pré-remplit l'exposition et le besoin en eau de 9 des 10 cultures du périmètre depuis le jeu de données Wind River Greens (CC BY 4.0), sans qu'aucune valeur ne soit inventée (US-161)
+- Ajoute `python tools/adapter_wind_river.py`, qui traduit les CSV de cette source en manifeste d'import — l'adaptation ne touche jamais la base, l'import ne connaît jamais le format d'une source (US-161)
+
+### 🐛 Corrections
+- Corrige l'échec de `/culture attributs` sur une culture dont les valeurs sont importées : le code technique de la source était affiché en italique et Telegram refusait le message (US-161)
+
+### 🔧 Améliorations techniques
+- Élargit le socle de licences importables à `CC BY 4.0` : contrairement au partage à l'identique, l'attribution simple ne contamine pas le corpus, et la mention est déjà affichée avec la réponse — CC-BY-SA reste refusé (US-161)
+- N'agrège une valeur de cultivar vers une culture que sur consensus mesuré — au moins 80 % d'accord sur au moins 3 cultivars — et laisse « non renseigné » sinon, avec le motif du refus au compte rendu (US-161)
+- Écarte explicitement la rusticité (`usda_zone_min` décrit la pérennité, pas la culture), la profondeur de semis (absente de la source) et le calendrier (zones USDA nord-américaines, qui relèvent d'US-068) (US-161)
+- Extrait 217 associations de cultures dans un fichier séparé du manifeste d'import, explicitement marqué comme non révisé : un manifeste ne porte que ce qui s'importe, et cette extraction attend la relecture d'US-163 (US-161)
+- Documente dans ce fichier les quatre défauts relevés à l'audit — libellés doublonnés, contradiction masquée, motifs décrivant une autre plante, auto-association — pour qu'il ne puisse pas être pris pour de la donnée validée (US-161)
+- Sépare poivrons et piments, concombres et cornichons à l'appariement : la catégorie source les confond, et un piment n'a pas la conduite d'un poivron (US-161)
+- Versionne un extrait de 276 cultivars pinné sur la release `v1.0.0` plutôt que la branche amont, qui se rafraîchit chaque mois (US-161)
+
+### 💾 Base de données
+- Ajoute `culture_config.exposition`, `besoin_eau`, `profondeur_semis_cm` et `rusticite_min_c`, toutes nullables, ainsi qu'une colonne d'origine par caractéristique (migration `migration_v39.sql`, rollback fourni) (US-161)
+- N'écrit aucune valeur à la migration : aucune caractéristique n'est semée, aucune fiche culture n'est créée (US-161)
+- Ajoute Wind River Greens au registre des sources avec son attribution CC BY exacte (migration `migration_v40.sql`, rollback fourni — qui efface aussi les valeurs dérivées, aucune donnée ne survivant à son origine) (US-161)
+- N'introduit ni date, ni fenêtre de semis, ni durée — ces données restent au référentiel calendrier (US-068) — ni aucune relation entre cultures, qui relève d'US-162 et d'US-163 (US-161)
+
+
+## [v3.43.0] — 2026-09-01
+
+### 🚀 Nouveautés
+- Ajoute un registre des sources du référentiel : chaque donnée de connaissance sait désormais d'où elle vient, sous quelle licence et avec quelle mention à afficher (US-166)
+- Ajoute la commande `python tools/importer_referentiel.py` qui importe le référentiel structuré hors ligne, sans aucun appel réseau, et publie le rapport de couverture qui pilote la suite de l'ÉPIC 6 (US-166)
+- Ajoute le rapport de couverture : cultures couvertes, non couvertes, configurées mais jamais utilisées, cultures suspectes issues d'un échec de parsing, synonymes probables à relire et taux d'appariement automatique (US-166)
+- Ajoute `--derive-de <source>` pour lister en une requête tout ce qui dérive d'une source, préalable au retrait propre d'une source dont la licence poserait problème (US-166)
+
+### 🔧 Améliorations techniques
+- Refuse à la porte tout import dont la licence n'est pas celle d'une source du socle — CC0 (Wikidata) ou Licence Ouverte 2.0 (E-Phy / ANSES) — sans rien créer, licence absente comprise (US-166)
+- Rend l'import rejouable sans dommage : relancé sur une version mise à jour de la source, il n'écrit que les valeurs absentes ou celles qu'il avait lui-même écrites, et conserve toute correction du jardinier (US-166)
+- Interdit à l'import de créer une fiche culture : il enrichit les cultures déjà dictées, jamais un catalogue de cultures fantômes (US-166)
+- Exclut les bulletins météo automatiques de toutes les statistiques du rapport, soit 30 % des événements enregistrés (US-166)
+- Trace les corrections de famille et de délai de retour saisies au bot comme des données d'origine `saisie_manuelle`, protégées de tout import ultérieur (US-166)
+- Ajoute `data/referentiel/wikidata_familles.json`, extrait taxonomique versionné dans le dépôt : les données sources sont récupérées et rejouées hors ligne, jamais téléchargées à l'exécution (US-166)
+
+### 💾 Base de données
+- Ajoute la table `referentiel_source` — code, licence, attribution, URL, date du dernier import, indicateurs `partageable` et `importee` (migration `migration_v38.sql`, rollback fourni) (US-166)
+- Ajoute `familles_botaniques.nom_scientifique` et `familles_botaniques.source_id`, ainsi que `culture_config.famille_source_id`, pour rattacher chaque donnée du référentiel à son origine (US-166)
+- Rattache à l'origine « rédaction interne » tout ce que la migration précédente avait semé, afin qu'aucune donnée du référentiel ne reste sans origine dès la livraison (US-166)
 
 ## [v3.42.0] — 2026-08-31
 

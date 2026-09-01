@@ -68,6 +68,34 @@ psql -d potager -f migrations/migration_v12.sql
 # (aussi planifiée quotidiennement à 04h00 par le job_queue du bot)
 python tools/purger_potagers.py --dry-run   # liste sans rien effacer
 python tools/purger_potagers.py             # purge réelle, idempotente
+
+# Import du référentiel structuré + rapport de couverture [US-166]
+# Hors ligne (aucun appel réseau), idempotent, rejouable.
+python tools/importer_referentiel.py data/referentiel/wikidata_familles.json
+python tools/importer_referentiel.py data/referentiel/wikidata_familles.json --dry-run
+python tools/importer_referentiel.py --rapport-seul        # rapport sans rien importer
+python tools/importer_referentiel.py --derive-de wikidata  # que retirer avec cette source ?
+python tools/importer_referentiel.py --lister-sources      # registre : licence + attribution
+
+# Attributs agronomiques de conduite [US-161]
+# Le gabarit est livré VIDE et se remplit à la main : aucun chiffre agronomique
+# n'est produit par un modèle de langage. Une valeur null n'écrit rien.
+python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json
+# Source Wind River Greens (CC BY 4.0) — attribution obligatoire à l'affichage
+# L'adaptateur produit un manifeste ; l'import le joue. Aucun appel réseau.
+python tools/adapter_wind_river.py                    # CSV versionnés → manifeste
+# Écrit aussi wind_river_associations.json — extraction BRUTE pour US-163,
+# à NE PAS passer à l'import : elle n'est pas révisée et ne s'importe pas.
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# Provenance, version figée et périmètre : data/referentiel/wind_river_greens/SOURCE.md
+
+# Correction depuis le bot — prime sur tout rejeu de l'import :
+#   /culture attributs <culture>
+#   /culture exposition <culture> <plein soleil|mi-ombre|ombre>
+#   /culture eau <culture> <faible|moyen|élevé>
+#   /culture profondeur <culture> <cm>
+#   /culture rusticite <culture> <°C>
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

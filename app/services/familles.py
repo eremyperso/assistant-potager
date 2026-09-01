@@ -12,16 +12,31 @@ personnalisées à un potager précis (créées à la volée par
 `app.services.parcelles.creer_culture_config`) — jamais à la seule fiche
 résolue pour le potager courant, sous peine de laisser deux potagers avec deux
 familles différentes pour la même culture (violation directe de CA7).
+
+[US-166 / CA3, CA5] Toute écriture passant par ce module s'attribue l'origine
+`saisie_manuelle` au registre des sources. Deux conséquences voulues : une
+donnée saisie par le jardinier est tracée au même titre qu'une donnée importée
+(il n'existe aucune donnée sans origine), et l'import du référentiel structuré
+reconnaît cette origine pour ne jamais réécrire par-dessus. Marquer la ligne
+entière et non le seul champ corrigé est délibéré : c'est la protection la plus
+large, au prix documenté qu'un `nom_scientifique` déjà importé ne sera plus
+rafraîchi sur une famille dont le jardinier a corrigé le délai de retour.
 """
 from typing import Optional
 
 from unidecode import unidecode
 from sqlalchemy.orm import Session
 
+from app.services import referentiel_sources as svc_sources
 from app.services.context import TenantContext
 from app.services.parcelles import lister_cultures_config
 from database.models import CultureConfig, FamilleBotanique
 from utils.culture_resolve import normaliser_culture
+
+
+def _origine_saisie(db: Session) -> int:
+    """[US-166 / CA3] Id de l'origine `saisie_manuelle`, créée au registre si absente."""
+    return svc_sources.garantir_source(db, svc_sources.SOURCE_SAISIE_MANUELLE).id
 
 
 def normaliser_famille(nom: str) -> str:
@@ -48,7 +63,13 @@ def get_or_create_famille(db: Session, nom: str) -> FamilleBotanique:
     famille = get_famille(db, nom)
     if famille is not None:
         return famille
-    famille = FamilleBotanique(nom=nom.strip(), nom_normalise=normaliser_famille(nom))
+    famille = FamilleBotanique(
+        nom=nom.strip(),
+        nom_normalise=normaliser_famille(nom),
+        # [US-166 / CA3] Une famille née d'une correction au bot est une saisie,
+        # pas un import — l'origine est écrite dès la création, jamais après coup.
+        source_id=_origine_saisie(db),
+    )
     db.add(famille)
     db.commit()
     return famille
@@ -88,8 +109,12 @@ def corriger_famille_culture(
 
     ancienne = fiches[0].famille_rel.nom if fiches[0].famille_rel is not None else None
     famille = get_or_create_famille(db, famille_nom)
+    origine = _origine_saisie(db)
     for fiche in fiches:
         fiche.famille_id = famille.id
+        # [US-166 / CA5] Le rattachement devient une correction humaine : l'import
+        # du référentiel structuré la lira et la conservera au prochain rejeu.
+        fiche.famille_source_id = origine
     db.commit()
     return fiches, ancienne
 
@@ -110,5 +135,8 @@ def corriger_delai_retour(
         raise LookupError(famille_nom)
     ancien = famille.delai_retour_annees
     famille.delai_retour_annees = annees
+    # [US-166 / CA5] Le délai devient une valeur corrigée à la main : un import
+    # rejoué la conservera au lieu de la réécraser à chaque mise à jour de source.
+    famille.source_id = _origine_saisie(db)
     db.commit()
     return famille, ancien

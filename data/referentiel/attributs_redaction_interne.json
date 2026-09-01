@@ -1,0 +1,123 @@
+{
+  "_lisez_moi": [
+    "[US-161] Attributs agronomiques de conduite — rédaction interne du projet.",
+    "",
+    "CE FICHIER EST À REMPLIR À LA MAIN. Livré vide : toutes les valeurs sont à null,",
+    "et une valeur null n'écrit rien. L'importer en l'état ne fait donc rien — c'est",
+    "voulu, aucun chiffre agronomique n'est produit par un modèle de langage (CA10).",
+    "",
+    "COMMENT LE REMPLIR",
+    "  exposition          : 'plein soleil' | 'mi-ombre' | 'ombre'   (vocabulaire fermé)",
+    "  besoin_eau          : 'faible' | 'moyen' | 'élevé'            (vocabulaire fermé)",
+    "  profondeur_semis_cm : nombre en cm, entre 0 et 30",
+    "  rusticite_min_c     : température minimale supportée en °C, entre -40 et 20",
+    "Une valeur hors de ces listes ou de ces bornes est refusée et signalée au",
+    "compte rendu ; les autres attributs de la même culture sont écrits quand même.",
+    "Laisser null tout ce qu'on ne sait pas : 'non renseigné' s'affiche tel quel et",
+    "vaut mieux qu'une valeur inventée.",
+    "",
+    "PÉRIMÈTRE — les dix cultures ci-dessous et elles seules (CA7, US-140/CA1).",
+    "Ajouter une onzième culture ici ne fera rien : l'import l'ignorera et la comptera",
+    "'hors périmètre'. Une culture absente de culture_config est ignorée aussi : ce",
+    "fichier enrichit des cultures déjà dictées, il n'en crée aucune.",
+    "",
+    "D'OÙ DOIVENT VENIR CES VALEURS",
+    "De votre propre connaissance du terrain, éventuellement recoupée par lecture.",
+    "PAS d'une recopie systématique d'un site horticole ou d'un ouvrage : un fait isolé",
+    "ne se protège pas, une compilation reprise si (voir §6.3 de",
+    "docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md). Ces valeurs sont l'actif du",
+    "projet — couche 2 du §6.2 — pas un import déguisé.",
+    "",
+    "CE QUI PRIME SUR CE FICHIER",
+    "Une correction faite au bot (/culture exposition|eau|profondeur|rusticite) porte",
+    "l'origine 'saisie_manuelle' et survit à tout rejeu de ce fichier (CA6). Le terrain",
+    "gagne toujours contre le référentiel. Pour qu'une valeur de ce fichier reprenne la",
+    "main, il faut l'effacer au bot avec une valeur vide, puis rejouer l'import.",
+    "",
+    "IMPORTER",
+    "  python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json --dry-run",
+    "  python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json",
+    "Idempotent : rejouer ne crée aucun doublon et n'écrase aucune correction humaine."
+  ],
+  "source": {
+    "code": "redaction_interne",
+    "libelle": "Rédaction interne Assistant Potager",
+    "licence": "proprietaire",
+    "attribution": "Assistant Potager — rédaction interne",
+    "url": null,
+    "partageable": true
+  },
+  "redige_le": "2026-09-01",
+  "cultures_attributs": [
+    {
+      "culture": "tomate",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "haricot",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "courgette",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "chou",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "carotte",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "concombre",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "cornichon",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "poivron",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "ail",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    },
+    {
+      "culture": "blette",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": null
+    }
+  ]
+}

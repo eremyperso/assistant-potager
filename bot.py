@@ -77,6 +77,7 @@ from app.services.context import default_context, current_context, set_current_c
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
 from app.services import familles as svc_familles  # [US-067]
+from app.services import attributs_culture as svc_attributs  # [US-161]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
@@ -4421,22 +4422,38 @@ async def _cmd_parcelles_lister(update, ctx) -> None:
 
 # ──────────────────────────────────────────────────────────────────────────────
 # [US-067 / CA4, CA12, CA14] Commande /culture — famille botanique + délai de retour
+# [US-161 / CA4, CA5] Attributs agronomiques de conduite : lecture et correction
 # ──────────────────────────────────────────────────────────────────────────────
 async def cmd_culture(update, ctx) -> None:
     """
-    /culture <sous-commande> — Famille botanique et délai de retour de rotation.
+    /culture <sous-commande> — Famille botanique, délai de retour, attributs de conduite.
 
     Sous-commandes :
-      famille <culture> <famille>       — corriger/renseigner la famille d'une culture (CA4)
-      delai_retour <famille> <années>   — corriger le délai de retour d'une famille (CA14)
+      famille <culture> <famille>       — corriger/renseigner la famille d'une culture (US-067/CA4)
+      delai_retour <famille> <années>   — corriger le délai de retour d'une famille (US-067/CA14)
+      attributs <culture>               — lire les attributs agronomiques (US-161/CA4)
+      exposition|eau|profondeur|rusticite <culture> <valeur>
+                                        — corriger un attribut agronomique (US-161/CA5)
+
+    Aucune logique métier ici (convention projet) : la validation du vocabulaire
+    fermé et l'écriture vivent dans `app.services.attributs_culture`, seul point
+    d'écriture, partagé avec l'import du référentiel structuré.
     """
     USAGE = (
         "*Usage :*\n"
         "  /culture famille <culture> <famille>\n"
-        "  /culture delai_retour <famille> <années>\n\n"
+        "  /culture delai_retour <famille> <années>\n"
+        "  /culture attributs <culture>\n"
+        "  /culture exposition <culture> <plein soleil|mi-ombre|ombre>\n"
+        "  /culture eau <culture> <faible|moyen|élevé>\n"
+        "  /culture profondeur <culture> <cm>\n"
+        "  /culture rusticite <culture> <°C>\n\n"
         "Exemples :\n"
         "  /culture famille pâtisson Cucurbitacée\n"
-        "  /culture delai_retour Solanacée 4"
+        "  /culture delai_retour Solanacée 4\n"
+        "  /culture attributs carotte\n"
+        "  /culture exposition courgette plein soleil\n"
+        "  /culture profondeur carotte 1"
     )
 
     if not ctx.args:
@@ -4519,6 +4536,115 @@ async def cmd_culture(update, ctx) -> None:
             )
         except Exception as e:
             log.error(f"[US-067] cmd_culture delai_retour erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture attributs <culture> ──────────────────────────────────────────
+    # [US-161 / CA4] Lecture pure : des colonnes et leur origine, zéro jeton, et
+    # « non renseigné » dit tel quel — jamais une valeur devinée ni moyennée.
+    if sous_cmd in ("attributs", "attribut", "fiche"):
+        if len(ctx.args) < 2:
+            await update.message.reply_text(
+                "❌ Usage : /culture attributs <culture>\n"
+                "Exemple : /culture attributs carotte",
+                parse_mode="Markdown",
+            )
+            return
+        culture = " ".join(ctx.args[1:]).strip()
+        db = SessionLocal()
+        try:
+            lus = svc_attributs.lire_attributs(db, culture)
+            lignes = [f"🌱 *{_md(culture)}* — attributs agronomiques"]
+            for attribut in lus:
+                # Une valeur absente se lit en clair (CA4) : la mettre en gras
+                # comme une vraie valeur donnerait à « non renseigné » le poids
+                # d'une réponse.
+                valeur = (
+                    f"*{_md(attribut.affichage)}*" if attribut.renseigne
+                    else attribut.affichage
+                )
+                lignes.append(f"• {attribut.libelle} : {valeur}")
+
+            # [US-166 / CA1] L'attribution, pas le code technique : `wind_river_greens`
+            # ne dit rien au jardinier, et CC BY oblige à créditer la source AVEC la
+            # réponse, pas dans un README. Une mention par source, dédupliquée, en
+            # texte brut — Telegram parse mal les underscores d'un identifiant.
+            attributions = []
+            for attribut in lus:
+                if attribut.attribution and attribut.attribution not in attributions:
+                    attributions.append(attribut.attribution)
+            if attributions:
+                lignes.append("")
+                lignes.append("Source : " + " · ".join(attributions))
+
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-161] cmd_culture attributs erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture <attribut> <culture> <valeur> ────────────────────────────────
+    # [US-161 / CA5] Correction depuis le bot, sans livraison ni intervention en
+    # base — exactement comme la famille botanique. La réponse confirme
+    # l'ancienne ET la nouvelle valeur.
+    try:
+        cle_attribut = svc_attributs.resoudre_cle(sous_cmd)
+    except KeyError:
+        cle_attribut = None
+
+    if cle_attribut is not None:
+        attribut = svc_attributs.ATTRIBUTS_PAR_CLE[cle_attribut]
+        if len(ctx.args) < 3:
+            admis = (
+                " | ".join(attribut.vocabulaire) if attribut.est_qualitatif
+                else f"un nombre en {attribut.unite}"
+            )
+            await update.message.reply_text(
+                f"❌ Usage : /culture {sous_cmd} <culture> <valeur>\n"
+                f"Valeurs admises : {admis}",
+                parse_mode="Markdown",
+            )
+            return
+        culture = ctx.args[1].strip()
+        valeur = " ".join(ctx.args[2:]).strip()
+        db = SessionLocal()
+        try:
+            fiches, avant, apres = svc_attributs.corriger_attribut(
+                db, culture, cle_attribut, valeur
+            )
+            log.info(
+                f"[US-161] {attribut.libelle} corrigée : '{culture}' : "
+                f"'{avant}' → '{apres}' ({len(fiches)} fiche(s))"
+            )
+            await update.message.reply_text(
+                f"✅ {attribut.libelle} de *{_md(culture)}* : "
+                f"*{_md(avant)}* → *{_md(apres)}*",
+                parse_mode="Markdown",
+            )
+        except svc_attributs.ValeurHorsVocabulaireError as err:
+            # [CA2] L'attribut conserve sa valeur précédente : rien n'a été écrit.
+            await update.message.reply_text(
+                f"❌ {_md(str(err))}\nL'attribut conserve sa valeur précédente.",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-161] cmd_culture {sous_cmd} erreur : {e}")
             await update.message.reply_text(f"❌ Erreur : {e}")
         finally:
             db.close()
