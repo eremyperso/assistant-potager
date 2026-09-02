@@ -36,7 +36,7 @@ Afin de garder l'écran de conversation entier pour mes échanges avec le bot, e
 - Dépendances :
   - S'articule avec `US_Restructurer_help_4_domaines` et `US_Commande_help_aide_mobile` : les descriptions d'une ligne du menu doivent reprendre le vocabulaire des 4 domaines métier, pas en inventer un septième
   - Touche les parcours de saisie guidée (`US-033` et suivantes) uniquement par CA9 (le bouton d'entrée disparaît, le parcours reste)
-- Portée du menu : le menu est déclaré pour l'ensemble des jardiniers. **Vérification faite le 02/09/2026 : il n'existe aucune commande réservée à un rôle** — les 24 commandes enregistrées sont toutes destinées au jardinier, le seul contrôle de rôle en place portant sur l'enregistrement et la correction d'évènements, pas sur l'accès à une commande. Le menu n'a donc pas à distinguer de périmètre d'administration
+- Portée du menu : le menu est déclaré pour l'ensemble des jardiniers. **Vérification faite le 02/09/2026 : il n'existe aucune commande réservée à un rôle** — les 23 commandes enregistrées sont toutes destinées au jardinier, le seul contrôle de rôle en place portant sur l'enregistrement et la correction d'évènements, pas sur l'accès à une commande. Le menu n'a donc pas à distinguer de périmètre d'administration
 - Hors périmètre, explicitement : le remplacement du bouton « Menu » par l'ouverture du dashboard PWA (mini-application web Telegram). Écarté par décision du 02/09/2026 — à traiter dans une US dédiée si le besoin se confirme
 
 *Les trois commandes écartées du menu — décisions du 02/09/2026*

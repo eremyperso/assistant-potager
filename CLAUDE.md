@@ -114,6 +114,18 @@ python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 # CA12 : temps de réponse à VÉRIFIER sur la production avant tout câblage
 # automatique (US-167) — jamais supposé sous prétexte que les index existent.
 python tools/mesurer_rotation.py <parcelle_id> <culture>
+
+# Menu de commandes natif Telegram [US-171]
+# Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :
+# il se dérive des CommandHandler enregistrés dans bot._construire_application().
+# Une commande ajoutée y entre au redémarrage suivant. Trois décisions, un seul
+# fichier — app/services/menu_commandes.py :
+#   COMMANDES_EXCLUES   ce qui n'entre pas au menu (/version, /delier, /tts)
+#   ORDRE_METIER        l'ordre de lecture des lignes
+#   DESCRIPTIONS        la phrase d'aide (≤ 60 caractères, lisible à 375 px)
+# Le clavier de raccourcis permanent n'existe plus : bot.SANS_CLAVIER
+# (ReplyKeyboardRemove) le retire activement chez les jardiniers qui l'avaient.
+# Les claviers contextuels de validation, eux, sont inchangés.
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

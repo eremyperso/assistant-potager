@@ -42,7 +42,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
 logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
 logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
 
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
@@ -81,6 +81,7 @@ from app.services import attributs_culture as svc_attributs  # [US-161]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164]
 from app.services import associations as svc_associations  # [US-163]
 from app.services import rotation as svc_rotation  # [US-163]
+from app.services import menu_commandes as svc_menu_commandes  # [US-171]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
@@ -307,24 +308,26 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
     return normalized
 
 
-# ── Clavier principal ────────────────────────────────────────────────────────────
-MENU_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("🎤 Nouvelle action vocale"), KeyboardButton("🔍 Interroger")],
-        [KeyboardButton("📋 Historique"),             KeyboardButton("📊 Stats")],
-        [KeyboardButton("✏️ Corriger"),               KeyboardButton("📝 Note")],
-    ],
-    resize_keyboard=True,
-    is_persistent=True
-)
-
-AFTER_RECORD_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("➕ Autre action"), KeyboardButton("🔍 Interroger mes données")],
-        [KeyboardButton("📋 Historique"),  KeyboardButton("🏠 Menu principal")],
-    ],
-    resize_keyboard=True
-)
+# ── Plus de clavier de raccourcis permanent [US-171 / CA7, CA8, CA12] ───────────
+# Les raccourcis du bas d'écran (« Nouvelle action vocale », « Interroger »,
+# « Historique », « Stats », « Corriger », « Note », et le clavier d'après
+# enregistrement) sont remplacés par le menu de commandes natif de Telegram —
+# voir `app.services.menu_commandes` et `_publier_menu_commandes()`.
+#
+# Le clavier n'est pas seulement retiré du code : il est **activement retiré de
+# l'écran** (CA8). Un clavier permanent Telegram persiste côté client tant que le
+# bot ne demande pas son retrait ; supprimer les `reply_markup=` aurait laissé
+# l'ancien clavier affiché indéfiniment chez les jardiniers qui l'avaient déjà.
+# D'où `ReplyKeyboardRemove()` posé sur exactement les mêmes messages qu'avant :
+# le premier message reçu après la mise à jour nettoie l'écran, et aucun message
+# suivant ne le fait réapparaître (CA12).
+#
+# Les deux noms historiques survivent volontairement — ils sont posés sur une
+# quarantaine de messages et référencés par les tests existants (CA13) — mais ils
+# désignent désormais la même absence de clavier.
+SANS_CLAVIER = ReplyKeyboardRemove()
+MENU_KEYBOARD = SANS_CLAVIER
+AFTER_RECORD_KEYBOARD = SANS_CLAVIER
 
 # ── États conversation ───────────────────────────────────────────────────────────
 WAITING_ASK = 1
@@ -434,7 +437,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Synthèse vocale : {tts_etat}\n\n"
         f"Envoyez-moi un *message vocal* ou *texte* pour enregistrer une action.\n"
         f"Ex : _\"Récolté 3 kg de tomates variété cerise parcelle nord\"_\n\n"
-        f"Ou utilisez les boutons ci-dessous.\n"
+        # [US-171 / CA10] Le menu natif remplace les anciens boutons du bas.
+        f"⌨️ Toutes les commandes sont dans le menu, à gauche de la zone de saisie.\n"
         f"📖 Tapez /help pour l'aide en ligne.",
         parse_mode="Markdown",
         reply_markup=MENU_KEYBOARD
@@ -688,8 +692,10 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "amendement · protection · observation\n\n"
         "*Dates :* hier · avant-hier · lundi… \"le 5 mars\"\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "*⌨️ Commandes*\n"
-        "/start — Menu principal\n"
+        # [US-171 / CA10] Le menu natif est le chemin d'accès aux commandes.
+        "*⌨️ Commandes* — toutes accessibles depuis le bouton *Menu*,\n"
+        "à gauche de la zone de saisie.\n"
+        "/start — Accueil\n"
         "/plan — Plan d'occupation des parcelles\n"
         "/parcelle ajouter [nom] — Créer une parcelle\n"
         "/culture famille [culture] [famille] — Corriger une famille botanique\n"
@@ -6421,6 +6427,42 @@ def _avec_garde_liaison(handler):
     return _handler_garde
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-171] Menu de commandes natif Telegram
+# ──────────────────────────────────────────────────────────────────────────────
+def _noms_commandes_enregistrees(app: "Application") -> set[str]:
+    """Noms des commandes réellement servies par le bot, par introspection.
+
+    Dérivé des `CommandHandler` de l'Application plutôt que d'une liste recopiée :
+    c'est ce qui garantit qu'aucune commande morte ne figure au menu et qu'une
+    commande nouvellement enregistrée y entre d'elle-même (CA3, CA6).
+    """
+    noms: set[str] = set()
+    for handlers in app.handlers.values():
+        for handler in handlers:
+            if isinstance(handler, CommandHandler):
+                noms.update(handler.commands)
+    return noms
+
+
+async def _publier_menu_commandes(app: "Application") -> None:
+    """Déclare le menu de commandes auprès de Telegram, à chaque démarrage (CA1, CA6).
+
+    Rejoué sans intervention manuelle : la liste envoyée écrase la précédente,
+    donc une commande ajoutée ou retirée du bot se reflète au redémarrage suivant.
+    Un échec réseau est journalisé mais ne fait jamais échouer le démarrage du
+    bot — le menu est un confort, pas une condition de service.
+    """
+    entrees = svc_menu_commandes.construire_menu(_noms_commandes_enregistrees(app))
+    try:
+        await app.bot.set_my_commands(
+            [BotCommand(nom, description) for nom, description in entrees]
+        )
+        log.info("⌨️  MENU TELEGRAM  : %d commandes déclarées", len(entrees))
+    except Exception as e:  # noqa: BLE001 — observabilité, jamais bloquant
+        log.warning("⌨️  MENU TELEGRAM  : déclaration impossible (%s)", e)
+
+
 def _enregistrer_commande(app: "Application", nom: str, handler) -> None:
     """[US-045] Point d'enregistrement unique des CommandHandler — applique le
     garde de liaison sauf pour les commandes d'onboarding (CA9)."""
@@ -6440,6 +6482,8 @@ def _construire_application() -> "Application":
         .write_timeout(30)
         .connect_timeout(15)
         .pool_timeout(30)
+        # [US-171 / CA6] Le menu est (re)déclaré à chaque démarrage du bot.
+        .post_init(_publier_menu_commandes)
         .build()
     )
 

@@ -1,3 +1,17 @@
+## [v3.49.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute le menu de commandes natif Telegram : le bouton « Menu », à gauche de la zone de saisie, liste désormais les 20 commandes du bot, chacune avec sa phrase d'aide en français (US-171)
+- Retire le clavier de raccourcis permanent qui occupait le bas de l'écran — y compris chez les jardiniers qui l'avaient déjà affiché, un clavier Telegram persistant côté client tant que son retrait n'est pas demandé (US-171)
+- Oriente `/start` et `/help` vers le menu comme chemin d'accès aux commandes (US-171)
+
+### 🔧 Améliorations techniques
+- Dérive le menu des commandes réellement enregistrées par le bot plutôt que d'une liste tenue à la main : une commande ajoutée y entre au redémarrage suivant, aucune commande retirée n'y subsiste (US-171)
+- Concentre en un seul endroit les trois décisions du menu — ce qui en est écarté (`/version`, `/delier`, `/tts`), dans quel ordre métier les lignes se lisent, avec quelle phrase d'aide (`app/services/menu_commandes.py`) (US-171)
+- Écarte `/tts` du menu au profit de `/tts_on` et `/tts_off` : une entrée de menu doit agir en un clic, or `/tts` ne fait qu'afficher l'état puis renvoyer vers ces deux commandes (US-171)
+- Laisse strictement inchangés les claviers contextuels de validation — confirmation d'événement, choix de variété, catégories de note, dissociation (US-171)
+- Ne fait jamais échouer le démarrage du bot si Telegram refuse la déclaration du menu : l'échec est journalisé, le service démarre (US-171)
+
 ## [v3.48.0] — 2026-09-02
 
 ### 🚀 Nouveautés
