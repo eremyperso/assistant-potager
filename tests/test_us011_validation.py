@@ -215,6 +215,30 @@ def test_us011bis_culture_grounded_none_toujours_vrai():
     assert culture_grounded_dans_texte(None, "paillage parcelle nord") is True
 
 
+def test_us011bis_culture_grounded_composee_presente_dans_texte():
+    """Repro bug prod : culture composée dictée telle quelle → fondée.
+
+    Le parseur déterministe (US-094/095) reconnaît des cultures à plusieurs
+    mots ("petit pois") issues du référentiel — le garde-fou doit retrouver
+    CHACUN de ses mots dans le texte, pas la chaîne entière d'un bloc.
+    """
+    assert culture_grounded_dans_texte("petit pois", "semer 10 graines de petit pois") is True
+
+
+def test_us011bis_culture_grounded_composee_absente_du_texte():
+    """Culture composée dont aucun mot n'apparaît dans le texte → non fondée."""
+    assert culture_grounded_dans_texte("pomme de terre", "paillage parcelle nord") is False
+
+
+def test_us011bis_culture_grounded_composee_partiellement_presente():
+    """Un seul mot de la culture composée mentionné → non fondée.
+
+    Évite qu'un mot isolé et hors contexte ("pomme") suffise à valider une
+    culture composée inventée ("pomme de terre").
+    """
+    assert culture_grounded_dans_texte("pomme de terre", "j'ai mangé une pomme") is False
+
+
 def test_us011bis_strip_culture_hallucinee_retire_culture_et_variete():
     """Repro bug prod : culture inventée sans aucune mention dans le texte → retirée."""
     parsed = {"action": "paillage", "culture": "ail", "variete": "blanc", "parcelle": "planche test"}
@@ -226,6 +250,17 @@ def test_us011bis_strip_culture_hallucinee_retire_culture_et_variete():
     assert result["variete"] is None
     assert result["action"] == "paillage"       # le reste de l'item n'est pas altéré
     assert result["parcelle"] == "planche test"
+
+
+def test_us011bis_strip_culture_hallucinee_conserve_culture_composee_fondee():
+    """Repro bug prod : culture composée dictée telle quelle → conservée (pas retirée à tort)."""
+    parsed = {"action": "semis", "culture": "petit pois", "quantite": 10, "unite": "graines"}
+    texte = "semer 10 graines de petit pois"
+
+    result = strip_culture_hallucinee(parsed, texte)
+
+    assert result["culture"] == "petit pois"
+    assert result["quantite"] == 10
 
 
 def test_us011bis_strip_culture_hallucinee_conserve_culture_fondee():

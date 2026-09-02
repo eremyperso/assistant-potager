@@ -25,11 +25,49 @@ from sqlalchemy import func, or_
 from database.models import Evenement, CultureConfig, Parcelle
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-096 / CA4] Référentiel de conversion et d'arrondi des poids récoltés.
+# Extrait tel quel des corps de calcul_stock_cultures() / calcul_rendement_mensuel(),
+# où il était dupliqué à l'identique, pour qu'un gabarit de réponse chiffrée
+# (app/services/reponses_chiffrees.py) affiche EXACTEMENT le même chiffre que
+# /stats Telegram et que l'écran web — le bot et la PWA ne doivent jamais
+# annoncer deux valeurs différentes pour la même réalité.
+# ─────────────────────────────────────────────────────────────────────────────
+UNITES_POIDS_EN_G: Dict[str, float] = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+
+# [fix bug EN PLACE non déduit] Libellé humain substitué à `variete=None` pour
+# l'affichage. Centralisé ici pour que bot.py puisse détecter cette substitution
+# et la ramener à None avant toute réutilisation comme donnée (callback_data,
+# pré-remplissage) — sans quoi le libellé finit stocké tel quel dans Evenement.variete.
+LABEL_VARIETE_NON_PRECISEE = "Variété non précisée"
+
+
+def poids_lisible(total_g: float) -> tuple:
+    """[US-002 / US-096 / CA4] Convertit un total en grammes vers le couple
+    (valeur arrondie, unité) affiché partout ailleurs : kg à 2 décimales
+    au-delà de 1 kg, g à 1 décimale en deçà."""
+    if total_g >= 1000:
+        return round(total_g / 1000, 2), "kg"
+    return round(total_g, 1), "g"
+
+
 def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
     """[US-030] Borne haute inclusive (23:59:59) pour filtrage temporel par date de référence."""
     if date_ref is None:
         return None
     return datetime(date_ref.year, date_ref.month, date_ref.day, 23, 59, 59)
+
+
+def _norm_variete(variete: Optional[str]) -> Optional[str]:
+    """[fix bug EN PLACE non déduit] Ramène à None une valeur de `Evenement.variete`
+    déjà lue en base sous la forme du libellé humain LABEL_VARIETE_NON_PRECISEE (ou
+    une chaîne vide) — un écrivain en amont (bug déjà corrigé côté bot.py, ou donnée
+    historique) a pu stocker ce libellé au lieu de NULL. Sans cette normalisation à la
+    lecture, une clé "None" (plantation) et une clé "Variété non précisée" (perte) pour
+    la même variété non précisée ne matchent jamais dans les dicts d'agrégation."""
+    if not variete or variete == LABEL_VARIETE_NON_PRECISEE:
+        return None
+    return variete
 
 
 import logging as _logging
@@ -246,12 +284,8 @@ def calcul_stock_cultures(
     # [US-036] pool "pièces" (déduction de stock) vs pool "poids" (rendement) :
     # un même couple (culture, unite="g") ne doit JAMAIS alimenter le stock,
     # et un couple (culture, unite="plants") ne doit JAMAIS alimenter le rendement.
-    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
-
-    def _best_unite(total_g: float) -> tuple:
-        if total_g >= 1000:
-            return round(total_g / 1000, 2), "kg"
-        return round(total_g, 1), "g"
+    _UNITE_TO_G = UNITES_POIDS_EN_G
+    _best_unite = poids_lisible
 
     _q_recoltes = (
         db.query(
@@ -323,6 +357,11 @@ def _fmt_qte_unite(valeur: float, unite: str) -> float | int:
         arrondi = round(valeur, 2)
         return int(arrondi) if arrondi == int(arrondi) else arrondi
     return int(valeur)
+
+
+# [US-096 / CA4] Alias public du formateur de quantité : les gabarits de réponses
+# chiffrées arrondissent comme /stats et comme l'API web, sans importer un nom privé.
+quantite_lisible = _fmt_qte_unite
 
 
 def format_stock_ligne_telegram(s: StockCulture) -> str:
@@ -684,7 +723,7 @@ def calcul_rendement_mensuel(
     if not rows:
         return {"cultures": [], "mois_range": [], "total_general_kg": 0.0}
 
-    _UNITE_TO_G = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
+    _UNITE_TO_G = UNITES_POIDS_EN_G
 
     par_culture: Dict[str, dict] = {}
     mois_avec_recolte: set = set()
@@ -846,7 +885,10 @@ def calcul_stock_par_variete(
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
-    pertes: Dict[Optional[str], float] = {v: (q or 0) for v, q in pertes_raw}
+    pertes: Dict[Optional[str], float] = {}
+    for v, q in pertes_raw:
+        vk = _norm_variete(v)
+        pertes[vk] = pertes.get(vk, 0.0) + (q or 0)
 
     # ── 3. Récoltes brutes par variété (agrégation Python pour gérer multi-unités) ──
     _q_recoltes = (
@@ -889,13 +931,13 @@ def calcul_stock_par_variete(
 
     for variete, unite, qte, rang, date_ev in plantations_raw:
         total = (qte or 0) * (rang or 1)
-        _accumuler_variete(variete, unite or "plants", total, date_ev)
+        _accumuler_variete(_norm_variete(variete), unite or "plants", total, date_ev)
 
     # [US-037 / CA4, CA5] Semis pleine terre fusionnés dans le même pool — pas de
     # rang appliqué (un semis à la volée n'a pas de notion de rang), pas de
     # conversion d'unité.
     for variete, unite, qte, date_ev in semis_pt_raw:
-        _accumuler_variete(variete, unite or "graines", qte or 0.0, date_ev)
+        _accumuler_variete(_norm_variete(variete), unite or "graines", qte or 0.0, date_ev)
 
     plantes_resolues = _resoudre_unite_dominante(plantes_par_unite, contexte=f"{culture} par variété")
     plantes: Dict[Optional[str], dict] = {
@@ -923,6 +965,7 @@ def calcul_stock_par_variete(
     pieces_brut: Dict[Optional[str], dict] = {}
     poids_g_brut: Dict[Optional[str], dict] = {}
     for variete, unite, qte, date_ev in recoltes_raw:
+        variete = _norm_variete(variete)
         unite_l = (unite or "").lower()
         if unite_l in _UNITE_TO_G_V:
             _accumulate(poids_g_brut, variete, (qte or 0) * _UNITE_TO_G_V[unite_l], unite_l, date_ev)
@@ -981,7 +1024,7 @@ def calcul_stock_par_variete(
         rp = rendements.get(vkey, _empty_pool_entry())
         dates_recolte = [d for d in (r["date_max"], rp["date_max"]) if d]
         result.append({
-            "variete":                  vkey if vkey is not None else "Variété non précisée",
+            "variete":                  vkey if vkey is not None else LABEL_VARIETE_NON_PRECISEE,
             "plants_plantes":           p["total"],
             "plants_perdus":            pertes.get(vkey, 0.0),
             "nb_recoltes":              r["nb"],
@@ -1048,7 +1091,7 @@ def _parcelles_par_variete(
 
     result: Dict[str, List[str]] = {}
     for variete, parcelle_nom in _q_plant.all() + _q_semis.all():
-        v_key = variete if variete is not None else "Variété non précisée"
+        v_key = variete if variete is not None else LABEL_VARIETE_NON_PRECISEE
         noms = result.setdefault(v_key, [])
         nom = parcelle_nom or "Non localisé"
         if nom not in noms:
@@ -1126,7 +1169,7 @@ def calcul_stock_varietes(
         if cutoff is not None:
             _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
         varietes_avec_plantation = {
-            (row[0] if row[0] is not None else "Variété non précisée") for row in _q_plant_var.all()
+            (row[0] if row[0] is not None else LABEL_VARIETE_NON_PRECISEE) for row in _q_plant_var.all()
         }
 
         parcelles_var = _parcelles_par_variete(db, culture, date_ref, potager_id)
@@ -1173,7 +1216,7 @@ def calcul_stock_varietes(
         unite_v = "plants" if en_godet else g.get("unite_germination", "graines")
         result.append({
             "culture":           g["culture"],
-            "variete":           g["variete"] if g["variete"] is not None else "Variété non précisée",
+            "variete":           g["variete"] if g["variete"] is not None else LABEL_VARIETE_NON_PRECISEE,
             "etat":              "pep",
             "origine":           "pépinière",
             "parcelles":         [],
@@ -1786,8 +1829,16 @@ def calcul_lots_pepiniere(
     cutoff = _cutoff_dt(date_ref)
 
     # ── 1. Les lots : un semis en pépinière = un lot (CA1) ──────────────────
+    # [US-096 / CA11] `joinedload` plutôt que l'accès paresseux à `parcelle_rel`
+    # plus bas : le nom de la parcelle est ramené par CETTE requête, déjà scopée
+    # par potager. Sans cela, chaque lot déclenchait un `SELECT … FROM parcelles
+    # WHERE id = ?` sans filtre de potager — un N+1 pour l'écran pépinière, et
+    # une lecture non isolée que le garde du catalogue refuse à juste titre.
+    from sqlalchemy.orm import joinedload as _joinedload
+
     _q_semis = (
         db.query(Evenement)
+        .options(_joinedload(Evenement.parcelle_rel))
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))

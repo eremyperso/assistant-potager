@@ -18,7 +18,7 @@ from utils.parcelles import levenshtein_distance
 _LEVENSHTEIN_MAX = 2
 
 
-def _normalise(texte: str) -> str:
+def normaliser_culture(texte: str) -> str:
     return unidecode((texte or "").strip().lower())
 
 
@@ -62,24 +62,24 @@ def varietes_connues(db, potager_id: int, culture: str) -> list[str]:
 
 def _meilleure_correspondance(brut: str, connus: list[str]) -> str | None:
     """Applique le triptyque exact → Levenshtein ≤ 2 → sous-chaîne sur une liste de valeurs connues."""
-    cible = _normalise(brut)
+    cible = normaliser_culture(brut)
     if not cible:
         return None
 
     for c in connus:
-        if _normalise(c) == cible:
+        if normaliser_culture(c) == cible:
             return c
 
     meilleur, meilleure_dist = None, _LEVENSHTEIN_MAX + 1
     for c in connus:
-        d = levenshtein_distance(_normalise(c), cible)
+        d = levenshtein_distance(normaliser_culture(c), cible)
         if d <= _LEVENSHTEIN_MAX and d < meilleure_dist:
             meilleur, meilleure_dist = c, d
     if meilleur:
         return meilleur
 
     for c in connus:
-        cn = _normalise(c)
+        cn = normaliser_culture(c)
         if cn and (cn in cible or cible in cn):
             return c
 
@@ -103,7 +103,7 @@ def culture_deja_plantee(db, potager_id: int, culture: str) -> bool:
     """
     if not culture or not culture.strip():
         return True  # rien à vérifier, laisse passer (comportement neutre)
-    cible = _normalise(culture)
+    cible = normaliser_culture(culture)
     rows = (
         db.query(Evenement.culture)
         .filter(
@@ -114,7 +114,7 @@ def culture_deja_plantee(db, potager_id: int, culture: str) -> bool:
         .distinct()
         .all()
     )
-    return any(_normalise(c) == cible for (c,) in rows)
+    return any(normaliser_culture(c) == cible for (c,) in rows)
 
 
 def resolve_culture(db, potager_id: int, culture_brute: str | None) -> str | None:

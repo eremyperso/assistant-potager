@@ -6,7 +6,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { familleDe } from '../lib/familles.js'
 import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
@@ -465,9 +464,11 @@ export default function Pepiniere({ refresh }) {
         : tri === 'Ancien → Récent' ? cle(a).localeCompare(cle(b))
           : (a.culture || '').localeCompare(b.culture || ''))
 
+    // [US-067 / CA5, CA6] La famille vient de GET /pepiniere/lots (culture_config
+    // → familles_botaniques côté serveur), plus de la table figée familles.js.
     const acc = []
     tries.forEach(l => {
-      const f = familleDe(l.culture)
+      const f = l.famille || 'Autres'
       const g = acc.find(x => x.nom === f)
       g ? g.items.push(l) : acc.push({ nom: f, items: [l] })
     })

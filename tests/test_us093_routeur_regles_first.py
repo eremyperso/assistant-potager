@@ -253,8 +253,22 @@ def test_us093_ca3_ca4_cache_evite_un_second_appel_modele():
     # [CA14] le type d'appel passe par la passerelle, jamais un modèle en dur —
     # le petit modèle rapide est résolu par configuration (GROQ_MODEL_CLASSIFICATION).
     assert mock_modele.call_args.kwargs["appel_type"] == passerelle.TYPE_CLASSIFICATION
-    # [CA12] coût borné : peu de jetons de sortie pour une classification.
-    assert mock_modele.call_args.kwargs["max_tokens"] <= 16
+    # [CA12] coût borné : le budget reste petit devant celui d'une réponse
+    # (400 jetons pour l'étage raisonnement).
+    #
+    # Le seuil était fixé à 16, calibré sur la réponse attendue
+    # « NATURE|confiance » qui tient en 8 jetons. C'était impossible à tenir :
+    # `openai/gpt-oss-120b` émet des jetons de raisonnement avant son contenu,
+    # et `max_tokens` plafonne les deux ensemble — le contenu revenait
+    # systématiquement vide et le routeur repliait sur QUESTION_HYBRIDE/0.0.
+    # Ce test passait néanmoins, la passerelle étant simulée : il vérifiait le
+    # budget demandé, jamais qu'une classification en revenait. Découvert le
+    # 27/08/2026 par le rejeu de corpus (Action 0), sur 210 classifications
+    # réelles toutes à confiance 0.00.
+    assert mock_modele.call_args.kwargs["max_tokens"] <= 200
+    # Le plancher est le vrai garde-fou : sous ~120 jetons, le raisonnement
+    # consomme tout le budget et le contenu revient vide.
+    assert mock_modele.call_args.kwargs["max_tokens"] >= 120
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -301,8 +315,8 @@ def test_us093_ca6_ca7_remontee_sur_donnee_absente():
 
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("Aucune donnée enregistrée pour physalis / recolte.", False),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("Aucune donnée enregistrée pour physalis / recolte.", False, None),
         ) as mock_data,
         patch("llm.passerelle.appeler_chat", return_value=reponse_raisonnement) as mock_llm,
     ):
@@ -310,9 +324,11 @@ def test_us093_ca6_ca7_remontee_sur_donnee_absente():
 
     mock_data.assert_called_once()
     mock_llm.assert_called_once()  # [CA7] un seul saut, jamais répété
-    assert resultat == reponse_raisonnement.texte
+    assert resultat.texte == reponse_raisonnement.texte
+    # [US-097] remontée de cascade correctement journalisée
+    assert resultat.etage_resolveur == routeur.ETAGE_RAISONNEMENT
     # [CA8] aucun message intermédiaire — seule la réponse finale est renvoyée
-    assert "cherche ailleurs" not in resultat.lower()
+    assert "cherche ailleurs" not in resultat.texte.lower()
 
 
 def test_us093_ca6_pas_de_remontee_si_donnee_deja_exploitable():
@@ -320,15 +336,17 @@ def test_us093_ca6_pas_de_remontee_si_donnee_deja_exploitable():
     question = "combien de tomates ai-je récolté cette saison ?"
     with (
         patch(
-            "app.services.questions.repondre_question_avec_confiance",
-            return_value=("Total tomate récolte : 4 kg", True),
+            "app.services.questions.repondre_question_detaille",
+            return_value=("Total tomate récolte : 4 kg", True, None),
         ),
         patch("llm.passerelle.appeler_chat") as mock_llm,
     ):
         resultat = routeur.repondre_avec_cascade(CTX, question)
 
     mock_llm.assert_not_called()
-    assert resultat == "Total tomate récolte : 4 kg"
+    assert resultat.texte == "Total tomate récolte : 4 kg"
+    # [US-097] pas de remontée : l'étage donnée a directement résolu la demande
+    assert resultat.etage_resolveur == routeur.ETAGE_DONNEE
 
 
 def test_us093_edge_echec_llm_sur_etage_data_nest_pas_une_remontee():
@@ -338,7 +356,7 @@ def test_us093_edge_echec_llm_sur_etage_data_nest_pas_une_remontee():
     avant cette US (US-092 / CA9, CA10), pas être avalée en silence."""
     question = "combien de tomates ai-je récolté cette saison ?"
     with patch(
-        "app.services.questions.repondre_question_avec_confiance",
+        "app.services.questions.repondre_question_detaille",
         side_effect=LLMIndisponibleError("quota dépassé"),
     ):
         with pytest.raises(LLMIndisponibleError):
@@ -411,3 +429,68 @@ def test_us093_ca14_appel_modele_configurable_via_passerelle():
     _, kwargs = mock_modele.call_args
     assert kwargs["appel_type"] == passerelle.TYPE_CLASSIFICATION
     assert "modele" not in kwargs  # jamais de nom de modèle forcé depuis le routeur
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Action 0 (vague 2) — une saisie dictée qui nomme un geste est une ACTION
+# -----------------------------------------------------------------------------
+# Le rejeu du corpus de production du 27/08/2026 a montré que 28 saisies sur
+# 205 étaient classées QUESTION_DATA : `_VERBES_ACTION` teste un PRÉFIXE et
+# rate donc les formes nominales (« plantation 14 plants… »), tandis que les
+# marqueurs DATA sont testés par sous-chaîne n'importe où dans la phrase —
+# « mise en godet 20 tomates » tombait sur le marqueur « en godet » ajouté par
+# US-096. Conséquence : le jardinier recevait un agrégat SQL au lieu de voir
+# son évènement enregistré.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("texte", [
+    "Mise en godet 20 tomate",
+    "mise en godet 8 plants de blette sur 20 le 13/04",
+    "plantation 14 plants de tomate coeur de boeuf le 25/05",
+    "Binage effectué sur les rangs d'oignons il y a 4 jours",
+    "Vente 1 courgette",
+    "Perte 3 salades le 22/5",
+    "Récolte 500 grammes de courgettes.",
+])
+def test_action0_saisie_dictee_nommant_un_geste_reste_une_action(texte):
+    """Aucun appel modèle : la règle doit trancher seule, à coût nul."""
+    with patch("llm.passerelle.appeler_chat") as mock_modele:
+        decision = routeur.classer_demande(texte, ctx=CTX)
+    mock_modele.assert_not_called()
+    assert decision.nature == NATURE_ACTION
+    assert decision.origine == "regle"
+
+
+@pytest.mark.parametrize("texte", [
+    "qu'est-ce qu'il y a en pépinière ?",
+    "combien de plants de tomate en godet ?",
+    "quel est le rendement de la saison ?",
+])
+def test_action0_questions_chiffrees_us096_restent_data(texte):
+    """La règle geste ne doit pas manger les formulations qu'US-096 sert par
+    gabarit : ce sont elles qui ont motivé l'ajout des marqueurs DATA."""
+    with patch("llm.passerelle.appeler_chat") as mock_modele:
+        decision = routeur.classer_demande(texte, ctx=CTX)
+    mock_modele.assert_not_called()
+    assert decision.nature == NATURE_QUESTION_DATA
+
+
+@pytest.mark.parametrize("texte", [
+    "pourquoi mes tomates jaunissent",
+    "comment planter des poireaux",
+])
+def test_action0_marqueurs_savoir_gardent_la_priorite_sur_le_geste(texte):
+    """« comment **planter** des poireaux » nomme un geste mais demande un
+    savoir : les marqueurs explicites sont testés avant la règle geste."""
+    with patch("llm.passerelle.appeler_chat") as mock_modele:
+        decision = routeur.classer_demande(texte, ctx=CTX)
+    mock_modele.assert_not_called()
+    assert decision.nature == NATURE_QUESTION_SAVOIR
+
+
+def test_action0_geste_en_subordonnee_ne_declenche_pas_la_regle():
+    """Le geste doit être en tête. Dans une subordonnée de contexte, il décrit
+    un repère temporel, pas la demande — cas mesuré sur le corpus CA11."""
+    assert routeur._regle_par_geste(
+        "mes asperges ont des petites bêtes noires sur les tiges après la récolte"
+    ) is None

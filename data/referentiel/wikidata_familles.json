@@ -1,0 +1,114 @@
+{
+  "_lisez_moi": [
+    "[US-166] Extrait hors ligne du référentiel taxonomique Wikidata (CC0).",
+    "Versionné dans le dépôt et rejoué par tools/importer_referentiel.py — aucun appel",
+    "réseau n'a lieu à l'import (CA8) : la récupération des données est une opération",
+    "d'administration séparée, jamais un aller-retour pendant qu'un jardinier attend.",
+    "Wikidata n'apporte ici QUE de la taxonomie — noms scientifiques et rattachement",
+    "culture → famille. Aucun délai de retour n'y figure : un délai de rotation est un",
+    "conseil agronomique, pas un fait taxonomique. Les délais restent ceux de la",
+    "rédaction interne (migration_v37) et ne sont pas écrasés par cet import.",
+    "Les cultures listées ici qui n'existent pas dans culture_config sont ignorées,",
+    "jamais créées (CA7)."
+  ],
+  "source": {
+    "code": "wikidata",
+    "libelle": "Wikidata",
+    "licence": "CC0",
+    "attribution": "Wikidata — CC0 1.0 Universal (domaine public)",
+    "url": "https://www.wikidata.org/",
+    "partageable": true
+  },
+  "extrait_le": "2026-09-01",
+  "familles": [
+    { "nom": "Solanacée",     "nom_scientifique": "Solanaceae" },
+    { "nom": "Cucurbitacée",  "nom_scientifique": "Cucurbitaceae" },
+    { "nom": "Alliacée",      "nom_scientifique": "Alliaceae" },
+    { "nom": "Chénopodiacée", "nom_scientifique": "Chenopodiaceae" },
+    { "nom": "Lamiacée",      "nom_scientifique": "Lamiaceae" },
+    { "nom": "Rosacée",       "nom_scientifique": "Rosaceae" },
+    { "nom": "Apiacée",       "nom_scientifique": "Apiaceae" },
+    { "nom": "Brassicacée",   "nom_scientifique": "Brassicaceae" },
+    { "nom": "Astéracée",     "nom_scientifique": "Asteraceae" },
+    { "nom": "Fabacée",       "nom_scientifique": "Fabaceae" },
+    { "nom": "Poacée",        "nom_scientifique": "Poaceae" },
+    { "nom": "Asparagacée",   "nom_scientifique": "Asparagaceae" },
+    { "nom": "Polygonacée",   "nom_scientifique": "Polygonaceae" },
+    { "nom": "Tropéolacée",   "nom_scientifique": "Tropaeolaceae" },
+    { "nom": "Caprifoliacée", "nom_scientifique": "Caprifoliaceae" }
+  ],
+  "cultures_familles": [
+    { "culture": "tomate",             "famille": "Solanacée" },
+    { "culture": "aubergine",          "famille": "Solanacée" },
+    { "culture": "poivron",            "famille": "Solanacée" },
+    { "culture": "piment",             "famille": "Solanacée" },
+    { "culture": "pomme de terre",     "famille": "Solanacée" },
+
+    { "culture": "courgette",          "famille": "Cucurbitacée" },
+    { "culture": "courge",             "famille": "Cucurbitacée" },
+    { "culture": "butternut",          "famille": "Cucurbitacée" },
+    { "culture": "potiron",            "famille": "Cucurbitacée" },
+    { "culture": "potimarron",         "famille": "Cucurbitacée" },
+    { "culture": "concombre",          "famille": "Cucurbitacée" },
+    { "culture": "cornichon",          "famille": "Cucurbitacée" },
+    { "culture": "melon",              "famille": "Cucurbitacée" },
+    { "culture": "pastèque",           "famille": "Cucurbitacée" },
+    { "culture": "pâtisson",           "famille": "Cucurbitacée" },
+
+    { "culture": "oignon",             "famille": "Alliacée" },
+    { "culture": "échalote",           "famille": "Alliacée" },
+    { "culture": "ail",                "famille": "Alliacée" },
+    { "culture": "poireau",            "famille": "Alliacée" },
+    { "culture": "ciboulette",         "famille": "Alliacée" },
+
+    { "culture": "betterave",          "famille": "Chénopodiacée" },
+    { "culture": "blette",             "famille": "Chénopodiacée" },
+    { "culture": "épinard",            "famille": "Chénopodiacée" },
+    { "culture": "épinard perpétuel",  "famille": "Chénopodiacée" },
+
+    { "culture": "basilic",            "famille": "Lamiacée" },
+    { "culture": "menthe",             "famille": "Lamiacée" },
+    { "culture": "thym",               "famille": "Lamiacée" },
+    { "culture": "romarin",            "famille": "Lamiacée" },
+
+    { "culture": "fraise",             "famille": "Rosacée" },
+    { "culture": "framboise",          "famille": "Rosacée" },
+
+    { "culture": "carotte",            "famille": "Apiacée" },
+    { "culture": "persil",             "famille": "Apiacée" },
+    { "culture": "céleri",             "famille": "Apiacée" },
+    { "culture": "panais",             "famille": "Apiacée" },
+    { "culture": "fenouil",            "famille": "Apiacée" },
+    { "culture": "coriandre",          "famille": "Apiacée" },
+
+    { "culture": "chou",               "famille": "Brassicacée" },
+    { "culture": "radis",              "famille": "Brassicacée" },
+    { "culture": "navet",              "famille": "Brassicacée" },
+    { "culture": "roquette",           "famille": "Brassicacée" },
+    { "culture": "brocoli",            "famille": "Brassicacée" },
+    { "culture": "chou de Bruxelles",  "famille": "Brassicacée" },
+    { "culture": "chou frisé",         "famille": "Brassicacée" },
+
+    { "culture": "salade",             "famille": "Astéracée" },
+    { "culture": "laitue",             "famille": "Astéracée" },
+    { "culture": "artichaut",          "famille": "Astéracée" },
+
+    { "culture": "haricot",            "famille": "Fabacée" },
+    { "culture": "haricot grimpant",   "famille": "Fabacée" },
+    { "culture": "pois",               "famille": "Fabacée" },
+    { "culture": "petit pois",         "famille": "Fabacée" },
+    { "culture": "pois gourmand",      "famille": "Fabacée" },
+    { "culture": "fève",               "famille": "Fabacée" },
+
+    { "culture": "maïs",               "famille": "Poacée" },
+
+    { "culture": "asperge",            "famille": "Asparagacée" },
+
+    { "culture": "oseille",            "famille": "Polygonacée" },
+    { "culture": "rhubarbe",           "famille": "Polygonacée" },
+
+    { "culture": "capucine",           "famille": "Tropéolacée" },
+
+    { "culture": "mâche",              "famille": "Caprifoliacée" }
+  ]
+}

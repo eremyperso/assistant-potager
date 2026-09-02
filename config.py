@@ -84,3 +84,8 @@ GROQ_TIMEOUT_S = float(os.environ.get("GROQ_TIMEOUT_S", "30"))
 # La passerelle est appelée depuis des handlers Telegram et des endpoints HTTP :
 # au-delà de ce plafond on bascule en mode dégradé plutôt que de faire attendre.
 GROQ_RETRY_MAX_S = float(os.environ.get("GROQ_RETRY_MAX_S", "2"))
+
+# [US-097 / CA7] E-mail du compte administrateur de la plateforme — seul compte
+# autorisé à consulter les métriques de routage. Absent/vide → endpoints admin
+# totalement inaccessibles (403), pas de repli sur un compte par défaut.
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")

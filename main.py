@@ -44,6 +44,11 @@ Onboarding self-service [US-048] :
 
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
+
+Observabilité de la cascade de réponses + retour du jardinier [US-097] :
+  POST /routage/{routage_log_id}/retour  → avis 👍/👎 sur une réponse de savoir/raisonnement
+  GET  /admin/routage/metriques          → métriques de routage (réservé à ADMIN_EMAIL)
+  GET  /admin/routage/retours-negatifs   → questions les plus souvent jugées mauvaises (réservé)
 """
 import json
 import logging
@@ -99,7 +104,14 @@ from app.services import plan as svc_plan
 from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
-from config import FRONTEND_URL  # [US-090] retour de fédération vers la PWA
+from app.services import familles as svc_familles  # [US-067]
+from app.services import avertissements_plantation as svc_avertissements  # [US-167]
+from utils.culture_resolve import normaliser_culture
+from utils.parcelles import resolve_parcelle  # [US-167]
+from utils.actions import normalize_action  # [US-167]
+from app.services import retours as svc_retours  # [US-097]
+from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
 
 log = logging.getLogger("potager")
 
@@ -254,6 +266,15 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
             )
     finally:
         db.close()
+
+
+def require_admin_user(user: User = Depends(get_current_user)) -> User:
+    """[US-097 / CA7] Dépendance FastAPI : réserve un endpoint au compte
+    administrateur de la plateforme (`ADMIN_EMAIL`, variable d'environnement).
+    `ADMIN_EMAIL` absent/vide → 403 systématique, jamais de repli implicite."""
+    if not ADMIN_EMAIL or (user.email or "").strip().lower() != ADMIN_EMAIL.strip().lower():
+        raise HTTPException(status_code=403, detail="Réservé à l'administrateur de la plateforme")
+    return user
 
 
 def ctx_pour_potager_consulte(db, ctx: TenantContext, potager_id: Optional[int]) -> TenantContext:
@@ -1140,6 +1161,10 @@ class TexteRequest(BaseModel):
     texte: str
 
 
+class RetourRequest(BaseModel):
+    avis: str  # 'positif' | 'negatif'
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1213,6 +1238,26 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     db = SessionLocal()
     saved = []
     try:
+        # [US-167 / CA1-CA3] Avertissement de rotation/association — évalué
+        # AVANT toute écriture ci-dessous, sur l'historique tel qu'il était
+        # avant cette sauvegarde. L'évaluer après aurait fait apparaître
+        # l'événement tout juste créé comme son propre antécédent dans
+        # `rotation.evaluer_rotation` (faux conflit auto-référentiel). Additif
+        # au contrat JSON existant, ne modifie aucun champ déjà retourné.
+        avertissements = []
+        for parsed in items:
+            if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+                continue
+            nom_parcelle = parsed.get("parcelle")
+            if not nom_parcelle:
+                continue
+            parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
+            if parcelle is None:
+                continue
+            avertissements.extend(
+                svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
+            )
+
         for parsed in items:
             event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, req.texte)
             add_to_rag(event.id, parsed)
@@ -1225,6 +1270,7 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
             "event_id"       : saved[0]["event_id"] if saved else None,
             "parsed"         : saved[0]["parsed"]   if saved else None,
             "texte_original" : req.texte,
+            "avertissements" : avertissements,
         }
     except svc_evenements.EvenementInvalideError as e:
         db.rollback()
@@ -1334,7 +1380,25 @@ async def voice(
 
         db = SessionLocal()
         saved_parsed: list[dict] = []
+        avertissements: list[str] = []
         try:
+            # [US-167 / CA1-CA3] Évalué AVANT toute écriture ci-dessous — voir
+            # le commentaire équivalent dans POST /parse pour la raison (sinon
+            # l'événement tout juste créé se compte comme son propre
+            # antécédent de rotation).
+            for parsed in items:
+                if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+                    continue
+                nom_parcelle = parsed.get("parcelle")
+                if not nom_parcelle:
+                    continue
+                parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
+                if parcelle is None:
+                    continue
+                avertissements.extend(
+                    svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
+                )
+
             for parsed in items:
                 event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
                 add_to_rag(event.id, parsed)
@@ -1378,6 +1442,7 @@ async def voice(
             "recap"         : recap,
             "session_id"    : session_id,
             "nb_evenements" : len(saved_parsed),
+            "avertissements": avertissements,
         }
 
     # 6. Mettre à jour la session (historique multi-tours)
@@ -1404,6 +1469,73 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
         raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
     return {"reponse": reponse}
+
+
+@app.post("/routage/{routage_log_id}/retour")
+def deposer_retour_routage(
+    routage_log_id: int,
+    req: RetourRequest,
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-097 / CA9-CA11] Dépose un avis 👍/👎 sur une réponse de savoir ou de
+    raisonnement, rattaché à son entrée de journal. Facultatif, ne bloque
+    rien : un doublon (avis déjà donné) renvoie 409, pas une erreur bloquante
+    pour l'appelant. Point d'accroche pour un futur contrôle web (CA9) — aucune
+    vue Q&A n'existe encore côté PWA pour l'exposer directement."""
+    db = SessionLocal()
+    try:
+        try:
+            svc_retours.enregistrer_retour(db, ctx.potager_id, routage_log_id, req.avis)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except svc_retours.RoutageLogIntrouvableError:
+            raise HTTPException(status_code=404, detail="Réponse introuvable pour ce potager")
+        except svc_retours.RetourDejaEnregistreError:
+            raise HTTPException(status_code=409, detail="Un avis a déjà été enregistré pour cette réponse")
+    finally:
+        db.close()
+    return {"ok": True}
+
+
+@app.get("/admin/routage/metriques")
+def admin_routage_metriques(_admin: User = Depends(require_admin_user)):
+    """[US-097 / CA5-CA8] Métriques de routage — lecture seule, réservée à
+    l'administrateur de la plateforme. Aucun calcul ici n'appelle un modèle
+    (CA8) ; aucun tableau de bord graphique n'est construit (CA7)."""
+    db = SessionLocal()
+    try:
+        return {
+            "par_etage": svc_metriques_routage.resume_par_etage(db),
+            "jetons_moyens_par_question": svc_metriques_routage.jetons_moyens_par_question(db),
+            "taux_remontee_cascade": svc_metriques_routage.taux_remontee_cascade(db),
+            # [US-096 / CA6] Indicateur principal des gabarits sur agrégats SQL.
+            "taux_donnees_sans_modele": svc_metriques_routage.taux_donnees_sans_modele(db),
+            "taux_service_cache": svc_metriques_routage.taux_service_cache(db),
+            # [US-095 / CA12] Cache de RÉPONSES (étage 0bis) — à ne pas
+            # confondre avec `taux_service_cache` ci-dessus, qui mesure le
+            # cache en mémoire des classifications. Publié avec son écart à
+            # l'hypothèse de 40 %, jamais renormalisé.
+            "taux_service_cache_reponses": svc_metriques_routage.taux_service_cache_reponses(db),
+            "part_parseur_deterministe": svc_metriques_routage.part_parseur_deterministe(db),
+            "comparaison_hypotheses": svc_metriques_routage.comparaison_hypotheses(db),
+        }
+    finally:
+        db.close()
+
+
+@app.get("/admin/routage/retours-negatifs")
+def admin_routage_retours_negatifs(
+    limite: int = Query(default=20, ge=1, le=200),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-097 / CA12] Questions les plus souvent jugées mauvaises — alimente
+    le corpus de routage (US-093/CA9) et la liste des lacunes de la base de
+    connaissance."""
+    db = SessionLocal()
+    try:
+        return {"questions": svc_metriques_routage.top_questions_mal_notees(db, limite=limite)}
+    finally:
+        db.close()
 
 
 @app.get("/stats")
@@ -1505,11 +1637,16 @@ def get_stats_varietes(
         # pas de granularité variété côté observations (US-039), le badge remonte
         # donc sur chaque ligne d'une même culture.
         obs_index = build_observations_index(db)
+        # [US-067 / CA5, CA6] Famille botanique par culture, relue à chaque appel
+        # (pas de copie mémorisée) — None si non renseignée, l'écran Stocks
+        # applique son propre repli "Autres" (CA3), comme avant cette US.
+        familles = svc_familles.familles_par_culture(db, use_ctx)
         for entry in varietes:
             nom = (entry.get("culture") or "").lower()
             nb_obs = len(obs_index["stocks"].get(nom, []))
             entry["has_observations"] = nb_obs > 0
             entry["nb_observations"]  = nb_obs
+            entry["famille"] = familles.get(normaliser_culture(entry.get("culture") or ""), None)
         return {
             "varietes":           varietes,
             "total":              len(varietes),
@@ -1597,6 +1734,12 @@ def get_plan(
         # Index surface_m2 par nom de culture (insensible à la casse)
         surface_par_culture = svc_plan.surface_par_culture(db, use_ctx)
 
+        # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
+        # table figée frontend/src/lib/familles.js (supprimée), relue à chaque
+        # appel. None si non renseignée : Plan.jsx affiche "—", pas "Autres"
+        # (une tuile de culture seule n'a pas besoin d'un groupe fourre-tout).
+        familles_par_culture = svc_familles.familles_par_culture(db, use_ctx)
+
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
 
@@ -1614,6 +1757,9 @@ def get_plan(
                     "type_organe": c.get("type_organe") or "végétatif",
                     "surface_m2_par_plant": surface_par_culture.get(
                         (c.get("culture") or "").lower(), None
+                    ),
+                    "famille": familles_par_culture.get(
+                        normaliser_culture(c.get("culture") or ""), None
                     ),
                     "nb_observations": (
                         len(obs_index["culture_row"].get((p.id, c["culture"].lower(), c["variete"]), []))
@@ -1753,6 +1899,12 @@ def get_pepiniere_lots(
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
+        # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
+        # table figée frontend/src/lib/familles.js (supprimée) qui alimentait le
+        # regroupement de cet écran (US-061). Relue à chaque appel : une
+        # correction de famille depuis le bot (CA4) se reflète au rechargement
+        # suivant, sans copie mémorisée nulle part.
+        familles = svc_familles.familles_par_culture(db, use_ctx)
         return {
             "lots": [
                 {
@@ -1762,6 +1914,7 @@ def get_pepiniere_lots(
                         str(lot["date_derniere_mise_en_godet"])[:10]
                         if lot["date_derniere_mise_en_godet"] else None
                     ),
+                    "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
                 }
                 for lot in lots
             ],

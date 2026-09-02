@@ -68,6 +68,64 @@ psql -d potager -f migrations/migration_v12.sql
 # (aussi planifiée quotidiennement à 04h00 par le job_queue du bot)
 python tools/purger_potagers.py --dry-run   # liste sans rien effacer
 python tools/purger_potagers.py             # purge réelle, idempotente
+
+# Import du référentiel structuré + rapport de couverture [US-166]
+# Hors ligne (aucun appel réseau), idempotent, rejouable.
+python tools/importer_referentiel.py data/referentiel/wikidata_familles.json
+python tools/importer_referentiel.py data/referentiel/wikidata_familles.json --dry-run
+python tools/importer_referentiel.py --rapport-seul        # rapport sans rien importer
+python tools/importer_referentiel.py --derive-de wikidata  # que retirer avec cette source ?
+python tools/importer_referentiel.py --lister-sources      # registre : licence + attribution
+
+# Attributs agronomiques de conduite [US-161]
+# Le gabarit est livré VIDE et se remplit à la main : aucun chiffre agronomique
+# n'est produit par un modèle de langage. Une valeur null n'écrit rien.
+python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/attributs_redaction_interne.json
+# Source Wind River Greens (CC BY 4.0) — attribution obligatoire à l'affichage
+# L'adaptateur produit un manifeste ; l'import le joue. Aucun appel réseau.
+python tools/adapter_wind_river.py                    # CSV versionnés → manifeste
+# Écrit aussi wind_river_associations.json — extraction BRUTE pour US-163,
+# à NE PAS passer à l'import : elle n'est pas révisée et ne s'importe pas.
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# Provenance, version figée et périmètre : data/referentiel/wind_river_greens/SOURCE.md
+
+# Correction depuis le bot — prime sur tout rejeu de l'import :
+#   /culture attributs <culture>
+#   /culture exposition <culture> <plein soleil|mi-ombre|ombre>
+#   /culture eau <culture> <faible|moyen|élevé>
+#   /culture profondeur <culture> <cm>
+#   /culture rusticite <culture> <°C>
+
+# Associations de cultures et rotation calculable [US-163]
+# La saisie au bot reste le chemin premier (option A sur la licence — zéro
+# CC-BY-SA dans le socle). Amendement du 02/09/2026 : une source déjà au socle
+# en CC BY 4.0 (wind_river_greens, US-161) peut aussi alimenter la table après
+# curation humaine (traduction, périmètre, doublons) — jamais brute.
+#   /association lister <culture>
+#   /association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> <etabli|traditionnel> <motif>
+# Import (même commande que les attributs de conduite — un seul manifeste) :
+python tools/adapter_wind_river.py                    # régénère le manifeste, associations incluses
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json --dry-run
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# Rotation : un conflit se calcule (evenements × culture_config × familles_botaniques),
+# il ne se rédige pas — consultation seule ici, l'alerte proactive est US-167.
+#   /rotation <parcelle> <culture>
+# CA12 : temps de réponse à VÉRIFIER sur la production avant tout câblage
+# automatique (US-167) — jamais supposé sous prétexte que les index existent.
+python tools/mesurer_rotation.py <parcelle_id> <culture>
+
+# Menu de commandes natif Telegram [US-171]
+# Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :
+# il se dérive des CommandHandler enregistrés dans bot._construire_application().
+# Une commande ajoutée y entre au redémarrage suivant. Trois décisions, un seul
+# fichier — app/services/menu_commandes.py :
+#   COMMANDES_EXCLUES   ce qui n'entre pas au menu (/version, /delier, /tts)
+#   ORDRE_METIER        l'ordre de lecture des lignes
+#   DESCRIPTIONS        la phrase d'aide (≤ 60 caractères, lisible à 375 px)
+# Le clavier de raccourcis permanent n'existe plus : bot.SANS_CLAVIER
+# (ReplyKeyboardRemove) le retire activement chez les jardiniers qui l'avaient.
+# Les claviers contextuels de validation, eux, sont inchangés.
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

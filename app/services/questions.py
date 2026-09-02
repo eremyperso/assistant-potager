@@ -13,9 +13,19 @@ seule scopable proprement par potager.
 
 [US-042 / CA7] Le nombre de tokens Groq réellement consommés par l'appel est
 loggué à chaque appel — cible : < 1500 tokens/appel (contre ~5000 avant).
+
+[US-096] Ordre de l'étage 1, désormais en deux temps : le catalogue de réponses
+chiffrées (`app/services/reponses_chiffrees.py`) est consulté EN PREMIER et
+répond par gabarit à coût nul ; l'agent SQL historique, qui coûte encore une
+extraction d'intention (~100 jetons), ne sert plus que les formulations qu'aucune
+famille du catalogue ne reconnaît. Le routeur (US-093) n'a pas à le savoir : il
+appelle toujours `repondre_question_avec_confiance()`, dont le contrat est
+inchangé — c'est ce qui permet d'étendre le catalogue sans y toucher.
 """
 import logging
+from typing import Optional
 
+from app.services import reponses_chiffrees
 from app.services.context import TenantContext
 from llm.groq_client import extract_intent_query_mesuree
 from llm.sql_agent import query_agent_answer, query_agent_answer_avec_confiance
@@ -37,6 +47,38 @@ def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple
     l'étage data a produit une réponse exploitable. Utilisée par le routeur pour
     décider d'une remontée de cascade vers l'étage suivant sans avoir à
     réinterpréter le texte produit."""
+    texte, confiant, _ = repondre_question_detaille(ctx, question)
+    return texte, confiant
+
+
+def repondre_question_detaille(
+    ctx: TenantContext, question: str
+) -> tuple[str, bool, Optional[reponses_chiffrees.ReponseChiffree]]:
+    """[US-095] Même réponse, plus la réponse chiffrée d'origine quand c'est le
+    catalogue de gabarits qui a répondu.
+
+    Le troisième élément porte l'**aiguillage** de la réponse (famille, culture,
+    parcelle, dépendances) : c'est ce que le cache de questions mémorise, et
+    lui seul — jamais le texte, jamais les chiffres. Le routeur en a besoin
+    pour alimenter l'étage 0bis ; les appelants historiques, eux, continuent
+    d'utiliser `repondre_question_avec_confiance()` dont le contrat est
+    inchangé.
+    """
+    # [US-096 / CA1] Étage 1, premier passage : les familles de questions
+    # chiffrées du catalogue (`app/services/reponses_chiffrees.py`) sont servies
+    # par un gabarit, AVANT toute extraction d'intention — donc avant le seul
+    # appel modèle qui subsistait sur ce chemin. Une famille reconnue mais sans
+    # donnée (`present=False`) rend la main à la cascade (CA8) sans avoir rien
+    # dépensé pour le constater, tout en portant une phrase honnête (CA7) qui
+    # sert de réponse si aucun étage supérieur ne fait mieux.
+    chiffree = reponses_chiffrees.repondre_chiffre(ctx, question)
+    if chiffree is not None:
+        log.info(
+            "[US-096 CA1] repondre_question potager_id=%s famille=%s tokens_groq=0 donnee=%s",
+            ctx.potager_id, chiffree.famille, "oui" if chiffree.present else "aucune",
+        )
+        return chiffree.texte, chiffree.present, chiffree
+
     # [US-092 / CA2] Le contexte tenant est transmis explicitement à la
     # passerelle : c'est lui qui rend l'appel imputable au bon potager.
     intent, tokens = extract_intent_query_mesuree(question, ctx=ctx)
@@ -45,4 +87,8 @@ def repondre_question_avec_confiance(ctx: TenantContext, question: str) -> tuple
         "[US-042 CA7] repondre_question potager_id=%s tokens_groq=%d (cible <1500)",
         ctx.potager_id, tokens,
     )
-    return reponse, confiant
+    # [US-095] Pas d'aiguillage : l'agent SQL compose sa réponse question par
+    # question, il n'existe pas de famille à rejouer. Rien n'est donc mémorisé
+    # pour ce chemin — mémoriser son TEXTE reviendrait à figer un chiffre,
+    # exactement ce que l'US interdit.
+    return reponse, confiant, None

@@ -564,6 +564,44 @@ class TestPerteDeduiteDuPlan:
         assert tomate is not None
         assert tomate["nb_plants"] == 35.0  # 36 - 1 perte
 
+    def test_perte_groupe_non_precise_deduite_du_groupe_specifique(self, test_db) -> None:
+        """[bug EN PLACE non déduit — écran Plan] Quand la culture a un groupe de
+        plantation "sans variété" ET des variétés nommées, une perte sans variété
+        doit être déduite du groupe "sans variété" spécifiquement, jamais diluée
+        sur les variétés nommées (cf. écran Stocks : calcul_stock_par_variete
+        traite déjà ce cas de la même façon)."""
+        db = test_db
+        db.add(CultureConfig(nom="tomate", type_organe_recolte="reproducteur"))
+        nord = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+        db.add(nord)
+        db.commit()
+
+        today = datetime.now()
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete=None,
+            quantite=2.0, rang=1, unite="plants",
+            parcelle_id=nord.id, date=today - timedelta(days=10),
+        ))
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete="cœur de bœuf",
+            quantite=36.0, rang=1, unite="plants",
+            parcelle_id=nord.id, date=today - timedelta(days=10),
+        ))
+        db.add(Evenement(
+            type_action="perte", culture="tomate", variete=None,
+            quantite=2.0, unite="plants",
+        ))
+        db.commit()
+
+        result = calcul_occupation_parcelles(db)
+        nord_cultures = result.get("Nord", [])
+        # Le groupe "sans variété" (2 plants, entièrement perdus) ne doit plus
+        # apparaître ; la variété nommée ne doit PAS avoir été rognée.
+        assert not any(c["culture"] == "tomate" and not c["variete"] for c in nord_cultures)
+        nommee = next((c for c in nord_cultures if c.get("variete") == "cœur de bœuf"), None)
+        assert nommee is not None
+        assert nommee["nb_plants"] == 36.0
+
     def test_perte_sans_variete_distribuee_proportionnellement(self, test_db) -> None:
         """Perte sans variete déduite proportionnellement de toutes les varietes."""
         db = test_db

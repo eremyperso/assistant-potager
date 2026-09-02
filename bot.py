@@ -21,6 +21,7 @@ Lancement :
 """
 
 import os
+import re
 import json
 import asyncio
 import tempfile
@@ -41,7 +42,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # Supprime logs HTTP
 logging.getLogger("telegram").setLevel(logging.WARNING)  # Supprime logs telegram.ext
 logging.getLogger("apscheduler").setLevel(logging.WARNING)  # Supprime logs scheduler
 
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     ContextTypes, filters, ConversationHandler, CallbackQueryHandler, TypeHandler
@@ -61,6 +62,7 @@ from llm import passerelle
 # [US-093] Routeur règles-first : aiguille une question déjà détectée comme
 # telle (data / savoir / hybride) avant de la confier à l'étage qui répond.
 from llm import routeur
+from llm.parseur_deterministe import ORIGINE_LLM, parser_saisie
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.ia_orchestrator import build_question_context
 from utils.date_utils import parse_date
@@ -74,11 +76,20 @@ from utils.culture_resolve import resolve_culture, resolve_variete  # [US-038]
 from app.services.context import default_context, current_context, set_current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
+from app.services import familles as svc_familles  # [US-067]
+from app.services import attributs_culture as svc_attributs  # [US-161]
+from app.services import fiche_culture as svc_fiche_culture  # [US-164]
+from app.services import associations as svc_associations  # [US-163]
+from app.services import rotation as svc_rotation  # [US-163]
+from app.services import avertissements_plantation as svc_avertissements  # [US-167]
+from app.services import menu_commandes as svc_menu_commandes  # [US-171]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
 from app.services import potager_actif as svc_potager_actif  # [US-046]
 from app.services import potagers as svc_potagers  # [US-084] purge planifiée
+from app.services import retours as svc_retours  # [US-097] retour du jardinier
+from app.services import metriques_routage as svc_metriques_routage  # [US-097] purge rétention
 from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
 from database.models import Potager as _Potager  # [US-046]
 
@@ -222,6 +233,29 @@ def _infer_date(texte: str) -> str | None:
     return None
 
 
+def _parser_items(texte: str) -> list:
+    """[US-094 / CA1] Étage 0 de la saisie : grammaire déterministe, puis repli modèle.
+
+    Un seul point de décision pour tous les chemins de saisie (texte, vocal,
+    multi-lignes) — sans quoi la couverture mesurée dépendrait du canal
+    emprunté, ce que l'arbitrage « la voix ne change rien » exclut.
+
+    Ne touche à aucune garde en amont : les modes de correction, le mode `ask`
+    et la navigation ont déjà tranché quand on arrive ici. Peut lever
+    `LLMIndisponibleError` — mais seulement quand le repli modèle a dû être
+    tenté, jamais pour une forme couverte par la grammaire (CA12).
+    """
+    resultat = parser_saisie(texte, current_context())
+    if resultat.reconnu:
+        return resultat.items
+
+    items = parse_commande(texte, ctx=current_context())
+    for item in items:
+        if isinstance(item, dict):
+            item.setdefault("origine_parsing", ORIGINE_LLM)
+    return items
+
+
 def _normalize_items(items: list, texte_original: str = "") -> list:
     """
     Normalise la réponse Groq :
@@ -275,24 +309,26 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
     return normalized
 
 
-# ── Clavier principal ────────────────────────────────────────────────────────────
-MENU_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("🎤 Nouvelle action vocale"), KeyboardButton("🔍 Interroger")],
-        [KeyboardButton("📋 Historique"),             KeyboardButton("📊 Stats")],
-        [KeyboardButton("✏️ Corriger"),               KeyboardButton("📝 Note")],
-    ],
-    resize_keyboard=True,
-    is_persistent=True
-)
-
-AFTER_RECORD_KEYBOARD = ReplyKeyboardMarkup(
-    [
-        [KeyboardButton("➕ Autre action"), KeyboardButton("🔍 Interroger mes données")],
-        [KeyboardButton("📋 Historique"),  KeyboardButton("🏠 Menu principal")],
-    ],
-    resize_keyboard=True
-)
+# ── Plus de clavier de raccourcis permanent [US-171 / CA7, CA8, CA12] ───────────
+# Les raccourcis du bas d'écran (« Nouvelle action vocale », « Interroger »,
+# « Historique », « Stats », « Corriger », « Note », et le clavier d'après
+# enregistrement) sont remplacés par le menu de commandes natif de Telegram —
+# voir `app.services.menu_commandes` et `_publier_menu_commandes()`.
+#
+# Le clavier n'est pas seulement retiré du code : il est **activement retiré de
+# l'écran** (CA8). Un clavier permanent Telegram persiste côté client tant que le
+# bot ne demande pas son retrait ; supprimer les `reply_markup=` aurait laissé
+# l'ancien clavier affiché indéfiniment chez les jardiniers qui l'avaient déjà.
+# D'où `ReplyKeyboardRemove()` posé sur exactement les mêmes messages qu'avant :
+# le premier message reçu après la mise à jour nettoie l'écran, et aucun message
+# suivant ne le fait réapparaître (CA12).
+#
+# Les deux noms historiques survivent volontairement — ils sont posés sur une
+# quarantaine de messages et référencés par les tests existants (CA13) — mais ils
+# désignent désormais la même absence de clavier.
+SANS_CLAVIER = ReplyKeyboardRemove()
+MENU_KEYBOARD = SANS_CLAVIER
+AFTER_RECORD_KEYBOARD = SANS_CLAVIER
 
 # ── États conversation ───────────────────────────────────────────────────────────
 WAITING_ASK = 1
@@ -402,7 +438,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"Synthèse vocale : {tts_etat}\n\n"
         f"Envoyez-moi un *message vocal* ou *texte* pour enregistrer une action.\n"
         f"Ex : _\"Récolté 3 kg de tomates variété cerise parcelle nord\"_\n\n"
-        f"Ou utilisez les boutons ci-dessous.\n"
+        # [US-171 / CA10] Le menu natif remplace les anciens boutons du bas.
+        f"⌨️ Toutes les commandes sont dans le menu, à gauche de la zone de saisie.\n"
         f"📖 Tapez /help pour l'aide en ligne.",
         parse_mode="Markdown",
         reply_markup=MENU_KEYBOARD
@@ -555,7 +592,31 @@ _HELP_NOTE = (
     "en langage naturel. Un récapitulatif s'affiche avant enregistrement définitif."
 )
 
-_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note"
+_HELP_CULTURE = (
+    "🌿 *Aide — Famille botanique*\n"
+    "Corriger ou renseigner la famille d'une culture, sans livraison ni "
+    "intervention en base (US-067).\n\n"
+    "*Corriger la famille d'une culture :*\n"
+    "  → /culture famille pâtisson Cucurbitacée\n"
+    "  → /culture famille petit\\_pois Fabacée\n"
+    "_La culture doit avoir déjà été dictée au moins une fois._\n\n"
+    "*Corriger le délai de retour d'une famille (années) :*\n"
+    "  → /culture delai\\_retour Solanacée 4\n"
+    "_S'applique aussitôt à toutes les cultures de cette famille — "
+    "un délai de retour est un fait de la famille, pas de chaque culture._"
+)
+
+_HELP_FICHE = (
+    "🌱 *Aide — Fiche culture*\n"
+    "Restituer l'essentiel d'une culture depuis le référentiel, en zéro jeton (US-164).\n\n"
+    "*Consulter la fiche d'une culture :*\n"
+    "  → /fiche tomate\n"
+    "  → /fiche CELERI\n"
+    "_Casse et accents indifférents. Une culture sans fiche connue le dit "
+    "explicitement — jamais une fiche voisine forcée._"
+)
+
+_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note · culture · fiche"
 
 _HELP_CONTEXTUEL: dict[str, str] = {
     "parcelle":  _HELP_PARCELLE,
@@ -572,6 +633,9 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "statistiques": _HELP_STATS,
     "note":      _HELP_NOTE,
     "notes":     _HELP_NOTE,
+    "culture":   _HELP_CULTURE,
+    "famille":   _HELP_CULTURE,
+    "fiche":     _HELP_FICHE,
 }
 
 
@@ -629,10 +693,14 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "amendement · protection · observation\n\n"
         "*Dates :* hier · avant-hier · lundi… \"le 5 mars\"\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
-        "*⌨️ Commandes*\n"
-        "/start — Menu principal\n"
+        # [US-171 / CA10] Le menu natif est le chemin d'accès aux commandes.
+        "*⌨️ Commandes* — toutes accessibles depuis le bouton *Menu*,\n"
+        "à gauche de la zone de saisie.\n"
+        "/start — Accueil\n"
         "/plan — Plan d'occupation des parcelles\n"
         "/parcelle ajouter [nom] — Créer une parcelle\n"
+        "/culture famille [culture] [famille] — Corriger une famille botanique\n"
+        "/fiche [culture] — Fiche courte agronomique, zéro jeton\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
@@ -1022,7 +1090,18 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _ask_question(update, texte)
         return
 
-    # ── 5. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
+    # ── 5. [US-094 / CA1] Étage 0 — la grammaire déterministe d'abord ────────
+    # Une forme qu'elle reconnaît est une saisie par construction : elle porte
+    # un geste en tête, une culture connue du potager et rien d'inexpliqué.
+    # Aucune classification n'est donc à payer, et le mode dégradé 429 laisse
+    # cette voie entièrement ouverte (CA12). Placé ici, après toutes les gardes
+    # de conversation ci-dessus, l'ordre critique des flux reste intact.
+    resultat_deterministe = parser_saisie(texte, current_context())
+    if resultat_deterministe.reconnu:
+        await _parse_and_save(update, texte, msg, pre_parsed_items=resultat_deterministe.items)
+        return
+
+    # ── 5bis. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
     try:
         parsed = parse_message(texte, ctx=current_context())
     except LLMIndisponibleError:
@@ -1122,52 +1201,35 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _parse_and_save(update, texte, msg, pre_parsed_items=parsed.get("items"))
 
 
-# Mots déclencheurs de QUESTION analytique (début de phrase)
-QUESTION_STARTERS = (
-    "combien", "quand", "quel", "quelle", "quels", "quelles",
-    "est-ce", "depuis", "total", "bilan de", "liste des",
-    "montre", "donne", "rappelle", "résume", "résumé de",
-    "quelle quantité", "quelle date", "à quelle", "a quelle",
-    "date des", "dates des", "date de", "dates de",
-    "liste de", "liste des", "historique de", "historique des",
-    "dernière", "dernier", "derniers", "dernières",
-    "quelles cultures", "quel traitement", "quels traitements",
-    "mes récoltes", "mes semis", "mes plantations", "mes arrosages",
-)
-
-# Verbes d'action potager — ne jamais les traiter comme des questions
-ACTION_VERBS = (
-    "arros", "semé", "semer", "planté", "planter", "récolté", "récolter",
-    "cueilli", "cueillir", "ramassé", "ramasser", "repiqué", "repiquer",
-    "traité", "traiter", "désherbé", "désherber", "paillé", "pailler",
-    "taillé", "tailler", "tuteurer", "tuteuré", "fertilisé", "fertiliser",
-    "observé", "observer", "constaté", "constater", "mis en", "mis ",
-    "posé", "appliqué", "installé", "sorti",
-    "godet", "mis en godet", "mise en godet",
-)
-
 _GODETS_KEYWORDS = (
     "liste des godets", "liste godets", "quels plants en godet",
     "quels plants sont en godet", "plants en godet", "godets en attente",
     "mes godets", "voir les godets", "mes plants en godet",
 )
 
+# [US-170 / CA9] Ce qui distingue une consultation des godets EN ATTENTE de
+# plantation (liste, sans chiffre à produire — aucun équivalent catalogue) d'une
+# question de PRODUCTION/rendement, que le catalogue sait désormais servir
+# (famille `godets_produits`, chantier 3). Sans cette exclusion, « combien de
+# godet de tomate produit cette saison ? » matchait ci-dessous ("godet" +
+# "combien") et n'atteignait jamais le routeur : une réponse fausse d'apparence
+# juste (un poids récolté présenté comme un nombre de godets), constatée le
+# 30/08/2026. `_is_deplacer_request`/`_is_note_request`, eux, déclenchent des
+# flux GUIDÉS de saisie (un geste, pas une question) sans équivalent catalogue
+# possible : les déplacer après le routeur les ferait manquer sur toute phrase
+# que le routeur classerait ACTION avant d'atteindre leur propre motif — ils
+# restent donc, comme avant US-170, consultés avant lui.
+_GODETS_EXCLUSION_PRODUCTION = re.compile(r"\bproduits?\b|\brendement\b|\brecolt")
+
 
 def _is_requete_godets(texte: str) -> bool:
     """Retourne True si la phrase porte sur la consultation des godets en attente."""
     t = texte.lower().strip()
+    if _GODETS_EXCLUSION_PRODUCTION.search(t):
+        return False
     return any(kw in t for kw in _GODETS_KEYWORDS) or (
         "godet" in t and any(w in t for w in ("liste", "quels", "combien", "voir", "etat", "état"))
     )
-
-
-def _is_question(texte: str) -> bool:
-    """Retourne True si la phrase ressemble à une question analytique."""
-    t = texte.lower().strip()
-    # Si ça commence par un verbe d'action → jamais une question
-    if t.startswith(ACTION_VERBS):
-        return False
-    return t.startswith(QUESTION_STARTERS) or t.endswith("?")
 
 
 # [US-007] _is_deplacer_request et _extract_culture_deplacer sont importées de utils/deplacer.py
@@ -1708,9 +1770,16 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _note_start(update, ctx)
         return
 
-    # ── PRIORITÉ 4 : détection automatique question
-    if _is_question(texte_raw):
-        log.info(f"❓ QUESTION AUTO   : détectée → reroutage vers _ask_question")
+    # ── PRIORITÉ 4 : nature de la demande décidée par le routeur [US-170 CA6, CA7]
+    # Remplace _is_question(), dont la moitié du critère (le point d'interrogation
+    # en fin de phrase) est absente du canal vocal — voir
+    # docs/ANALYSE_ROUTAGE_QUESTIONS_2026-08-30.md. Le routeur porte déjà les
+    # règles, la règle de geste, le catalogue, le cache de classification et le
+    # modèle en dernier recours (US-093) ; le filet US-011 plus bas reste le
+    # rattrapage des cas résiduels (CA10), inchangé.
+    decision_routage = routeur.classer_demande(texte_raw, current_context())
+    if decision_routage.nature != routeur.NATURE_ACTION:
+        log.info(f"❓ QUESTION AUTO   : nature={decision_routage.nature} → reroutage vers _ask_question")
         await _ask_question(update, texte_raw)
         return
 
@@ -1743,11 +1812,12 @@ async def _parse_multi(update, lignes: list, msg=None):
 
     log.info(f"📋 MULTI-LIGNES    : {len(lignes)} phrases à traiter séparément")
     total_saved = []
+    avertissements: list[str] = []  # [US-167]
 
     for i, ligne in enumerate(lignes, 1):
         log.info(f"  [{i}/{len(lignes)}] Traitement : {ligne}")
         try:
-            items = parse_commande(ligne, ctx=current_context())
+            items = _parser_items(ligne)
             items = _normalize_items(items, ligne)
             from utils.validation import strip_culture_hallucinee
             for j, item in enumerate(items):
@@ -1779,6 +1849,11 @@ async def _parse_multi(update, lignes: list, msg=None):
 
         db = SessionLocal()
         try:
+            # [US-167] Évalué AVANT l'écriture ci-dessous, sur l'historique de
+            # cette ligne — sinon l'événement qu'on est en train de créer se
+            # compterait comme son propre antécédent de rotation.
+            avertissements.extend(_evaluer_avertissements_avant_ecriture(db, current_context(), items))
+
             for parsed in items:
                 event = svc_evenements.creer_evenement_ligne(db, current_context(), parsed, ligne)
                 log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
@@ -1804,6 +1879,13 @@ async def _parse_multi(update, lignes: list, msg=None):
     recap = "\n".join(lines_out)
     if msg:   await msg.edit_text(recap, parse_mode="Markdown")
     else:     await update.message.reply_text(recap, parse_mode="Markdown")
+
+    # [US-167 / CA1-CA3] Avertissement de rotation/association (calculé plus
+    # haut, avant l'écriture) — après la confirmation d'enregistrement
+    # ci-dessus, jamais à sa place.
+    if avertissements:
+        await update.message.reply_text("\n".join(avertissements))
+
     await update.message.reply_text(
         "_Que voulez-vous faire ensuite ?_",
         parse_mode="Markdown",
@@ -2338,6 +2420,17 @@ def _stock_variete_jardin(v: dict) -> int:
     return stock_actif_variete(v)
 
 
+def _variete_reelle(v: dict) -> str | None:
+    """[fix bug EN PLACE non déduit] `calcul_stock_par_variete()` substitue déjà
+    `variete=None` par le libellé humain LABEL_VARIETE_NON_PRECISEE pour l'affichage.
+    Ramène ce libellé à None avant toute réutilisation comme donnée (callback_data,
+    pré-remplissage d'un item) — sinon le libellé littéral finit stocké tel quel dans
+    Evenement.variete au lieu de NULL, et devient invisible à l'agrégation des pertes."""
+    from utils.stock import LABEL_VARIETE_NON_PRECISEE
+    variete = v.get("variete")
+    return None if not variete or variete == LABEL_VARIETE_NON_PRECISEE else variete
+
+
 async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Flux disambiguation perte en 2 étapes :
@@ -2393,7 +2486,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         elif len(jardin_varietes) == 1:
             _PERTE_PENDING.pop(user_id, None)
             item["action"]  = "perte"
-            item["variete"] = jardin_varietes[0]["variete"]
+            item["variete"] = _variete_reelle(jardin_varietes[0])
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
             await _save_perte_item(update, item, texte)
@@ -2404,7 +2497,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             for v in jardin_varietes:
                 var   = v["variete"] or "non précisée"
                 stock = _stock_variete_jardin(v)
-                cb    = v["variete"] if v["variete"] else "__none__"
+                cb    = _variete_reelle(v) or "__none__"
                 buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
             buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
             await query.edit_message_text(
@@ -2536,11 +2629,46 @@ def _build_action_summary(items: list[dict]) -> str:
         return "\n".join(lines)
 
 
+def _evaluer_avertissements_avant_ecriture(db, tenant_ctx, items: list[dict]) -> list[str]:
+    """[US-167 / CA1, CA10] Avertissements de rotation/association pour les
+    items plantation/semis d'un lot — évalués AVANT toute écriture, sur
+    l'historique tel qu'il était avant cette sauvegarde. Appeler ceci APRÈS
+    avoir écrit les événements ferait apparaître l'événement tout juste créé
+    comme son propre antécédent dans la requête de `rotation.evaluer_rotation`
+    (faux conflit auto-référentiel — bug constaté en production le 02/09/2026 :
+    une plantation de tomate sur une parcelle sans aucun autre antécédent se
+    voyait citée comme « déjà présente cette année », elle-même). Le message
+    reste affiché après la confirmation d'enregistrement chez l'appelant —
+    seul le calcul est avancé plus tôt, l'ordre d'affichage ne change pas."""
+    messages: list[str] = []
+    for parsed in items:
+        if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+            continue
+        nom_parcelle = parsed.get("parcelle")
+        if not nom_parcelle:
+            continue
+        parcelle = resolve_parcelle(db, nom_parcelle, potager_id=tenant_ctx.potager_id)
+        if parcelle is None:
+            continue
+        messages.extend(
+            svc_avertissements.evaluer_avertissements_plantation(
+                db, tenant_ctx, parcelle.id, parsed.get("culture")
+            )
+        )
+    return messages
+
+
 async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> None:
     """[US-021] Sauvegarde effective en base après confirmation utilisateur."""
     db = SessionLocal()
     saved_items = []
     try:
+        # [US-167] Évalué AVANT toute écriture ci-dessous — voir la docstring
+        # de `_evaluer_avertissements_avant_ecriture` pour la raison (sinon
+        # l'événement qu'on est en train de créer se compte comme son propre
+        # antécédent de rotation).
+        avertissements = _evaluer_avertissements_avant_ecriture(db, current_context(), items)
+
         for parsed in items:
             # [US-049] La résolution reste ici (nécessaire pour construire l'Evenement
             # avec le bon parcelle_id), mais le BLOCAGE si la parcelle ne résout à rien
@@ -2602,6 +2730,13 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
         recap_multi = "\n".join(lines_out)
         if msg:  await msg.edit_text(recap_multi, parse_mode="Markdown")
         else:    await update.effective_message.reply_text(recap_multi, parse_mode="Markdown")
+
+    # [US-167 / CA1-CA3] Avertissement de rotation/association (calculé plus haut,
+    # avant l'écriture) — TOUJOURS affiché après la confirmation ci-dessus,
+    # jamais à sa place. Un simple message, pas une question : aucun état
+    # conversationnel n'est ouvert ici.
+    if avertissements:
+        await update.effective_message.reply_text("\n".join(avertissements))
 
     await update.effective_message.reply_text(
         "_Que voulez-vous faire ensuite ?_",
@@ -2926,7 +3061,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         if pre_parsed_items is not None:
             items = pre_parsed_items   # déjà parsé — pas de 2e appel LLM
         else:
-            items = parse_commande(texte, ctx=current_context())
+            items = _parser_items(texte)
     except LLMIndisponibleError:
         # [US-092 / CA9] Aucun repli utile : sans parsing, rien à enregistrer.
         # On le dit explicitement plutôt que d'inventer un événement.
@@ -2945,7 +3080,13 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         else:   await message.reply_text(txt)
         return
 
-    log.info(f"🤖 GROQ PARSING   : {json.dumps(items, ensure_ascii=False)}")
+    # [US-094 / CA10] Un item déjà parsé porte son origine ; celui qui n'en a
+    # pas vient du modèle (pre_parsed_items de parse_message, flux en attente).
+    for _item in items:
+        if isinstance(_item, dict):
+            _item.setdefault("origine_parsing", ORIGINE_LLM)
+
+    log.info(f"🤖 PARSING        : {json.dumps(items, ensure_ascii=False)}")
     items = _normalize_items(items, texte)
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
@@ -3371,7 +3512,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 await _save_perte_item(update, item, texte)
                 return
             elif len(jardin_actif) == 1:
-                item["variete"] = jardin_actif[0]["variete"]
+                item["variete"] = _variete_reelle(jardin_actif[0])
                 log.info(f"[perte-auto] Jardin, variété unique '{item['variete']}'")
                 await _save_perte_item(update, item, texte)
                 return
@@ -3387,7 +3528,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 for v in jardin_actif:
                     var   = v["variete"] or "non précisée"
                     stock = _stock_variete_jardin(v)
-                    cb    = v["variete"] if v["variete"] else "__none__"
+                    cb    = _variete_reelle(v) or "__none__"
                     buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
                 buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
                 await message.reply_text(
@@ -3472,7 +3613,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         # (même logique que récolte : auto-remplir si unique, menu si plusieurs)
         if not godets_pertinents and jardin_actif and not variete:
             if len(jardin_actif) == 1:
-                item["variete"] = jardin_actif[0]["variete"]
+                item["variete"] = _variete_reelle(jardin_actif[0])
                 log.info("[perte-auto] Aucun godet, variété unique jardin '%s' → auto-remplie", item["variete"])
                 # pas de return → continue vers la confirmation
             else:
@@ -3485,7 +3626,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 buttons_var = [
                     [InlineKeyboardButton(
                         f"🌿 {v['variete'] or 'non précisée'} ({_stock_variete_jardin(v)} plants actifs)",
-                        callback_data=f"perte_var_j:{v['variete'] if v['variete'] else '__none__'}",
+                        callback_data=f"perte_var_j:{_variete_reelle(v) or '__none__'}",
                     )]
                     for v in jardin_actif
                 ]
@@ -3743,24 +3884,47 @@ def _build_recap(p: dict, event_id: int) -> str:
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
 async def _ask_question(update: Update, question: str):
     """
-    [US-012 / US-093] Interroge l'historique via SQL agent, ou bascule vers le
-    savoir/raisonnement selon l'aiguillage du routeur — zéro hallucination sur
-    l'étage data, zéro appel modèle sur la frange non ambiguë (règles/cache).
+    [US-012 / US-093 / US-097] Interroge l'historique via SQL agent, ou bascule
+    vers le savoir/raisonnement selon l'aiguillage du routeur — zéro
+    hallucination sur l'étage data, zéro appel modèle sur la frange non
+    ambiguë (règles/cache).
 
     Flux : routeur.classer_demande() [0 token la plupart du temps] →
     étage data (SQL, 0 token) ou raisonnement, avec au plus une remontée de
     cascade si l'étage data ne trouve rien d'exploitable (US-093 / CA6).
+    Chaque cascade menée à son terme est journalisée (US-097 / CA1) ; les
+    réponses de savoir/raisonnement proposent en plus un retour 👍/👎
+    (US-097 / CA9).
     """
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        reponse = routeur.repondre_avec_cascade(current_context(), question)
+        resultat = routeur.repondre_avec_cascade(current_context(), question)
+        reponse = resultat.texte
         log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
         try:
             await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
         except Exception:
             await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+
+        # [US-097 / CA9] Retour 👍/👎 uniquement pour les réponses de savoir ou
+        # de raisonnement (étages 2 et 3) — jamais pour une donnée du potager,
+        # qui n'est pas un avis à recueillir. Rien à proposer si le journal
+        # n'a pas pu être écrit (routage_log_id absent) : il n'y aurait rien
+        # à rattacher (CA10).
+        if resultat.routage_log_id is not None and resultat.etage_resolveur in (
+            routeur.ETAGE_SAVOIR, routeur.ETAGE_RAISONNEMENT,
+        ):
+            boutons = [[
+                InlineKeyboardButton("👍", callback_data=f"retour_routage:positif:{resultat.routage_log_id}"),
+                InlineKeyboardButton("👎", callback_data=f"retour_routage:negatif:{resultat.routage_log_id}"),
+            ]]
+            await update.message.reply_text(
+                "_Cette réponse t'a aidé ?_",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(boutons),
+            )
 
         await update.message.reply_text(
             "_Autre question ou action ?_",
@@ -4342,6 +4506,478 @@ async def _cmd_parcelles_lister(update, ctx) -> None:
     """Alias /parcelles → /parcelle lister."""
     ctx.args = ["lister"]
     await cmd_parcelle(update, ctx)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-067 / CA4, CA12, CA14] Commande /culture — famille botanique + délai de retour
+# [US-161 / CA4, CA5] Attributs agronomiques de conduite : lecture et correction
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_culture(update, ctx) -> None:
+    """
+    /culture <sous-commande> — Famille botanique, délai de retour, attributs de conduite.
+
+    Sous-commandes :
+      famille <culture> <famille>       — corriger/renseigner la famille d'une culture (US-067/CA4)
+      delai_retour <famille> <années>   — corriger le délai de retour d'une famille (US-067/CA14)
+      attributs <culture>               — lire les attributs agronomiques (US-161/CA4)
+      exposition|eau|profondeur|rusticite <culture> <valeur>
+                                        — corriger un attribut agronomique (US-161/CA5)
+
+    Aucune logique métier ici (convention projet) : la validation du vocabulaire
+    fermé et l'écriture vivent dans `app.services.attributs_culture`, seul point
+    d'écriture, partagé avec l'import du référentiel structuré.
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /culture famille <culture> <famille>\n"
+        "  /culture delai_retour <famille> <années>\n"
+        "  /culture attributs <culture>\n"
+        "  /culture exposition <culture> <plein soleil|mi-ombre|ombre>\n"
+        "  /culture eau <culture> <faible|moyen|élevé>\n"
+        "  /culture profondeur <culture> <cm>\n"
+        "  /culture rusticite <culture> <°C>\n\n"
+        "Exemples :\n"
+        "  /culture famille pâtisson Cucurbitacée\n"
+        "  /culture delai_retour Solanacée 4\n"
+        "  /culture attributs carotte\n"
+        "  /culture exposition courgette plein soleil\n"
+        "  /culture profondeur carotte 1"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = ctx.args[0].lower()
+
+    # ── /culture famille <culture> <famille> ──────────────────────────────────
+    if sous_cmd == "famille":
+        if len(ctx.args) < 3:
+            await update.message.reply_text(
+                "❌ Usage : /culture famille <culture> <famille>\n"
+                "Exemple : /culture famille pâtisson Cucurbitacée",
+                parse_mode="Markdown",
+            )
+            return
+        culture = ctx.args[1].strip()
+        famille_nom = " ".join(ctx.args[2:]).strip()
+        db = SessionLocal()
+        try:
+            fiches, ancienne = svc_familles.corriger_famille_culture(db, culture, famille_nom)
+            avant = _md(ancienne) if ancienne else "Autres"
+            log.info(
+                f"[US-067] Famille corrigée : '{culture}' : '{ancienne or 'Autres'}' → "
+                f"'{fiches[0].famille_rel.nom}' ({len(fiches)} fiche(s))"
+            )
+            await update.message.reply_text(
+                f"✅ Famille de *{_md(culture)}* : *{avant}* → *{_md(fiches[0].famille_rel.nom)}*",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-067] cmd_culture famille erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture delai_retour <famille> <années> ──────────────────────────────
+    if sous_cmd in ("delai_retour", "delai"):
+        if len(ctx.args) < 3:
+            await update.message.reply_text(
+                "❌ Usage : /culture delai_retour <famille> <années>\n"
+                "Exemple : /culture delai_retour Solanacée 4",
+                parse_mode="Markdown",
+            )
+            return
+        *famille_tokens, annees_brut = ctx.args[1:]
+        famille_nom = " ".join(famille_tokens).strip()
+        try:
+            annees = int(annees_brut)
+            if annees < 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text(
+                f"❌ Le délai de retour doit être un nombre entier positif d'années "
+                f"(reçu : *{_md(annees_brut)}*)",
+                parse_mode="Markdown",
+            )
+            return
+        db = SessionLocal()
+        try:
+            famille, ancien = svc_familles.corriger_delai_retour(db, famille_nom, annees)
+            avant = f"{ancien} ans" if ancien is not None else "non renseigné"
+            log.info(f"[US-067] Délai de retour corrigé : '{famille.nom}' : {avant} → {annees} ans")
+            await update.message.reply_text(
+                f"✅ Délai de retour de *{_md(famille.nom)}* : {avant} → *{annees} ans*",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Famille inconnue : *{_md(famille_nom)}*",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-067] cmd_culture delai_retour erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture attributs <culture> ──────────────────────────────────────────
+    # [US-161 / CA4] Lecture pure : des colonnes et leur origine, zéro jeton, et
+    # « non renseigné » dit tel quel — jamais une valeur devinée ni moyennée.
+    if sous_cmd in ("attributs", "attribut", "fiche"):
+        if len(ctx.args) < 2:
+            await update.message.reply_text(
+                "❌ Usage : /culture attributs <culture>\n"
+                "Exemple : /culture attributs carotte",
+                parse_mode="Markdown",
+            )
+            return
+        culture = " ".join(ctx.args[1:]).strip()
+        db = SessionLocal()
+        try:
+            lus = svc_attributs.lire_attributs(db, culture)
+            lignes = [f"🌱 *{_md(culture)}* — attributs agronomiques"]
+            for attribut in lus:
+                # Une valeur absente se lit en clair (CA4) : la mettre en gras
+                # comme une vraie valeur donnerait à « non renseigné » le poids
+                # d'une réponse.
+                valeur = (
+                    f"*{_md(attribut.affichage)}*" if attribut.renseigne
+                    else attribut.affichage
+                )
+                lignes.append(f"• {attribut.libelle} : {valeur}")
+
+            # [US-166 / CA1] L'attribution, pas le code technique : `wind_river_greens`
+            # ne dit rien au jardinier, et CC BY oblige à créditer la source AVEC la
+            # réponse, pas dans un README. Une mention par source, dédupliquée, en
+            # texte brut — Telegram parse mal les underscores d'un identifiant.
+            attributions = []
+            for attribut in lus:
+                if attribut.attribution and attribut.attribution not in attributions:
+                    attributions.append(attribut.attribution)
+            if attributions:
+                lignes.append("")
+                lignes.append("Source : " + " · ".join(attributions))
+
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-161] cmd_culture attributs erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /culture <attribut> <culture> <valeur> ────────────────────────────────
+    # [US-161 / CA5] Correction depuis le bot, sans livraison ni intervention en
+    # base — exactement comme la famille botanique. La réponse confirme
+    # l'ancienne ET la nouvelle valeur.
+    try:
+        cle_attribut = svc_attributs.resoudre_cle(sous_cmd)
+    except KeyError:
+        cle_attribut = None
+
+    if cle_attribut is not None:
+        attribut = svc_attributs.ATTRIBUTS_PAR_CLE[cle_attribut]
+        if len(ctx.args) < 3:
+            admis = (
+                " | ".join(attribut.vocabulaire) if attribut.est_qualitatif
+                else f"un nombre en {attribut.unite}"
+            )
+            await update.message.reply_text(
+                f"❌ Usage : /culture {sous_cmd} <culture> <valeur>\n"
+                f"Valeurs admises : {admis}",
+                parse_mode="Markdown",
+            )
+            return
+        culture = ctx.args[1].strip()
+        valeur = " ".join(ctx.args[2:]).strip()
+        db = SessionLocal()
+        try:
+            fiches, avant, apres = svc_attributs.corriger_attribut(
+                db, culture, cle_attribut, valeur
+            )
+            log.info(
+                f"[US-161] {attribut.libelle} corrigée : '{culture}' : "
+                f"'{avant}' → '{apres}' ({len(fiches)} fiche(s))"
+            )
+            await update.message.reply_text(
+                f"✅ {attribut.libelle} de *{_md(culture)}* : "
+                f"*{_md(avant)}* → *{_md(apres)}*",
+                parse_mode="Markdown",
+            )
+        except svc_attributs.ValeurHorsVocabulaireError as err:
+            # [CA2] L'attribut conserve sa valeur précédente : rien n'a été écrit.
+            await update.message.reply_text(
+                f"❌ {_md(str(err))}\nL'attribut conserve sa valeur précédente.",
+                parse_mode="Markdown",
+            )
+        except LookupError:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-161] cmd_culture {sous_cmd} erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # Sous-commande inconnue
+    await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-163 / CA1-CA5, CA10] Commande /association — associations de cultures
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_association(update, ctx) -> None:
+    """
+    /association <sous-commande> — Associations favorables/défavorables/neutres
+    entre cultures ou familles botaniques (US-163).
+
+    Sous-commandes :
+      lister <culture>                                            — associations connues (CA4, CA5)
+      saisir <cultureA> <cultureB> <nature> <preuve> <motif>       — saisir/corriger (CA1, CA2, CA10)
+
+    Aucune logique métier ici (convention projet) : la résolution des entités,
+    la validation du vocabulaire fermé et l'écriture vivent dans
+    `app.services.associations`, seul point d'écriture.
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /association lister <culture>\n"
+        "  /association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> "
+        "<etabli|traditionnel> <motif>\n\n"
+        "Exemples :\n"
+        "  /association lister carotte\n"
+        "  /association saisir carotte aneth defavorable etabli concurrence racinaire\n"
+        "  /association saisir tomate basilic favorable traditionnel repousse les pucerons"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = ctx.args[0].lower()
+
+    # ── /association lister <culture> ─────────────────────────────────────────
+    if sous_cmd in ("lister", "liste", "voir"):
+        if len(ctx.args) < 2:
+            await update.message.reply_text(
+                "❌ Usage : /association lister <culture>\n"
+                "Exemple : /association lister carotte",
+                parse_mode="Markdown",
+            )
+            return
+        culture = " ".join(ctx.args[1:]).strip()
+        db = SessionLocal()
+        try:
+            associations = svc_associations.lire_associations(db, culture)
+            if not associations:
+                await update.message.reply_text(
+                    f"ℹ️ Aucune association connue pour *{_md(culture)}*.",
+                    parse_mode="Markdown",
+                )
+                return
+            lignes = [f"🌿 *{_md(culture)}* — associations connues"]
+            attributions: list[str] = []
+            for a in associations:
+                cible = f"la famille {a.autre_partie}" if a.autre_est_famille else a.autre_partie
+                lignes.append(f"• {_md(cible)} : *{_md(a.formulation)}* — {_md(a.motif)}")
+                if a.attribution and a.attribution not in attributions:
+                    attributions.append(a.attribution)
+            if attributions:
+                lignes.append("")
+                lignes.append("Source : " + " · ".join(attributions))
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+        except svc_associations.EntiteInconnueError:
+            await update.message.reply_text(
+                f"❌ Culture ou famille inconnue : *{_md(culture)}*",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-163] cmd_association lister erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /association saisir <cultureA> <cultureB> <nature> <preuve> <motif> ───
+    if sous_cmd in ("saisir", "corriger", "ajouter"):
+        if len(ctx.args) < 6:
+            await update.message.reply_text(
+                "❌ Usage : /association saisir <cultureA> <cultureB> "
+                "<favorable|defavorable|neutre> <etabli|traditionnel> <motif>\n"
+                "Exemple : /association saisir carotte aneth defavorable etabli concurrence racinaire",
+                parse_mode="Markdown",
+            )
+            return
+        cote_a, cote_b = ctx.args[1], ctx.args[2]
+        nature, niveau_preuve = ctx.args[3].lower(), ctx.args[4].lower()
+        motif = " ".join(ctx.args[5:]).strip()
+        db = SessionLocal()
+        try:
+            association, creee = svc_associations.enregistrer_association(
+                db, cote_a, cote_b, nature, motif, niveau_preuve
+            )
+            verbe = "saisie" if creee else "corrigée"
+            log.info(
+                f"[US-163] Association {verbe} : '{cote_a}' ↔ '{cote_b}' : "
+                f"{nature}/{niveau_preuve}"
+            )
+            await update.message.reply_text(
+                f"✅ Association {verbe} : *{_md(cote_a)}* ↔ *{_md(cote_b)}* — "
+                f"*{_md(svc_associations.formuler_nature(nature, niveau_preuve))}*",
+                parse_mode="Markdown",
+            )
+        except svc_associations.EntiteInconnueError as err:
+            await update.message.reply_text(
+                f"❌ Culture ou famille inconnue : *{_md(str(err))}*\n"
+                "Elle doit déjà exister (culture déjà dictée, ou famille déjà connue).",
+                parse_mode="Markdown",
+            )
+        except svc_associations.ValeurAssociationInvalideError as err:
+            await update.message.reply_text(f"❌ {_md(str(err))}", parse_mode="Markdown")
+        except Exception as e:
+            log.error(f"[US-163] cmd_association saisir erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # Sous-commande inconnue
+    await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-163 / CA6-CA9] Commande /rotation — conflit de rotation calculé, à la campagne
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_rotation(update, ctx) -> None:
+    """
+    /rotation <parcelle> <culture> — Un conflit de rotation se calcule, il ne se
+    rédige pas (CA6). Consultation à la demande ; l'alerte automatique déclenchée
+    à la plantation est le périmètre d'US-167, qui réutilise
+    `app.services.rotation.evaluer_rotation` sans le réécrire.
+    """
+    if len(ctx.args) < 2:
+        await update.message.reply_text(
+            "*Usage :* /rotation <parcelle> <culture>\nExemple : /rotation NORD poivron",
+            parse_mode="Markdown",
+        )
+        return
+
+    nom_parcelle = ctx.args[0]
+    culture = " ".join(ctx.args[1:]).strip()
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        parcelle = resolve_parcelle(db, nom_parcelle, potager_id=tenant_ctx.potager_id)
+        if parcelle is None:
+            await update.message.reply_text(
+                f"❌ Parcelle inconnue : *{_md(nom_parcelle)}*", parse_mode="Markdown"
+            )
+            return
+        evaluation = svc_rotation.evaluer_rotation(db, tenant_ctx, parcelle.id, culture)
+        prefixe = {
+            svc_rotation.STATUT_CONFLIT: "⚠️",
+            svc_rotation.STATUT_OK: "✅",
+        }.get(evaluation.statut, "ℹ️")
+        log.info(
+            f"[US-163] /rotation '{culture}' sur '{parcelle.nom}' : statut={evaluation.statut}"
+        )
+        await update.message.reply_text(f"{prefixe} {evaluation.message}")
+    except Exception as e:
+        log.error(f"[US-163] cmd_rotation erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-164 / CA1-CA11, CA13] Commande /fiche — fiche courte, générée, sans aucun jeton
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_fiche(update, ctx) -> None:
+    """
+    /fiche <culture> — Fiche courte au bot, sur commande uniquement.
+
+    [CA1] Commande préfixée, reconnue au tout premier étage du routage
+    (CommandHandler) : zéro jeton, zéro appel réseau, zéro effet de bord.
+    [CA4] N'introduit AUCUNE restitution spontanée : c'est le seul chemin vers
+    la fiche, aucun autre flux (notamment `handle_text`) n'y touche.
+    [CA3] Aucune logique métier ici (convention projet) : le gabarit est
+    assemblé par `app.services.fiche_culture`, seul point de lecture.
+    """
+    if not ctx.args:
+        await update.message.reply_text(
+            "❌ Usage : /fiche <culture>\nExemple : /fiche tomate",
+            parse_mode="Markdown",
+        )
+        return
+
+    culture = " ".join(ctx.args).strip()
+    db = SessionLocal()
+    try:
+        fiche = svc_fiche_culture.generer_fiche_courte(db, culture)
+
+        lignes = [f"🌱 *{_md(fiche.culture)}*"]
+        # [CA6] Famille non renseignée : dite telle quelle, jamais omise ni devinée.
+        if fiche.famille:
+            lignes.append(f"Famille : *{_md(fiche.famille)}*")
+            if fiche.delai_retour_annees is not None:
+                lignes.append(f"Délai de retour : *{fiche.delai_retour_annees} ans*")
+        else:
+            lignes.append("Famille : non renseignée")
+
+        for attribut in fiche.attributs:
+            # [CA6] Une valeur absente se lit en clair, jamais mise en gras
+            # comme une vraie valeur — même convention que /culture attributs.
+            valeur = (
+                f"*{_md(attribut.affichage)}*" if attribut.renseigne
+                else attribut.affichage
+            )
+            lignes.append(f"• {attribut.libelle} : {valeur}")
+
+        # [CA13] Champ de texte libre : affiché quand renseigné, jamais omis ni
+        # comblé sinon — même principe d'honnêteté que CA6, appliqué à ce champ.
+        if fiche.description_agronomique:
+            lignes.append(f"Description : *{_md(fiche.description_agronomique)}*")
+        else:
+            lignes.append("Description : incomplète")
+
+        # [CA7 / US-166] L'attribution, pas le code technique de la source —
+        # une mention par source, dédupliquée, en texte brut.
+        if fiche.attributions:
+            lignes.append("")
+            lignes.append("Source : " + " · ".join(fiche.attributions))
+
+        log.info(f"[US-164] Fiche courte servie : '{culture}' (0 jeton, 0 appel modèle)")
+        await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+    except LookupError:
+        # [CA5] Honnêteté : jamais une fiche voisine forcée ni une réponse générée.
+        await update.message.reply_text(
+            f"🤷 Je n'ai pas de fiche sur cette culture : *{_md(culture)}*.",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        log.error(f"[US-164] cmd_fiche erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
 
 
 async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
@@ -5684,8 +6320,48 @@ async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
     try:
         resultats = svc_potagers.purger_potagers_supprimes(db)
         log.info("🗑️  PURGE AUTO      : %s potager(s) effacé(s) définitivement", len(resultats))
+        # [US-097 / CA3] Rétention documentée du journal de routage (12 mois) —
+        # même job quotidien, la purge des entrées expirées n'a pas besoin
+        # d'une planification dédiée.
+        nb_routage = svc_metriques_routage.purger_routage_logs_expires(db)
+        if nb_routage:
+            log.info("🗑️  PURGE AUTO      : %s entrée(s) de routage_logs expirée(s) effacée(s)", nb_routage)
     except Exception as e:
         log.error(f"❌ JOB PURGE ERREUR : {e}")
+    finally:
+        db.close()
+
+
+# ── [US-097] CALLBACK RETOUR SUR RÉPONSE (savoir/raisonnement) ──────────────────
+
+async def _retour_routage_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-097 / CA9-CA13] Callback inline — avis 👍/👎 sur une réponse de
+    savoir/raisonnement. Point d'écriture pur : aucun avis, positif ou
+    négatif, ne déclenche de nouvel appel modèle (CA13)."""
+    query = update.callback_query
+    await query.answer()
+
+    # retour_routage:<positif|negatif>:<routage_log_id>
+    try:
+        _, avis, routage_log_id_str = query.data.split(":")
+        routage_log_id = int(routage_log_id_str)
+    except (ValueError, IndexError):
+        await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+        return
+
+    db = SessionLocal()
+    try:
+        svc_retours.enregistrer_retour(db, current_context().potager_id, routage_log_id, avis)
+        emoji = "👍" if avis == svc_retours.AVIS_POSITIF else "👎"
+        await query.edit_message_text(f"{emoji} Merci, ton avis est enregistré.", reply_markup=None)
+    except svc_retours.RetourDejaEnregistreError:
+        # [CA11] Jamais redemandé — un second clic (double-tap) ne casse rien.
+        await query.edit_message_text("Un avis a déjà été enregistré pour cette réponse.", reply_markup=None)
+    except svc_retours.RoutageLogIntrouvableError:
+        await query.edit_message_text("❌ Cette réponse n'est plus disponible.", reply_markup=None)
+    except Exception as e:
+        log.error(f"❌ Erreur retour routage : {e}")
+        await query.edit_message_text("❌ Erreur lors de l'enregistrement de l'avis.", reply_markup=None)
     finally:
         db.close()
 
@@ -5818,6 +6494,42 @@ def _avec_garde_liaison(handler):
     return _handler_garde
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-171] Menu de commandes natif Telegram
+# ──────────────────────────────────────────────────────────────────────────────
+def _noms_commandes_enregistrees(app: "Application") -> set[str]:
+    """Noms des commandes réellement servies par le bot, par introspection.
+
+    Dérivé des `CommandHandler` de l'Application plutôt que d'une liste recopiée :
+    c'est ce qui garantit qu'aucune commande morte ne figure au menu et qu'une
+    commande nouvellement enregistrée y entre d'elle-même (CA3, CA6).
+    """
+    noms: set[str] = set()
+    for handlers in app.handlers.values():
+        for handler in handlers:
+            if isinstance(handler, CommandHandler):
+                noms.update(handler.commands)
+    return noms
+
+
+async def _publier_menu_commandes(app: "Application") -> None:
+    """Déclare le menu de commandes auprès de Telegram, à chaque démarrage (CA1, CA6).
+
+    Rejoué sans intervention manuelle : la liste envoyée écrase la précédente,
+    donc une commande ajoutée ou retirée du bot se reflète au redémarrage suivant.
+    Un échec réseau est journalisé mais ne fait jamais échouer le démarrage du
+    bot — le menu est un confort, pas une condition de service.
+    """
+    entrees = svc_menu_commandes.construire_menu(_noms_commandes_enregistrees(app))
+    try:
+        await app.bot.set_my_commands(
+            [BotCommand(nom, description) for nom, description in entrees]
+        )
+        log.info("⌨️  MENU TELEGRAM  : %d commandes déclarées", len(entrees))
+    except Exception as e:  # noqa: BLE001 — observabilité, jamais bloquant
+        log.warning("⌨️  MENU TELEGRAM  : déclaration impossible (%s)", e)
+
+
 def _enregistrer_commande(app: "Application", nom: str, handler) -> None:
     """[US-045] Point d'enregistrement unique des CommandHandler — applique le
     garde de liaison sauf pour les commandes d'onboarding (CA9)."""
@@ -5837,6 +6549,8 @@ def _construire_application() -> "Application":
         .write_timeout(30)
         .connect_timeout(15)
         .pool_timeout(30)
+        # [US-171 / CA6] Le menu est (re)déclaré à chaque démarrage du bot.
+        .post_init(_publier_menu_commandes)
         .build()
     )
 
@@ -5870,6 +6584,10 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "plan",      cmd_plan)
     _enregistrer_commande(app, "parcelle",  cmd_parcelle)
     _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
+    _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
+    _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
+    _enregistrer_commande(app, "association", cmd_association)  # [US-163]
+    _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
 
     _enregistrer_commande(app, "vendre",    cmd_vendre)
 
@@ -5900,6 +6618,9 @@ def _construire_application() -> "Application":
 
     # [US-046] Sélection du potager actif — boutons inline
     app.add_handler(CallbackQueryHandler(_potager_select_cb, pattern=r"^potager_select_"))
+
+    # [US-097] Retour 👍/👎 sur une réponse de savoir/raisonnement
+    app.add_handler(CallbackQueryHandler(_retour_routage_cb, pattern=r"^retour_routage:"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))

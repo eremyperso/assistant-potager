@@ -1,3 +1,209 @@
+## [v3.51.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Répond désormais à « quelles parcelles contiennent des solanacées ? » en croisant le référentiel des familles botaniques avec l'occupation réelle des parcelles — sans aucun appel de modèle, donc sans coût ni latence (US-067/US-096)
+- Répond aussi à la question inverse, « sur quelles parcelles je trouve des tomates ? » — l'association parcelle ↔ culture était déjà acquise (c'est celle du plan), il ne manquait que de savoir la lire dans ce sens (US-096)
+- Reconnaît la famille citée quelle que soit la forme : nom français ou nom scientifique (« Solanaceae »), singulier ou pluriel, avec ou sans ponctuation — la dictée vocale ne produit ni accord ni point d'interrogation fiables (US-096)
+
+### 🐛 Corrections
+- Corrige une réponse fausse d'apparence juste : une question qu'aucune famille du catalogue ne reconnaissait repartait à l'agent SQL, qui servait un classement « Top cultures — observation » exact mais totalement hors sujet, et avec assez d'assurance pour empêcher la cascade de remonter d'un étage (constaté le 02/09/2026)
+- Corrige le même défaut sur « sur quelles parcelles je trouve des tomates ? », à qui l'agent SQL répondait par la liste des observations faites sur les tomates — la bonne culture, un geste que personne n'avait mentionné (constaté le 02/09/2026)
+- L'agent SQL ne prête plus à une question un geste qu'elle ne cite pas, partout où ce geste dicte la forme de la réponse — le classement de cultures comme l'historique d'un geste : l'extraction d'intention choisit dans un vocabulaire fermé et rend toujours un geste, y compris pour une question qui n'en parle pas. Là où le geste désigne seulement quel chiffre est demandé (« total fraise ? »), l'inférence reste retenue
+
+### 🔧 Améliorations techniques
+- Distingue deux absences que la même phrase confondait : une famille dont aucune fiche culture n'est rattachée est une non-réponse qui rend la main à la cascade, là où une famille rattachée mais absente des parcelles est une réponse chiffrée légitime
+- Mutualise le motif qui disqualifie les questions de savoir (« pourquoi », « comment », « que faire ») entre les familles volontairement larges du catalogue — deux copies auraient divergé au premier ajout
+
+## [v3.50.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Avertit désormais, juste après l'enregistrement d'une plantation ou d'un semis, d'un conflit de rotation avec l'historique réel de la parcelle ou d'une association défavorable avec une culture déjà en place cette même campagne — sur le bot comme sur l'interface web (US-167)
+- Dit explicitement « je n'ai pas d'antécédent sur cette parcelle » ou « évaluation indisponible » plutôt que de rester silencieux, chaque fois qu'elle n'a pas de quoi conclure à l'absence de conflit (US-167)
+- Distingue, comme pour la consultation à la demande, une association défavorable établie d'une association seulement déconseillée par la pratique traditionnelle (US-167)
+
+### 🔧 Améliorations techniques
+- N'avertit jamais quand il n'y a positivement rien à signaler (délai de rotation respecté), ni pour une culture totalement inconnue du référentiel, ni pour une parcelle non identifiée — l'enregistrement n'est jamais bloqué par cet avertissement (US-167)
+- Réutilise tel quel le calcul de rotation d'US-163 sans le réécrire, et n'appelle jamais de modèle de langage sur ce chemin (US-167)
+
+### 🐛 Corrections
+- Corrige un avertissement de rotation qui se déclenchait à tort dès la toute première plantation d'une culture sur une parcelle sans aucun antécédent réel, en se citant lui-même comme conflit (US-167)
+
+## [v3.49.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute le menu de commandes natif Telegram : le bouton « Menu », à gauche de la zone de saisie, liste désormais les 20 commandes du bot, chacune avec sa phrase d'aide en français (US-171)
+- Retire le clavier de raccourcis permanent qui occupait le bas de l'écran — y compris chez les jardiniers qui l'avaient déjà affiché, un clavier Telegram persistant côté client tant que son retrait n'est pas demandé (US-171)
+- Oriente `/start` et `/help` vers le menu comme chemin d'accès aux commandes (US-171)
+
+### 🔧 Améliorations techniques
+- Dérive le menu des commandes réellement enregistrées par le bot plutôt que d'une liste tenue à la main : une commande ajoutée y entre au redémarrage suivant, aucune commande retirée n'y subsiste (US-171)
+- Concentre en un seul endroit les trois décisions du menu — ce qui en est écarté (`/version`, `/delier`, `/tts`), dans quel ordre métier les lignes se lisent, avec quelle phrase d'aide (`app/services/menu_commandes.py`) (US-171)
+- Écarte `/tts` du menu au profit de `/tts_on` et `/tts_off` : une entrée de menu doit agir en un clic, or `/tts` ne fait qu'afficher l'état puis renvoyer vers ces deux commandes (US-171)
+- Laisse strictement inchangés les claviers contextuels de validation — confirmation d'événement, choix de variété, catégories de note, dissociation (US-171)
+- Ne fait jamais échouer le démarrage du bot si Telegram refuse la déclaration du menu : l'échec est journalisé, le service démarre (US-171)
+
+## [v3.48.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Pré-remplit 113 associations de cultures depuis Wind River Greens (CC BY 4.0) — traduites en français et curées, dans les dix cultures du périmètre initial (US-163)
+
+### 🔧 Améliorations techniques
+- Amende l'arbitrage « associations saisies, pas importées » d'US-163 : une source déjà au socle en CC BY 4.0 peut désormais aussi les alimenter, après curation humaine — la saisie au bot reste le chemin premier, et une correction du jardinier n'est jamais réécrite par un rejeu d'import (US-163)
+- Écarte 65 compagnons hors du périmètre d'un potager (ornementales, arbres) qu'aucune culture ni famille de ce référentiel n'a vocation à recevoir, 4 motifs recyclés d'une autre plante et 1 auto-association relevés par l'audit du 01/09/2026, et démasque une contradiction que deux libellés distincts pour un même compagnon laissaient passer (US-163)
+- Rattache un compagnon générique (« herbes aromatiques », origan, sauge) à sa famille botanique plutôt qu'à une espèce précise absente du référentiel — une famille reste un fait défendable là où une espèce le serait moins (US-163)
+- Un manifeste d'import unique porte désormais attributs de conduite et associations pour une même source : une commande, un rapport de couverture (US-163)
+
+## [v3.47.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute `/association lister <culture>` et `/association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> <etabli|traditionnel> <motif>` : les associations entre cultures se saisissent et se corrigent depuis le bot, jamais depuis un import (US-163)
+- Ajoute `/rotation <parcelle> <culture>` : un conflit de rotation se calcule désormais depuis l'historique réel d'une parcelle, la famille botanique de chaque culture qui y est passée et le délai de retour de cette famille — jamais rédigé (US-163)
+- Distingue à l'affichage une association établie d'une association seulement traditionnelle : « défavorable » pour l'une, « déconseillé par la pratique traditionnelle » pour l'autre (US-163)
+- Restitue une association saisie au niveau d'une famille botanique pour toutes les cultures qui s'y rattachent, sans avoir à la ressaisir pour chacune (US-163)
+- Indique explicitement l'absence d'antécédent sur une parcelle ou l'indisponibilité d'une évaluation (famille sans délai de retour connu) — jamais interprété comme l'absence de conflit (US-163)
+
+### 🔧 Améliorations techniques
+- Lit une association dans les deux sens quelle que soit son orientation de saisie, et met à jour la ligne existante plutôt que d'en créer une seconde en cas de correction dans l'autre sens (US-163)
+- Exclut les bulletins météo automatiques et toute culture inconnue du référentiel (culture fantôme) de l'historique de rotation, pour ne jamais les traiter comme un antécédent établi (US-163)
+- Raisonne à la campagne (l'année), jamais au jour près, ce qui protège le calcul d'une date imparfaite sans perdre en justesse (US-163)
+- N'appelle jamais de modèle de langage sur les deux chemins — saisie/lecture d'association et évaluation de rotation (US-163)
+- Ajoute `python tools/mesurer_rotation.py` pour vérifier le temps de réponse de la requête de rotation sur la base réellement configurée, avant tout câblage dans un chemin automatique (US-163)
+
+### 💾 Base de données
+- Ajoute `association_culture` : une arête orientée entre deux cultures et/ou familles botaniques, avec nature, motif, niveau de preuve et source obligatoire (migration `migration_v41.sql`, rollback fourni) (US-163)
+- Ajoute un index composite sur `evenements(parcelle_id, date)` pour l'historique de rotation par campagne (US-163)
+
+## [v3.46.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- `/fiche <culture>` affiche désormais la description agronomique de la culture quand elle est renseignée en base, et l'indique explicitement comme incomplète sinon (US-164)
+
+## [v3.45.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute `/fiche <culture>` : restitue en un seul message la famille botanique, le délai de retour et les quatre caractéristiques de conduite d'une culture, en zéro jeton et zéro appel réseau (US-164)
+- Signale explicitement l'absence de fiche sur une culture inconnue du référentiel, sans jamais en proposer une voisine (US-164)
+
+### 🔧 Améliorations techniques
+- Compose la fiche par gabarit depuis la donnée déjà en base (familles, attributs agronomiques) : aucun texte de fiche n'est stocké rédigé, une correction du référentiel s'y répercute aussitôt (US-164)
+- Affiche la mention de source avec la réponse quand une caractéristique ou une famille en dérive une, dédupliquée entre les deux (US-164)
+
+## [v3.44.0] — 2026-09-01
+
+### 🚀 Nouveautés
+- Ajoute quatre caractéristiques de conduite à chaque culture — exposition, besoin en eau, profondeur de semis et rusticité minimale — restituées telles quelles, sans jamais passer par l'IA (US-161)
+- Ajoute `/culture attributs <culture>` pour consulter ces caractéristiques et leur source, en zéro jeton (US-161)
+- Ajoute `/culture exposition|eau|profondeur|rusticite <culture> <valeur>` pour corriger une caractéristique depuis le bot, sans livraison ni intervention en base ; la commande confirme l'ancienne et la nouvelle valeur (US-161)
+- Affiche « non renseigné » pour toute caractéristique inconnue : l'application ne devine jamais, ne moyenne jamais et ne complète jamais par un modèle de langage (US-161)
+
+### 🔧 Améliorations techniques
+- Restreint l'exposition à « plein soleil / mi-ombre / ombre » et le besoin en eau à « faible / moyen / élevé » : une valeur hors de ces listes est refusée et la caractéristique conserve sa valeur précédente, condition pour que la future vue Cultures puisse filtrer et trier (US-161)
+- Accepte les variantes de saisie — casse, accents, tirets, virgule décimale — mais n'enregistre jamais que la valeur canonique (US-161)
+- Fait primer toute correction du jardinier sur les reprises d'import : rejouer l'import du référentiel ne réécrit jamais une valeur saisie à la main, et le compte rendu la signale comme préservée (US-161)
+- Trace l'origine caractéristique par caractéristique, et non ligne par ligne : corriger la profondeur de semis n'empêche pas l'import de continuer à rafraîchir l'exposition (US-161)
+- Limite le pré-remplissage aux dix cultures du périmètre initial et interdit toute création de fiche culture, pour ne pas peupler les écrans de cultures jamais cultivées (US-161)
+- Refuse à l'import une valeur hors vocabulaire sans abandonner le reste de la ligne : un fichier source partiellement fautif enrichit ce qu'il peut (US-161)
+- Étend la requête de retrait d'une source (`--derive-de`) aux quatre nouvelles caractéristiques (US-161)
+- Ajoute `data/referentiel/attributs_redaction_interne.json`, gabarit versionné à remplir à la main : les caractéristiques rédigées par le projet s'importent par le même script que les sources ouvertes, sans second mécanisme (US-161)
+- Autorise un manifeste d'origine interne à échapper au contrôle de licence, qui n'a de sens que pour du contenu tiers — la porte reste fermée à toute source externe qui s'annoncerait interne, et un fichier interne ne peut ni se donner une autre licence ni une autre attribution (US-161)
+
+### 🚀 Nouveautés
+- Pré-remplit l'exposition et le besoin en eau de 9 des 10 cultures du périmètre depuis le jeu de données Wind River Greens (CC BY 4.0), sans qu'aucune valeur ne soit inventée (US-161)
+- Ajoute `python tools/adapter_wind_river.py`, qui traduit les CSV de cette source en manifeste d'import — l'adaptation ne touche jamais la base, l'import ne connaît jamais le format d'une source (US-161)
+
+### 🐛 Corrections
+- Corrige l'échec de `/culture attributs` sur une culture dont les valeurs sont importées : le code technique de la source était affiché en italique et Telegram refusait le message (US-161)
+
+### 🔧 Améliorations techniques
+- Élargit le socle de licences importables à `CC BY 4.0` : contrairement au partage à l'identique, l'attribution simple ne contamine pas le corpus, et la mention est déjà affichée avec la réponse — CC-BY-SA reste refusé (US-161)
+- N'agrège une valeur de cultivar vers une culture que sur consensus mesuré — au moins 80 % d'accord sur au moins 3 cultivars — et laisse « non renseigné » sinon, avec le motif du refus au compte rendu (US-161)
+- Écarte explicitement la rusticité (`usda_zone_min` décrit la pérennité, pas la culture), la profondeur de semis (absente de la source) et le calendrier (zones USDA nord-américaines, qui relèvent d'US-068) (US-161)
+- Extrait 217 associations de cultures dans un fichier séparé du manifeste d'import, explicitement marqué comme non révisé : un manifeste ne porte que ce qui s'importe, et cette extraction attend la relecture d'US-163 (US-161)
+- Documente dans ce fichier les quatre défauts relevés à l'audit — libellés doublonnés, contradiction masquée, motifs décrivant une autre plante, auto-association — pour qu'il ne puisse pas être pris pour de la donnée validée (US-161)
+- Sépare poivrons et piments, concombres et cornichons à l'appariement : la catégorie source les confond, et un piment n'a pas la conduite d'un poivron (US-161)
+- Versionne un extrait de 276 cultivars pinné sur la release `v1.0.0` plutôt que la branche amont, qui se rafraîchit chaque mois (US-161)
+
+### 💾 Base de données
+- Ajoute `culture_config.exposition`, `besoin_eau`, `profondeur_semis_cm` et `rusticite_min_c`, toutes nullables, ainsi qu'une colonne d'origine par caractéristique (migration `migration_v39.sql`, rollback fourni) (US-161)
+- N'écrit aucune valeur à la migration : aucune caractéristique n'est semée, aucune fiche culture n'est créée (US-161)
+- Ajoute Wind River Greens au registre des sources avec son attribution CC BY exacte (migration `migration_v40.sql`, rollback fourni — qui efface aussi les valeurs dérivées, aucune donnée ne survivant à son origine) (US-161)
+- N'introduit ni date, ni fenêtre de semis, ni durée — ces données restent au référentiel calendrier (US-068) — ni aucune relation entre cultures, qui relève d'US-162 et d'US-163 (US-161)
+
+
+## [v3.43.0] — 2026-09-01
+
+### 🚀 Nouveautés
+- Ajoute un registre des sources du référentiel : chaque donnée de connaissance sait désormais d'où elle vient, sous quelle licence et avec quelle mention à afficher (US-166)
+- Ajoute la commande `python tools/importer_referentiel.py` qui importe le référentiel structuré hors ligne, sans aucun appel réseau, et publie le rapport de couverture qui pilote la suite de l'ÉPIC 6 (US-166)
+- Ajoute le rapport de couverture : cultures couvertes, non couvertes, configurées mais jamais utilisées, cultures suspectes issues d'un échec de parsing, synonymes probables à relire et taux d'appariement automatique (US-166)
+- Ajoute `--derive-de <source>` pour lister en une requête tout ce qui dérive d'une source, préalable au retrait propre d'une source dont la licence poserait problème (US-166)
+
+### 🔧 Améliorations techniques
+- Refuse à la porte tout import dont la licence n'est pas celle d'une source du socle — CC0 (Wikidata) ou Licence Ouverte 2.0 (E-Phy / ANSES) — sans rien créer, licence absente comprise (US-166)
+- Rend l'import rejouable sans dommage : relancé sur une version mise à jour de la source, il n'écrit que les valeurs absentes ou celles qu'il avait lui-même écrites, et conserve toute correction du jardinier (US-166)
+- Interdit à l'import de créer une fiche culture : il enrichit les cultures déjà dictées, jamais un catalogue de cultures fantômes (US-166)
+- Exclut les bulletins météo automatiques de toutes les statistiques du rapport, soit 30 % des événements enregistrés (US-166)
+- Trace les corrections de famille et de délai de retour saisies au bot comme des données d'origine `saisie_manuelle`, protégées de tout import ultérieur (US-166)
+- Ajoute `data/referentiel/wikidata_familles.json`, extrait taxonomique versionné dans le dépôt : les données sources sont récupérées et rejouées hors ligne, jamais téléchargées à l'exécution (US-166)
+
+### 💾 Base de données
+- Ajoute la table `referentiel_source` — code, licence, attribution, URL, date du dernier import, indicateurs `partageable` et `importee` (migration `migration_v38.sql`, rollback fourni) (US-166)
+- Ajoute `familles_botaniques.nom_scientifique` et `familles_botaniques.source_id`, ainsi que `culture_config.famille_source_id`, pour rattacher chaque donnée du référentiel à son origine (US-166)
+- Rattache à l'origine « rédaction interne » tout ce que la migration précédente avait semé, afin qu'aucune donnée du référentiel ne reste sans origine dès la livraison (US-166)
+
+## [v3.42.0] — 2026-08-31
+
+### 🚀 Nouveautés
+- Enregistre la famille botanique de chaque culture en base, corrigeable depuis le bot sans attendre une nouvelle version de l'application (US-067)
+- Ajoute `/culture famille <culture> <famille>` pour corriger ou renseigner la famille d'une culture, et `/culture delai_retour <famille> <années>` pour corriger le délai de retour recommandé d'une famille entière en une seule commande (US-067)
+
+### 🐛 Corrections
+- Corrige le regroupement de l'écran Pépinière pour pâtisson, petit pois, pois gourmand et haricot grimpant, qui tombaient jusqu'ici dans « Autres » faute d'appariement exact sur un nom composé (US-067)
+
+### 🔧 Améliorations techniques
+- Supprime la table de familles botaniques figée côté frontend (`frontend/src/lib/familles.js`) : les écrans Pépinière, Stocks et Plan lisent désormais la famille exposée par l'API (US-067)
+- Résout la famille d'une culture indépendamment de la casse et des accents, cohérent avec la normalisation déjà appliquée aux noms de culture ailleurs dans l'application (US-067)
+- Applique une correction de famille ou de délai de retour à toutes les fiches culture_config partageant le même nom, y compris entre potagers différents — la famille botanique est un fait, pas une préférence de jardinier (US-067)
+
+### 💾 Base de données
+- Ajoute la table de référence `familles_botaniques` (libellé + délai de retour recommandé en années, nullable) et la colonne `culture_config.famille_id` (migration `migration_v37.sql`, rollback fourni) (US-067)
+- Pré-remplit la famille des cultures déjà connues à la livraison, sans jamais écraser une correction déjà saisie (US-067)
+
+## [v3.41.0] — 2026-08-30
+
+### 🚀 Nouveautés
+- Les questions déjà posées reçoivent une réponse immédiate, servie sans aucun appel à l'IA, et impossible à distinguer d'une réponse fraîche (US-095)
+- Une réponse mémorisée sur les données du potager ne peut jamais être périmée : seule la façon d'y répondre est retenue, les chiffres sont recalculés à chaque fois (US-095)
+- Enregistrer, corriger ou supprimer un évènement efface immédiatement les réponses mémorisées que ce geste contredit — demander son stock, récolter, puis redemander donne bien le nouveau stock (US-095)
+- Les réponses de connaissance générale (profondeur de semis, maladies…) sont mémorisées une fois et partagées entre tous les potagers (US-095)
+
+### 🔧 Améliorations techniques
+- Ajoute l'étage 0bis de la cascade de réponses (`app/services/cache_questions.py`), consulté avant toute classification et à coût nul en jetons (US-095)
+- Mémorise une réponse par question et non par formulation : « ma production de concombre » et « quel est ma production de concombre » partagent la même entrée, ce qui borne la table à quelques centaines de lignes par potager (US-095)
+- Refuse de mémoriser en savoir partagé une réponse où le modèle avoue ne pas savoir, ou une question ancrée dans le temps — ni l'une ni l'autre n'est du savoir général (US-095)
+- Refuse à l'écriture toute réponse partagée qui citerait un nom de parcelle ou une variété d'un potager, et vérifie l'absence de fuite inter-potagers par test (US-095)
+- Déclare, pour chaque famille de question chiffrée, les natures de donnée dont elle dérive — support de l'invalidation ciblée (US-095)
+- Branche l'invalidation en un point unique, la couche services d'écriture des évènements : ni le bot ni l'API ne la connaissent (US-095)
+- Écarte les réponses périmées à la lecture et les nettoie au fil de l'eau, sans ajouter de tâche planifiée ; borne le nombre d'entrées par potager (US-095)
+- Expose le taux de service depuis le cache et son écart à l'hypothèse de 40 % du document d'architecture, publié tel quel plutôt qu'affirmé (US-095)
+- Distingue dans les métriques le cache de réponses du cache de classification, qui ne mesuraient pas la même chose (US-095)
+
+### 💾 Base de données
+- Ajoute la table `questions_cache` et le modèle `QuestionCache`, clefée sur l'aiguillage de la question pour les réponses sur données et sur la phrase pour le savoir général (migration `migration_v36.sql`, rollback fourni) (US-095)
+- La purge définitive d'un potager efface désormais aussi ses entrées de cache (US-095)
+
+## [v3.40.0] — 2026-08-26
+
+### 🚀 Nouveautés
+- Répond désormais aux questions sur ses propres chiffres (récolte totale d'une culture, dernière récolte/semis, stock courant, pieds actifs, rendement de la saison, contenu de la pépinière, parcelles libres, occupation d'une parcelle) sans passer par l'IA, avec une réponse exacte et immédiate (US-096)
+- Reconnaît ces questions quelle que soit leur formulation exacte (fautes de frappe, tournures elliptiques, dictée vocale) grâce au même catalogue qui produit la réponse (US-096)
+
+### 🔧 Améliorations techniques
+- Ajoute un catalogue fermé d'agrégations SQL en lecture seule, avec délai maximal et vérification systématique de l'isolation par potager à l'exécution — aucune requête composée librement par l'IA n'est possible (US-096)
+- Le routeur de questions (US-093) consulte ce catalogue comme une règle supplémentaire, avant tout appel au modèle, pour aiguiller ces questions à coût nul (US-096)
+- Mesure la part des questions sur les données résolues sans aucun appel au modèle, exposée dans les métriques de routage (US-096)
+- Une liste tronquée dans une réponse (ex. pépinière de plus de 25 lots) annonce désormais explicitement combien d'éléments manquent, au lieu de laisser croire à une liste complète
+- Corrige une lecture répétée (N+1) du nom de parcelle sur l'écran pépinière
 
 ## [v3.39.0] — 2026-08-26
 

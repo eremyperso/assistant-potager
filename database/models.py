@@ -10,6 +10,15 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-046] Ajout User.potager_actif_id (potager sélectionné par l'utilisateur)
 [US-048] Ajout modèle Invitation (codes d'invitation à rejoindre un potager)
 [US-092] Ajout modèle ConsoTokens (mesure de consommation LLM par potager)
+[US-097] Ajout modèles RoutageLog et RoutageRetour (observabilité cascade + retour jardinier)
+[US-095] Ajout modèle QuestionCache (table questions_cache — cache de réponses)
+[US-166] Ajout modèle ReferentielSource (registre de sources) + rattachement
+         source_id sur familles_botaniques et famille_source_id sur culture_config
+[US-161] Ajout des attributs agronomiques de conduite sur culture_config
+         (exposition, besoin_eau, profondeur_semis_cm, rusticite_min_c) et de
+         leur source respective
+[US-163] Ajout du modèle AssociationCulture (table association_culture) et
+         de l'index composite evenements(parcelle_id, date) pour la rotation
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
@@ -166,6 +175,21 @@ class Evenement(Base):
     # [US-029] Chaînage plantation → godet(s) source (IDs séparés par ";" si multi-lots)
     source_evenement_ids = Column(String, nullable=True)
 
+    # [US-094 / CA10 / migration_v34] Chemin qui a produit cet évènement :
+    # "deterministe" (grammaire de llm/parseur_deterministe.py, zéro jeton) |
+    # "llm" (parsing par le modèle) | NULL (antérieur à l'US).
+    # Instrumentation seule : aucune condition métier, aucun gabarit et aucun
+    # message utilisateur ne lit cette colonne.
+    origine_parsing = Column(String, nullable=True)
+
+    # [US-169 / CA1 / migration_v35] Origine de `date` : "explicite" (dictée en
+    # clair) | "relative_resolue" (ex. "hier") | "presumee" (aucun ancrage,
+    # convention "aujourd'hui") | "modele_incertain" (date rendue par le
+    # modèle, origine non connaissable) | NULL (antérieur à l'US, ou chemin
+    # d'écriture qui ne sait pas conclure — jamais deviné, voir CA7).
+    # Instrumentation seule, même invariant que `origine_parsing` ci-dessus.
+    date_source = Column(String, nullable=True)
+
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
     # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests
@@ -182,6 +206,9 @@ class Evenement(Base):
 
     __table_args__ = (
         Index("idx_evenements_potager_date", "potager_id", "date"),
+        # [US-163/CA12] Historique d'une parcelle par campagne — requête posée
+        # par app.services.rotation.evaluer_rotation.
+        Index("idx_evenements_parcelle_date", "parcelle_id", "date"),
     )
 
     @property
@@ -213,6 +240,189 @@ class CultureConfig(Base):
     # non NULL = fiche personnalisée à un potager (le backfill ne force pas
     # cette colonne, contrairement aux tables purement métier)
     potager_id               = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+
+    # [US-067 / CA1] Famille botanique — référence vers la table dédiée, jamais
+    # un libellé texte ici : le délai de retour (FamilleBotanique) est un
+    # attribut de la FAMILLE, pas de la culture (voir FamilleBotanique
+    # ci-dessous). NULL = famille non renseignée, affichée "Autres" (CA3).
+    famille_id                = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    famille_rel               = relationship("FamilleBotanique", foreign_keys=[famille_id])
+
+    # [US-166 / CA1-CA3] Origine du rattachement `famille_id` — jamais l'origine
+    # de la fiche culture_config elle-même, qui naît de la dictée du jardinier.
+    # Renseignée que la famille vienne d'un import (`wikidata`) ou d'une
+    # correction au bot (`saisie_manuelle`) : il n'existe aucune donnée sans
+    # origine. NULL = rattachement antérieur à l'US, origine non connaissable —
+    # jamais devinée après coup.
+    famille_source_id         = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True, index=True)
+    famille_source_rel        = relationship("ReferentielSource", foreign_keys=[famille_source_id])
+
+    # ── [US-161 / CA1, CA2] Attributs agronomiques de conduite ────────────────
+    # Rien que des attributs : de la donnée qui s'affiche, se filtre et se trie
+    # sans jamais passer par un modèle de langage. Tous nullables — un attribut
+    # non renseigné se lit « non renseigné » (CA4), jamais deviné ni moyenné.
+    #
+    # ⚠️ Aucun attribut de calendrier ici (CA8) : ni fenêtre de semis, ni durée
+    # de germination, ni date — ils appartiennent au référentiel calendrier
+    # d'US-068. Ni aucune relation (CA9) : associations, rotations et
+    # bioagresseurs sont des arêtes (US-162, US-163), pas des colonnes.
+
+    # [CA2] Vocabulaire fermé — app.services.attributs_culture.EXPOSITIONS.
+    # Stocké en VARCHAR plutôt qu'en ENUM Postgres : ajouter une valeur au
+    # vocabulaire resterait un ALTER TYPE, alors que la validation vit déjà en
+    # un seul endroit applicatif que l'import comme le bot traversent.
+    exposition                = Column(String, nullable=True)
+    # [CA2] Vocabulaire fermé — app.services.attributs_culture.BESOINS_EAU.
+    besoin_eau                = Column(String, nullable=True)
+    # [CA10] Chiffres : jamais produits par un modèle de langage, exclusivement
+    # importés (US-166) ou saisis par le jardinier. L'unité est dans le nom,
+    # comme `surface_m2`, pour qu'aucune lecture n'ait à la supposer.
+    profondeur_semis_cm       = Column(Float, nullable=True)
+    rusticite_min_c           = Column(Float, nullable=True)
+
+    # [CA3] Une source PAR attribut, et non une source de ligne : c'est ce qui
+    # permet à une profondeur corrigée à la main de survivre à un rejeu d'import
+    # (CA6) sans figer pour autant l'exposition, que l'import doit continuer de
+    # rafraîchir. Aucun attribut orphelin : une valeur renseignée porte toujours
+    # son origine. NULL = attribut non renseigné.
+    exposition_source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    besoin_eau_source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    profondeur_semis_source_id = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+    rusticite_min_source_id   = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True)
+
+
+class FamilleBotanique(Base):
+    """
+    [US-067] Table de référence des familles botaniques.
+
+    Table à part plutôt que colonne texte sur `culture_config` (CA1) : le délai
+    de retour recommandé est un attribut de la FAMILLE, pas de la culture — en
+    colonne sur `culture_config`, il se dupliquerait sur chaque culture de la
+    famille et deviendrait incohérent à la première correction (le jardinier
+    corrige "Solanacées : 4 ans" sur la tomate, la pomme de terre reste à 3).
+
+    Aucune colonne `potager_id` : une famille botanique est un fait, identique
+    quel que soit le potager (CA7) — jamais une préférence de jardinier.
+    """
+    __tablename__ = "familles_botaniques"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    nom                  = Column(String, unique=True, nullable=False)
+    # [CA6] Casse/accents indifférents à la résolution — même stratégie que
+    # Parcelle.nom_normalise (strip + lower + unidecode).
+    nom_normalise        = Column(String, unique=True, nullable=False, index=True)
+    # [CA12/CA13] Délai de retour recommandé, en années. Nullable : une famille
+    # sans délai renseigné n'empêche aucun affichage, elle rend seulement
+    # l'avertissement de rotation indisponible pour ses cultures (US-163).
+    delai_retour_annees  = Column(Integer, nullable=True)
+
+    # [US-166] Nom scientifique de la famille ('Solanaceae') — c'est l'apport
+    # propre de Wikidata (CC0) au référentiel structuré, et le champ prévu par
+    # `docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md` §4.1. Nullable :
+    # une famille saisie au bot n'a aucune raison d'en porter un.
+    nom_scientifique     = Column(String, nullable=True)
+
+    # [US-166 / CA1-CA3] Origine de la ligne — import (`wikidata`), saisie du
+    # jardinier (`saisie_manuelle`) ou rédaction interne. C'est cette colonne
+    # que l'import relit pour ne jamais écraser une correction humaine (CA5) et
+    # que la requête de retrait de source suit pour identifier tout ce qui
+    # dérive d'une source (CA4).
+    source_id            = Column(Integer, ForeignKey("referentiel_source.id"), nullable=True, index=True)
+    source_rel           = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class ReferentielSource(Base):
+    """
+    [US-166] Registre des sources du référentiel — d'où vient chaque donnée.
+
+    Une ligne par origine, importée ou non (CA3) : `wikidata` et `ephy_anses`
+    sont des sources d'import ; `saisie_manuelle` (le jardinier corrige au bot)
+    et `redaction_interne` (contenu écrit par le projet) n'importent rien mais
+    sont des origines à part entière — il n'existe aucune donnée sans origine.
+
+    L'attribution est portée par la ligne, jamais par un README : c'est une
+    obligation par enregistrement (CA1), et c'est ce qui rend le retrait d'une
+    source répondable six mois plus tard, quand plus personne ne se souvient de
+    ce qui venait d'où (CA4, voir `app.services.referentiel_sources.donnees_derivees`).
+    """
+    __tablename__ = "referentiel_source"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    # [CA1] Code stable, c'est lui que citent les scripts d'import et les
+    # requêtes de traçabilité — jamais l'id, qui dépend de l'ordre d'insertion.
+    code                = Column(String, unique=True, nullable=False, index=True)
+    libelle             = Column(String, nullable=False)
+    # [CA6] Valeur du socle uniquement — voir LICENCES_SOCLE dans
+    # app/services/referentiel_sources.py, qui refuse tout le reste.
+    licence             = Column(String, nullable=False)
+    # [CA1] Mention à afficher. NOT NULL : une source sans attribution connue
+    # n'entre pas au registre, donc rien ne peut en dériver.
+    attribution         = Column(String, nullable=False)
+    url                 = Column(String, nullable=True)
+    # [CA1] Date du dernier import réussi. NULL pour les origines non importées
+    # (CA3) comme pour une source déclarée mais jamais encore rejouée.
+    date_dernier_import = Column(DateTime, nullable=True)
+    # [CA2] Exclut d'un éventuel export les sources contaminantes. `true` pour
+    # toutes les sources retenues aujourd'hui (arbitrage option A,
+    # docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md §2.1) : la colonne existe
+    # pour rendre l'option B réversiblement atteignable, pas parce qu'un cas
+    # `false` existe déjà.
+    partageable         = Column(Boolean, nullable=False, default=True)
+    # [CA3] False = origine non importée (saisie, rédaction interne). C'est
+    # aussi ce qui distingue les licences acceptables : `proprietaire` n'est
+    # légitime que pour une origine interne, jamais pour un contenu importé.
+    importee            = Column(Boolean, nullable=False, default=True)
+
+
+class AssociationCulture(Base):
+    """
+    [US-163] Association orientée entre deux cultures et/ou familles botaniques.
+
+    Une arête typée (CA1) plutôt qu'un paragraphe dans une fiche — c'est
+    précisément ce que US-140/CA7bis interdit d'écrire ailleurs
+    (docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md §1.2). `nature` porte la
+    relation, `motif` le texte court qui la rend compréhensible, `niveau_preuve`
+    distingue une relation établie d'une relation seulement traditionnelle
+    (CA2) — la formulation différenciée à la restitution (CA3) est portée par
+    `app.services.associations.formuler_nature`, pas par une colonne.
+
+    [CA4] Chaque côté référence SOIT une culture (`culture_x_id`) SOIT une
+    famille botanique (`famille_x_id`), jamais les deux ni aucun des deux —
+    contrôlé par `app.services.associations` à l'écriture, doublé d'un CHECK
+    Postgres (`migrations/migration_v41.sql`) non reproduit ici : SQLite (tests)
+    n'a pas besoin de cette défense en profondeur, la validation Python suffit.
+
+    [CA5] Le stockage reste ORIENTÉ (une ligne par couple, comme `Evenement`) :
+    c'est la LECTURE qui est symétrique — `app.services.associations.lire_associations`
+    interroge les deux côtés, jamais la forme de stockage.
+
+    [CA10] `source_id` NOT NULL : aucune arête anonyme. Les associations sont
+    saisies, pas importées — l'origine est presque toujours `saisie_manuelle`.
+    """
+    __tablename__ = "association_culture"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    culture_a_id   = Column(Integer, ForeignKey("culture_config.id"), nullable=True, index=True)
+    famille_a_id   = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    culture_b_id   = Column(Integer, ForeignKey("culture_config.id"), nullable=True, index=True)
+    famille_b_id   = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    # [CA1] 'favorable' | 'defavorable' | 'neutre'. Vocabulaire fermé validé par
+    # app.services.associations, pas par un CHECK — même arbitrage que
+    # culture_config.exposition (US-161) : une décision produit révisable.
+    nature         = Column(String, nullable=False)
+    # [CA1] Motif court en clair — ce qui rend l'avertissement compréhensible
+    # plutôt qu'autoritaire ("répulsif contre la mouche de la carotte").
+    motif          = Column(String, nullable=False)
+    # [CA2] 'etabli' | 'traditionnel'.
+    niveau_preuve  = Column(String, nullable=False)
+    # [CA10] Traçabilité obligatoire, jamais NULL.
+    source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    culture_a_rel  = relationship("CultureConfig", foreign_keys=[culture_a_id])
+    famille_a_rel  = relationship("FamilleBotanique", foreign_keys=[famille_a_id])
+    culture_b_rel  = relationship("CultureConfig", foreign_keys=[culture_b_id])
+    famille_b_rel  = relationship("FamilleBotanique", foreign_keys=[famille_b_id])
+    source_rel     = relationship("ReferentielSource", foreign_keys=[source_id])
 
 
 class Parcelle(Base):
@@ -295,4 +505,135 @@ class ConsoTokens(Base):
         # Agrégation type « consommation du potager X sur le mois » — c'est la
         # requête que l'US de quotas exécutera à chaque appel.
         Index("idx_conso_tokens_potager_date", "potager_id", "date"),
+    )
+
+
+class RoutageLog(Base):
+    """
+    [US-097 / CA1] Une ligne par question passée par le routeur
+    (`llm/routeur.py::repondre_avec_cascade`) — succès comme remontée de
+    cascade.
+
+    - question_normalisee    : [CA2] question NORMALISÉE, jamais le message brut
+    - nature                 : ACTION | QUESTION_DATA | QUESTION_SAVOIR | QUESTION_HYBRIDE
+    - origine_classification : regle | cache | modele — origine de la DÉCISION
+                                de classification (llm.routeur.DecisionRoutage.origine)
+    - etage_resolveur        : donnee | savoir | raisonnement — étage ayant
+                                produit la réponse FINALE (distinct de la
+                                classification : peut différer en cas de
+                                remontée de cascade)
+    - cascade_remontee       : vrai si l'étage data n'a pas su répondre et que
+                                le raisonnement a pris le relais (US-093 CA7)
+    - tokens_consommes       : [CA5] jetons consommés pour cette réponse,
+                                routage (appel de classification) inclus
+    """
+    __tablename__ = "routage_logs"
+
+    id                     = Column(Integer, primary_key=True, index=True)
+    potager_id             = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    cree_le                = Column(DateTime, server_default=func.now())
+    question_normalisee    = Column(String, nullable=False)
+    nature                 = Column(String(20), nullable=False)
+    origine_classification = Column(String(10), nullable=False)
+    etage_resolveur        = Column(String(20), nullable=False)
+    cascade_remontee       = Column(Boolean, nullable=False, default=False)
+    confiance              = Column(Float, nullable=True)
+    latence_ms             = Column(Integer, nullable=False, default=0)
+    tokens_consommes       = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),
+    )
+
+
+class RoutageRetour(Base):
+    """
+    [US-097 / CA9-CA11] Avis 👍/👎 du jardinier sur une réponse de savoir ou de
+    raisonnement — au plus un par ligne de `routage_logs` (contrainte UNIQUE,
+    CA11 : jamais redemandé pour la même réponse).
+
+    potager_id est dénormalisé depuis routage_logs : évite une jointure pour la
+    purge potager (CA3) et pour le scoping tenant d'un futur endpoint web.
+    """
+    __tablename__ = "routage_retours"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    routage_log_id = Column(Integer, ForeignKey("routage_logs.id"), nullable=False, unique=True)
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    avis           = Column(String(10), nullable=False)  # 'positif' | 'negatif'
+    cree_le        = Column(DateTime, server_default=func.now())
+
+
+class QuestionCache(Base):
+    """
+    [US-095 / CA1] Réponse mémorisée — étage 0bis de la cascade
+    (`llm/routeur.py::repondre_avec_cascade`), servie par
+    `app/services/cache_questions.py`.
+
+    Deux natures de réponse, qu'il ne faut jamais confondre :
+
+    - `type_reponse='template_sql'` : seuls le motif et l'**aiguillage** sont
+      mémorisés (`template` = famille du catalogue + culture + parcelle, en
+      JSON). Les valeurs sont recalculées à chaque service par l'étage des
+      données (US-096) : la réponse est donc juste *par construction*,
+      personnalisée à chaque appel, et coûte zéro jeton (CA3).
+    - `type_reponse='figee'` : `reponse_figee` est le texte servi tel quel,
+      réservé au savoir général. `potager_id` est alors NULL — l'entrée est
+      partageable entre tous les potagers (CA1), ce qui est précisément la
+      raison pour laquelle elle ne peut contenir aucune donnée de potager
+      (CA8, contrôle à l'écriture dans le service).
+
+    **Deux natures de réponse, donc deux espaces de clés** (CA2) :
+
+    - `cle_aiguillage` (`famille|culture|parcelle`) est la clé des entrées
+      `template_sql`. Elle est bornée par construction — quelques centaines de
+      valeurs pour un potager — là où l'espace des formulations ne l'est pas.
+      « quel est ma production de concombre », « ma production de concombre » et
+      « production de concombre » sont trois phrases pour une seule question :
+      une seule ligne. Corrigé le 29/08/2026 après constat en usage réel, où
+      ces trois formulations avaient créé trois lignes et servi zéro réponse.
+    - `motif_normalise` est la clé des entrées `figee` — pour du savoir général
+      il n'existe aucun aiguillage, la phrase est tout ce qu'on a. Sur une
+      entrée `template_sql`, la colonne reste renseignée mais ne sert qu'à
+      l'**audit** : elle dit quelle formulation a créé l'entrée.
+
+    - motif_normalise : question normalisée par `llm.routeur.normaliser_question`,
+                        la MÊME fonction que le routeur, jamais une variante (CA2)
+    - source_etage    : sql | rag | llm — étage ayant produit la réponse, pour audit
+    - culture         : [CA4] culture dont dérive l'entrée, NULL si elle porte
+                        sur l'ensemble du potager (stock global, rendement global)
+    - natures         : [CA4] natures de donnée dont dérive l'entrée, encadrées
+                        de « | » (ex. `|stock|recolte|journal|`) — support de
+                        l'invalidation événementielle (CA5), voir
+                        `utils/dependances_donnee.py`
+    - fragment_id     : [CA10] fragment de connaissance dont une réponse figée
+                        est issue ; NULL tant qu'US-098 n'existe pas
+    - valide_jusqu_au : [CA11] écartée à la lecture au-delà, nettoyée au fil de
+                        l'eau — aucun job planifié n'est ajouté pour cela
+    """
+    __tablename__ = "questions_cache"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    # Nullable : NULL = savoir général partageable entre tous les potagers.
+    potager_id      = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    motif_normalise = Column(String(500), nullable=False)
+    # [US-095 / CA2] Clé des entrées `template_sql` — NULL sur une entrée figée,
+    # qui n'a pas d'aiguillage.
+    cle_aiguillage  = Column(String(300), nullable=True)
+    type_reponse    = Column(String(16), nullable=False)
+    template        = Column(String, nullable=True)
+    reponse_figee   = Column(String, nullable=True)
+    source_etage    = Column(String(8), nullable=False)
+    culture         = Column(String(120), nullable=True)
+    natures         = Column(String(200), nullable=False, default="")
+    fragment_id     = Column(String(120), nullable=True)
+    valide_jusqu_au = Column(DateTime, nullable=True)
+    cree_le         = Column(DateTime, server_default=func.now(), default=func.now())
+
+    __table_args__ = (
+        # Requête de service d'une réponse paramétrée : « ce potager a-t-il déjà
+        # répondu à cette question, quelle qu'en soit la formulation ? »
+        Index("idx_questions_cache_aiguillage", "cle_aiguillage", "potager_id"),
+        # Requête de service d'une réponse figée : la phrase est la seule clé.
+        Index("idx_questions_cache_motif", "motif_normalise", "potager_id"),
     )

@@ -22,11 +22,13 @@ from sqlalchemy.orm import Session
 from app.services.context import TenantContext
 from app.services.permissions import require_role
 from app.services import auth as svc_auth
+from app.services import cache_questions as svc_cache_questions
 from app.services import potager_actif as svc_potager_actif
 from app.services import telegram_notify as svc_telegram_notify
 from database.db import tenant_scope
 from database.models import (
-    CultureConfig, Evenement, Invitation, Parcelle, Potager, PotagerMembre, User,
+    CultureConfig, Evenement, Invitation, Parcelle, Potager, PotagerMembre, RoutageLog,
+    RoutageRetour, User,
 )
 
 log = logging.getLogger("potager")
@@ -505,6 +507,15 @@ def purger_potager(db: Session, potager_id: int) -> dict:
                                 .delete(synchronize_session=False),
             "membres": db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id)
                          .delete(synchronize_session=False),
+            # [US-097 / CA3] routage_retours avant routage_logs (clé étrangère).
+            "routage_retours": db.query(RoutageRetour).filter(RoutageRetour.potager_id == potager_id)
+                                  .delete(synchronize_session=False),
+            "routage_logs": db.query(RoutageLog).filter(RoutageLog.potager_id == potager_id)
+                              .delete(synchronize_session=False),
+            # [US-095] Cache de reponses : aucune donnee de potager n'y est
+            # stockee (les entrees ne portent qu'un aiguillage), mais elles
+            # nomment ses cultures et ses parcelles. Elles partent avec lui.
+            "questions_cache": svc_cache_questions.purger_potager(db, potager_id),
         }
         db.delete(potager)
         db.commit()
@@ -512,9 +523,11 @@ def purger_potager(db: Session, potager_id: int) -> dict:
     # [CA7] Seule trace qui subsiste après effacement — d'où le détail des volumes.
     log.info(
         "[US-084] Purge physique : potager_id=%s nom=%r evenements=%s parcelles=%s "
-        "invitations=%s culture_config=%s membres=%s",
+        "invitations=%s culture_config=%s membres=%s routage_logs=%s routage_retours=%s "
+        "questions_cache=%s",
         potager_id, nom, volumes["evenements"], volumes["parcelles"],
         volumes["invitations"], volumes["culture_config"], volumes["membres"],
+        volumes["routage_logs"], volumes["routage_retours"], volumes["questions_cache"],
     )
     return {"potager_id": potager_id, "nom": nom, "purge": True, "volumes": volumes}
 
