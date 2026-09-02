@@ -96,6 +96,24 @@ python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 #   /culture eau <culture> <faible|moyen|élevé>
 #   /culture profondeur <culture> <cm>
 #   /culture rusticite <culture> <°C>
+
+# Associations de cultures et rotation calculable [US-163]
+# La saisie au bot reste le chemin premier (option A sur la licence — zéro
+# CC-BY-SA dans le socle). Amendement du 02/09/2026 : une source déjà au socle
+# en CC BY 4.0 (wind_river_greens, US-161) peut aussi alimenter la table après
+# curation humaine (traduction, périmètre, doublons) — jamais brute.
+#   /association lister <culture>
+#   /association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> <etabli|traditionnel> <motif>
+# Import (même commande que les attributs de conduite — un seul manifeste) :
+python tools/adapter_wind_river.py                    # régénère le manifeste, associations incluses
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json --dry-run
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# Rotation : un conflit se calcule (evenements × culture_config × familles_botaniques),
+# il ne se rédige pas — consultation seule ici, l'alerte proactive est US-167.
+#   /rotation <parcelle> <culture>
+# CA12 : temps de réponse à VÉRIFIER sur la production avant tout câblage
+# automatique (US-167) — jamais supposé sous prétexte que les index existent.
+python tools/mesurer_rotation.py <parcelle_id> <culture>
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

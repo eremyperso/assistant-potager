@@ -50,7 +50,7 @@ python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 |---|---|---|
 | `sun_requirement` | ✅ retenue → `exposition` | 29 formulations libres, normalisées par règles ; accord ≥ 88 % sur nos cultures |
 | `water_requirement` | ✅ retenue → `besoin_eau` | 579 formulations, dont des quantités en pouces/semaine ramenées à trois catégories |
-| `companion_plants.csv` | 🔶 extraite **brute**, non importée | 217 arêtes dans `wind_river_associations.json`, fichier séparé du manifeste. **Non révisée** — l'audit du 01/09/2026 y relève 41 libellés doublonnés, une contradiction masquée, 8 motifs décrivant une autre plante et une auto-association. À relire en US-163 |
+| `companion_plants.csv` | ✅ retenue → `cultures_associations`, après curation | 217 arêtes extraites brutes dans `wind_river_associations.json` (fichier séparé, jamais à importer). L'audit du 01/09/2026 y relevait 41 libellés doublonnés, une contradiction masquée, 8 motifs décrivant une autre plante et une auto-association ; `adaptateur_wind_river.curer_associations` [US-163] les traite tous — traduction en français, rattachement à une culture ou une famille de ce référentiel, retrait de ce qui n'a pas sa place. **113 des 217 retenues**, importées dans `wind_river_attributs.json` |
 | `usda_zone_min/max` | ⛔ écartée | Décrit la zone où la plante est *pérenne*, pas où on la cultive : les tomates y sont en « zones 10-11 », sauf Roma en « 4-9 ». Faux pour des annuelles |
 | `planting_calendar.csv` | ⛔ écartée | Mois × zone USDA, dates de gelée nord-américaines. La zone 8 USDA contient Seattle *et* Dallas. Le calendrier français relève d'US-068 |
 | profondeur de semis | ⛔ absente | Aucune colonne dans le jeu de données |

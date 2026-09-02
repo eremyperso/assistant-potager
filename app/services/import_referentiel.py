@@ -45,13 +45,29 @@ convention implicite ni confiance dans le nom du fichier ::
       "cultures_familles": [{"culture": "tomate", "famille": "Solanacée"}],
       "cultures_attributs": [{"culture": "carotte", "exposition": "plein soleil",
                               "besoin_eau": "moyen", "profondeur_semis_cm": 1,
-                              "rusticite_min_c": -5}]
+                              "rusticite_min_c": -5}],
+      "cultures_associations": [{"culture": "tomate", "compagnon": "basilic",
+                                 "nature": "favorable", "motif": "répulsif contre pucerons",
+                                 "niveau_preuve": "traditionnel"}]
     }
 
 Les blocs de données sont tous facultatifs : une source qui n'apporte que des
 familles, que des rattachements ou que des attributs est un manifeste valide.
 `ephy_anses` s'enfichera par un bloc supplémentaire quand US-162 aura créé sa
 destination — sans second mécanisme d'ingestion.
+
+Le bloc `cultures_associations` [US-163]
+-----------------------------------------
+`compagnon` est un nom de culture OU de famille botanique — jamais les deux
+champs séparés : `app.services.associations._resoudre_cote` essaie une culture
+d'abord, une famille ensuite, exactement comme une saisie `/association saisir`
+au bot. Ni `culture` ni `compagnon` ne sont jamais créés à la volée (même
+invariant que CA7 d'US-161) : l'un des deux absent du référentiel compte la
+ligne en `associations_ignorees`, elle n'est pas fabriquée.
+
+La règle de non-écrasement (CA5) porte sur la LIGNE entière, pas sur un champ :
+une association déjà saisie par le jardinier (`saisie_manuelle`) n'est jamais
+réécrite par un rejeu d'import, quelle que soit la source qui rejoue.
 
 Le bloc `cultures_attributs` [US-161]
 -------------------------------------
@@ -109,6 +125,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
+from app.services import associations as svc_associations
 from app.services import attributs_culture as svc_attributs
 from app.services import referentiel_sources as svc_sources
 from app.services.familles import normaliser_famille
@@ -148,6 +165,19 @@ class ResultatImport:
     #: [US-161 / CA7] Cultures du fichier hors des dix du périmètre initial.
     cultures_hors_perimetre: list[str] = field(default_factory=list)
 
+    # ── [US-163] Associations de cultures ──────────────────────────────────────
+    associations_creees: list[str] = field(default_factory=list)
+    #: Ligne déjà de cette origine (rejeu), valeur mise à jour.
+    associations_ecrites: list[str] = field(default_factory=list)
+    #: [CA10] Ligne portant une AUTRE origine (le plus souvent `saisie_manuelle`)
+    #: — jamais écrasée par un import, quel qu'il soit.
+    associations_preservees: list[str] = field(default_factory=list)
+    #: [US-161/CA7, même invariant] Un côté ne désigne ni une culture ni une
+    #: famille connue — jamais créée à la volée.
+    associations_ignorees: list[str] = field(default_factory=list)
+    #: Nature/niveau de preuve/motif hors vocabulaire fermé (CA1, CA2).
+    associations_refusees: list[str] = field(default_factory=list)
+
     @property
     def total_ecritures(self) -> int:
         return (
@@ -155,6 +185,8 @@ class ResultatImport:
             + len(self.familles_enrichies)
             + len(self.cultures_rattachees)
             + len(self.attributs_ecrits)
+            + len(self.associations_creees)
+            + len(self.associations_ecrites)
         )
 
 
@@ -388,6 +420,52 @@ def _importer_attributs_cultures(
                 resultat.attributs_preserves.append(f"{culture}.{attribut.cle}")
 
 
+def _importer_associations_cultures(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-163] Importe des associations culture ↔ culture ou culture ↔ famille.
+
+    Délègue la résolution, la validation et l'écriture à
+    `app.services.associations.importer_association` — seul point d'écriture,
+    partagé avec `/association saisir` au bot (« aucun second mécanisme »,
+    US-140). Aucune culture ni famille n'est créée à la volée : un côté qui ne
+    désigne rien de connu est compté `associations_ignorees`, jamais fabriqué.
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        culture = (entree.get("culture") or "").strip()
+        compagnon = (entree.get("compagnon") or "").strip()
+        if not culture or not compagnon:
+            continue
+        libelle = f"{culture} × {compagnon}"
+
+        try:
+            statut = svc_associations.importer_association(
+                db, culture, compagnon,
+                (entree.get("nature") or "").strip(),
+                entree.get("motif") or "",
+                (entree.get("niveau_preuve") or "").strip(),
+                source,
+            )
+        except svc_associations.EntiteInconnueError:
+            resultat.associations_ignorees.append(libelle)
+            continue
+        except svc_associations.ValeurAssociationInvalideError as err:
+            log.warning("[import_referentiel] association %s refusée : %s", libelle, err)
+            resultat.associations_refusees.append(libelle)
+            continue
+
+        if statut == svc_associations.IMPORT_CREEE:
+            resultat.associations_creees.append(libelle)
+        elif statut == svc_associations.IMPORT_ECRITE:
+            resultat.associations_ecrites.append(libelle)
+        elif statut == svc_associations.IMPORT_PRESERVEE:
+            resultat.associations_preservees.append(libelle)
+        # IMPORT_INCHANGEE : déjà conforme, rien de plus à compter.
+
+
 def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> ResultatImport:
     """
     [CA5-CA8] Importe un manifeste de référentiel structuré.
@@ -457,6 +535,9 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
     _importer_attributs_cultures(
         db, manifeste.get("cultures_attributs") or [], source, resultat
     )
+    _importer_associations_cultures(
+        db, manifeste.get("cultures_associations") or [], source, resultat
+    )
 
     if dry_run:
         db.rollback()
@@ -467,15 +548,17 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
     svc_sources.marquer_import(db, code)
     log.info(
         "[import_referentiel] « %s » : %s famille(s) créée(s), %s enrichie(s), "
-        "%s culture(s) rattachée(s), %s attribut(s) écrit(s), %s ignorée(s) "
-        "(aucune création, CA7), %s hors périmètre, %s valeur(s) refusée(s), "
-        "%s valeur(s) humaine(s) préservée(s)",
+        "%s culture(s) rattachée(s), %s attribut(s) écrit(s), %s association(s) "
+        "créée(s)/écrite(s), %s ignorée(s) (aucune création, CA7), %s hors "
+        "périmètre, %s valeur(s) refusée(s), %s valeur(s) humaine(s) préservée(s)",
         code, len(resultat.familles_creees), len(resultat.familles_enrichies),
         len(resultat.cultures_rattachees), len(resultat.attributs_ecrits),
-        len(resultat.cultures_ignorees), len(resultat.cultures_hors_perimetre),
-        len(resultat.attributs_refuses),
+        len(resultat.associations_creees) + len(resultat.associations_ecrites),
+        len(resultat.cultures_ignorees) + len(resultat.associations_ignorees),
+        len(resultat.cultures_hors_perimetre),
+        len(resultat.attributs_refuses) + len(resultat.associations_refusees),
         len(resultat.familles_preservees) + len(resultat.cultures_preservees)
-        + len(resultat.attributs_preserves),
+        + len(resultat.attributs_preserves) + len(resultat.associations_preservees),
     )
     return resultat
 
@@ -501,17 +584,31 @@ def formater_resultat(resultat: ResultatImport) -> str:
         f"{', '.join(resultat.attributs_ecrits) or '—'}"
     )
     lignes.append(
+        f"  Associations créées  : {len(resultat.associations_creees)} — "
+        f"{', '.join(resultat.associations_creees) or '—'}"
+    )
+    lignes.append(
+        f"  Associations écrites : {len(resultat.associations_ecrites)} — "
+        f"{', '.join(resultat.associations_ecrites) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"  Associations ignorées : {len(resultat.associations_ignorees)} — "
+        f"{', '.join(resultat.associations_ignorees) or '—'} "
+        "(culture ou famille absente du référentiel, jamais créée)"
+    )
+    lignes.append(
         f"  Hors périmètre       : {len(resultat.cultures_hors_perimetre)} — "
         f"{', '.join(resultat.cultures_hors_perimetre) or '—'} "
         "(hors des dix cultures du périmètre initial, US-161/CA7)"
     )
+    refusees = resultat.attributs_refuses + resultat.associations_refusees
     lignes.append(
-        f"  Valeurs refusées     : {len(resultat.attributs_refuses)} — "
-        f"{', '.join(resultat.attributs_refuses) or '—'} (hors vocabulaire fermé, US-161/CA2)"
+        f"  Valeurs refusées     : {len(refusees)} — "
+        f"{', '.join(refusees) or '—'} (hors vocabulaire fermé, US-161/CA2, US-163/CA1-CA2)"
     )
     preservees = (
         resultat.familles_preservees + resultat.cultures_preservees
-        + resultat.attributs_preserves
+        + resultat.attributs_preserves + resultat.associations_preservees
     )
     lignes.append(
         f"  Valeurs préservées   : {len(preservees)} — {', '.join(preservees) or '—'} "

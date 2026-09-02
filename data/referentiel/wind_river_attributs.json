@@ -5,8 +5,15 @@
     "Pour corriger une valeur : /culture <attribut> <culture> <valeur> au bot.",
     "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA6).",
     "",
-    "Le bloc 'cultures_associations' n'est PAS importé aujourd'hui : sa table",
-    "d'accueil relève d'US-163. Il est extrait ici pour ne pas refaire le travail."
+    "[US-163] Le bloc 'cultures_associations' est une extraction CURÉE et",
+    "TRADUITE de companion_plants.csv (voir adaptateur_wind_river.curer_associations) :",
+    "hors périmètre, motifs recyclés et contradictions déjà écartés — voir le compte",
+    "rendu de 'python tools/adapter_wind_river.py' pour le détail des exclusions.",
+    "Pour corriger une association : /association saisir <cultureA> <cultureB> ... au bot.",
+    "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA5/CA10).",
+    "",
+    "L'extraction BRUTE, non traduite et non curée, reste disponible séparément",
+    "dans wind_river_associations.json — matériau de relecture, jamais à importer."
   ],
   "source": {
     "code": "wind_river_greens",
@@ -59,6 +66,799 @@
       "culture": "ail",
       "exposition": "plein soleil",
       "besoin_eau": "moyen"
+    }
+  ],
+  "cultures_associations": [
+    {
+      "culture": "ail",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "répulsif croisé contre la mouche de la carotte",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "chou",
+      "nature": "favorable",
+      "motif": "répulsif contre la piéride du chou et les pucerons",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "fraise",
+      "nature": "favorable",
+      "motif": "répulsif contre limaces, pucerons et acariens",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "haricot",
+      "nature": "defavorable",
+      "motif": "inhibe la fixation d'azote du haricot",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "protège des pucerons et limaces sans concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "pois",
+      "nature": "defavorable",
+      "motif": "perturbe la fixation d'azote symbiotique du pois",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "poivron",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et acariens du poivron",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "tomate",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et sphinx de la tomate",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "ail",
+      "compagnon": "épinard",
+      "nature": "favorable",
+      "motif": "protège contre pucerons et mineuses, besoins en eau proches",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "ail",
+      "nature": "favorable",
+      "motif": "répulsif naturel, limite les maladies fongiques",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "racines à profondeurs différentes, aucune concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables à la blette",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "haricot grimpant",
+      "nature": "defavorable",
+      "motif": "ombrage excessif et concurrence racinaire",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "racines superficielles complémentaires, paillage vivant",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "maïs",
+      "nature": "defavorable",
+      "motif": "ombrage excessif, forte concurrence nutritive",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "oignon",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et altises de la blette",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "croissance rapide, ameublit le sol avant que la blette n'occupe l'espace",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "blette",
+      "compagnon": "épinard",
+      "nature": "favorable",
+      "motif": "besoins de culture proches, bonne culture en succession",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "Lamiacée",
+      "nature": "favorable",
+      "motif": "répulsif contre la mouche de la carotte, attire les auxiliaires",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "aneth",
+      "nature": "defavorable",
+      "motif": "ralentit la carotte plantée trop près",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "ciboulette",
+      "nature": "favorable",
+      "motif": "répulsif contre la mouche de la carotte et les pucerons",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "coriandre",
+      "nature": "defavorable",
+      "motif": "attire la mouche de la carotte, freine la germination",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables à la germination",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "racines superficielles complémentaires, garde l'humidité",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "oignon",
+      "nature": "favorable",
+      "motif": "répulsif contre la mouche de la carotte et les vers du pied",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "panais",
+      "nature": "defavorable",
+      "motif": "concurrence directe pour le sol, mêmes ravageurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "poireau",
+      "nature": "favorable",
+      "motif": "répulsif croisé, mouche de la carotte et teigne du poireau",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "pois",
+      "nature": "favorable",
+      "motif": "fixe l'azote, feuillage léger n'ombrage pas la carotte",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "ameublit le sol pour la racine, récolté rapidement",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "romarin",
+      "nature": "favorable",
+      "motif": "masque l'odeur de la carotte contre sa mouche",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "carotte",
+      "compagnon": "tomate",
+      "nature": "favorable",
+      "motif": "ameublit le sol pour la tomate, qui lui apporte de l'ombre",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "ail",
+      "nature": "favorable",
+      "motif": "fongicide naturel contre hernie du chou et nervation noire",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "aneth",
+      "nature": "favorable",
+      "motif": "attire les guêpes parasites contre la piéride du chou",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "ameublit le sol sans concurrence, bonne occupation de l'espace",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "céleri",
+      "nature": "favorable",
+      "motif": "répulsif contre la piéride, racines complémentaires",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "fraise",
+      "nature": "defavorable",
+      "motif": "freine la fraise, sensibilités telluriques communes",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "haricot grimpant",
+      "nature": "defavorable",
+      "motif": "ombrage excessif, concurrence pour l'azote",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "couvre-sol efficace sans concurrence nutritive",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "oignon",
+      "nature": "favorable",
+      "motif": "répulsif contre mouche du chou, pucerons et altises",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "thym",
+      "nature": "favorable",
+      "motif": "répulsif contre piéride et altises, attire les pollinisateurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "tomate",
+      "nature": "defavorable",
+      "motif": "concurrence nutritive et allélopathie défavorables au chou",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "chou",
+      "compagnon": "épinard",
+      "nature": "favorable",
+      "motif": "paillage vivant, besoins nutritifs différents",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "Lamiacée",
+      "nature": "defavorable",
+      "motif": "odeurs fortes défavorables à la croissance et à la saveur",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "aneth",
+      "nature": "favorable",
+      "motif": "attire les guêpes parasites contre les ravageurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, acariens et thrips",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables au concombre",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "haricot",
+      "nature": "favorable",
+      "motif": "fixe l'azote et sert de tuteur naturel",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "couvre-sol qui garde l'humidité et limite les adventices",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "maïs",
+      "nature": "favorable",
+      "motif": "ombrage et protection contre le vent",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "melon",
+      "nature": "defavorable",
+      "motif": "concurrence directe, risque accru de flétrissement bactérien",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "pomme de terre",
+      "nature": "defavorable",
+      "motif": "concurrence nutritive, sensibilité accrue aux maladies",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "répulsif contre la chrysomèle, récolté avant de gêner",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "concombre",
+      "compagnon": "tomate",
+      "nature": "defavorable",
+      "motif": "deux cultures gourmandes en concurrence, maladies partagées",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "Lamiacée",
+      "nature": "defavorable",
+      "motif": "huiles essentielles défavorables à la germination",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "aneth",
+      "nature": "favorable",
+      "motif": "attire les guêpes prédatrices contre les ravageurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, acariens et thrips",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "sécrétions racinaires allélopathiques défavorables",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "haricot",
+      "nature": "favorable",
+      "motif": "fixe l'azote et couvre le sol",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "profite de l'ombre du cornichon, bonne occupation de l'espace",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "maïs",
+      "nature": "favorable",
+      "motif": "tuteur naturel et ombrage partiel",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "melon",
+      "nature": "defavorable",
+      "motif": "mêmes ravageurs, pression accrue de la chrysomèle",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "pomme de terre",
+      "nature": "defavorable",
+      "motif": "concurrence nutritive, sensibilité accrue aux maladies",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "cornichon",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "répulsif contre chrysomèle et punaise, améliore le sol",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "Brassicacée",
+      "nature": "defavorable",
+      "motif": "besoins de sol différents, concurrence défavorable",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "ail",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, punaises et maladies fongiques",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "aneth",
+      "nature": "favorable",
+      "motif": "attire les guêpes parasites contre les ravageurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et aleurodes",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "concombre",
+      "nature": "defavorable",
+      "motif": "concurrence directe, mêmes ravageurs (chrysomèle)",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables à la courgette",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "haricot",
+      "nature": "favorable",
+      "motif": "fixe l'azote pour la courgette, grande consommatrice",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "profite de l'ombre de la courgette, couvre-sol efficace",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "maïs",
+      "nature": "favorable",
+      "motif": "support vertical et ombrage partiel (les trois sœurs)",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "melon",
+      "nature": "defavorable",
+      "motif": "mêmes ravageurs, pression accrue",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "pomme de terre",
+      "nature": "defavorable",
+      "motif": "deux cultures gourmandes en concurrence directe",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "potiron",
+      "nature": "defavorable",
+      "motif": "pollinisation croisée pouvant affecter les fruits",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "courgette",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "répulsif contre la pyrale et la chrysomèle",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "ail",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables au haricot",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, acariens et thrips",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "ameublit le sol pour le haricot, sans concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "chou-rave",
+      "nature": "defavorable",
+      "motif": "forte concurrence nutritive défavorable au haricot",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "ciboulette",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, assainit le potager",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "concombre",
+      "nature": "favorable",
+      "motif": "conditions de culture proches, le haricot apporte l'azote",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "courge",
+      "nature": "favorable",
+      "motif": "couvre-sol qui limite les adventices et garde l'humidité",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables au haricot",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "fraise",
+      "nature": "favorable",
+      "motif": "niveau de sol différent, profite de l'azote fixé",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "profite de l'azote fixé par le haricot, paillage vivant",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "maïs",
+      "nature": "favorable",
+      "motif": "tuteur naturel pour le haricot grimpant (les trois sœurs)",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "oignon",
+      "nature": "defavorable",
+      "motif": "sécrétions racinaires qui freinent la fixation d'azote",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "radis",
+      "nature": "favorable",
+      "motif": "croissance rapide, ameublit le sol, répulsif contre la bruche",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "romarin",
+      "nature": "favorable",
+      "motif": "répulsif contre la bruche du haricot",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "haricot",
+      "compagnon": "épinard",
+      "nature": "favorable",
+      "motif": "profite de l'azote fixé, profondeurs racinaires différentes",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "Brassicacée",
+      "nature": "defavorable",
+      "motif": "forte concurrence racinaire défavorable au poivron",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "Lamiacée",
+      "nature": "favorable",
+      "motif": "répulsif contre la chrysomèle, garde l'humidité du sol",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, acariens et thrips",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "ameublit le sol pour le poivron, sans concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "chou-rave",
+      "nature": "defavorable",
+      "motif": "forte concurrence nutritive défavorable au poivron",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "ciboulette",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et vers gris",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables au poivron",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "paillage vivant, récoltée avant que le poivron n'ait besoin de place",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "oignon",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons et thrips du poivron",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "persil",
+      "nature": "favorable",
+      "motif": "attire syrphes et guêpes parasites contre les ravageurs",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "poivron",
+      "compagnon": "tomate",
+      "nature": "favorable",
+      "motif": "besoins de culture proches, peuvent partager un tuteurage",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "Brassicacée",
+      "nature": "defavorable",
+      "motif": "concurrence nutritive défavorable à la tomate",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "Lamiacée",
+      "nature": "favorable",
+      "motif": "répulsif divers, améliorerait la saveur de la tomate",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "ail",
+      "nature": "favorable",
+      "motif": "fongicide naturel contre le mildiou, répulsif divers",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "basilic",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, aleurodes et sphinx",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "carotte",
+      "nature": "favorable",
+      "motif": "ameublit le sol pour la tomate, sans concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "ciboulette",
+      "nature": "favorable",
+      "motif": "répulsif contre pucerons, limiterait les maladies fongiques",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "fenouil",
+      "nature": "defavorable",
+      "motif": "composés allélopathiques défavorables à la tomate",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "laitue",
+      "nature": "favorable",
+      "motif": "profite de l'ombre de la tomate, sans concurrence",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "maïs",
+      "nature": "defavorable",
+      "motif": "attire le même ravageur (noctuelle), pression accrue",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "persil",
+      "nature": "favorable",
+      "motif": "attire syrphes et guêpes parasites",
+      "niveau_preuve": "traditionnel"
+    },
+    {
+      "culture": "tomate",
+      "compagnon": "poivron",
+      "nature": "favorable",
+      "motif": "besoins de culture proches, systèmes racinaires compatibles",
+      "niveau_preuve": "traditionnel"
     }
   ]
 }

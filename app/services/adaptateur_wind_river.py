@@ -30,12 +30,15 @@ trois annoncées. D'où trois décisions, mesurées et non intuitées :
   calendrier français relève d'US-068, décliné par zone climatique et recalé sur
   les événements réels — pas d'une conversion de zone USDA.
 
-Les associations (`companion_plants.csv`, 21 880 arêtes) sont extraites dans un
-**fichier séparé**, jamais dans le manifeste d'import. Un manifeste sert à
-importer ; y laisser un bloc que l'import ignore aujourd'hui reviendrait à parier
-qu'aucune évolution future ne le consommera sans revue. Leur table d'accueil est
-celle d'US-163, et l'audit du 01/09/2026 (voir `envelopper_associations`) montre
-qu'elles ont besoin d'une relecture avant d'y entrer.
+Les associations (`companion_plants.csv`, 21 880 arêtes, réduites à 217 sur notre
+périmètre) sont d'abord extraites **brutes** dans un fichier séparé
+(`envelopper_associations`) — en anglais, non canonicalisées, exactement comme
+l'audit du 01/09/2026 les a trouvées. C'est `curer_associations` [US-163] qui les
+rend importables : traduction, rattachement à une culture ou une famille de ce
+référentiel, retrait de ce qui n'a pas sa place ou d'un motif recyclé d'une autre
+plante, nouvelle détection de contradiction une fois les doublons de libellé
+fusionnés. Le résultat rejoint le manifeste principal, bloc `cultures_associations`
+— import unique avec les attributs de conduite, même source, même commande.
 
 L'agrégation cultivar → culture
 --------------------------------
@@ -217,6 +220,9 @@ class ResultatAdaptation:
     #: Paires dites bénéfiques par un cultivar et nuisibles par un autre : la
     #: source se contredit, on ne tranche pas à sa place.
     associations_contradictoires: list[str] = field(default_factory=list)
+    #: [US-163] Résultat de `curer_associations` — None si aucun compagnon
+    #: n'a été fourni (`--sans-associations`).
+    curation_associations: "Optional[RapportCuration]" = None
 
 
 def _voter(valeurs: list[str]) -> tuple[Optional[str], str]:
@@ -366,8 +372,15 @@ def construire_manifeste(
             "Pour corriger une valeur : /culture <attribut> <culture> <valeur> au bot.",
             "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA6).",
             "",
-            "Le bloc 'cultures_associations' n'est PAS importé aujourd'hui : sa table",
-            "d'accueil relève d'US-163. Il est extrait ici pour ne pas refaire le travail.",
+            "[US-163] Le bloc 'cultures_associations' est une extraction CURÉE et",
+            "TRADUITE de companion_plants.csv (voir adaptateur_wind_river.curer_associations) :",
+            "hors périmètre, motifs recyclés et contradictions déjà écartés — voir le compte",
+            "rendu de 'python tools/adapter_wind_river.py' pour le détail des exclusions.",
+            "Pour corriger une association : /association saisir <cultureA> <cultureB> ... au bot.",
+            "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA5/CA10).",
+            "",
+            "L'extraction BRUTE, non traduite et non curée, reste disponible séparément",
+            "dans wind_river_associations.json — matériau de relecture, jamais à importer.",
         ],
         "source": {
             "code": fiche["code"],
@@ -384,10 +397,11 @@ def construire_manifeste(
     companions = list(companions)
     associations = None
     if companions:
-        associations = envelopper_associations(
-            construire_associations(companions, par_culture, resultat),
-            manifeste["source"], extrait_le,
-        )
+        aretes_brutes = construire_associations(companions, par_culture, resultat)
+        associations = envelopper_associations(aretes_brutes, manifeste["source"], extrait_le)
+        entrees_curees, rapport_curation = curer_associations(aretes_brutes)
+        manifeste["cultures_associations"] = entrees_curees
+        resultat.curation_associations = rapport_curation
 
     log.info(
         "[adaptateur_wind_river] %s culture(s) appariée(s), %s attribut(s) retenu(s), "
@@ -417,11 +431,17 @@ def envelopper_associations(
     """
     return {
         "_lisez_moi": [
-            "[US-161] Extraction BRUTE et NON RÉVISÉE des associations de cultures.",
-            "Matière première pour US-163 — ce fichier n'est PAS un manifeste d'import",
-            "et ne doit pas être passé à tools/importer_referentiel.py.",
+            "[US-161] Extraction BRUTE, en anglais, non canonicalisée des associations",
+            "de cultures. Ce fichier n'est PAS un manifeste d'import et ne doit pas être",
+            "passé à tools/importer_referentiel.py.",
             "",
-            "⚠️ AUDIT DU 01/09/2026 SUR LA RELEASE v1.0.0 — à traiter avant tout usage :",
+            "[US-163] La version CURÉE, traduite et importable de cette extraction vit",
+            "dans le bloc 'cultures_associations' de wind_river_attributs.json — produite",
+            "par adaptateur_wind_river.curer_associations à partir de CES MÊMES arêtes.",
+            "Ce fichier-ci reste le matériau de relecture : ce que la curation a retenu,",
+            "traduit et écarté s'y vérifie contre la donnée source, ligne par ligne.",
+            "",
+            "⚠️ AUDIT DU 01/09/2026 SUR LA RELEASE v1.0.0 — traité par la curation d'US-163 :",
             "",
             "  • 41 paires de libellés doublonnés désignent le même compagnon :",
             "    'Marigold'/'Marigolds', 'Onion'/'Onions', 'Black Walnut'/'Walnut Trees'…",
@@ -452,6 +472,334 @@ def envelopper_associations(
     }
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-163] Curation des associations — traduction, périmètre, doublons
+# ═════════════════════════════════════════════════════════════════════════════
+# `construire_associations` ci-dessus produit une extraction BRUTE, en anglais,
+# non canonicalisée : c'était le travail d'US-161, délibérément arrêté là (voir
+# sa docstring). Ce qui suit EST le travail d'US-163 qu'elle annonçait : chaque
+# compagnon est rattaché à une culture ou une famille de notre référentiel, ou
+# écarté s'il n'y a pas sa place ; les motifs sont traduits en français, courts,
+# dans le style déjà utilisé ailleurs dans le projet (« concurrence
+# racinaire ») plutôt que la phrase explicative complète de la source anglaise.
+#
+# Un compagnon dont le nom traduit COÏNCIDE avec la culture elle-même
+# (auto-association, ex. « tomate × Tomatoes ») est également écarté : il ne
+# décrit rien qu'une rotation ou une association puisse exploiter.
+
+#: [CIBLE_COMPAGNONS] Pour chaque libellé source anglais : `None` si le
+#: compagnon est hors du périmètre d'un potager POTAGER — ornementale, arbre,
+#: plante non suivie par ce référentiel — aucune traduction ne lui donnerait sa
+#: place ici, quelle que soit la culture visée. Sinon `("culture", nom)` ou
+#: `("famille", nom)` : une CIBLE PLAUSIBLE et son nom français, jamais une
+#: garantie qu'une fiche existe réellement en base — cette vérification est le
+#: travail de l'import (`app.services.associations._resoudre_cote`), pas de
+#: cette table. Une cible non résolue à l'import est comptée
+#: `associations_ignorees`, jamais fabriquée (même invariant que CA7 d'US-161).
+#:
+#: Niveau famille plutôt que culture précise dans deux cas : le compagnon
+#: source est déjà générique dans le texte anglais (« Aromatic Herbs »), ou il
+#: désigne une espèce absente du pré-remplissage de `migration_v37.sql` mais
+#: botaniquement certaine (origan, sauge — Lamiacées comme basilic et thym).
+#: Une famille reste un fait défendable là où une espèce précise ne le serait
+#: pas.
+CIBLE_COMPAGNONS: dict[str, Optional[tuple[str, str]]] = {
+    # ── Hors périmètre : ornementales, arbres, plantes non suivies ───────────
+    "Alyssum": None, "Apricot Trees": None, "Asparagus": None, "Borage": None,
+    "Black Walnut": None, "Black Walnut Trees": None, "Walnut Trees": None,
+    "Catmint": None, "Catnip": None, "Chamomile": None, "Clematis": None,
+    "Gladiolus": None, "Large Trees": None, "Lavender": None,
+    "Marigold": None, "Marigolds": None, "Nasturtium": None, "Nasturtiums": None,
+    "Roses": None, "Rue": None, "Summer Savory": None,
+    "Sunflower": None, "Sunflowers": None,
+
+    # ── Niveau famille ────────────────────────────────────────────────────────
+    "Aromatic Herbs": ("famille", "Lamiacée"),
+    "Aromatic Herbs (Oregano, Thyme)": ("famille", "Lamiacée"),
+    "Aromatic herbs": ("famille", "Lamiacée"),
+    "Aromatic herbs (Sage)": ("famille", "Lamiacée"),
+    "Aromatic herbs (Sage, Rosemary)": ("famille", "Lamiacée"),
+    "Aromatic herbs (sage, rosemary)": ("famille", "Lamiacée"),
+    "Aromatic herbs (strong)": ("famille", "Lamiacée"),
+    "Brassicas": ("famille", "Brassicacée"),
+    "Brassicas (Broccoli)": ("famille", "Brassicacée"),
+    "Brassicas (Cabbage family)": ("famille", "Brassicacée"),
+    "Oregano": ("famille", "Lamiacée"),
+    "Sage": ("famille", "Lamiacée"),
+
+    # ── Niveau culture ────────────────────────────────────────────────────────
+    "Basil": ("culture", "basilic"),
+    "Bean": ("culture", "haricot"), "Beans": ("culture", "haricot"),
+    "Bush Beans": ("culture", "haricot"),
+    "Pole Bean": ("culture", "haricot grimpant"), "Pole Beans": ("culture", "haricot grimpant"),
+    "Cabbage": ("culture", "chou"),
+    "Carrot": ("culture", "carotte"), "Carrots": ("culture", "carotte"),
+    "Celery": ("culture", "céleri"),
+    "Chives": ("culture", "ciboulette"),
+    "Coriander": ("culture", "coriandre"),
+    "Corn": ("culture", "maïs"), "Sweet Corn": ("culture", "maïs"),
+    "Cucumber": ("culture", "concombre"), "Cucumbers": ("culture", "concombre"),
+    "Dill": ("culture", "aneth"),
+    "Fennel": ("culture", "fenouil"),
+    "Garlic": ("culture", "ail"),
+    "Hot Peppers": ("culture", "piment"),
+    "Kohlrabi": ("culture", "chou-rave"),
+    "Leeks": ("culture", "poireau"),
+    "Lettuce": ("culture", "laitue"),
+    "Melon": ("culture", "melon"), "Melons": ("culture", "melon"),
+    "Mint": ("culture", "menthe"),
+    "Onion": ("culture", "oignon"), "Onions": ("culture", "oignon"),
+    "Parsley": ("culture", "persil"),
+    "Parsnips": ("culture", "panais"),
+    "Peas": ("culture", "pois"),
+    "Peppers": ("culture", "poivron"),
+    "Potato": ("culture", "pomme de terre"), "Potatoes": ("culture", "pomme de terre"),
+    "Pumpkins": ("culture", "potiron"),
+    "Radish": ("culture", "radis"), "Radishes": ("culture", "radis"),
+    "Rosemary": ("culture", "romarin"),
+    "Spinach": ("culture", "épinard"),
+    "Squash": ("culture", "courge"), "Summer Squash": ("culture", "courge"),
+    "Strawberry": ("culture", "fraise"), "Strawberries": ("culture", "fraise"),
+    "Thyme": ("culture", "thym"),
+    "Tomato": ("culture", "tomate"), "Tomatoes": ("culture", "tomate"),
+}
+
+#: [Audit du 01/09/2026, release v1.0.0] Motifs qui décrivent une AUTRE plante
+#: que `culture` — texte recyclé d'un cultivar à l'autre dans la source amont
+#: (ex. « tomate × Catnip » explique qu'il protège « eggplant foliage »).
+#: Identifiées par relecture humaine, pas par un filtre : aucune règle générale
+#: ne distingue fiablement un motif recyclé d'un motif légitime qui nomme
+#: incidemment une autre culture (« ail × haricot » mentionne légitimement le
+#: haricot, qui EST le sujet). Figées comme toute mesure du projet — les
+#: recompter à chaque exécution donnerait l'illusion d'un contrôle qualité
+#: automatique là où il a fallu une relecture. Clé : (culture, libellé source).
+MOTIFS_RECYCLES_A_EXCLURE: frozenset = frozenset({
+    ("tomate", "Alyssum"),      # motif parle de pucerons du rosier
+    ("tomate", "Catnip"),       # motif parle du feuillage de l'aubergine
+    ("tomate", "Hot Peppers"),  # motif parle des feuilles de l'aubergine
+    ("tomate", "Lavender"),     # motif parle de pucerons du rosier
+    ("tomate", "Pole Beans"),   # motif parle de l'ombrage sur des aubergines
+    ("haricot", "Mint"),        # motif parle des graines et gousses du pois
+    ("haricot", "Cucumbers"),   # motif parle de l'azote fixé par le pois
+    ("haricot", "Gladiolus"),   # motif parle du développement des gousses de pois
+})
+
+#: [US-163] Motif traduit et condensé, à l'usage attendu du référentiel — une
+#: phrase courte, pas la traduction mot à mot de la phrase explicative anglaise
+#: de la source (CA1 : « ce qui rend l'avertissement compréhensible »). Clé :
+#: (culture, cible française) après canonicalisation des doublons de libellé.
+#: Une entrée retenue par `curer_associations` sans traduction ici est un défaut
+#: de cette table à corriger, pas un comportement attendu — voir son assertion
+#: de couverture dans `tests/test_us163_adaptateur_wind_river_associations.py`.
+MOTIFS_FR: dict[tuple[str, str], str] = {
+    ("ail", "carotte"): "répulsif croisé contre la mouche de la carotte",
+    ("ail", "chou"): "répulsif contre la piéride du chou et les pucerons",
+    ("ail", "fraise"): "répulsif contre limaces, pucerons et acariens",
+    ("ail", "haricot"): "inhibe la fixation d'azote du haricot",
+    ("ail", "laitue"): "protège des pucerons et limaces sans concurrence",
+    ("ail", "pois"): "perturbe la fixation d'azote symbiotique du pois",
+    ("ail", "poivron"): "répulsif contre pucerons et acariens du poivron",
+    ("ail", "tomate"): "répulsif contre pucerons et sphinx de la tomate",
+    ("ail", "épinard"): "protège contre pucerons et mineuses, besoins en eau proches",
+    ("blette", "ail"): "répulsif naturel, limite les maladies fongiques",
+    ("blette", "carotte"): "racines à profondeurs différentes, aucune concurrence",
+    ("blette", "fenouil"): "composés allélopathiques défavorables à la blette",
+    ("blette", "haricot grimpant"): "ombrage excessif et concurrence racinaire",
+    ("blette", "laitue"): "racines superficielles complémentaires, paillage vivant",
+    ("blette", "maïs"): "ombrage excessif, forte concurrence nutritive",
+    ("blette", "oignon"): "répulsif contre pucerons et altises de la blette",
+    ("blette", "radis"): "croissance rapide, ameublit le sol avant que la blette n'occupe l'espace",
+    ("blette", "épinard"): "besoins de culture proches, bonne culture en succession",
+    ("carotte", "aneth"): "ralentit la carotte plantée trop près",
+    ("carotte", "ciboulette"): "répulsif contre la mouche de la carotte et les pucerons",
+    ("carotte", "coriandre"): "attire la mouche de la carotte, freine la germination",
+    ("carotte", "fenouil"): "composés allélopathiques défavorables à la germination",
+    ("carotte", "laitue"): "racines superficielles complémentaires, garde l'humidité",
+    ("carotte", "oignon"): "répulsif contre la mouche de la carotte et les vers du pied",
+    ("carotte", "panais"): "concurrence directe pour le sol, mêmes ravageurs",
+    ("carotte", "poireau"): "répulsif croisé, mouche de la carotte et teigne du poireau",
+    ("carotte", "pois"): "fixe l'azote, feuillage léger n'ombrage pas la carotte",
+    ("carotte", "radis"): "ameublit le sol pour la racine, récolté rapidement",
+    ("carotte", "romarin"): "masque l'odeur de la carotte contre sa mouche",
+    ("carotte", "tomate"): "ameublit le sol pour la tomate, qui lui apporte de l'ombre",
+    ("carotte", "Lamiacée"): "répulsif contre la mouche de la carotte, attire les auxiliaires",
+    ("chou", "ail"): "fongicide naturel contre hernie du chou et nervation noire",
+    ("chou", "aneth"): "attire les guêpes parasites contre la piéride du chou",
+    ("chou", "carotte"): "ameublit le sol sans concurrence, bonne occupation de l'espace",
+    ("chou", "céleri"): "répulsif contre la piéride, racines complémentaires",
+    ("chou", "fraise"): "freine la fraise, sensibilités telluriques communes",
+    ("chou", "haricot grimpant"): "ombrage excessif, concurrence pour l'azote",
+    ("chou", "laitue"): "couvre-sol efficace sans concurrence nutritive",
+    ("chou", "oignon"): "répulsif contre mouche du chou, pucerons et altises",
+    ("chou", "thym"): "répulsif contre piéride et altises, attire les pollinisateurs",
+    ("chou", "tomate"): "concurrence nutritive et allélopathie défavorables au chou",
+    ("chou", "épinard"): "paillage vivant, besoins nutritifs différents",
+    ("concombre", "aneth"): "attire les guêpes parasites contre les ravageurs",
+    ("concombre", "basilic"): "répulsif contre pucerons, acariens et thrips",
+    ("concombre", "fenouil"): "composés allélopathiques défavorables au concombre",
+    ("concombre", "haricot"): "fixe l'azote et sert de tuteur naturel",
+    ("concombre", "laitue"): "couvre-sol qui garde l'humidité et limite les adventices",
+    ("concombre", "maïs"): "ombrage et protection contre le vent",
+    ("concombre", "melon"): "concurrence directe, risque accru de flétrissement bactérien",
+    ("concombre", "pomme de terre"): "concurrence nutritive, sensibilité accrue aux maladies",
+    ("concombre", "radis"): "répulsif contre la chrysomèle, récolté avant de gêner",
+    ("concombre", "tomate"): "deux cultures gourmandes en concurrence, maladies partagées",
+    ("concombre", "Lamiacée"): "odeurs fortes défavorables à la croissance et à la saveur",
+    ("cornichon", "aneth"): "attire les guêpes prédatrices contre les ravageurs",
+    ("cornichon", "basilic"): "répulsif contre pucerons, acariens et thrips",
+    ("cornichon", "fenouil"): "sécrétions racinaires allélopathiques défavorables",
+    ("cornichon", "haricot"): "fixe l'azote et couvre le sol",
+    ("cornichon", "laitue"): "profite de l'ombre du cornichon, bonne occupation de l'espace",
+    ("cornichon", "maïs"): "tuteur naturel et ombrage partiel",
+    ("cornichon", "melon"): "mêmes ravageurs, pression accrue de la chrysomèle",
+    ("cornichon", "pomme de terre"): "concurrence nutritive, sensibilité accrue aux maladies",
+    ("cornichon", "radis"): "répulsif contre chrysomèle et punaise, améliore le sol",
+    ("cornichon", "Lamiacée"): "huiles essentielles défavorables à la germination",
+    ("courgette", "ail"): "répulsif contre pucerons, punaises et maladies fongiques",
+    ("courgette", "aneth"): "attire les guêpes parasites contre les ravageurs",
+    ("courgette", "basilic"): "répulsif contre pucerons et aleurodes",
+    ("courgette", "concombre"): "concurrence directe, mêmes ravageurs (chrysomèle)",
+    ("courgette", "fenouil"): "composés allélopathiques défavorables à la courgette",
+    ("courgette", "haricot"): "fixe l'azote pour la courgette, grande consommatrice",
+    ("courgette", "laitue"): "profite de l'ombre de la courgette, couvre-sol efficace",
+    ("courgette", "maïs"): "support vertical et ombrage partiel (les trois sœurs)",
+    ("courgette", "melon"): "mêmes ravageurs, pression accrue",
+    ("courgette", "pomme de terre"): "deux cultures gourmandes en concurrence directe",
+    ("courgette", "potiron"): "pollinisation croisée pouvant affecter les fruits",
+    ("courgette", "radis"): "répulsif contre la pyrale et la chrysomèle",
+    ("courgette", "Brassicacée"): "besoins de sol différents, concurrence défavorable",
+    ("haricot", "ail"): "composés allélopathiques défavorables au haricot",
+    ("haricot", "basilic"): "répulsif contre pucerons, acariens et thrips",
+    ("haricot", "carotte"): "ameublit le sol pour le haricot, sans concurrence",
+    ("haricot", "chou-rave"): "forte concurrence nutritive défavorable au haricot",
+    ("haricot", "ciboulette"): "répulsif contre pucerons, assainit le potager",
+    ("haricot", "concombre"): "conditions de culture proches, le haricot apporte l'azote",
+    ("haricot", "courge"): "couvre-sol qui limite les adventices et garde l'humidité",
+    ("haricot", "fenouil"): "composés allélopathiques défavorables au haricot",
+    ("haricot", "fraise"): "niveau de sol différent, profite de l'azote fixé",
+    ("haricot", "laitue"): "profite de l'azote fixé par le haricot, paillage vivant",
+    ("haricot", "maïs"): "tuteur naturel pour le haricot grimpant (les trois sœurs)",
+    ("haricot", "oignon"): "sécrétions racinaires qui freinent la fixation d'azote",
+    ("haricot", "radis"): "croissance rapide, ameublit le sol, répulsif contre la bruche",
+    ("haricot", "romarin"): "répulsif contre la bruche du haricot",
+    ("haricot", "épinard"): "profite de l'azote fixé, profondeurs racinaires différentes",
+    ("poivron", "basilic"): "répulsif contre pucerons, acariens et thrips",
+    ("poivron", "carotte"): "ameublit le sol pour le poivron, sans concurrence",
+    ("poivron", "chou-rave"): "forte concurrence nutritive défavorable au poivron",
+    ("poivron", "ciboulette"): "répulsif contre pucerons et vers gris",
+    ("poivron", "fenouil"): "composés allélopathiques défavorables au poivron",
+    ("poivron", "laitue"): "paillage vivant, récoltée avant que le poivron n'ait besoin de place",
+    ("poivron", "oignon"): "répulsif contre pucerons et thrips du poivron",
+    ("poivron", "persil"): "attire syrphes et guêpes parasites contre les ravageurs",
+    ("poivron", "tomate"): "besoins de culture proches, peuvent partager un tuteurage",
+    ("poivron", "Brassicacée"): "forte concurrence racinaire défavorable au poivron",
+    ("poivron", "Lamiacée"): "répulsif contre la chrysomèle, garde l'humidité du sol",
+    ("tomate", "ail"): "fongicide naturel contre le mildiou, répulsif divers",
+    ("tomate", "basilic"): "répulsif contre pucerons, aleurodes et sphinx",
+    ("tomate", "carotte"): "ameublit le sol pour la tomate, sans concurrence",
+    ("tomate", "ciboulette"): "répulsif contre pucerons, limiterait les maladies fongiques",
+    ("tomate", "fenouil"): "composés allélopathiques défavorables à la tomate",
+    ("tomate", "laitue"): "profite de l'ombre de la tomate, sans concurrence",
+    ("tomate", "maïs"): "attire le même ravageur (noctuelle), pression accrue",
+    ("tomate", "persil"): "attire syrphes et guêpes parasites",
+    ("tomate", "poivron"): "besoins de culture proches, systèmes racinaires compatibles",
+    ("tomate", "Brassicacée"): "concurrence nutritive défavorable à la tomate",
+    ("tomate", "Lamiacée"): "répulsif divers, améliorerait la saveur de la tomate",
+}
+
+
+@dataclass
+class RapportCuration:
+    """Ce que `curer_associations` a réellement fait — matière du compte rendu."""
+
+    brutes: int = 0
+    hors_perimetre: list[str] = field(default_factory=list)
+    motifs_recycles: list[str] = field(default_factory=list)
+    auto_associations: list[str] = field(default_factory=list)
+    contradictions: list[str] = field(default_factory=list)
+    #: [Filet de sécurité] Paire retenue mais absente de MOTIFS_FR — le motif
+    #: anglais brut est alors utilisé tel quel, et la paire est signalée ici :
+    #: la table de traduction a un trou à combler, pas un comportement voulu.
+    motifs_non_traduits: list[str] = field(default_factory=list)
+    retenues: int = 0
+
+
+def curer_associations(aretes_brutes: list[dict]) -> tuple[list[dict], RapportCuration]:
+    """
+    [US-163] Traduit et curate l'extraction brute de `construire_associations`
+    en un bloc `cultures_associations` prêt pour le manifeste d'import.
+
+    Quatre écarts, chacun compté séparément dans le rapport, avant toute
+    traduction :
+    1. Compagnon hors périmètre (`CIBLE_COMPAGNONS` vaut None) — ornementale,
+       arbre : aucune culture ni famille de ce référentiel ne l'accueille.
+    2. Motif recyclé d'une autre plante (`MOTIFS_RECYCLES_A_EXCLURE`, audit du
+       01/09/2026).
+    3. Auto-association : la cible traduite est la culture elle-même.
+    4. Contradiction : une fois les libellés doublonnés fusionnés vers une même
+       cible, la source affirme à la fois « favorable » et « défavorable » — on
+       ne tranche pas à sa place (§6.5 de la conception), la paire entière est
+       écartée. C'est ici, et seulement ici, qu'une contradiction que l'audit
+       avait laissée passer sous deux libellés différents (« courgette ×
+       Aromatic Herbs » / « Aromatic herbs (Sage) ») devient visible : la
+       fusion précède la détection.
+
+    Chaque arête retenue porte `niveau_preuve = 'traditionnel'` sans exception :
+    la source ne distingue pas l'établi du traditionnel (US-161), et cette
+    curation ne lui fait dire ni plus ni moins que ce qu'elle affirme.
+
+    Ne résout AUCUN nom vers une fiche réelle : `culture` et `compagnon` sont
+    des noms français plausibles, la vérification qu'une fiche `culture_config`
+    ou `familles_botaniques` existe réellement est le travail de l'import
+    (`app.services.associations.importer_association`), jamais de cette
+    fonction — elle ne touche ni la base ni le réseau.
+    """
+    rapport = RapportCuration(brutes=len(aretes_brutes))
+    natures: dict[tuple[str, str], set[str]] = defaultdict(set)
+
+    for arete in aretes_brutes:
+        culture = arete["culture"]
+        compagnon = arete["compagnon_source"]
+        libelle = f"{culture} × {compagnon}"
+
+        cible = CIBLE_COMPAGNONS.get(compagnon)
+        if cible is None:
+            rapport.hors_perimetre.append(libelle)
+            continue
+        if (culture, compagnon) in MOTIFS_RECYCLES_A_EXCLURE:
+            rapport.motifs_recycles.append(libelle)
+            continue
+        _type_cible, nom_cible = cible
+        if nom_cible == culture:
+            rapport.auto_associations.append(libelle)
+            continue
+
+        natures[(culture, nom_cible)].add(arete["nature"])
+
+    contradictions = {cle for cle, valeurs in natures.items() if len(valeurs) > 1}
+    for cle in contradictions:
+        culture, nom_cible = cle
+        rapport.contradictions.append(f"{culture} × {nom_cible}")
+
+    entrees: list[dict] = []
+    for (culture, nom_cible), valeurs in sorted(natures.items()):
+        if (culture, nom_cible) in contradictions:
+            continue
+        motif = MOTIFS_FR.get((culture, nom_cible))
+        if motif is None:
+            rapport.motifs_non_traduits.append(f"{culture} × {nom_cible}")
+            continue
+        entrees.append({
+            "culture": culture,
+            "compagnon": nom_cible,
+            "nature": next(iter(valeurs)),
+            "motif": motif,
+            "niveau_preuve": "traditionnel",
+        })
+    rapport.retenues = len(entrees)
+    return entrees, rapport
+
+
 def formater_resultat(resultat: ResultatAdaptation) -> str:
     """Compte rendu console de l'adaptation."""
     lignes = ["", "Adaptation Wind River Greens → manifeste [US-161]", "─" * 48, ""]
@@ -469,16 +817,34 @@ def formater_resultat(resultat: ResultatAdaptation) -> str:
         lignes.append(f"     • {entree}")
     lignes.append("")
     lignes.append(
-        f"  🔗 Associations extraites : {resultat.associations} — fichier séparé, "
-        "BRUTES et non révisées (US-163)"
+        f"  🔗 Associations extraites (brutes) : {resultat.associations} — "
+        "wind_river_associations.json, matériau de relecture, jamais à importer"
     )
     if resultat.associations_contradictoires:
         lignes.append(
-            f"  ⚠️  Paires contradictoires écartées : {len(resultat.associations_contradictoires)} — "
+            f"  ⚠️  Paires contradictoires écartées à l'extraction : {len(resultat.associations_contradictoires)} — "
             f"{', '.join(resultat.associations_contradictoires[:5])}"
             f"{'…' if len(resultat.associations_contradictoires) > 5 else ''}"
         )
     lignes.append("")
+    curation = resultat.curation_associations
+    if curation is not None:
+        lignes.append("  Curation des associations [US-163] — bloc cultures_associations, importable :")
+        lignes.append(f"     ✅ retenues, traduites            : {curation.retenues} / {curation.brutes}")
+        lignes.append(f"     ⛔ hors périmètre (ornementales…) : {len(curation.hors_perimetre)}")
+        lignes.append(f"     ⛔ motifs recyclés (audit)         : {len(curation.motifs_recycles)}")
+        lignes.append(f"     ⛔ auto-associations               : {len(curation.auto_associations)}")
+        if curation.contradictions:
+            lignes.append(
+                f"     ⚠️  contradictions après fusion des doublons : {len(curation.contradictions)} — "
+                f"{', '.join(curation.contradictions)}"
+            )
+        if curation.motifs_non_traduits:
+            lignes.append(
+                f"     ⚠️  sans traduction dans MOTIFS_FR (à corriger) : "
+                f"{len(curation.motifs_non_traduits)} — {', '.join(curation.motifs_non_traduits)}"
+            )
+        lignes.append("")
     lignes.append("  ⛔ Non produits par cet adaptateur, par construction :")
     lignes.append("     profondeur_semis_cm — absente du jeu de données")
     lignes.append("     rusticite_min_c     — usda_zone_min décrit la pérennité, pas la culture")

@@ -17,6 +17,8 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-161] Ajout des attributs agronomiques de conduite sur culture_config
          (exposition, besoin_eau, profondeur_semis_cm, rusticite_min_c) et de
          leur source respective
+[US-163] Ajout du modèle AssociationCulture (table association_culture) et
+         de l'index composite evenements(parcelle_id, date) pour la rotation
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql import func
@@ -204,6 +206,9 @@ class Evenement(Base):
 
     __table_args__ = (
         Index("idx_evenements_potager_date", "potager_id", "date"),
+        # [US-163/CA12] Historique d'une parcelle par campagne — requête posée
+        # par app.services.rotation.evaluer_rotation.
+        Index("idx_evenements_parcelle_date", "parcelle_id", "date"),
     )
 
     @property
@@ -367,6 +372,57 @@ class ReferentielSource(Base):
     # aussi ce qui distingue les licences acceptables : `proprietaire` n'est
     # légitime que pour une origine interne, jamais pour un contenu importé.
     importee            = Column(Boolean, nullable=False, default=True)
+
+
+class AssociationCulture(Base):
+    """
+    [US-163] Association orientée entre deux cultures et/ou familles botaniques.
+
+    Une arête typée (CA1) plutôt qu'un paragraphe dans une fiche — c'est
+    précisément ce que US-140/CA7bis interdit d'écrire ailleurs
+    (docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md §1.2). `nature` porte la
+    relation, `motif` le texte court qui la rend compréhensible, `niveau_preuve`
+    distingue une relation établie d'une relation seulement traditionnelle
+    (CA2) — la formulation différenciée à la restitution (CA3) est portée par
+    `app.services.associations.formuler_nature`, pas par une colonne.
+
+    [CA4] Chaque côté référence SOIT une culture (`culture_x_id`) SOIT une
+    famille botanique (`famille_x_id`), jamais les deux ni aucun des deux —
+    contrôlé par `app.services.associations` à l'écriture, doublé d'un CHECK
+    Postgres (`migrations/migration_v41.sql`) non reproduit ici : SQLite (tests)
+    n'a pas besoin de cette défense en profondeur, la validation Python suffit.
+
+    [CA5] Le stockage reste ORIENTÉ (une ligne par couple, comme `Evenement`) :
+    c'est la LECTURE qui est symétrique — `app.services.associations.lire_associations`
+    interroge les deux côtés, jamais la forme de stockage.
+
+    [CA10] `source_id` NOT NULL : aucune arête anonyme. Les associations sont
+    saisies, pas importées — l'origine est presque toujours `saisie_manuelle`.
+    """
+    __tablename__ = "association_culture"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    culture_a_id   = Column(Integer, ForeignKey("culture_config.id"), nullable=True, index=True)
+    famille_a_id   = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    culture_b_id   = Column(Integer, ForeignKey("culture_config.id"), nullable=True, index=True)
+    famille_b_id   = Column(Integer, ForeignKey("familles_botaniques.id"), nullable=True, index=True)
+    # [CA1] 'favorable' | 'defavorable' | 'neutre'. Vocabulaire fermé validé par
+    # app.services.associations, pas par un CHECK — même arbitrage que
+    # culture_config.exposition (US-161) : une décision produit révisable.
+    nature         = Column(String, nullable=False)
+    # [CA1] Motif court en clair — ce qui rend l'avertissement compréhensible
+    # plutôt qu'autoritaire ("répulsif contre la mouche de la carotte").
+    motif          = Column(String, nullable=False)
+    # [CA2] 'etabli' | 'traditionnel'.
+    niveau_preuve  = Column(String, nullable=False)
+    # [CA10] Traçabilité obligatoire, jamais NULL.
+    source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    culture_a_rel  = relationship("CultureConfig", foreign_keys=[culture_a_id])
+    famille_a_rel  = relationship("FamilleBotanique", foreign_keys=[famille_a_id])
+    culture_b_rel  = relationship("CultureConfig", foreign_keys=[culture_b_id])
+    famille_b_rel  = relationship("FamilleBotanique", foreign_keys=[famille_b_id])
+    source_rel     = relationship("ReferentielSource", foreign_keys=[source_id])
 
 
 class Parcelle(Base):

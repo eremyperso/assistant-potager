@@ -1,3 +1,49 @@
+## [v3.48.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Pré-remplit 113 associations de cultures depuis Wind River Greens (CC BY 4.0) — traduites en français et curées, dans les dix cultures du périmètre initial (US-163)
+
+### 🔧 Améliorations techniques
+- Amende l'arbitrage « associations saisies, pas importées » d'US-163 : une source déjà au socle en CC BY 4.0 peut désormais aussi les alimenter, après curation humaine — la saisie au bot reste le chemin premier, et une correction du jardinier n'est jamais réécrite par un rejeu d'import (US-163)
+- Écarte 65 compagnons hors du périmètre d'un potager (ornementales, arbres) qu'aucune culture ni famille de ce référentiel n'a vocation à recevoir, 4 motifs recyclés d'une autre plante et 1 auto-association relevés par l'audit du 01/09/2026, et démasque une contradiction que deux libellés distincts pour un même compagnon laissaient passer (US-163)
+- Rattache un compagnon générique (« herbes aromatiques », origan, sauge) à sa famille botanique plutôt qu'à une espèce précise absente du référentiel — une famille reste un fait défendable là où une espèce le serait moins (US-163)
+- Un manifeste d'import unique porte désormais attributs de conduite et associations pour une même source : une commande, un rapport de couverture (US-163)
+
+## [v3.47.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute `/association lister <culture>` et `/association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> <etabli|traditionnel> <motif>` : les associations entre cultures se saisissent et se corrigent depuis le bot, jamais depuis un import (US-163)
+- Ajoute `/rotation <parcelle> <culture>` : un conflit de rotation se calcule désormais depuis l'historique réel d'une parcelle, la famille botanique de chaque culture qui y est passée et le délai de retour de cette famille — jamais rédigé (US-163)
+- Distingue à l'affichage une association établie d'une association seulement traditionnelle : « défavorable » pour l'une, « déconseillé par la pratique traditionnelle » pour l'autre (US-163)
+- Restitue une association saisie au niveau d'une famille botanique pour toutes les cultures qui s'y rattachent, sans avoir à la ressaisir pour chacune (US-163)
+- Indique explicitement l'absence d'antécédent sur une parcelle ou l'indisponibilité d'une évaluation (famille sans délai de retour connu) — jamais interprété comme l'absence de conflit (US-163)
+
+### 🔧 Améliorations techniques
+- Lit une association dans les deux sens quelle que soit son orientation de saisie, et met à jour la ligne existante plutôt que d'en créer une seconde en cas de correction dans l'autre sens (US-163)
+- Exclut les bulletins météo automatiques et toute culture inconnue du référentiel (culture fantôme) de l'historique de rotation, pour ne jamais les traiter comme un antécédent établi (US-163)
+- Raisonne à la campagne (l'année), jamais au jour près, ce qui protège le calcul d'une date imparfaite sans perdre en justesse (US-163)
+- N'appelle jamais de modèle de langage sur les deux chemins — saisie/lecture d'association et évaluation de rotation (US-163)
+- Ajoute `python tools/mesurer_rotation.py` pour vérifier le temps de réponse de la requête de rotation sur la base réellement configurée, avant tout câblage dans un chemin automatique (US-163)
+
+### 💾 Base de données
+- Ajoute `association_culture` : une arête orientée entre deux cultures et/ou familles botaniques, avec nature, motif, niveau de preuve et source obligatoire (migration `migration_v41.sql`, rollback fourni) (US-163)
+- Ajoute un index composite sur `evenements(parcelle_id, date)` pour l'historique de rotation par campagne (US-163)
+
+## [v3.46.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- `/fiche <culture>` affiche désormais la description agronomique de la culture quand elle est renseignée en base, et l'indique explicitement comme incomplète sinon (US-164)
+
+## [v3.45.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Ajoute `/fiche <culture>` : restitue en un seul message la famille botanique, le délai de retour et les quatre caractéristiques de conduite d'une culture, en zéro jeton et zéro appel réseau (US-164)
+- Signale explicitement l'absence de fiche sur une culture inconnue du référentiel, sans jamais en proposer une voisine (US-164)
+
+### 🔧 Améliorations techniques
+- Compose la fiche par gabarit depuis la donnée déjà en base (familles, attributs agronomiques) : aucun texte de fiche n'est stocké rédigé, une correction du référentiel s'y répercute aussitôt (US-164)
+- Affiche la mention de source avec la réponse quand une caractéristique ou une famille en dérive une, dédupliquée entre les deux (US-164)
+
 ## [v3.44.0] — 2026-09-01
 
 ### 🚀 Nouveautés

@@ -7,9 +7,10 @@ importe ensuite. Deux outils, deux responsabilités — l'adaptation ne touche
 jamais la base, l'import ne connaît jamais le format d'une source.
 
 Utilisation :
-    # 1. Produire le manifeste depuis les CSV versionnés
-    #    (écrit aussi wind_river_associations.json — extraction BRUTE pour US-163,
-    #     qui ne s'importe pas et attend une relecture humaine)
+    # 1. Produire le manifeste depuis les CSV versionnés — attributs de conduite
+    #    ET associations [US-163], curées et traduites, dans le même fichier.
+    #    (écrit aussi wind_river_associations.json — extraction BRUTE, matériau
+    #     de relecture, à NE JAMAIS passer à l'import)
     python tools/adapter_wind_river.py
 
     # 2. L'importer (le manifeste est un manifeste comme un autre)

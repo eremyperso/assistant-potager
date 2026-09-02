@@ -266,18 +266,28 @@ class TestAssociations:
         assert associations["cultures_associations"] == []
         assert "tomate × Fennel" in resultat.associations_contradictoires
 
-    def test_us161_le_manifeste_ne_porte_jamais_les_associations(self):
-        """Un manifeste sert à importer. Y laisser un bloc que l'import ignore
-        aujourd'hui, ce serait parier qu'aucune évolution ne le consommera un
-        jour sans revue — et cette extraction n'est pas révisée."""
+    def test_us163_le_manifeste_porte_les_associations_curees_pas_les_brutes(self):
+        """[US-163] La curation (traduction, périmètre, doublons — voir
+        tests/test_us163_adaptateur_wind_river_associations.py) rejoint
+        désormais le manifeste principal : import unique, une seule commande.
+        Le fichier séparé (`associations`, ici) reste l'extraction BRUTE, en
+        anglais, non canonicalisée — jamais ce que le manifeste porte."""
         lignes = [_cultivar("Cherokee Purple", "tomato")]
         compagnons = [{"variety_slug": "cherokee-purple", "companion_name": "Basil",
                        "relationship": "beneficial", "reason": "x"}]
 
         manifeste, associations, _ = svc_adaptateur.construire_manifeste(lignes, compagnons)
 
-        assert "cultures_associations" not in manifeste
-        assert associations["cultures_associations"]
+        assert manifeste["cultures_associations"] == [
+            {"culture": "tomate", "compagnon": "basilic", "nature": "favorable",
+             "motif": svc_adaptateur.MOTIFS_FR[("tomate", "basilic")],
+             "niveau_preuve": "traditionnel"}
+        ]
+        # Le fichier séparé reste brut : libellé anglais, motif anglais tel quel.
+        assert associations["cultures_associations"] == [
+            {"culture": "tomate", "compagnon_source": "Basil", "nature": "favorable",
+             "motif_source": "x", "niveau_preuve": "traditionnel"}
+        ]
 
     def test_us161_sans_compagnons_aucun_fichier_d_associations(self):
         """Pas de CSV de compagnons, pas de fichier : rien n'est produit à vide."""
@@ -290,13 +300,15 @@ class TestAssociations:
 
     def test_us161_le_fichier_d_associations_annonce_ce_qu_il_vaut(self):
         """Il doit dire qu'il est brut : un fichier de données qui ne signale pas
-        ses défauts finira par être pris pour de la donnée validée."""
+        ses défauts finira par être pris pour de la donnée validée. [US-163]
+        Il pointe aussi vers la version curée, désormais ailleurs."""
         associations = json.load(open(ASSOCIATIONS_PROJET, encoding="utf-8"))
         avertissement = " ".join(associations["_lisez_moi"])
 
         assert associations["revise"] is False
-        assert "NON RÉVISÉE" in avertissement
+        assert "BRUTE" in avertissement
         assert "n'est PAS un manifeste d'import" in avertissement
+        assert "cultures_associations" in avertissement  # pointeur vers le bloc curé
         # Les quatre défauts mesurés le 01/09/2026 sont nommés, pas résumés.
         for defaut in ("doublonn", "contradiction", "AUTRE plante", "auto-association"):
             assert defaut in avertissement
@@ -406,12 +418,19 @@ class TestManifesteProjet:
         assert carotte.besoin_eau == "faible"
         assert "carotte.besoin_eau" in resultat.attributs_preserves
 
-    def test_us161_le_manifeste_projet_ne_porte_que_des_attributs(self):
-        """Sur le vrai fichier : seuls des blocs importables."""
+    def test_us161_le_manifeste_projet_ne_porte_que_des_blocs_importables(self):
+        """Sur le vrai fichier : uniquement des blocs que l'import sait lire —
+        attributs de conduite (US-161) et associations curées (US-163)."""
         manifeste = json.load(open(MANIFESTE_PROJET, encoding="utf-8"))
 
-        assert "cultures_associations" not in manifeste
         assert "cultures_attributs" in manifeste
+        assert "cultures_associations" in manifeste
+        assert manifeste["cultures_associations"]  # non vide sur le vrai fichier
+        # Le motif est en français, jamais la phrase anglaise de la source.
+        assert all(
+            entree["compagnon"] and entree["motif"]
+            for entree in manifeste["cultures_associations"]
+        )
 
     def test_us161_le_manifeste_projet_porte_l_attribution_cc_by(self):
         """CC BY oblige à créditer : le manifeste doit être auto-portant, donc

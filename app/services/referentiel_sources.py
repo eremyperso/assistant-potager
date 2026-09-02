@@ -133,6 +133,10 @@ TABLES_RATTACHEES: tuple[tuple[str, str, str], ...] = (
     ("culture_config", "besoin_eau_source_id", "nom"),
     ("culture_config", "profondeur_semis_source_id", "nom"),
     ("culture_config", "rusticite_min_source_id", "nom"),
+    # [US-163] Une association n'a qu'une seule origine (pas une par côté) :
+    # une ligne dans `TABLES_RATTACHEES` suffit, contrairement aux quatre
+    # attributs de conduite ci-dessus.
+    ("association_culture", "source_id", "motif"),
 )
 
 

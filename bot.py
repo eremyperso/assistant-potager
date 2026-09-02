@@ -78,6 +78,9 @@ from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
 from app.services import familles as svc_familles  # [US-067]
 from app.services import attributs_culture as svc_attributs  # [US-161]
+from app.services import fiche_culture as svc_fiche_culture  # [US-164]
+from app.services import associations as svc_associations  # [US-163]
+from app.services import rotation as svc_rotation  # [US-163]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
@@ -598,7 +601,17 @@ _HELP_CULTURE = (
     "un délai de retour est un fait de la famille, pas de chaque culture._"
 )
 
-_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note · culture"
+_HELP_FICHE = (
+    "🌱 *Aide — Fiche culture*\n"
+    "Restituer l'essentiel d'une culture depuis le référentiel, en zéro jeton (US-164).\n\n"
+    "*Consulter la fiche d'une culture :*\n"
+    "  → /fiche tomate\n"
+    "  → /fiche CELERI\n"
+    "_Casse et accents indifférents. Une culture sans fiche connue le dit "
+    "explicitement — jamais une fiche voisine forcée._"
+)
+
+_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note · culture · fiche"
 
 _HELP_CONTEXTUEL: dict[str, str] = {
     "parcelle":  _HELP_PARCELLE,
@@ -617,6 +630,7 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "notes":     _HELP_NOTE,
     "culture":   _HELP_CULTURE,
     "famille":   _HELP_CULTURE,
+    "fiche":     _HELP_FICHE,
 }
 
 
@@ -679,6 +693,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/plan — Plan d'occupation des parcelles\n"
         "/parcelle ajouter [nom] — Créer une parcelle\n"
         "/culture famille [culture] [famille] — Corriger une famille botanique\n"
+        "/fiche [culture] — Fiche courte agronomique, zéro jeton\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
@@ -4654,6 +4669,244 @@ async def cmd_culture(update, ctx) -> None:
     await update.message.reply_text(USAGE, parse_mode="Markdown")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-163 / CA1-CA5, CA10] Commande /association — associations de cultures
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_association(update, ctx) -> None:
+    """
+    /association <sous-commande> — Associations favorables/défavorables/neutres
+    entre cultures ou familles botaniques (US-163).
+
+    Sous-commandes :
+      lister <culture>                                            — associations connues (CA4, CA5)
+      saisir <cultureA> <cultureB> <nature> <preuve> <motif>       — saisir/corriger (CA1, CA2, CA10)
+
+    Aucune logique métier ici (convention projet) : la résolution des entités,
+    la validation du vocabulaire fermé et l'écriture vivent dans
+    `app.services.associations`, seul point d'écriture.
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /association lister <culture>\n"
+        "  /association saisir <cultureA> <cultureB> <favorable|defavorable|neutre> "
+        "<etabli|traditionnel> <motif>\n\n"
+        "Exemples :\n"
+        "  /association lister carotte\n"
+        "  /association saisir carotte aneth defavorable etabli concurrence racinaire\n"
+        "  /association saisir tomate basilic favorable traditionnel repousse les pucerons"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = ctx.args[0].lower()
+
+    # ── /association lister <culture> ─────────────────────────────────────────
+    if sous_cmd in ("lister", "liste", "voir"):
+        if len(ctx.args) < 2:
+            await update.message.reply_text(
+                "❌ Usage : /association lister <culture>\n"
+                "Exemple : /association lister carotte",
+                parse_mode="Markdown",
+            )
+            return
+        culture = " ".join(ctx.args[1:]).strip()
+        db = SessionLocal()
+        try:
+            associations = svc_associations.lire_associations(db, culture)
+            if not associations:
+                await update.message.reply_text(
+                    f"ℹ️ Aucune association connue pour *{_md(culture)}*.",
+                    parse_mode="Markdown",
+                )
+                return
+            lignes = [f"🌿 *{_md(culture)}* — associations connues"]
+            attributions: list[str] = []
+            for a in associations:
+                cible = f"la famille {a.autre_partie}" if a.autre_est_famille else a.autre_partie
+                lignes.append(f"• {_md(cible)} : *{_md(a.formulation)}* — {_md(a.motif)}")
+                if a.attribution and a.attribution not in attributions:
+                    attributions.append(a.attribution)
+            if attributions:
+                lignes.append("")
+                lignes.append("Source : " + " · ".join(attributions))
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+        except svc_associations.EntiteInconnueError:
+            await update.message.reply_text(
+                f"❌ Culture ou famille inconnue : *{_md(culture)}*",
+                parse_mode="Markdown",
+            )
+        except Exception as e:
+            log.error(f"[US-163] cmd_association lister erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # ── /association saisir <cultureA> <cultureB> <nature> <preuve> <motif> ───
+    if sous_cmd in ("saisir", "corriger", "ajouter"):
+        if len(ctx.args) < 6:
+            await update.message.reply_text(
+                "❌ Usage : /association saisir <cultureA> <cultureB> "
+                "<favorable|defavorable|neutre> <etabli|traditionnel> <motif>\n"
+                "Exemple : /association saisir carotte aneth defavorable etabli concurrence racinaire",
+                parse_mode="Markdown",
+            )
+            return
+        cote_a, cote_b = ctx.args[1], ctx.args[2]
+        nature, niveau_preuve = ctx.args[3].lower(), ctx.args[4].lower()
+        motif = " ".join(ctx.args[5:]).strip()
+        db = SessionLocal()
+        try:
+            association, creee = svc_associations.enregistrer_association(
+                db, cote_a, cote_b, nature, motif, niveau_preuve
+            )
+            verbe = "saisie" if creee else "corrigée"
+            log.info(
+                f"[US-163] Association {verbe} : '{cote_a}' ↔ '{cote_b}' : "
+                f"{nature}/{niveau_preuve}"
+            )
+            await update.message.reply_text(
+                f"✅ Association {verbe} : *{_md(cote_a)}* ↔ *{_md(cote_b)}* — "
+                f"*{_md(svc_associations.formuler_nature(nature, niveau_preuve))}*",
+                parse_mode="Markdown",
+            )
+        except svc_associations.EntiteInconnueError as err:
+            await update.message.reply_text(
+                f"❌ Culture ou famille inconnue : *{_md(str(err))}*\n"
+                "Elle doit déjà exister (culture déjà dictée, ou famille déjà connue).",
+                parse_mode="Markdown",
+            )
+        except svc_associations.ValeurAssociationInvalideError as err:
+            await update.message.reply_text(f"❌ {_md(str(err))}", parse_mode="Markdown")
+        except Exception as e:
+            log.error(f"[US-163] cmd_association saisir erreur : {e}")
+            await update.message.reply_text(f"❌ Erreur : {e}")
+        finally:
+            db.close()
+        return
+
+    # Sous-commande inconnue
+    await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-163 / CA6-CA9] Commande /rotation — conflit de rotation calculé, à la campagne
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_rotation(update, ctx) -> None:
+    """
+    /rotation <parcelle> <culture> — Un conflit de rotation se calcule, il ne se
+    rédige pas (CA6). Consultation à la demande ; l'alerte automatique déclenchée
+    à la plantation est le périmètre d'US-167, qui réutilise
+    `app.services.rotation.evaluer_rotation` sans le réécrire.
+    """
+    if len(ctx.args) < 2:
+        await update.message.reply_text(
+            "*Usage :* /rotation <parcelle> <culture>\nExemple : /rotation NORD poivron",
+            parse_mode="Markdown",
+        )
+        return
+
+    nom_parcelle = ctx.args[0]
+    culture = " ".join(ctx.args[1:]).strip()
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        parcelle = resolve_parcelle(db, nom_parcelle, potager_id=tenant_ctx.potager_id)
+        if parcelle is None:
+            await update.message.reply_text(
+                f"❌ Parcelle inconnue : *{_md(nom_parcelle)}*", parse_mode="Markdown"
+            )
+            return
+        evaluation = svc_rotation.evaluer_rotation(db, tenant_ctx, parcelle.id, culture)
+        prefixe = {
+            svc_rotation.STATUT_CONFLIT: "⚠️",
+            svc_rotation.STATUT_OK: "✅",
+        }.get(evaluation.statut, "ℹ️")
+        log.info(
+            f"[US-163] /rotation '{culture}' sur '{parcelle.nom}' : statut={evaluation.statut}"
+        )
+        await update.message.reply_text(f"{prefixe} {evaluation.message}")
+    except Exception as e:
+        log.error(f"[US-163] cmd_rotation erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-164 / CA1-CA11, CA13] Commande /fiche — fiche courte, générée, sans aucun jeton
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_fiche(update, ctx) -> None:
+    """
+    /fiche <culture> — Fiche courte au bot, sur commande uniquement.
+
+    [CA1] Commande préfixée, reconnue au tout premier étage du routage
+    (CommandHandler) : zéro jeton, zéro appel réseau, zéro effet de bord.
+    [CA4] N'introduit AUCUNE restitution spontanée : c'est le seul chemin vers
+    la fiche, aucun autre flux (notamment `handle_text`) n'y touche.
+    [CA3] Aucune logique métier ici (convention projet) : le gabarit est
+    assemblé par `app.services.fiche_culture`, seul point de lecture.
+    """
+    if not ctx.args:
+        await update.message.reply_text(
+            "❌ Usage : /fiche <culture>\nExemple : /fiche tomate",
+            parse_mode="Markdown",
+        )
+        return
+
+    culture = " ".join(ctx.args).strip()
+    db = SessionLocal()
+    try:
+        fiche = svc_fiche_culture.generer_fiche_courte(db, culture)
+
+        lignes = [f"🌱 *{_md(fiche.culture)}*"]
+        # [CA6] Famille non renseignée : dite telle quelle, jamais omise ni devinée.
+        if fiche.famille:
+            lignes.append(f"Famille : *{_md(fiche.famille)}*")
+            if fiche.delai_retour_annees is not None:
+                lignes.append(f"Délai de retour : *{fiche.delai_retour_annees} ans*")
+        else:
+            lignes.append("Famille : non renseignée")
+
+        for attribut in fiche.attributs:
+            # [CA6] Une valeur absente se lit en clair, jamais mise en gras
+            # comme une vraie valeur — même convention que /culture attributs.
+            valeur = (
+                f"*{_md(attribut.affichage)}*" if attribut.renseigne
+                else attribut.affichage
+            )
+            lignes.append(f"• {attribut.libelle} : {valeur}")
+
+        # [CA13] Champ de texte libre : affiché quand renseigné, jamais omis ni
+        # comblé sinon — même principe d'honnêteté que CA6, appliqué à ce champ.
+        if fiche.description_agronomique:
+            lignes.append(f"Description : *{_md(fiche.description_agronomique)}*")
+        else:
+            lignes.append("Description : incomplète")
+
+        # [CA7 / US-166] L'attribution, pas le code technique de la source —
+        # une mention par source, dédupliquée, en texte brut.
+        if fiche.attributions:
+            lignes.append("")
+            lignes.append("Source : " + " · ".join(fiche.attributions))
+
+        log.info(f"[US-164] Fiche courte servie : '{culture}' (0 jeton, 0 appel modèle)")
+        await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+    except LookupError:
+        # [CA5] Honnêteté : jamais une fiche voisine forcée ni une réponse générée.
+        await update.message.reply_text(
+            f"🤷 Je n'ai pas de fiche sur cette culture : *{_md(culture)}*.",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        log.error(f"[US-164] cmd_fiche erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
+
+
 async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
     """Envoie un texte long en découpant par blocs de ≤4096 chars sur des sauts de ligne."""
     MAX = 4096
@@ -6221,6 +6474,9 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "parcelle",  cmd_parcelle)
     _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
     _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
+    _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
+    _enregistrer_commande(app, "association", cmd_association)  # [US-163]
+    _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
 
     _enregistrer_commande(app, "vendre",    cmd_vendre)
 
