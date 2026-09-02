@@ -124,6 +124,13 @@ FAMILLES_ATTENDUES = {
     # vide ? » est une question chiffrée qui partait au modèle pour recevoir
     # une réponse inventée.
     "parcelles_libres",
+    # Ajoutée après l'essai du 02/09/2026 : « quelles parcelles contiennent des
+    # solanacées ? » repartait à l'agent SQL, qui servait un « Top cultures »
+    # hors sujet — couverte par tests/test_parcelles_par_famille_botanique.py.
+    "parcelles_par_famille",
+    # Même essai, symétrique : « sur quelles parcelles je trouve des
+    # tomates ? » recevait un « Historique observation de tomate ».
+    "parcelles_par_culture",
 }
 
 

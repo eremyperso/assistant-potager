@@ -1,3 +1,19 @@
+## [v3.51.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Répond désormais à « quelles parcelles contiennent des solanacées ? » en croisant le référentiel des familles botaniques avec l'occupation réelle des parcelles — sans aucun appel de modèle, donc sans coût ni latence (US-067/US-096)
+- Répond aussi à la question inverse, « sur quelles parcelles je trouve des tomates ? » — l'association parcelle ↔ culture était déjà acquise (c'est celle du plan), il ne manquait que de savoir la lire dans ce sens (US-096)
+- Reconnaît la famille citée quelle que soit la forme : nom français ou nom scientifique (« Solanaceae »), singulier ou pluriel, avec ou sans ponctuation — la dictée vocale ne produit ni accord ni point d'interrogation fiables (US-096)
+
+### 🐛 Corrections
+- Corrige une réponse fausse d'apparence juste : une question qu'aucune famille du catalogue ne reconnaissait repartait à l'agent SQL, qui servait un classement « Top cultures — observation » exact mais totalement hors sujet, et avec assez d'assurance pour empêcher la cascade de remonter d'un étage (constaté le 02/09/2026)
+- Corrige le même défaut sur « sur quelles parcelles je trouve des tomates ? », à qui l'agent SQL répondait par la liste des observations faites sur les tomates — la bonne culture, un geste que personne n'avait mentionné (constaté le 02/09/2026)
+- L'agent SQL ne prête plus à une question un geste qu'elle ne cite pas, partout où ce geste dicte la forme de la réponse — le classement de cultures comme l'historique d'un geste : l'extraction d'intention choisit dans un vocabulaire fermé et rend toujours un geste, y compris pour une question qui n'en parle pas. Là où le geste désigne seulement quel chiffre est demandé (« total fraise ? »), l'inférence reste retenue
+
+### 🔧 Améliorations techniques
+- Distingue deux absences que la même phrase confondait : une famille dont aucune fiche culture n'est rattachée est une non-réponse qui rend la main à la cascade, là où une famille rattachée mais absente des parcelles est une réponse chiffrée légitime
+- Mutualise le motif qui disqualifie les questions de savoir (« pourquoi », « comment », « que faire ») entre les familles volontairement larges du catalogue — deux copies auraient divergé au premier ajout
+
 ## [v3.50.0] — 2026-09-02
 
 ### 🚀 Nouveautés

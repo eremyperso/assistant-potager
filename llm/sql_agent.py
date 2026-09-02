@@ -13,13 +13,20 @@ pour les tests unitaires directs de ce module ; les appelants applicatifs
 (app/services/questions.py) passent toujours potager_id=ctx.potager_id.
 """
 
+import logging
+import re
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import func
+from unidecode import unidecode
+
 from database.db import SessionLocal
 from database.models import Evenement
+from utils.actions import ACTION_MAP
+
+log = logging.getLogger("potager")
 
 # ─── Fenêtre temporelle / limite par défaut [US-042 / CA3, CA7] ───────────────
 WINDOW_DAYS = 365      # 12 mois glissants
@@ -35,6 +42,45 @@ _VOLUME_TO_ML: dict[str, float] = {
     "ml": 1, "cl": 10, "dl": 100,
     "l": 1000, "litre": 1000, "litres": 1000,
 }
+
+
+_NON_ALPHANUM = re.compile(r"[^a-z0-9]+")
+
+
+def _action_citee(question: str, action: str) -> bool:
+    """Le geste retenu par l'extraction d'intention est-il vraiment cité dans la
+    question ?
+
+    L'extraction choisit dans un vocabulaire **fermé** (`INTENT_PROMPT`) : une
+    question qui ne relève d'aucun de ces gestes en ressort quand même avec un
+    geste. « quelles sont mes parcelles contenant des familles de solanacées ? »
+    en est revenue avec `action="observation"` le 02/09/2026, et l'agent a servi
+    un « Top cultures — observation » — un classement parfaitement exact, hors
+    sujet, et assez assuré (`confiant=True`) pour que la cascade d'US-093 ne
+    remonte pas d'un étage. Une réponse fausse d'apparence juste, donc, là où
+    « je n'ai pas compris » aurait laissé l'étage suivant répondre. Même cause
+    le même jour pour « sur quelles parcelles je trouve des tomates ? », servie
+    en « Historique observation de tomate » : le geste inventé, cette fois
+    appliqué à la bonne culture.
+
+    Le contrôle ne s'applique qu'aux chemins où le geste dicte la FORME de la
+    réponse (classement de cultures, historique d'un geste). Là où il désigne
+    seulement QUEL chiffre est demandé — « Total fraise ? » → le total récolté,
+    sans qu'aucun synonyme de « récolte » n'apparaisse — l'inférence du modèle
+    est légitime et reste retenue.
+
+    Le contrôle réutilise les synonymes de `utils/actions.ACTION_MAP` — le
+    référentiel des gestes, jamais une seconde liste — et ne coûte qu'une
+    comparaison de chaînes. Les synonymes de moins de quatre lettres sont
+    ignorés, comme dans `reponses_chiffrees._detecter_action`, pour la même
+    raison : ils matchent n'importe quoi.
+    """
+    normalisee = _NON_ALPHANUM.sub(" ", unidecode((question or "").strip().lower()))
+    for synonyme in ACTION_MAP.get(action, ()):
+        normalise = _NON_ALPHANUM.sub(" ", unidecode(synonyme.strip().lower())).strip()
+        if len(normalise) >= 4 and re.search(rf"\b{re.escape(normalise)}", normalisee):
+            return True
+    return False
 
 
 def _fmt_poids(g: float) -> str:
@@ -120,17 +166,42 @@ class QueryAgent:
         culture    = intent.get("culture")
         query_type = intent.get("query_type", "quantite")
 
+        # Le geste est-il seulement dans la question ? La réponse ne commande
+        # PAS les mêmes chemins (`_action_citee`) :
+        #
+        #   • là où le geste dicte à lui seul la FORME de la réponse — un
+        #     classement de cultures, la liste des occurrences d'un geste — un
+        #     geste inventé produit une réponse hors sujet et sûre d'elle ;
+        #   • là où il ne fait que désigner QUEL chiffre est demandé (« Total
+        #     fraise ? » → le total récolté), l'inférence du modèle est
+        #     légitime et ne cite aucun synonyme. L'écarter casserait des
+        #     questions qui marchent.
+        geste_cite = bool(action) and _action_citee(question, action)
+        if action and not geste_cite:
+            log.info(
+                "🚫 AGENT SQL       │ geste '%s' absent de la question : ni classement ni historique de geste │ '%s'",
+                action, (question or "")[:60],
+            )
+
         if culture and action:
             if query_type == "date":
                 return self._answer_date(action, culture)
             if query_type == "historique":
-                return self._answer_history_culture(culture, action)
+                # « sur quelles parcelles je trouve des tomates ? » arrivait ici
+                # avec `action="observation"` et rendait « Historique
+                # observation de tomate » (02/09/2026). Sans geste cité, on
+                # liste l'historique de la culture, sans lui prêter un geste.
+                return self._answer_history_culture(culture, action if geste_cite else None)
             return self._answer_quantity(action, culture)
 
         if culture and not action:
             return self._answer_history_culture(culture)
 
         if action and not culture:
+            # Un classement « top cultures » sur un geste que personne n'a
+            # nommé n'est pas une réponse : il vaut mieux rendre la main.
+            if not geste_cite:
+                return "Je n'ai pas compris la question. Formulez autrement.", False
             return self._answer_action_stats(action)
 
         return "Je n'ai pas compris la question. Formulez autrement.", False

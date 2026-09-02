@@ -54,7 +54,8 @@ Ce qui est délibérément écrit ici, et pourquoi :
 [CA1] Familles couvertes, toutes sans appel modèle : total récolté par culture et
 par période · dernière occurrence d'un type d'action · stock courant · nombre de
 pieds actifs · nombre de godets produits [US-170] · rendement cumulé de la
-saison · contenu de la pépinière · occupation d'une parcelle.
+saison · contenu de la pépinière · occupation d'une parcelle · parcelles où une
+culture est en place · parcelles portant une famille botanique.
 """
 from __future__ import annotations
 
@@ -69,14 +70,15 @@ from sqlalchemy.orm import Session
 from unidecode import unidecode
 
 from app.services import catalogue_sql
+from app.services import familles as _familles
 from app.services.catalogue_sql import GardeCatalogueError
 from app.services.context import TenantContext
 from database.db import SessionLocal
-from database.models import Evenement
+from database.models import Evenement, FamilleBotanique
 from utils import parcelles as _parcelles
 from utils import stock as _stock
 from utils.actions import ACTION_MAP
-from utils.culture_resolve import cultures_connues
+from utils.culture_resolve import cultures_connues, normaliser_culture
 from utils.dependances_donnee import (
     NATURE_JOURNAL,
     NATURE_PEPINIERE,
@@ -171,6 +173,16 @@ GABARITS: dict[str, str] = {
     "parcelles_libres":         "{nb} parcelle(s) libre(s) sur {total} :\n{lignes}",
     "parcelles_libres_aucune":  "Aucune parcelle libre : tes {total} parcelles sont toutes occupées.",
 
+    # Parcelles où une culture est en place — « où sont mes tomates ? »
+    "parcelles_par_culture":    "Je trouve {culture} sur {nb} parcelle(s) :\n{lignes}",
+    "parcelles_par_culture_aucune": "Côté {culture} : aucune parcelle n'en porte en ce moment.",
+
+    # Parcelles portant une famille botanique — le référentiel des familles
+    # (US-067/US-166) croisé avec l'occupation qu'affiche déjà /plan
+    "parcelles_par_famille":    "{nb} parcelle(s) portent des cultures de la famille {famille} :\n{lignes}",
+    "parcelles_par_famille_aucune":   "Aucune parcelle ne porte de culture de la famille {famille} en ce moment. Cultures rattachées : {cultures}.",
+    "parcelles_par_famille_inconnue": "Aucune fiche culture n'est rattachée à la famille {famille} — je ne peux pas dire quelles parcelles en portent.",
+
     # Occupation d'une parcelle
     "occupation":               "La parcelle {parcelle} accueille :\n{lignes}",
     "occupation_vide":          "Je n'ai aucune culture en place enregistrée sur la parcelle {parcelle}.",
@@ -230,6 +242,10 @@ class Parametres:
     culture: Optional[str] = None
     action: Optional[str] = None
     parcelle: Optional[str] = None
+    # Famille botanique nommée dans la question (« des solanacées »), résolue
+    # contre le référentiel `familles_botaniques` — jamais contre une liste
+    # tenue ici, qui divergerait du référentiel au premier import.
+    famille_botanique: Optional[str] = None
     periode: Periode = field(default_factory=Periode)
 
 
@@ -383,6 +399,30 @@ def _detecter_parcelle(db: Session, ctx: TenantContext, normalisee: str) -> Opti
     return None
 
 
+def _detecter_famille_botanique(db: Session, normalisee: str) -> Optional[str]:
+    """Résout la famille botanique nommée dans la question, contre le seul
+    référentiel `familles_botaniques` (US-067/US-166).
+
+    Deux tolérances, et deux seulement, parce que la question est dictée : le
+    nom scientifique vaut le nom français (« Solanaceae » = « Solanacées »), et
+    le singulier vaut le pluriel (« une solanacée » = « des solanacées »).
+    L'accord n'a jamais fait partie de la question.
+
+    Retourne toujours le nom du référentiel, pas la forme écrite par le
+    jardinier : c'est lui qui sera affiché et lui qui sert de clé.
+    """
+    candidats: dict[str, str] = {}
+    for famille in db.query(FamilleBotanique).all():
+        for nom in (famille.nom, famille.nom_scientifique):
+            if not nom:
+                continue
+            candidats.setdefault(nom, famille.nom)
+            if nom.lower().endswith("s"):
+                candidats.setdefault(nom[:-1], famille.nom)
+    trouve = _detecter_dans(normalisee, list(candidats))
+    return candidats.get(trouve) if trouve else None
+
+
 def _extraire_parametres(db: Session, ctx: TenantContext, question: str) -> Parametres:
     normalisee = _normaliser(question)
     cultures = cultures_connues(db, ctx.potager_id)
@@ -392,6 +432,7 @@ def _extraire_parametres(db: Session, ctx: TenantContext, question: str) -> Para
         culture=_detecter_dans(normalisee, cultures),
         action=_detecter_action(normalisee),
         parcelle=_detecter_parcelle(db, ctx, normalisee),
+        famille_botanique=_detecter_famille_botanique(db, normalisee),
         periode=_detecter_periode(normalisee, _date.today()),
     )
 
@@ -640,6 +681,97 @@ def _agreger_occupation_parcelle(db: Session, ctx: TenantContext, parcelle: str)
     }
 
 
+@catalogue_sql.enregistrer("parcelles_par_culture")
+def _agreger_parcelles_par_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
+    """Parcelles où une culture est en place — la question inverse de
+    `occupation_parcelle`, sur la même occupation (`utils/parcelles`, CA4).
+
+    [CA7] `present` reste vrai quand la culture n'est nulle part : « aucune
+    parcelle ne porte de tomate en ce moment » est un constat EXACT tiré du
+    plan, pas une absence de donnée. La culture, elle, n'est reconnue que si
+    elle est déjà connue du potager (`cultures_connues`) — le cas « je ne sais
+    pas de quelle plante tu parles » ne se pose donc pas ici.
+    """
+    cible = normaliser_culture(culture)
+    occupation = _parcelles.calcul_occupation_parcelles(db, potager_id=ctx.potager_id)
+    trouvees = [
+        {
+            "parcelle": nom_parcelle,
+            "variete": entree.get("variete"),
+            "nb_plants": entree.get("nb_plants") or 0,
+            "unite": entree.get("unite") or "plants",
+        }
+        for nom_parcelle, entrees in occupation.items()
+        for entree in entrees
+        if normaliser_culture(entree.get("culture") or "") == cible
+    ]
+    # La case « non localisé » (parcelle_id nul, CA7 d'US-030) en dernier :
+    # elle fait partie de la réponse sans prétendre être une parcelle.
+    trouvees.sort(key=lambda e: (e["parcelle"] is None, (e["parcelle"] or "").lower(),
+                                 (e["variete"] or "").lower()))
+    return {
+        "present": True,
+        "culture": culture,
+        "entrees": trouvees[:MAX_LIGNES_AFFICHEES],
+        "nb": len({e["parcelle"] for e in trouvees}),
+        "nb_lignes": len(trouvees),
+    }
+
+
+@catalogue_sql.enregistrer("parcelles_par_famille")
+def _agreger_parcelles_par_famille(
+    db: Session, ctx: TenantContext, famille_botanique: str
+) -> dict:
+    """Parcelles portant, en ce moment, une culture d'une famille botanique.
+
+    [CA4] Deux vérités se rencontrent ici, et aucune n'est recalculée pour le
+    bot : l'occupation vient de `utils/parcelles.calcul_occupation_parcelles`
+    (celle de /plan), le rattachement culture → famille vient de
+    `app/services/familles.familles_par_culture` (celui des fiches culture,
+    US-067).
+
+    [CA7] `present` sépare deux « rien » qui se ressemblent et ne se valent
+    pas. Une famille dont AUCUNE fiche culture visible du potager ne relève —
+    référentiel incomplet, cas normal pour une famille jamais renseignée — est
+    une **non-réponse** : répondre « aucune parcelle » ferait dire au silence
+    du référentiel ce qu'il ne dit pas. Une famille bien rattachée mais absente
+    des parcelles, elle, est une réponse chiffrée légitime.
+    """
+    cible = _familles.normaliser_famille(famille_botanique)
+    rattachees = {
+        culture
+        for culture, nom in _familles.familles_par_culture(db, ctx).items()
+        if _familles.normaliser_famille(nom) == cible
+    }
+
+    occupation = _parcelles.calcul_occupation_parcelles(db, potager_id=ctx.potager_id)
+    par_parcelle: dict[Optional[str], list[str]] = {}
+    for nom_parcelle, entrees in occupation.items():
+        for entree in entrees:
+            if normaliser_culture(entree.get("culture") or "") not in rattachees:
+                continue
+            cultures = par_parcelle.setdefault(nom_parcelle, [])
+            if entree.get("culture") not in cultures:
+                cultures.append(entree.get("culture"))
+
+    # Les parcelles nommées d'abord, la case « non localisé » (parcelle_id nul,
+    # CA7 d'US-030) en dernier — elle répond à la question sans prétendre être
+    # une parcelle.
+    ordonnees = sorted(
+        par_parcelle.items(), key=lambda item: (item[0] is None, (item[0] or "").lower())
+    )
+    return {
+        "present": bool(rattachees),
+        "famille": famille_botanique,
+        "rattachees": sorted(rattachees),
+        "parcelles": [
+            {"parcelle": nom, "cultures": cultures}
+            for nom, cultures in ordonnees[:MAX_LIGNES_AFFICHEES]
+        ],
+        "nb": len(ordonnees),
+    }
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Le rendu — un agrégat, un gabarit [CA2, CA3, CA7]
 # ═════════════════════════════════════════════════════════════════════════════
@@ -873,6 +1005,46 @@ def _rendu_occupation(params: Parametres, agregat: dict) -> str:
     )
 
 
+def _rendu_parcelles_par_culture(params: Parametres, agregat: dict) -> str:
+    culture = _sur(agregat["culture"])
+    if not agregat["nb"]:
+        return _remplir(GABARITS["parcelles_par_culture_aucune"], {"culture": culture})
+    lignes = []
+    for entree in agregat["entrees"]:
+        nom = _sur(entree["parcelle"]) if entree["parcelle"] else "sans parcelle renseignée"
+        variete = f"{_sur(entree['variete'])}, " if entree["variete"] else ""
+        lignes.append(
+            f"  • {nom} — {variete}"
+            f"{_stock.quantite_lisible(entree['nb_plants'], entree['unite']):g} {entree['unite']}"
+        )
+    return _remplir(GABARITS["parcelles_par_culture"], {
+        "culture": culture, "nb": agregat["nb"],
+        "lignes": _lignes_avec_reste(lignes, agregat["nb_lignes"]),
+    })
+
+
+def _rendu_parcelles_par_famille(params: Parametres, agregat: dict) -> str:
+    famille = _sur(agregat["famille"])
+    if not agregat["present"]:
+        return _remplir(GABARITS["parcelles_par_famille_inconnue"], {"famille": famille})
+    if not agregat["nb"]:
+        return _remplir(GABARITS["parcelles_par_famille_aucune"], {
+            "famille": famille,
+            "cultures": ", ".join(_sur(culture) for culture in agregat["rattachees"]),
+        })
+    lignes = [
+        "  • {} — {}".format(
+            _sur(entree["parcelle"]) if entree["parcelle"] else "sans parcelle renseignée",
+            ", ".join(_sur(culture) for culture in entree["cultures"]),
+        )
+        for entree in agregat["parcelles"]
+    ]
+    return _remplir(GABARITS["parcelles_par_famille"], {
+        "nb": agregat["nb"], "famille": famille,
+        "lignes": _lignes_avec_reste(lignes, agregat["nb"]),
+    })
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Les familles de questions [CA1] — l'ajout d'une famille tient en une ligne
 # ═════════════════════════════════════════════════════════════════════════════
@@ -898,6 +1070,18 @@ class Famille:
     # larges, qui doivent rendre la main plutôt que servir un chiffre à une
     # question qui n'en attend pas.
     exclut: Optional[re.Pattern] = None
+
+
+# Ce qui retire une question aux familles volontairement larges (celles qui se
+# contentent d'une parcelle, d'une culture ou d'une famille botanique nommée
+# quelque part dans la phrase) : une
+# question de savoir ou de conseil n'attend pas un inventaire. Écrit une fois
+# et partagé — deux copies divergeraient au premier ajout, et la divergence se
+# paierait en appels au modèle sans se voir.
+_EXCLUT_SAVOIR = re.compile(
+    r"\bpourquoi\b|\bcomment\b|\bfaut il\b|\bdois je\b|\bque faire\b|"
+    r"\bconseil\b|\bpenses tu\b|\ba ton avis\b|\bmaladie\b|\bpuis je\b"
+)
 
 
 FAMILLES: tuple[Famille, ...] = (
@@ -1032,6 +1216,60 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_stock_global,
     ),
     Famille(
+        # La question INVERSE d'`occupation_parcelle` : celle-ci part d'une
+        # parcelle et rend ses cultures, celle-là part d'une culture et rend
+        # ses parcelles. L'association parcelle ↔ culture était déjà acquise
+        # (c'est celle de /plan) mais aucune famille ne savait la lire dans ce
+        # sens : « sur quelles parcelles je trouve des tomates ? » repartait à
+        # l'agent SQL, qui en a rendu un « Historique observation de tomate »
+        # — le geste inventé par l'extraction d'intention, appliqué à la bonne
+        # culture (constaté en usage réel le 02/09/2026).
+        #
+        # Le motif reste étroit — des tournures de LOCALISATION explicites, pas
+        # un simple `\bparcelle\b` : sans quoi cette famille prendrait à
+        # `occupation_parcelle` toute question qui nomme une parcelle et une
+        # culture, alors que le jardinier y demande l'inventaire de la parcelle.
+        nom="parcelles_par_culture",
+        dependances=(NATURE_PLAN, NATURE_STOCK),
+        agregation="parcelles_par_culture",
+        motif=re.compile(
+            r"\b(?:sur|dans|a|de) quelles? (?:parcelles?|planches?|carre|carreau|zone|butte|bac)\b|"
+            r"\bquelles? (?:parcelles?|planches?)\b|"
+            r"\bou (?:sont|est|se trouve|se trouvent|pousse|poussent|ai je|j ai)\b|"
+            r"\bparcelles? avec\b|\blocalisation\b|\bemplacement\b"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=("culture",),
+        arguments=lambda p: {"culture": p.culture},
+        rendu=_rendu_parcelles_par_culture,
+    ),
+    Famille(
+        # AVANT `occupation_parcelle`, qui exige UNE parcelle désignée : « quelles
+        # parcelles contiennent des solanacées ? » parle de parcelles au pluriel
+        # sans en nommer aucune, le filet ne pouvait donc pas la servir. Sans
+        # cette famille, la question repartait à l'agent SQL, dont l'extraction
+        # d'intention choisit dans un vocabulaire fermé : elle en revenait avec
+        # `action="observation"` et un « Top cultures — observation » exact,
+        # hors sujet, et assez assuré pour que la cascade ne remonte pas
+        # (constaté en usage réel le 02/09/2026).
+        #
+        # La question ne se reconnaît pas à sa grammaire mais à la famille
+        # botanique RÉSOLUE contre le référentiel : « où sont mes solanacées »,
+        # « mes parcelles avec des cucurbitacées » et « quelles planches portent
+        # des Apiaceae » sont la même question.
+        nom="parcelles_par_famille",
+        dependances=(NATURE_PLAN, NATURE_STOCK),
+        agregation="parcelles_par_famille",
+        motif=re.compile(
+            r"\bparcelles?\b|\bplanches?\b|\bcarre\b|\bcarreau\b|\bzone\b|\bbutte\b|\bbac\b|"
+            r"\bou (?:sont|est|ai je|se trouvent?|j ai)\b|\bdans quelle?s?\b"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=("famille_botanique",),
+        arguments=lambda p: {"famille_botanique": p.famille_botanique},
+        rendu=_rendu_parcelles_par_famille,
+    ),
+    Famille(
         # En DERNIER, et volontairement large : dès qu'une parcelle est nommée
         # et qu'aucune famille plus précise n'explique la question, le sens
         # attendu est « ce qu'il y a dessus ».
@@ -1047,10 +1285,7 @@ FAMILLES: tuple[Famille, ...] = (
         motif=re.compile(r"\b(?:parcelles?|planches?|carre|carreau|zone|butte|bac)\b"),
         # …mais une question de savoir ou de conseil qui mentionne une parcelle
         # n'attend pas un inventaire : elle rend la main à la cascade.
-        exclut=re.compile(
-            r"\bpourquoi\b|\bcomment\b|\bfaut il\b|\bdois je\b|\bque faire\b|"
-            r"\bconseil\b|\bpenses tu\b|\ba ton avis\b|\bmaladie\b|\bpuis je\b"
-        ),
+        exclut=_EXCLUT_SAVOIR,
         exige=("parcelle",),
         arguments=lambda p: {"parcelle": p.parcelle},
         rendu=_rendu_occupation,
@@ -1264,6 +1499,11 @@ def servir_aiguillage(
             # Redérivés de la phrase, jamais relus du cache — voir `_aiguillage`.
             action=_detecter_action(normalisee),
             parcelle=aiguillage.get("parcelle"),
+            # Redérivée elle aussi : « quelles parcelles portent des
+            # solanacées ? » et « … des cucurbitacées ? » partagent l'entrée
+            # de cache et reçoivent chacune sa réponse exacte, exactement
+            # comme deux périodes différentes (voir `cle_aiguillage`).
+            famille_botanique=_detecter_famille_botanique(session, normalisee),
             periode=_detecter_periode(normalisee, _date.today()),
         )
         if not all(getattr(params, nom) for nom in famille.exige):
