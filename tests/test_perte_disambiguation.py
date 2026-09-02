@@ -396,3 +396,88 @@ def test_cx3_variete_fuzzy_match_typo(db):
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
     assert ev is not None
     assert ev.variete == "cerise", f"Variété attendue 'cerise', obtenu '{ev.variete}'"
+
+
+# ── Regression : perte sur variété "non précisée" (bug EN PLACE non déduit) ──
+#
+# `calcul_stock_par_variete()` substitue déjà variete=None par le libellé humain
+# "Variété non précisée" dans son résultat. Ce libellé ne doit JAMAIS être réécrit
+# tel quel dans Evenement.variete (sinon il ne matche plus la clé None utilisée
+# par les plantations, et la perte devient invisible du calcul EN PLACE/PERDU).
+
+def test_perte_auto_variete_unique_non_precisee_sauvegarde_none(db):
+    """Une seule variété non précisée au jardin, aucun godet, aucun mot-clé de
+    contexte dans le texte → auto-remplissage (bot.py section 7) doit sauvegarder
+    variete=None, pas le libellé littéral 'Variété non précisée'."""
+    session, pid = db
+    session.add(Evenement(
+        type_action="plantation", culture="tomate", variete=None,
+        quantite=2.0, rang=1, unite="plants",
+        parcelle_id=pid, date=datetime(2026, 5, 1),
+    ))
+    session.commit()
+
+    user_id = 996
+    update  = _make_message_update(user_id, "perte de 2 pieds de tomate")
+    item    = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 2}
+
+    with patch("bot.SessionLocal", return_value=session), \
+         patch("bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from bot import _parse_and_save, _action_confirm_cb
+        _run(_parse_and_save(update, "perte de 2 pieds de tomate", pre_parsed_items=[item]))
+
+        # [US-021] Une seule parcelle plantée en tomate → auto-détectée, puis
+        # confirmation demandée avant sauvegarde effective : on la valide ici.
+        confirm_update = _make_callback_update(user_id, "action_confirm")
+        _run(_action_confirm_cb(confirm_update, _make_ctx()))
+
+    ev = session.query(Evenement).filter_by(type_action="perte").first()
+    assert ev is not None
+    assert ev.variete is None, (
+        f"variete devrait être None, obtenu '{ev.variete}' — le libellé "
+        "d'affichage a fuité dans les données stockées"
+    )
+
+    from utils.stock import calcul_stock_par_variete
+    stock = calcul_stock_par_variete(session, "tomate")
+    assert len(stock) == 1
+    assert stock[0]["plants_perdus"] == 2.0
+    assert stock[0]["plants_plantes"] - stock[0]["plants_perdus"] == 0.0
+
+
+def test_perte_menu_jardin_variete_non_precisee_callback_sans_libelle(db):
+    """Plusieurs variétés jardin dont une non précisée → le bouton correspondant
+    doit utiliser le sentinel '__none__', jamais le libellé littéral, sinon un
+    clic dessus réécrit le libellé en base (scénario exact du bug rapporté :
+    5 variétés de tomate, menu inline, choix de la variété non précisée)."""
+    session, pid = db
+    session.add(Evenement(
+        type_action="plantation", culture="tomate", variete=None,
+        quantite=2.0, rang=1, unite="plants",
+        parcelle_id=pid, date=datetime(2026, 5, 1),
+    ))
+    session.add(Evenement(
+        type_action="plantation", culture="tomate", variete="cerise",
+        quantite=3.0, rang=1, unite="plants",
+        parcelle_id=pid, date=datetime(2026, 5, 1),
+    ))
+    session.commit()
+
+    update = _make_message_update(995, "perte de 2 pieds de tomate")
+    item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 2}
+
+    with patch("bot.SessionLocal", return_value=session), \
+         patch("bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from bot import _parse_and_save
+        _run(_parse_and_save(update, "perte de 2 pieds de tomate", pre_parsed_items=[item]))
+
+    update.message.reply_text.assert_called_once()
+    _, kwargs = update.message.reply_text.call_args
+    boutons = [b for row in kwargs["reply_markup"].inline_keyboard for b in row]
+    callback_data = {b.callback_data for b in boutons}
+    assert "perte_var_j:__none__" in callback_data
+    assert not any("non précisée" in cb for cb in callback_data), (
+        f"Le libellé d'affichage a fuité dans un callback_data : {callback_data}"
+    )

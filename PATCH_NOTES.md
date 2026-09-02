@@ -1,3 +1,17 @@
+## [v3.50.0] — 2026-09-02
+
+### 🚀 Nouveautés
+- Avertit désormais, juste après l'enregistrement d'une plantation ou d'un semis, d'un conflit de rotation avec l'historique réel de la parcelle ou d'une association défavorable avec une culture déjà en place cette même campagne — sur le bot comme sur l'interface web (US-167)
+- Dit explicitement « je n'ai pas d'antécédent sur cette parcelle » ou « évaluation indisponible » plutôt que de rester silencieux, chaque fois qu'elle n'a pas de quoi conclure à l'absence de conflit (US-167)
+- Distingue, comme pour la consultation à la demande, une association défavorable établie d'une association seulement déconseillée par la pratique traditionnelle (US-167)
+
+### 🔧 Améliorations techniques
+- N'avertit jamais quand il n'y a positivement rien à signaler (délai de rotation respecté), ni pour une culture totalement inconnue du référentiel, ni pour une parcelle non identifiée — l'enregistrement n'est jamais bloqué par cet avertissement (US-167)
+- Réutilise tel quel le calcul de rotation d'US-163 sans le réécrire, et n'appelle jamais de modèle de langage sur ce chemin (US-167)
+
+### 🐛 Corrections
+- Corrige un avertissement de rotation qui se déclenchait à tort dès la toute première plantation d'une culture sur une parcelle sans aucun antécédent réel, en se citant lui-même comme conflit (US-167)
+
 ## [v3.49.0] — 2026-09-02
 
 ### 🚀 Nouveautés

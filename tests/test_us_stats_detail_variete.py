@@ -153,6 +153,44 @@ class TestCalcStockParVariete:
         result = calcul_stock_par_variete(db, "tomate")
         assert result[0]["plants_perdus"] == 1
 
+    def test_perte_deduite_variete_non_precisee(self, db):
+        """[bug EN PLACE non déduit] Une perte variete=None se déduit de la
+        plantation variete=None (regroupées sous "Variété non précisée"),
+        au même titre qu'une variété nommée."""
+        _seed_config(db)
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete=None,
+            quantite=5, unite="plants", date=datetime(2025, 4, 1),
+        ))
+        db.add(Evenement(
+            type_action="perte", culture="tomate", variete=None,
+            quantite=2, unite="plants", date=datetime(2025, 4, 15),
+        ))
+        db.commit()
+        result = calcul_stock_par_variete(db, "tomate")
+        assert len(result) == 1
+        assert result[0]["variete"] == "Variété non précisée"
+        assert result[0]["plants_perdus"] == 2
+
+    def test_perte_deduite_variete_non_precisee_donnee_corrompue(self, db):
+        """[bug EN PLACE non déduit] Défense en profondeur : une perte stockée
+        avec le libellé littéral "Variété non précisée" au lieu de NULL (donnée
+        historique corrompue, cas réel de l'événement id=462) doit malgré tout
+        être déduite de la plantation variete=None — pas silencieusement ignorée."""
+        _seed_config(db)
+        db.add(Evenement(
+            type_action="plantation", culture="tomate", variete=None,
+            quantite=5, unite="plants", date=datetime(2025, 4, 1),
+        ))
+        db.add(Evenement(
+            type_action="perte", culture="tomate", variete="Variété non précisée",
+            quantite=2, unite="plants", date=datetime(2025, 4, 15),
+        ))
+        db.commit()
+        result = calcul_stock_par_variete(db, "tomate")
+        assert len(result) == 1
+        assert result[0]["plants_perdus"] == 2
+
     def test_vegetatif_structure(self, db):
         """[CA4] Végétatif retourne le bon type_organe et les bonnes quantités."""
         _seed_config(db)

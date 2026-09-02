@@ -35,6 +35,12 @@ from database.models import Evenement, CultureConfig, Parcelle
 # ─────────────────────────────────────────────────────────────────────────────
 UNITES_POIDS_EN_G: Dict[str, float] = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
 
+# [fix bug EN PLACE non déduit] Libellé humain substitué à `variete=None` pour
+# l'affichage. Centralisé ici pour que bot.py puisse détecter cette substitution
+# et la ramener à None avant toute réutilisation comme donnée (callback_data,
+# pré-remplissage) — sans quoi le libellé finit stocké tel quel dans Evenement.variete.
+LABEL_VARIETE_NON_PRECISEE = "Variété non précisée"
+
 
 def poids_lisible(total_g: float) -> tuple:
     """[US-002 / US-096 / CA4] Convertit un total en grammes vers le couple
@@ -50,6 +56,18 @@ def _cutoff_dt(date_ref: Optional[_date]) -> Optional[datetime]:
     if date_ref is None:
         return None
     return datetime(date_ref.year, date_ref.month, date_ref.day, 23, 59, 59)
+
+
+def _norm_variete(variete: Optional[str]) -> Optional[str]:
+    """[fix bug EN PLACE non déduit] Ramène à None une valeur de `Evenement.variete`
+    déjà lue en base sous la forme du libellé humain LABEL_VARIETE_NON_PRECISEE (ou
+    une chaîne vide) — un écrivain en amont (bug déjà corrigé côté bot.py, ou donnée
+    historique) a pu stocker ce libellé au lieu de NULL. Sans cette normalisation à la
+    lecture, une clé "None" (plantation) et une clé "Variété non précisée" (perte) pour
+    la même variété non précisée ne matchent jamais dans les dicts d'agrégation."""
+    if not variete or variete == LABEL_VARIETE_NON_PRECISEE:
+        return None
+    return variete
 
 
 import logging as _logging
@@ -867,7 +885,10 @@ def calcul_stock_par_variete(
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
     pertes_raw = _q_pertes.all()
-    pertes: Dict[Optional[str], float] = {v: (q or 0) for v, q in pertes_raw}
+    pertes: Dict[Optional[str], float] = {}
+    for v, q in pertes_raw:
+        vk = _norm_variete(v)
+        pertes[vk] = pertes.get(vk, 0.0) + (q or 0)
 
     # ── 3. Récoltes brutes par variété (agrégation Python pour gérer multi-unités) ──
     _q_recoltes = (
@@ -910,13 +931,13 @@ def calcul_stock_par_variete(
 
     for variete, unite, qte, rang, date_ev in plantations_raw:
         total = (qte or 0) * (rang or 1)
-        _accumuler_variete(variete, unite or "plants", total, date_ev)
+        _accumuler_variete(_norm_variete(variete), unite or "plants", total, date_ev)
 
     # [US-037 / CA4, CA5] Semis pleine terre fusionnés dans le même pool — pas de
     # rang appliqué (un semis à la volée n'a pas de notion de rang), pas de
     # conversion d'unité.
     for variete, unite, qte, date_ev in semis_pt_raw:
-        _accumuler_variete(variete, unite or "graines", qte or 0.0, date_ev)
+        _accumuler_variete(_norm_variete(variete), unite or "graines", qte or 0.0, date_ev)
 
     plantes_resolues = _resoudre_unite_dominante(plantes_par_unite, contexte=f"{culture} par variété")
     plantes: Dict[Optional[str], dict] = {
@@ -944,6 +965,7 @@ def calcul_stock_par_variete(
     pieces_brut: Dict[Optional[str], dict] = {}
     poids_g_brut: Dict[Optional[str], dict] = {}
     for variete, unite, qte, date_ev in recoltes_raw:
+        variete = _norm_variete(variete)
         unite_l = (unite or "").lower()
         if unite_l in _UNITE_TO_G_V:
             _accumulate(poids_g_brut, variete, (qte or 0) * _UNITE_TO_G_V[unite_l], unite_l, date_ev)
@@ -1002,7 +1024,7 @@ def calcul_stock_par_variete(
         rp = rendements.get(vkey, _empty_pool_entry())
         dates_recolte = [d for d in (r["date_max"], rp["date_max"]) if d]
         result.append({
-            "variete":                  vkey if vkey is not None else "Variété non précisée",
+            "variete":                  vkey if vkey is not None else LABEL_VARIETE_NON_PRECISEE,
             "plants_plantes":           p["total"],
             "plants_perdus":            pertes.get(vkey, 0.0),
             "nb_recoltes":              r["nb"],
@@ -1069,7 +1091,7 @@ def _parcelles_par_variete(
 
     result: Dict[str, List[str]] = {}
     for variete, parcelle_nom in _q_plant.all() + _q_semis.all():
-        v_key = variete if variete is not None else "Variété non précisée"
+        v_key = variete if variete is not None else LABEL_VARIETE_NON_PRECISEE
         noms = result.setdefault(v_key, [])
         nom = parcelle_nom or "Non localisé"
         if nom not in noms:
@@ -1147,7 +1169,7 @@ def calcul_stock_varietes(
         if cutoff is not None:
             _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
         varietes_avec_plantation = {
-            (row[0] if row[0] is not None else "Variété non précisée") for row in _q_plant_var.all()
+            (row[0] if row[0] is not None else LABEL_VARIETE_NON_PRECISEE) for row in _q_plant_var.all()
         }
 
         parcelles_var = _parcelles_par_variete(db, culture, date_ref, potager_id)
@@ -1194,7 +1216,7 @@ def calcul_stock_varietes(
         unite_v = "plants" if en_godet else g.get("unite_germination", "graines")
         result.append({
             "culture":           g["culture"],
-            "variete":           g["variete"] if g["variete"] is not None else "Variété non précisée",
+            "variete":           g["variete"] if g["variete"] is not None else LABEL_VARIETE_NON_PRECISEE,
             "etat":              "pep",
             "origine":           "pépinière",
             "parcelles":         [],

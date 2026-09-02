@@ -25,6 +25,7 @@ from unidecode import unidecode
 from database.models import Evenement, Parcelle
 from utils.stock import (
     calcul_stock_cultures, get_type_organe, _cutoff_dt, _cond_semis_pleine_terre,
+    _norm_variete, LABEL_VARIETE_NON_PRECISEE,
 )
 
 log = logging.getLogger("potager")
@@ -573,9 +574,18 @@ def calcul_occupation_parcelles(
     # ── 4. Construction du résultat final ─────────────────────────────────────
     today = ref_day  # [US-030] calcul d'âge relatif à la date de référence
 
+    # [fix bug EN PLACE non déduit sur le Plan] Cultures pour lesquelles il existe
+    # un groupe de plantation "sans variété" (variete_norm == "") — une perte ou
+    # récolte SANS variété doit être imputée à CE groupe précis (même logique que
+    # calcul_stock_par_variete côté écran Stocks), pas diluée sur toutes les
+    # variétés nommées : ces deux idées sont différentes (perte identifiée sur les
+    # plants non précisés vs perte réellement non attribuable, cf. spread ci-dessous).
+    cultures_avec_groupe_non_precise = {c for (c, v, _p, _u) in groupes if v == ""}
+
     # Pertes par (culture, variete_norm) pour corriger les nb_plants affichés dans le plan.
-    # Les pertes sans variete sont attribuées à toutes les varietes de la culture
-    # proportionnellement à leur poids dans le total planté.
+    # Les pertes sans variete sont attribuées au groupe "sans variété" de la culture
+    # s'il existe, sinon réparties sur toutes les varietes nommées proportionnellement
+    # à leur poids dans le total planté (seul cas où l'attribution est réellement inconnue).
     _q_pertes = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
         .filter(Evenement.type_action == "perte")
@@ -590,8 +600,11 @@ def calcul_occupation_parcelles(
     pertes_var: Dict[tuple, float] = {}
     pertes_sans_variete: Dict[str, float] = {}
     for c, v, q in pertes_raw:
-        if v:
-            pertes_var[(c, v)] = pertes_var.get((c, v), 0) + (q or 0)
+        v_norm = _norm_variete(v)
+        if v_norm:
+            pertes_var[(c, v_norm)] = pertes_var.get((c, v_norm), 0) + (q or 0)
+        elif c in cultures_avec_groupe_non_precise:
+            pertes_var[(c, "")] = pertes_var.get((c, ""), 0) + (q or 0)
         else:
             pertes_sans_variete[c] = pertes_sans_variete.get(c, 0) + (q or 0)
 
@@ -617,8 +630,11 @@ def calcul_occupation_parcelles(
     recoltes_var: Dict[tuple, float] = {}
     recoltes_sans_variete: Dict[str, float] = {}
     for c, v, q in recoltes_raw:
-        if v:
-            recoltes_var[(c, v)] = recoltes_var.get((c, v), 0) + (q or 0)
+        v_norm = _norm_variete(v)
+        if v_norm:
+            recoltes_var[(c, v_norm)] = recoltes_var.get((c, v_norm), 0) + (q or 0)
+        elif c in cultures_avec_groupe_non_precise:
+            recoltes_var[(c, "")] = recoltes_var.get((c, ""), 0) + (q or 0)
         else:
             recoltes_sans_variete[c] = recoltes_sans_variete.get(c, 0) + (q or 0)
 

@@ -81,6 +81,7 @@ from app.services import attributs_culture as svc_attributs  # [US-161]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164]
 from app.services import associations as svc_associations  # [US-163]
 from app.services import rotation as svc_rotation  # [US-163]
+from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from app.services import menu_commandes as svc_menu_commandes  # [US-171]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
@@ -1811,6 +1812,7 @@ async def _parse_multi(update, lignes: list, msg=None):
 
     log.info(f"📋 MULTI-LIGNES    : {len(lignes)} phrases à traiter séparément")
     total_saved = []
+    avertissements: list[str] = []  # [US-167]
 
     for i, ligne in enumerate(lignes, 1):
         log.info(f"  [{i}/{len(lignes)}] Traitement : {ligne}")
@@ -1847,6 +1849,11 @@ async def _parse_multi(update, lignes: list, msg=None):
 
         db = SessionLocal()
         try:
+            # [US-167] Évalué AVANT l'écriture ci-dessous, sur l'historique de
+            # cette ligne — sinon l'événement qu'on est en train de créer se
+            # compterait comme son propre antécédent de rotation.
+            avertissements.extend(_evaluer_avertissements_avant_ecriture(db, current_context(), items))
+
             for parsed in items:
                 event = svc_evenements.creer_evenement_ligne(db, current_context(), parsed, ligne)
                 log.info(f"  💾 DB SAVE : id={event.id} | action={event.type_action} | culture={event.culture} | parcelle_id={event.parcelle_id} | date={event.date}")
@@ -1872,6 +1879,13 @@ async def _parse_multi(update, lignes: list, msg=None):
     recap = "\n".join(lines_out)
     if msg:   await msg.edit_text(recap, parse_mode="Markdown")
     else:     await update.message.reply_text(recap, parse_mode="Markdown")
+
+    # [US-167 / CA1-CA3] Avertissement de rotation/association (calculé plus
+    # haut, avant l'écriture) — après la confirmation d'enregistrement
+    # ci-dessus, jamais à sa place.
+    if avertissements:
+        await update.message.reply_text("\n".join(avertissements))
+
     await update.message.reply_text(
         "_Que voulez-vous faire ensuite ?_",
         parse_mode="Markdown",
@@ -2406,6 +2420,17 @@ def _stock_variete_jardin(v: dict) -> int:
     return stock_actif_variete(v)
 
 
+def _variete_reelle(v: dict) -> str | None:
+    """[fix bug EN PLACE non déduit] `calcul_stock_par_variete()` substitue déjà
+    `variete=None` par le libellé humain LABEL_VARIETE_NON_PRECISEE pour l'affichage.
+    Ramène ce libellé à None avant toute réutilisation comme donnée (callback_data,
+    pré-remplissage d'un item) — sinon le libellé littéral finit stocké tel quel dans
+    Evenement.variete au lieu de NULL, et devient invisible à l'agrégation des pertes."""
+    from utils.stock import LABEL_VARIETE_NON_PRECISEE
+    variete = v.get("variete")
+    return None if not variete or variete == LABEL_VARIETE_NON_PRECISEE else variete
+
+
 async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Flux disambiguation perte en 2 étapes :
@@ -2461,7 +2486,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         elif len(jardin_varietes) == 1:
             _PERTE_PENDING.pop(user_id, None)
             item["action"]  = "perte"
-            item["variete"] = jardin_varietes[0]["variete"]
+            item["variete"] = _variete_reelle(jardin_varietes[0])
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
             await _save_perte_item(update, item, texte)
@@ -2472,7 +2497,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             for v in jardin_varietes:
                 var   = v["variete"] or "non précisée"
                 stock = _stock_variete_jardin(v)
-                cb    = v["variete"] if v["variete"] else "__none__"
+                cb    = _variete_reelle(v) or "__none__"
                 buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
             buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
             await query.edit_message_text(
@@ -2604,11 +2629,46 @@ def _build_action_summary(items: list[dict]) -> str:
         return "\n".join(lines)
 
 
+def _evaluer_avertissements_avant_ecriture(db, tenant_ctx, items: list[dict]) -> list[str]:
+    """[US-167 / CA1, CA10] Avertissements de rotation/association pour les
+    items plantation/semis d'un lot — évalués AVANT toute écriture, sur
+    l'historique tel qu'il était avant cette sauvegarde. Appeler ceci APRÈS
+    avoir écrit les événements ferait apparaître l'événement tout juste créé
+    comme son propre antécédent dans la requête de `rotation.evaluer_rotation`
+    (faux conflit auto-référentiel — bug constaté en production le 02/09/2026 :
+    une plantation de tomate sur une parcelle sans aucun autre antécédent se
+    voyait citée comme « déjà présente cette année », elle-même). Le message
+    reste affiché après la confirmation d'enregistrement chez l'appelant —
+    seul le calcul est avancé plus tôt, l'ordre d'affichage ne change pas."""
+    messages: list[str] = []
+    for parsed in items:
+        if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+            continue
+        nom_parcelle = parsed.get("parcelle")
+        if not nom_parcelle:
+            continue
+        parcelle = resolve_parcelle(db, nom_parcelle, potager_id=tenant_ctx.potager_id)
+        if parcelle is None:
+            continue
+        messages.extend(
+            svc_avertissements.evaluer_avertissements_plantation(
+                db, tenant_ctx, parcelle.id, parsed.get("culture")
+            )
+        )
+    return messages
+
+
 async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> None:
     """[US-021] Sauvegarde effective en base après confirmation utilisateur."""
     db = SessionLocal()
     saved_items = []
     try:
+        # [US-167] Évalué AVANT toute écriture ci-dessous — voir la docstring
+        # de `_evaluer_avertissements_avant_ecriture` pour la raison (sinon
+        # l'événement qu'on est en train de créer se compte comme son propre
+        # antécédent de rotation).
+        avertissements = _evaluer_avertissements_avant_ecriture(db, current_context(), items)
+
         for parsed in items:
             # [US-049] La résolution reste ici (nécessaire pour construire l'Evenement
             # avec le bon parcelle_id), mais le BLOCAGE si la parcelle ne résout à rien
@@ -2670,6 +2730,13 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
         recap_multi = "\n".join(lines_out)
         if msg:  await msg.edit_text(recap_multi, parse_mode="Markdown")
         else:    await update.effective_message.reply_text(recap_multi, parse_mode="Markdown")
+
+    # [US-167 / CA1-CA3] Avertissement de rotation/association (calculé plus haut,
+    # avant l'écriture) — TOUJOURS affiché après la confirmation ci-dessus,
+    # jamais à sa place. Un simple message, pas une question : aucun état
+    # conversationnel n'est ouvert ici.
+    if avertissements:
+        await update.effective_message.reply_text("\n".join(avertissements))
 
     await update.effective_message.reply_text(
         "_Que voulez-vous faire ensuite ?_",
@@ -3445,7 +3512,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 await _save_perte_item(update, item, texte)
                 return
             elif len(jardin_actif) == 1:
-                item["variete"] = jardin_actif[0]["variete"]
+                item["variete"] = _variete_reelle(jardin_actif[0])
                 log.info(f"[perte-auto] Jardin, variété unique '{item['variete']}'")
                 await _save_perte_item(update, item, texte)
                 return
@@ -3461,7 +3528,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 for v in jardin_actif:
                     var   = v["variete"] or "non précisée"
                     stock = _stock_variete_jardin(v)
-                    cb    = v["variete"] if v["variete"] else "__none__"
+                    cb    = _variete_reelle(v) or "__none__"
                     buttons.append([InlineKeyboardButton(f"🌿 {var} ({stock} plants actifs)", callback_data=f"perte_var_j:{cb}")])
                 buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="perte_cancel")])
                 await message.reply_text(
@@ -3546,7 +3613,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         # (même logique que récolte : auto-remplir si unique, menu si plusieurs)
         if not godets_pertinents and jardin_actif and not variete:
             if len(jardin_actif) == 1:
-                item["variete"] = jardin_actif[0]["variete"]
+                item["variete"] = _variete_reelle(jardin_actif[0])
                 log.info("[perte-auto] Aucun godet, variété unique jardin '%s' → auto-remplie", item["variete"])
                 # pas de return → continue vers la confirmation
             else:
@@ -3559,7 +3626,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 buttons_var = [
                     [InlineKeyboardButton(
                         f"🌿 {v['variete'] or 'non précisée'} ({_stock_variete_jardin(v)} plants actifs)",
-                        callback_data=f"perte_var_j:{v['variete'] if v['variete'] else '__none__'}",
+                        callback_data=f"perte_var_j:{_variete_reelle(v) or '__none__'}",
                     )]
                     for v in jardin_actif
                 ]

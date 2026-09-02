@@ -105,7 +105,10 @@ from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
+from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
+from utils.parcelles import resolve_parcelle  # [US-167]
+from utils.actions import normalize_action  # [US-167]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
@@ -1235,6 +1238,26 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
     db = SessionLocal()
     saved = []
     try:
+        # [US-167 / CA1-CA3] Avertissement de rotation/association — évalué
+        # AVANT toute écriture ci-dessous, sur l'historique tel qu'il était
+        # avant cette sauvegarde. L'évaluer après aurait fait apparaître
+        # l'événement tout juste créé comme son propre antécédent dans
+        # `rotation.evaluer_rotation` (faux conflit auto-référentiel). Additif
+        # au contrat JSON existant, ne modifie aucun champ déjà retourné.
+        avertissements = []
+        for parsed in items:
+            if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+                continue
+            nom_parcelle = parsed.get("parcelle")
+            if not nom_parcelle:
+                continue
+            parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
+            if parcelle is None:
+                continue
+            avertissements.extend(
+                svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
+            )
+
         for parsed in items:
             event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, req.texte)
             add_to_rag(event.id, parsed)
@@ -1247,6 +1270,7 @@ def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx))
             "event_id"       : saved[0]["event_id"] if saved else None,
             "parsed"         : saved[0]["parsed"]   if saved else None,
             "texte_original" : req.texte,
+            "avertissements" : avertissements,
         }
     except svc_evenements.EvenementInvalideError as e:
         db.rollback()
@@ -1356,7 +1380,25 @@ async def voice(
 
         db = SessionLocal()
         saved_parsed: list[dict] = []
+        avertissements: list[str] = []
         try:
+            # [US-167 / CA1-CA3] Évalué AVANT toute écriture ci-dessous — voir
+            # le commentaire équivalent dans POST /parse pour la raison (sinon
+            # l'événement tout juste créé se compte comme son propre
+            # antécédent de rotation).
+            for parsed in items:
+                if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
+                    continue
+                nom_parcelle = parsed.get("parcelle")
+                if not nom_parcelle:
+                    continue
+                parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
+                if parcelle is None:
+                    continue
+                avertissements.extend(
+                    svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
+                )
+
             for parsed in items:
                 event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
                 add_to_rag(event.id, parsed)
@@ -1400,6 +1442,7 @@ async def voice(
             "recap"         : recap,
             "session_id"    : session_id,
             "nb_evenements" : len(saved_parsed),
+            "avertissements": avertissements,
         }
 
     # 6. Mettre à jour la session (historique multi-tours)
