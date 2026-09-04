@@ -1,0 +1,43 @@
+question,fragment_attendu
+pourquoi mes tomates ont le cul noir ?,agronomie/tomate-cul-noir.md#00-ce-qu-est-le-cul-noir-de-la-tomate
+c'est quoi ces taches noires sous mes tomates ?,agronomie/tomate-cul-noir.md#00-ce-qu-est-le-cul-noir-de-la-tomate
+le cul noir vient-il d'un manque de calcium ?,agronomie/tomate-cul-noir.md#01-pourquoi-le-calcium-manque-alors-que-le-sol-en-contient
+comment corriger le cul noir en cours de saison ?,agronomie/tomate-cul-noir.md#02-comment-corriger-le-cul-noir-en-cours-de-saison
+mes feuilles de tomate ont des taches brunes huileuses,agronomie/mildiou-tomate.md#00-reconnaitre-le-mildiou-sur-une-tomate
+comment reconnaitre le mildiou sur une tomate ?,agronomie/mildiou-tomate.md#00-reconnaitre-le-mildiou-sur-une-tomate
+par quel temps le mildiou se declenche ?,agronomie/mildiou-tomate.md#01-les-conditions-qui-declenchent-le-mildiou
+comment limiter le mildiou sans traitement ?,agronomie/mildiou-tomate.md#02-limiter-le-mildiou-sans-traitement
+a quelle profondeur semer les graines de tomate ?,agronomie/semis-tomate.md#00-profondeur-et-chaleur-necessaires-au-semis-de-tomate
+quelle temperature pour la germination des tomates ?,agronomie/semis-tomate.md#00-profondeur-et-chaleur-necessaires-au-semis-de-tomate
+quand repiquer mes semis de tomate en godet ?,agronomie/semis-tomate.md#01-repiquer-en-godet-les-jeunes-plants-de-tomate
+faut-il enterrer la tige au repiquage ?,agronomie/semis-tomate.md#01-repiquer-en-godet-les-jeunes-plants-de-tomate
+mes semis de tomates font des tiges toutes fines et molles,agronomie/semis-tomate.md#02-eviter-les-plants-filants-au-semis
+pourquoi mes plants filent ?,agronomie/semis-tomate.md#02-eviter-les-plants-filants-au-semis
+j'ai un feutrage blanc poudreux sur les feuilles de courgette,agronomie/courgette-oidium.md#00-reconnaitre-l-oidium-sur-les-feuilles-de-courgette
+c'est quoi l'oidium ?,agronomie/courgette-oidium.md#00-reconnaitre-l-oidium-sur-les-feuilles-de-courgette
+l'oidium arrive par quel temps ?,agronomie/courgette-oidium.md#01-ce-qui-favorise-l-oidium
+comment freiner l'oidium sur mes courgettes ?,agronomie/courgette-oidium.md#02-ralentir-l-oidium-sur-une-courgette-en-place
+a quel moment de la journee faut-il arroser ?,agronomie/arrosage-et-paillage.md#00-a-quel-moment-de-la-journee-arroser
+vaut-il mieux arroser peu et souvent ou beaucoup et espace ?,agronomie/arrosage-et-paillage.md#01-arroser-abondamment-et-espace-plutot-que-peu-et-souvent
+a quoi sert le paillage ?,agronomie/arrosage-et-paillage.md#02-ce-que-le-paillage-change-reellement
+quelle epaisseur de paillage faut-il mettre ?,agronomie/arrosage-et-paillage.md#02-ce-que-le-paillage-change-reellement
+pourquoi faire une rotation des cultures ?,agronomie/rotation-des-cultures.md#00-pourquoi-ne-pas-remettre-la-meme-famille-au-meme-endroit
+c'est quoi le delai de retour d'une famille botanique ?,agronomie/rotation-des-cultures.md#01-ce-qu-est-le-delai-de-retour-d-une-famille
+combien d'annees attendre avant de remettre des solanacees ?,agronomie/rotation-des-cultures.md#01-ce-qu-est-le-delai-de-retour-d-une-famille
+faire suivre une legumineuse apres une culture exigeante ?,agronomie/rotation-des-cultures.md#02-rotation-et-gourmandise-des-cultures
+mes salades sont mangees la nuit il reste que le trognon,agronomie/limaces.md#00-reconnaitre-des-degats-de-limaces
+comment reconnaitre des degats de limaces ?,agronomie/limaces.md#00-reconnaitre-des-degats-de-limaces
+quelles cultures sont les plus exposees aux limaces ?,agronomie/limaces.md#01-les-cultures-les-plus-exposees-aux-limaces
+comment reduire la pression des limaces ?,agronomie/limaces.md#02-reduire-la-pression-des-limaces
+a quoi sert le purin de consoude ?,agronomie/purin-de-consoude.md#00-ce-qu-apporte-le-purin-de-consoude
+comment preparer du purin de consoude ?,agronomie/purin-de-consoude.md#01-preparer-un-purin-de-consoude
+a quelle dose diluer le purin de consoude ?,agronomie/purin-de-consoude.md#02-doser-le-purin-de-consoude-a-l-usage
+comment enregistrer un geste au potager depuis le bot ?,doc_app/enregistrer-un-evenement.md#00-dicter-un-geste-au-bot-plutot-que-de-le-saisir
+comment corriger un evenement mal compris ?,doc_app/enregistrer-un-evenement.md#01-corriger-un-evenement-mal-compris
+puis-je enregistrer un geste a une date passee ?,doc_app/enregistrer-un-evenement.md#02-enregistrer-un-geste-a-une-date-passee
+a quoi sert une parcelle ?,doc_app/parcelles-et-plan.md#00-a-quoi-sert-une-parcelle
+est-ce que je perds l'historique si je renomme une parcelle ?,doc_app/parcelles-et-plan.md#01-renommer-une-parcelle-sans-perdre-son-historique
+comment savoir quelles parcelles sont libres ?,doc_app/parcelles-et-plan.md#02-savoir-quelles-parcelles-sont-libres
+pourquoi mon stock de tomate ne diminue pas quand je recolte ?,doc_app/stock-et-recoltes.md#00-ce-que-le-stock-compte-selon-le-type-de-culture
+comment consulter le rendement cumule d'une culture ?,doc_app/stock-et-recoltes.md#01-consulter-le-rendement-cumule-d-une-culture
+quelle difference entre declarer une perte et une recolte ?,doc_app/stock-et-recoltes.md#02-declarer-une-perte-plutot-qu-une-recolte

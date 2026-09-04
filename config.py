@@ -89,3 +89,34 @@ GROQ_RETRY_MAX_S = float(os.environ.get("GROQ_RETRY_MAX_S", "2"))
 # autorisé à consulter les métriques de routage. Absent/vide → endpoints admin
 # totalement inaccessibles (403), pas de repli sur un compte par défaut.
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-098] Étage 2 — socle de connaissance (recherche plein texte)
+# -----------------------------------------------------------------------------
+# RAG_ACTIF est un INTERRUPTEUR, pas un verrou de livraison : tant que le corpus
+# est vide (il l'est jusqu'à US-099/US-140/US-141), l'étage est inerte de
+# lui-même et la cascade se comporte exactement comme avant. Il existe pour
+# qu'on puisse le couper en production SANS redéploiement le jour où la mesure
+# du CA13 (`python tools/mesurer_corpus_savoir.py`) montrerait que le bon
+# fragment ne sort pas dans les trois premiers résultats — cette mesure
+# conditionne l'activation de l'étage, elle ne se suppose pas.
+RAG_ACTIF = os.environ.get("RAG_ACTIF", "1").strip().lower() not in ("0", "false", "non", "")
+
+# Au-dessus de ce score de confiance global, et à condition que le passage soit
+# marqué `verifie`, la réponse est servie telle quelle à coût nul (CA7). En
+# dessous, le contexte descend à l'étage de raisonnement.
+#
+# ⚠️ La valeur 0.6 est étalonnée sur le repli SQLite des tests, où le score est
+# une couverture de termes. En production, le score est un `ts_rank_cd`
+# normalisé PostgreSQL : la MÊME question n'y produit PAS le même nombre. Les
+# deux échelles sont bornées dans [0, 1] mais ne se superposent pas, et un seuil
+# repris tel quel rendrait l'étage soit muet, soit trop bavard. C'est
+# précisément ce que `python tools/mesurer_corpus_savoir.py` doit établir contre
+# la production avant l'arrivée du corpus (US-099/US-140) — la valeur se règle
+# alors ici, par variable d'environnement, sans redéploiement.
+RAG_SEUIL_CONFIANCE = float(os.environ.get("RAG_SEUIL_CONFIANCE", "0.6"))
+
+# Nombre de passages retenus par recherche. 3 par défaut, comme la cible du
+# CA13 (« le bon fragment figure dans les trois premiers résultats ») : au-delà,
+# on allongerait le contexte envoyé à l'étage 3 sans améliorer la mesure.
+RAG_MAX_PASSAGES = int(os.environ.get("RAG_MAX_PASSAGES", "3"))

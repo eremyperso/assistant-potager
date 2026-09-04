@@ -1,3 +1,59 @@
+## [v3.53.0] — 2026-09-04
+
+### 🚀 Nouveautés
+- Retrouve désormais une fiche par les mots que le jardinier emploie réellement : chaque section déclare ses formulations équivalentes (« cul noir » aussi bien que « nécrose apicale »), indexées au poids d'un titre. Sur 24 fiches et 19 questions réellement dictées, mesuré contre PostgreSQL, le bon passage sort en tête 17 fois sur 19 et figure dans les trois premiers 19 fois sur 19 — contre 3 sur 12 avant ce travail, sans un changement de moteur de recherche (US-098)
+- Retrouve une fiche que le jardinier tape **sans accents**, comme sur un clavier mobile : « quand recolter mes carottes ? » servait une réponse sur les carottes fourchues, là où la même question accentuée trouvait la bonne section. PostgreSQL lemmatise mais ne replie pas les accents — « récolter » et « recolter » y étaient deux mots sans rapport. Le défaut touchait les mots les plus courants du potager : récolter, éclaircir, flétrir, arroser, semer, oïdium, développé (US-098)
+
+### 🐛 Corrections
+- Ne sert plus au jardinier les annotations de rédaction d'une fiche : le message commençait par « **Intention :** diagnostic / **Organes concernés :** fruit / **On parle aussi de :**… » avant d'en venir à la réponse
+- Ne répond plus par la section « Sources et licence » d'une fiche, ni par son titre de tête recopié : un fragment sur trois n'était pas du contenu, et ils sortaient avec assez de confiance pour être servis comme faisant autorité
+- Accepte les conventions d'écriture d'une fiche relue par un humain — valeurs entre guillemets, blocs en liste (`sources:`, `index_terms:`) — au lieu de refuser le fichier entier sur la première ligne venue
+- N'inflate plus le classement d'une section dont les alias répètent le nom de la culture : « ver carotte ; galeries carotte ; mouche de la carotte » triplait son poids sur un mot que le titre du document porte déjà sur tous les fragments de la fiche, et cette seule section remportait « comment éclaircir » comme « quand récolter »
+- Dit enfin pourquoi une réponse n'a pas été servie telle quelle : le journal annonçait « savoir insuffisant (score=0.93) » alors que 0.93 est excellent et que la vraie cause était une fiche déclarée non relue — deux situations qui n'appellent pas le même travail
+- Mémorise de nouveau les réponses de savoir courantes : le contrôle anti-fuite cherchait les noms propres du potager **au milieu des mots**, si bien qu'une variété nommée « verte » se reconnaissait dans « une racine ou*verte* », « serre » dans « plantules *serre*es » et « autre » dans « d'*autre*s insectes ». Sur le corpus agronomique, 23 fragments sur 96 tombaient sous ce couperet : la moindre réponse qui les reprenait était refusée au cache et repayait un appel modèle complet à chaque fois qu'on reposait la question (US-095 / CA8)
+- N'utilise plus comme témoin de fuite les valeurs génériques du champ libre `variete` — « autre », « blanc », « cerise », « variété non précisée », « récolte de 2025 ». Ce sont des mots français ordinaires, pas des noms que seul ce potager emploie : les retenir ne protégeait rien et interdisait de mémoriser le savoir le plus banal (US-095 / CA8)
+- Indique de nouveau d'où vient une réponse construite sur le corpus : sur le chemin où le modèle REDIGE à partir des passages trouvés, la mention d'origine disparaissait — seule la réponse servie mot pour mot en portait une. La réponse se termine désormais par « _D'après : … _ ». Ce n'est pas qu'un confort de lecture : `referentiel_source` porte des licences à attribution obligatoire à l'affichage (CC BY 4.0), qui couvrent aussi les œuvres dérivées — et une réponse rédigée à partir du texte en est une (US-098 / CA7)
+- Mémorise de nouveau les réponses dérivées d'une fiche au titre de section un peu long : `questions_cache.fragment_id` était borné à 120 caractères (dimensionné avant qu'aucun fragment n'existe) alors qu'une référence de fragment n'a pas de borne. 19 des 96 fragments du premier corpus réel la dépassaient — la mémorisation échouait sur un DataError rattrapé, donc invisible, et la question repayait un appel modèle complet à chaque fois qu'on la reposait (US-098 / CA11)
+- Nomme TOUS les passages retenus dans la ligne de journal `SAVOIR`, au lieu de n'en donner que le nombre : un `passages=3` muet se lit comme un échec de recherche alors que la bonne section est là. Les nommer tous, et pas seulement celui de tête : les trois partent ensemble dans le prompt, et la réponse se construit souvent sur le deuxième et le troisième — nommer le seul premier envoie relire la mauvaise fiche
+
+### 🔧 Améliorations techniques
+- Ajoute `docs/PLAN_TEST_MANUEL_CASCADE_ROUTAGE.md` : comment provoquer délibérément chacun des états de `routage_logs` depuis le bot, en douze messages, avec les couples nature/origine vérifiés contre la base et les deux cas qui ne se devinent pas — l'homonymie de `origine=cache` entre deux caches distincts, et `etage=savoir` inatteignable tant qu'aucune fiche n'est relue (US-097/US-098)
+- Aligne PostgreSQL sur le repli SQLite des tests, qui retirait déjà les accents : les deux moteurs divergeaient en silence, et toute mesure locale était systématiquement optimiste sur les termes accentués. Une mesure en test redevient prédictive de la production (US-098)
+- N'indexe pas les termes déclarés au niveau du document : la décision est mesurée et non de principe — ils pèsent identiquement sur toutes les sections d'une fiche, donc ils diluent exactement ce que les alias de section discriminent. Ils gardent leur valeur d'index de relecture dans le fichier (US-098)
+- Accepte `niveau_confiance: a-valider` comme l'état normal d'une fiche pas encore relue phrase par phrase, replié sur `indicatif` : elle descend en contexte vers le raisonnement au lieu d'être servie mot pour mot (US-098)
+- Sépare ce qui pèse à l'index de ce qui s'affiche : les alias vivent dans le vecteur de recherche, jamais dans le texte restitué — sans schéma nouveau, ils se réécrivent à chaque réingestion (US-098)
+- Corrige un exemple faux : `french_stem` ne rapproche pas « mildious » de « mildiou » — le stemmer ne traite pas ce pluriel, et l'exemple laissait croire à une couverture qui n'existe pas. Un pluriel irrégulier se déclare comme n'importe quel autre alias (US-098)
+- Documente le format de fiche mesuré dans `data/connaissance/README.md` et le runbook d'alimentation, avec les chiffres qui justifient chaque règle plutôt que des principes (US-098)
+
+### 💾 Base de données
+- Complète `migration_v42.sql` (non encore déployée) : elle crée aussi la configuration de recherche `french_sans_accent`, dérivée de `french` avec le dictionnaire `unaccent`, et vérifie son effet — `to_tsvector('french_sans_accent', 'récolter recolter')` doit rendre un seul lexème. Aucune table, aucune colonne, aucun index ajouté ; le rollback l'emporte (US-098)
+- ⚠️ Sur une base où le socle est **déjà** installé, appliquer cette version demande de vider `knowledge_chunks` / `knowledge_documents` avant de réingérer : les vecteurs existants ont été écrits avec l'ancienne configuration, et l'empreinte des fichiers n'ayant pas changé, l'outil les déclarerait « inchangés ». Sans perte — le dépôt est la source, la base l'index (US-098)
+
+## [v3.52.0] — 2026-09-03
+
+### 🚀 Nouveautés
+- Ajoute un socle de connaissance interrogeable en recherche plein texte française : une question de savoir consulte désormais un corpus écrit et relu **avant** tout appel de modèle, et le passage trouvé est servi mot pour mot, à coût nul (US-098)
+- Fait descendre les passages trouvés vers l'étage de raisonnement quand la confiance est insuffisante, au lieu de les jeter : une recherche à demi concluante enrichit la réponse plutôt que de la remplacer (US-098)
+- Ne sert jamais telle quelle une fiche qui se déclare elle-même incertaine (`indicatif`) — elle descend en contexte, où le raisonnement peut la nuancer (US-098)
+- Ajoute `python tools/ingerer_connaissance.py`, qui projette les fiches Markdown versionnées du dépôt vers l'index de recherche : idempotent, rejouable, sans appel réseau ni appel de modèle (US-098)
+- Ajoute `python tools/mesurer_corpus_savoir.py`, qui mesure sur 42 questions réelles si le bon fragment sort dans les trois premiers résultats, et à quelle latence (US-098)
+- Publie sur `/admin/savoir/lacunes` les questions auxquelles la base de connaissance ne répond pas : c'est cette liste qui dira quoi écrire dans les corpus à venir (US-098)
+
+### 🔧 Améliorations techniques
+- Livre le contenant sans le contenu : `data/connaissance/` ne contient aucune fiche, elles arrivent avec US-099 (fonctionnement de l'application), US-140 (agronomie) et US-141 (mémoire du potager) — tant que rien n'est ingéré, l'étage est inerte et la cascade se comporte exactement comme avant (US-098)
+- Porte le filtre d'isolation inter-potagers par la fonction de recherche elle-même plutôt que par ses appelants, et le vérifie statiquement : aucun module du dépôt ne peut interroger la table sans lui (US-098)
+- Rattache un fragment à sa culture par référence et non par libellé — renommer une culture depuis le bot n'orpheline aucun fragment, là où un libellé texte aurait rejoué l'erreur corrigée par `migration_v12` (US-098)
+- Invalide toutes les réponses mémorisées d'une fiche dès qu'elle est corrigée, y compris celles dont la section n'a pas été renommée : c'est justement la correction la plus fréquente (US-098)
+- Signale à l'ingestion les fragments qui n'ont pas de sens seuls — trop courts, ou ouverts par un pronom de reprise — plutôt que de les indexer en silence (US-098)
+- Journalise le score et l'issue de chaque recherche de savoir dans `routage_logs`, pour que « à quoi la base ne répond-elle pas ? » soit une requête et non une lecture de fichiers de logs (US-098)
+- Rappelle dans son propre rapport de mesure qu'une mesure sur SQLite ne vaut pas décision d'activation en production : le score de PostgreSQL n'est pas sur la même échelle, et le seuil de confiance doit y être réétalonné (US-098)
+- Ajoute l'interrupteur `RAG_ACTIF` pour couper l'étage du savoir en production sans redéploiement (US-098)
+
+### 💾 Base de données
+- Ajoute `migration_v42.sql` : tables `knowledge_documents` et `knowledge_chunks`, index GIN en dictionnaire français explicite, isolation RLS sur les deux tables, et colonnes `score_savoir` / `issue_savoir` sur `routage_logs` — rollback documenté dans `rollback_v42.sql` (US-098)
+- Crée la colonne d'embedding vide et volontairement inutilisée, sans extension ni dépendance nouvelle : elle évite de rouvrir cette table le jour où la recherche sémantique sera décidée (US-098)
+- Emporte la connaissance privée d'un potager dans sa purge physique ; le savoir global, qui n'appartient à personne, n'est jamais touché (US-098)
+
 ## [v3.51.0] — 2026-09-02
 
 ### 🚀 Nouveautés

@@ -23,6 +23,7 @@ from app.services.context import TenantContext
 from app.services.permissions import require_role
 from app.services import auth as svc_auth
 from app.services import cache_questions as svc_cache_questions
+from app.services import connaissance as svc_connaissance
 from app.services import potager_actif as svc_potager_actif
 from app.services import telegram_notify as svc_telegram_notify
 from database.db import tenant_scope
@@ -516,6 +517,9 @@ def purger_potager(db: Session, potager_id: int) -> dict:
             # stockee (les entrees ne portent qu'un aiguillage), mais elles
             # nomment ses cultures et ses parcelles. Elles partent avec lui.
             "questions_cache": svc_cache_questions.purger_potager(db, potager_id),
+            # [US-098] Connaissance PRIVEE du potager (US-141). Le savoir global
+            # (`potager_id IS NULL`) n'appartient a personne et n'est pas touche.
+            "knowledge_chunks": svc_connaissance.purger_potager(db, potager_id),
         }
         db.delete(potager)
         db.commit()
@@ -524,10 +528,11 @@ def purger_potager(db: Session, potager_id: int) -> dict:
     log.info(
         "[US-084] Purge physique : potager_id=%s nom=%r evenements=%s parcelles=%s "
         "invitations=%s culture_config=%s membres=%s routage_logs=%s routage_retours=%s "
-        "questions_cache=%s",
+        "questions_cache=%s knowledge_chunks=%s",
         potager_id, nom, volumes["evenements"], volumes["parcelles"],
         volumes["invitations"], volumes["culture_config"], volumes["membres"],
         volumes["routage_logs"], volumes["routage_retours"], volumes["questions_cache"],
+        volumes["knowledge_chunks"],
     )
     return {"potager_id": potager_id, "nom": nom, "purge": True, "volumes": volumes}
 

@@ -38,14 +38,20 @@ n'ai aucune récolte de concombre enregistrée » est une réponse exacte, pas u
 l'absence de toute famille matchée, ou un agent SQL qui n'a lui-même rien
 trouvé, la déclenche encore. Voir le commentaire au point d'appel.
 
-Portée volontairement limitée à ce que le code sait déjà faire aujourd'hui :
-l'étage 2 (RAG / connaissance, US-098) et l'étage 3 (raisonnement multi-sources,
-US-142) ne sont pas encore construits. Les natures SAVOIR et HYBRIDE utilisent
-donc dès maintenant le seul étage de raisonnement disponible — un appel direct
-au modèle via la passerelle, éventuellement enrichi du contexte data quand il
-existe (HYBRIDE) — en attendant que ces étages soient livrés séparément. Le
-contrat de `classer_demande`/`repondre_avec_cascade` ne change pas ce jour-là :
-seul l'intérieur du branchement SAVOIR/HYBRIDE sera enrichi.
+[US-098] L'étage 2 (connaissance, recherche plein texte) est désormais branché
+sur la nature SAVOIR, exactement comme la docstring précédente l'annonçait :
+seul l'intérieur du branchement a changé, le contrat de
+`classer_demande`/`repondre_avec_cascade` est resté le même. Une question de
+savoir consulte d'abord `app.services.connaissance` — zéro jeton, zéro appel
+modèle ; si la confiance est suffisante, le passage écrit et relu est servi tel
+quel (CA7), sinon les passages trouvés DESCENDENT en contexte vers l'étage de
+raisonnement, qui reste seul à rédiger (CA8). Une confiance faible ne déclare
+donc jamais la question sans réponse : elle change d'étage.
+
+L'étage 3 multi-sources (US-142) n'est toujours pas construit : c'est
+`_repondre_raisonnement` qui en tient lieu, et la nature HYBRIDE ne consulte
+pas encore le socle de connaissance — croiser savoir et données du potager est
+précisément le périmètre d'US-142, pas celui d'US-098.
 
 [CA12] Coût moyen recalculé, routage inclus : les demandes aiguillées par une
 règle ou par le cache coûtent 0 jeton de routage (l'écrasante majorité, c'est
@@ -67,6 +73,7 @@ from typing import Optional
 from unidecode import unidecode
 
 from app.services.context import TenantContext
+from config import RAG_ACTIF, RAG_SEUIL_CONFIANCE
 from database.db import SessionLocal
 from database.models import RoutageLog
 from llm import passerelle
@@ -98,11 +105,14 @@ ORIGINE_MODELE = "modele"
 SEUIL_CONFIANCE_FAIBLE = 0.6
 
 # [US-097 / CA1] Étage ayant produit la réponse FINALE — distinct de l'origine
-# de la classification (regle/cache/modele ci-dessus). ETAGE_SAVOIR est déjà
-# défini pour le contrat de journalisation, mais n'est encore jamais écrit :
-# l'étage 2 (RAG, US-098) n'existe pas, les demandes SAVOIR sont aujourd'hui
-# honnêtement journalisées sous ETAGE_RAISONNEMENT (voir repondre_avec_cascade)
-# — c'est précisément l'écart que CA6 doit publier tel quel.
+# de la classification (regle/cache/modele ci-dessus).
+#
+# [US-098] ETAGE_SAVOIR est désormais réellement écrit : une question de savoir
+# à laquelle le socle de connaissance répond avec une confiance suffisante est
+# résolue à l'étage 2, à zéro jeton. Tant que le corpus est vide (US-099 /
+# US-140 / US-141 ne sont pas livrées), la recherche ne trouve rien et la
+# demande remonte à ETAGE_RAISONNEMENT — le journal continue donc de dire la
+# vérité, sans que l'écart ait besoin d'être commenté.
 ETAGE_DONNEE       = "donnee"
 ETAGE_SAVOIR       = "savoir"
 ETAGE_RAISONNEMENT = "raisonnement"
@@ -528,17 +538,31 @@ def classer_demande(texte: str, ctx: Optional[TenantContext] = None) -> Decision
 _PROMPT_FIXE_RAISONNEMENT = """Tu es l'assistant d'un potager amateur. Réponds à la question de jardinage
 posée, de façon concise et concrète (2 à 4 phrases). Si un contexte de données
 du potager est fourni, appuie-toi dessus ; sinon réponds depuis tes
-connaissances générales d'agronomie ou de fonctionnement de l'application."""
+connaissances générales d'agronomie ou de fonctionnement de l'application.
+Si des passages issus de la base de connaissance sont fournis, ils font
+autorité : appuie-toi dessus en priorité et ne les contredis pas."""
 
 
-def _repondre_raisonnement(ctx: TenantContext, question: str, contexte_donnees: str = "") -> str:
+def _repondre_raisonnement(
+    ctx: TenantContext,
+    question: str,
+    contexte_donnees: str = "",
+    contexte_savoir: str = "",
+) -> str:
     """Étage de dernier recours : raisonnement/savoir général via la passerelle.
     Peut lever `LLMIndisponibleError` — volontairement non rattrapée ici, pour
     que l'appelant (bot._ask_question) affiche le même repli dégradé standard
-    qu'aujourd'hui (US-092), sans dupliquer ce message."""
+    qu'aujourd'hui (US-092), sans dupliquer ce message.
+
+    [US-098 / CA7] `contexte_savoir` porte les passages que l'étage 2 a trouvés
+    sans assez de confiance pour les servir seuls. Les descendre ici plutôt que
+    les jeter est tout l'intérêt d'une cascade : une recherche à demi
+    concluante vaut mieux qu'une réponse de culture générale."""
     message = question
+    if contexte_savoir:
+        message = f"{message}\n\nPassages de la base de connaissance :\n{contexte_savoir}"
     if contexte_donnees:
-        message = f"{question}\n\nDonnées du potager déjà connues : {contexte_donnees}"
+        message = f"{message}\n\nDonnées du potager déjà connues : {contexte_donnees}"
     reponse = passerelle.appeler_chat(
         appel_type=passerelle.TYPE_QUESTION,
         ctx=ctx,
@@ -575,10 +599,17 @@ def _persister_routage_log(
     cascade_remontee: bool,
     latence_ms: int,
     tokens_consommes: int,
+    score_savoir: Optional[float] = None,
+    issue_savoir: Optional[str] = None,
 ) -> Optional[int]:
     """[CA1, CA2, CA4] Écrit une ligne dans `routage_logs`. Ne lève jamais : la
     journalisation est de l'observabilité, une panne d'écriture ne doit pas
-    faire échouer une réponse déjà produite."""
+    faire échouer une réponse déjà produite.
+
+    [US-098 / CA14] `score_savoir` et `issue_savoir` ne sont renseignés que si
+    la question a traversé l'étage 2. Ce sont eux qui rendent interrogeable la
+    seule question qui compte au démarrage du socle : « à quoi la base ne
+    répond-elle pas ? » — donc « que faut-il écrire ensuite ? »."""
     db = None
     try:
         db = SessionLocal()
@@ -592,6 +623,8 @@ def _persister_routage_log(
             confiance=decision.confiance,
             latence_ms=latence_ms,
             tokens_consommes=tokens_consommes,
+            score_savoir=score_savoir,
+            issue_savoir=issue_savoir,
         )
         db.add(entree)
         db.commit()
@@ -604,6 +637,40 @@ def _persister_routage_log(
                 db.rollback()
             except Exception:
                 pass
+        return None
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-098] Étage 2 — consultation du socle de connaissance
+# ─────────────────────────────────────────────────────────────────────────────
+def _consulter_savoir(ctx: TenantContext, question: str):
+    """Interroge l'étage 2 et rend son contexte, ou `None`.
+
+    Ne lève jamais et ne rédige jamais : l'étage du savoir est un ACCÉLÉRATEUR,
+    pas un passage obligé. Une base absente (migration non jouée), vide (le
+    corpus arrive avec US-099/US-140/US-141) ou en panne doit laisser la cascade
+    se dérouler exactement comme avant cette US — un socle indisponible ne peut
+    pas coûter une réponse au jardinier.
+
+    `RAG_ACTIF=0` court-circuite l'étage sans redéploiement, le jour où la
+    mesure du CA13 le justifierait (voir `config.py`).
+    """
+    from app.services import connaissance
+
+    if not RAG_ACTIF:
+        return None
+    db = None
+    try:
+        db = SessionLocal()
+        return connaissance.rechercher(db, ctx, question)
+    except Exception as e:
+        log.warning("⚠️  SAVOIR         │ recherche impossible (%s) — cascade poursuivie", type(e).__name__)
         return None
     finally:
         if db is not None:
@@ -629,7 +696,7 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     (`passerelle.demarrer_mesure_cascade`/`cumul_mesure_cascade`)."""
     # Imports locaux : `app.services` importe déjà `llm`, un import de module
     # créerait un cycle (même raison que `_regle_par_catalogue` ci-dessus).
-    from app.services import cache_questions
+    from app.services import cache_questions, connaissance
     from app.services.questions import repondre_question_detaille
 
     debut = time.monotonic()
@@ -661,6 +728,7 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     cascade_remontee = False
     etage_resolveur = ETAGE_RAISONNEMENT
     chiffree = None
+    savoir = None  # [US-098] ContexteConnaissance, si l'étage 2 a été consulté
 
     try:
         if decision.nature == NATURE_QUESTION_DATA:
@@ -681,9 +749,56 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
                 chiffree = None
                 texte = _repondre_raisonnement(ctx, question)
         elif decision.nature == NATURE_QUESTION_SAVOIR:
-            # [CA6] Étage 2 (RAG, US-098) non livré — journalisé honnêtement
-            # sous ETAGE_RAISONNEMENT, voir docstring d'ETAGE_SAVOIR ci-dessus.
-            texte = _repondre_raisonnement(ctx, question)
+            # ── [US-098] Étage 2 — le socle de connaissance ──────────────────
+            # Consulté AVANT tout appel modèle : c'est toute la raison d'être de
+            # cet étage. Une recherche qui trouve à coup sûr coûte zéro jeton ;
+            # une recherche qui ne trouve rien coûte zéro jeton aussi, et le
+            # raisonnement reprend exactement comme avant cette US.
+            savoir = _consulter_savoir(ctx, question)
+            if savoir is not None and savoir.suffisant:
+                # [CA7, CA8] Le texte servi est le passage HUMAINEMENT écrit,
+                # recopié — pas une génération. Zéro appel modèle sur ce chemin.
+                texte = connaissance.restituer(savoir)
+                etage_resolveur = ETAGE_SAVOIR
+            else:
+                # [CA7] Confiance insuffisante : le contexte DESCEND vers
+                # l'étage de raisonnement, il ne se perd pas. La question n'est
+                # jamais déclarée sans réponse.
+                passages = (
+                    connaissance.contexte_pour_raisonnement(savoir)
+                    if savoir is not None else ""
+                )
+                cascade_remontee = bool(passages)
+                if passages:
+                    # Deux causes très différentes mènent ici, et les confondre
+                    # envoie chercher un défaut de recherche là où il n'y en a
+                    # pas : un score sous le seuil, ou une fiche qui se déclare
+                    # elle-même non relue. Le log doit dire laquelle.
+                    motif = (
+                        "fiche %s, non servie telle quelle"
+                        % savoir.passages[0].niveau_confiance
+                        if savoir.confiance >= RAG_SEUIL_CONFIANCE
+                        else "score sous le seuil (%.2f)" % RAG_SEUIL_CONFIANCE
+                    )
+                    log.info(
+                        "↪️ ROUTEUR REMONTÉE : %s (score=%.2f) → raisonnement (1 saut) : '%s'",
+                        motif, savoir.confiance, question[:80],
+                    )
+                texte = _repondre_raisonnement(ctx, question, contexte_savoir=passages)
+                # [CA7] L'attribution suit le contenu, même quand le modèle l'a
+                # RÉÉCRIT. Sur le chemin `servi`, `restituer()` ajoute
+                # « _Source : … _ » ; sur celui-ci, la même matière partait sans
+                # aucune mention — le jardinier ne pouvait plus savoir que la
+                # réponse venait du corpus, ni de quelle fiche.
+                #
+                # Ce n'est pas qu'une commodité de lecture : `referentiel_source`
+                # porte des licences à attribution obligatoire à l'affichage
+                # (wind_river_greens est en CC BY 4.0). Une licence de ce type
+                # couvre aussi les œuvres DÉRIVÉES — une réponse rédigée à partir
+                # du texte en est une. Le libellé dit « d'après » et non
+                # « source » : le texte servi ici n'est pas celui de la fiche.
+                if savoir is not None and savoir.sources:
+                    texte = f"{texte}\n\n_D'après : {', '.join(savoir.sources)}_"
         else:
             # QUESTION_HYBRIDE (et ACTION mal aiguillée jusqu'ici) : tente
             # d'enrichir le raisonnement avec la donnée si elle existe, sans
@@ -699,11 +814,13 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     tokens_consommes = passerelle.cumul_mesure_cascade(jeton_mesure)
     routage_log_id = _persister_routage_log(
         ctx, question, decision, etage_resolveur, cascade_remontee, latence_ms, tokens_consommes,
+        score_savoir=savoir.confiance if savoir is not None else None,
+        issue_savoir=savoir.issue if savoir is not None else None,
     )
     # [US-095] Mémorisation APRÈS coup, et seulement sur une réponse réellement
     # produite : une cascade qui lève (mode dégradé 429, US-092) n'arrive jamais
     # ici — mémoriser une non-réponse la ferait servir comme une réponse.
-    _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte)
+    _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte, savoir)
     return ReponseCascade(texte=texte, etage_resolveur=etage_resolveur, routage_log_id=routage_log_id)
 
 
@@ -714,6 +831,7 @@ def _memoriser_reponse(
     etage_resolveur: str,
     chiffree,
     texte: str,
+    savoir=None,
 ) -> None:
     """[US-095 / CA1, CA3, CA8] Alimente l'étage 0bis avec la réponse qui vient
     d'être produite — quand, et seulement quand, elle est mémorisable.
@@ -733,6 +851,16 @@ def _memoriser_reponse(
     Une réponse de l'agent SQL non plus (aucune famille à rejouer, et son texte
     porte des chiffres). Ne lève jamais : rater une mémorisation coûte un
     recalcul, la faire échouer coûterait la réponse.
+
+    [US-098 / CA11] Quand la réponse dérive du socle de connaissance, elle est
+    mémorisée AVEC la référence du fragment dont elle est issue : c'est ce lien,
+    et lui seul, qui permet à une réingestion de la faire tomber au lieu de la
+    laisser vivre des mois (`cache_questions.invalider_par_fragment`).
+
+    Un contexte de savoir contenant un passage PRIVÉ (US-141) interdit toute
+    mémorisation : une entrée figée est partagée entre tous les potagers
+    (`potager_id = NULL`), y verser un savoir privé serait la fuite que le
+    contrôle textuel d'US-095 / CA8 ne rattraperait qu'au hasard des mots.
     """
     from app.services import cache_questions
 
@@ -745,8 +873,20 @@ def _memoriser_reponse(
             decision.nature == NATURE_QUESTION_SAVOIR
             and etage_resolveur in (ETAGE_SAVOIR, ETAGE_RAISONNEMENT)
         ):
+            if savoir is not None and not savoir.contexte_partageable:
+                log.info(
+                    "⛔ CACHE QUESTION │ mémorisation écartée (passage privé au contexte) : '%s'",
+                    question[:80],
+                )
+                return
             db = SessionLocal()
-            cache_questions.memoriser_figee(db, ctx, question, texte)
+            cache_questions.memoriser_figee(
+                db, ctx, question, texte,
+                source_etage=(cache_questions.SOURCE_RAG if etage_resolveur == ETAGE_SAVOIR
+                              else cache_questions.SOURCE_LLM),
+                fragment_id=(savoir.passages[0].reference
+                             if savoir is not None and savoir.passages else None),
+            )
     except Exception as e:
         log.warning("⚠️ CACHE QUESTION │ mémorisation impossible (%s)", type(e).__name__)
         if db is not None:

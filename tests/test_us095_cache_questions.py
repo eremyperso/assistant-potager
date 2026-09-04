@@ -702,6 +702,66 @@ def test_us095_ca8_un_nom_de_culture_n_est_pas_un_temoin_de_fuite(potager):
     assert entree is not None
 
 
+def test_us095_ca8_le_temoin_doit_apparaitre_comme_un_mot_entier(potager):
+    """CA8 — un témoin ne se cherche pas au milieu d'un mot.
+
+    Constaté le 04/09/2026 : le contrôle testait `temoin in texte`, donc la
+    variété « verte » se reconnaissait dans « une racine ou*verte* », « serre »
+    dans « plantules *serre*es », « autre » dans « d'*autre*s insectes ». Aucune
+    de ces phrases ne cite quoi que ce soit du potager, et 23 fragments sur 96
+    du corpus agronomique tombaient sous ce couperet — donc autant de réponses
+    qu'on ne pouvait jamais mémoriser, repayées au modèle à chaque fois.
+    """
+    for phrase in (
+        "Une racine ouverte se conserve moins bien.",
+        "Des plantules serrees se concurrencent pour la lumiere.",
+        "D'autres insectes peuvent laisser des blessures voisines.",
+    ):
+        assert not cq.contient_donnee_potager(potager, CTX.potager_id, phrase), \
+            f"faux positif sur un mot courant : {phrase!r}"
+
+
+def test_us095_ca8_un_vrai_nom_reste_detecte_meme_au_pluriel(potager):
+    """CA8 — la borne de mot ne doit pas ouvrir une porte : le nom propre reste
+    reconnu, y compris accordé au pluriel."""
+    assert cq.contient_donnee_potager(
+        potager, CTX.potager_id, "Pose un voile sur la planche-nord ce soir.")
+    assert cq.contient_donnee_potager(
+        potager, CTX.potager_id, "Les Marmandes de cette annee ont bien donne.")
+
+
+def test_us095_ca8_une_valeur_generique_n_est_pas_un_temoin(potager):
+    """CA8 — `evenements.variete` est un champ LIBRE : il reçoit « Gariguette »
+    comme « autre », « blanc » ou « variété non précisée ». Les secondes sont
+    des mots français ordinaires — les retenir comme témoins ne protège rien et
+    interdit de mémoriser le savoir le plus banal.
+
+    Le critère reste celui de la docstring : un témoin est un nom que SEUL ce
+    potager emploie.
+    """
+    for generique in ("autre", "blanc", "verte", "cerise", "variete non precisee",
+                      "recolte de 2025", "annee 2024"):
+        assert not cq._est_temoin_exploitable(generique), \
+            f"{generique!r} ne devrait pas servir de témoin de fuite"
+    for propre in ("gariguette", "marmande", "coeur de boeuf", "planche-nord",
+                   "noire de crimee"):
+        assert cq._est_temoin_exploitable(propre), \
+            f"{propre!r} est un nom propre du potager, il doit rester un témoin"
+
+
+def test_us095_ca8_une_reponse_agronomique_banale_est_memorisable(potager):
+    """CA8, bout en bout — c'est le défaut tel qu'il se voyait en production :
+    une réponse générale sur le tuteurage était refusée à la mémorisation, donc
+    la même question repayait un appel modèle à chaque fois."""
+    entree = cq.memoriser_figee(
+        potager, CTX, "comment tuteurer mes haricots grimpants ?",
+        "Installe un support avant que les tiges ne s'allongent : les jeunes "
+        "pousses s'y enroulent d'elles-memes. Des plantules serrees se "
+        "concurrencent, et une tige ouverte cicatrise mal.",
+    )
+    assert entree is not None, "une reponse agronomique generale doit etre memorisable"
+
+
 def test_us095_ca9_aucune_fuite_entre_potagers(potager, sans_appel_modele):
     """CA9 / scénario Gherkin « Aucune fuite entre potagers » — une réponse
     mémorisée pour le potager A n'est jamais servie au potager B, même à motif

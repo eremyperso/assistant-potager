@@ -48,6 +48,7 @@ Météo personnalisée [US-075] :
 Observabilité de la cascade de réponses + retour du jardinier [US-097] :
   POST /routage/{routage_log_id}/retour  → avis 👍/👎 sur une réponse de savoir/raisonnement
   GET  /admin/routage/metriques          → métriques de routage (réservé à ADMIN_EMAIL)
+  GET  /admin/savoir/lacunes             → questions que la base de connaissance ne sert pas [US-098]
   GET  /admin/routage/retours-negatifs   → questions les plus souvent jugées mauvaises (réservé)
 """
 import json
@@ -1518,7 +1519,28 @@ def admin_routage_metriques(_admin: User = Depends(require_admin_user)):
             "taux_service_cache_reponses": svc_metriques_routage.taux_service_cache_reponses(db),
             "part_parseur_deterministe": svc_metriques_routage.part_parseur_deterministe(db),
             "comparaison_hypotheses": svc_metriques_routage.comparaison_hypotheses(db),
+            # [US-098 / CA14] Ce que la base de connaissance sert, sert à moitié
+            # ou ne sert pas. Le détail question par question est sur
+            # /admin/savoir/lacunes.
+            "savoir": svc_metriques_routage.resume_savoir(db),
         }
+    finally:
+        db.close()
+
+
+@app.get("/admin/savoir/lacunes")
+def admin_savoir_lacunes(
+    limite: int = Query(default=20, ge=1, le=200),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-098 / CA14] Questions de savoir que la base n'a pas su servir.
+
+    C'est la liste de travail éditorial d'US-099, US-140 et US-141 : elle dit
+    quoi écrire, dans quel ordre, sur la foi de questions réellement posées —
+    et non d'une intuition sur ce dont un jardinier aurait besoin."""
+    db = SessionLocal()
+    try:
+        return {"questions": svc_metriques_routage.questions_sans_savoir(db, limite=limite)}
     finally:
         db.close()
 

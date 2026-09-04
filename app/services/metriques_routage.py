@@ -6,6 +6,11 @@ sur `routage_logs` / `routage_retours` / `conso_tokens`, et un calcul de
 percentile fait en Python (portable SQLite ↔ PostgreSQL, les deux backends
 utilisés par ce projet — voir tests/conftest.py).
 
+[US-098 / CA14] Deux agrégations de plus, sur les mêmes principes : `resume_savoir`
+et `questions_sans_savoir` publient ce à quoi la base de connaissance ne répond
+pas. Ce ne sont pas des indicateurs de confort — ce sont eux qui décident du
+contenu à écrire dans US-099, US-140 et US-141.
+
 [CA7] Ce module alimente un point d'accès en lecture seule réservé à
 l'administrateur (`main.py`). Aucun tableau de bord graphique n'est construit
 ici, volontairement — l'écran viendra si, et seulement si, ces chiffres sont
@@ -30,6 +35,7 @@ from llm.routeur import (
     ETAGE_SAVOIR,
     ORIGINE_CACHE,
 )
+from app.services.connaissance import ISSUE_SERVI, ISSUE_TRANSMIS, ISSUE_VIDE
 from app.services.retours import AVIS_NEGATIF
 
 log = logging.getLogger("potager")
@@ -284,10 +290,76 @@ def comparaison_hypotheses(
             "questions (QUESTION_DATA/QUESTION_SAVOIR/QUESTION_HYBRIDE) ; la "
             "catégorie d'hypothèse 'commande_ou_cache' couvre aussi les "
             "saisies d'action, non mesurées ici tant qu'US-094 n'est pas "
-            "livrée. 'savoir' n'a jamais été observé séparément de "
-            "'raisonnement' : l'étage 2 (RAG, US-098) n'est pas construit."
+            "livrée. L'étage 2 (savoir, US-098) est branché depuis le "
+            "02/09/2026 mais son corpus est vide tant qu'US-099/US-140/US-141 "
+            "ne sont pas livrées : sa part observée reste donc nulle par "
+            "construction, et non par défaut de mesure."
         ),
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-098 / CA14] Ce à quoi la base de connaissance ne répond pas
+# ─────────────────────────────────────────────────────────────────────────────
+def resume_savoir(
+    db: Session, depuis: Optional[datetime] = None, jusqu_a: Optional[datetime] = None
+) -> dict:
+    """[US-098 / CA14] Répartition des issues de l'étage du savoir sur la
+    période, et score moyen par issue.
+
+    Trois issues, trois lectures : `servi` mesure ce que le corpus couvre
+    réellement à coût nul, `transmis` ce qu'il couvre à moitié, `vide` ce qu'il
+    ne couvre pas du tout. C'est le rapport entre les trois qui dit si l'étage
+    mérite de rester actif, pas le volume brut.
+    """
+    lignes = (
+        _requete_periode(db, depuis, jusqu_a)
+        .filter(RoutageLog.issue_savoir.isnot(None))
+        .with_entities(RoutageLog.issue_savoir, RoutageLog.score_savoir)
+        .all()
+    )
+    total = len(lignes)
+    par_issue: dict[str, dict] = {}
+    for issue in (ISSUE_SERVI, ISSUE_TRANSMIS, ISSUE_VIDE):
+        scores = [score for autre, score in lignes if autre == issue and score is not None]
+        nb = sum(1 for autre, _ in lignes if autre == issue)
+        par_issue[issue] = {
+            "nb": nb,
+            "part": round(nb / total, 4) if total else 0.0,
+            "score_moyen": round(sum(scores) / len(scores), 4) if scores else None,
+        }
+    return {"total_recherches": total, "par_issue": par_issue}
+
+
+def questions_sans_savoir(
+    db: Session, limite: int = 20, depuis: Optional[datetime] = None
+) -> list[dict]:
+    """[US-098 / CA14] Questions que la base de connaissance n'a pas su servir,
+    les plus fréquentes d'abord.
+
+    C'est LA liste qui définit le contenu à écrire ensuite (US-099, US-140,
+    US-141) : une question posée souvent et jamais servie vaut une fiche, une
+    question posée une fois n'en vaut pas forcément une. `issue_savoir='vide'`
+    et `'transmis'` sont comptés séparément — « rien trouvé » appelle une fiche
+    nouvelle, « trouvé mais pas assez sûr » appelle plutôt de relire l'existante.
+    """
+    requete = db.query(
+        RoutageLog.question_normalisee,
+        RoutageLog.issue_savoir,
+        func.count(RoutageLog.id),
+    ).filter(RoutageLog.issue_savoir.in_((ISSUE_VIDE, ISSUE_TRANSMIS)))
+    if depuis is not None:
+        requete = requete.filter(RoutageLog.cree_le >= depuis)
+    lignes = (
+        requete.group_by(RoutageLog.question_normalisee, RoutageLog.issue_savoir)
+        .order_by(func.count(RoutageLog.id).desc())
+        .limit(limite)
+        .all()
+    )
+    return [
+        {"question_normalisee": question, "issue": issue, "nb": nb}
+        for question, issue, nb in lignes
+    ]
 
 
 def top_questions_mal_notees(

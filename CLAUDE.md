@@ -62,7 +62,7 @@ pytest tests/test_us006_renommer_parcelle.py   # single test file
 pytest tests/ -k "test_name"                   # single test by name
 
 # Apply latest database migration
-psql -d potager -f migrations/migration_v12.sql
+psql -d potager -f migrations/migration_v42.sql
 
 # Purge des potagers supprimés au-delà du délai de grâce de 30 jours [US-084]
 # (aussi planifiée quotidiennement à 04h00 par le job_queue du bot)
@@ -126,6 +126,52 @@ python tools/mesurer_rotation.py <parcelle_id> <culture>
 # Le clavier de raccourcis permanent n'existe plus : bot.SANS_CLAVIER
 # (ReplyKeyboardRemove) le retire activement chez les jardiniers qui l'avaient.
 # Les claviers contextuels de validation, eux, sont inchangés.
+
+# Socle de connaissance — étage 2 de la cascade [US-098]
+# ⚠️ Procédure complète (rédaction des fiches, licences, mesure, mise en prod
+# dans le bon ordre) : docs/RUNBOOK_ALIMENTATION_SOCLE_CONNAISSANCE.md
+# La base est l'INDEX, le dépôt est la SOURCE : rien ne s'édite en base, une
+# fiche se corrige dans data/connaissance/ puis se réingère. Le dossier est
+# livré VIDE — le contenu arrive avec US-099, US-140 et US-141, et tant qu'il
+# est vide l'étage est inerte (la cascade se comporte comme avant l'US).
+psql -d potager -f migrations/migration_v42.sql
+python tools/ingerer_connaissance.py --dry-run    # rapport seul, aucune écriture
+python tools/ingerer_connaissance.py             # idempotent : même empreinte = rien réécrit
+python tools/ingerer_connaissance.py --strict    # échoue sur un fragment non autonome (CA12)
+python tools/ingerer_connaissance.py --elaguer   # retire aussi les fiches supprimées du dépôt
+# ⚠️ RLS (migration_v42) : une fiche GLOBALE ne s'écrit qu'avec le rôle
+# propriétaire de la base, jamais app_user — même règle que importer_referentiel.
+#
+# CA13 : la mesure conditionne l'activation en production, elle ne se suppose pas.
+# Le score n'est PAS sur la même échelle en SQLite (repli de test, couverture de
+# termes) et en PostgreSQL (ts_rank_cd) : RAG_SEUIL_CONFIANCE doit être
+# réétalonné contre la production AVANT d'y ingérer un corpus.
+python tools/mesurer_corpus_savoir.py --ingerer --detail
+# Interrupteurs (config.py, variables d'environnement, sans redéploiement) :
+#   RAG_ACTIF=0            coupe l'étage du savoir
+#   RAG_SEUIL_CONFIANCE    au-dessus : réponse servie telle quelle, à coût nul
+#   RAG_MAX_PASSAGES       nombre de passages retenus (3 = cible du CA13)
+# Ce que la base ne sait pas répondre — c'est cela qui dit quoi écrire ensuite :
+#   GET /admin/savoir/lacunes   (réservé à ADMIN_EMAIL)
+#
+# Format de fiche : une fiche = un couple culture × thème (tomate-problemes.md).
+# La recherche est LEXICALE — un lemme absent de l'index est un rapprochement
+# impossible, quelle que soit la qualité du texte. D'où la ligne qui décide de
+# tout, dans CHAQUE section (jamais dans l'en-tête) :
+#   **On parle aussi de :** cul noir ; nécrose apicale ; manque de calcium
+# Les deux registres, celui du jardinier ET celui de l'agronome. Mesuré sur 24
+# fiches et 19 questions réelles, contre PostgreSQL : 17/19 en tête, 19/19 dans
+# les trois premiers. Ne jamais répéter le nom de la culture dans cette ligne :
+# le titre du document le porte déjà sur TOUS les fragments de la fiche, et
+# `ts_rank_cd` compte les occurrences — la section vole alors le classement à
+# ses voisines. L'ingestion retire d'elle-même les lexèmes déjà présents.
+# `index_terms:` au niveau du DOCUMENT n'est pas indexé (il dilue : 15/19) —
+# c'est un index de relecture, il reste dans le fichier.
+# Ce que l'ingestion retire avant d'indexer, sans rien supprimer du .md :
+# le `# H1` de tête, la section `## Sources et licence`, et les lignes
+# `**Intention :**` / `**Organes concernés :**` / `**On parle aussi de :**`.
+# Un `**Attention :**` — clé inconnue — reste du contenu : on ne retire que ce
+# qu'on sait nommer. Gabarit complet : data/connaissance/README.md
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)
@@ -195,7 +241,7 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 ## Database Migrations
 
-Manual SQL files in `migrations/`, numbered sequentially (v2 → v12). Apply in order on a fresh DB. Latest: `migration_v12.sql` — removes the denormalized `evenements.parcelle` text column; `parcelle_id` is now NOT NULL with FK.
+Manual SQL files in `migrations/`, numbered sequentially (v2 → v42), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
 
 ## Testing
 

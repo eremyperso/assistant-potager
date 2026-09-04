@@ -143,6 +143,43 @@ MAX_ENTREES_PAR_POTAGER = 1000
 # trois lettres produirait des faux positifs sur des mots courants.
 _LONGUEUR_MIN_TEMOIN = 4
 
+# [CA8] Valeurs qui SE TROUVENT dans `evenements.variete` sans être des noms
+# propres du potager. Le champ est libre : il reçoit aussi bien « Gariguette »
+# que « autre », « blanc » ou « variété non précisée ». Les secondes sont des
+# mots français ordinaires, qui apparaissent naturellement dans une réponse
+# agronomique générale — les retenir comme témoins de fuite ne protège rien et
+# interdit de mémoriser le savoir le plus banal.
+#
+# Constaté le 04/09/2026 sur le potager #1 : 23 fragments sur 96 du corpus
+# agronomique contenaient un tel « témoin », donc aucune réponse qui les
+# reprend ne pouvait être mémorisée — chaque question répétée sur ces sujets
+# repayait un appel modèle complet, indéfiniment.
+#
+# Le critère reste celui de la docstring de `_temoins_du_potager` : un témoin
+# est un nom que SEUL ce potager emploie. Une couleur ou un mot de conduite
+# n'en est pas un. Contrepartie assumée : un jardinier qui nommerait vraiment
+# une variété « Blanc » ne serait plus protégé sur ce mot précis — un texte
+# général contenant « blanc » n'est de toute façon pas une fuite.
+_TEMOINS_GENERIQUES: frozenset[str] = frozenset({
+    # remplissages du champ libre
+    "autre", "autres", "divers", "diverses", "inconnu", "inconnue",
+    "non precisee", "non precise", "variete non precisee", "non localise",
+    "non localisee", "standard", "classique", "ordinaire", "commun", "commune",
+    "mixte", "melange", "maison", "serre", "greffe", "greffee",
+    # couleurs seules
+    "blanc", "blanche", "noir", "noire", "rouge", "rose", "jaune", "vert",
+    "verte", "violet", "violette", "orange", "gris", "grise", "bleu", "bleue",
+    # qualificatifs horticoles courants
+    "cerise", "cerises", "precoce", "tardive", "hative", "native", "naine",
+    "grimpante", "grimpant", "ronde", "longue", "plate", "douce", "amere",
+    "sucree", "geante", "petite", "grosse", "mini", "bio", "ancienne",
+    "hybride", "citronne", "cannelle", "commune",
+})
+
+# Un témoin qui porte une année est une NOTE de saisie (« récolte de 2025 »,
+# « année 2024 »), pas un nom propre du potager.
+_ANNEE_DANS_TEMOIN = re.compile(r"\d{4}")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sérialisation des dépendances [CA4]
@@ -450,7 +487,22 @@ def _temoins_du_potager(db: Session, potager_id: int) -> set[str]:
         .all()
     ):
         temoins.add(_normaliser_temoin(variete))
-    return {t for t in temoins if len(t) >= _LONGUEUR_MIN_TEMOIN}
+    return {t for t in temoins if _est_temoin_exploitable(t)}
+
+
+def _est_temoin_exploitable(temoin: str) -> bool:
+    """[CA8] Un témoin doit être un nom que SEUL ce potager emploie.
+
+    Trois disqualifications, toutes constatées dans de vraies données : trop
+    court pour ne pas croiser un mot courant, porteur d'une année (donc une
+    note de saisie, pas un nom), ou membre du vocabulaire générique du champ
+    libre `variete`.
+    """
+    if len(temoin) < _LONGUEUR_MIN_TEMOIN:
+        return False
+    if _ANNEE_DANS_TEMOIN.search(temoin):
+        return False
+    return temoin not in _TEMOINS_GENERIQUES
 
 
 def _normaliser_temoin(valeur: Optional[str]) -> str:
@@ -471,7 +523,28 @@ def contient_donnee_potager(db: Session, potager_id: int, texte: str) -> bool:
     normalise = _normaliser_temoin(texte)
     if not normalise:
         return True
-    return any(temoin in normalise for temoin in _temoins_du_potager(db, potager_id))
+    return any(
+        _cite_le_temoin(normalise, temoin)
+        for temoin in _temoins_du_potager(db, potager_id)
+    )
+
+
+def _cite_le_temoin(texte_normalise: str, temoin: str) -> bool:
+    """[CA8] Le témoin doit apparaître comme un MOT, pas comme une sous-chaîne.
+
+    Sans cette borne, la recherche mordait au milieu des mots et refusait du
+    savoir parfaitement général — constaté le 04/09/2026 sur le corpus
+    agronomique :
+
+        « une racine ouverte se conserve moins bien »  → témoin « verte »
+        « des plantules serrees se concurrencent »     → témoin « serre »
+        « d'autres insectes peuvent laisser… »         → témoin « autre »
+
+    Aucune de ces phrases ne cite quoi que ce soit du potager. Le `s?` final
+    tolère le pluriel d'un vrai nom (« des Gariguettes ») sans rouvrir la
+    porte : « serrees » n'est pas « serre » suivi d'un `s`.
+    """
+    return re.search(rf"\b{re.escape(temoin)}s?\b", texte_normalise) is not None
 
 
 # Formulations par lesquelles un modèle annonce qu'il ne répond PAS. Elles
