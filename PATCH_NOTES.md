@@ -1,3 +1,21 @@
+## [v3.54.0] — 2026-09-04
+
+### 🚀 Nouveautés
+- Sait désormais expliquer sa propre application, avec les mots du jardinier et sans consulter de modèle : treize fiches couvrent le calcul du stock, le parcours d'un plant du semis à la plantation, la pépinière lot par lot, les parcelles et le plan d'occupation, le journal et ses corrections, le cycle de vie d'un potager, le partage et les rôles, l'activation du compagnon Telegram, les bilans, les notes et la rotation (US-099)
+- Répond enfin à la question la plus prévisible de l'application — « pourquoi mon stock de tomates ne baisse pas quand je récolte ? » — en distinguant ce qui consomme un pied de ce qui n'en consomme pas. Une réponse fausse à cet endroit faisait douter de tout le stock (US-099 / CA4)
+- Distingue « comment est calculé mon stock ? » de « quel est mon stock ? » : la première demande une règle, la seconde un chiffre. Les deux phrases partagent leurs mots, pas leur intention — la première recevait jusqu'ici un agrégat en guise d'explication, sans que le corpus soit seulement consulté (US-099 / CA8)
+- Cite la fiche dont la réponse est tirée, et ne coûte aucun jeton : le texte servi est celui, relu et versionné, du dépôt (US-099 / CA8)
+- Ajoute `python tools/controler_aide_corpus.py`, qui échoue en intégration continue dès qu'un domaine annoncé par `/help` n'a plus de fiche : un jardinier à qui l'aide annonce un domaine et à qui l'assistant répond « je ne sais pas » perd confiance dans les deux à la fois (US-099 / CA7)
+
+### 🔧 Améliorations techniques
+- Ingère le corpus **au déploiement**, dans les deux workflows GitHub (dev et prod) juste après les migrations et avant le redémarrage des services, contrôle de cohérence compris : l'ingestion est idempotente, donc la rejouer ne coûte rien, et une fiche corrigée dans le dépôt ne peut plus rester fausse en production (US-099 / CA10)
+- Retire de l'index les fiches supprimées du dépôt (`--elaguer`) : c'est ainsi qu'on retire un contenu devenu faux, et sans cela une fiche supprimée aurait continué d'être servie indéfiniment, sans que rien ne le signale (US-099 / CA9)
+- Inscrit dans la définition de terminé du projet qu'une évolution rendant une fiche fausse impose sa mise à jour dans la même livraison, et rend la règle applicable : `data/connaissance/doc_app/README.md` porte la table « je touche à ceci, donc je relis cette fiche », et le test échoue tant qu'une fiche n'y figure pas (US-099 / CA9)
+- Dérive le sommaire des mots-clés de `/help` de la liste des domaines contrôlés, au lieu de la recopier à la main : une liste recopiée divergerait, et le contrôle porterait alors sur une liste que le jardinier ne voit pas (US-099 / CA7)
+- Mesure le corpus plutôt que de l'affirmer : 60 questions de fonctionnement versionnées, dont la bonne section sort 60 fois sur 60 dans les trois premiers résultats et 53 fois en tête. La mesure qui conditionne l'activation en production reste à rejouer contre PostgreSQL (US-099 / CA11)
+- Vérifie qu'aucun nom de table, de fonction ni numéro d'US n'apparaît dans un texte servi : ce texte part tel quel dans un message au jardinier, source d'affichage comprise (US-099 / CA3)
+- Contrôle que chaque fragment indexé répond à une question réellement formulée : un fragment que personne n'a su mettre en question a été écrit depuis le plan de l'application, pas depuis le jardinier (US-099 / CA2)
+
 ## [v3.53.0] — 2026-09-04
 
 ### 🚀 Nouveautés

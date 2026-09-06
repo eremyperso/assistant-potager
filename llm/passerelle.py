@@ -440,6 +440,20 @@ def _executer_avec_repli(appel, ctx: TenantContext, appel_type: str, modele: str
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Modèles sans `reasoning_effort` — famille "compound" (ex: groq/compound-mini)
+# -----------------------------------------------------------------------------
+# `groq/compound` et `groq/compound-mini` sont des systèmes agentiques (recherche
+# web / exécution de code intégrées côté serveur), pas des modèles de
+# raisonnement : passer `reasoning_effort` leur fait renvoyer une erreur 400
+# "reasoning_effort is not supported". Comme `reasoning=True` est le défaut de
+# la plupart des appels (voir `appeler_chat`), basculer un type d'appel dessus
+# via `GROQ_MODEL_<TYPE>` casserait sans cette exemption.
+# ─────────────────────────────────────────────────────────────────────────────
+def _accepte_reasoning_effort(modele: str) -> bool:
+    return not modele.startswith("groq/compound")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # API publique — chat
 # ─────────────────────────────────────────────────────────────────────────────
 def appeler_chat(
@@ -486,7 +500,7 @@ def appeler_chat(
         "max_tokens": max_tokens,
         "stream": False,
     }
-    if reasoning and GROQ_REASONING_EFFORT:
+    if reasoning and GROQ_REASONING_EFFORT and _accepte_reasoning_effort(modele):
         kwargs["reasoning_effort"] = GROQ_REASONING_EFFORT
 
     chat, latence_ms = _executer_avec_repli(

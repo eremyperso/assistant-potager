@@ -22,6 +22,27 @@ Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/a
 3. **Confirmation d'étape** : après chaque étape de l'Orchestrateur, indiquer explicitement
    "Étape X terminée" avec les fichiers modifiés. Ne pas enchaîner silencieusement.
 
+## Corpus de connaissance — définition de terminé (NON NÉGOCIABLE)
+
+Règle posée par US-099 / CA9. Une évolution fonctionnelle qui rend une fiche du
+corpus fausse impose la mise à jour de cette fiche **dans la même livraison** —
+au même titre qu'une migration, jamais « plus tard ». Sans quoi le corpus
+devient en quelques mois un mensonge documenté, d'autant plus crédible qu'il est
+servi au jardinier comme vérifié, mot pour mot, sans passer par un modèle.
+
+Concrètement, avant de livrer un changement de comportement :
+
+1. lire la table « ce qui rend une fiche fausse » de
+   `data/connaissance/doc_app/README.md` — elle se lit à l'envers : *je touche
+   à ceci, donc je relis cette fiche* ;
+2. corriger la ou les fiches concernées dans le même commit ;
+3. `pytest tests/test_us099_corpus_fonctionnement.py` doit rester vert — il
+   contrôle la couverture des domaines de `/help`, l'absence de vocabulaire
+   technique dans le texte servi, et le classement des 60 questions de mesure.
+
+Une fiche ajoutée entre dans cette table dans le même commit : le test échoue
+tant que ce n'est pas fait.
+
 ## Pull requests (NON NÉGOCIABLE)
 
 Toute description de PR (quelle que soit la branche source ou cible — feature, hotfix,
@@ -172,6 +193,17 @@ python tools/mesurer_corpus_savoir.py --ingerer --detail
 # `**Intention :**` / `**Organes concernés :**` / `**On parle aussi de :**`.
 # Un `**Attention :**` — clé inconnue — reste du contenu : on ne retire que ce
 # qu'on sait nommer. Gabarit complet : data/connaissance/README.md
+
+# Corpus « fonctionnement de l'application » — premier contenu du socle [US-099]
+# 13 fiches dans data/connaissance/doc_app/, famille doc_app, niveau verifie,
+# potager_id nul. Elles sont ingérées par la commande ci-dessus (même racine).
+# `/help` est le SOMMAIRE, ces fiches en sont la forme longue : un domaine
+# annoncé par /help sans fiche fait échouer l'intégration continue.
+python tools/controler_aide_corpus.py --detail
+python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us099_questions_fonctionnement.csv     --racine data/connaissance/doc_app --detail
+# Les domaines d'aide se déclarent à DEUX endroits, jamais recopiés :
+#   bot._HELP_DOMAINES        la liste dont /help dérive son sommaire
+#   domaines_aide: en en-tête  ce que chaque fiche déclare couvrir
 ```
 
 ### Lancer le bot Telegram et l'API en local (PowerShell, Windows)

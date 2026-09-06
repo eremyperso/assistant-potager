@@ -56,6 +56,12 @@ l'en-tête les distingue.
 
 ### 2.1 `doc_app` — commence par là
 
+> **Livré par US-099.** Treize fiches, cinquante-six fragments, mesurés à 60/60
+> dans les trois premiers résultats. Le format de rédaction, la table de
+> relecture (« ce qui rend une fiche fausse ») et le contrôle de cohérence avec
+> `/help` sont décrits dans `data/connaissance/doc_app/README.md`. Ce qui suit
+> reste vrai pour l'enrichir.
+
 C'est le corpus le plus facile et le plus rentable : tu connais les réponses,
 elles ne périment que quand tu changes le code, et elles évitent des appels de
 modèle sur des questions auxquelles un modèle répond mal (il ne connaît pas ton

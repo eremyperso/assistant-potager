@@ -14,11 +14,12 @@ Arbitrage tranché d'US-098 : **rien ne s'édite en base.** Une fiche se corrige
 ici, se relit comme du code, se versionne, puis se réingère. Une interface
 d'administration en ligne serait un chantier sans valeur à ce stade.
 
-> **Le dossier est volontairement vide de fiches à ce jour.** US-098 livre le
-> contenant. Le contenu arrive avec **US-099** (fonctionnement de
-> l'application), **US-140** (agronomie) et **US-141** (mémoire du potager) :
-> le travail éditorial est long, la mécanique était courte, il n'y avait aucune
-> raison de les livrer ensemble.
+> **Ce qui est écrit à ce jour.** US-098 a livré le contenant ; `doc_app/`
+> (fonctionnement de l'application) est le premier contenu versé, par
+> **US-099** — voir `doc_app/README.md`, qui porte la table « ce qui rend une
+> fiche fausse ». Restent à écrire **US-140** (agronomie) et **US-141**
+> (mémoire du potager) : le travail éditorial est long, la mécanique était
+> courte, il n'y avait aucune raison de les livrer ensemble.
 
 ## Format d'une fiche
 

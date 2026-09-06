@@ -95,6 +95,27 @@ jobs:
             done
           "
 
+      # [US-099 / CA10] Le corpus de connaissance se déploie comme une migration.
+      # Trois propriétés le rendent sûr à rejouer à chaque déploiement :
+      #   · le contrôle de cohérence /help ↔ corpus échoue AVANT toute écriture ;
+      #   · l'ingestion est idempotente (empreinte SHA-256 par fichier : même
+      #     contenu, aucune écriture, pas même un UPDATE) ;
+      #   · --elaguer retire de l'index les fiches disparues du dépôt — c'est
+      #     ainsi qu'on RETIRE un contenu devenu faux, et sans lui une fiche
+      #     supprimée continuerait d'être servie indéfiniment.
+      # DATABASE_URL est ici celui des migrations, donc le rôle PROPRIÉTAIRE de
+      # la base : une fiche globale (potager_id NULL) est refusée à app_user par
+      # le WITH CHECK de la policy RLS de migration_v42.
+      - name: Ingest knowledge corpus
+        run: |
+          ssh ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }} "
+            set -euo pipefail
+            cd /opt/potager-prod
+            set -a && source .env.prod && set +a
+            venv/bin/python tools/controler_aide_corpus.py
+            venv/bin/python tools/ingerer_connaissance.py --strict --elaguer
+          "
+
       - name: Install systemd services (API + Bot)
         run: |
           scp infra/potager-prod.service \

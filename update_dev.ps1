@@ -8,6 +8,7 @@
 #   1. Tire le dernier code Git (sauf si -SkipPull)
 #   2. Installe les nouvelles dependances Python si requirements.txt a change
 #   3. Applique les migrations SQL non encore jouees (suivi dans .migrations_applied)
+#   4. Reingere le corpus de connaissance si data/connaissance/ a change [US-099 / CA10]
 #
 # Prerequis :
 #   - Python + pip dans le PATH
@@ -61,7 +62,7 @@ $DB_URL = $env:DATABASE_URL
 if (-not $DB_URL) { fail "DATABASE_URL absente de .env.dev." }
 
 # --- 1. Git Pull ---
-step "[1/3] Synchronisation Git..."
+step "[1/4] Synchronisation Git..."
 
 if ($SkipPull) {
     $before = git rev-parse ORIG_HEAD 2>$null
@@ -85,7 +86,7 @@ $migChanged = $Force -or ($changedFiles | Where-Object { $_ -match "^migrations/
 ok "HEAD : $(git rev-parse --short HEAD 2>$null)"
 
 # --- 2. Dependances Python ---
-step "[2/3] Dependances Python..."
+step "[2/4] Dependances Python..."
 
 if ($reqChanged -or $Force) {
     python -m pip install --quiet -r $REQUIREMENTS
@@ -96,7 +97,7 @@ if ($reqChanged -or $Force) {
 }
 
 # --- 3. Migrations SQL ---
-step "[3/3] Migrations SQL..."
+step "[3/4] Migrations SQL..."
 
 $applied = @()
 if (Test-Path $APPLIED_LOG) {
@@ -134,6 +135,22 @@ foreach ($mig in $files) {
 if ($nbApplied -eq 0) {
     skip "toutes les migrations sont deja appliquees"
 }
+
+# --- 4. Corpus de connaissance [US-099 / CA10] ---
+# Rejoue a chaque passage, comme les migrations juste au-dessus, et pour la meme
+# raison : l'ingestion est idempotente (empreinte SHA-256 par fichier, meme
+# contenu = aucune ecriture). Volontairement PAS conditionne aux fichiers
+# ramenes par le pull : en cours de redaction, une fiche se corrige sans aucun
+# pull, et la sauter alors laisserait la base servir l'ancienne version.
+# --elaguer retire de l'index les fiches supprimees du depot : c'est ainsi qu'on
+# retire un contenu devenu faux.
+step "[4/4] Corpus de connaissance..."
+
+python tools/controler_aide_corpus.py
+if ($LASTEXITCODE -ne 0) { fail "un domaine de /help n'a plus de fiche (US-099 / CA7)." }
+python tools/ingerer_connaissance.py --strict --elaguer
+if ($LASTEXITCODE -ne 0) { fail "ingestion du corpus en echec." }
+ok "corpus ingere (idempotent : aucune ecriture si rien n'a change)"
 
 Write-Host ""
 Write-Host "[OK] Environnement dev a jour !" -ForegroundColor Green

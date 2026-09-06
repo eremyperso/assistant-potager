@@ -171,6 +171,22 @@ _MARQUEURS_SAVOIR: tuple[str, ...] = (
     "à quelle profondeur", "a quelle profondeur", "quelle est la meilleure",
     "quelle distance", "quelle variété choisir", "difference entre",
     "différence entre", "que faire contre", "traitement contre",
+    # [US-099 / CA8] Fonctionnement de l'application — le MÉCANISME, jamais la
+    # valeur. « Comment est calculé mon stock ? » demande une règle,
+    # « quel est mon stock ? » demande un chiffre : les deux phrases partagent
+    # les mots, pas l'intention. Sans ces marqueurs, la première tombait sur le
+    # marqueur DATA « mon stock » et recevait un agrégat en guise d'explication,
+    # sans que le corpus de fonctionnement soit seulement consulté.
+    # Placés ici, donc AVANT les marqueurs DATA, et sans en retirer aucun.
+    "comment est calcul", "comment sont calcul", "comment se calcul",
+    "comment ca marche", "comment ça marche", "a quoi sert", "à quoi sert",
+    # « Comment fait-on pour… » — l'usage de l'application, pas son contenu.
+    # Aucune de ces formulations n'est une saisie : un geste s'annonce, il ne
+    # se demande pas.
+    "comment enregistrer", "comment corriger", "comment supprimer",
+    "comment renommer", "comment archiver", "comment exporter",
+    "comment activer", "comment inviter", "comment noter",
+    "comment declarer", "comment déclarer", "comment dicter",
 )
 
 # [CA2] Consultation d'une donnée déjà enregistrée dans CE potager.
