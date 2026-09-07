@@ -19,6 +19,8 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
          leur source respective
 [US-163] Ajout du modèle AssociationCulture (table association_culture) et
          de l'index composite evenements(parcelle_id, date) pour la rotation
+[US-162] Ajout des modèles Bioagresseur et CultureBioagresseur (identités de
+         bioagresseurs + arête culture × bioagresseur, isolation potager_id)
 [US-098] Ajout des modèles KnowledgeDocument et KnowledgeChunk (socle de
          connaissance interrogeable en plein texte) + colonnes score_savoir /
          issue_savoir sur routage_logs
@@ -431,6 +433,149 @@ class AssociationCulture(Base):
     culture_b_rel  = relationship("CultureConfig", foreign_keys=[culture_b_id])
     famille_b_rel  = relationship("FamilleBotanique", foreign_keys=[famille_b_id])
     source_rel     = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class Bioagresseur(Base):
+    """
+    [US-162 / CA1] Identité propre d'un bioagresseur — ce que l'application ne
+    savait pas jusqu'ici.
+
+    « Mildiou » est aujourd'hui une chaîne dans un commentaire d'événement :
+    rien ne relie cette chaîne aux pommes de terre de la parcelle d'à côté. Une
+    ligne ici lui donne une identité stable, à laquelle une arête
+    (`CultureBioagresseur`) et, plus tard, un narratif (US-098) viennent se
+    rattacher.
+
+    [CA1] `code_eppo` est la SEULE clé de rapprochement fiable entre sources —
+    les libellés d'usage E-Phy, eux, sont du texte. Nullable : un bioagresseur
+    saisi au bot par un jardinier n'en porte aucun, et ne doit pas être refusé
+    pour autant. L'unicité est PARTIELLE (voir `migrations/migration_v43.sql`) :
+    elle ne porte que sur les lignes partagées, sans quoi le premier potager
+    qui saisirait « mildiou » chez lui bloquerait tous les autres.
+
+    [CA3] `potager_id` NULL = connaissance partagée — le pattern d'isolation du
+    projet (`culture_config`, `knowledge_documents`), réappliqué tel quel. Un
+    potager ajoute *son* bioagresseur local sans polluer les 499 autres, et cet
+    ajout n'est JAMAIS promu au partagé automatiquement : la promotion est une
+    décision humaine, pas un effet de bord de la saisie.
+
+    [CA4] `source_id` NOT NULL : aucune identité anonyme, même saisie au bot.
+
+    [CA10, CA11] Ce que cette table N'A PAS, et n'aura pas ici : aucune colonne
+    de produit, de dosage ni de conduite à tenir — l'absence de colonne est la
+    garantie structurelle qu'aucune prescription ne peut être stockée, donc
+    restituée. Aucune colonne de description narrative non plus : les symptômes
+    et la biologie relèvent d'US-140, ingérés par US-098, et se rattachent à
+    cette identité — ils ne la dupliquent pas.
+    """
+    __tablename__ = "bioagresseur"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    # [CA1] Clé pivot inter-sources ('1PHYTIN' pour Phytophthora infestans).
+    code_eppo        = Column(String, nullable=True, index=True)
+    nom_commun_fr    = Column(String, nullable=False)
+    # [CA1] Casse/accents indifférents à la résolution — même stratégie que
+    # FamilleBotanique.nom_normalise et utils.culture_resolve.normaliser_culture.
+    nom_normalise    = Column(String, nullable=False, index=True)
+    nom_scientifique = Column(String, nullable=True)
+    # [CA1] 'champignon' | 'insecte' | 'mollusque' | 'nematode' | 'bacterie' |
+    # 'virus' | 'abiotique' | 'carence'. `mollusque` et `nematode` ajoutés le
+    # 06/09/2026 : sans eux, limaces et nématodes à galles tombaient en
+    # 'insecte' faute de case — voir app.services.bioagresseurs.CATEGORIES.
+    # Vocabulaire fermé validé par app.services.bioagresseurs, pas
+    # par un CHECK — même arbitrage que culture_config.exposition (US-161) et
+    # association_culture.nature (US-163) : fermé mais révisable en produit.
+    categorie        = Column(String, nullable=False)
+    # [CA3] NULL = partagé entre tous les potagers.
+    potager_id       = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    # [CA4] Traçabilité obligatoire, jamais NULL.
+    source_id        = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    source_rel       = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class CultureBioagresseur(Base):
+    """
+    [US-162 / CA2] L'arête culture × bioagresseur — une table de liaison, jamais
+    un texte.
+
+    C'est elle qui rend « qu'est-ce qui attaque mes poireaux » résoluble à zéro
+    jeton (`docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md` §5.2, étage 1) :
+    une jointure ordonnée par fréquence, et non une recherche de similarité sur
+    un corpus narratif. Écrite dans une fiche, la même information ne serait ni
+    joignable, ni triable, ni comptable.
+
+    [CA2] `frequence` porte le tri de la restitution ; `periode_risque` reste un
+    libellé court et NULLABLE ('juin-septembre') — une période inconnue se lit
+    « non renseignée », jamais « toute l'année ».
+
+    [CA3] `potager_id` NULL = arête partagée. Un jardinier peut rattacher un
+    bioagresseur à une culture chez lui sans que ce rattachement vaille pour les
+    autres — le mildiou est partout, l'altise de son coin de vallée ne l'est pas.
+
+    [CA12] L'absence de ligne pour une culture n'est PAS une absence de risque :
+    c'est `app.services.bioagresseurs.lire_bioagresseurs` qui porte cette
+    honnêteté à la restitution, aucune colonne ne peut la porter.
+    """
+    __tablename__ = "culture_bioagresseur"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    culture_id      = Column(Integer, ForeignKey("culture_config.id"), nullable=False, index=True)
+    bioagresseur_id = Column(Integer, ForeignKey("bioagresseur.id"), nullable=False, index=True)
+    # [CA2] 'courant' | 'occasionnel' | 'rare' — vocabulaire fermé validé par
+    # app.services.bioagresseurs, qui porte aussi l'ordre de restitution.
+    frequence       = Column(String, nullable=False)
+    # [CA2] Libellé court, NULL = période non renseignée.
+    periode_risque  = Column(String, nullable=True)
+    # [CA3] NULL = arête partagée.
+    potager_id      = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    # [CA4] Traçabilité obligatoire, jamais NULL.
+    source_id       = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    culture_rel      = relationship("CultureConfig", foreign_keys=[culture_id])
+    bioagresseur_rel = relationship("Bioagresseur", foreign_keys=[bioagresseur_id])
+    source_rel       = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+# [US-162 / CA1] Unicité PARTIELLE du code EPPO : une seule identité partagée
+# par code, mais un potager reste libre d'ajouter la sienne (CA3). Un UNIQUE
+# simple sur la colonne ferait échouer la saisie locale du 2ᵉ potager.
+Index(
+    "uq_bioagresseur_code_eppo_partage",
+    Bioagresseur.code_eppo,
+    unique=True,
+    sqlite_where=Bioagresseur.code_eppo.isnot(None) & Bioagresseur.potager_id.is_(None),
+    postgresql_where=Bioagresseur.code_eppo.isnot(None) & Bioagresseur.potager_id.is_(None),
+)
+# [US-162 / CA1] Idem sur le nom normalisé : deux fiches partagées « mildiou »
+# seraient deux vérités concurrentes pour la même chose.
+Index(
+    "uq_bioagresseur_nom_partage",
+    Bioagresseur.nom_normalise,
+    unique=True,
+    sqlite_where=Bioagresseur.potager_id.is_(None),
+    postgresql_where=Bioagresseur.potager_id.is_(None),
+)
+# [US-162 / CA5] Idempotence de l'import garantie en base et pas seulement dans
+# le service : rejouer un manifeste hebdomadaire ne peut pas créer de doublon
+# d'arête, partagée comme locale.
+Index(
+    "uq_culture_bioagresseur_partage",
+    CultureBioagresseur.culture_id,
+    CultureBioagresseur.bioagresseur_id,
+    unique=True,
+    sqlite_where=CultureBioagresseur.potager_id.is_(None),
+    postgresql_where=CultureBioagresseur.potager_id.is_(None),
+)
+Index(
+    "uq_culture_bioagresseur_local",
+    CultureBioagresseur.culture_id,
+    CultureBioagresseur.bioagresseur_id,
+    CultureBioagresseur.potager_id,
+    unique=True,
+    sqlite_where=CultureBioagresseur.potager_id.isnot(None),
+    postgresql_where=CultureBioagresseur.potager_id.isnot(None),
+)
 
 
 class Parcelle(Base):

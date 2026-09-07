@@ -247,6 +247,42 @@ def _construire_motif_geste() -> "re.Pattern[str]":
 
 _MOTIF_GESTE = _construire_motif_geste()
 
+# [US-173 / CA3] Ce qui, en TÊTE de phrase, dit qu'on interroge et non qu'on
+# rapporte. Le garde-fou de `_regle_par_geste` était jusqu'ici le seul point
+# d'interrogation final — or « à la dictée vocale, le point d'interrogation
+# n'existe pas » (docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md §8.4), et le
+# compagnon est d'abord dicté.
+#
+# Le défaut mesuré le 07/09/2026 : « qu'est-ce qui attaque mes poireaux »
+# (sans « ? ») était classée ACTION, parce que `attaque` est une variante de
+# l'action canonique `observation` dans ACTION_MAP. La question phare d'US-162,
+# posée à l'oral, s'enregistrait dans le journal au lieu d'être répondue.
+#
+# Une saisie réelle ne s'ouvre jamais par ces mots : « observé une attaque de
+# mildiou », « j'ai traité les tomates » commencent par le geste ou par son
+# auteur. Le motif est donc ancré en tête (`\A`) et volontairement court —
+# élargi, il finirait par neutraliser la règle de geste qu'il protège.
+_MOTIF_INTERROGATIF = re.compile(
+    r"\A(?:qu est ce|quest ce|qu est|est ce que|que |quoi |qui |quel|quelle|quels|quelles|"
+    r"combien|comment|pourquoi|quand |ou |a quoi|y a t il|y a t elle|"
+    r"dois je|puis je|faut il|est ce)"
+)
+
+
+def _ouverture_interrogative(texte: str) -> bool:
+    """[US-173 / CA3, CA4] La phrase s'ouvre-t-elle comme une question ?
+
+    Testée sur le texte NORMALISÉ à la façon des motifs de familles (accents et
+    ponctuation ramenés), pour que « qu'est-ce qui », « qu est ce qui » et
+    « quest ce qui » se comportent à l'identique — ce que produit la dictée.
+    """
+    normalise = _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode((texte or "").strip().lower()))
+    return bool(_MOTIF_INTERROGATIF.match(_ESPACES_ROUTEUR.sub(" ", normalise).strip() + " "))
+
+
+_NON_ALPHANUM_ROUTEUR = re.compile(r"[^a-z0-9]+")
+_ESPACES_ROUTEUR = re.compile(r"\s+")
+
 
 def _regle_par_geste(texte: str) -> Optional[str]:
     """[Action 0] ACTION si l'un des premiers mots nomme un geste de jardinage.
@@ -281,7 +317,11 @@ def _regle_par_mots_cles(texte: str) -> Optional[str]:
     if any(m in t for m in _MARQUEURS_SAVOIR):
         return NATURE_QUESTION_SAVOIR
     nature_geste = _regle_par_geste(t)
-    if nature_geste is not None and not t.endswith("?"):
+    # [US-173 / CA3] Deux garde-fous, pas un seul : le point d'interrogation
+    # final — absent de la dictée vocale — ET l'ouverture interrogative. Sans le
+    # second, « qu'est-ce qui attaque mes poireaux » dicté sans ponctuation
+    # s'enregistrait comme une observation au lieu d'être répondu.
+    if nature_geste is not None and not t.endswith("?") and not _ouverture_interrogative(t):
         return nature_geste
     if any(m in t for m in _MARQUEURS_DATA):
         return NATURE_QUESTION_DATA

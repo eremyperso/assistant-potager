@@ -1,3 +1,46 @@
+## [v3.56.0] — 2026-09-07
+
+### 🚀 Nouveautés
+- Répond enfin à « qu'est-ce qui attaque mes poireaux ? » avec les mots du jardinier, depuis le référentiel et **sans consulter de modèle** : ni pour classer la question, ni pour y répondre. Jusqu'ici la question partait deux fois au modèle, qui répondait de ses connaissances générales en ignorant les arêtes du potager (US-173)
+- Comprend les trois façons de poser la question — le ravageur (« qu'est-ce qui attaque »), la maladie (« quelles maladies sur »), l'anticipation (« à quoi dois-je m'attendre ») — et le vocabulaire des deux registres : nuisibles, parasites, bestioles, bioagresseurs (US-173 / CA2)
+- Affiche dans la fiche d'une culture ce qui est susceptible de l'attaquer : `/fiche tomate` porte désormais une rubrique « À surveiller », les plus fréquents d'abord (US-174)
+- Distingue trois situations là où une seule réponse aurait menti : la liste, l'absence d'information sur une culture connue du référentiel, et l'absence de fiche pour une culture pourtant cultivée ici. Dans les trois cas, l'application ne conclut jamais que la culture n'est pas exposée (US-173 / CA7)
+
+### 🐛 Corrections
+- Ne transforme plus une question dictée en événement de journal. « qu'est-ce qui attaque mes poireaux », dicté **sans point d'interrogation** — ce que produit la transcription vocale — était classé comme une action et enregistré, parce que « attaque » est une variante du geste « observation ». Le seul garde-fou était le « ? » final, absent à la voix ; l'ouverture interrogative en est un second (US-173 / CA3)
+
+### 🔧 Améliorations techniques
+- Étend le catalogue de réponses chiffrées au **référentiel partagé**, et plus seulement aux événements du potager : c'est la première famille de ce type, et c'est ce qui court-circuite le modèle jusque dans la classification (US-173 / CA1)
+- Isole la résolution de culture des bioagresseurs : la lecture filtre désormais `culture_config` sur le potager en base plutôt qu'en mémoire — une fiche personnalisée par un autre potager ne résout plus la culture de qui interroge, et la garde de lecture seule accepte la requête (US-173 / CA8)
+- Rend la fiche courte **consciente du potager** qui la demande, pour que le bioagresseur déclaré localement par un jardinier ne fuie jamais vers un autre potager. Famille, délai de retour, attributs et description restent partagés et rendus à l'identique (US-174 / CA6, CA7)
+- Borne la rubrique à cinq bioagresseurs, les plus fréquents d'abord, et annonce combien restent : une culture en porte parfois quinze, et la fiche courte doit tenir sur un écran de téléphone (US-174 / CA4)
+- N'affiche la période de risque que lorsqu'elle est renseignée : « non renseignée » répété cinq fois noierait la rubrique (US-173 / CA6, US-174 / CA2)
+- Ajoute un corpus de mesure versionné — seize formulations reconnues, sept phrases voisines à ne pas capter, avec et sans ponctuation — et le couperet qui va avec : zéro question enregistrée comme événement (US-173 / CA13, CA14)
+
+## [v3.55.0] — 2026-09-06
+
+### 🚀 Nouveautés
+- Sait enfin ce qui attaque chaque culture, et le dit en une requête sans consulter de modèle : `/bioagresseur lister poireau` restitue la liste ordonnée par fréquence, avec la période de risque et la source (US-162)
+- Permet à un jardinier de déclarer *son* bioagresseur local et de le rattacher à une culture, sans que cette saisie ne vaille pour les autres potagers ni ne soit jamais promue au partagé (US-162 / CA3)
+- Répond « je n'ai pas l'information » plutôt que rien quand une culture n'a aucun bioagresseur rattaché, et dit explicitement que cela ne signifie pas qu'elle n'est pas exposée : l'absence de lien n'est pas une absence de risque (US-162 / CA12)
+- Liste les bioagresseurs connus mais rattachés à aucune culture (`/bioagresseur orphelins`) — la liste de travail de la revue, plutôt qu'un silence qui se lit comme une couverture complète (US-162 / CA12)
+- Ne donne aucun dosage ni recommandation d'emploi d'un produit phytosanitaire, et ne le doit pas à une consigne de rédaction : il n'existe aucune colonne où en stocker un (US-162 / CA10)
+
+### 🔧 Améliorations techniques
+- Publie le **taux d'appariement** des libellés de culture d'une source à chaque import, avec son verdict face au seuil de 70 % : c'est cette mesure, et non une intention, qui décide si l'import automatique vaut encore la saisie directe sur les dix cultures du périmètre (US-162 / CA8)
+- N'applique jamais un rapprochement obtenu par nom vernaculaire seul — « laitue » pour « salade », « haricot grimpant » pour « haricot » — sans revue humaine déclarée dans le manifeste versionné : un drapeau relu en diff git, pas un seuil de similarité qui trancherait seul (US-162 / CA9)
+- Distingue « ne rien mesurer » de « mesurer zéro » : un manifeste sans rattachement ne déclenche pas le verdict d'échec d'appariement (US-162 / CA8)
+- Importe bioagresseurs et arêtes par le manifeste existant, sans second mécanisme : deux blocs de plus, le même contrôle de licence, la même idempotence, et une saisie du jardinier qui survit à tout rejeu hebdomadaire (US-162 / CA5)
+- Consigne les conditions d'utilisation de `data.eppo.int` — préalable bloquant de l'US — dans `data/referentiel/eppo/SOURCE.md` : la « EPPO Codes Open Data Licence » autorise explicitement la reprise en base et l'usage commercial, sans clause de partage à l'identique. Le repli « codes saisis à la main » n'a pas lieu d'être (US-162 / CA7)
+- Recompose la date de dernier téléchargement dans l'attribution EPPO au lieu de la figer : la licence l'exige, et une date en dur mentirait dès le premier rejeu (US-162 / CA7)
+- Range les limaces et les nématodes dans leur propre catégorie : le vocabulaire livré n'en avait pas, et les forçait en « insecte » — la limace est le premier ravageur du potager amateur, l'erreur se voyait. Aucune migration : `categorie` n'a jamais porté de contrainte en base, précisément pour rester révisable (US-162 / CA1)
+- Ajoute la commande `/bioagresseur` au menu natif Telegram, dérivée des handlers comme les autres (US-171)
+
+### 💾 Base de données
+- Ajoute `migration_v43.sql` : tables `bioagresseur` (identité, code EPPO, catégorie) et `culture_bioagresseur` (arête, fréquence, période de risque), leurs index d'unicité **partiels** — le partagé est unique, le local reste libre — et leurs politiques RLS (US-162)
+- Ajoute la source `eppo` au registre de traçabilité, avec sa licence et son attribution ; les deux nouvelles tables entrent dans `donnees_derivees`, qui répond en une requête à « que faut-il retirer si cette source devient litigieuse ? » (US-162 / CA4)
+- Ajoute `rollback_v43.sql`, qui ne retire la source `eppo` que si plus rien n'en dérive
+
 ## [v3.54.0] — 2026-09-04
 
 ### 🚀 Nouveautés

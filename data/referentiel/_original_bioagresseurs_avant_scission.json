@@ -1,0 +1,2436 @@
+{
+  "_lisez_moi": [
+    "Référentiel bioagresseurs et relations avec les cultures du potager amateur en France métropolitaine.",
+    "Rédaction interne autorisée par le responsable du corpus. Fréquences et périodes sont des valeurs éditoriales à soumettre à une revue humaine avant import en production.",
+    "Les codes EPPO renseignés identifient les taxons. Une valeur null signifie qu'aucun code taxonomique pertinent n'est associé, notamment pour les carences et accidents abiotiques.",
+    "Attribution des codes : EPPO (www.eppo.int), consultation du 2026-09-06. Aucun logo ni aval officiel d'EPPO n'est revendiqué.",
+    "Aucun produit phytosanitaire, dosage ni prescription n'est inclus."
+  ],
+  "source": {
+    "code": "redaction_interne",
+    "libelle": "Rédaction interne Assistant Potager",
+    "attribution": "Assistant Potager - rédaction interne ; codes taxonomiques : EPPO (www.eppo.int), consultation du 2026-09-06"
+  },
+  "bioagresseurs": [
+    {
+      "nom_commun_fr": "limaces",
+      "nom_scientifique": "Deroceras reticulatum",
+      "categorie": "insecte",
+      "code_eppo": "DERORE"
+    },
+    {
+      "nom_commun_fr": "puceron vert du pêcher",
+      "nom_scientifique": "Myzus persicae",
+      "categorie": "insecte",
+      "code_eppo": "MYZUPE"
+    },
+    {
+      "nom_commun_fr": "puceron noir de la fève",
+      "nom_scientifique": "Aphis fabae",
+      "categorie": "insecte",
+      "code_eppo": "APHIFA"
+    },
+    {
+      "nom_commun_fr": "puceron cendré du chou",
+      "nom_scientifique": "Brevicoryne brassicae",
+      "categorie": "insecte",
+      "code_eppo": "BRVCBR"
+    },
+    {
+      "nom_commun_fr": "puceron du pois",
+      "nom_scientifique": "Acyrthosiphon pisum",
+      "categorie": "insecte",
+      "code_eppo": "ACYRPI"
+    },
+    {
+      "nom_commun_fr": "puceron du fraisier",
+      "nom_scientifique": "Chaetosiphon fragaefolii",
+      "categorie": "insecte",
+      "code_eppo": "CHTSFR"
+    },
+    {
+      "nom_commun_fr": "aleurode des serres",
+      "nom_scientifique": "Trialeurodes vaporariorum",
+      "categorie": "insecte",
+      "code_eppo": "TRIAVA"
+    },
+    {
+      "nom_commun_fr": "tétranyque tisserand",
+      "nom_scientifique": "Tetranychus urticae",
+      "categorie": "insecte",
+      "code_eppo": "TETRUR"
+    },
+    {
+      "nom_commun_fr": "thrips de l'oignon",
+      "nom_scientifique": "Thrips tabaci",
+      "categorie": "insecte",
+      "code_eppo": "THRITB"
+    },
+    {
+      "nom_commun_fr": "teigne du poireau",
+      "nom_scientifique": "Acrolepiopsis assectella",
+      "categorie": "insecte",
+      "code_eppo": "ACROAS"
+    },
+    {
+      "nom_commun_fr": "mineuse du poireau",
+      "nom_scientifique": "Phytomyza gymnostoma",
+      "categorie": "insecte",
+      "code_eppo": "NAPOGY"
+    },
+    {
+      "nom_commun_fr": "mouche de l'oignon",
+      "nom_scientifique": "Delia antiqua",
+      "categorie": "insecte",
+      "code_eppo": "HYLEAQ"
+    },
+    {
+      "nom_commun_fr": "mouche de la carotte",
+      "nom_scientifique": "Psila rosae",
+      "categorie": "insecte",
+      "code_eppo": "PSILRO"
+    },
+    {
+      "nom_commun_fr": "mouche du chou",
+      "nom_scientifique": "Delia radicum",
+      "categorie": "insecte",
+      "code_eppo": "HYLEBR"
+    },
+    {
+      "nom_commun_fr": "altise des crucifères",
+      "nom_scientifique": "Phyllotreta nemorum",
+      "categorie": "insecte",
+      "code_eppo": "PHYLNE"
+    },
+    {
+      "nom_commun_fr": "piéride du chou",
+      "nom_scientifique": "Pieris brassicae",
+      "categorie": "insecte",
+      "code_eppo": "PIERBR"
+    },
+    {
+      "nom_commun_fr": "piéride de la rave",
+      "nom_scientifique": "Pieris rapae",
+      "categorie": "insecte",
+      "code_eppo": "PIERRA"
+    },
+    {
+      "nom_commun_fr": "noctuelle du chou",
+      "nom_scientifique": "Mamestra brassicae",
+      "categorie": "insecte",
+      "code_eppo": "BARABR"
+    },
+    {
+      "nom_commun_fr": "teigne des crucifères",
+      "nom_scientifique": "Plutella xylostella",
+      "categorie": "insecte",
+      "code_eppo": "PLUTMA"
+    },
+    {
+      "nom_commun_fr": "doryphore",
+      "nom_scientifique": "Leptinotarsa decemlineata",
+      "categorie": "insecte",
+      "code_eppo": "LPTNDE"
+    },
+    {
+      "nom_commun_fr": "taupin",
+      "nom_scientifique": "Agriotes lineatus",
+      "categorie": "insecte",
+      "code_eppo": "AGROLI"
+    },
+    {
+      "nom_commun_fr": "bruche du pois",
+      "nom_scientifique": "Bruchus pisorum",
+      "categorie": "insecte",
+      "code_eppo": "BRCHPI"
+    },
+    {
+      "nom_commun_fr": "bruche de la fève",
+      "nom_scientifique": "Bruchus rufimanus",
+      "categorie": "insecte",
+      "code_eppo": "BRCHRU"
+    },
+    {
+      "nom_commun_fr": "sitone du pois",
+      "nom_scientifique": "Sitona lineatus",
+      "categorie": "insecte",
+      "code_eppo": "SITOLI"
+    },
+    {
+      "nom_commun_fr": "mouche de l'asperge",
+      "nom_scientifique": "Plioreocepta poeciloptera",
+      "categorie": "insecte",
+      "code_eppo": "PLIOPO"
+    },
+    {
+      "nom_commun_fr": "criocère de l'asperge",
+      "nom_scientifique": "Crioceris asparagi",
+      "categorie": "insecte",
+      "code_eppo": "CRIOAS"
+    },
+    {
+      "nom_commun_fr": "anthonome du fraisier",
+      "nom_scientifique": "Anthonomus rubi",
+      "categorie": "insecte",
+      "code_eppo": "ANTHRU"
+    },
+    {
+      "nom_commun_fr": "ver du framboisier",
+      "nom_scientifique": "Byturus tomentosus",
+      "categorie": "insecte",
+      "code_eppo": "BYTUTO"
+    },
+    {
+      "nom_commun_fr": "drosophile à ailes tachetées",
+      "nom_scientifique": "Drosophila suzukii",
+      "categorie": "insecte",
+      "code_eppo": "DROSSU"
+    },
+    {
+      "nom_commun_fr": "mildiou de la pomme de terre et de la tomate",
+      "nom_scientifique": "Phytophthora infestans",
+      "categorie": "champignon",
+      "code_eppo": "PHYTIN"
+    },
+    {
+      "nom_commun_fr": "mildiou des cucurbitacées",
+      "nom_scientifique": "Pseudoperonospora cubensis",
+      "categorie": "champignon",
+      "code_eppo": "PSPECU"
+    },
+    {
+      "nom_commun_fr": "mildiou de la laitue",
+      "nom_scientifique": "Bremia lactucae",
+      "categorie": "champignon",
+      "code_eppo": "BREMLA"
+    },
+    {
+      "nom_commun_fr": "mildiou des alliacées",
+      "nom_scientifique": "Peronospora destructor",
+      "categorie": "champignon",
+      "code_eppo": "PERODE"
+    },
+    {
+      "nom_commun_fr": "mildiou du pois",
+      "nom_scientifique": "Peronospora viciae",
+      "categorie": "champignon",
+      "code_eppo": "PEROVI"
+    },
+    {
+      "nom_commun_fr": "oïdium des cucurbitacées",
+      "nom_scientifique": "Podosphaera xanthii",
+      "categorie": "champignon",
+      "code_eppo": "PODOXA"
+    },
+    {
+      "nom_commun_fr": "oïdium du pois",
+      "nom_scientifique": "Erysiphe pisi",
+      "categorie": "champignon",
+      "code_eppo": "ERYSPF"
+    },
+    {
+      "nom_commun_fr": "oïdium du fraisier",
+      "nom_scientifique": "Podosphaera aphanis",
+      "categorie": "champignon",
+      "code_eppo": "PODOAP"
+    },
+    {
+      "nom_commun_fr": "oïdium de la tomate",
+      "nom_scientifique": "Oidium neolycopersici",
+      "categorie": "champignon",
+      "code_eppo": "OIDILY"
+    },
+    {
+      "nom_commun_fr": "alternariose de la tomate",
+      "nom_scientifique": "Alternaria solani",
+      "categorie": "champignon",
+      "code_eppo": "ALTESO"
+    },
+    {
+      "nom_commun_fr": "alternariose de la carotte",
+      "nom_scientifique": "Alternaria dauci",
+      "categorie": "champignon",
+      "code_eppo": "ALTEDA"
+    },
+    {
+      "nom_commun_fr": "alternariose des brassicacées",
+      "nom_scientifique": "Alternaria brassicae",
+      "categorie": "champignon",
+      "code_eppo": "ALTEBA"
+    },
+    {
+      "nom_commun_fr": "anthracnose du haricot",
+      "nom_scientifique": "Colletotrichum lindemuthianum",
+      "categorie": "champignon",
+      "code_eppo": "COLLLI"
+    },
+    {
+      "nom_commun_fr": "anthracnose des cucurbitacées",
+      "nom_scientifique": "Colletotrichum orbiculare",
+      "categorie": "champignon",
+      "code_eppo": "COLLOR"
+    },
+    {
+      "nom_commun_fr": "rouille des alliacées",
+      "nom_scientifique": "Puccinia allii",
+      "categorie": "champignon",
+      "code_eppo": "PUCCAL"
+    },
+    {
+      "nom_commun_fr": "rouille de l'asperge",
+      "nom_scientifique": "Puccinia asparagi",
+      "categorie": "champignon",
+      "code_eppo": "PUCCAS"
+    },
+    {
+      "nom_commun_fr": "rouille du haricot",
+      "nom_scientifique": "Uromyces appendiculatus",
+      "categorie": "champignon",
+      "code_eppo": "UROMAP"
+    },
+    {
+      "nom_commun_fr": "septoriose du céleri",
+      "nom_scientifique": "Septoria apiicola",
+      "categorie": "champignon",
+      "code_eppo": "SEPTAP"
+    },
+    {
+      "nom_commun_fr": "septoriose du persil",
+      "nom_scientifique": "Septoria petroselini",
+      "categorie": "champignon",
+      "code_eppo": "SEPTPE"
+    },
+    {
+      "nom_commun_fr": "pourriture grise",
+      "nom_scientifique": "Botrytis cinerea",
+      "categorie": "champignon",
+      "code_eppo": "BOTRCI"
+    },
+    {
+      "nom_commun_fr": "sclérotiniose",
+      "nom_scientifique": "Sclerotinia sclerotiorum",
+      "categorie": "champignon",
+      "code_eppo": "SCLESC"
+    },
+    {
+      "nom_commun_fr": "fonte des semis",
+      "nom_scientifique": "Pythium ultimum",
+      "categorie": "champignon",
+      "code_eppo": "PYTHUL"
+    },
+    {
+      "nom_commun_fr": "hernie du chou",
+      "nom_scientifique": "Plasmodiophora brassicae",
+      "categorie": "champignon",
+      "code_eppo": "PLADBR"
+    },
+    {
+      "nom_commun_fr": "fusariose vasculaire de la tomate",
+      "nom_scientifique": "Fusarium oxysporum f. sp. lycopersici",
+      "categorie": "champignon",
+      "code_eppo": "FUSALY"
+    },
+    {
+      "nom_commun_fr": "verticilliose",
+      "nom_scientifique": "Verticillium dahliae",
+      "categorie": "champignon",
+      "code_eppo": "VERTDA"
+    },
+    {
+      "nom_commun_fr": "cladosporiose de la tomate",
+      "nom_scientifique": "Passalora fulva",
+      "categorie": "champignon",
+      "code_eppo": "FULVFU"
+    },
+    {
+      "nom_commun_fr": "tavelure noire de la pomme de terre",
+      "nom_scientifique": "Rhizoctonia solani",
+      "categorie": "champignon",
+      "code_eppo": "RHIZSO"
+    },
+    {
+      "nom_commun_fr": "gale commune de la pomme de terre",
+      "nom_scientifique": "Streptomyces scabiei",
+      "categorie": "bacterie",
+      "code_eppo": "STRSSC"
+    },
+    {
+      "nom_commun_fr": "graisse du haricot",
+      "nom_scientifique": "Pseudomonas savastanoi pv. phaseolicola",
+      "categorie": "bacterie",
+      "code_eppo": "PSDMPS"
+    },
+    {
+      "nom_commun_fr": "tache bactérienne de la tomate",
+      "nom_scientifique": "Xanthomonas euvesicatoria",
+      "categorie": "bacterie",
+      "code_eppo": "XANTEU"
+    },
+    {
+      "nom_commun_fr": "mosaïque du concombre",
+      "nom_scientifique": "Cucumber mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "CMV000"
+    },
+    {
+      "nom_commun_fr": "mosaïque de la laitue",
+      "nom_scientifique": "Lettuce mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "LMV000"
+    },
+    {
+      "nom_commun_fr": "mosaïque du haricot",
+      "nom_scientifique": "Bean common mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "BCMV00"
+    },
+    {
+      "nom_commun_fr": "virus Y de la pomme de terre",
+      "nom_scientifique": "Potato virus Y",
+      "categorie": "virus",
+      "code_eppo": "PVY000"
+    },
+    {
+      "nom_commun_fr": "nématodes à galles",
+      "nom_scientifique": "Meloidogyne incognita",
+      "categorie": "insecte",
+      "code_eppo": "MELGIN"
+    },
+    {
+      "nom_commun_fr": "coup de soleil",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "éclatement des fruits",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "montaison précoce",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "nécrose apicale",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    }
+  ],
+  "cultures_bioagresseurs": [
+    {
+      "culture": "salade",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "mosaïque de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "mosaïque de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mesclun",
+      "bioagresseur": "mosaïque de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "oseille",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "oseille",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "oseille",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard perpétuel",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard perpétuel",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard perpétuel",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "mildiou de la laitue",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "périodes fraîches et humides"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "altise des crucifères",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "piéride de la rave",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "mouche du chou",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "puceron cendré du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "piéride du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "teigne des crucifères",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "hernie du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "noctuelle du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "alternariose des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "noctuelle du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "alternariose des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "noctuelle du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "alternariose des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "noctuelle du chou",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "alternariose des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "mouche de la carotte",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "persil",
+      "bioagresseur": "mouche de la carotte",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "céleri",
+      "bioagresseur": "mouche de la carotte",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "fenouil",
+      "bioagresseur": "mouche de la carotte",
+      "frequence": "courant",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "céleri",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "céleri",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "persil",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "persil",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "coriandre",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "coriandre",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "fenouil",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "fenouil",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "alternariose de la carotte",
+      "frequence": "courant",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "céleri",
+      "bioagresseur": "septoriose du céleri",
+      "frequence": "courant",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "persil",
+      "bioagresseur": "septoriose du persil",
+      "frequence": "occasionnel",
+      "periode_risque": "été-automne"
+    },
+    {
+      "culture": "betterave",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "betterave",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "blette",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "thrips de l'oignon",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "rouille des alliacées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "thrips de l'oignon",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "rouille des alliacées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "thrips de l'oignon",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "rouille des alliacées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "thrips de l'oignon",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "rouille des alliacées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "ciboulette",
+      "bioagresseur": "thrips de l'oignon",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "ciboulette",
+      "bioagresseur": "rouille des alliacées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "mildiou des alliacées",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "mineuse du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "mildiou des alliacées",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "mineuse du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "mildiou des alliacées",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "mineuse du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "mildiou des alliacées",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "mineuse du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "ciboulette",
+      "bioagresseur": "mildiou des alliacées",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "ciboulette",
+      "bioagresseur": "mineuse du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "teigne du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "mouche de l'oignon",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "teigne du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "mouche de l'oignon",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "teigne du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "échalote",
+      "bioagresseur": "mouche de l'oignon",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "teigne du poireau",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "mouche de l'oignon",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "aleurode des serres",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "aleurode des serres",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "aleurode des serres",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "aleurode des serres",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "mildiou de la pomme de terre et de la tomate",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "alternariose de la tomate",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "mildiou de la pomme de terre et de la tomate",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "alternariose de la tomate",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "verticilliose",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "nématodes à galles",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "verticilliose",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "nématodes à galles",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "verticilliose",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "nématodes à galles",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "verticilliose",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "nématodes à galles",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "oïdium de la tomate",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "cladosporiose de la tomate",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "fusariose vasculaire de la tomate",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "tache bactérienne de la tomate",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "nécrose apicale",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "éclatement des fruits",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-octobre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "doryphore",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "taupin",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "tavelure noire de la pomme de terre",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "gale commune de la pomme de terre",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "pomme de terre",
+      "bioagresseur": "virus Y de la pomme de terre",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "butternut",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "courge",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "mosaïque du concombre",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "potimarron",
+      "bioagresseur": "fonte des semis",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "anthracnose des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été humide"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "anthracnose des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été humide"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "anthracnose des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été humide"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "anthracnose des cucurbitacées",
+      "frequence": "occasionnel",
+      "periode_risque": "été humide"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "fève",
+      "bioagresseur": "puceron noir de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "fève",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "puceron du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "bruche du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "sitone du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "oïdium du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "mildiou du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "puceron du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "bruche du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "sitone du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "oïdium du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "pois gourmand",
+      "bioagresseur": "mildiou du pois",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "fève",
+      "bioagresseur": "bruche de la fève",
+      "frequence": "courant",
+      "periode_risque": "avril-juillet"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "anthracnose du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "rouille du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "graisse du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "mosaïque du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "anthracnose du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "rouille du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "graisse du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "mosaïque du haricot",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "oïdium du fraisier",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "puceron du fraisier",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "anthonome du fraisier",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "asperge",
+      "bioagresseur": "criocère de l'asperge",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "asperge",
+      "bioagresseur": "mouche de l'asperge",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "asperge",
+      "bioagresseur": "rouille de l'asperge",
+      "frequence": "courant",
+      "periode_risque": "avril-septembre"
+    },
+    {
+      "culture": "framboise",
+      "bioagresseur": "ver du framboisier",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "framboise",
+      "bioagresseur": "drosophile à ailes tachetées",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "framboise",
+      "bioagresseur": "pourriture grise",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "framboise",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "courant",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "rhubarbe",
+      "bioagresseur": "limaces",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "rhubarbe",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "rhubarbe",
+      "bioagresseur": "sclérotiniose",
+      "frequence": "occasionnel",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "basilic",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "basilic",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "basilic",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "thym",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "thym",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "thym",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "romarin",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "romarin",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "romarin",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "menthe",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "menthe",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "menthe",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "capucine",
+      "bioagresseur": "puceron vert du pêcher",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "capucine",
+      "bioagresseur": "tétranyque tisserand",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "capucine",
+      "bioagresseur": "pourriture grise",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-septembre"
+    },
+    {
+      "culture": "basilic",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "menthe",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "capucine",
+      "bioagresseur": "limaces",
+      "frequence": "courant",
+      "periode_risque": "printemps-automne"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "laitue",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "mâche",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "roquette",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "coriandre",
+      "bioagresseur": "montaison précoce",
+      "frequence": "courant",
+      "periode_risque": "fin de printemps-été"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "coup de soleil",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "coup de soleil",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "coup de soleil",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "coup de soleil",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "coup de soleil",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "nécrose apicale",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "nécrose apicale",
+      "frequence": "occasionnel",
+      "periode_risque": "été"
+    }
+  ]
+}

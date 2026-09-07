@@ -69,6 +69,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from unidecode import unidecode
 
+from app.services import bioagresseurs as svc_bioagresseurs
 from app.services import catalogue_sql
 from app.services import familles as _familles
 from app.services.catalogue_sql import GardeCatalogueError
@@ -174,6 +175,18 @@ GABARITS: dict[str, str] = {
     "parcelles_libres_aucune":  "Aucune parcelle libre : tes {total} parcelles sont toutes occupées.",
 
     # Parcelles où une culture est en place — « où sont mes tomates ? »
+    # [US-173 / CA5, CA7] Ce qui attaque une culture. Trois gabarits, parce
+    # qu'il y a trois situations distinctes et qu'en confondre deux trompe le
+    # jardinier : la liste, l'ignorance sur une culture dont le référentiel a
+    # une fiche, et l'absence de fiche pour une culture pourtant cultivée ici.
+    "bioagresseurs_culture":        "Sur {culture}, à surveiller :\n{lignes}",
+    "bioagresseurs_culture_aucun":  ("Je n'ai aucun bioagresseur rattaché à {culture}. "
+                                     "Cela ne veut pas dire que cette culture n'est pas "
+                                     "exposée : l'information n'a pas encore été renseignée."),
+    "bioagresseurs_culture_sans_fiche": ("Je n'ai pas de fiche de référentiel pour {culture}, "
+                                         "donc rien à dire sur ce qui l'attaque. Ce n'est pas "
+                                         "un constat d'absence de risque."),
+
     "parcelles_par_culture":    "Je trouve {culture} sur {nb} parcelle(s) :\n{lignes}",
     "parcelles_par_culture_aucune": "Côté {culture} : aucune parcelle n'en porte en ce moment.",
 
@@ -681,6 +694,50 @@ def _agreger_occupation_parcelle(db: Session, ctx: TenantContext, parcelle: str)
     }
 
 
+@catalogue_sql.enregistrer("bioagresseurs_culture")
+def _agreger_bioagresseurs_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
+    """[US-173 / CA5, CA7, CA8, CA11] Ce qui attaque une culture — lecture pure
+    du référentiel d'US-162, à zéro jeton.
+
+    Délègue à `app.services.bioagresseurs.lire_bioagresseurs`, qui porte déjà
+    l'ordre par fréquence, l'isolation par potager et la recomposition
+    d'attribution. **Aucune requête n'est réécrite ici** (CA11) : la commande
+    `/bioagresseur lister`, cette réponse en langage naturel et la commande
+    dictée d'US-172 traversent le même code — trois portes, une seule vérité.
+
+    Trois issues distinctes, jamais confondues :
+      - `present=True` + entrées : la liste ;
+      - `present=True` sans entrée : la culture a une fiche, aucune arête n'y
+        est rattachée — l'application ne sait pas, ce qui n'est pas « rien ne
+        l'attaque » (CA12 d'US-162) ;
+      - `present=False` : la culture est cultivée ici mais n'a aucune fiche de
+        référentiel — troisième situation, troisième message (CA7).
+    """
+    try:
+        trouves = svc_bioagresseurs.lire_bioagresseurs(
+            db, culture, potager_id=ctx.potager_id
+        )
+    except svc_bioagresseurs.CultureInconnueError:
+        return {"present": False, "culture": culture, "entrees": [], "nb": 0, "nb_lignes": 0}
+
+    entrees = [
+        {
+            "nom": b.nom_commun_fr,
+            "frequence": b.frequence,
+            "periode": b.periode_risque,
+            "local": b.local,
+        }
+        for b in trouves
+    ]
+    return {
+        "present": True,
+        "culture": culture,
+        "entrees": entrees[:MAX_LIGNES_AFFICHEES],
+        "nb": len(entrees),
+        "nb_lignes": len(entrees),
+    }
+
+
 @catalogue_sql.enregistrer("parcelles_par_culture")
 def _agreger_parcelles_par_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
     """Parcelles où une culture est en place — la question inverse de
@@ -1005,6 +1062,33 @@ def _rendu_occupation(params: Parametres, agregat: dict) -> str:
     )
 
 
+def _rendu_bioagresseurs_culture(params: Parametres, agregat: dict) -> str:
+    """[US-173 / CA5, CA6, CA10] Gabarit assemblé, jamais rédigé par un modèle.
+
+    La période n'apparaît que si elle est renseignée (CA6) — « non renseignée »
+    répété cinq fois noierait la réponse. Aucun produit, aucun dosage n'est
+    formulable ici : l'agrégat n'en porte pas (CA10).
+    """
+    culture = _sur(agregat["culture"])
+    if not agregat["present"]:
+        return _remplir(GABARITS["bioagresseurs_culture_sans_fiche"], {"culture": culture})
+    if not agregat["nb"]:
+        return _remplir(GABARITS["bioagresseurs_culture_aucun"], {"culture": culture})
+
+    lignes = []
+    for entree in agregat["entrees"]:
+        details = [entree["frequence"]]
+        if entree["periode"]:
+            details.append(entree["periode"])
+        if entree["local"]:
+            details.append("votre potager")
+        lignes.append(f"  • {_sur(entree['nom'])} — {_sur(' · '.join(details))}")
+    return _remplir(GABARITS["bioagresseurs_culture"], {
+        "culture": culture,
+        "lignes": _lignes_avec_reste(lignes, agregat["nb_lignes"]),
+    })
+
+
 def _rendu_parcelles_par_culture(params: Parametres, agregat: dict) -> str:
     culture = _sur(agregat["culture"])
     if not agregat["nb"]:
@@ -1085,6 +1169,54 @@ _EXCLUT_SAVOIR = re.compile(
 
 
 FAMILLES: tuple[Famille, ...] = (
+    Famille(
+        # [US-173] EN PREMIER, et volontairement spécifique : le vocabulaire de
+        # l'agression ne se confond avec aucune autre famille, et le placer en
+        # tête évite qu'une famille plus large ne capte « quelles maladies sur
+        # mes tomates » pour servir un inventaire de parcelles.
+        #
+        # ⚠️ Cette famille ne porte PAS `_EXCLUT_SAVOIR`, contrairement aux
+        # familles larges : ce motif exclut « maladie », qui est ici le mot
+        # central de la question. L'exclusion dont elle a besoin est autre —
+        # voir `exclut` ci-dessous.
+        nom="bioagresseurs_culture",
+        # [US-173 / CA1] Cette réponse dérive du référentiel PARTAGÉ (US-162)
+        # et non des évènements du potager : aucune nature de donnée ne la
+        # décrit vraiment. `NATURE_JOURNAL` est donc déclarée au titre de
+        # l'arbitrage « invalider large » d'utils/dependances_donnee — toute
+        # écriture périme l'entrée, ce qui ne coûte qu'un recalcul SQL.
+        #
+        # Déclarer un tuple vide aurait produit le MÊME effet par un autre
+        # chemin (`cache_questions` retombe alors sur NATURES_TOUTES), mais sans
+        # le dire : une famille sans dépendance se lit comme un oubli, et le
+        # garde-fou d'US-095 la refuse à raison.
+        #
+        # La fraîcheur, elle, ne dépend de toute façon pas de ce champ :
+        # `servir_aiguillage` réexécute l'agrégation à chaque service, le cache
+        # ne mémorise que le choix de la famille et sa culture.
+        dependances=(NATURE_JOURNAL,),
+        agregation="bioagresseurs_culture",
+        motif=re.compile(
+            # Les trois registres du CA2 : le ravageur, la maladie, l'anticipation.
+            r"\battaque(?:nt|s|r)?\b|\bs attaquent?\b|\bmaladies?\b|\bravageurs?\b|"
+            r"\bnuisibles?\b|\bparasites?\b|\bbioagresseurs?\b|\bbestioles?\b|"
+            r"\bbetes\b|\bqui (?:mange|ronge|abime|devore)\b|\bmangent\b|"
+            r"\bm attendre\b|\bme attendre\b|\bcraindre\b|\bsurveiller\b"
+        ),
+        # [US-173 / CA4] Ce qui retire la question à cette famille : une SAISIE
+        # d'observation, qui rapporte un fait au lieu de poser une question.
+        # « observé une attaque de mildiou sur les tomates » doit s'enregistrer,
+        # pas déclencher un inventaire. Le routeur l'attrape déjà avant nous
+        # (les verbes d'action y sont testés en premier) ; ceci est la défense
+        # en profondeur, au cas où la phrase l'atteindrait autrement.
+        exclut=re.compile(
+            r"\bobserve\b|\bobservee?s?\b|\bconstate\b|\bconstatee?s?\b|\bremarque\b|"
+            r"\bj ai vu\b|\bjai vu\b|\bnote\b|\btraite\b|\bpulverise\b"
+        ),
+        exige=("culture",),
+        arguments=lambda p: {"culture": p.culture},
+        rendu=_rendu_bioagresseurs_culture,
+    ),
     Famille(
         nom="pepiniere",
         dependances=(NATURE_PEPINIERE, NATURE_SEMIS),
