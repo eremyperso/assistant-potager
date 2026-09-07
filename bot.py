@@ -616,7 +616,19 @@ _HELP_FICHE = (
     "explicitement — jamais une fiche voisine forcée._"
 )
 
-_HELP_MOTS_CLES = "parcelle · semis · godet · recolte · stock · stats · note · culture · fiche"
+# [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
+# C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
+# connaissance doit couvrir chacun d'eux par au moins une fiche
+# (`tools/controler_aide_corpus.py`, vérifié en intégration continue).
+# Les entrées de `_HELP_CONTEXTUEL` qui n'y figurent pas sont des synonymes de
+# saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
+_HELP_DOMAINES: tuple[str, ...] = (
+    "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
+)
+
+# Dérivé, jamais recopié : un domaine ajouté ci-dessus entre au sommaire sans
+# qu'on ait à y penser, et le contrôle de couverture du corpus le réclame aussitôt.
+_HELP_MOTS_CLES = " · ".join(_HELP_DOMAINES)
 
 _HELP_CONTEXTUEL: dict[str, str] = {
     "parcelle":  _HELP_PARCELLE,

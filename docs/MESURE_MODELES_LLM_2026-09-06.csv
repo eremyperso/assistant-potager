@@ -1,0 +1,6 @@
+modele,texte,issue,erreur,exact,json_valide,attendu_action,obtenu_action,exact_action,attendu_culture,obtenu_culture,exact_culture,attendu_quantite,obtenu_quantite,exact_quantite,attendu_unite,obtenu_unite,exact_unite,tokens_in,tokens_out,tokens_cache,latence_ms,attente_s
+groq/compound-mini,Ajouté 2 pieds de ciboulette Allium schoenoprasum le 01/07/2025,ok,,True,True,plantation,plantation,True,ciboulette,ciboulette,True,2.0,2,True,plants,plants,True,6129,542,0,1430,12.0
+groq/compound-mini,Arrache 3 pieds de courges hier,ok,,True,True,perte,perte,True,courge,courge,True,3.0,3,True,plants,plants,True,6096,481,0,1595,12.0
+groq/compound-mini,Arrache 7 pieds de courges hier,ok,,True,True,perte,perte,True,courge,courge,True,7.0,7,True,plants,plants,True,6096,460,0,1568,20.0
+groq/compound-mini,Arrosage betteraves,quota,RateLimitError,False,False,arrosage,,False,betterave,,False,,,False,,,False,0,0,0,59,20.0
+groq/compound-mini,Arrosage copieux sur les courges de la parcelle courges le 11/07 matin,quota,RateLimitError,False,False,observation,,False,courge,,False,,,False,,,False,0,0,0,66,20.0

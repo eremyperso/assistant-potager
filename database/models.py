@@ -19,8 +19,16 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
          leur source respective
 [US-163] Ajout du modèle AssociationCulture (table association_culture) et
          de l'index composite evenements(parcelle_id, date) pour la rotation
+[US-098] Ajout des modèles KnowledgeDocument et KnowledgeChunk (socle de
+         connaissance interrogeable en plein texte) + colonnes score_savoir /
+         issue_savoir sur routage_logs
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
+# [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
+# aucun pilote (psycopg2 n'est sollicité qu'à la création du moteur). Le
+# `with_variant(Text(), "sqlite")` posé sur la colonne laisse les tests tourner
+# en SQLite en mémoire, sans branchement dans le modèle.
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database.db import Base
@@ -541,6 +549,15 @@ class RoutageLog(Base):
     latence_ms             = Column(Integer, nullable=False, default=0)
     tokens_consommes       = Column(Integer, nullable=False, default=0)
 
+    # [US-098 / CA14] Score et issue de la recherche de savoir, quand la
+    # question a traversé l'étage 2. Deux colonnes distinctes de `confiance`
+    # ci-dessus, qui est la confiance de la CLASSIFICATION : les confondre
+    # rendrait illisibles les deux mesures. NULL = étage du savoir non traversé.
+    # C'est `issue_savoir = 'vide'` qui répond à « quelles questions ne trouvent
+    # rien ? », donc à « que faut-il écrire ensuite ? ».
+    score_savoir           = Column(Float, nullable=True)
+    issue_savoir           = Column(String(16), nullable=True)
+
     __table_args__ = (
         Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),
     )
@@ -626,7 +643,11 @@ class QuestionCache(Base):
     source_etage    = Column(String(8), nullable=False)
     culture         = Column(String(120), nullable=True)
     natures         = Column(String(200), nullable=False, default="")
-    fragment_id     = Column(String(120), nullable=True)
+    # [US-098] Sans borne, comme `KnowledgeChunk.reference` dont c'est le report.
+    # VARCHAR(120) (migration_v36) refusait 19 des 96 fragments du premier corpus
+    # agronomique réel — une réponse dérivée de l'un d'eux échouait à la
+    # mémorisation sur un DataError, donc repayait un appel modèle à chaque fois.
+    fragment_id     = Column(String, nullable=True)
     valide_jusqu_au = Column(DateTime, nullable=True)
     cree_le         = Column(DateTime, server_default=func.now(), default=func.now())
 
@@ -637,3 +658,117 @@ class QuestionCache(Base):
         # Requête de service d'une réponse figée : la phrase est la seule clé.
         Index("idx_questions_cache_motif", "motif_normalise", "potager_id"),
     )
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-098] Socle de connaissance — le contenant, pas le contenu
+# ═════════════════════════════════════════════════════════════════════════════
+class KnowledgeDocument(Base):
+    """
+    [US-098 / CA1] Document de connaissance versionné dans le dépôt.
+
+    Le contenu vit dans le dépôt, la base en est l'INDEX (arbitrage tranché de
+    l'US) : ces lignes sont produites exclusivement par
+    `tools/ingerer_connaissance.py` à partir de fichiers Markdown relus et
+    corrigés comme du code. Rien ne s'édite en base.
+
+    `potager_id` NULL = savoir global partagé entre tous les potagers ; non NULL
+    = savoir privé d'un potager (US-141). Motif déjà éprouvé sur
+    `culture_config` (CA3) — une seule fiche « tomate » sert tous les jardins.
+    """
+    __tablename__ = "knowledge_documents"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    potager_id       = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+
+    # [CA10] Identité STABLE du document — chemin relatif du .md dans le dépôt.
+    # C'est elle qui rend l'ingestion idempotente : sans identité stable, un
+    # rejeu créerait un second document au lieu de retrouver le premier.
+    reference        = Column(String, nullable=False, unique=True, index=True)
+
+    titre            = Column(String, nullable=False)
+    # agronomie | doc_app | memoire_potager — vocabulaire fermé validé par
+    # app.services.connaissance.FAMILLES, pas par un CHECK en base : même
+    # arbitrage que `culture_config.exposition` (migration_v39), un vocabulaire
+    # fermé mais révisable sans ALTER TYPE.
+    famille          = Column(String, nullable=False, index=True)
+    source           = Column(String, nullable=False)
+    # verifie | indicatif — app.services.connaissance.NIVEAUX_CONFIANCE.
+    niveau_confiance = Column(String, nullable=False)
+
+    # [CA10] SHA-256 du fichier source : « ce document a-t-il changé ? » sans
+    # comparer le texte entier, et sans réécrire des fragments identiques.
+    empreinte        = Column(String, nullable=False)
+
+    cree_le          = Column(DateTime, server_default=func.now(), default=func.now())
+    mis_a_jour_le    = Column(DateTime, server_default=func.now(), default=func.now(),
+                              onupdate=func.now())
+
+    fragments        = relationship(
+        "KnowledgeChunk", back_populates="document",
+        cascade="all, delete-orphan", passive_deletes=True,
+    )
+
+
+class KnowledgeChunk(Base):
+    """
+    [US-098 / CA2] Fragment autonome d'un document — l'unité de la recherche.
+
+    [CA12] Un fragment porte une idée répondable à lui seul, et conserve le
+    titre de son document (`titre_document`) : un fragment qui n'a de sens
+    qu'avec le précédent est un défaut de découpage, pas une fatalité du format.
+
+    [CA2 amendé le 25/08/2026 — docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md
+    §1.3] La culture est une RÉFÉRENCE (`culture_id`), jamais un libellé : un
+    libellé ici serait l'erreur corrigée par `migration_v12` sur
+    `evenements.parcelle`, et une culture renommée depuis le bot orphelinerait
+    silencieusement ses fragments (CA2bis).
+
+    ⚠️ `app/services/connaissance.py` est le SEUL point d'écriture de cette
+    table : `recherche_fts` est maintenu à l'écriture, une insertion faite
+    ailleurs laisserait le vecteur vide, donc le fragment introuvable.
+    """
+    __tablename__ = "knowledge_chunks"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    document_id    = Column(Integer, ForeignKey("knowledge_documents.id", ondelete="CASCADE"),
+                            nullable=False, index=True)
+
+    # [CA2, CA5] Dénormalisé depuis le document : le filtre d'isolation se pose
+    # alors sur la table interrogée, sans jointure — une jointure oubliée est un
+    # chemin de fuite, une colonne absente n'en est pas un.
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+
+    # [CA11] Identité stable du fragment, reportée dans
+    # `questions_cache.fragment_id` : c'est par elle qu'une réingestion invalide
+    # les réponses figées qui en dérivaient (US-095 / CA10).
+    reference      = Column(String, nullable=False, unique=True, index=True)
+
+    ordre          = Column(Integer, nullable=False, default=0)
+    # [CA12] Contexte du titre du document conservé sur CHAQUE fragment : c'est
+    # ce qui rend « arroser deux fois par semaine » lisible sans le document.
+    titre_document = Column(String, nullable=False)
+    intitule       = Column(String, nullable=True)
+    contenu        = Column(Text, nullable=False)
+
+    culture_id     = Column(Integer, ForeignKey("culture_config.id"), nullable=True, index=True)
+    culture_rel    = relationship("CultureConfig", foreign_keys=[culture_id])
+
+    # maladie | semis | association | rotation… — vocabulaire ouvert : il sert à
+    # restreindre une recherche (CA6), jamais à valider une saisie.
+    type           = Column(String, nullable=True, index=True)
+    saison         = Column(String, nullable=True)
+
+    # [CA4] TSVECTOR sous PostgreSQL, texte indexable sous SQLite (tests) — voir
+    # `app.services.connaissance` pour les deux chemins. Maintenu à l'ÉCRITURE,
+    # jamais recalculé par requête (note technique de l'US), et jamais par un
+    # trigger ni une colonne GENERATED : le projet tourne aussi sur SQLite.
+    recherche_fts  = Column(TSVECTOR().with_variant(Text(), "sqlite"), nullable=True)
+
+    # [CA2] Créée, nullable et INUTILISÉE — aucune lecture, aucune écriture nulle
+    # part dans le code. Pas de pgvector à ce stade (arbitrage tranché) : la
+    # colonne existe pour éviter de rouvrir cette table le jour où la recherche
+    # sémantique sera décidée, décision suspendue à la mesure du CA13.
+    embedding      = Column(Text, nullable=True)
+
+    document       = relationship("KnowledgeDocument", back_populates="fragments")

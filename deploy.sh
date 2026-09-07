@@ -22,7 +22,7 @@ BRANCH="${DEPLOY_BRANCH:-main}"
 echo "==> Déploiement sur ${DEPLOY_HOST} (branche: ${BRANCH})"
 
 # ── 1. Synchronisation du code ─────────────────────────────────────────────────
-echo "==> [1/5] Synchronisation du code..."
+echo "==> [1/6] Synchronisation du code..."
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
   if [ ! -d '${REMOTE_DIR}/.git' ]; then
@@ -35,7 +35,7 @@ ssh "${DEPLOY_HOST}" "
 "
 
 # ── 2. Installation des dépendances ────────────────────────────────────────────
-echo "==> [2/5] Installation des dépendances Python..."
+echo "==> [2/6] Installation des dépendances Python..."
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
   cd ${REMOTE_DIR}
@@ -44,7 +44,7 @@ ssh "${DEPLOY_HOST}" "
 "
 
 # ── 3. Application des migrations SQL ──────────────────────────────────────────
-echo "==> [3/5] Application des migrations SQL..."
+echo "==> [3/6] Application des migrations SQL..."
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
   cd ${REMOTE_DIR}
@@ -56,12 +56,41 @@ ssh "${DEPLOY_HOST}" "
   done
 "
 
-# ── 4. Redémarrage du service systemd ──────────────────────────────────────────
-echo "==> [4/5] Redémarrage du service systemd..."
+# ── 4. Corpus de connaissance ──────────────────────────────────────────────────
+# [US-099 / CA10] Le corpus se déploie comme une migration : il fait partie de
+# la livraison, pas d'une opération manuelle à côté. Une fiche corrigée dans le
+# dépôt mais jamais réingérée resterait fausse en production — c'est exactement
+# ce que le CA9 interdit.
+#
+# Deux propriétés le rendent sûr à jouer à chaque déploiement : l'ingestion est
+# IDEMPOTENTE (empreinte SHA-256 par fichier — même contenu, aucune écriture,
+# pas même un UPDATE), et le contrôle de cohérence qui la précède échoue avant
+# d'avoir rien écrit.
+#
+# ATTENTION RLS : une fiche GLOBALE (potager_id NULL) ne s'écrit qu'avec le rôle
+# PROPRIÉTAIRE de la base. On réutilise donc le même DATABASE_URL que les
+# migrations ci-dessus, jamais un rôle applicatif.
+#
+# ATTENTION Premiere mise en service de l'étage : le seuil de confiance doit être
+# étalonné contre PostgreSQL AVANT d'ouvrir l'étage — procédure complète dans
+# docs/RUNBOOK_ALIMENTATION_SOCLE_CONNAISSANCE.md §5. Ce pas de déploiement
+# entretient un corpus déjà en service, il ne remplace pas cette mise en route.
+echo "==> [4/6] Contrôle et ingestion du corpus de connaissance..."
+ssh "${DEPLOY_HOST}" "
+  set -euo pipefail
+  cd ${REMOTE_DIR}
+  export APP_ENV=prod
+  set -a && source .env.prod && set +a
+  python3 tools/controler_aide_corpus.py
+  python3 tools/ingerer_connaissance.py --strict --elaguer
+"
+
+# ── 5. Redémarrage du service systemd ──────────────────────────────────────────
+echo "==> [5/6] Redémarrage du service systemd..."
 ssh "${DEPLOY_HOST}" "sudo systemctl restart potager.service"
 
-# ── 5. Smoke test ──────────────────────────────────────────────────────────────
-echo "==> [5/5] Smoke test (attente 10s démarrage)..."
+# ── 6. Smoke test ──────────────────────────────────────────────────────────────
+echo "==> [6/6] Smoke test (attente 10s démarrage)..."
 sleep 10
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
