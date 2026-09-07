@@ -62,6 +62,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "fiche",
     "association",
     "rotation",
+    "bioagresseur",
     "meteo",
     # Configuration du potager et du compte
     "parcelle",
@@ -90,6 +91,7 @@ DESCRIPTIONS: dict[str, str] = {
     "fiche":       "Fiche agronomique courte d'une culture",
     "association": "Cultures à associer ou à éloigner",
     "rotation":    "Vérifier la rotation avant de semer",
+    "bioagresseur": "Ce qui attaque une culture",
     "meteo":       "Météo du jour et conseil potager",
     "parcelle":    "Créer, renommer ou lister vos parcelles",
     "parcelles":   "Lister vos parcelles",

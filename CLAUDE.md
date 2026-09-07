@@ -136,6 +136,54 @@ python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 # automatique (US-167) — jamais supposé sous prétexte que les index existent.
 python tools/mesurer_rotation.py <parcelle_id> <culture>
 
+# Bioagresseurs et relation culture × bioagresseur [US-162]
+# « Qu'est-ce qui attaque mes poireaux » est une REQUÊTE, à zéro jeton — pas une
+# recherche de similarité. Deux tables : une identité (bioagresseur) et une arête
+# (culture_bioagresseur). Aucune colonne de produit, de dosage ni de description :
+# l'absence de colonne est la garantie qu'aucune prescription ne peut être servie.
+psql -d potager -f migrations/migration_v43.sql
+#   /bioagresseur lister <culture>
+#   /bioagresseur declarer <champignon|insecte|mollusque|nematode|bacterie|virus|abiotique|carence> <nom>
+#   /bioagresseur rattacher <culture> <courant|occasionnel|rare> <bioagresseur>
+#   /bioagresseur orphelins        # identités connues rattachées à aucune culture
+# Une saisie au bot est TOUJOURS locale au potager et n'est jamais promue au
+# partagé : la promotion est une décision humaine.
+# Import — même commande et même manifeste que les attributs et les associations,
+# deux blocs supplémentaires (`bioagresseurs` puis `cultures_bioagresseurs`) :
+python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_interne.json
+# Le gabarit est livré VIDE et se remplit à la main. L'import PUBLIE le taux
+# d'appariement des libellés de culture (CA8) : sous ~70 %, la correspondance
+# manuelle sur les dix cultures du périmètre devient le mode nominal — la décision
+# se prend sur la mesure, pas sur l'intention.
+# Un rapprochement par nom vernaculaire seul (« laitue » pour « salade », déclaré
+# par `culture_en_base`) n'est JAMAIS appliqué sans `"revue_humaine": true` dans
+# le manifeste — un drapeau relu en diff git, pas un seuil de similarité (CA9).
+# Codes EPPO : conditions d'utilisation de data.eppo.int LUES et consignées dans
+# data/referentiel/eppo/SOURCE.md — elles autorisent la reprise en base et l'usage
+# commercial, contre citation d'EPPO ET de la date du dernier téléchargement.
+
+# Question en langage naturel sur les bioagresseurs [US-173]
+# « qu'est-ce qui attaque mes poireaux ? » est servie par GABARIT, à l'étage 1,
+# sans appel modèle — pas même pour classer la question. Une famille de plus au
+# catalogue de reponses_chiffrees (`bioagresseurs_culture`), la première à servir
+# le référentiel PARTAGÉ et non les événements du potager.
+#   app/services/reponses_chiffrees.py   GABARITS + agrégation + Famille (en tête)
+#   llm/routeur._ouverture_interrogative  ce qui empêche une question dictée sans
+#                                         « ? » d'être enregistrée comme un geste
+# ⚠️ Le garde-fou de la règle de geste n'était QUE le « ? » final. À la dictée
+# vocale il n'existe pas, et « attaque » est une variante de l'action canonique
+# `observation` : la question s'enregistrait dans le journal. Deux garde-fous
+# désormais, et un corpus de mesure dans tests/test_us173_question_bioagresseurs.py.
+
+# Bioagresseurs dans la fiche de culture [US-174]
+# `/fiche <culture>` porte une rubrique « À surveiller » — au plus
+# app.services.fiche_culture.LIMITE_BIOAGRESSEURS lignes, les plus fréquents
+# d'abord, le reste compté et renvoyé vers /bioagresseur lister.
+# ⚠️ `generer_fiche_courte(db, culture, potager_id=...)` : la fiche est devenue
+# CONSCIENTE DU POTAGER. Ce paramètre ne scope QUE les bioagresseurs — famille,
+# délai de retour, attributs de conduite et description restent partagés.
+
 # Menu de commandes natif Telegram [US-171]
 # Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :
 # il se dérive des CommandHandler enregistrés dans bot._construire_application().

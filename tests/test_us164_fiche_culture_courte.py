@@ -351,13 +351,17 @@ class TestCommandeBotFiche:
 
             await cmd_fiche(update, ctx)
 
-            mock_gen.assert_called_once_with(ANY, "tomate")
+            mock_gen.assert_called_once_with(ANY, "tomate", potager_id=ANY)
         texte = update.message.reply_text.call_args[0][0]
         assert "tomate" in texte
         assert "Solanacée" in texte
         assert "4 ans" in texte
-        # [CA2] Une dizaine de lignes maximum, lisibles sur téléphone.
-        assert texte.count("\n") < 12
+        # [CA2] La fiche reste lisible sur un téléphone. Borne relevée le
+        # 07/09/2026 par US-174, qui y ajoute la rubrique « À surveiller » :
+        # jusqu'à cinq bioagresseurs, leur intitulé et l'éventuelle ligne de
+        # débordement. La borne garde son rôle — empêcher la fiche de devenir
+        # un catalogue — elle ne prétend plus au même chiffre.
+        assert texte.count("\n") < 20
 
     @pytest.mark.asyncio
     async def test_us164_bot_reconstitue_un_nom_de_culture_a_plusieurs_mots(self):
@@ -383,7 +387,7 @@ class TestCommandeBotFiche:
 
             await cmd_fiche(update, ctx)
 
-            mock_gen.assert_called_once_with(ANY, "petit pois")
+            mock_gen.assert_called_once_with(ANY, "petit pois", potager_id=ANY)
 
     @pytest.mark.asyncio
     async def test_us164_bot_signale_honnetement_une_culture_inconnue(self):

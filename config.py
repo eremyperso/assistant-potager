@@ -8,8 +8,8 @@ load_dotenv(f".env.{_env}", override=True)
 GROQ_API_KEY       = os.environ["GROQ_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 DATABASE_URL       = os.environ["DATABASE_URL"]
-# GROQ_MODEL         = "openai/gpt-oss-120b"
-GROQ_MODEL         = "groq/compound-mini"
+GROQ_MODEL         = "openai/gpt-oss-120b"
+#GROQ_MODEL         = "groq/compound-mini"
 GROQ_WHISPER_MODEL = "whisper-large-v3-turbo"
 
 # [US-044] Authentification web JWT — secret jamais codé en dur ni versionné

@@ -110,6 +110,12 @@ def session_applicative(potager, monkeypatch):
 # CA1 — Le catalogue des familles, servi sans aucun appel au modèle
 # ═════════════════════════════════════════════════════════════════════════════
 FAMILLES_ATTENDUES = {
+    # [US-173] Ajoutée le 07/09/2026 : « qu'est-ce qui attaque mes poireaux ? »
+    # partait au modèle pour etre classee, puis pour etre repondue — et la
+    # reponse venait des connaissances generales du modele, pas des aretes
+    # culture x bioagresseur d'US-162. Premiere famille du catalogue a servir
+    # le referentiel PARTAGE et non les evenements du potager.
+    "bioagresseurs_culture",
     "total_recolte", "derniere_occurrence", "stock_courant", "pieds_actifs",
     "rendement_saison", "pepiniere", "occupation_parcelle",
     # [Chantier 3 / US-170] Nombre de godets produits — distinct du rendement

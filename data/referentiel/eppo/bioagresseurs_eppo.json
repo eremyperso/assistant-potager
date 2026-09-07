@@ -1,0 +1,427 @@
+{
+  "_lisez_moi": [
+    "[US-162] Identités de bioagresseurs portant un code EPPO.",
+    "",
+    "POURQUOI CE FICHIER EST SÉPARÉ",
+    "Une origine interne (redaction_interne) ne peut pas se donner une licence ni une",
+    "attribution : l'import récupère les siennes au registre et ignore celles que le",
+    "manifeste déclarerait. Les codes EPPO déclarés sous cette origine seraient donc",
+    "entrés en base SANS attribution EPPO, et `--derive-de eppo` aurait répondu",
+    "« aucune donnée » alors que 64 codes en dérivent — le CA4 promet exactement",
+    "l'inverse.",
+    "",
+    "CE FICHIER NE PORTE QUE DES IDENTITÉS. Les fréquences et les périodes de risque",
+    "sont un travail éditorial du projet, pas une donnée d'EPPO : elles vivent dans",
+    "bioagresseurs_redaction_interne_complet.json, sous leur propre origine.",
+    "",
+    "ORDRE D'IMPORT — celui-ci D'ABORD, l'autre ENSUITE : une arête dont le",
+    "bioagresseur n'a pas encore d'identité est comptée « ignorée », jamais fabriquée.",
+    "",
+    "PRÉALABLE : migrations/migration_v43.sql doit être appliquée — c'est elle qui sème",
+    "la source `eppo` au registre. Sans elle, un --dry-run affiche 0 identité.",
+    "",
+    "⚠️ Les codes ci-dessous n'ont PAS été vérifiés un à un contre gd.eppo.int. Un code",
+    "faux fait converger deux sources sur la mauvaise espèce — c'est pire qu'un code",
+    "absent. Sondez-en une dizaine avant l'import en production.",
+    "",
+    "LICENCE : EPPO Codes Open Data Licence — reprise en base, usage commercial et",
+    "information dérivée explicitement autorisés. Obligations : citer EPPO ET la date",
+    "du dernier téléchargement (portée par date_dernier_import, jamais figée ici),",
+    "sans reproduire le logo EPPO. Conditions lues et consignées :",
+    "data/referentiel/eppo/SOURCE.md"
+  ],
+  "source": {
+    "code": "eppo",
+    "libelle": "EPPO Global Database — codes EPPO",
+    "licence": "EPPO Codes Open Data Licence",
+    "attribution": "Contains EPPO Codes (www.eppo.int) — EPPO Codes Open Data Licence",
+    "url": "https://data.eppo.int/",
+    "partageable": true
+  },
+  "bioagresseurs": [
+    {
+      "nom_commun_fr": "limaces",
+      "nom_scientifique": "Deroceras reticulatum",
+      "categorie": "mollusque",
+      "code_eppo": "DERORE"
+    },
+    {
+      "nom_commun_fr": "puceron vert du pêcher",
+      "nom_scientifique": "Myzus persicae",
+      "categorie": "insecte",
+      "code_eppo": "MYZUPE"
+    },
+    {
+      "nom_commun_fr": "puceron noir de la fève",
+      "nom_scientifique": "Aphis fabae",
+      "categorie": "insecte",
+      "code_eppo": "APHIFA"
+    },
+    {
+      "nom_commun_fr": "puceron cendré du chou",
+      "nom_scientifique": "Brevicoryne brassicae",
+      "categorie": "insecte",
+      "code_eppo": "BRVCBR"
+    },
+    {
+      "nom_commun_fr": "puceron du pois",
+      "nom_scientifique": "Acyrthosiphon pisum",
+      "categorie": "insecte",
+      "code_eppo": "ACYRPI"
+    },
+    {
+      "nom_commun_fr": "puceron du fraisier",
+      "nom_scientifique": "Chaetosiphon fragaefolii",
+      "categorie": "insecte",
+      "code_eppo": "CHTSFR"
+    },
+    {
+      "nom_commun_fr": "aleurode des serres",
+      "nom_scientifique": "Trialeurodes vaporariorum",
+      "categorie": "insecte",
+      "code_eppo": "TRIAVA"
+    },
+    {
+      "nom_commun_fr": "tétranyque tisserand",
+      "nom_scientifique": "Tetranychus urticae",
+      "categorie": "insecte",
+      "code_eppo": "TETRUR"
+    },
+    {
+      "nom_commun_fr": "thrips de l'oignon",
+      "nom_scientifique": "Thrips tabaci",
+      "categorie": "insecte",
+      "code_eppo": "THRITB"
+    },
+    {
+      "nom_commun_fr": "teigne du poireau",
+      "nom_scientifique": "Acrolepiopsis assectella",
+      "categorie": "insecte",
+      "code_eppo": "ACROAS"
+    },
+    {
+      "nom_commun_fr": "mineuse du poireau",
+      "nom_scientifique": "Phytomyza gymnostoma",
+      "categorie": "insecte",
+      "code_eppo": "NAPOGY"
+    },
+    {
+      "nom_commun_fr": "mouche de l'oignon",
+      "nom_scientifique": "Delia antiqua",
+      "categorie": "insecte",
+      "code_eppo": "HYLEAQ"
+    },
+    {
+      "nom_commun_fr": "mouche de la carotte",
+      "nom_scientifique": "Psila rosae",
+      "categorie": "insecte",
+      "code_eppo": "PSILRO"
+    },
+    {
+      "nom_commun_fr": "mouche du chou",
+      "nom_scientifique": "Delia radicum",
+      "categorie": "insecte",
+      "code_eppo": "HYLEBR"
+    },
+    {
+      "nom_commun_fr": "altise des crucifères",
+      "nom_scientifique": "Phyllotreta nemorum",
+      "categorie": "insecte",
+      "code_eppo": "PHYLNE"
+    },
+    {
+      "nom_commun_fr": "piéride du chou",
+      "nom_scientifique": "Pieris brassicae",
+      "categorie": "insecte",
+      "code_eppo": "PIERBR"
+    },
+    {
+      "nom_commun_fr": "piéride de la rave",
+      "nom_scientifique": "Pieris rapae",
+      "categorie": "insecte",
+      "code_eppo": "PIERRA"
+    },
+    {
+      "nom_commun_fr": "noctuelle du chou",
+      "nom_scientifique": "Mamestra brassicae",
+      "categorie": "insecte",
+      "code_eppo": "BARABR"
+    },
+    {
+      "nom_commun_fr": "teigne des crucifères",
+      "nom_scientifique": "Plutella xylostella",
+      "categorie": "insecte",
+      "code_eppo": "PLUTMA"
+    },
+    {
+      "nom_commun_fr": "doryphore",
+      "nom_scientifique": "Leptinotarsa decemlineata",
+      "categorie": "insecte",
+      "code_eppo": "LPTNDE"
+    },
+    {
+      "nom_commun_fr": "taupin",
+      "nom_scientifique": "Agriotes lineatus",
+      "categorie": "insecte",
+      "code_eppo": "AGROLI"
+    },
+    {
+      "nom_commun_fr": "bruche du pois",
+      "nom_scientifique": "Bruchus pisorum",
+      "categorie": "insecte",
+      "code_eppo": "BRCHPI"
+    },
+    {
+      "nom_commun_fr": "bruche de la fève",
+      "nom_scientifique": "Bruchus rufimanus",
+      "categorie": "insecte",
+      "code_eppo": "BRCHRU"
+    },
+    {
+      "nom_commun_fr": "sitone du pois",
+      "nom_scientifique": "Sitona lineatus",
+      "categorie": "insecte",
+      "code_eppo": "SITOLI"
+    },
+    {
+      "nom_commun_fr": "mouche de l'asperge",
+      "nom_scientifique": "Plioreocepta poeciloptera",
+      "categorie": "insecte",
+      "code_eppo": "PLIOPO"
+    },
+    {
+      "nom_commun_fr": "criocère de l'asperge",
+      "nom_scientifique": "Crioceris asparagi",
+      "categorie": "insecte",
+      "code_eppo": "CRIOAS"
+    },
+    {
+      "nom_commun_fr": "anthonome du fraisier",
+      "nom_scientifique": "Anthonomus rubi",
+      "categorie": "insecte",
+      "code_eppo": "ANTHRU"
+    },
+    {
+      "nom_commun_fr": "ver du framboisier",
+      "nom_scientifique": "Byturus tomentosus",
+      "categorie": "insecte",
+      "code_eppo": "BYTUTO"
+    },
+    {
+      "nom_commun_fr": "drosophile à ailes tachetées",
+      "nom_scientifique": "Drosophila suzukii",
+      "categorie": "insecte",
+      "code_eppo": "DROSSU"
+    },
+    {
+      "nom_commun_fr": "mildiou de la pomme de terre et de la tomate",
+      "nom_scientifique": "Phytophthora infestans",
+      "categorie": "champignon",
+      "code_eppo": "PHYTIN"
+    },
+    {
+      "nom_commun_fr": "mildiou des cucurbitacées",
+      "nom_scientifique": "Pseudoperonospora cubensis",
+      "categorie": "champignon",
+      "code_eppo": "PSPECU"
+    },
+    {
+      "nom_commun_fr": "mildiou de la laitue",
+      "nom_scientifique": "Bremia lactucae",
+      "categorie": "champignon",
+      "code_eppo": "BREMLA"
+    },
+    {
+      "nom_commun_fr": "mildiou des alliacées",
+      "nom_scientifique": "Peronospora destructor",
+      "categorie": "champignon",
+      "code_eppo": "PERODE"
+    },
+    {
+      "nom_commun_fr": "mildiou du pois",
+      "nom_scientifique": "Peronospora viciae",
+      "categorie": "champignon",
+      "code_eppo": "PEROVI"
+    },
+    {
+      "nom_commun_fr": "oïdium des cucurbitacées",
+      "nom_scientifique": "Podosphaera xanthii",
+      "categorie": "champignon",
+      "code_eppo": "PODOXA"
+    },
+    {
+      "nom_commun_fr": "oïdium du pois",
+      "nom_scientifique": "Erysiphe pisi",
+      "categorie": "champignon",
+      "code_eppo": "ERYSPF"
+    },
+    {
+      "nom_commun_fr": "oïdium du fraisier",
+      "nom_scientifique": "Podosphaera aphanis",
+      "categorie": "champignon",
+      "code_eppo": "PODOAP"
+    },
+    {
+      "nom_commun_fr": "oïdium de la tomate",
+      "nom_scientifique": "Oidium neolycopersici",
+      "categorie": "champignon",
+      "code_eppo": "OIDILY"
+    },
+    {
+      "nom_commun_fr": "alternariose de la tomate",
+      "nom_scientifique": "Alternaria solani",
+      "categorie": "champignon",
+      "code_eppo": "ALTESO"
+    },
+    {
+      "nom_commun_fr": "alternariose de la carotte",
+      "nom_scientifique": "Alternaria dauci",
+      "categorie": "champignon",
+      "code_eppo": "ALTEDA"
+    },
+    {
+      "nom_commun_fr": "alternariose des brassicacées",
+      "nom_scientifique": "Alternaria brassicae",
+      "categorie": "champignon",
+      "code_eppo": "ALTEBA"
+    },
+    {
+      "nom_commun_fr": "anthracnose du haricot",
+      "nom_scientifique": "Colletotrichum lindemuthianum",
+      "categorie": "champignon",
+      "code_eppo": "COLLLI"
+    },
+    {
+      "nom_commun_fr": "anthracnose des cucurbitacées",
+      "nom_scientifique": "Colletotrichum orbiculare",
+      "categorie": "champignon",
+      "code_eppo": "COLLOR"
+    },
+    {
+      "nom_commun_fr": "rouille des alliacées",
+      "nom_scientifique": "Puccinia allii",
+      "categorie": "champignon",
+      "code_eppo": "PUCCAL"
+    },
+    {
+      "nom_commun_fr": "rouille de l'asperge",
+      "nom_scientifique": "Puccinia asparagi",
+      "categorie": "champignon",
+      "code_eppo": "PUCCAS"
+    },
+    {
+      "nom_commun_fr": "rouille du haricot",
+      "nom_scientifique": "Uromyces appendiculatus",
+      "categorie": "champignon",
+      "code_eppo": "UROMAP"
+    },
+    {
+      "nom_commun_fr": "septoriose du céleri",
+      "nom_scientifique": "Septoria apiicola",
+      "categorie": "champignon",
+      "code_eppo": "SEPTAP"
+    },
+    {
+      "nom_commun_fr": "septoriose du persil",
+      "nom_scientifique": "Septoria petroselini",
+      "categorie": "champignon",
+      "code_eppo": "SEPTPE"
+    },
+    {
+      "nom_commun_fr": "pourriture grise",
+      "nom_scientifique": "Botrytis cinerea",
+      "categorie": "champignon",
+      "code_eppo": "BOTRCI"
+    },
+    {
+      "nom_commun_fr": "sclérotiniose",
+      "nom_scientifique": "Sclerotinia sclerotiorum",
+      "categorie": "champignon",
+      "code_eppo": "SCLESC"
+    },
+    {
+      "nom_commun_fr": "fonte des semis",
+      "nom_scientifique": "Pythium ultimum",
+      "categorie": "champignon",
+      "code_eppo": "PYTHUL"
+    },
+    {
+      "nom_commun_fr": "hernie du chou",
+      "nom_scientifique": "Plasmodiophora brassicae",
+      "categorie": "champignon",
+      "code_eppo": "PLADBR"
+    },
+    {
+      "nom_commun_fr": "fusariose vasculaire de la tomate",
+      "nom_scientifique": "Fusarium oxysporum f. sp. lycopersici",
+      "categorie": "champignon",
+      "code_eppo": "FUSALY"
+    },
+    {
+      "nom_commun_fr": "verticilliose",
+      "nom_scientifique": "Verticillium dahliae",
+      "categorie": "champignon",
+      "code_eppo": "VERTDA"
+    },
+    {
+      "nom_commun_fr": "cladosporiose de la tomate",
+      "nom_scientifique": "Passalora fulva",
+      "categorie": "champignon",
+      "code_eppo": "FULVFU"
+    },
+    {
+      "nom_commun_fr": "tavelure noire de la pomme de terre",
+      "nom_scientifique": "Rhizoctonia solani",
+      "categorie": "champignon",
+      "code_eppo": "RHIZSO"
+    },
+    {
+      "nom_commun_fr": "gale commune de la pomme de terre",
+      "nom_scientifique": "Streptomyces scabiei",
+      "categorie": "bacterie",
+      "code_eppo": "STRSSC"
+    },
+    {
+      "nom_commun_fr": "graisse du haricot",
+      "nom_scientifique": "Pseudomonas savastanoi pv. phaseolicola",
+      "categorie": "bacterie",
+      "code_eppo": "PSDMPS"
+    },
+    {
+      "nom_commun_fr": "tache bactérienne de la tomate",
+      "nom_scientifique": "Xanthomonas euvesicatoria",
+      "categorie": "bacterie",
+      "code_eppo": "XANTEU"
+    },
+    {
+      "nom_commun_fr": "mosaïque du concombre",
+      "nom_scientifique": "Cucumber mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "CMV000"
+    },
+    {
+      "nom_commun_fr": "mosaïque de la laitue",
+      "nom_scientifique": "Lettuce mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "LMV000"
+    },
+    {
+      "nom_commun_fr": "mosaïque du haricot",
+      "nom_scientifique": "Bean common mosaic virus",
+      "categorie": "virus",
+      "code_eppo": "BCMV00"
+    },
+    {
+      "nom_commun_fr": "virus Y de la pomme de terre",
+      "nom_scientifique": "Potato virus Y",
+      "categorie": "virus",
+      "code_eppo": "PVY000"
+    },
+    {
+      "nom_commun_fr": "nématodes à galles",
+      "nom_scientifique": "Meloidogyne incognita",
+      "categorie": "nematode",
+      "code_eppo": "MELGIN"
+    }
+  ]
+}

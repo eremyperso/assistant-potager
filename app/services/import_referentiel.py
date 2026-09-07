@@ -69,6 +69,58 @@ La règle de non-écrasement (CA5) porte sur la LIGNE entière, pas sur un champ
 une association déjà saisie par le jardinier (`saisie_manuelle`) n'est jamais
 réécrite par un rejeu d'import, quelle que soit la source qui rejoue.
 
+Les blocs `bioagresseurs` et `cultures_bioagresseurs` [US-162]
+---------------------------------------------------------------
+Deux blocs, parce que ce sont deux natures : une **identité** (`bioagresseurs`)
+et une **arête** (`cultures_bioagresseurs`). Les identités s'importent d'abord —
+un rattachement dont le bioagresseur n'a pas encore d'identité est compté ignoré,
+jamais fabriqué (même invariant que CA7 d'US-161 sur les cultures).
+
+    "bioagresseurs": [{"nom_commun_fr": "mildiou de la tomate",
+                       "nom_scientifique": "Phytophthora infestans",
+                       "categorie": "champignon", "code_eppo": "PHYTIN"}],
+    "cultures_bioagresseurs": [{"culture": "tomate",
+                                "bioagresseur": "mildiou de la tomate",
+                                "frequence": "courant",
+                                "periode_risque": "juin-septembre"}]
+
+Un import n'écrit QUE du partagé (`potager_id` NULL) : c'est la définition même
+de la connaissance importée, et le CA3 interdit qu'un ajout local soit promu —
+la réciproque vaut, un import ne descend jamais dans le périmètre d'un potager.
+
+**[CA9] Le rapprochement par nom vernaculaire ne s'applique pas seul.** La
+résolution de la culture d'un rattachement est EXACTE (nom normalisé) par
+défaut. Quand seul un rapprochement approché existe — `laitue` pour `salade`,
+`haricot` pour `haricot grimpant`, deux cas réellement présents en base — la
+ligne n'est PAS écrite : elle est comptée `appariements_a_revoir`, avec la
+culture qu'elle viserait. Elle ne s'écrit qu'une fois relue par un humain, qui
+le déclare dans le manifeste :
+
+    {"culture": "salade", "bioagresseur": "limace", "frequence": "courant",
+     "revue_humaine": true}
+
+Quand aucune règle textuelle ne peut rapprocher les deux libellés — `laitue` et
+`salade` sont des synonymes, pas des variantes d'écriture — la correspondance se
+DÉCLARE, et c'est la table de correspondance manuelle que le CA8 désigne comme
+mode de repli :
+
+    {"culture": "laitue", "culture_en_base": "salade", "bioagresseur": "limace",
+     "frequence": "courant", "revue_humaine": true}
+
+Déclarée ou déduite, elle reste un rapprochement par nom vernaculaire : sans
+`revue_humaine`, elle est comptée `appariements_a_revoir` et n'écrit rien.
+
+C'est un drapeau porté par le FICHIER versionné — donc revu en diff git — et non
+un seuil de similarité qui déciderait tout seul. Les cucurbitacées, réparties
+sur dix libellés distincts, sont la raison pour laquelle ce garde-fou n'est pas
+théorique.
+
+**[CA8] Le taux d'appariement est un livrable, pas un journal.** L'import mesure
+et publie la part des libellés de culture du manifeste qui retrouvent une
+culture réellement présente en base. Sous `SEUIL_APPARIEMENT` (~70 %), l'import
+automatique ne vaut plus la saisie directe sur les dix cultures du périmètre :
+c'est cette mesure, et non une intention, qui tranche.
+
 Le bloc `cultures_attributs` [US-161]
 -------------------------------------
 C'est le **seul** chemin de pré-remplissage des attributs agronomiques : « aucun
@@ -127,10 +179,18 @@ from sqlalchemy.orm import Session
 
 from app.services import associations as svc_associations
 from app.services import attributs_culture as svc_attributs
+from app.services import bioagresseurs as svc_bioagresseurs
 from app.services import referentiel_sources as svc_sources
 from app.services.familles import normaliser_famille
+from app.services.rapport_couverture import SEUIL_APPARIEMENT
 from database.models import CultureConfig, FamilleBotanique, ReferentielSource
 from utils.culture_resolve import normaliser_culture
+from utils.parcelles import levenshtein_distance
+
+#: [US-162 / CA9] Au-delà, deux libellés ne sont plus « proches » — même valeur
+#: que `utils.culture_resolve` et `rapport_couverture`, pour que l'import
+#: signale exactement ce que la résolution de culture rapprocherait déjà.
+_LEVENSHTEIN_MAX = 2
 
 log = logging.getLogger("potager")
 
@@ -178,6 +238,59 @@ class ResultatImport:
     #: Nature/niveau de preuve/motif hors vocabulaire fermé (CA1, CA2).
     associations_refusees: list[str] = field(default_factory=list)
 
+    # ── [US-162] Bioagresseurs : identités puis arêtes ────────────────────────
+    bioagresseurs_crees: list[str] = field(default_factory=list)
+    bioagresseurs_ecrits: list[str] = field(default_factory=list)
+    #: [CA4] Identité déjà portée par une AUTRE origine — jamais écrasée.
+    bioagresseurs_preserves: list[str] = field(default_factory=list)
+    #: [CA1] Catégorie hors vocabulaire fermé, ou nom vide.
+    bioagresseurs_refuses: list[str] = field(default_factory=list)
+
+    rattachements_crees: list[str] = field(default_factory=list)
+    rattachements_ecrits: list[str] = field(default_factory=list)
+    rattachements_preserves: list[str] = field(default_factory=list)
+    #: Culture ou bioagresseur absent du référentiel — jamais créé à la volée.
+    rattachements_ignores: list[str] = field(default_factory=list)
+    #: [CA2] Fréquence hors vocabulaire fermé.
+    rattachements_refuses: list[str] = field(default_factory=list)
+    #: [CA9] Lignes dont la culture ne se rapproche que par nom vernaculaire —
+    #: NON écrites, en attente de revue humaine (`"revue_humaine": true`).
+    appariements_a_revoir: list[str] = field(default_factory=list)
+
+    # ── [US-162 / CA8] Mesure d'appariement — un livrable, pas un journal ─────
+    #: Libellés de culture DISTINCTS portés par le bloc `cultures_bioagresseurs`.
+    appariement_libelles: list[str] = field(default_factory=list)
+    #: Ceux qui retrouvent une culture en base par nom exact (normalisé).
+    appariement_exacts: list[str] = field(default_factory=list)
+    #: Ceux qui ne s'y retrouvent que par rapprochement approché (CA9).
+    appariement_approches: list[str] = field(default_factory=list)
+
+    @property
+    def appariement_non_apparies(self) -> list[str]:
+        """Libellés de la source qui ne désignent aucune culture connue."""
+        apparies = set(self.appariement_exacts) | set(self.appariement_approches)
+        return [libelle for libelle in self.appariement_libelles if libelle not in apparies]
+
+    @property
+    def taux_appariement(self) -> Optional[float]:
+        """
+        [CA8] Part des libellés de la source qui retrouvent une culture en base.
+
+        `None` — et non `0.0` — quand le manifeste ne porte aucun rattachement :
+        ne rien mesurer et mesurer zéro sont deux choses différentes, et le
+        second déclencherait à tort le verdict « sous le seuil ».
+        """
+        if not self.appariement_libelles:
+            return None
+        apparies = len(self.appariement_exacts) + len(self.appariement_approches)
+        return apparies / len(self.appariement_libelles)
+
+    @property
+    def appariement_suffisant(self) -> Optional[bool]:
+        """[CA8] Verdict : l'import automatique vaut-il encore la saisie directe ?"""
+        taux = self.taux_appariement
+        return None if taux is None else taux >= SEUIL_APPARIEMENT
+
     @property
     def total_ecritures(self) -> int:
         return (
@@ -187,6 +300,10 @@ class ResultatImport:
             + len(self.attributs_ecrits)
             + len(self.associations_creees)
             + len(self.associations_ecrites)
+            + len(self.bioagresseurs_crees)
+            + len(self.bioagresseurs_ecrits)
+            + len(self.rattachements_crees)
+            + len(self.rattachements_ecrits)
         )
 
 
@@ -466,6 +583,166 @@ def _importer_associations_cultures(
         # IMPORT_INCHANGEE : déjà conforme, rien de plus à compter.
 
 
+def _importer_bioagresseurs(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-162 / CA1, CA4, CA5] Importe les IDENTITÉS de bioagresseurs — partagées,
+    par définition (`potager_id` NULL, CA3).
+
+    Délègue à `app.services.bioagresseurs.importer_bioagresseur`, seul point
+    d'écriture, partagé avec la saisie au bot (« aucun second mécanisme »).
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        nom = (entree.get("nom_commun_fr") or "").strip()
+        if not nom:
+            continue
+        try:
+            statut = svc_bioagresseurs.importer_bioagresseur(
+                db,
+                nom_commun_fr=nom,
+                categorie=(entree.get("categorie") or "").strip(),
+                source=source,
+                nom_scientifique=entree.get("nom_scientifique"),
+                code_eppo=entree.get("code_eppo"),
+            )
+        except svc_bioagresseurs.ValeurBioagresseurInvalideError as err:
+            log.warning("[import_referentiel] bioagresseur « %s » refusé : %s", nom, err)
+            resultat.bioagresseurs_refuses.append(nom)
+            continue
+
+        if statut == svc_bioagresseurs.IMPORT_CREEE:
+            resultat.bioagresseurs_crees.append(nom)
+        elif statut == svc_bioagresseurs.IMPORT_ECRITE:
+            resultat.bioagresseurs_ecrits.append(nom)
+        elif statut == svc_bioagresseurs.IMPORT_PRESERVEE:
+            resultat.bioagresseurs_preserves.append(nom)
+
+
+def _apparier_culture(
+    libelle: str, cultures_connues: dict[str, str]
+) -> tuple[Optional[str], bool]:
+    """
+    [US-162 / CA8, CA9] Rapproche un libellé de culture de la source d'une
+    culture réellement présente en base.
+
+    Retourne `(nom de culture en base, exact)` — `(None, False)` si rien ne s'en
+    approche. `exact=False` signale un rapprochement par **nom vernaculaire
+    seul**, la clé la moins fiable des trois de la conception §7 : il est mesuré
+    (CA8) mais jamais appliqué sans revue humaine (CA9).
+    """
+    cible = normaliser_culture(libelle)
+    if cible in cultures_connues:
+        return cultures_connues[cible], True
+    if not cible:
+        return None, False
+    for connue_normalisee, nom in cultures_connues.items():
+        if levenshtein_distance(cible, connue_normalisee) <= _LEVENSHTEIN_MAX:
+            return nom, False
+    # `haricot` / `haricot grimpant` : la distance de Levenshtein ne les
+    # rapproche pas, l'inclusion oui — et c'est justement le cas que cite le
+    # CA9. Rapprochement d'autant plus faible : jamais exact.
+    for connue_normalisee, nom in cultures_connues.items():
+        if cible and (cible in connue_normalisee or connue_normalisee in cible):
+            return nom, False
+    return None, False
+
+
+def _importer_rattachements_bioagresseurs(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-162 / CA2, CA5, CA8, CA9] Importe les ARÊTES culture × bioagresseur, et
+    publie au passage la mesure d'appariement qui décide du sort de l'import
+    automatique.
+
+    Trois refus, dans cet ordre :
+    1. Libellé de culture ne désignant aucune culture connue → `rattachements_ignores`
+       (jamais créée — CA7 d'US-161, même invariant).
+    2. Rapprochement par nom vernaculaire seul, sans `"revue_humaine": true` →
+       `appariements_a_revoir`, NON écrit (CA9).
+    3. Fréquence hors vocabulaire fermé → `rattachements_refuses` (CA2).
+    """
+    if source is None:
+        return
+
+    cultures_connues: dict[str, str] = {}
+    for config in db.query(CultureConfig).all():
+        cultures_connues.setdefault(normaliser_culture(config.nom), config.nom)
+
+    for entree in entrees:
+        libelle_culture = (entree.get("culture") or "").strip()
+        bioagresseur = (entree.get("bioagresseur") or "").strip()
+        if not libelle_culture or not bioagresseur:
+            continue
+
+        # [CA9] `culture_en_base` est la table de correspondance MANUELLE que le
+        # CA8 désigne comme mode de repli : le seul moyen d'apparier « laitue »
+        # à « salade », que ni la distance d'édition ni l'inclusion ne
+        # rapprochent — ce sont des synonymes, pas des variantes d'écriture.
+        # Déclarée, elle reste un rapprochement par nom vernaculaire : elle
+        # exige `revue_humaine` comme les autres.
+        correspondance = (entree.get("culture_en_base") or "").strip()
+        if correspondance:
+            cible = normaliser_culture(correspondance)
+            culture_base, exact = cultures_connues.get(cible), False
+        else:
+            culture_base, exact = _apparier_culture(libelle_culture, cultures_connues)
+        # [CA8] La mesure porte sur les libellés DISTINCTS de la source, qu'ils
+        # aboutissent ou non à une écriture : c'est la qualité de la source qui
+        # est mesurée, pas le rendement de ce passage.
+        if libelle_culture not in resultat.appariement_libelles:
+            resultat.appariement_libelles.append(libelle_culture)
+            if culture_base is not None and exact:
+                resultat.appariement_exacts.append(libelle_culture)
+            elif culture_base is not None:
+                resultat.appariement_approches.append(libelle_culture)
+
+        libelle = f"{libelle_culture} × {bioagresseur}"
+
+        if culture_base is None:
+            resultat.rattachements_ignores.append(libelle)
+            continue
+
+        if not exact and not bool(entree.get("revue_humaine")):
+            # [CA9] Le rapprochement existe, il est plausible — et c'est
+            # précisément pourquoi il ne s'applique pas tout seul.
+            log.warning(
+                "[import_referentiel] « %s » ne se rapproche de « %s » que par nom "
+                "vernaculaire — rattachement en attente de revue humaine (US-162/CA9)",
+                libelle_culture, culture_base,
+            )
+            resultat.appariements_a_revoir.append(f"{libelle} → {culture_base}")
+            continue
+
+        try:
+            statut = svc_bioagresseurs.importer_rattachement(
+                db,
+                culture=culture_base,
+                bioagresseur=bioagresseur,
+                frequence=(entree.get("frequence") or "").strip(),
+                source=source,
+                periode_risque=entree.get("periode_risque"),
+            )
+        except (svc_bioagresseurs.CultureInconnueError,
+                svc_bioagresseurs.BioagresseurInconnuError):
+            resultat.rattachements_ignores.append(libelle)
+            continue
+        except svc_bioagresseurs.ValeurBioagresseurInvalideError as err:
+            log.warning("[import_referentiel] rattachement %s refusé : %s", libelle, err)
+            resultat.rattachements_refuses.append(libelle)
+            continue
+
+        if statut == svc_bioagresseurs.IMPORT_CREEE:
+            resultat.rattachements_crees.append(libelle)
+        elif statut == svc_bioagresseurs.IMPORT_ECRITE:
+            resultat.rattachements_ecrits.append(libelle)
+        elif statut == svc_bioagresseurs.IMPORT_PRESERVEE:
+            resultat.rattachements_preserves.append(libelle)
+
+
 def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> ResultatImport:
     """
     [CA5-CA8] Importe un manifeste de référentiel structuré.
@@ -538,6 +815,13 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
     _importer_associations_cultures(
         db, manifeste.get("cultures_associations") or [], source, resultat
     )
+    # [US-162] Les identités AVANT les arêtes : un rattachement dont le
+    # bioagresseur n'est pas encore déclaré serait compté ignoré à tort.
+    _importer_bioagresseurs(db, manifeste.get("bioagresseurs") or [], source, resultat)
+    db.flush()  # les identités créées doivent porter un id avant les arêtes
+    _importer_rattachements_bioagresseurs(
+        db, manifeste.get("cultures_bioagresseurs") or [], source, resultat
+    )
 
     if dry_run:
         db.rollback()
@@ -550,7 +834,9 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         "[import_referentiel] « %s » : %s famille(s) créée(s), %s enrichie(s), "
         "%s culture(s) rattachée(s), %s attribut(s) écrit(s), %s association(s) "
         "créée(s)/écrite(s), %s ignorée(s) (aucune création, CA7), %s hors "
-        "périmètre, %s valeur(s) refusée(s), %s valeur(s) humaine(s) préservée(s)",
+        "périmètre, %s valeur(s) refusée(s), %s valeur(s) humaine(s) préservée(s), "
+        "%s bioagresseur(s) et %s arête(s) culture × bioagresseur écrit(e)s, "
+        "%s appariement(s) en attente de revue humaine (US-162/CA9)",
         code, len(resultat.familles_creees), len(resultat.familles_enrichies),
         len(resultat.cultures_rattachees), len(resultat.attributs_ecrits),
         len(resultat.associations_creees) + len(resultat.associations_ecrites),
@@ -558,7 +844,11 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         len(resultat.cultures_hors_perimetre),
         len(resultat.attributs_refuses) + len(resultat.associations_refusees),
         len(resultat.familles_preservees) + len(resultat.cultures_preservees)
-        + len(resultat.attributs_preserves) + len(resultat.associations_preservees),
+        + len(resultat.attributs_preserves) + len(resultat.associations_preservees)
+        + len(resultat.bioagresseurs_preserves) + len(resultat.rattachements_preserves),
+        len(resultat.bioagresseurs_crees) + len(resultat.bioagresseurs_ecrits),
+        len(resultat.rattachements_crees) + len(resultat.rattachements_ecrits),
+        len(resultat.appariements_a_revoir),
     )
     return resultat
 
@@ -609,9 +899,92 @@ def formater_resultat(resultat: ResultatImport) -> str:
     preservees = (
         resultat.familles_preservees + resultat.cultures_preservees
         + resultat.attributs_preserves + resultat.associations_preservees
+        + resultat.bioagresseurs_preserves + resultat.rattachements_preserves
     )
     lignes.append(
         f"  Valeurs préservées   : {len(preservees)} — {', '.join(preservees) or '—'} "
         "(déjà renseignées par une autre origine)"
     )
+
+    # ── [US-162] Bioagresseurs : identités, arêtes, et la mesure qui décide ───
+    lignes.append("")
+    lignes.append("  Bioagresseurs [US-162]")
+    lignes.append(
+        f"    Identités créées   : {len(resultat.bioagresseurs_crees)} — "
+        f"{', '.join(resultat.bioagresseurs_crees) or '—'}"
+    )
+    lignes.append(
+        f"    Identités écrites  : {len(resultat.bioagresseurs_ecrits)} — "
+        f"{', '.join(resultat.bioagresseurs_ecrits) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Arêtes créées      : {len(resultat.rattachements_crees)} — "
+        f"{', '.join(resultat.rattachements_crees) or '—'}"
+    )
+    lignes.append(
+        f"    Arêtes écrites     : {len(resultat.rattachements_ecrits)} — "
+        f"{', '.join(resultat.rattachements_ecrits) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Arêtes ignorées    : {len(resultat.rattachements_ignores)} — "
+        f"{', '.join(resultat.rattachements_ignores) or '—'} "
+        "(culture ou bioagresseur absent du référentiel, jamais créé)"
+    )
+    lignes.append(
+        f"    Valeurs refusées   : "
+        f"{len(resultat.bioagresseurs_refuses) + len(resultat.rattachements_refuses)} — "
+        f"{', '.join(resultat.bioagresseurs_refuses + resultat.rattachements_refuses) or '—'} "
+        "(catégorie ou fréquence hors vocabulaire fermé, CA1/CA2)"
+    )
+    lignes.append(
+        f"    À REVOIR (CA9)     : {len(resultat.appariements_a_revoir)} — "
+        f"{', '.join(resultat.appariements_a_revoir) or '—'}"
+    )
+    if resultat.appariements_a_revoir:
+        lignes.append(
+            "      ↳ rapprochement par nom vernaculaire seul : NON écrit. Relire, puis "
+            'ajouter "revue_humaine": true à la ligne du manifeste pour l\'appliquer.'
+        )
+
+    # [CA8] La mesure d'appariement — le livrable qui décide si l'import
+    # automatique est conservé ou remplacé par la correspondance manuelle.
+    taux = resultat.taux_appariement
+    lignes.append("")
+    lignes.append("  Taux d'appariement des libellés de culture [US-162 / CA8]")
+    if taux is None:
+        lignes.append(
+            "    Non mesurable : ce manifeste ne porte aucun rattachement culture × "
+            "bioagresseur. Ne rien mesurer n'est pas mesurer zéro."
+        )
+    else:
+        lignes.append(
+            f"    {len(resultat.appariement_exacts) + len(resultat.appariement_approches)}"
+            f"/{len(resultat.appariement_libelles)} libellés appariés — {taux:.0%} "
+            f"(seuil de décision : {SEUIL_APPARIEMENT:.0%})"
+        )
+        lignes.append(
+            f"      • exacts    : {len(resultat.appariement_exacts)} — "
+            f"{', '.join(resultat.appariement_exacts) or '—'}"
+        )
+        lignes.append(
+            f"      • approchés : {len(resultat.appariement_approches)} — "
+            f"{', '.join(resultat.appariement_approches) or '—'} "
+            "(nom vernaculaire seul, revue humaine requise — CA9)"
+        )
+        lignes.append(
+            f"      • non appariés : {len(resultat.appariement_non_apparies)} — "
+            f"{', '.join(resultat.appariement_non_apparies) or '—'}"
+        )
+        if resultat.appariement_suffisant:
+            lignes.append(
+                "    ✅ Au-dessus du seuil : l'import automatique garde son intérêt "
+                "face à la saisie directe."
+            )
+        else:
+            lignes.append(
+                "    ⚠️ SOUS LE SEUIL : l'import automatique ne vaut plus la saisie "
+                "directe. La table de correspondance manuelle sur les dix cultures du "
+                "périmètre devient le mode nominal (US-162 / CA8)."
+            )
+
     return "\n".join(lignes)

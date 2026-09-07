@@ -383,9 +383,19 @@ class TestCA6RefusHorsSocle:
         ⚠️ Élargi par US-161 le 01/09/2026 : `CC BY 4.0` s'y ajoute pour Wind
         River Greens. Ce n'est pas un renoncement au CA6 — l'arbitrage §6.3
         n'écarte que le **partage à l'identique**, et CC BY n'a aucune clause
-        virale. Le test suivant vérifie que CC-BY-SA reste dehors."""
+        virale. Le test suivant vérifie que CC-BY-SA reste dehors.
+
+        ⚠️ Élargi de nouveau par US-162 le 06/09/2026 : `EPPO Codes Open Data
+        Licence`. Le CA7 d'US-162 faisait de la lecture des conditions de
+        `data.eppo.int` un préalable bloquant ; elles ont été lues et consignées
+        (`data/referentiel/eppo/SOURCE.md`) et accordent explicitement la
+        reprise en base, l'usage commercial et la création d'information
+        dérivée, sans aucune clause `-SA`. Même raisonnement que pour CC BY.
+
+        Ce test est délibérément rigide : élargir le socle doit rester un geste
+        conscient, jamais un effet de bord."""
         assert svc_sources.LICENCES_IMPORTABLES == frozenset({
-            "CC0", "Licence Ouverte 2.0", "CC BY 4.0",
+            "CC0", "Licence Ouverte 2.0", "CC BY 4.0", "EPPO Codes Open Data Licence",
         })
         assert "CC-BY-SA-4.0" not in svc_sources.LICENCES_IMPORTABLES
 

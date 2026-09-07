@@ -81,6 +81,7 @@ from app.services import attributs_culture as svc_attributs  # [US-161]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164]
 from app.services import associations as svc_associations  # [US-163]
 from app.services import rotation as svc_rotation  # [US-163]
+from app.services import bioagresseurs as svc_bioagresseurs  # [US-162]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from app.services import menu_commandes as svc_menu_commandes  # [US-171]
 from app.services import plan as svc_plan
@@ -4879,6 +4880,195 @@ async def cmd_association(update, ctx) -> None:
 # ──────────────────────────────────────────────────────────────────────────────
 # [US-163 / CA6-CA9] Commande /rotation — conflit de rotation calculé, à la campagne
 # ──────────────────────────────────────────────────────────────────────────────
+async def cmd_bioagresseur(update, ctx) -> None:
+    """
+    /bioagresseur <sous-commande> — Ce qui attaque une culture (US-162).
+
+    Sous-commandes :
+      lister <culture>                                  — restitution à ZÉRO jeton (CA2, CA13)
+      declarer <categorie> <nom>                        — identité LOCALE au potager (CA1, CA3)
+      rattacher <culture> <frequence> <bioagresseur>    — arête locale (CA2, CA3)
+      orphelins                                         — identités sans arête connue (CA12)
+
+    Aucune logique métier ici (convention projet) : la résolution, la validation
+    du vocabulaire fermé et l'écriture vivent dans `app.services.bioagresseurs`,
+    seul point d'écriture — le même que traverse l'import de manifeste.
+
+    [CA3] Toute saisie faite ici est LOCALE au potager courant. Rien dans ce
+    chemin ne promeut une saisie au partagé : c'est une décision humaine, prise
+    ailleurs.
+
+    [CA10] Aucun dosage ni recommandation d'emploi n'est restitué — il n'existe
+    aucune colonne où en stocker. Ce que l'application peut dire d'un traitement
+    se lit à la source officielle, qui est citée.
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /bioagresseur lister <culture>\n"
+        "  /bioagresseur declarer <champignon|insecte|mollusque|nematode|bacterie|virus|abiotique|carence> <nom>\n"
+        "  /bioagresseur rattacher <culture> <courant|occasionnel|rare> <bioagresseur>\n"
+        "  /bioagresseur orphelins\n\n"
+        "Exemples :\n"
+        "  /bioagresseur lister poireau\n"
+        "  /bioagresseur declarer insecte teigne du poireau\n"
+        "  /bioagresseur rattacher poireau courant teigne du poireau"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = ctx.args[0].lower()
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        # ── /bioagresseur lister <culture> ────────────────────────────────────
+        if sous_cmd in ("lister", "liste", "voir"):
+            if len(ctx.args) < 2:
+                await update.message.reply_text(
+                    "❌ Usage : /bioagresseur lister <culture>\n"
+                    "Exemple : /bioagresseur lister poireau",
+                    parse_mode="Markdown",
+                )
+                return
+            culture = " ".join(ctx.args[1:]).strip()
+            try:
+                trouves = svc_bioagresseurs.lire_bioagresseurs(
+                    db, culture, potager_id=tenant_ctx.potager_id
+                )
+            except svc_bioagresseurs.CultureInconnueError:
+                await update.message.reply_text(
+                    f"❌ Culture inconnue : *{_md(culture)}*", parse_mode="Markdown"
+                )
+                return
+
+            log.info(
+                f"[US-162] /bioagresseur lister '{culture}' : {len(trouves)} résultat(s), 0 jeton"
+            )
+            if not trouves:
+                # [CA12] Ne jamais laisser lire « rien ne l'attaque ».
+                await update.message.reply_text(
+                    f"ℹ️ *{_md(culture)}* — {_md(svc_bioagresseurs.MESSAGE_AUCUNE_INFO)}",
+                    parse_mode="Markdown",
+                )
+                return
+
+            lignes = [f"🐛 *{_md(culture)}* — ce qui l'attaque"]
+            attributions: list[str] = []
+            for b in trouves:
+                details = [b.frequence]
+                if b.periode_risque:
+                    details.append(b.periode_risque)
+                else:
+                    details.append("période non renseignée")
+                details.append(b.categorie)
+                if b.local:
+                    details.append("propre à votre potager")
+                ligne = f"• *{_md(b.nom_commun_fr)}* — {_md(' · '.join(details))}"
+                if b.nom_scientifique:
+                    ligne += f"\n  _{_md(b.nom_scientifique)}_"
+                lignes.append(ligne)
+                if b.attribution and b.attribution not in attributions:
+                    attributions.append(b.attribution)
+            if attributions:
+                lignes.append("")
+                lignes.append("Source : " + " · ".join(attributions))
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+            return
+
+        # ── /bioagresseur declarer <categorie> <nom> ──────────────────────────
+        if sous_cmd in ("declarer", "déclarer", "ajouter"):
+            if len(ctx.args) < 3:
+                await update.message.reply_text(
+                    "❌ Usage : /bioagresseur declarer "
+                    "<champignon|insecte|mollusque|nematode|bacterie|virus|abiotique|carence> <nom>\n"
+                    "Exemple : /bioagresseur declarer insecte teigne du poireau",
+                    parse_mode="Markdown",
+                )
+                return
+            categorie = ctx.args[1].lower()
+            nom = " ".join(ctx.args[2:]).strip()
+            try:
+                _, cree = svc_bioagresseurs.enregistrer_bioagresseur(
+                    db, nom_commun_fr=nom, categorie=categorie,
+                    potager_id=tenant_ctx.potager_id,
+                )
+            except svc_bioagresseurs.ValeurBioagresseurInvalideError as err:
+                await update.message.reply_text(f"❌ {err}")
+                return
+            verbe = "déclaré" if cree else "corrigé"
+            await update.message.reply_text(
+                f"✅ *{_md(nom)}* {verbe} ({_md(categorie)}) — pour votre potager uniquement.\n"
+                f"Rattachez-le à une culture : /bioagresseur rattacher <culture> "
+                f"<courant|occasionnel|rare> {_md(nom)}",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /bioagresseur rattacher <culture> <frequence> <bioagresseur> ──────
+        if sous_cmd in ("rattacher", "relier"):
+            if len(ctx.args) < 4:
+                await update.message.reply_text(
+                    "❌ Usage : /bioagresseur rattacher <culture> "
+                    "<courant|occasionnel|rare> <bioagresseur>\n"
+                    "Exemple : /bioagresseur rattacher poireau courant teigne du poireau",
+                    parse_mode="Markdown",
+                )
+                return
+            culture, frequence = ctx.args[1], ctx.args[2].lower()
+            nom = " ".join(ctx.args[3:]).strip()
+            try:
+                _, cree = svc_bioagresseurs.rattacher(
+                    db, culture=culture, bioagresseur=nom, frequence=frequence,
+                    potager_id=tenant_ctx.potager_id,
+                )
+            except svc_bioagresseurs.ValeurBioagresseurInvalideError as err:
+                await update.message.reply_text(f"❌ {err}")
+                return
+            except svc_bioagresseurs.CultureInconnueError:
+                await update.message.reply_text(
+                    f"❌ Culture inconnue : *{_md(culture)}*", parse_mode="Markdown"
+                )
+                return
+            except svc_bioagresseurs.BioagresseurInconnuError:
+                await update.message.reply_text(
+                    f"❌ Bioagresseur inconnu : *{_md(nom)}*\n"
+                    f"Déclarez-le d'abord : /bioagresseur declarer <categorie> {_md(nom)}",
+                    parse_mode="Markdown",
+                )
+                return
+            verbe = "rattaché" if cree else "mis à jour"
+            await update.message.reply_text(
+                f"✅ *{_md(nom)}* {verbe} à *{_md(culture)}* ({_md(frequence)}).",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /bioagresseur orphelins ───────────────────────────────────────────
+        if sous_cmd in ("orphelins", "orphelin", "nonrattaches"):
+            orphelins = svc_bioagresseurs.lister_non_rattaches(
+                db, potager_id=tenant_ctx.potager_id
+            )
+            if not orphelins:
+                await update.message.reply_text(
+                    "✅ Tous les bioagresseurs connus sont rattachés à au moins une culture."
+                )
+                return
+            # [CA12] Ils restent en base et se lisent comme non rattachés — ni
+            # supprimés, ni comptés comme couverture.
+            lignes = [f"🔎 *{len(orphelins)}* bioagresseur(s) connu(s) mais rattaché(s) à aucune culture"]
+            lignes += [f"• {_md(b.nom_commun_fr)} ({_md(b.categorie)})" for b in orphelins]
+            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+            return
+
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+    except Exception as e:
+        log.error(f"[US-162] cmd_bioagresseur erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
+
+
 async def cmd_rotation(update, ctx) -> None:
     """
     /rotation <parcelle> <culture> — Un conflit de rotation se calcule, il ne se
@@ -4942,9 +5132,15 @@ async def cmd_fiche(update, ctx) -> None:
         return
 
     culture = " ".join(ctx.args).strip()
+    tenant_ctx = current_context()
     db = SessionLocal()
     try:
-        fiche = svc_fiche_culture.generer_fiche_courte(db, culture)
+        # [US-174 / CA6] Le potager courant est passé pour que les bioagresseurs
+        # déclarés localement par un jardinier ne fuient pas vers un autre
+        # potager. Il ne scope QUE cette rubrique (CA7).
+        fiche = svc_fiche_culture.generer_fiche_courte(
+            db, culture, potager_id=tenant_ctx.potager_id
+        )
 
         lignes = [f"🌱 *{_md(fiche.culture)}*"]
         # [CA6] Famille non renseignée : dite telle quelle, jamais omise ni devinée.
@@ -4963,6 +5159,38 @@ async def cmd_fiche(update, ctx) -> None:
                 else attribut.affichage
             )
             lignes.append(f"• {attribut.libelle} : {valeur}")
+
+        # ── [US-174 / CA1-CA5] Ce qui attaque la culture ──────────────────
+        # Placée avant la description : un jardinier qui ouvre la fiche d'une
+        # culture attaquée cherche cela, pas un champ de texte libre.
+        lignes.append("")
+        if fiche.bioagresseurs_connus:
+            lignes.append("*À surveiller :*")
+            for b in fiche.bioagresseurs:
+                # [CA2] La période n'apparaît que si elle est renseignée —
+                # répéter « non renseignée » cinq fois noierait la rubrique.
+                details = [b.frequence]
+                if b.periode_risque:
+                    details.append(b.periode_risque)
+                # [CA3] Le local se distingue du partagé, comme dans
+                # /bioagresseur lister.
+                if b.local:
+                    details.append("votre potager")
+                lignes.append(f"• {_md(b.nom_commun_fr)} — {_md(' · '.join(details))}")
+            # [CA4] La fiche courte reste courte : ce qui déborde est compté, et
+            # la commande qui montre tout est rappelée.
+            if fiche.bioagresseurs_non_affiches:
+                lignes.append(
+                    f"_+ {fiche.bioagresseurs_non_affiches} autre(s) — "
+                    f"/bioagresseur lister {_md(fiche.culture)}_"
+                )
+        else:
+            # [CA5] Aucune arête connue : jamais une rubrique vide, jamais
+            # « rien ne l'attaque » — l'ignorance se dit (US-162 / CA12).
+            lignes.append(
+                "*À surveiller :* information non connue — cela ne veut pas dire "
+                "que cette culture n'est pas exposée."
+            )
 
         # [CA13] Champ de texte libre : affiché quand renseigné, jamais omis ni
         # comblé sinon — même principe d'honnêteté que CA6, appliqué à ce champ.
@@ -6600,6 +6828,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
     _enregistrer_commande(app, "association", cmd_association)  # [US-163]
     _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
+    _enregistrer_commande(app, "bioagresseur", cmd_bioagresseur)  # [US-162]
 
     _enregistrer_commande(app, "vendre",    cmd_vendre)
 

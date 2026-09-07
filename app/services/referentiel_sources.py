@@ -34,6 +34,17 @@ from database.models import ReferentielSource
 LICENCE_CC0 = "CC0"
 LICENCE_LICENCE_OUVERTE = "Licence Ouverte 2.0"
 LICENCE_CC_BY = "CC BY 4.0"
+#: [US-162 / CA7] « EPPO Codes Open Data Licence » (EPPO, Paris, 17/11/2014) —
+#: conditions LUES et consignées dans `data/referentiel/eppo/SOURCE.md`, comme
+#: le CA7 en fait un préalable bloquant. Le texte accorde un droit mondial,
+#: perpétuel, gratuit et non exclusif de reproduire, publier, transmettre les
+#: codes EPPO, d'en dériver de l'information et de les exploiter commercialement
+#: « en les incluant dans votre propre produit ou application ». Aucune clause
+#: de partage à l'identique, donc aucune contamination du corpus — le seul motif
+#: d'exclusion posé par l'arbitrage §6.3. Deux obligations, et elles sont déjà
+#: portées par ce registre : citer EPPO **et la date du dernier téléchargement**
+#: (`date_dernier_import`), sans jamais reproduire le logo EPPO.
+LICENCE_EPPO = "EPPO Codes Open Data Licence"
 LICENCE_PROPRIETAIRE = "proprietaire"
 
 #: Licences acceptées pour un contenu **importé** — le socle, et lui seul.
@@ -47,8 +58,15 @@ LICENCE_PROPRIETAIRE = "proprietaire"
 #: enregistrement dans ce registre (CA1) et déjà affichée avec la réponse
 #: (US-164 / CA7). Le socle refuse donc toujours CC-BY-SA, et toujours ce dont
 #: la licence n'est pas établie.
+#:
+#: `EPPO Codes Open Data Licence` a été ajoutée le 06/09/2026 par US-162 / CA7,
+#: qui faisait de la lecture des conditions un préalable bloquant. Elles ne
+#: prohibent PAS la reprise en base — elles l'autorisent explicitement, y
+#: compris commercialement — et le repli « codes saisis à la main sur les dix
+#: cultures » que le CA7 prévoyait n'a donc pas lieu d'être. Même raisonnement
+#: que pour CC BY : pas de clause `-SA`, donc pas de contamination.
 LICENCES_IMPORTABLES: frozenset[str] = frozenset({
-    LICENCE_CC0, LICENCE_LICENCE_OUVERTE, LICENCE_CC_BY,
+    LICENCE_CC0, LICENCE_LICENCE_OUVERTE, LICENCE_CC_BY, LICENCE_EPPO,
 })
 
 #: Licences acceptées au registre, importées ou non. `proprietaire` couvre les
@@ -59,6 +77,7 @@ LICENCES_SOCLE: frozenset[str] = LICENCES_IMPORTABLES | frozenset({LICENCE_PROPR
 SOURCE_WIKIDATA = "wikidata"
 SOURCE_EPHY_ANSES = "ephy_anses"
 SOURCE_WIND_RIVER = "wind_river_greens"
+SOURCE_EPPO = "eppo"
 SOURCE_SAISIE_MANUELLE = "saisie_manuelle"
 SOURCE_REDACTION_INTERNE = "redaction_interne"
 
@@ -101,6 +120,20 @@ SOURCES_SOCLE: tuple[dict, ...] = (
         "importee": True,
     },
     {
+        "code": SOURCE_EPPO,
+        "libelle": "EPPO Global Database — codes EPPO",
+        "licence": LICENCE_EPPO,
+        # [US-162 / CA7] La licence exige la mention d'EPPO **et de la date du
+        # dernier téléchargement**. Cette date n'est pas figée dans la chaîne :
+        # elle est portée par `date_dernier_import`, que `marquer_import` date à
+        # chaque import réussi — une attribution en dur mentirait au premier
+        # rejeu. `attribution_affichee` la recompose, jamais l'appelant.
+        "attribution": "Contains EPPO Codes (www.eppo.int) — EPPO Codes Open Data Licence",
+        "url": "https://data.eppo.int/",
+        "partageable": True,
+        "importee": True,
+    },
+    {
         "code": SOURCE_SAISIE_MANUELLE,
         "libelle": "Saisie du jardinier",
         "licence": LICENCE_PROPRIETAIRE,
@@ -137,6 +170,12 @@ TABLES_RATTACHEES: tuple[tuple[str, str, str], ...] = (
     # une ligne dans `TABLES_RATTACHEES` suffit, contrairement aux quatre
     # attributs de conduite ci-dessus.
     ("association_culture", "source_id", "motif"),
+    # [US-162 / CA4] Les identités de bioagresseurs et les arêtes culture ×
+    # bioagresseur portent chacune leur origine : retirer une source doit
+    # pouvoir emporter les arêtes qu'elle a posées sans emporter les identités
+    # qui viennent d'ailleurs (un code EPPO importé, un nom saisi au bot).
+    ("bioagresseur", "source_id", "nom_commun_fr"),
+    ("culture_bioagresseur", "source_id", "frequence"),
 )
 
 
@@ -297,6 +336,23 @@ def donnees_derivees(db: Session, code: str) -> list[dict]:
 
 
 def attribution_affichee(db: Session, code: str) -> Optional[str]:
-    """[CA1] Mention à afficher pour une source, ou None si elle est inconnue."""
+    """
+    [CA1] Mention à afficher pour une source, ou None si elle est inconnue.
+
+    [US-162 / CA7] La licence EPPO est la seule du socle à exiger, en plus du
+    nom de la source, **la date du dernier téléchargement**. Elle est recomposée
+    ici depuis `date_dernier_import` plutôt que figée dans la chaîne du registre :
+    une date en dur mentirait dès le premier rejeu hebdomadaire, et l'obligation
+    porterait alors sur une information fausse — ce qui est pire que pas de date.
+    Une source EPPO jamais importée n'affiche aucune date : rien n'en dérive
+    encore, il n'y a donc rien à dater.
+    """
     source = get_source(db, code)
-    return source.attribution if source is not None else None
+    if source is None:
+        return None
+    if source.licence == LICENCE_EPPO and source.date_dernier_import is not None:
+        return (
+            f"{source.attribution} — dernier téléchargement le "
+            f"{source.date_dernier_import.strftime('%d/%m/%Y')}"
+        )
+    return source.attribution
