@@ -364,6 +364,24 @@ def rename_parcelle(
     parcelle.nom = nouveau_nom
     parcelle.nom_normalise = nouveau_normalise
 
+    # [US-141] Le nom de la parcelle est DANS le titre indexé des notes qui s'y
+    # rattachent — c'est lui qui fait retrouver « la parcelle nord ». Un
+    # renommage le périme donc des deux côtés à la fois : la note devient
+    # introuvable sous le nom que le jardinier emploie désormais, et elle
+    # s'affiche sous un nom qui n'existe plus. Réindexer part dans le même
+    # commit ; un échec ne peut pas coûter le renommage lui-même, qui est
+    # l'opération demandée.
+    if potager_id is not None:
+        try:
+            from app.services import memoire_potager
+
+            memoire_potager.reindexer_parcelle(db, potager_id, parcelle.id)
+        except Exception as e:
+            log.warning(
+                "⚠️ [US-141] Réindexation de la mémoire après renommage impossible (%s)",
+                type(e).__name__,
+            )
+
     db.commit()
     db.refresh(parcelle)
 

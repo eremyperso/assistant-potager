@@ -189,6 +189,94 @@ _MARQUEURS_SAVOIR: tuple[str, ...] = (
     "comment declarer", "comment déclarer", "comment dicter",
 )
 
+# [US-141 / CA5] La mémoire du potager — retrouver ce que le JARDINIER a écrit.
+#
+# Ces formulations demandent bel et bien une donnée enregistrée dans ce potager,
+# et en portent souvent le marqueur : « qu'avais-je noté SUR LA PARCELLE nord
+# l'an dernier ? » matche `sur la parcelle`. Elles partaient donc à l'étage des
+# données — qui ne sait répondre qu'en SQL, sur des agrégats, et n'a aucune
+# famille capable de rendre un texte libre. Le jardinier recevait l'occupation
+# de sa parcelle à la place de sa note, et la mémoire n'était jamais consultée.
+#
+# Elles vont donc à QUESTION_SAVOIR, seule nature dont la cascade consulte le
+# socle de connaissance (`_consulter_savoir`), où la mémoire est indexée. Le nom
+# de la nature dit « connaissance générale » et c'est ici un abus de langage
+# assumé : ce qui compte est l'étage atteint, pas l'étiquette — et cet étage
+# sert la note À COÛT NUL, ce que l'étage des données ne saurait pas faire.
+#
+# Testées AVANT `_regle_par_geste`, et pas seulement avant les marqueurs DATA :
+# `noter` et `constat` sont des variantes du geste canonique `observation`
+# (`utils/actions.ACTION_MAP`), et `_ouverture_interrogative` ne reconnaît pas
+# « qu'avais-je… ». Sans cette antériorité, la même question DICTÉE — donc sans
+# point d'interrogation — s'enregistrerait dans le journal au lieu d'être
+# répondue : exactement le défaut mesuré par US-173 / CA3.
+#
+# Une liste de locutions figées ne suffit PAS ici, et l'essai l'a montré en
+# usage réel : « quelle note précédente avais-je sur ce potager ? » ne contient
+# aucune des formes attendues (« avais-je noté », « mes notes »), le verbe et le
+# nom y sont séparés par trois mots. Aucune liste plate ne couvre les
+# combinaisons du français — le déterminant, le nom et le verbe de rappel se
+# rencontrent dans n'importe quel ordre et à n'importe quelle distance.
+#
+# Le motif exige donc DEUX choses ensemble, ce qui le rend à la fois large et
+# sûr : un NOM d'écrit (note, remarque, observation, constat) ET une marque de
+# RAPPEL (un possessif, un interrogatif, un passé composé en « avais », ou un
+# adjectif d'antériorité). « Combien d'observations ai-je faites ? » ne porte
+# aucune des secondes : c'est un comptage, il continue de descendre au catalogue
+# chiffré, qui y répond exactement et à coût nul.
+_NOMS_ECRIT = r"(?:notes?|remarques?|observations?|constats?)"
+_MARQUES_RAPPEL = (
+    r"(?:avais je|j avais|quel|quelle|quels|quelles|mes|ma|"
+    r"precedent|precedente|precedents|precedentes|"
+    r"dernier|derniere|derniers|dernieres|ancien|ancienne|anciens|anciennes|"
+    r"passee|passees|passe)"
+)
+_MOTIF_MEMOIRE = re.compile(
+    # Marque de rappel, puis le nom de l'écrit — « quelle NOTE », « mes NOTES »,
+    # « quelle note précédente AVAIS-JE » se lit aussi dans ce sens.
+    rf"\b{_MARQUES_RAPPEL}\b[a-z0-9 ]{{0,30}}?\b{_NOMS_ECRIT}\b"
+    # …ou l'inverse : « les NOTES que J'AVAIS prises », « NOTES PRÉCÉDENTES ».
+    rf"|\b{_NOMS_ECRIT}\b[a-z0-9 ]{{0,30}}?\b{_MARQUES_RAPPEL}\b"
+)
+
+# Le passé composé à la première personne est AMBIGU, et c'est le seul cas où
+# la même suite de mots peut être une saisie ou une question :
+#
+#   « j'ai noté que le sol est sec »        → une note à ENREGISTRER
+#   « qu'est-ce que j'ai noté ? »           → une note à RELIRE
+#
+# Aucun vocabulaire ne les sépare — seule l'ouverture interrogative le fait.
+# C'est pourquoi cette forme est traitée à part, sous garde, plutôt qu'ajoutée
+# aux marques de rappel : l'y verser aurait fait basculer toute saisie
+# commençant par « j'ai noté » vers une question, et le geste se serait perdu.
+_MOTIF_MEMOIRE_AMBIGU = re.compile(
+    r"\b(?:j ai|ai je)\s+"
+    r"(?:notes?|ecrits?|remarques?|constates?|observes?|consignes?)\b"
+)
+
+
+def _est_rappel_de_note(texte: str) -> bool:
+    """[US-141 / CA5] La phrase demande-t-elle à RELIRE un écrit du jardinier ?
+
+    Testée sur le texte normalisé comme le reste du routeur (accents et
+    ponctuation ramenés), pour que « qu'avais-je noté », « qu avais je note » et
+    la même phrase dictée se comportent à l'identique.
+
+    La forme au passé composé (« j'ai noté ») n'est retenue que si la phrase
+    s'OUVRE comme une question — le même discriminant qu'US-173 / CA3, et pour
+    la même raison : à la dictée vocale, le point d'interrogation n'existe pas,
+    et c'est alors l'ouverture qui distingue le rappel de la saisie.
+    """
+    brut = (texte or "").strip()
+    normalise = _ESPACES_ROUTEUR.sub(
+        " ", _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode(brut.lower()))
+    ).strip()
+    if _MOTIF_MEMOIRE.search(normalise):
+        return True
+    if not _MOTIF_MEMOIRE_AMBIGU.search(normalise):
+        return False
+    return brut.endswith("?") or _ouverture_interrogative(brut)
+
 # [CA2] Consultation d'une donnée déjà enregistrée dans CE potager.
 _MARQUEURS_DATA: tuple[str, ...] = (
     "combien de", "combien ai-je", "combien j'ai", "quand ai-je", "quand j'ai",
@@ -315,6 +403,11 @@ def _regle_par_mots_cles(texte: str) -> Optional[str]:
     if any(m in t for m in _MARQUEURS_HYBRIDE):
         return NATURE_QUESTION_HYBRIDE
     if any(m in t for m in _MARQUEURS_SAVOIR):
+        return NATURE_QUESTION_SAVOIR
+    # [US-141 / CA5] Avant la règle de geste ET avant les marqueurs DATA — voir
+    # le commentaire de `_MOTIF_MEMOIRE` : les deux la précédant la
+    # captureraient, l'une pour l'enregistrer, l'autre pour y répondre en SQL.
+    if _est_rappel_de_note(t):
         return NATURE_QUESTION_SAVOIR
     nature_geste = _regle_par_geste(t)
     # [US-173 / CA3] Deux garde-fous, pas un seul : le point d'interrogation
@@ -448,7 +541,7 @@ _PROMPT_FIXE_ROUTEUR = """Tu es le routeur de l'assistant potager. Classe le mes
 
 ACTION            : décrit une action potager déjà réalisée (semis, arrosage, récolte...)
 QUESTION_DATA     : demande une donnée déjà enregistrée dans CE potager (stock, historique, quantité, dates)
-QUESTION_SAVOIR   : demande une connaissance générale (agronomie, maladies, ravageurs, fonctionnement de l'application)
+QUESTION_SAVOIR   : demande une connaissance générale (agronomie, maladies, ravageurs, fonctionnement de l'application), OU demande à relire une note que le jardinier a lui-même écrite les saisons passées
 QUESTION_HYBRIDE  : exige À LA FOIS de consulter les données enregistrées du potager ET de raisonner dessus
 
 Test décisif entre QUESTION_SAVOIR et QUESTION_HYBRIDE : pour répondre, faut-il aller
@@ -461,6 +554,7 @@ Exemples :
 mes salades sont mangées la nuit, il reste que le trognon -> QUESTION_SAVOIR|0.9
 mes semis de tomates font des tiges toutes fines et molles -> QUESTION_SAVOIR|0.9
 combien de tomates ai-je récolté cette saison ? -> QUESTION_DATA|0.95
+que disais-je de la planche du fond en juillet dernier ? -> QUESTION_SAVOIR|0.9
 mes courgettes jaunissent et j'ai beaucoup arrosé cette semaine, qu'en penses-tu ? -> QUESTION_HYBRIDE|0.9
 
 Réponds STRICTEMENT au format : NATURE|CONFIANCE
@@ -597,6 +691,14 @@ du potager est fourni, appuie-toi dessus ; sinon réponds depuis tes
 connaissances générales d'agronomie ou de fonctionnement de l'application.
 Si des passages issus de la base de connaissance sont fournis, ils font
 autorité : appuie-toi dessus en priorité et ne les contredis pas.
+Un passage marqué « MÉMOIRE DU POTAGER » est une note que le jardinier a
+écrite lui-même : cite-la entre guillemets avec sa date, sans la reformuler, et
+distingue-la explicitement du savoir général (« ta note du 12 mai indique… »
+d'un côté, « en général… » de l'autre). Ne lui fais jamais dire ce qu'il n'a
+pas écrit, et n'invente jamais une note qui ne t'a pas été fournie.
+Ces étiquettes sont un repère interne : ne les cite JAMAIS dans ta réponse, et
+ne mentionne jamais ce qui « t'a été fourni » ou non. Si tu n'as reçu aucune
+note, dis simplement que tu ne trouves rien d'enregistré à ce sujet.
 S'il s'agit d'un symptôme observé au potager, présente les causes possibles par
 ordre de probabilité (« l'excès d'eau est plus probable qu'une carence ») et
 n'affirme jamais une cause comme certaine.
@@ -710,7 +812,7 @@ def _persister_routage_log(
 # ─────────────────────────────────────────────────────────────────────────────
 # [US-098] Étage 2 — consultation du socle de connaissance
 # ─────────────────────────────────────────────────────────────────────────────
-def _consulter_savoir(ctx: TenantContext, question: str):
+def _consulter_savoir(ctx: TenantContext, question: str, famille: "str | None" = None):
     """Interroge l'étage 2 et rend son contexte, ou `None`.
 
     Ne lève jamais et ne rédige jamais : l'étage du savoir est un ACCÉLÉRATEUR,
@@ -729,7 +831,7 @@ def _consulter_savoir(ctx: TenantContext, question: str):
     db = None
     try:
         db = SessionLocal()
-        return connaissance.rechercher(db, ctx, question)
+        return connaissance.rechercher(db, ctx, question, famille=famille)
     except Exception as e:
         log.warning("⚠️  SAVOIR         │ recherche impossible (%s) — cascade poursuivie", type(e).__name__)
         return None
@@ -768,7 +870,18 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
     # reclassée, et une entrée `template_sql` recalcule ses valeurs, donc ne
     # peut pas servir un chiffre périmé. Le jardinier ne voit aucune différence
     # (US-095 / CA13) — seul le journal garde trace de l'origine.
-    depuis_cache = cache_questions.servir(ctx, question)
+    #
+    # [US-141 / CA9] Sauf pour une question de mémoire, qui court-circuite le
+    # cache dans les DEUX sens. Ne plus en mémoriser (voir `_memoriser_reponse`)
+    # ne suffit pas : les entrées écrites AVANT ce garde-fou continueraient
+    # d'être servies pendant leurs quatre-vingt-dix jours de validité, et le
+    # jardinier verrait sa mémoire répondre « je ne trouve aucune note » sans
+    # qu'aucune recherche n'ait eu lieu. Refuser de servir les fait expirer
+    # d'elles-mêmes, sans purge manuelle.
+    depuis_cache = (
+        None if _est_rappel_de_note(question)
+        else cache_questions.servir(ctx, question)
+    )
     if depuis_cache is not None:
         decision_cache = DecisionRoutage(
             nature=(NATURE_QUESTION_SAVOIR if depuis_cache.type_reponse == cache_questions.TYPE_FIGEE
@@ -815,7 +928,17 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
             # cet étage. Une recherche qui trouve à coup sûr coûte zéro jeton ;
             # une recherche qui ne trouve rien coûte zéro jeton aussi, et le
             # raisonnement reprend exactement comme avant cette US.
-            savoir = _consulter_savoir(ctx, question)
+            # [US-141 / CA5] Une question de mémoire cherche dans la
+            # mémoire, et NULLE PART AILLEURS. Sans cette restriction, le corpus
+            # général — plus vaste, et riche du vocabulaire même de la question
+            # — remporte le classement : « qu'ai-je noté sur les tomates ? »
+            # rendait trois fiches d'agronomie et aucune note (constaté en
+            # production le 08/09/2026).
+            famille_savoir = (
+                connaissance.FAMILLE_MEMOIRE_POTAGER
+                if _est_rappel_de_note(question) else None
+            )
+            savoir = _consulter_savoir(ctx, question, famille=famille_savoir)
             if savoir is not None and savoir.suffisant:
                 # [CA7, CA8] Le texte servi est le passage HUMAINEMENT écrit,
                 # recopié — pas une génération. Zéro appel modèle sur ce chemin.
@@ -936,6 +1059,22 @@ def _memoriser_reponse(
 
     db = None
     try:
+        # [US-141 / CA9] Une question qui demande à RELIRE une note n'a pas de
+        # réponse générale, jamais : la réponse dépend entièrement de ce que ce
+        # jardinier-là a écrit. Le contrôle par passage privé ne suffit pas —
+        # il ne se déclenche que si un passage privé a été RETENU, or le cas
+        # dangereux est précisément l'inverse. « Je ne trouve aucune note
+        # enregistrée » mémorisé en savoir PARTAGÉ (`potager_id = NULL`) est
+        # servi ensuite à tous les potagers, y compris à ceux qui en ont, et à
+        # coût nul donc sans jamais être recalculé. Relevé en usage le
+        # 08/09/2026 : l'entrée figée répondait à la place de la recherche, la
+        # mémoire n'était même plus consultée.
+        if _est_rappel_de_note(question):
+            log.info(
+                "⛔ CACHE QUESTION │ mémorisation écartée (question de mémoire, "
+                "réponse propre au potager) : '%s'", question[:80],
+            )
+            return
         if chiffree is not None and chiffree.present and chiffree.aiguillage:
             db = SessionLocal()
             cache_questions.memoriser_template_sql(db, ctx, question, chiffree.aiguillage)

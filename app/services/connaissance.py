@@ -50,7 +50,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Iterable, Optional
 
-from sqlalchemy import Text, cast, func, or_, text
+from sqlalchemy import Text, and_, cast, func, or_, text
 from sqlalchemy.dialects.postgresql import TSQUERY
 from sqlalchemy.orm import Session
 from unidecode import unidecode
@@ -331,6 +331,16 @@ def _requete_base(db: Session, ctx: TenantContext):
     filtre » (CA5). Un `potager_id` absent du contexte est refusé plutôt que
     replié sur une valeur par défaut : sans tenant courant, une recherche n'est
     pas isolable, donc elle n'a pas lieu.
+
+    [US-141 / CA8] La famille `memoire_potager` est EXCLUE de la clause de
+    savoir partagé. La différence est subtile et vaut d'être écrite : jusqu'ici,
+    une note privée était invisible d'un autre potager parce qu'elle portait un
+    `potager_id`, donc parce que l'INDEXATION avait bien fait son travail. Ici,
+    elle l'est parce que la RECHERCHE refuse de servir un fragment de cette
+    famille autrement que sur l'égalité du potager courant — même si un jour un
+    chemin d'écriture en produisait un sans potager, il resterait inatteignable.
+    L'isolation cesse d'être une propriété des données pour devenir une
+    propriété de la requête, et c'est cette seconde forme que le CA8 demande.
     """
     if ctx is None or ctx.potager_id is None:
         raise ValueError("Aucun potager courant : recherche de connaissance refusée")
@@ -338,7 +348,10 @@ def _requete_base(db: Session, ctx: TenantContext):
         db.query(KnowledgeChunk, KnowledgeDocument)
         .join(KnowledgeDocument, KnowledgeDocument.id == KnowledgeChunk.document_id)
         .filter(or_(
-            KnowledgeChunk.potager_id.is_(None),
+            and_(
+                KnowledgeChunk.potager_id.is_(None),
+                KnowledgeDocument.famille != FAMILLE_MEMOIRE_POTAGER,
+            ),
             KnowledgeChunk.potager_id == ctx.potager_id,
         ))
     )
@@ -424,7 +437,7 @@ def resoudre_culture(db: Session, ctx: TenantContext, question: str) -> Optional
 # ─────────────────────────────────────────────────────────────────────────────
 def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
                         culture_id: Optional[int], type_fragment: Optional[str],
-                        limite: int) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                        limite: int, famille: Optional[str] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     requete_texte = _tsquery(question)
     rang = func.ts_rank_cd(
         KnowledgeChunk.recherche_fts, requete_texte, _NORMALISATION_RANG,
@@ -432,14 +445,14 @@ def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).add_columns(rang.label("rang")).filter(
         KnowledgeChunk.recherche_fts.op("@@")(requete_texte)
     )
-    requete = _restreindre(requete, culture_id, type_fragment)
+    requete = _restreindre(requete, culture_id, type_fragment, famille)
     lignes = requete.order_by(text("rang DESC")).limit(limite).all()
     return [(fragment, document, float(score or 0.0)) for fragment, document, score in lignes]
 
 
 def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
                     culture_id: Optional[int], type_fragment: Optional[str],
-                    limite: int) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                    limite: int, famille: Optional[str] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     """Repli de test — même sémantique, moteur sans dictionnaire.
 
     Le classement est fait en Python sur les seuls fragments qui portent au
@@ -454,7 +467,7 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).filter(
         or_(*[KnowledgeChunk.recherche_fts.like(f"%{terme}%") for terme in termes])
     )
-    requete = _restreindre(requete, culture_id, type_fragment)
+    requete = _restreindre(requete, culture_id, type_fragment, famille)
 
     classees: list[tuple[KnowledgeChunk, KnowledgeDocument, float]] = []
     for fragment, document in requete.all():
@@ -473,8 +486,17 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
     return classees[:limite]
 
 
-def _restreindre(requete, culture_id: Optional[int], type_fragment: Optional[str]):
-    """[CA6] Restriction par métadonnée — appliquée seulement quand elle existe."""
+def _restreindre(requete, culture_id: Optional[int], type_fragment: Optional[str],
+                 famille: Optional[str] = None):
+    """[CA6] Restriction par métadonnée — appliquée seulement quand elle existe.
+
+    [US-141 / CA5] `famille` n'est PAS une métadonnée du même ordre : c'est le
+    REGISTRE que la question désigne, et il ne se relâche jamais (voir la boucle
+    de tentatives dans `rechercher`). « Qu'ai-je noté sur les tomates ? » ne
+    demande pas de conseil sur la tomate — elle demande les notes du jardinier.
+    """
+    if famille:
+        requete = requete.filter(KnowledgeDocument.famille == famille)
     if culture_id is not None:
         requete = requete.filter(KnowledgeChunk.culture_id == culture_id)
     if type_fragment:
@@ -489,6 +511,7 @@ def rechercher(
     *,
     culture_id: Optional[int] = None,
     type_fragment: Optional[str] = None,
+    famille: Optional[str] = None,
     detecter_metadonnees: bool = True,
     limite: int = RAG_MAX_PASSAGES,
     seuil: float = RAG_SEUIL_CONFIANCE,
@@ -504,6 +527,16 @@ def rechercher(
     résultat, elle est relâchée et la recherche est rejouée sans elle. Un filtre
     qui vide un résultat est un filtre faux — mieux vaut un passage un peu large
     qu'aucun passage.
+
+    [US-141 / CA5] `famille` fait exception à ce relâchement, parce qu'elle ne
+    relève pas de la même nature : c'est le REGISTRE que la question désigne
+    elle-même, pas une métadonnée devinée sur le texte. Relevé en production le
+    08/09/2026 : « qu'ai-je noté sur les tomates ? » rendait trois fiches
+    d'agronomie sur la tomate et pas une seule note du jardinier — le corpus
+    général, bien plus vaste et bien plus riche du vocabulaire de la question,
+    remporte le classement à tous les coups. Un filtre qui viderait le résultat
+    est un filtre faux ; un filtre qui rend le mauvais registre l'est aussi, et
+    aucun assouplissement ne peut réparer cela.
     """
     debut = time.monotonic()
     question = (question or "").strip()
@@ -534,7 +567,7 @@ def rechercher(
     lignes: list = []
     metadonnees: dict[str, str] = {}
     for culture_essai, type_essai in tentatives:
-        lignes = classer(db, ctx, question, culture_essai, type_essai, limite)
+        lignes = classer(db, ctx, question, culture_essai, type_essai, limite, famille)
         if lignes:
             if culture_essai is not None:
                 metadonnees["culture_id"] = str(culture_essai)
@@ -676,6 +709,36 @@ def reserve_a_afficher(contexte: ContexteConnaissance) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # [CA7, CA8] Restitution — citation, jamais génération
 # ─────────────────────────────────────────────────────────────────────────────
+# [US-141 / CA6] Les deux registres, nommés une fois pour toutes ici.
+# « Ta note du 12 mai indique… » et « en général… » ne disent pas la même chose,
+# et les confondre revient à faire dire au jardinier ce qu'il n'a pas dit. Le
+# vocabulaire est donc écrit à un seul endroit, partagé par le chemin servi (à
+# coût nul) et par le contexte qui descend vers l'étage de raisonnement.
+REGISTRE_MEMOIRE = "📓 Ce que tu avais noté"
+REGISTRE_GENERAL = "🌱 En général"
+
+
+def _bloc_memoire(passage: Passage) -> str:
+    """[CA5] Une note restituée : sa date, sa parcelle, puis son texte CITÉ.
+
+    Les guillemets ne sont pas un ornement : ils disent que ce qui suit n'a pas
+    été retouché. `titre_document` porte la date et la parcelle (voir
+    `memoire_potager.titre_note`), donc le CA5 est servi par la même chaîne qui
+    a permis de retrouver la note — l'un ne peut pas dériver de l'autre.
+    """
+    return f"{REGISTRE_MEMOIRE} — {passage.titre_document} :\n« {passage.contenu.strip()} »"
+
+
+def _bloc_general(passage: Passage, *, etiquete: bool) -> str:
+    """Un passage du savoir partagé, recopié tel quel, avec sa source."""
+    corps = passage.contenu.strip()
+    if etiquete:
+        corps = f"{REGISTRE_GENERAL} :\n{corps}"
+    if passage.source:
+        corps = f"{corps}\n\n_Source : {passage.source}_"
+    return corps
+
+
 def restituer(contexte: ContexteConnaissance) -> str:
     """Assemble la réponse servie directement, à coût nul (CA7).
 
@@ -683,14 +746,32 @@ def restituer(contexte: ContexteConnaissance) -> str:
     relu et versionné, suivi de sa source. Cette fonction ne fait que coller —
     elle n'a aucune raison d'exister ailleurs qu'ici, et surtout aucune raison
     d'appeler un modèle.
+
+    [US-141 / CA6] Quand les passages retenus mêlent la mémoire du potager et le
+    savoir général, les deux sont rendus SÉPARÉMENT et étiquetés. Le passage de
+    tête commande l'ordre — c'est lui qui répond — et le meilleur passage de
+    l'autre registre le complète. Fondre les deux en un seul paragraphe
+    reviendrait à présenter comme une vérité générale ce que le jardinier a
+    observé chez lui, ou l'inverse : les deux erreurs sont graves, et ce sont
+    précisément celles que le CA6 interdit.
     """
     if not contexte.passages:
         return ""
-    passage = contexte.passages[0]
-    lignes = [passage.contenu.strip()]
-    if passage.source:
-        lignes.append(f"\n_Source : {passage.source}_")
-    return "\n".join(lignes)
+    tete = contexte.passages[0]
+    autre_registre = next(
+        (p for p in contexte.passages[1:] if p.prive != tete.prive), None
+    )
+    mixte = autre_registre is not None
+
+    blocs = [
+        _bloc_memoire(tete) if tete.prive else _bloc_general(tete, etiquete=mixte)
+    ]
+    if autre_registre is not None:
+        blocs.append(
+            _bloc_memoire(autre_registre) if autre_registre.prive
+            else _bloc_general(autre_registre, etiquete=True)
+        )
+    return "\n\n".join(blocs)
 
 
 def contexte_pour_raisonnement(contexte: ContexteConnaissance, max_passages: int = RAG_MAX_PASSAGES) -> str:
@@ -699,13 +780,29 @@ def contexte_pour_raisonnement(contexte: ContexteConnaissance, max_passages: int
     Des passages étiquetés, pas une réponse : l'étage de raisonnement reçoit de
     la matière et reste seul à rédiger. Une confiance insuffisante ne déclare
     donc jamais la question sans réponse — elle change seulement d'étage.
+
+    [US-141 / CA6] L'étiquette dit le REGISTRE avant de dire la source. Un
+    modèle à qui l'on donne, dans le même bloc, une note du jardinier et une
+    fiche d'agronomie n'a aucun moyen de savoir laquelle est la parole de son
+    interlocuteur — et il attribuera l'une à l'autre. La distinction des deux
+    registres ne peut donc pas être demandée au seul prompt : elle doit être
+    portée par la matière elle-même.
     """
     if not contexte.passages:
         return ""
-    blocs = [
-        f"[{passage.titre_complet} — {passage.source}, {passage.niveau_confiance}]\n{passage.contenu.strip()}"
-        for passage in contexte.passages[:max_passages]
-    ]
+    blocs = []
+    for passage in contexte.passages[:max_passages]:
+        if passage.prive:
+            registre = (
+                "MÉMOIRE DU POTAGER — note écrite par le jardinier lui-même, "
+                "à citer sans la reformuler"
+            )
+        else:
+            registre = "SAVOIR GÉNÉRAL"
+        blocs.append(
+            f"[{registre} | {passage.titre_complet} — {passage.source}, "
+            f"{passage.niveau_confiance}]\n{passage.contenu.strip()}"
+        )
     return "\n\n".join(blocs)
 
 
@@ -728,15 +825,28 @@ class FragmentAIngerer:
     termes_indexation: str = ""
 
 
-def valider_entete(famille: str, niveau_confiance: str) -> None:
+def valider_entete(famille: str, niveau_confiance: str,
+                   potager_id: Optional[int] = None) -> None:
     """Refuse un vocabulaire hors périmètre à l'écriture — l'ingestion doit
-    échouer sur un en-tête fautif, pas indexer un document inclassable."""
+    échouer sur un en-tête fautif, pas indexer un document inclassable.
+
+    [US-141 / CA1] Une note du jardinier s'écrit avec le `potager_id` de son
+    potager, **jamais** avec un `potager_id` nul. Le refus est posé ici, au seul
+    point d'écriture de la table, plutôt que dans le module qui indexe les
+    notes : c'est ce qui rend l'invariant vrai de tout chemin d'écriture, y
+    compris de ceux qui n'existent pas encore.
+    """
     if famille not in FAMILLES:
         raise ValueError(f"Famille inconnue : {famille!r} (attendu : {', '.join(sorted(FAMILLES))})")
     if niveau_confiance not in NIVEAUX_CONFIANCE:
         raise ValueError(
             f"Niveau de confiance inconnu : {niveau_confiance!r} "
             f"(attendu : {', '.join(sorted(NIVEAUX_CONFIANCE))})"
+        )
+    if famille == FAMILLE_MEMOIRE_POTAGER and potager_id is None:
+        raise ValueError(
+            "Un document de la famille 'memoire_potager' doit porter un potager_id : "
+            "une note du jardinier n'est jamais un savoir partagé (US-141 / CA1)"
         )
 
 
@@ -757,7 +867,7 @@ def enregistrer_document(
     réécrire, et c'est exactement ce qui rend l'ingestion idempotente — un rejeu
     sans modification ne touche pas une ligne.
     """
-    valider_entete(famille, niveau_confiance)
+    valider_entete(famille, niveau_confiance, potager_id)
     document = (
         db.query(KnowledgeDocument)
         .filter(KnowledgeDocument.reference == reference)

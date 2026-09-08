@@ -38,7 +38,7 @@ Concrètement, avant de livrer un changement de comportement :
 2. corriger la ou les fiches concernées dans le même commit ;
 3. `pytest tests/test_us099_corpus_fonctionnement.py` doit rester vert — il
    contrôle la couverture des domaines de `/help`, l'absence de vocabulaire
-   technique dans le texte servi, et le classement des 60 questions de mesure.
+   technique dans le texte servi, et le classement des 65 questions de mesure.
 
 Une fiche ajoutée entre dans cette table dans le même commit : le test échoue
 tant que ce n'est pas fait.
@@ -272,6 +272,56 @@ python tools/controler_corpus_agronomie.py --detail
 python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us140_questions_diagnostic.csv     --racine data/connaissance/agronomie --detail
 # Mesure au 07/09/2026, repli SQLite : 66/66 dans les trois premiers, 64 en tête.
 # CA12 : au-dessus du seuil, la question de la recherche SÉMANTIQUE reste fermée.
+
+# Mémoire du potager — troisième contenu du socle [US-141]
+# Les observations et notes libres (US-038/US-039) sont indexées comme fragments
+# de famille `memoire_potager`, avec le potager_id de leur auteur — JAMAIS nul.
+# Indexation AUTOMATIQUE à l'enregistrement : elle est branchée dans
+# app/services/evenements.py, au même point que l'invalidation de cache d'US-095
+# (`_indexer_memoire` / `_oublier_memoire`), et nulle part ailleurs.
+# ⚠️ L'AIGUILLAGE conditionne tout le reste. La mémoire n'est consultée que sur
+# la branche QUESTION_SAVOIR de la cascade (`routeur._consulter_savoir`). Or
+# « qu'avais-je noté SUR LA PARCELLE nord ? » porte un marqueur DATA et partait
+# à l'étage SQL, qui n'a aucune famille capable de rendre un texte libre : la
+# mémoire était indexée, isolée, et injoignable. D'où `_MARQUEURS_MEMOIRE`,
+# testés AVANT `_regle_par_geste` (« noter » est une variante du geste
+# `observation` : dictée sans « ? », la question s'enregistrerait — défaut
+# US-173/CA3) et AVANT les marqueurs DATA.
+# Deuxième condition, du même ordre : `memoire_potager.TERMES_RAPPEL`. Les mots
+# avec lesquels on REDEMANDE une note ne sont jamais dans la note ; sans eux la
+# question tombait sous RAG_SEUIL_CONFIANCE et descendait se faire reformuler à
+# l'étage 3 — des jetons payés pour dégrader une citation exacte. Même véhicule
+# que la ligne « On parle aussi de : » des fiches : poids du titre, jamais
+# affiché.
+# Reprise initiale des notes antérieures — rejouable, sans doublon, idempotente :
+python tools/indexer_memoire_potager.py --dry-run     # rapport seul
+python tools/indexer_memoire_potager.py               # tous les potagers
+python tools/indexer_memoire_potager.py --potager 3    # un seul
+# ⚠️ Ce qui distingue cette famille des deux autres, et qui est la RAISON D'ÊTRE
+# de l'US : une note privée qui fuirait vers un autre jardin est une atteinte à
+# la confiance bien plus grave qu'une réponse agronomique approximative. D'où
+# deux garde-fous, aux DEUX bouts :
+#   connaissance.valider_entete   refuse un document `memoire_potager` sans potager
+#   connaissance._requete_base    EXCLUT cette famille de la clause de savoir
+#                                 partagé — un fragment de mémoire n'est servi
+#                                 que sur l'ÉGALITÉ du potager courant, même
+#                                 s'il naissait un jour sans potager
+# Trois arbitrages tranchés, à ne pas rouvrir sans rouvrir l'US :
+#   on indexe les NOTES, pas les événements structurés — un semis se répond en
+#     SQL (US-096), exactement et à coût nul ; et pas les BULLETINS MÉTÉO
+#     (`[AUTO-METEO]`), qui sont des observations que personne n'a écrites et
+#     qui noient la mémoire — même exclusion que rotation et rapport_couverture ;
+#   extrait FIDÈLE, jamais résumé — un résumé coûterait des jetons pour faire
+#     perdre à la note sa valeur de preuve ;
+#   pas de mémoire DÉDUITE — l'assistant n'invente aucune note à partir d'un
+#     événement.
+# Les deux registres se distinguent à l'affichage ET dans la matière transmise
+# au modèle (connaissance.REGISTRE_MEMOIRE / REGISTRE_GENERAL,
+# contexte_pour_raisonnement) : les confondre ferait dire au jardinier ce qu'il
+# n'a pas dit.
+# Cycle de vie déjà couvert par l'existant, vérifié plutôt que supposé :
+# suppression et correction d'une note (CA11), purge d'un potager (US-084/CA12),
+# potager archivé consultable en lecture seule (US-083/CA13).
 
 # Corpus « fonctionnement de l'application » — premier contenu du socle [US-099]
 # 13 fiches dans data/connaissance/doc_app/, famille doc_app, niveau verifie,

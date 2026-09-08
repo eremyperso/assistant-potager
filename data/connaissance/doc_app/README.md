@@ -54,7 +54,7 @@ relis cette fiche avant de livrer.*
 | `potager-partage-et-roles.md` | les rôles et leurs droits, les invitations, le retrait d'un membre, l'isolation entre potagers |
 | `compagnon-telegram.md` | l'activation Telegram, la liaison de compte, la synthèse vocale, la dissociation |
 | `statistiques-et-bilans.md` | le contenu de `/stats`, le détail par variété, les agrégats mensuels |
-| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement |
+| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement, la mémoire du potager (`app/services/memoire_potager.py`) : ce qui y entre, la restitution d'une note, l'isolation entre potagers, le devenir d'une note corrigée ou supprimée |
 | `cultures-familles-et-rotation.md` | la famille botanique et son délai de retour, le calcul de rotation, l'avertissement à la plantation, les associations |
 
 Toute fiche ajoutée ici entre dans cette table **dans le même commit** :
@@ -74,9 +74,9 @@ de `/help`, c'est le signe qu'elle a changé de nature.
 
 ## Ce que la mesure a appris sur ce corpus
 
-57 questions de fonctionnement (`tests/corpus/us099_questions_fonctionnement.csv`),
-mesurées sur le repli SQLite : **57/57 dans les trois premiers résultats**, dont
-50 en tête. Deux enseignements pratiques, tirés des échecs rencontrés en cours
+65 questions de fonctionnement (`tests/corpus/us099_questions_fonctionnement.csv`),
+mesurées sur le repli SQLite : **65/65 dans les trois premiers résultats**, dont
+58 en tête. Deux enseignements pratiques, tirés des échecs rencontrés en cours
 de rédaction :
 
 * une section ne se retrouve que par les mots qu'elle porte — « comment dicter
