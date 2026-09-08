@@ -2,6 +2,7 @@
 titre: Les limaces au potager
 famille: agronomie
 source: Corpus de mesure US-098
+licence: proprietaire
 niveau_confiance: indicatif
 type: maladie
 ---

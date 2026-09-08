@@ -113,6 +113,7 @@ jobs:
             cd /opt/potager-prod
             set -a && source .env.prod && set +a
             venv/bin/python tools/controler_aide_corpus.py
+            venv/bin/python tools/controler_corpus_agronomie.py
             venv/bin/python tools/ingerer_connaissance.py --strict --elaguer
           "
 

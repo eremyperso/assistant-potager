@@ -74,6 +74,24 @@ Niveau de confiance : `verifie` — tu peux l'affirmer.
 
 ### 2.2 `agronomie` — la contrainte de licence est bloquante, pas décorative
 
+> **Livré par US-140.** Vingt fiches, dix cultures, deux thèmes imposés par
+> culture (`<culture>-problemes.md`, `<culture>-conduite-recolte.md`), mesurées à
+> 66/66 dans les trois premiers résultats. Le plan, les refus de relecture et la
+> table « ce qui rend une fiche fausse » sont décrits dans
+> `data/connaissance/agronomie/README.md`. Ce qui suit reste vrai pour
+> l'enrichir.
+>
+> **La contrainte de licence n'est plus déclarative :** la clé `licence:` est
+> obligatoire pour cette famille et contrôlée contre le socle du registre à
+> l'ingestion. Une fiche sans licence, ou sous CC-BY-SA, est refusée avant toute
+> écriture — voir `tools/ingerer_connaissance.valider_licence`.
+>
+> **Et la relecture est exécutable :** `tools/controler_corpus_agronomie.py`
+> oppose au corpus les refus que l'US énonçait en prose (aucun chiffre, aucune
+> date, aucune association ni rotation, aucun dosage, une tournure d'hypothèse
+> dans chaque section de diagnostic). Il tourne au déploiement, **avant**
+> l'ingestion, sur les quatre chemins.
+
 L'arbitrage de la vague 0 (option A,
 `docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md` §2.1) limite le socle à :
 
@@ -359,6 +377,8 @@ cascade redevient strictement celui d'avant US-098.
 ### Étape 2 — Contrôler le corpus à blanc
 
 ```bash
+python tools/controler_aide_corpus.py                     # /help ↔ corpus (US-099 / CA7)
+python tools/controler_corpus_agronomie.py --detail       # relecture agronomique (US-140)
 python tools/ingerer_connaissance.py --dry-run
 python tools/ingerer_connaissance.py --strict --dry-run   # refuse les fragments non autonomes
 ```

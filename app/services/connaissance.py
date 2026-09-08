@@ -637,6 +637,43 @@ def _confiance_globale(passages: tuple[Passage, ...]) -> float:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# [US-140 / CA8] La réserve due à un contenu non relu
+# -----------------------------------------------------------------------------
+# « Le niveau de confiance est renseigné par fiche ; une réponse issue d'un
+# contenu `indicatif` est servie avec une réserve explicite. »
+#
+# Un fragment `indicatif` ne peut pas être servi mot pour mot — `rechercher()`
+# le refuse déjà, il descend en contexte vers l'étage de raisonnement. Mais il
+# en ressortait jusqu'ici sous la même forme qu'une réponse tirée d'une fiche
+# relue : rien, dans le message reçu, ne disait au jardinier que la matière
+# n'avait pas été vérifiée par quelqu'un qui jardine. Le niveau de confiance
+# était un engagement interne, pas une information qui lui parvenait.
+#
+# La réserve est une PHRASE, pas un pictogramme : elle doit se comprendre sans
+# légende, y compris lue à voix haute par la synthèse vocale.
+# ─────────────────────────────────────────────────────────────────────────────
+RESERVE_INDICATIF = (
+    "Cette réponse s'appuie sur une fiche qui n'a pas encore été relue par un "
+    "jardinier : prends-la comme une piste à vérifier, pas comme une certitude."
+)
+
+
+def reserve_a_afficher(contexte: ContexteConnaissance) -> str:
+    """[US-140 / CA8] La réserve à joindre à une réponse, ou la chaîne vide.
+
+    Décidée sur le passage de TÊTE, celui qui porte la réponse. Un corpus
+    entièrement `verifie` ne déclenche donc jamais rien : la réserve doit
+    signaler une exception, sinon elle devient un ornement que plus personne ne
+    lit — et le jour où elle compte vraiment, elle ne se voit plus.
+    """
+    if not contexte.passages:
+        return ""
+    if contexte.passages[0].niveau_confiance == NIVEAU_VERIFIE:
+        return ""
+    return RESERVE_INDICATIF
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # [CA7, CA8] Restitution — citation, jamais génération
 # ─────────────────────────────────────────────────────────────────────────────
 def restituer(contexte: ContexteConnaissance) -> str:

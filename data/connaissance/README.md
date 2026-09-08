@@ -17,9 +17,10 @@ d'administration en ligne serait un chantier sans valeur à ce stade.
 > **Ce qui est écrit à ce jour.** US-098 a livré le contenant ; `doc_app/`
 > (fonctionnement de l'application) est le premier contenu versé, par
 > **US-099** — voir `doc_app/README.md`, qui porte la table « ce qui rend une
-> fiche fausse ». Restent à écrire **US-140** (agronomie) et **US-141**
-> (mémoire du potager) : le travail éditorial est long, la mécanique était
-> courte, il n'y avait aucune raison de les livrer ensemble.
+> fiche fausse ». `agronomie/` est le second, versé par **US-140** : dix
+> cultures, deux fiches chacune, plan imposé et relecture exécutable
+> (`tools/controler_corpus_agronomie.py`) — voir `agronomie/README.md`. Reste à
+> écrire **US-141** (mémoire du potager).
 
 ## Format d'une fiche
 
@@ -33,6 +34,7 @@ en tête sur toute question contenant le mot « tomate ».
 titre: "Problèmes observables de tomate"
 famille: "agronomie"                # agronomie | doc_app | memoire_potager
 source: "Rédaction interne"         # ce qui s'affiche « _Source : …_ »
+licence: "proprietaire"             # OBLIGATOIRE en agronomie (US-140 / CA3)
 niveau_confiance: "a-valider"       # verifie | indicatif | a-valider
 culture: "tomate"                   # facultatif — DOIT exister dans culture_config
 type: "maladie"                     # facultatif — maladie, semis, association, rotation…
@@ -97,6 +99,20 @@ de bout en bout par un relecteur humain, il n'entre simplement pas à l'index.
 5. **`culture` est résolue en référence, pas stockée en texte.** Le libellé doit
    exister dans `culture_config`, sinon la fiche est refusée. C'est ce qui fait
    qu'une culture renommée depuis le bot n'orpheline aucun fragment.
+
+## La licence est un préalable bloquant, pas une métadonnée
+
+`licence:` est contrôlée à l'ingestion contre le socle du registre
+`app/services/referentiel_sources.py` — CC0, Licence Ouverte 2.0, CC BY 4.0,
+EPPO, `proprietaire` — et **une licence absente ou hors socle fait refuser le
+document, avant toute écriture**. La clé est obligatoire pour la famille
+`agronomie`, qui reprend un savoir qui n'est pas le nôtre ; elle est facultative
+pour `doc_app`, qui décrit notre propre application.
+
+Ce n'est pas une préférence : une clause de partage à l'identique (CC-BY-SA)
+contaminerait un corpus qui doit rester propriétaire, et un corpus contaminé se
+reconstitue, il ne se corrige pas. Arbitrage complet :
+`docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md` §2.1.
 
 ## Ce qu'une fiche ne contient pas
 

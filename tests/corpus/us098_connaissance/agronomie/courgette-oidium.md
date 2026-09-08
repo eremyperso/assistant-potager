@@ -2,6 +2,7 @@
 titre: L'oïdium de la courgette
 famille: agronomie
 source: Corpus de mesure US-098
+licence: proprietaire
 niveau_confiance: verifie
 culture: courgette
 type: maladie

@@ -1,3 +1,22 @@
+## [v3.57.0] — 2026-09-07
+
+### 🚀 Nouveautés
+- Sait enfin répondre à « qu'est-ce qu'ils ont ? » : vingt fiches d'agronomie couvrent les **dix cultures réellement suivies** — tomate, haricot, courgette, chou, carotte, concombre, cornichon, poivron, ail, blette — avec leurs maladies, leurs ravageurs et leurs troubles décrits par le symptôme observable, puis les gestes d'entretien, de récolte et de conservation (US-140)
+- Retrouve la bonne fiche à partir des **mots du jardinier** et non du nom de la maladie : « le cul noir », « de la poudre blanche », « des taches marron qui remontent », « deux ou trois jambes » ramènent la section qui répond. Mesuré sur 66 questions écrites au style dicté : 66 dans les trois premiers résultats, dont 64 en tête (US-140 / CA6, CA11)
+- Accompagne désormais toute réponse tirée d'une fiche **non encore relue par un jardinier** d'une réserve explicite, en toutes lettres : le niveau de confiance était jusqu'ici un engagement interne dont rien ne parvenait au jardinier (US-140 / CA8)
+- Présente les causes possibles **par ordre de probabilité** au lieu d'affirmer : « l'excès d'eau est plus probable qu'une carence », jamais « tes courgettes ont trop d'eau ». La consigne vaut pour les fiches comme pour l'étage qui rédige (US-140 / CA9)
+- Ne donne aucun dosage ni produit de traitement, ni dans les fiches ni dans les réponses rédigées : l'assistant conseille la conduite de culture, il n'est pas conseiller en traitement (US-140 / CA10)
+
+### 🔧 Améliorations techniques
+- Refuse à l'ingestion tout document dont la **licence n'est pas établie ou sort du socle** — CC-BY-SA en tête — avant la moindre écriture, et sans dérogation. Le socle n'est pas redéfini pour l'occasion : c'est celui du registre des sources, déjà opposé aux imports du référentiel structuré (US-140 / CA2, CA3)
+- Rend la relecture **exécutable** plutôt que promise : `tools/controler_corpus_agronomie.py` oppose au corpus les refus que l'US énonçait en prose — aucun chiffre, aucune date, aucune durée, aucune association ni rotation, aucun dosage, une tournure d'hypothèse dans chaque section de diagnostic. Il tourne au déploiement, avant l'ingestion, sur les quatre chemins (US-140 / CA7, CA7bis, CA9, CA10, CA13)
+- Affiche l'attribution du registre des sources aussi sur les réponses **réécrites** par l'étage de raisonnement, pas seulement sur celles servies mot pour mot : une réponse rédigée à partir d'une fiche en est une œuvre dérivée (US-140 / CA4)
+- Impose un plan de fiche identique pour toutes — deux thèmes par culture, portés par le nom du fichier, et trois lignes de métadonnée par section — sans quoi le découpage en fragments devient irrégulier et le classement avec lui (US-140 / CA13 c)
+- Consigne la mesure et sa conséquence : au-dessus du seuil, la question de la **recherche sémantique** reste fermée. Enrichir le vocabulaire des sections coûte quelques minutes par fiche et rend le moteur vectoriel inutile à ce stade (US-140 / CA12)
+
+### 🐛 Corrections
+- Rétablit quatre corpus de mesure déplacés par erreur dans `tests/corpus/doc_app/`, où ils étaient invisibles des tests qui les lisent : 72 tests d'US-094 et d'US-098 échouaient sur des fichiers pourtant présents dans le dépôt. Le dossier dupliquait par ailleurs à l'identique le corpus de `data/connaissance/doc_app/`
+
 ## [v3.56.0] — 2026-09-07
 
 ### 🚀 Nouveautés

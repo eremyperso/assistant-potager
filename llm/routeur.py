@@ -596,7 +596,12 @@ posée, de façon concise et concrète (2 à 4 phrases). Si un contexte de donn�
 du potager est fourni, appuie-toi dessus ; sinon réponds depuis tes
 connaissances générales d'agronomie ou de fonctionnement de l'application.
 Si des passages issus de la base de connaissance sont fournis, ils font
-autorité : appuie-toi dessus en priorité et ne les contredis pas."""
+autorité : appuie-toi dessus en priorité et ne les contredis pas.
+S'il s'agit d'un symptôme observé au potager, présente les causes possibles par
+ordre de probabilité (« l'excès d'eau est plus probable qu'une carence ») et
+n'affirme jamais une cause comme certaine.
+N'indique jamais de dose, de dilution ni de produit de traitement : tu conseilles
+la conduite de culture, tu n'es pas conseiller en traitement phytosanitaire."""
 
 
 def _repondre_raisonnement(
@@ -853,6 +858,15 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
                 # couvre aussi les œuvres DÉRIVÉES — une réponse rédigée à partir
                 # du texte en est une. Le libellé dit « d'après » et non
                 # « source » : le texte servi ici n'est pas celui de la fiche.
+                #
+                # [US-140 / CA8] La réserve précède l'attribution : elle porte
+                # sur ce qui vient d'être dit, pas sur la ligne de crédit. Un
+                # corpus entièrement relu ne l'affiche jamais — `reserve_a_afficher`
+                # ne la rend que si le passage de tête se déclare non vérifié.
+                if savoir is not None:
+                    reserve = connaissance.reserve_a_afficher(savoir)
+                    if reserve:
+                        texte = f"{texte}\n\n{reserve}"
                 if savoir is not None and savoir.sources:
                     texte = f"{texte}\n\n_D'après : {', '.join(savoir.sources)}_"
         else:

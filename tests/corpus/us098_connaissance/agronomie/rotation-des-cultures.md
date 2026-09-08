@@ -2,6 +2,7 @@
 titre: Le principe de la rotation des cultures
 famille: agronomie
 source: Corpus de mesure US-098
+licence: proprietaire
 niveau_confiance: verifie
 type: rotation
 ---

@@ -17,7 +17,7 @@ Ce qui est mesuré, par modèle :
 * **latence** — médiane et p95, la queue comptant plus que la moyenne pour un
   jardinier qui attend une réponse dans Telegram.
 
-Le corpus (`tests/corpus/doc_app/us094_saisies_reelles.csv`) porte des saisies
+Le corpus (`tests/corpus/us094_saisies_reelles.csv`) porte des saisies
 RÉELLES de production, pas des phrases imaginées. Seules les phrases à vérité
 terrain non ambiguë entrent dans l'assiette : ligne unique par texte (une phrase
 à deux évènements n'a pas d'attendu unique) et `corrigee=0` (une valeur corrigée
@@ -72,7 +72,7 @@ from config import GROQ_API_KEY, GROQ_REASONING_EFFORT, GROQ_TIMEOUT_S  # noqa: 
 from llm.groq_client import PARSE_PROMPT, _nettoyer_backticks, _today_context  # noqa: E402
 from llm.passerelle import _accepte_reasoning_effort  # noqa: E402
 
-CORPUS_PAR_DEFAUT = "tests/corpus/doc_app/us094_saisies_reelles.csv"
+CORPUS_PAR_DEFAUT = "tests/corpus/us094_saisies_reelles.csv"
 MODELES_PAR_DEFAUT = "groq/compound-mini,openai/gpt-oss-120b"
 REQUETES_PAR_DEFAUT = 250
 

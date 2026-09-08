@@ -43,6 +43,12 @@ Concrètement, avant de livrer un changement de comportement :
 Une fiche ajoutée entre dans cette table dans le même commit : le test échoue
 tant que ce n'est pas fait.
 
+Le corpus **agronomique** (US-140, `data/connaissance/agronomie/`) porte sa
+propre table de relecture, dans `data/connaissance/agronomie/README.md`. Ce qui
+périme une fiche d'agronomie n'est pas un changement de code mais un **retour de
+terrain** : une observation qui contredit le texte. Même exigence, même commit,
+et `pytest tests/test_us140_corpus_agronomique.py` doit rester vert.
+
 ## Pull requests (NON NÉGOCIABLE)
 
 Toute description de PR (quelle que soit la branche source ou cible — feature, hotfix,
@@ -241,6 +247,31 @@ python tools/mesurer_corpus_savoir.py --ingerer --detail
 # `**Intention :**` / `**Organes concernés :**` / `**On parle aussi de :**`.
 # Un `**Attention :**` — clé inconnue — reste du contenu : on ne retire que ce
 # qu'on sait nommer. Gabarit complet : data/connaissance/README.md
+
+# Corpus agronomique — deuxième contenu du socle [US-140]
+# 20 fiches dans data/connaissance/agronomie/, famille agronomie, niveau
+# a-valider (donc `indicatif` en base), potager_id nul. Dix cultures — tomate,
+# haricot, courgette, chou, carotte, concombre, cornichon, poivron, ail, blette —
+# et DEUX thèmes imposés par culture, portés par le nom du fichier :
+#   <culture>-problemes.md         maladies, ravageurs, troubles (par le symptôme)
+#   <culture>-conduite-recolte.md  gestes d'entretien, de récolte, de conservation
+# ⚠️ `blette` côté jardinier, `bette` côté culture_config (semé par migration_v6) :
+# les fiches se rattachent à `bette`, le mot du jardinier vit dans les alias.
+#
+# La relecture est EXÉCUTABLE, et elle tourne au déploiement AVANT l'ingestion :
+python tools/controler_corpus_agronomie.py --detail
+# Ce qu'elle refuse — un refus, un critère de l'US, aucune dérogation :
+#   un chiffre, une unité, une durée, un mois        CA7 / CA13(a)  → US-068, US-161
+#   une association de cultures, une rotation        CA7bis         → US-163
+#   un dosage, un produit de traitement              CA10
+#   une section de diagnostic sans hypothèse         CA9
+#   une licence absente ou hors socle                CA2 / CA3
+# La licence est contrôlée à l'INGESTION contre app/services/referentiel_sources
+# (le socle du registre, pas une seconde liste) : `licence:` est obligatoire pour
+# la famille agronomie, facultative pour doc_app.
+python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us140_questions_diagnostic.csv     --racine data/connaissance/agronomie --detail
+# Mesure au 07/09/2026, repli SQLite : 66/66 dans les trois premiers, 64 en tête.
+# CA12 : au-dessus du seuil, la question de la recherche SÉMANTIQUE reste fermée.
 
 # Corpus « fonctionnement de l'application » — premier contenu du socle [US-099]
 # 13 fiches dans data/connaissance/doc_app/, famille doc_app, niveau verifie,
