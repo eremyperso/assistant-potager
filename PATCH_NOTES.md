@@ -1,3 +1,37 @@
+## [v3.58.0] — 2026-09-08
+
+### 🚀 Nouveautés
+- Se souvient de **ton** potager : les observations et notes libres écrites au fil des saisons se retrouvent en langage naturel — « qu'avais-je noté sur la parcelle nord l'an dernier ? » — au lieu de se chercher par filtre et par date (US-141)
+- Restitue une note avec sa **date** et sa **parcelle**, puis son texte entre guillemets, tel qu'il a été écrit : jamais reformulé, jamais résumé. Un résumé produit par un modèle ferait perdre à la note sa valeur de preuve, qui est toute sa raison d'être (US-141 / CA5)
+- Distingue explicitement les deux registres quand une réponse mêle les deux : « ce que tu avais noté » d'un côté, « en général » de l'autre, jamais fondus en une phrase — les confondre reviendrait à faire dire au jardinier ce qu'il n'a pas dit (US-141 / CA6)
+- Indexe une note **à l'instant où elle est enregistrée** : aucune action du jardinier, aucun délai, aucune commande à lancer (US-141 / CA2)
+- Ne consomme **aucun jeton** en lecture : retrouver et citer une note est une citation, pas une génération (US-141 / CA7)
+- Reconnaît la question de mémoire pour ce qu'elle est — « qu'avais-je noté sur… », « que disait ma note sur… », « mes notes sur… » —, y compris **dictée sans point d'interrogation**, où elle s'enregistrait sinon dans le journal : « noter » est une variante du geste « observation » (US-141 / CA5)
+
+### 🐛 Corrections
+- N'indexe plus les **bulletins météo quotidiens** dans la mémoire du potager : le job météo enregistre son relevé comme une observation, techniquement une note mais que personne n'a écrite. Sur une base réelle, ils étaient largement majoritaires et noyaient les vraies notes sous des relevés de température (US-141)
+- Cherche une question de mémoire **dans la mémoire seule**, et non dans tout le corpus : « qu'ai-je noté sur les tomates ? » rendait trois fiches d'agronomie sur la tomate et pas une seule note. Le corpus général est bien plus vaste que la mémoire d'un potager, et bien plus riche du vocabulaire même de la question — il remporte le classement à tous les coups, et aucun réglage de score n'y change rien (US-141 / CA5)
+- Reconnaît « qu'est-ce que j'ai noté ? » — le passé composé, et non le plus-que-parfait — sans capter pour autant « j'ai noté que le sol est sec », qui reste une saisie. Les mots sont les mêmes : seule l'ouverture interrogative les sépare, comme pour les questions dictées d'US-173 (US-141 / CA5)
+- Ne mémorise plus, et ne sert plus, de réponse figée pour une question de mémoire : « je ne trouve aucune note enregistrée » avait été mémorisé en savoir **partagé entre tous les potagers** et servi ensuite à coût nul, sans qu'aucune recherche n'ait lieu — y compris aux potagers qui avaient des notes. Les entrées déjà écrites cessent d'être servies et expirent d'elles-mêmes (US-141 / CA9)
+
+### 🔧 Améliorations techniques
+- Pose l'isolation de la mémoire comme propriété de la **requête** et non des seules données : la famille `memoire_potager` est exclue de la clause de savoir partagé, et n'est servie que sur l'égalité du potager courant. Un fragment de cette famille resterait inatteignable même s'il naissait un jour sans potager (US-141 / CA8)
+- Refuse à l'écriture tout document de mémoire sans potager, au seul point d'écriture de la table — l'invariant vaut donc de tout chemin d'écriture, y compris de ceux qui n'existent pas encore (US-141 / CA1)
+- Branche l'indexation là où l'invalidation de cache est déjà branchée, et nulle part ailleurs : il n'existe qu'un seul endroit dans l'application où « une observation vient de changer » (US-141)
+- Fait qu'un échec d'indexation ne fasse jamais échouer l'enregistrement d'une note : perdre une note serait irréparable, perdre son index ne coûte qu'une reprise (US-141)
+- Retire de la mémoire toute note supprimée, corrigée, ou qui cesse d'être une note — et réindexe celles dont la parcelle a été renommée, déplacée ou supprimée : aucune mémoire orpheline ne survit à la donnée dont elle dérive (US-141 / CA11)
+- Ajoute `tools/indexer_memoire_potager.py`, reprise initiale rejouable et sans doublon des notes déjà enregistrées, à lancer **une fois** après le déploiement (`--dry-run` pour voir sans écrire, `--potager` pour n'en traiter qu'un). L'idempotence tient à l'identité stable du document, pas à une précaution de l'outil (US-141 / CA3)
+- Permet à l'invalidation du cache de réponses de s'inscrire dans une transaction d'écriture en cours plutôt que de commiter d'elle-même — commiter à mi-chemin validerait une écriture que l'appelant n'a pas fini de composer (US-141, US-095 / CA10)
+- Aiguille les questions de mémoire vers l'étage du savoir plutôt que vers l'étage des données : elles portaient souvent un marqueur de donnée (« sur la parcelle »), partaient à l'agrégat SQL, et la mémoire — pourtant indexée et isolée — restait injoignable depuis Telegram. L'étage des données n'a aucune famille capable de rendre un texte libre (US-141 / CA5)
+- Reconnaît la question de mémoire par la RENCONTRE d'un nom d'écrit (note, remarque, observation) et d'une marque de rappel (possessif, interrogatif, « avais-je », « précédente ») plutôt que par une liste de locutions figées : « quelle note précédente avais-je sur ce potager ? », relevée en usage, en séparait le verbe et le nom par un adjectif et échappait à toute liste plate (US-141 / CA5)
+- Pose le scope d'isolation PostgreSQL **potager par potager** dans la reprise initiale : les tables de connaissance sont sous RLS, et une reprise multi-potagers sans changement de scope échouait dès le second — invisible en test SQLite, fatale en production (US-141 / CA3, US-043)
+- N'expose plus au jardinier le vocabulaire interne du prompt : le modèle répondait « aucune « MÉMOIRE DU POTAGER » ne m'a été fournie », lui montrant un rouage qui ne le concerne pas (US-141 / CA6)
+- Indexe avec chaque note le **registre du rappel** — « noté », « écrit », « l'an dernier », « carnet » —, au poids du titre et sans jamais l'afficher : ces mots ne sont par construction jamais dans la note, et sans eux la question passait sous le seuil de confiance et descendait se faire reformuler, payant des jetons pour dégrader une citation exacte (US-141 / CA5, CA7)
+- Vérifie plutôt que suppose les trois comportements que l'existant couvrait déjà : un membre parti perd l'accès à la mémoire par le seul filtre de potager courant, la purge d'un potager emporte sa mémoire, et un potager archivé la garde consultable en lecture seule (US-141 / CA10, CA12, CA13)
+
+### 📚 Corpus de connaissance
+- Complète la fiche « Noter une observation au potager » de trois sections — retrouver une note ancienne, ce que la mémoire garde et ce qu'elle ne garde pas, et la distinction des deux registres — sans quoi le corpus décrirait une application qui n'existe plus. Mesure du corpus de fonctionnement portée à 65 questions : 65/65 dans les trois premiers résultats, dont 58 en tête (US-141, US-099 / CA9)
+
 ## [v3.57.0] — 2026-09-07
 
 ### 🚀 Nouveautés
