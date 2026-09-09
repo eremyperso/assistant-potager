@@ -209,8 +209,40 @@ def create_parcelle(
     """
     nom_normalise = normalize_parcelle_name(nom)
     exact, _ = find_doublon(db, nom_normalise, potager_id=potager_id)
-    if exact:
+    if exact and exact.actif:
         raise ValueError(f"La parcelle « {exact.nom.upper()} » existe déjà.")
+    if exact:
+        # [US-172] Une parcelle SUPPRIMÉE porte toujours son nom en base : la
+        # suppression d'US-009 est logique (`actif=False`), pour que les gestes
+        # passés gardent une trace de l'endroit où ils ont eu lieu. Mais
+        # `find_doublon` la retrouvait comme doublon exact — il ne filtre pas
+        # `actif`, et c'est voulu, c'est lui qui garantit l'unicité du nom —, de
+        # sorte que la recréer était refusée pendant que `/plan` et
+        # `/parcelle lister`, qui filtrent `actif`, ne la montraient plus.
+        # La planche devenait invisible ET incréable, sans aucun message
+        # expliquant pourquoi.
+        #
+        # Recréer une parcelle du même nom la remet donc en service. Les gestes
+        # qu'elle portait ne reviennent pas : ils ont été délibérément détachés
+        # à la suppression (US-009 / CA3), et les faire réapparaître ici serait
+        # une surprise bien pire que leur absence.
+        exact.actif = True
+        exact.nom = nom  # le nom tel qu'il vient d'être dicté, casse comprise
+        if exposition is not None:
+            exact.exposition = exposition
+        if superficie_m2 is not None:
+            exact.superficie_m2 = superficie_m2
+        if est_pepiniere:
+            exact.est_pepiniere = True
+        if type_sol is not None:
+            exact.type_sol = type_sol
+        db.commit()
+        db.refresh(exact)
+        log.info(
+            f"[US-172] Parcelle remise en service : {nom!r} "
+            f"(elle avait été supprimée, ses gestes restent « non localisés »)"
+        )
+        return exact
 
     _q_nb = db.query(Parcelle)
     if potager_id is not None:

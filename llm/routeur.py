@@ -224,6 +224,13 @@ _MARQUEURS_SAVOIR: tuple[str, ...] = (
 # adjectif d'antériorité). « Combien d'observations ai-je faites ? » ne porte
 # aucune des secondes : c'est un comptage, il continue de descendre au catalogue
 # chiffré, qui y répond exactement et à coût nul.
+#
+# `MOTIF_MEMOIRE` est PUBLIC parce qu'il est partagé : le catalogue de réponses
+# chiffrées (US-096) reconnaît ses familles de mémoire avec CE motif-là, jamais
+# avec une copie. Deux définitions de « question de rappel » divergeraient au
+# premier ajustement, et la divergence produirait une question routée vers le
+# catalogue que le catalogue ne reconnaîtrait plus — une cascade qui tourne à
+# vide, sans rien dans le journal pour le dire.
 _NOMS_ECRIT = r"(?:notes?|remarques?|observations?|constats?)"
 _MARQUES_RAPPEL = (
     r"(?:avais je|j avais|quel|quelle|quels|quelles|mes|ma|"
@@ -231,7 +238,7 @@ _MARQUES_RAPPEL = (
     r"dernier|derniere|derniers|dernieres|ancien|ancienne|anciens|anciennes|"
     r"passee|passees|passe)"
 )
-_MOTIF_MEMOIRE = re.compile(
+MOTIF_MEMOIRE = re.compile(
     # Marque de rappel, puis le nom de l'écrit — « quelle NOTE », « mes NOTES »,
     # « quelle note précédente AVAIS-JE » se lit aussi dans ce sens.
     rf"\b{_MARQUES_RAPPEL}\b[a-z0-9 ]{{0,30}}?\b{_NOMS_ECRIT}\b"
@@ -271,7 +278,7 @@ def _est_rappel_de_note(texte: str) -> bool:
     normalise = _ESPACES_ROUTEUR.sub(
         " ", _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode(brut.lower()))
     ).strip()
-    if _MOTIF_MEMOIRE.search(normalise):
+    if MOTIF_MEMOIRE.search(normalise):
         return True
     if not _MOTIF_MEMOIRE_AMBIGU.search(normalise):
         return False
@@ -405,7 +412,7 @@ def _regle_par_mots_cles(texte: str) -> Optional[str]:
     if any(m in t for m in _MARQUEURS_SAVOIR):
         return NATURE_QUESTION_SAVOIR
     # [US-141 / CA5] Avant la règle de geste ET avant les marqueurs DATA — voir
-    # le commentaire de `_MOTIF_MEMOIRE` : les deux la précédant la
+    # le commentaire de `MOTIF_MEMOIRE` : les deux la précédant la
     # captureraient, l'une pour l'enregistrer, l'autre pour y répondre en SQL.
     if _est_rappel_de_note(t):
         return NATURE_QUESTION_SAVOIR
@@ -445,6 +452,47 @@ def _regle_par_catalogue(texte: str, ctx: Optional[TenantContext]) -> Optional[s
     except Exception as e:
         log.debug("ROUTEUR CATALOGUE : indisponible (%s)", type(e).__name__)
         return None
+
+
+# [US-141] Les familles du catalogue qui servent une question de MÉMOIRE.
+# Nommées ici parce que c'est le routeur qui doit savoir qu'elles existent : une
+# famille de mémoire est la seule qui puisse détourner une question déjà tranchée
+# par `_est_rappel_de_note`, et cette exception mérite d'être lisible plutôt que
+# devinée d'un préfixe de nom.
+FAMILLES_MEMOIRE_SQL: frozenset[str] = frozenset({"notes_culture", "notes_parcelle"})
+
+
+def _rappel_servi_par_le_catalogue(texte: str, ctx: Optional[TenantContext]) -> bool:
+    """[US-141] La question de mémoire nomme-t-elle une cible servable en SQL ?
+
+    Constaté en production le 09/09/2026 : « qu'avais-je noté sur mes tomates ? »
+    retrouvait bien les trois bonnes notes par la recherche lexicale, mais ce
+    chemin est plafonné à `RAG_MAX_PASSAGES` et classe par RESSEMBLANCE — il rend
+    ce qui ressemble le plus, jamais ce qui manque. Or la question ne demande
+    aucune ressemblance : elle demande tout ce qui a été écrit sur la tomate.
+    C'est une lecture exacte du journal, donc du ressort de l'étage 1, qui la
+    sert exhaustivement et à zéro jeton.
+
+    Ce contrôle est posé APRÈS `_est_rappel_de_note` et non à sa place, et c'est
+    tout son intérêt : une question de mémoire qui ne nomme NI culture NI
+    parcelle — « qu'avais-je noté l'an dernier ? », ou « sur mes povrons », une
+    culture que le potager ne connaît pas sous ce nom — ne satisfait aucun
+    `exige`, `reconnait_famille` rend `None`, et elle repart vers la mémoire
+    indexée exactement comme avant. C'est l'invariant que ce garde préserve, et
+    il ne fait rien d'autre.
+
+    `ctx is None` (canal vocal, `classer_par_regles`) → faux, sans la moindre
+    lecture en base : le comportement d'US-172 est inchangé.
+    """
+    if ctx is None or not _est_rappel_de_note(texte):
+        return False
+    try:
+        from app.services.reponses_chiffrees import reconnait_famille
+
+        return (reconnait_famille(ctx, texte) or "") in FAMILLES_MEMOIRE_SQL
+    except Exception as e:
+        log.debug("ROUTEUR MÉMOIRE : catalogue indisponible (%s)", type(e).__name__)
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -629,6 +677,24 @@ def _journaliser(texte: str, decision: DecisionRoutage) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # API publique — classification [CA1 → CA5]
 # ─────────────────────────────────────────────────────────────────────────────
+def classer_par_regles(texte: str) -> Optional[str]:
+    """[CA2] La nature de la demande SI les règles la tranchent, sinon `None`.
+
+    L'étage 0 seul, exposé sans le reste de la cascade : ni cache, ni catalogue
+    (qui lit la base), ni modèle. Le contrat tient en une phrase — cette
+    fonction décide à coût nul, ou ne décide pas.
+
+    Elle existe pour les appelants qui ne peuvent pas se permettre l'appel de
+    classification que `classer_demande` finit par payer sur la frange ambiguë,
+    parce qu'ils ont déjà, en aval, un aiguillage qui sait traiter cette frange.
+    C'est le cas de `bot.handle_voice` : son `parse_message` classe et parse en
+    un seul appel, et le doubler d'une classification coûterait deux appels là
+    où il en faut un. Une règle qui tranche lui évite l'erreur ; une règle qui
+    se tait lui laisse la main.
+    """
+    return _regle_par_mots_cles(texte)
+
+
 def classer_demande(texte: str, ctx: Optional[TenantContext] = None) -> DecisionRoutage:
     """Classe une demande entrante en une des quatre natures (CA1).
 
@@ -640,6 +706,21 @@ def classer_demande(texte: str, ctx: Optional[TenantContext] = None) -> Decision
     """
     debut = time.monotonic()
     texte_brut = texte or ""
+
+    # [US-141] AVANT les mots-clés, et c'est la seule exception à leur primauté :
+    # `_est_rappel_de_note` y renvoie QUESTION_SAVOIR sans condition, ce qui
+    # rendrait les familles de mémoire du catalogue inatteignables. Ce pré-étage
+    # ne change de nature QUE si le catalogue sait servir la question — donc
+    # uniquement quand une culture ou une parcelle est nommée. Coût : deux
+    # lectures SQL brèves, zéro jeton, et sur le seul sous-ensemble des phrases
+    # qui ont déjà matché le motif de rappel.
+    if _rappel_servi_par_le_catalogue(texte_brut, ctx):
+        decision = DecisionRoutage(
+            nature=NATURE_QUESTION_DATA, origine=ORIGINE_REGLE, confiance=1.0,
+            latence_ms=int((time.monotonic() - debut) * 1000),
+        )
+        _journaliser(texte_brut, decision)
+        return decision
 
     nature_regle = _regle_par_mots_cles(texte_brut)
     if nature_regle is not None:

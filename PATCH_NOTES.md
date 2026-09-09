@@ -1,3 +1,58 @@
+## [v3.60.0] — 2026-09-09
+
+### 🚀 Nouveautés
+- Rend **toutes** les notes écrites sur une culture ou une parcelle, de la plus récente à la plus ancienne, quand la question la nomme : « qu'avais-je noté sur mes tomates ? » lit le carnet exactement, à zéro jeton et sans appel au modèle. Cette question ne demandait aucune ressemblance — elle demandait tout ce qui avait été écrit (US-141)
+- Présente un **carnet volumineux par repères de temps** plutôt que par un défilement : par année quand les notes s'étalent sur plusieurs, par saison du jardin quand elles tiennent dans une seule, suivis des plus récentes citées en entier. Les saisons sont celles du potager — mars-mai, juin-août, sept-nov, déc-fév — et non les trimestres du calendrier (US-141)
+- Ouvre une période en la nommant dans la question : « mes notes sur la tomate en 2025 », « qu'avais-je noté sur les courges ce printemps ? ». La réponse propose elle-même la période la plus fournie, dans une formulation qu'elle sait relire (US-141)
+
+### 🐛 Corrections
+- N'affiche plus **une seule note quand trois répondaient**. Relevé le 09/09/2026 sur le potager 1 : « qu'avais je noté sur mes tomates ? » retrouvait bien les trois notes attendues (evenement-472, 355 et 363 ; score 0,733 ; issue=servi) et n'en montrait qu'une — la restitution ne gardait qu'un bloc par registre, et les deux autres étaient trouvées puis jetées. Une note trouvée puis tue est pire qu'une note non trouvée : le jardinier en conclut qu'il n'avait rien écrit (US-141 / CA5)
+- « comment ajouter une note ? » n'ouvre plus la saisie guidée à la place d'une réponse. Relevé le 09/09/2026 : le mot-clé de déclenchement du flux (« ajouter une note ») matchait aussi bien dans la question que dans la commande, sans distinguer l'une de l'autre — même défaut, corrigé au même titre, que celui déjà refermé sur les commandes dictées (US-172 / CA2) (US-038)
+
+### 🔧 Améliorations techniques
+- Le périmètre de « ce qu'est une note » reste défini au seul endroit qui l'indexe (`memoire_potager.est_memorisable`) : le nouveau chemin SQL l'importe au lieu de le réécrire, et un test compare les deux inventaires. Deux définitions divergentes feraient différer la liste et la recherche sur le même carnet, sans qu'aucune ne paraisse fausse (US-141)
+- Le motif de rappel du routeur est désormais **partagé** avec le catalogue de réponses chiffrées au lieu d'y être recopié : deux définitions de « question de rappel » produiraient une question routée vers un catalogue qui ne la reconnaîtrait plus, donc une cascade qui tourne à vide sans rien dans le journal pour le dire (US-141)
+- Le corps d'une note ne traverse plus le remplissage de gabarit, qui renormalisait sa ponctuation — une note vaut par ce qu'elle dit exactement (US-141)
+- Le texte libre d'une note est échappé avant d'atteindre Telegram : un `*` ou un `[` dans une note faisait échouer le rendu, donc perdait la réponse entière et pas seulement sa mise en forme (US-141)
+
+## [v3.59.0] — 2026-09-08
+
+### 🚀 Nouveautés
+- Pilote **toute l'application en une phrase** : « crée la parcelle PlancheTomate », « la serre est une pépinière », « montre-moi le bilan des tomates », « passe sur le potager de la maison » sont comprises et exécutées, sans avoir à retenir la commande exacte, l'ordre de ses arguments ni le vocabulaire attendu pour ses valeurs (US-172)
+- Couvre les **24 commandes du bot** : 18 sont dictables (31 formes avec leurs sous-commandes), 1 est un alias de sa cible canonique, et 5 sont écartées sur une décision motivée — `/ask`, `/start`, `/lier`, `/delier`, `/version` restent pleinement utilisables à la main (US-172 / CA7, CA8)
+- Distingue **vouloir faire de demander comment faire** : « comment supprimer une parcelle ? » reçoit une explication du socle de connaissance, « supprime la parcelle du fond » agit. Répondre par une notice à quelqu'un qui vient de demander l'action était la non-réponse la plus agaçante du compagnon (US-172 / CA2)
+- Relit **toute valeur chiffrée avant de l'écrire**, en chiffres et en toutes lettres avec son unité : « profondeur 1 » et « profondeur 10 » ne s'entendent pas à la dictée, et la seconde écrirait une donnée fausse dans un référentiel partagé (US-172 / CA11)
+- Complète un argument manquant au lieu d'échouer : « note une association entre la carotte et l'aneth » enchaîne sur les valeurs possibles en boutons, plutôt que de renvoyer un message d'usage (US-172 / CA13)
+- Propose de **créer la parcelle manquante dans la foulée du geste** : « j'ai planté 3 pieds de tomate sur PlancheTomate » propose de créer la planche et d'enregistrer la plantation, sans faire redicter la phrase (US-172 / CA19)
+- Accepte `/potager <nom>` pour basculer directement sur un potager nommé — la commande tapée strictement équivalente à « passe sur le potager de la maison », sans quoi la phrase aurait dû réimplémenter la bascule (US-172 / CA9)
+- Reconnaît **100 % des 109 formulations du corpus sans aucun appel au modèle**, donc à zéro jeton : le modèle n'intervient qu'en repli, et sous contrainte fermée (US-172 / CA3, CA16, CA17)
+
+### 🐛 Corrections
+- Ne prend plus « supprimer la parcelle nord » pour « annuler ma dernière saisie » : le raccourci par mot-clé effaçait le dernier événement enregistré, ce qui n'était ni ce que le jardinier avait demandé, ni réparable d'un geste (US-172 / CA16)
+- Refuse d'exécuter une commande destructrice sur un **nom approchant** : « supprime la parcelle planche nord-est » ne supprime pas « Planche Nord ». Le rapprochement à deux lettres près est le bon comportement pour rattacher un geste, le mauvais pour supprimer — le nom voisin est désormais proposé, jamais substitué (US-172 / CA12)
+- Répond enfin à une **question dictée** au lieu d'y obéir : « comment supprimer une parcelle ? » était lue par le canal vocal comme l'intent SUPPRIMER, et le bot proposait d'effacer le dernier geste enregistré. Ce canal était resté sur les seuls intents de `parse_message`, qui ne connaissent ni le socle de connaissance ni la mémoire du potager — la même phrase TAPÉE recevait pourtant l'explication depuis US-170 (US-172 / CA2, CA5)
+- Permet de **recréer une parcelle supprimée** : son nom restait en base (la suppression est logique, pour que les gestes passés gardent trace du lieu), ce qui bloquait la recréation — pendant que `/plan` et `/parcelle lister`, qui filtrent les parcelles actives, ne la montraient plus. La planche était à la fois invisible et incréable, sans un message pour l'expliquer. La recréer la remet en service ; ses anciens gestes restent « non localisés », comme la suppression l'avait décidé (US-172, US-009)
+- Ne colle plus un morceau de la superficie au nom dicté : « crée la parcelle planche tomate 12 m² » donnait le nom « planche tomate 12 ». Le nom est désormais lu comme ce qui **précède** la première annotation, par ses bornes et non par une longueur calculée sur une chaîne déjà modifiée (US-172)
+- Ne coupe plus une superficie sur sa **virgule décimale** : « 8,5 m² » était découpé en deux annotations et enregistré comme 5 m². Une valeur fausse écrite sans que rien ne le signale, exactement ce que la relecture du CA11 doit empêcher (US-172 / CA11)
+- Renonce à trancher, et laisse le modèle lire la phrase, quand une direction est collée à une superficie — « planche tomate sud 12 m² » : rien ne dit si « sud » ferme le nom ou annonce l'exposition, et « Planche Sud » est un nom de parcelle courant. Isolée par une virgule ou présentée par un mot (« exposée sud »), elle ne pose plus de question et reste traitée sans jeton (US-172 / CA3, CA4)
+- Refuse une action d'écriture à un membre en **lecture seule** sur `/parcelle`, `/culture`, `/association` et `/bioagresseur` : ces commandes n'appelaient aucun garde de rôle, et un lecteur pouvait renommer ou supprimer une parcelle. Le garde est posé dans le handler, donc traversé par la commande tapée comme par la commande dictée (US-172 / CA14, US-047)
+
+### 🔧 Améliorations techniques
+- Dérive le catalogue de l'interpréteur des commandes **réellement enregistrées** par le bot, à côté de celui du menu d'US-171 : il n'existe pas de seconde liste de commandes tenue à la main (US-172 / CA6)
+- Arme un **test de parité** qui échoue tant qu'une commande ajoutée au bot n'est ni dictable, ni alias, ni exclue et motivée — et tant qu'une commande dictable ne déclare pas la forme de ses arguments, leur unité et leur vocabulaire fermé. C'est ce test, et non la vigilance, qui empêche l'écart de se recreuser (US-172 / CA7)
+- Lit les vocabulaires fermés aux services qui les **valident déjà** plutôt que de les recopier : l'interpréteur ne peut pas proposer une valeur que le point d'écriture refuserait, et une valeur ajoutée devient dictable sans une ligne de plus (US-172 / CA6)
+- Exécute une commande dictée via le handler **retrouvé par introspection**, garde de liaison compris : même service, mêmes contrôles, mêmes messages, mêmes claviers. Aucune table de correspondance nom → fonction, qui divergerait au premier renommage (US-172 / CA9, CA14)
+- Contraint le repli modèle à trois refus sans tolérance : commande hors catalogue, valeur hors vocabulaire fermé, argument absent de la phrase. Le dernier est ce qui empêche une parcelle que personne n'a nommée d'être proposée à la suppression (US-172 / CA4)
+- Expose l'étage des RÈGLES du routeur seul (`routeur.classer_par_regles`) pour le canal vocal : consulter la cascade entière y aurait coûté un appel de classification sur tout ce que les règles ne tranchent pas, alors que `parse_message` classe et parse déjà en un seul appel. Une règle qui tranche évite l'erreur, une règle qui se tait laisse la main — « supprime ma dernière saisie » continue donc d'annuler le dernier geste (US-172 / CA5, CA22)
+- Ajoute un garde d'**ouverture interrogative** sur les règles qui lisent une phrase déclarative pour écrire : sans lui, « qu'est-ce qui attaque mes poireaux ? » — servie par gabarit à zéro jeton depuis US-173 — se transformait en écriture au référentiel (US-172 / CA22)
+- Conserve le signe moins d'une valeur dictée : le trait d'union est ramené à une espace pour que « montre-moi » et « montre moi » se comportent à l'identique, ce qui transformait « -2 °C » en « 2 °C » au référentiel partagé (US-172 / CA11)
+- Réutilise la résolution de dates d'US-094 pour « le plan au 1er mai » : aucune seconde règle de datation dans le projet (US-172)
+- Journalise chaque interprétation — nature, commande, sous-commande, origine, confiance, latence, issue — dans les colonnes d'observabilité de routage. C'est `issue_interpretation` qui dira quelles formulations le jardinier refuse ou abandonne, donc lesquelles enrichir ensuite (US-172 / CA18)
+- Verse au corpus `doc_app` ce que cette US rend faux ou incomplet : deux sections neuves sur le pilotage par la phrase et sur ce qui est relu avant écriture, et la mention de la dictée dans les procédures de renommage, de suppression, de déclaration de pépinière et de correction (US-172, US-099 / CA9)
+
+### 💾 Base de données
+- `migration_v44.sql` — ajoute `commande_interpretee` et `issue_interpretation` à `routage_logs`, nullables et idempotentes. Détourner `issue_savoir` pour y loger l'issue d'une validation de commande aurait rendu illisibles deux mesures à la fois, celle du socle de connaissance et celle de l'interpréteur. Rollback : `rollback_v44.sql` (US-172 / CA18)
+
 ## [v3.58.0] — 2026-09-08
 
 ### 🚀 Nouveautés

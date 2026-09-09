@@ -47,14 +47,14 @@ relis cette fiche avant de livrer.*
 | `recoltes-et-pertes.md` | le type d'organe récolté (`culture_config`), la déduction de stock à la récolte, le rendement en poids, la vente de plants |
 | `semis-godet-plantation.md` | le chaînage semis → godet → plantation, le calcul des graines soldées, la déduction des godets à la plantation |
 | `pepiniere-par-lot.md` | la lecture par lot (`calcul_lots_pepiniere`), les états de germination, le signalement d'incohérence de saisie |
-| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`), le plan d'occupation |
-| `enregistrer-un-geste.md` | le référentiel d'actions (`utils/actions.py`), le parsing d'une phrase, l'étape de validation, la datation |
-| `journal-et-corrections.md` | l'écran Journal (filtres, pagination, export), le parcours de correction et de suppression |
+| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`), le plan d'occupation, ce que l'interpréteur de commandes rend dictable sur les parcelles (`app/services/interpreteur_commandes.py`) |
+| `enregistrer-un-geste.md` | le référentiel d'actions (`utils/actions.py`), le parsing d'une phrase, l'étape de validation, la datation, l'interprétation d'une phrase en COMMANDE et ce qu'elle relit avant d'écrire (`app/services/interpreteur_commandes.py`, `app/services/menu_commandes.FORMES_DICTABLES`) |
+| `journal-et-corrections.md` | l'écran Journal (filtres, pagination, export), le parcours de correction et de suppression, les façons de l'ouvrir (commande tapée, phrase dictée) |
 | `potager-cycle-de-vie.md` | l'archivage, la suppression logique, le délai de grâce et la purge |
 | `potager-partage-et-roles.md` | les rôles et leurs droits, les invitations, le retrait d'un membre, l'isolation entre potagers |
 | `compagnon-telegram.md` | l'activation Telegram, la liaison de compte, la synthèse vocale, la dissociation |
 | `statistiques-et-bilans.md` | le contenu de `/stats`, le détail par variété, les agrégats mensuels |
-| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement, la mémoire du potager (`app/services/memoire_potager.py`) : ce qui y entre, la restitution d'une note, l'isolation entre potagers, le devenir d'une note corrigée ou supprimée |
+| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement, la mémoire du potager (`app/services/memoire_potager.py`) : ce qui y entre, la restitution d'une note, l'isolation entre potagers, le devenir d'une note corrigée ou supprimée, ainsi que la façon dont un carnet volumineux est présenté — repères par année et par saison (`app/services/reponses_chiffrees.py`, familles `notes_culture` / `notes_parcelle`) |
 | `cultures-familles-et-rotation.md` | la famille botanique et son délai de retour, le calcul de rotation, l'avertissement à la plantation, les associations |
 
 Toute fiche ajoutée ici entre dans cette table **dans le même commit** :

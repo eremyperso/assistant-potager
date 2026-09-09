@@ -68,6 +68,18 @@ def test_us038_is_note_request_detecte_phrases_typiques():
     assert not is_note_request("combien de tomates ai-je récolté ?")
 
 
+def test_us038_une_ouverture_interrogative_n_ouvre_pas_le_flux_guide():
+    """Relevé le 09/09/2026 : « comment ajouter une note ? » démarrait la saisie
+    guidée au lieu d'être répondue — « ajouter une note » matchait le mot-clé
+    sans distinguer la demande d'exécution de la demande d'explication."""
+    assert not is_note_request("comment ajouter une note ?")
+    assert not is_note_request("comment noter une observation ?")
+    assert not is_note_request("pourquoi noter que le sol est sec ?")
+    # Une exécution réelle, même précédée d'un « comment » ailleurs qu'en tête,
+    # continue de déclencher le flux — le garde reste ancré en tête de phrase.
+    assert is_note_request("je veux noter une observation, comment dire, sur mes tomates")
+
+
 def test_us038_match_note_category_variantes():
     assert match_note_category("🔍 Observation") == "observation"
     assert match_note_category("observation") == "observation"

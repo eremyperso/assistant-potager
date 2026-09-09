@@ -34,8 +34,10 @@ elle-même plutôt que d'une habitude de test :
 la restitution et de l'isolation — pas la qualité du classement plein texte
 français, qui se mesure sur PostgreSQL.
 """
+import csv
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from pathlib import Path
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -1021,7 +1023,15 @@ def test_us141_bout_en_bout_la_note_est_servie_a_cout_nul(base, monkeypatch):
     """CA2 → CA7 — le parcours réel du jardinier, de la question à la réponse.
 
     Aucun modèle n'est appelé : la classification passe par une règle, et la
-    restitution recopie la note. Le test échoue si un jeton est consommé."""
+    restitution recopie la note. Le test échoue si un jeton est consommé.
+
+    [09/09/2026] L'étage attendu a changé, et le CA7 est le même. Cette question
+    NOMME sa cible (« la parcelle nord ») : elle est donc désormais servie par le
+    catalogue, qui rend TOUTES les notes de cette parcelle plutôt que la plus
+    ressemblante. La recherche documentaire reste le chemin des questions de
+    mémoire diffuses — le test voisin, `…_sans_cible_reste_au_socle`, le tient.
+    Les deux étages citent la note sans la reformuler et sans jeton, ce que les
+    assertions ci-dessous vérifient inchangées."""
     _noter(base, CTX_A, NOTE_A)
     for module in (routeur, cq, rc):
         monkeypatch.setattr(module, "SessionLocal", lambda: base)
@@ -1032,7 +1042,7 @@ def test_us141_bout_en_bout_la_note_est_servie_a_cout_nul(base, monkeypatch):
     reponse = routeur.repondre_avec_cascade(
         CTX_A, "qu'avais-je noté sur la parcelle nord l'an dernier ?")
 
-    assert reponse.etage_resolveur == routeur.ETAGE_SAVOIR
+    assert reponse.etage_resolveur == routeur.ETAGE_DONNEE
     assert "12 mai 2025" in reponse.texte
     assert "parcelle nord" in reponse.texte
     assert NOTE_A in reponse.texte
@@ -1100,3 +1110,469 @@ def test_us141_gherkin_memoire_et_savoir_general_distingues(base, sans_appel_mod
     assert connaissance.REGISTRE_MEMOIRE in texte
     assert connaissance.REGISTRE_GENERAL in texte
     assert texte.index(connaissance.REGISTRE_MEMOIRE) != texte.index(connaissance.REGISTRE_GENERAL)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CA5 bis — la restitution ne jette plus ce que la recherche a trouvé
+# -----------------------------------------------------------------------------
+# Relevé de production du 09/09/2026, potager 1 : « qu'avais je noté sur mes
+# tomates ? » retrouvait les trois notes attendues (evenement-472, 355, 363 ;
+# score 0,733 ; issue=servi) et n'en affichait qu'une. `restituer` ne gardait
+# qu'un bloc par REGISTRE. Une note trouvée puis tue est pire qu'une note non
+# trouvée : le jardinier en conclut qu'il n'avait rien écrit.
+# ═════════════════════════════════════════════════════════════════════════════
+def test_us141_ca5_trois_notes_du_meme_registre_sont_toutes_restituees(base, sans_appel_modele):
+    """CA5 — ce que la recherche trouve, la restitution le rend."""
+    constats = (
+        "les feuilles du bas jaunissent depuis la pluie",
+        "les feuilles portent des taches brunes ce matin",
+        "j'ai retiré les feuilles atteintes hier soir",
+    )
+    for jour, constat in enumerate(constats, start=1):
+        _noter(base, CTX_A, constat, date=f"2025-06-0{jour}")
+
+    contexte = connaissance.rechercher(base, CTX_A, "qu'avais-je noté sur les feuilles ?")
+    texte = connaissance.restituer(contexte)
+
+    assert len(contexte.passages) >= 2, "la recherche elle-même doit ramener plusieurs notes"
+    trouves = [c for c in constats if c in texte]
+    assert len(trouves) == len([p for p in contexte.passages if p.prive])
+
+
+def test_us141_ca5_une_note_unique_garde_sa_forme_historique(base, sans_appel_modele):
+    """CA5 — non-régression de forme : le cas d'une seule note ne bouge pas.
+
+    C'est de très loin le cas le plus fréquent, et celui sur lequel reposent
+    tous les tests écrits avant cette correction. Il est vérifié caractère pour
+    caractère, pas par sous-chaîne."""
+    _noter(base, CTX_A, NOTE_A, date="2025-05-12")
+
+    contexte = connaissance.rechercher(base, CTX_A, "qu'avais-je noté sur la parcelle nord ?")
+    passage = contexte.passages[0]
+
+    assert connaissance.restituer(contexte) == (
+        f"{connaissance.REGISTRE_MEMOIRE} — {passage.titre_document} :\n"
+        f"« {passage.contenu.strip()} »"
+    )
+
+
+def test_us141_ca6_le_registre_general_reste_a_un_seul_bloc(base, sans_appel_modele):
+    """CA6 — les deux registres ne se comptent pas pareil.
+
+    Trois fiches d'agronomie sur le même sujet sont trois façons de dire la même
+    chose : les empiler est du bruit, et le classement a déjà désigné la
+    meilleure. Trois notes du jardinier sont trois faits datés distincts."""
+    _noter(base, CTX_A, "les limaces ont dévoré mes jeunes plants cette nuit")
+    _fiche_generale(base, "agro/limaces-1.md", "Limaces",
+                    "Les limaces sortent la nuit par temps humide et attaquent les jeunes plants.")
+    _fiche_generale(base, "agro/limaces-2.md", "Limaces et humidité",
+                    "Par temps humide, les limaces dévorent les jeunes plants au ras du sol.")
+
+    texte = connaissance.restituer(
+        connaissance.rechercher(base, CTX_A, "limaces jeunes plants")
+    )
+
+    assert texte.count(connaissance.REGISTRE_GENERAL) == 1
+    assert connaissance.REGISTRE_MEMOIRE in texte
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CA5 ter — la mémoire servie en SQL : exhaustive, à zéro jeton, par repères
+# -----------------------------------------------------------------------------
+# « Qu'avais-je noté sur mes tomates ? » ne demande aucune RESSEMBLANCE : elle
+# demande tout ce qui a été écrit sur la tomate. C'est une lecture exacte du
+# journal, du même ordre qu'un total de récolte — donc l'étage 1, pas la
+# recherche documentaire, qui classe par similarité et s'arrête à trois passages.
+# ═════════════════════════════════════════════════════════════════════════════
+def _demander(db, ctx, question):
+    return rc.repondre_chiffre(ctx, question, db=db)
+
+
+def test_us141_les_notes_d_une_culture_sont_servies_par_le_catalogue(base, sans_appel_modele):
+    """CA7 — la famille est reconnue, et rien de la question ne coûte un jeton."""
+    _noter(base, CTX_A, NOTE_A)
+
+    reponse = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?")
+
+    assert reponse is not None and reponse.famille == "notes_culture"
+    assert reponse.present is True
+    assert NOTE_A in reponse.texte
+
+
+def test_us141_une_question_de_memoire_ciblee_est_routee_vers_l_etage_1(base, monkeypatch):
+    """Le pré-étage de routage : sans lui, la famille serait inatteignable."""
+    for module in (routeur, rc):
+        monkeypatch.setattr(module, "SessionLocal", lambda: base)
+    _noter(base, CTX_A, NOTE_A)
+
+    assert routeur.classer_demande(
+        "qu'avais-je noté sur mes tomates ?", CTX_A
+    ).nature == routeur.NATURE_QUESTION_DATA
+    # Dictée : ni apostrophe ni point d'interrogation, même aiguillage.
+    assert routeur.classer_demande(
+        "qu avais je note sur mes tomates", CTX_A
+    ).nature == routeur.NATURE_QUESTION_DATA
+
+
+def test_us141_la_liste_est_exhaustive_et_triee_du_plus_recent(base, sans_appel_modele):
+    """CA5 — les cinq notes, dans l'ordre du carnet. C'est le défaut de
+    production : trois notes trouvées, une seule rendue."""
+    constats = [f"constat numero {i} sur le feuillage" for i in range(1, 6)]
+    for jour, constat in enumerate(constats, start=1):
+        _noter(base, CTX_A, constat, date=f"2025-06-0{jour}")
+
+    texte = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?").texte
+
+    assert all(constat in texte for constat in constats)
+    positions = [texte.index(constat) for constat in constats]
+    assert positions == sorted(positions, reverse=True), "la plus récente d'abord"
+
+
+def test_us141_le_perimetre_sql_est_celui_de_l_indexation(base, sans_appel_modele):
+    """LE test central : une seule définition de « ce qu'est une note ».
+
+    Deux définitions divergentes seraient le vrai risque de cette correction —
+    le jardinier verrait la liste SQL et la recherche documentaire différer sur
+    le même carnet, sans qu'aucune des deux ne paraisse fausse. Le périmètre est
+    donc comparé à celui de `memoire_potager`, jamais réécrit ici."""
+    _noter(base, CTX_A, "les feuilles jaunissent par le bas")
+    _noter(base, CTX_A, "j'ai retiré les gourmands")
+    # Un bulletin météo automatique : une observation que personne n'a écrite.
+    base.add(Evenement(
+        type_action="observation", culture="tomate", parcelle_id=10,
+        date=datetime(2025, 6, 15), potager_id=1,
+        texte_original=memoire_potager.BULLETIN_AUTO_METEO,
+        commentaire=memoire_potager.BULLETIN_AUTO_METEO,
+    ))
+    # Un geste structuré sur la même culture : il se répond en SQL (US-096),
+    # il n'entre pas dans la mémoire.
+    base.add(Evenement(
+        type_action="recolte", culture="tomate", parcelle_id=10,
+        date=datetime(2025, 6, 16), potager_id=1, quantite=3, unite="kg",
+        commentaire="belle cueillette",
+    ))
+    base.commit()
+
+    texte = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?").texte
+    attendues = {
+        memoire_potager.texte_note(e)
+        for e in memoire_potager.notes_a_indexer(base, 1)
+        if e.culture == "tomate"
+    }
+
+    assert attendues, "le décor doit contenir des notes"
+    assert all(note in texte for note in attendues)
+    assert memoire_potager.BULLETIN_AUTO_METEO not in texte
+    assert "belle cueillette" not in texte
+
+
+def test_us141_l_agregation_passe_le_garde_d_isolation_du_catalogue(base, sans_appel_modele):
+    """La note porte une parcelle — le cas qui tenterait un `db.get(Parcelle)`.
+
+    `memoire_potager.titre_note()` compose pourtant exactement l'en-tête voulu :
+    elle est écartée parce que sa lecture de parcelle n'est pas filtrée sur le
+    potager, et que le garde du catalogue la refuserait à raison. Sans ce test,
+    l'échec serait SILENCIEUX — `repondre_chiffre` rattrape la garde et la
+    famille ne répondrait simplement jamais."""
+    _noter(base, CTX_A, NOTE_A, parcelle="nord")
+
+    reponse = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?")
+
+    assert reponse is not None and reponse.famille == "notes_culture"
+    assert "parcelle nord" in reponse.texte
+
+
+def test_us141_ca8_la_liste_sql_n_atteint_jamais_un_autre_potager(base, sans_appel_modele):
+    """CA8 — l'isolation vaut sur ce chemin comme sur la recherche."""
+    _noter(base, CTX_A, NOTE_A)
+    _noter(base, CTX_B, "chez moi tout va bien", culture="tomate", parcelle="nord")
+
+    texte = _demander(base, CTX_B, "qu'avais-je noté sur mes tomates ?").texte
+
+    assert NOTE_A not in texte
+    assert "chez moi tout va bien" in texte
+
+
+def test_us141_le_texte_d_une_note_n_est_jamais_retouche(base, sans_appel_modele):
+    """« Extrait fidèle, jamais résumé » — y compris sur la ponctuation.
+
+    `_remplir` renormalise les espaces avant la ponctuation ; le corps d'une
+    note ne doit donc jamais le traverser."""
+    brut = "limaces  ,  encore elles"
+    _noter(base, CTX_A, brut)
+
+    assert brut in _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?").texte
+
+
+def test_us141_une_note_contenant_du_markdown_est_echappee(base, sans_appel_modele):
+    """Première fois que du texte libre traverse le rendu du catalogue.
+
+    Un parse Markdown qui échoue chez Telegram perd la réponse ENTIÈRE, pas
+    seulement sa mise en forme."""
+    _noter(base, CTX_A, "arroser 2*/semaine, voir [carnet] et _le reste_")
+
+    texte = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?").texte
+
+    assert "2\\*/semaine" in texte
+    assert "\\[carnet\\]" in texte
+    assert "\\_le reste\\_" in texte
+
+
+def test_us141_aucune_note_est_un_constat_pas_une_absence_de_donnee(base, sans_appel_modele):
+    """CA7 d'US-096 — « je n'ai aucune note sur la tomate » est une réponse.
+
+    Remonter la cascade y substituerait un conseil d'agronomie, c'est-à-dire une
+    non-réponse payante à une question dont la réponse était certaine."""
+    reponse = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?")
+
+    assert reponse is not None and reponse.present is True
+    assert "aucune note" in reponse.texte
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Repères temporels — un carnet volumineux ne se déroule pas, il se repère
+# ─────────────────────────────────────────────────────────────────────────────
+def test_us141_un_carnet_volumineux_est_presente_par_reperes(base, sans_appel_modele):
+    """Au-delà du plafond de citations, la réponse dit OÙ REGARDER."""
+    jours = 0
+    for annee in (2024, 2025, 2026):
+        for numero in range(6):
+            jours += 1
+            _noter(base, CTX_A, f"constat {annee} numero {numero} sur le feuillage",
+                   date=f"{annee}-0{(numero % 4) + 5}-1{numero}")
+
+    texte = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates ?").texte
+
+    assert "18 notes" in texte
+    for annee in ("2024", "2025", "2026"):
+        assert annee in texte
+    # Un aperçu, pas le carnet entier.
+    assert texte.count("• ") <= rc.APERCU_NOTES_RECENTES + 3 + 1
+    assert "pour lire une période en détail" in texte
+
+
+def test_us141_les_reperes_suivent_la_saison_du_jardin_pas_le_trimestre(base):
+    """Arbitrage tranché : saison agronomique, jamais trimestre calendaire.
+
+    Le trimestre couperait janvier-mars ensemble, mêlant le cœur de l'hiver et
+    le démarrage des semis. Et surtout, `_detecter_periode` encode déjà ces
+    quatre fenêtres : un second découpage ferait cohabiter deux vérités
+    temporelles, l'une pour lire les questions, l'autre pour écrire les
+    réponses."""
+    assert rc._saison_de(datetime(2026, 3, 5)) == ("printemps", 2026)
+    assert rc._saison_de(datetime(2026, 5, 31)) == ("printemps", 2026)
+    assert rc._saison_de(datetime(2026, 6, 1)) == ("été", 2026)
+    # L'hiver enjambe l'année civile, et se lit sous l'année de son janvier.
+    assert rc._saison_de(datetime(2025, 12, 12)) == ("hiver", 2026)
+    assert rc._saison_de(datetime(2026, 1, 8)) == ("hiver", 2026)
+    # Ce que le trimestre calendaire aurait confondu.
+    assert rc._saison_de(datetime(2026, 1, 8))[0] != rc._saison_de(datetime(2026, 3, 5))[0]
+
+
+def test_us141_le_zoom_sur_une_periode_rend_le_detail(base, sans_appel_modele):
+    """La sortie du repère : une période nommée rouvre les notes qu'elle porte."""
+    for annee in (2025, 2026):
+        for numero in range(5):
+            _noter(base, CTX_A, f"constat {annee} numero {numero} sur le feuillage",
+                   date=f"{annee}-06-1{numero}")
+
+    texte = _demander(base, CTX_A, "qu'avais-je noté sur mes tomates en 2025 ?").texte
+
+    assert "constat 2025 numero 0" in texte
+    assert "constat 2026" not in texte
+
+
+def test_us141_le_zoom_propose_une_formulation_que_la_question_sait_relire(base, sans_appel_modele):
+    """La boucle se referme sans second analyseur de dates.
+
+    Une invitation que `_detecter_periode` ne saurait pas relire serait une
+    invitation vers une commande qui n'existe pas."""
+    for annee in (2024, 2025, 2026):
+        for numero in range(6):
+            _noter(base, CTX_A, f"constat {annee} numero {numero} sur le feuillage",
+                   date=f"{annee}-06-1{numero}")
+
+    agregat = rc.catalogue_sql.executer(
+        "notes_du_jardinier", base, CTX_A, culture="tomate"
+    )
+
+    exemple = agregat["exemple_zoom"]
+    assert exemple
+    assert rc._detecter_periode(rc._normaliser(exemple), date(2026, 9, 9)).debut is not None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Non-régression — ce que ce chemin ne doit PAS capter
+# ─────────────────────────────────────────────────────────────────────────────
+def test_us141_une_question_de_memoire_sans_cible_reste_au_socle(base, sans_appel_modele, monkeypatch):
+    """Sans culture ni parcelle nommée, rien n'a changé : la recherche répond."""
+    for module in (routeur, rc):
+        monkeypatch.setattr(module, "SessionLocal", lambda: base)
+    _noter(base, CTX_A, NOTE_A)
+
+    assert routeur.classer_demande(
+        "qu'avais-je noté l'an dernier ?", CTX_A
+    ).nature == routeur.NATURE_QUESTION_SAVOIR
+    assert rc.reconnait_famille(CTX_A, "qu'avais-je noté l'an dernier ?", base) is None
+
+
+def test_us141_une_culture_mal_orthographiee_reste_au_socle(base, sans_appel_modele, monkeypatch):
+    """Décision de conception : aucun rapprochement approché sur les cultures.
+
+    « povrons » (relevé du 09/09/2026) ne devient pas « poivron » : la
+    résolution de culture est littérale sur ce chemin, et ce test verrouille ce
+    choix plutôt que de le laisser à la mémoire de qui relit."""
+    for module in (routeur, rc):
+        monkeypatch.setattr(module, "SessionLocal", lambda: base)
+    _noter(base, CTX_A, NOTE_A)
+
+    assert rc.reconnait_famille(CTX_A, "qu'avais-je noté sur mes tomtes ?", base) is None
+    assert routeur.classer_demande(
+        "qu'avais-je noté sur mes tomtes ?", CTX_A
+    ).nature == routeur.NATURE_QUESTION_SAVOIR
+
+
+def test_us141_un_comptage_d_observations_n_est_pas_une_liste_de_notes(base, sans_appel_modele):
+    """« Combien » se répond par un nombre, pas par des citations."""
+    _noter(base, CTX_A, NOTE_A)
+
+    famille = rc.reconnait_famille(
+        CTX_A, "combien d'observations ai-je faites cette saison ?", base
+    )
+    assert famille not in ("notes_culture", "notes_parcelle")
+
+
+def test_us141_la_question_des_bioagresseurs_reste_servie_par_sa_famille(base, sans_appel_modele):
+    """US-173 — la famille en tête d'hier ne perd pas ses questions."""
+    assert rc.reconnait_famille(
+        CTX_A, "qu'est-ce qui attaque mes tomates ?", base
+    ) == "bioagresseurs_culture"
+
+
+def test_us141_une_saisie_de_note_n_est_pas_detournee_vers_la_memoire(base, monkeypatch):
+    """« J'ai noté que… » enregistre, il n'interroge pas — US-141 / CA5.
+
+    Le pré-étage de routage ne s'applique qu'aux phrases que
+    `_est_rappel_de_note` a déjà reconnues, et cette forme au passé composé n'en
+    fait partie que sous garde d'ouverture interrogative. C'est ce garde-là que
+    le test contrôle, et non le classement final de la phrase : celui-ci se joue
+    plus loin, sur des règles que cette correction n'a pas touchées."""
+    for module in (routeur, rc):
+        monkeypatch.setattr(module, "SessionLocal", lambda: base)
+    _noter(base, CTX_A, NOTE_A)
+
+    saisie = "j'ai noté que le sol est sec sur la parcelle nord"
+    assert routeur._est_rappel_de_note(saisie) is False
+    assert routeur._rappel_servi_par_le_catalogue(saisie, CTX_A) is False
+    # La même phrase OUVERTE en question, elle, redevient un rappel.
+    assert routeur._est_rappel_de_note("qu'est-ce que j'ai noté sur mes tomates ?") is True
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Corpus de mesure — les formulations, dans un fichier plutôt que dans le code
+# -----------------------------------------------------------------------------
+# `tests/corpus/us141_questions_memoire.csv` porte ce que la reconnaissance doit
+# savoir faire, et surtout ce qu'elle ne doit PAS capter : une famille vide dans
+# la colonne attendue signifie « aucune famille du catalogue », donc la question
+# repart vers la recherche documentaire ou la cascade.
+#
+# Le fichier est le bon endroit pour cela : c'est lui qui recevra les
+# formulations réelles remontées par `routage_logs` sans qu'on ait à retoucher
+# le code de test.
+# ═════════════════════════════════════════════════════════════════════════════
+CORPUS_MEMOIRE = Path(__file__).parent / "corpus" / "us141_questions_memoire.csv"
+
+
+def _cas_du_corpus():
+    with CORPUS_MEMOIRE.open(encoding="utf-8") as fichier:
+        return [
+            (ligne["question"], ligne["famille_attendue"] or None)
+            for ligne in csv.DictReader(fichier)
+        ]
+
+
+@pytest.mark.parametrize("question,famille_attendue", _cas_du_corpus())
+def test_us141_corpus_de_reconnaissance(base, question, famille_attendue):
+    """Chaque formulation du corpus atteint la famille qu'elle doit atteindre.
+
+    Le décor porte une note sur la tomate et une sur la parcelle nord : sans
+    elles, `exige` échouerait pour la bonne raison au lieu de la bonne
+    reconnaissance, et le test passerait au vert sans rien démontrer."""
+    _noter(base, CTX_A, NOTE_A, culture="tomate", parcelle="nord")
+
+    assert rc.reconnait_famille(CTX_A, question, base) == famille_attendue
+
+
+def test_us141_limite_connue_un_participe_n_est_pas_un_nom_d_ecrit(base):
+    """Ce que la reconnaissance ne sait PAS faire, écrit plutôt que découvert.
+
+    « quelles maladies avais-je NOTÉES sur mes tomates ? » n'est pas reconnue
+    comme un rappel : `_NOMS_ECRIT` liste des NOMS (note, remarque, observation,
+    constat), et « notées » est ici un participe passé. La question part donc au
+    référentiel des bioagresseurs, qui répond sur ce qui attaque la tomate en
+    général — pas sur ce que le jardinier avait écrit.
+
+    Cette limite est ANTÉRIEURE à la correction du 09/09/2026 et n'est pas
+    élargie ici : toucher au motif de rappel change l'aiguillage de toutes les
+    questions de mémoire, y compris des saisies (« j'ai noté que… »), et cela se
+    mesure avant de se décider. Le test est là pour que la limite se voie dans
+    la suite plutôt que d'être redécouverte en production."""
+    _noter(base, CTX_A, NOTE_A)
+    question = "quelles maladies avais-je notées sur mes tomates ?"
+
+    assert routeur._est_rappel_de_note(question) is False
+    assert rc.reconnait_famille(CTX_A, question, base) == "bioagresseurs_culture"
+
+
+@pytest.mark.parametrize("phrase,attendu", [
+    ("mes notes sur la tomate par saison", rc.ZOOM_SAISON),
+    ("mes notes sur la tomate saison par saison", rc.ZOOM_SAISON),
+    ("mes notes sur la tomate par annee", rc.ZOOM_ANNEE),
+    ("mes notes sur la tomate par an", rc.ZOOM_ANNEE),
+    ("mes notes sur la tomate en detail", rc.ZOOM_DETAIL),
+    ("toutes mes notes sur la tomate", rc.ZOOM_DETAIL),
+    # Aucune demande : c'est alors l'ampleur du carnet qui décide.
+    ("mes notes sur la tomate", None),
+    ("qu'avais-je noté sur mes tomates ?", None),
+])
+def test_us141_le_zoom_demande_explicitement_est_reconnu(phrase, attendu):
+    """Le niveau de lecture demandé par la phrase l'emporte sur l'ampleur.
+
+    Relevé le 09/09/2026 en essai réel : « mes notes sur la tomate par saison »
+    rendait le détail. Les motifs avaient été écrits avec des `\\b` transformés en
+    caractères de contrôle, si bien qu'ils ne pouvaient matcher aucune phrase —
+    un motif toujours faux ne casse rien, il rend seulement la fonction inerte,
+    et c'est exactement ce qui échappe à une relecture."""
+    assert rc._detecter_zoom(rc._normaliser(phrase)) == attendu
+
+
+def test_us141_aucun_motif_du_service_ne_porte_de_caractere_de_controle():
+    """Le garde-fou générique, plutôt qu'un test par motif.
+
+    Un `\\b` de regex écrit à travers une couche d'échappement devient `\\x08`
+    (retour arrière) : le motif compile, ne lève rien, et ne matche plus jamais.
+    Aucun test fonctionnel ne le signale tant qu'il ne couvre pas ce motif-là."""
+    source = Path(rc.__file__).read_text(encoding="utf-8")
+    interdits = {"\x07": "BEL", "\x08": "RETOUR ARRIÈRE", "\x0b": "TAB VERTICALE",
+                 "\x0c": "SAUT DE PAGE"}
+    presents = {nom for code, nom in interdits.items() if code in source}
+
+    assert not presents, f"caractères de contrôle dans le service : {presents}"
+
+
+def test_us141_le_zoom_par_saison_rend_des_reperes_meme_sur_un_petit_carnet(
+    base, sans_appel_modele
+):
+    """Une demande explicite l'emporte sur le plafond de citations.
+
+    C'est aussi le seul moyen de VOIR les repères sans attendre d'avoir écrit
+    neuf notes sur la même culture — donc le premier geste de vérification en
+    recette."""
+    for jour in range(1, 4):
+        _noter(base, CTX_A, f"constat numero {jour} sur le feuillage",
+               date=f"2025-06-0{jour}")
+
+    texte = _demander(base, CTX_A, "mes notes sur la tomate par saison").texte
+
+    assert "se répartissent" in texte
+    assert "été 2025" in texte

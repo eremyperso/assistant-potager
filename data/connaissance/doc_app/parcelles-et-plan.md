@@ -29,20 +29,20 @@ Le plan d'occupation montre, parcelle par parcelle, les cultures encore en place
 ## Renommer une parcelle sans perdre son historique
 
 **Intention :** procédure
-**On parle aussi de :** changer le nom ; corriger un nom de planche ; renommage ; ancien nom
+**On parle aussi de :** changer le nom ; corriger un nom de planche ; renommage ; ancien nom ; renommer en le disant
 
-Renommer une parcelle conserve l'intégralité des gestes qui s'y rattachent : le lien ne passe pas par le nom, mais par la parcelle elle-même. L'ancien nom disparaît simplement de l'affichage, y compris sur les gestes anciens, qui portent aussitôt le nouveau. Les noms sont par ailleurs comparés sans tenir compte des majuscules ni des accents, de sorte qu'une même planche ne se dédouble pas selon la façon dont on la dicte.
+Renommer une parcelle conserve l'intégralité des gestes qui s'y rattachent : le lien ne passe pas par le nom, mais par la parcelle elle-même. L'ancien nom disparaît simplement de l'affichage, y compris sur les gestes anciens, qui portent aussitôt le nouveau. Les noms sont par ailleurs comparés sans tenir compte des majuscules ni des accents, de sorte qu'une même planche ne se dédouble pas selon la façon dont on la dicte. Le renommage se demande aussi en une phrase — « renomme la planche nord en planche des courges » — sans avoir à retenir la commande.
 
 ## Supprimer une parcelle sans effacer ce qui s'y est passé
 
 **Intention :** procédure
-**On parle aussi de :** enlever une planche ; parcelle qui n'existe plus ; suppression ; non localisé
+**On parle aussi de :** enlever une planche ; parcelle qui n'existe plus ; suppression ; non localisé ; supprimer en le disant
 
-Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun geste : les événements qui s'y rattachaient restent au journal et basculent sous la mention « non localisé ». Rien n'est donc perdu du passé de la planche, ni les récoltes qu'on y a faites, ni les cultures qui s'y sont succédé.
+Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun geste : les événements qui s'y rattachaient restent au journal et basculent sous la mention « non localisé ». Rien n'est donc perdu du passé de la planche, ni les récoltes qu'on y a faites, ni les cultures qui s'y sont succédé. La suppression se demande aussi en une phrase, et elle est alors récapitulée avant d'être faite : si le nom prononcé ne correspond exactement à aucune planche, le nom voisin est proposé plutôt que retenu d'office.
 
 ## Déclarer une serre ou une pépinière
 
 **Intention :** procédure
-**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert
+**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant
 
-Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y rattache reste alors un semis à couvert, en attente de repiquage, et n'est jamais compté comme une culture en place au jardin, même si le lieu est nommé. Sans cette déclaration, semer dans sa serre en la nommant reviendrait à dire qu'on a semé en pleine terre, et le stock s'en trouverait faussé dès la première barquette.
+Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y rattache reste alors un semis à couvert, en attente de repiquage, et n'est jamais compté comme une culture en place au jardin, même si le lieu est nommé. Sans cette déclaration, semer dans sa serre en la nommant reviendrait à dire qu'on a semé en pleine terre, et le stock s'en trouverait faussé dès la première barquette. La déclaration se fait aussi en une phrase — « la serre est une pépinière » — sans connaître la syntaxe attendue.

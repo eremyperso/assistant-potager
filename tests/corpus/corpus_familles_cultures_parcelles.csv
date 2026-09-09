@@ -1,0 +1,59 @@
+question,famille_attendue,categorie
+sur quelles parcelles ai-je des tomates ?,parcelles_par_culture,culture_vers_parcelles
+où sont mes tomates ?,parcelles_par_culture,culture_vers_parcelles
+où poussent mes haricots ?,parcelles_par_culture,culture_vers_parcelles
+dans quelle parcelle j'ai planté du chou ?,parcelles_par_culture,culture_vers_parcelles
+quelles parcelles ont des courgettes ?,parcelles_par_culture,culture_vers_parcelles
+ou est ce que jai plante mes courgettes,parcelles_par_culture,culture_vers_parcelles
+sur quelle planche j'ai du chou ?,parcelles_par_culture,culture_vers_parcelles
+j'ai mis mes poivrons où déjà ?,,culture_vers_parcelles
+dans quel carré est-ce que je fais pousser des aubergines ?,,culture_vers_parcelles
+où sont mes solanacées ?,parcelles_par_famille,famille_vers_parcelles
+quelles parcelles portent des cucurbitacées ?,parcelles_par_famille,famille_vers_parcelles
+sur quelle parcelle j'ai des brassicacées ?,parcelles_par_famille,famille_vers_parcelles
+où se trouvent mes fabacées ?,parcelles_par_famille,famille_vers_parcelles
+ou sont mes solanacees,parcelles_par_famille,famille_vers_parcelles
+quelles planches ont des solanacées cette année ?,parcelles_par_famille,famille_vers_parcelles
+j'ai des cucurbitacées où sur mon terrain ?,,famille_vers_parcelles
+où sont mes rosacées ?,,famille_vers_parcelles
+qu'est-ce qu'il y a sur la parcelle nord ?,occupation_parcelle,parcelle_vers_cultures
+qu'y a-t-il sur ma parcelle sud ?,occupation_parcelle,parcelle_vers_cultures
+combien de cultures sur la parcelle nord ?,occupation_parcelle,parcelle_vers_cultures
+combien de cultures différentes sur ma parcelle sud ?,occupation_parcelle,parcelle_vers_cultures
+combien de plantations sur la parcelle serre ?,occupation_parcelle,parcelle_vers_cultures
+quelles cultures sont plantées sur la parcelle nord ?,occupation_parcelle,parcelle_vers_cultures
+combien j'ai de plantes sur la parcelle serre ?,occupation_parcelle,parcelle_vers_cultures
+et sur la parcelle nord il y a combien de cultures différentes ?,occupation_parcelle,parcelle_vers_cultures
+combien de tomates j'ai sur la parcelle nord ?,occupation_parcelle,parcelle_vers_cultures
+y a-t-il plusieurs familles sur ma parcelle nord ?,occupation_parcelle,parcelle_vers_familles
+quelles familles botaniques sont présentes sur la parcelle nord ?,occupation_parcelle,parcelle_vers_familles
+quelle famille de plante ai-je sur la parcelle sud ?,occupation_parcelle,parcelle_vers_familles
+quelles familles de culture sur ma parcelle serre ?,occupation_parcelle,parcelle_vers_familles
+à quelles familles appartiennent les cultures de la parcelle nord ?,occupation_parcelle,parcelle_vers_familles
+quelles sont les familles botaniques de la parcelle sud ?,occupation_parcelle,parcelle_vers_familles
+de quelles familles sont mes cultures sur la parcelle nord ?,occupation_parcelle,parcelle_vers_familles
+combien de familles différentes sur la parcelle nord ?,occupation_parcelle,parcelle_vers_familles
+fais moi la liste des familles par parcelle,,parcelle_vers_familles
+combien de parcelles ont plusieurs familles différentes ?,,parcelle_vers_familles
+quelles sont les cultures présentes sur chacune de mes parcelles ?,,parcelle_vers_familles
+combien de cultures ai-je dans la famille des solanacées ?,,comptage_cultures_par_famille
+combien de cultures de la famille cucurbitacées est-ce que je cultive ?,,comptage_cultures_par_famille
+j'ai combien de cultures différentes chez les solanacées ?,,comptage_cultures_par_famille
+combien de plantes de la famille des brassicacées ?,,comptage_cultures_par_famille
+combien de solanacées je cultive en ce moment ?,,comptage_cultures_par_famille
+j'ai combien de cucurbitacées cette année ?,,comptage_cultures_par_famille
+combien de cultures fabacées dans mon potager ?,,comptage_cultures_par_famille
+nombre de cultures par famille botanique,,comptage_cultures_par_famille
+quelles cultures de la famille des solanacées j'ai chez moi ?,,comptage_cultures_par_famille
+combien de familles botaniques différentes dans mon potager ?,,comptage_global
+combien de cultures différentes ai-je au total ?,,comptage_global
+combien de familles ai-je sur mes parcelles ?,,comptage_global
+combien de familles différentes je cultive cette année ?,,comptage_global
+combien de cultures est-ce que je fais pousser en tout ?,,comptage_global
+j'ai combien de familles botaniques différentes ?,,comptage_global
+j'ai quelles familles de légumes cette année ?,,comptage_global
+quelle est la famille de la tomate ?,,identite_famille_culture
+la tomate est de quelle famille ?,,identite_famille_culture
+à quelle famille appartient le chou ?,,identite_famille_culture
+le poivron c'est quelle famille botanique ?,,identite_famille_culture
+de quelle famille botanique fait partie le concombre ?,,identite_famille_culture

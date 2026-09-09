@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assistant Potager — cheminement d'une demande</title>
+<style>
+:root{
+  --sol:        #12181a;
+  --sol-haut:   #1a2225;
+  --sol-creux:  #0d1214;
+  --trait:      #29343a;
+  --trait-fort: #3c4a51;
+  --craie:      #e6eae7;
+  --craie-2:    #8fa09f;
+  --craie-3:    #5f7071;
+
+  --gratuit:    #59c98a;
+  --jeton:      #e9a13c;
+  --savoir:     #6ba8e2;
+  --remontee:   #bd8ce0;
+  --hors:       #7d8f8e;
+  --neutre:     #cfd8d6;
+
+  --mono: "Cascadia Mono","JetBrains Mono","SF Mono",ui-monospace,Consolas,"Liberation Mono",monospace;
+  --ui: "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--sol); color:var(--craie);
+  font-family:var(--ui); font-size:15px; line-height:1.5;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+button{font:inherit; color:inherit; cursor:pointer}
+:focus-visible{outline:2px solid var(--savoir); outline-offset:2px}
+
+/* ─── en-tête ─────────────────────────────────────────────── */
+header{
+  display:flex; align-items:baseline; gap:18px; flex-wrap:wrap;
+  padding:10px 18px; border-bottom:1px solid var(--trait);
+  background:var(--sol-creux);
+}
+h1{font-size:15px; font-weight:600; margin:0; letter-spacing:.01em}
+h1 span{color:var(--craie-3); font-weight:400}
+.scenarios{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+.sc{
+  background:var(--sol-haut); border:1px solid var(--trait);
+  border-radius:3px; padding:4px 9px; font-size:12.5px; color:var(--craie-2);
+  display:flex; align-items:center; gap:7px; transition:border-color .15s,color .15s;
+}
+.sc:hover{border-color:var(--trait-fort); color:var(--craie)}
+.sc[aria-current="true"]{border-color:var(--craie-3); color:var(--craie); background:#222c30}
+.sc b{font-weight:600; font-variant-numeric:tabular-nums}
+.sc .cost{font-family:var(--mono); font-size:11px}
+.sc .c0{color:var(--gratuit)} .sc .cn{color:var(--jeton)}
+.hbtn{background:none; border:1px solid var(--trait); border-radius:3px;
+  padding:4px 10px; font-size:12.5px; color:var(--craie-2)}
+.hbtn:hover{border-color:var(--trait-fort); color:var(--craie)}
+
+/* ─── corps ───────────────────────────────────────────────── */
+main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
+     grid-template-rows:minmax(0,1fr); min-height:0; overflow:hidden}
+#scene{position:relative; min-width:0; min-height:0; overflow:hidden}
+#carte{position:absolute; inset:0; width:100%; height:100%; display:block}
+
+/* ─── graphe ──────────────────────────────────────────────── */
+.arete{fill:none; stroke:var(--trait); stroke-width:1.5}
+.arete.on{stroke-width:2.5; stroke-linecap:round}
+.arete.dyn{stroke-dasharray:2 5}
+.noeud rect{fill:var(--sol-haut); stroke:var(--trait); stroke-width:1.5; rx:4}
+.noeud .emo{font-size:19px; dominant-baseline:middle}
+.noeud .nom{font-family:var(--ui); font-size:12.5px; fill:var(--craie-3); dominant-baseline:middle}
+.noeud .sub{font-family:var(--mono); font-size:10.5px; fill:var(--craie-3); dominant-baseline:middle}
+.noeud.vu rect{fill:#1e282c; stroke:currentColor; stroke-width:1.5}
+.noeud.vu .nom{fill:var(--craie)}
+.noeud.vu .sub{fill:currentColor}
+.noeud.ici rect{stroke-width:2.5; filter:drop-shadow(0 0 9px currentColor)}
+.noeud.hors rect{stroke-dasharray:4 3}
+.bandeau-hors{fill:none; stroke:var(--trait); stroke-dasharray:3 4; rx:6}
+.bandeau-txt{font-family:var(--ui); font-size:11px; fill:var(--craie-3)}
+@media (prefers-reduced-motion:no-preference){
+  .noeud rect,.arete{transition:stroke .25s, fill .25s, stroke-width .25s}
+  .noeud.ici rect{animation:battement 1.6s ease-in-out infinite}
+  @keyframes battement{0%,100%{filter:drop-shadow(0 0 5px currentColor)}50%{filter:drop-shadow(0 0 14px currentColor)}}
+}
+
+/* ─── panneau ─────────────────────────────────────────────── */
+#panneau{
+  border-left:1px solid var(--trait); background:var(--sol-creux);
+  overflow-y:auto; padding:16px 18px 26px; min-width:0;
+}
+.rappel{
+  position:sticky; top:0; z-index:2;
+  margin:-16px -18px 14px; padding:11px 18px 10px;
+  background:var(--sol-creux); border-bottom:1px solid var(--trait);
+  display:flex; gap:9px; align-items:baseline;
+}
+.rappel .e{font-size:14px; flex:0 0 auto}
+.rappel .q{font-size:13px; line-height:1.45; color:var(--craie-2)}
+.p-tete{display:flex; align-items:baseline; gap:9px; margin-bottom:3px}
+.p-emo{font-size:20px}
+.p-nom{font-size:15px; font-weight:600}
+.p-hor{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--craie-3)}
+.p-etage{font-size:12px; color:var(--craie-3); margin-bottom:12px}
+.brut{
+  font-family:var(--mono); font-size:11px; line-height:1.65; color:var(--craie-2);
+  background:#0a0f10; border:1px solid var(--trait); border-left:2px solid var(--trait-fort);
+  padding:8px 10px; border-radius:3px; white-space:pre-wrap; word-break:break-word; margin-bottom:14px;
+}
+.apport{font-size:13.5px; line-height:1.55; margin-bottom:14px}
+.apport em{color:var(--craie-2); font-style:normal}
+.titrillon{font-size:11.5px; color:var(--craie-3); margin:16px 0 6px; border-bottom:1px solid var(--trait); padding-bottom:4px}
+.champs{display:grid; grid-template-columns:auto 1fr; gap:3px 12px; font-size:12.5px}
+.champs dt{color:var(--craie-3); font-family:var(--mono); font-size:11px; padding-top:1px}
+.champs dd{margin:0; font-family:var(--mono); font-size:11.5px; color:var(--craie); word-break:break-word}
+.passage{border-left:2px solid var(--savoir); padding:2px 0 2px 9px; margin-bottom:7px}
+.passage .f{font-family:var(--mono); font-size:11px; color:var(--savoir)}
+.passage .s{font-size:12.5px; color:var(--craie-2)}
+.puce{display:inline-block; padding:1px 6px; border-radius:3px; font-size:11px;
+  font-family:var(--mono); border:1px solid currentColor}
+.p-gratuit{color:var(--gratuit)} .p-jeton{color:var(--jeton)}
+.p-hors2{color:var(--hors)} .p-savoir{color:var(--savoir)}
+
+/* ─── timeline ────────────────────────────────────────────── */
+#frise{
+  flex:0 0 auto;
+  border-top:1px solid var(--trait); background:var(--sol-creux);
+  padding:8px 14px 10px; display:flex; align-items:center; gap:14px;
+}
+.cmd{display:flex; gap:5px; align-items:center}
+.cmd button{
+  width:30px; height:28px; border:1px solid var(--trait); background:var(--sol-haut);
+  border-radius:3px; display:grid; place-items:center; font-size:13px; color:var(--craie-2);
+}
+.cmd button:hover{border-color:var(--trait-fort); color:var(--craie)}
+.cmd button[disabled]{opacity:.35; cursor:default}
+#pas{
+  flex:1; display:flex; gap:3px; overflow-x:auto; padding:3px 2px 6px; min-width:0;
+  scrollbar-width:thin; scrollbar-color:var(--trait) transparent;
+}
+.pas{
+  flex:0 0 auto; border:1px solid var(--trait); background:var(--sol-haut);
+  border-radius:3px; padding:3px 7px; display:flex; align-items:center; gap:5px;
+  font-size:11px; color:var(--craie-3); white-space:nowrap;
+}
+.pas .e{font-size:13px}
+.pas .t{font-family:var(--mono); font-size:10px}
+.pas.vu{color:var(--craie-2); border-color:var(--trait-fort)}
+.pas.ici{color:var(--craie); border-color:currentColor; background:#232e32}
+.pas.meta{opacity:.62}
+
+/* ─── bandeau économie ────────────────────────────────────── */
+#eco{
+  flex:0 0 auto;
+  border-top:1px solid var(--trait); background:var(--sol-creux);
+  padding:9px 18px 11px; display:flex; align-items:flex-end; gap:26px; flex-wrap:wrap;
+}
+.mesure{display:flex; flex-direction:column; gap:1px}
+.mesure .v{font-family:var(--mono); font-size:19px; line-height:1.1; font-variant-numeric:tabular-nums}
+.mesure .l{font-size:11px; color:var(--craie-3)}
+.jauge{flex:1; min-width:190px; max-width:340px}
+.jauge .bar{height:5px; background:#0a0f10; border:1px solid var(--trait); border-radius:3px; overflow:hidden; margin-top:5px}
+.jauge .bar i{display:block; height:100%; background:var(--savoir)}
+.note{font-size:11.5px; color:var(--craie-3); max-width:34ch; line-height:1.4}
+
+/* ─── import ──────────────────────────────────────────────── */
+#voile{
+  position:fixed; inset:0; background:rgba(6,10,11,.82); display:none;
+  place-items:center; padding:24px; z-index:20;
+}
+#voile.on{display:grid}
+.boite{
+  background:var(--sol-haut); border:1px solid var(--trait-fort); border-radius:5px;
+  width:min(760px,100%); max-height:86vh; display:flex; flex-direction:column; padding:20px;
+}
+.boite h2{margin:0 0 4px; font-size:16px; font-weight:600}
+.boite p{margin:0 0 14px; font-size:13px; color:var(--craie-2); max-width:70ch}
+#zone{
+  flex:1; min-height:220px; resize:none; background:#0a0f10; color:var(--craie-2);
+  border:1px solid var(--trait); border-radius:3px; padding:10px;
+  font-family:var(--mono); font-size:11.5px; line-height:1.6;
+}
+#zone.survol{border-color:var(--savoir)}
+.boite footer{display:flex; gap:9px; align-items:center; margin-top:14px}
+.primaire{background:var(--gratuit); color:#0b1512; border:none; border-radius:3px;
+  padding:7px 15px; font-size:13.5px; font-weight:600}
+.secondaire{background:none; border:1px solid var(--trait); border-radius:3px;
+  padding:7px 13px; font-size:13.5px; color:var(--craie-2)}
+.secondaire:hover{border-color:var(--trait-fort); color:var(--craie)}
+#retour{margin-left:auto; font-size:12.5px; color:var(--jeton)}
+
+@media (max-width:1080px){
+  main{grid-template-columns:1fr}
+  #panneau{border-left:none; border-top:1px solid var(--trait); max-height:44vh}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Assistant Potager <span>— cheminement d'une demande</span></h1>
+  <div class="scenarios" id="scenarios"></div>
+  <button class="hbtn" id="btn-import">Charger un log</button>
+</header>
+
+<main>
+  <div id="scene"><svg id="carte" viewBox="-16 74 1312 620" preserveAspectRatio="xMidYMid meet"></svg></div>
+  <aside id="panneau"></aside>
+</main>
+
+<div id="frise">
+  <div class="cmd">
+    <button id="b-debut" title="Début (Origine)">⏮</button>
+    <button id="b-prec" title="Étape précédente (←)">◀</button>
+    <button id="b-play" title="Lecture / pause (Espace)">▶</button>
+    <button id="b-suiv" title="Étape suivante (→)">▶|</button>
+    <button id="b-fin" title="Fin (Fin)">⏭</button>
+  </div>
+  <div id="pas"></div>
+</div>
+
+<div id="eco"></div>
+
+<div id="voile">
+  <div class="boite">
+    <h2>Charger un extrait de log</h2>
+    <p>Colle la sortie du bot (<code>journalctl -u potager-prod-bot</code> ou la console),
+       ou dépose un fichier ici. Le préfixe journalctl est toléré. Chaque
+       <code>💬 MESSAGE TEXTE</code> ou <code>🎤 TRANSCRIPTION</code> ouvre un scénario.</p>
+    <textarea id="zone" spellcheck="false" placeholder="2026-09-09 17:41:45 │ INFO │ 💬 MESSAGE TEXTE  : comment ajouter une note ?&#10;…"></textarea>
+    <footer>
+      <button class="primaire" id="b-lire">Lire ce log</button>
+      <button class="secondaire" id="b-fichier">Ouvrir un fichier…</button>
+      <button class="secondaire" id="b-exemple">Remettre l'exemple</button>
+      <button class="secondaire" id="b-fermer">Annuler</button>
+      <span id="retour"></span>
+    </footer>
+    <input type="file" id="fichier" accept=".log,.txt,.json,text/*" hidden>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════
+   1. LOG D'EXEMPLE — traces réelles du 2026-09-09
+   ════════════════════════════════════════════════════════════ */
+const LOG_EXEMPLE = `2026-09-09 17:41:45 │ INFO │ 💬 MESSAGE TEXTE  : comment ajouter une note ?
+2026-09-09 17:41:46 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=516 out=60 cache=0 │ 416 ms │ issue=ok
+2026-09-09 17:41:46 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '7416', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '4.38s'}
+2026-09-09 17:41:46 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 437 ms │ 'comment ajouter une note ?'
+2026-09-09 17:41:46 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-09 17:41:46 │ INFO │ 🔍 QUESTION       : comment ajouter une note ?
+2026-09-09 17:41:46 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 5 ms │ 'comment ajouter une note ?'
+2026-09-09 17:41:46 │ INFO │ 📚 SAVOIR         │ issue=transmis │ score=0.987 │ passages=3 │ 22 ms │ 1·guide assistant.md::11. Observer et noter ┊ 2·notes-et-observations.md::Retrouver une note écrite les saisons  ┊ 3·notes-et-observations.md::Quand il y a beaucoup de notes │ 'comment ajouter une note ?'
+2026-09-09 17:41:46 │ INFO │ ↪️ ROUTEUR REMONTÉE : fiche indicatif, non servie telle quelle (score=0.99) → raisonnement (1 saut) : 'comment ajouter une note ?'
+2026-09-09 17:41:47 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=26 │ in=2248 out=164 cache=0 │ 807 ms │ issue=ok
+2026-09-09 17:41:47 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '5002', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '22.485s'}
+2026-09-09 17:41:47 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=llm │ fragment=data/connaissance/guide user/guide assistant.md#11-11-observer-et-noter │ 'comment ajouter une note ?'
+2026-09-09 17:41:47 │ INFO │ 💡 RÉPONSE        : Pour ajouter une note, lance simplement la commande \`/note\` ou dicte une phrase du type « Je veux noter une observation » (ou « Ajouter une note »). Le bot affichera alors les quatre catégories — 🔍 Ob...
+2026-09-09 17:43:40 │ INFO │ 💬 MESSAGE TEXTE  : comment ajouter une note ?
+2026-09-09 17:43:40 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 9 ms │ 'comment ajouter une note ?'
+2026-09-09 17:43:40 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-09 17:43:40 │ INFO │ 🔍 QUESTION       : comment ajouter une note ?
+2026-09-09 17:43:40 │ INFO │ ⚡ CACHE QUESTION │ servie=figee │ source=llm │ 0 jeton │ 'comment ajouter une note ?'
+2026-09-09 17:43:40 │ INFO │ 💡 RÉPONSE        : Pour ajouter une note, lance simplement la commande \`/note\` ou dicte une phrase du type « Je veux noter une observation » (ou « Ajouter une note »). Le bot affichera alors les quatre catégories — 🔍 Ob...
+2026-09-09 17:44:02 │ INFO │ 💬 MESSAGE TEXTE  : comment ajouter une note ?
+2026-09-09 17:44:02 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 4 ms │ 'comment ajouter une note ?'
+2026-09-09 17:44:02 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-09 17:44:02 │ INFO │ 🔍 QUESTION       : comment ajouter une note ?
+2026-09-09 17:44:03 │ INFO │ ⚡ CACHE QUESTION │ servie=figee │ source=llm │ 0 jeton │ 'comment ajouter une note ?'
+2026-09-09 17:44:03 │ INFO │ 💡 RÉPONSE        : Pour ajouter une note, lance simplement la commande \`/note\` ou dicte une phrase du type « Je veux noter une observation » (ou « Ajouter une note »). Le bot affichera alors les quatre catégories — 🔍 Ob...
+2026-09-09 17:45:21 │ INFO │ 💬 MESSAGE TEXTE  : il me reste combien de tomate ?
+2026-09-09 17:45:24 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=1050 out=32 cache=0 │ 2930 ms │ issue=ok
+2026-09-09 17:45:24 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6786', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '9.105s'}
+2026-09-09 17:45:24 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'il me reste combien de tomate ?'
+2026-09-09 17:45:24 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-09-09 17:45:24 │ INFO │ 🔍 QUESTION       : il me reste combien de tomate ?
+2026-09-09 17:45:24 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'il me reste combien de tomate ?'
+2026-09-09 17:45:24 │ INFO │ 📐 GABARIT SQL     │ famille=stock_courant       │ donnee=oui │ 0 jeton │ 'il me reste combien de tomate ?'
+2026-09-09 17:45:24 │ INFO │ [US-096 CA1] repondre_question potager_id=26 famille=stock_courant tokens_groq=0 donnee=oui
+2026-09-09 17:45:25 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=template_sql │ cle=stock_courant|tomate|        │ 'il me reste combien de tomate ?'
+2026-09-09 17:45:25 │ INFO │ 💡 RÉPONSE        : Côté tomate : 12 plants toujours en place — la cueillette ne les diminue pas. Rendement cumulé : 10 kg.
+2026-09-09 17:45:37 │ INFO │ 💬 MESSAGE TEXTE  : il me reste combien de courges ?
+2026-09-09 17:45:37 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=1051 out=42 cache=0 │ 243 ms │ issue=ok
+2026-09-09 17:45:37 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6881', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '8.392s'}
+2026-09-09 17:45:37 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'il me reste combien de courges ?'
+2026-09-09 17:45:37 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-09-09 17:45:37 │ INFO │ 🔍 QUESTION       : il me reste combien de courges ?
+2026-09-09 17:45:37 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'il me reste combien de courges ?'
+2026-09-09 17:45:37 │ INFO │ 📐 GABARIT SQL     │ famille=stock_courant       │ donnee=aucune │ 0 jeton │ 'il me reste combien de courges ?'
+2026-09-09 17:45:37 │ INFO │ [US-096 CA1] repondre_question potager_id=26 famille=stock_courant tokens_groq=0 donnee=aucune
+2026-09-09 17:45:37 │ INFO │ 💡 RÉPONSE        : Je n'ai aucun pied de courge enregistré dans ce potager.
+2026-09-09 18:11:52 │ INFO │ 💬 MESSAGE TEXTE  : récolte de 2kg de tomate
+2026-09-09 18:11:53 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=1052 out=26 cache=0 │ 499 ms │ issue=ok
+2026-09-09 18:11:53 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6748', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '9.39s'}
+2026-09-09 18:11:53 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=ACTION            │ confiance=1.00 │ 0 ms │ 'récolte de 2kg de tomate'
+2026-09-09 18:11:53 │ INFO │ 🔤 PARSEUR DÉTERM. : reconnu sans modèle | geste=recolte culture=tomate qte=2.0 kg parcelle=None date=None
+2026-09-09 18:11:53 │ INFO │ 🤖 PARSING        : [{"action": "recolte", "culture": "tomate", "variete": null, "quantite": 2.0, "unite": "kg", "parcelle": null, "rang": null, "duree_minutes": null, "traitement": null, "date": null, "commentaire": null, "nb_graines_semees": null, "nb_plants_godets": null, "origine_parsing": "deterministe", "date_source": "presumee"}]
+2026-09-09 18:11:53 │ INFO │ [recolte] Variété 'cerise' auto-déduite pour 'tomate'
+2026-09-09 18:11:53 │ INFO │ [US-021] Parcelle auto-détectée : 'planche tomate' pour 'tomate'
+2026-09-09 18:11:53 │ INFO │ [US-021] Confirmation demandée — user_id=8063902186, 1 item(s)
+2026-09-09 18:11:55 │ INFO │ [US-021] Confirmation reçue — user_id=8063902186, 1 item(s)
+2026-09-09 18:11:55 │ INFO │ ♻️ CACHE QUESTION │ invalidé=2 │ potager=26 │ culture=tomate │ action=recolte
+2026-09-09 18:11:55 │ INFO │ 💾 DB SAVE        : id=479 | action=recolte | culture=tomate | qte=2.0 kg | parcelle=61 | date=2026-09-09 00:00:00
+2026-09-09 18:12:53 │ INFO │ 🎤 TRANSCRIPTION  : Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?
+2026-09-09 18:12:53 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=1061 out=38 cache=0 │ 258 ms │ issue=ok
+2026-09-09 18:12:53 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6739', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '9.457s'}
+2026-09-09 18:12:53 │ INFO │ 🔤 PARSEUR DÉTERM. : repli modèle — aucun geste reconnu en tête de phrase | texte="Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?"
+2026-09-09 18:12:54 │ INFO │ 🔌 LLM parsing        │ modele=openai/gpt-oss-120b │ potager=26 │ in=2394 out=93 cache=0 │ 629 ms │ issue=ok
+2026-09-09 18:12:54 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '4516', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '26.13s'}
+2026-09-09 18:12:54 │ INFO │ [parse_message] intent='INTERROGER' culture='tomate' action_filtre='None' items=0
+2026-09-09 18:12:54 │ INFO │ ❓ QUESTION DIRECTE : 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?' → traitement immédiat
+2026-09-09 18:12:54 │ INFO │ 🔍 QUESTION       : Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?
+2026-09-09 18:12:54 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=26 │ in=529 out=51 cache=0 │ 241 ms │ issue=ok
+2026-09-09 18:12:54 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '3822', 'x-ratelimit-reset-requests': '5m45.6s', 'x-ratelimit-reset-tokens': '31.335s'}
+2026-09-09 18:12:54 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 259 ms │ 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?'
+2026-09-09 18:12:54 │ INFO │ 📚 SAVOIR         │ issue=transmis │ score=0.940 │ passages=3 │ 16 ms │ 1·tomate-problemes.md::Des petites bêtes vertes ou noires col ┊ 2·tomate-conduite-recolte.md::Retirer un gourmand de tomate sans ouv ┊ 3·tomate-problemes.md::Mes semis de tomate font des tiges tou │ 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles '
+2026-09-09 18:12:54 │ INFO │ ↪️ ROUTEUR REMONTÉE : fiche indicatif, non servie telle quelle (score=0.94) → raisonnement (1 saut) : 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles de tomates ?'
+2026-09-09 18:12:55 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=26 │ in=1019 out=197 cache=0 │ 1115 ms │ issue=ok
+2026-09-09 18:12:55 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '2961', 'x-ratelimit-reset-requests': '7m12s', 'x-ratelimit-reset-tokens': '37.792s'}
+2026-09-09 18:12:55 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=llm │ fragment=data/connaissance/agronomie/tomate-problemes.md#03-des-petites-betes-vertes-ou-noires-collent-aux-jeunes-pousse │ 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles '
+2026-09-09 18:12:55 │ INFO │ 💡 RÉPONSE        : Les pucerons apparaissent surtout quand les jeunes pousses sont très tendres et que le feuillage est dense ; ils s'y installent en colonies et laissent un miellat collant, souvent fréquenté par des fo...`;
+
+/* ════════════════════════════════════════════════════════════
+   2. TOPOLOGIE DE LA CASCADE
+   ════════════════════════════════════════════════════════════ */
+const NOEUDS = {
+  entree:      {x:  80, y:340, emo:"💬", nom:"Entrée",            sub:"Telegram",       ton:"neutre"},
+  intent:      {x: 250, y:340, emo:"🔌", nom:"Intention",         sub:"bot.py",         ton:"hors", hors:true},
+  routeur:     {x: 430, y:340, emo:"🧭", nom:"Routeur",           sub:"llm/routeur",    ton:"gratuit"},
+  cache_lec:   {x: 620, y:120, emo:"⚡", nom:"Cache — lecture",   sub:"étage 0bis",     ton:"gratuit"},
+  gabarit:     {x: 620, y:250, emo:"📐", nom:"Gabarit SQL",       sub:"étage 1",        ton:"gratuit"},
+  savoir:      {x: 620, y:400, emo:"📚", nom:"Savoir",            sub:"étage 2 · RAG",  ton:"savoir"},
+  parseur:     {x: 620, y:590, emo:"🔤", nom:"Parseur",           sub:"étage 0",        ton:"gratuit"},
+  remontee:    {x: 810, y:400, emo:"↪️", nom:"Remontée",          sub:"1 saut",         ton:"remontee"},
+  parsing_llm: {x: 810, y:590, emo:"🔌", nom:"Parsing modèle",    sub:"repli",          ton:"hors", hors:true},
+  llm:         {x: 990, y:400, emo:"🔌", nom:"Raisonnement",      sub:"étage 3",        ton:"jeton"},
+  cache_ecr:   {x: 990, y:250, emo:"🧠", nom:"Cache — écriture",  sub:"mémorisation",   ton:"gratuit"},
+  cache_inv:   {x: 990, y:590, emo:"♻️", nom:"Invalidation",      sub:"cache purgé",    ton:"gratuit"},
+  db:          {x:1170, y:590, emo:"💾", nom:"Enregistrement",    sub:"PostgreSQL",     ton:"gratuit"},
+  reponse:     {x:1170, y:120, emo:"💡", nom:"Réponse",           sub:"Telegram",       ton:"neutre"},
+};
+const ARETES = [
+  ["entree","intent","h"], ["entree","routeur","sous"], ["intent","routeur","h"],
+  ["routeur","cache_lec","h"], ["routeur","gabarit","h"], ["routeur","savoir","h"],
+  ["routeur","parseur","h"],
+  ["savoir","remontee","h"], ["remontee","llm","h"],
+  ["llm","cache_ecr","haut"], ["gabarit","cache_ecr","h"],
+  ["cache_ecr","reponse","h"], ["cache_lec","reponse","h"], ["gabarit","reponse","h"],
+  ["parseur","parsing_llm","h"], ["parseur","cache_inv","sous"],
+  ["parsing_llm","routeur","arriere"], ["cache_inv","db","h"],
+];
+const TON = {gratuit:"var(--gratuit)", jeton:"var(--jeton)", savoir:"var(--savoir)",
+             remontee:"var(--remontee)", hors:"var(--hors)", neutre:"var(--neutre)"};
+const DW = 75, DH = 28;   // demi-largeur / demi-hauteur d'un nœud
+
+/* ════════════════════════════════════════════════════════════
+   3. PARSEUR DE LOG
+   ════════════════════════════════════════════════════════════ */
+const RE_LIGNE = /(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})\s*│\s*([A-Z]+)\s*│\s*([\s\S]*)$/;
+const nb  = (s,k)=>{const m=s.match(new RegExp(k+"=(-?[\\d.]+)")); return m?parseFloat(m[1]):null;};
+const mot = (s,k)=>{const m=s.match(new RegExp(k+"=([^│|\\s]+)")); return m?m[1]:null;};
+const jusquaBarre = (s,k)=>{const m=s.match(new RegExp(k+"=([\\s\\S]*?)\\s*│")); return m?m[1].trim():null;};
+const duree = s=>{const m=s.match(/│\s*(\d+)\s*ms\s*│/); return m?parseInt(m[1]):null;};
+const cite  = s=>{const m=s.match(/'([^']*)'\s*$/); return m?m[1]:null;};
+
+function typerLigne(msg){
+  const t = m => msg.indexOf(m) !== -1;
+  if (t("MESSAGE TEXTE"))     return "entree_texte";
+  if (t("TRANSCRIPTION"))     return "entree_voix";
+  if (t("LLM DEBIT"))         return "debit";
+  if (t("LLM classification"))return "classif";
+  if (t("LLM parsing"))       return "parsing_llm";
+  if (t("LLM question"))      return "llm";
+  if (t("ROUTEUR REMONTÉE"))  return "remontee";
+  if (t("ROUTEUR"))           return "routeur";
+  // avant SAVOIR : « nature=QUESTION_SAVOIR » apparaît aussi dans les lignes de reroutage
+  if (t("QUESTION AUTO")||t("QUESTION DIRECTE")) return "reroutage";
+  if (t("PARSEUR DÉTERM"))    return "parseur";
+  if (t("PARSING"))           return "parseur_json";
+  if (t("GABARIT SQL"))       return "gabarit";
+  if (t("SAVOIR"))            return "savoir";
+  if (t("CACHE QUESTION")){
+    if (t("mémorisé=")) return "cache_ecr";
+    if (t("servie="))   return "cache_lec";
+    if (t("invalidé=")) return "cache_inv";
+    return "cache_autre";
+  }
+  if (t("DB SAVE"))           return "db";
+  if (t("RÉPONSE"))           return "reponse";
+  if (t("auto-déduite")||t("auto-détectée"))     return "enrichissement";
+  if (t("Confirmation demandée"))                return "confirm_dem";
+  if (t("Confirmation reçue"))                   return "confirm_rec";
+  if (/^🔍/.test(msg)||t("QUESTION       :"))    return "question";
+  return "meta";
+}
+
+function parseLog(texte){
+  const lignes = [];
+  for (const brute of texte.split(/\r?\n/)){
+    const m = brute.match(RE_LIGNE);
+    if (!m) continue;
+    lignes.push({ts:m[1].slice(11), niveau:m[2], msg:m[3].trim(), brut:brute.trim(),
+                 type:typerLigne(m[3])});
+  }
+  // découpage en traces sur les ouvertures
+  const traces = []; let cour = null;
+  for (const l of lignes){
+    if (l.type === "entree_texte" || l.type === "entree_voix"){
+      cour = {lignes:[l], voix:l.type === "entree_voix"};
+      traces.push(cour);
+    } else if (cour){ cour.lignes.push(l); }
+  }
+  return traces.map(construireTrace).filter(t => t.pas.length);
+}
+
+/* — désambiguïsation routeur / bot.py, cf. règle métier —
+   Une ligne « 🔌 LLM classification » appartient au routeur ssi la
+   prochaine ligne non-📉 est « 🧭 ROUTEUR │ origine=modele ». */
+function classifEstRouteur(lignes, i){
+  for (let j = i + 1; j < lignes.length; j++){
+    const t = lignes[j].type;
+    if (t === "debit") continue;
+    return t === "routeur" && mot(lignes[j].msg, "origine") === "modele";
+  }
+  return false;
+}
+
+const NOMS = {
+  entree_texte:["💬","Message texte","Entrée"], entree_voix:["🎤","Transcription vocale","Entrée"],
+  classif_hors:["🔌","Classifieur d'intention","Hors cascade"],
+  classif_rout:["🔌","Classification du routeur","Routeur"],
+  routeur:["🧭","Aiguillage","Routeur"], parseur:["🔤","Parseur déterministe","Étage 0"],
+  parseur_json:["🤖","Résultat du parsing","Étage 0"],
+  enrichissement:["✨","Enrichissement","Étage 0"],
+  confirm_dem:["⏸","Confirmation demandée","Étage 0"], confirm_rec:["✔","Confirmation reçue","Étage 0"],
+  parsing_llm:["🔌","Parsing par modèle","Hors cascade"],
+  cache_lec:["⚡","Cache — lecture","Étage 0bis"], cache_ecr:["🧠","Cache — écriture","Étage 0bis"],
+  cache_inv:["♻️","Cache — invalidation","Étage 0bis"],
+  gabarit:["📐","Gabarit SQL","Étage 1"], savoir:["📚","Recherche dans le référentiel","Étage 2"],
+  remontee:["↪️","Remontée d'étage","Étage 2 → 3"], llm:["🔌","Raisonnement","Étage 3"],
+  db:["💾","Enregistrement","PostgreSQL"], reponse:["💡","Réponse","Sortie"],
+  debit:["📉","Débit Groq","Quotas"], reroutage:["❓","Reroutage","Aiguillage"],
+  question:["🔍","Question isolée","Aiguillage"], meta:["·","Journal","—"],
+};
+
+function construireTrace(src){
+  const L = src.lignes, pas = [];
+  let jetonsCascade = 0, jetonsHors = 0, msMesure = 0, restant = null, limite = null;
+
+  L.forEach((l, i) => {
+    let type = l.type, noeud = null, champs = [], apport = "", extra = null, cout = 0, bucket = null;
+    const m = l.msg;
+
+    switch (type){
+      case "entree_texte": case "entree_voix":
+        noeud = "entree";
+        extra = {texte:(m.split(/:\s/).slice(1).join(": ")||"").trim()};
+        apport = src.voix
+          ? "Le vocal est transcrit par Whisper avant tout traitement. La transcription est le vrai point de départ de la trace."
+          : "Point d'entrée. Rien n'a encore été décidé sur la nature du message.";
+        break;
+
+      case "classif": {
+        const rout = classifEstRouteur(L, i);
+        type = rout ? "classif_rout" : "classif_hors";
+        noeud = rout ? "routeur" : "intent";
+        cout = (nb(m,"in")||0) + (nb(m,"out")||0);
+        bucket = rout ? "cascade" : "hors";
+        champs = [["modèle",mot(m,"modele")],["potager",mot(m,"potager")],
+                  ["in",nb(m,"in")],["out",nb(m,"out")],["cache",nb(m,"cache")],
+                  ["durée",duree(m)+" ms"],["issue",mot(m,"issue")]];
+        apport = rout
+          ? `Aucune règle déterministe n'a su trancher : le modèle arbitre entre ACTION, QUESTION_DATA, QUESTION_SAVOIR et QUESTION_HYBRIDE. <strong>${cout} jetons</strong>, dans le périmètre de la cascade.`
+          : `Décide si le message est une action, une question ou une note — <em>avant</em> l'aiguillage. <strong>${cout} jetons hors cascade</strong> : ce coût est payé quel que soit l'étage qui répondra ensuite.`;
+        break;
+      }
+
+      case "routeur": {
+        noeud = "routeur";
+        const o = mot(m,"origine"), n = mot(m,"nature"), c = mot(m,"confiance");
+        champs = [["origine",o],["nature",n],["confiance",c],["durée",duree(m)+" ms"]];
+        extra = {origine:o, nature:n};
+        apport = o === "regle"
+          ? `Un motif du catalogue déterministe a tranché : <strong>${n}</strong>, confiance ${c}. Aucun modèle appelé, <strong>0 jeton, ${duree(m)} ms</strong>.`
+          : o === "cache"
+          ? `La classification de cette question était déjà connue : relue en <strong>${duree(m)} ms</strong> pour <strong>0 jeton</strong>. C'est le cache de routage, distinct du cache de réponses.`
+          : `Décision rendue par le modèle (voir l'appel précédent) : <strong>${n}</strong>, confiance ${c}.`;
+        break;
+      }
+
+      case "parseur": {
+        noeud = "parseur";
+        if (m.indexOf("reconnu sans modèle") !== -1){
+          const seg = m.split("|").pop().trim();
+          champs = seg.split(/\s+(?=\w+=)/).map(p => p.split("="));
+          apport = "Le geste est reconnu par grammaire, <strong>sans aucun appel modèle</strong>. Les champs ci-dessous sont extraits du texte brut — c'est ce que le parseur apporte à la réponse.";
+        } else {
+          const mo = m.match(/repli modèle — (.*?)\s*\|/);
+          champs = [["repli", mo ? mo[1] : "—"]];
+          apport = "Aucun geste reconnu en tête de phrase : le parsing bascule sur le modèle. C'est le seul cas où l'étage 0 échoue et où l'on paie du parsing.";
+        }
+        break;
+      }
+
+      case "parseur_json": {
+        noeud = "parseur";
+        try {
+          const arr = JSON.parse(m.slice(m.indexOf("[")));
+          extra = {json:arr[0]};
+          champs = Object.entries(arr[0]).filter(([,v]) => v !== null).map(([k,v]) => [k, String(v)]);
+        } catch(e){ champs = [["brut", m.slice(0,160)]]; }
+        apport = "Structure normalisée transmise à l'enregistrement. <code>origine_parsing</code> dit qui a produit ces champs : <code>deterministe</code> = 0 jeton.";
+        break;
+      }
+
+      case "enrichissement": {
+        noeud = "parseur";
+        const v = m.match(/Variété '(.+?)' auto-déduite pour '(.+?)'/);
+        const p = m.match(/Parcelle auto-détectée : '(.+?)' pour '(.+?)'/);
+        if (v) champs = [["variété",v[1]],["culture",v[2]],["source","historique du potager"]];
+        if (p) champs = [["parcelle",p[1]],["culture",p[2]],["source","occupation courante"]];
+        apport = "Champ absent de la phrase, complété depuis les données du potager. L'utilisateur n'a pas eu à le dire, et aucun modèle n'a été sollicité.";
+        break;
+      }
+
+      case "confirm_dem": noeud = "parseur";
+        apport = "Le bot demande validation avant d'écrire. L'attente qui suit est du temps utilisateur, pas du temps machine."; break;
+      case "confirm_rec": noeud = "parseur";
+        apport = "Validation reçue. L'écriture peut avoir lieu."; break;
+
+      case "parsing_llm":
+        noeud = "parsing_llm";
+        cout = (nb(m,"in")||0) + (nb(m,"out")||0); bucket = "hors";
+        champs = [["modèle",mot(m,"modele")],["in",nb(m,"in")],["out",nb(m,"out")],["durée",duree(m)+" ms"]];
+        apport = `Parsing par modèle, en repli du parseur déterministe. <strong>${cout} jetons hors cascade</strong>.`;
+        break;
+
+      case "gabarit": {
+        noeud = "gabarit";
+        const f = mot(m,"famille"), d = mot(m,"donnee");
+        champs = [["famille",f],["donnée",d],["jetons","0"]];
+        extra = {donnee:d};
+        apport = d === "oui"
+          ? `Requête SQL pré-écrite de la famille <code>${f}</code>, scopée au potager. Réponse exacte et chiffrée pour <strong>0 jeton</strong> — là où un LLM aurait approximé.`
+          : `Le gabarit <code>${f}</code> s'exécute et répond honnêtement : aucune donnée. <strong>Rien n'est mémorisé</strong> — un potager vide aujourd'hui ne le sera pas demain.`;
+        break;
+      }
+
+      case "savoir": {
+        noeud = "savoir";
+        const sc = nb(m,"score"), np = nb(m,"passages");
+        const bloc = m.match(/passages=\d+\s*│\s*\d+\s*ms\s*│\s*([\s\S]*?)\s*│\s*'/);
+        const passages = bloc ? bloc[1].split("┊").map(p => {
+          const mm = p.trim().match(/^\d+·(.*?)::(.*)$/);
+          return mm ? {fichier:mm[1].trim(), section:mm[2].trim()} : {fichier:p.trim(), section:""};
+        }) : [];
+        extra = {passages};
+        champs = [["issue",mot(m,"issue")],["score",sc],["passages",np],["durée",duree(m)+" ms"]];
+        apport = `Recherche plein texte dans le référentiel, filtrée sur ce potager. <strong>${np} passages remontés en ${duree(m)} ms pour 0 jeton.</strong> Le référentiel ne rédige jamais : il fournit du contexte et un score.`;
+        break;
+      }
+
+      case "remontee": {
+        noeud = "remontee";
+        const sc = m.match(/score=([\d.]+)/), sa = m.match(/\((\d+) saut/);
+        const mo = m.match(/REMONTÉE\s*:\s*(.*?)\s*\(score/);
+        champs = [["motif",mo?mo[1]:"—"],["score",sc?sc[1]:"—"],["sauts",sa?sa[1]:"—"]];
+        apport = "Score jugé insuffisant pour servir la fiche telle quelle. La cascade <strong>remonte d'un étage</strong> plutôt que de répondre à côté — c'est le garde-fou contre le mauvais routage.";
+        break;
+      }
+
+      case "llm":
+        noeud = "llm";
+        cout = (nb(m,"in")||0) + (nb(m,"out")||0); bucket = "cascade";
+        champs = [["modèle",mot(m,"modele")],["in",nb(m,"in")],["out",nb(m,"out")],["durée",duree(m)+" ms"]];
+        apport = `Rédaction à partir du contexte déjà rassemblé. <strong>${cout} jetons</strong> — le seul étage qui coûte, atteint en dernier recours.`;
+        break;
+
+      case "cache_ecr": {
+        noeud = "cache_ecr";
+        const kind = mot(m,"mémorisé"), frag = jusquaBarre(m,"fragment"), cle = jusquaBarre(m,"cle");
+        champs = [["type",kind],["source",mot(m,"source")]];
+        if (frag) champs.push(["fragment",frag]);
+        if (cle)  champs.push(["clé",cle]);
+        apport = kind === "figee"
+          ? "Réponse mémorisée telle quelle avec son ancre dans le référentiel. <strong>Le prochain passage coûtera 0 jeton.</strong>"
+          : "Motif mémorisé sous forme de gabarit : la structure et le routage sont figés, les valeurs restent recalculées en SQL. La réponse reste juste, la décision est gratuite.";
+        break;
+      }
+
+      case "cache_lec":
+        noeud = "cache_lec";
+        champs = [["servie",mot(m,"servie")],["source",mot(m,"source")],["jetons","0"]];
+        apport = "Question déjà rencontrée : la réponse est servie depuis le cache. <strong>0 jeton, aucun étage traversé.</strong>";
+        break;
+
+      case "cache_inv":
+        noeud = "cache_inv";
+        champs = [["invalidées",mot(m,"invalidé")],["potager",mot(m,"potager")],
+                  ["culture",mot(m,"culture")],["action",mot(m,"action")]];
+        apport = `La saisie rend obsolètes les réponses déjà mémorisées sur cette culture : <strong>${mot(m,"invalidé")} entrées purgées</strong>. Sans ça, le cache servirait un stock périmé avec assurance.`;
+        break;
+
+      case "db":
+        noeud = "db";
+        champs = m.split(":").slice(1).join(":").split("|").map(p => {
+          const q = p.split("="); return [q[0].trim(), q.slice(1).join("=").trim()];
+        });
+        apport = "Événement écrit en base, scopé au potager.";
+        break;
+
+      case "reponse":
+        noeud = "reponse";
+        extra = {texte:m.slice(m.indexOf(":") + 1).trim()};
+        apport = "Réponse envoyée sur Telegram.";
+        break;
+
+      case "debit": {
+        restant = parseInt((m.match(/'x-ratelimit-remaining-tokens':\s*'(\d+)'/)||[])[1] || restant);
+        limite  = parseInt((m.match(/'x-ratelimit-limit-tokens':\s*'(\d+)'/)||[])[1] || limite);
+        const rr = (m.match(/'x-ratelimit-reset-tokens':\s*'([^']+)'/)||[])[1];
+        champs = [["jetons restants",restant],["plafond",limite],["réarmement",rr]];
+        apport = "Headers de quota renvoyés par Groq après l'appel. C'est la mesure qui compte au niveau du compte, pas celle de la cascade.";
+        break;
+      }
+
+      case "reroutage": case "question": case "meta": default:
+        apport = "Ligne de journal, sans effet sur le chemin.";
+        break;
+    }
+
+    if (bucket === "cascade") jetonsCascade += cout;
+    if (bucket === "hors")    jetonsHors    += cout;
+    const d = duree(m); if (d) msMesure += d;
+
+    const n = NOMS[type] || NOMS.meta;
+    pas.push({type, noeud, emo:n[0], nom:n[1], etage:n[2], ts:l.ts, brut:l.brut,
+              champs:champs.filter(c => c && c[1] !== null && c[1] !== undefined && c[1] !== "null"),
+              apport, extra, cout, bucket});
+  });
+
+  const ouvre = pas[0];
+  const rep   = pas.filter(p => p.type === "reponse").pop();
+  const q     = (ouvre.extra && ouvre.extra.texte) || "—";
+  return {
+    titre:q, voix:src.voix, pas, jetonsCascade, jetonsHors,
+    total:jetonsCascade + jetonsHors, msMesure, restant, limite,
+    reponse:rep ? rep.extra.texte : null,
+    horaire:ouvre.ts,
+    cle:q.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ ]/g,"").replace(/\s+/g," ").trim(),
+  };
+}
+
+/* ════════════════════════════════════════════════════════════
+   4. ÉTAT + RENDU
+   ════════════════════════════════════════════════════════════ */
+let TRACES = [], iTrace = 0, iPas = 0, minuteur = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* — géométrie des arêtes — */
+function chemin(a, b, forme){
+  const A = NOEUDS[a], B = NOEUDS[b];
+  if (!A || !B) return "";
+  if (forme === "sous"){
+    const y = Math.max(A.y, B.y) + 92;
+    return `M ${A.x} ${A.y+DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+  }
+  if (forme === "arriere"){
+    const y = Math.min(A.y, B.y) - 78;
+    return `M ${A.x} ${A.y-DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+  }
+  if (forme === "haut" || (Math.abs(A.x - B.x) < 12 && forme !== "h")){
+    return B.y < A.y
+      ? `M ${A.x} ${A.y-DH} C ${A.x} ${A.y-DH-46} ${B.x} ${B.y+DH+46} ${B.x} ${B.y+DH}`
+      : `M ${A.x} ${A.y+DH} C ${A.x} ${A.y+DH+46} ${B.x} ${B.y-DH-46} ${B.x} ${B.y-DH}`;
+  }
+  if (B.x <= A.x){   // repli automatique vers l'arrière
+    const y = Math.min(A.y, B.y) - 78;
+    return `M ${A.x} ${A.y-DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+  }
+  const x1 = A.x + DW, x2 = B.x - DW, mid = (x1 + x2) / 2;
+  return `M ${x1} ${A.y} C ${mid} ${A.y} ${mid} ${B.y} ${x2} ${B.y}`;
+}
+
+function tonDuPas(p){
+  if (!p || !p.noeud) return "neutre";
+  if (p.noeud === "routeur"){
+    const o = p.extra && p.extra.origine;
+    return (o === "modele" || p.type === "classif_rout") ? "jeton" : "gratuit";
+  }
+  return NOEUDS[p.noeud] ? NOEUDS[p.noeud].ton : "neutre";
+}
+
+function dessinerGraphe(){
+  const svg = $("#carte");
+  const tr  = TRACES[iTrace];
+  const vus = new Map();               // noeud → ton
+  const arcs = new Set();
+  let precedent = null, courant = null;
+
+  tr.pas.forEach((p, k) => {
+    if (k > iPas || !p.noeud) return;
+    vus.set(p.noeud, tonDuPas(p));
+    if (precedent && precedent !== p.noeud) arcs.add(precedent + ">" + p.noeud);
+    if (precedent !== p.noeud) precedent = p.noeud;
+    courant = p.noeud;
+  });
+
+  const decl = new Set(ARETES.map(a => a[0] + ">" + a[1]));
+  let h = "";
+
+  // enclos "hors cascade"
+  h += `<rect class="bandeau-hors" x="160" y="278" width="180" height="124"/>`;
+  h += `<text class="bandeau-txt" x="250" y="420" text-anchor="middle">hors cascade</text>`;
+  h += `<rect class="bandeau-hors" x="720" y="528" width="180" height="124"/>`;
+  h += `<text class="bandeau-txt" x="810" y="670" text-anchor="middle">hors cascade</text>`;
+
+  // arêtes déclarées
+  for (const [a,b,f] of ARETES){
+    const on = arcs.has(a + ">" + b);
+    const st = on ? `stroke:${TON[vus.get(b)||"neutre"]}` : "";
+    h += `<path class="arete${on?" on":""}" style="${st}" d="${chemin(a,b,f)}"/>`;
+  }
+  // arêtes non déclarées, apparues dans ce log
+  for (const arc of arcs){
+    if (decl.has(arc)) continue;
+    const [a,b] = arc.split(">");
+    h += `<path class="arete on dyn" style="stroke:${TON[vus.get(b)||"neutre"]}" d="${chemin(a,b,"auto")}"/>`;
+  }
+  // nœuds
+  for (const [id,n] of Object.entries(NOEUDS)){
+    const ton = vus.get(id);
+    const cls = "noeud" + (ton ? " vu" : "") + (id === courant ? " ici" : "") + (n.hors ? " hors" : "");
+    h += `<g class="${cls}" style="color:${TON[ton||"neutre"]}">
+      <rect x="${n.x-DW}" y="${n.y-DH}" width="${DW*2}" height="${DH*2}"/>
+      <text class="emo" x="${n.x-DW+13}" y="${n.y}">${n.emo}</text>
+      <text class="nom" x="${n.x-DW+40}" y="${n.y-8}">${esc(n.nom)}</text>
+      <text class="sub" x="${n.x-DW+40}" y="${n.y+10}">${esc(n.sub)}</text>
+    </g>`;
+  }
+  svg.innerHTML = h;
+}
+
+function dessinerFrise(){
+  const tr = TRACES[iTrace], t0 = tr.pas[0].ts;
+  $("#pas").innerHTML = tr.pas.map((p,k) => {
+    const cls = "pas" + (k < iPas ? " vu" : "") + (k === iPas ? " ici" : "")
+              + (p.noeud ? "" : " meta");
+    const rel = secondes(p.ts) - secondes(t0);
+    return `<button class="${cls}" data-k="${k}" style="color:${k<=iPas?TON[tonDuPas(p)]:""}"
+      title="${esc(p.nom)}"><span class="e">${p.emo}</span><span class="t">+${rel}s</span></button>`;
+  }).join("");
+  const ici = $("#pas .ici"); if (ici) ici.scrollIntoView({block:"nearest", inline:"center"});
+}
+const secondes = t => {const [h,m,s] = t.split(":").map(Number); return h*3600 + m*60 + s;};
+
+function dessinerPanneau(){
+  const tr = TRACES[iTrace], p = tr.pas[iPas];
+  let h = `<div class="rappel"><span class="e">${tr.voix?"🎤":"💬"}</span>
+      <span class="q">${esc(tr.titre)}</span></div>
+    <div class="p-tete"><span class="p-emo">${p.emo}</span>
+      <span class="p-nom">${esc(p.nom)}</span><span class="p-hor">${p.ts}</span></div>
+    <div class="p-etage">${esc(p.etage)}${p.cout ? ` · <span class="puce ${p.bucket==="hors"?"p-hors2":"p-jeton"}">${p.cout} jetons</span>` : ""}</div>
+    <div class="brut">${esc(p.brut)}</div>
+    <div class="apport">${p.apport}</div>`;
+
+  if (p.champs.length){
+    h += `<div class="titrillon">Champs lus dans la ligne</div><dl class="champs">` +
+      p.champs.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("") + `</dl>`;
+  }
+  if (p.extra && p.extra.passages){
+    h += `<div class="titrillon">Passages remontés du référentiel</div>` +
+      p.extra.passages.map(x => `<div class="passage"><div class="f">${esc(x.fichier)}</div>
+        <div class="s">${esc(x.section)}</div></div>`).join("");
+  }
+  if (p.extra && p.extra.texte && p.type !== "entree_texte" && p.type !== "entree_voix"){
+    h += `<div class="titrillon">${p.type === "reponse" ? "Réponse envoyée" : "Texte"}</div>
+      <div class="brut" style="margin-bottom:0">${esc(p.extra.texte)}</div>`;
+  }
+  if (p.type === "cache_lec"){
+    const av = TRACES.find(t => t.cle === tr.cle && t.total > 0);
+    if (av) h += `<div class="titrillon">Comparaison</div><div class="apport">
+      Le même échange, joué pour la première fois à ${av.horaire}, a coûté
+      <strong>${av.total} jetons</strong>. Ici : <strong class="p-gratuit">0</strong>.</div>`;
+  }
+  $("#panneau").innerHTML = h;
+  $("#panneau").scrollTop = 0;
+}
+
+function dessinerEco(){
+  const tr = TRACES[iTrace];
+  const jusque = tr.pas.slice(0, iPas + 1);
+  const cas = jusque.filter(p => p.bucket === "cascade").reduce((a,p) => a + p.cout, 0);
+  const hor = jusque.filter(p => p.bucket === "hors").reduce((a,p) => a + p.cout, 0);
+  const ms  = jusque.reduce((a,p) => {const d = (p.brut.match(/│\s*(\d+)\s*ms\s*│/)||[])[1]; return a + (d?+d:0);}, 0);
+  const pc  = tr.limite ? Math.round((tr.restant / tr.limite) * 100) : null;
+  $("#eco").innerHTML = `
+    <div class="mesure"><span class="v" style="color:${cas?"var(--jeton)":"var(--gratuit)"}">${cas}</span>
+      <span class="l">jetons — cascade</span></div>
+    <div class="mesure"><span class="v" style="color:${hor?"var(--hors)":"var(--gratuit)"}">${hor}</span>
+      <span class="l">jetons — hors cascade</span></div>
+    <div class="mesure"><span class="v">${cas+hor}</span><span class="l">total facturé Groq</span></div>
+    <div class="mesure"><span class="v">${ms}<small style="font-size:12px"> ms</small></span>
+      <span class="l">temps mesuré · étapes instrumentées</span></div>
+    ${pc !== null ? `<div class="jauge"><span class="l">quota jetons Groq restant — ${tr.restant} / ${tr.limite}</span>
+      <div class="bar"><i style="width:${pc}%"></i></div></div>` : ""}
+    <div class="note">Le compteur « hors cascade » couvre le classifieur d'intention et le parsing
+      de repli : ils précèdent l'aiguillage et sont payés quel que soit l'étage qui répond.</div>`;
+}
+
+function dessinerScenarios(){
+  $("#scenarios").innerHTML = TRACES.map((t,k) => {
+    const c = t.total === 0 ? "c0" : "cn";
+    const titre = t.titre.length > 34 ? t.titre.slice(0,33) + "…" : t.titre;
+    return `<button class="sc" data-t="${k}" aria-current="${k===iTrace}">
+      <span>${t.voix?"🎤":"💬"}</span><b>${esc(titre)}</b>
+      <span class="cost ${c}">${t.total} j</span></button>`;
+  }).join("");
+}
+
+function rendre(){ dessinerGraphe(); dessinerFrise(); dessinerPanneau(); dessinerEco(); dessinerScenarios();
+  $("#b-prec").disabled = iPas === 0;
+  $("#b-suiv").disabled = iPas === TRACES[iTrace].pas.length - 1;
+}
+
+/* ════════════════════════════════════════════════════════════
+   5. NAVIGATION
+   ════════════════════════════════════════════════════════════ */
+function allerPas(k){ const n = TRACES[iTrace].pas.length;
+  iPas = Math.max(0, Math.min(n-1, k)); rendre(); }
+function allerTrace(k){ iTrace = k; iPas = 0; pause(); rendre(); }
+function suivant(){ if (iPas < TRACES[iTrace].pas.length - 1) allerPas(iPas+1); else pause(); }
+
+function lecture(){
+  if (minuteur) return pause();
+  $("#b-play").textContent = "⏸";
+  minuteur = setInterval(suivant, 850);
+}
+function pause(){ clearInterval(minuteur); minuteur = null; $("#b-play").textContent = "▶"; }
+
+$("#b-prec").onclick  = () => { pause(); allerPas(iPas-1); };
+$("#b-suiv").onclick  = () => { pause(); allerPas(iPas+1); };
+$("#b-debut").onclick = () => { pause(); allerPas(0); };
+$("#b-fin").onclick   = () => { pause(); allerPas(1e9); };
+$("#b-play").onclick  = lecture;
+$("#pas").onclick = e => { const b = e.target.closest(".pas"); if (b){ pause(); allerPas(+b.dataset.k); } };
+$("#scenarios").onclick = e => { const b = e.target.closest(".sc"); if (b) allerTrace(+b.dataset.t); };
+
+document.addEventListener("keydown", e => {
+  if ($("#voile").classList.contains("on")) return;
+  if (e.target.tagName === "TEXTAREA") return;
+  const k = e.key;
+  if (k === "ArrowRight" || k === "PageDown"){ pause(); allerPas(iPas+1); e.preventDefault(); }
+  else if (k === "ArrowLeft" || k === "PageUp"){ pause(); allerPas(iPas-1); e.preventDefault(); }
+  else if (k === " "){ lecture(); e.preventDefault(); }
+  else if (k === "Home"){ pause(); allerPas(0); }
+  else if (k === "End"){ pause(); allerPas(1e9); }
+  else if (k === "ArrowDown"){ allerTrace(Math.min(TRACES.length-1, iTrace+1)); e.preventDefault(); }
+  else if (k === "ArrowUp"){ allerTrace(Math.max(0, iTrace-1)); e.preventDefault(); }
+});
+
+/* ════════════════════════════════════════════════════════════
+   6. IMPORT
+   ════════════════════════════════════════════════════════════ */
+const voile = $("#voile"), zone = $("#zone");
+$("#btn-import").onclick = () => { voile.classList.add("on"); $("#retour").textContent = ""; zone.focus(); };
+$("#b-fermer").onclick   = () => voile.classList.remove("on");
+voile.onclick = e => { if (e.target === voile) voile.classList.remove("on"); };
+$("#b-exemple").onclick  = () => { zone.value = LOG_EXEMPLE; };
+$("#b-fichier").onclick  = () => $("#fichier").click();
+$("#fichier").onchange = e => { const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { zone.value = t; }); };
+["dragover","dragenter"].forEach(ev => zone.addEventListener(ev, e => {
+  e.preventDefault(); zone.classList.add("survol"); }));
+["dragleave","drop"].forEach(ev => zone.addEventListener(ev, () => zone.classList.remove("survol")));
+zone.addEventListener("drop", e => { e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) f.text().then(t => { zone.value = t; }); });
+
+$("#b-lire").onclick = () => {
+  const t = parseLog(zone.value);
+  if (!t.length){
+    $("#retour").textContent = "Aucune trace trouvée. Il faut au moins une ligne 💬 MESSAGE TEXTE ou 🎤 TRANSCRIPTION.";
+    return;
+  }
+  TRACES = t; iTrace = 0; iPas = 0; pause();
+  voile.classList.remove("on"); rendre();
+};
+
+/* ── démarrage ── */
+zone.value = LOG_EXEMPLE;
+TRACES = parseLog(LOG_EXEMPLE);
+rendre();
+</script>
+</body>
+</html>

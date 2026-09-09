@@ -48,10 +48,20 @@ _NOTE_KEYWORDS = (
     "faire une observation", "noter que", "à noter",
 )
 
+# Relevé en production le 09/09/2026 : « comment ajouter une note ? » ouvrait
+# le flux guidé au lieu d'être répondue — le mot-clé « ajouter une note » ne
+# distingue pas la demande d'exécution de la demande d'explication. Même
+# défaut, même remède que app.services.interpreteur_commandes._MOTIF_SAVOIR
+# (US-172/CA2) : une ouverture interrogative n'est jamais un déclencheur,
+# repris ici sans dépendance croisée — ce module est antérieur (US-038).
+_OUVERTURE_INTERROGATIVE = re.compile(r"\A(?:comment|pourquoi|c est quoi|qu est ce)\b")
+
 
 def is_note_request(texte: str) -> bool:
     """[US-038 / CA2] Retourne True si la phrase déclenche le flux guidé de note."""
     t = texte.lower().strip()
+    if _OUVERTURE_INTERROGATIVE.match(t):
+        return False
     return any(kw in t for kw in _NOTE_KEYWORDS)
 
 

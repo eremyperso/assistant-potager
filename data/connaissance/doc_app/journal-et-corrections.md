@@ -23,7 +23,7 @@ Le journal liste tout ce qui a été enregistré, du plus récent au plus ancien
 **Intention :** procédure
 **On parle aussi de :** rectifier ; modifier une saisie ; erreur de transcription ; mauvaise culture ; mauvaise quantité
 
-Un geste enregistré de travers se corrige sans avoir à le supprimer puis à le ressaisir. Il suffit de décrire ce qu'on veut reprendre — le dernier geste, ou la mise en godet de fèves du vingt juillet — pour que l'assistant propose les enregistrements correspondants, puis de choisir le champ à changer. La correction porte sur ce seul champ, et tous les calculs qui en dépendent, stock compris, s'ajustent aussitôt.
+Un geste enregistré de travers se corrige sans avoir à le supprimer puis à le ressaisir. Il suffit de décrire ce qu'on veut reprendre — le dernier geste, ou la mise en godet de fèves du vingt juillet — pour que l'assistant propose les enregistrements correspondants, puis de choisir le champ à changer. La correction porte sur ce seul champ, et tous les calculs qui en dépendent, stock compris, s'ajustent aussitôt. Le parcours de correction s'ouvre aussi en le disant — « je me suis trompé sur ma dernière saisie » — mais il ne corrige jamais seul : il pose les mêmes questions que si on l'avait ouvert à la main, parce qu'une donnée déjà validée une fois mérite le même soin que sa saisie.
 
 ## Supprimer un enregistrement en trop
 

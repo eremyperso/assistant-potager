@@ -202,6 +202,62 @@ python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_in
 # (ReplyKeyboardRemove) le retire activement chez les jardiniers qui l'avaient.
 # Les claviers contextuels de validation, eux, sont inchangés.
 
+# Piloter le bot par une phrase [US-172]
+# Les 24 commandes du bot sont désormais DICTABLES : 18 le sont pour de bon,
+# 1 est un alias de sa cible canonique (`/parcelles` = `/parcelle lister`), et 5
+# sont écartées sur décision motivée (`/ask`, `/start`, `/lier`, `/delier`,
+# `/version`). Deux fichiers, et deux seulement :
+#   app/services/menu_commandes.py        le catalogue ENRICHI, à côté de celui
+#                                         du menu d'US-171 dont il se dérive :
+#     FORMES_DICTABLES                    forme des arguments, unités,
+#                                         vocabulaires fermés, `destructrice`,
+#                                         `confirmation`
+#     ALIAS_COMMANDES                     ce qui n'est pas une commande de plus
+#     MOTIFS_EXCLUSION_INTERPRETEUR       ce qu'une phrase ne peut pas porter —
+#                                         DISTINCTE de COMMANDES_EXCLUES (menu),
+#                                         parce que les critères diffèrent (CA8)
+#     controler_parite()                  le test qui échoue tant qu'une commande
+#                                         ajoutée n'est pas tranchée (CA7)
+#   app/services/interpreteur_commandes.py  la RECONNAISSANCE, et rien d'autre
+#
+# ⚠️ Ajouter une commande au bot fait ÉCHOUER l'intégration continue tant qu'elle
+# n'est ni dictable ni exclue et motivée. C'est voulu : c'est ce test, et non la
+# vigilance, qui empêche l'écart de se recreuser. Une exclusion motive une
+# décision DÉFINITIVE, elle n'héberge jamais un « pas encore fait ».
+#
+# Ce que l'interpréteur ne fait PAS : il ne réimplémente aucun comportement de
+# commande. Il produit un nom et des arguments, `bot.py` retrouve le handler
+# réellement enregistré par introspection de `ctx.application` et l'appelle avec
+# `ctx.args`. Même service, mêmes contrôles, mêmes messages, même garde de
+# liaison — et donc mêmes droits (CA9, CA14).
+#
+# Quatre gardes portent tout le reste, et se lisent dans la docstring du module :
+#   _est_demande_de_savoir     « comment supprimer une parcelle ? » explique,
+#                              « supprime la parcelle nord » agit (CA2)
+#   ouverture interrogative    une règle DÉCLARATIVE (« X attaque souvent Y »)
+#                              est refusée sur une question — sans quoi
+#                              « qu'est-ce qui attaque mes poireaux ? », servie
+#                              par gabarit depuis US-173, écrirait au référentiel
+#   noms de parcelle           `resolve_parcelle` rapproche à deux lettres près :
+#                              bon pour rattacher un geste, mauvais pour
+#                              supprimer. Le voisin est PROPOSÉ, jamais substitué
+#   arguments manquants        demandés, boutons à l'appui pour un vocabulaire
+#                              fermé — jamais devinés d'un synonyme (CA13)
+#
+# Confirmation : exigée pour tout ce qui ÉCRIT (`FormeCommande.confirmation`),
+# pas pour une consultation — « voulez-vous vraiment afficher le plan ? »
+# doublerait chaque lecture. La commande équivalente est rappelée dans les DEUX
+# cas : c'est ainsi que le jardinier apprend la syntaxe sans l'apprendre.
+#
+# Mesure et journal :
+psql -d potager -f migrations/migration_v44.sql   # routage_logs : commande + issue
+pytest tests/test_us172_interpreteur_commandes.py
+#   tests/corpus/us172_commandes.csv  109 formulations de commande, 31 questions
+#   de savoir voisines, 16 phrases hors périmètre. Au 08/09/2026 : 100 % de
+#   reconnaissance, 0 exécution destructrice erronée, 100 % sans appel modèle.
+#   Ce chiffre mesure ce qu'on a su prévoir ; c'est `issue_interpretation` en
+#   production qui dira quelles formulations enrichir ensuite (CA18).
+
 # Socle de connaissance — étage 2 de la cascade [US-098]
 # ⚠️ Procédure complète (rédaction des fiches, licences, mesure, mise en prod
 # dans le bon ordre) : docs/RUNBOOK_ALIMENTATION_SOCLE_CONNAISSANCE.md
@@ -283,8 +339,8 @@ python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us140_questions_
 # la branche QUESTION_SAVOIR de la cascade (`routeur._consulter_savoir`). Or
 # « qu'avais-je noté SUR LA PARCELLE nord ? » porte un marqueur DATA et partait
 # à l'étage SQL, qui n'a aucune famille capable de rendre un texte libre : la
-# mémoire était indexée, isolée, et injoignable. D'où `_MARQUEURS_MEMOIRE`,
-# testés AVANT `_regle_par_geste` (« noter » est une variante du geste
+# mémoire était indexée, isolée, et injoignable. D'où `routeur.MOTIF_MEMOIRE`,
+# testé AVANT `_regle_par_geste` (« noter » est une variante du geste
 # `observation` : dictée sans « ? », la question s'enregistrerait — défaut
 # US-173/CA3) et AVANT les marqueurs DATA.
 # Deuxième condition, du même ordre : `memoire_potager.TERMES_RAPPEL`. Les mots
@@ -293,6 +349,46 @@ python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us140_questions_
 # l'étage 3 — des jetons payés pour dégrader une citation exacte. Même véhicule
 # que la ligne « On parle aussi de : » des fiches : poids du titre, jamais
 # affiché.
+#
+# ⚠️ DEUX CHEMINS depuis le 09/09/2026, et savoir lequel répond est la première
+# chose à établir devant un défaut de restitution :
+#   la question NOMME une culture ou une parcelle  → étage 1, SQL, EXHAUSTIF
+#     `reponses_chiffrees` : familles `notes_culture` / `notes_parcelle`, une
+#     seule agrégation `notes_du_jardinier`. Le routeur y va par
+#     `_rappel_servi_par_le_catalogue`, seul pré-étage placé AVANT les mots-clés
+#     (`FAMILLES_MEMOIRE_SQL`). Journal : `nature=QUESTION_DATA`.
+#   la question ne nomme NI l'une NI l'autre       → étage 2, recherche lexicale
+#     inchangée, plafonnée à RAG_MAX_PASSAGES. Journal : `nature=QUESTION_SAVOIR`.
+# Motif : « qu'avais-je noté sur mes tomates ? » ne demande aucune RESSEMBLANCE,
+# elle demande tout ce qui a été écrit. Relevé le 09/09/2026 (potager 1) : les
+# trois notes attendues étaient trouvées (evenement-472/355/363, score 0,733,
+# issue=servi) et UNE SEULE était affichée — `connaissance.restituer` ne gardait
+# qu'un bloc par registre. Corrigé des deux côtés : la restitution rend jusqu'à
+# `MAX_NOTES_RESTITUEES` notes (le savoir général, lui, reste à UN passage — trois
+# fiches sur un même sujet sont trois façons de dire la même chose).
+#
+# Le PÉRIMÈTRE des notes n'est écrit qu'à un endroit, `memoire_potager`
+# (`TYPE_ACTION_NOTE`, `est_memorisable`) : le chemin SQL l'importe et ne le
+# réécrit pas. Deux définitions feraient diverger la liste et la recherche sur le
+# même carnet, sans qu'aucune ne paraisse fausse — c'est ce que verrouille
+# `test_us141_le_perimetre_sql_est_celui_de_l_indexation`.
+# Deux pièges, tous deux commentés au point d'appel : `titre_note()` n'est PAS
+# appelée par l'agrégation (son `db.get(Parcelle, …)` n'est pas filtré sur le
+# potager, le garde du catalogue le refuse), et le corps d'une note ne traverse
+# JAMAIS `_remplir` (qui renormalise la ponctuation, donc retoucherait la note).
+#
+# Un carnet volumineux se lit par REPÈRES — année, puis saison AGRONOMIQUE
+# (mars-mai / juin-août / sept-nov / déc-fév, l'hiver rattaché à l'année de son
+# janvier), jamais par trimestre calendaire : `_detecter_periode` encode déjà ces
+# quatre fenêtres, et « ce printemps » ou « en 2025 » se relisent tels quels pour
+# rouvrir une période — « le T2 » ne se relit pas et ne se prononce pas.
+# Plafonds, tous nommés dans `reponses_chiffrees` : `LIMITE_NOTES_CITEES`,
+# `APERCU_NOTES_RECENTES`, `BUDGET_CARACTERES_NOTES`.
+#
+# Limite CONNUE, écrite pour ne pas être redécouverte : « quelles maladies
+# avais-je NOTÉES ? » n'est pas reconnue comme un rappel — `_NOMS_ECRIT` liste
+# des noms, pas des participes. Test dédié dans la suite d'US-141.
+#
 # Reprise initiale des notes antérieures — rejouable, sans doublon, idempotente :
 python tools/indexer_memoire_potager.py --dry-run     # rapport seul
 python tools/indexer_memoire_potager.py               # tous les potagers
@@ -402,7 +498,7 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 ## Database Migrations
 
-Manual SQL files in `migrations/`, numbered sequentially (v2 → v42), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
+Manual SQL files in `migrations/`, numbered sequentially (v2 → v44), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v44.sql` [US-172] — adds `commande_interpretee` / `issue_interpretation` to `routage_logs` (nullable, idempotent), so an interpreted command and the fate of its confirmation are journalled without overloading US-098's `issue_savoir`. Before it, `migration_v43.sql` [US-162]. `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
 
 ## Testing
 

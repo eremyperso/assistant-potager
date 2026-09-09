@@ -1,0 +1,157 @@
+phrase,attendu,registre
+crée la parcelle PlancheTomate,parcelle ajouter,imperatif
+je veux créer la parcelle PlancheTomate,parcelle ajouter,intention
+nouvelle parcelle PlancheTomate,parcelle ajouter,elliptique
+"crée la parcelle PlancheTomate, plein sud, 12 m²",parcelle ajouter,imperatif
+comment créer une parcelle ?,,savoir
+renomme planche nord en planche des courges,parcelle renommer,imperatif
+je voudrais renommer la parcelle sud en carré sud,parcelle renommer,intention
+changement de nom de la parcelle sud en carré sud,parcelle renommer,elliptique
+comment renommer une parcelle ?,,savoir
+supprime la parcelle PlancheTomate,parcelle supprimer,imperatif
+je veux supprimer la parcelle nord,parcelle supprimer,intention
+suppression de la parcelle serre,parcelle supprimer,elliptique
+efface la parcelle du fond,parcelle supprimer,imperatif
+comment supprimer une parcelle ?,,savoir
+mets la serre en pépinière,parcelle modifier,imperatif
+"je veux que la planche sud fasse 8,5 m²",parcelle modifier,intention
+la serre est une pépinière,parcelle modifier,elliptique
+"la planche sud fait 8,5 m²",parcelle modifier,elliptique
+l'exposition de la parcelle nord est plein sud,parcelle modifier,elliptique
+comment modifier une parcelle ?,,savoir
+liste mes parcelles,parcelle lister,imperatif
+je veux voir mes parcelles,parcelle lister,intention
+mes parcelles,parcelle lister,elliptique
+montre-moi les parcelles,parcelle lister,imperatif
+comment lister mes parcelles ?,,savoir
+montre-moi le plan,plan,imperatif
+je voudrais voir le plan du potager,plan,intention
+plan de la parcelle nord,plan,elliptique
+le plan au 1er mai,plan,elliptique
+comment fonctionne le plan d'occupation ?,,savoir
+affiche le bilan de la saison,stats,imperatif
+je veux les stats des tomates,stats,intention
+bilan des tomates,stats,elliptique
+stats des tomates,stats,elliptique
+comment est calculé le bilan ?,,savoir
+montre-moi mes derniers événements,historique,imperatif
+je veux voir l'historique,historique,intention
+historique,historique,elliptique
+qu'est-ce que j'ai fait dernièrement ?,historique,elliptique
+comment consulter mon historique ?,,savoir
+donne-moi la météo,meteo,imperatif
+je voudrais voir les prévisions,meteo,intention
+quel temps fait-il ?,meteo,elliptique
+la météo,meteo,elliptique
+comment est obtenue la météo ?,,savoir
+montre-moi la fiche de la courgette,fiche,imperatif
+je veux voir la fiche du poivron,fiche,intention
+fiche de la tomate,fiche,elliptique
+comment lire une fiche de culture ?,,savoir
+vérifie la rotation du poireau sur la parcelle est,rotation,imperatif
+je peux planter des poivrons sur la nord ?,rotation,intention
+rotation du chou sur la planche nord,rotation,elliptique
+est-ce que je peux semer des carottes sur la planche nord,rotation,intention
+comment est calculée la rotation ?,,savoir
+montre-moi les associations de la courgette,association lister,imperatif
+je voudrais les associations de la tomate,association lister,intention
+avec quoi associer la carotte ?,association lister,elliptique
+quelles associations pour la tomate,association lister,elliptique
+comment fonctionnent les associations de cultures ?,,savoir
+note une association entre la carotte et l'aneth,association saisir,imperatif
+je veux enregistrer une association entre la tomate et le basilic,association saisir,intention
+association entre le chou et la menthe,association saisir,elliptique
+comment saisir une association ?,,savoir
+montre-moi les attributs de la tomate,culture attributs,imperatif
+je veux voir les attributs de la carotte,culture attributs,intention
+attributs du poireau,culture attributs,elliptique
+comment sont renseignés les attributs d'une culture ?,,savoir
+corrige la famille du pâtisson en cucurbitacée,culture famille,imperatif
+je veux que la famille du pâtisson soit cucurbitacée,culture famille,intention
+le pâtisson est une cucurbitacée,culture famille,elliptique
+comment est déterminée la famille botanique ?,,savoir
+corrige le délai de retour des solanacées à 4 ans,culture delai_retour,imperatif
+je voudrais que le délai de retour des cucurbitacées soit de 3 ans,culture delai_retour,intention
+délai de retour des solanacées : 4 ans,culture delai_retour,elliptique
+comment est calculé le délai de retour ?,,savoir
+mets la courgette en plein soleil,culture exposition,imperatif
+je veux que la courgette soit en plein soleil,culture exposition,intention
+la salade préfère la mi-ombre,culture exposition,elliptique
+la courgette veut du plein soleil,culture exposition,elliptique
+comment choisir l'exposition d'une culture ?,,savoir
+corrige le besoin en eau de la carotte en moyen,culture eau,imperatif
+je veux que le besoin en eau de la courgette soit élevé,culture eau,intention
+le besoin en eau de la carotte est moyen,culture eau,elliptique
+la courgette a un besoin en eau élevé,culture eau,elliptique
+comment est estimé le besoin en eau ?,,savoir
+corrige la profondeur de semis de la carotte à 1 cm,culture profondeur,imperatif
+je voudrais que la profondeur de semis de la carotte soit de 1 cm,culture profondeur,intention
+profondeur de la carotte : 1 cm,culture profondeur,elliptique
+la profondeur de semis de la carotte est de 1 centimètre,culture profondeur,elliptique
+comment est utilisée la profondeur de semis ?,,savoir
+corrige la rusticité de la tomate à -2 degrés,culture rusticite,imperatif
+je veux que la rusticité de la tomate soit de moins 2 degrés,culture rusticite,intention
+la tomate gèle à -2 degrés,culture rusticite,elliptique
+la rusticité de la tomate est de -2 degrés,culture rusticite,elliptique
+comment est utilisée la rusticité ?,,savoir
+déclare le bioagresseur teigne du poireau comme insecte,bioagresseur declarer,imperatif
+je veux déclarer le bioagresseur mildiou comme champignon,bioagresseur declarer,intention
+"nouveau bioagresseur : la piéride, un insecte",bioagresseur declarer,elliptique
+comment déclarer un bioagresseur ?,,savoir
+rattache le mildiou à la tomate,bioagresseur rattacher,imperatif
+je veux rattacher la piéride au chou,bioagresseur rattacher,intention
+le mildiou attaque souvent la tomate,bioagresseur rattacher,elliptique
+la piéride attaque le chou,bioagresseur rattacher,elliptique
+comment rattacher un bioagresseur à une culture ?,,savoir
+liste les bioagresseurs orphelins,bioagresseur orphelins,imperatif
+je veux voir les bioagresseurs sans culture,bioagresseur orphelins,intention
+quels bioagresseurs ne sont rattachés à aucune culture,bioagresseur orphelins,elliptique
+comment un bioagresseur devient-il orphelin ?,,savoir
+passe sur le potager de la maison,potager,imperatif
+je veux changer de potager,potager,intention
+potager,potager,elliptique
+comment changer de potager actif ?,,savoir
+note une observation,note,imperatif
+je veux noter une observation,note,intention
+nouvelle observation,note,elliptique
+comment noter une observation ?,,savoir
+corrige ma dernière saisie,corriger,imperatif
+je veux corriger un événement,corriger,intention
+je me suis trompé sur ma dernière saisie,corriger,elliptique
+comment corriger un événement ?,,savoir
+vendre des plants,vendre,imperatif
+je veux vendre des plants,vendre,intention
+vente de plants,vendre,elliptique
+comment enregistrer une vente de plants ?,,savoir
+lis-moi les réponses,tts_on,imperatif
+je veux activer la lecture vocale,tts_on,intention
+active la voix,tts_on,elliptique
+comment activer la lecture vocale ?,,savoir
+coupe la voix,tts_off,imperatif
+je veux désactiver la lecture vocale,tts_off,intention
+stoppe les réponses vocales,tts_off,elliptique
+comment couper la lecture vocale ?,,savoir
+dis-moi si la lecture vocale est activée,tts,imperatif
+je veux savoir si la voix est activée,tts,intention
+est-ce que la lecture vocale est active ?,tts,elliptique
+comment savoir si la lecture vocale est active ?,,savoir
+aide,help,imperatif
+j'ai besoin d'aide,help,intention
+aide sur les parcelles,help,elliptique
+comment utiliser l'aide ?,,savoir
+récolté 2 kg de tomates cerise,,hors_perimetre
+j'ai planté 3 pieds de tomate sur PlancheTomate,,hors_perimetre
+arrosé les courgettes 30 min,,hors_perimetre
+semé carottes Nantaise rang 4,,hors_perimetre
+observation : pucerons sur fèves,,hors_perimetre
+j'ai vendu 6 plants de tomate,,hors_perimetre
+mise en godet 20 tomates,,hors_perimetre
+combien de tomates ai-je récolté cette saison ?,,hors_perimetre
+qu'est-ce qui attaque mes poireaux ?,,hors_perimetre
+mes salades sont mangées la nuit,,hors_perimetre
+pourquoi mes tomates jaunissent ?,,hors_perimetre
+à quelle profondeur semer les carottes ?,,hors_perimetre
+quel est mon stock de plants de tomate ?,,hors_perimetre
+quand ai-je planté les courgettes ?,,hors_perimetre
+qu'avais-je noté sur la parcelle nord ?,,hors_perimetre
+il me reste combien de tomates ?,,hors_perimetre

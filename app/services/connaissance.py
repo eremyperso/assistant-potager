@@ -717,6 +717,19 @@ def reserve_a_afficher(contexte: ContexteConnaissance) -> str:
 REGISTRE_MEMOIRE = "📓 Ce que tu avais noté"
 REGISTRE_GENERAL = "🌱 En général"
 
+# [US-141] Combien de NOTES une restitution rend, quand plusieurs répondent.
+# Aligné sur `RAG_MAX_PASSAGES`, qui borne déjà la recherche : cette constante ne
+# dit rien de plus que « la restitution ne perd plus rien de ce que la recherche
+# a trouvé ».
+#
+# Relevé en production le 09/09/2026, potager 1 : « qu'avais je noté sur mes
+# tomates ? » retrouvait les trois notes attendues (evenement-472, 355, 363 ;
+# score 0,733 ; issue=servi) et n'en affichait qu'une. Elles n'étaient pas
+# manquées, elles étaient JETÉES ici — `restituer` ne gardait qu'un bloc par
+# registre. Une note trouvée puis tue est pire qu'une note non trouvée : le
+# jardinier conclut qu'il n'avait rien écrit.
+MAX_NOTES_RESTITUEES = RAG_MAX_PASSAGES
+
 
 def _bloc_memoire(passage: Passage) -> str:
     """[CA5] Une note restituée : sa date, sa parcelle, puis son texte CITÉ.
@@ -729,6 +742,27 @@ def _bloc_memoire(passage: Passage) -> str:
     return f"{REGISTRE_MEMOIRE} — {passage.titre_document} :\n« {passage.contenu.strip()} »"
 
 
+def _blocs_memoire(notes: list[Passage]) -> str:
+    """[US-141 / CA5] Une OU PLUSIEURS notes, sous un seul en-tête de registre.
+
+    Une note seule garde la forme historique, caractère pour caractère : c'est le
+    cas de très loin le plus fréquent, et rien ne justifierait de le remanier.
+    Plusieurs notes émettent `REGISTRE_MEMOIRE` une fois, puis un bloc chacune —
+    répéter « 📓 Ce que tu avais noté » trois fois de suite lirait comme trois
+    réponses là où il n'y a qu'un carnet.
+
+    Chaque note garde son titre : c'est lui qui porte la date et la parcelle
+    (voir `memoire_potager.titre_note`), donc ce qui distingue deux notes l'une
+    de l'autre. Les fondre en une liste sans dates les rendrait interchangeables.
+    """
+    if len(notes) == 1:
+        return _bloc_memoire(notes[0])
+    corps = "\n\n".join(
+        f"• {p.titre_document} :\n« {p.contenu.strip()} »" for p in notes
+    )
+    return f"{REGISTRE_MEMOIRE} :\n\n{corps}"
+
+
 def _bloc_general(passage: Passage, *, etiquete: bool) -> str:
     """Un passage du savoir partagé, recopié tel quel, avec sa source."""
     corps = passage.contenu.strip()
@@ -739,7 +773,10 @@ def _bloc_general(passage: Passage, *, etiquete: bool) -> str:
     return corps
 
 
-def restituer(contexte: ContexteConnaissance) -> str:
+def restituer(
+    contexte: ContexteConnaissance,
+    max_notes: int = MAX_NOTES_RESTITUEES,
+) -> str:
     """Assemble la réponse servie directement, à coût nul (CA7).
 
     Aucune rédaction : le texte est celui du fragment, recopié tel qu'il a été
@@ -749,28 +786,37 @@ def restituer(contexte: ContexteConnaissance) -> str:
 
     [US-141 / CA6] Quand les passages retenus mêlent la mémoire du potager et le
     savoir général, les deux sont rendus SÉPARÉMENT et étiquetés. Le passage de
-    tête commande l'ordre — c'est lui qui répond — et le meilleur passage de
-    l'autre registre le complète. Fondre les deux en un seul paragraphe
-    reviendrait à présenter comme une vérité générale ce que le jardinier a
-    observé chez lui, ou l'inverse : les deux erreurs sont graves, et ce sont
-    précisément celles que le CA6 interdit.
+    tête commande l'ordre — c'est lui qui répond. Fondre les deux en un seul
+    paragraphe reviendrait à présenter comme une vérité générale ce que le
+    jardinier a observé chez lui, ou l'inverse : les deux erreurs sont graves, et
+    ce sont précisément celles que le CA6 interdit.
+
+    [US-141 / CA5] Les deux registres ne se comptent PAS de la même façon, et
+    c'est le seul point de conception de cette fonction :
+
+    - la mémoire rend jusqu'à `max_notes` notes. Trois notes du jardinier sont
+      trois faits datés distincts, dont aucun ne redit l'autre — en taire deux
+      lui fait croire qu'il n'avait rien écrit (constat de production du
+      09/09/2026, voir `MAX_NOTES_RESTITUEES`) ;
+    - le savoir général reste à UN seul passage. Trois fiches d'agronomie sur le
+      même sujet sont trois façons de dire la même chose : les empiler est du
+      bruit, et le classement a déjà désigné la meilleure.
     """
     if not contexte.passages:
         return ""
     tete = contexte.passages[0]
-    autre_registre = next(
-        (p for p in contexte.passages[1:] if p.prive != tete.prive), None
-    )
-    mixte = autre_registre is not None
+    notes = [p for p in contexte.passages if p.prive][:max_notes]
+    general = next((p for p in contexte.passages if not p.prive), None)
+    mixte = bool(notes) and general is not None
 
-    blocs = [
-        _bloc_memoire(tete) if tete.prive else _bloc_general(tete, etiquete=mixte)
-    ]
-    if autre_registre is not None:
-        blocs.append(
-            _bloc_memoire(autre_registre) if autre_registre.prive
-            else _bloc_general(autre_registre, etiquete=True)
-        )
+    if tete.prive:
+        blocs = [_blocs_memoire(notes)]
+        if general is not None:
+            blocs.append(_bloc_general(general, etiquete=True))
+    else:
+        blocs = [_bloc_general(tete, etiquete=mixte)]
+        if notes:
+            blocs.append(_blocs_memoire(notes))
     return "\n\n".join(blocs)
 
 

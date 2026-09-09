@@ -703,6 +703,17 @@ class RoutageLog(Base):
     score_savoir           = Column(Float, nullable=True)
     issue_savoir           = Column(String(16), nullable=True)
 
+    # [US-172 / CA18] Commande retenue par l'interpréteur et issue de sa
+    # proposition. NULL = la demande n'est pas passée par l'interpréteur, ce qui
+    # est le cas de l'écrasante majorité des lignes (les questions). Deux
+    # colonnes distinctes de `issue_savoir` ci-dessus : y loger l'issue d'une
+    # validation de commande rendrait illisibles les deux mesures à la fois.
+    # C'est `issue_interpretation IN ('refusee', 'abandonnee')` qui répond à
+    # « quelles formulations le jardinier n'a pas obtenues ? », donc à « quelles
+    # règles enrichir ensuite ? ».
+    commande_interpretee   = Column(String(64), nullable=True)
+    issue_interpretation   = Column(String(16), nullable=True)
+
     __table_args__ = (
         Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),
     )

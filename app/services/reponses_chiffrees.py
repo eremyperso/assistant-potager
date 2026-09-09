@@ -55,7 +55,8 @@ Ce qui est délibérément écrit ici, et pourquoi :
 par période · dernière occurrence d'un type d'action · stock courant · nombre de
 pieds actifs · nombre de godets produits [US-170] · rendement cumulé de la
 saison · contenu de la pépinière · occupation d'une parcelle · parcelles où une
-culture est en place · parcelles portant une famille botanique.
+culture est en place · parcelles portant une famille botanique · notes du jardinier sur une
+culture ou une parcelle [US-141].
 """
 from __future__ import annotations
 
@@ -72,10 +73,12 @@ from unidecode import unidecode
 from app.services import bioagresseurs as svc_bioagresseurs
 from app.services import catalogue_sql
 from app.services import familles as _familles
+from app.services import memoire_potager as _memoire
 from app.services.catalogue_sql import GardeCatalogueError
 from app.services.context import TenantContext
 from database.db import SessionLocal
-from database.models import Evenement, FamilleBotanique
+from database.models import Evenement, FamilleBotanique, Parcelle
+from llm.routeur import MOTIF_MEMOIRE
 from utils import parcelles as _parcelles
 from utils import stock as _stock
 from utils.actions import ACTION_MAP
@@ -104,6 +107,59 @@ MAX_LIGNES_AFFICHEES = 25
 # [CA5] Ce qui descend à l'étage de raisonnement, quand un habillage en langage
 # naturel est nécessaire : un résumé déjà agrégé, très en deçà de 1 000 jetons.
 MAX_LIGNES_RESUME = 8
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-141] La mémoire du potager, servie en SQL — les trois plafonds
+# -----------------------------------------------------------------------------
+# Décisions PRODUIT, nommées et justifiées plutôt qu'enfouies dans une tranche,
+# sur le modèle de `fiche_culture.LIMITE_BIOAGRESSEURS` : elles se révisent sans
+# relire le code qui les applique.
+# ─────────────────────────────────────────────────────────────────────────────
+#: Notes CITÉES en entier dans une réponse. Au-delà, le jardinier ne lit plus,
+#: il fait défiler — et ce qu'il cherchait est au milieu. La réponse bascule
+#: alors sur des REPÈRES temporels, qui disent où regarder plutôt que de tout
+#: dérouler.
+LIMITE_NOTES_CITEES = 8
+
+#: Notes citées SOUS des repères : de quoi reconnaître le fil sans le dérouler.
+APERCU_NOTES_RECENTES = 3
+
+#: Budget de caractères des notes citées. Telegram REFUSE un message de plus de
+#: 4 096 caractères — un refus est une réponse perdue, pas tronquée. Une note
+#: pèse jusqu'à `memoire_potager.TAILLE_MAX_FRAGMENT` (900) caractères : huit
+#: d'entre elles peuvent dépasser à elles seules. Une note est donc citée
+#: ENTIÈRE ou comptée dans le reste — jamais coupée en son milieu, ce qui la
+#: citerait de travers.
+BUDGET_CARACTERES_NOTES = 3000
+
+#: Les trois niveaux de lecture d'un historique de notes.
+ZOOM_DETAIL = "detail"
+ZOOM_SAISON = "saison"
+ZOOM_ANNEE = "annee"
+
+# [US-141] SAISON AGRONOMIQUE, jamais trimestre calendaire — arbitrage tranché.
+#
+# Trois raisons, dans l'ordre de leur poids. (1) `_detecter_periode` encode DÉJÀ
+# ces quatre fenêtres, parce que c'est le vocabulaire dans lequel les questions
+# arrivent ; un découpage par trimestre ferait cohabiter deux vérités
+# temporelles dans ce fichier, l'une pour lire les questions, l'autre pour
+# écrire les réponses. (2) Un repère n'a d'intérêt que si l'on peut dire
+# « montre-moi celui-là » : « ce printemps » et « en 2025 » sont relus tels
+# quels, « le T2 » n'est reconnu par rien et le jardinier ne le prononce pas.
+# (3) Le trimestre coupe le cycle aux mauvais endroits — janvier-mars mêle le
+# cœur de l'hiver et le démarrage des semis.
+#
+# Seul coût, nommé et payé : l'hiver enjambe l'année civile. Décembre est
+# rattaché à l'année de son janvier (d'où le décalage +1), de sorte qu'une note
+# du 12/12/2025 et une du 08/01/2026 se lisent ensemble sous « hiver 2026 ».
+# C'est le choix que `_detecter_periode` fait déjà pour « cet hiver » : on
+# l'aligne, on ne l'invente pas.
+SAISONS_AGRONOMIQUES: dict[int, tuple[str, int]] = {
+    3: ("printemps", 0), 4: ("printemps", 0), 5: ("printemps", 0),
+    6: ("été", 0), 7: ("été", 0), 8: ("été", 0),
+    9: ("automne", 0), 10: ("automne", 0), 11: ("automne", 0),
+    12: ("hiver", 1), 1: ("hiver", 0), 2: ("hiver", 0),
+}
 
 # Libellé et genre de chaque action canonique : un gabarit doit produire du
 # français correct (« dernier semis », « dernière récolte »), sans quoi la
@@ -199,6 +255,16 @@ GABARITS: dict[str, str] = {
     # Occupation d'une parcelle
     "occupation":               "La parcelle {parcelle} accueille :\n{lignes}",
     "occupation_vide":          "Je n'ai aucune culture en place enregistrée sur la parcelle {parcelle}.",
+
+    # [US-141 / CA5] La mémoire du potager, quand la question nomme sa cible.
+    # Seul l'EN-TÊTE passe par `_remplir` : le corps des notes, jamais — il en
+    # ressortirait renormalisé, donc retouché (voir `_bloc_note`).
+    "notes_detail":   "📓 Tes notes sur {cible} — {nb}{periode}, de la plus récente à la plus ancienne :",
+    "notes_reperes":  "📓 Tes notes sur {cible} — {nb}{periode}, {etendue}. Voici comment elles se répartissent :",
+    "notes_apercu":   "Les {apercu} plus récentes :",
+    "notes_zoom":     "Dis-moi « mes notes sur {cible} {exemple} » pour lire une période en détail.",
+    "notes_vide":     ("Je n'ai aucune note sur {cible} dans ton carnet{periode}. "
+                       "Les semis, arrosages et récoltes, eux, se comptent autrement."),
 }
 
 
@@ -311,6 +377,56 @@ def _detecter_periode(normalisee: str, aujourdhui: _date) -> Periode:
         return Periode(_date(annee, 1, 1), _date(annee, 12, 31), "cette année", annee)
 
     return Periode()
+
+
+# [US-141] Le zoom EXPLICITEMENT demandé sur un historique de notes.
+_MOTIFS_ZOOM: tuple[tuple[str, "re.Pattern[str]"], ...] = (
+    (ZOOM_DETAIL, re.compile(r"\ben detail\b|\bdans le detail\b|\btoutes mes notes\b|\bune par une\b|\bla liste complete\b")),
+    (ZOOM_SAISON, re.compile(r"\bpar saisons?\b|\bsaison par saison\b")),
+    (ZOOM_ANNEE, re.compile(r"\bpar annees?\b|\bpar an\b|\bannee par annee\b")),
+)
+
+
+def _detecter_zoom(normalisee: str) -> Optional[str]:
+    """[US-141] Le niveau de lecture demandé par la question, ou `None`.
+
+    `None` n'est pas une valeur par défaut : c'est l'ABSENCE de demande, et c'est
+    alors l'ampleur de l'historique qui tranche (`_zoom_effectif`). Deviner ici
+    un zoom que le jardinier n'a pas demandé serait le même travers que deviner
+    une période — une réponse exacte sur une découpe qu'il n'a pas voulue.
+
+    Volontairement HORS de `Parametres` et hors de l'aiguillage : comme la
+    période, il est redérivé de la phrase au moment de servir, si bien que
+    « mes notes sur la tomate » et « … par saison » partagent une entrée de
+    cache et reçoivent chacune leur réponse.
+    """
+    for niveau, motif in _MOTIFS_ZOOM:
+        if motif.search(normalisee):
+            return niveau
+    return None
+
+
+def _saison_de(valeur: datetime) -> tuple[str, int]:
+    """(« printemps », 2026) — saison agronomique et année de rattachement."""
+    nom, decalage = SAISONS_AGRONOMIQUES[valeur.month]
+    return nom, valeur.year + decalage
+
+
+def _zoom_effectif(demande: Optional[str], nb: int, annees: set[int]) -> str:
+    """[US-141] Le niveau auquel l'historique se lit : détail, saison ou année.
+
+    Trois règles, dans cet ordre. Une demande explicite l'emporte toujours. Un
+    historique qui tient à l'écran se lit en entier — le repère n'a d'intérêt que
+    quand il y a trop à lire. Au-delà, c'est l'ÉTENDUE qui commande : plusieurs
+    années se lisent par année, parce que la saison seule y perdrait le fil du
+    temps (« printemps » trois fois de suite ne dit pas lesquels) ; une seule
+    année se lit par saison, qui est la maille du jardin.
+    """
+    if demande is not None:
+        return demande
+    if nb <= LIMITE_NOTES_CITEES:
+        return ZOOM_DETAIL
+    return ZOOM_ANNEE if len(annees) > 1 else ZOOM_SAISON
 
 
 def _detecter_dans(normalisee: str, candidats: list[str]) -> Optional[str]:
@@ -738,6 +854,208 @@ def _agreger_bioagresseurs_culture(db: Session, ctx: TenantContext, culture: str
     }
 
 
+@catalogue_sql.enregistrer("notes_du_jardinier")
+def _agreger_notes_du_jardinier(
+    db: Session,
+    ctx: TenantContext,
+    culture: Optional[str] = None,
+    parcelle: Optional[str] = None,
+    periode: Optional[Periode] = None,
+    zoom: Optional[str] = None,
+) -> dict:
+    """[US-141 / CA5] Les notes du jardinier sur une culture ou une parcelle —
+    EXHAUSTIVES, de la plus récente à la plus ancienne, à zéro jeton.
+
+    Constaté en production le 09/09/2026 : « qu'avais-je noté sur mes tomates ? »
+    partait à la recherche lexicale, qui classe par RESSEMBLANCE et s'arrête à
+    trois passages. Elle rendait donc ce qui ressemblait le plus, jamais ce qui
+    manquait. Mais la question ne demande aucune ressemblance : elle demande tout
+    ce qui a été écrit sur la tomate — une lecture exacte du journal, du même
+    ordre qu'un total de récolte, et qui se répond donc ici.
+
+    ⚠️ **Le périmètre des notes n'est PAS défini ici.** Il est lu à
+    `app/services/memoire_potager.py` — `TYPE_ACTION_NOTE` et `est_memorisable()`
+    — le module qui décide déjà de ce qui entre dans l'INDEX de mémoire. Deux
+    définitions de « ce qu'est une note » sont le vrai risque de cette
+    correction : le jardinier verrait cette liste et la recherche documentaire
+    diverger sur le même carnet, sans qu'aucune des deux ne paraisse fausse. Les
+    bulletins météo automatiques, notamment, sont écartés par `est_memorisable()`
+    et par elle seule.
+
+    ⚠️ **`memoire_potager.titre_note()` n'est pas appelée**, alors qu'elle
+    compose exactement l'en-tête voulu : elle résout la parcelle par
+    `db.get(Parcelle, ...)`, une requête sans `potager_id` que le garde
+    d'isolation du catalogue refuse à raison (US-096 / CA11). Les noms sont donc
+    chargés en une requête filtrée, et l'en-tête recomposé au rendu à partir des
+    mêmes briques. La différence porte sur la JOINTURE, jamais sur le contenu.
+
+    [US-096 / CA7] `present` reste vrai dès que la cible est résolue : « je n'ai
+    aucune note sur la tomate » est un constat exact tiré du journal, pas une
+    absence de donnée — même arbitrage que `parcelles_par_culture`. Faire
+    remonter la cascade y substituerait un conseil d'agronomie, c'est-à-dire une
+    non-réponse payante à une question dont la réponse était certaine.
+    """
+    periode = periode or Periode()
+    debut, fin = _bornes(periode)
+
+    # Une seule requête, filtrée sur le potager : voir la docstring. Sans
+    # `actif` — une note ancienne garde le nom du lieu où elle a été écrite, même
+    # si la parcelle a depuis été supprimée (US-009, suppression logique).
+    noms_parcelles = {
+        p.id: p.nom
+        for p in db.query(Parcelle).filter(Parcelle.potager_id == ctx.potager_id).all()
+    }
+
+    requete = db.query(Evenement).filter(
+        Evenement.potager_id == ctx.potager_id,
+        Evenement.type_action == _memoire.TYPE_ACTION_NOTE,
+    )
+    if culture:
+        requete = requete.filter(func.lower(Evenement.culture) == culture.lower())
+    if parcelle:
+        cibles = [
+            pid for pid, nom in noms_parcelles.items()
+            if _normaliser(nom) == _normaliser(parcelle)
+        ]
+        # `[-1]` plutôt qu'un court-circuit : une parcelle nommée mais introuvable
+        # doit rendre une liste vide, pas la totalité du carnet.
+        requete = requete.filter(Evenement.parcelle_id.in_(cibles or [-1]))
+    if debut is not None:
+        requete = requete.filter(Evenement.date >= debut)
+    if fin is not None:
+        requete = requete.filter(Evenement.date <= fin)
+
+    candidats = requete.order_by(Evenement.date.desc(), Evenement.id.desc()).all()
+    notes = [e for e in candidats if _memoire.est_memorisable(e)]
+
+    # Les repères se calculent sur L'ENSEMBLE, jamais sur la tranche affichée :
+    # un repère tiré des seules notes citées annoncerait ce qu'on montre déjà,
+    # au lieu de dire ce qu'on ne montre pas.
+    datees = [e for e in notes if e.date]
+    annees = {e.date.year for e in datees}
+    niveau = _zoom_effectif(zoom, len(notes), annees)
+    reperes = _reperes_temporels(datees, niveau)
+
+    plafond = LIMITE_NOTES_CITEES if niveau == ZOOM_DETAIL else APERCU_NOTES_RECENTES
+    entrees: list[dict] = []
+    budget = BUDGET_CARACTERES_NOTES
+    for evenement in notes[:plafond]:
+        texte = _memoire.texte_note(evenement)
+        # Une note est citée ENTIÈRE ou comptée dans le reste. La première passe
+        # toujours : une réponse qui ne citerait rien ne serait pas une réponse.
+        if entrees and len(texte) > budget:
+            break
+        budget -= len(texte)
+        entrees.append({
+            "date_lisible": _memoire.date_lisible(evenement.date),
+            "texte": texte,
+            "categorie": _memoire.categorie_note(evenement),
+            "parcelle": noms_parcelles.get(evenement.parcelle_id),
+            "culture": evenement.culture,
+        })
+
+    return {
+        "present": True,
+        "cible": culture or parcelle,
+        "culture": culture,
+        "parcelle": parcelle,
+        "periode": periode.libelle if (debut or fin) else "",
+        "zoom": niveau,
+        "nb": len(notes),
+        "nb_cites": len(entrees),
+        "entrees": entrees,
+        "reperes": reperes,
+        "etendue": _etendue_lisible(datees),
+        "exemple_zoom": _exemple_de_zoom(reperes, niveau),
+    }
+
+
+#: Ordre de lecture des saisons dans une année — celui du jardin, pas l'alphabet.
+_ORDRE_SAISON: dict[str, int] = {"hiver": 0, "printemps": 1, "été": 2, "automne": 3}
+
+
+def _reperes_temporels(datees: list, niveau: str) -> list[dict]:
+    """[US-141] Comment un carnet volumineux se répartit dans le temps.
+
+    Par année, chaque année détaillant ses saisons ; ou par saison seule quand
+    tout tient dans une année. Vide au niveau `detail`, où les notes sont citées
+    une à une et où un repère ne dirait rien de plus.
+    """
+    if niveau == ZOOM_DETAIL or not datees:
+        return []
+
+    groupes: dict[tuple, int] = {}
+    saisons: dict[int, dict[str, int]] = {}
+    for evenement in datees:
+        saison, annee_saison = _saison_de(evenement.date)
+        if niveau == ZOOM_ANNEE:
+            cle = (evenement.date.year,)
+            groupes[cle] = groupes.get(cle, 0) + 1
+            par_annee = saisons.setdefault(evenement.date.year, {})
+            par_annee[saison] = par_annee.get(saison, 0) + 1
+        else:
+            cle = (annee_saison, saison)
+            groupes[cle] = groupes.get(cle, 0) + 1
+
+    reperes: list[dict] = []
+    if niveau == ZOOM_ANNEE:
+        for cle in sorted(groupes, reverse=True):
+            annee = cle[0]
+            # Ordre du TEMPS, pas de la fréquence : tout le reste de la
+            # réponse va du plus récent au plus ancien, et un repère qui
+            # inverserait cet ordre se lirait comme un classement.
+            detail = sorted(
+                saisons.get(annee, {}).items(),
+                key=lambda kv: _ORDRE_SAISON[kv[0]], reverse=True,
+            )
+            reperes.append({
+                "libelle": str(annee),
+                "nb": groupes[cle],
+                "detail": ", ".join(f"{nom} {nb}" for nom, nb in detail),
+                "zoom": f"en {annee}",
+            })
+    else:
+        ordonnees = sorted(
+            groupes, key=lambda c: (c[0], _ORDRE_SAISON[c[1]]), reverse=True
+        )
+        for cle in ordonnees:
+            annee, saison = cle
+            reperes.append({
+                "libelle": f"{saison} {annee}",
+                "nb": groupes[cle],
+                "detail": "",
+                # Une saison ne se redemande sans ambiguïté que dans l'année en
+                # cours (« ce printemps ») ; ailleurs, l'année est le repère que
+                # `_detecter_periode` sait relire.
+                "zoom": f"en {annee}",
+            })
+    return reperes
+
+
+def _etendue_lisible(datees: list) -> str:
+    """« de mai 2024 à septembre 2026 » — sur quoi porte le carnet, en un souffle."""
+    if len(datees) < 2:
+        return ""
+    dates = sorted(e.date for e in datees)
+    mois = {numero: nom for nom, numero in MOIS.items()}
+    debut = f"{mois[dates[0].month]} {dates[0].year}"
+    fin = f"{mois[dates[-1].month]} {dates[-1].year}"
+    return "" if debut == fin else f"de {debut} à {fin}"
+
+
+def _exemple_de_zoom(reperes: list[dict], niveau: str) -> str:
+    """La période à proposer au jardinier pour lire un repère en détail.
+
+    Le repère le plus fourni, exprimé dans une formulation que `_detecter_periode`
+    sait RELIRE (« en 2025 ») : c'est ce qui referme la boucle du zoom sans
+    écrire un second analyseur de dates. Une formulation que la question ne
+    saurait pas reprendre serait une invitation à une commande qui n'existe pas.
+    """
+    if niveau == ZOOM_DETAIL or not reperes:
+        return ""
+    return max(reperes, key=lambda repere: repere["nb"])["zoom"]
+
+
 @catalogue_sql.enregistrer("parcelles_par_culture")
 def _agreger_parcelles_par_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
     """Parcelles où une culture est en place — la question inverse de
@@ -844,15 +1162,21 @@ def _formater_recolte(agregat: dict) -> str:
     return " et ".join(morceaux) if morceaux else "0"
 
 
-def _lignes_avec_reste(lignes: list[str], total: int) -> str:
+def _lignes_avec_reste(lignes: list[str], total: int, separateur: str = "\n") -> str:
     """Assemble une liste et, si elle est tronquée, annonce ce qui manque.
     Une liste amputée en silence contredirait le nombre annoncé juste au-dessus
     et ferait douter le jardinier de son propre journal — le même principe que
-    le CA7 sur les résultats vides."""
+    le CA7 sur les résultats vides.
+
+    [US-141] `separateur` existe parce qu'une « ligne » n'en est pas toujours
+    une : un bloc de note tient sur deux lignes — son en-tête, puis son texte
+    cité — et les coller les rendrait illisibles. L'annonce du reste, elle, ne
+    change pas : c'est tout l'intérêt de ne pas avoir écrit une seconde
+    fonction."""
     reste = total - len(lignes)
     if reste > 0:
         lignes = lignes + [f"  … et {reste} autre(s), tout est dans l'application"]
-    return "\n".join(lignes)
+    return separateur.join(lignes)
 
 
 def _fois(nb: int) -> str:
@@ -1089,6 +1413,87 @@ def _rendu_bioagresseurs_culture(params: Parametres, agregat: dict) -> str:
     })
 
 
+def _notes_lisibles(nb: int) -> str:
+    """« 1 note » ou « 8 notes » — le nombre est connu, « note(s) » ne l'est pas."""
+    return "1 note" if nb == 1 else f"{nb} notes"
+
+
+def _bloc_note(entree: dict) -> str:
+    """[US-141 / CA5] Une note citée : sa date, son lieu, sa catégorie, son texte.
+
+    Les guillemets ne sont pas un ornement : ils disent que ce qui suit n'a pas
+    été retouché.
+
+    ⚠️ Ce bloc ne traverse JAMAIS `_remplir` : celui-ci renormalise les espaces
+    et la ponctuation de toute la chaîne qu'il assemble, et retoucherait donc la
+    parole du jardinier — précisément ce que l'arbitrage « extrait fidèle,
+    jamais résumé » d'US-141 interdit. Le gabarit ne couvre que l'en-tête, les
+    blocs sont concaténés après.
+
+    ⚠️ `_sur()` est appliqué au TEXTE de la note, et pas seulement aux noms.
+    C'est la première fois que du texte libre du jardinier traverse le rendu du
+    catalogue : une note contenant « arroser 2*/semaine » ou « voir [carnet] »
+    ferait échouer le parse Markdown de Telegram, donc perdrait la réponse
+    entière. `bot._md()`, qui n'échappe que l'underscore, n'y suffirait pas.
+    """
+    entete = " — ".join(filter(None, (
+        entree["date_lisible"],
+        f"parcelle {_sur(entree['parcelle'])}" if entree["parcelle"] else "",
+        _sur(entree["culture"]) if entree["culture"] else "",
+        _sur(entree["categorie"]) if entree["categorie"] else "",
+    )))
+    return f"• {entete}\n« {_sur(entree['texte'])} »"
+
+
+def _rendu_notes(params: Parametres, agregat: dict) -> str:
+    """[US-141 / CA5] Le carnet du jardinier, cité ou repéré selon son ampleur.
+
+    Deux formes, une seule décision — celle qu'a prise `_zoom_effectif`. Un
+    carnet qui tient à l'écran se lit en entier ; au-delà, la réponse dit
+    d'abord OÙ REGARDER (par année, ou par saison), ne cite que les plus
+    récentes, et rappelle la phrase qui ouvre une période.
+    """
+    cible = _sur(agregat["cible"])
+    periode = f" {agregat['periode']}" if agregat["periode"] else ""
+    if not agregat["nb"]:
+        return _remplir(GABARITS["notes_vide"], {"cible": cible, "periode": periode})
+
+    nb_lisible = _notes_lisibles(agregat["nb"])
+    blocs_notes = [_bloc_note(entree) for entree in agregat["entrees"]]
+
+    if agregat["zoom"] == ZOOM_DETAIL:
+        entete = _remplir(GABARITS["notes_detail"], {
+            "cible": cible, "nb": nb_lisible, "periode": periode,
+        })
+        # `_lignes_avec_reste` sur les BLOCS : le nombre annoncé en tête et ce
+        # qui est montré ne peuvent jamais se contredire, même quand le budget
+        # de caractères a coupé avant le plafond.
+        return entete + "\n\n" + _lignes_avec_reste(
+            blocs_notes, agregat["nb"], separateur="\n\n"
+        )
+
+    lignes_reperes = [
+        f"  • {repere['libelle']} — {_notes_lisibles(repere['nb'])}"
+        + (f" ({repere['detail']})" if repere["detail"] else "")
+        for repere in agregat["reperes"][:MAX_LIGNES_AFFICHEES]
+    ]
+    entete = _remplir(GABARITS["notes_reperes"], {
+        "cible": cible, "nb": nb_lisible, "periode": periode,
+        "etendue": agregat["etendue"] or "sur toute leur durée",
+    })
+    apercu = _remplir(GABARITS["notes_apercu"], {"apercu": str(len(blocs_notes))})
+    zoom = _remplir(GABARITS["notes_zoom"], {
+        "cible": cible, "exemple": agregat["exemple_zoom"],
+    })
+    return "\n\n".join([
+        entete,
+        _lignes_avec_reste(lignes_reperes, len(agregat["reperes"])),
+        apercu,
+        "\n\n".join(blocs_notes),
+        zoom,
+    ])
+
+
 def _rendu_parcelles_par_culture(params: Parametres, agregat: dict) -> str:
     culture = _sur(agregat["culture"])
     if not agregat["nb"]:
@@ -1168,7 +1573,71 @@ _EXCLUT_SAVOIR = re.compile(
 )
 
 
+# [US-141] Ce qui retire une question aux familles de MÉMOIRE. « Combien
+# d'observations ai-je faites ? » est un COMPTAGE : il se répond par un nombre,
+# pas par une liste de citations, et le catalogue le sert déjà ailleurs.
+#
+# ⚠️ « maladie » est volontairement ABSENT, contrairement à `_EXCLUT_SAVOIR` :
+# « quelles maladies avais-je notées sur mes tomates ? » demande bien ce que le
+# jardinier a ÉCRIT, et c'est cette famille-ci qui doit la servir — pas une
+# fiche d'agronomie sur les maladies de la tomate en général.
+_EXCLUT_NOTES = re.compile(
+    r"\bcombien\b|\bnombre de\b|\bpourquoi\b|\bque faire\b|\bdois je\b|\bfaut il\b"
+)
+
+
 FAMILLES: tuple[Famille, ...] = (
+    Famille(
+        # [US-141] EN TÊTE, comme `bioagresseurs_culture` et pour la même
+        # raison : le motif est étroit — il exige ENSEMBLE un nom d'écrit et une
+        # marque de rappel — donc il ne peut voler aucune question à une famille
+        # plus large. Le placer plus bas laisserait `occupation_parcelle`,
+        # volontairement large, capter « qu'avais-je noté sur la planche
+        # nord ? » pour rendre un inventaire de cultures à la place d'une note.
+        #
+        # Le motif est celui du ROUTEUR (`llm.routeur.MOTIF_MEMOIRE`), importé
+        # et jamais recopié : deux définitions de « question de rappel »
+        # produiraient une question routée vers le catalogue que le catalogue ne
+        # reconnaîtrait plus — une cascade qui tourne à vide, sans rien dans le
+        # journal pour le dire.
+        nom="notes_culture",
+        # La réponse dérive du journal : toute écriture d'événement la périme.
+        dependances=(NATURE_JOURNAL,),
+        agregation="notes_du_jardinier",
+        motif=MOTIF_MEMOIRE,
+        exclut=_EXCLUT_NOTES,
+        exige=("culture",),
+        arguments=lambda p: {
+            "culture": p.culture,
+            "parcelle": p.parcelle,
+            "periode": p.periode,
+            "zoom": _detecter_zoom(p.normalisee),
+        },
+        rendu=_rendu_notes,
+    ),
+    Famille(
+        # Même famille de question, autre désignation de la cible. Deux entrées
+        # plutôt qu'une parce que `exige` est une conjonction : « culture OU
+        # parcelle » ne s'y exprime pas. L'AGRÉGATION, elle, reste unique — comme
+        # `stock_culture` sert déjà `pieds_actifs` et `stock_courant`.
+        #
+        # APRÈS `notes_culture` : « mes notes sur les tomates de la planche
+        # nord » se lit d'abord comme une question sur la tomate, et la parcelle
+        # y est un filtre supplémentaire, que `notes_culture` transmet déjà.
+        nom="notes_parcelle",
+        dependances=(NATURE_JOURNAL,),
+        agregation="notes_du_jardinier",
+        motif=MOTIF_MEMOIRE,
+        exclut=_EXCLUT_NOTES,
+        exige=("parcelle",),
+        arguments=lambda p: {
+            "culture": None,
+            "parcelle": p.parcelle,
+            "periode": p.periode,
+            "zoom": _detecter_zoom(p.normalisee),
+        },
+        rendu=_rendu_notes,
+    ),
     Famille(
         # [US-173] EN PREMIER, et volontairement spécifique : le vocabulaire de
         # l'agression ne se confond avec aucune autre famille, et le placer en

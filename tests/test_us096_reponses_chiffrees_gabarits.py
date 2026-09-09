@@ -137,6 +137,11 @@ FAMILLES_ATTENDUES = {
     # Même essai, symétrique : « sur quelles parcelles je trouve des
     # tomates ? » recevait un « Historique observation de tomate ».
     "parcelles_par_culture",
+    # [US-141] Ajoutées après le relevé du 09/09/2026 : « qu'avais-je noté sur
+    # mes tomates ? » partait à la recherche documentaire, qui classe par
+    # ressemblance et s'arrête à trois passages — trois notes trouvées, une
+    # seule rendue. La question demande une lecture EXACTE du journal.
+    "notes_culture", "notes_parcelle",
 }
 
 

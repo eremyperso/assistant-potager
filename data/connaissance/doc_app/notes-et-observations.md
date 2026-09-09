@@ -9,6 +9,9 @@ index_terms:
   - "catégories de note"
   - "observation"
   - "retrouver une note ancienne"
+  - "toutes mes notes sur une culture"
+  - "beaucoup de notes"
+  - "notes par saison"
 ---
 
 # Noter une observation au potager
@@ -37,9 +40,20 @@ Constater que le sol est sec n'est pas arroser. Une remarque d'arrosage est enre
 ## Retrouver une note écrite les saisons passées
 
 **Intention :** procédure
-**On parle aussi de :** qu'avais-je noté ; l'an dernier ; la saison dernière ; se souvenir ; mémoire du jardin ; carnet des années précédentes ; ce que j'avais écrit
+**On parle aussi de :** qu'avais-je noté ; l'an dernier ; la saison dernière ; se souvenir ; mémoire du jardin ; carnet des années précédentes ; ce que j'avais écrit ; mes notes sur ; toutes mes notes
 
-Une note écrite il y a un an se retrouve en la demandant à voix haute ou par écrit, sans passer par les filtres du journal : « qu'avais-je noté sur la parcelle nord l'an dernier ? » suffit. La réponse rappelle la date de la note, la parcelle concernée quand il y en avait une, puis le texte tel qu'il a été écrit, entre guillemets. Ce texte n'est jamais reformulé ni résumé : une note vaut par ce qu'elle dit exactement, et c'est ce qui permet de s'y fier des saisons plus tard.
+Une note écrite il y a un an se retrouve en la demandant à voix haute ou par écrit, sans passer par les filtres du journal : « qu'avais-je noté sur la parcelle nord l'an dernier ? » suffit. Chaque note est rendue avec sa date, la parcelle concernée quand il y en avait une, puis le texte tel qu'il a été écrit, entre guillemets. Ce texte n'est jamais reformulé ni résumé : une note vaut par ce qu'elle dit exactement, et c'est ce qui permet de s'y fier des saisons plus tard.
+
+Quand la question nomme une culture ou une parcelle, ce sont **toutes** les notes qui la concernent qui sont rendues, de la plus récente à la plus ancienne — et non la seule qui ressemble le plus à la question. Quand elle n'en nomme aucune, comme « qu'avais-je noté l'an dernier ? », ce sont les notes les plus proches de ce qui est demandé qui remontent.
+
+## Quand il y a beaucoup de notes
+
+**Intention :** comprendre
+**On parle aussi de :** beaucoup de notes ; trop de notes ; par saison ; par année ; repères ; zoomer ; toute mon histoire
+
+Un carnet de plusieurs saisons ne se déroule pas d'un bloc : au-delà de quelques notes, la réponse dit d'abord **comment elles se répartissent dans le temps** — par année quand elles s'étalent sur plusieurs, par saison quand elles tiennent dans une seule — puis cite les plus récentes. Les saisons employées sont celles du jardin : mars à mai, juin à août, septembre à novembre, décembre à février, l'hiver étant rattaché à l'année de son mois de janvier.
+
+Pour lire une période en entier, il suffit de la nommer dans la question : « mes notes sur la tomate en 2025 », « qu'avais-je noté sur les courges ce printemps ? ». La réponse propose elle-même une période à ouvrir, choisie parmi les plus fournies.
 
 ## Ce que la mémoire du jardin garde, et ce qu'elle ne garde pas
 
