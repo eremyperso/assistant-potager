@@ -499,9 +499,15 @@ def importer_rattachement(
     return IMPORT_INCHANGEE if inchangee else IMPORT_ECRITE
 
 
-def _fiches_visibles(db: Session, culture: str, potager_id: Optional[int]):
+def fiches_visibles(db: Session, culture: str, potager_id: Optional[int]):
     """
     [CA3] Fiches `culture_config` portant ce nom et visibles par ce potager.
+
+    Publique depuis US-165 : le pré-diagnostic doit résoudre une culture
+    exactement comme la lecture des bioagresseurs le fait, garde de
+    `catalogue_sql` comprise. Une seconde résolution répondrait « je n'ai pas de
+    fiche pour cette culture » là où `/bioagresseur lister` en trouve une, ou
+    l'inverse — et le jardinier n'aurait aucun moyen de comprendre pourquoi.
 
     Se distingue de `attributs_culture.fiches_de_culture`, qui balaie TOUTES les
     fiches sans distinction de potager, sur deux points qui comptent tous les
@@ -546,7 +552,7 @@ def lire_bioagresseurs(
     savoir d'une culture connue et ne pas connaître la culture sont deux
     situations différentes, et les confondre trompe le jardinier.
     """
-    fiches = _fiches_visibles(db, culture, potager_id)
+    fiches = fiches_visibles(db, culture, potager_id)
     if not fiches:
         raise CultureInconnueError(culture)
     ids_fiches = [f.id for f in fiches]

@@ -1,3 +1,29 @@
+## [v3.61.0] — 2026-09-10
+
+### 🚀 Nouveautés
+- Propose des **pistes quand tu décris ce que tu vois**, avec tes mots : « mes pieds de tomates ont des taches marron sur les feuilles du bas qui remontent » reçoit deux ou trois hypothèses ordonnées au lieu d'un silence ou d'une généralité (US-165)
+- Formule toujours une piste comme une **évocation, jamais comme une certitude** — « cela peut évoquer », jamais « c'est ». C'est le risque le plus élevé de tout l'épic : un jardinier qui traite sur une suspicion fausse a perdu plus que si l'application s'était tue (US-165 / CA4)
+- Ne propose que ce qui **attaque réellement cette culture** : un mildiou de la pomme de terre n'est jamais proposé sur une carotte, et « des traits orange qui partent en poussière » évoque la rouille des alliacées sur l'ail, celle du haricot sur le haricot, celle de l'asperge sur l'asperge — un seul symptôme, trois pistes différentes (US-165 / CA3, CA14)
+- Dit **honnêtement qu'elle ne sait pas** plutôt que de rapprocher au hasard, et distingue trois ignorances qu'il serait trompeur de confondre : la culture qu'elle ne connaît pas, le symptôme qu'elle ne reconnaît pas, et le symptôme reconnu dont aucune piste n'est rattachée à cette culture (US-165 / CA8)
+- Annonce qu'une piste est **seule** quand le référentiel n'en connaît qu'une : une hypothèse unique se lit comme une conclusion, quelle que soit la prudence de la formulation qui l'entoure (US-165 / CA5)
+- Ne consomme **aucun jeton** : le pré-diagnostic est une recherche plein texte suivie de jointures, mesurée à 3 ms. Le modèle n'intervient qu'à l'étage au-dessus, pour le diagnostic multi-facteurs qui reste à venir (US-165 / CA9)
+- Livre **44 symptômes** dérivés des fiches d'agronomie déjà versionnées, avec pour chacun les deux registres — celui du jardinier (« poudre blanche », « cul noir », « des bestioles ») et celui de l'agronome (« oïdium », « nécrose apicale », « puceron ») (US-165 / CA1)
+
+### 🔧 Améliorations techniques
+- **Mesure du CA11, sur le référentiel réellement livré** : 19/19 des entrées du périmètre v1 trouvent la bonne piste dans les trois premières (18 en première position), et 25/25 des entrées hors périmètre reçoivent un refus explicite ou une piste juste — jamais un rapprochement forcé. Les deux assiettes sont mesurées SÉPARÉMENT : les confondre plafonnerait mécaniquement le taux sous les 80 % et ferait échouer l'US pour une raison de découpage (US-165 / CA11, CA12)
+- **Au-dessus du seuil, la question du moteur vectoriel reste donc fermée.** L'arbitrage de l'US se vérifie : le problème n'était pas la faiblesse de la recherche lexicale, c'était que les fiches sont écrites en vocabulaire technique et les questions posées en vocabulaire courant. Écrire les deux dans la colonne de synonymes coûte quelques minutes par symptôme, là où le vectoriel coûte une infrastructure (US-165 / CA13)
+- Le poids d'une piste **ne sort jamais du service** : `Piste` ne porte aucun champ de plausibilité, et c'est cette absence — pas une consigne de rendu — qui empêche qu'un pourcentage soit un jour affiché comme une probabilité mesurée (US-165 / CA2)
+- La formulation prudente vit à **un seul endroit** (`prediagnostic.FORMULE_EVOCATION`), concaténée par les gabarits : une prudence répartie sur plusieurs textes s'érode à la première reformulation, et un test refuse toute tournure affirmative dans les 44 réponses du corpus (US-165 / CA4)
+- Le score de la recherche lexicale est désormais **partagé** avec le socle de connaissance (`connaissance.score_lexical`) au lieu d'être réécrit. La première version, propre à cette US, punissait exactement ce que le CA1 demande d'encourager : une liste de synonymes riche faisait chuter le score, et « mes tomates ont le cul noir » passait sous le seuil alors que le symptôme portait « cul noir » en toutes lettres (US-165 / CA9)
+- La question d'INVENTAIRE (« qu'est-ce qui attaque mes poireaux ») garde la priorité sur la DESCRIPTION (« mes tomates ont des taches marron »), par l'ordre des familles et non par une seconde liste de motifs. Prix connu et mesuré : deux formulations du corpus reçoivent l'inventaire plutôt qu'un pré-diagnostic, aucune du périmètre v1 (US-165, US-173)
+- La garde d'exécution du catalogue couvre les deux nouvelles tables : une lecture sans filtre `potager_id` est refusée **à l'exécution**, pas signalée en revue de code (US-165, US-096 / CA11)
+- Aucune fiche du corpus `doc_app` ne devient fausse : aucune des treize ne décrit ce qui se passe quand un symptôme est décrit, la table de relecture d'US-099 a été parcourue avant livraison (US-165, US-099 / CA9)
+- Ajoute `python tools/mesurer_prediagnostic.py`, qui publie les deux assiettes, la latence et le cas de désambiguïsation — et rappelle de lui-même que la mesure SQLite ne décide de rien tant qu'elle n'a pas été rejouée contre PostgreSQL (US-165 / CA13)
+
+### 💾 Base de données
+- `migration_v45.sql` — crée `symptome` (libellé, organe, synonymes, vecteur plein texte avec index GIN) et `symptome_bioagresseur` (arête pondérée), toutes deux sous RLS. **Aucune colonne de culture sur le symptôme** : un symptôme n'appartient à aucune culture, c'est le croisement avec `culture_bioagresseur` qui décide de la piste — une colonne `culture_id` aurait dupliqué chaque symptôme par culture et rendu la désambiguïsation du CA14 structurellement impossible. Aucune colonne de produit ni de dosage non plus, même garantie que `migration_v43`. Rollback : `rollback_v45.sql` (US-165 / CA1, CA2, CA7)
+- Ajoute les blocs `symptomes` et `symptomes_bioagresseurs` au manifeste de référentiel, et `data/referentiel/symptomes_redaction_interne.json` : 23 identités qui manquaient (surtout des causes abiotiques, que les sources phytosanitaires ne recensent pas et qui sont pourtant la moitié de ce que voit un amateur), 74 arêtes de culture, 44 symptômes et 103 suspicions pondérées (US-165)
+
 ## [v3.60.0] — 2026-09-09
 
 ### 🚀 Nouveautés

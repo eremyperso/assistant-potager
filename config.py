@@ -121,3 +121,26 @@ RAG_SEUIL_CONFIANCE = float(os.environ.get("RAG_SEUIL_CONFIANCE", "0.6"))
 # CA13 (« le bon fragment figure dans les trois premiers résultats ») : au-delà,
 # on allongerait le contexte envoyé à l'étage 3 sans améliorer la mesure.
 RAG_MAX_PASSAGES = int(os.environ.get("RAG_MAX_PASSAGES", "3"))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-165] Pré-diagnostic déterministe à partir des symptômes décrits
+# -----------------------------------------------------------------------------
+# Score minimal en deçà duquel une description N'EST PAS reconnue comme un
+# symptôme du référentiel. C'est le réglage du CA8, celui qui décide entre « je
+# n'ai pas de piste » et un rapprochement forcé : le corpus de mesure réserve 25
+# de ses 44 entrées à ce seul test d'honnêteté, parce qu'une piste inventée sur
+# un symptôme mal compris est le risque le plus élevé de tout l'épic.
+#
+# ⚠️ Même avertissement d'échelle que RAG_SEUIL_CONFIANCE, et il vaut ici aussi :
+# le repli SQLite score une COUVERTURE DE TERMES, PostgreSQL un `ts_rank_cd`
+# normalisé. Les deux sont dans [0, 1] et ne se superposent pas. La valeur se
+# réétalonne contre la production avec `python tools/mesurer_prediagnostic.py`,
+# par variable d'environnement, sans redéploiement.
+PREDIAGNOSTIC_SEUIL_SYMPTOME = float(os.environ.get("PREDIAGNOSTIC_SEUIL_SYMPTOME", "0.35"))
+
+# [CA5] « Deux à trois hypothèses sont toujours présentées » — une hypothèse
+# unique se lit comme une conclusion, quelle que soit la prudence qui l'entoure.
+# Le plafond est ici ; le plancher, lui, n'est pas un réglage : quand le
+# croisement n'en produit qu'une, l'application le DIT (voir
+# `prediagnostic.ISSUE_PISTE_UNIQUE`) au lieu d'en inventer une seconde.
+PREDIAGNOSTIC_MAX_PISTES = int(os.environ.get("PREDIAGNOSTIC_MAX_PISTES", "3"))

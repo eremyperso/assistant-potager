@@ -43,8 +43,13 @@ header{
 }
 h1{font-size:15px; font-weight:600; margin:0; letter-spacing:.01em}
 h1 span{color:var(--craie-3); font-weight:400}
-.scenarios{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+.scenarios{
+  flex:0 0 auto; display:flex; gap:6px; flex-wrap:nowrap;
+  overflow-x:auto; padding:8px 18px; border-bottom:1px solid var(--trait);
+  background:var(--sol); scrollbar-width:thin; scrollbar-color:var(--trait) transparent;
+}
 .sc{
+  flex:0 0 auto;
   background:var(--sol-haut); border:1px solid var(--trait);
   border-radius:3px; padding:4px 9px; font-size:12.5px; color:var(--craie-2);
   display:flex; align-items:center; gap:7px; transition:border-color .15s,color .15s;
@@ -65,8 +70,9 @@ main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
 #carte{position:absolute; inset:0; width:100%; height:100%; display:block}
 
 /* ─── graphe ──────────────────────────────────────────────── */
-.arete{fill:none; stroke:var(--trait); stroke-width:1.5}
-.arete.on{stroke-width:2.5; stroke-linecap:round}
+.arete{fill:none; stroke:var(--trait); stroke-width:1.5;
+  stroke-linejoin:miter; stroke-linecap:butt; shape-rendering:crispEdges}
+.arete.on{stroke-width:2.5; shape-rendering:auto}
 .arete.dyn{stroke-dasharray:2 5}
 .noeud rect{fill:var(--sol-haut); stroke:var(--trait); stroke-width:1.5; rx:4}
 .noeud .emo{font-size:19px; dominant-baseline:middle}
@@ -182,6 +188,14 @@ main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
   font-family:var(--mono); font-size:11.5px; line-height:1.6;
 }
 #zone.survol{border-color:var(--savoir)}
+#rapport{
+  display:none; margin-top:12px; max-height:34vh; overflow:auto;
+  font-family:var(--mono); font-size:11.5px; line-height:1.7; white-space:pre-wrap;
+  background:#0a0f10; border:1px solid var(--trait); border-radius:3px;
+  padding:10px 12px; color:var(--craie-2);
+}
+#rapport.on{display:block}
+#rapport b{color:var(--jeton); font-weight:600}
 .boite footer{display:flex; gap:9px; align-items:center; margin-top:14px}
 .primaire{background:var(--gratuit); color:#0b1512; border:none; border-radius:3px;
   padding:7px 15px; font-size:13.5px; font-weight:600}
@@ -200,9 +214,10 @@ main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
 
 <header>
   <h1>Assistant Potager <span>— cheminement d'une demande</span></h1>
-  <div class="scenarios" id="scenarios"></div>
+  <button class="hbtn" id="btn-diag" style="margin-left:auto">Diagnostic</button>
   <button class="hbtn" id="btn-import">Charger un log</button>
 </header>
+<nav class="scenarios" id="scenarios"></nav>
 
 <main>
   <div id="scene"><svg id="carte" viewBox="-16 74 1312 620" preserveAspectRatio="xMidYMid meet"></svg></div>
@@ -229,11 +244,13 @@ main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
        ou dépose un fichier ici. Le préfixe journalctl est toléré. Chaque
        <code>💬 MESSAGE TEXTE</code> ou <code>🎤 TRANSCRIPTION</code> ouvre un scénario.</p>
     <textarea id="zone" spellcheck="false" placeholder="2026-09-09 17:41:45 │ INFO │ 💬 MESSAGE TEXTE  : comment ajouter une note ?&#10;…"></textarea>
+    <div id="rapport"></div>
     <footer>
       <button class="primaire" id="b-lire">Lire ce log</button>
       <button class="secondaire" id="b-fichier">Ouvrir un fichier…</button>
+      <button class="secondaire" id="b-copier">Copier le rapport</button>
       <button class="secondaire" id="b-exemple">Remettre l'exemple</button>
-      <button class="secondaire" id="b-fermer">Annuler</button>
+      <button class="secondaire" id="b-fermer">Fermer</button>
       <span id="retour"></span>
     </footer>
     <input type="file" id="fichier" accept=".log,.txt,.json,text/*" hidden>
@@ -321,14 +338,126 @@ const LOG_EXEMPLE = `2026-09-09 17:41:45 │ INFO │ 💬 MESSAGE TEXTE  : comm
 2026-09-09 18:12:55 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=26 │ in=1019 out=197 cache=0 │ 1115 ms │ issue=ok
 2026-09-09 18:12:55 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '2961', 'x-ratelimit-reset-requests': '7m12s', 'x-ratelimit-reset-tokens': '37.792s'}
 2026-09-09 18:12:55 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=llm │ fragment=data/connaissance/agronomie/tomate-problemes.md#03-des-petites-betes-vertes-ou-noires-collent-aux-jeunes-pousse │ 'Peux-tu me dire pourquoi j'ai des pucerons sur mes feuilles '
-2026-09-09 18:12:55 │ INFO │ 💡 RÉPONSE        : Les pucerons apparaissent surtout quand les jeunes pousses sont très tendres et que le feuillage est dense ; ils s'y installent en colonies et laissent un miellat collant, souvent fréquenté par des fo...`;
+2026-09-09 18:12:55 │ INFO │ 💡 RÉPONSE        : Les pucerons apparaissent surtout quand les jeunes pousses sont très tendres et que le feuillage est dense ; ils s'y installent en colonies et laissent un miellat collant, souvent fréquenté par des fo...
+2026-09-10 09:13:30 │ INFO │ ⌨️  MENU TELEGRAM  : 21 commandes déclarées
+2026-09-10 09:14:15 │ INFO │ 💬 MESSAGE TEXTE  : affiche moi le plan du potager
+2026-09-10 09:14:15 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=regle  │ /plan                      │ confiance=1.00 │ 0 ms │ issue=proposee   │ regle=plan                     │ 'affiche moi le plan du potager'
+2026-09-10 09:14:15 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=regle  │ /plan                      │ confiance=1.00 │ 0 ms │ issue=confirmee  │ regle=plan                     │ 'affiche moi le plan du potager'
+2026-09-10 09:14:15 │ INFO │ [US-172] Exécution de la commande interprétée : /plan
+2026-09-10 09:14:15 │ INFO │ [US_Plan_occupation_parcelles] calcul_occupation_parcelles : 32 cultures actives, 7 parcelles
+2026-09-10 09:14:24 │ INFO │ 💬 MESSAGE TEXTE  : affiche moi mes parcelles ?
+2026-09-10 09:14:27 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1050 out=41 cache=0 │ 3580 ms │ issue=ok
+2026-09-10 09:14:27 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6769', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '9.232s'}
+2026-09-10 09:14:27 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /parcelle     lister       │ confiance=0.99 │ 3595 ms │ issue=proposee   │ regle=-                        │ 'affiche moi mes parcelles ?'
+2026-09-10 09:14:27 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /parcelle     lister       │ confiance=0.99 │ 3595 ms │ issue=confirmee  │ regle=-                        │ 'affiche moi mes parcelles ?'
+2026-09-10 09:14:30 │ INFO │ [US-172] Exécution de la commande interprétée : /parcelle lister
+2026-09-10 09:14:53 │ INFO │ 💬 MESSAGE TEXTE  : quel type d'oignon dans  parcelle ?
+2026-09-10 09:14:53 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1053 out=50 cache=0 │ 448 ms │ issue=ok
+2026-09-10 09:14:53 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6747', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '9.397s'}
+2026-09-10 09:14:54 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=521 out=77 cache=0 │ 374 ms │ issue=ok
+2026-09-10 09:14:54 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6233', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '13.252s'}
+2026-09-10 09:14:54 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_DATA     │ confiance=0.96 │ 404 ms │ 'quel type d'oignon dans  parcelle ?'
+2026-09-10 09:14:54 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-09-10 09:14:54 │ INFO │ 🔍 QUESTION       : quel type d'oignon dans  parcelle ?
+2026-09-10 09:14:54 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_DATA     │ confiance=0.96 │ 7 ms │ 'quel type d'oignon dans  parcelle ?'
+2026-09-10 09:14:54 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=1 │ in=576 out=128 cache=0 │ 371 ms │ issue=ok
+2026-09-10 09:14:54 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '996', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '5807', 'x-ratelimit-reset-requests': '5m45.6s', 'x-ratelimit-reset-tokens': '16.447s'}
+2026-09-10 09:14:54 │ INFO │ [US-042 CA7] repondre_question potager_id=1 tokens_groq=704 (cible <1500)
+2026-09-10 09:14:54 │ INFO │ ↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : 'quel type d'oignon dans  parcelle ?'
+2026-09-10 09:14:55 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=1 │ in=447 out=181 cache=0 │ 585 ms │ issue=ok
+2026-09-10 09:14:55 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '995', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '5113', 'x-ratelimit-reset-requests': '7m12s', 'x-ratelimit-reset-tokens': '21.652s'}
+2026-09-10 09:14:55 │ INFO │ 💡 RÉPONSE        : Je ne trouve rien d'enregistré à ce sujet.  
+
+En général, le choix de la variété d'oignon dépend du climat et de la durée du jour de votre région : les « oignons à jour court » (type « Red » ou « Whit...
+2026-09-10 09:15:06 │ INFO │ 💬 MESSAGE TEXTE  : combien de plant d'oignon ?
+2026-09-10 09:15:07 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1051 out=32 cache=0 │ 183 ms │ issue=ok
+2026-09-10 09:15:07 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '994', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '5555', 'x-ratelimit-reset-requests': '8m38.4s', 'x-ratelimit-reset-tokens': '18.337s'}
+2026-09-10 09:15:07 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'combien de plant d'oignon ?'
+2026-09-10 09:15:07 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-09-10 09:15:07 │ INFO │ 🔍 QUESTION       : combien de plant d'oignon ?
+2026-09-10 09:15:07 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 0 ms │ 'combien de plant d'oignon ?'
+2026-09-10 09:15:07 │ INFO │ 📐 GABARIT SQL     │ famille=pieds_actifs        │ donnee=oui │ 0 jeton │ 'combien de plant d'oignon ?'
+2026-09-10 09:15:07 │ INFO │ [US-096 CA1] repondre_question potager_id=1 famille=pieds_actifs tokens_groq=0 donnee=oui
+2026-09-10 09:15:07 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=template_sql │ cle=pieds_actifs|oignon|         │ 'combien de plant d'oignon ?'
+2026-09-10 09:15:07 │ INFO │ 💡 RÉPONSE        : 0 plants de oignon sont en place aujourd'hui (planté 100, récolté 100 plants).
+2026-09-10 09:15:26 │ INFO │ 💬 MESSAGE TEXTE  : affiches moi les stats de la parcelle oignon
+2026-09-10 09:15:26 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1054 out=45 cache=0 │ 402 ms │ issue=ok
+2026-09-10 09:15:26 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '993', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6818', 'x-ratelimit-reset-requests': '10m4.8s', 'x-ratelimit-reset-tokens': '8.865s'}
+2026-09-10 09:15:26 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 6 ms │ 'affiches moi les stats de la parcelle oignon'
+2026-09-10 09:15:26 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-09-10 09:15:26 │ INFO │ 🔍 QUESTION       : affiches moi les stats de la parcelle oignon
+2026-09-10 09:15:26 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=QUESTION_DATA     │ confiance=1.00 │ 10 ms │ 'affiches moi les stats de la parcelle oignon'
+2026-09-10 09:15:27 │ INFO │ [US_Plan_occupation_parcelles] calcul_occupation_parcelles : 32 cultures actives, 7 parcelles
+2026-09-10 09:15:27 │ INFO │ 📐 GABARIT SQL     │ famille=occupation_parcelle │ donnee=aucune │ 0 jeton │ 'affiches moi les stats de la parcelle oignon'
+2026-09-10 09:15:27 │ INFO │ [US-096 CA1] repondre_question potager_id=1 famille=occupation_parcelle tokens_groq=0 donnee=aucune
+2026-09-10 09:15:27 │ INFO │ 💡 RÉPONSE        : Je n'ai aucune culture en place enregistrée sur la parcelle planche-oignon.
+2026-09-10 09:15:32 │ INFO │ 📊 STATS VARIETE  : culture='oignon', 2 variété(s), 0 godet(s)
+2026-09-10 09:15:54 │ INFO │ 💬 MESSAGE TEXTE  : comment cultiver les oignons ?
+2026-09-10 09:15:58 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=518 out=39 cache=0 │ 3291 ms │ issue=ok
+2026-09-10 09:15:58 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '992', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '7354', 'x-ratelimit-reset-requests': '11m31.2s', 'x-ratelimit-reset-tokens': '4.845s'}
+2026-09-10 09:15:58 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 3302 ms │ 'comment cultiver les oignons ?'
+2026-09-10 09:15:58 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-10 09:15:58 │ INFO │ 🔍 QUESTION       : comment cultiver les oignons ?
+2026-09-10 09:15:58 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 8 ms │ 'comment cultiver les oignons ?'
+2026-09-10 09:15:58 │ INFO │ 📚 SAVOIR         │ issue=transmis │ score=0.993 │ passages=3 │ 33 ms │ 1·guide assistant.md::5. Premiers pas — les cinq minutes qui ┊ 2·guide assistant.md::6. Enregistrer un geste — les règles g ┊ 3·guide assistant.md::10. Entretenir │ 'comment cultiver les oignons ?'
+2026-09-10 09:15:58 │ INFO │ ↪️ ROUTEUR REMONTÉE : fiche indicatif, non servie telle quelle (score=0.99) → raisonnement (1 saut) : 'comment cultiver les oignons ?'
+2026-09-10 09:15:58 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=1 │ in=3894 out=160 cache=0 │ 749 ms │ issue=ok
+2026-09-10 09:15:58 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '991', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '3575', 'x-ratelimit-reset-requests': '12m57.599s', 'x-ratelimit-reset-tokens': '33.187s'}
+2026-09-10 09:15:58 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=llm │ fragment=data/connaissance/guide user/guide assistant.md#05-5-premiers-pas-les-cinq-minutes-qui-comptent │ 'comment cultiver les oignons ?'
+2026-09-10 09:15:58 │ INFO │ 💡 RÉPONSE        : Pour cultiver des oignons, semez les graines ou plantez les bulbilles au printemps (ou fin d'été selon votre climat) en rangées espacées de 10–15 cm et à 2–3 cm de profondeur. Choisissez une parcelle ...
+2026-09-10 09:16:14 │ INFO │ [US-164] Fiche courte servie : 'oignon' (0 jeton, 0 appel modèle)
+2026-09-10 09:16:35 │ INFO │ 💬 MESSAGE TEXTE  : quels sont les associations possible avec les oignons ?
+2026-09-10 09:16:35 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1054 out=47 cache=0 │ 349 ms │ issue=ok
+2026-09-10 09:16:35 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '990', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6786', 'x-ratelimit-reset-requests': '14m24s', 'x-ratelimit-reset-tokens': '9.105s'}
+2026-09-10 09:16:35 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.99 │ 364 ms │ issue=proposee   │ regle=-                        │ 'quels sont les associations possible avec les oignons ?'
+2026-09-10 09:16:35 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.99 │ 364 ms │ issue=confirmee  │ regle=-                        │ 'quels sont les associations possible avec les oignons ?'
+2026-09-10 09:16:39 │ INFO │ [US-172] Exécution de la commande interprétée : /association lister oignons
+2026-09-10 09:17:08 │ INFO │ 💬 MESSAGE TEXTE  : quels sont les associations possible avec l'oignon ?
+2026-09-10 09:17:11 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1054 out=43 cache=0 │ 3616 ms │ issue=ok
+2026-09-10 09:17:11 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '989', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6765', 'x-ratelimit-reset-requests': '15m50.4s', 'x-ratelimit-reset-tokens': '9.262s'}
+2026-09-10 09:17:11 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.99 │ 3628 ms │ issue=proposee   │ regle=-                        │ 'quels sont les associations possible avec l'oignon ?'
+2026-09-10 09:17:11 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.99 │ 3628 ms │ issue=confirmee  │ regle=-                        │ 'quels sont les associations possible avec l'oignon ?'
+2026-09-10 09:17:11 │ INFO │ [US-172] Exécution de la commande interprétée : /association lister oignon
+2026-09-10 09:17:34 │ INFO │ 💬 MESSAGE TEXTE  : et les cultures à ne pas mettre avec l'oignon ?
+2026-09-10 09:17:34 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1055 out=77 cache=0 │ 702 ms │ issue=ok
+2026-09-10 09:17:34 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '988', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6817', 'x-ratelimit-reset-requests': '17m16.8s', 'x-ratelimit-reset-tokens': '8.872s'}
+2026-09-10 09:17:34 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.97 │ 715 ms │ issue=proposee   │ regle=-                        │ 'et les cultures à ne pas mettre avec l'oignon ?'
+2026-09-10 09:17:34 │ INFO │ 🎛️  INTERPRETEUR   │ nature=COMMANDE │ origine=modele │ /association  lister       │ confiance=0.97 │ 715 ms │ issue=confirmee  │ regle=-                        │ 'et les cultures à ne pas mettre avec l'oignon ?'
+2026-09-10 09:17:34 │ INFO │ [US-172] Exécution de la commande interprétée : /association lister oignon
+2026-09-10 10:18:51 │ INFO │ 💬 MESSAGE TEXTE  : comment cultiver la carotte ?
+2026-09-10 10:18:54 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=518 out=40 cache=0 │ 3544 ms │ issue=ok
+2026-09-10 10:18:54 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '7282', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '5.385s'}
+2026-09-10 10:18:54 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 3556 ms │ 'comment cultiver la carotte ?'
+2026-09-10 10:18:54 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-10 10:18:54 │ INFO │ 🔍 QUESTION       : comment cultiver la carotte ?
+2026-09-10 10:18:58 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.97 │ 4 ms │ 'comment cultiver la carotte ?'
+2026-09-10 10:18:58 │ INFO │ 📚 SAVOIR         │ issue=transmis │ score=0.807 │ passages=3 │ 4 ms │ 1·carotte-problemes.md::Mes carottes ont mal levé et il y a de ┊ 2·carotte-conduite-recolte.md::Désherber et butter les carottes sans  ┊ 3·carotte-conduite-recolte.md::Éclaircir un rang de carottes trop den │ 'comment cultiver la carotte ?'
+2026-09-10 10:18:58 │ INFO │ ↪️ ROUTEUR REMONTÉE : fiche indicatif, non servie telle quelle (score=0.81) → raisonnement (1 saut) : 'comment cultiver la carotte ?'
+2026-09-10 10:18:58 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=1 │ in=957 out=198 cache=0 │ 713 ms │ issue=ok
+2026-09-10 10:18:58 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6925', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '8.062s'}
+2026-09-10 10:18:58 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=llm │ fragment=data/connaissance/agronomie/carotte-problemes.md#04-mes-carottes-ont-mal-leve-et-il-y-a-des-trous-dans-le-rang │ 'comment cultiver la carotte ?'
+2026-09-10 10:18:58 │ INFO │ 💡 RÉPONSE        : Pour semer les carottes, prépare un sol fin, meuble et légèrement humide ; sème les graines à 0,5 cm de profondeur en les espaçant d'environ 2 cm, puis recouvre légèrement de terre. Maintiens la surfa...
+2026-09-10 10:21:41 │ INFO │ 💬 MESSAGE TEXTE  : décris moi les différent modèle de moteur pour l'automobile
+2026-09-10 10:21:44 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1056 out=34 cache=0 │ 3326 ms │ issue=ok
+2026-09-10 10:21:44 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6746', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '9.405s'}
+2026-09-10 10:21:45 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=524 out=51 cache=0 │ 366 ms │ issue=ok
+2026-09-10 10:21:45 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6229', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '13.282s'}
+2026-09-10 10:21:45 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_SAVOIR   │ confiance=0.99 │ 379 ms │ 'décris moi les différent modèle de moteur pour l'automobile'
+2026-09-10 10:21:45 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_SAVOIR → reroutage vers _ask_question
+2026-09-10 10:21:45 │ INFO │ 🔍 QUESTION       : décris moi les différent modèle de moteur pour l'automobile
+2026-09-10 10:21:48 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.99 │ 6 ms │ 'décris moi les différent modèle de moteur pour l'automobile'
+2026-09-10 10:21:48 │ INFO │ 📚 SAVOIR         │ issue=servi    │ score=0.930 │ passages=3 │ 12 ms │ 1·auto-definition.md::Les principaux éléments d'une automobi ┊ 2·auto-avantage-inconvenient.md::Voiture hybride ┊ 3·auto-avantage-inconvenient.md::Voiture électrique │ 'décris moi les différent modèle de moteur pour l'automobile'
+2026-09-10 10:21:48 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=rag │ fragment=tests/corpus/automobile/auto-definition.md#02-les-principaux-elements-d-une-automobile │ 'décris moi les différent modèle de moteur pour l'automobile'
+2026-09-10 10:21:48 │ INFO │ 💡 RÉPONSE        : Le moteur produit l'énergie nécessaire au déplacement. La transmission transmet cette énergie aux roues. La direction permet d'orienter le véhicule et le système de freinage assure son ralentissement ...`;
 
 /* ════════════════════════════════════════════════════════════
    2. TOPOLOGIE DE LA CASCADE
    ════════════════════════════════════════════════════════════ */
 const NOEUDS = {
   entree:      {x:  80, y:340, emo:"💬", nom:"Entrée",            sub:"Telegram",       ton:"neutre"},
-  intent:      {x: 250, y:340, emo:"🔌", nom:"Intention",         sub:"bot.py",         ton:"hors", hors:true},
+  intent:      {x: 250, y:340, emo:"🔌", nom:"Amont",              sub:"site indéterminé", ton:"hors", hors:true},
+  interpreteur:{x: 430, y:200, emo:"🎛️", nom:"Interpréteur",       sub:"US-172",         ton:"gratuit"},
+  commande:    {x: 810, y:200, emo:"⚙️", nom:"Commande exécutée",  sub:"handler natif",  ton:"neutre"},
   routeur:     {x: 430, y:340, emo:"🧭", nom:"Routeur",           sub:"llm/routeur",    ton:"gratuit"},
   cache_lec:   {x: 620, y:120, emo:"⚡", nom:"Cache — lecture",   sub:"étage 0bis",     ton:"gratuit"},
   gabarit:     {x: 620, y:250, emo:"📐", nom:"Gabarit SQL",       sub:"étage 1",        ton:"gratuit"},
@@ -344,12 +473,14 @@ const NOEUDS = {
 };
 const ARETES = [
   ["entree","intent","h"], ["entree","routeur","sous"], ["intent","routeur","h"],
+  ["entree","interpreteur","h"], ["intent","interpreteur","h"],
+  ["interpreteur","commande","h"], ["commande","reponse","h"],
   ["routeur","cache_lec","h"], ["routeur","gabarit","h"], ["routeur","savoir","h"],
-  ["routeur","parseur","h"],
-  ["savoir","remontee","h"], ["remontee","llm","h"],
+  ["routeur","parseur","h"], ["routeur","llm","hl",15],
+  ["savoir","remontee","h"], ["savoir","cache_ecr","h"], ["remontee","llm","h"],
   ["llm","cache_ecr","haut"], ["gabarit","cache_ecr","h"],
-  ["cache_ecr","reponse","h"], ["cache_lec","reponse","h"], ["gabarit","reponse","h"],
-  ["parseur","parsing_llm","h"], ["parseur","cache_inv","sous"],
+  ["cache_ecr","reponse","h"], ["cache_lec","reponse","h"], ["gabarit","reponse","h",16],
+  ["parseur","parsing_llm","h"], ["parseur","cache_inv","dessus"],
   ["parsing_llm","routeur","arriere"], ["cache_inv","db","h"],
 ];
 const TON = {gratuit:"var(--gratuit)", jeton:"var(--jeton)", savoir:"var(--savoir)",
@@ -360,6 +491,7 @@ const DW = 75, DH = 28;   // demi-largeur / demi-hauteur d'un nœud
    3. PARSEUR DE LOG
    ════════════════════════════════════════════════════════════ */
 const RE_LIGNE = /(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})\s*│\s*([A-Z]+)\s*│\s*([\s\S]*)$/;
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const nb  = (s,k)=>{const m=s.match(new RegExp(k+"=(-?[\\d.]+)")); return m?parseFloat(m[1]):null;};
 const mot = (s,k)=>{const m=s.match(new RegExp(k+"=([^│|\\s]+)")); return m?m[1]:null;};
 const jusquaBarre = (s,k)=>{const m=s.match(new RegExp(k+"=([\\s\\S]*?)\\s*│")); return m?m[1].trim():null;};
@@ -394,6 +526,12 @@ function typerLigne(msg){
   if (t("Confirmation demandée"))                return "confirm_dem";
   if (t("Confirmation reçue"))                   return "confirm_rec";
   if (/^🔍/.test(msg)||t("QUESTION       :"))    return "question";
+  if (t("INTERPRETEUR")){
+    return t("issue=confirmee") ? "interp_conf" : "interp_prop";
+  }
+  if (t("Exécution de la commande interprétée")) return "commande";
+  if (t("MENU TELEGRAM")||t("STATS VARIETE"))    return "journal";
+  if (/^\[/.test(msg))                           return "journal";
   return "meta";
 }
 
@@ -416,22 +554,30 @@ function parseLog(texte){
   return traces.map(construireTrace).filter(t => t.pas.length);
 }
 
-/* — désambiguïsation routeur / bot.py, cf. règle métier —
-   Une ligne « 🔌 LLM classification » appartient au routeur ssi la
-   prochaine ligne non-📉 est « 🧭 ROUTEUR │ origine=modele ». */
-function classifEstRouteur(lignes, i){
+/* — attribution d'une ligne « 🔌 LLM classification » à son site d'appel —
+   La prochaine ligne non-📉 le désigne : 🧭 ROUTEUR ou 🎛️ INTERPRETEUR, à
+   condition qu'elle porte origine=modele. Sinon le site reste indéterminé. */
+function siteClassif(lignes, i){
   for (let j = i + 1; j < lignes.length; j++){
     const t = lignes[j].type;
     if (t === "debit") continue;
-    return t === "routeur" && mot(lignes[j].msg, "origine") === "modele";
+    if (t === "routeur")
+      return mot(lignes[j].msg,"origine") === "modele" ? "routeur" : "amont";
+    if (t === "interp_prop" || t === "interp_conf")
+      return mot(lignes[j].msg,"origine") === "modele" ? "interpreteur" : "amont";
+    return "amont";
   }
-  return false;
+  return "amont";
 }
 
 const NOMS = {
   entree_texte:["💬","Message texte","Entrée"], entree_voix:["🎤","Transcription vocale","Entrée"],
-  classif_hors:["🔌","Classifieur d'intention","Hors cascade"],
+  classif_hors:["🔌","Classification amont","Site indéterminé"],
   classif_rout:["🔌","Classification du routeur","Routeur"],
+  classif_interp:["🔌","Classification de l'interpréteur","Interpréteur"],
+  interp_prop:["🎛️","Commande proposée","Interpréteur · US-172"],
+  interp_conf:["🎛️","Commande confirmée","Interpréteur · US-172"],
+  commande:["⚙️","Commande exécutée","Sortie"],
   routeur:["🧭","Aiguillage","Routeur"], parseur:["🔤","Parseur déterministe","Étage 0"],
   parseur_json:["🤖","Résultat du parsing","Étage 0"],
   enrichissement:["✨","Enrichissement","Étage 0"],
@@ -443,7 +589,8 @@ const NOMS = {
   remontee:["↪️","Remontée d'étage","Étage 2 → 3"], llm:["🔌","Raisonnement","Étage 3"],
   db:["💾","Enregistrement","PostgreSQL"], reponse:["💡","Réponse","Sortie"],
   debit:["📉","Débit Groq","Quotas"], reroutage:["❓","Reroutage","Aiguillage"],
-  question:["🔍","Question isolée","Aiguillage"], meta:["·","Journal","—"],
+  question:["🔍","Question isolée","Aiguillage"], meta:["·","Ligne inconnue","—"],
+  journal:["·","Métrique applicative","—"],
 };
 
 function construireTrace(src){
@@ -464,17 +611,45 @@ function construireTrace(src){
         break;
 
       case "classif": {
-        const rout = classifEstRouteur(L, i);
-        type = rout ? "classif_rout" : "classif_hors";
-        noeud = rout ? "routeur" : "intent";
+        const site = siteClassif(L, i);
+        type  = site === "routeur" ? "classif_rout"
+              : site === "interpreteur" ? "classif_interp" : "classif_hors";
+        noeud = site === "amont" ? "intent" : site;
         cout = (nb(m,"in")||0) + (nb(m,"out")||0);
-        bucket = rout ? "cascade" : "hors";
+        bucket = site === "amont" ? "hors" : "cascade";
         champs = [["modèle",mot(m,"modele")],["potager",mot(m,"potager")],
                   ["in",nb(m,"in")],["out",nb(m,"out")],["cache",nb(m,"cache")],
                   ["durée",duree(m)+" ms"],["issue",mot(m,"issue")]];
-        apport = rout
+        apport = site === "routeur"
           ? `Aucune règle déterministe n'a su trancher : le modèle arbitre entre ACTION, QUESTION_DATA, QUESTION_SAVOIR et QUESTION_HYBRIDE. <strong>${cout} jetons</strong>, dans le périmètre de la cascade.`
-          : `Décide si le message est une action, une question ou une note — <em>avant</em> l'aiguillage. <strong>${cout} jetons hors cascade</strong> : ce coût est payé quel que soit l'étage qui répondra ensuite.`;
+          : site === "interpreteur"
+          ? `Aucune règle de l'interpréteur n'a reconnu la formulation : le modèle propose la commande native correspondante. <strong>${cout} jetons</strong> — payés une fois pour basculer sur un handler qui, lui, ne coûtera rien.`
+          : `Appel effectué avant tout aiguillage logué. <strong>${cout} jetons hors cascade</strong>. <em>Le site d'appel n'est pas déterminable sur cette seule ligne : aucune ligne 🧭 ROUTEUR ni 🎛️ INTERPRETEUR avec origine=modele ne suit.</em>`;
+        break;
+      }
+
+      case "interp_prop": case "interp_conf": {
+        noeud = "interpreteur";
+        const parts = m.split("│");
+        const cmd = (parts[3]||"").trim().replace(/\s+/g," ");
+        const o = mot(m,"origine"), r = mot(m,"regle");
+        champs = [["nature",mot(m,"nature")],["origine",o],["commande",cmd],
+                  ["confiance",mot(m,"confiance")],["issue",mot(m,"issue")],
+                  ["règle",r],["durée",duree(m)+" ms"]];
+        extra = {origine:o, commande:cmd};
+        apport = type === "interp_prop"
+          ? (o === "regle"
+              ? `Une règle de l'interpréteur (<code>${r}</code>) reconnaît la formulation et propose <code>${cmd}</code> en <strong>${duree(m)} ms, 0 jeton</strong>. La phrase libre devient une commande native.`
+              : `Le modèle propose <code>${cmd}</code>, confiance ${mot(m,"confiance")}. La formulation n'était couverte par aucune règle — candidate à en devenir une.`)
+          : `Proposition retenue : <code>${cmd}</code> part vers son handler. Tout ce qui suit s'exécute en Python et en SQL, <strong>sans un jeton de plus</strong>.`;
+        break;
+      }
+
+      case "commande": {
+        noeud = "commande";
+        const cmd = m.slice(m.indexOf(":") + 1).trim();
+        champs = [["commande",cmd]];
+        apport = `Le handler natif <code>${cmd}</code> s'exécute et répond sur Telegram. <strong>0 jeton</strong> : c'est le gain de l'interpréteur — comprendre une fois, exécuter du code ensuite.`;
         break;
       }
 
@@ -557,18 +732,24 @@ function construireTrace(src){
           const mm = p.trim().match(/^\d+·(.*?)::(.*)$/);
           return mm ? {fichier:mm[1].trim(), section:mm[2].trim()} : {fichier:p.trim(), section:""};
         }) : [];
-        extra = {passages};
-        champs = [["issue",mot(m,"issue")],["score",sc],["passages",np],["durée",duree(m)+" ms"]];
-        apport = `Recherche plein texte dans le référentiel, filtrée sur ce potager. <strong>${np} passages remontés en ${duree(m)} ms pour 0 jeton.</strong> Le référentiel ne rédige jamais : il fournit du contexte et un score.`;
+        const iss = mot(m,"issue");
+        extra = {passages, issue:iss};
+        champs = [["issue",iss],["score",sc],["passages",np],["durée",duree(m)+" ms"]];
+        apport = iss === "servi"
+          ? `Recherche dans le référentiel, filtrée sur ce potager : <strong>${np} passages en ${duree(m)} ms</strong>. <code>issue=servi</code> — la fiche part <strong>telle quelle</strong> vers l'utilisateur. Aucun étage supérieur n'est sollicité : <strong>0 jeton de rédaction</strong>. C'est le meilleur cas de la cascade.`
+          : `Recherche dans le référentiel, filtrée sur ce potager : <strong>${np} passages en ${duree(m)} ms pour 0 jeton</strong>. <code>issue=transmis</code> — les passages ne sont pas servis directement, ils sont <em>transmis en contexte</em> à l'étage supérieur. Le référentiel ne rédige pas : il fournit de la matière et un score.`;
         break;
       }
 
       case "remontee": {
         noeud = "remontee";
         const sc = m.match(/score=([\d.]+)/), sa = m.match(/\((\d+) saut/);
-        const mo = m.match(/REMONTÉE\s*:\s*(.*?)\s*\(score/);
-        champs = [["motif",mo?mo[1]:"—"],["score",sc?sc[1]:"—"],["sauts",sa?sa[1]:"—"]];
-        apport = "Score jugé insuffisant pour servir la fiche telle quelle. La cascade <strong>remonte d'un étage</strong> plutôt que de répondre à côté — c'est le garde-fou contre le mauvais routage.";
+        const mo = m.match(/REMONTÉE\s*:\s*([\s\S]*?)\s*(?:\(score|→)/);
+        const motif = mo ? mo[1] : "—";
+        champs = [["motif",motif],["score",sc?sc[1]:"non mesuré"],["sauts",sa?sa[1]:"—"]];
+        apport = sc
+          ? `Score jugé insuffisant pour servir la fiche telle quelle. La cascade <strong>remonte d'un étage</strong> plutôt que de répondre à côté — c'est le garde-fou contre le mauvais routage.`
+          : `Motif : <em>${esc(motif)}</em>. L'étage atteint n'a pas produit de quoi répondre, la cascade <strong>remonte d'un étage</strong> au lieu de servir une réponse creuse. Le coût de ce garde-fou est réel : l'étage précédent a déjà été payé.`;
         break;
       }
 
@@ -581,12 +762,15 @@ function construireTrace(src){
 
       case "cache_ecr": {
         noeud = "cache_ecr";
-        const kind = mot(m,"mémorisé"), frag = jusquaBarre(m,"fragment"), cle = jusquaBarre(m,"cle");
-        champs = [["type",kind],["source",mot(m,"source")]];
+        const kind = mot(m,"mémorisé"), src2 = mot(m,"source"),
+              frag = jusquaBarre(m,"fragment"), cle = jusquaBarre(m,"cle");
+        champs = [["type",kind],["source",src2]];
         if (frag) champs.push(["fragment",frag]);
         if (cle)  champs.push(["clé",cle]);
         apport = kind === "figee"
-          ? "Réponse mémorisée telle quelle avec son ancre dans le référentiel. <strong>Le prochain passage coûtera 0 jeton.</strong>"
+          ? (src2 === "rag"
+              ? "Réponse mémorisée avec <code>source=rag</code> : elle n'a jamais coûté un jeton de rédaction, et elle n'en coûtera pas davantage au prochain passage."
+              : "Réponse mémorisée telle quelle avec son ancre dans le référentiel. <code>source=llm</code> : elle a été rédigée une fois, elle ne le sera plus. <strong>Le prochain passage coûtera 0 jeton.</strong>")
           : "Motif mémorisé sous forme de gabarit : la structure et le routage sont figés, les valeurs restent recalculées en SQL. La réponse reste juste, la décision est gratuite.";
         break;
       }
@@ -645,11 +829,16 @@ function construireTrace(src){
   const ouvre = pas[0];
   const rep   = pas.filter(p => p.type === "reponse").pop();
   const q     = (ouvre.extra && ouvre.extra.texte) || "—";
+  const complete = pas.some(p => p.noeud === "reponse" || p.noeud === "db" || p.noeud === "commande");
+  const inconnues = pas.filter(p => p.type === "meta" || p.type === "cache_autre")
+                       .map(p => p.brut.replace(/^.*?│\s*[A-Z]+\s*│\s*/, ""));
+  const dernier = pas.filter(p => p.noeud).pop();
   return {
     titre:q, voix:src.voix, pas, jetonsCascade, jetonsHors,
     total:jetonsCascade + jetonsHors, msMesure, restant, limite,
     reponse:rep ? rep.extra.texte : null,
-    horaire:ouvre.ts,
+    horaire:ouvre.ts, complete, inconnues,
+    dernierNoeud: dernier ? dernier.noeud : null,
     cle:q.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôûùüÿñæœ ]/g,"").replace(/\s+/g," ").trim(),
   };
 }
@@ -659,38 +848,100 @@ function construireTrace(src){
    ════════════════════════════════════════════════════════════ */
 let TRACES = [], iTrace = 0, iPas = 0, minuteur = null;
 const $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-/* — géométrie des arêtes — */
-function chemin(a, b, forme){
+/* un tracé orthogonal traverse-t-il un nœud autre que ses extrémités ? */
+function traverse(d, a, b){
+  const tk = d.trim().split(/\s+/); let x = 0, y = 0, i = 0; const seg = [];
+  while (i < tk.length){
+    const c = tk[i++];
+    if (c === "M"){ x = +tk[i++]; y = +tk[i++]; }
+    else if (c === "H"){ const n = +tk[i++]; seg.push([Math.min(x,n),y,Math.max(x,n),y]); x = n; }
+    else if (c === "V"){ const n = +tk[i++]; seg.push([x,Math.min(y,n),x,Math.max(y,n)]); y = n; }
+  }
+  for (const [k,n] of Object.entries(NOEUDS)){
+    if (k === a || k === b) continue;
+    const X1 = n.x-DW, Y1 = n.y-DH, X2 = n.x+DW, Y2 = n.y+DH;
+    for (const [x1,y1,x2,y2] of seg)
+      if (x2 > X1+1 && x1 < X2-1 && y2 > Y1+1 && y1 < Y2-1) return true;
+  }
+  return false;
+}
+
+/* — géométrie des arêtes : routage orthogonal, angles droits — */
+function chemin(a, b, forme, jog){
   const A = NOEUDS[a], B = NOEUDS[b];
   if (!A || !B) return "";
+  const dx = B.x - A.x, dy = B.y - A.y;
+
+  // contournement par le bas (évite un nœud placé entre les deux)
   if (forme === "sous"){
-    const y = Math.max(A.y, B.y) + 92;
-    return `M ${A.x} ${A.y+DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+    const y = Math.max(A.y, B.y) + DH + 62;
+    return `M ${A.x} ${A.y+DH} V ${y} H ${B.x} V ${B.y+DH}`;
   }
+  // contournement par le haut
+  if (forme === "dessus"){
+    const y = Math.min(A.y, B.y) - DH - 50;
+    return `M ${A.x} ${A.y-DH} V ${y} H ${B.x} V ${B.y-DH}`;
+  }
+  // retour en arrière, par un couloir dégagé
   if (forme === "arriere"){
-    const y = Math.min(A.y, B.y) - 78;
-    return `M ${A.x} ${A.y-DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+    const x = A.x - DW - 20, y = (A.y + B.y) / 2 + 35;
+    return `M ${A.x-DW} ${A.y} H ${x} V ${y} H ${B.x} V ${B.y+DH}`;
   }
-  if (forme === "haut" || (Math.abs(A.x - B.x) < 12 && forme !== "h")){
-    return B.y < A.y
-      ? `M ${A.x} ${A.y-DH} C ${A.x} ${A.y-DH-46} ${B.x} ${B.y+DH+46} ${B.x} ${B.y+DH}`
-      : `M ${A.x} ${A.y+DH} C ${A.x} ${A.y+DH+46} ${B.x} ${B.y-DH-46} ${B.x} ${B.y-DH}`;
+  // formes déclarées : bifurcation imposée, déjà validée
+  if (forme === "h" || forme === "hl"){
+    if (Math.abs(dy) < 6) return `M ${A.x+DW} ${A.y} H ${B.x-DW}`;
+    const x = forme === "hl" ? B.x - DW - (jog || 20) : A.x + DW + (jog || 20);
+    return `M ${A.x+DW} ${A.y} H ${x} V ${B.y} H ${B.x-DW}`;
   }
-  if (B.x <= A.x){   // repli automatique vers l'arrière
-    const y = Math.min(A.y, B.y) - 78;
-    return `M ${A.x} ${A.y-DH} C ${A.x} ${y} ${B.x} ${y} ${B.x} ${B.y+DH}`;
+  // colonne identique : segment vertical franc
+  if (forme === "haut" || Math.abs(dx) < 10){
+    return dy < 0 ? `M ${A.x} ${A.y-DH} V ${B.y+DH}`
+                  : `M ${A.x} ${A.y+DH} V ${B.y-DH}`;
   }
-  const x1 = A.x + DW, x2 = B.x - DW, mid = (x1 + x2) / 2;
-  return `M ${x1} ${A.y} C ${mid} ${A.y} ${mid} ${B.y} ${x2} ${B.y}`;
+  // arête non déclarée : on essaie plusieurs tracés et on garde le premier propre
+  const c = [];
+  if (dx > 10){
+    const x1 = A.x + DW, x2 = B.x - DW;
+    if (Math.abs(dy) < 6) c.push(`M ${x1} ${A.y} H ${x2}`);
+    for (const t of [0.10, 0.90, 0.50, 0.28, 0.72]){
+      const x = Math.round(x1 + (x2 - x1) * t);
+      if (x > x1 + 6 && x < x2 - 6) c.push(`M ${x1} ${A.y} H ${x} V ${B.y} H ${x2}`);
+    }
+  }
+  for (const y of [Math.max(A.y,B.y) + DH + 46, Math.min(A.y,B.y) - DH - 46,
+                   Math.max(A.y,B.y) + DH + 88, Math.min(A.y,B.y) - DH - 88]){
+    if (y < 84 || y > 686) continue;
+    const sA = y > A.y ? DH : -DH, sB = y > B.y ? DH : -DH;
+    c.push(`M ${A.x} ${A.y+sA} V ${y} H ${B.x} V ${B.y+sB}`);
+  }
+  for (const d of c) if (!traverse(d, a, b)) return d;
+  return c[0] || `M ${A.x} ${A.y} H ${B.x} V ${B.y}`;
 }
+
+/* décalage des bifurcations : une verticale distincte par arête sortante */
+const JOG = {};
+(function(){
+  const cpt = {};
+  for (const e of ARETES){
+    const [a,b,f] = e;
+    if (e[3] !== undefined){ JOG[a+">"+b] = e[3]; continue; }
+    if (f !== "h" || !NOEUDS[a] || !NOEUDS[b]) continue;
+    if (Math.abs(NOEUDS[b].y - NOEUDS[a].y) < 6) continue;
+    cpt[a] = (cpt[a] || 0) + 1;
+    JOG[a+">"+b] = 8 * cpt[a];
+  }
+})();
 
 function tonDuPas(p){
   if (!p || !p.noeud) return "neutre";
   if (p.noeud === "routeur"){
     const o = p.extra && p.extra.origine;
     return (o === "modele" || p.type === "classif_rout") ? "jeton" : "gratuit";
+  }
+  if (p.noeud === "interpreteur"){
+    const o = p.extra && p.extra.origine;
+    return (o === "modele" || p.type === "classif_interp") ? "jeton" : "gratuit";
   }
   return NOEUDS[p.noeud] ? NOEUDS[p.noeud].ton : "neutre";
 }
@@ -720,10 +971,11 @@ function dessinerGraphe(){
   h += `<text class="bandeau-txt" x="810" y="670" text-anchor="middle">hors cascade</text>`;
 
   // arêtes déclarées
-  for (const [a,b,f] of ARETES){
+  for (const e of ARETES){
+    const [a,b,f] = e;
     const on = arcs.has(a + ">" + b);
     const st = on ? `stroke:${TON[vus.get(b)||"neutre"]}` : "";
-    h += `<path class="arete${on?" on":""}" style="${st}" d="${chemin(a,b,f)}"/>`;
+    h += `<path class="arete${on?" on":""}" style="${st}" d="${chemin(a,b,f,JOG[a+">"+b])}"/>`;
   }
   // arêtes non déclarées, apparues dans ce log
   for (const arc of arcs){
@@ -741,6 +993,12 @@ function dessinerGraphe(){
       <text class="nom" x="${n.x-DW+40}" y="${n.y-8}">${esc(n.nom)}</text>
       <text class="sub" x="${n.x-DW+40}" y="${n.y+10}">${esc(n.sub)}</text>
     </g>`;
+  }
+  // impasse : la trace ne rejoint jamais la sortie
+  if (!tr.complete && courant && iPas === tr.pas.length - 1){
+    const n = NOEUDS[courant];
+    h += `<text class="bandeau-txt" x="${n.x+DW+14}" y="${n.y+5}"
+      style="fill:var(--jeton)">⋯ trace interrompue ici</text>`;
   }
   svg.innerHTML = h;
 }
@@ -787,6 +1045,16 @@ function dessinerPanneau(){
       Le même échange, joué pour la première fois à ${av.horaire}, a coûté
       <strong>${av.total} jetons</strong>. Ici : <strong class="p-gratuit">0</strong>.</div>`;
   }
+  if (!tr.complete && iPas === tr.pas.length - 1){
+    h += `<div class="titrillon" style="color:var(--jeton)">Trace interrompue</div>
+      <div class="apport">Aucune ligne <code>💡 RÉPONSE</code> ni <code>💾 DB SAVE</code> dans cet
+      échange : le chemin s'arrête à <strong>${esc(NOEUDS[tr.dernierNoeud] ? NOEUDS[tr.dernierNoeud].nom : "—")}</strong>.
+      Soit le log est tronqué, soit la sortie emprunte un marqueur que le lecteur ne connaît pas encore.</div>`;
+    if (tr.inconnues.length){
+      h += `<div class="titrillon">Lignes non reconnues dans cette trace</div>
+        <div class="brut" style="margin-bottom:0">${esc(tr.inconnues.join("\n"))}</div>`;
+    }
+  }
   $("#panneau").innerHTML = h;
   $("#panneau").scrollTop = 0;
 }
@@ -816,13 +1084,16 @@ function dessinerScenarios(){
   $("#scenarios").innerHTML = TRACES.map((t,k) => {
     const c = t.total === 0 ? "c0" : "cn";
     const titre = t.titre.length > 34 ? t.titre.slice(0,33) + "…" : t.titre;
-    return `<button class="sc" data-t="${k}" aria-current="${k===iTrace}">
+    return `<button class="sc" data-t="${k}" aria-current="${k===iTrace}"
+      title="${t.complete?"":"trace interrompue — "}${esc(t.titre)}">
       <span>${t.voix?"🎤":"💬"}</span><b>${esc(titre)}</b>
-      <span class="cost ${c}">${t.total} j</span></button>`;
+      <span class="cost ${c}">${t.total} j</span>${t.complete?"":`<span class="cost" style="color:var(--jeton)">⋯</span>`}</button>`;
   }).join("");
 }
 
 function rendre(){ dessinerGraphe(); dessinerFrise(); dessinerPanneau(); dessinerEco(); dessinerScenarios();
+  const onglet = $('#scenarios [aria-current="true"]');
+  if (onglet) onglet.scrollIntoView({block:"nearest", inline:"nearest"});
   $("#b-prec").disabled = iPas === 0;
   $("#b-suiv").disabled = iPas === TRACES[iTrace].pas.length - 1;
 }
@@ -881,6 +1152,64 @@ zone.addEventListener("drop", e => { e.preventDefault();
   const f = e.dataTransfer.files[0];
   if (f) f.text().then(t => { zone.value = t; }); });
 
+/* — rapport de diagnostic : ce que le lecteur n'a pas su nommer — */
+function texteRapport(traces){
+  const inc = traces.filter(t => !t.complete);
+  const fam = new Map();
+  traces.forEach(t => t.inconnues.forEach(l => {
+    const cle = l.replace(/\d+/g,"N").replace(/'[^']*'/g,"'…'")
+                 .replace(/"[^"]*"/g,'"…"').slice(0,72);
+    if (!fam.has(cle)) fam.set(cle, {n:0, ex:l});
+    fam.get(cle).n++;
+  }));
+  const L = [];
+  L.push(`RAPPORT DE LECTURE — ${traces.length} trace(s)`);
+  L.push("");
+  L.push(`Traces atteignant la sortie  : ${traces.length - inc.length}`);
+  L.push(`Traces interrompues          : ${inc.length}`);
+  if (inc.length){
+    L.push("");
+    L.push("— TRACES INTERROMPUES —");
+    inc.forEach(t => {
+      const n = NOEUDS[t.dernierNoeud];
+      L.push(`  ${t.horaire}  « ${t.titre} »`);
+      L.push(`      dernier étage atteint : ${n ? n.nom : "aucun"}   (${t.pas.length} lignes)`);
+    });
+  }
+  if (fam.size){
+    L.push("");
+    L.push("— LIGNES NON RECONNUES (regroupées) —");
+    [...fam.entries()].sort((a,b) => b[1].n - a[1].n).forEach(([,v]) => {
+      L.push(`  ×${String(v.n).padStart(3)}  ${v.ex.slice(0,150)}`);
+    });
+  } else {
+    L.push("");
+    L.push("Aucune ligne non reconnue.");
+  }
+  L.push("");
+  L.push("Marqueurs actuellement reconnus comme sortie : 💡 RÉPONSE, 💾 DB SAVE.");
+  return L.join("\n");
+}
+
+function afficherRapport(){
+  const r = $("#rapport");
+  r.textContent = texteRapport(TRACES);
+  r.classList.add("on");
+}
+
+let dernierRapport = "";
+$("#btn-diag").onclick = () => {
+  voile.classList.add("on"); $("#retour").textContent = "";
+  afficherRapport(); dernierRapport = $("#rapport").textContent;
+};
+$("#b-copier").onclick = () => {
+  const t = $("#rapport").textContent;
+  if (!t) return;
+  navigator.clipboard && navigator.clipboard.writeText(t)
+    .then(() => { $("#retour").textContent = "Rapport copié."; })
+    .catch(() => { $("#retour").textContent = "Copie refusée — sélectionne le texte à la main."; });
+};
+
 $("#b-lire").onclick = () => {
   const t = parseLog(zone.value);
   if (!t.length){
@@ -888,7 +1217,13 @@ $("#b-lire").onclick = () => {
     return;
   }
   TRACES = t; iTrace = 0; iPas = 0; pause();
-  voile.classList.remove("on"); rendre();
+  rendre(); afficherRapport();
+  const inc = t.filter(x => !x.complete).length;
+  if (inc){
+    $("#retour").textContent = `${inc} trace(s) n'atteignent pas la sortie — voir le rapport.`;
+  } else {
+    voile.classList.remove("on");
+  }
 };
 
 /* ── démarrage ── */

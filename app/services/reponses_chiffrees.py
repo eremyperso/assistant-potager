@@ -56,7 +56,15 @@ par période · dernière occurrence d'un type d'action · stock courant · nomb
 pieds actifs · nombre de godets produits [US-170] · rendement cumulé de la
 saison · contenu de la pépinière · occupation d'une parcelle · parcelles où une
 culture est en place · parcelles portant une famille botanique · notes du jardinier sur une
-culture ou une parcelle [US-141].
+culture ou une parcelle [US-141] · pré-diagnostic à partir d'un symptôme décrit [US-165].
+
+[US-165] Deux familles servent désormais le référentiel PARTAGÉ et non les
+chiffres du potager : `bioagresseurs_culture` (« qu'est-ce qui attaque mes
+poireaux ») et `prediagnostic_symptome` (« mes tomates ont des taches marron »).
+Elles sont ici et pas ailleurs pour une raison unique : ce sont des réponses
+EXACTES, servies par gabarit, à zéro jeton — exactement le contrat de cet étage.
+Ce qu'elles agrègent est une jointure de référentiel plutôt qu'une somme
+d'évènements, et cela ne change rien à ce contrat.
 """
 from __future__ import annotations
 
@@ -72,6 +80,7 @@ from unidecode import unidecode
 
 from app.services import bioagresseurs as svc_bioagresseurs
 from app.services import catalogue_sql
+from app.services import prediagnostic as svc_prediagnostic
 from app.services import familles as _familles
 from app.services import memoire_potager as _memoire
 from app.services.catalogue_sql import GardeCatalogueError
@@ -242,6 +251,23 @@ GABARITS: dict[str, str] = {
     "bioagresseurs_culture_sans_fiche": ("Je n'ai pas de fiche de référentiel pour {culture}, "
                                          "donc rien à dire sur ce qui l'attaque. Ce n'est pas "
                                          "un constat d'absence de risque."),
+
+    # [US-165] Le pré-diagnostic. Cinq gabarits pour cinq situations, parce que
+    # les confondre trompe le jardinier — et parce que trois d'entre elles sont
+    # des IGNORANCES différentes, qu'il a le droit de distinguer.
+    #
+    # ⚠️ `FORMULE_EVOCATION` est reprise du service, jamais recopiée : la
+    # formulation du CA4 est imposée et non négociable, et une seconde
+    # occurrence littérale dériverait à la première reformulation. Les trois
+    # messages d'ignorance viennent du service pour la même raison.
+    "prediagnostic":        "Sur {culture}, ce que tu décris ({symptome}) "
+                            + svc_prediagnostic.FORMULE_EVOCATION + " :\n{lignes}",
+    "prediagnostic_unique": "Sur {culture}, ce que tu décris ({symptome}) "
+                            + svc_prediagnostic.FORMULE_EVOCATION + " :\n{lignes}\n\n"
+                            + svc_prediagnostic.MESSAGE_PISTE_UNIQUE,
+    "prediagnostic_symptome_inconnu": svc_prediagnostic.MESSAGE_SYMPTOME_INCONNU,
+    "prediagnostic_culture_sans_fiche": svc_prediagnostic.MESSAGE_CULTURE_SANS_FICHE,
+    "prediagnostic_aucun_croisement": svc_prediagnostic.MESSAGE_AUCUN_CROISEMENT,
 
     "parcelles_par_culture":    "Je trouve {culture} sur {nb} parcelle(s) :\n{lignes}",
     "parcelles_par_culture_aucune": "Côté {culture} : aucune parcelle n'en porte en ce moment.",
@@ -854,6 +880,45 @@ def _agreger_bioagresseurs_culture(db: Session, ctx: TenantContext, culture: str
     }
 
 
+@catalogue_sql.enregistrer("prediagnostic_symptome")
+def _agreger_prediagnostic(db: Session, ctx: TenantContext, culture: str, description: str) -> dict:
+    """[US-165 / CA3, CA5, CA8, CA9] Des pistes ordonnées — à zéro jeton.
+
+    Délègue à `app.services.prediagnostic.prediagnostic`, qui porte la recherche
+    plein texte, le croisement avec les bioagresseurs de la culture et les cinq
+    issues. **Aucune requête n'est réécrite ici** : la même règle que pour
+    `bioagresseurs_culture` (US-173 / CA11).
+
+    ⚠️ Le POIDS des arêtes ne figure PAS dans l'agrégat, et c'est délibéré
+    (CA2) : ce qui n'est pas transmis ne peut pas être affiché comme un
+    pourcentage. L'ordre des pistes porte à lui seul la plausibilité relative.
+
+    `present` est vrai dès qu'une piste sort — les trois issues d'ignorance
+    produisent chacune leur phrase et rendent `present=False`, ce qui laisse la
+    cascade décider (US-170 / CA18 : une phrase produite reste une réponse).
+    """
+    resultat = svc_prediagnostic.prediagnostic(
+        db, description, culture, potager_id=ctx.potager_id
+    )
+    return {
+        "present": bool(resultat.pistes),
+        "issue": resultat.issue,
+        "culture": resultat.culture,
+        "symptome": resultat.symptome,
+        "entrees": [
+            {
+                "bioagresseur": piste.bioagresseur,
+                "categorie": piste.categorie,
+                "frequence": piste.frequence,
+            }
+            for piste in resultat.pistes
+        ],
+        "nb": len(resultat.pistes),
+        "reserve": resultat.reserve,
+        "sources": list(resultat.sources),
+    }
+
+
 @catalogue_sql.enregistrer("notes_du_jardinier")
 def _agreger_notes_du_jardinier(
     db: Session,
@@ -1413,6 +1478,53 @@ def _rendu_bioagresseurs_culture(params: Parametres, agregat: dict) -> str:
     })
 
 
+def _rendu_prediagnostic(params: Parametres, agregat: dict) -> str:
+    """[US-165 / CA4, CA5, CA6, CA7] Gabarit assemblé, jamais rédigé par un modèle.
+
+    Rien ici ne peut affirmer : la seule tournure disponible est
+    `svc_prediagnostic.FORMULE_EVOCATION`, portée par les gabarits. Rien ici ne
+    peut prescrire non plus : l'agrégat ne porte ni produit ni dose, faute de
+    colonne où les stocker (CA7) — l'impossibilité est structurelle, pas
+    rédactionnelle.
+
+    L'ordre des lignes EST l'information de plausibilité. Aucun nombre ne
+    l'accompagne (CA2) : un pourcentage se lirait comme une probabilité mesurée.
+    """
+    culture = _sur(agregat["culture"])
+    issue = agregat["issue"]
+    if issue == svc_prediagnostic.ISSUE_CULTURE_SANS_FICHE:
+        return _remplir(GABARITS["prediagnostic_culture_sans_fiche"], {"culture": culture})
+    if issue == svc_prediagnostic.ISSUE_SYMPTOME_INCONNU:
+        return GABARITS["prediagnostic_symptome_inconnu"]
+    if issue == svc_prediagnostic.ISSUE_AUCUN_CROISEMENT:
+        return _remplir(GABARITS["prediagnostic_aucun_croisement"], {"culture": culture})
+
+    lignes = [
+        f"  • {_sur(entree['bioagresseur'])} — {_sur(entree['categorie'])}, "
+        f"{_sur(entree['frequence'])} sur cette culture"
+        for entree in agregat["entrees"]
+    ]
+    gabarit = (
+        GABARITS["prediagnostic_unique"]
+        if issue == svc_prediagnostic.ISSUE_PISTE_UNIQUE
+        else GABARITS["prediagnostic"]
+    )
+    texte = _remplir(gabarit, {
+        "culture": culture,
+        "symptome": _sur(agregat["symptome"]),
+        "lignes": "\n".join(lignes),
+    })
+    # [CA6] La réserve d'abord — elle porte sur ce qui vient d'être dit — puis
+    # l'attribution. Ni l'une ni l'autre ne passe par `_remplir` : la première
+    # est la phrase d'US-140/CA8 mot pour mot, la seconde un nom de source, et
+    # les renormaliser reviendrait à les retoucher.
+    if agregat["reserve"]:
+        texte = f"{texte}\n\n{agregat['reserve']}"
+    if agregat["sources"]:
+        texte = f"{texte}\n\n_D'après : {', '.join(agregat['sources'])}_"
+    return texte
+
+
 def _notes_lisibles(nb: int) -> str:
     """« 1 note » ou « 8 notes » — le nombre est connu, « note(s) » ne l'est pas."""
     return "1 note" if nb == 1 else f"{nb} notes"
@@ -1586,6 +1698,35 @@ _EXCLUT_NOTES = re.compile(
 )
 
 
+# [US-165] Ce qui retire une phrase au pré-diagnostic. Deux natures, et il faut
+# les deux :
+#
+# 1. `_EXCLUT_SAVOIR` — une question qui demande une EXPLICATION n'attend pas
+#    une liste de pistes. « mes tomates ont le cul noir » décrit et appelle un
+#    pré-diagnostic ; « POURQUOI mes tomates ont le cul noir ? » demande la
+#    cause expliquée, que la fiche d'agronomie d'US-140 rend bien mieux à
+#    l'étage 2. Les deux se ressemblent à un mot près, et ce mot tranche.
+#    Le motif partagé est repris tel quel plutôt que recopié : il exclut aussi
+#    « maladie », ce qui convient ici — une phrase qui NOMME la maladie ne
+#    décrit plus un symptôme, elle avance déjà une conclusion.
+#
+# 2. La SAISIE d'observation — elle rapporte un fait au lieu d'en demander la
+#    cause. « j'ai observé des taches brunes sur les tomates » doit
+#    s'enregistrer. Le routeur l'attrape déjà avant nous (les verbes de geste y
+#    sont testés en tête) ; ceci est la défense en profondeur, pour la phrase
+#    qui l'atteindrait autrement — même garde qu'US-173 / CA4.
+#
+# La question d'INVENTAIRE (« qu'est-ce qui attaque mes poireaux »), elle, n'est
+# pas exclue ici : c'est l'ORDRE des familles qui la lui retire. L'écrire aux
+# deux endroits ferait diverger la frontière au premier ajustement.
+_EXCLUT_PREDIAGNOSTIC = re.compile(
+    _EXCLUT_SAVOIR.pattern
+    + r"|\bobserve\b|\bobservee?s?\b|\bconstate\b|\bconstatee?s?\b"
+    + r"|\bremarque\b|\bj ai vu\b|\bjai vu\b|\bj ai note\b|\btraite\b"
+    + r"|\bpulverise\b"
+)
+
+
 FAMILLES: tuple[Famille, ...] = (
     Famille(
         # [US-141] EN TÊTE, comme `bioagresseurs_culture` et pour la même
@@ -1639,10 +1780,10 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_notes,
     ),
     Famille(
-        # [US-173] EN PREMIER, et volontairement spécifique : le vocabulaire de
-        # l'agression ne se confond avec aucune autre famille, et le placer en
-        # tête évite qu'une famille plus large ne capte « quelles maladies sur
-        # mes tomates » pour servir un inventaire de parcelles.
+        # [US-173] Volontairement spécifique : le vocabulaire de l'agression ne
+        # se confond avec aucune autre famille, et le placer haut évite qu'une
+        # famille plus large ne capte « quelles maladies sur mes tomates » pour
+        # servir un inventaire de parcelles.
         #
         # ⚠️ Cette famille ne porte PAS `_EXCLUT_SAVOIR`, contrairement aux
         # familles larges : ce motif exclut « maladie », qui est ici le mot
@@ -1685,6 +1826,69 @@ FAMILLES: tuple[Famille, ...] = (
         exige=("culture",),
         arguments=lambda p: {"culture": p.culture},
         rendu=_rendu_bioagresseurs_culture,
+    ),
+    Famille(
+        # [US-165] APRÈS `bioagresseurs_culture`, et l'ordre est le seul point
+        # d'articulation entre les deux familles.
+        #
+        # Elles se ressemblent — même culture, même référentiel — mais ne
+        # répondent pas à la même demande : « qu'est-ce qui attaque mes pommes
+        # de terre » demande l'INVENTAIRE de ce qui pourrait arriver ; « mes
+        # tomates ont des taches marron » DÉCRIT ce qu'on voit et attend des
+        # pistes.
+        #
+        # L'inventaire passe donc d'abord, sans exception ni carve-out : son
+        # motif est étroit, il exige le vocabulaire de l'agression, et US-173
+        # garantit par test qu'aucune famille ne le précède. Le prix de cet
+        # ordre est connu et mesuré — deux formulations du corpus de mesure
+        # (« des petites bêtes rayées jaune et noir sur mes pommes de terre »,
+        # « des bestioles noires collées en grappe ») reçoivent l'inventaire
+        # plutôt qu'un pré-diagnostic. Aucune des 19 entrées du périmètre v1
+        # n'est concernée, et l'inventaire reste une réponse juste.
+        #
+        # L'alternative — passer devant et carver l'inventaire par `exclut` —
+        # a été essayée : elle demande de prévoir toutes les formes de la
+        # question d'inventaire (« quelles bestioles sur mes poireaux »,
+        # « qui mange mes poireaux »), donc de réécrire chez nous le motif
+        # d'US-173. Deux définitions de la même frontière, et la divergence au
+        # premier ajustement.
+        nom="prediagnostic_symptome",
+        # [US-165 / CA9] Comme `bioagresseurs_culture`, cette réponse dérive du
+        # référentiel PARTAGÉ et non des évènements du potager : `NATURE_JOURNAL`
+        # est déclarée au titre de l'arbitrage « invalider large », qui ne coûte
+        # qu'un recalcul SQL. Un tuple vide produirait le même effet sans le
+        # dire, et se lirait comme un oubli.
+        dependances=(NATURE_JOURNAL,),
+        agregation="prediagnostic_symptome",
+        motif=re.compile(
+            # Le vocabulaire du SYMPTÔME, celui du jardinier — pas celui de
+            # l'agronome, qui nomme déjà la cause et relève d'une autre famille.
+            r"\btaches?\b|\bpoudre blanche\b|\bpoudreux\b|\bfarineu|\bfeutrage\b|"
+            r"\bmoisissure\b|\bcul noir\b|\bpourri|\bmoisi\b|"
+            r"\bjaunit\b|\bjaunissent\b|\bjaunissement\b|\bpalissent\b|\bdecolore|"
+            r"\bfletri|\bfanent\b|\bfane\b|\bfond sur place\b|\bfondent\b|"
+            r"\btrous?\b|\btroue|\bcrible|\bmange|\bgrignote|\bdevore|\bnervures\b|"
+            r"\bgaleries?\b|\bvereu|\bvers blancs\b|\bmineuse|\basticots\b|"
+            r"\benroulent\b|\benroulee|\bcloquee|\bmarbree|\bdifforme|\bcrochu|"
+            r"\bfourchue|\bfendue|\bfendent\b|\beclate|\bcraquel|"
+            r"\bmolles?\b|\brabougri|\bboursoufle|\brenflement|"
+            r"\bamer|\bcreux\b|\bsans gout\b|\bpiquant|"
+            r"\bbetes\b|\bbestioles\b|\bpucerons?\b|\blimaces?\b|\bchenilles?\b|"
+            r"\btoiles?\b|\baltises?\b|\bdoryphores?\b|\bmiellat\b|\bcollantes?\b|"
+            r"\bne levent pas\b|\bmal leve\b|\bpas leve\b|\bmonte en graine\b|"
+            r"\bmontaison\b|\bcoulure\b|\bavort|"
+            r"\bfleurs? qui tombent\b|\bperdent (?:toutes )?leurs fleurs\b|"
+            r"\btraits orange\b|\brouille\b|\bpustules?\b|\betiole|\bfilants?\b"
+        ),
+        exclut=_EXCLUT_PREDIAGNOSTIC,
+        exige=("culture",),
+        # La DESCRIPTION est la question elle-même : c'est sur elle que porte la
+        # recherche plein texte, mot pour mot, sans reformulation ni extraction.
+        # Redérivée à chaque service (`servir_aiguillage` repasse la phrase
+        # réelle), donc deux symptômes différents sur la même culture ne peuvent
+        # pas se servir la réponse l'un de l'autre depuis le cache.
+        arguments=lambda p: {"culture": p.culture, "description": p.question},
+        rendu=_rendu_prediagnostic,
     ),
     Famille(
         nom="pepiniere",

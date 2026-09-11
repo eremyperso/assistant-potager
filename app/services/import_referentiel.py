@@ -121,6 +121,37 @@ culture réellement présente en base. Sous `SEUIL_APPARIEMENT` (~70 %), l'impor
 automatique ne vaut plus la saisie directe sur les dix cultures du périmètre :
 c'est cette mesure, et non une intention, qui tranche.
 
+Les blocs `symptomes` et `symptomes_bioagresseurs` [US-165]
+------------------------------------------------------------
+Même partition que ci-dessus, un cran plus bas : une **identité** (`symptomes`)
+et une **arête pondérée** (`symptomes_bioagresseurs`). Les symptômes s'importent
+après les identités de bioagresseurs, leurs arêtes après eux — un manifeste
+complet s'importe donc en une passe, dans l'ordre des dépendances.
+
+    "symptomes": [{"libelle": "des taches marron remontent depuis les feuilles du bas",
+                   "organe": "feuille",
+                   "synonymes": "taches marron ; feuilles qui noircissent ; mildiou"}],
+    "symptomes_bioagresseurs": [{"symptome": "des taches marron remontent depuis les feuilles du bas",
+                                 "bioagresseur": "mildiou de la pomme de terre et de la tomate",
+                                 "poids": 0.9,
+                                 "niveau_confiance": "indicatif"}]
+
+Trois points qui ne se devinent pas à la lecture du gabarit :
+
+- **`synonymes` est le livrable, pas un ornement (US-165 / CA1).** C'est cette
+  colonne qui rapproche « poudre blanche » d'« oïdium » sans moteur vectoriel.
+  Les deux registres s'y écrivent, celui du jardinier ET celui de l'agronome.
+- **`poids` ordonne et ne s'affiche jamais (CA2).** Il vaut dans ]0, 1] et
+  transcrit une hiérarchie déjà écrite en toutes lettres dans les fiches d'US-140
+  (« évoque en premier lieu », « vient loin derrière ») — ce n'est pas une
+  probabilité mesurée, et rien ne le fait remonter jusqu'au jardinier.
+- **`niveau_confiance` vaut `indicatif` par défaut (CA6).** Une piste servie
+  depuis une arête `indicatif` porte la réserve d'US-140/CA8, mot pour mot. Ne
+  passer à `verifie` qu'après un constat au champ.
+
+Un symptôme n'a AUCUN rattachement à une culture : le croisement passe par
+`cultures_bioagresseurs`, jamais par le symptôme lui-même (voir migration_v45).
+
 Le bloc `cultures_attributs` [US-161]
 -------------------------------------
 C'est le **seul** chemin de pré-remplissage des attributs agronomiques : « aucun
@@ -180,6 +211,7 @@ from sqlalchemy.orm import Session
 from app.services import associations as svc_associations
 from app.services import attributs_culture as svc_attributs
 from app.services import bioagresseurs as svc_bioagresseurs
+from app.services import prediagnostic as svc_prediagnostic
 from app.services import referentiel_sources as svc_sources
 from app.services.familles import normaliser_famille
 from app.services.rapport_couverture import SEUIL_APPARIEMENT
@@ -257,6 +289,22 @@ class ResultatImport:
     #: NON écrites, en attente de revue humaine (`"revue_humaine": true`).
     appariements_a_revoir: list[str] = field(default_factory=list)
 
+    # ── [US-165] Symptômes : identités puis arêtes pondérées ──────────────────
+    symptomes_crees: list[str] = field(default_factory=list)
+    symptomes_ecrits: list[str] = field(default_factory=list)
+    #: Symptôme déjà porté par une AUTRE origine — jamais écrasé par un rejeu.
+    symptomes_preserves: list[str] = field(default_factory=list)
+    #: [CA1] Organe hors vocabulaire fermé, ou libellé vide.
+    symptomes_refuses: list[str] = field(default_factory=list)
+
+    suspicions_creees: list[str] = field(default_factory=list)
+    suspicions_ecrites: list[str] = field(default_factory=list)
+    suspicions_preservees: list[str] = field(default_factory=list)
+    #: Symptôme ou bioagresseur absent du référentiel — jamais créé à la volée.
+    suspicions_ignorees: list[str] = field(default_factory=list)
+    #: [CA2, CA6] Poids hors ]0, 1] ou niveau de confiance hors vocabulaire.
+    suspicions_refusees: list[str] = field(default_factory=list)
+
     # ── [US-162 / CA8] Mesure d'appariement — un livrable, pas un journal ─────
     #: Libellés de culture DISTINCTS portés par le bloc `cultures_bioagresseurs`.
     appariement_libelles: list[str] = field(default_factory=list)
@@ -304,6 +352,10 @@ class ResultatImport:
             + len(self.bioagresseurs_ecrits)
             + len(self.rattachements_crees)
             + len(self.rattachements_ecrits)
+            + len(self.symptomes_crees)
+            + len(self.symptomes_ecrits)
+            + len(self.suspicions_creees)
+            + len(self.suspicions_ecrites)
         )
 
 
@@ -743,6 +795,91 @@ def _importer_rattachements_bioagresseurs(
             resultat.rattachements_preserves.append(libelle)
 
 
+def _importer_symptomes(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-165 / CA1] Importe les SYMPTÔMES — partagés, par définition.
+
+    Délègue à `app.services.prediagnostic.importer_symptome`, seul point
+    d'écriture de la table, partagé avec toute autre saisie (« aucun second
+    mécanisme »). C'est lui qui maintient `recherche_fts` : un symptôme inséré
+    ailleurs serait en base et introuvable.
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        libelle = (entree.get("libelle") or "").strip()
+        if not libelle:
+            continue
+        try:
+            statut = svc_prediagnostic.importer_symptome(
+                db,
+                libelle=libelle,
+                organe=(entree.get("organe") or "").strip(),
+                source=source,
+                synonymes=entree.get("synonymes"),
+            )
+        except svc_prediagnostic.ValeurSymptomeInvalideError as err:
+            log.warning("[import_referentiel] symptôme « %s » refusé : %s", libelle, err)
+            resultat.symptomes_refuses.append(libelle)
+            continue
+
+        if statut == svc_prediagnostic.IMPORT_CREEE:
+            resultat.symptomes_crees.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_ECRITE:
+            resultat.symptomes_ecrits.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_PRESERVEE:
+            resultat.symptomes_preserves.append(libelle)
+
+
+def _importer_suspicions(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-165 / CA2, CA6] Importe les ARÊTES PONDÉRÉES symptôme × bioagresseur.
+
+    Ni le symptôme ni le bioagresseur ne sont créés à la volée : un côté absent
+    est compté ignoré, jamais fabriqué (CA7 d'US-161, même invariant que les
+    arêtes d'US-162). Le niveau de confiance par défaut est `indicatif` — rien
+    n'est vérifié tant qu'un jardinier ne l'a pas constaté au champ.
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        symptome = (entree.get("symptome") or "").strip()
+        bioagresseur = (entree.get("bioagresseur") or "").strip()
+        if not symptome or not bioagresseur:
+            continue
+        libelle = f"{symptome} → {bioagresseur}"
+        try:
+            statut = svc_prediagnostic.importer_rattachement(
+                db,
+                symptome=symptome,
+                bioagresseur=bioagresseur,
+                poids=entree.get("poids"),
+                source=source,
+                niveau_confiance=(
+                    entree.get("niveau_confiance") or svc_prediagnostic.NIVEAU_INDICATIF
+                ),
+            )
+        except (svc_prediagnostic.SymptomeInconnuError,
+                svc_bioagresseurs.BioagresseurInconnuError):
+            resultat.suspicions_ignorees.append(libelle)
+            continue
+        except svc_prediagnostic.ValeurSymptomeInvalideError as err:
+            log.warning("[import_referentiel] suspicion « %s » refusée : %s", libelle, err)
+            resultat.suspicions_refusees.append(libelle)
+            continue
+
+        if statut == svc_prediagnostic.IMPORT_CREEE:
+            resultat.suspicions_creees.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_ECRITE:
+            resultat.suspicions_ecrites.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_PRESERVEE:
+            resultat.suspicions_preservees.append(libelle)
+
+
 def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> ResultatImport:
     """
     [CA5-CA8] Importe un manifeste de référentiel structuré.
@@ -822,6 +959,14 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
     _importer_rattachements_bioagresseurs(
         db, manifeste.get("cultures_bioagresseurs") or [], source, resultat
     )
+    # [US-165] Les symptômes APRÈS les identités de bioagresseurs, pour la même
+    # raison, et leurs arêtes après eux : un manifeste complet s'importe alors en
+    # une passe, dans l'ordre des dépendances.
+    _importer_symptomes(db, manifeste.get("symptomes") or [], source, resultat)
+    db.flush()  # les symptômes créés doivent porter un id avant les suspicions
+    _importer_suspicions(
+        db, manifeste.get("symptomes_bioagresseurs") or [], source, resultat
+    )
 
     if dry_run:
         db.rollback()
@@ -836,6 +981,7 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         "créée(s)/écrite(s), %s ignorée(s) (aucune création, CA7), %s hors "
         "périmètre, %s valeur(s) refusée(s), %s valeur(s) humaine(s) préservée(s), "
         "%s bioagresseur(s) et %s arête(s) culture × bioagresseur écrit(e)s, "
+        "%s symptôme(s) et %s suspicion(s) symptôme × bioagresseur écrit(e)s, "
         "%s appariement(s) en attente de revue humaine (US-162/CA9)",
         code, len(resultat.familles_creees), len(resultat.familles_enrichies),
         len(resultat.cultures_rattachees), len(resultat.attributs_ecrits),
@@ -848,6 +994,8 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         + len(resultat.bioagresseurs_preserves) + len(resultat.rattachements_preserves),
         len(resultat.bioagresseurs_crees) + len(resultat.bioagresseurs_ecrits),
         len(resultat.rattachements_crees) + len(resultat.rattachements_ecrits),
+        len(resultat.symptomes_crees) + len(resultat.symptomes_ecrits),
+        len(resultat.suspicions_creees) + len(resultat.suspicions_ecrites),
         len(resultat.appariements_a_revoir),
     )
     return resultat
@@ -986,5 +1134,42 @@ def formater_resultat(resultat: ResultatImport) -> str:
                 "directe. La table de correspondance manuelle sur les dix cultures du "
                 "périmètre devient le mode nominal (US-162 / CA8)."
             )
+
+    # ── [US-165] Symptômes et suspicions pondérées ────────────────────────────
+    lignes.append("")
+    lignes.append("  Symptômes [US-165]")
+    lignes.append(
+        f"    Symptômes créés    : {len(resultat.symptomes_crees)} — "
+        f"{', '.join(resultat.symptomes_crees) or '—'}"
+    )
+    lignes.append(
+        f"    Symptômes écrits   : {len(resultat.symptomes_ecrits)} — "
+        f"{', '.join(resultat.symptomes_ecrits) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Suspicions créées  : {len(resultat.suspicions_creees)} — "
+        f"{', '.join(resultat.suspicions_creees) or '—'}"
+    )
+    lignes.append(
+        f"    Suspicions écrites : {len(resultat.suspicions_ecrites)} — "
+        f"{', '.join(resultat.suspicions_ecrites) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Suspicions ignorées: {len(resultat.suspicions_ignorees)} — "
+        f"{', '.join(resultat.suspicions_ignorees) or '—'} "
+        "(symptôme ou bioagresseur absent du référentiel, jamais créé)"
+    )
+    lignes.append(
+        f"    Valeurs refusées   : "
+        f"{len(resultat.symptomes_refuses) + len(resultat.suspicions_refusees)} — "
+        f"{', '.join(resultat.symptomes_refuses + resultat.suspicions_refusees) or '—'} "
+        "(organe, poids ou niveau de confiance hors vocabulaire, CA1/CA2/CA6)"
+    )
+    if resultat.symptomes_crees or resultat.symptomes_ecrits:
+        lignes.append(
+            "    ↳ Le rappel du pré-diagnostic ne se suppose pas : rejouer "
+            "`python tools/mesurer_prediagnostic.py` après tout import de symptômes "
+            "(US-165 / CA11, CA13)."
+        )
 
     return "\n".join(lignes)

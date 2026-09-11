@@ -246,11 +246,26 @@ def lexemes(texte: Optional[str]) -> list[str]:
     return retenus
 
 
-def _est_postgresql(db: Session) -> bool:
+# ─────────────────────────────────────────────────────────────────────────────
+# Mécanique plein texte — PUBLIQUE depuis US-165
+# -----------------------------------------------------------------------------
+# `est_postgresql`, `valeur_recherche_fts` et `tsquery` sont les trois seules
+# pièces de ce module qui ne parlent pas de `knowledge_chunks` : elles ne savent
+# que construire un vecteur, une requête, et dire quel moteur répond. US-165
+# indexe une AUTRE table (`symptome`) avec exactement la même sémantique — même
+# dictionnaire `french_sans_accent`, même pondération, même repli SQLite — et
+# les réécrire chez elle aurait produit un second moteur qui aurait divergé au
+# premier ajustement, du côté où on ne l'aurait pas cherché.
+#
+# Ce qui reste privé, et le reste : `_requete_base`, seul constructeur de requête
+# sur `knowledge_chunks` du projet (CA5). Rendre la mécanique partageable ne
+# rend pas la TABLE partageable.
+# ─────────────────────────────────────────────────────────────────────────────
+def est_postgresql(db: Session) -> bool:
     return db.get_bind().dialect.name == "postgresql"
 
 
-def _valeur_recherche_fts(db: Session, titre: str, intitule: Optional[str], contenu: str,
+def valeur_recherche_fts(db: Session, titre: str, intitule: Optional[str], contenu: str,
                           termes_indexation: str = ""):
     """[CA4, note technique] Valeur du vecteur de recherche, calculée À
     L'ÉCRITURE du fragment — jamais à chaque requête.
@@ -269,7 +284,7 @@ def _valeur_recherche_fts(db: Session, titre: str, intitule: Optional[str], cont
     recopie — un alias ne doit pas pouvoir fuir vers le jardinier.
     """
     entete = " ".join(filter(None, (titre, intitule)))
-    if _est_postgresql(db):
+    if est_postgresql(db):
         vecteur_entete = func.to_tsvector(CONFIG_FTS, entete)
         poids_a = func.setweight(vecteur_entete, _POIDS_TITRE)
         if termes_indexation:
@@ -301,7 +316,7 @@ def _valeur_recherche_fts(db: Session, titre: str, intitule: Optional[str], cont
     return " ".join(lexemes_entete + lexemes_entete + lexemes(contenu))
 
 
-def _tsquery(question: str):
+def tsquery(question: str):
     """Requête plein texte PostgreSQL, en OU plutôt qu'en ET.
 
     `plainto_tsquery` assemble ses termes avec `&` : « pourquoi mes tomates ont
@@ -438,7 +453,7 @@ def resoudre_culture(db: Session, ctx: TenantContext, question: str) -> Optional
 def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
                         culture_id: Optional[int], type_fragment: Optional[str],
                         limite: int, famille: Optional[str] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
-    requete_texte = _tsquery(question)
+    requete_texte = tsquery(question)
     rang = func.ts_rank_cd(
         KnowledgeChunk.recherche_fts, requete_texte, _NORMALISATION_RANG,
     )
@@ -448,6 +463,40 @@ def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
     requete = _restreindre(requete, culture_id, type_fragment, famille)
     lignes = requete.order_by(text("rang DESC")).limit(limite).all()
     return [(fragment, document, float(score or 0.0)) for fragment, document, score in lignes]
+
+
+def score_lexical(termes: Iterable[str], indexe: Iterable[str]) -> float:
+    """Score du repli SQLite — couverture des termes de la question, pondérée
+    par la densité. Rendu dans [0, 1], 0 si rien ne se recoupe.
+
+    PUBLIQUE depuis US-165, qui indexe une autre table avec la même sémantique :
+    deux formules de « à quel point ce texte répond-il à cette question » se
+    seraient contredites sur les cas limites, et c'est précisément là qu'un
+    seuil de confiance se joue.
+
+    Deux moitiés, et il en faut deux :
+
+    - la **couverture** — la part des termes de la question que le texte porte.
+      C'est le cœur du score, et c'est volontairement une couverture de la
+      QUESTION et non du texte : un texte long (une section de fiche, une longue
+      liste de synonymes) répond mieux qu'un texte court, pas moins bien.
+      Diviser par la taille du texte punirait exactement ce qu'on cherche à
+      encourager.
+    - la **densité** — un terme répété (donc porté par le titre, dupliqué à
+      l'indexation) pèse davantage. C'est l'équivalent local du `setweight`
+      PostgreSQL. Elle module de ±15 %, jamais plus : elle départage, elle ne
+      décide pas.
+    """
+    cherches = set(termes)
+    mots = list(indexe)
+    if not cherches or not mots:
+        return 0.0
+    presents = [terme for terme in cherches if any(mot.startswith(terme) for mot in mots)]
+    if not presents:
+        return 0.0
+    couverture = len(presents) / len(cherches)
+    densite = sum(1 for mot in mots if any(mot.startswith(t) for t in presents)) / len(mots)
+    return round(couverture * (0.85 + 0.15 * min(densite * 4, 1.0)), 6)
 
 
 def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
@@ -471,17 +520,9 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
 
     classees: list[tuple[KnowledgeChunk, KnowledgeDocument, float]] = []
     for fragment, document in requete.all():
-        indexe = (fragment.recherche_fts or "").split()
-        if not indexe:
-            continue
-        presents = [terme for terme in set(termes) if any(mot.startswith(terme) for mot in indexe)]
-        if not presents:
-            continue
-        couverture = len(presents) / len(set(termes))
-        # Densité : un terme répété (donc porté par le titre, dupliqué à
-        # l'indexation) pèse davantage — c'est l'équivalent du `setweight`.
-        densite = sum(1 for mot in indexe if any(mot.startswith(t) for t in presents)) / len(indexe)
-        classees.append((fragment, document, round(couverture * (0.85 + 0.15 * min(densite * 4, 1.0)), 6)))
+        score = score_lexical(termes, (fragment.recherche_fts or "").split())
+        if score:
+            classees.append((fragment, document, score))
     classees.sort(key=lambda ligne: (-ligne[2], ligne[0].id))
     return classees[:limite]
 
@@ -549,7 +590,7 @@ def rechercher(
         if type_fragment is None:
             type_fragment = detecter_type(question)
 
-    classer = _classer_postgresql if _est_postgresql(db) else _classer_sqlite
+    classer = _classer_postgresql if est_postgresql(db) else _classer_sqlite
 
     # [CA6] Relâchement PROGRESSIF, du plus restrictif au plus large. Une
     # restriction qui vide le résultat ne vaut rien, mais tout relâcher d'un
@@ -992,7 +1033,7 @@ def remplacer_fragments(
             culture_id=fragment.culture_id,
             type=fragment.type,
             saison=fragment.saison,
-            recherche_fts=_valeur_recherche_fts(
+            recherche_fts=valeur_recherche_fts(
                 db, document.titre, fragment.intitule, fragment.contenu,
                 fragment.termes_indexation,
             ),

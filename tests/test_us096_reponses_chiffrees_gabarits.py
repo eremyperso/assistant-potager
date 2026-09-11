@@ -142,6 +142,12 @@ FAMILLES_ATTENDUES = {
     # ressemblance et s'arrête à trois passages — trois notes trouvées, une
     # seule rendue. La question demande une lecture EXACTE du journal.
     "notes_culture", "notes_parcelle",
+    # [US-165] Ajoutée le 10/09/2026 : « mes tomates ont des taches marron sur
+    # les feuilles du bas » recevait un silence ou une généralité. Deuxième
+    # famille à servir le référentiel PARTAGÉ — elle croise les symptômes
+    # décrits avec les bioagresseurs réellement rattachés à la culture (US-162),
+    # et ne rend que des pistes, jamais un diagnostic.
+    "prediagnostic_symptome",
 }
 
 

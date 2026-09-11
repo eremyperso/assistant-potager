@@ -578,6 +578,119 @@ Index(
 )
 
 
+class Symptome(Base):
+    """
+    [US-165 / CA1] Ce que le jardinier VOIT, décrit avec ses mots.
+
+    Un symptôme n'appartient à AUCUNE culture, et c'est la décision de
+    conception centrale de l'US : « des traits orange qui partent en poussière »
+    est le même symptôme sur l'ail et sur le poireau. C'est le CROISEMENT avec
+    `CultureBioagresseur` (US-162) qui décide de la piste. Une colonne
+    `culture_id` ici aurait dupliqué chaque symptôme autant de fois qu'il y a de
+    cultures qui le montrent, et aurait rendu le cas de désambiguïsation du CA14
+    structurellement intraitable.
+
+    [CA1] `synonymes` est le cœur de la table, pas un complément. La mesure du
+    25/08/2026 a invalidé l'hypothèse de départ — le vocabulaire des fiches est
+    technique (« oïdium », « nécrose apicale »), celui des questions est courant
+    (« poudre blanche », « cul noir »). Écrire les DEUX registres ici supprime la
+    majeure partie du besoin de recherche sémantique : c'est l'arbitrage tranché
+    de l'US, et `recherche_fts` est ce qui le rend exécutable.
+
+    ⚠️ `app/services/prediagnostic.py` est le SEUL point d'écriture de cette
+    table : `recherche_fts` est maintenu à l'écriture, une insertion faite
+    ailleurs laisserait le vecteur vide, donc le symptôme introuvable — même
+    invariant que `KnowledgeChunk` et `app.services.connaissance`.
+    """
+    __tablename__ = "symptome"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    libelle           = Column(String, nullable=False)
+    # Casse/accents indifférents à la résolution — même stratégie que
+    # Bioagresseur.nom_normalise et utils.culture_resolve.normaliser_culture.
+    libelle_normalise = Column(String, nullable=False, index=True)
+    # [CA1] 'feuille' | 'fruit' | 'tige' | 'racine' | 'plant entier' | 'fleur' |
+    # 'graine' | 'bulbe'. Vocabulaire fermé validé par app.services.prediagnostic,
+    # pas par un CHECK — voir ORGANES pour les trois valeurs ajoutées et pourquoi.
+    organe            = Column(String, nullable=False)
+    # [CA1] Les deux registres, séparés par ' ; ' — jamais affichés au jardinier,
+    # ils ne servent qu'à l'index.
+    synonymes         = Column(Text, nullable=True)
+    # [CA9] TSVECTOR sous PostgreSQL, texte indexable sous SQLite (tests), même
+    # variante que KnowledgeChunk.recherche_fts et même configuration de
+    # dictionnaire (`french_sans_accent`). Maintenu à l'ÉCRITURE.
+    recherche_fts     = Column(TSVECTOR().with_variant(Text(), "sqlite"), nullable=True)
+    # [CA3 d'US-162] NULL = symptôme partagé entre tous les potagers.
+    potager_id        = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    # [CA4 d'US-162] Traçabilité obligatoire, jamais NULL.
+    source_id         = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    source_rel        = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class SymptomeBioagresseur(Base):
+    """
+    [US-165 / CA2] L'arête PONDÉRÉE symptôme × bioagresseur.
+
+    `poids` exprime une plausibilité RELATIVE dans ]0, 1]. Il ordonne, il ne se
+    montre jamais : `app.services.prediagnostic` ne le verse pas dans ce qu'il
+    rend, et c'est cette absence — pas une consigne de rédaction — qui empêche
+    qu'un pourcentage soit un jour affiché. Le nombre n'est du reste que la
+    transcription d'un ordre déjà écrit en toutes lettres dans les fiches
+    d'US-140 (« évoque en premier lieu », « vient loin derrière »).
+
+    [CA6] `niveau_confiance` reprend le vocabulaire d'US-098 (`verifie` |
+    `indicatif`) au lieu d'en inventer un second : une arête `indicatif` est
+    servie avec `connaissance.RESERVE_INDICATIF`, mot pour mot.
+
+    [CA7] Aucune colonne de produit, de dosage ni de conduite à tenir — même
+    garantie structurelle que `CultureBioagresseur`.
+    """
+    __tablename__ = "symptome_bioagresseur"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    symptome_id      = Column(Integer, ForeignKey("symptome.id"), nullable=False, index=True)
+    bioagresseur_id  = Column(Integer, ForeignKey("bioagresseur.id"), nullable=False, index=True)
+    poids            = Column(Float, nullable=False)
+    niveau_confiance = Column(String, nullable=False, default="indicatif")
+    potager_id       = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    source_id        = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    symptome_rel     = relationship("Symptome", foreign_keys=[symptome_id])
+    bioagresseur_rel = relationship("Bioagresseur", foreign_keys=[bioagresseur_id])
+    source_rel       = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+# [US-165 / CA1] Unicité PARTIELLE du libellé : un seul symptôme PARTAGÉ par
+# libellé, mais un potager reste libre de décrire le sien (CA3 d'US-162).
+Index(
+    "uq_symptome_libelle_partage",
+    Symptome.libelle_normalise,
+    unique=True,
+    sqlite_where=Symptome.potager_id.is_(None),
+    postgresql_where=Symptome.potager_id.is_(None),
+)
+# [US-165 / CA2] Idempotence de l'import garantie en base : rejouer le manifeste
+# de symptômes ne peut pas créer de doublon d'arête, partagée comme locale.
+Index(
+    "uq_symptome_bio_partage",
+    SymptomeBioagresseur.symptome_id,
+    SymptomeBioagresseur.bioagresseur_id,
+    unique=True,
+    sqlite_where=SymptomeBioagresseur.potager_id.is_(None),
+    postgresql_where=SymptomeBioagresseur.potager_id.is_(None),
+)
+Index(
+    "uq_symptome_bio_local",
+    SymptomeBioagresseur.symptome_id,
+    SymptomeBioagresseur.bioagresseur_id,
+    SymptomeBioagresseur.potager_id,
+    unique=True,
+    sqlite_where=SymptomeBioagresseur.potager_id.isnot(None),
+    postgresql_where=SymptomeBioagresseur.potager_id.isnot(None),
+)
+
+
 class Parcelle(Base):
     """
     [US_Plan_occupation_parcelles / CA8]
