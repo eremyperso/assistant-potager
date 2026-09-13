@@ -1,5 +1,8 @@
 # US-024 : Vue plan d'occupation des parcelles
 
+**ID :** US-024
+**Titre :** Vue plan d'occupation des parcelles
+
 **En tant que** : Admin  
 **Je veux** : voir sur une page dédiée l'occupation actuelle de chaque parcelle avec les cultures en cours  
 **Afin que** : j'aie une vue d'ensemble rapide de ce qui pousse où, depuis mon téléphone au jardin

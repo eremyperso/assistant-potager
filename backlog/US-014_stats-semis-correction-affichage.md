@@ -1,5 +1,8 @@
 # US-014 — Corriger l'affichage des semis dans /stats et /stats [culture]
 
+**ID :** US-014
+**Titre :** Corriger l'affichage des semis dans /stats et /stats [culture]
+
 ## Contexte
 
 Le potager suit des **itinéraires culturaux décalés** : une même culture (ex: courgette)

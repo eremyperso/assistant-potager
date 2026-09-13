@@ -1,5 +1,8 @@
 # US-027 : Vue historique des événements — tableau filtrable
 
+**ID :** US-027
+**Titre :** Vue historique des événements — tableau filtrable
+
 **En tant que** : Admin  
 **Je veux** : consulter l'historique complet des actions enregistrées avec filtres par culture, action et période  
 **Afin que** : je puisse retrouver un événement précis ou auditer l'activité de ma saison sans passer par le bot
