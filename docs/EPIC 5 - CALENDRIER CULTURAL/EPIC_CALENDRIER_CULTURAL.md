@@ -157,7 +157,7 @@ pendant ou après, son CA8 prévoyant la cascade de dégradés `recalé → cons
 
 | Risque | Niveau | Traitement |
 |---|---|---|
-| **Source du référentiel** — les calendriers de semis du commerce sont des œuvres protégées ; les réutiliser tels quels n'est probablement pas licite | 🔴 Élevé | À trancher **avant** de démarrer US-068 : identifier une source réutilisable (licence ouverte), ou saisir à la main les ~30 cultures réellement suivies. C'est le principal aléa de chiffrage de l'épic |
+| **Source du référentiel** — les calendriers de semis du commerce sont des œuvres protégées ; les réutiliser tels quels n'est probablement pas licite | ✅ Levé (US-068, 13/09/2026) | Tranché en deux : les **durées** viennent de Wind River Greens (CC BY 4.0, déjà au socle — levée, récolte en pleine terre seulement, repiquage) ; les **fenêtres** viennent aussi de Wind River Greens (`planting_calendar.csv`, décision du 14/09/2026) : zones USDA lues par une correspondance **déclarée et à valider** (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4, calée sur la date de dernière gelée), gabarit par catégorie, printemps seulement, six règles de rejet — 272 fenêtres et 45 durées sur 32 cultures de `culture_config`. Ce que la source ne couvre pas (23 cultures : plantées plutôt que semées, moins de trois cultivars ou absentes ; semis d'été et d'automne) se rédige dans `calendrier_redaction_interne.json` (livré vide) ou se corrige au bot. Aucun calendrier du commerce n'est repris |
 | **Couverture du pré-remplissage** — une culture non couverte tombe en mode dégradé | 🟡 Moyen | Assumé et spécifié (US-068 / CA13). Le bot permet de compléter au fil de l'eau (CA10) |
 | **Le CA3 d'US-069 alourdit la saisie vocale** — demander le contexte à chaque semis casserait la fluidité | 🟡 Moyen | Spécifié : proposition en un seul geste de confirmation, sinon enregistrement sans contexte et correction ultérieure |
 | **Évolution d'un composant partagé** — US-070 modifie `MonthStrip`, utilisé par plusieurs écrans | 🟢 Faible | Ajout d'un état et paramétrage du mois mis en évidence : rétrocompatible, tous les usages en héritent |
@@ -178,10 +178,10 @@ pendant ou après, son CA8 prévoyant la cascade de dégradés `recalé → cons
 
 ## 11. À faire au démarrage de l'épic
 
-- Trancher la **source du référentiel** (risque 🔴 ci-dessus) — c'est le préalable à US-068.
+- ~~Trancher la **source du référentiel**~~ — levé par US-068 (voir le tableau des risques).
 - Ajouter `ÉPIC 5 — Calendrier cultural` à la liste des épics définis de
   `.github/agents/Personna PO.agent.md`, pour que le Milestone GitHub soit assigné
   automatiquement aux prochaines US du périmètre.
 - Référencer ce document dans `docs/00_INDEX_NAVIGATION.md`.
 - Positionner US-068, US-069 et US-070 en `Todo` sur le kanban (`python tools/us_tracker.py`).
-- Supprimer `backlog/US_Distinguer_semis_pepiniere_pleine_terre.md`, remplacée par US-069.
+- ~~Supprimer `backlog/US_Distinguer_semis_pepiniere_pleine_terre.md`, remplacée par US-069~~ — fait à la livraison d'US-069.

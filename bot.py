@@ -83,6 +83,7 @@ from app.services import fiche_culture as svc_fiche_culture  # [US-164]
 from app.services import associations as svc_associations  # [US-163]
 from app.services import rotation as svc_rotation  # [US-163]
 from app.services import bioagresseurs as svc_bioagresseurs  # [US-162]
+from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from app.services import menu_commandes as svc_menu_commandes  # [US-171]
 from app.services import interpreteur_commandes as svc_interpreteur  # [US-172]
@@ -93,7 +94,8 @@ from app.services import potager_actif as svc_potager_actif  # [US-046]
 from app.services import potagers as svc_potagers  # [US-084] purge planifiée
 from app.services import retours as svc_retours  # [US-097] retour du jardinier
 from app.services import metriques_routage as svc_metriques_routage  # [US-097] purge rétention
-from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from app.services import contexte_semis as svc_contexte_semis  # [US-069] pépinière / pleine terre
+from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047] [US-083]
 from database.models import Potager as _Potager  # [US-046]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
@@ -619,6 +621,23 @@ _HELP_FICHE = (
     "explicitement — jamais une fiche voisine forcée._"
 )
 
+_HELP_CALENDRIER = (
+    "📅 *Aide — Calendrier cultural*\n"
+    "Quand semer, en pépinière ou en pleine terre, et quand récolter — "
+    "avec les délais de levée et de récolte, sans appel à l'IA.\n\n"
+    "*Consulter le calendrier d'une culture :*\n"
+    "  → /calendrier tomate\n"
+    "*Lire ou choisir la zone climatique du potager :*\n"
+    "  → /calendrier zone\n"
+    "  → /calendrier zone méditerranéen\n"
+    "*Corriger une fenêtre (pour la zone du potager) :*\n"
+    "  → /calendrier fenetre tomate pepiniere février-avril\n"
+    "*Corriger une durée (en jours, ou une fourchette) :*\n"
+    "  → /calendrier duree courgette recolte 50-60\n"
+    "_Vos corrections ne valent que pour votre potager. Sans donnée, "
+    "rien n'est inventé : la frise reste vide et la durée s'affiche en tiret._"
+)
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -627,6 +646,7 @@ _HELP_FICHE = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
+    "calendrier",
 )
 
 # Dérivé, jamais recopié : un domaine ajouté ci-dessus entre au sommaire sans
@@ -651,6 +671,7 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "culture":   _HELP_CULTURE,
     "famille":   _HELP_CULTURE,
     "fiche":     _HELP_FICHE,
+    "calendrier": _HELP_CALENDRIER,  # [US-068]
 }
 
 
@@ -716,6 +737,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/parcelle ajouter [nom] — Créer une parcelle\n"
         "/culture famille [culture] [famille] — Corriger une famille botanique\n"
         "/fiche [culture] — Fiche courte agronomique, zéro jeton\n"
+        "/calendrier [culture] — Quand semer et récolter, selon votre zone\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
@@ -3178,6 +3200,101 @@ def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
     return svc_parcelles.parcelles_avec_culture(db, current_context(), culture, variete)
 
 
+def _ligne_contexte_semis(p: dict) -> "str | None":
+    """[US-069 / CA2, CA3] Ligne « Filière » du récapitulatif d'un semis : le
+    contexte dit, ou celui qui est PROPOSÉ (et pourquoi), ou « non précisée »."""
+    if normalize_action(p.get("action")) != svc_contexte_semis.ACTION_SEMIS:
+        return None
+    if p.get("contexte_semis"):
+        return f"🧭 Filière : *{svc_contexte_semis.libelle_contexte(p['contexte_semis'])}*"
+    if p.get("_contexte_propose"):
+        motif = p.get("_contexte_motif")
+        suffixe = f" _(proposée : {_md(motif)})_" if motif else " _(proposée)_"
+        return f"🧭 Filière : *{svc_contexte_semis.libelle_contexte(p['_contexte_propose'])}*{suffixe}"
+    return "🧭 Filière : _non précisée_"
+
+
+def _preparer_contexte_semis(items: list[dict], texte: str) -> None:
+    """[US-069 / CA2, CA3] Contexte des semis d'une saisie, AVANT confirmation.
+
+    - dit dans la phrase (ou lu par la grammaire) → retenu tel quel ;
+    - sinon, pour une saisie d'UN seul geste, une proposition est calculée
+      (`_contexte_propose`), que le bouton « Confirmer » adopte en un geste ;
+    - sinon rien : le semis s'enregistrera sans contexte.
+    Aucune question n'est posée ici — pas d'interrogatoire sur une dictée
+    multi-gestes (point de vigilance de l'US), et une proposition impossible ne
+    bloque rien (CA9). Rejouable : ne touche jamais un contexte déjà tranché.
+    """
+    semis = [i for i in items if normalize_action(i.get("action")) == svc_contexte_semis.ACTION_SEMIS]
+    if not semis:
+        return
+    dit = svc_contexte_semis.detecter_contexte(texte)
+    db = SessionLocal()
+    try:
+        for item in semis:
+            if item.get("contexte_semis"):
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+                continue
+            if dit:
+                item["contexte_semis"] = dit
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+                continue
+            item.pop("contexte_semis", None)
+            proposition = None
+            if len(items) == 1:
+                parcelle = (
+                    resolve_parcelle(db, item["parcelle"], potager_id=current_context().potager_id)
+                    if item.get("parcelle") else None
+                )
+                proposition = svc_contexte_semis.proposer_contexte(
+                    db, item.get("culture"), current_context().potager_id, parcelle
+                )
+            if proposition is None:
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+            else:
+                item["_contexte_propose"] = proposition.contexte
+                item["_contexte_motif"] = proposition.motif
+                log.info("[US-069 / CA3] Contexte proposé : %s (%s)", proposition.contexte, proposition.motif)
+    finally:
+        db.close()
+
+
+def _boutons_confirmation(items: list[dict]) -> InlineKeyboardMarkup:
+    """[US-021] Confirmer / Annuler — et [US-069 / CA3] pour un semis unique sans
+    contexte dit, une seconde rangée qui corrige la proposition ET enregistre,
+    dans le même geste. « Confirmer » adopte la proposition affichée."""
+    rangees = [[
+        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
+        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
+    ]]
+    if len(items) == 1:
+        item = items[0]
+        if (
+            normalize_action(item.get("action")) == svc_contexte_semis.ACTION_SEMIS
+            and not item.get("contexte_semis")
+        ):
+            propose = item.get("_contexte_propose")
+            if propose == svc_contexte_semis.CONTEXTE_PEPINIERE:
+                rangees.append([
+                    InlineKeyboardButton("🌿 Plutôt en pleine terre", callback_data="action_contexte:pleine_terre"),
+                    InlineKeyboardButton("❔ Sans préciser", callback_data="action_contexte:aucun"),
+                ])
+            elif propose == svc_contexte_semis.CONTEXTE_PLEINE_TERRE:
+                rangees.append([
+                    InlineKeyboardButton("🪴 Plutôt en pépinière", callback_data="action_contexte:pepiniere"),
+                    InlineKeyboardButton("❔ Sans préciser", callback_data="action_contexte:aucun"),
+                ])
+            else:
+                rangees.append([
+                    InlineKeyboardButton("🪴 En pépinière", callback_data="action_contexte:pepiniere"),
+                    InlineKeyboardButton("🌿 En pleine terre", callback_data="action_contexte:pleine_terre"),
+                ])
+    return InlineKeyboardMarkup(rangees)
+
+
 def _build_action_summary(items: list[dict]) -> str:
     """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
     if len(items) == 1:
@@ -3200,6 +3317,8 @@ def _build_action_summary(items: list[dict]) -> str:
         elif p.get("_parcelle_demandee") is not True:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
+        ligne_contexte = _ligne_contexte_semis(p)
+        if ligne_contexte:     lines.append(ligne_contexte)
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
         if p.get("_avertissement_coherence"):
             lines.append(f"\n{p['_avertissement_coherence']}")
@@ -3300,6 +3419,8 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                 else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                 return
+            # [US-069] Le récapitulatif affiche le contexte RÉELLEMENT enregistré.
+            parsed["contexte_semis"] = event.contexte_semis
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -3422,13 +3543,31 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
             item["parcelle"] = parcelle_nom
             item.pop("_parcelle_demandee", None)
         log.info(f"[US-021 CA9] Parcelle sélectionnée : {parcelle_nom!r} — user_id={user_id}")
+        # [US-069 / CA3] Une parcelle pépinière est un indice : proposition recalculée.
+        _preparer_contexte_semis(pending["items"], pending["texte"])
         summary = _build_action_summary(pending["items"])
-        buttons = [[
-            InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
-            InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
-        ]]
-        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=_boutons_confirmation(pending["items"]))
         return
+
+    # [US-069 / CA3] Contexte choisi au clavier : corrige la proposition ET
+    # enregistre — un seul geste. « aucun » enregistre sans contexte (clé
+    # présente et vide : la phrase n'est pas relue derrière ce choix).
+    if data.startswith("action_contexte:"):
+        choix = data[len("action_contexte:"):]
+        contexte = None if choix == "aucun" else svc_contexte_semis.normaliser_contexte(choix)
+        for item in pending["items"]:
+            if normalize_action(item.get("action")) == svc_contexte_semis.ACTION_SEMIS:
+                item["contexte_semis"] = contexte
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+        log.info(f"[US-069 / CA3] Contexte choisi : {contexte!r} — user_id={user_id}")
+    else:
+        # « Confirmer » adopte la proposition affichée, et elle seule.
+        for item in pending["items"]:
+            if item.get("_contexte_propose") and not item.get("contexte_semis"):
+                item["contexte_semis"] = item.pop("_contexte_propose")
+                item.pop("_contexte_motif", None)
+                log.info(f"[US-069 / CA3] Proposition confirmée : {item['contexte_semis']} — user_id={user_id}")
 
     # action_confirm → sauvegarde effective
     _ACTION_PENDING.pop(user_id, None)
@@ -4374,16 +4513,14 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         return
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
+    # [US-069 / CA2, CA3] Contexte des semis : dit, proposé, ou laissé vide.
+    _preparer_contexte_semis(items, texte)
     summary = _build_action_summary(items)
-    buttons = [[
-        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
-        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
-    ]]
     log.info(f"[US-021] Confirmation demandée — user_id={user_id}, {len(items)} item(s)")
     await message.reply_text(
         summary,
         parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons),
+        reply_markup=_boutons_confirmation(items),
     )
 
 
@@ -4472,6 +4609,8 @@ def _build_recap(p: dict, event_id: int) -> str:
         ("⏱ Durée",       str(p["duree_minutes"]) + " min" if p.get("duree_minutes") else None),
         ("💊 Traitement",  p.get("traitement")),
         ("📅 Date",        p.get("date")),
+        # [US-069] Filière du semis, seulement si elle est connue.
+        ("🧭 Filière",     svc_contexte_semis.libelle_contexte(p["contexte_semis"]) if p.get("contexte_semis") else None),
         ("📝 Note",        p.get("commentaire")),
     ]
 
@@ -5394,6 +5533,253 @@ async def cmd_culture(update, ctx) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# [US-068 / CA10, CA11] Commande /calendrier — calendrier cultural et zone climatique
+# ──────────────────────────────────────────────────────────────────────────────
+def _fusionner_pleine_terre(jetons: list[str]) -> list[str]:
+    """« pleine terre » tapé en deux mots devient un seul jeton de phase."""
+    fusion: list[str] = []
+    for jeton in jetons:
+        if fusion and fusion[-1].lower() == "pleine" and jeton.lower() == "terre":
+            fusion[-1] = "pleine_terre"
+        else:
+            fusion.append(jeton)
+    return fusion
+
+
+def _decouper_correction(jetons: list[str], est_cle, parser) -> "tuple[list[str], str, str] | None":
+    """
+    Découpe « <culture> [itinéraire] <clé> <valeur> » en partant de la FIN.
+
+    La clé (phase ou étape) est la dernière position dont le reste se lit comme
+    une valeur valide : « pomme de terre recolte juillet » ne confond pas
+    « terre » avec une phase, et « mars à mai » reste une seule valeur.
+    Retourne (jetons de culture et d'itinéraire, clé, valeur) ou None.
+    """
+    for i in range(len(jetons) - 2, 0, -1):
+        if not est_cle(jetons[i]):
+            continue
+        valeur = " ".join(jetons[i + 1:])
+        try:
+            parser(valeur)
+        except svc_calendrier.ValeurCalendrierInvalideError:
+            continue
+        return jetons[:i], jetons[i], valeur
+    return None
+
+
+def _formater_calendrier(calendrier, itineraire_cible: "str | None" = None) -> str:
+    """Rendu Telegram d'un calendrier — aucune date calculée, aucune valeur empruntée."""
+    lignes = [
+        f"📅 *{_md(calendrier.culture)}* — calendrier cultural",
+        f"Zone : {_md(svc_calendrier.libelle_zone(calendrier.zone, calendrier.zone_origine))}",
+    ]
+    itineraires = calendrier.itineraires
+    if itineraire_cible:
+        cle = svc_calendrier.normaliser_itineraire(itineraire_cible)
+        itineraires = [
+            it for it in itineraires if svc_calendrier.normaliser_itineraire(it.nom) == cle
+        ] or itineraires
+
+    for it in itineraires:
+        lignes.append("")
+        entete = f"*{_md(it.nom)}*"
+        if it.personnalise:
+            entete += " — propre à votre potager"
+        lignes.append(entete)
+        if it.fenetres:
+            for fenetre in it.fenetres:
+                lignes.append(f"• {fenetre.libelle} : *{_md(fenetre.affichage)}*")
+        else:
+            # [CA13] Frise neutre : dire qu'on ne sait pas, sans rien emprunter.
+            texte = (
+                "Aucune fenêtre renseignée pour la zone "
+                f"{svc_calendrier.LIBELLES_ZONES.get(calendrier.zone, calendrier.zone)}"
+            )
+            autres = [
+                svc_calendrier.LIBELLES_ZONES[z] for z in it.zones_renseignees if z != calendrier.zone
+            ]
+            if autres:
+                texte += f" (renseignée pour : {', '.join(autres)})"
+            lignes.append(f"• {_md(texte)}")
+        for duree in it.durees:
+            valeur = f"*{_md(duree.affichage)}*" if duree.renseignee else duree.affichage
+            lignes.append(f"• {duree.libelle} : {valeur}")
+
+    lignes.append("")
+    # [CA4] Une fourchette n'est jamais une date certaine.
+    lignes.append("_Durées indicatives : des ordres de grandeur, jamais des dates._")
+    if calendrier.attributions:
+        lignes.append("Source : " + " · ".join(calendrier.attributions))
+    return "\n".join(lignes)
+
+
+async def cmd_calendrier(update, ctx) -> None:
+    """
+    /calendrier — Calendrier cultural d'une culture et zone climatique du potager (US-068).
+
+    Sous-commandes :
+      <culture> [itinéraire]                               — consulter (zéro jeton)
+      zone [oceanique|continental|mediterraneen|montagnard|auto]
+                                                           — lire ou choisir la zone (CA7)
+      fenetre <culture> [itinéraire] <pepiniere|pleine_terre|recolte> <mars-mai|aucune>
+      duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|70-90|mention|aucune>
+                                                           — corriger (CA10)
+
+    Aucune logique métier ici : lecture, validation et écriture vivent dans
+    `app.services.calendrier_cultural`. Une correction est TOUJOURS propre au
+    potager courant (CA11) et confirme l'ancienne et la nouvelle valeur (CA10).
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /calendrier <culture>\n"
+        "  /calendrier zone [océanique|continental|méditerranéen|montagnard|auto]\n"
+        "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|recolte> <mois-mois|aucune>\n"
+        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|aucune>\n\n"
+        "Exemples :\n"
+        "  /calendrier tomate\n"
+        "  /calendrier zone méditerranéen\n"
+        "  /calendrier fenetre tomate pepiniere février-avril\n"
+        "  /calendrier fenetre chou-fleur culture d'hiver recolte novembre-février\n"
+        "  /calendrier duree courgette recolte 50-60\n\n"
+        "_Vos corrections ne valent que pour votre potager._"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = svc_calendrier.normaliser_itineraire(ctx.args[0])
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        # ── /calendrier zone [valeur] ─────────────────────────────────────────
+        if sous_cmd == "zone":
+            if len(ctx.args) == 1:
+                zone, origine = svc_calendrier.zone_du_potager(db, tenant_ctx.potager_id)
+                await update.message.reply_text(
+                    f"🗺️ Zone climatique du potager : *{_md(svc_calendrier.libelle_zone(zone, origine))}*\n"
+                    "Pour la choisir : /calendrier zone <océanique|continental|méditerranéen|montagnard>\n"
+                    "Pour revenir à la localisation : /calendrier zone auto",
+                    parse_mode="Markdown",
+                )
+                return
+            valeur = " ".join(ctx.args[1:]).strip()
+            try:
+                avant, apres = svc_calendrier.definir_zone(db, tenant_ctx, valeur)
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                await update.message.reply_text(f"❌ {_md(str(err))}", parse_mode="Markdown")
+                return
+            except (PermissionInsuffisanteError, PotagerArchiveError) as err:
+                await update.message.reply_text(f"⛔ {err}")
+                return
+            await update.message.reply_text(
+                f"✅ Zone climatique : *{_md(svc_calendrier.libelle_zone(*avant))}* → "
+                f"*{_md(svc_calendrier.libelle_zone(*apres))}*",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /calendrier fenetre|duree … ───────────────────────────────────────
+        if sous_cmd in ("fenetre", "fenetres", "duree", "durees"):
+            est_fenetre = sous_cmd.startswith("fenetre")
+            # Un argument dicté peut porter plusieurs mots (« petit pois ») :
+            # le découpage se fait sur les mots, comme pour une commande tapée.
+            jetons = _fusionner_pleine_terre(" ".join(ctx.args[1:]).split())
+            decoupe = _decouper_correction(
+                jetons,
+                svc_calendrier.est_phase if est_fenetre else svc_calendrier.est_etape,
+                svc_calendrier.parser_fenetre if est_fenetre else svc_calendrier.parser_duree,
+            )
+            if decoupe is None:
+                exemple = (
+                    "/calendrier fenetre tomate pepiniere février-avril" if est_fenetre
+                    else "/calendrier duree courgette recolte 50-60"
+                )
+                await update.message.reply_text(
+                    "❌ Je n'ai pas reconnu la correction.\n"
+                    f"Exemple : {_md(exemple)}\n\n{USAGE}",
+                    parse_mode="Markdown",
+                )
+                return
+            jetons_culture, cle, valeur = decoupe
+            culture, itineraire = svc_calendrier.separer_culture_itineraire(
+                db, jetons_culture, tenant_ctx.potager_id
+            )
+            try:
+                if est_fenetre:
+                    zone, avant, apres = svc_calendrier.corriger_fenetre(
+                        db, tenant_ctx, culture, cle, valeur, itineraire=itineraire
+                    )
+                    libelle = (
+                        f"{svc_calendrier.LIBELLES_PHASES[svc_calendrier.normaliser_phase(cle)]} "
+                        f"(zone {svc_calendrier.LIBELLES_ZONES.get(zone, zone)})"
+                    )
+                else:
+                    avant, apres = svc_calendrier.corriger_duree(
+                        db, tenant_ctx, culture, cle, valeur, itineraire=itineraire
+                    )
+                    libelle = svc_calendrier.LIBELLES_ETAPES[svc_calendrier.normaliser_etape(cle)]
+            except svc_calendrier.CultureInconnueError:
+                await update.message.reply_text(
+                    f"❌ Culture inconnue : *{_md(culture)}*\n"
+                    "Elle doit avoir déjà été dictée au moins une fois.",
+                    parse_mode="Markdown",
+                )
+                return
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                await update.message.reply_text(
+                    f"❌ {_md(str(err))}\nRien n'a été modifié.", parse_mode="Markdown"
+                )
+                return
+            except (PermissionInsuffisanteError, PotagerArchiveError) as err:
+                await update.message.reply_text(f"⛔ {err}")
+                return
+            log.info(
+                f"[US-068] /calendrier {sous_cmd} '{culture}' / '{itineraire}' {cle} : "
+                f"'{avant}' → '{apres}' (potager_id={tenant_ctx.potager_id})"
+            )
+            await update.message.reply_text(
+                f"✅ *{_md(culture)}* — {_md(itineraire)}\n"
+                f"{_md(libelle)} : *{_md(avant)}* → *{_md(apres)}*\n"
+                "_Correction propre à votre potager._",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /calendrier <culture> [itinéraire] ────────────────────────────────
+        jetons = " ".join(
+            ctx.args[1:] if sous_cmd in ("voir", "lire", "consulter") else ctx.args
+        ).split()
+        if not jetons:
+            await update.message.reply_text(USAGE, parse_mode="Markdown")
+            return
+        culture, itineraire = svc_calendrier.separer_culture_itineraire(
+            db, list(jetons), tenant_ctx.potager_id
+        )
+        calendrier = svc_calendrier.lire_calendrier(db, culture, tenant_ctx.potager_id)
+        log.info(
+            f"[US-068] /calendrier '{culture}' : connue={calendrier.culture_connue} "
+            f"renseigne={calendrier.renseigne} zone={calendrier.zone} ({calendrier.zone_origine}), 0 jeton"
+        )
+        if not calendrier.culture_connue:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+            return
+        cible = itineraire if itineraire != svc_calendrier.ITINERAIRE_PAR_DEFAUT else None
+        await update.message.reply_text(
+            _formater_calendrier(calendrier, cible), parse_mode="Markdown"
+        )
+    except Exception as e:
+        log.error(f"[US-068] cmd_calendrier erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # [US-163 / CA1-CA5, CA10] Commande /association — associations de cultures
 # ──────────────────────────────────────────────────────────────────────────────
 async def cmd_association(update, ctx) -> None:
@@ -6092,6 +6478,14 @@ async def cmd_stats(update, ctx):
                         for culture, s in repr_pep.items():
                             lines_out.append(_ligne_semis_pep(culture, s))
 
+        # ── [US-069 / CA6] Semis par filière : trois totaux par culture ─────────
+        # Pépinière, pleine terre, et SANS CONTEXTE — compté, jamais tu (CA9).
+        saison_courante = (date_ref or date.today()).year
+        lignes_filiere = svc_contexte_semis.semis_par_contexte(
+            db, current_context().potager_id, date_ref=date_ref, saison=saison_courante,
+        )
+        lines_out.extend(svc_contexte_semis.formater_semis_par_contexte_telegram(lignes_filiere, saison_courante))
+
         # ── Pépinière (godets) ─────────────────────────────────────────────────
         godets_stats = calcul_godets(db, date_ref=date_ref, potager_id=current_context().potager_id)
         if godets_stats:
@@ -6235,7 +6629,12 @@ def _fmt_event(e) -> str:
     parc = f" [{e.parcelle}]" if e.parcelle else ""
     rang = f" x{e.rang}rangs" if e.rang else ""
     trt  = f" ({e.traitement})" if e.traitement else ""
-    return f"#{e.id} {d} — {act}{cult}{var}{qte}{rang}{parc}{trt}"
+    # [US-069] La filière d'un semis, seulement si elle est connue.
+    ctxs = (
+        f" · {svc_contexte_semis.libelle_contexte(e.contexte_semis)}"
+        if getattr(e, "contexte_semis", None) else ""
+    )
+    return f"#{e.id} {d} — {act}{cult}{var}{qte}{rang}{parc}{trt}{ctxs}"
 
 
 def _normalize_action_search(action: str) -> str:
@@ -6648,6 +7047,10 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
             "traitement": event.traitement, "commentaire": event.commentaire,
             "date": event.date.strftime("%Y-%m-%d") if event.date else None
         }
+        # [US-069 / CA4] Seul un semis porte un contexte — et seul un semis
+        # peut en recevoir un à la correction.
+        if event.type_action == svc_contexte_semis.ACTION_SEMIS:
+            event_actuel["contexte_semis"] = event.contexte_semis
     finally:
         db.close()
 
@@ -6678,33 +7081,57 @@ JSON brut uniquement."""
         f"\nÉvénement actuel : {json.dumps(event_actuel, ensure_ascii=False)}\n"
     )
 
-    try:
-        reponse = passerelle.appeler_chat(
-            appel_type=passerelle.TYPE_PARSING,
-            ctx=current_context(),
-            prompt_fixe=prompt,
-            prompt_variable=prompt_variable,
-            message_utilisateur=f'Correction demandée : "{texte}"',
-            max_tokens=300,
-            reasoning=False,   # comportement constant : cet appel n'en passait pas
-        )
-        raw = reponse.texte
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:-1])
-        corrections = json.loads(raw)
-    except LLMIndisponibleError:
-        # [CA9] Aucun repli utile : appliquer une correction devinée serait pire
-        # que ne rien faire. L'événement reste intact, la correction est différée.
-        log.warning("⏳ CORRECTION      : IA indisponible, correction différée")
-        await msg_wait.edit_text(
-            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
-            "Ton événement n'a pas été modifié — retente la correction dans un moment."
-        )
-        return
-    except Exception as e:
-        log.error(f"Analyse de correction en échec : {e}")
-        await msg_wait.edit_text("❌ Je n'ai pas compris la correction. Reformulez.")
-        return
+    # [US-069 / CA4] « non, c'était en pépinière » : une correction qui ne dit
+    # QUE le contexte d'un semis se lit sans modèle — et reste possible quand
+    # l'IA est indisponible. Une phrase qui corrige autre chose passe par le
+    # modèle, puis le contexte qu'elle dit est ajouté ci-dessous.
+    est_semis = "contexte_semis" in event_actuel
+    contexte_seul = svc_contexte_semis.correction_contexte_seule(texte) if est_semis else None
+    if contexte_seul is not None:
+        corrections = {"contexte_semis": contexte_seul}
+        log.info(f"[US-069 / CA4] Correction du contexte sans modèle : {contexte_seul}")
+    else:
+        try:
+            reponse = passerelle.appeler_chat(
+                appel_type=passerelle.TYPE_PARSING,
+                ctx=current_context(),
+                prompt_fixe=prompt,
+                prompt_variable=prompt_variable,
+                message_utilisateur=f'Correction demandée : "{texte}"',
+                max_tokens=300,
+                reasoning=False,   # comportement constant : cet appel n'en passait pas
+            )
+            raw = reponse.texte
+            if raw.startswith("```"):
+                raw = "\n".join(raw.split("\n")[1:-1])
+            corrections = json.loads(raw)
+        except LLMIndisponibleError:
+            # [CA9] Aucun repli utile : appliquer une correction devinée serait pire
+            # que ne rien faire. L'événement reste intact, la correction est différée.
+            log.warning("⏳ CORRECTION      : IA indisponible, correction différée")
+            await msg_wait.edit_text(
+                f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+                "Ton événement n'a pas été modifié — retente la correction dans un moment."
+            )
+            return
+        except Exception as e:
+            log.error(f"Analyse de correction en échec : {e}")
+            await msg_wait.edit_text("❌ Je n'ai pas compris la correction. Reformulez.")
+            return
+
+        contexte_dit = svc_contexte_semis.detecter_contexte(texte) if est_semis else None
+        if contexte_dit and isinstance(corrections, dict):
+            corrections["contexte_semis"] = contexte_dit
+            # Le modèle lit parfois « en pépinière » comme une parcelle : un
+            # libellé de contexte qui ne nomme aucune parcelle réelle est retiré.
+            nom_p = corrections.get("parcelle")
+            if nom_p and svc_contexte_semis.detecter_contexte(f"en {nom_p}") == contexte_dit:
+                db_p = SessionLocal()
+                try:
+                    if resolve_parcelle(db_p, nom_p, potager_id=current_context().potager_id) is None:
+                        corrections.pop("parcelle", None)
+                finally:
+                    db_p.close()
 
     if not corrections:
         await msg_wait.edit_text(
@@ -6743,7 +7170,7 @@ JSON brut uniquement."""
         "action": "Action", "culture": "Culture", "variete": "Variété",
         "quantite": "Quantité", "unite": "Unité", "parcelle": "Parcelle",
         "rang": "Rangs", "duree_minutes": "Durée (min)", "traitement": "Traitement",
-        "commentaire": "Commentaire", "date": "Date"
+        "commentaire": "Commentaire", "date": "Date", "contexte_semis": "Filière",
     }
     mapping = {
         "action": "type_action", "culture": "culture", "variete": "variete",
@@ -6757,6 +7184,9 @@ JSON brut uniquement."""
         if champ.startswith("_"):   # champs internes (_parcelle_id…)
             continue
         ancienne_val = event_actuel.get(champ, "—") or "—"
+        if champ == "contexte_semis":   # [US-069] libellés, pas valeurs stockées
+            ancienne_val = svc_contexte_semis.libelle_contexte(event_actuel.get(champ))
+            nouvelle_val = svc_contexte_semis.libelle_contexte(nouvelle_val)
         label = LABELS.get(champ, champ)
         lines.append(f"• *{label}* : `{ancienne_val}` → `{nouvelle_val if nouvelle_val is not None else 'supprimé'}`")
 
@@ -6814,7 +7244,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
             "action": "action", "culture": "culture", "variete": "variété",
             "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
             "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
-            "commentaire": "commentaire", "date": "date"
+            "commentaire": "commentaire", "date": "date", "contexte_semis": "filière",
         }
         details = ", ".join(
             f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
@@ -7470,6 +7900,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
     _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
     _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
+    _enregistrer_commande(app, "calendrier", cmd_calendrier)  # [US-068]
     _enregistrer_commande(app, "association", cmd_association)  # [US-163]
     _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
     _enregistrer_commande(app, "bioagresseur", cmd_bioagresseur)  # [US-162]

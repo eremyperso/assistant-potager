@@ -1,0 +1,362 @@
+{
+  "_lisez_moi": [
+    "[US-068] Calendrier cultural — rédaction interne du projet.",
+    "",
+    "CE FICHIER EST À REMPLIR À LA MAIN. Livré vide : toutes les valeurs sont à null,",
+    "et une valeur null n'écrit rien. L'importer en l'état ne fait donc rien — c'est",
+    "voulu : aucune fenêtre ni aucune durée n'est produite par un modèle de langage,",
+    "et les calendriers de semis du commerce sont des œuvres protégées qu'on ne recopie pas",
+    "(docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md §6.1).",
+    "",
+    "COMMENT LE REMPLIR",
+    "  fenetres.<zone>.<phase> : 'mars-mai', 'novembre-février' (chevauche l'année), 'juin'",
+    "      zones  : oceanique | continental | mediterraneen | montagnard",
+    "      phases : semis_pepiniere | semis_pleine_terre | recolte",
+    "      Une culture qui ne se sème jamais en godet garde semis_pepiniere à null.",
+    "  durees.<etape> : '10', '70-90', ou une mention libre courte ('vivace')",
+    "      etapes : levee | recolte | repiquage (repiquage : itinéraire en pépinière seulement)",
+    "      Les durées sont COMMUNES à toutes les zones : on ne les répète pas par zone.",
+    "  itineraire : 'standard' par défaut. Pour une conduite de plus ('culture d'hiver'),",
+    "      dupliquer le bloc de la culture et changer ce nom.",
+    "Une valeur mal formée est refusée et signalée au compte rendu ; ses voisines sont",
+    "écrites quand même. Laisser null tout ce qu'on ne sait pas : l'écran affichera une",
+    "frise neutre et un tiret, ce qui vaut mieux qu'une période inventée.",
+    "",
+    "PÉRIMÈTRE : les cultures déjà présentes dans culture_config. Une culture absente est",
+    "ignorée et comptée : ce fichier enrichit des cultures déjà dictées, il n'en crée aucune.",
+    "",
+    "CE QUI PRIME SUR CE FICHIER",
+    "Une correction faite au bot (/calendrier fenetre|duree ...) crée un calendrier PROPRE au",
+    "potager du jardinier. L'import n'écrit que le calendrier partagé : il ne peut, par",
+    "construction, jamais écraser une correction. Une valeur partagée écrite par une autre",
+    "source (wind_river_greens pour les durées et les fenêtres de 32 cultures) est préservée",
+    "à son tour : ce gabarit sert d'abord à ce que cette source ne couvre pas (ail, échalote,",
+    "pomme de terre, mâche, épinard, blette… — liste dans wind_river_greens/SOURCE.md — et",
+    "semis de fin d'été ou d'automne, sur un itinéraire nommé).",
+    "",
+    "IMPORTER",
+    "  python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json --dry-run",
+    "  python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json",
+    "Idempotent : rejouer ne crée aucun doublon et n'écrase aucune correction humaine."
+  ],
+  "source": {
+    "code": "redaction_interne",
+    "libelle": "Rédaction interne Assistant Potager",
+    "licence": "proprietaire",
+    "attribution": "Assistant Potager — rédaction interne",
+    "url": null,
+    "partageable": true
+  },
+  "cultures_calendriers": [
+    {
+      "culture": "tomate",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "haricot",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "courgette",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "chou",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "carotte",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "concombre",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "cornichon",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "poivron",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "ail",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    },
+    {
+      "culture": "bette",
+      "itineraire": "standard",
+      "durees": {
+        "levee": null,
+        "recolte": null,
+        "repiquage": null
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "continental": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "mediterraneen": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        },
+        "montagnard": {
+          "semis_pepiniere": null,
+          "semis_pleine_terre": null,
+          "recolte": null
+        }
+      }
+    }
+  ]
+}

@@ -1108,6 +1108,180 @@ def _construire_culture_rusticite_verbe(groupes):
     return _construire_culture_rusticite(groupes)
 
 
+# ── [US-068] Calendrier cultural ─────────────────────────────────────────────
+# Le point sensible est la frontière avec les questions sur les DONNÉES du
+# potager (US-096) : « quand semer les tomates ? » demande le calendrier,
+# « quand ai-je semé les tomates ? » demande le journal. D'où un verbe exigé à
+# l'INFINITIF (« semer », jamais « semé ») et aucun pronom sujet admis entre
+# l'interrogatif et lui.
+_MOIS_DITS = (
+    r"(?:janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|"
+    r"novembre|decembre)"
+)
+
+#: Ce qu'un nom de culture capté ne peut pas être : « le calendrier des semis »
+#: ne désigne aucune culture.
+_MOTS_NON_CULTURE_CALENDRIER: frozenset[str] = frozenset({
+    "semis", "semer", "recolte", "recoltes", "plantation", "plantations",
+    "legume", "legumes", "potager", "jardin", "zone", "saison",
+})
+
+#: Compléments de lieu ou de temps qui suivent la culture sans en faire partie :
+#: « quand semer les radis EN PLEINE TERRE », « … CETTE ANNÉE ».
+_QUEUE_CULTURE_CALENDRIER = re.compile(
+    r"\s+(?:en|sous|dans|cette|cet|ce|chez|au|a la|ici)\b.*$", re.IGNORECASE
+)
+
+
+def _culture_calendrier(fragment: str) -> Optional[str]:
+    culture = _nettoyer_nom(_QUEUE_CULTURE_CALENDRIER.sub("", fragment or ""))
+    normalise, _ = normaliser(culture)
+    if not _nom_plausible(culture) or normalise in _MOTS_NON_CULTURE_CALENDRIER:
+        return None
+    return culture
+
+
+def _mois_canonique(dit: str) -> Optional[str]:
+    """« fevrier » (forme normalisée) → « février », valeur du vocabulaire fermé."""
+    from app.services.calendrier_cultural import MOIS
+
+    normalise, _ = normaliser(dit or "")
+    return next((m for m in MOIS if normaliser(m)[0] == normalise), None)
+
+
+@_regle(
+    "calendrier_consulter",
+    r"\A" + _INTENTION + _MONTRER + _ARTICLE + r"calendrier\s+(?:cultural\s+)?"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE + r"(?P<culture>.+)",
+    "calendrier",
+    None,
+)
+def _construire_calendrier_consulter(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    return {"culture": culture} if culture else None
+
+
+@_regle(
+    "calendrier_quand",
+    r"\A(?:dis moi\s+|sais tu\s+)?"
+    r"(?:quand|a quelle (?:periode|epoque|saison)|en quel mois|a quel moment)\s+"
+    r"(?:est ce qu on\s+|est ce que je (?:dois|peux)\s+|faut il\s+|dois je\s+|"
+    r"peut on\s+|on peut\s+|je peux\s+|je dois\s+)?"
+    r"(?:semer|recolter|repiquer|planter)\s+" + _ARTICLE + r"(?P<culture>.+)",
+    "calendrier",
+    None,
+)
+def _construire_calendrier_quand(groupes):
+    return _construire_calendrier_consulter(groupes)
+
+
+@_regle(
+    "calendrier_zone",
+    r"\A" + _INTENTION + _CORRIGER
+    + r"(?:(?:(?:ma|la|notre)\s+)?zone(?:\s+climatique)?|"
+    r"(?:mon|le|notre)\s+(?:potager|jardin|climat))\s*"
+    r"(?:(?:est|soit|:|=|a|sur|passe)\s+)?(?:(?:en|de|du|dans)\s+)?"
+    r"(?:(?:zone|climat|type)\s+)?"
+    r"(?P<zone>oceaniques?|continentales?|continentaux|mediterraneen(?:ne)?s?|"
+    r"mediterranee|montagnardes?|montagne)\b",
+    "calendrier",
+    "zone",
+    declarative=True,
+)
+def _construire_calendrier_zone(groupes):
+    from app.services.calendrier_cultural import ValeurCalendrierInvalideError, normaliser_zone
+
+    brute = re.sub(r"s$", "", groupes["zone"]).replace("continentaux", "continental")
+    try:
+        return {"zone": normaliser_zone(brute)}
+    except ValeurCalendrierInvalideError:
+        return None
+
+
+_PHASES_DITES: dict[str, str] = {
+    "pepiniere": "semis_pepiniere", "godet": "semis_pepiniere", "godets": "semis_pepiniere",
+    "abri": "semis_pepiniere", "pleine terre": "semis_pleine_terre",
+    "place": "semis_pleine_terre", "direct": "semis_pleine_terre", "recolte": "recolte",
+}
+
+
+@_regle(
+    "calendrier_fenetre",
+    r"\A" + _INTENTION + _CORRIGER
+    + r"(?:(?:avance|avancer|recule|reculer|decale|decaler)\s+)?" + _ARTICLE
+    + r"(?:fenetre|periode)\s+(?:de\s+|d\s+)?"
+    r"(?:semis\s+(?:en\s+|sous\s+)?(?P<phase>pepiniere|godets?|abri|pleine terre|place|direct)|"
+    r"(?P<phase_recolte>recolte))\s+"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|en|de|va|devient)\s+)?"
+    r"(?:(?:de|d|en|a|au)\s+)?(?P<mois_debut>" + _MOIS_DITS + r")"
+    r"(?:\s*(?:a|au|jusqu a|et)?\s*(?P<mois_fin>" + _MOIS_DITS + r"))?\b",
+    "calendrier",
+    "fenetre",
+    declarative=True,
+)
+def _construire_calendrier_fenetre(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    phase = _PHASES_DITES.get(groupes.get("phase") or groupes.get("phase_recolte") or "")
+    debut = _mois_canonique(groupes["mois_debut"])
+    if not (culture and phase and debut):
+        return None
+    valeurs = {"culture": culture, "phase": phase, "mois_debut": debut}
+    fin = _mois_canonique(groupes.get("mois_fin") or "")
+    if fin:
+        valeurs["mois_fin"] = fin
+    return valeurs
+
+
+_ETAPES_DITES: dict[str, str] = {
+    "levee": "levee", "germination": "levee", "recolte": "recolte",
+    "premiere recolte": "recolte", "repiquage": "repiquage",
+}
+
+
+@_regle(
+    "calendrier_duree",
+    r"\A" + _INTENTION + _CORRIGER + _ARTICLE
+    + r"(?:delai|duree|temps)\s+(?:de\s+|d\s+|avant\s+(?:la\s+|le\s+)?|jusqu a\s+(?:la\s+|le\s+)?)?"
+    r"(?P<etape>levee|germination|premiere recolte|recolte|repiquage)\s+"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    etape = _ETAPES_DITES.get(groupes["etape"])
+    if not (culture and etape):
+        return None
+    valeurs = {"culture": culture, "etape": etape, "jours_min": groupes["jours_min"]}
+    if groupes.get("jours_max"):
+        valeurs["jours_max"] = groupes["jours_max"]
+    return valeurs
+
+
+@_regle(
+    "calendrier_duree_levee_verbe",
+    r"\A" + _ARTICLE + r"(?P<culture>.+?)\s+(?:levent|leve|germent|germe)\s+"
+    r"(?:en|au bout de|apres)\s+(?:environ\s+)?" + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_levee_verbe(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    if not culture:
+        return None
+    valeurs = {"culture": culture, "etape": "levee", "jours_min": groupes["jours_min"]}
+    if groupes.get("jours_max"):
+        valeurs["jours_max"] = groupes["jours_max"]
+    return valeurs
+
+
 # ── Bioagresseurs ────────────────────────────────────────────────────────────
 def _vocabulaire_de(commande: str, sous_commande: Optional[str], nom_argument: str) -> tuple[str, ...]:
     forme = FORMES_PAR_CLE[(commande, sous_commande)]
@@ -1332,6 +1506,8 @@ def _construire_help(groupes):
 #: accents intacts.
 _GROUPES_NORMALISES: frozenset[str] = frozenset({
     "valeur", "annees", "categorie", "frequence",
+    # [US-068] Calendrier cultural
+    "zone", "phase", "phase_recolte", "etape", "mois_debut", "mois_fin", "jours_min", "jours_max",
 })
 
 

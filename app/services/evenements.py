@@ -23,6 +23,7 @@ from typing import Optional
 from sqlalchemy import func, or_, and_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.services import contexte_semis as svc_contexte_semis
 from app.services.context import TenantContext
 from app.services.permissions import require_role, require_potager_non_archive
 from database.models import Evenement, Parcelle
@@ -836,6 +837,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         potager_id=ctx.potager_id,
     )
     if event.culture:
@@ -886,6 +888,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -957,6 +960,9 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         type_organe_recolte=type_organe_semis,
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        # [US-069 / CA1-CA3] Dit dans la phrase, ou confirmé au bot — jamais
+        # une proposition restée sans réponse (`_contexte_propose`).
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -966,6 +972,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     log.info(
         f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} "
         f"| qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}"
+        f" | contexte_semis={event.contexte_semis}"
     )
     return event
 
@@ -1226,6 +1233,18 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         quantite=_to_float(quantite_final),
     )
 
+    # [US-069 / CA1, CA4] Le contexte se corrige comme tout champ — et tombe de
+    # lui-même si la correction fait de l'événement autre chose qu'un semis. Une
+    # valeur illisible, ou un contexte demandé sur un autre geste, est refusé ici,
+    # avant toute mutation : jamais un « aucun » silencieux à la place.
+    est_semis_final = normalize_action(action_final) == svc_contexte_semis.ACTION_SEMIS
+    if "contexte_semis" in corrections:
+        contexte_final = svc_contexte_semis.normaliser_contexte(corrections["contexte_semis"])
+        if contexte_final is not None and not est_semis_final:
+            raise ValueError("Le contexte pépinière / pleine terre ne s'applique qu'à un semis.")
+    else:
+        contexte_final = event.contexte_semis if est_semis_final else None
+
     mapping = {
         "action": "type_action", "culture": "culture", "variete": "variete",
         "quantite": "quantite", "unite": "unite", "parcelle": "parcelle",
@@ -1236,6 +1255,8 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         if champ == "_parcelle_id":
             continue
         col = mapping.get(champ, champ)
+        if champ == "contexte_semis":
+            continue   # [US-069 / CA4] traité après la boucle, sur l'action FINALE
         if champ == "date":
             setattr(event, "date", parse_date(valeur))
         elif champ == "quantite":
@@ -1246,6 +1267,9 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
             event.parcelle_id = corrections.get("_parcelle_id")
         elif hasattr(event, col):
             setattr(event, col, valeur)
+
+    # [US-069 / CA1, CA4] Contexte validé AVANT toute mutation (voir plus haut).
+    event.contexte_semis = contexte_final
 
     event.texte_original = (event.texte_original or "") + trace
     # [US-095 / CA7] Une correction périme au même titre qu'une création — les

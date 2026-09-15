@@ -7,8 +7,9 @@ importe ensuite. Deux outils, deux responsabilités — l'adaptation ne touche
 jamais la base, l'import ne connaît jamais le format d'une source.
 
 Utilisation :
-    # 1. Produire le manifeste depuis les CSV versionnés — attributs de conduite
-    #    ET associations [US-163], curées et traduites, dans le même fichier.
+    # 1. Produire le manifeste depuis les CSV versionnés — attributs de conduite,
+    #    associations [US-163] curées et traduites, durées ET fenêtres du
+    #    calendrier [US-068], dans le même fichier.
     #    (écrit aussi wind_river_associations.json — extraction BRUTE, matériau
     #     de relecture, à NE JAMAIS passer à l'import)
     python tools/adapter_wind_river.py
@@ -68,9 +69,17 @@ def _extraire(repertoire_source: str) -> int:
         print(f"❌ Aucun varieties.csv lisible dans {repertoire_source}", file=sys.stderr)
         return 2
 
+    # [US-068] L'extrait couvre la table ÉTENDUE du calendrier ; les associations
+    # restent filtrées sur les dix cultures d'US-161/US-163, seules curées.
     par_culture = svc_adaptateur.selectionner_cultivars(varieties)
-    retenues = [l for lignes in par_culture.values() for l in lignes]
-    slugs = {l.get("slug") for l in retenues}
+    par_culture_calendrier = svc_adaptateur.selectionner_cultivars(
+        varieties, svc_adaptateur.APPARIEMENTS_CALENDRIER
+    )
+    identifiants_retenus = {
+        l.get("id") for lignes in (*par_culture.values(), *par_culture_calendrier.values()) for l in lignes
+    }
+    retenues = [l for l in varieties if l.get("id") in identifiants_retenus]
+    slugs = {l.get("slug") for lignes in par_culture.values() for l in lignes}
 
     os.makedirs(REPERTOIRE_CSV, exist_ok=True)
     with open(os.path.join(REPERTOIRE_CSV, "varieties.csv"), "w", encoding="utf-8", newline="") as flux:
@@ -85,10 +94,22 @@ def _extraire(repertoire_source: str) -> int:
             redacteur.writeheader()
             redacteur.writerows(arêtes)
 
+    # [US-068] Le calendrier se filtre par IDENTIFIANT : le slug n'y est pas
+    # unique (`black-beauty` est une aubergine, une courgette et un rosier).
+    calendrier = _lire_csv(os.path.join(repertoire_source, "planting_calendar.csv"))
+    identifiants = {l.get("id") for l in retenues}
+    lignes_calendrier = [l for l in calendrier if l.get("variety_id") in identifiants]
+    if calendrier:
+        with open(os.path.join(REPERTOIRE_CSV, "planting_calendar.csv"), "w", encoding="utf-8", newline="") as flux:
+            redacteur = csv.DictWriter(flux, fieldnames=calendrier[0].keys())
+            redacteur.writeheader()
+            redacteur.writerows(lignes_calendrier)
+
     print(
         f"\n✅ Extrait du périmètre écrit dans {REPERTOIRE_CSV}\n"
         f"   {len(retenues)} cultivars retenus sur {len(varieties)}\n"
         f"   {len(arêtes)} arêtes d'association retenues sur {len(companions)}\n"
+        f"   {len(lignes_calendrier)} lignes de calendrier retenues sur {len(calendrier)}\n"
     )
     return 0
 
@@ -134,8 +155,11 @@ def main(argv: "list[str] | None" = None) -> int:
         os.path.join(REPERTOIRE_CSV, "companion_plants.csv")
     )
 
+    # [US-068] Absent, le calendrier ne produit simplement aucune fenêtre.
+    calendrier = _lire_csv(os.path.join(REPERTOIRE_CSV, "planting_calendar.csv"))
+
     manifeste, associations, resultat = svc_adaptateur.construire_manifeste(
-        varieties, companions, extrait_le=TAG_SOURCE
+        varieties, companions, extrait_le=TAG_SOURCE, calendrier=calendrier
     )
     with open(args.sortie, "w", encoding="utf-8", newline="\n") as flux:
         json.dump(manifeste, flux, ensure_ascii=False, indent=2)

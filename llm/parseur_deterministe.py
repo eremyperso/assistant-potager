@@ -406,6 +406,14 @@ def parser_saisie(
     if any(m in _MOTS_RANG for m in mots):
         return _repli("vocabulaire de rangs — partage quantité/rang ambigu", texte)
 
+    # [US-069 / CA2] « en pépinière », « en pleine terre » : la tournure dit le
+    # contexte du semis, elle ne doit pas rester en mots non attribués (et
+    # renvoyer au modèle une phrase que la grammaire sait lire).
+    contexte_semis: Optional[str] = None
+    if geste == "semis":
+        from app.services.contexte_semis import retirer_tournure_contexte
+        mots, contexte_semis = retirer_tournure_contexte(mots)
+
     fermer_db = db is None
     if fermer_db:
         from database.db import SessionLocal
@@ -500,6 +508,9 @@ def parser_saisie(
         "origine_parsing": ORIGINE_DETERMINISTE,
         "date_source": date_source,
     }
+
+    if contexte_semis is not None:
+        item["contexte_semis"] = contexte_semis
 
     if geste == "mise_en_godet":
         # Une mise en godet compte des plants repiqués, jamais une quantité

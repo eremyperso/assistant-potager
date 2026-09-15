@@ -252,6 +252,98 @@ python tools/mesurer_prediagnostic.py --detail
 # CONSCIENTE DU POTAGER. Ce paramètre ne scope QUE les bioagresseurs — famille,
 # délai de retour, attributs de conduite et description restent partagés.
 
+# Calendrier cultural et zone climatique [US-068]
+# Quand semer (en pépinière / en pleine terre), quand récolter, et dans combien
+# de jours la culture lève ou se récolte — lu à ZÉRO jeton, corrigeable au bot.
+psql -d potager -f migrations/migration_v46.sql
+#   /calendrier <culture>
+#   /calendrier zone [oceanique|continental|mediterraneen|montagnard|auto]
+#   /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine_terre|recolte> <mars-mai|aucune>
+#   /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <10|70-90|vivace|aucune>
+#   GET /cultures/{culture}/calendrier   (forme de lecture pour US-060 / US-070 / Lot E)
+# Tout est aussi DICTABLE (US-172) : « quand semer les tomates ? », « passe mon
+# potager en zone méditerranéenne », « délai de levée des carottes : 14 à 21 jours ».
+# ⚠️ Frontière avec US-096 portée par la règle `calendrier_quand` de
+# interpreteur_commandes : verbe à l'INFINITIF exigé — « quand ai-je semé les
+# tomates ? » reste une question sur le journal du potager.
+#
+# Le modèle — app/services/calendrier_cultural.py (seul point de lecture/écriture) :
+#   itineraire_cultural   une CONDUITE (« standard », « culture d'hiver »), jamais une variété
+#   fenetre_culturale     une par (itinéraire, zone, phase), au mois ; absente = vide
+#   duree_culturale       une par (itinéraire, étape), en jours ou mention libre,
+#                         COMMUNE à toutes les zones (physiologie, pas latitude)
+#
+# ⚠️ Trois décisions à ne pas rouvrir sans rouvrir l'US :
+#   ZONE : `potagers.zone_climatique` ne porte que le CHOIX du jardinier. Sans
+#     choix, la zone se DÉDUIT de la localisation À LA LECTURE
+#     (`zone_depuis_localisation` : règle grossière, déclarée, jamais
+#     « montagnard » faute d'altitude), puis CALENDRIER_ZONE_DEFAUT (config.py,
+#     `oceanique`). Aucun backfill SQL : une seconde règle divergerait.
+#   CORRECTION : TOUJOURS locale au potager (CA11). La première correction COPIE
+#     l'itinéraire partagé en itinéraire personnalisé (`potager_id` non nul) qui
+#     le remplace pour ce potager. `culture_config.nom` étant UNIQUE, la
+#     convention « fiche personnalisée » s'applique sur les tables du calendrier,
+#     pas sur `culture_config`. L'import n'écrit que du PARTAGÉ : il ne peut pas
+#     écraser une correction, par construction (CA9).
+#   HONNÊTETÉ : aucune fenêtre empruntée à une zone voisine, aucune durée
+#     moyenne, jamais une date calculée (CA4, CA13). Sans donnée : frise vide,
+#     durée « — ».
+#
+# Pré-remplissage (CA9) — le calendrier du commerce est une œuvre protégée :
+#   DURÉES   : Wind River Greens (CC BY 4.0), bloc `cultures_calendriers` du
+#              manifeste existant — levée ; récolte en pleine terre SEULEMENT
+#              (`days_to_harvest` compte depuis la plantation pour ce qui est
+#              élevé à l'abri) ; repiquage depuis « start indoors N-M weeks ».
+#   FENÊTRES : même source, même bloc, lues dans `planting_calendar.csv`
+#              (identique au tag v1.0.0, extrait aux cultivars du périmètre).
+#              TOUT culture_config retrouvé dans la source (APPARIEMENTS_CALENDRIER,
+#              le particulier avant le général ; ALIAS_CALENDRIER : salade = laitue) :
+#              272 fenêtres et 45 durées sur 32 cultures. Attributs et associations
+#              restent sur les dix d'APPARIEMENTS. Couverture détaillée et motifs
+#              d'exclusion : wind_river_greens/SOURCE.md.
+python tools/adapter_wind_river.py
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# ⚠️ Deux choses à savoir avant de toucher aux fenêtres :
+#   - La source est en zones USDA. `adaptateur_wind_river.ZONE_USDA_PAR_ZONE`
+#     (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4) est
+#     une DÉCISION calée sur la date de dernière gelée, pas une équivalence de
+#     rusticité (qui mettrait la Bretagne au calendrier du Texas). À valider.
+#   - Le calendrier source est un GABARIT PAR CATÉGORIE (10 profils pour 91
+#     tomates), printemps seulement : aucun semis de fin d'été ni d'automne.
+#     Six règles de rejet dans `construire_fenetres` — plantation majoritaire
+#     (ail, échalote, pomme de terre, fraise, framboise, menthe), jointure id +
+#     catégorie, fenêtre à cheval sur l'année (artefact), phase minoritaire,
+#     médiane basse, semis contredit par les fiches de la source (pépinière du
+#     cornichon et du fenouil). `fenetres_incompletes` liste les cultures dont les
+#     fiches parlent d'un semis d'automne que le calendrier ignore.
+# Gabarit de rédaction interne, livré VIDE, pour ce que la source ne couvre pas
+# (aucun chiffre produit par un modèle de langage) — une valeur déjà écrite par
+# wind_river_greens y est PRÉSERVÉE, jamais écrasée :
+python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json
+
+# Semis en pépinière ou en pleine terre [US-069]
+# Un semis porte sa FILIÈRE (`evenements.contexte_semis`) : dite dans la phrase
+# (« en pépinière », « en godets », « en pleine terre », « en place »), sinon
+# PROPOSÉE au récapitulatif du bot et adoptée par « Confirmer » — un seul geste.
+psql -d potager -f migrations/migration_v47.sql
+# Un seul module — app/services/contexte_semis.py :
+#   detecter_contexte          ce qui est DIT, jamais deviné (« sous abri » n'y est pas)
+#   proposer_contexte          deux indices et deux seulement : parcelle déclarée
+#                              pépinière, puis un calendrier (US-068) qui ne connaît
+#                              QU'UNE des deux fenêtres de semis. Sinon : sans contexte
+#   correction_contexte_seule  « non, c'était en pépinière » se corrige SANS modèle
+#   semis_par_contexte         trois totaux par culture et saison (/stats, GET /stats)
+#   fenetre_conseillee         la fenêtre du référentiel qu'US-070 ancrera
+# ⚠️ Le contexte ne pilote AUCUN calcul de stock (CA8) : le stock se déduit
+# toujours de `parcelles.est_pepiniere`. Une parcelle ordinaire n'est pas non plus
+# un indice de pleine terre — un semis de pépinière est rattaché à une parcelle
+# comme tout événement.
+# ⚠️ Pas d'interrogatoire (point de vigilance de l'US) : la proposition n'est faite
+# que pour une saisie d'UN geste ; une dictée multi-gestes s'enregistre sans
+# contexte non dit, corrigeable ensuite. La clé `contexte_semis` PRÉSENTE et vide
+# dans un item vaut « sans préciser » : la phrase n'est pas relue derrière ce choix.
+
 # Menu de commandes natif Telegram [US-171]
 # Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :
 # il se dérive des CommandHandler enregistrés dans bot._construire_application().
@@ -560,7 +652,7 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 ## Database Migrations
 
-Manual SQL files in `migrations/`, numbered sequentially (v2 → v45), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v45.sql` [US-165] — creates `symptome` (full-text GIN index) and `symptome_bioagresseur` (weighted edge), both under RLS. `symptome` deliberately has **no** `culture_id`: a symptom belongs to no culture, and it is the join with `culture_bioagresseur` that picks the lead — a culture column would have duplicated every symptom per culture and made the CA14 disambiguation structurally impossible. Before it, `migration_v44.sql` [US-172] — adds `commande_interpretee` / `issue_interpretation` to `routage_logs` (nullable, idempotent), so an interpreted command and the fate of its confirmation are journalled without overloading US-098's `issue_savoir`. Before it, `migration_v43.sql` [US-162]. `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
+Manual SQL files in `migrations/`, numbered sequentially (v2 → v47), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v47.sql` [US-069] — adds nullable `evenements.contexte_semis` (`pepiniere` | `pleine_terre` | NULL), with a CHECK that only a `semis` carries one, and replays the only non-presumptuous backfill: a semis with a chained `mise_en_godet` (`origine_graines_id`) becomes `pepiniere`, every other one stays NULL — never presumed `pleine_terre`. That UPDATE lives between `REPRISE` markers and is executed as-is by `tests/test_us069_contexte_semis.py`: edit it there, never copy it. The column drives NO stock computation (stock still derives from `parcelles.est_pepiniere`). Before it, `migration_v46.sql` [US-068] — creates the crop calendar (`itineraire_cultural`, `fenetre_culturale` per climate zone, `duree_culturale` shared by all zones), all three under the `potager_id NULL = shared` RLS policy, and adds nullable `potagers.zone_climatique`, which stores only the gardener's explicit choice: the zone derived from the location is computed at read time by `app/services/calendrier_cultural.zone_depuis_localisation`, never backfilled in SQL. It seeds no calendar row. Before it, `migration_v45.sql` [US-165] — creates `symptome` (full-text GIN index) and `symptome_bioagresseur` (weighted edge), both under RLS. `symptome` deliberately has **no** `culture_id`: a symptom belongs to no culture, and it is the join with `culture_bioagresseur` that picks the lead — a culture column would have duplicated every symptom per culture and made the CA14 disambiguation structurally impossible. Before it, `migration_v44.sql` [US-172] — adds `commande_interpretee` / `issue_interpretation` to `routage_logs` (nullable, idempotent), so an interpreted command and the fate of its confirmation are journalled without overloading US-098's `issue_savoir`. Before it, `migration_v43.sql` [US-162]. `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
 
 ## Testing
 

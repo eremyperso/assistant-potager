@@ -139,6 +139,25 @@ aide,help,imperatif
 j'ai besoin d'aide,help,intention
 aide sur les parcelles,help,elliptique
 comment utiliser l'aide ?,,savoir
+montre-moi le calendrier de la tomate,calendrier,imperatif
+je veux voir le calendrier des courgettes,calendrier,intention
+calendrier du poireau,calendrier,elliptique
+quand semer les tomates ?,calendrier,elliptique
+à quelle période récolter les carottes,calendrier,elliptique
+comment fonctionne le calendrier des semis ?,,savoir
+passe mon potager en zone méditerranéenne,calendrier zone,imperatif
+je veux que mon jardin soit en zone montagnarde,calendrier zone,intention
+zone climatique océanique,calendrier zone,elliptique
+comment choisir la zone climatique de mon potager ?,,savoir
+corrige la période de semis en pépinière des tomates de février à avril,calendrier fenetre,imperatif
+je voudrais que la période de récolte de la courgette soit de juillet à octobre,calendrier fenetre,intention
+période de semis en pleine terre des carottes : mars à juin,calendrier fenetre,elliptique
+comment corriger une période de semis ?,,savoir
+corrige le délai de levée des carottes à 14 jours,calendrier duree,imperatif
+je voudrais que le délai de récolte de la courgette soit de 50 à 60 jours,calendrier duree,intention
+délai de levée des carottes : 14 à 21 jours,calendrier duree,elliptique
+les tomates lèvent en 7 à 14 jours,calendrier duree,elliptique
+comment corriger un délai de levée ?,,savoir
 récolté 2 kg de tomates cerise,,hors_perimetre
 j'ai planté 3 pieds de tomate sur PlancheTomate,,hors_perimetre
 arrosé les courgettes 30 min,,hors_perimetre
@@ -153,5 +172,7 @@ pourquoi mes tomates jaunissent ?,,hors_perimetre
 à quelle profondeur semer les carottes ?,,hors_perimetre
 quel est mon stock de plants de tomate ?,,hors_perimetre
 quand ai-je planté les courgettes ?,,hors_perimetre
+quand ai-je semé les tomates ?,,hors_perimetre
+j'ai semé les tomates en pépinière en février,,hors_perimetre
 qu'avais-je noté sur la parcelle nord ?,,hors_perimetre
 il me reste combien de tomates ?,,hors_perimetre

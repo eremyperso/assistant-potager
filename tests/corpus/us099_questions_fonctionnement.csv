@@ -15,6 +15,8 @@ comment est compté le rendement en kilos de mes cultures ?,recoltes-et-pertes.m
 pourquoi mes semis n'apparaissent pas en pepiniere ?,semis-godet-plantation.md#01-pourquoi-mes-semis-n-apparaissent-pas-dans-la-pepiniere
 "j'ai repiqué vingt plants sur trente graines, que deviennent les autres ?",semis-godet-plantation.md#02-ce-que-la-mise-en-godet-retire-au-semis-d-origine
 est-ce que planter mes godets les retire de la pepiniere ?,semis-godet-plantation.md#03-ce-que-la-plantation-retire-aux-godets
+comment dire qu'un semis est fait en pépinière ou en pleine terre ?,semis-godet-plantation.md#04-dire-si-un-semis-est-fait-en-pepiniere-ou-en-pleine-terre
+"j'ai semé mes carottes en place, comment l'indiquer ?",semis-godet-plantation.md#04-dire-si-un-semis-est-fait-en-pepiniere-ou-en-pleine-terre
 c'est quoi un lot de semis ?,pepiniere-par-lot.md#00-ce-qu-est-un-lot-de-semis
 combien de graines de mon lot ne sont pas encore levees ?,pepiniere-par-lot.md#01-savoir-combien-de-graines-d-un-lot-n-ont-pas-encore-leve
 pourquoi mon taux de germination depasse cent pour cent ?,pepiniere-par-lot.md#02-un-lot-qui-affiche-plus-de-plants-que-de-graines
@@ -70,3 +72,11 @@ est-ce que je peux demander à l'application de créer une parcelle en parlant ?
 faut-il retenir la commande exacte pour supprimer une planche ?,enregistrer-un-geste.md#05-demander-une-action-a-l-application-en-une-phrase
 qu'est-ce qui est vérifié avant qu'une valeur dictée soit écrite ?,enregistrer-un-geste.md#06-ce-qui-est-relu-avant-d-etre-ecrit
 que se passe-t-il si je me trompe de nom de parcelle en dictant ?,enregistrer-un-geste.md#06-ce-qui-est-relu-avant-d-etre-ecrit
+à quelle période faut-il semer une culture ?,calendrier-et-zone-climatique.md#00-savoir-quand-semer-et-quand-recolter-une-culture
+est-ce que l'assistant connaît le calendrier des semis ?,calendrier-et-zone-climatique.md#00-savoir-quand-semer-et-quand-recolter-une-culture
+pourquoi deux périodes de semis pour la même culture selon le godet ou la pleine terre ?,calendrier-et-zone-climatique.md#01-pourquoi-semer-en-godet-et-semer-en-pleine-terre-sont-deux-p
+pourquoi le chou-fleur d'hiver n'a pas le même calendrier que le précoce ?,calendrier-et-zone-climatique.md#02-plusieurs-facons-de-conduire-une-meme-culture
+à quoi sert la zone climatique de mon potager ?,calendrier-et-zone-climatique.md#03-a-quoi-sert-la-zone-climatique-du-potager
+comment changer la zone climatique de mon jardin ?,calendrier-et-zone-climatique.md#04-choisir-soi-meme-la-zone-climatique-de-son-jardin
+comment avancer mes semis dans le calendrier de mon jardin ?,calendrier-et-zone-climatique.md#05-corriger-une-periode-ou-un-delai-qui-ne-convient-pas-a-son-j
+pourquoi l'assistant ne m'annonce jamais une date précise pour mes légumes ?,calendrier-et-zone-climatique.md#06-pourquoi-un-delai-s-affiche-en-fourchette-et-jamais-en-date

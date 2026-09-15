@@ -28,8 +28,8 @@ from app.services import potager_actif as svc_potager_actif
 from app.services import telegram_notify as svc_telegram_notify
 from database.db import tenant_scope
 from database.models import (
-    CultureConfig, Evenement, Invitation, Parcelle, Potager, PotagerMembre, RoutageLog,
-    RoutageRetour, User,
+    CultureConfig, DureeCulturale, Evenement, FenetreCulturale, Invitation, ItineraireCultural,
+    Parcelle, Potager, PotagerMembre, RoutageLog, RoutageRetour, User,
 )
 
 log = logging.getLogger("potager")
@@ -504,6 +504,15 @@ def purger_potager(db: Session, potager_id: int) -> dict:
                            .delete(synchronize_session=False),
             "invitations": db.query(Invitation).filter(Invitation.potager_id == potager_id)
                              .delete(synchronize_session=False),
+            # [US-068] Calendriers PERSONNALISÉS du potager — valeurs d'abord,
+            # itinéraires ensuite (clés étrangères), et avant culture_config à
+            # laquelle un itinéraire se rattache. Le partagé n'est pas touché.
+            "duree_culturale": db.query(DureeCulturale).filter(DureeCulturale.potager_id == potager_id)
+                                 .delete(synchronize_session=False),
+            "fenetre_culturale": db.query(FenetreCulturale).filter(FenetreCulturale.potager_id == potager_id)
+                                   .delete(synchronize_session=False),
+            "itineraire_cultural": db.query(ItineraireCultural).filter(ItineraireCultural.potager_id == potager_id)
+                                     .delete(synchronize_session=False),
             "culture_config": db.query(CultureConfig).filter(CultureConfig.potager_id == potager_id)
                                 .delete(synchronize_session=False),
             "membres": db.query(PotagerMembre).filter(PotagerMembre.potager_id == potager_id)
@@ -528,11 +537,13 @@ def purger_potager(db: Session, potager_id: int) -> dict:
     log.info(
         "[US-084] Purge physique : potager_id=%s nom=%r evenements=%s parcelles=%s "
         "invitations=%s culture_config=%s membres=%s routage_logs=%s routage_retours=%s "
-        "questions_cache=%s knowledge_chunks=%s",
+        "questions_cache=%s knowledge_chunks=%s itineraire_cultural=%s fenetre_culturale=%s "
+        "duree_culturale=%s",
         potager_id, nom, volumes["evenements"], volumes["parcelles"],
         volumes["invitations"], volumes["culture_config"], volumes["membres"],
         volumes["routage_logs"], volumes["routage_retours"], volumes["questions_cache"],
-        volumes["knowledge_chunks"],
+        volumes["knowledge_chunks"], volumes["itineraire_cultural"],
+        volumes["fenetre_culturale"], volumes["duree_culturale"],
     )
     return {"potager_id": potager_id, "nom": nom, "purge": True, "volumes": volumes}
 

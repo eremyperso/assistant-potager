@@ -250,6 +250,7 @@ main{flex:1 1 auto; display:grid; grid-template-columns:1fr 380px;
       <button class="secondaire" id="b-fichier">Ouvrir un fichier…</button>
       <button class="secondaire" id="b-copier">Copier le rapport</button>
       <button class="secondaire" id="b-exemple">Remettre l'exemple</button>
+      <button class="secondaire" id="b-vider" title="Vide la zone de texte pour coller un nouveau log">Effacer le log</button>
       <button class="secondaire" id="b-fermer">Fermer</button>
       <span id="retour"></span>
     </footer>
@@ -448,7 +449,40 @@ En général, le choix de la variété d'oignon dépend du climat et de la duré
 2026-09-10 10:21:48 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_SAVOIR   │ confiance=0.99 │ 6 ms │ 'décris moi les différent modèle de moteur pour l'automobile'
 2026-09-10 10:21:48 │ INFO │ 📚 SAVOIR         │ issue=servi    │ score=0.930 │ passages=3 │ 12 ms │ 1·auto-definition.md::Les principaux éléments d'une automobi ┊ 2·auto-avantage-inconvenient.md::Voiture hybride ┊ 3·auto-avantage-inconvenient.md::Voiture électrique │ 'décris moi les différent modèle de moteur pour l'automobile'
 2026-09-10 10:21:48 │ INFO │ 🧠 CACHE QUESTION │ mémorisé=figee │ source=rag │ fragment=tests/corpus/automobile/auto-definition.md#02-les-principaux-elements-d-une-automobile │ 'décris moi les différent modèle de moteur pour l'automobile'
-2026-09-10 10:21:48 │ INFO │ 💡 RÉPONSE        : Le moteur produit l'énergie nécessaire au déplacement. La transmission transmet cette énergie aux roues. La direction permet d'orienter le véhicule et le système de freinage assure son ralentissement ...`;
+2026-09-10 10:21:48 │ INFO │ 💡 RÉPONSE        : Le moteur produit l'énergie nécessaire au déplacement. La transmission transmet cette énergie aux roues. La direction permet d'orienter le véhicule et le système de freinage assure son ralentissement ...
+2026-09-15 09:47:46 │ INFO │ 🌅 JOB MÉTÉO       : planifié à 05h00 Europe/Paris
+2026-09-15 09:47:46 │ INFO │ 🗑️  JOB PURGE       : planifié à 04h00 Europe/Paris
+2026-09-15 09:47:49 │ INFO │ ⌨️  MENU TELEGRAM  : 22 commandes déclarées
+2026-09-15 09:47:49 │ INFO │ [US-068] /calendrier 'poivron' : connue=True renseigne=True zone=oceanique (localisation), 0 jeton
+2026-09-15 09:49:23 │ INFO │ 💬 MESSAGE TEXTE  : semer 12 graines de poivrons en godet
+2026-09-15 09:49:27 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1280 out=60 cache=0 │ 3696 ms │ issue=ok
+2026-09-15 09:49:27 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '999', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6520', 'x-ratelimit-reset-requests': '1m26.4s', 'x-ratelimit-reset-tokens': '11.1s'}
+2026-09-15 09:49:27 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=ACTION            │ confiance=1.00 │ 0 ms │ 'semer 12 graines de poivrons en godet'
+2026-09-15 09:49:30 │ INFO │ 🔤 PARSEUR DÉTERM. : reconnu sans modèle | geste=semis culture=poivron qte=12.0 graines parcelle=None date=None
+2026-09-15 09:49:30 │ INFO │ 🤖 PARSING        : [{"action": "semis", "culture": "poivron", "variete": null, "quantite": 12.0, "unite": "graines", "parcelle": null, "rang": null, "duree_minutes": null, "traitement": null, "date": null, "commentaire": null, "nb_graines_semees": null, "nb_plants_godets": null, "origine_parsing": "deterministe", "date_source": "presumee", "contexte_semis": "pepiniere"}]
+2026-09-15 09:49:30 │ INFO │ [US-021 CA8] Sélection parcelle (liste complète) — user_id=8063902186
+2026-09-15 09:49:46 │ INFO │ [US-021 CA9] Parcelle sélectionnée : 'SERRE' — user_id=8063902186
+2026-09-15 09:49:49 │ INFO │ [US-021] Confirmation reçue — user_id=8063902186, 1 item(s)
+2026-09-15 09:49:49 │ INFO │ 💾 DB SAVE        : id=485 | action=semis | culture=poivron | qte=12.0 graines | parcelle=64 | date=2026-09-15 00:00:00 | contexte_semis=pepiniere
+2026-09-15 09:50:47 │ INFO │ 💬 MESSAGE TEXTE  : mise en godet de 13 poivrons
+2026-09-15 09:50:50 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1278 out=52 cache=0 │ 3448 ms │ issue=ok
+2026-09-15 09:50:50 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '998', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6522', 'x-ratelimit-reset-requests': '2m52.8s', 'x-ratelimit-reset-tokens': '11.085s'}
+2026-09-15 09:50:50 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=ACTION            │ confiance=1.00 │ 0 ms │ 'mise en godet de 13 poivrons'
+2026-09-15 09:50:54 │ INFO │ 🔤 PARSEUR DÉTERM. : reconnu sans modèle | geste=mise_en_godet culture=poivron qte=None  parcelle=None date=None
+2026-09-15 09:50:54 │ INFO │ 🤖 PARSING        : [{"action": "mise_en_godet", "culture": "poivron", "variete": null, "quantite": null, "unite": null, "parcelle": null, "rang": null, "duree_minutes": null, "traitement": null, "date": null, "commentaire": null, "nb_graines_semees": null, "nb_plants_godets": 13, "origine_parsing": "deterministe", "date_source": "presumee"}]
+2026-09-15 09:50:58 │ WARNING │ [fix garde-fou graines du lot] Refus : 13 plant(s) de 'poivron/None' demandés alors qu'aucun des 1 lot(s) de semis ne peut les fournir (meilleur reste : 12)
+2026-09-15 09:50:58 │ WARNING │ ❌ MISE EN GODET INVALIDE : Aucun lot de semis de « poivron » ne peut fournir 13 plant(s) : le lot le mieux fourni n'a plus que 12 graine(s) en germination. Enregistrez d'abord le semis correspondant, ou corrigez la quantité. | texte='mise en godet de 13 poivrons'
+2026-09-15 09:51:10 │ INFO │ 💬 MESSAGE TEXTE  : mise en godet de 10 poivrons
+2026-09-15 09:51:10 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=1 │ in=1278 out=50 cache=0 │ 267 ms │ issue=ok
+2026-09-15 09:51:10 │ INFO │ 📉 LLM DEBIT       │ {'x-ratelimit-limit-requests': '1000', 'x-ratelimit-remaining-requests': '997', 'x-ratelimit-limit-tokens': '8000', 'x-ratelimit-remaining-tokens': '6670', 'x-ratelimit-reset-requests': '4m19.2s', 'x-ratelimit-reset-tokens': '9.975s'}
+2026-09-15 09:51:10 │ INFO │ 🧭 ROUTEUR         │ origine=regle  │ nature=ACTION            │ confiance=1.00 │ 0 ms │ 'mise en godet de 10 poivrons'
+2026-09-15 09:51:10 │ INFO │ 🔤 PARSEUR DÉTERM. : reconnu sans modèle | geste=mise_en_godet culture=poivron qte=None  parcelle=None date=None
+2026-09-15 09:51:10 │ INFO │ 🤖 PARSING        : [{"action": "mise_en_godet", "culture": "poivron", "variete": null, "quantite": null, "unite": null, "parcelle": null, "rang": null, "duree_minutes": null, "traitement": null, "date": null, "commentaire": null, "nb_graines_semees": null, "nb_plants_godets": 10, "origine_parsing": "deterministe", "date_source": "presumee"}]
+2026-09-15 09:51:12 │ INFO │ [US-066] Nombre de graines réclamé pour le lot #485 (12 restantes) — user_id=8063902186
+2026-09-15 09:51:26 │ INFO │ 💬 MESSAGE TEXTE  : 10
+2026-09-15 09:51:26 │ INFO │ [US-066] Nombre de graines saisi : 10 — user_id=8063902186
+2026-09-15 09:51:26 │ INFO │ [US-029 CA3] Godet lié au semis id=485 pour 'poivron/None'
+2026-09-15 09:51:26 │ INFO │ 💾 GODET SAVE : id=486 culture=poivron variete=None origine=485`;
 
 /* ════════════════════════════════════════════════════════════
    2. TOPOLOGIE DE LA CASCADE
@@ -500,6 +534,10 @@ const cite  = s=>{const m=s.match(/'([^']*)'\s*$/); return m?m[1]:null;};
 
 function typerLigne(msg){
   const t = m => msg.indexOf(m) !== -1;
+  // testé en tête : un refus de garde-fou (❌ ... INVALIDE, ❌ ... ERREUR, etc.)
+  // peut contenir n'importe quel mot-clé plus bas (« PARSING », « RÉPONSE »…)
+  // et serait mal typé s'il n'était pas intercepté avant les tests par mot-clé
+  if (/^❌/.test(msg))         return "refus";
   if (t("MESSAGE TEXTE"))     return "entree_texte";
   if (t("TRANSCRIPTION"))     return "entree_voix";
   if (t("LLM DEBIT"))         return "debit";
@@ -520,7 +558,14 @@ function typerLigne(msg){
     if (t("invalidé=")) return "cache_inv";
     return "cache_autre";
   }
-  if (t("DB SAVE"))           return "db";
+  // toute ligne 💾 est une écriture en base, quel que soit son libellé exact
+  // (DB SAVE, GODET SAVE, PERTE SAVE, DB SAVE [US-038]…) — un nom de plus ne
+  // doit jamais faire retomber la ligne en « meta »
+  if (/^💾/.test(msg)){
+    if (t("GODET SAVE")) return "db_godet";
+    if (t("PERTE SAVE")) return "db_perte";
+    return "db";
+  }
   if (t("RÉPONSE"))           return "reponse";
   if (t("auto-déduite")||t("auto-détectée"))     return "enrichissement";
   if (t("Confirmation demandée"))                return "confirm_dem";
@@ -530,7 +575,8 @@ function typerLigne(msg){
     return t("issue=confirmee") ? "interp_conf" : "interp_prop";
   }
   if (t("Exécution de la commande interprétée")) return "commande";
-  if (t("MENU TELEGRAM")||t("STATS VARIETE"))    return "journal";
+  if (t("MENU TELEGRAM")||t("STATS VARIETE")||t("JOB MÉTÉO")||t("JOB PURGE"))
+    return "journal";
   if (/^\[/.test(msg))                           return "journal";
   return "meta";
 }
@@ -587,7 +633,10 @@ const NOMS = {
   cache_inv:["♻️","Cache — invalidation","Étage 0bis"],
   gabarit:["📐","Gabarit SQL","Étage 1"], savoir:["📚","Recherche dans le référentiel","Étage 2"],
   remontee:["↪️","Remontée d'étage","Étage 2 → 3"], llm:["🔌","Raisonnement","Étage 3"],
-  db:["💾","Enregistrement","PostgreSQL"], reponse:["💡","Réponse","Sortie"],
+  db:["💾","Enregistrement","PostgreSQL"],
+  db_godet:["💾","Enregistrement — godet","PostgreSQL"],
+  db_perte:["💾","Enregistrement — perte","PostgreSQL"],
+  reponse:["💡","Réponse","Sortie"], refus:["❌","Refus — garde-fou","Sortie"],
   debit:["📉","Débit Groq","Quotas"], reroutage:["❓","Reroutage","Aiguillage"],
   question:["🔍","Question isolée","Aiguillage"], meta:["·","Ligne inconnue","—"],
   journal:["·","Métrique applicative","—"],
@@ -788,13 +837,39 @@ function construireTrace(src){
         apport = `La saisie rend obsolètes les réponses déjà mémorisées sur cette culture : <strong>${mot(m,"invalidé")} entrées purgées</strong>. Sans ça, le cache servirait un stock périmé avec assurance.`;
         break;
 
-      case "db":
+      case "db": case "db_godet": case "db_perte": {
         noeud = "db";
-        champs = m.split(":").slice(1).join(":").split("|").map(p => {
-          const q = p.split("="); return [q[0].trim(), q.slice(1).join("=").trim()];
+        // « DB SAVE » sépare ses champs par des « | », « GODET SAVE » et
+        // « PERTE SAVE » par de simples espaces — les deux formats coexistent
+        const reste = m.slice(m.indexOf(":") + 1).trim();
+        const troncons = reste.indexOf("|") !== -1
+          ? reste.split("|")
+          : reste.split(/\s+(?=\w+=)/);
+        champs = troncons.map(p => {
+          const q = p.trim().split("=");
+          return [q[0].trim(), q.slice(1).join("=").trim()];
         });
-        apport = "Événement écrit en base, scopé au potager.";
+        apport = type === "db_godet"
+          ? "Godet enregistré et rattaché au semis d'origine : ce lien est ce que le garde-fou de stock (US-029) contrôle à la mise en godet suivante."
+          : type === "db_perte"
+          ? "Perte enregistrée : elle réduit le stock en place au même titre qu'une récolte."
+          : "Événement écrit en base, scopé au potager.";
         break;
+      }
+
+      case "refus": {
+        noeud = "reponse";
+        const mm = m.match(/^❌\s*([^:]+):\s*([\s\S]*)$/);
+        const label = mm ? mm[1].trim() : "Refus";
+        let detail = mm ? mm[2].trim() : m;
+        const texteOrigine = cite(detail);
+        detail = detail.replace(/\s*\|\s*texte='[^']*'\s*$/, "").trim();
+        extra = {texte: detail};
+        champs = [["motif", label]];
+        if (texteOrigine) champs.push(["phrase d'origine", texteOrigine]);
+        apport = `Garde-fou métier : la demande est refusée avant toute écriture (<code>${esc(label)}</code>), et ce refus est la réponse envoyée sur Telegram. <strong>0 jeton</strong> — le contrôle est déterministe, en amont de tout appel modèle.`;
+        break;
+      }
 
       case "reponse":
         noeud = "reponse";
@@ -827,7 +902,7 @@ function construireTrace(src){
   });
 
   const ouvre = pas[0];
-  const rep   = pas.filter(p => p.type === "reponse").pop();
+  const rep   = pas.filter(p => p.type === "reponse" || p.type === "refus").pop();
   const q     = (ouvre.extra && ouvre.extra.texte) || "—";
   const complete = pas.some(p => p.noeud === "reponse" || p.noeud === "db" || p.noeud === "commande");
   const inconnues = pas.filter(p => p.type === "meta" || p.type === "cache_autre")
@@ -1036,7 +1111,7 @@ function dessinerPanneau(){
         <div class="s">${esc(x.section)}</div></div>`).join("");
   }
   if (p.extra && p.extra.texte && p.type !== "entree_texte" && p.type !== "entree_voix"){
-    h += `<div class="titrillon">${p.type === "reponse" ? "Réponse envoyée" : "Texte"}</div>
+    h += `<div class="titrillon">${p.type === "reponse" || p.type === "refus" ? "Réponse envoyée" : "Texte"}</div>
       <div class="brut" style="margin-bottom:0">${esc(p.extra.texte)}</div>`;
   }
   if (p.type === "cache_lec"){
@@ -1142,6 +1217,10 @@ $("#btn-import").onclick = () => { voile.classList.add("on"); $("#retour").textC
 $("#b-fermer").onclick   = () => voile.classList.remove("on");
 voile.onclick = e => { if (e.target === voile) voile.classList.remove("on"); };
 $("#b-exemple").onclick  = () => { zone.value = LOG_EXEMPLE; };
+$("#b-vider").onclick    = () => {
+  zone.value = ""; $("#rapport").classList.remove("on"); $("#rapport").textContent = "";
+  $("#retour").textContent = ""; zone.focus();
+};
 $("#b-fichier").onclick  = () => $("#fichier").click();
 $("#fichier").onchange = e => { const f = e.target.files[0]; if (!f) return;
   f.text().then(t => { zone.value = t; }); };
@@ -1187,7 +1266,7 @@ function texteRapport(traces){
     L.push("Aucune ligne non reconnue.");
   }
   L.push("");
-  L.push("Marqueurs actuellement reconnus comme sortie : 💡 RÉPONSE, 💾 DB SAVE.");
+  L.push("Marqueurs actuellement reconnus comme sortie : 💡 RÉPONSE, 💾 ...SAVE (DB/GODET/PERTE), ❌ ...INVALIDE (refus de garde-fou).");
   return L.join("\n");
 }
 

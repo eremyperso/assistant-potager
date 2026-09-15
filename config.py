@@ -144,3 +144,13 @@ PREDIAGNOSTIC_SEUIL_SYMPTOME = float(os.environ.get("PREDIAGNOSTIC_SEUIL_SYMPTOM
 # croisement n'en produit qu'une, l'application le DIT (voir
 # `prediagnostic.ISSUE_PISTE_UNIQUE`) au lieu d'en inventer une seconde.
 PREDIAGNOSTIC_MAX_PISTES = int(os.environ.get("PREDIAGNOSTIC_MAX_PISTES", "3"))
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-068 / CA8] Calendrier cultural — zone climatique par défaut
+# -----------------------------------------------------------------------------
+# Zone dont un potager lit les fenêtres quand il n'a ni zone choisie par le
+# jardinier, ni localisation dont on puisse la déduire. `oceanique` par défaut :
+# c'est le climat de la plus grande part des jardins de France métropolitaine.
+# Réglable sans redéploiement ; une valeur hors vocabulaire retombe sur
+# `oceanique` (voir app.services.calendrier_cultural.zone_par_defaut).
+CALENDRIER_ZONE_DEFAUT = os.environ.get("CALENDRIER_ZONE_DEFAUT", "oceanique").strip().lower()

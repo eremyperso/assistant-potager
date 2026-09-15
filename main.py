@@ -106,12 +106,14 @@ from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
+from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import resolve_parcelle  # [US-167]
 from utils.actions import normalize_action  # [US-167]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from app.services import contexte_semis as svc_contexte_semis  # [US-069]
 from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
 
 log = logging.getLogger("potager")
@@ -726,6 +728,11 @@ def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user))
                     "ville": p.ville,
                     "latitude": p.latitude,
                     "longitude": p.longitude,
+                    # [US-068 / CA7, CA8] Zone lue par le potager et son origine
+                    # (jardinier | localisation | defaut) — jamais une supposition
+                    # présentée comme un choix.
+                    "zone_climatique": svc_calendrier.zone_effective(p)[0],
+                    "zone_climatique_origine": svc_calendrier.zone_effective(p)[1],
                 }
                 for p in potagers
             ],
@@ -813,6 +820,9 @@ class ModifierPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-068 / CA7] Zone choisie par le jardinier. Omise = inchangée ;
+    # "auto" (ou "") = rendre la main à la localisation.
+    zone_climatique: Optional[str] = None
 
 
 class InviterMembreRequest(BaseModel):
@@ -898,6 +908,13 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
     actif de l'appelant (même principe que POST /potagers/{id}/invitations)."""
     if req.nom is not None and not req.nom.strip():
         raise HTTPException(status_code=400, detail="Nom de potager requis")
+    # [US-068 / CA7] Zone validée AVANT toute écriture : une valeur refusée ne
+    # doit pas laisser derrière elle un nom ou une localisation à moitié modifiés.
+    if req.zone_climatique is not None and req.zone_climatique.strip().lower() not in ("", "auto"):
+        try:
+            svc_calendrier.normaliser_zone(req.zone_climatique)
+        except svc_calendrier.ValeurCalendrierInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     db = SessionLocal()
     try:
         try:
@@ -906,11 +923,25 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
                 nom=req.nom.strip() if req.nom is not None else None,
                 ville=req.ville, latitude=req.latitude, longitude=req.longitude,
             )
+            if req.zone_climatique is not None:
+                svc_calendrier.definir_zone(
+                    db,
+                    TenantContext(
+                        user_id=user.id, potager_id=potager_id,
+                        role=svc_potager_actif.role_utilisateur(db, user.id, potager_id),
+                    ),
+                    req.zone_climatique,
+                )
+                db.refresh(potager)
         except PermissionInsuffisanteError as e:
             raise HTTPException(status_code=403, detail=str(e))
+        except PotagerArchiveError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        zone, origine = svc_calendrier.zone_effective(potager)
         return {
             "id": potager.id, "nom": potager.nom, "ville": potager.ville,
             "latitude": potager.latitude, "longitude": potager.longitude,
+            "zone_climatique": zone, "zone_climatique_origine": origine,
         }
     finally:
         db.close()
@@ -1203,6 +1234,24 @@ def get_cultures(ctx: TenantContext = Depends(get_current_user_ctx)):
             for c in cultures
         ]
         return {"cultures": result, "total": len(result)}
+    finally:
+        db.close()
+
+
+@app.get("/cultures/{culture}/calendrier")
+def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-068 / CA1-CA4, CA8, CA11-CA13] Calendrier cultural d'une culture, tel que
+    le lit le potager actif : itinéraires, fenêtres de SA zone, durées communes.
+
+    Aucun écran ne le consomme encore (US-060, US-070, vue Cultures du Lot E) :
+    c'est la forme de lecture qu'ils trouveront. Toujours 200 — une culture
+    inconnue ou sans référentiel rend `culture_connue` / `renseigne` à faux, une
+    frise vide et des durées nulles. Jamais une période ni un délai inventés, et
+    jamais une date calculée : des mois et des jours, rien d'autre."""
+    db = SessionLocal()
+    try:
+        calendrier = svc_calendrier.lire_calendrier(db, culture, ctx.potager_id)
+        return svc_calendrier.calendrier_en_dict(calendrier)
     finally:
         db.close()
 
@@ -1630,6 +1679,12 @@ def stats(
                 for v in godets.values()
             ],
             "semis_pleine_terre" : semis_pleine_terre,
+            # [US-069 / CA6] Trois totaux par culture et par saison — pépinière,
+            # pleine terre, sans contexte. Clé ajoutée : aucune clé existante ne change.
+            "semis_par_contexte" : [
+                t.en_dict()
+                for t in svc_contexte_semis.semis_par_contexte(db, use_ctx.potager_id, date_ref=date_ref_effective)
+            ],
             "traitements"        : [{"produit": t or "?", "nb_applications": n} for t, n in traitements],
         }
     finally:

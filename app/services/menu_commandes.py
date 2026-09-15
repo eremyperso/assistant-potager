@@ -60,6 +60,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "plan",
     "ask",
     "fiche",
+    "calendrier",
     "association",
     "rotation",
     "bioagresseur",
@@ -89,6 +90,7 @@ DESCRIPTIONS: dict[str, str] = {
     "plan":        "Plan d'occupation de vos parcelles",
     "ask":         "Poser une question sur votre potager",
     "fiche":       "Fiche agronomique courte d'une culture",
+    "calendrier":  "Quand semer et récolter, selon votre zone",
     "association": "Cultures à associer ou à éloigner",
     "rotation":    "Vérifier la rotation avant de semer",
     "bioagresseur": "Ce qui attaque une culture",
@@ -380,6 +382,50 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("valeur", TYPE_NOMBRE, "Quelle température minimale ?", unite="°C"),
+        ),
+    ),
+
+    # ── [US-068] Calendrier cultural ─────────────────────────────────────────
+    # La consultation ne demande aucune confirmation ; zone, période et délai
+    # ÉCRIVENT (dans le calendrier propre au potager) et sont donc confirmés.
+    # L'itinéraire n'est pas un argument dictable : une phrase vise l'itinéraire
+    # « standard », la commande tapée reste le chemin des conduites nommées
+    # (« culture d'hiver »), dont le nom se découpe mal d'un nom de culture.
+    # Un délai en MENTION libre (« vivace ») ne se dicte pas non plus : il se tape.
+    FormeCommande(
+        "calendrier", None, "Consulter le calendrier d'une culture",
+        (Argument("culture", TYPE_CULTURE, "Quelle culture ?"),),
+        confirmation=False,
+    ),
+    FormeCommande(
+        "calendrier", "zone", "Choisir la zone climatique du potager",
+        (
+            Argument("zone", TYPE_VOCABULAIRE, "Quelle zone climatique ?",
+                     vocabulaire=_vocabulaire("app.services.calendrier_cultural", "ZONES_CLIMATIQUES")),
+        ),
+    ),
+    FormeCommande(
+        "calendrier", "fenetre", "Corriger une période du calendrier d'une culture",
+        (
+            Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
+            Argument("phase", TYPE_VOCABULAIRE,
+                     "Quelle période : semis en pépinière, semis en pleine terre ou récolte ?",
+                     vocabulaire=_vocabulaire("app.services.calendrier_cultural", "PHASES")),
+            Argument("mois_debut", TYPE_VOCABULAIRE, "À partir de quel mois ?",
+                     vocabulaire=_vocabulaire("app.services.calendrier_cultural", "MOIS")),
+            Argument("mois_fin", TYPE_VOCABULAIRE, "Jusqu'à quel mois ?", obligatoire=False,
+                     vocabulaire=_vocabulaire("app.services.calendrier_cultural", "MOIS")),
+        ),
+    ),
+    FormeCommande(
+        "calendrier", "duree", "Corriger un délai du calendrier d'une culture",
+        (
+            Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
+            Argument("etape", TYPE_VOCABULAIRE, "Quel délai : levée, récolte ou repiquage ?",
+                     vocabulaire=_vocabulaire("app.services.calendrier_cultural", "ETAPES")),
+            Argument("jours_min", TYPE_NOMBRE, "Combien de jours ?", unite="jours"),
+            Argument("jours_max", TYPE_NOMBRE, "Jusqu'à combien de jours ?", obligatoire=False,
+                     unite="jours"),
         ),
     ),
 

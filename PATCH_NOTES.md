@@ -1,3 +1,49 @@
+## [v3.63.0] — 2026-09-14
+
+### 🚀 Nouveautés
+- Retient la **filière de chaque semis** — en pépinière, hors sol pour être repiqué, ou directement en pleine terre — dès qu'elle est dite : « semé 50 graines de tomate cerise en pépinière », « semé des carottes en place », « semis direct de haricots » (US-069 / CA1, CA2)
+- **Propose** la filière la plus probable quand la phrase ne la dit pas — parcelle déclarée pépinière, ou calendrier de la culture qui ne connaît qu'une seule façon de la semer — et l'adopte d'un seul appui sur « Confirmer » ; un bouton la remplace par l'autre ou enregistre « sans préciser », dans le même geste (US-069 / CA3)
+- Enregistre un semis **sans filière** plutôt que de le ranger au hasard quand rien ne permet de trancher, et ne pose aucune question sur une dictée de plusieurs gestes (US-069 / CA3, CA9)
+- Permet de **corriger la filière après coup** depuis `/corriger` : « non, c'était en pépinière » se lit sans appel au modèle, et reste donc possible quand l'IA est indisponible (US-069 / CA4)
+- Ajoute à `/stats` un bloc **« Semis par filière »** pour la saison : trois totaux par culture — en pépinière, en pleine terre, et sans contexte, ce dernier affiché plutôt que passé sous silence (US-069 / CA6)
+
+### 🔧 Améliorations techniques
+- Centralise la reconnaissance, la proposition, le décompte et la fenêtre applicable dans `app/services/contexte_semis.py` ; `fenetre_conseillee` rend la fenêtre de semis du calendrier qui correspond à la filière, sans jamais emprunter celle de l'autre — c'est l'ancrage qu'utilisera le recalage d'US-070 (US-069 / CA7)
+- Lit la filière dans la grammaire déterministe : « semé 50 graines de tomate en pépinière » s'enregistre toujours à zéro jeton, au lieu de repartir au modèle pour deux mots non attribués (US-069 / CA2, US-094)
+- Garantit l'absence de régression sur le stock : la filière ne pilote **aucun** calcul, qui continue de dépendre de la parcelle déclarée pépinière — un test compare le stock avec et sans filière renseignée (US-069 / CA8)
+- Ajoute la clé `semis_par_contexte` à `GET /stats`, sans modifier aucune clé existante (US-069 / CA6)
+- Met à jour les fiches d'aide `semis-godet-plantation.md`, `statistiques-et-bilans.md` et `journal-et-corrections.md`, avec deux questions de mesure servies par la nouvelle section (US-069, US-099 / CA9)
+- Supprime l'ancienne US non numérotée `US_Distinguer_semis_pepiniere_pleine_terre.md`, remplacée par US-069
+
+### 💾 Base de données
+- `migration_v47.sql` — ajoute `evenements.contexte_semis` (nullable) avec une contrainte « seul un semis en porte un », et reprend l'existant sans supposition : un semis suivi d'une mise en godet chaînée devient « pépinière », tous les autres restent sans contexte, jamais présumés en pleine terre. Rejouable, n'écrase aucune correction ; la requête de reprise est exécutée telle quelle par les tests. Rollback : `rollback_v47.sql` (US-069 / CA1, CA5)
+
+## [v3.62.0] — 2026-09-13
+
+### 🚀 Nouveautés
+- Ajoute le **calendrier cultural** d'une culture : mois conseillés pour semer en pépinière, semer en pleine terre et récolter, plus les délais de levée, de première récolte et de repiquage — lu à zéro jeton avec `/calendrier <culture>` (US-068)
+- Distingue **plusieurs itinéraires** pour une même culture (« culture précoce », « culture d'hiver »), chacun avec ses périodes et ses délais ; une culture sans itinéraire nommé en porte un implicite, sans aucune saisie exigée (US-068 / CA1)
+- Décline les périodes par **zone climatique** (océanique, continental, méditerranéen, montagnard) et garde les délais communs à toutes les zones, parce qu'ils tiennent à la plante et non au climat (US-068 / CA6)
+- Propose la zone du potager **d'après sa localisation**, sans jamais supposer « montagnard » faute d'altitude, et la laisse choisir au jardinier — `/calendrier zone méditerranéen`, ou `auto` pour revenir à la localisation. La réponse dit toujours si la zone est choisie, déduite ou appliquée par défaut (US-068 / CA7, CA8)
+- Permet de **corriger une période ou un délai depuis le bot**, en rappelant l'ancienne et la nouvelle valeur ; la correction ne vaut que pour le potager où elle est faite (US-068 / CA10, CA11)
+- Rend le calendrier **dictable** : « quand semer les tomates ? », « passe mon potager en zone méditerranéenne », « délai de levée des carottes : 14 à 21 jours » — alors que « quand ai-je semé les tomates ? » reste une question sur le journal du potager (US-068, US-172)
+- Expose `GET /cultures/{culture}/calendrier` et la zone climatique dans `GET/PATCH /potagers`, forme de lecture qu'utiliseront l'écran Plan, le recalage sur les semis réels et la vue Cultures (US-068, US-060, US-070)
+
+### 🔧 Améliorations techniques
+- N'invente **jamais** une période ni un délai : aucune fenêtre empruntée à une zone voisine, aucune durée moyenne, aucune date calculée — sans donnée, la frise reste vide et la durée s'affiche « — » (US-068 / CA4, CA13)
+- Pré-remplit les **durées** depuis Wind River Greens (CC BY 4.0, déjà au socle) par règles fermées : levée, récolte **seulement en semis en place** (la source compte depuis la plantation pour ce qui est élevé à l'abri), repiquage depuis la consigne de mise à l'abri — 12 durées sur 8 cultures, l'ail et la blette écartés avec leur motif (US-068 / CA9)
+- Pré-remplit les **fenêtres** de semis et de récolte depuis le calendrier de la même source (`planting_calendar.csv`, identique au tag `v1.0.0`) — 272 fenêtres et 45 durées sur **32 cultures** de la configuration (salade comprise, qui reçoit le calendrier de la laitue) et 4 zones. La source étant en zones USDA, chaque zone climatique lit la zone USDA dont le printemps démarre au même moment (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4) : une correspondance **déclarée et à valider**, pas une équivalence de rusticité (US-068 / CA9)
+- Écarte ce que ce calendrier ne permet pas d'affirmer, par six règles fermées : il est un gabarit par catégorie et ne connaît que le printemps, se contredit sur l'ail (planté à l'automne selon ses propres fiches, semé en mars-mai selon son calendrier), met le fenouil en pépinière quand ses fiches disent « semis direct », et produit des récoltes « de décembre à novembre » — rejetées comme artefacts. Restent sans calendrier, à compléter au bot : ce qui se plante (ail, échalote, pomme de terre, fraise, framboise), ce que la source décrit par moins de trois variétés (mâche, épinard, roquette, blette, céleri…) et ce qu'elle ne contient pas (fève, asperge, rhubarbe) (US-068 / CA9, CA13)
+- Signale au compte rendu les dix calendriers **incomplets** — choux, radis, navet, laitue, poireau… — dont les fiches mêmes de la source mentionnent un semis de fin d'été ou d'automne que son calendrier ignore (US-068 / CA9)
+- Livre le gabarit de rédaction interne **vide** (`calendrier_redaction_interne.json`) pour ce que la source ne couvre pas : les calendriers de semis du commerce sont des œuvres protégées, et aucun chiffre agronomique n'est produit par un modèle de langage (US-068 / CA9)
+- Garantit **par construction** qu'un import n'écrase aucune correction : l'import n'écrit que le calendrier partagé, une correction crée une copie propre au potager qui le remplace pour lui seul (US-068 / CA9, CA11)
+- Ajoute au corpus « fonctionnement de l'application » la fiche `calendrier-et-zone-climatique.md` et le domaine d'aide `/help calendrier`, avec 8 questions de mesure servies en tête ; la question témoin « sans fiche » devient « c'est quoi la lune rousse ? », « calendrier » étant désormais couvert (US-068, US-099 / CA9)
+- Couvre la purge d'un potager supprimé : ses calendriers personnalisés partent avec lui, le calendrier partagé n'est pas touché (US-068, US-084)
+- Trace les trois nouvelles tables dans le registre des sources, pour qu'une source retirée se liste en une requête (US-068, US-166 / CA4)
+
+### 💾 Base de données
+- `migration_v46.sql` — crée `itineraire_cultural`, `fenetre_culturale` (une par itinéraire, zone et phase, au mois) et `duree_culturale` (en jours ou mention libre, CHECK « l'un ou l'autre »), toutes trois sous RLS avec la convention `potager_id NULL = partagé`, et ajoute `potagers.zone_climatique` (nullable, choix du jardinier seulement). Aucune ligne de calendrier semée, aucun backfill de zone. Vérifiée sur PostgreSQL : application, rollback et rejeu idempotent. Rollback : `rollback_v46.sql` (US-068)
+
 ## [v3.61.0] — 2026-09-10
 
 ### 🚀 Nouveautés

@@ -443,11 +443,19 @@ class TestManifesteProjet:
 
     def test_us161_le_csv_versionne_est_l_extrait_du_perimetre(self):
         """L'extrait versionné et l'appariement du code ne peuvent pas diverger :
-        toute ligne du CSV doit correspondre à une culture du périmètre."""
+        toute ligne du CSV doit correspondre à une culture du périmètre.
+
+        [US-068] Le périmètre de l'extrait est l'UNION des dix cultures
+        d'US-161 et de la table étendue du calendrier."""
         import csv as _csv
 
         with open(CSV_PROJET, encoding="utf-8", newline="") as flux:
             lignes = list(_csv.DictReader(flux))
-        par_culture = svc_adaptateur.selectionner_cultivars(lignes)
+        apparies = {
+            l["id"]
+            for appariements in (svc_adaptateur.APPARIEMENTS, svc_adaptateur.APPARIEMENTS_CALENDRIER)
+            for cultivars in svc_adaptateur.selectionner_cultivars(lignes, appariements).values()
+            for l in cultivars
+        }
 
-        assert sum(len(v) for v in par_culture.values()) == len(lignes)
+        assert apparies == {l["id"] for l in lignes}

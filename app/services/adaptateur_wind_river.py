@@ -24,11 +24,17 @@ trois annoncées. D'où trois décisions, mesurées et non intuitées :
   en « zones 10-11 », sauf Roma en « 4-9 ». Pour des annuelles, c'est faux.
   Dériver `rusticite_min_c` de là produirait un chiffre, et un chiffre faux.
 - ❌ **La profondeur de semis est absente** du jeu de données — aucune colonne.
-- ❌ **Le calendrier est écarté.** Il est en mois × zone USDA, calé sur des dates
-  de gelée nord-américaines. La zone 8 USDA contient Seattle et Dallas : elle ne
-  mesure que le froid hivernal minimal, ni les étés ni la pluviométrie. Le
-  calendrier français relève d'US-068, décliné par zone climatique et recalé sur
-  les événements réels — pas d'une conversion de zone USDA.
+- ✅ **Les DURÉES sont retenues [US-068].** Le délai entre semis et levée
+  ou récolte relève de la physiologie de la plante, pas de la latitude : c'est
+  précisément pourquoi US-068 ne les décline pas par zone. Trois règles fermées,
+  décrites à `construire_calendriers`, bornent ce qu'on en tire.
+- ⚠️ **Les FENÊTRES sont retenues sous conditions [US-068, 14/09/2026].**
+  `planting_calendar.csv` est en mois × zone USDA. Il n'est PAS rédigé cultivar
+  par cultivar : c'est un gabarit par catégorie (10 profils pour 91 tomates, un
+  seul pour 84 aromatiques), dont la fin de récolte est une constante de
+  catégorie. D'où une table de zones déclarée (`ZONE_USDA_PAR_ZONE`) et six
+  règles de rejet, décrites à `construire_fenetres` — ce qui ne les franchit pas
+  reste vide, jamais complété.
 
 Les associations (`companion_plants.csv`, 21 880 arêtes, réduites à 217 sur notre
 périmètre) sont d'abord extraites **brutes** dans un fichier séparé
@@ -61,10 +67,12 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter, defaultdict
+from statistics import median, median_low
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 from app.services import attributs_culture as svc_attributs
+from app.services import calendrier_cultural as svc_calendrier
 from app.services import referentiel_sources as svc_sources
 
 log = logging.getLogger("potager")
@@ -129,6 +137,89 @@ APPARIEMENTS: tuple[Appariement, ...] = (
     Appariement("ail", categorie="allium", inclusion=r"\bgarlic\b", exclusion=r"chive"),
     Appariement("blette", inclusion=r"\bchard\b"),
 )
+
+#: [US-068] Appariement ÉTENDU, pour le calendrier seulement : toutes les
+#: cultures de `culture_config` qu'on sait retrouver dans la source. Les
+#: attributs de conduite et les associations restent sur `APPARIEMENTS` — leur
+#: périmètre est celui d'US-161/US-163, et leur curation (traductions de motifs)
+#: n'existe que pour les dix cultures initiales.
+#:
+#: L'ORDRE COMPTE : un cultivar va à la PREMIÈRE culture qui le reconnaît. Le
+#: particulier passe donc avant le général (haricot grimpant avant haricot,
+#: pâtisson / butternut / potimarron / potiron avant courge, pois gourmand
+#: avant petit pois). La catégorie est exigée chaque fois qu'elle discrimine :
+#: les noms scientifiques de la source sont par endroits faux (`golden-beet` y
+#: est un zinnia, `nelson-carrot` un radis), et les microgreens partagent les
+#: noms des légumes. Aucune entrée pour ce que la source ne contient pas
+#: (asperge, rhubarbe, épinard perpétuel) : une culture sans cultivar apparié
+#: n'a simplement pas de calendrier.
+APPARIEMENTS_CALENDRIER: tuple[Appariement, ...] = (
+    Appariement("tomate", categorie="tomato"),
+    Appariement("haricot grimpant", categorie="bean",
+                inclusion=r"\bpole\b|runner|vining|climbing|yard-long|noodle",
+                exclusion=r"soy|fava|broad"),
+    Appariement("haricot", categorie="bean", exclusion=r"soy|fava|broad"),
+    Appariement("courgette", categorie="squash", inclusion=r"zucchini|courgette"),
+    Appariement("pâtisson", categorie="squash", inclusion=r"pattypan|scallop"),
+    Appariement("butternut", categorie="squash", inclusion=r"butternut"),
+    Appariement("potimarron", categorie="squash", inclusion=r"\bkuri\b|hokkaido"),
+    Appariement("potiron", categorie="squash", inclusion=r"cucurbita maxima|pumpkin"),
+    Appariement("courge", categorie="squash", inclusion=r"squash|cushaw",
+                exclusion=r"summer|crookneck|straightneck|marrow|tromboncino|gourd"),
+    Appariement("chou de Bruxelles", categorie="brassica", inclusion=r"brussels"),
+    Appariement("brocoli", categorie="brassica", inclusion=r"broccoli"),
+    Appariement("chou frisé", categorie="brassica", inclusion=r"\bkale\b"),
+    Appariement("chou", categorie="brassica", inclusion=r"\bcabbage\b", exclusion=r"chinese|napa"),
+    Appariement("carotte", categorie="root-vegetable", inclusion=r"\bcarrot"),
+    Appariement("radis", categorie="root-vegetable", inclusion=r"radish|raphanus"),
+    Appariement("betterave", categorie="root-vegetable", inclusion=r"\bbeet"),
+    Appariement("navet", categorie="root-vegetable", inclusion=r"turnip"),
+    Appariement("pomme de terre", categorie="root-vegetable", inclusion=r"solanum tuberosum"),
+    Appariement("concombre", categorie="cucumber", exclusion=r"pickl|gherkin"),
+    Appariement("cornichon", categorie="cucumber", inclusion=r"pickl|gherkin"),
+    Appariement("poivron", categorie="pepper", inclusion=r"bell|sweet|pimento",
+                exclusion=r"hot|chili|jalape|habanero|cayenne"),
+    Appariement("aubergine", categorie="eggplant"),
+    Appariement("melon", categorie="melon", inclusion=r"cucumis melo"),
+    Appariement("pastèque", categorie="melon", inclusion=r"citrullus|watermelon"),
+    Appariement("pois gourmand", categorie="pea",
+                inclusion=r"sugar|snow|snap|carouby|saccharatum|mangetout"),
+    Appariement("petit pois", categorie="pea"),
+    Appariement("fève", categorie="bean", inclusion=r"vicia faba|fava|broad bean"),
+    Appariement("ail", categorie="allium", inclusion=r"\bgarlic\b", exclusion=r"chive"),
+    Appariement("échalote", categorie="allium", inclusion=r"shallot|aggregatum"),
+    Appariement("poireau", categorie="allium", inclusion=r"\bleek|porrum|ampeloprasum"),
+    # La ciboulette chinoise (Allium tuberosum) est une autre espèce.
+    Appariement("ciboulette", categorie="allium", inclusion=r"schoenoprasum"),
+    Appariement("oignon", categorie="allium", inclusion=r"onion|allium cepa",
+                exclusion=r"bunching|fistulosum"),
+    Appariement("laitue", categorie="lettuce", inclusion=r"lactuca sativa"),
+    Appariement("épinard", categorie="lettuce", inclusion=r"spinacia"),
+    Appariement("mâche", categorie="lettuce", inclusion=r"valerianella|corn salad"),
+    Appariement("oseille", categorie="lettuce", inclusion=r"rumex"),
+    Appariement("roquette", inclusion=r"arugula|eruca", exclusion=r"microgreen"),
+    Appariement("mesclun", categorie="lettuce", inclusion=r"greens mix|mesclun"),
+    Appariement("blette", inclusion=r"\bchard\b"),
+    Appariement("basilic", categorie="herb", inclusion=r"\bbasil", exclusion=r"oregano"),
+    Appariement("persil", categorie="herb", inclusion=r"parsley|petroselinum"),
+    Appariement("coriandre", categorie="herb", inclusion=r"cilantro|coriandrum"),
+    Appariement("thym", categorie="herb", inclusion=r"thyme|thymus"),
+    Appariement("menthe", categorie="herb", inclusion=r"\bmint\b|mentha", exclusion=r"marigold"),
+    Appariement("romarin", categorie="herb", inclusion=r"rosemar"),
+    Appariement("céleri", categorie="herb", inclusion=r"celery|apium"),
+    Appariement("fenouil", categorie="herb", inclusion=r"foeniculum vulgare"),
+    Appariement("fraise", categorie="berry", inclusion=r"fragaria"),
+    Appariement("framboise", categorie="berry", inclusion=r"rubus idaeus"),
+    Appariement("capucine", categorie="flower", inclusion=r"tropaeolum"),
+)
+
+#: [US-068] Noms de `culture_config` qui désignent la MÊME culture qu'une entrée
+#: d'`APPARIEMENTS_CALENDRIER` : ils reçoivent le même calendrier. Décision
+#: relue en diff, jamais une similarité calculée — « salade » est, dans ce
+#: référentiel, la laitue (même rapprochement que celui déclaré pour US-162).
+ALIAS_CALENDRIER: dict[str, str] = {
+    "salade": "laitue",
+}
 
 # ── Normalisation des valeurs sources vers le vocabulaire fermé ─────────────
 
@@ -223,6 +314,17 @@ class ResultatAdaptation:
     #: [US-163] Résultat de `curer_associations` — None si aucun compagnon
     #: n'a été fourni (`--sans-associations`).
     curation_associations: "Optional[RapportCuration]" = None
+    #: [US-068] Durées retenues / écartées, avec leur motif.
+    durees_retenues: list[str] = field(default_factory=list)
+    durees_ecartees: list[str] = field(default_factory=list)
+    #: [US-068] Fenêtres retenues / écartées, avec leur motif.
+    fenetres_retenues: list[str] = field(default_factory=list)
+    fenetres_ecartees: list[str] = field(default_factory=list)
+    #: [US-068] Cultures dont les fiches parlent d'un semis de fin d'été ou
+    #: d'automne que le calendrier source ignore : retenues, mais incomplètes.
+    fenetres_incompletes: list[str] = field(default_factory=list)
+    #: [US-068] Cultivars appariés par culture pour le calendrier (table étendue).
+    cultivars_calendrier: dict[str, int] = field(default_factory=dict)
 
 
 def _voter(valeurs: list[str]) -> tuple[Optional[str], str]:
@@ -243,13 +345,15 @@ def _voter(valeurs: list[str]) -> tuple[Optional[str], str]:
     return majoritaire, f"{accord:.0%} de {len(renseignees)} cultivars"
 
 
-def selectionner_cultivars(lignes: Iterable[dict]) -> dict[str, list[dict]]:
+def selectionner_cultivars(
+    lignes: Iterable[dict], appariements: tuple[Appariement, ...] = APPARIEMENTS
+) -> dict[str, list[dict]]:
     """Range les lignes de `varieties.csv` sous celle de nos cultures qu'elles
     décrivent. Une ligne qui n'en décrit aucune est simplement ignorée — le jeu
     de données couvre 1 972 cultivars, notre périmètre en concerne une fraction."""
-    par_culture: dict[str, list[dict]] = {a.culture: [] for a in APPARIEMENTS}
+    par_culture: dict[str, list[dict]] = {a.culture: [] for a in appariements}
     for ligne in lignes:
-        for appariement in APPARIEMENTS:
+        for appariement in appariements:
             if appariement.correspond(ligne):
                 par_culture[appariement.culture].append(ligne)
                 break
@@ -280,6 +384,403 @@ def construire_attributs(
 
         if len(entree) > 1:
             entrees.append(entree)
+    return entrees
+
+
+# ── [US-068] Durées du calendrier cultural ───────────────────────────────────
+
+#: Mode de semis d'un cultivar, lu dans `sowing_method` (texte libre).
+MODE_PLEINE_TERRE = "pleine_terre"
+MODE_PEPINIERE = "pepiniere"
+MODE_MIXTE = "mixte"
+MODE_NON_SEMIS = "non_semis"
+
+
+def classer_mode_semis(texte: Optional[str]) -> Optional[str]:
+    """
+    [US-068] Range la consigne de semis d'un cultivar.
+
+    - « Direct sow … » sans « start indoors » → pleine terre ;
+    - « Start (seeds) indoors … » sans « direct sow » → pépinière ;
+    - les deux à la fois (« direct sow, or start indoors… ») → mixte ;
+    - ni semis ni graine (« Plant cloves… ») → non semis : l'ail se plante en
+      caïeux, un délai « de levée » n'y a pas le sens d'une germination ;
+    - une multiplication végétative nommée (« Plant seed potatoes », « Plant
+      sets », « Transplant crowns », « Start from cuttings ») → non semis aussi,
+      même quand le mot « seed » apparaît : un plant de pomme de terre n'est pas
+      une graine.
+    """
+    brut = (texte or "").strip().lower()
+    if not brut:
+        return None
+    direct = bool(re.search(r"direct (sow|seed)", brut))
+    abri = bool(re.search(r"start(ed)? (from )?(seeds? )?indoors", brut))
+    if direct and abri:
+        return MODE_MIXTE
+    if direct:
+        return MODE_PLEINE_TERRE
+    if abri:
+        return MODE_PEPINIERE
+    if "sow" not in brut and "seed" not in brut:
+        return MODE_NON_SEMIS
+    if re.search(_MULTIPLICATION_VEGETATIVE, brut):
+        return MODE_NON_SEMIS
+    return None
+
+
+#: [US-068] Ce qui se plante sans se semer, tel que la source l'écrit.
+_MULTIPLICATION_VEGETATIVE = (
+    r"seed potato|\bsets?\b|\bbulbs?\b|\bcrowns?\b|cuttings?|divisions?|\bcloves?\b|purchased plants"
+)
+
+
+def _bornes_jours(texte: Optional[str]) -> Optional[tuple[int, int]]:
+    """« 7-14 », « 7-10 days », « 14-21 (sprouting) », « 60 » → (min, max)."""
+    nombres = [int(n) for n in re.findall(r"\d+", texte or "")[:2]]
+    if not nombres:
+        return None
+    return min(nombres), max(nombres)
+
+
+def _semaines_abri(texte: Optional[str]) -> Optional[tuple[int, int]]:
+    """« Start indoors 6-8 weeks before last frost » → (42, 56) jours."""
+    trouve = re.search(r"indoors\s+(\d+)\s*-\s*(\d+)\s*weeks", (texte or "").lower())
+    if trouve is None:
+        return None
+    return int(trouve.group(1)) * 7, int(trouve.group(2)) * 7
+
+
+def _agreger_bornes(bornes: list[Optional[tuple[int, int]]]) -> tuple[Optional[tuple[int, int]], str]:
+    """
+    Fourchette d'une culture à partir de celles de ses cultivars : médiane des
+    minima, médiane des maxima. La médiane et non la moyenne — un cultivar
+    « baby » à 21 jours ne tire pas la carotte vers le bas.
+    """
+    valides = [b for b in bornes if b is not None]
+    if len(valides) < MIN_CULTIVARS:
+        return None, f"base trop faible ({len(valides)} cultivar(s), minimum {MIN_CULTIVARS})"
+    jours_min = int(round(median(b[0] for b in valides)))
+    jours_max = int(round(median(b[1] for b in valides)))
+    return (min(jours_min, jours_max), max(jours_min, jours_max)), f"médiane de {len(valides)} cultivars"
+
+
+# ── [US-068] Fenêtres du calendrier cultural ─────────────────────────────────
+
+#: [US-068] Zone USDA dont le calendrier est lu pour chaque zone climatique.
+#:
+#: ⚠️ DÉCISION DÉCLARÉE, À VALIDER — pas une équivalence. Une zone USDA mesure
+#: le froid hivernal minimal ; lue comme zone de RUSTICITÉ, la France océanique
+#: tomberait en 8-9, soit le calendrier du Texas et de la Géorgie : tomates
+#: plantées en avril à Rennes. Mais `planting_calendar.csv` ne se sert de la zone
+#: que pour caler ses mois sur la date moyenne de DERNIÈRE GELÉE du printemps —
+#: c'est donc sur ce critère, et sur lui seul, que la correspondance se fait :
+#: chaque zone climatique reçoit la zone USDA dont le printemps démarre au même
+#: moment, de la plus tardive (montagnard) à la plus précoce (méditerranéen).
+#: Un seul mois de décalage change une fenêtre : cette table se relit en diff,
+#: et la modifier impose de régénérer le manifeste.
+ZONE_USDA_PAR_ZONE: dict[str, int] = {
+    "oceanique": 7,
+    "continental": 6,
+    "mediterraneen": 8,
+    "montagnard": 4,
+}
+
+#: Colonnes source de chaque phase. `outdoor_transplant_*` n'est pas repris : le
+#: modèle d'US-068 n'a pas de phase « plantation », et le délai de repiquage est
+#: déjà une durée (`construire_calendriers`).
+COLONNES_PHASE: dict[str, tuple[str, str]] = {
+    svc_calendrier.PHASE_SEMIS_PEPINIERE: ("indoor_sow_start", "indoor_sow_end"),
+    svc_calendrier.PHASE_SEMIS_PLEINE_TERRE: ("direct_sow_start", "direct_sow_end"),
+    svc_calendrier.PHASE_RECOLTE: ("harvest_start", "harvest_end"),
+}
+
+_MOIS_SOURCE: dict[str, int] = {
+    nom: numero for numero, nom in enumerate((
+        "january", "february", "march", "april", "may", "june", "july",
+        "august", "september", "october", "november", "december",
+    ), start=1)
+}
+
+def fenetre_source(ligne: dict, phase: str) -> Optional[tuple[int, int]]:
+    """Mois (début, fin) d'une phase dans une ligne du calendrier source, ou None
+    si la ligne n'en porte pas. Un seul des deux mois renseigné → None."""
+    debut, fin = (
+        _MOIS_SOURCE.get((ligne.get(colonne) or "").strip().lower())
+        for colonne in COLONNES_PHASE[phase]
+    )
+    if debut is None or fin is None:
+        return None
+    return debut, fin
+
+
+def formater_mois(debut: int, fin: int) -> str:
+    """(3, 5) → « mars-mai » ; (6, 6) → « juin » — la forme du gabarit d'US-068."""
+    if debut == fin:
+        return svc_calendrier.MOIS[debut - 1]
+    return f"{svc_calendrier.MOIS[debut - 1]}-{svc_calendrier.MOIS[fin - 1]}"
+
+
+#: [US-068] Part des fiches d'une culture à partir de laquelle la source est
+#: jugée contredire son propre calendrier (règles 1 et 6 de construire_fenetres).
+SEUIL_COHERENCE = 0.5
+
+#: Modes de semis (lus dans `sowing_method`) qui justifient chaque phase de semis.
+_MODES_DE_PHASE: dict[str, frozenset] = {
+    "semis_pepiniere": frozenset({MODE_PEPINIERE, MODE_MIXTE}),
+    "semis_pleine_terre": frozenset({MODE_PLEINE_TERRE, MODE_MIXTE}),
+}
+
+#: Ce qui, dans une fiche, annonce un semis ou une plantation hors printemps.
+_SEMIS_TARDIF = (
+    r"late summer|mid-summer for fall|\bin (the )?fall\b|\bfall (sow|plant|crop|harvest)"
+    r"|autumn|overwinter"
+)
+
+
+def construire_fenetres(
+    par_culture: dict[str, list[dict]],
+    calendrier: Iterable[dict],
+    resultat: ResultatAdaptation,
+) -> dict[str, dict[str, dict[str, str]]]:
+    """
+    [US-068 / CA9] Fenêtres par culture, zone climatique et phase, lues dans
+    `planting_calendar.csv`. Retourne `{culture: {zone: {phase: "mars-mai"}}}`.
+
+    Le calendrier source est un GABARIT PAR CATÉGORIE, pas une donnée par
+    cultivar : les semis d'une catégorie sont identiques d'un cultivar à l'autre,
+    la fin de récolte y est une constante. Six règles fermées bornent ce qu'on
+    en tire ; ce qui ne les franchit pas reste vide :
+
+    1. **Ce qui ne se sème pas ne reçoit aucune fenêtre.** La source se contredit
+       sur l'ail : `varieties.csv` dit « planted in fall, harvest mid-summer »,
+       son calendrier le sème en mars-mai et le récolte de décembre à novembre.
+       Dès que la MOITIÉ des fiches classées décrivent une plantation (caïeux,
+       plants de pomme de terre, bulbes, griffes, boutures), la culture entière
+       est écartée — récolte comprise, puisque le gabarit de la catégorie la
+       calcule depuis un semis qui n'existe pas.
+    2. **Jointure par identifiant ET catégorie.** Le slug n'est pas unique dans
+       la source (`black-beauty` y est une aubergine, une courgette et un rosier).
+    3. **Une fenêtre à cheval sur l'année est rejetée.** Dans ce jeu de données,
+       c'est l'artefact d'un début de récolte calculé au-delà de la fin de saison
+       fixe de la catégorie — jamais une vraie récolte d'hiver.
+    4. **Une phase n'est retenue que si la culture la porte**, c'est-à-dire au
+       moins `SEUIL_ACCORD` des cultivars ayant une ligne pour la zone, et au
+       moins `MIN_CULTIVARS` : un cultivar semé à l'abri ne met pas toute la
+       courgette en pépinière.
+    5. **Bornes : médiane basse des débuts, médiane basse des fins** — un mois
+       réellement observé, jamais une moyenne ; même esprit que les durées. Une
+       médiane dont le début dépasse la fin est écartée.
+    6. **Un semis que les fiches de la source ne décrivent pas est écarté.** Le
+       gabarit des aromatiques met le fenouil en pépinière, alors que trois de
+       ses quatre fiches disent « direct sow ». Une phase de semis n'est retenue
+       que si au moins la MOITIÉ des fiches classées décrivent ce mode (mixte
+       compris) : la source contre elle-même, sans aucun avis agronomique.
+
+    Une culture dont les fiches mentionnent un semis de fin d'été ou d'automne
+    est retenue mais signalée incomplète (`fenetres_incompletes`) : le calendrier
+    source ne connaît que le printemps.
+    """
+    calendrier_par_id: dict[tuple[str, str], dict] = {}
+    for ligne in calendrier:
+        cle = ((ligne.get("variety_id") or "").strip(), (ligne.get("usda_zone") or "").strip())
+        calendrier_par_id[cle] = ligne
+
+    fenetres: dict[str, dict[str, dict[str, str]]] = {}
+    for culture, cultivars in par_culture.items():
+        if not cultivars:
+            continue
+        if len(cultivars) < MIN_CULTIVARS:
+            resultat.fenetres_ecartees.append(
+                f"{culture} — base trop faible ({len(cultivars)} cultivar(s), minimum {MIN_CULTIVARS})"
+            )
+            continue
+        modes = [m for m in (classer_mode_semis(c.get("sowing_method")) for c in cultivars) if m]
+        plantes = sum(1 for m in modes if m == MODE_NON_SEMIS)
+        if modes and plantes / len(modes) >= SEUIL_COHERENCE:
+            resultat.fenetres_ecartees.append(
+                f"{culture} — ne se sème pas ({plantes} fiche(s) sur {len(modes)} décrivent une "
+                "plantation) : le calendrier source lui applique le gabarit de semis de sa catégorie"
+            )
+            continue
+        semis = [m for m in modes if m != MODE_NON_SEMIS]
+        automne = sum(
+            1 for c in cultivars
+            if re.search(_SEMIS_TARDIF, f"{c.get('sowing_method') or ''} {c.get('growing_season') or ''}".lower())
+        )
+        if automne:
+            resultat.fenetres_incompletes.append(
+                f"{culture} — {automne} fiche(s) sur {len(cultivars)} mentionnent un semis ou une "
+                "plantation de fin d'été / d'automne, absent du calendrier source"
+            )
+
+        for zone, zone_usda in ZONE_USDA_PAR_ZONE.items():
+            lignes = []
+            for cultivar in cultivars:
+                ligne = calendrier_par_id.get(((cultivar.get("id") or "").strip(), str(zone_usda)))
+                if ligne is not None and ligne.get("category") == cultivar.get("category"):
+                    lignes.append(ligne)
+            if not lignes:
+                continue
+
+            for phase in COLONNES_PHASE:
+                brutes = [fenetre_source(l, phase) for l in lignes]
+                portees = [f for f in brutes if f is not None]
+                if not portees:
+                    continue
+                etiquette = f"{culture}.{zone}.{phase}"
+                modes_admis = _MODES_DE_PHASE.get(phase)
+                if modes_admis is not None:
+                    decrits = sum(1 for m in semis if m in modes_admis)
+                    if not semis or decrits / len(semis) < SEUIL_COHERENCE:
+                        resultat.fenetres_ecartees.append(
+                            f"{etiquette} — contredite par les fiches de la source "
+                            f"({decrits} sur {len(semis)} décrivent ce mode de semis)"
+                        )
+                        continue
+                valides = [f for f in portees if f[0] <= f[1]]
+                artefacts = len(portees) - len(valides)
+                precision = f", {artefacts} à cheval sur l'année rejetée(s)" if artefacts else ""
+                part = len(valides) / len(lignes)
+                if len(valides) < MIN_CULTIVARS:
+                    resultat.fenetres_ecartees.append(
+                        f"{etiquette} — base trop faible ({len(valides)} cultivar(s), "
+                        f"minimum {MIN_CULTIVARS}{precision})"
+                    )
+                    continue
+                if part < SEUIL_ACCORD:
+                    resultat.fenetres_ecartees.append(
+                        f"{etiquette} — portée par {part:.0%} des cultivars seulement "
+                        f"(seuil {SEUIL_ACCORD:.0%}{precision})"
+                    )
+                    continue
+                debut = median_low(f[0] for f in valides)
+                fin = median_low(f[1] for f in valides)
+                if debut > fin:
+                    resultat.fenetres_ecartees.append(f"{etiquette} — médianes incohérentes")
+                    continue
+                valeur = formater_mois(debut, fin)
+                fenetres.setdefault(culture, {}).setdefault(zone, {})[phase] = valeur
+                resultat.fenetres_retenues.append(
+                    f"{etiquette} = {valeur} (médiane de {len(valides)} cultivars, "
+                    f"zone USDA {zone_usda}{precision})"
+                )
+    return fenetres
+
+
+def _mode_dominant(modes: list[Optional[str]]) -> tuple[Optional[str], str]:
+    """
+    [US-068] Vote du mode de semis, qui ne laisse pas une option secondaire
+    masquer la conduite principale. « Start indoors 6-8 weeks, or direct seed in
+    warm climates » est une fiche MIXTE ; mais 69 tomates en pépinière et 22
+    mixtes restent une culture élevée à l'abri.
+
+    Sans consensus au sens de `_voter`, un mode franc (pépinière ou pleine terre)
+    est retenu si, avec les fiches mixtes, il réunit `SEUIL_ACCORD` des fiches
+    classées ET qu'il est plus fréquent que le mixte. Sinon, le résultat du vote.
+    """
+    mode, motif = _voter(modes)
+    if mode is not None:
+        return mode, motif
+    renseignes = [m for m in modes if m]
+    if len(renseignes) < MIN_CULTIVARS:
+        return mode, motif
+    compte = Counter(renseignes)
+    for franc in (MODE_PEPINIERE, MODE_PLEINE_TERRE):
+        compatibles = (compte[franc] + compte[MODE_MIXTE]) / len(renseignes)
+        if compatibles >= SEUIL_ACCORD and compte[franc] > compte[MODE_MIXTE]:
+            return franc, (
+                f"{compte[franc]} en {franc} et {compte[MODE_MIXTE]} mixtes sur {len(renseignes)} cultivars"
+            )
+    return mode, motif
+
+
+def construire_calendriers(
+    par_culture: dict[str, list[dict]],
+    resultat: ResultatAdaptation,
+    calendrier: Iterable[dict] = (),
+) -> list[dict]:
+    """
+    [US-068 / CA3, CA9] Produit le bloc `cultures_calendriers` sur l'itinéraire
+    « standard » : les durées, et les fenêtres de `construire_fenetres` quand
+    le calendrier source est fourni.
+
+    Trois règles fermées pour les durées, parce qu'une durée mal comprise est
+    une durée fausse :
+
+    1. **Le mode de semis se vote** (`classer_mode_semis`, même seuil d'accord que
+       les attributs). Sans consensus, aucune durée dépendante du mode.
+    2. **Semis → première récolte n'est retenu qu'en pleine terre.** Les
+       catalogues comptent `days_to_harvest` depuis la PLANTATION pour les
+       cultures élevées à l'abri (tomate, poivron) : l'additionner au temps de
+       pépinière reposerait sur une convention que la source ne déclare pas. Pour
+       ces cultures, la durée reste vide — le jardinier la complète au bot.
+    3. **Semis → repiquage n'est retenu qu'en pépinière**, depuis la consigne
+       « start indoors N-M weeks ».
+
+    Semis → levée vaut quel que soit le mode, sauf pour ce qui ne se sème pas.
+    Le mode voté tient compte des fiches « mixtes » (`_mode_dominant`).
+    """
+    fenetres = construire_fenetres(par_culture, calendrier, resultat)
+    entrees: list[dict] = []
+    for culture, lignes in par_culture.items():
+        if not lignes:
+            continue
+        mode, motif_mode = _mode_dominant([classer_mode_semis(l.get("sowing_method")) for l in lignes])
+        durees: dict[str, Any] = {}
+
+        if mode == MODE_NON_SEMIS:
+            resultat.durees_ecartees.append(f"{culture} — ne se sème pas ({motif_mode})")
+        else:
+            levee, motif = _agreger_bornes([_bornes_jours(l.get("days_to_germination")) for l in lignes])
+            if levee is None:
+                resultat.durees_ecartees.append(f"{culture}.levee — {motif}")
+            else:
+                durees["levee"] = f"{levee[0]}-{levee[1]}"
+                resultat.durees_retenues.append(f"{culture}.levee = {levee[0]}-{levee[1]} j ({motif})")
+
+        if mode == MODE_PLEINE_TERRE:
+            recolte, motif = _agreger_bornes([_bornes_jours(l.get("days_to_harvest")) for l in lignes])
+            if recolte is None:
+                resultat.durees_ecartees.append(f"{culture}.recolte — {motif}")
+            else:
+                durees["recolte"] = f"{recolte[0]}-{recolte[1]}"
+                resultat.durees_retenues.append(
+                    f"{culture}.recolte = {recolte[0]}-{recolte[1]} j ({motif}, semis en place)"
+                )
+        elif mode == MODE_PEPINIERE:
+            repiquage, motif = _agreger_bornes([_semaines_abri(l.get("sowing_method")) for l in lignes])
+            if repiquage is None:
+                resultat.durees_ecartees.append(f"{culture}.repiquage — {motif}")
+            else:
+                durees["repiquage"] = f"{repiquage[0]}-{repiquage[1]}"
+                resultat.durees_retenues.append(
+                    f"{culture}.repiquage = {repiquage[0]}-{repiquage[1]} j ({motif})"
+                )
+            resultat.durees_ecartees.append(
+                f"{culture}.recolte — élevée à l'abri : la source compte depuis la plantation"
+            )
+        elif mode == MODE_MIXTE:
+            resultat.durees_ecartees.append(
+                f"{culture}.recolte — semée en place OU à l'abri selon le cultivar : "
+                f"la source ne dit pas depuis quand elle compte ({motif_mode})"
+            )
+        elif mode != MODE_NON_SEMIS:
+            resultat.durees_ecartees.append(
+                f"{culture}.recolte — mode de semis indéterminé ({motif_mode})"
+            )
+
+        if durees or culture in fenetres:
+            entree: dict[str, Any] = {"culture": culture, "itineraire": "standard", "durees": durees}
+            if culture in fenetres:
+                entree["fenetres"] = fenetres[culture]
+            entrees.append(entree)
+
+    # Les alias reçoivent une COPIE de l'entrée de leur culture de référence.
+    par_nom = {e["culture"]: e for e in entrees}
+    for alias, reference in ALIAS_CALENDRIER.items():
+        if reference in par_nom and alias not in par_nom:
+            entrees.append({**par_nom[reference], "culture": alias})
+            resultat.fenetres_retenues.append(f"{alias} = calendrier de « {reference} » (ALIAS_CALENDRIER)")
     return entrees
 
 
@@ -345,6 +846,7 @@ def construire_manifeste(
     varieties: Iterable[dict],
     companions: Iterable[dict] = (),
     extrait_le: Optional[str] = None,
+    calendrier: Iterable[dict] = (),
 ) -> tuple[dict[str, Any], Optional[dict[str, Any]], ResultatAdaptation]:
     """
     Assemble le manifeste d'import et, séparément, l'extraction d'associations.
@@ -364,6 +866,10 @@ def construire_manifeste(
     resultat = ResultatAdaptation()
     varieties = list(varieties)
     par_culture = selectionner_cultivars(varieties)
+    # [US-068] Le calendrier couvre toutes les cultures de culture_config qu'on
+    # sait retrouver dans la source ; attributs et associations restent sur les dix.
+    par_culture_calendrier = selectionner_cultivars(varieties, APPARIEMENTS_CALENDRIER)
+    resultat.cultivars_calendrier = {c: len(l) for c, l in par_culture_calendrier.items()}
 
     manifeste: dict[str, Any] = {
         "_lisez_moi": [
@@ -381,6 +887,16 @@ def construire_manifeste(
             "",
             "L'extraction BRUTE, non traduite et non curée, reste disponible séparément",
             "dans wind_river_associations.json — matériau de relecture, jamais à importer.",
+            "",
+            "[US-068] Le bloc 'cultures_calendriers' porte des DURÉES (levée, récolte en pleine",
+            "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv.",
+            "⚠️ Les fenêtres amont sont en zones USDA : la zone lue pour chaque zone climatique",
+            "est une DÉCISION déclarée (adaptateur_wind_river.ZONE_USDA_PAR_ZONE, calée sur la",
+            "date de dernière gelée), pas une équivalence. Printemps seulement : la source ne",
+            "connaît aucun semis de fin d'été ni d'automne. Toutes les cultures de culture_config",
+            "retrouvées dans la source (APPARIEMENTS_CALENDRIER). Voir wind_river_greens/SOURCE.md.",
+            "Pour corriger : /calendrier fenetre|duree <culture> ... au bot, correction propre",
+            "au potager qu'aucun rejeu n'écrasera.",
         ],
         "source": {
             "code": fiche["code"],
@@ -392,6 +908,8 @@ def construire_manifeste(
         },
         "extrait_le": extrait_le,
         "cultures_attributs": construire_attributs(par_culture, resultat),
+        # [US-068] Durées et fenêtres — voir construire_calendriers / construire_fenetres.
+        "cultures_calendriers": construire_calendriers(par_culture_calendrier, resultat, calendrier),
     }
 
     companions = list(companions)
@@ -845,9 +1363,33 @@ def formater_resultat(resultat: ResultatAdaptation) -> str:
                 f"{len(curation.motifs_non_traduits)} — {', '.join(curation.motifs_non_traduits)}"
             )
         lignes.append("")
+    lignes.append(f"  ⏱️  Durées du calendrier retenues [US-068] : {len(resultat.durees_retenues)}")
+    for entree in resultat.durees_retenues:
+        lignes.append(f"     • {entree}")
+    lignes.append(f"  ⬜ Durées écartées : {len(resultat.durees_ecartees)} — à saisir au bot si besoin")
+    for entree in resultat.durees_ecartees:
+        lignes.append(f"     • {entree}")
+    lignes.append("")
+    zones = ", ".join(f"{zone} ← USDA {usda}" for zone, usda in ZONE_USDA_PAR_ZONE.items())
+    lignes.append(f"  🗓️  Fenêtres du calendrier retenues [US-068] : {len(resultat.fenetres_retenues)}")
+    lignes.append(f"     Zones lues ({zones}) — décision déclarée, à valider")
+    for entree in resultat.fenetres_retenues:
+        lignes.append(f"     • {entree}")
+    lignes.append(f"  ⬜ Fenêtres écartées : {len(resultat.fenetres_ecartees)} — à saisir au bot si besoin")
+    for entree in resultat.fenetres_ecartees:
+        lignes.append(f"     • {entree}")
+    lignes.append(
+        f"  ⚠️  Calendriers incomplets (printemps seulement) : {len(resultat.fenetres_incompletes)}"
+    )
+    for entree in resultat.fenetres_incompletes:
+        lignes.append(f"     • {entree}")
+    sans_cultivar = [c for c, n in resultat.cultivars_calendrier.items() if not n]
+    if sans_cultivar:
+        lignes.append(f"  ⛔ Aucun cultivar apparié pour le calendrier : {', '.join(sans_cultivar)}")
+    lignes.append("")
     lignes.append("  ⛔ Non produits par cet adaptateur, par construction :")
     lignes.append("     profondeur_semis_cm — absente du jeu de données")
     lignes.append("     rusticite_min_c     — usda_zone_min décrit la pérennité, pas la culture")
-    lignes.append("     calendrier          — zones USDA nord-américaines, relève d'US-068")
+    lignes.append("     semis d'été/automne — le calendrier source ne connaît que le printemps")
     lignes.append("")
     return "\n".join(lignes)
