@@ -47,7 +47,15 @@ DELAI_MAX_MS = 2000
 
 # [CA11] Tables porteuses de données propres à un potager. Une lecture sur
 # l'une d'elles sans `potager_id` dans l'instruction est un défaut d'isolation.
-TABLES_TENANT: frozenset[str] = frozenset({"evenements", "parcelles", "culture_config"})
+# [US-165] `symptome` et `symptome_bioagresseur` s'y ajoutent parce qu'elles
+# portent un `potager_id` : un symptôme décrit par un jardinier chez lui ne doit
+# pas remonter chez un autre. L'isolation cesse alors d'être une propriété des
+# requêtes écrites — elle devient une propriété vérifiée à l'exécution, ce qui
+# est précisément la différence que pose le CA11 d'US-096.
+TABLES_TENANT: frozenset[str] = frozenset({
+    "evenements", "parcelles", "culture_config",
+    "symptome", "symptome_bioagresseur",
+})
 
 # Verbes de lecture tolérés — tout le reste est une écriture (CA10). `SET`,
 # `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `RELEASE` et `PRAGMA` sont de la

@@ -137,6 +137,17 @@ FAMILLES_ATTENDUES = {
     # Même essai, symétrique : « sur quelles parcelles je trouve des
     # tomates ? » recevait un « Historique observation de tomate ».
     "parcelles_par_culture",
+    # [US-141] Ajoutées après le relevé du 09/09/2026 : « qu'avais-je noté sur
+    # mes tomates ? » partait à la recherche documentaire, qui classe par
+    # ressemblance et s'arrête à trois passages — trois notes trouvées, une
+    # seule rendue. La question demande une lecture EXACTE du journal.
+    "notes_culture", "notes_parcelle",
+    # [US-165] Ajoutée le 10/09/2026 : « mes tomates ont des taches marron sur
+    # les feuilles du bas » recevait un silence ou une généralité. Deuxième
+    # famille à servir le référentiel PARTAGÉ — elle croise les symptômes
+    # décrits avec les bioagresseurs réellement rattachés à la culture (US-162),
+    # et ne rend que des pistes, jamais un diagnostic.
+    "prediagnostic_symptome",
 }
 
 

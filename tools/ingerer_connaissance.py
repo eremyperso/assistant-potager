@@ -41,6 +41,7 @@ Format attendu d'un fichier
     titre: "Problèmes observables de tomate"
     famille: agronomie                     # agronomie | doc_app | memoire_potager
     source: "Rédaction interne"            # ce qui s'affiche « _Source : …_ »
+    licence: proprietaire                  # OBLIGATOIRE en agronomie (US-140/CA3)
     niveau_confiance: a-valider            # verifie | indicatif | a-valider
     culture: tomate                        # facultatif — DOIT exister dans culture_config
     type: maladie                          # facultatif
@@ -78,6 +79,15 @@ Deux registres obligatoires dans « On parle aussi de » : celui du jardinier
 « oïdium »). La recherche est LEXICALE : un lemme absent de l'index est un
 rapprochement impossible, quelle que soit la qualité du texte.
 
+[US-140 / CA2, CA3] La clé `licence:` est contrôlée contre le socle du registre
+`app/services/referentiel_sources.py` — le même qu'oppose déjà l'import du
+référentiel structuré, pour qu'il n'existe pas deux listes de licences. Une
+licence absente ou hors socle fait REFUSER le document, avant toute écriture :
+une clause de partage à l'identique contaminerait irréversiblement un corpus qui
+doit rester propriétaire. La clé est obligatoire pour la famille `agronomie`, qui
+reprend un savoir qui n'est pas le nôtre, et facultative pour `doc_app`, qui
+décrit notre propre application.
+
 Zéro appel réseau, zéro appel modèle — comme `tools/importer_referentiel.py`.
 """
 from __future__ import annotations
@@ -104,6 +114,7 @@ except (AttributeError, OSError):  # flux redirigé qui ne le supporte pas
 
 
 from app.services import cache_questions, connaissance  # noqa: E402
+from app.services import referentiel_sources  # noqa: E402
 from database.db import SessionLocal  # noqa: E402
 from database.models import CultureConfig, KnowledgeDocument  # noqa: E402
 
@@ -170,6 +181,12 @@ _NIVEAUX_EDITORIAUX = {
     "a valider": connaissance.NIVEAU_INDICATIF,
 }
 
+# [US-140 / CA3] Familles pour lesquelles `licence:` est une clé OBLIGATOIRE.
+# `agronomie` reprend du savoir qui n'est pas le nôtre : la licence doit être
+# établie avant qu'une ligne n'entre à l'index. `doc_app` décrit notre propre
+# application, `memoire_potager` les données d'un jardin — aucun tiers à créditer.
+_FAMILLES_LICENCE_OBLIGATOIRE: frozenset[str] = frozenset({connaissance.FAMILLE_AGRONOMIE})
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Lecture d'un fichier
@@ -232,6 +249,44 @@ def lire_entete(texte: str) -> tuple[dict[str, str], str]:
         cle, valeur = depouillee.split(":", 1)
         entete[cle.strip().lower()] = _sans_guillemets(valeur)
     return entete, texte[correspondance.end():]
+
+
+def valider_licence(famille: str, licence: Optional[str]) -> Optional[str]:
+    """[US-140 / CA2, CA3] La licence d'un document est contrôlée AVANT toute écriture.
+
+    « Aucun contenu dont la licence n'est pas établie n'est ingéré — ni "en
+    attendant", ni "pour tester". Toute source hors du socle du CA2 est refusée
+    à l'ingestion, sans dérogation. »
+
+    Le socle n'est pas redéfini ici : c'est celui de
+    `app/services/referentiel_sources.py`, déjà opposé aux imports du
+    référentiel structuré (US-166 / CA6). Deux listes de licences finiraient par
+    diverger, et la seconde serait la permissive — celle qui laisse passer une
+    clause de partage à l'identique dans un corpus qui doit rester
+    propriétaire (`docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md` §2.1).
+
+    La clé est OBLIGATOIRE pour les familles du CA3 (`agronomie`) et facultative
+    ailleurs : `doc_app` (US-099) décrit notre propre application, il n'y a pas
+    de tiers à créditer. Déclarée, elle est contrôlée dans tous les cas — une
+    licence hors socle n'est jamais tolérée sous prétexte que la famille ne
+    l'exigeait pas.
+    """
+    valeur = (licence or "").strip()
+    if not valeur:
+        if famille in _FAMILLES_LICENCE_OBLIGATOIRE:
+            raise DocumentInvalide(
+                "licence non établie — la clé `licence:` est obligatoire pour la famille "
+                f"« {famille} » (US-140 / CA3). Licences du socle : "
+                f"{', '.join(sorted(referentiel_sources.LICENCES_SOCLE))}"
+            )
+        return None
+    if valeur not in referentiel_sources.LICENCES_SOCLE:
+        raise DocumentInvalide(
+            f"licence « {valeur} » hors socle — document refusé, aucun fragment créé "
+            f"(US-140 / CA2, CA3). Licences du socle : "
+            f"{', '.join(sorted(referentiel_sources.LICENCES_SOCLE))}"
+        )
+    return valeur
 
 
 def _normaliser(valeur: str) -> str:
@@ -406,6 +461,7 @@ def ingerer_fichier(db, chemin: Path, racine_depot: Path, rapport: Rapport,
     niveau = _NIVEAUX_EDITORIAUX.get(entete["niveau_confiance"].lower(),
                                      entete["niveau_confiance"])
     connaissance.valider_entete(entete["famille"], niveau)
+    valider_licence(entete["famille"], entete.get("licence"))
     culture_id = _resoudre_culture(db, entete.get("culture"), potager_id)
 
     sections = decouper(corps)

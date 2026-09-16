@@ -11,7 +11,6 @@ import {
   occTint, pctDe, estEnPlants, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
   filtrerParcelles, parcelleSelectionnee,
 } from './plan.js'
-import { calendrierDe } from './calendrier.js'
 
 /** Parcelle minimale : seuls les champs utiles au scénario sont renseignés. */
 const parcelle = (champs) => ({
@@ -190,57 +189,6 @@ test('[CA1] une seule parcelle sélectionnée, la première à l’ouverture', a
   })
 })
 
-// ── CA8 / CA9 — calendrier cultural standard ─────────────────────────────────
-
-test('[CA8] une culture connue porte les fenêtres conseillées standard', async (t) => {
-  await t.test('scénario « courgette » : 50-60 j', () => {
-    const meta = calendrierDe('courgette')
-    assert.equal(meta.duree, '50-60 j')
-  })
-
-  await t.test('la frise de la courgette colore ses mois conseillés', () => {
-    const meta = calendrierDe('courgette')
-    assert.deepEqual(meta.semis, [3, 4])
-    assert.deepEqual(meta.plant, [4, 5])
-    assert.deepEqual(meta.rec, [5, 6, 7, 8, 9])
-  })
-
-  await t.test('le rapprochement ignore la casse et les accents', () => {
-    assert.equal(calendrierDe('Céleri').duree, calendrierDe('celeri').duree)
-    assert.equal(calendrierDe(' Tomate ').duree, '70-90 j')
-  })
-
-  await t.test('les valeurs ne dépendent ni de la parcelle ni de la date', () => {
-    assert.deepEqual(calendrierDe('tomate'), calendrierDe('TOMATE'))
-  })
-})
-
-test('[CA9] une culture inconnue s’affiche en mode dégradé, sans valeur inventée', async (t) => {
-  await t.test('scénario « topinambour » : aucune métadonnée horticole', () => {
-    assert.equal(calendrierDe('topinambour'), null)
-  })
-
-  await t.test('un nom composé absent de la table n’est pas deviné', () => {
-    assert.equal(calendrierDe('haricot grimpant'), null)
-    assert.equal(calendrierDe(''), null)
-    assert.equal(calendrierDe(null), null)
-  })
-})
-
-// ── Cohérence des deux tables provisoires ────────────────────────────────────
-
-test('[CA8] toute culture du calendrier a bien trois phases et une durée', () => {
-  const noms = ['tomate', 'courgette', 'carotte', 'salade', 'ail', 'mache', 'haricot']
-  for (const nom of noms) {
-    const meta = calendrierDe(nom)
-    assert.ok(meta, `${nom} absente de la table`)
-    assert.equal(typeof meta.duree, 'string')
-    for (const phase of ['semis', 'plant', 'rec']) {
-      assert.ok(Array.isArray(meta[phase]), `${nom}.${phase} n’est pas une liste de mois`)
-      assert.ok(
-        meta[phase].every((m) => Number.isInteger(m) && m >= 0 && m <= 11),
-        `${nom}.${phase} contient un index de mois hors bornes`,
-      )
-    }
-  }
-})
+// ── CA8 / CA9 — calendrier cultural : soldés par US-176 ──────────────────────
+// La table provisoire a été supprimée ; la frise se lit désormais dans le
+// référentiel serveur. Tests : `lib/calendrier.test.js`.

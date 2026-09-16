@@ -708,7 +708,7 @@ def test_us098_ca12_un_fragment_non_autonome_est_signale(base, tmp_path):
     fiche = tmp_path / "defaut.md"
     fiche.write_text(
         "---\ntitre: Fiche mal découpée\nfamille: agronomie\n"
-        "source: Test\nniveau_confiance: verifie\n---\n\n"
+        "source: Test\nlicence: proprietaire\nniveau_confiance: verifie\n---\n\n"
         "## Première idée\n\n"
         "Le paillage garde le sol frais et limite fortement l'évaporation en été, "
         "ce qui lisse les à-coups d'humidité.\n\n"
@@ -735,7 +735,7 @@ def test_us098_ingestion_refuse_une_culture_absente_du_referentiel(base, tmp_pat
     fiche = tmp_path / "inconnue.md"
     fiche.write_text(
         "---\ntitre: Fiche inconnue\nfamille: agronomie\nsource: Test\n"
-        "niveau_confiance: verifie\nculture: topinambour\n---\n\n"
+        "licence: proprietaire\nniveau_confiance: verifie\nculture: topinambour\n---\n\n"
         "## Une idée\n\nUn contenu suffisamment long pour passer le contrôle "
         "d'autonomie du découpage sans être signalé.\n",
         encoding="utf-8",
@@ -770,6 +770,9 @@ def _fiche_v2(niveau: str = "a-valider") -> str:
         'titre: "Problèmes observables de tomate"\n'
         'famille: "agronomie"\n'
         'source: "Rédaction interne"\n'
+        # [US-140 / CA3] Une fiche d'agronomie porte sa licence, sinon elle est
+        # refusée avant toute écriture — le socle est fermé, pas indicatif.
+        'licence: "proprietaire"\n'
         f'niveau_confiance: "{niveau}"\n'
         'culture: "tomate"\n'
         'theme: "problemes"\n'
@@ -1197,6 +1200,7 @@ def _fiche_exemple(corrigee: bool = False) -> str:
         "titre: Le cul noir de la tomate\n"
         "famille: agronomie\n"
         "source: Test\n"
+        "licence: proprietaire\n"
         "niveau_confiance: verifie\n"
         "culture: tomate\n"
         "type: maladie\n"

@@ -1,3 +1,230 @@
+## [v3.65.0] — 2026-09-15
+
+### 🚀 Nouveautés
+- Recale sur l'écran Plan la frise d'une culture déjà semée sur sa date réelle de semis : levée et première récolte attendues se calculent depuis ce semis et les durées du référentiel, plus depuis la période conseillée (US-070 / CA1, CA2)
+- Retrouve l'origine d'une culture plantée par le chaînage semis → godet → plantation, et avance ou retarde la récolte attendue quand la plantation sort du délai de repiquage conseillé (US-070 / CA1, CA4)
+- Affiche à côté de la famille le nombre de jours avant la première récolte attendue, en fourchette quand le délai en est une, et « récolte attendue il y a N jours, aucune récolte notée » quand elle est dépassée (US-070 / CA3, CA12)
+- Ajoute à la frise l'état « en croissance », entre la levée et la première récolte, dans une teinte réservée cerclée de vert et nommé dans la légende dès qu'une tuile l'affiche (US-070 / CA7)
+- Bascule sur le réel dès qu'une récolte est notée : récolte terminale pour une culture végétative, étalée jusqu'à la fin de la période conseillée pour une reproductrice (US-070 / CA5, CA6)
+- Suit le plus ancien de plusieurs semis d'une même culture dans la parcelle, signale les autres séries sans jamais faire de moyenne, et rappelle ce qui reste de la période de semis pour en lancer une autre (US-070 / CA9, CA10)
+- Replace toute la projection à la date de référence choisie, événements postérieurs ignorés (US-070 / CA8)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/recalage_calendrier.py`, seul point de projection, en lecture seule : aucun événement, stock ni statistique n'est modifié (US-070 / CA13)
+- Enrichit `GET /plan/calendriers` d'un paramètre `date_ref` et d'un bloc `projections` par parcelle × culture × variété, sans changer les champs existants (US-070)
+- Étend `MonthStrip` d'une propriété `croissance` et `MonthStripLegend` d'`avecCroissance`, rétrocompatibles pour les autres écrans (US-070)
+- Met à jour la fiche d'aide `calendrier-et-zone-climatique.md` d'une section « Savoir où en est une culture déjà semée », et le corpus de mesure de deux questions (US-099 / CA9)
+
+### ⚠️ Breaking changes
+- Ne recale pas, et garde donc la frise conseillée, pour une plantation sans semis retrouvé, un semis sans filière connue ou une culture sans durée semis → récolte chiffrée — c'est le cas de la tomate et du poivron tant qu'US-177 n'est pas livrée
+
+## [v3.64.0] — 2026-09-15
+
+### 🚀 Nouveautés
+- Affiche sur l'écran Plan le **calendrier réel de ton potager** : la frise de chaque culture lit désormais les périodes de sa zone climatique et tient compte des corrections faites au bot, visibles au prochain chargement de l'écran (US-176 / CA1, CA2)
+- Distingue sur la frise les quatre phases du référentiel — **semis en pépinière, semis en pleine terre, plantation, récolte** — chacune dans sa couleur, et affiche la durée semis → première récolte en fourchette (« 70 à 90 jours ») ou en tiret (US-176 / CA3, CA4)
+- Tranche par une règle unique quand deux phases tombent le même mois (le concombre, semé en place ou planté en mai) : la couleur montre le geste le plus avancé, et le libellé du mois nomme toutes ses phases (US-176 / CA3bis)
+- Ajoute au calendrier cultural une **période de plantation** par zone climatique, lue dans Wind River Greens pour 16 cultures (tomate, poivron, aubergine, choux, cucurbitacées, aromatiques, capucine, fraise) et jamais déduite du semis en pépinière : `/calendrier fenetre tomate plantation mai-juin` la corrige, et `/calendrier tomate` l'affiche, vide comprise (US-068 / CA17 à CA24, CA27)
+- Comprend la plantation à la dictée, tranchée par la valeur : « plantation des poireaux : juin-juillet » corrige la période, « délai avant plantation des tomates : 42 à 56 jours » corrige le délai — une phrase dont la valeur ne tranche pas n'est pas devinée (US-068 / CA29)
+- Nomme sur la tuile un itinéraire autre que « standard » (« culture d'hiver ») plutôt que de fusionner plusieurs calendriers (US-176 / CA5)
+- Indique une seule fois, sous les cultures, la zone climatique retenue et son origine — choisie, déduite de la localisation ou par défaut — avec la commande pour la changer, ainsi que l'attribution de la source du calendrier (US-176 / CA8, CA9)
+- Garde la famille botanique affichée même pour une culture sans calendrier (US-176 / CA7)
+
+### ⚠️ Breaking changes
+- Remplace la bande « plantation » générique de la table provisoire par celle du référentiel : sans période de plantation connue pour la zone (courgette, poireau, laitue, ail…), aucun mois n'est coloré en plantation (US-176 / CA3)
+- Change la couleur du **semis en pleine terre** (violet) : le vert revient à la plantation, comme sur la maquette (US-176 / CA3bis)
+- Laisse **neutres** les frises des cultures sans calendrier pour la zone du potager (ail, échalote, pomme de terre, fraise, framboise, épinard, céleri…) que la table provisoire couvrait : aucune période n'est inventée, elles se complètent au bot avec `/calendrier fenetre` (US-176 / CA6)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /plan/calendriers?culture=…` et `calendrier_cultural.calendriers_du_plan` : le calendrier de toutes les cultures de l'écran en une seule lecture groupée, attendue avant l'affichage pour éviter tout clignotement (US-176 / CA11)
+- Garde l'écran Plan utilisable si cette lecture échoue : parcelles, cultures et familles s'affichent, les frises passent en mode dégradé sans valeur de repli (US-176 / CA12)
+- Supprime la table de calendrier provisoire de `frontend/src/lib/calendrier.js`, soldée par US-176 et non par US-068 comme annoncé ; `ANALYSE_REFONTE_UI_WEB_2026.md` §5.10 et le CA11 d'US-060 sont mis à jour (US-176 / CA13)
+- Fait évoluer `MonthStrip` de façon rétrocompatible (props `pepiniere` / `pleineTerre` / `plantation`, légende `variante="referentiel"` dérivée de `PHASES_REFERENTIEL`) : l'aperçu du design system s'affiche à l'identique (US-176 / CA14)
+- Ajoute à la fiche d'aide `calendrier-et-zone-climatique.md` une section sur la frise de l'écran Plan, avec deux questions de mesure, puis la plantation et la règle de priorité (US-176 / CA15, US-068 / CA30, US-099 / CA9)
+- Lit `outdoor_transplant_*` dans l'adaptateur Wind River Greens avec les règles de rejet transposées et un signalement, sans correction, des plantations incohérentes avec le semis et le délai de repiquage ; manifeste régénéré : 336 fenêtres dont 64 de plantation (US-068 / CA21 à CA24, CA26)
+- Étend le gabarit `calendrier_redaction_interne.json` à 106 cultures, avec une case `plantation` par zone, toujours livré vide (US-068 / CA25)
+- Aucune migration : `fenetre_culturale.phase` accueille la quatrième phase telle quelle ; en production, rejouer `python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json` (US-068 / CA17)
+
+## [v3.63.0] — 2026-09-14
+
+### 🚀 Nouveautés
+- Retient la **filière de chaque semis** — en pépinière, hors sol pour être repiqué, ou directement en pleine terre — dès qu'elle est dite : « semé 50 graines de tomate cerise en pépinière », « semé des carottes en place », « semis direct de haricots » (US-069 / CA1, CA2)
+- **Propose** la filière la plus probable quand la phrase ne la dit pas — parcelle déclarée pépinière, ou calendrier de la culture qui ne connaît qu'une seule façon de la semer — et l'adopte d'un seul appui sur « Confirmer » ; un bouton la remplace par l'autre ou enregistre « sans préciser », dans le même geste (US-069 / CA3)
+- Enregistre un semis **sans filière** plutôt que de le ranger au hasard quand rien ne permet de trancher, et ne pose aucune question sur une dictée de plusieurs gestes (US-069 / CA3, CA9)
+- Permet de **corriger la filière après coup** depuis `/corriger` : « non, c'était en pépinière » se lit sans appel au modèle, et reste donc possible quand l'IA est indisponible (US-069 / CA4)
+- Ajoute à `/stats` un bloc **« Semis par filière »** pour la saison : trois totaux par culture — en pépinière, en pleine terre, et sans contexte, ce dernier affiché plutôt que passé sous silence (US-069 / CA6)
+
+### 🔧 Améliorations techniques
+- Centralise la reconnaissance, la proposition, le décompte et la fenêtre applicable dans `app/services/contexte_semis.py` ; `fenetre_conseillee` rend la fenêtre de semis du calendrier qui correspond à la filière, sans jamais emprunter celle de l'autre — c'est l'ancrage qu'utilisera le recalage d'US-070 (US-069 / CA7)
+- Lit la filière dans la grammaire déterministe : « semé 50 graines de tomate en pépinière » s'enregistre toujours à zéro jeton, au lieu de repartir au modèle pour deux mots non attribués (US-069 / CA2, US-094)
+- Garantit l'absence de régression sur le stock : la filière ne pilote **aucun** calcul, qui continue de dépendre de la parcelle déclarée pépinière — un test compare le stock avec et sans filière renseignée (US-069 / CA8)
+- Ajoute la clé `semis_par_contexte` à `GET /stats`, sans modifier aucune clé existante (US-069 / CA6)
+- Met à jour les fiches d'aide `semis-godet-plantation.md`, `statistiques-et-bilans.md` et `journal-et-corrections.md`, avec deux questions de mesure servies par la nouvelle section (US-069, US-099 / CA9)
+- Supprime l'ancienne US non numérotée `US_Distinguer_semis_pepiniere_pleine_terre.md`, remplacée par US-069
+
+### 💾 Base de données
+- `migration_v47.sql` — ajoute `evenements.contexte_semis` (nullable) avec une contrainte « seul un semis en porte un », et reprend l'existant sans supposition : un semis suivi d'une mise en godet chaînée devient « pépinière », tous les autres restent sans contexte, jamais présumés en pleine terre. Rejouable, n'écrase aucune correction ; la requête de reprise est exécutée telle quelle par les tests. Rollback : `rollback_v47.sql` (US-069 / CA1, CA5)
+
+## [v3.62.0] — 2026-09-13
+
+### 🚀 Nouveautés
+- Ajoute le **calendrier cultural** d'une culture : mois conseillés pour semer en pépinière, semer en pleine terre et récolter, plus les délais de levée, de première récolte et de repiquage — lu à zéro jeton avec `/calendrier <culture>` (US-068)
+- Distingue **plusieurs itinéraires** pour une même culture (« culture précoce », « culture d'hiver »), chacun avec ses périodes et ses délais ; une culture sans itinéraire nommé en porte un implicite, sans aucune saisie exigée (US-068 / CA1)
+- Décline les périodes par **zone climatique** (océanique, continental, méditerranéen, montagnard) et garde les délais communs à toutes les zones, parce qu'ils tiennent à la plante et non au climat (US-068 / CA6)
+- Propose la zone du potager **d'après sa localisation**, sans jamais supposer « montagnard » faute d'altitude, et la laisse choisir au jardinier — `/calendrier zone méditerranéen`, ou `auto` pour revenir à la localisation. La réponse dit toujours si la zone est choisie, déduite ou appliquée par défaut (US-068 / CA7, CA8)
+- Permet de **corriger une période ou un délai depuis le bot**, en rappelant l'ancienne et la nouvelle valeur ; la correction ne vaut que pour le potager où elle est faite (US-068 / CA10, CA11)
+- Rend le calendrier **dictable** : « quand semer les tomates ? », « passe mon potager en zone méditerranéenne », « délai de levée des carottes : 14 à 21 jours » — alors que « quand ai-je semé les tomates ? » reste une question sur le journal du potager (US-068, US-172)
+- Expose `GET /cultures/{culture}/calendrier` et la zone climatique dans `GET/PATCH /potagers`, forme de lecture qu'utiliseront l'écran Plan, le recalage sur les semis réels et la vue Cultures (US-068, US-060, US-070)
+
+### 🔧 Améliorations techniques
+- N'invente **jamais** une période ni un délai : aucune fenêtre empruntée à une zone voisine, aucune durée moyenne, aucune date calculée — sans donnée, la frise reste vide et la durée s'affiche « — » (US-068 / CA4, CA13)
+- Pré-remplit les **durées** depuis Wind River Greens (CC BY 4.0, déjà au socle) par règles fermées : levée, récolte **seulement en semis en place** (la source compte depuis la plantation pour ce qui est élevé à l'abri), repiquage depuis la consigne de mise à l'abri — 12 durées sur 8 cultures, l'ail et la blette écartés avec leur motif (US-068 / CA9)
+- Pré-remplit les **fenêtres** de semis et de récolte depuis le calendrier de la même source (`planting_calendar.csv`, identique au tag `v1.0.0`) — 272 fenêtres et 45 durées sur **32 cultures** de la configuration (salade comprise, qui reçoit le calendrier de la laitue) et 4 zones. La source étant en zones USDA, chaque zone climatique lit la zone USDA dont le printemps démarre au même moment (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4) : une correspondance **déclarée et à valider**, pas une équivalence de rusticité (US-068 / CA9)
+- Écarte ce que ce calendrier ne permet pas d'affirmer, par six règles fermées : il est un gabarit par catégorie et ne connaît que le printemps, se contredit sur l'ail (planté à l'automne selon ses propres fiches, semé en mars-mai selon son calendrier), met le fenouil en pépinière quand ses fiches disent « semis direct », et produit des récoltes « de décembre à novembre » — rejetées comme artefacts. Restent sans calendrier, à compléter au bot : ce qui se plante (ail, échalote, pomme de terre, fraise, framboise), ce que la source décrit par moins de trois variétés (mâche, épinard, roquette, blette, céleri…) et ce qu'elle ne contient pas (fève, asperge, rhubarbe) (US-068 / CA9, CA13)
+- Signale au compte rendu les dix calendriers **incomplets** — choux, radis, navet, laitue, poireau… — dont les fiches mêmes de la source mentionnent un semis de fin d'été ou d'automne que son calendrier ignore (US-068 / CA9)
+- Livre le gabarit de rédaction interne **vide** (`calendrier_redaction_interne.json`) pour ce que la source ne couvre pas : les calendriers de semis du commerce sont des œuvres protégées, et aucun chiffre agronomique n'est produit par un modèle de langage (US-068 / CA9)
+- Garantit **par construction** qu'un import n'écrase aucune correction : l'import n'écrit que le calendrier partagé, une correction crée une copie propre au potager qui le remplace pour lui seul (US-068 / CA9, CA11)
+- Ajoute au corpus « fonctionnement de l'application » la fiche `calendrier-et-zone-climatique.md` et le domaine d'aide `/help calendrier`, avec 8 questions de mesure servies en tête ; la question témoin « sans fiche » devient « c'est quoi la lune rousse ? », « calendrier » étant désormais couvert (US-068, US-099 / CA9)
+- Couvre la purge d'un potager supprimé : ses calendriers personnalisés partent avec lui, le calendrier partagé n'est pas touché (US-068, US-084)
+- Trace les trois nouvelles tables dans le registre des sources, pour qu'une source retirée se liste en une requête (US-068, US-166 / CA4)
+
+### 💾 Base de données
+- `migration_v46.sql` — crée `itineraire_cultural`, `fenetre_culturale` (une par itinéraire, zone et phase, au mois) et `duree_culturale` (en jours ou mention libre, CHECK « l'un ou l'autre »), toutes trois sous RLS avec la convention `potager_id NULL = partagé`, et ajoute `potagers.zone_climatique` (nullable, choix du jardinier seulement). Aucune ligne de calendrier semée, aucun backfill de zone. Vérifiée sur PostgreSQL : application, rollback et rejeu idempotent. Rollback : `rollback_v46.sql` (US-068)
+
+## [v3.61.0] — 2026-09-10
+
+### 🚀 Nouveautés
+- Propose des **pistes quand tu décris ce que tu vois**, avec tes mots : « mes pieds de tomates ont des taches marron sur les feuilles du bas qui remontent » reçoit deux ou trois hypothèses ordonnées au lieu d'un silence ou d'une généralité (US-165)
+- Formule toujours une piste comme une **évocation, jamais comme une certitude** — « cela peut évoquer », jamais « c'est ». C'est le risque le plus élevé de tout l'épic : un jardinier qui traite sur une suspicion fausse a perdu plus que si l'application s'était tue (US-165 / CA4)
+- Ne propose que ce qui **attaque réellement cette culture** : un mildiou de la pomme de terre n'est jamais proposé sur une carotte, et « des traits orange qui partent en poussière » évoque la rouille des alliacées sur l'ail, celle du haricot sur le haricot, celle de l'asperge sur l'asperge — un seul symptôme, trois pistes différentes (US-165 / CA3, CA14)
+- Dit **honnêtement qu'elle ne sait pas** plutôt que de rapprocher au hasard, et distingue trois ignorances qu'il serait trompeur de confondre : la culture qu'elle ne connaît pas, le symptôme qu'elle ne reconnaît pas, et le symptôme reconnu dont aucune piste n'est rattachée à cette culture (US-165 / CA8)
+- Annonce qu'une piste est **seule** quand le référentiel n'en connaît qu'une : une hypothèse unique se lit comme une conclusion, quelle que soit la prudence de la formulation qui l'entoure (US-165 / CA5)
+- Ne consomme **aucun jeton** : le pré-diagnostic est une recherche plein texte suivie de jointures, mesurée à 3 ms. Le modèle n'intervient qu'à l'étage au-dessus, pour le diagnostic multi-facteurs qui reste à venir (US-165 / CA9)
+- Livre **44 symptômes** dérivés des fiches d'agronomie déjà versionnées, avec pour chacun les deux registres — celui du jardinier (« poudre blanche », « cul noir », « des bestioles ») et celui de l'agronome (« oïdium », « nécrose apicale », « puceron ») (US-165 / CA1)
+
+### 🔧 Améliorations techniques
+- **Mesure du CA11, sur le référentiel réellement livré** : 19/19 des entrées du périmètre v1 trouvent la bonne piste dans les trois premières (18 en première position), et 25/25 des entrées hors périmètre reçoivent un refus explicite ou une piste juste — jamais un rapprochement forcé. Les deux assiettes sont mesurées SÉPARÉMENT : les confondre plafonnerait mécaniquement le taux sous les 80 % et ferait échouer l'US pour une raison de découpage (US-165 / CA11, CA12)
+- **Au-dessus du seuil, la question du moteur vectoriel reste donc fermée.** L'arbitrage de l'US se vérifie : le problème n'était pas la faiblesse de la recherche lexicale, c'était que les fiches sont écrites en vocabulaire technique et les questions posées en vocabulaire courant. Écrire les deux dans la colonne de synonymes coûte quelques minutes par symptôme, là où le vectoriel coûte une infrastructure (US-165 / CA13)
+- Le poids d'une piste **ne sort jamais du service** : `Piste` ne porte aucun champ de plausibilité, et c'est cette absence — pas une consigne de rendu — qui empêche qu'un pourcentage soit un jour affiché comme une probabilité mesurée (US-165 / CA2)
+- La formulation prudente vit à **un seul endroit** (`prediagnostic.FORMULE_EVOCATION`), concaténée par les gabarits : une prudence répartie sur plusieurs textes s'érode à la première reformulation, et un test refuse toute tournure affirmative dans les 44 réponses du corpus (US-165 / CA4)
+- Le score de la recherche lexicale est désormais **partagé** avec le socle de connaissance (`connaissance.score_lexical`) au lieu d'être réécrit. La première version, propre à cette US, punissait exactement ce que le CA1 demande d'encourager : une liste de synonymes riche faisait chuter le score, et « mes tomates ont le cul noir » passait sous le seuil alors que le symptôme portait « cul noir » en toutes lettres (US-165 / CA9)
+- La question d'INVENTAIRE (« qu'est-ce qui attaque mes poireaux ») garde la priorité sur la DESCRIPTION (« mes tomates ont des taches marron »), par l'ordre des familles et non par une seconde liste de motifs. Prix connu et mesuré : deux formulations du corpus reçoivent l'inventaire plutôt qu'un pré-diagnostic, aucune du périmètre v1 (US-165, US-173)
+- La garde d'exécution du catalogue couvre les deux nouvelles tables : une lecture sans filtre `potager_id` est refusée **à l'exécution**, pas signalée en revue de code (US-165, US-096 / CA11)
+- Aucune fiche du corpus `doc_app` ne devient fausse : aucune des treize ne décrit ce qui se passe quand un symptôme est décrit, la table de relecture d'US-099 a été parcourue avant livraison (US-165, US-099 / CA9)
+- Ajoute `python tools/mesurer_prediagnostic.py`, qui publie les deux assiettes, la latence et le cas de désambiguïsation — et rappelle de lui-même que la mesure SQLite ne décide de rien tant qu'elle n'a pas été rejouée contre PostgreSQL (US-165 / CA13)
+
+### 💾 Base de données
+- `migration_v45.sql` — crée `symptome` (libellé, organe, synonymes, vecteur plein texte avec index GIN) et `symptome_bioagresseur` (arête pondérée), toutes deux sous RLS. **Aucune colonne de culture sur le symptôme** : un symptôme n'appartient à aucune culture, c'est le croisement avec `culture_bioagresseur` qui décide de la piste — une colonne `culture_id` aurait dupliqué chaque symptôme par culture et rendu la désambiguïsation du CA14 structurellement impossible. Aucune colonne de produit ni de dosage non plus, même garantie que `migration_v43`. Rollback : `rollback_v45.sql` (US-165 / CA1, CA2, CA7)
+- Ajoute les blocs `symptomes` et `symptomes_bioagresseurs` au manifeste de référentiel, et `data/referentiel/symptomes_redaction_interne.json` : 23 identités qui manquaient (surtout des causes abiotiques, que les sources phytosanitaires ne recensent pas et qui sont pourtant la moitié de ce que voit un amateur), 74 arêtes de culture, 44 symptômes et 103 suspicions pondérées (US-165)
+
+## [v3.60.0] — 2026-09-09
+
+### 🚀 Nouveautés
+- Rend **toutes** les notes écrites sur une culture ou une parcelle, de la plus récente à la plus ancienne, quand la question la nomme : « qu'avais-je noté sur mes tomates ? » lit le carnet exactement, à zéro jeton et sans appel au modèle. Cette question ne demandait aucune ressemblance — elle demandait tout ce qui avait été écrit (US-141)
+- Présente un **carnet volumineux par repères de temps** plutôt que par un défilement : par année quand les notes s'étalent sur plusieurs, par saison du jardin quand elles tiennent dans une seule, suivis des plus récentes citées en entier. Les saisons sont celles du potager — mars-mai, juin-août, sept-nov, déc-fév — et non les trimestres du calendrier (US-141)
+- Ouvre une période en la nommant dans la question : « mes notes sur la tomate en 2025 », « qu'avais-je noté sur les courges ce printemps ? ». La réponse propose elle-même la période la plus fournie, dans une formulation qu'elle sait relire (US-141)
+
+### 🐛 Corrections
+- N'affiche plus **une seule note quand trois répondaient**. Relevé le 09/09/2026 sur le potager 1 : « qu'avais je noté sur mes tomates ? » retrouvait bien les trois notes attendues (evenement-472, 355 et 363 ; score 0,733 ; issue=servi) et n'en montrait qu'une — la restitution ne gardait qu'un bloc par registre, et les deux autres étaient trouvées puis jetées. Une note trouvée puis tue est pire qu'une note non trouvée : le jardinier en conclut qu'il n'avait rien écrit (US-141 / CA5)
+- « comment ajouter une note ? » n'ouvre plus la saisie guidée à la place d'une réponse. Relevé le 09/09/2026 : le mot-clé de déclenchement du flux (« ajouter une note ») matchait aussi bien dans la question que dans la commande, sans distinguer l'une de l'autre — même défaut, corrigé au même titre, que celui déjà refermé sur les commandes dictées (US-172 / CA2) (US-038)
+
+### 🔧 Améliorations techniques
+- Le périmètre de « ce qu'est une note » reste défini au seul endroit qui l'indexe (`memoire_potager.est_memorisable`) : le nouveau chemin SQL l'importe au lieu de le réécrire, et un test compare les deux inventaires. Deux définitions divergentes feraient différer la liste et la recherche sur le même carnet, sans qu'aucune ne paraisse fausse (US-141)
+- Le motif de rappel du routeur est désormais **partagé** avec le catalogue de réponses chiffrées au lieu d'y être recopié : deux définitions de « question de rappel » produiraient une question routée vers un catalogue qui ne la reconnaîtrait plus, donc une cascade qui tourne à vide sans rien dans le journal pour le dire (US-141)
+- Le corps d'une note ne traverse plus le remplissage de gabarit, qui renormalisait sa ponctuation — une note vaut par ce qu'elle dit exactement (US-141)
+- Le texte libre d'une note est échappé avant d'atteindre Telegram : un `*` ou un `[` dans une note faisait échouer le rendu, donc perdait la réponse entière et pas seulement sa mise en forme (US-141)
+
+## [v3.59.0] — 2026-09-08
+
+### 🚀 Nouveautés
+- Pilote **toute l'application en une phrase** : « crée la parcelle PlancheTomate », « la serre est une pépinière », « montre-moi le bilan des tomates », « passe sur le potager de la maison » sont comprises et exécutées, sans avoir à retenir la commande exacte, l'ordre de ses arguments ni le vocabulaire attendu pour ses valeurs (US-172)
+- Couvre les **24 commandes du bot** : 18 sont dictables (31 formes avec leurs sous-commandes), 1 est un alias de sa cible canonique, et 5 sont écartées sur une décision motivée — `/ask`, `/start`, `/lier`, `/delier`, `/version` restent pleinement utilisables à la main (US-172 / CA7, CA8)
+- Distingue **vouloir faire de demander comment faire** : « comment supprimer une parcelle ? » reçoit une explication du socle de connaissance, « supprime la parcelle du fond » agit. Répondre par une notice à quelqu'un qui vient de demander l'action était la non-réponse la plus agaçante du compagnon (US-172 / CA2)
+- Relit **toute valeur chiffrée avant de l'écrire**, en chiffres et en toutes lettres avec son unité : « profondeur 1 » et « profondeur 10 » ne s'entendent pas à la dictée, et la seconde écrirait une donnée fausse dans un référentiel partagé (US-172 / CA11)
+- Complète un argument manquant au lieu d'échouer : « note une association entre la carotte et l'aneth » enchaîne sur les valeurs possibles en boutons, plutôt que de renvoyer un message d'usage (US-172 / CA13)
+- Propose de **créer la parcelle manquante dans la foulée du geste** : « j'ai planté 3 pieds de tomate sur PlancheTomate » propose de créer la planche et d'enregistrer la plantation, sans faire redicter la phrase (US-172 / CA19)
+- Accepte `/potager <nom>` pour basculer directement sur un potager nommé — la commande tapée strictement équivalente à « passe sur le potager de la maison », sans quoi la phrase aurait dû réimplémenter la bascule (US-172 / CA9)
+- Reconnaît **100 % des 109 formulations du corpus sans aucun appel au modèle**, donc à zéro jeton : le modèle n'intervient qu'en repli, et sous contrainte fermée (US-172 / CA3, CA16, CA17)
+
+### 🐛 Corrections
+- Ne prend plus « supprimer la parcelle nord » pour « annuler ma dernière saisie » : le raccourci par mot-clé effaçait le dernier événement enregistré, ce qui n'était ni ce que le jardinier avait demandé, ni réparable d'un geste (US-172 / CA16)
+- Refuse d'exécuter une commande destructrice sur un **nom approchant** : « supprime la parcelle planche nord-est » ne supprime pas « Planche Nord ». Le rapprochement à deux lettres près est le bon comportement pour rattacher un geste, le mauvais pour supprimer — le nom voisin est désormais proposé, jamais substitué (US-172 / CA12)
+- Répond enfin à une **question dictée** au lieu d'y obéir : « comment supprimer une parcelle ? » était lue par le canal vocal comme l'intent SUPPRIMER, et le bot proposait d'effacer le dernier geste enregistré. Ce canal était resté sur les seuls intents de `parse_message`, qui ne connaissent ni le socle de connaissance ni la mémoire du potager — la même phrase TAPÉE recevait pourtant l'explication depuis US-170 (US-172 / CA2, CA5)
+- Permet de **recréer une parcelle supprimée** : son nom restait en base (la suppression est logique, pour que les gestes passés gardent trace du lieu), ce qui bloquait la recréation — pendant que `/plan` et `/parcelle lister`, qui filtrent les parcelles actives, ne la montraient plus. La planche était à la fois invisible et incréable, sans un message pour l'expliquer. La recréer la remet en service ; ses anciens gestes restent « non localisés », comme la suppression l'avait décidé (US-172, US-009)
+- Ne colle plus un morceau de la superficie au nom dicté : « crée la parcelle planche tomate 12 m² » donnait le nom « planche tomate 12 ». Le nom est désormais lu comme ce qui **précède** la première annotation, par ses bornes et non par une longueur calculée sur une chaîne déjà modifiée (US-172)
+- Ne coupe plus une superficie sur sa **virgule décimale** : « 8,5 m² » était découpé en deux annotations et enregistré comme 5 m². Une valeur fausse écrite sans que rien ne le signale, exactement ce que la relecture du CA11 doit empêcher (US-172 / CA11)
+- Renonce à trancher, et laisse le modèle lire la phrase, quand une direction est collée à une superficie — « planche tomate sud 12 m² » : rien ne dit si « sud » ferme le nom ou annonce l'exposition, et « Planche Sud » est un nom de parcelle courant. Isolée par une virgule ou présentée par un mot (« exposée sud »), elle ne pose plus de question et reste traitée sans jeton (US-172 / CA3, CA4)
+- Refuse une action d'écriture à un membre en **lecture seule** sur `/parcelle`, `/culture`, `/association` et `/bioagresseur` : ces commandes n'appelaient aucun garde de rôle, et un lecteur pouvait renommer ou supprimer une parcelle. Le garde est posé dans le handler, donc traversé par la commande tapée comme par la commande dictée (US-172 / CA14, US-047)
+
+### 🔧 Améliorations techniques
+- Dérive le catalogue de l'interpréteur des commandes **réellement enregistrées** par le bot, à côté de celui du menu d'US-171 : il n'existe pas de seconde liste de commandes tenue à la main (US-172 / CA6)
+- Arme un **test de parité** qui échoue tant qu'une commande ajoutée au bot n'est ni dictable, ni alias, ni exclue et motivée — et tant qu'une commande dictable ne déclare pas la forme de ses arguments, leur unité et leur vocabulaire fermé. C'est ce test, et non la vigilance, qui empêche l'écart de se recreuser (US-172 / CA7)
+- Lit les vocabulaires fermés aux services qui les **valident déjà** plutôt que de les recopier : l'interpréteur ne peut pas proposer une valeur que le point d'écriture refuserait, et une valeur ajoutée devient dictable sans une ligne de plus (US-172 / CA6)
+- Exécute une commande dictée via le handler **retrouvé par introspection**, garde de liaison compris : même service, mêmes contrôles, mêmes messages, mêmes claviers. Aucune table de correspondance nom → fonction, qui divergerait au premier renommage (US-172 / CA9, CA14)
+- Contraint le repli modèle à trois refus sans tolérance : commande hors catalogue, valeur hors vocabulaire fermé, argument absent de la phrase. Le dernier est ce qui empêche une parcelle que personne n'a nommée d'être proposée à la suppression (US-172 / CA4)
+- Expose l'étage des RÈGLES du routeur seul (`routeur.classer_par_regles`) pour le canal vocal : consulter la cascade entière y aurait coûté un appel de classification sur tout ce que les règles ne tranchent pas, alors que `parse_message` classe et parse déjà en un seul appel. Une règle qui tranche évite l'erreur, une règle qui se tait laisse la main — « supprime ma dernière saisie » continue donc d'annuler le dernier geste (US-172 / CA5, CA22)
+- Ajoute un garde d'**ouverture interrogative** sur les règles qui lisent une phrase déclarative pour écrire : sans lui, « qu'est-ce qui attaque mes poireaux ? » — servie par gabarit à zéro jeton depuis US-173 — se transformait en écriture au référentiel (US-172 / CA22)
+- Conserve le signe moins d'une valeur dictée : le trait d'union est ramené à une espace pour que « montre-moi » et « montre moi » se comportent à l'identique, ce qui transformait « -2 °C » en « 2 °C » au référentiel partagé (US-172 / CA11)
+- Réutilise la résolution de dates d'US-094 pour « le plan au 1er mai » : aucune seconde règle de datation dans le projet (US-172)
+- Journalise chaque interprétation — nature, commande, sous-commande, origine, confiance, latence, issue — dans les colonnes d'observabilité de routage. C'est `issue_interpretation` qui dira quelles formulations le jardinier refuse ou abandonne, donc lesquelles enrichir ensuite (US-172 / CA18)
+- Verse au corpus `doc_app` ce que cette US rend faux ou incomplet : deux sections neuves sur le pilotage par la phrase et sur ce qui est relu avant écriture, et la mention de la dictée dans les procédures de renommage, de suppression, de déclaration de pépinière et de correction (US-172, US-099 / CA9)
+
+### 💾 Base de données
+- `migration_v44.sql` — ajoute `commande_interpretee` et `issue_interpretation` à `routage_logs`, nullables et idempotentes. Détourner `issue_savoir` pour y loger l'issue d'une validation de commande aurait rendu illisibles deux mesures à la fois, celle du socle de connaissance et celle de l'interpréteur. Rollback : `rollback_v44.sql` (US-172 / CA18)
+
+## [v3.58.0] — 2026-09-08
+
+### 🚀 Nouveautés
+- Se souvient de **ton** potager : les observations et notes libres écrites au fil des saisons se retrouvent en langage naturel — « qu'avais-je noté sur la parcelle nord l'an dernier ? » — au lieu de se chercher par filtre et par date (US-141)
+- Restitue une note avec sa **date** et sa **parcelle**, puis son texte entre guillemets, tel qu'il a été écrit : jamais reformulé, jamais résumé. Un résumé produit par un modèle ferait perdre à la note sa valeur de preuve, qui est toute sa raison d'être (US-141 / CA5)
+- Distingue explicitement les deux registres quand une réponse mêle les deux : « ce que tu avais noté » d'un côté, « en général » de l'autre, jamais fondus en une phrase — les confondre reviendrait à faire dire au jardinier ce qu'il n'a pas dit (US-141 / CA6)
+- Indexe une note **à l'instant où elle est enregistrée** : aucune action du jardinier, aucun délai, aucune commande à lancer (US-141 / CA2)
+- Ne consomme **aucun jeton** en lecture : retrouver et citer une note est une citation, pas une génération (US-141 / CA7)
+- Reconnaît la question de mémoire pour ce qu'elle est — « qu'avais-je noté sur… », « que disait ma note sur… », « mes notes sur… » —, y compris **dictée sans point d'interrogation**, où elle s'enregistrait sinon dans le journal : « noter » est une variante du geste « observation » (US-141 / CA5)
+
+### 🐛 Corrections
+- N'indexe plus les **bulletins météo quotidiens** dans la mémoire du potager : le job météo enregistre son relevé comme une observation, techniquement une note mais que personne n'a écrite. Sur une base réelle, ils étaient largement majoritaires et noyaient les vraies notes sous des relevés de température (US-141)
+- Cherche une question de mémoire **dans la mémoire seule**, et non dans tout le corpus : « qu'ai-je noté sur les tomates ? » rendait trois fiches d'agronomie sur la tomate et pas une seule note. Le corpus général est bien plus vaste que la mémoire d'un potager, et bien plus riche du vocabulaire même de la question — il remporte le classement à tous les coups, et aucun réglage de score n'y change rien (US-141 / CA5)
+- Reconnaît « qu'est-ce que j'ai noté ? » — le passé composé, et non le plus-que-parfait — sans capter pour autant « j'ai noté que le sol est sec », qui reste une saisie. Les mots sont les mêmes : seule l'ouverture interrogative les sépare, comme pour les questions dictées d'US-173 (US-141 / CA5)
+- Ne mémorise plus, et ne sert plus, de réponse figée pour une question de mémoire : « je ne trouve aucune note enregistrée » avait été mémorisé en savoir **partagé entre tous les potagers** et servi ensuite à coût nul, sans qu'aucune recherche n'ait lieu — y compris aux potagers qui avaient des notes. Les entrées déjà écrites cessent d'être servies et expirent d'elles-mêmes (US-141 / CA9)
+
+### 🔧 Améliorations techniques
+- Pose l'isolation de la mémoire comme propriété de la **requête** et non des seules données : la famille `memoire_potager` est exclue de la clause de savoir partagé, et n'est servie que sur l'égalité du potager courant. Un fragment de cette famille resterait inatteignable même s'il naissait un jour sans potager (US-141 / CA8)
+- Refuse à l'écriture tout document de mémoire sans potager, au seul point d'écriture de la table — l'invariant vaut donc de tout chemin d'écriture, y compris de ceux qui n'existent pas encore (US-141 / CA1)
+- Branche l'indexation là où l'invalidation de cache est déjà branchée, et nulle part ailleurs : il n'existe qu'un seul endroit dans l'application où « une observation vient de changer » (US-141)
+- Fait qu'un échec d'indexation ne fasse jamais échouer l'enregistrement d'une note : perdre une note serait irréparable, perdre son index ne coûte qu'une reprise (US-141)
+- Retire de la mémoire toute note supprimée, corrigée, ou qui cesse d'être une note — et réindexe celles dont la parcelle a été renommée, déplacée ou supprimée : aucune mémoire orpheline ne survit à la donnée dont elle dérive (US-141 / CA11)
+- Ajoute `tools/indexer_memoire_potager.py`, reprise initiale rejouable et sans doublon des notes déjà enregistrées, à lancer **une fois** après le déploiement (`--dry-run` pour voir sans écrire, `--potager` pour n'en traiter qu'un). L'idempotence tient à l'identité stable du document, pas à une précaution de l'outil (US-141 / CA3)
+- Permet à l'invalidation du cache de réponses de s'inscrire dans une transaction d'écriture en cours plutôt que de commiter d'elle-même — commiter à mi-chemin validerait une écriture que l'appelant n'a pas fini de composer (US-141, US-095 / CA10)
+- Aiguille les questions de mémoire vers l'étage du savoir plutôt que vers l'étage des données : elles portaient souvent un marqueur de donnée (« sur la parcelle »), partaient à l'agrégat SQL, et la mémoire — pourtant indexée et isolée — restait injoignable depuis Telegram. L'étage des données n'a aucune famille capable de rendre un texte libre (US-141 / CA5)
+- Reconnaît la question de mémoire par la RENCONTRE d'un nom d'écrit (note, remarque, observation) et d'une marque de rappel (possessif, interrogatif, « avais-je », « précédente ») plutôt que par une liste de locutions figées : « quelle note précédente avais-je sur ce potager ? », relevée en usage, en séparait le verbe et le nom par un adjectif et échappait à toute liste plate (US-141 / CA5)
+- Pose le scope d'isolation PostgreSQL **potager par potager** dans la reprise initiale : les tables de connaissance sont sous RLS, et une reprise multi-potagers sans changement de scope échouait dès le second — invisible en test SQLite, fatale en production (US-141 / CA3, US-043)
+- N'expose plus au jardinier le vocabulaire interne du prompt : le modèle répondait « aucune « MÉMOIRE DU POTAGER » ne m'a été fournie », lui montrant un rouage qui ne le concerne pas (US-141 / CA6)
+- Indexe avec chaque note le **registre du rappel** — « noté », « écrit », « l'an dernier », « carnet » —, au poids du titre et sans jamais l'afficher : ces mots ne sont par construction jamais dans la note, et sans eux la question passait sous le seuil de confiance et descendait se faire reformuler, payant des jetons pour dégrader une citation exacte (US-141 / CA5, CA7)
+- Vérifie plutôt que suppose les trois comportements que l'existant couvrait déjà : un membre parti perd l'accès à la mémoire par le seul filtre de potager courant, la purge d'un potager emporte sa mémoire, et un potager archivé la garde consultable en lecture seule (US-141 / CA10, CA12, CA13)
+
+### 📚 Corpus de connaissance
+- Complète la fiche « Noter une observation au potager » de trois sections — retrouver une note ancienne, ce que la mémoire garde et ce qu'elle ne garde pas, et la distinction des deux registres — sans quoi le corpus décrirait une application qui n'existe plus. Mesure du corpus de fonctionnement portée à 65 questions : 65/65 dans les trois premiers résultats, dont 58 en tête (US-141, US-099 / CA9)
+
+## [v3.57.0] — 2026-09-07
+
+### 🚀 Nouveautés
+- Sait enfin répondre à « qu'est-ce qu'ils ont ? » : vingt fiches d'agronomie couvrent les **dix cultures réellement suivies** — tomate, haricot, courgette, chou, carotte, concombre, cornichon, poivron, ail, blette — avec leurs maladies, leurs ravageurs et leurs troubles décrits par le symptôme observable, puis les gestes d'entretien, de récolte et de conservation (US-140)
+- Retrouve la bonne fiche à partir des **mots du jardinier** et non du nom de la maladie : « le cul noir », « de la poudre blanche », « des taches marron qui remontent », « deux ou trois jambes » ramènent la section qui répond. Mesuré sur 66 questions écrites au style dicté : 66 dans les trois premiers résultats, dont 64 en tête (US-140 / CA6, CA11)
+- Accompagne désormais toute réponse tirée d'une fiche **non encore relue par un jardinier** d'une réserve explicite, en toutes lettres : le niveau de confiance était jusqu'ici un engagement interne dont rien ne parvenait au jardinier (US-140 / CA8)
+- Présente les causes possibles **par ordre de probabilité** au lieu d'affirmer : « l'excès d'eau est plus probable qu'une carence », jamais « tes courgettes ont trop d'eau ». La consigne vaut pour les fiches comme pour l'étage qui rédige (US-140 / CA9)
+- Ne donne aucun dosage ni produit de traitement, ni dans les fiches ni dans les réponses rédigées : l'assistant conseille la conduite de culture, il n'est pas conseiller en traitement (US-140 / CA10)
+
+### 🔧 Améliorations techniques
+- Refuse à l'ingestion tout document dont la **licence n'est pas établie ou sort du socle** — CC-BY-SA en tête — avant la moindre écriture, et sans dérogation. Le socle n'est pas redéfini pour l'occasion : c'est celui du registre des sources, déjà opposé aux imports du référentiel structuré (US-140 / CA2, CA3)
+- Rend la relecture **exécutable** plutôt que promise : `tools/controler_corpus_agronomie.py` oppose au corpus les refus que l'US énonçait en prose — aucun chiffre, aucune date, aucune durée, aucune association ni rotation, aucun dosage, une tournure d'hypothèse dans chaque section de diagnostic. Il tourne au déploiement, avant l'ingestion, sur les quatre chemins (US-140 / CA7, CA7bis, CA9, CA10, CA13)
+- Affiche l'attribution du registre des sources aussi sur les réponses **réécrites** par l'étage de raisonnement, pas seulement sur celles servies mot pour mot : une réponse rédigée à partir d'une fiche en est une œuvre dérivée (US-140 / CA4)
+- Impose un plan de fiche identique pour toutes — deux thèmes par culture, portés par le nom du fichier, et trois lignes de métadonnée par section — sans quoi le découpage en fragments devient irrégulier et le classement avec lui (US-140 / CA13 c)
+- Consigne la mesure et sa conséquence : au-dessus du seuil, la question de la **recherche sémantique** reste fermée. Enrichir le vocabulaire des sections coûte quelques minutes par fiche et rend le moteur vectoriel inutile à ce stade (US-140 / CA12)
+
+### 🐛 Corrections
+- Rétablit quatre corpus de mesure déplacés par erreur dans `tests/corpus/doc_app/`, où ils étaient invisibles des tests qui les lisent : 72 tests d'US-094 et d'US-098 échouaient sur des fichiers pourtant présents dans le dépôt. Le dossier dupliquait par ailleurs à l'identique le corpus de `data/connaissance/doc_app/`
+
 ## [v3.56.0] — 2026-09-07
 
 ### 🚀 Nouveautés

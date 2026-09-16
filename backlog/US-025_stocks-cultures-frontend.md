@@ -1,5 +1,8 @@
 # US-025 : Vue stocks cultures en cours
 
+**ID :** US-025
+**Titre :** Vue stocks cultures en cours
+
 **En tant que** : Admin  
 **Je veux** : consulter en un coup d'œil les stocks de toutes mes cultures (végétatives et reproductrices) avec quantités et unités  
 **Afin que** : je sache ce qu'il me reste à récolter ou ce qui a déjà été perdu, sans ouvrir le bot Telegram

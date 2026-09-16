@@ -17,7 +17,7 @@ index_terms:
 **Intention :** comprendre
 **On parle aussi de :** statistiques ; synthèse ; où j'en suis ; état des lieux ; tableau de bord ; résumé
 
-Le bilan présente le jardin en deux temps. D'un côté les cultures dont le pied disparaît à la récolte, avec le nombre de pieds encore en place et ce qui a déjà été récolté ; de l'autre celles qui produisent en continu, avec les pieds vivants et le poids cumulé de leur production. Le bilan reprend ensuite les semis en cours et l'état de la pépinière. Tout y est recalculé à la demande depuis les gestes enregistrés : aucune valeur n'y est figée.
+Le bilan présente le jardin en deux temps. D'un côté les cultures dont le pied disparaît à la récolte, avec le nombre de pieds encore en place et ce qui a déjà été récolté ; de l'autre celles qui produisent en continu, avec les pieds vivants et le poids cumulé de leur production. Le bilan reprend ensuite les semis en cours, compte les semis de la saison par filière — en pépinière, en pleine terre, et sans filière précisée, ce dernier total étant affiché plutôt que passé sous silence — puis l'état de la pépinière. Tout y est recalculé à la demande depuis les gestes enregistrés : aucune valeur n'y est figée.
 
 ## Voir le détail d'une culture, variété par variété
 

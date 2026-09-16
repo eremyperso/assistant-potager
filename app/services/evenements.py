@@ -23,6 +23,7 @@ from typing import Optional
 from sqlalchemy import func, or_, and_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.services import contexte_semis as svc_contexte_semis
 from app.services.context import TenantContext
 from app.services.permissions import require_role, require_potager_non_archive
 from database.models import Evenement, Parcelle
@@ -684,7 +685,15 @@ def liberer_evenements_parcelle(db: Session, ctx: TenantContext, parcelle_id: in
         Evenement.parcelle_id == parcelle_id, Evenement.potager_id == ctx.potager_id
     )
     nb = q.count()
+    # [US-141 / CA11] Les notes portées par cette parcelle sont relevées AVANT
+    # le détachement : après, `parcelle_id` est nul et plus rien ne permet de
+    # savoir lesquelles réindexer. Leur titre nomme une parcelle qui n'existe
+    # plus — le laisser en place rendrait la note introuvable sous le seul nom
+    # que le jardinier connaît encore, celui qu'il n'emploie plus.
+    notes_liees = [e for e in q.all() if (e.type_action or "").lower() == "observation"]
     q.update({"parcelle_id": None}, synchronize_session="fetch")
+    for note in notes_liees:
+        _indexer_memoire(db, note)
     # [US-095 / CA5] La parcelle disparaît : toute réponse mémorisée sur
     # l'occupation ou la place disponible est fausse à partir d'ici. Culture
     # non précisée → toutes les entrées du potager tombent, conformément à
@@ -750,6 +759,51 @@ def _invalider_cache(db: Session, ctx: TenantContext, culture, type_action) -> N
     cache_questions.invalider_pour_evenement(db, ctx.potager_id, culture, type_action)
 
 
+# ── Indexation de la mémoire du potager [US-141 / CA2, CA11] ─────────────────
+def _indexer_memoire(db: Session, event) -> None:
+    """[US-141 / CA2] Met la mémoire du potager en accord avec cette écriture.
+
+    Branchée au MÊME endroit que l'invalidation de cache ci-dessus, et pour la
+    même raison : il n'existe qu'un seul lieu dans l'application où « une
+    observation vient de changer », et c'est cette couche. Une indexation
+    dupliquée dans le bot et dans l'API divergerait au premier chemin
+    d'écriture ajouté.
+
+    [Note technique de l'US] **Un échec d'indexation ne fait jamais échouer
+    l'enregistrement.** La note prime sur son index : le jardinier a écrit
+    quelque chose, cela doit être conservé même si la recherche n'en sait rien
+    pour l'instant. L'index se rattrape — `tools/indexer_memoire_potager.py`
+    existe exactement pour cela. L'inverse, perdre une note parce que son
+    indexation a échoué, serait irréparable.
+
+    Appelée AVANT le `commit()` de l'appelant, comme `_invalider_cache` : une
+    écriture annulée n'indexe rien.
+    """
+    try:
+        from app.services import memoire_potager
+
+        memoire_potager.synchroniser_evenement(db, event)
+    except Exception as e:
+        log.warning(
+            "⚠️ [US-141] Indexation de la mémoire impossible (%s) — la note est enregistrée, "
+            "l'index se rattrapera à la prochaine reprise", type(e).__name__,
+        )
+
+
+def _oublier_memoire(db: Session, ctx: TenantContext, evenement_id: int) -> None:
+    """[US-141 / CA11] Retire de la mémoire la note d'un événement qui disparaît.
+
+    Appelée AVANT la suppression : « aucune mémoire orpheline ne survit à la
+    donnée dont elle dérive » ne se vérifie qu'à condition que le retrait parte
+    dans la même transaction que la suppression."""
+    try:
+        from app.services import memoire_potager
+
+        memoire_potager.oublier_evenement(db, ctx.potager_id, evenement_id)
+    except Exception as e:
+        log.warning("⚠️ [US-141] Oubli de la mémoire impossible (%s)", type(e).__name__)
+
+
 # ── Écriture ──────────────────────────────────────────────────────────────────
 def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
     """[POST /parse, POST /voice-ACTION] Crée un événement depuis un item parsé par Groq,
@@ -783,6 +837,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         potager_id=ctx.potager_id,
     )
     if event.culture:
@@ -833,6 +888,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -904,6 +960,9 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         type_organe_recolte=type_organe_semis,
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
+        # [US-069 / CA1-CA3] Dit dans la phrase, ou confirmé au bot — jamais
+        # une proposition restée sans réponse (`_contexte_propose`).
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -913,6 +972,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     log.info(
         f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} "
         f"| qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}"
+        f" | contexte_semis={event.contexte_semis}"
     )
     return event
 
@@ -1091,6 +1151,13 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
+    # [US-141 / CA2] `flush()` avant l'indexation : la référence du document de
+    # mémoire dérive de l'identifiant de l'événement, qui n'existe pas avant.
+    # L'ensemble part dans un seul `commit()` — l'indexation est donc
+    # automatique à l'enregistrement, sans action du jardinier ni second aller-
+    # retour en base perceptible.
+    db.flush()
+    _indexer_memoire(db, event)
     db.commit()
     db.refresh(event)
     log.info(f"💾 DB SAVE [US-038] : id={event.id} | culture={event.culture} | parcelle_id={event.parcelle_id}")
@@ -1166,6 +1233,18 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         quantite=_to_float(quantite_final),
     )
 
+    # [US-069 / CA1, CA4] Le contexte se corrige comme tout champ — et tombe de
+    # lui-même si la correction fait de l'événement autre chose qu'un semis. Une
+    # valeur illisible, ou un contexte demandé sur un autre geste, est refusé ici,
+    # avant toute mutation : jamais un « aucun » silencieux à la place.
+    est_semis_final = normalize_action(action_final) == svc_contexte_semis.ACTION_SEMIS
+    if "contexte_semis" in corrections:
+        contexte_final = svc_contexte_semis.normaliser_contexte(corrections["contexte_semis"])
+        if contexte_final is not None and not est_semis_final:
+            raise ValueError("Le contexte pépinière / pleine terre ne s'applique qu'à un semis.")
+    else:
+        contexte_final = event.contexte_semis if est_semis_final else None
+
     mapping = {
         "action": "type_action", "culture": "culture", "variete": "variete",
         "quantite": "quantite", "unite": "unite", "parcelle": "parcelle",
@@ -1176,6 +1255,8 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         if champ == "_parcelle_id":
             continue
         col = mapping.get(champ, champ)
+        if champ == "contexte_semis":
+            continue   # [US-069 / CA4] traité après la boucle, sur l'action FINALE
         if champ == "date":
             setattr(event, "date", parse_date(valeur))
         elif champ == "quantite":
@@ -1187,11 +1268,20 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         elif hasattr(event, col):
             setattr(event, col, valeur)
 
+    # [US-069 / CA1, CA4] Contexte validé AVANT toute mutation (voir plus haut).
+    event.contexte_semis = contexte_final
+
     event.texte_original = (event.texte_original or "") + trace
     # [US-095 / CA7] Une correction périme au même titre qu'une création — les
     # deux états, l'ancien et le nouveau.
     _invalider_cache(db, ctx, culture_avant, action_avant)
     _invalider_cache(db, ctx, event.culture, event.type_action)
+    # [US-141 / CA11] C'est le texte CORRIGÉ qui doit ressortir. `synchroniser_`
+    # gère les trois cas d'un même geste : une note corrigée voit ses fragments
+    # remplacés, une note qui cesse d'en être une (action corrigée, commentaire
+    # vidé) voit son document partir, et un événement structuré corrigé n'écrit
+    # toujours rien.
+    _indexer_memoire(db, event)
     db.commit()
     db.refresh(event)
     return event
@@ -1208,6 +1298,9 @@ def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> b
     # — et une réponse mémorisée qui survivrait à la disparition de la ligne
     # dont elle dérive est exactement le défaut que l'US interdit.
     _invalider_cache(db, ctx, event.culture, event.type_action)
+    # [US-141 / CA11] Même raison, même ordre : lu et retiré AVANT la
+    # suppression, dans la même transaction.
+    _oublier_memoire(db, ctx, evenement_id)
     db.delete(event)
     db.commit()
     log.info(f"🗑 SUPPRESSION     : id={evenement_id}")
@@ -1346,6 +1439,12 @@ def deplacer_evenements(
         event.parcelle_id = parcelle_id_cible
         trace = f" | [DÉPL {today}] parcelle: {ancienne} → {nom_affiche}"
         event.texte_original = (event.texte_original or "") + trace
+        # [US-141 / CA11] Une note déplacée doit se retrouver sous sa NOUVELLE
+        # parcelle. `evenements_localises_pour_maj` ne rend en pratique que des
+        # plantations, mais l'appel est posé sur la boucle plutôt que sur une
+        # hypothèse : c'est le fait de changer `parcelle_id` qui périme
+        # l'index, pas le type de l'événement.
+        _indexer_memoire(db, event)
         nb_updated += 1
     # [US-095 / CA5] Les événements changent de parcelle : l'occupation des
     # deux parcelles, l'ancienne comme la nouvelle, est périmée.

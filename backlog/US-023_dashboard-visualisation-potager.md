@@ -1,5 +1,8 @@
 # US-023 : Socle technique frontend — initialisation, layout, auth, dark/light mode
 
+**ID :** US-023
+**Titre :** Socle technique frontend — initialisation, layout, auth, dark/light mode
+
 **En tant que** : Admin  
 **Je veux** : disposer d'une application web fonctionnelle avec navigation, authentification légère et support dark/light mode  
 **Afin que** : toutes les vues suivantes (parcelles, stocks, pépinière, historique, graphiques) puissent être développées sur une base stable et cohérente

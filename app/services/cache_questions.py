@@ -771,7 +771,7 @@ def invalider_pour_evenement(
         return 0
 
 
-def invalider_par_fragment(db: Session, fragment_id: str) -> int:
+def invalider_par_fragment(db: Session, fragment_id: str, *, commit: bool = True) -> int:
     """[CA10] Supprime les réponses figées dérivées d'un fragment de
     connaissance corrigé ou réingéré.
 
@@ -782,6 +782,13 @@ def invalider_par_fragment(db: Session, fragment_id: str) -> int:
     existe et est testée dès maintenant pour que corriger une fiche
     agronomique ne laisse pas vivre des mois une réponse erronée le jour où
     le socle de connaissance arrivera.
+
+    [US-141] `commit=False` pour un appelant qui est DÉJÀ dans une transaction
+    d'écriture — l'indexation de la mémoire du potager, branchée au cœur de la
+    correction d'une observation. Commiter là revient à valider à mi-chemin une
+    écriture que l'appelant n'a pas fini de composer, et à la rendre
+    irrécupérable si la suite échoue. L'outil d'ingestion, lui, garde le
+    `commit` par défaut : il n'a pas de transaction englobante.
     """
     if not fragment_id:
         return 0
@@ -790,7 +797,8 @@ def invalider_par_fragment(db: Session, fragment_id: str) -> int:
         .filter(QuestionCache.fragment_id == fragment_id)
         .delete(synchronize_session=False)
     )
-    db.commit()
+    if commit:
+        db.commit()
     if nb:
         log.info("♻️ CACHE QUESTION │ invalidé=%d │ fragment=%s", nb, fragment_id)
     return nb

@@ -176,6 +176,12 @@ TABLES_RATTACHEES: tuple[tuple[str, str, str], ...] = (
     # qui viennent d'ailleurs (un code EPPO importé, un nom saisi au bot).
     ("bioagresseur", "source_id", "nom_commun_fr"),
     ("culture_bioagresseur", "source_id", "frequence"),
+    # [US-068] Une origine par fenêtre et par durée : une durée importée et la
+    # fenêtre corrigée à côté se retirent séparément. L'itinéraire porte la
+    # sienne (celle qui l'a créé), sans emporter ses valeurs.
+    ("itineraire_cultural", "source_id", "nom"),
+    ("fenetre_culturale", "source_id", "phase"),
+    ("duree_culturale", "source_id", "etape"),
 )
 
 

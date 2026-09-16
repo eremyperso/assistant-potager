@@ -154,6 +154,15 @@ export const api = {
   // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
   // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
   plan:       (dateRef, potagerId) => get(`/plan${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  // [US-176 / CA11] Calendrier conseillé de toutes les cultures de l'écran Plan, en un appel
+  // [US-070 / CA8] dateRef : les projections recalées se placent à la date de référence
+  calendriersPlan: (cultures, potagerId, dateRef) => {
+    const p = new URLSearchParams()
+    for (const c of cultures) p.append('culture', c)
+    if (potagerId) p.append('potager_id', potagerId)
+    if (dateRef) p.append('date_ref', dateRef)
+    return get(`/plan/calendriers?${p.toString()}`)
+  },
   stats:      (dateRef, potagerId) => get(`/stats${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-072] Détail par variété toutes cultures confondues, avec parcelles — écran Stocks (US-073)
   statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),

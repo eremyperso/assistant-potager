@@ -511,7 +511,10 @@ def test_us099_ca12_une_question_sans_fiche_est_une_issue_vide(corpus, sans_appe
     """CA12 — une question de fonctionnement hors corpus ne trouve rien, et le
     dit. C'est cette issue, et non un silence, qui alimente la rédaction."""
     db, _ = corpus
-    contexte = connaissance.rechercher(db, CTX, "c'est quoi le calendrier lunaire ?")
+    # [US-068] « calendrier lunaire » servait de témoin jusqu'à l'arrivée de la
+    # fiche du calendrier cultural : le mot « calendrier » est désormais couvert,
+    # la question témoin doit donc rester HORS corpus par tous ses mots.
+    contexte = connaissance.rechercher(db, CTX, "c'est quoi la lune rousse ?")
     assert contexte.issue == connaissance.ISSUE_VIDE
     assert contexte.passages == ()
 
@@ -597,12 +600,12 @@ def test_us099_gherkin_question_sans_fiche_remontee_pour_redaction(corpus, monke
     reponse_modele = ReponseLLM(texte="Je ne sais pas encore répondre à cela.", modele="mock",
                                 appel_type=passerelle.TYPE_QUESTION, tokens_in=5, tokens_out=5)
     with patch("llm.passerelle.appeler_chat", return_value=reponse_modele):
-        routeur.repondre_avec_cascade(CTX, "c'est quoi le calendrier lunaire ?")
+        routeur.repondre_avec_cascade(CTX, "c'est quoi la lune rousse ?")
 
     ligne = db.query(RoutageLog).order_by(RoutageLog.id.desc()).first()
     assert ligne.issue_savoir == connaissance.ISSUE_VIDE
     lacunes = svc_metriques.questions_sans_savoir(db)
-    assert any("calendrier lunaire" in l["question_normalisee"] for l in lacunes)
+    assert any("lune rousse" in l["question_normalisee"] for l in lacunes)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

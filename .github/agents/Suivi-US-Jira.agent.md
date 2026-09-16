@@ -28,6 +28,13 @@ lancer après une session de rédaction avec Persona PO (une ou plusieurs US),
 pour les voir apparaître dans Jira et les organiser en sprint **avant** de
 décider laquelle implémenter. Ne déclenche jamais Developer ni QA.
 
+**Incidents (`backlog/INC-NNN_*.md`)** : les trois commandes ci-dessous
+traitent un incident exactement comme une US — seul le préfixe `INC-` change,
+et bascule le type d'issue créé sur `JIRA_ISSUE_TYPE_INCIDENT` (`Bug` par
+défaut) au lieu de `JIRA_ISSUE_TYPE` (`Story`). La rédaction de la fiche
+elle-même n'est pas de ton ressort : c'est `Analyste-Incident.agent.md`, pas
+Persona PO, qui la produit.
+
 **2. Créer le ticket d'UNE seule US** (filet de sécurité côté Orchestrateur —
 voir `Orchestrateur-US-Jira.agent.md` ÉTAPE 1, utilisé seulement si `sync-backlog`
 n'a pas encore été lancé pour cette US précise) :

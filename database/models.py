@@ -24,6 +24,8 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-098] Ajout des modèles KnowledgeDocument et KnowledgeChunk (socle de
          connaissance interrogeable en plein texte) + colonnes score_savoir /
          issue_savoir sur routage_logs
+[US-068] Ajout du référentiel de calendrier cultural (ItineraireCultural,
+         FenetreCulturale, DureeCulturale) et de Potager.zone_climatique
 """
 from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
 # [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
@@ -111,6 +113,14 @@ class Potager(Base):
     etat             = Column(String(20), nullable=False, default="actif", server_default="actif")
     archive_le       = Column(DateTime, nullable=True)   # renseigné par US-083
     supprime_le      = Column(DateTime, nullable=True)   # soft-delete + délai de grâce, US-084
+    # [US-068 / CA7] Zone climatique CHOISIE par le jardinier — 'oceanique' |
+    # 'continental' | 'mediterraneen' | 'montagnard' (sans accent en base, comme
+    # `etat`). NULL = aucun choix explicite : la zone se DÉDUIT alors de la
+    # localisation, à la lecture, puis retombe sur la zone par défaut (CA8).
+    # Aucune zone déduite n'est jamais stockée ici — une seule règle de
+    # déduction, `app.services.calendrier_cultural.zone_depuis_localisation`,
+    # et un potager relocalisé suit sa nouvelle localisation sans rejeu.
+    zone_climatique  = Column(String(20), nullable=True)
 
 
 class PotagerMembre(Base):
@@ -199,6 +209,13 @@ class Evenement(Base):
     # d'écriture qui ne sait pas conclure — jamais deviné, voir CA7).
     # Instrumentation seule, même invariant que `origine_parsing` ci-dessus.
     date_source = Column(String, nullable=True)
+
+    # [US-069 / CA1 / migration_v47] Contexte d'un SEMIS : "pepiniere" (hors sol,
+    # en godet) | "pleine_terre" (semis direct en parcelle) | NULL (non précisé,
+    # ou geste autre qu'un semis). Jamais présumé : NULL reste NULL (CA5).
+    # Ne pilote AUCUN calcul de stock (CA8) — le seul lecteur est
+    # app/services/contexte_semis.py (statistiques, fenêtre conseillée).
+    contexte_semis = Column(String(16), nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
@@ -382,6 +399,100 @@ class ReferentielSource(Base):
     # aussi ce qui distingue les licences acceptables : `proprietaire` n'est
     # légitime que pour une origine interne, jamais pour un contenu importé.
     importee            = Column(Boolean, nullable=False, default=True)
+
+
+class ItineraireCultural(Base):
+    """
+    [US-068 / CA1] Itinéraire cultural d'une culture — « standard », « culture
+    précoce », « culture d'hiver »… Une CONDUITE, jamais une variété : aucune
+    source réutilisable ne descend au cultivar, et une variété hérite de
+    l'itinéraire sous lequel elle est conduite.
+
+    Table à part plutôt que colonnes sur `culture_config` : une culture porte
+    plusieurs itinéraires, chacun avec ses fenêtres (par zone) et ses durées.
+
+    [CA11] `potager_id` NULL = calendrier PARTAGÉ ; non NULL = calendrier
+    PERSONNALISÉ d'un potager — la convention de fiche personnalisée de
+    `culture_config` (US-040), réappliquée ici parce qu'elle ne peut pas l'être
+    sur `culture_config` elle-même (`nom` y est UNIQUE : deux fiches « tomate »,
+    une partagée et une locale, sont impossibles). Un itinéraire personnalisé
+    REMPLACE, pour son potager seulement, l'itinéraire partagé de même nom
+    (copie à la première correction) : un calendrier est une préférence
+    légitime, pas un fait botanique — contrairement à la famille (US-067/CA7).
+    """
+    __tablename__ = "itineraire_cultural"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    culture_id    = Column(Integer, ForeignKey("culture_config.id"), nullable=False, index=True)
+    nom           = Column(String, nullable=False)
+    # [CA12] Casse/accents indifférents — même stratégie que les autres noms.
+    nom_normalise = Column(String, nullable=False)
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    source_id     = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    culture_rel   = relationship("CultureConfig", foreign_keys=[culture_id])
+
+
+class FenetreCulturale(Base):
+    """
+    [US-068 / CA2, CA6] Fenêtre conseillée d'un itinéraire, POUR UNE ZONE
+    climatique : semis en pépinière, semis en pleine terre, ou récolte.
+
+    Une ligne par (itinéraire, zone, phase) : une fenêtre absente est une
+    fenêtre VIDE — une culture qui ne se sème jamais en godet n'a simplement pas
+    de ligne `semis_pepiniere`. Granularité au mois, bornes incluses ; une
+    fenêtre peut chevaucher la fin d'année (`mois_debut` > `mois_fin`, ex.
+    novembre → février).
+
+    `potager_id` est dénormalisé depuis l'itinéraire (toujours identique) : c'est
+    ce qui permet la même policy RLS que `culture_bioagresseur`, sans jointure.
+    `source_id` par fenêtre : une fenêtre corrigée par le jardinier et ses
+    voisines importées gardent chacune leur origine.
+    """
+    __tablename__ = "fenetre_culturale"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    itineraire_id  = Column(Integer, ForeignKey("itineraire_cultural.id", ondelete="CASCADE"), nullable=False, index=True)
+    # 'oceanique' | 'continental' | 'mediterraneen' | 'montagnard'
+    zone_climatique = Column(String(20), nullable=False)
+    # 'semis_pepiniere' | 'semis_pleine_terre' | 'recolte'
+    phase          = Column(String(20), nullable=False)
+    mois_debut     = Column(Integer, nullable=False)   # 1..12
+    mois_fin       = Column(Integer, nullable=False)   # 1..12
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    source_id      = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("itineraire_id", "zone_climatique", "phase", name="uq_fenetre_culturale"),
+    )
+
+
+class DureeCulturale(Base):
+    """
+    [US-068 / CA3, CA4, CA6] Durée conseillée d'un itinéraire, COMMUNE à toutes
+    les zones : semis → levée, semis → première récolte, semis → repiquage (ce
+    dernier pour un itinéraire passant par la pépinière seulement).
+
+    En jours, fourchette possible (`jours_min` ≤ `jours_max`, égaux pour une
+    valeur unique), ou mention libre (« vivace ») pour ce qui n'en relève pas —
+    jamais les deux. Une durée absente se lit « — » : l'application n'invente
+    aucun délai (CA13).
+    """
+    __tablename__ = "duree_culturale"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    itineraire_id = Column(Integer, ForeignKey("itineraire_cultural.id", ondelete="CASCADE"), nullable=False, index=True)
+    # 'levee' | 'recolte' | 'repiquage'
+    etape         = Column(String(20), nullable=False)
+    jours_min     = Column(Integer, nullable=True)
+    jours_max     = Column(Integer, nullable=True)
+    mention       = Column(String(60), nullable=True)
+    potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    source_id     = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    __table_args__ = (
+        UniqueConstraint("itineraire_id", "etape", name="uq_duree_culturale"),
+    )
 
 
 class AssociationCulture(Base):
@@ -577,6 +688,140 @@ Index(
     postgresql_where=CultureBioagresseur.potager_id.isnot(None),
 )
 
+# [US-068 / CA11] Un seul itinéraire PARTAGÉ par (culture, nom), et un seul
+# itinéraire PERSONNALISÉ par (culture, nom, potager) — unicité partielle, même
+# motif que `culture_bioagresseur`.
+Index(
+    "uq_itineraire_cultural_partage",
+    ItineraireCultural.culture_id,
+    ItineraireCultural.nom_normalise,
+    unique=True,
+    sqlite_where=ItineraireCultural.potager_id.is_(None),
+    postgresql_where=ItineraireCultural.potager_id.is_(None),
+)
+Index(
+    "uq_itineraire_cultural_local",
+    ItineraireCultural.culture_id,
+    ItineraireCultural.nom_normalise,
+    ItineraireCultural.potager_id,
+    unique=True,
+    sqlite_where=ItineraireCultural.potager_id.isnot(None),
+    postgresql_where=ItineraireCultural.potager_id.isnot(None),
+)
+
+
+class Symptome(Base):
+    """
+    [US-165 / CA1] Ce que le jardinier VOIT, décrit avec ses mots.
+
+    Un symptôme n'appartient à AUCUNE culture, et c'est la décision de
+    conception centrale de l'US : « des traits orange qui partent en poussière »
+    est le même symptôme sur l'ail et sur le poireau. C'est le CROISEMENT avec
+    `CultureBioagresseur` (US-162) qui décide de la piste. Une colonne
+    `culture_id` ici aurait dupliqué chaque symptôme autant de fois qu'il y a de
+    cultures qui le montrent, et aurait rendu le cas de désambiguïsation du CA14
+    structurellement intraitable.
+
+    [CA1] `synonymes` est le cœur de la table, pas un complément. La mesure du
+    25/08/2026 a invalidé l'hypothèse de départ — le vocabulaire des fiches est
+    technique (« oïdium », « nécrose apicale »), celui des questions est courant
+    (« poudre blanche », « cul noir »). Écrire les DEUX registres ici supprime la
+    majeure partie du besoin de recherche sémantique : c'est l'arbitrage tranché
+    de l'US, et `recherche_fts` est ce qui le rend exécutable.
+
+    ⚠️ `app/services/prediagnostic.py` est le SEUL point d'écriture de cette
+    table : `recherche_fts` est maintenu à l'écriture, une insertion faite
+    ailleurs laisserait le vecteur vide, donc le symptôme introuvable — même
+    invariant que `KnowledgeChunk` et `app.services.connaissance`.
+    """
+    __tablename__ = "symptome"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    libelle           = Column(String, nullable=False)
+    # Casse/accents indifférents à la résolution — même stratégie que
+    # Bioagresseur.nom_normalise et utils.culture_resolve.normaliser_culture.
+    libelle_normalise = Column(String, nullable=False, index=True)
+    # [CA1] 'feuille' | 'fruit' | 'tige' | 'racine' | 'plant entier' | 'fleur' |
+    # 'graine' | 'bulbe'. Vocabulaire fermé validé par app.services.prediagnostic,
+    # pas par un CHECK — voir ORGANES pour les trois valeurs ajoutées et pourquoi.
+    organe            = Column(String, nullable=False)
+    # [CA1] Les deux registres, séparés par ' ; ' — jamais affichés au jardinier,
+    # ils ne servent qu'à l'index.
+    synonymes         = Column(Text, nullable=True)
+    # [CA9] TSVECTOR sous PostgreSQL, texte indexable sous SQLite (tests), même
+    # variante que KnowledgeChunk.recherche_fts et même configuration de
+    # dictionnaire (`french_sans_accent`). Maintenu à l'ÉCRITURE.
+    recherche_fts     = Column(TSVECTOR().with_variant(Text(), "sqlite"), nullable=True)
+    # [CA3 d'US-162] NULL = symptôme partagé entre tous les potagers.
+    potager_id        = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    # [CA4 d'US-162] Traçabilité obligatoire, jamais NULL.
+    source_id         = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    source_rel        = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+class SymptomeBioagresseur(Base):
+    """
+    [US-165 / CA2] L'arête PONDÉRÉE symptôme × bioagresseur.
+
+    `poids` exprime une plausibilité RELATIVE dans ]0, 1]. Il ordonne, il ne se
+    montre jamais : `app.services.prediagnostic` ne le verse pas dans ce qu'il
+    rend, et c'est cette absence — pas une consigne de rédaction — qui empêche
+    qu'un pourcentage soit un jour affiché. Le nombre n'est du reste que la
+    transcription d'un ordre déjà écrit en toutes lettres dans les fiches
+    d'US-140 (« évoque en premier lieu », « vient loin derrière »).
+
+    [CA6] `niveau_confiance` reprend le vocabulaire d'US-098 (`verifie` |
+    `indicatif`) au lieu d'en inventer un second : une arête `indicatif` est
+    servie avec `connaissance.RESERVE_INDICATIF`, mot pour mot.
+
+    [CA7] Aucune colonne de produit, de dosage ni de conduite à tenir — même
+    garantie structurelle que `CultureBioagresseur`.
+    """
+    __tablename__ = "symptome_bioagresseur"
+
+    id               = Column(Integer, primary_key=True, index=True)
+    symptome_id      = Column(Integer, ForeignKey("symptome.id"), nullable=False, index=True)
+    bioagresseur_id  = Column(Integer, ForeignKey("bioagresseur.id"), nullable=False, index=True)
+    poids            = Column(Float, nullable=False)
+    niveau_confiance = Column(String, nullable=False, default="indicatif")
+    potager_id       = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
+    source_id        = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+
+    symptome_rel     = relationship("Symptome", foreign_keys=[symptome_id])
+    bioagresseur_rel = relationship("Bioagresseur", foreign_keys=[bioagresseur_id])
+    source_rel       = relationship("ReferentielSource", foreign_keys=[source_id])
+
+
+# [US-165 / CA1] Unicité PARTIELLE du libellé : un seul symptôme PARTAGÉ par
+# libellé, mais un potager reste libre de décrire le sien (CA3 d'US-162).
+Index(
+    "uq_symptome_libelle_partage",
+    Symptome.libelle_normalise,
+    unique=True,
+    sqlite_where=Symptome.potager_id.is_(None),
+    postgresql_where=Symptome.potager_id.is_(None),
+)
+# [US-165 / CA2] Idempotence de l'import garantie en base : rejouer le manifeste
+# de symptômes ne peut pas créer de doublon d'arête, partagée comme locale.
+Index(
+    "uq_symptome_bio_partage",
+    SymptomeBioagresseur.symptome_id,
+    SymptomeBioagresseur.bioagresseur_id,
+    unique=True,
+    sqlite_where=SymptomeBioagresseur.potager_id.is_(None),
+    postgresql_where=SymptomeBioagresseur.potager_id.is_(None),
+)
+Index(
+    "uq_symptome_bio_local",
+    SymptomeBioagresseur.symptome_id,
+    SymptomeBioagresseur.bioagresseur_id,
+    SymptomeBioagresseur.potager_id,
+    unique=True,
+    sqlite_where=SymptomeBioagresseur.potager_id.isnot(None),
+    postgresql_where=SymptomeBioagresseur.potager_id.isnot(None),
+)
+
 
 class Parcelle(Base):
     """
@@ -702,6 +947,17 @@ class RoutageLog(Base):
     # rien ? », donc à « que faut-il écrire ensuite ? ».
     score_savoir           = Column(Float, nullable=True)
     issue_savoir           = Column(String(16), nullable=True)
+
+    # [US-172 / CA18] Commande retenue par l'interpréteur et issue de sa
+    # proposition. NULL = la demande n'est pas passée par l'interpréteur, ce qui
+    # est le cas de l'écrasante majorité des lignes (les questions). Deux
+    # colonnes distinctes de `issue_savoir` ci-dessus : y loger l'issue d'une
+    # validation de commande rendrait illisibles les deux mesures à la fois.
+    # C'est `issue_interpretation IN ('refusee', 'abandonnee')` qui répond à
+    # « quelles formulations le jardinier n'a pas obtenues ? », donc à « quelles
+    # règles enrichir ensuite ? ».
+    commande_interpretee   = Column(String(64), nullable=True)
+    issue_interpretation   = Column(String(16), nullable=True)
 
     __table_args__ = (
         Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),

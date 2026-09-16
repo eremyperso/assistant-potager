@@ -45,3 +45,17 @@ Plusieurs gestes peuvent être annoncés dans le même message, à raison d'un p
 **On parle aussi de :** date passée ; hier ; avant-hier ; la semaine dernière ; le cinq mars ; rattraper une saisie
 
 Une date énoncée dans la phrase est prise telle quelle : hier, avant-hier, lundi dernier ou une date complète reportent le geste au bon jour. Sans indication de date, le geste est daté du jour de la saisie, ce qui reste une supposition et non une certitude — c'est la raison pour laquelle les calculs de rotation raisonnent par saison plutôt qu'au jour près.
+
+## Demander une action à l'application en une phrase
+
+**Intention :** procédure
+**On parle aussi de :** énoncer une consigne ; sans retenir la commande ; piloter à la voix ; faire agir l'assistant en parlant ; créer ou renommer en parlant ; sans taper la commande exacte
+
+Une phrase ne sert pas qu'à rapporter ce qu'on a fait au jardin : elle sert aussi à demander une action à l'application. « Crée la parcelle du fond », « renomme la planche nord », « la serre est une pépinière », « montre-moi le bilan des tomates », « affiche le plan » sont comprises et exécutées, sans avoir à retenir la commande exacte, l'ordre de ses arguments ni le vocabulaire attendu pour ses valeurs. Un ordre et une question restent deux choses distinctes : une question reçoit une explication, un ordre agit.
+
+## Ce qui est relu avant d'être écrit
+
+**Intention :** comprendre
+**On parle aussi de :** vérifier avant ; récapitulatif chiffré ; valeur en toutes lettres ; se tromper de nom de parcelle ; erreur de dictée ; mal dicter un nom ; nom approchant
+
+Une demande qui modifie quelque chose est toujours récapitulée avant d'être exécutée, et le récapitulatif rappelle la commande équivalente — de quoi l'apprendre sans avoir eu à l'apprendre. Toute valeur chiffrée y est relue en chiffres et en toutes lettres avec son unité, parce qu'un « un » et un « dix » ne s'entendent pas de la même façon selon la qualité du micro. Un nom de parcelle mal dicté n'est jamais remplacé d'autorité par un nom voisin : le nom approchant est proposé, et rien ne se fait tant qu'il n'a pas été confirmé. Une demande à laquelle il manque une information ne échoue pas non plus : ce qui manque est demandé, valeurs possibles à l'appui.

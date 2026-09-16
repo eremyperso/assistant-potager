@@ -1,0 +1,1481 @@
+{
+  "_lisez_moi": [
+    "[US-165] Symptômes observables et suspicions pondérées — rédaction interne.",
+    "",
+    "CE FICHIER SE RELIT ET SE CORRIGE À LA MAIN. Il n'est produit par aucun",
+    "modèle de langage : son contenu est DÉRIVÉ des fiches déjà versionnées de",
+    "data/connaissance/agronomie/*-problemes.md (US-140) — le titre d'une section",
+    "donne le libellé, sa ligne « On parle aussi de : » donne les synonymes, et la",
+    "cause qu'elle nomme donne la piste. Rien n'y est ajouté qui n'ait d'abord été",
+    "écrit, relu et versionné dans une fiche.",
+    "",
+    "QUATRE BLOCS, DEUX NATURES CHACUN",
+    "  bioagresseurs            les IDENTITÉS qui manquaient au référentiel d'US-162 —",
+    "                           surtout des causes ABIOTIQUES et des carences, que",
+    "                           les sources phytosanitaires ne recensent pas et qui",
+    "                           sont pourtant la moitié de ce que voit un amateur.",
+    "  cultures_bioagresseurs   les arêtes de ces nouvelles identités vers les cultures.",
+    "  symptomes                ce que le jardinier VOIT, avec ses mots.",
+    "  symptomes_bioagresseurs  les suspicions pondérées.",
+    "L'import respecte cet ordre : une arête dont un côté n'existe pas encore est",
+    "comptée « ignorée », jamais fabriquée.",
+    "",
+    "UN SYMPTÔME N'APPARTIENT À AUCUNE CULTURE",
+    "C'est la décision de conception de l'US, et elle explique la forme des libellés :",
+    "« des traits orange qui partent en poussière sur les feuilles » est le MÊME",
+    "symptôme sur l'ail, sur le haricot et sur l'asperge. C'est le croisement avec",
+    "cultures_bioagresseurs (US-162) qui décide de la piste — rouille des alliacées,",
+    "rouille du haricot ou rouille de l'asperge. Écrire un symptôme par culture aurait",
+    "rendu ce croisement inutile et cette désambiguïsation impossible (CA14).",
+    "",
+    "COMMENT REMPLIR UN SYMPTÔME",
+    "  libelle   : ce qu'on VOIT, pas ce que c'est. « un dépôt blanc poudreux couvre",
+    "              les feuilles », jamais « oïdium » — le nom de la maladie est une",
+    "              conclusion, et ce fichier ne décrit que des observations.",
+    "  organe    : 'feuille' | 'fruit' | 'tige' | 'racine' | 'plant entier' |",
+    "              'fleur' | 'graine' | 'bulbe'",
+    "  synonymes : LE livrable, séparés par ' ; '. Les DEUX registres, celui du",
+    "              jardinier (« poudre blanche », « cul noir », « des bestioles ») ET",
+    "              celui de l'agronome (« oïdium », « nécrose apicale », « puceron »).",
+    "              C'est cette ligne qui fait fonctionner la recherche sans moteur",
+    "              vectoriel : quelques minutes par symptôme contre une infrastructure.",
+    "              Ne jamais y répéter un nom de culture — le croisement s'en charge,",
+    "              et le répéter ferait remporter le classement au mauvais symptôme.",
+    "",
+    "COMMENT REMPLIR UNE SUSPICION",
+    "  symptome         : libellé exact d'un symptôme du bloc ci-dessus.",
+    "  bioagresseur     : nom d'une identité connue (bloc ci-dessus ou US-162).",
+    "  poids            : plausibilité RELATIVE dans ]0, 1]. Elle ORDONNE et ne",
+    "                     s'affiche jamais — le jardinier ne verra jamais ce nombre,",
+    "                     et surtout jamais un pourcentage (CA2).",
+    "                     L'échelle transcrit la façon dont la fiche d'US-140 elle-même",
+    "                     hiérarchise, en toutes lettres :",
+    "                       0.85-0.95  « évoque en premier lieu », « la cause la plus",
+    "                                  probable », « très probablement », « presque",
+    "                                  toujours »",
+    "                       0.60-0.80  « le plus souvent », « souvent »",
+    "                       0.30-0.50  « possible mais moins probable », « vient loin",
+    "                                  derrière », « une piste à examiner »",
+    "                     Un poids n'est donc pas un avis : c'est une lecture. S'il",
+    "                     doit changer, c'est la fiche qui change d'abord.",
+    "  niveau_confiance : 'indicatif' (défaut) | 'verifie'. Ne passer à 'verifie'",
+    "                     qu'après un constat AU CHAMP. Une piste 'indicatif' est",
+    "                     servie avec la réserve d'US-140/CA8, mot pour mot.",
+    "",
+    "CE QU'ON N'ÉCRIT PAS ICI, JAMAIS (CA7)",
+    "  Aucun produit, aucun dosage, aucune conduite à tenir : il n'existe aucun champ",
+    "  où les mettre, et c'est délibéré (migration_v45). L'application n'est pas",
+    "  conseiller en traitement phytosanitaire.",
+    "",
+    "APRÈS TOUT IMPORT",
+    "  Le rappel du pré-diagnostic ne se suppose pas :",
+    "      python tools/mesurer_prediagnostic.py --detail",
+    "  Cible du CA11 : la bonne piste dans les trois premiers résultats pour au moins",
+    "  80 % des 19 entrées du périmètre v1. Les 25 entrées hors périmètre ne comptent",
+    "  pas dans ce taux (CA12) : elles mesurent l'honnêteté, pas le rappel."
+  ],
+  "source": {
+    "code": "redaction_interne",
+    "libelle": "Rédaction interne Assistant Potager",
+    "licence": "proprietaire",
+    "attribution": "Assistant Potager — rédaction interne",
+    "url": null,
+    "partageable": true
+  },
+  "redige_le": "2026-09-10",
+  "bioagresseurs": [
+    {
+      "nom_commun_fr": "enroulement physiologique",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "étiolement par manque de lumière",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "défaut de pollinisation",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "asphyxie racinaire",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "semis en sol froid et humide",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "coulure florale",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "racine fourchue",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "fendillement des racines",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "levée irrégulière",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "amertume du fruit",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "récolte tardive",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "excès d'eau avant récolte",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "maturité dépassée",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "excès d'azote",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "séchage insuffisant après récolte",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "arrosage irrégulier",
+      "nom_scientifique": null,
+      "categorie": "abiotique",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "faim d'azote",
+      "nom_scientifique": null,
+      "categorie": "carence",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "carence en calcium",
+      "nom_scientifique": null,
+      "categorie": "carence",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "oïdium des brassicacées",
+      "nom_scientifique": null,
+      "categorie": "champignon",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "mildiou des brassicacées",
+      "nom_scientifique": null,
+      "categorie": "champignon",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "pourriture blanche des alliacées",
+      "nom_scientifique": null,
+      "categorie": "champignon",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "cercosporiose de la betterave",
+      "nom_scientifique": null,
+      "categorie": "champignon",
+      "code_eppo": null
+    },
+    {
+      "nom_commun_fr": "mineuse de la betterave",
+      "nom_scientifique": null,
+      "categorie": "insecte",
+      "code_eppo": null
+    }
+  ],
+  "cultures_bioagresseurs": [
+    {
+      "culture": "tomate",
+      "bioagresseur": "enroulement physiologique",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "étiolement par manque de lumière",
+      "frequence": "courant",
+      "periode_risque": "février-avril"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "coulure florale",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "excès d'azote",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "étiolement par manque de lumière",
+      "frequence": "occasionnel",
+      "periode_risque": "février-avril"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "coulure florale",
+      "frequence": "courant",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "coulure florale",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "aubergine",
+      "bioagresseur": "étiolement par manque de lumière",
+      "frequence": "occasionnel",
+      "periode_risque": "février-avril"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "récolte tardive",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "amertume du fruit",
+      "frequence": "courant",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "récolte tardive",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "amertume du fruit",
+      "frequence": "courant",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "récolte tardive",
+      "frequence": "courant",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "potiron",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "courge butternut",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "pâtisson",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "courant",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "défaut de pollinisation",
+      "frequence": "occasionnel",
+      "periode_risque": "juin-août"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "excès d'eau avant récolte",
+      "frequence": "courant",
+      "periode_risque": "août-septembre"
+    },
+    {
+      "culture": "pastèque",
+      "bioagresseur": "excès d'eau avant récolte",
+      "frequence": "occasionnel",
+      "periode_risque": "août-septembre"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "excès d'eau avant récolte",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "fraise",
+      "bioagresseur": "excès d'azote",
+      "frequence": "courant",
+      "periode_risque": "mai-juin"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "semis en sol froid et humide",
+      "frequence": "courant",
+      "periode_risque": "avril-mai"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "coulure florale",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "haricot",
+      "bioagresseur": "levée irrégulière",
+      "frequence": "occasionnel",
+      "periode_risque": "avril-mai"
+    },
+    {
+      "culture": "haricot grimpant",
+      "bioagresseur": "semis en sol froid et humide",
+      "frequence": "courant",
+      "periode_risque": "avril-mai"
+    },
+    {
+      "culture": "petit pois",
+      "bioagresseur": "semis en sol froid et humide",
+      "frequence": "occasionnel",
+      "periode_risque": "février-mars"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "racine fourchue",
+      "frequence": "courant"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "fendillement des racines",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "levée irrégulière",
+      "frequence": "courant",
+      "periode_risque": "mars-mai"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "faim d'azote",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "racine fourchue",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "navet",
+      "bioagresseur": "maturité dépassée",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "maturité dépassée",
+      "frequence": "courant"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "fendillement des racines",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "oïdium des brassicacées",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "oïdium des brassicacées",
+      "frequence": "courant",
+      "periode_risque": "septembre-mars"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "mildiou des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "septembre-mars"
+    },
+    {
+      "culture": "chou",
+      "bioagresseur": "faim d'azote",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "brocoli",
+      "bioagresseur": "oïdium des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "septembre-mars"
+    },
+    {
+      "culture": "chou frisé",
+      "bioagresseur": "oïdium des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "septembre-mars"
+    },
+    {
+      "culture": "chou de Bruxelles",
+      "bioagresseur": "oïdium des brassicacées",
+      "frequence": "occasionnel",
+      "periode_risque": "septembre-mars"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "courant",
+      "periode_risque": "novembre-février"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "pourriture blanche des alliacées",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "ail",
+      "bioagresseur": "séchage insuffisant après récolte",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-août"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "pourriture blanche des alliacées",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "séchage insuffisant après récolte",
+      "frequence": "courant",
+      "periode_risque": "août-septembre"
+    },
+    {
+      "culture": "oignon",
+      "bioagresseur": "asphyxie racinaire",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "poireau",
+      "bioagresseur": "pourriture blanche des alliacées",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "bette",
+      "bioagresseur": "mineuse de la betterave",
+      "frequence": "courant",
+      "periode_risque": "mai-août"
+    },
+    {
+      "culture": "bette",
+      "bioagresseur": "cercosporiose de la betterave",
+      "frequence": "occasionnel",
+      "periode_risque": "juillet-septembre"
+    },
+    {
+      "culture": "bette",
+      "bioagresseur": "levée irrégulière",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "betterave",
+      "bioagresseur": "mineuse de la betterave",
+      "frequence": "courant",
+      "periode_risque": "mai-août"
+    },
+    {
+      "culture": "betterave",
+      "bioagresseur": "cercosporiose de la betterave",
+      "frequence": "courant",
+      "periode_risque": "juillet-septembre"
+    },
+    {
+      "culture": "épinard",
+      "bioagresseur": "mineuse de la betterave",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-août"
+    },
+    {
+      "culture": "épinard perpétuel",
+      "bioagresseur": "mineuse de la betterave",
+      "frequence": "occasionnel",
+      "periode_risque": "mai-août"
+    },
+    {
+      "culture": "salade",
+      "bioagresseur": "étiolement par manque de lumière",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "céleri",
+      "bioagresseur": "faim d'azote",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "tomate",
+      "bioagresseur": "carence en calcium",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "poivron",
+      "bioagresseur": "carence en calcium",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "concombre",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "cornichon",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "courgette",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "occasionnel"
+    },
+    {
+      "culture": "carotte",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "radis",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "courant"
+    },
+    {
+      "culture": "melon",
+      "bioagresseur": "arrosage irrégulier",
+      "frequence": "occasionnel"
+    }
+  ],
+  "symptomes": [
+    {
+      "libelle": "des taches brunes remontent depuis les feuilles du bas",
+      "organe": "feuille",
+      "synonymes": "taches marron sur les feuilles ; taches brunes ; taches brun-vert huileuses ; feuilles qui noircissent ; taches après la pluie ; feuillage brûlé ; tiges qui noircissent ; malade après un orage ; mildiou ; taches qui remontent"
+    },
+    {
+      "libelle": "une tache noire et sèche au bout du fruit",
+      "organe": "fruit",
+      "synonymes": "cul noir ; fruit pourri dessous ; tache noire sous le fruit ; nécrose apicale ; manque de calcium ; fond du fruit noir ; zone brune et sèche ; pourrit par en bas ; creusé sous le fruit"
+    },
+    {
+      "libelle": "les feuilles s'enroulent en cuillère vers le haut",
+      "organe": "feuille",
+      "synonymes": "feuilles enroulées ; feuilles en cuillère ; feuillage recroquevillé ; enroulement physiologique ; qui referme ses feuilles ; feuilles roulées"
+    },
+    {
+      "libelle": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "organe": "tige",
+      "synonymes": "pucerons ; bêtes noires sur les tiges ; bêtes vertes sous les feuilles ; bestioles collées en grappe ; feuilles collantes ; miellat ; fourmis sur le pied ; colonies sous les feuilles ; pousses crispées ; petites bêtes vertes ou noires"
+    },
+    {
+      "libelle": "les fruits se fendent sur le dessus",
+      "organe": "fruit",
+      "synonymes": "fruit éclaté ; fruit fendu ; craquelures ; peau qui craque ; qui s'ouvre ; fentes autour du pédoncule ; éclatement"
+    },
+    {
+      "libelle": "les jeunes semis font des tiges fines et molles qui s'allongent",
+      "organe": "tige",
+      "synonymes": "semis filants ; plants étiolés ; tiges fines et molles ; plants qui s'allongent ; pas assez de lumière ; jeunes plants qui se couchent ; tige pâle qui peine à se tenir"
+    },
+    {
+      "libelle": "un dépôt blanc poudreux couvre les feuilles",
+      "organe": "feuille",
+      "synonymes": "poudre blanche ; oïdium ; feuilles farineuses ; dépôt blanc ; feutrage blanc ; blanc sur le feuillage ; couvert de blanc ; truc gris poudreux ; dépôt gris ; comme saupoudré de farine ; poudreux"
+    },
+    {
+      "libelle": "les jeunes fruits jaunissent et pourrissent au bout",
+      "organe": "fruit",
+      "synonymes": "fruit avorté ; petit fruit qui pourrit ; mauvaise pollinisation ; bout du fruit mou ; plein de fleurs mais pas de fruits ; fruit qui ne grossit pas ; fruit jaune qui ramollit ; pas assez d'abeilles"
+    },
+    {
+      "libelle": "les feuilles sont trouées et les jeunes plants disparaissent la nuit",
+      "organe": "feuille",
+      "synonymes": "limaces ; escargots ; feuilles trouées ; mangé la nuit ; traces brillantes ; jeune plant qui disparaît ; bords grignotés ; il ne reste que le trognon ; plants dévorés"
+    },
+    {
+      "libelle": "le feuillage pâlit alors que le sol reste détrempé",
+      "organe": "racine",
+      "synonymes": "trop arrosé ; racines asphyxiées ; sol détrempé ; pied qui flétrit malgré l'eau ; feuillage pâle ; excès d'eau ; coin toujours humide ; terre lourde ; terre qui ne ressuie pas"
+    },
+    {
+      "libelle": "les graines n'ont pas levé et sont molles et pourries en terre",
+      "organe": "graine",
+      "synonymes": "semis raté ; graines pourries en terre ; terre froide et mouillée ; graines molles ; qui ne lèvent pas ; j'ai gratté les graines ; semis qui n'a rien donné"
+    },
+    {
+      "libelle": "les feuilles portent des taches cernées d'un halo et un aspect brûlé",
+      "organe": "feuille",
+      "synonymes": "taches avec un halo ; feuilles brunes ; feuillage brûlé ; anthracnose ; graisse ; taches auréolées ; taches huileuses sur les gousses"
+    },
+    {
+      "libelle": "les fleurs tombent sans donner de fruit",
+      "organe": "fleur",
+      "synonymes": "fleurs qui tombent ; pas de gousses ; coulure ; forte chaleur ; floraison sans résultat ; boutons qui se détachent ; trop chaud sous la serre ; qui ne noue pas ; perd toutes ses fleurs"
+    },
+    {
+      "libelle": "des plages décolorées comme brûlées sur le fruit",
+      "organe": "fruit",
+      "synonymes": "brûlé par le soleil ; coup de soleil sur le fruit ; plage blanchâtre ; peau parcheminée ; fruit décoloré ; face exposée blanchie"
+    },
+    {
+      "libelle": "des traits orange qui partent en poussière sur les feuilles",
+      "organe": "feuille",
+      "synonymes": "rouille ; traits orange sur les feuilles ; poussière orange ; pustules ; taches rouille ; feuilles marquées de rouge ; pointes jaunes ; poudre orange quand je frotte"
+    },
+    {
+      "libelle": "les caïeux ou les bulbes ont pourri en terre sans jamais lever",
+      "organe": "bulbe",
+      "synonymes": "caïeux pourris ; gousse molle en terre ; planté dans l'eau ; bulbe pourri ; sans jamais lever ; n'a jamais démarré ; coin toujours humide"
+    },
+    {
+      "libelle": "le feuillage jaunit très tôt et le pied se déchausse avec un feutrage blanc à la base",
+      "organe": "bulbe",
+      "synonymes": "pourriture blanche ; feuilles sèches ; pied qui se déchausse ; feutrage blanc à la base ; racines pourries ; jaunit trop tôt ; se retire tout seul de la terre"
+    },
+    {
+      "libelle": "une tige dure monte au milieu du feuillage",
+      "organe": "tige",
+      "synonymes": "montaison ; monte en graine ; hampe florale ; tige au centre ; qui fleurit ; bulbille ; fait une fleur ; feuilles amères ; monte à graine ; monte tout de suite"
+    },
+    {
+      "libelle": "les feuilles sont cloquées avec des galeries claires à l'intérieur",
+      "organe": "feuille",
+      "synonymes": "mineuse ; galeries dans la feuille ; taches translucides ; feuille boursouflée ; cloquée ; feuille minée ; galeries claires dedans"
+    },
+    {
+      "libelle": "de petites taches rondes claires piquettent les feuilles",
+      "organe": "feuille",
+      "synonymes": "cercosporiose ; taches rondes ; taches grises cerclées ; feuilles piquetées ; petits points sur les feuilles ; taches avec des points noirs ; septoriose"
+    },
+    {
+      "libelle": "il ne reste que les nervures des feuilles dévorées",
+      "organe": "feuille",
+      "synonymes": "piéride ; chenilles vertes ; feuilles dévorées ; il ne reste que les nervures ; crottes vertes sur les feuilles ; chenilles ; feuillage mangé"
+    },
+    {
+      "libelle": "le plant flétrit en pleine journée et ses racines sont boursouflées",
+      "organe": "racine",
+      "synonymes": "hernie ; racines gonflées ; renflements sur les racines ; flétrit alors que la terre est humide ; racines déformées ; galles sur les racines"
+    },
+    {
+      "libelle": "de petits trous ronds criblent les jeunes feuilles",
+      "organe": "feuille",
+      "synonymes": "altises ; petits trous ronds ; feuille criblée ; jeunes plants troués ; puces de terre ; bêtes qui sautent ; feuilles perforées"
+    },
+    {
+      "libelle": "les racines sont fourchues et font plusieurs jambes",
+      "organe": "racine",
+      "synonymes": "fourchues ; fait deux jambes ; racine bifide ; racines tordues ; fumier frais ; racine déformée ; plusieurs pivots"
+    },
+    {
+      "libelle": "les racines sont fendues sur la longueur",
+      "organe": "racine",
+      "synonymes": "racines éclatées ; racines fendues ; qui s'ouvrent ; arrosage après sécheresse ; craquelées ; fente longitudinale"
+    },
+    {
+      "libelle": "des galeries brunâtres traversent la racine",
+      "organe": "racine",
+      "synonymes": "vers dans la racine ; galeries dans la racine ; véreux ; tunnels brunâtres ; galeries sous la peau ; racine creusée ; asticots dans la racine"
+    },
+    {
+      "libelle": "le feuillage jaunit et la croissance s'arrête",
+      "organe": "feuille",
+      "synonymes": "fanes jaunes ; ne pousse plus ; feuillage pâle ; croissance arrêtée ; qui stagne ; plante bloquée ; feuilles décolorées"
+    },
+    {
+      "libelle": "la levée est irrégulière avec des trous dans le rang",
+      "organe": "graine",
+      "synonymes": "mal levé ; trous dans le rang ; levée irrégulière ; rang clairsemé ; graines qui n'ont pas germé ; semis clairsemé ; il manque des pieds"
+    },
+    {
+      "libelle": "le fruit est amer et immangeable",
+      "organe": "fruit",
+      "synonymes": "goût amer ; amertume ; arrosage irrégulier ; immangeable ; amer ; fruit trop avancé ; goût désagréable"
+    },
+    {
+      "libelle": "les fruits jaunissent sur pied quand on tarde à les cueillir",
+      "organe": "fruit",
+      "synonymes": "jaune sur le pied ; fruit oublié ; récolte trop espacée ; fruit trop gros ; peau qui ternit ; jaunit sur pied ; deux jours sans cueillir"
+    },
+    {
+      "libelle": "les feuilles sont marbrées jaune et vert et les nouvelles pousses sont rabougries",
+      "organe": "feuille",
+      "synonymes": "mosaïque ; feuilles marbrées ; jaune et vert ; virose ; pousses rabougries ; marbrure ; transmise par les pucerons ; feuilles boursouflées et déformées"
+    },
+    {
+      "libelle": "les fruits sont difformes ou crochus",
+      "organe": "fruit",
+      "synonymes": "fruit tordu ; crochu ; étranglé ; difforme ; pollinisation incomplète ; fruit mal formé"
+    },
+    {
+      "libelle": "des fils comme des toiles d'araignée et un feuillage piqueté",
+      "organe": "feuille",
+      "synonymes": "araignées rouges ; toiles ; acariens ; feuilles piquetées ; feuillage grisâtre ; tétranyque ; fines toiles sous les feuilles"
+    },
+    {
+      "libelle": "des bêtes rayées jaune et noir et des larves rouges sur le feuillage",
+      "organe": "feuille",
+      "synonymes": "doryphores ; bêtes rayées ; larves rouges ; larves orangées ; feuillage dévoré par des larves ; bêtes à rayures"
+    },
+    {
+      "libelle": "le plant fond sur place et devient mou au ras de la terre",
+      "organe": "tige",
+      "synonymes": "fonte des semis ; tombés au ras de la terre ; plants qui fondent ; deviennent mous ; disparaissent ; semé trop dense ; pied étranglé au collet"
+    },
+    {
+      "libelle": "une moisissure grise duveteuse recouvre les organes atteints",
+      "organe": "plant entier",
+      "synonymes": "pourriture grise ; botrytis ; moisissure grise ; duvet gris ; feutrage gris ; poussière grise quand on touche"
+    },
+    {
+      "libelle": "de petites bêtes noires et oranges sur les tiges",
+      "organe": "tige",
+      "synonymes": "criocères ; bêtes noires et oranges ; petites bêtes sur les tiges après la récolte ; insectes rayés sur la tige"
+    },
+    {
+      "libelle": "de petits vers blancs dans les fruits cueillis",
+      "organe": "fruit",
+      "synonymes": "vers blancs ; asticots dans les fruits ; fruits véreux ; drosophile ; petites larves dans la chair"
+    },
+    {
+      "libelle": "les fruits n'ont aucun goût, c'est de l'eau",
+      "organe": "fruit",
+      "synonymes": "sans goût ; fade ; c'est de l'eau ; trop arrosés avant la récolte ; insipide ; aucun parfum"
+    },
+    {
+      "libelle": "la racine est creuse et piquante",
+      "organe": "racine",
+      "synonymes": "creux à l'intérieur ; piquant comme du poivre ; maturité dépassée ; arrosage irrégulier ; racine spongieuse ; trop fort"
+    },
+    {
+      "libelle": "les fruits pourrissent sur la face en contact avec le sol",
+      "organe": "fruit",
+      "synonymes": "pourrit sur le dessous ; face au sol ; humidité au sol ; posé sur la terre ; il fallait mettre une planche dessous"
+    },
+    {
+      "libelle": "beaucoup de feuillage et de stolons mais presque pas de fruits",
+      "organe": "plant entier",
+      "synonymes": "excès d'azote ; stolons partout ; feuilles magnifiques ; presque pas de fruits ; trop d'azote ; plante qui pousse mais ne produit pas"
+    },
+    {
+      "libelle": "les bulbes pourrissent au collet après la rentrée au sec",
+      "organe": "bulbe",
+      "synonymes": "pourriture au collet ; mal séchés ; qui pourrissent une fois rentrés ; conservation ratée ; collet mou"
+    },
+    {
+      "libelle": "de petites bêtes blanches s'envolent quand on touche le feuillage",
+      "organe": "feuille",
+      "synonymes": "mouches blanches ; aleurodes ; nuage blanc ; petites mouches sous les feuilles ; bestioles qui s'envolent"
+    }
+  ],
+  "symptomes_bioagresseurs": [
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou de la pomme de terre et de la tomate",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou des cucurbitacées",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou de la laitue",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou des alliacées",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou du pois",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "mildiou des brassicacées",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "alternariose de la tomate",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "alternariose de la carotte",
+      "poids": 0.45,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "alternariose des brassicacées",
+      "poids": 0.45,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des taches brunes remontent depuis les feuilles du bas",
+      "bioagresseur": "cladosporiose de la tomate",
+      "poids": 0.35,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une tache noire et sèche au bout du fruit",
+      "bioagresseur": "nécrose apicale",
+      "poids": 0.95,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une tache noire et sèche au bout du fruit",
+      "bioagresseur": "arrosage irrégulier",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une tache noire et sèche au bout du fruit",
+      "bioagresseur": "carence en calcium",
+      "poids": 0.3,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles s'enroulent en cuillère vers le haut",
+      "bioagresseur": "enroulement physiologique",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles s'enroulent en cuillère vers le haut",
+      "bioagresseur": "arrosage irrégulier",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "bioagresseur": "puceron vert du pêcher",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "bioagresseur": "puceron noir de la fève",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "bioagresseur": "puceron cendré du chou",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "bioagresseur": "puceron du pois",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes molles collent en colonie aux jeunes pousses",
+      "bioagresseur": "puceron du fraisier",
+      "poids": 0.75,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits se fendent sur le dessus",
+      "bioagresseur": "éclatement des fruits",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les jeunes semis font des tiges fines et molles qui s'allongent",
+      "bioagresseur": "étiolement par manque de lumière",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les jeunes semis font des tiges fines et molles qui s'allongent",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.3,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "oïdium des cucurbitacées",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "oïdium de la tomate",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "oïdium du pois",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "oïdium du fraisier",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "oïdium des brassicacées",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "un dépôt blanc poudreux couvre les feuilles",
+      "bioagresseur": "mildiou des brassicacées",
+      "poids": 0.45,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les jeunes fruits jaunissent et pourrissent au bout",
+      "bioagresseur": "défaut de pollinisation",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les jeunes fruits jaunissent et pourrissent au bout",
+      "bioagresseur": "pourriture grise",
+      "poids": 0.35,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont trouées et les jeunes plants disparaissent la nuit",
+      "bioagresseur": "limaces",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage pâlit alors que le sol reste détrempé",
+      "bioagresseur": "asphyxie racinaire",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage pâlit alors que le sol reste détrempé",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.3,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les graines n'ont pas levé et sont molles et pourries en terre",
+      "bioagresseur": "semis en sol froid et humide",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les graines n'ont pas levé et sont molles et pourries en terre",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles portent des taches cernées d'un halo et un aspect brûlé",
+      "bioagresseur": "anthracnose du haricot",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles portent des taches cernées d'un halo et un aspect brûlé",
+      "bioagresseur": "graisse du haricot",
+      "poids": 0.75,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles portent des taches cernées d'un halo et un aspect brûlé",
+      "bioagresseur": "anthracnose des cucurbitacées",
+      "poids": 0.65,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles portent des taches cernées d'un halo et un aspect brûlé",
+      "bioagresseur": "tache bactérienne de la tomate",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fleurs tombent sans donner de fruit",
+      "bioagresseur": "coulure florale",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des plages décolorées comme brûlées sur le fruit",
+      "bioagresseur": "coup de soleil",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des traits orange qui partent en poussière sur les feuilles",
+      "bioagresseur": "rouille des alliacées",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des traits orange qui partent en poussière sur les feuilles",
+      "bioagresseur": "rouille du haricot",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des traits orange qui partent en poussière sur les feuilles",
+      "bioagresseur": "rouille de l'asperge",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les caïeux ou les bulbes ont pourri en terre sans jamais lever",
+      "bioagresseur": "asphyxie racinaire",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les caïeux ou les bulbes ont pourri en terre sans jamais lever",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit très tôt et le pied se déchausse avec un feutrage blanc à la base",
+      "bioagresseur": "pourriture blanche des alliacées",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit très tôt et le pied se déchausse avec un feutrage blanc à la base",
+      "bioagresseur": "sclérotiniose",
+      "poids": 0.45,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une tige dure monte au milieu du feuillage",
+      "bioagresseur": "montaison précoce",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont cloquées avec des galeries claires à l'intérieur",
+      "bioagresseur": "mineuse de la betterave",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont cloquées avec des galeries claires à l'intérieur",
+      "bioagresseur": "mineuse du poireau",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites taches rondes claires piquettent les feuilles",
+      "bioagresseur": "cercosporiose de la betterave",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites taches rondes claires piquettent les feuilles",
+      "bioagresseur": "septoriose du céleri",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites taches rondes claires piquettent les feuilles",
+      "bioagresseur": "septoriose du persil",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites taches rondes claires piquettent les feuilles",
+      "bioagresseur": "alternariose des brassicacées",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "il ne reste que les nervures des feuilles dévorées",
+      "bioagresseur": "piéride du chou",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "il ne reste que les nervures des feuilles dévorées",
+      "bioagresseur": "piéride de la rave",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "il ne reste que les nervures des feuilles dévorées",
+      "bioagresseur": "noctuelle du chou",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "il ne reste que les nervures des feuilles dévorées",
+      "bioagresseur": "teigne des crucifères",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le plant flétrit en pleine journée et ses racines sont boursouflées",
+      "bioagresseur": "hernie du chou",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le plant flétrit en pleine journée et ses racines sont boursouflées",
+      "bioagresseur": "nématodes à galles",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petits trous ronds criblent les jeunes feuilles",
+      "bioagresseur": "altise des crucifères",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les racines sont fourchues et font plusieurs jambes",
+      "bioagresseur": "racine fourchue",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les racines sont fourchues et font plusieurs jambes",
+      "bioagresseur": "nématodes à galles",
+      "poids": 0.35,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les racines sont fendues sur la longueur",
+      "bioagresseur": "fendillement des racines",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les racines sont fendues sur la longueur",
+      "bioagresseur": "arrosage irrégulier",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des galeries brunâtres traversent la racine",
+      "bioagresseur": "mouche de la carotte",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des galeries brunâtres traversent la racine",
+      "bioagresseur": "mouche du chou",
+      "poids": 0.75,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des galeries brunâtres traversent la racine",
+      "bioagresseur": "taupin",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit et la croissance s'arrête",
+      "bioagresseur": "faim d'azote",
+      "poids": 0.7,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit et la croissance s'arrête",
+      "bioagresseur": "verticilliose",
+      "poids": 0.45,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit et la croissance s'arrête",
+      "bioagresseur": "fusariose vasculaire de la tomate",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le feuillage jaunit et la croissance s'arrête",
+      "bioagresseur": "nématodes à galles",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "la levée est irrégulière avec des trous dans le rang",
+      "bioagresseur": "levée irrégulière",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "la levée est irrégulière avec des trous dans le rang",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le fruit est amer et immangeable",
+      "bioagresseur": "amertume du fruit",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le fruit est amer et immangeable",
+      "bioagresseur": "arrosage irrégulier",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits jaunissent sur pied quand on tarde à les cueillir",
+      "bioagresseur": "récolte tardive",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont marbrées jaune et vert et les nouvelles pousses sont rabougries",
+      "bioagresseur": "mosaïque du concombre",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont marbrées jaune et vert et les nouvelles pousses sont rabougries",
+      "bioagresseur": "mosaïque du haricot",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont marbrées jaune et vert et les nouvelles pousses sont rabougries",
+      "bioagresseur": "mosaïque de la laitue",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les feuilles sont marbrées jaune et vert et les nouvelles pousses sont rabougries",
+      "bioagresseur": "virus Y de la pomme de terre",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits sont difformes ou crochus",
+      "bioagresseur": "défaut de pollinisation",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des fils comme des toiles d'araignée et un feuillage piqueté",
+      "bioagresseur": "tétranyque tisserand",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "des bêtes rayées jaune et noir et des larves rouges sur le feuillage",
+      "bioagresseur": "doryphore",
+      "poids": 0.95,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le plant fond sur place et devient mou au ras de la terre",
+      "bioagresseur": "fonte des semis",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "le plant fond sur place et devient mou au ras de la terre",
+      "bioagresseur": "pourriture grise",
+      "poids": 0.4,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une moisissure grise duveteuse recouvre les organes atteints",
+      "bioagresseur": "pourriture grise",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "une moisissure grise duveteuse recouvre les organes atteints",
+      "bioagresseur": "sclérotiniose",
+      "poids": 0.55,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes noires et oranges sur les tiges",
+      "bioagresseur": "criocère de l'asperge",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petits vers blancs dans les fruits cueillis",
+      "bioagresseur": "ver du framboisier",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petits vers blancs dans les fruits cueillis",
+      "bioagresseur": "drosophile à ailes tachetées",
+      "poids": 0.8,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits n'ont aucun goût, c'est de l'eau",
+      "bioagresseur": "excès d'eau avant récolte",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "la racine est creuse et piquante",
+      "bioagresseur": "maturité dépassée",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "la racine est creuse et piquante",
+      "bioagresseur": "arrosage irrégulier",
+      "poids": 0.5,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "la racine est creuse et piquante",
+      "bioagresseur": "fendillement des racines",
+      "poids": 0.3,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits pourrissent sur la face en contact avec le sol",
+      "bioagresseur": "pourriture grise",
+      "poids": 0.65,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les fruits pourrissent sur la face en contact avec le sol",
+      "bioagresseur": "sclérotiniose",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "beaucoup de feuillage et de stolons mais presque pas de fruits",
+      "bioagresseur": "excès d'azote",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les bulbes pourrissent au collet après la rentrée au sec",
+      "bioagresseur": "séchage insuffisant après récolte",
+      "poids": 0.85,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "les bulbes pourrissent au collet après la rentrée au sec",
+      "bioagresseur": "pourriture grise",
+      "poids": 0.6,
+      "niveau_confiance": "indicatif"
+    },
+    {
+      "symptome": "de petites bêtes blanches s'envolent quand on touche le feuillage",
+      "bioagresseur": "aleurode des serres",
+      "poids": 0.9,
+      "niveau_confiance": "indicatif"
+    }
+  ]
+}

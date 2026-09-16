@@ -38,10 +38,16 @@ Concrètement, avant de livrer un changement de comportement :
 2. corriger la ou les fiches concernées dans le même commit ;
 3. `pytest tests/test_us099_corpus_fonctionnement.py` doit rester vert — il
    contrôle la couverture des domaines de `/help`, l'absence de vocabulaire
-   technique dans le texte servi, et le classement des 60 questions de mesure.
+   technique dans le texte servi, et le classement des 65 questions de mesure.
 
 Une fiche ajoutée entre dans cette table dans le même commit : le test échoue
 tant que ce n'est pas fait.
+
+Le corpus **agronomique** (US-140, `data/connaissance/agronomie/`) porte sa
+propre table de relecture, dans `data/connaissance/agronomie/README.md`. Ce qui
+périme une fiche d'agronomie n'est pas un changement de code mais un **retour de
+terrain** : une observation qui contredit le texte. Même exigence, même commit,
+et `pytest tests/test_us140_corpus_agronomique.py` doit rester vert.
 
 ## Pull requests (NON NÉGOCIABLE)
 
@@ -163,6 +169,68 @@ python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_in
 # data/referentiel/eppo/SOURCE.md — elles autorisent la reprise en base et l'usage
 # commercial, contre citation d'EPPO ET de la date du dernier téléchargement.
 
+# Pré-diagnostic déterministe à partir des symptômes décrits [US-165]
+# « Mes pieds de tomates ont des taches marron sur les feuilles du bas » reçoit
+# deux ou trois PISTES ordonnées, à zéro jeton. Deux mots décrivent tout le
+# mécanisme, et aucun n'est « modèle » :
+#     recherche plein texte sur les symptômes et leurs SYNONYMES, puis jointure
+#     avec les bioagresseurs connus pour CETTE culture (US-162)
+psql -d potager -f migrations/migration_v45.sql
+python tools/importer_referentiel.py data/referentiel/symptomes_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/symptomes_redaction_interne.json
+python tools/mesurer_prediagnostic.py --detail
+#
+# ⚠️ UN SYMPTÔME N'APPARTIENT À AUCUNE CULTURE. C'est LA décision de conception,
+# et elle se relit dans `migration_v45` : la table `symptome` n'a pas de colonne
+# `culture_id`, et un test le vérifie. « Des traits orange qui partent en
+# poussière » est le même symptôme sur l'ail, le haricot et l'asperge ; c'est le
+# CROISEMENT qui rend rouille des alliacées, rouille du haricot ou rouille de
+# l'asperge. Une colonne de culture aurait dupliqué chaque symptôme autant de
+# fois qu'il y a de cultures, et rendu cette désambiguïsation (CA14) impossible.
+#
+# Ce qui porte le risque le plus élevé de l'épic — un pré-diagnostic pris pour un
+# diagnostic — et où chaque garde-fou vit :
+#   app/services/prediagnostic.py
+#     FORMULE_EVOCATION       « cela peut évoquer », jamais « c'est ». UN seul
+#                             endroit ; les gabarits la concatènent, ne la
+#                             recopient pas. Un test refuse toute tournure
+#                             affirmative dans les 44 réponses du corpus (CA4)
+#     MESSAGE_PISTE_UNIQUE    quand le croisement n'en rend qu'une, on le DIT au
+#                             lieu d'en inventer une seconde (CA5)
+#     MESSAGE_SYMPTOME_INCONNU / MESSAGE_CULTURE_SANS_FICHE /
+#     MESSAGE_AUCUN_CROISEMENT   TROIS ignorances distinctes, trois phrases —
+#                             les confondre trompe le jardinier (CA8)
+#     Piste                   ne porte AUCUN champ de poids : c'est cette
+#                             absence, pas une consigne de rendu, qui interdit
+#                             qu'un pourcentage soit un jour affiché (CA2)
+#
+# Réglages (config.py, variables d'environnement, sans redéploiement) :
+#   PREDIAGNOSTIC_SEUIL_SYMPTOME   en deçà, le symptôme n'est PAS reconnu — c'est
+#                                  le réglage du refus honnête (CA8)
+#   PREDIAGNOSTIC_MAX_PISTES       plafond ; le plancher n'est pas un réglage
+#
+# ⚠️ La colonne `synonymes` EST le livrable, pas un complément. C'est elle qui
+# rapproche « poudre blanche » d'« oïdium » sans moteur vectoriel. Les DEUX
+# registres s'y écrivent, celui du jardinier et celui de l'agronome — et jamais
+# un nom de culture, que le croisement porte déjà.
+#
+# Mesure au 10/09/2026, repli SQLite, sur le référentiel réellement livré :
+#   19/19 du périmètre v1 dans les trois premières (18 en tête), 25/25 des
+#   entrées hors périmètre honnêtes, latence p50 3,2 ms.
+# Les DEUX assiettes se mesurent SÉPARÉMENT (CA12) : les confondre plafonnerait
+# le taux sous les 80 % pour une raison de découpage, pas de qualité.
+# CA13 : au-dessus du seuil, la question du moteur SÉMANTIQUE reste fermée — mais
+# la mesure doit être rejouée contre PostgreSQL avant d'en décider, l'échelle de
+# score n'étant pas la même (même avertissement que RAG_SEUIL_CONFIANCE).
+#
+# Frontière avec US-173, portée par l'ORDRE des familles et par rien d'autre :
+#   « qu'est-ce qui attaque mes poireaux »   → INVENTAIRE (bioagresseurs_culture)
+#   « mes tomates ont des taches marron »    → DESCRIPTION (prediagnostic_symptome)
+# L'inventaire passe en premier. Prix connu et mesuré : deux formulations du
+# corpus (« des petites bêtes rayées… », « des bestioles noires… ») reçoivent
+# l'inventaire, aucune du périmètre v1. Ne PAS réécrire le motif d'US-173 dans
+# une clause d'exclusion : deux définitions de la même frontière divergeraient.
+
 # Question en langage naturel sur les bioagresseurs [US-173]
 # « qu'est-ce qui attaque mes poireaux ? » est servie par GABARIT, à l'étage 1,
 # sans appel modèle — pas même pour classer la question. Une famille de plus au
@@ -184,6 +252,124 @@ python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_in
 # CONSCIENTE DU POTAGER. Ce paramètre ne scope QUE les bioagresseurs — famille,
 # délai de retour, attributs de conduite et description restent partagés.
 
+# Calendrier cultural et zone climatique [US-068]
+# Quand semer (en pépinière / en pleine terre), quand récolter, et dans combien
+# de jours la culture lève ou se récolte — lu à ZÉRO jeton, corrigeable au bot.
+psql -d potager -f migrations/migration_v46.sql
+#   /calendrier <culture>
+#   /calendrier zone [oceanique|continental|mediterraneen|montagnard|auto]
+#   /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
+#   /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <10|70-90|vivace|aucune>
+#   GET /cultures/{culture}/calendrier   (forme de lecture pour US-060 / US-070 / Lot E)
+# Tout est aussi DICTABLE (US-172) : « quand semer les tomates ? », « passe mon
+# potager en zone méditerranéenne », « délai de levée des carottes : 14 à 21 jours ».
+# « Plantation » se tranche par la VALEUR (CA29) : des mois corrigent la fenêtre
+# (« plantation des poireaux : juin-juillet »), des jours la durée `repiquage`
+# (« délai avant plantation des tomates : 42 à 56 jours ») ; sinon rien n'est deviné.
+# ⚠️ Frontière avec US-096 portée par la règle `calendrier_quand` de
+# interpreteur_commandes : verbe à l'INFINITIF exigé — « quand ai-je semé les
+# tomates ? » reste une question sur le journal du potager.
+#
+# Le modèle — app/services/calendrier_cultural.py (seul point de lecture/écriture) :
+#   itineraire_cultural   une CONDUITE (« standard », « culture d'hiver »), jamais une variété
+#   fenetre_culturale     une par (itinéraire, zone, phase), au mois ; absente = vide
+#   duree_culturale       une par (itinéraire, étape), en jours ou mention libre,
+#                         COMMUNE à toutes les zones (physiologie, pas latitude)
+#
+# ⚠️ Trois décisions à ne pas rouvrir sans rouvrir l'US :
+#   ZONE : `potagers.zone_climatique` ne porte que le CHOIX du jardinier. Sans
+#     choix, la zone se DÉDUIT de la localisation À LA LECTURE
+#     (`zone_depuis_localisation` : règle grossière, déclarée, jamais
+#     « montagnard » faute d'altitude), puis CALENDRIER_ZONE_DEFAUT (config.py,
+#     `oceanique`). Aucun backfill SQL : une seconde règle divergerait.
+#   CORRECTION : TOUJOURS locale au potager (CA11). La première correction COPIE
+#     l'itinéraire partagé en itinéraire personnalisé (`potager_id` non nul) qui
+#     le remplace pour ce potager. `culture_config.nom` étant UNIQUE, la
+#     convention « fiche personnalisée » s'applique sur les tables du calendrier,
+#     pas sur `culture_config`. L'import n'écrit que du PARTAGÉ : il ne peut pas
+#     écraser une correction, par construction (CA9).
+#   HONNÊTETÉ : aucune fenêtre empruntée à une zone voisine, aucune durée
+#     moyenne, jamais une date calculée (CA4, CA13). Sans donnée : frise vide,
+#     durée « — ».
+#
+# Pré-remplissage (CA9) — le calendrier du commerce est une œuvre protégée :
+#   DURÉES   : Wind River Greens (CC BY 4.0), bloc `cultures_calendriers` du
+#              manifeste existant — levée ; récolte en pleine terre SEULEMENT
+#              (`days_to_harvest` compte depuis la plantation pour ce qui est
+#              élevé à l'abri) ; repiquage depuis « start indoors N-M weeks ».
+#   FENÊTRES : même source, même bloc, lues dans `planting_calendar.csv`
+#              (identique au tag v1.0.0, extrait aux cultivars du périmètre).
+#              TOUT culture_config retrouvé dans la source (APPARIEMENTS_CALENDRIER,
+#              le particulier avant le général ; ALIAS_CALENDRIER : salade = laitue) :
+#              336 fenêtres (dont 64 de plantation) et 45 durées sur 33 cultures.
+#              Attributs et associations restent sur les dix d'APPARIEMENTS.
+#              Couverture détaillée et motifs d'exclusion : wind_river_greens/SOURCE.md.
+#   PLANTATION (amendement d'US-068 du 15/09/2026) : quatrième phase, mise en
+#              place DÉFINITIVE, lue dans `outdoor_transplant_*` — JAMAIS déduite
+#              du semis en pépinière + délai de repiquage, et jamais un indice de
+#              pépinière pour la proposition de contexte d'US-069. Portée par 16
+#              cultures (dont la fraise, plantation seule) ; les autres se plantent
+#              au gabarit de rédaction interne ou au bot, ou se sèment en place.
+python tools/adapter_wind_river.py
+python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
+# ⚠️ Deux choses à savoir avant de toucher aux fenêtres :
+#   - La source est en zones USDA. `adaptateur_wind_river.ZONE_USDA_PAR_ZONE`
+#     (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4) est
+#     une DÉCISION calée sur la date de dernière gelée, pas une équivalence de
+#     rusticité (qui mettrait la Bretagne au calendrier du Texas). À valider.
+#   - Le calendrier source est un GABARIT PAR CATÉGORIE (10 profils pour 91
+#     tomates), printemps seulement : aucun semis de fin d'été ni d'automne.
+#     Six règles de rejet dans `construire_fenetres` — plantation majoritaire
+#     (ail, échalote, pomme de terre, fraise, framboise, menthe : semis et récolte
+#     écartés, plantation gardée sauf fiche de plantation d'automne), jointure id +
+#     catégorie, fenêtre à cheval sur l'année (artefact), phase minoritaire,
+#     médiane basse, semis contredit par les fiches de la source (pépinière du
+#     cornichon et du fenouil). `fenetres_incompletes` liste les cultures dont les
+#     fiches parlent d'un semis d'automne que le calendrier ignore.
+# Gabarit de rédaction interne, livré VIDE, pour ce que la source ne couvre pas
+# (aucun chiffre produit par un modèle de langage) — une valeur déjà écrite par
+# wind_river_greens y est PRÉSERVÉE, jamais écrasée :
+python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json --dry-run
+python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json
+
+# Semis en pépinière ou en pleine terre [US-069]
+# Un semis porte sa FILIÈRE (`evenements.contexte_semis`) : dite dans la phrase
+# (« en pépinière », « en godets », « en pleine terre », « en place »), sinon
+# PROPOSÉE au récapitulatif du bot et adoptée par « Confirmer » — un seul geste.
+psql -d potager -f migrations/migration_v47.sql
+# Un seul module — app/services/contexte_semis.py :
+#   detecter_contexte          ce qui est DIT, jamais deviné (« sous abri » n'y est pas)
+#   proposer_contexte          deux indices et deux seulement : parcelle déclarée
+#                              pépinière, puis un calendrier (US-068) qui ne connaît
+#                              QU'UNE des deux fenêtres de semis. Sinon : sans contexte
+#   correction_contexte_seule  « non, c'était en pépinière » se corrige SANS modèle
+#   semis_par_contexte         trois totaux par culture et saison (/stats, GET /stats)
+#   fenetre_conseillee         la fenêtre du référentiel qu'US-070 ancrera
+# ⚠️ Le contexte ne pilote AUCUN calcul de stock (CA8) : le stock se déduit
+# toujours de `parcelles.est_pepiniere`. Une parcelle ordinaire n'est pas non plus
+# un indice de pleine terre — un semis de pépinière est rattaché à une parcelle
+# comme tout événement.
+# ⚠️ Pas d'interrogatoire (point de vigilance de l'US) : la proposition n'est faite
+# que pour une saisie d'UN geste ; une dictée multi-gestes s'enregistre sans
+# contexte non dit, corrigeable ensuite. La clé `contexte_semis` PRÉSENTE et vide
+# dans un item vaut « sans préciser » : la phrase n'est pas relue derrière ce choix.
+
+# Calendrier recalé sur les événements réels [US-070]
+# Une culture EN PLACE se lit sur son propre calendrier : levée et première
+# récolte attendues depuis la date réelle du semis. Lecture seule, zéro jeton.
+#   GET /plan/calendriers?culture=…&date_ref=YYYY-MM-DD   bloc `projections`
+# Un seul module — app/services/recalage_calendrier.py :
+#   construire_series / semis_chaine   origine = SEMIS (parcelle, ou chaînage
+#                                      plantation → godet → semis) — jamais une
+#                                      plantation seule (durée absente : US-177)
+#   rattacher_recoltes                 plus ancienne série ouverte ; en végétatif
+#                                      la récolte CLÔT la série (CA6, CA10)
+#   projeter_serie                     fourchettes, état, mois de la frise (CA7)
+# ⚠️ Rien n'est deviné (CA11) : semis sans filière connue, durée `recolte` non
+# chiffrée ou culture sans référentiel → `sans_recalage`, la tuile garde la frise
+# CONSEILLÉE. Un semis chaîné à un godet vaut pépinière (même preuve que v47).
+# ⚠️ Aucune écriture, aucun calcul de stock touché (CA13) — un test le vérifie.
+
 # Menu de commandes natif Telegram [US-171]
 # Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :
 # il se dérive des CommandHandler enregistrés dans bot._construire_application().
@@ -195,6 +381,62 @@ python tools/importer_referentiel.py data/referentiel/bioagresseurs_redaction_in
 # Le clavier de raccourcis permanent n'existe plus : bot.SANS_CLAVIER
 # (ReplyKeyboardRemove) le retire activement chez les jardiniers qui l'avaient.
 # Les claviers contextuels de validation, eux, sont inchangés.
+
+# Piloter le bot par une phrase [US-172]
+# Les 24 commandes du bot sont désormais DICTABLES : 18 le sont pour de bon,
+# 1 est un alias de sa cible canonique (`/parcelles` = `/parcelle lister`), et 5
+# sont écartées sur décision motivée (`/ask`, `/start`, `/lier`, `/delier`,
+# `/version`). Deux fichiers, et deux seulement :
+#   app/services/menu_commandes.py        le catalogue ENRICHI, à côté de celui
+#                                         du menu d'US-171 dont il se dérive :
+#     FORMES_DICTABLES                    forme des arguments, unités,
+#                                         vocabulaires fermés, `destructrice`,
+#                                         `confirmation`
+#     ALIAS_COMMANDES                     ce qui n'est pas une commande de plus
+#     MOTIFS_EXCLUSION_INTERPRETEUR       ce qu'une phrase ne peut pas porter —
+#                                         DISTINCTE de COMMANDES_EXCLUES (menu),
+#                                         parce que les critères diffèrent (CA8)
+#     controler_parite()                  le test qui échoue tant qu'une commande
+#                                         ajoutée n'est pas tranchée (CA7)
+#   app/services/interpreteur_commandes.py  la RECONNAISSANCE, et rien d'autre
+#
+# ⚠️ Ajouter une commande au bot fait ÉCHOUER l'intégration continue tant qu'elle
+# n'est ni dictable ni exclue et motivée. C'est voulu : c'est ce test, et non la
+# vigilance, qui empêche l'écart de se recreuser. Une exclusion motive une
+# décision DÉFINITIVE, elle n'héberge jamais un « pas encore fait ».
+#
+# Ce que l'interpréteur ne fait PAS : il ne réimplémente aucun comportement de
+# commande. Il produit un nom et des arguments, `bot.py` retrouve le handler
+# réellement enregistré par introspection de `ctx.application` et l'appelle avec
+# `ctx.args`. Même service, mêmes contrôles, mêmes messages, même garde de
+# liaison — et donc mêmes droits (CA9, CA14).
+#
+# Quatre gardes portent tout le reste, et se lisent dans la docstring du module :
+#   _est_demande_de_savoir     « comment supprimer une parcelle ? » explique,
+#                              « supprime la parcelle nord » agit (CA2)
+#   ouverture interrogative    une règle DÉCLARATIVE (« X attaque souvent Y »)
+#                              est refusée sur une question — sans quoi
+#                              « qu'est-ce qui attaque mes poireaux ? », servie
+#                              par gabarit depuis US-173, écrirait au référentiel
+#   noms de parcelle           `resolve_parcelle` rapproche à deux lettres près :
+#                              bon pour rattacher un geste, mauvais pour
+#                              supprimer. Le voisin est PROPOSÉ, jamais substitué
+#   arguments manquants        demandés, boutons à l'appui pour un vocabulaire
+#                              fermé — jamais devinés d'un synonyme (CA13)
+#
+# Confirmation : exigée pour tout ce qui ÉCRIT (`FormeCommande.confirmation`),
+# pas pour une consultation — « voulez-vous vraiment afficher le plan ? »
+# doublerait chaque lecture. La commande équivalente est rappelée dans les DEUX
+# cas : c'est ainsi que le jardinier apprend la syntaxe sans l'apprendre.
+#
+# Mesure et journal :
+psql -d potager -f migrations/migration_v44.sql   # routage_logs : commande + issue
+pytest tests/test_us172_interpreteur_commandes.py
+#   tests/corpus/us172_commandes.csv  109 formulations de commande, 31 questions
+#   de savoir voisines, 16 phrases hors périmètre. Au 08/09/2026 : 100 % de
+#   reconnaissance, 0 exécution destructrice erronée, 100 % sans appel modèle.
+#   Ce chiffre mesure ce qu'on a su prévoir ; c'est `issue_interpretation` en
+#   production qui dira quelles formulations enrichir ensuite (CA18).
 
 # Socle de connaissance — étage 2 de la cascade [US-098]
 # ⚠️ Procédure complète (rédaction des fiches, licences, mesure, mise en prod
@@ -241,6 +483,121 @@ python tools/mesurer_corpus_savoir.py --ingerer --detail
 # `**Intention :**` / `**Organes concernés :**` / `**On parle aussi de :**`.
 # Un `**Attention :**` — clé inconnue — reste du contenu : on ne retire que ce
 # qu'on sait nommer. Gabarit complet : data/connaissance/README.md
+
+# Corpus agronomique — deuxième contenu du socle [US-140]
+# 20 fiches dans data/connaissance/agronomie/, famille agronomie, niveau
+# a-valider (donc `indicatif` en base), potager_id nul. Dix cultures — tomate,
+# haricot, courgette, chou, carotte, concombre, cornichon, poivron, ail, blette —
+# et DEUX thèmes imposés par culture, portés par le nom du fichier :
+#   <culture>-problemes.md         maladies, ravageurs, troubles (par le symptôme)
+#   <culture>-conduite-recolte.md  gestes d'entretien, de récolte, de conservation
+# ⚠️ `blette` côté jardinier, `bette` côté culture_config (semé par migration_v6) :
+# les fiches se rattachent à `bette`, le mot du jardinier vit dans les alias.
+#
+# La relecture est EXÉCUTABLE, et elle tourne au déploiement AVANT l'ingestion :
+python tools/controler_corpus_agronomie.py --detail
+# Ce qu'elle refuse — un refus, un critère de l'US, aucune dérogation :
+#   un chiffre, une unité, une durée, un mois        CA7 / CA13(a)  → US-068, US-161
+#   une association de cultures, une rotation        CA7bis         → US-163
+#   un dosage, un produit de traitement              CA10
+#   une section de diagnostic sans hypothèse         CA9
+#   une licence absente ou hors socle                CA2 / CA3
+# La licence est contrôlée à l'INGESTION contre app/services/referentiel_sources
+# (le socle du registre, pas une seconde liste) : `licence:` est obligatoire pour
+# la famille agronomie, facultative pour doc_app.
+python tools/mesurer_corpus_savoir.py     --corpus tests/corpus/us140_questions_diagnostic.csv     --racine data/connaissance/agronomie --detail
+# Mesure au 07/09/2026, repli SQLite : 66/66 dans les trois premiers, 64 en tête.
+# CA12 : au-dessus du seuil, la question de la recherche SÉMANTIQUE reste fermée.
+
+# Mémoire du potager — troisième contenu du socle [US-141]
+# Les observations et notes libres (US-038/US-039) sont indexées comme fragments
+# de famille `memoire_potager`, avec le potager_id de leur auteur — JAMAIS nul.
+# Indexation AUTOMATIQUE à l'enregistrement : elle est branchée dans
+# app/services/evenements.py, au même point que l'invalidation de cache d'US-095
+# (`_indexer_memoire` / `_oublier_memoire`), et nulle part ailleurs.
+# ⚠️ L'AIGUILLAGE conditionne tout le reste. La mémoire n'est consultée que sur
+# la branche QUESTION_SAVOIR de la cascade (`routeur._consulter_savoir`). Or
+# « qu'avais-je noté SUR LA PARCELLE nord ? » porte un marqueur DATA et partait
+# à l'étage SQL, qui n'a aucune famille capable de rendre un texte libre : la
+# mémoire était indexée, isolée, et injoignable. D'où `routeur.MOTIF_MEMOIRE`,
+# testé AVANT `_regle_par_geste` (« noter » est une variante du geste
+# `observation` : dictée sans « ? », la question s'enregistrerait — défaut
+# US-173/CA3) et AVANT les marqueurs DATA.
+# Deuxième condition, du même ordre : `memoire_potager.TERMES_RAPPEL`. Les mots
+# avec lesquels on REDEMANDE une note ne sont jamais dans la note ; sans eux la
+# question tombait sous RAG_SEUIL_CONFIANCE et descendait se faire reformuler à
+# l'étage 3 — des jetons payés pour dégrader une citation exacte. Même véhicule
+# que la ligne « On parle aussi de : » des fiches : poids du titre, jamais
+# affiché.
+#
+# ⚠️ DEUX CHEMINS depuis le 09/09/2026, et savoir lequel répond est la première
+# chose à établir devant un défaut de restitution :
+#   la question NOMME une culture ou une parcelle  → étage 1, SQL, EXHAUSTIF
+#     `reponses_chiffrees` : familles `notes_culture` / `notes_parcelle`, une
+#     seule agrégation `notes_du_jardinier`. Le routeur y va par
+#     `_rappel_servi_par_le_catalogue`, seul pré-étage placé AVANT les mots-clés
+#     (`FAMILLES_MEMOIRE_SQL`). Journal : `nature=QUESTION_DATA`.
+#   la question ne nomme NI l'une NI l'autre       → étage 2, recherche lexicale
+#     inchangée, plafonnée à RAG_MAX_PASSAGES. Journal : `nature=QUESTION_SAVOIR`.
+# Motif : « qu'avais-je noté sur mes tomates ? » ne demande aucune RESSEMBLANCE,
+# elle demande tout ce qui a été écrit. Relevé le 09/09/2026 (potager 1) : les
+# trois notes attendues étaient trouvées (evenement-472/355/363, score 0,733,
+# issue=servi) et UNE SEULE était affichée — `connaissance.restituer` ne gardait
+# qu'un bloc par registre. Corrigé des deux côtés : la restitution rend jusqu'à
+# `MAX_NOTES_RESTITUEES` notes (le savoir général, lui, reste à UN passage — trois
+# fiches sur un même sujet sont trois façons de dire la même chose).
+#
+# Le PÉRIMÈTRE des notes n'est écrit qu'à un endroit, `memoire_potager`
+# (`TYPE_ACTION_NOTE`, `est_memorisable`) : le chemin SQL l'importe et ne le
+# réécrit pas. Deux définitions feraient diverger la liste et la recherche sur le
+# même carnet, sans qu'aucune ne paraisse fausse — c'est ce que verrouille
+# `test_us141_le_perimetre_sql_est_celui_de_l_indexation`.
+# Deux pièges, tous deux commentés au point d'appel : `titre_note()` n'est PAS
+# appelée par l'agrégation (son `db.get(Parcelle, …)` n'est pas filtré sur le
+# potager, le garde du catalogue le refuse), et le corps d'une note ne traverse
+# JAMAIS `_remplir` (qui renormalise la ponctuation, donc retoucherait la note).
+#
+# Un carnet volumineux se lit par REPÈRES — année, puis saison AGRONOMIQUE
+# (mars-mai / juin-août / sept-nov / déc-fév, l'hiver rattaché à l'année de son
+# janvier), jamais par trimestre calendaire : `_detecter_periode` encode déjà ces
+# quatre fenêtres, et « ce printemps » ou « en 2025 » se relisent tels quels pour
+# rouvrir une période — « le T2 » ne se relit pas et ne se prononce pas.
+# Plafonds, tous nommés dans `reponses_chiffrees` : `LIMITE_NOTES_CITEES`,
+# `APERCU_NOTES_RECENTES`, `BUDGET_CARACTERES_NOTES`.
+#
+# Limite CONNUE, écrite pour ne pas être redécouverte : « quelles maladies
+# avais-je NOTÉES ? » n'est pas reconnue comme un rappel — `_NOMS_ECRIT` liste
+# des noms, pas des participes. Test dédié dans la suite d'US-141.
+#
+# Reprise initiale des notes antérieures — rejouable, sans doublon, idempotente :
+python tools/indexer_memoire_potager.py --dry-run     # rapport seul
+python tools/indexer_memoire_potager.py               # tous les potagers
+python tools/indexer_memoire_potager.py --potager 3    # un seul
+# ⚠️ Ce qui distingue cette famille des deux autres, et qui est la RAISON D'ÊTRE
+# de l'US : une note privée qui fuirait vers un autre jardin est une atteinte à
+# la confiance bien plus grave qu'une réponse agronomique approximative. D'où
+# deux garde-fous, aux DEUX bouts :
+#   connaissance.valider_entete   refuse un document `memoire_potager` sans potager
+#   connaissance._requete_base    EXCLUT cette famille de la clause de savoir
+#                                 partagé — un fragment de mémoire n'est servi
+#                                 que sur l'ÉGALITÉ du potager courant, même
+#                                 s'il naissait un jour sans potager
+# Trois arbitrages tranchés, à ne pas rouvrir sans rouvrir l'US :
+#   on indexe les NOTES, pas les événements structurés — un semis se répond en
+#     SQL (US-096), exactement et à coût nul ; et pas les BULLETINS MÉTÉO
+#     (`[AUTO-METEO]`), qui sont des observations que personne n'a écrites et
+#     qui noient la mémoire — même exclusion que rotation et rapport_couverture ;
+#   extrait FIDÈLE, jamais résumé — un résumé coûterait des jetons pour faire
+#     perdre à la note sa valeur de preuve ;
+#   pas de mémoire DÉDUITE — l'assistant n'invente aucune note à partir d'un
+#     événement.
+# Les deux registres se distinguent à l'affichage ET dans la matière transmise
+# au modèle (connaissance.REGISTRE_MEMOIRE / REGISTRE_GENERAL,
+# contexte_pour_raisonnement) : les confondre ferait dire au jardinier ce qu'il
+# n'a pas dit.
+# Cycle de vie déjà couvert par l'existant, vérifié plutôt que supposé :
+# suppression et correction d'une note (CA11), purge d'un potager (US-084/CA12),
+# potager archivé consultable en lecture seule (US-083/CA13).
 
 # Corpus « fonctionnement de l'application » — premier contenu du socle [US-099]
 # 13 fiches dans data/connaissance/doc_app/, famille doc_app, niveau verifie,
@@ -321,7 +678,7 @@ Config is loaded from `.env.{APP_ENV}` via `config.py`.
 
 ## Database Migrations
 
-Manual SQL files in `migrations/`, numbered sequentially (v2 → v42), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
+Manual SQL files in `migrations/`, numbered sequentially (v2 → v47), each with its `rollback_vN.sql` since v16. Apply in order on a fresh DB. Latest: `migration_v47.sql` [US-069] — adds nullable `evenements.contexte_semis` (`pepiniere` | `pleine_terre` | NULL), with a CHECK that only a `semis` carries one, and replays the only non-presumptuous backfill: a semis with a chained `mise_en_godet` (`origine_graines_id`) becomes `pepiniere`, every other one stays NULL — never presumed `pleine_terre`. That UPDATE lives between `REPRISE` markers and is executed as-is by `tests/test_us069_contexte_semis.py`: edit it there, never copy it. The column drives NO stock computation (stock still derives from `parcelles.est_pepiniere`). Before it, `migration_v46.sql` [US-068] — creates the crop calendar (`itineraire_cultural`, `fenetre_culturale` per climate zone, `duree_culturale` shared by all zones), all three under the `potager_id NULL = shared` RLS policy, and adds nullable `potagers.zone_climatique`, which stores only the gardener's explicit choice: the zone derived from the location is computed at read time by `app/services/calendrier_cultural.zone_depuis_localisation`, never backfilled in SQL. It seeds no calendar row. Before it, `migration_v45.sql` [US-165] — creates `symptome` (full-text GIN index) and `symptome_bioagresseur` (weighted edge), both under RLS. `symptome` deliberately has **no** `culture_id`: a symptom belongs to no culture, and it is the join with `culture_bioagresseur` that picks the lead — a culture column would have duplicated every symptom per culture and made the CA14 disambiguation structurally impossible. Before it, `migration_v44.sql` [US-172] — adds `commande_interpretee` / `issue_interpretation` to `routage_logs` (nullable, idempotent), so an interpreted command and the fate of its confirmation are journalled without overloading US-098's `issue_savoir`. Before it, `migration_v43.sql` [US-162]. `migration_v42.sql` [US-098] — creates `knowledge_documents` / `knowledge_chunks` (full-text GIN index, RLS on both tables), adds `score_savoir` / `issue_savoir` to `routage_logs`, and creates the `french_sans_accent` text search configuration (`french` + `unaccent`). That configuration is not a refinement: `french` alone lemmatises but does NOT strip accents, so « récolter » and « recolter » are two unrelated lexemes, and a gardener typing without accents — the norm on mobile — misses every accented term in the corpus. The migration verifies it (`to_tsvector('french_sans_accent', 'récolter recolter')` must yield a single lexeme). It must stay identical to `app/services/connaissance.CONFIG_FTS`, which serves both the write and the query side.
 
 ## Testing
 

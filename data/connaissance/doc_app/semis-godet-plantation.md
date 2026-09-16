@@ -40,3 +40,10 @@ Repiquer solde les graines du semis d'origine, et non les seuls plants obtenus. 
 **On parle aussi de :** planter des godets ; godets restants ; stock de godets ; mise en terre des plants
 
 Mettre en terre des plants issus de godets retranche d'autant les godets disponibles pour cette culture et cette variété. Un godet planté quitte donc la pépinière et rejoint le stock de plants au jardin, dans le même mouvement. Quand tous les godets d'une variété ont été plantés, la ligne correspondante tombe à zéro et disparaît de la pépinière, sans que rien ne soit effacé du journal.
+
+## Dire si un semis est fait en pépinière ou en pleine terre
+
+**Intention :** procédure
+**On parle aussi de :** filière ; semé en godets ; semé en place ; semis direct ; hors sol ; semis à l'abri ; en pleine terre
+
+Chaque semis retient sa filière : semé en pépinière, hors sol, pour être repiqué plus tard, ou semé directement en pleine terre. Il suffit de le dire dans la phrase — « semé cinquante graines de tomate cerise en pépinière », « semé des carottes en place » — pour que ce soit retenu. Quand la phrase ne le précise pas, le récapitulatif propose la filière la plus probable, parce que la parcelle choisie est une pépinière ou parce que le calendrier de la culture ne connaît qu'une seule façon de la semer ; valider l'adopte, un bouton la remplace par l'autre, et c'est tout. Si rien ne permet de trancher, le semis est enregistré sans filière plutôt que rangé au hasard, et se complète plus tard depuis le parcours de correction. Les semis enregistrés avant cette distinction ont été repris avec la même prudence : ceux dont une mise en godet est rattachée sont comptés en pépinière, tous les autres restent sans filière. La filière n'influence pas le stock, qui continue de dépendre de la parcelle où le semis a été fait ; elle sert à distinguer les deux façons de semer dans le bilan et à choisir la bonne période conseillée du calendrier.

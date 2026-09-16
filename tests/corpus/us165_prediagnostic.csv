@@ -1,0 +1,45 @@
+numero,perimetre,culture,description,piste_attendue
+1,v1,tomate,"mes semis de tomates sur le rebord de la fenêtre font des tiges toutes fines et molles",étiolement par manque de lumière
+2,hors,poireau,"mes plants de poireaux en godet sont tombés d'un coup au ras de la terre",
+3,v1,chou,"les feuilles de mes choux d'hiver sont couvertes d'un truc gris poudreux",oïdium des brassicacées
+4,v1,carotte,"mes carottes ont mal levé, il y a des trous dans le rang",levée irrégulière
+5,hors,radis,"il y a plein de petits trous ronds dans les feuilles de mes radis",altise des crucifères
+6,hors,fève,"j'ai des bestioles noires collées en grappe en haut de mes fèves",puceron noir de la fève
+7,hors,salade,"mes salades sont mangées la nuit, il reste que le trognon",limaces
+8,v1,haricot,"mes haricots ne lèvent pas, j'ai gratté les graines sont molles et pourries",semis en sol froid et humide
+9,hors,pomme de terre,"il y a des petites bêtes rayées jaune et noir sur mes pommes de terre, et des larves rouges",doryphore
+10,hors,fraise,"mes fraisiers font des feuilles magnifiques et des stolons partout mais presque pas de fruits",excès d'azote
+11,hors,rhubarbe,"les feuilles de ma rhubarbe sont grignotées sur les bords en dents de scie",limaces
+12,hors,épinard,"mes épinards montent en graine à peine sortis de terre",
+13,hors,asperge,"mes asperges ont des petites bêtes noires et oranges sur les tiges après la récolte",criocère de l'asperge
+14,hors,artichaut,"mes pieds d'artichaut ont le cœur plein de pucerons",
+15,hors,salade,"mes salades montent tout de suite en graine, elles font une tige au milieu",montaison précoce
+16,hors,pomme de terre,"mes pommes de terre ont des taches brunes sur les feuilles et les tiges qui noircissent",mildiou de la pomme de terre et de la tomate
+17,hors,petit pois,"mes petits pois sont couverts de blanc en fin de saison",oïdium du pois
+18,hors,radis,"mes radis sont creux à l'intérieur et piquants comme du poivre",maturité dépassée
+19,v1,tomate,"mes pieds de tomates ont des taches marron sur les feuilles du bas qui remontent",mildiou de la pomme de terre et de la tomate
+20,v1,courgette,"les feuilles de mes courgettes ont de la poudre blanche",oïdium des cucurbitacées
+21,v1,courgette,"mes courgettes font plein de fleurs mais les petits fruits jaunissent et pourrissent au bout",défaut de pollinisation
+22,v1,tomate,"les feuilles de mes tomates s'enroulent en cuillère vers le haut",enroulement physiologique
+23,v1,bette,"mes feuilles de blettes sont cloquées avec des galeries claires dedans",mineuse de la betterave
+24,v1,poivron,"mes poivrons sous la serre perdent toutes leurs fleurs sans faire de fruit",coulure florale
+25,hors,aubergine,"il y a des fils comme des toiles d'araignée sur mes aubergines et les feuilles sont piquetées",tétranyque tisserand
+26,v1,tomate,"mes tomates ont le cul noir",nécrose apicale
+27,v1,concombre,"mes concombres sont amers, immangeables",amertume du fruit
+28,v1,chou,"mes choux sont mangés, il ne reste que les nervures",piéride du chou
+29,hors,betterave,"mes betteraves ont des petites taches rondes claires sur les feuilles",cercosporiose de la betterave
+30,hors,oignon,"mes oignons pourrissent au collet une fois rentrés au sec",séchage insuffisant après récolte
+31,hors,melon,"mes melons n'ont aucun goût, c'est de l'eau",excès d'eau avant récolte
+32,hors,framboise,"il y a des petits vers blancs dans mes framboises quand je les cueille",ver du framboisier
+33,v1,carotte,"mes carottes sont fourchues, elles font deux ou trois jambes",racine fourchue
+34,hors,potiron,"mes potirons pourrissent sur le dessous là où ils touchent la terre",pourriture grise
+35,v1,chou,"mes pieds de choux flétrissent en pleine journée et les racines sont toutes boursouflées",hernie du chou
+36,hors,céleri,"mes feuilles de céleri ont des taches brunes avec des points noirs dedans",septoriose du céleri
+37,hors,navet,"mes navets sont véreux avec des galeries sous la peau",mouche du chou
+38,hors,poireau,"mes poireaux ont des pointes jaunes et des traits orange comme de la rouille",rouille des alliacées
+39,hors,poireau,"quand je coupe mes poireaux il y a des galeries et des petites bêtes dans le fût",
+40,hors,mâche,"ma mâche fond sur place, les plants deviennent mous et disparaissent",fonte des semis
+41,v1,cornichon,"mes cornichons deviennent amers et jaunissent sur pied dès que je passe deux jours sans aller cueillir",récolte tardive
+42,v1,cornichon,"mes pieds de cornichons ont les feuilles marbrées jaune et vert et les nouvelles pousses sont toutes rabougries",mosaïque du concombre
+43,v1,ail,"j'ai planté mon ail dans un coin du potager qui reste toujours humide, les caïeux ont pourri sans jamais lever",asphyxie racinaire
+44,v1,ail,"mes feuilles d'ail ont des traits orange qui partent en poussière quand je les frotte",rouille des alliacées

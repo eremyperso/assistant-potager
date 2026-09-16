@@ -10,7 +10,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { MapPin, Leaf } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { calendrierDe } from '../lib/calendrier.js'
+import {
+  culturesDuPlan, friseDeCulture, zoneAffichable, attributionsAffichables, TIRET,
+  projectionDeTuile, friseRecalee, resteLisible, reperesLisibles,
+} from '../lib/calendrier.js'
 import {
   occTint, pctDe, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
   filtrerParcelles, parcelleSelectionnee,
@@ -93,23 +96,29 @@ function ParcelleRow({ parcelle, selected, onSelect }) {
  * [CA7] Nom serif + variété italique, quantité à droite, ligne « famille ·
  * durée », puis la frise des douze mois.
  *
- * [CA8/CA9] Les métadonnées horticoles viennent de la table provisoire
- * `lib/calendrier.js`. Une culture absente s'affiche en **mode dégradé** — frise
- * entièrement neutre, famille et durée en tiret — plutôt qu'avec des valeurs par
- * défaut qui auraient l'air d'un conseil.
+ * [US-176] Frise et durée lues dans le référentiel du potager consulté
+ * (`GET /plan/calendriers`). Une culture sans calendrier pour sa zone s'affiche
+ * en **mode dégradé** — frise neutre, durée en tiret — plutôt qu'avec des
+ * valeurs par défaut qui auraient l'air d'un conseil (CA6).
  */
-function CultureTile({ c, parcelleId, moisRef }) {
+function CultureTile({ c, parcelleId, moisRef, calendriers }) {
   const obs = useObservations(
     `culture-row:${parcelleId}:${c.culture}:${c.variete || ''}`,
     { parcelleId, culture: c.culture, variete: c.variete },
   )
 
-  const meta = calendrierDe(c.culture)
+  const frise = friseDeCulture(calendriers, c.culture)
+  // [US-070] Une culture en place se lit sur SON calendrier, recalé sur le
+  // semis réel ; sans recalage possible (CA11), la frise conseillée reste.
+  const projection = projectionDeTuile(calendriers, parcelleId, c.culture, c.variete)
+  const recalee = friseRecalee(projection)
+  const reste = resteLisible(projection)
+  const reperes = reperesLisibles(projection)
   // [US-067 / CA5, CA6, CA8] Famille lue depuis GET /plan (culture_config →
-  // familles_botaniques côté serveur), plus de familles.js. Repli `null` —
-  // pas "Autres" — conservé à l'identique (US-060/CA9) : sur une tuile de
-  // culture seule, un groupe fourre-tout n'a aucun sens.
-  const famille = meta ? (c.famille ?? null) : null
+  // familles_botaniques côté serveur). [US-176 / CA7] Elle ne dépend plus de la
+  // présence d'un calendrier : une culture sans frise garde sa famille. Repli
+  // `null` — pas "Autres" (US-060/CA9).
+  const famille = c.famille ?? null
 
   return (
     <div className="bg-card-alt rounded-xl p-[13px]">
@@ -130,15 +139,42 @@ function CultureTile({ c, parcelleId, moisRef }) {
           <span className="text-[11px] font-semibold text-txt3"> {formatUnite(c.unite)}</span>
         </span>
       </div>
-      <div className="text-[11.5px] text-txt3 mb-2.5">
-        {famille || '—'} · {meta?.duree || '—'}
+      <div className={`text-[11.5px] text-txt3 ${reperes.length ? 'mb-1' : 'mb-2.5'}`}>
+        {famille || TIRET} ·{' '}
+        {/* [US-070 / CA3, CA12] Le reste à courir remplace la durée conseillée ;
+            une récolte dépassée est dite, jamais masquée. */}
+        {reste
+          ? <span className={projection.etat === 'recolte_depassee' ? 'font-semibold text-amber' : 'font-semibold text-txt2'}>{reste}</span>
+          : frise.duree}
+        {/* [US-176 / CA5] Un itinéraire autre que « standard » est nommé. */}
+        {frise.itineraire && <span className="italic"> · {frise.itineraire}</span>}
       </div>
-      <MonthStrip
-        semis={meta?.semis ?? []}
-        plant={meta?.plant ?? []}
-        rec={meta?.rec ?? []}
-        moisCourant={moisRef}
-      />
+      {reperes.length > 0 && (
+        <div className="text-[11px] text-txt3 mb-2.5">
+          {reperes.join(' · ').replace(/^./, (l) => l.toUpperCase())}
+        </div>
+      )}
+      {/* [US-176 / CA3, CA3bis] Quatre phases du référentiel ; la plantation est
+          lue, jamais reconstituée du semis en pépinière. [US-070 / CA7] Recalée,
+          la frise suit la culture : semis, plantation, en croissance, récolte. */}
+      {recalee ? (
+        <MonthStrip
+          pepiniere={recalee.pepiniere}
+          pleineTerre={recalee.pleineTerre}
+          plantation={recalee.plantation}
+          croissance={recalee.croissance}
+          rec={recalee.rec}
+          moisCourant={moisRef}
+        />
+      ) : (
+        <MonthStrip
+          pepiniere={frise.pepiniere}
+          pleineTerre={frise.pleineTerre}
+          plantation={frise.plantation}
+          rec={frise.rec}
+          moisCourant={moisRef}
+        />
+      )}
       {c.has_observations && obs.open && <ObservationPanel items={obs.items} loading={obs.loading} />}
     </div>
   )
@@ -146,7 +182,7 @@ function CultureTile({ c, parcelleId, moisRef }) {
 
 // ── Panneau de détail de la parcelle sélectionnée ────────────────────────────
 
-function DetailParcelle({ parcelle, moisRef }) {
+function DetailParcelle({ parcelle, moisRef, calendriers }) {
   const { id, nom, superficie_m2, cultures, has_observations, nb_observations } = parcelle
   const exposition = expositionAffichable(parcelle.exposition)
   const pct = pctDe(parcelle)
@@ -155,6 +191,8 @@ function DetailParcelle({ parcelle, moisRef }) {
 
   // [CA6] Total restreint aux cultures effectivement comptées en plants.
   const nbPlants = totalPlants(cultures)
+  const zone = zoneAffichable(calendriers)
+  const attributions = attributionsAffichables(calendriers)
 
   return (
     <div className="flex flex-col gap-4">
@@ -203,14 +241,22 @@ function DetailParcelle({ parcelle, moisRef }) {
             sub={`${cultures.length} culture${cultures.length > 1 ? 's' : ''}${
               nbPlants > 0 ? ` · ${nbPlants} plants` : ''
             }`}
-            right={<MonthStripLegend />}
+            right={
+              <MonthStripLegend
+                variante="referentiel"
+                avecCroissance={cultures.some((c) => friseRecalee(projectionDeTuile(calendriers, id, c.culture, c.variete)))}
+              />
+            }
           />
           {/* [CA7] Paliers de la maquette (`.wcult-grid`) : une colonne, deux à
               partir de 640 px de carte, trois à partir de 1400 px — largeur du
               conteneur, jamais de l'écran (règle « Responsive » de CLAUDE.md). */}
           <div className="grid gap-3 @[640px]/card:grid-cols-2 @[1400px]/card:grid-cols-3">
             {cultures.map((c, i) => (
-              <CultureTile key={`${c.culture}-${c.variete || ''}-${i}`} c={c} parcelleId={id} moisRef={moisRef} />
+              <CultureTile
+                key={`${c.culture}-${c.variete || ''}-${i}`}
+                c={c} parcelleId={id} moisRef={moisRef} calendriers={calendriers}
+              />
             ))}
           </div>
           {/* [CA13] Légende de la pastille du modèle de stock, absente de la
@@ -223,6 +269,20 @@ function DetailParcelle({ parcelle, moisRef }) {
               <PastilleOrgane typeOrgane="reproducteur" />reproducteur
             </span>
           </div>
+          {/* [US-176 / CA8, CA9] Zone lue et attribution : une fois pour toutes
+              les tuiles, jamais répétées sur chacune. */}
+          {(zone || attributions.length > 0) && (
+            <div className="mt-2.5 text-[11px] text-txt3 flex flex-col gap-1">
+              {zone && (
+                <span>
+                  Calendrier de la zone <span className="font-semibold text-txt2">{zone.zone}</span>
+                  {zone.origine ? ` (${zone.origine})` : ''} — pour la changer, dites au bot
+                  « /calendrier zone ».
+                </span>
+              )}
+              {attributions.length > 0 && <span>Source : {attributions.join(' · ')}</span>}
+            </div>
+          )}
         </Card>
       )}
     </div>
@@ -239,13 +299,28 @@ export default function Plan({ refresh }) {
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')      // [CA16] filtre local, non persisté
   const [selId, setSelId] = useState(null)
+  const [calendriers, setCalendriers] = useState(null)
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
       // [US-083 / CA7] Si on consulte un potager archivé, passer son ID
-      setData(await api.plan(dateRef, potagerId))
+      const plan = await api.plan(dateRef, potagerId)
+      // [US-176 / CA11, CA12] Calendrier de toutes les cultures en UNE lecture,
+      // attendue avant d'afficher l'écran (pas de frise qui clignote). Son échec
+      // ne bloque rien : les frises passent en mode dégradé, sans repli.
+      const noms = culturesDuPlan(plan?.parcelles)
+      let cal = null
+      if (noms.length > 0) {
+        try {
+          cal = await api.calendriersPlan(noms, potagerId, dateRef)
+        } catch (e) {
+          console.warn('[US-176] Calendrier cultural indisponible', e)
+        }
+      }
+      setCalendriers(cal)
+      setData(plan)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -322,7 +397,7 @@ export default function Plan({ refresh }) {
                   // La sélection remonte le composant à neuf : les panneaux
                   // d'observations d'une parcelle ne survivent pas au passage à
                   // la suivante.
-                  <DetailParcelle key={selection.id} parcelle={selection} moisRef={moisRef} />
+                  <DetailParcelle key={selection.id} parcelle={selection} moisRef={moisRef} calendriers={calendriers} />
                 )}
               </div>
             </div>

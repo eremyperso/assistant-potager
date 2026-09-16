@@ -1,5 +1,8 @@
 # US-026 : Vue pépinière — godets en attente de plantation
 
+**ID :** US-026
+**Titre :** Vue pépinière — godets en attente de plantation
+
 **En tant que** : Admin  
 **Je veux** : voir l'état de ma pépinière — quelles cultures sont en godets, combien de plants, quel taux de réussite  
 **Afin que** : je puisse planifier mes plantations à venir sans interroger le bot

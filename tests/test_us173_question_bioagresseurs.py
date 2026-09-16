@@ -326,11 +326,30 @@ class TestCA10CA11Frontieres:
         for b in par_service:
             assert b.nom_commun_fr in texte
 
-    def test_us173_la_famille_est_en_tete_du_catalogue(self):
-        """[CA12] Placée en premier pour qu'aucune famille plus large ne capte
+    def test_us173_la_famille_precede_toutes_les_familles_larges(self):
+        """[CA12] Placée avant toute famille plus large, pour qu'aucune ne capte
         « quelles maladies sur mes tomates » et ne serve un inventaire de
-        parcelles à sa place."""
-        assert rc.FAMILLES[0].nom == "bioagresseurs_culture"
+        parcelles à sa place.
+
+        [US-141] Ce n'est plus la position ZÉRO, et l'invariant n'a pas changé
+        pour autant : les deux familles de mémoire la précèdent désormais, et
+        elles sont plus ÉTROITES qu'elle — leur motif exige un nom d'écrit
+        (« note », « remarque », « observation », « constat ») qu'aucune question
+        d'agression ne porte. Vérifier la position brute reviendrait à interdire
+        toute famille plus spécifique à l'avenir ; ce qui compte est qu'aucune
+        famille large ne passe devant."""
+        noms = [famille.nom for famille in rc.FAMILLES]
+        rang = noms.index("bioagresseurs_culture")
+
+        assert set(noms[:rang]) <= {"notes_culture", "notes_parcelle"}
+        # Et le comportement que la position protège, mesuré plutôt que déduit.
+        assert rc._choisir_famille(
+            rc.Parametres(
+                question="qu'est-ce qui attaque mes tomates ?",
+                normalisee=rc._normaliser("qu'est-ce qui attaque mes tomates ?"),
+                culture="tomate",
+            )
+        ).nom == "bioagresseurs_culture"
 
     def test_us173_la_famille_declare_une_dependance_large(self):
         """[CA1] La réponse dérive du référentiel PARTAGÉ, pas des évènements du

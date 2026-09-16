@@ -13,7 +13,19 @@
     "La correction porte l'origine 'saisie_manuelle' et survit à tout rejeu (CA5/CA10).",
     "",
     "L'extraction BRUTE, non traduite et non curée, reste disponible séparément",
-    "dans wind_river_associations.json — matériau de relecture, jamais à importer."
+    "dans wind_river_associations.json — matériau de relecture, jamais à importer.",
+    "",
+    "[US-068] Le bloc 'cultures_calendriers' porte des DURÉES (levée, récolte en pleine",
+    "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv :",
+    "semis en pépinière, semis en pleine terre, PLANTATION (outdoor_transplant_*,",
+    "amendement du 15/09/2026 — lue, jamais recalculée depuis le repiquage) et récolte.",
+    "⚠️ Les fenêtres amont sont en zones USDA : la zone lue pour chaque zone climatique",
+    "est une DÉCISION déclarée (adaptateur_wind_river.ZONE_USDA_PAR_ZONE, calée sur la",
+    "date de dernière gelée), pas une équivalence. Printemps seulement : la source ne",
+    "connaît aucun semis de fin d'été ni d'automne. Toutes les cultures de culture_config",
+    "retrouvées dans la source (APPARIEMENTS_CALENDRIER). Voir wind_river_greens/SOURCE.md.",
+    "Pour corriger : /calendrier fenetre|duree <culture> ... au bot, correction propre",
+    "au potager qu'aucun rejeu n'écrasera."
   ],
   "source": {
     "code": "wind_river_greens",
@@ -66,6 +78,916 @@
       "culture": "ail",
       "exposition": "plein soleil",
       "besoin_eau": "moyen"
+    }
+  ],
+  "cultures_calendriers": [
+    {
+      "culture": "tomate",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14",
+        "repiquage": "42-56"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
+          "recolte": "août-octobre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "haricot grimpant",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-12",
+        "recolte": "68-75"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-septembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "août-septembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juillet-août"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "septembre-octobre"
+        }
+      }
+    },
+    {
+      "culture": "haricot",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10",
+        "recolte": "54-57"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-août"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "courgette",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-août"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "pâtisson",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-août"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "potiron",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "septembre-octobre"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "septembre-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "août-octobre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "octobre"
+        }
+      }
+    },
+    {
+      "culture": "courge",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-13"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "août-octobre"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "septembre-octobre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "août-septembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "septembre-octobre"
+        }
+      }
+    },
+    {
+      "culture": "brocoli",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "5-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "janvier-février",
+          "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "chou frisé",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "6-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "janvier-février",
+          "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "chou",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "5-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "janvier-février",
+          "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "carotte",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "14-21",
+        "recolte": "65-75"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "radis",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "5-10",
+        "recolte": "54-55"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "avril-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "betterave",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14",
+        "recolte": "52-55"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "avril-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "navet",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "4-8",
+        "recolte": "38-39"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "avril-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "avril-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "concombre",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
+          "recolte": "juillet-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "avril",
+          "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
+          "recolte": "août-septembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "mars",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
+          "recolte": "juillet-août"
+        },
+        "montagnard": {
+          "semis_pepiniere": "avril-mai",
+          "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "cornichon",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10",
+        "recolte": "52-55"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mai-juin",
+          "recolte": "juillet-août"
+        },
+        "continental": {
+          "semis_pleine_terre": "mai-juillet",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "juin-juillet",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "poivron",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "10-14",
+        "repiquage": "56-70"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février",
+          "plantation": "avril-mai",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "aubergine",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "10-14",
+        "repiquage": "56-70"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
+          "recolte": "juillet-septembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février",
+          "plantation": "avril-mai",
+          "recolte": "juin-août"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "melon",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
+          "recolte": "août-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "avril",
+          "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
+          "recolte": "août-octobre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "mars",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "avril-mai",
+          "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
+          "recolte": "septembre-octobre"
+        }
+      }
+    },
+    {
+      "culture": "pastèque",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
+          "recolte": "août-septembre"
+        },
+        "continental": {
+          "semis_pepiniere": "avril",
+          "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
+          "recolte": "août-octobre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "mars",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
+          "recolte": "juillet-septembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "avril-mai",
+          "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
+          "recolte": "septembre-octobre"
+        }
+      }
+    },
+    {
+      "culture": "pois gourmand",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14",
+        "recolte": "60-65"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "petit pois",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14",
+        "recolte": "60-65"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "poireau",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juillet-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "juin-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "oignon",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "juillet-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "juillet-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "juin-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "août-octobre"
+        }
+      }
+    },
+    {
+      "culture": "laitue",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "avril-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
+    },
+    {
+      "culture": "basilic",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "5-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "persil",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "12-21"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "thym",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "14-21",
+        "repiquage": "42-56"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "menthe",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "10-16"
+      },
+      "fenetres": {
+        "oceanique": {
+          "plantation": "avril-juin"
+        },
+        "continental": {
+          "plantation": "mai-juin"
+        },
+        "mediterraneen": {
+          "plantation": "avril-mai"
+        },
+        "montagnard": {
+          "plantation": "juin-juillet"
+        }
+      }
+    },
+    {
+      "culture": "fenouil",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-14"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
+          "recolte": "juin-novembre"
+        },
+        "continental": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
+          "recolte": "juin-novembre"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
+          "recolte": "mai-décembre"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
+          "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "fraise",
+      "itineraire": "standard",
+      "durees": {},
+      "fenetres": {
+        "oceanique": {
+          "plantation": "mai-juin"
+        },
+        "continental": {
+          "plantation": "mai-juillet"
+        },
+        "mediterraneen": {
+          "plantation": "avril-juin"
+        },
+        "montagnard": {
+          "plantation": "juin-juillet"
+        }
+      }
+    },
+    {
+      "culture": "capucine",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-12"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai"
+        },
+        "continental": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin"
+        },
+        "mediterraneen": {
+          "semis_pepiniere": "février-mars",
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai"
+        },
+        "montagnard": {
+          "semis_pepiniere": "mars-avril",
+          "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin"
+        }
+      }
+    },
+    {
+      "culture": "salade",
+      "itineraire": "standard",
+      "durees": {
+        "levee": "7-10"
+      },
+      "fenetres": {
+        "oceanique": {
+          "semis_pleine_terre": "mars-mai",
+          "recolte": "mai-novembre"
+        },
+        "continental": {
+          "semis_pleine_terre": "avril-mai",
+          "recolte": "mai-novembre"
+        },
+        "mediterraneen": {
+          "semis_pleine_terre": "mars-avril",
+          "recolte": "avril-décembre"
+        },
+        "montagnard": {
+          "semis_pleine_terre": "avril-juin",
+          "recolte": "juin-octobre"
+        }
+      }
     }
   ],
   "cultures_associations": [

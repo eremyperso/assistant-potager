@@ -121,6 +121,37 @@ culture réellement présente en base. Sous `SEUIL_APPARIEMENT` (~70 %), l'impor
 automatique ne vaut plus la saisie directe sur les dix cultures du périmètre :
 c'est cette mesure, et non une intention, qui tranche.
 
+Les blocs `symptomes` et `symptomes_bioagresseurs` [US-165]
+------------------------------------------------------------
+Même partition que ci-dessus, un cran plus bas : une **identité** (`symptomes`)
+et une **arête pondérée** (`symptomes_bioagresseurs`). Les symptômes s'importent
+après les identités de bioagresseurs, leurs arêtes après eux — un manifeste
+complet s'importe donc en une passe, dans l'ordre des dépendances.
+
+    "symptomes": [{"libelle": "des taches marron remontent depuis les feuilles du bas",
+                   "organe": "feuille",
+                   "synonymes": "taches marron ; feuilles qui noircissent ; mildiou"}],
+    "symptomes_bioagresseurs": [{"symptome": "des taches marron remontent depuis les feuilles du bas",
+                                 "bioagresseur": "mildiou de la pomme de terre et de la tomate",
+                                 "poids": 0.9,
+                                 "niveau_confiance": "indicatif"}]
+
+Trois points qui ne se devinent pas à la lecture du gabarit :
+
+- **`synonymes` est le livrable, pas un ornement (US-165 / CA1).** C'est cette
+  colonne qui rapproche « poudre blanche » d'« oïdium » sans moteur vectoriel.
+  Les deux registres s'y écrivent, celui du jardinier ET celui de l'agronome.
+- **`poids` ordonne et ne s'affiche jamais (CA2).** Il vaut dans ]0, 1] et
+  transcrit une hiérarchie déjà écrite en toutes lettres dans les fiches d'US-140
+  (« évoque en premier lieu », « vient loin derrière ») — ce n'est pas une
+  probabilité mesurée, et rien ne le fait remonter jusqu'au jardinier.
+- **`niveau_confiance` vaut `indicatif` par défaut (CA6).** Une piste servie
+  depuis une arête `indicatif` porte la réserve d'US-140/CA8, mot pour mot. Ne
+  passer à `verifie` qu'après un constat au champ.
+
+Un symptôme n'a AUCUN rattachement à une culture : le croisement passe par
+`cultures_bioagresseurs`, jamais par le symptôme lui-même (voir migration_v45).
+
 Le bloc `cultures_attributs` [US-161]
 -------------------------------------
 C'est le **seul** chemin de pré-remplissage des attributs agronomiques : « aucun
@@ -147,6 +178,30 @@ CA10 interdit qu'un chiffre soit produit par un modèle de langage. Profondeurs
 de semis et rusticités viennent d'une extraction sourcée du socle de licences
 (CA6 d'US-166), de la saisie du jardinier au bot, ou du manifeste de rédaction
 interne ci-dessous — le mécanisme les attend, il ne les invente pas.
+
+Le bloc `cultures_calendriers` [US-068]
+---------------------------------------
+Fenêtres par zone et durées communes, rattachées à un itinéraire cultural ::
+
+    "cultures_calendriers": [{
+        "culture": "courgette", "itineraire": "standard",
+        "durees":   {"levee": "7-10", "recolte": "50-55", "repiquage": null},
+        "fenetres": {"continental": {"semis_pepiniere": null,
+                                     "semis_pleine_terre": "mai-juin",
+                                     "recolte": "juillet-octobre"}}
+    }]
+
+Trois règles, toutes héritées :
+- **Aucune culture créée (CA9, CA7 ci-dessus).** Une culture absente de
+  `culture_config` est comptée `cultures_ignorees` — l'itinéraire, lui, est créé
+  s'il manque, puisqu'il n'existe qu'attaché à une culture déjà dictée.
+- **Du partagé seulement.** L'import écrit `potager_id` NULL et ne lit jamais
+  un calendrier personnalisé : une correction de jardinier est, par
+  construction, hors de sa portée (CA9 : « n'écrase jamais une valeur saisie »).
+- **Non-écrasement valeur par valeur (`_peut_ecrire`).** Une fenêtre ou une
+  durée partagée d'une autre origine est préservée ; une valeur `null` n'écrit
+  rien — le gabarit livré vide est inoffensif. Une valeur mal formée est refusée
+  et comptée, sans empêcher ses voisines d'être écrites.
 
 Le manifeste de rédaction interne
 ---------------------------------
@@ -180,10 +235,18 @@ from sqlalchemy.orm import Session
 from app.services import associations as svc_associations
 from app.services import attributs_culture as svc_attributs
 from app.services import bioagresseurs as svc_bioagresseurs
+from app.services import prediagnostic as svc_prediagnostic
+from app.services import calendrier_cultural as svc_calendrier
 from app.services import referentiel_sources as svc_sources
 from app.services.familles import normaliser_famille
 from app.services.rapport_couverture import SEUIL_APPARIEMENT
-from database.models import CultureConfig, FamilleBotanique, ReferentielSource
+from database.models import (
+    CultureConfig,
+    DureeCulturale,
+    FamilleBotanique,
+    FenetreCulturale,
+    ReferentielSource,
+)
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import levenshtein_distance
 
@@ -257,6 +320,31 @@ class ResultatImport:
     #: NON écrites, en attente de revue humaine (`"revue_humaine": true`).
     appariements_a_revoir: list[str] = field(default_factory=list)
 
+    # ── [US-165] Symptômes : identités puis arêtes pondérées ──────────────────
+    symptomes_crees: list[str] = field(default_factory=list)
+    symptomes_ecrits: list[str] = field(default_factory=list)
+    #: Symptôme déjà porté par une AUTRE origine — jamais écrasé par un rejeu.
+    symptomes_preserves: list[str] = field(default_factory=list)
+    #: [CA1] Organe hors vocabulaire fermé, ou libellé vide.
+    symptomes_refuses: list[str] = field(default_factory=list)
+
+    suspicions_creees: list[str] = field(default_factory=list)
+    suspicions_ecrites: list[str] = field(default_factory=list)
+    suspicions_preservees: list[str] = field(default_factory=list)
+    #: Symptôme ou bioagresseur absent du référentiel — jamais créé à la volée.
+    suspicions_ignorees: list[str] = field(default_factory=list)
+    #: [CA2, CA6] Poids hors ]0, 1] ou niveau de confiance hors vocabulaire.
+    suspicions_refusees: list[str] = field(default_factory=list)
+    # ── [US-068] Calendrier cultural : itinéraires, fenêtres, durées ──────────
+    #: Itinéraires PARTAGÉS créés (« culture / itinéraire »).
+    calendriers_itineraires_crees: list[str] = field(default_factory=list)
+    #: Valeurs écrites (« culture / itinéraire / zone.phase » ou « … / etape »).
+    calendriers_valeurs_ecrites: list[str] = field(default_factory=list)
+    #: Valeurs partagées portant une autre origine — jamais écrasées.
+    calendriers_valeurs_preservees: list[str] = field(default_factory=list)
+    #: Zone, phase, étape ou valeur mal formée — refusée, rien d'écrit.
+    calendriers_valeurs_refusees: list[str] = field(default_factory=list)
+
     # ── [US-162 / CA8] Mesure d'appariement — un livrable, pas un journal ─────
     #: Libellés de culture DISTINCTS portés par le bloc `cultures_bioagresseurs`.
     appariement_libelles: list[str] = field(default_factory=list)
@@ -304,6 +392,12 @@ class ResultatImport:
             + len(self.bioagresseurs_ecrits)
             + len(self.rattachements_crees)
             + len(self.rattachements_ecrits)
+            + len(self.symptomes_crees)
+            + len(self.symptomes_ecrits)
+            + len(self.suspicions_creees)
+            + len(self.suspicions_ecrites)
+            + len(self.calendriers_itineraires_crees)
+            + len(self.calendriers_valeurs_ecrites)
         )
 
 
@@ -743,6 +837,268 @@ def _importer_rattachements_bioagresseurs(
             resultat.rattachements_preserves.append(libelle)
 
 
+def _importer_symptomes(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-165 / CA1] Importe les SYMPTÔMES — partagés, par définition.
+
+    Délègue à `app.services.prediagnostic.importer_symptome`, seul point
+    d'écriture de la table, partagé avec toute autre saisie (« aucun second
+    mécanisme »). C'est lui qui maintient `recherche_fts` : un symptôme inséré
+    ailleurs serait en base et introuvable.
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        libelle = (entree.get("libelle") or "").strip()
+        if not libelle:
+            continue
+        try:
+            statut = svc_prediagnostic.importer_symptome(
+                db,
+                libelle=libelle,
+                organe=(entree.get("organe") or "").strip(),
+                source=source,
+                synonymes=entree.get("synonymes"),
+            )
+        except svc_prediagnostic.ValeurSymptomeInvalideError as err:
+            log.warning("[import_referentiel] symptôme « %s » refusé : %s", libelle, err)
+            resultat.symptomes_refuses.append(libelle)
+            continue
+
+        if statut == svc_prediagnostic.IMPORT_CREEE:
+            resultat.symptomes_crees.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_ECRITE:
+            resultat.symptomes_ecrits.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_PRESERVEE:
+            resultat.symptomes_preserves.append(libelle)
+
+
+def _importer_suspicions(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-165 / CA2, CA6] Importe les ARÊTES PONDÉRÉES symptôme × bioagresseur.
+
+    Ni le symptôme ni le bioagresseur ne sont créés à la volée : un côté absent
+    est compté ignoré, jamais fabriqué (CA7 d'US-161, même invariant que les
+    arêtes d'US-162). Le niveau de confiance par défaut est `indicatif` — rien
+    n'est vérifié tant qu'un jardinier ne l'a pas constaté au champ.
+    """
+    if source is None:
+        return
+    for entree in entrees:
+        symptome = (entree.get("symptome") or "").strip()
+        bioagresseur = (entree.get("bioagresseur") or "").strip()
+        if not symptome or not bioagresseur:
+            continue
+        libelle = f"{symptome} → {bioagresseur}"
+        try:
+            statut = svc_prediagnostic.importer_rattachement(
+                db,
+                symptome=symptome,
+                bioagresseur=bioagresseur,
+                poids=entree.get("poids"),
+                source=source,
+                niveau_confiance=(
+                    entree.get("niveau_confiance") or svc_prediagnostic.NIVEAU_INDICATIF
+                ),
+            )
+        except (svc_prediagnostic.SymptomeInconnuError,
+                svc_bioagresseurs.BioagresseurInconnuError):
+            resultat.suspicions_ignorees.append(libelle)
+            continue
+        except svc_prediagnostic.ValeurSymptomeInvalideError as err:
+            log.warning("[import_referentiel] suspicion « %s » refusée : %s", libelle, err)
+            resultat.suspicions_refusees.append(libelle)
+            continue
+
+        if statut == svc_prediagnostic.IMPORT_CREEE:
+            resultat.suspicions_creees.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_ECRITE:
+            resultat.suspicions_ecrites.append(libelle)
+        elif statut == svc_prediagnostic.IMPORT_PRESERVEE:
+            resultat.suspicions_preservees.append(libelle)
+
+
+def _simuler_calendrier(prefixe: str, durees: dict, fenetres: dict, resultat: ResultatImport) -> None:
+    """[US-068] Ce qu'un import de calendrier écrirait, sans rien écrire."""
+    resultat.calendriers_itineraires_crees.append(prefixe)
+    for etape, valeur in durees.items():
+        if valeur is None:
+            continue
+        try:
+            if svc_calendrier.parser_duree(valeur) is not None:
+                resultat.calendriers_valeurs_ecrites.append(
+                    f"{prefixe} / {svc_calendrier.normaliser_etape(etape)}"
+                )
+        except svc_calendrier.ValeurCalendrierInvalideError:
+            resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {etape}")
+    for zone, phases in fenetres.items():
+        if not isinstance(phases, dict):
+            resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {zone}")
+            continue
+        for phase, valeur in phases.items():
+            if valeur is None:
+                continue
+            try:
+                if svc_calendrier.parser_fenetre(valeur) is not None:
+                    resultat.calendriers_valeurs_ecrites.append(
+                        f"{prefixe} / {svc_calendrier.normaliser_zone(zone)}."
+                        f"{svc_calendrier.normaliser_phase(phase)}"
+                    )
+            except svc_calendrier.ValeurCalendrierInvalideError:
+                resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {zone}.{phase}")
+
+
+def _importer_calendriers_cultures(
+    db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
+) -> None:
+    """
+    [US-068 / CA2-CA4, CA6, CA9] Pré-remplit le calendrier PARTAGÉ des cultures
+    **existantes** : itinéraire, fenêtres par zone, durées communes.
+
+    Quatre refus, dans cet ordre :
+    1. Culture sans aucune fiche dans `culture_config` → `cultures_ignorees`,
+       jamais créée.
+    2. Zone, phase ou étape hors vocabulaire → `calendriers_valeurs_refusees`.
+    3. Valeur mal formée (« mars-mai », « 70-90 ») → refusée, ses voisines écrites.
+    4. Valeur partagée d'une autre origine → `calendriers_valeurs_preservees`.
+
+    Un calendrier personnalisé (`potager_id` non nul) n'est jamais lu ni écrit
+    ici : c'est ce qui garantit que le pré-remplissage n'écrase aucune saisie
+    de jardinier (CA9).
+    """
+    source_id = source.id if source is not None else None
+
+    # Toutes les fiches, partagées d'abord — même périmètre que les attributs
+    # (US-161) : une culture créée à la volée l'est POUR un potager
+    # (`parcelles.creer_culture_config`), et l'ignorer ici laisserait sans
+    # calendrier la plupart des cultures réellement dictées. L'itinéraire
+    # importé reste PARTAGÉ (`potager_id` NULL) : attaché à une fiche locale, il
+    # n'est lu que par les potagers qui voient cette fiche.
+    fiches_par_culture: dict[str, CultureConfig] = {}
+    configs = db.query(CultureConfig).all()
+    for config in sorted(configs, key=lambda c: (c.potager_id is not None, c.id)):
+        fiches_par_culture.setdefault(normaliser_culture(config.nom), config)
+
+    for entree in entrees:
+        culture = (entree.get("culture") or "").strip()
+        if not culture:
+            continue
+        fiche = fiches_par_culture.get(normaliser_culture(culture))
+        if fiche is None:
+            resultat.cultures_ignorees.append(culture)
+            continue
+
+        nom_itineraire = (entree.get("itineraire") or svc_calendrier.ITINERAIRE_PAR_DEFAUT).strip()
+        prefixe = f"{culture} / {nom_itineraire}"
+
+        # Rien à écrire ? Alors aucun itinéraire vide n'est créé pour autant :
+        # le gabarit livré vide doit rester strictement inoffensif.
+        durees = entree.get("durees") or {}
+        fenetres = entree.get("fenetres") or {}
+        a_ecrire = any(v is not None for v in durees.values()) or any(
+            v is not None
+            for phases in fenetres.values() if isinstance(phases, dict)
+            for v in phases.values()
+        )
+        if not a_ecrire:
+            continue
+
+        if source_id is None:
+            # Simulation d'une source pas encore au registre : aucune ligne ne
+            # peut naître sans origine (NOT NULL), on compte donc ce qui SERAIT
+            # écrit — tout, puisque rien de cette source n'existe encore.
+            _simuler_calendrier(prefixe, durees, fenetres, resultat)
+            continue
+
+        itineraire, cree = svc_calendrier.itineraire_partage(db, fiche, nom_itineraire, source_id)
+        if cree:
+            resultat.calendriers_itineraires_crees.append(prefixe)
+
+        for etape_brute, valeur_brute in durees.items():
+            if valeur_brute is None:
+                continue
+            try:
+                etape = svc_calendrier.normaliser_etape(etape_brute)
+                valeurs = svc_calendrier.parser_duree(valeur_brute)
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                log.warning("[import_referentiel] %s / %s refusé : %s", prefixe, etape_brute, err)
+                resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {etape_brute}")
+                continue
+            if valeurs is None:
+                continue
+            etiquette = f"{prefixe} / {etape}"
+            ligne = (
+                db.query(DureeCulturale)
+                .filter(DureeCulturale.itineraire_id == itineraire.id, DureeCulturale.etape == etape)
+                .first()
+            )
+            if ligne is None:
+                ligne = DureeCulturale(itineraire_id=itineraire.id, etape=etape, potager_id=None)
+                db.add(ligne)
+            elif not _peut_ecrire(
+                ligne.jours_min if ligne.mention is None else ligne.mention,
+                ligne.source_id, source_id,
+            ):
+                resultat.calendriers_valeurs_preservees.append(etiquette)
+                continue
+            if (ligne.jours_min, ligne.jours_max, ligne.mention) != valeurs:
+                ligne.jours_min, ligne.jours_max, ligne.mention = valeurs
+                resultat.calendriers_valeurs_ecrites.append(etiquette)
+            ligne.source_id = source_id
+
+        for zone_brute, phases in fenetres.items():
+            if not isinstance(phases, dict):
+                resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {zone_brute}")
+                continue
+            try:
+                zone = svc_calendrier.normaliser_zone(zone_brute)
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                log.warning("[import_referentiel] %s / %s refusé : %s", prefixe, zone_brute, err)
+                resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {zone_brute}")
+                continue
+            for phase_brute, valeur_brute in phases.items():
+                if valeur_brute is None:
+                    continue
+                try:
+                    phase = svc_calendrier.normaliser_phase(phase_brute)
+                    bornes = svc_calendrier.parser_fenetre(valeur_brute)
+                except svc_calendrier.ValeurCalendrierInvalideError as err:
+                    log.warning(
+                        "[import_referentiel] %s / %s.%s refusé : %s", prefixe, zone, phase_brute, err,
+                    )
+                    resultat.calendriers_valeurs_refusees.append(f"{prefixe} / {zone}.{phase_brute}")
+                    continue
+                if bornes is None:
+                    continue
+                etiquette = f"{prefixe} / {zone}.{phase}"
+                ligne = (
+                    db.query(FenetreCulturale)
+                    .filter(
+                        FenetreCulturale.itineraire_id == itineraire.id,
+                        FenetreCulturale.zone_climatique == zone,
+                        FenetreCulturale.phase == phase,
+                    )
+                    .first()
+                )
+                if ligne is None:
+                    ligne = FenetreCulturale(
+                        itineraire_id=itineraire.id, zone_climatique=zone, phase=phase, potager_id=None,
+                    )
+                    db.add(ligne)
+                elif not _peut_ecrire(ligne.mois_debut, ligne.source_id, source_id):
+                    resultat.calendriers_valeurs_preservees.append(etiquette)
+                    continue
+                if (ligne.mois_debut, ligne.mois_fin) != bornes:
+                    ligne.mois_debut, ligne.mois_fin = bornes
+                    resultat.calendriers_valeurs_ecrites.append(etiquette)
+                ligne.source_id = source_id
+        db.flush()
+
+
 def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> ResultatImport:
     """
     [CA5-CA8] Importe un manifeste de référentiel structuré.
@@ -822,6 +1178,18 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
     _importer_rattachements_bioagresseurs(
         db, manifeste.get("cultures_bioagresseurs") or [], source, resultat
     )
+    # [US-165] Les symptômes APRÈS les identités de bioagresseurs, pour la même
+    # raison, et leurs arêtes après eux : un manifeste complet s'importe alors en
+    # une passe, dans l'ordre des dépendances.
+    _importer_symptomes(db, manifeste.get("symptomes") or [], source, resultat)
+    db.flush()  # les symptômes créés doivent porter un id avant les suspicions
+    _importer_suspicions(
+        db, manifeste.get("symptomes_bioagresseurs") or [], source, resultat
+    )
+    # [US-068] Le calendrier ne dépend que de culture_config.
+    _importer_calendriers_cultures(
+        db, manifeste.get("cultures_calendriers") or [], source, resultat
+    )
 
     if dry_run:
         db.rollback()
@@ -836,7 +1204,9 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         "créée(s)/écrite(s), %s ignorée(s) (aucune création, CA7), %s hors "
         "périmètre, %s valeur(s) refusée(s), %s valeur(s) humaine(s) préservée(s), "
         "%s bioagresseur(s) et %s arête(s) culture × bioagresseur écrit(e)s, "
-        "%s appariement(s) en attente de revue humaine (US-162/CA9)",
+        "%s symptôme(s) et %s suspicion(s) symptôme × bioagresseur écrit(e)s, "
+        "%s appariement(s) en attente de revue humaine (US-162/CA9), "
+        "%s valeur(s) de calendrier écrite(s) (US-068)",
         code, len(resultat.familles_creees), len(resultat.familles_enrichies),
         len(resultat.cultures_rattachees), len(resultat.attributs_ecrits),
         len(resultat.associations_creees) + len(resultat.associations_ecrites),
@@ -848,7 +1218,10 @@ def importer(db: Session, manifeste: dict[str, Any], dry_run: bool = False) -> R
         + len(resultat.bioagresseurs_preserves) + len(resultat.rattachements_preserves),
         len(resultat.bioagresseurs_crees) + len(resultat.bioagresseurs_ecrits),
         len(resultat.rattachements_crees) + len(resultat.rattachements_ecrits),
+        len(resultat.symptomes_crees) + len(resultat.symptomes_ecrits),
+        len(resultat.suspicions_creees) + len(resultat.suspicions_ecrites),
         len(resultat.appariements_a_revoir),
+        len(resultat.calendriers_valeurs_ecrites),
     )
     return resultat
 
@@ -946,6 +1319,28 @@ def formater_resultat(resultat: ResultatImport) -> str:
             'ajouter "revue_humaine": true à la ligne du manifeste pour l\'appliquer.'
         )
 
+    # ── [US-068] Calendrier cultural ──────────────────────────────────────────
+    lignes.append("")
+    lignes.append("  Calendrier cultural [US-068]")
+    lignes.append(
+        f"    Itinéraires créés  : {len(resultat.calendriers_itineraires_crees)} — "
+        f"{', '.join(resultat.calendriers_itineraires_crees) or '—'}"
+    )
+    lignes.append(
+        f"    Valeurs écrites    : {len(resultat.calendriers_valeurs_ecrites)} — "
+        f"{', '.join(resultat.calendriers_valeurs_ecrites) or '—'}"
+    )
+    lignes.append(
+        f"    Valeurs préservées : {len(resultat.calendriers_valeurs_preservees)} — "
+        f"{', '.join(resultat.calendriers_valeurs_preservees) or '—'} "
+        "(déjà renseignées par une autre origine)"
+    )
+    lignes.append(
+        f"    Valeurs refusées   : {len(resultat.calendriers_valeurs_refusees)} — "
+        f"{', '.join(resultat.calendriers_valeurs_refusees) or '—'} "
+        "(zone, phase, étape ou valeur mal formée)"
+    )
+
     # [CA8] La mesure d'appariement — le livrable qui décide si l'import
     # automatique est conservé ou remplacé par la correspondance manuelle.
     taux = resultat.taux_appariement
@@ -986,5 +1381,42 @@ def formater_resultat(resultat: ResultatImport) -> str:
                 "directe. La table de correspondance manuelle sur les dix cultures du "
                 "périmètre devient le mode nominal (US-162 / CA8)."
             )
+
+    # ── [US-165] Symptômes et suspicions pondérées ────────────────────────────
+    lignes.append("")
+    lignes.append("  Symptômes [US-165]")
+    lignes.append(
+        f"    Symptômes créés    : {len(resultat.symptomes_crees)} — "
+        f"{', '.join(resultat.symptomes_crees) or '—'}"
+    )
+    lignes.append(
+        f"    Symptômes écrits   : {len(resultat.symptomes_ecrits)} — "
+        f"{', '.join(resultat.symptomes_ecrits) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Suspicions créées  : {len(resultat.suspicions_creees)} — "
+        f"{', '.join(resultat.suspicions_creees) or '—'}"
+    )
+    lignes.append(
+        f"    Suspicions écrites : {len(resultat.suspicions_ecrites)} — "
+        f"{', '.join(resultat.suspicions_ecrites) or '—'} (rejeu, valeur modifiée)"
+    )
+    lignes.append(
+        f"    Suspicions ignorées: {len(resultat.suspicions_ignorees)} — "
+        f"{', '.join(resultat.suspicions_ignorees) or '—'} "
+        "(symptôme ou bioagresseur absent du référentiel, jamais créé)"
+    )
+    lignes.append(
+        f"    Valeurs refusées   : "
+        f"{len(resultat.symptomes_refuses) + len(resultat.suspicions_refusees)} — "
+        f"{', '.join(resultat.symptomes_refuses + resultat.suspicions_refusees) or '—'} "
+        "(organe, poids ou niveau de confiance hors vocabulaire, CA1/CA2/CA6)"
+    )
+    if resultat.symptomes_crees or resultat.symptomes_ecrits:
+        lignes.append(
+            "    ↳ Le rappel du pré-diagnostic ne se suppose pas : rejouer "
+            "`python tools/mesurer_prediagnostic.py` après tout import de symptômes "
+            "(US-165 / CA11, CA13)."
+        )
 
     return "\n".join(lignes)

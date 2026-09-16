@@ -23,6 +23,7 @@ Lancement :
 import os
 import re
 import json
+import time
 import asyncio
 import tempfile
 import logging
@@ -82,8 +83,10 @@ from app.services import fiche_culture as svc_fiche_culture  # [US-164]
 from app.services import associations as svc_associations  # [US-163]
 from app.services import rotation as svc_rotation  # [US-163]
 from app.services import bioagresseurs as svc_bioagresseurs  # [US-162]
+from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from app.services import menu_commandes as svc_menu_commandes  # [US-171]
+from app.services import interpreteur_commandes as svc_interpreteur  # [US-172]
 from app.services import plan as svc_plan
 from app.services import stock as svc_stock  # [fix rattachement lot godet]
 from app.services import liaison_telegram as svc_liaison_telegram  # [US-045]
@@ -91,7 +94,8 @@ from app.services import potager_actif as svc_potager_actif  # [US-046]
 from app.services import potagers as svc_potagers  # [US-084] purge planifiée
 from app.services import retours as svc_retours  # [US-097] retour du jardinier
 from app.services import metriques_routage as svc_metriques_routage  # [US-097] purge rétention
-from app.services.permissions import require_role, PermissionInsuffisanteError  # [US-047]
+from app.services import contexte_semis as svc_contexte_semis  # [US-069] pépinière / pleine terre
+from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047] [US-083]
 from database.models import Potager as _Potager  # [US-046]
 
 # ── Init ────────────────────────────────────────────────────────────────────────
@@ -617,6 +621,23 @@ _HELP_FICHE = (
     "explicitement — jamais une fiche voisine forcée._"
 )
 
+_HELP_CALENDRIER = (
+    "📅 *Aide — Calendrier cultural*\n"
+    "Quand semer, en pépinière ou en pleine terre, et quand récolter — "
+    "avec les délais de levée et de récolte, sans appel à l'IA.\n\n"
+    "*Consulter le calendrier d'une culture :*\n"
+    "  → /calendrier tomate\n"
+    "*Lire ou choisir la zone climatique du potager :*\n"
+    "  → /calendrier zone\n"
+    "  → /calendrier zone méditerranéen\n"
+    "*Corriger une fenêtre (pour la zone du potager) :*\n"
+    "  → /calendrier fenetre tomate pepiniere février-avril\n"
+    "*Corriger une durée (en jours, ou une fourchette) :*\n"
+    "  → /calendrier duree courgette recolte 50-60\n"
+    "_Vos corrections ne valent que pour votre potager. Sans donnée, "
+    "rien n'est inventé : la frise reste vide et la durée s'affiche en tiret._"
+)
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -625,6 +646,7 @@ _HELP_FICHE = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
+    "calendrier",
 )
 
 # Dérivé, jamais recopié : un domaine ajouté ci-dessus entre au sommaire sans
@@ -649,6 +671,7 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "culture":   _HELP_CULTURE,
     "famille":   _HELP_CULTURE,
     "fiche":     _HELP_FICHE,
+    "calendrier": _HELP_CALENDRIER,  # [US-068]
 }
 
 
@@ -714,6 +737,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/parcelle ajouter [nom] — Créer une parcelle\n"
         "/culture famille [culture] [famille] — Corriger une famille botanique\n"
         "/fiche [culture] — Fiche courte agronomique, zéro jeton\n"
+        "/calendrier [culture] — Quand semer et récolter, selon votre zone\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
@@ -931,8 +955,18 @@ async def _delier_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte:
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def cmd_potager(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """/potager — [US-046 / CA2] Liste les potagers de l'utilisateur, potager
-    actif marqué, boutons inline pour en changer."""
+    """/potager [nom] — [US-046 / CA2] Liste les potagers de l'utilisateur,
+    potager actif marqué, boutons inline pour en changer.
+
+    [US-172 / CA9] L'argument facultatif `nom` bascule directement sur le
+    potager nommé, en passant par `definir_potager_actif` — le même service que
+    le bouton inline, jamais une seconde règle. Il existe pour que « passe sur
+    le potager de la maison » ait une commande tapée strictement équivalente :
+    sans lui, la phrase dictée aurait dû réimplémenter la bascule, ce que le CA9
+    interdit. Sans argument, le comportement est celui d'avant, à l'identique.
+    Un nom qui ne correspond exactement à aucun potager n'en substitue jamais un
+    autre (CA12) : la liste complète est affichée, et le jardinier choisit.
+    """
     user_id = ctx.user_data.get('tenant_user_id')
     db = SessionLocal()
     try:
@@ -940,6 +974,29 @@ async def cmd_potager(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not potagers:
             await update.message.reply_text(_MSG_AUCUN_POTAGER, parse_mode="Markdown")
             return
+
+        nom_demande = " ".join(ctx.args).strip() if getattr(ctx, "args", None) else ""
+        if nom_demande:
+            cible = normalize_parcelle_name(nom_demande)
+            correspondances = [
+                p for p in potagers if normalize_parcelle_name(p.nom) == cible
+            ]
+            if len(correspondances) == 1:
+                tenant_ctx = svc_potager_actif.definir_potager_actif(
+                    db, user_id, correspondances[0].id
+                )
+                set_current_context(tenant_ctx)
+                current_potager_id.set(tenant_ctx.potager_id)
+                log.info(f"[US-172] Potager actif changé par commande : {correspondances[0].nom!r}")
+                await update.message.reply_text(
+                    f"✅ Potager actif : *{_md(correspondances[0].nom)}*",
+                    parse_mode="Markdown",
+                )
+                return
+            log.info(
+                f"[US-172 CA12] Potager {nom_demande!r} sans correspondance exacte "
+                f"({len(correspondances)} candidat(s)) → liste proposée"
+            )
 
         actif_id = current_context().potager_id
         boutons = [
@@ -1103,6 +1160,15 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _ask_question(update, texte)
         return
 
+    # ── 4bis. [US-172 / CA5] La dictée ne change rien : l'interpréteur voit la
+    # transcription au même point du flux que `handle_text` voit la frappe —
+    # après toutes les gardes de conversation ci-dessus, avant le parsing de
+    # geste. Sans cela, « supprime la parcelle nord » dicté serait parti au
+    # parseur d'événement, qui n'a aucune façon d'en faire quoi que ce soit.
+    resultat_commande = svc_interpreteur.interpreter(texte, current_context())
+    if await _traiter_commande_interpretee(update, ctx, resultat_commande, msg=msg):
+        return
+
     # ── 5. [US-094 / CA1] Étage 0 — la grammaire déterministe d'abord ────────
     # Une forme qu'elle reconnaît est une saisie par construction : elle porte
     # un geste en tête, une culture connue du potager et rien d'inexpliqué.
@@ -1114,7 +1180,35 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _parse_and_save(update, texte, msg, pre_parsed_items=resultat_deterministe.items)
         return
 
-    # ── 5bis. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
+    # ── 5bis. [US-172] Une QUESTION dictée n'est pas un ordre ────────────────
+    # `handle_text` demande sa nature au routeur depuis US-170 ; ce canal-ci
+    # était resté sur les seuls intents de `parse_message`, qui ne connaissent
+    # ni le socle de connaissance, ni la mémoire du potager. Une question dictée
+    # n'atteignait donc la cascade que si le modèle la classait INTERROGER —
+    # et « comment supprimer une parcelle ? » était lue comme l'intent
+    # SUPPRIMER, le bot proposant d'effacer le dernier geste enregistré au lieu
+    # d'expliquer la procédure. Constaté en dictée réelle le 08/09/2026, et en
+    # contradiction directe avec le CA2 : la même phrase TAPÉE recevait bien
+    # l'explication du socle.
+    #
+    # Seul l'étage des RÈGLES est consulté (`classer_par_regles`), et c'est
+    # délibéré : `classer_demande` paierait un appel de classification sur tout
+    # ce que les règles ne tranchent pas, alors que `parse_message` ci-dessous
+    # classe et parse déjà en un seul appel. Une règle qui tranche évite
+    # l'erreur, une règle qui se tait laisse la main — « supprime ma dernière
+    # saisie », qu'aucune règle ne reconnaît, continue donc d'atteindre son
+    # intent SUPPRIMER et d'annuler le dernier geste, comme avant.
+    #
+    # Placé APRÈS la grammaire déterministe : ce qu'elle reconnaît est une
+    # saisie par construction, et n'a pas à être classé.
+    nature_reglee = routeur.classer_par_regles(texte)
+    if nature_reglee is not None and nature_reglee != routeur.NATURE_ACTION:
+        log.info(f"❓ QUESTION VOCALE : nature={nature_reglee} → _ask_question")
+        await msg.edit_text("🔍 *Analyse en cours...*", parse_mode="Markdown")
+        await _ask_question(update, texte)
+        return
+
+    # ── 5ter. Analyse unifiée intent + parsing via la passerelle (single-pass) ──
     try:
         parsed = parse_message(texte, ctx=current_context())
     except LLMIndisponibleError:
@@ -1523,6 +1617,478 @@ def _extract_plan_parcelle(texte: str) -> str | None:
     return None
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-172] Piloter le bot par une phrase — proposition, complétion, exécution
+# ══════════════════════════════════════════════════════════════════════════════
+# La reconnaissance vit dans `app/services/interpreteur_commandes.py` ; ce qui
+# suit est le seul code Telegram qu'elle exige : proposer, compléter, exécuter.
+#
+# Point de conception central (CA9) : l'exécution ne réimplémente RIEN. Elle
+# retrouve le handler réellement enregistré par introspection de
+# `ctx.application`, pose les arguments dans `ctx.args` et l'appelle. Une
+# commande dictée traverse donc exactement le même chemin qu'une commande
+# tapée — même service, mêmes contrôles de rôle, mêmes messages, mêmes claviers
+# contextuels, et le même garde de liaison (CA14), puisque c'est le handler
+# ENVELOPPÉ par `_avec_garde_liaison` que l'introspection retrouve.
+#
+# Aucune table de correspondance nom → fonction n'est tenue ici : elle
+# divergerait au premier renommage, et la divergence se paierait en commande
+# dictée qui n'exécute rien.
+
+_INTERP_PENDING: dict[int, dict] = {}
+
+# Une proposition non tranchée expire : elle porte des arguments lus dans une
+# phrase, et les rejouer un quart d'heure plus tard sur un potager dont on a
+# changé entre-temps n'aurait aucun sens.
+_INTERP_TIMEOUT = 300  # secondes
+
+_INTERP_MODE_COMPLETION = "interp_completion"
+
+
+class _UpdateCommande:
+    """Vue d'un `Update` qui expose toujours `.message`.
+
+    Les handlers de commande écrivent via `update.message.reply_text` : appelés
+    depuis un callback de bouton, où `update.message` vaut None, ils
+    échoueraient. Cette vue substitue le message porteur du clavier et délègue
+    tout le reste à l'Update d'origine (`effective_user`, `effective_message`,
+    `callback_query`…), pour que le handler ne voie aucune différence.
+    """
+
+    def __init__(self, update: Update):
+        self._update = update
+        self.message = update.message or (
+            update.callback_query.message if update.callback_query else None
+        )
+
+    def __getattr__(self, nom):
+        return getattr(self._update, nom)
+
+
+def _handler_de_commande(ctx: ContextTypes.DEFAULT_TYPE, nom: str):
+    """Le handler réellement enregistré pour `/nom`, par introspection (CA6, CA9).
+
+    Même procédé que `_noms_commandes_enregistrees` pour le menu d'US-171 : on
+    lit les `CommandHandler` de l'Application plutôt qu'une liste recopiée. Ce
+    qui est retourné est le callback ENVELOPPÉ, garde de liaison compris.
+    """
+    application = getattr(ctx, "application", None)
+    for groupe in (getattr(application, "handlers", None) or {}).values():
+        for handler in groupe:
+            if isinstance(handler, CommandHandler) and nom in handler.commands:
+                return handler.callback
+    return None
+
+
+def _resoudre_noms_parcelle(commande):
+    """[CA12] Une commande ne s'exécute jamais sur un nom approché.
+
+    `resolve_parcelle` rapproche « planche nord-est » de « Planche Nord »
+    (Levenshtein ≤ 2, puis sous-chaîne). C'est le bon comportement pour
+    rattacher un geste à une parcelle — et le mauvais pour en supprimer une :
+    une suppression exécutée sur la mauvaise parcelle coûte davantage que cent
+    phrases non comprises.
+
+    L'exigence est donc l'égalité EXACTE après la normalisation habituelle du
+    projet (casse, accents, espaces, tirets — `normalize_parcelle_name`, jamais
+    une seconde règle). À défaut, le nom voisin est proposé au jardinier, et la
+    valeur dictée est retirée de la commande pour qu'aucun chemin ne puisse
+    l'exécuter telle quelle.
+    """
+    a_verifier = [
+        argument for argument in commande.forme.arguments
+        if argument.type == svc_menu_commandes.TYPE_PARCELLE
+        and commande.valeurs.get(argument.nom)
+    ]
+    if not a_verifier:
+        return commande
+
+    db = SessionLocal()
+    try:
+        potager_id = current_context().potager_id
+        for argument in a_verifier:
+            nom_dicte = commande.valeurs[argument.nom]
+            exact, _ = find_doublon(db, normalize_parcelle_name(nom_dicte), potager_id=potager_id)
+            if exact is not None and exact.actif:
+                continue
+            voisine = resolve_parcelle(db, nom_dicte, potager_id=potager_id)
+            candidats = (voisine.nom,) if voisine is not None else ()
+            log.info(
+                "[US-172 CA12] Parcelle %r inexacte → %s",
+                nom_dicte,
+                f"candidat proposé : {voisine.nom!r}" if voisine else "aucun voisin",
+            )
+            return commande.avec_candidats(argument.nom, candidats)
+        return commande
+    finally:
+        db.close()
+
+
+def _message_de(update: Update):
+    return update.message or (update.callback_query.message if update.callback_query else None)
+
+
+async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, commande, msg=None) -> None:
+    """Point d'entrée unique d'une commande interprétée : rien ne s'exécute ici.
+
+    Trois issues possibles, dans cet ordre — le doute d'abord, l'incomplétude
+    ensuite, la validation en dernier :
+      * un nom de parcelle inexact → les voisins sont proposés (CA12) ;
+      * un argument obligatoire absent → il est demandé (CA13) ;
+      * sinon → récapitulatif et confirmation explicite (CA10, CA11).
+    """
+    commande = _resoudre_noms_parcelle(commande)
+    user_id = update.effective_user.id
+    log_id = svc_interpreteur.persister_journal(
+        current_context(), commande, svc_interpreteur.ISSUE_PROPOSEE
+    )
+    svc_interpreteur.journaliser(commande, svc_interpreteur.ISSUE_PROPOSEE)
+    _INTERP_PENDING[user_id] = {
+        "commande": commande, "attend": None, "log_id": log_id, "ts": time.time(),
+    }
+    await _interp_etape_suivante(update, ctx, msg=msg)
+
+
+async def _interp_etape_suivante(update: Update, ctx: ContextTypes.DEFAULT_TYPE, msg=None) -> None:
+    """Affiche l'étape courante de la proposition en attente."""
+    user_id = update.effective_user.id
+    pending = _INTERP_PENDING.get(user_id)
+    if pending is None:
+        return
+    commande = pending["commande"]
+    message = _message_de(update)
+
+    async def _repondre(texte: str, boutons) -> None:
+        clavier = InlineKeyboardMarkup(boutons) if boutons else None
+        if msg is not None:
+            await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
+        else:
+            await message.reply_text(texte, parse_mode="Markdown", reply_markup=clavier)
+
+    # ── [CA12] Le nom dicté n'existe pas exactement ──────────────────────────
+    if commande.candidats or commande.argument_candidat is not None:
+        pending["attend"] = commande.argument_candidat
+        boutons = [
+            [InlineKeyboardButton(f"📍 {nom}", callback_data=f"interp:cand:{rang}")]
+            for rang, nom in enumerate(commande.candidats)
+        ]
+        boutons.append([InlineKeyboardButton("❌ Annuler", callback_data="interp:non")])
+        if commande.candidats:
+            texte = (
+                f"❓ Aucune parcelle ne porte exactement ce nom.\n"
+                f"Vouliez-vous dire *{_md(commande.candidats[0].upper())}* ?"
+            )
+        else:
+            texte = "❓ Aucune parcelle ne porte ce nom, ni un nom voisin."
+        await _repondre(texte, boutons)
+        return
+
+    # ── [CA13] Un argument manquant se complète, il n'échoue pas ─────────────
+    if commande.manquants:
+        argument = commande.manquants[0]
+        pending["attend"] = argument.nom
+        ctx.user_data['mode'] = _INTERP_MODE_COMPLETION
+        if argument.vocabulaire:
+            # Une valeur de vocabulaire fermé se choisit, elle ne se devine
+            # jamais à partir d'un synonyme approchant.
+            boutons = [
+                [InlineKeyboardButton(valeur, callback_data=f"interp:val:{rang}")]
+                for rang, valeur in enumerate(argument.vocabulaire)
+            ]
+        else:
+            boutons = []
+        boutons.append([InlineKeyboardButton("❌ Annuler", callback_data="interp:non")])
+        await _repondre(f"*{commande.forme.libelle}*\n\n{argument.question}", boutons)
+        return
+
+    # ── [CA10] Une commande de CONSULTATION s'exécute directement ────────────
+    # Elle n'écrit rien : lui demander « voulez-vous vraiment afficher le
+    # plan ? » doublerait chaque lecture sans rien protéger. La moitié
+    # PÉDAGOGIQUE du CA10 est en revanche servie dans les deux cas — la commande
+    # équivalente est rappelée, et c'est ainsi que le jardinier apprend la
+    # syntaxe sans avoir eu à l'apprendre.
+    if not commande.forme.confirmation:
+        _INTERP_PENDING.pop(user_id, None)
+        ctx.user_data['mode'] = None
+        svc_interpreteur.persister_journal(
+            current_context(), commande,
+            svc_interpreteur.ISSUE_CONFIRMEE, pending.get("log_id"),
+        )
+        svc_interpreteur.journaliser(commande, svc_interpreteur.ISSUE_CONFIRMEE)
+        await _repondre(f"↪️ `{commande.commande_equivalente()}`", None)
+        await _interp_executer(update, ctx, commande)
+        return
+
+    # ── [CA10, CA11] Rien de ce qui ÉCRIT ne s'exécute à l'aveugle ───────────
+    pending["attend"] = None
+    ctx.user_data['mode'] = None
+    entete = "🗑 " if commande.forme.destructrice else "➕ "
+    boutons = [[
+        InlineKeyboardButton("✅ Confirmer", callback_data="interp:ok"),
+        InlineKeyboardButton("❌ Annuler", callback_data="interp:non"),
+    ]]
+    await _repondre(entete + svc_interpreteur.recapitulatif(commande), boutons)
+
+
+async def _interp_executer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, commande) -> None:
+    """[CA9, CA14] Exécute la commande via le handler réellement enregistré."""
+    handler = _handler_de_commande(ctx, commande.commande)
+    message = _message_de(update)
+    if handler is None:
+        log.error("[US-172] /%s introuvable parmi les CommandHandler", commande.commande)
+        await message.reply_text(
+            f"❌ La commande /{commande.commande} n'est pas disponible.",
+        )
+        return
+    log.info(
+        "[US-172] Exécution de la commande interprétée : %s",
+        commande.commande_equivalente(),
+    )
+    ctx.args = list(commande.args)
+    await handler(_UpdateCommande(update), ctx)
+
+
+async def _interp_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """Callback inline — confirmation, refus, choix d'une valeur ou d'un nom voisin."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    pending = _INTERP_PENDING.get(user_id)
+
+    if query.data == "interp:non":
+        _INTERP_PENDING.pop(user_id, None)
+        ctx.user_data['mode'] = None
+        if pending is not None:
+            svc_interpreteur.persister_journal(
+                current_context(), pending["commande"],
+                svc_interpreteur.ISSUE_REFUSEE, pending.get("log_id"),
+            )
+            svc_interpreteur.journaliser(pending["commande"], svc_interpreteur.ISSUE_REFUSEE)
+        await query.edit_message_text("❌ Annulé — rien n'a été fait.", reply_markup=None)
+        return
+
+    if pending is None:
+        await query.edit_message_text("⏱ Demande expirée. Redites-la.", reply_markup=None)
+        return
+    if time.time() - pending["ts"] > _INTERP_TIMEOUT:
+        _INTERP_PENDING.pop(user_id, None)
+        ctx.user_data['mode'] = None
+        svc_interpreteur.persister_journal(
+            current_context(), pending["commande"],
+            svc_interpreteur.ISSUE_ABANDONNEE, pending.get("log_id"),
+        )
+        await query.edit_message_text("⏱ Demande expirée, rien n'a été fait.", reply_markup=None)
+        return
+
+    commande = pending["commande"]
+
+    # ── Choix d'un nom voisin proposé (CA12) ─────────────────────────────────
+    if query.data.startswith("interp:cand:"):
+        try:
+            choisi = commande.candidats[int(query.data.rsplit(":", 1)[1])]
+        except (ValueError, IndexError):
+            await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+            return
+        pending["commande"] = commande.avec(**{commande.argument_candidat: choisi})
+        await _interp_etape_suivante(update, ctx, msg=query.message)
+        return
+
+    # ── Choix d'une valeur de vocabulaire fermé (CA13) ───────────────────────
+    if query.data.startswith("interp:val:"):
+        argument = next(
+            (a for a in commande.manquants if a.nom == pending.get("attend")), None
+        )
+        if argument is None:
+            await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+            return
+        try:
+            valeur = argument.vocabulaire[int(query.data.rsplit(":", 1)[1])]
+        except (ValueError, IndexError):
+            await query.edit_message_text("❌ Données invalides.", reply_markup=None)
+            return
+        pending["commande"] = commande.avec(**{argument.nom: valeur})
+        await _interp_etape_suivante(update, ctx, msg=query.message)
+        return
+
+    # ── Confirmation (CA10) ──────────────────────────────────────────────────
+    if query.data == "interp:ok":
+        _INTERP_PENDING.pop(user_id, None)
+        ctx.user_data['mode'] = None
+        svc_interpreteur.persister_journal(
+            current_context(), commande,
+            svc_interpreteur.ISSUE_CONFIRMEE, pending.get("log_id"),
+        )
+        svc_interpreteur.journaliser(commande, svc_interpreteur.ISSUE_CONFIRMEE)
+        await query.edit_message_text(
+            f"⏳ `{commande.commande_equivalente()}`", parse_mode="Markdown", reply_markup=None
+        )
+        await _interp_executer(update, ctx, commande)
+
+
+async def _interp_completion_texte(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str) -> None:
+    """[CA13] Réponse tapée à un argument demandé.
+
+    Un argument de vocabulaire fermé n'accepte QUE l'une de ses valeurs : la
+    saisie est comparée à la normalisation près, jamais rapprochée d'un
+    synonyme. Le jardinier qui écrit « ça se marie bien » se voit reproposer les
+    boutons plutôt que voir « favorable » écrit à sa place.
+    """
+    user_id = update.effective_user.id
+    pending = _INTERP_PENDING.get(user_id)
+    if pending is None or not pending.get("attend"):
+        ctx.user_data['mode'] = None
+        return
+    commande = pending["commande"]
+    argument = next((a for a in commande.manquants if a.nom == pending["attend"]), None)
+    if argument is None:
+        ctx.user_data['mode'] = None
+        return
+
+    valeur = (texte or "").strip()
+    if argument.vocabulaire:
+        normalise, _ = svc_interpreteur.normaliser(valeur)
+        correspondance = next(
+            (v for v in argument.vocabulaire if svc_interpreteur.normaliser(v)[0] == normalise),
+            None,
+        )
+        if correspondance is None:
+            await update.message.reply_text(
+                f"❓ Valeur attendue parmi : *{'* · *'.join(argument.vocabulaire)}*",
+                parse_mode="Markdown",
+            )
+            return
+        valeur = correspondance
+
+    pending["commande"] = commande.avec(**{argument.nom: valeur})
+    await _interp_etape_suivante(update, ctx)
+
+
+async def _traiter_commande_interpretee(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, resultat, msg=None
+) -> bool:
+    """Aiguille un résultat d'interprétation. Retourne True s'il a été pris en charge.
+
+    [CA12] Une ambiguïté — plusieurs commandes reconnues dans la même phrase —
+    n'exécute pas la plus probable : elle demande laquelle.
+    """
+    if resultat is None:
+        return False
+
+    message = _message_de(update)
+    if isinstance(resultat, svc_interpreteur.Ambiguite):
+        lignes = ["❓ *Plusieurs commandes possibles* — laquelle ?", ""]
+        for candidat in resultat.candidats:
+            lignes.append(f"• {candidat.forme.libelle} : `{candidat.commande_equivalente()}`")
+        lignes.append("")
+        lignes.append("_Reformulez, ou tapez directement la commande voulue._")
+        texte = "\n".join(lignes)
+        log.info(
+            "[US-172 CA12] Ambiguïté (%s) → précision demandée",
+            ", ".join(c.commande for c in resultat.candidats),
+        )
+        if msg is not None:
+            await msg.edit_text(texte, parse_mode="Markdown")
+        else:
+            await message.reply_text(texte, parse_mode="Markdown")
+        return True
+
+    await _interp_proposer(update, ctx, resultat, msg=msg)
+    return True
+
+
+# ── [CA19] Créer la parcelle manquante dans la foulée du geste ────────────────
+# Le seul point où deux flux se rejoignent. La phrase d'origine est CONSERVÉE
+# pour être rejouée après création, jamais reconstruite : le jardinier n'a pas à
+# la redire, et le geste enregistré reste exactement celui qu'il a dicté.
+_CREATION_PARCELLE_PENDING: dict[int, dict] = {}
+
+
+async def _proposer_creation_parcelle_du_geste(
+    update: Update, items: list, texte: str, msg=None
+) -> bool:
+    """Propose de créer la parcelle citée par un geste quand elle n'existe pas.
+
+    Retourne True si la proposition a été faite (le geste est alors en attente).
+    Refuser laisse le flux de désambiguïsation actuel se dérouler à l'identique
+    (CA19), et aucune parcelle n'est créée sans cette confirmation explicite
+    (CA20) — la règle d'US-094 n'est pas assouplie, elle est outillée.
+    """
+    if len(items) != 1:
+        return False
+    nom_parcelle = (items[0].get("parcelle") or "").strip()
+    if not nom_parcelle:
+        return False
+
+    db = SessionLocal()
+    try:
+        if resolve_parcelle(db, nom_parcelle, potager_id=current_context().potager_id) is not None:
+            return False
+    finally:
+        db.close()
+
+    user_id = update.effective_user.id
+    _CREATION_PARCELLE_PENDING[user_id] = {
+        "items": items, "texte": texte, "nom": nom_parcelle, "ts": time.time(),
+    }
+    resume = _build_action_summary(items).splitlines()[0] if items else ""
+    boutons = [[
+        InlineKeyboardButton("✅ Créer et enregistrer", callback_data="interpparc:ok"),
+        InlineKeyboardButton("❌ Non", callback_data="interpparc:non"),
+    ]]
+    texte_msg = (
+        f"📍 La parcelle *{_md(nom_parcelle.upper())}* n'existe pas.\n"
+        f"La créer et enregistrer ce geste ?\n\n_{_md(resume)}_"
+    )
+    log.info("[US-172 CA19] Parcelle inconnue citée par un geste : %r", nom_parcelle)
+    if msg is not None:
+        await msg.edit_text(texte_msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(boutons))
+    else:
+        await _message_de(update).reply_text(
+            texte_msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(boutons)
+        )
+    return True
+
+
+async def _creation_parcelle_geste_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[CA19, CA20] Callback de la création de parcelle proposée par un geste."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    pending = _CREATION_PARCELLE_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Demande expirée. Redites votre geste.", reply_markup=None)
+        return
+
+    items, texte, nom = pending["items"], pending["texte"], pending["nom"]
+
+    if query.data == "interpparc:non":
+        # Le geste continue sans la parcelle inconnue : le flux de
+        # désambiguïsation existant reprend, à l'identique.
+        for item in items:
+            item.pop("parcelle", None)
+        log.info("[US-172 CA19] Création refusée — désambiguïsation habituelle")
+        await query.edit_message_text("↩️ Parcelle non créée.", reply_markup=None)
+        await _parse_and_save(_UpdateCommande(update), texte, pre_parsed_items=items)
+        return
+
+    db = SessionLocal()
+    try:
+        nouvelle = create_parcelle(db, nom, potager_id=current_context().potager_id)
+        log.info("[US-172 CA19] Parcelle créée dans la foulée du geste : %r", nouvelle.nom)
+    except ValueError as e:
+        await query.edit_message_text(f"❌ {e}", reply_markup=None)
+        return
+    finally:
+        db.close()
+
+    await query.edit_message_text(
+        f"✅ Parcelle *{_md(nouvelle.nom.upper())}* créée.", parse_mode="Markdown", reply_markup=None
+    )
+    # La phrase d'origine est rejouée telle quelle : le jardinier n'a rien à
+    # redire, et le geste part au flux de validation habituel (US-021).
+    await _parse_and_save(_UpdateCommande(update), texte, pre_parsed_items=items)
+
+
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
@@ -1608,6 +2174,8 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         'depl_culture_ask', 'depl_variete_select', 'depl_parcelle_select', 'depl_confirm',
         # [US-038] flux note guidée
         'note_category', 'note_details',
+        # [US-172 / CA13] complétion guidée d'un argument de commande
+        _INTERP_MODE_COMPLETION,
     }
     if ctx.user_data.get('mode') not in MODES_CORRECTION:
         ctx.user_data['mode'] = None
@@ -1707,6 +2275,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await _note_details_received(update, ctx, texte_raw)
         return
 
+    # ── PRIORITÉ 1d : [US-172 / CA13, CA21] complétion d'argument en cours
+    # Un flux engagé reste prioritaire : le message est une réponse à une
+    # question déjà posée, pas une nouvelle demande à interpréter.
+    elif mode == _INTERP_MODE_COMPLETION:
+        await _interp_completion_texte(update, ctx, texte_raw)
+        return
+
     # ── PRIORITÉ 2 : mode question analytique actif
     if mode == 'ask':
         ctx.user_data['mode'] = None
@@ -1752,11 +2327,26 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("↩️ Création annulée.", parse_mode="Markdown")
             return
 
+    # ── [US-172] Reconnaissance déterministe — calculée ici, appliquée en 3e
+    # Elle ne coûte ni jeton ni requête (CA3), et elle est CONSULTÉE dès
+    # maintenant parce que le raccourci destructeur ci-dessous en dépend :
+    # « supprimer la parcelle nord » n'est pas « annuler ma dernière saisie »,
+    # et l'exécuter comme telle serait précisément la suppression erronée que le
+    # CA16 pose en couperet. Le raccourci reste inchangé pour tout ce que
+    # l'interpréteur ne reconnaît pas — un « supprimer » nu, notamment.
+    commande_reglee = svc_interpreteur.reconnaitre_par_regles(texte_raw)
+
     # ── PRIORITÉ 3 : mots-clés correction/suppression
-    if texte in NAV_SUPPRIMER or any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"]):
+    if texte in NAV_SUPPRIMER or (
+        any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"])
+        and commande_reglee is None
+    ):
         await _corr_annuler_dernier(update, ctx)
         return
-    if texte in NAV_CORRIGER or any(texte.startswith(k) for k in ["corriger", "modifier"]):
+    if texte in NAV_CORRIGER or (
+        any(texte.startswith(k) for k in ["corriger", "modifier"])
+        and commande_reglee is None
+    ):
         # Nettoyer tout contexte correction résiduel avant de démarrer
         for k in ['mode','corr_event_id','corr_candidates','corr_last_id',
                   'corr_pending','corr_event_actuel']:
@@ -1781,6 +2371,18 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if _is_note_request(texte_raw):
         log.info(f"📝 NOTE TEXTE      : détectée → _note_start")
         await _note_start(update, ctx)
+        return
+
+    # ── PRIORITÉ 3e : [US-172] la phrase désigne-t-elle une COMMANDE ?
+    # Placé après toutes les gardes de flux de conversation et après les flux
+    # guidés déjà dictables (godets, déplacement, note), et AVANT le routeur :
+    # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
+    # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
+    # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
+    resultat_commande = commande_reglee or svc_interpreteur.interpreter(
+        texte_raw, current_context()
+    )
+    if await _traiter_commande_interpretee(update, ctx, resultat_commande):
         return
 
     # ── PRIORITÉ 4 : nature de la demande décidée par le routeur [US-170 CA6, CA7]
@@ -2598,6 +3200,101 @@ def _get_parcelles_avec_culture(db, culture: str, variete: str | None) -> list:
     return svc_parcelles.parcelles_avec_culture(db, current_context(), culture, variete)
 
 
+def _ligne_contexte_semis(p: dict) -> "str | None":
+    """[US-069 / CA2, CA3] Ligne « Filière » du récapitulatif d'un semis : le
+    contexte dit, ou celui qui est PROPOSÉ (et pourquoi), ou « non précisée »."""
+    if normalize_action(p.get("action")) != svc_contexte_semis.ACTION_SEMIS:
+        return None
+    if p.get("contexte_semis"):
+        return f"🧭 Filière : *{svc_contexte_semis.libelle_contexte(p['contexte_semis'])}*"
+    if p.get("_contexte_propose"):
+        motif = p.get("_contexte_motif")
+        suffixe = f" _(proposée : {_md(motif)})_" if motif else " _(proposée)_"
+        return f"🧭 Filière : *{svc_contexte_semis.libelle_contexte(p['_contexte_propose'])}*{suffixe}"
+    return "🧭 Filière : _non précisée_"
+
+
+def _preparer_contexte_semis(items: list[dict], texte: str) -> None:
+    """[US-069 / CA2, CA3] Contexte des semis d'une saisie, AVANT confirmation.
+
+    - dit dans la phrase (ou lu par la grammaire) → retenu tel quel ;
+    - sinon, pour une saisie d'UN seul geste, une proposition est calculée
+      (`_contexte_propose`), que le bouton « Confirmer » adopte en un geste ;
+    - sinon rien : le semis s'enregistrera sans contexte.
+    Aucune question n'est posée ici — pas d'interrogatoire sur une dictée
+    multi-gestes (point de vigilance de l'US), et une proposition impossible ne
+    bloque rien (CA9). Rejouable : ne touche jamais un contexte déjà tranché.
+    """
+    semis = [i for i in items if normalize_action(i.get("action")) == svc_contexte_semis.ACTION_SEMIS]
+    if not semis:
+        return
+    dit = svc_contexte_semis.detecter_contexte(texte)
+    db = SessionLocal()
+    try:
+        for item in semis:
+            if item.get("contexte_semis"):
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+                continue
+            if dit:
+                item["contexte_semis"] = dit
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+                continue
+            item.pop("contexte_semis", None)
+            proposition = None
+            if len(items) == 1:
+                parcelle = (
+                    resolve_parcelle(db, item["parcelle"], potager_id=current_context().potager_id)
+                    if item.get("parcelle") else None
+                )
+                proposition = svc_contexte_semis.proposer_contexte(
+                    db, item.get("culture"), current_context().potager_id, parcelle
+                )
+            if proposition is None:
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+            else:
+                item["_contexte_propose"] = proposition.contexte
+                item["_contexte_motif"] = proposition.motif
+                log.info("[US-069 / CA3] Contexte proposé : %s (%s)", proposition.contexte, proposition.motif)
+    finally:
+        db.close()
+
+
+def _boutons_confirmation(items: list[dict]) -> InlineKeyboardMarkup:
+    """[US-021] Confirmer / Annuler — et [US-069 / CA3] pour un semis unique sans
+    contexte dit, une seconde rangée qui corrige la proposition ET enregistre,
+    dans le même geste. « Confirmer » adopte la proposition affichée."""
+    rangees = [[
+        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
+        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
+    ]]
+    if len(items) == 1:
+        item = items[0]
+        if (
+            normalize_action(item.get("action")) == svc_contexte_semis.ACTION_SEMIS
+            and not item.get("contexte_semis")
+        ):
+            propose = item.get("_contexte_propose")
+            if propose == svc_contexte_semis.CONTEXTE_PEPINIERE:
+                rangees.append([
+                    InlineKeyboardButton("🌿 Plutôt en pleine terre", callback_data="action_contexte:pleine_terre"),
+                    InlineKeyboardButton("❔ Sans préciser", callback_data="action_contexte:aucun"),
+                ])
+            elif propose == svc_contexte_semis.CONTEXTE_PLEINE_TERRE:
+                rangees.append([
+                    InlineKeyboardButton("🪴 Plutôt en pépinière", callback_data="action_contexte:pepiniere"),
+                    InlineKeyboardButton("❔ Sans préciser", callback_data="action_contexte:aucun"),
+                ])
+            else:
+                rangees.append([
+                    InlineKeyboardButton("🪴 En pépinière", callback_data="action_contexte:pepiniere"),
+                    InlineKeyboardButton("🌿 En pleine terre", callback_data="action_contexte:pleine_terre"),
+                ])
+    return InlineKeyboardMarkup(rangees)
+
+
 def _build_action_summary(items: list[dict]) -> str:
     """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
     if len(items) == 1:
@@ -2620,6 +3317,8 @@ def _build_action_summary(items: list[dict]) -> str:
         elif p.get("_parcelle_demandee") is not True:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
+        ligne_contexte = _ligne_contexte_semis(p)
+        if ligne_contexte:     lines.append(ligne_contexte)
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
         if p.get("_avertissement_coherence"):
             lines.append(f"\n{p['_avertissement_coherence']}")
@@ -2720,6 +3419,8 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                 else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                 return
+            # [US-069] Le récapitulatif affiche le contexte RÉELLEMENT enregistré.
+            parsed["contexte_semis"] = event.contexte_semis
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -2842,13 +3543,31 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
             item["parcelle"] = parcelle_nom
             item.pop("_parcelle_demandee", None)
         log.info(f"[US-021 CA9] Parcelle sélectionnée : {parcelle_nom!r} — user_id={user_id}")
+        # [US-069 / CA3] Une parcelle pépinière est un indice : proposition recalculée.
+        _preparer_contexte_semis(pending["items"], pending["texte"])
         summary = _build_action_summary(pending["items"])
-        buttons = [[
-            InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
-            InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
-        ]]
-        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(buttons))
+        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=_boutons_confirmation(pending["items"]))
         return
+
+    # [US-069 / CA3] Contexte choisi au clavier : corrige la proposition ET
+    # enregistre — un seul geste. « aucun » enregistre sans contexte (clé
+    # présente et vide : la phrase n'est pas relue derrière ce choix).
+    if data.startswith("action_contexte:"):
+        choix = data[len("action_contexte:"):]
+        contexte = None if choix == "aucun" else svc_contexte_semis.normaliser_contexte(choix)
+        for item in pending["items"]:
+            if normalize_action(item.get("action")) == svc_contexte_semis.ACTION_SEMIS:
+                item["contexte_semis"] = contexte
+                item.pop("_contexte_propose", None)
+                item.pop("_contexte_motif", None)
+        log.info(f"[US-069 / CA3] Contexte choisi : {contexte!r} — user_id={user_id}")
+    else:
+        # « Confirmer » adopte la proposition affichée, et elle seule.
+        for item in pending["items"]:
+            if item.get("_contexte_propose") and not item.get("contexte_semis"):
+                item["contexte_semis"] = item.pop("_contexte_propose")
+                item.pop("_contexte_motif", None)
+                log.info(f"[US-069 / CA3] Proposition confirmée : {item['contexte_semis']} — user_id={user_id}")
 
     # action_confirm → sauvegarde effective
     _ACTION_PENDING.pop(user_id, None)
@@ -3665,6 +4384,15 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # qui finit par être assignée à un événement qui ne devrait jamais en avoir).
     _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
 
+    # [US-172 / CA19, CA20] Le geste cite une parcelle qui n'existe pas ?
+    # Jusqu'ici, le jardinier devait quitter sa phrase, taper une commande de
+    # création, puis la redicter. On la lui propose ici, avant toute
+    # désambiguïsation — et la phrase d'origine est conservée pour être rejouée
+    # telle quelle, jamais reconstruite. Refuser laisse le flux ci-dessous se
+    # dérouler à l'identique.
+    if await _proposer_creation_parcelle_du_geste(update, items, texte, msg):
+        return
+
     # [US-049] Incohérence culture/variété ↔ parcelle citée — appelle la validation
     # centrale (app/services/evenements.py::valider_evenement) au lieu de recalculer
     # le prédicat ici, pour ne jamais diverger de la règle réellement appliquée à
@@ -3785,16 +4513,14 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         return
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
+    # [US-069 / CA2, CA3] Contexte des semis : dit, proposé, ou laissé vide.
+    _preparer_contexte_semis(items, texte)
     summary = _build_action_summary(items)
-    buttons = [[
-        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
-        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
-    ]]
     log.info(f"[US-021] Confirmation demandée — user_id={user_id}, {len(items)} item(s)")
     await message.reply_text(
         summary,
         parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(buttons),
+        reply_markup=_boutons_confirmation(items),
     )
 
 
@@ -3883,6 +4609,8 @@ def _build_recap(p: dict, event_id: int) -> str:
         ("⏱ Durée",       str(p["duree_minutes"]) + " min" if p.get("duree_minutes") else None),
         ("💊 Traitement",  p.get("traitement")),
         ("📅 Date",        p.get("date")),
+        # [US-069] Filière du semis, seulement si elle est connue.
+        ("🧭 Filière",     svc_contexte_semis.libelle_contexte(p["contexte_semis"]) if p.get("contexte_semis") else None),
         ("📝 Note",        p.get("commentaire")),
     ]
 
@@ -4239,6 +4967,27 @@ def _looks_like_date(s: str) -> bool:
 # [US_Plan_occupation_parcelles / CA10, CA12, CA13] Commande /parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
+async def _refuser_si_role_insuffisant(update, action_label: str) -> bool:
+    """[US-047 / US-172 CA14] Garde de rôle des commandes d'ÉCRITURE du bot.
+
+    Posé dans le handler, et non dans l'interpréteur : c'est ce qui garantit
+    qu'une commande dictée traverse exactement les mêmes contrôles que la même
+    commande tapée. Un garde qui ne vivrait que dans l'interpréteur ouvrirait un
+    chemin d'accès parallèle — l'inverse exact de ce que le CA14 demande.
+
+    Les commandes de CONSULTATION (/plan, /stats, /fiche, /rotation…) n'en
+    portent pas : un lecteur a le droit de lire.
+
+    Retourne True si la commande doit s'arrêter là.
+    """
+    try:
+        require_role(current_context(), "editor", action_label)
+        return False
+    except PermissionInsuffisanteError as e:
+        await update.message.reply_text(f"⛔ {e}")
+        return True
+
+
 async def cmd_parcelle(update, ctx) -> None:
     """
     /parcelle <sous-commande> — Gestion des parcelles.
@@ -4303,6 +5052,8 @@ async def cmd_parcelle(update, ctx) -> None:
 
     # ── /parcelle modifier [nom] clé=valeur ... ───────────────────────────────
     if sous_cmd == "modifier":
+        if await _refuser_si_role_insuffisant(update, "modifier une parcelle"):
+            return
         if len(ctx.args) < 3:
             await update.message.reply_text(
                 "❌ Usage : /parcelle modifier [nom] clé=valeur ...\n"
@@ -4350,6 +5101,8 @@ async def cmd_parcelle(update, ctx) -> None:
 
     # ── /parcelle ajouter [nom] [exposition] [superficie] ─────────────────────
     if sous_cmd == "ajouter":
+        if await _refuser_si_role_insuffisant(update, "créer une parcelle"):
+            return
         if len(ctx.args) < 2:
             await update.message.reply_text(
                 "❌ Précisez le nom de la parcelle.\nExemple : /parcelle ajouter nord",
@@ -4374,8 +5127,15 @@ async def cmd_parcelle(update, ctx) -> None:
         try:
             exact, proche = find_doublon(db, nom_normalise, potager_id=current_context().potager_id)
 
+            # [US-172] Une parcelle supprimée porte toujours son nom en base :
+            # elle bloquait la recréation sans être visible nulle part. La
+            # recréer la remet en service (`utils.parcelles.create_parcelle`),
+            # et le récapitulatif le dit plutôt que de laisser croire à une
+            # création neuve.
+            remise_en_service = bool(exact) and not exact.actif
+
             # [CA10] Doublon exact
-            if exact:
+            if exact and exact.actif:
                 log.info(f"[US_Plan_occupation_parcelles] Doublon exact : {nom!r} → {exact.nom!r}")
                 await update.message.reply_text(
                     f"❌ La parcelle *{_md(exact.nom.upper())}* existe déjà.\n"
@@ -4414,9 +5174,16 @@ async def cmd_parcelle(update, ctx) -> None:
             if superficie_m2 is not None:
                 detail_parts.append(f"superficie : {superficie_m2} m²")
             detail_conf = f" ({', '.join(detail_parts)})" if detail_parts else ""
-            lignes.append(
-                f"\n➕ Créer la parcelle *{_md(nom.upper())}*{detail_conf} ? _(oui / non)_"
-            )
+            if remise_en_service:
+                lignes.append(
+                    f"\n♻️ La parcelle *{_md(nom.upper())}* avait été supprimée."
+                    f"\nLa remettre en service{detail_conf} ? _(oui / non)_"
+                    f"\n_Les gestes qu'elle portait restent « non localisés »._"
+                )
+            else:
+                lignes.append(
+                    f"\n➕ Créer la parcelle *{_md(nom.upper())}*{detail_conf} ? _(oui / non)_"
+                )
 
             ctx.user_data['mode'] = 'parcelle_confirm'
             ctx.user_data['parcelle_pending'] = {
@@ -4435,6 +5202,8 @@ async def cmd_parcelle(update, ctx) -> None:
 
     # ── /parcelle renommer <ancien> <nouveau> ─────────────────────────────────
     if sous_cmd == "renommer":
+        if await _refuser_si_role_insuffisant(update, "renommer une parcelle"):
+            return
         if len(ctx.args) < 3:
             await update.message.reply_text(
                 "❌ Usage : /parcelle renommer \\<ancien\\_nom\\> \\<nouveau\\_nom\\>\n"
@@ -4471,6 +5240,8 @@ async def cmd_parcelle(update, ctx) -> None:
 
     # ── /parcelle supprimer <nom> ─────────────────────────────────────────────
     if sous_cmd == "supprimer":
+        if await _refuser_si_role_insuffisant(update, "supprimer une parcelle"):
+            return
         if len(ctx.args) < 2:
             await update.message.reply_text(
                 "❌ Précisez le nom de la parcelle.\nExemple : /parcelle supprimer serre-1",
@@ -4565,6 +5336,8 @@ async def cmd_culture(update, ctx) -> None:
 
     # ── /culture famille <culture> <famille> ──────────────────────────────────
     if sous_cmd == "famille":
+        if await _refuser_si_role_insuffisant(update, "corriger une famille botanique"):
+            return
         if len(ctx.args) < 3:
             await update.message.reply_text(
                 "❌ Usage : /culture famille <culture> <famille>\n"
@@ -4601,6 +5374,8 @@ async def cmd_culture(update, ctx) -> None:
 
     # ── /culture delai_retour <famille> <années> ──────────────────────────────
     if sous_cmd in ("delai_retour", "delai"):
+        if await _refuser_si_role_insuffisant(update, "corriger un délai de retour"):
+            return
         if len(ctx.args) < 3:
             await update.message.reply_text(
                 "❌ Usage : /culture delai_retour <famille> <années>\n"
@@ -4704,6 +5479,8 @@ async def cmd_culture(update, ctx) -> None:
         cle_attribut = None
 
     if cle_attribut is not None:
+        if await _refuser_si_role_insuffisant(update, "corriger un attribut de culture"):
+            return
         attribut = svc_attributs.ATTRIBUTS_PAR_CLE[cle_attribut]
         if len(ctx.args) < 3:
             admis = (
@@ -4753,6 +5530,262 @@ async def cmd_culture(update, ctx) -> None:
 
     # Sous-commande inconnue
     await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-068 / CA10, CA11] Commande /calendrier — calendrier cultural et zone climatique
+# ──────────────────────────────────────────────────────────────────────────────
+def _fusionner_pleine_terre(jetons: list[str]) -> list[str]:
+    """« pleine terre » tapé en deux mots devient un seul jeton de phase."""
+    fusion: list[str] = []
+    for jeton in jetons:
+        if fusion and fusion[-1].lower() == "pleine" and jeton.lower() == "terre":
+            fusion[-1] = "pleine_terre"
+        else:
+            fusion.append(jeton)
+    return fusion
+
+
+def _decouper_correction(jetons: list[str], est_cle, parser) -> "tuple[list[str], str, str] | None":
+    """
+    Découpe « <culture> [itinéraire] <clé> <valeur> » en partant de la FIN.
+
+    La clé (phase ou étape) est la dernière position dont le reste se lit comme
+    une valeur valide : « pomme de terre recolte juillet » ne confond pas
+    « terre » avec une phase, et « mars à mai » reste une seule valeur.
+    Retourne (jetons de culture et d'itinéraire, clé, valeur) ou None.
+    """
+    for i in range(len(jetons) - 2, 0, -1):
+        if not est_cle(jetons[i]):
+            continue
+        valeur = " ".join(jetons[i + 1:])
+        try:
+            parser(valeur)
+        except svc_calendrier.ValeurCalendrierInvalideError:
+            continue
+        return jetons[:i], jetons[i], valeur
+    return None
+
+
+def _formater_calendrier(calendrier, itineraire_cible: "str | None" = None) -> str:
+    """Rendu Telegram d'un calendrier — aucune date calculée, aucune valeur empruntée."""
+    lignes = [
+        f"📅 *{_md(calendrier.culture)}* — calendrier cultural",
+        f"Zone : {_md(svc_calendrier.libelle_zone(calendrier.zone, calendrier.zone_origine))}",
+    ]
+    itineraires = calendrier.itineraires
+    if itineraire_cible:
+        cle = svc_calendrier.normaliser_itineraire(itineraire_cible)
+        itineraires = [
+            it for it in itineraires if svc_calendrier.normaliser_itineraire(it.nom) == cle
+        ] or itineraires
+
+    for it in itineraires:
+        lignes.append("")
+        entete = f"*{_md(it.nom)}*"
+        if it.personnalise:
+            entete += " — propre à votre potager"
+        lignes.append(entete)
+        if it.fenetres:
+            lues = {fenetre.phase: fenetre for fenetre in it.fenetres}
+            for phase in svc_calendrier.PHASES:
+                fenetre = lues.get(phase)
+                if fenetre:
+                    lignes.append(f"• {fenetre.libelle} : *{_md(fenetre.affichage)}*")
+                elif phase == svc_calendrier.PHASE_PLANTATION:
+                    # [US-068 / CA27] La plantation se dit vide plutôt que de se
+                    # taire : c'est le geste que la plupart des jardiniers font,
+                    # et son absence ne se déduit jamais du semis (CA18).
+                    lignes.append(f"• {svc_calendrier.LIBELLES_PHASES[phase]} : —")
+        else:
+            # [CA13] Frise neutre : dire qu'on ne sait pas, sans rien emprunter.
+            texte = (
+                "Aucune fenêtre renseignée pour la zone "
+                f"{svc_calendrier.LIBELLES_ZONES.get(calendrier.zone, calendrier.zone)}"
+            )
+            autres = [
+                svc_calendrier.LIBELLES_ZONES[z] for z in it.zones_renseignees if z != calendrier.zone
+            ]
+            if autres:
+                texte += f" (renseignée pour : {', '.join(autres)})"
+            lignes.append(f"• {_md(texte)}")
+        for duree in it.durees:
+            valeur = f"*{_md(duree.affichage)}*" if duree.renseignee else duree.affichage
+            lignes.append(f"• {duree.libelle} : {valeur}")
+
+    lignes.append("")
+    # [CA4] Une fourchette n'est jamais une date certaine.
+    lignes.append("_Durées indicatives : des ordres de grandeur, jamais des dates._")
+    if calendrier.attributions:
+        lignes.append("Source : " + " · ".join(calendrier.attributions))
+    return "\n".join(lignes)
+
+
+async def cmd_calendrier(update, ctx) -> None:
+    """
+    /calendrier — Calendrier cultural d'une culture et zone climatique du potager (US-068).
+
+    Sous-commandes :
+      <culture> [itinéraire]                               — consulter (zéro jeton)
+      zone [oceanique|continental|mediterraneen|montagnard|auto]
+                                                           — lire ou choisir la zone (CA7)
+      fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
+      duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|70-90|mention|aucune>
+                                                           — corriger (CA10)
+
+    Aucune logique métier ici : lecture, validation et écriture vivent dans
+    `app.services.calendrier_cultural`. Une correction est TOUJOURS propre au
+    potager courant (CA11) et confirme l'ancienne et la nouvelle valeur (CA10).
+    """
+    USAGE = (
+        "*Usage :*\n"
+        "  /calendrier <culture>\n"
+        "  /calendrier zone [océanique|continental|méditerranéen|montagnard|auto]\n"
+        "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|plantation|recolte> <mois-mois|aucune>\n"
+        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|aucune>\n\n"
+        "Exemples :\n"
+        "  /calendrier tomate\n"
+        "  /calendrier zone méditerranéen\n"
+        "  /calendrier fenetre tomate pepiniere février-avril\n"
+        "  /calendrier fenetre tomate plantation mai-juin\n"
+        "  /calendrier fenetre chou-fleur culture d'hiver recolte novembre-février\n"
+        "  /calendrier duree courgette recolte 50-60\n\n"
+        "_Vos corrections ne valent que pour votre potager._"
+    )
+
+    if not ctx.args:
+        await update.message.reply_text(USAGE, parse_mode="Markdown")
+        return
+
+    sous_cmd = svc_calendrier.normaliser_itineraire(ctx.args[0])
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        # ── /calendrier zone [valeur] ─────────────────────────────────────────
+        if sous_cmd == "zone":
+            if len(ctx.args) == 1:
+                zone, origine = svc_calendrier.zone_du_potager(db, tenant_ctx.potager_id)
+                await update.message.reply_text(
+                    f"🗺️ Zone climatique du potager : *{_md(svc_calendrier.libelle_zone(zone, origine))}*\n"
+                    "Pour la choisir : /calendrier zone <océanique|continental|méditerranéen|montagnard>\n"
+                    "Pour revenir à la localisation : /calendrier zone auto",
+                    parse_mode="Markdown",
+                )
+                return
+            valeur = " ".join(ctx.args[1:]).strip()
+            try:
+                avant, apres = svc_calendrier.definir_zone(db, tenant_ctx, valeur)
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                await update.message.reply_text(f"❌ {_md(str(err))}", parse_mode="Markdown")
+                return
+            except (PermissionInsuffisanteError, PotagerArchiveError) as err:
+                await update.message.reply_text(f"⛔ {err}")
+                return
+            await update.message.reply_text(
+                f"✅ Zone climatique : *{_md(svc_calendrier.libelle_zone(*avant))}* → "
+                f"*{_md(svc_calendrier.libelle_zone(*apres))}*",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /calendrier fenetre|duree … ───────────────────────────────────────
+        if sous_cmd in ("fenetre", "fenetres", "duree", "durees"):
+            est_fenetre = sous_cmd.startswith("fenetre")
+            # Un argument dicté peut porter plusieurs mots (« petit pois ») :
+            # le découpage se fait sur les mots, comme pour une commande tapée.
+            jetons = _fusionner_pleine_terre(" ".join(ctx.args[1:]).split())
+            decoupe = _decouper_correction(
+                jetons,
+                svc_calendrier.est_phase if est_fenetre else svc_calendrier.est_etape,
+                svc_calendrier.parser_fenetre if est_fenetre else svc_calendrier.parser_duree,
+            )
+            if decoupe is None:
+                exemple = (
+                    "/calendrier fenetre tomate pepiniere février-avril" if est_fenetre
+                    else "/calendrier duree courgette recolte 50-60"
+                )
+                await update.message.reply_text(
+                    "❌ Je n'ai pas reconnu la correction.\n"
+                    f"Exemple : {_md(exemple)}\n\n{USAGE}",
+                    parse_mode="Markdown",
+                )
+                return
+            jetons_culture, cle, valeur = decoupe
+            culture, itineraire = svc_calendrier.separer_culture_itineraire(
+                db, jetons_culture, tenant_ctx.potager_id
+            )
+            try:
+                if est_fenetre:
+                    zone, avant, apres = svc_calendrier.corriger_fenetre(
+                        db, tenant_ctx, culture, cle, valeur, itineraire=itineraire
+                    )
+                    libelle = (
+                        f"{svc_calendrier.LIBELLES_PHASES[svc_calendrier.normaliser_phase(cle)]} "
+                        f"(zone {svc_calendrier.LIBELLES_ZONES.get(zone, zone)})"
+                    )
+                else:
+                    avant, apres = svc_calendrier.corriger_duree(
+                        db, tenant_ctx, culture, cle, valeur, itineraire=itineraire
+                    )
+                    libelle = svc_calendrier.LIBELLES_ETAPES[svc_calendrier.normaliser_etape(cle)]
+            except svc_calendrier.CultureInconnueError:
+                await update.message.reply_text(
+                    f"❌ Culture inconnue : *{_md(culture)}*\n"
+                    "Elle doit avoir déjà été dictée au moins une fois.",
+                    parse_mode="Markdown",
+                )
+                return
+            except svc_calendrier.ValeurCalendrierInvalideError as err:
+                await update.message.reply_text(
+                    f"❌ {_md(str(err))}\nRien n'a été modifié.", parse_mode="Markdown"
+                )
+                return
+            except (PermissionInsuffisanteError, PotagerArchiveError) as err:
+                await update.message.reply_text(f"⛔ {err}")
+                return
+            log.info(
+                f"[US-068] /calendrier {sous_cmd} '{culture}' / '{itineraire}' {cle} : "
+                f"'{avant}' → '{apres}' (potager_id={tenant_ctx.potager_id})"
+            )
+            await update.message.reply_text(
+                f"✅ *{_md(culture)}* — {_md(itineraire)}\n"
+                f"{_md(libelle)} : *{_md(avant)}* → *{_md(apres)}*\n"
+                "_Correction propre à votre potager._",
+                parse_mode="Markdown",
+            )
+            return
+
+        # ── /calendrier <culture> [itinéraire] ────────────────────────────────
+        jetons = " ".join(
+            ctx.args[1:] if sous_cmd in ("voir", "lire", "consulter") else ctx.args
+        ).split()
+        if not jetons:
+            await update.message.reply_text(USAGE, parse_mode="Markdown")
+            return
+        culture, itineraire = svc_calendrier.separer_culture_itineraire(
+            db, list(jetons), tenant_ctx.potager_id
+        )
+        calendrier = svc_calendrier.lire_calendrier(db, culture, tenant_ctx.potager_id)
+        log.info(
+            f"[US-068] /calendrier '{culture}' : connue={calendrier.culture_connue} "
+            f"renseigne={calendrier.renseigne} zone={calendrier.zone} ({calendrier.zone_origine}), 0 jeton"
+        )
+        if not calendrier.culture_connue:
+            await update.message.reply_text(
+                f"❌ Culture inconnue : *{_md(culture)}*\n"
+                "Elle doit avoir déjà été dictée au moins une fois.",
+                parse_mode="Markdown",
+            )
+            return
+        cible = itineraire if itineraire != svc_calendrier.ITINERAIRE_PAR_DEFAUT else None
+        await update.message.reply_text(
+            _formater_calendrier(calendrier, cible), parse_mode="Markdown"
+        )
+    except Exception as e:
+        log.error(f"[US-068] cmd_calendrier erreur : {e}")
+        await update.message.reply_text(f"❌ Erreur : {e}")
+    finally:
+        db.close()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -4832,6 +5865,8 @@ async def cmd_association(update, ctx) -> None:
 
     # ── /association saisir <cultureA> <cultureB> <nature> <preuve> <motif> ───
     if sous_cmd in ("saisir", "corriger", "ajouter"):
+        if await _refuser_si_role_insuffisant(update, "saisir une association"):
+            return
         if len(ctx.args) < 6:
             await update.message.reply_text(
                 "❌ Usage : /association saisir <cultureA> <cultureB> "
@@ -4978,6 +6013,8 @@ async def cmd_bioagresseur(update, ctx) -> None:
 
         # ── /bioagresseur declarer <categorie> <nom> ──────────────────────────
         if sous_cmd in ("declarer", "déclarer", "ajouter"):
+            if await _refuser_si_role_insuffisant(update, "déclarer un bioagresseur"):
+                return
             if len(ctx.args) < 3:
                 await update.message.reply_text(
                     "❌ Usage : /bioagresseur declarer "
@@ -5007,6 +6044,8 @@ async def cmd_bioagresseur(update, ctx) -> None:
 
         # ── /bioagresseur rattacher <culture> <frequence> <bioagresseur> ──────
         if sous_cmd in ("rattacher", "relier"):
+            if await _refuser_si_role_insuffisant(update, "rattacher un bioagresseur"):
+                return
             if len(ctx.args) < 4:
                 await update.message.reply_text(
                     "❌ Usage : /bioagresseur rattacher <culture> "
@@ -5448,6 +6487,14 @@ async def cmd_stats(update, ctx):
                         for culture, s in repr_pep.items():
                             lines_out.append(_ligne_semis_pep(culture, s))
 
+        # ── [US-069 / CA6] Semis par filière : trois totaux par culture ─────────
+        # Pépinière, pleine terre, et SANS CONTEXTE — compté, jamais tu (CA9).
+        saison_courante = (date_ref or date.today()).year
+        lignes_filiere = svc_contexte_semis.semis_par_contexte(
+            db, current_context().potager_id, date_ref=date_ref, saison=saison_courante,
+        )
+        lines_out.extend(svc_contexte_semis.formater_semis_par_contexte_telegram(lignes_filiere, saison_courante))
+
         # ── Pépinière (godets) ─────────────────────────────────────────────────
         godets_stats = calcul_godets(db, date_ref=date_ref, potager_id=current_context().potager_id)
         if godets_stats:
@@ -5591,7 +6638,12 @@ def _fmt_event(e) -> str:
     parc = f" [{e.parcelle}]" if e.parcelle else ""
     rang = f" x{e.rang}rangs" if e.rang else ""
     trt  = f" ({e.traitement})" if e.traitement else ""
-    return f"#{e.id} {d} — {act}{cult}{var}{qte}{rang}{parc}{trt}"
+    # [US-069] La filière d'un semis, seulement si elle est connue.
+    ctxs = (
+        f" · {svc_contexte_semis.libelle_contexte(e.contexte_semis)}"
+        if getattr(e, "contexte_semis", None) else ""
+    )
+    return f"#{e.id} {d} — {act}{cult}{var}{qte}{rang}{parc}{trt}{ctxs}"
 
 
 def _normalize_action_search(action: str) -> str:
@@ -6004,6 +7056,10 @@ async def _corr_apply(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: str
             "traitement": event.traitement, "commentaire": event.commentaire,
             "date": event.date.strftime("%Y-%m-%d") if event.date else None
         }
+        # [US-069 / CA4] Seul un semis porte un contexte — et seul un semis
+        # peut en recevoir un à la correction.
+        if event.type_action == svc_contexte_semis.ACTION_SEMIS:
+            event_actuel["contexte_semis"] = event.contexte_semis
     finally:
         db.close()
 
@@ -6034,33 +7090,57 @@ JSON brut uniquement."""
         f"\nÉvénement actuel : {json.dumps(event_actuel, ensure_ascii=False)}\n"
     )
 
-    try:
-        reponse = passerelle.appeler_chat(
-            appel_type=passerelle.TYPE_PARSING,
-            ctx=current_context(),
-            prompt_fixe=prompt,
-            prompt_variable=prompt_variable,
-            message_utilisateur=f'Correction demandée : "{texte}"',
-            max_tokens=300,
-            reasoning=False,   # comportement constant : cet appel n'en passait pas
-        )
-        raw = reponse.texte
-        if raw.startswith("```"):
-            raw = "\n".join(raw.split("\n")[1:-1])
-        corrections = json.loads(raw)
-    except LLMIndisponibleError:
-        # [CA9] Aucun repli utile : appliquer une correction devinée serait pire
-        # que ne rien faire. L'événement reste intact, la correction est différée.
-        log.warning("⏳ CORRECTION      : IA indisponible, correction différée")
-        await msg_wait.edit_text(
-            f"⏳ {MESSAGE_REPLI_IA}.\n\n"
-            "Ton événement n'a pas été modifié — retente la correction dans un moment."
-        )
-        return
-    except Exception as e:
-        log.error(f"Analyse de correction en échec : {e}")
-        await msg_wait.edit_text("❌ Je n'ai pas compris la correction. Reformulez.")
-        return
+    # [US-069 / CA4] « non, c'était en pépinière » : une correction qui ne dit
+    # QUE le contexte d'un semis se lit sans modèle — et reste possible quand
+    # l'IA est indisponible. Une phrase qui corrige autre chose passe par le
+    # modèle, puis le contexte qu'elle dit est ajouté ci-dessous.
+    est_semis = "contexte_semis" in event_actuel
+    contexte_seul = svc_contexte_semis.correction_contexte_seule(texte) if est_semis else None
+    if contexte_seul is not None:
+        corrections = {"contexte_semis": contexte_seul}
+        log.info(f"[US-069 / CA4] Correction du contexte sans modèle : {contexte_seul}")
+    else:
+        try:
+            reponse = passerelle.appeler_chat(
+                appel_type=passerelle.TYPE_PARSING,
+                ctx=current_context(),
+                prompt_fixe=prompt,
+                prompt_variable=prompt_variable,
+                message_utilisateur=f'Correction demandée : "{texte}"',
+                max_tokens=300,
+                reasoning=False,   # comportement constant : cet appel n'en passait pas
+            )
+            raw = reponse.texte
+            if raw.startswith("```"):
+                raw = "\n".join(raw.split("\n")[1:-1])
+            corrections = json.loads(raw)
+        except LLMIndisponibleError:
+            # [CA9] Aucun repli utile : appliquer une correction devinée serait pire
+            # que ne rien faire. L'événement reste intact, la correction est différée.
+            log.warning("⏳ CORRECTION      : IA indisponible, correction différée")
+            await msg_wait.edit_text(
+                f"⏳ {MESSAGE_REPLI_IA}.\n\n"
+                "Ton événement n'a pas été modifié — retente la correction dans un moment."
+            )
+            return
+        except Exception as e:
+            log.error(f"Analyse de correction en échec : {e}")
+            await msg_wait.edit_text("❌ Je n'ai pas compris la correction. Reformulez.")
+            return
+
+        contexte_dit = svc_contexte_semis.detecter_contexte(texte) if est_semis else None
+        if contexte_dit and isinstance(corrections, dict):
+            corrections["contexte_semis"] = contexte_dit
+            # Le modèle lit parfois « en pépinière » comme une parcelle : un
+            # libellé de contexte qui ne nomme aucune parcelle réelle est retiré.
+            nom_p = corrections.get("parcelle")
+            if nom_p and svc_contexte_semis.detecter_contexte(f"en {nom_p}") == contexte_dit:
+                db_p = SessionLocal()
+                try:
+                    if resolve_parcelle(db_p, nom_p, potager_id=current_context().potager_id) is None:
+                        corrections.pop("parcelle", None)
+                finally:
+                    db_p.close()
 
     if not corrections:
         await msg_wait.edit_text(
@@ -6099,7 +7179,7 @@ JSON brut uniquement."""
         "action": "Action", "culture": "Culture", "variete": "Variété",
         "quantite": "Quantité", "unite": "Unité", "parcelle": "Parcelle",
         "rang": "Rangs", "duree_minutes": "Durée (min)", "traitement": "Traitement",
-        "commentaire": "Commentaire", "date": "Date"
+        "commentaire": "Commentaire", "date": "Date", "contexte_semis": "Filière",
     }
     mapping = {
         "action": "type_action", "culture": "culture", "variete": "variete",
@@ -6113,6 +7193,9 @@ JSON brut uniquement."""
         if champ.startswith("_"):   # champs internes (_parcelle_id…)
             continue
         ancienne_val = event_actuel.get(champ, "—") or "—"
+        if champ == "contexte_semis":   # [US-069] libellés, pas valeurs stockées
+            ancienne_val = svc_contexte_semis.libelle_contexte(event_actuel.get(champ))
+            nouvelle_val = svc_contexte_semis.libelle_contexte(nouvelle_val)
         label = LABELS.get(champ, champ)
         lines.append(f"• *{label}* : `{ancienne_val}` → `{nouvelle_val if nouvelle_val is not None else 'supprimé'}`")
 
@@ -6170,7 +7253,7 @@ async def _corr_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
             "action": "action", "culture": "culture", "variete": "variété",
             "quantite": "quantité", "unite": "unité", "parcelle": "parcelle",
             "rang": "rangs", "duree_minutes": "durée", "traitement": "traitement",
-            "commentaire": "commentaire", "date": "date"
+            "commentaire": "commentaire", "date": "date", "contexte_semis": "filière",
         }
         details = ", ".join(
             f"{LABELS.get(k, k)}: {event_actuel.get(k, '—') or '—'} → {v if v is not None else 'supprimé'}"
@@ -6826,6 +7909,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "parcelles", _cmd_parcelles_lister)  # alias /parcelle lister
     _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
     _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
+    _enregistrer_commande(app, "calendrier", cmd_calendrier)  # [US-068]
     _enregistrer_commande(app, "association", cmd_association)  # [US-163]
     _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
     _enregistrer_commande(app, "bioagresseur", cmd_bioagresseur)  # [US-162]
@@ -6862,6 +7946,12 @@ def _construire_application() -> "Application":
 
     # [US-097] Retour 👍/👎 sur une réponse de savoir/raisonnement
     app.add_handler(CallbackQueryHandler(_retour_routage_cb, pattern=r"^retour_routage:"))
+
+    # [US-172] Commande dictée : confirmation, refus, complétion d'un argument,
+    # choix d'un nom voisin. Motif disjoint de "^interpparc:" ci-dessous.
+    app.add_handler(CallbackQueryHandler(_interp_cb, pattern=r"^interp:"))
+    # [US-172 / CA19] Création de la parcelle citée par un geste
+    app.add_handler(CallbackQueryHandler(_creation_parcelle_geste_cb, pattern=r"^interpparc:"))
 
     # Messages
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))

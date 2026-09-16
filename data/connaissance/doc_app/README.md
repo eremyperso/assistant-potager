@@ -45,17 +45,18 @@ relis cette fiche avant de livrer.*
 |---|---|
 | `stock-plants-calcul.md` | le calcul de stock (`utils/stock.py`), la règle d'unité dominante, la prise en compte de la date de référence |
 | `recoltes-et-pertes.md` | le type d'organe récolté (`culture_config`), la déduction de stock à la récolte, le rendement en poids, la vente de plants |
-| `semis-godet-plantation.md` | le chaînage semis → godet → plantation, le calcul des graines soldées, la déduction des godets à la plantation |
+| `semis-godet-plantation.md` | le chaînage semis → godet → plantation, le calcul des graines soldées, la déduction des godets à la plantation, la filière d'un semis — pépinière ou pleine terre : reconnaissance, proposition, reprise de l'existant (`app/services/contexte_semis.py`, `migrations/migration_v47.sql`) |
 | `pepiniere-par-lot.md` | la lecture par lot (`calcul_lots_pepiniere`), les états de germination, le signalement d'incohérence de saisie |
-| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`), le plan d'occupation |
-| `enregistrer-un-geste.md` | le référentiel d'actions (`utils/actions.py`), le parsing d'une phrase, l'étape de validation, la datation |
-| `journal-et-corrections.md` | l'écran Journal (filtres, pagination, export), le parcours de correction et de suppression |
+| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`), le plan d'occupation, ce que l'interpréteur de commandes rend dictable sur les parcelles (`app/services/interpreteur_commandes.py`) |
+| `enregistrer-un-geste.md` | le référentiel d'actions (`utils/actions.py`), le parsing d'une phrase, l'étape de validation, la datation, l'interprétation d'une phrase en COMMANDE et ce qu'elle relit avant d'écrire (`app/services/interpreteur_commandes.py`, `app/services/menu_commandes.FORMES_DICTABLES`) |
+| `journal-et-corrections.md` | l'écran Journal (filtres, pagination, export), le parcours de correction et de suppression (dont la correction de la filière d'un semis), les façons de l'ouvrir (commande tapée, phrase dictée) |
 | `potager-cycle-de-vie.md` | l'archivage, la suppression logique, le délai de grâce et la purge |
 | `potager-partage-et-roles.md` | les rôles et leurs droits, les invitations, le retrait d'un membre, l'isolation entre potagers |
 | `compagnon-telegram.md` | l'activation Telegram, la liaison de compte, la synthèse vocale, la dissociation |
-| `statistiques-et-bilans.md` | le contenu de `/stats`, le détail par variété, les agrégats mensuels |
-| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement |
+| `statistiques-et-bilans.md` | le contenu de `/stats` (dont les totaux de semis par filière, `contexte_semis.semis_par_contexte`), le détail par variété, les agrégats mensuels |
+| `notes-et-observations.md` | les catégories de note (`utils/notes.py`) et leur enregistrement, la mémoire du potager (`app/services/memoire_potager.py`) : ce qui y entre, la restitution d'une note, l'isolation entre potagers, le devenir d'une note corrigée ou supprimée, ainsi que la façon dont un carnet volumineux est présenté — repères par année et par saison (`app/services/reponses_chiffrees.py`, familles `notes_culture` / `notes_parcelle`) |
 | `cultures-familles-et-rotation.md` | la famille botanique et son délai de retour, le calcul de rotation, l'avertissement à la plantation, les associations |
+| `calendrier-et-zone-climatique.md` | le calendrier cultural (itinéraires, fenêtres de semis et de récolte, durées), la zone climatique du potager et sa déduction depuis la localisation, la portée d'une correction au bot, la frise des mois de l'écran Plan (quatre phases dont la plantation, priorité quand deux phases partagent un mois, zone et mode dégradé — US-176), la frise recalée d'une culture en place (origine réelle, en croissance, récolte attendue et reste à courir, séries échelonnées, cas sans recalage — US-070) |
 
 Toute fiche ajoutée ici entre dans cette table **dans le même commit** :
 `tests/test_us099_corpus_fonctionnement.py` échoue tant que ce n'est pas fait.
@@ -74,9 +75,9 @@ de `/help`, c'est le signe qu'elle a changé de nature.
 
 ## Ce que la mesure a appris sur ce corpus
 
-57 questions de fonctionnement (`tests/corpus/us099_questions_fonctionnement.csv`),
-mesurées sur le repli SQLite : **57/57 dans les trois premiers résultats**, dont
-50 en tête. Deux enseignements pratiques, tirés des échecs rencontrés en cours
+65 questions de fonctionnement (`tests/corpus/us099_questions_fonctionnement.csv`),
+mesurées sur le repli SQLite : **65/65 dans les trois premiers résultats**, dont
+58 en tête. Deux enseignements pratiques, tirés des échecs rencontrés en cours
 de rédaction :
 
 * une section ne se retrouve que par les mots qu'elle porte — « comment dicter

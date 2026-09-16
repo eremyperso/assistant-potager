@@ -2,6 +2,7 @@
 titre: Le purin de consoude
 famille: agronomie
 source: Corpus de mesure US-098
+licence: proprietaire
 niveau_confiance: indicatif
 ---
 
