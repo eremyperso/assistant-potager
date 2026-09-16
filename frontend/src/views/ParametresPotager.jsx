@@ -57,7 +57,7 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
   const [nom, setNom] = useState(estPotagerActif ? potagerActif?.nom || '' : '')
   const [localisation, setLocalisation] = useState(
     estPotagerActif && potagerActif?.latitude != null && potagerActif?.longitude != null
-      ? { ville: potagerActif.ville || '', latitude: potagerActif.latitude, longitude: potagerActif.longitude }
+      ? { ville: potagerActif.ville || '', latitude: potagerActif.latitude, longitude: potagerActif.longitude, altitude: potagerActif.altitude ?? null }
       : null
   )
   const [loading, setLoading] = useState(false)
@@ -74,7 +74,7 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
         setNom(d.nom)
         setLocalisation(
           d.latitude != null && d.longitude != null
-            ? { ville: d.ville || '', latitude: d.latitude, longitude: d.longitude }
+            ? { ville: d.ville || '', latitude: d.latitude, longitude: d.longitude, altitude: d.altitude ?? null }
             : null
         )
       }
@@ -110,6 +110,7 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
         ville: localisation?.ville,
         latitude: localisation?.latitude,
         longitude: localisation?.longitude,
+        altitude: localisation?.altitude,
       })
       charger()
     } catch (err) {

@@ -222,11 +222,11 @@ export const api = {
   // [US-074 / CA3] `ville` optionnelle, choisie via VilleSearch (géocodage Open-Meteo)
   // [US-081 / CA3, CA4] `activer` pilote la bascule sur le potager créé — omis,
   // le serveur bascule (comportement d'origine, dont dépend l'onboarding US-058).
-  creerPotager: (nom, ville, latitude, longitude, activer = true) =>
-    post('/potagers', { nom, ville, latitude, longitude, activer }),
+  creerPotager: (nom, ville, latitude, longitude, activer = true, altitude = null) =>
+    post('/potagers', { nom, ville, latitude, longitude, activer, altitude }),
   // [US-074 / CA4, CA5] Modification (nom/ville/localisation) d'un potager déjà créé — owner uniquement
-  modifierPotager: (potagerId, { nom, ville, latitude, longitude } = {}) =>
-    patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude }),
+  modifierPotager: (potagerId, { nom, ville, latitude, longitude, altitude } = {}) =>
+    patch(`/potagers/${potagerId}`, { nom, ville, latitude, longitude, altitude }),
   creerInvitation: (potagerId, rolePropose, emailInvite) =>
     post(`/potagers/${potagerId}/invitations`, { role_propose: rolePropose, email_invite: emailInvite }),
   // [US-058] Première parcelle créée depuis l'assistant d'onboarding — rattachée

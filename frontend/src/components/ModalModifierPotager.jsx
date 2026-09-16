@@ -12,7 +12,7 @@ export default function ModalModifierPotager({ potager, onClose }) {
   // [CA6] Un potager sans localisation reste `null` — jamais de "0, 0" inventé.
   const [localisation, setLocalisation] = useState(
     potager.latitude != null && potager.longitude != null
-      ? { ville: potager.ville || '', latitude: potager.latitude, longitude: potager.longitude }
+      ? { ville: potager.ville || '', latitude: potager.latitude, longitude: potager.longitude, altitude: potager.altitude ?? null }
       : null
   )
   const [loading, setLoading] = useState(false)
@@ -29,6 +29,7 @@ export default function ModalModifierPotager({ potager, onClose }) {
         ville: localisation?.ville,
         latitude: localisation?.latitude,
         longitude: localisation?.longitude,
+        altitude: localisation?.altitude,
       })
       onClose()
     } catch (err) {

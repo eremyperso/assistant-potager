@@ -15,7 +15,7 @@ via `potager_actif.role_utilisateur`, puis passé à `require_role`.
 import logging
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
@@ -132,6 +132,7 @@ def creer_potager(
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
     activer: bool = True,
+    altitude: Optional[float] = None,
 ) -> Potager:
     """[CA1, CA2] Crée un potager — l'utilisateur en devient owner et ce potager
     devient immédiatement son potager actif. La localisation est simplement
@@ -149,8 +150,16 @@ def creer_potager(
 
     Un utilisateur qui n'a encore aucun potager actif se voit toujours attribuer
     celui-ci, même avec `activer=False` : le laisser sans potager actif le
-    renverrait sur l'onboarding (409 « aucun potager », cf. US-046 / CA5)."""
-    potager = Potager(nom=nom, ville=ville, latitude=latitude, longitude=longitude, proprietaire_id=user_id)
+    renverrait sur l'onboarding (409 « aucun potager », cf. US-046 / CA5).
+
+    [US-193 / CA1] `altitude` accompagne les coordonnées de la ville choisie ;
+    sans coordonnées, elle n'a pas de sens et n'est pas conservée."""
+    if latitude is None or longitude is None:
+        altitude = None
+    potager = Potager(
+        nom=nom, ville=ville, latitude=latitude, longitude=longitude, altitude=altitude,
+        proprietaire_id=user_id,
+    )
     db.add(potager)
     db.commit()
     db.refresh(potager)
@@ -176,15 +185,26 @@ def modifier_potager(
     ville: Optional[str] = None,
     latitude: Optional[float] = None,
     longitude: Optional[float] = None,
+    altitude: Optional[float] = None,
 ) -> Potager:
     """[US-074 / CA4] Un owner corrige nom/ville/localisation d'un potager déjà
     créé — seul moyen de localiser un potager créé avant l'existence de cette
     fonctionnalité (CA6 : rien n'est jamais réécrit à une valeur inventée, un
-    paramètre omis (`None`) laisse la colonne existante inchangée)."""
+    paramètre omis (`None`) laisse la colonne existante inchangée).
+
+    [US-193 / CA2] Latitude, longitude et altitude changent ENSEMBLE : dès que
+    les coordonnées CHANGENT, l'altitude fournie les accompagne — `None` compris.
+    Un potager ne garde jamais l'altitude de son ancienne ville. Des coordonnées
+    renvoyées à l'identique sans altitude (simple renommage depuis un écran qui
+    ne la connaît pas) ne l'effacent pas."""
     ctx = _ctx_pour_potager(db, user_id, potager_id)
     require_role(ctx, "owner", "modifier le potager")
 
     potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    coordonnees_changees = (
+        (latitude is not None and latitude != potager.latitude)
+        or (longitude is not None and longitude != potager.longitude)
+    )
     if nom is not None:
         potager.nom = nom
     if ville is not None:
@@ -193,11 +213,47 @@ def modifier_potager(
         potager.latitude = latitude
     if longitude is not None:
         potager.longitude = longitude
+    if coordonnees_changees or altitude is not None:
+        potager.altitude = altitude
     db.commit()
     db.refresh(potager)
 
     log.info("[US-074] Potager modifié : potager_id=%s par=%s", potager_id, user_id)
     return potager
+
+
+def renseigner_altitudes_manquantes(
+    db: Session,
+    fournisseur: Callable[[list[tuple[float, float]]], list[Optional[float]]],
+) -> tuple[int, int]:
+    """[US-193 / CA3] Reprise : donne leur altitude aux potagers déjà localisés.
+
+    Ne touche que les potagers à coordonnées connues et altitude NULL — rejouée,
+    elle ne réécrit rien, et n'écrase jamais l'altitude d'une ville choisie.
+    `fournisseur` reçoit les coordonnées et rend une altitude par point (`None`
+    si inconnue) : la base ne parle jamais au réseau, l'appelant si
+    (`utils.altitude.altitudes_depuis_coordonnees`). La zone CHOISIE n'est pas
+    touchée (CA11).
+
+    Retourne (potagers sans altitude trouvés, altitudes renseignées)."""
+    potagers = (
+        db.query(Potager)
+        .filter(Potager.altitude.is_(None), Potager.latitude.isnot(None), Potager.longitude.isnot(None))
+        .order_by(Potager.id)
+        .all()
+    )
+    if not potagers:
+        return 0, 0
+    altitudes = fournisseur([(p.latitude, p.longitude) for p in potagers])
+    renseignes = 0
+    for potager, altitude in zip(potagers, altitudes):
+        if altitude is None:
+            continue
+        potager.altitude = altitude
+        renseignes += 1
+        log.info("[US-193] Altitude renseignée : potager_id=%s altitude=%s m", potager.id, altitude)
+    db.commit()
+    return len(potagers), renseignes
 
 
 def _notifier_cycle_vie(

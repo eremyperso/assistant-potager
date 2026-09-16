@@ -407,7 +407,7 @@ export default function Onboarding() {
   // la validation finale du récapitulatif (CA5, CA6).
   const [st, setSt] = useState({
     nom: '',
-    localisation: null, // { ville, latitude, longitude } | null
+    localisation: null, // { ville, latitude, longitude, altitude } | null
     type: 'pleine-terre',
     pnom: '',
     surface: '',
@@ -441,6 +441,7 @@ export default function Onboarding() {
         ville: st.localisation?.ville,
         latitude: st.localisation?.latitude,
         longitude: st.localisation?.longitude,
+        altitude: st.localisation?.altitude,
         parcelle: st.pnom.trim()
           ? {
               nom: st.pnom.trim(),

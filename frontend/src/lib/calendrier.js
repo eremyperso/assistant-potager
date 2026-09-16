@@ -234,9 +234,16 @@ export function zoneAffichable(calendriers) {
     defaut: 'appliquée par défaut',
   }
   const noms = { oceanique: 'océanique', mediterraneen: 'méditerranéen' }
+  let origine = origines[calendriers.zone_climatique_origine] || null
+  // [US-193 / CA7, CA8] Même libellé que le bot : l'altitude retenue accompagne
+  // une zone déduite de la localisation (« 1 326 m »).
+  if (calendriers.zone_climatique_origine === 'localisation' && typeof calendriers.zone_altitude === 'number') {
+    const metres = String(Math.round(calendriers.zone_altitude)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+    origine = `${origine}, ${metres} m`
+  }
   return {
     zone: noms[calendriers.zone_climatique] || calendriers.zone_climatique,
-    origine: origines[calendriers.zone_climatique_origine] || null,
+    origine,
   }
 }
 

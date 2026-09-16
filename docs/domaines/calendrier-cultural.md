@@ -39,9 +39,18 @@ Le modèle — `app/services/calendrier_cultural.py` (seul point de lecture/écr
 
 - **ZONE** : `potagers.zone_climatique` ne porte que le CHOIX du jardinier. Sans
   choix, la zone se DÉDUIT de la localisation À LA LECTURE
-  (`zone_depuis_localisation` : règle grossière, déclarée, jamais
-  « montagnard » faute d'altitude), puis `CALENDRIER_ZONE_DEFAUT` (`app/config.py`,
-  `oceanique`). Aucun backfill SQL : une seconde règle divergerait.
+  (`zone_depuis_localisation` : règle grossière, déclarée), puis
+  `CALENDRIER_ZONE_DEFAUT` (`app/config.py`, `oceanique`). Aucun backfill SQL
+  de la zone : une seconde règle divergerait.
+  [US-193] La règle lit aussi `potagers.altitude` (migration v48) : au-delà de
+  `CALENDRIER_SEUIL_MONTAGNARD_M` (700) → montagnard ; sinon sud de 44,7° N et
+  est de 2,8° E → méditerranéen ; est de 3,8° E → continental ; sinon
+  océanique. Limites calées sur le tableau de villes d'US-193 / CA5
+  (`tests/test_us193_zone_altitude.py`), en penchant vers le plus froid. Sans
+  altitude, jamais « montagnard ». L'altitude arrive avec la ville
+  (`elevation` d'Open-Meteo dans `VilleSearch.jsx`) et change AVEC les
+  coordonnées (`modifier_potager`) ; les potagers déjà localisés la reçoivent
+  par `tools/renseigner_altitude_potagers.py`, lancé après les migrations.
 - **CORRECTION** : TOUJOURS locale au potager (CA11). La première correction COPIE
   l'itinéraire partagé en itinéraire personnalisé (`potager_id` non nul) qui
   le remplace pour ce potager. `culture_config.nom` étant UNIQUE, la

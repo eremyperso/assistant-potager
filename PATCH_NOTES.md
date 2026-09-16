@@ -1,3 +1,34 @@
+## [v3.69.0] — 2026-09-16
+
+### 🚀 Nouveautés
+- Déduit la zone **montagnarde** d'un potager localisé au-dessus de 700 m, quelles que soient sa latitude et sa longitude : Briançon, Chamonix ou Pontarlier ne lisent plus le calendrier océanique (US-193 / CA4)
+- Revoit les limites entre océanique, continental et méditerranéen sur un tableau de 22 villes de référence : Reims et Troyes passent en continental, Montélimar en méditerranéen (US-193 / CA5)
+- Conserve l'altitude de la ville choisie à la création et à la modification du potager, sans rien saisir de plus ; changer de ville met à jour ensemble coordonnées et altitude (US-193 / CA1, CA2)
+- Affiche l'altitude retenue avec la zone déduite, au bot comme sur l'écran Plan (« montagnard (déduite de la localisation, 1 326 m) »), et rappelle `/calendrier zone montagnard` quand l'altitude est inconnue (US-193 / CA7, CA8)
+- Précise « (choix du jardinier) » quand la zone a été choisie ; ce choix prime toujours sur l'altitude (US-193 / CA6)
+
+### 🔧 Améliorations techniques
+- Ajoute le réglage `CALENDRIER_SEUIL_MONTAGNARD_M` (700 par défaut), modifiable sans redéploiement (US-193 / CA4)
+- Ajoute `utils/altitude.py` (API d'élévation Open-Meteo, par lots de 100, jamais bloquant) et `tools/renseigner_altitude_potagers.py`, lancé après les migrations en dev, en prod et par `update_dev.ps1` pour les potagers déjà localisés (US-193 / CA3)
+- Expose `altitude` dans `GET /potagers`, `GET`/`PATCH /potagers/{id}` et `zone_altitude` dans `GET /plan/calendriers` ; `POST`/`PATCH /potagers` l'acceptent (US-193 / CA1)
+- Met à jour la fiche `calendrier-et-zone-climatique.md` du corpus de fonctionnement (US-193 / CA10)
+
+### 💾 Base de données
+- Ajoute la colonne `potagers.altitude` (migration_v48, rollback_v48) ; la zone choisie par un jardinier n'est jamais modifiée (US-193 / CA11)
+## [v3.68.0] — 2026-09-16
+
+### 🚀 Nouveautés
+- Étend la prévision météo du potager de 5 à **14 jours** (température minimale, maximale et temps attendu, avec l'horizon de chaque jour), pour que les conseils de semis et de plantation voient une gelée annoncée la semaine suivante (US-182 / CA1)
+- Garde le widget météo servi quand Open-Meteo ne répond pas, à partir de la prévision du jour déjà lue, en indiquant son ancienneté ; sans prévision du jour, l'erreur reste affichée comme avant (US-182 / CA5)
+
+### 🔧 Améliorations techniques
+- Ajoute le service `app/services/previsions_meteo.py` : cache en mémoire par localisation arrondie, fuseau et jour, valable une heure (`DUREE_VALIDITE_CACHE`, seule déclaration), partagé entre potagers et membres au même endroit (US-182 / CA2, CA3)
+- Ajoute une lecture groupée de plusieurs localisations ou potagers qui n'interroge Open-Meteo qu'une fois pour toutes celles absentes du cache, prête pour le moteur de confiance (US-182 / CA4, US-178)
+- Distingue trois issues de lecture — disponible (avec source et âge de la donnée), indisponible, localisation manquante — sans jamais présenter une prévision d'un autre jour comme celle du jour (US-182 / CA5, CA6)
+- Journalise chaque appel Open-Meteo sur une ligne structurée (localisation arrondie à ~1 km, jour, issue, durée), échecs en erreur avec leur motif (US-182 / CA7)
+- Branche `GET /meteo` sur le cache et ajoute `previsions_etendues`, `age_donnees_secondes` et `source_donnees` à sa réponse, sans retirer ni renommer aucune clé ; le job de 5 h et `/meteo` Telegram restent hors cache (US-182 / CA8)
+- Vide le cache météo avant chaque test (`tests/conftest.py`) pour qu'une prévision mise en cache par un test ne soit jamais servie au suivant
+
 ## [v3.67.0] — 2026-09-16
 
 ### 🔧 Améliorations techniques

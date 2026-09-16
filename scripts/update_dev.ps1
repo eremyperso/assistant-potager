@@ -138,6 +138,10 @@ if ($nbApplied -eq 0) {
     skip "toutes les migrations sont deja appliquees"
 }
 
+# [US-193 / CA3] Complement de migration_v48 : altitude des potagers deja
+# localises, lue aupres d'Open-Meteo. Idempotent, jamais bloquant.
+python tools/renseigner_altitude_potagers.py
+
 # --- 4. Corpus de connaissance [US-099 / CA10] ---
 # Rejoue a chaque passage, comme les migrations juste au-dessus, et pour la meme
 # raison : l'ingestion est idempotente (empreinte SHA-256 par fichier, meme

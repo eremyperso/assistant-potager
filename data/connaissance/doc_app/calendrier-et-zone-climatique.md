@@ -37,16 +37,16 @@ Certaines cultures se conduisent de plusieurs façons au fil de l'année, un cho
 ## À quoi sert la zone climatique du potager
 
 **Intention :** comprendre
-**On parle aussi de :** climat ; région ; méditerranéen ; océanique ; continental ; montagnard ; microclimat ; décalage des semis
+**On parle aussi de :** climat ; région ; méditerranéen ; océanique ; continental ; montagnard ; altitude ; jardin de montagne ; microclimat ; décalage des semis
 
-Les périodes de semis et de récolte se décalent de plusieurs semaines entre un jardin du bord de mer, un jardin de montagne et un jardin du Midi : chaque potager lit donc les périodes de sa zone climatique. Les délais de levée et de récolte, eux, sont les mêmes partout, parce qu'ils tiennent à la plante et non au climat. Quand un potager est localisé, sa zone est proposée d'après sa position ; la zone montagnarde n'est jamais supposée, puisque la position seule ne dit rien de l'altitude. Sans localisation ni choix, une zone par défaut s'applique et le calendrier reste utilisable.
+Les périodes de semis et de récolte se décalent de plusieurs semaines entre un jardin du bord de mer, un jardin de montagne et un jardin du Midi : chaque potager lit donc les périodes de sa zone climatique. Les délais de levée et de récolte, eux, sont les mêmes partout, parce qu'ils tiennent à la plante et non au climat. Quand un potager est localisé, sa zone est proposée d'après sa position et son altitude. L'altitude est retenue automatiquement avec la ville choisie pour le potager, sans rien saisir de plus, et un changement de ville la met à jour. Au-dessus d'une certaine altitude, 700 mètres par défaut, la zone proposée est montagnarde, où que soit le jardin. Plus bas, l'est de la France, où les gelées sont tardives, lit la zone continentale, le pourtour méditerranéen et la basse vallée du Rhône la zone méditerranéenne, et le reste la zone océanique. En cas de doute, la proposition penche vers le climat le plus froid : des semis un peu tardifs valent mieux que des plants gelés. Tant que l'altitude d'un potager n'est pas connue, la zone montagnarde n'est jamais supposée. Hors de France métropolitaine, aucune zone n'est proposée. Sans localisation ni choix, une zone par défaut s'applique et le calendrier reste utilisable.
 
 ## Choisir soi-même la zone climatique de son jardin
 
 **Intention :** procédure
-**On parle aussi de :** changer de zone ; mauvaise zone ; fond de vallée ; corriger le climat ; revenir à la localisation
+**On parle aussi de :** changer de zone ; mauvaise zone ; fond de vallée ; corriger le climat ; revenir à la localisation ; zone déduite de l'altitude
 
-La zone proposée d'après la localisation n'est qu'un point de départ : c'est le jardinier qui connaît son microclimat, et un fond de vallée n'a pas le calendrier du plateau voisin. Le propriétaire du potager peut choisir sa zone depuis la conversation, et revenir à tout moment à la zone déduite de la localisation. La réponse précise toujours si la zone affichée a été choisie, déduite ou appliquée par défaut.
+La zone proposée d'après la localisation n'est qu'un point de départ : c'est le jardinier qui connaît son microclimat, et un fond de vallée n'a pas le calendrier du plateau voisin. Le propriétaire du potager peut choisir sa zone depuis la conversation, et ce choix prime toujours sur la zone proposée, quelle que soit l'altitude ; il peut revenir à tout moment à la zone déduite de la localisation. La réponse précise toujours si la zone affichée a été choisie par le jardinier, déduite ou appliquée par défaut ; une zone déduite rappelle l'altitude retenue, et, quand l'altitude n'est pas connue, la réponse indique comment choisir la zone montagnarde soi-même. Le bot et l'écran Plan affichent la même zone pour un même potager.
 
 ## Corriger une période ou un délai qui ne convient pas à son jardin
 

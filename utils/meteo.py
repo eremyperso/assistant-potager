@@ -19,8 +19,10 @@ Zéro token Groq consommé — traitement 100% local.
 """
 
 import logging
+import time
 import requests
-from datetime import datetime, date
+from datetime import datetime, date, timezone as tz
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.orm import Session
 
 log = logging.getLogger("potager")
@@ -33,6 +35,17 @@ METEO_TIMEZONE  = "Europe/Paris"
 # ── URL Open-Meteo ─────────────────────────────────────────────────────────────
 OPEN_METEO_URL         = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+# ── Horizons de prévision ─────────────────────────────────────────────────────
+# [US-182] Choix produit aligné sur la règle R3 du moteur de confiance (US-178,
+# « aucun gel annoncé sur 14 jours ») ; Open-Meteo en accepte jusqu'à 16.
+# Seul endroit où l'horizon est déclaré : `forecast_days` en découle.
+METEO_HORIZON_PREVISION_JOURS = 14
+# [US-075 / CA2] Horizon court du widget (`previsions`), inchangé par US-182.
+METEO_HORIZON_WIDGET_JOURS    = 5
+# [US-182 / CA7] Arrondi des coordonnées dans les journaux (~1 km) : assez pour
+# diagnostiquer, pas assez pour retrouver l'adresse d'un jardinier.
+METEO_DECIMALES_JOURNAL       = 2
 
 # ── Codes météo WMO → label potager ───────────────────────────────────────────
 # https://open-meteo.com/en/docs#weathervariables
@@ -116,34 +129,31 @@ def _conseil_potager(wmo_code: int, temp_matin: float, temp_aprem: float,
     return " · ".join(conseils) if conseils else "🌿 Conditions normales"
 
 
-def fetch_meteo(
-    lat: float = METEO_LATITUDE,
-    lon: float = METEO_LONGITUDE,
-    timezone: str = METEO_TIMEZONE,
-) -> dict | None:
+def jour_local(timezone: str = METEO_TIMEZONE, maintenant: datetime | None = None) -> date:
     """
-    Interroge l'API Open-Meteo et retourne un dict avec les données météo
-    pertinentes pour le potager.
+    [US-182] Date du jour dans le fuseau du potager — c'est elle, et non la date
+    du serveur, qui borne une journée de prévision (le serveur peut tourner en UTC).
 
-    [US-075] `lat`/`lon`/`timezone` optionnels — repli sur les coordonnées du
-    bot par défaut (comportement inchangé pour le job 5h et /meteo Telegram),
-    même pattern que `fetch_meteo_history()`. Permet à `GET /meteo` d'interroger
-    la localisation réelle d'un potager (US-074).
-
-    Le dict retourné gagne trois ajouts par rapport à la version d'origine, sans
-    retirer ni renommer aucune clé existante (non-régression bot, US-075/CA5) :
-    - `previsions` : jusqu'à 5 jours suivants (`date`, `wmo_code`, `emoji`,
-      `label`, `temp_max`, `temp_min`)
-    - `temp_actuelle`/`ressenti`/`humidite`/`vent_actuel_kmh` : instantané
-      courant Open-Meteo, absents (`None`) si l'API ne les fournit pas.
-
-    Retourne None en cas d'erreur réseau.
+    `maintenant` doit être conscient du fuseau ; un fuseau inconnu retombe sur la
+    date du serveur, en le journalisant.
     """
-    params = {
-        "latitude"            : lat,
-        "longitude"           : lon,
+    instant = maintenant or datetime.now(tz.utc)
+    try:
+        return instant.astimezone(ZoneInfo(timezone)).date()
+    except ZoneInfoNotFoundError:
+        log.warning(f"⚠️  MÉTÉO FUSEAU    : fuseau inconnu '{timezone}', date du serveur utilisée")
+        return instant.date()
+
+
+def _parametres_prevision(latitudes: float | str, longitudes: float | str, timezone: str) -> dict:
+    """Paramètres Open-Meteo communs à la lecture simple et à la lecture groupée
+    (coordonnées séparées par des virgules pour la seconde)."""
+    return {
+        "latitude"            : latitudes,
+        "longitude"           : longitudes,
         "timezone"            : timezone,
-        "forecast_days"       : 6,  # aujourd'hui + 5 jours de prévision (US-075 / CA2)
+        # aujourd'hui + METEO_HORIZON_PREVISION_JOURS jours (US-182 / CA1)
+        "forecast_days"       : METEO_HORIZON_PREVISION_JOURS + 1,
         # Instantané courant — température ressentie, humidité, vent (US-075 / CA3)
         "current"              : [
             "temperature_2m",
@@ -175,94 +185,233 @@ def fetch_meteo(
         "precipitation_unit"  : "mm",
     }
 
+
+def _localisation_journal(localisations: list[tuple[float, float]]) -> str:
+    """[US-182 / CA7] Localisations arrondies pour les journaux : `48.96,2.20;43.30,5.38`."""
+    d = METEO_DECIMALES_JOURNAL
+    return ";".join(f"{lat:.{d}f},{lon:.{d}f}" for lat, lon in localisations)
+
+
+def _journaliser_appel(
+    localisations: list[tuple[float, float]],
+    timezone: str,
+    issue: str,
+    debut: float,
+    motif: str = "",
+) -> None:
+    """
+    [US-182 / CA7] Une ligne par appel Open-Meteo — localisation arrondie, jour,
+    issue, durée. Un échec est journalisé en erreur avec son motif : aucun appel
+    ne disparaît dans un `except` muet.
+    """
+    duree_ms = int((time.perf_counter() - debut) * 1000)
+    gabarit = "MÉTÉO APPEL      │ loc=%s │ jour=%s │ issue=%-14s │ %d ms │ %s"
+    arguments = (
+        _localisation_journal(localisations), jour_local(timezone).isoformat(),
+        issue, duree_ms, motif or "-",
+    )
+    if issue == "succes":
+        log.info("🌤️  " + gabarit, *arguments)
+    elif issue == "succes_partiel":
+        log.warning("⚠️  " + gabarit, *arguments)
+    else:
+        log.error("❌ " + gabarit, *arguments)
+
+
+def _analyser_prevision(raw: dict) -> dict:
+    """
+    Transforme une réponse Open-Meteo (une localisation) en dict météo potager.
+    Lève KeyError/IndexError/TypeError si la réponse est malformée.
+    """
+    daily   = raw["daily"]
+    hourly  = raw["hourly"]
+    current = raw.get("current") or {}
+    times   = hourly["time"]  # liste de "2026-03-25T00:00", "...T01:00"...
+
+    # Extraire la valeur horaire pour une heure cible (ex: 8 → 08:00)
+    def hourly_val(key: str, hour: int):
+        prefix = f"T{hour:02d}:00"
+        for i, t in enumerate(times):
+            if t.endswith(prefix):
+                return hourly[key][i]
+        return None
+
+    wmo_code      = daily["weathercode"][0]
+    temp_min      = daily["temperature_2m_min"][0]
+    temp_max      = daily["temperature_2m_max"][0]
+    precipitations= daily["precipitation_sum"][0] or 0.0
+    proba_pluie   = daily["precipitation_probability_max"][0] or 0
+    vent_max      = daily["windspeed_10m_max"][0] or 0.0
+    lever_soleil  = daily["sunrise"][0]
+    coucher_soleil= daily["sunset"][0]
+
+    # Températures horaires pour le résumé potager
+    temp_matin    = hourly_val("temperature_2m", 8)  or temp_min
+    temp_aprem    = hourly_val("temperature_2m", 14) or temp_max
+    proba_matin   = hourly_val("precipitation_probability", 8)  or 0
+    proba_aprem   = hourly_val("precipitation_probability", 14) or 0
+
+    emoji, label  = _wmo_label(wmo_code)
+    conseil       = _conseil_potager(wmo_code, temp_matin, temp_aprem,
+                                     precipitations, vent_max)
+
+    def _round_or_none(v):
+        return round(v, 1) if v is not None else None
+
+    # [US-075 / CA2] Prévision des jours suivants (jour 0 = aujourd'hui, déjà
+    # couvert ci-dessus) — jusqu'à 5 jours, selon ce que renvoie Open-Meteo.
+    # [US-182 / CA1] Même lecture étendue à l'horizon de prévision complet, avec
+    # l'horizon de chaque jour pour qu'un consommateur puisse en pondérer la fiabilité.
+    previsions = []
+    previsions_etendues = []
+    for i in range(1, min(METEO_HORIZON_PREVISION_JOURS + 1, len(daily["time"]))):
+        p_code = daily["weathercode"][i]
+        p_emoji, p_label = _wmo_label(p_code)
+        jour = {
+            "date"     : daily["time"][i],
+            "wmo_code" : p_code,
+            "emoji"    : p_emoji,
+            "label"    : p_label,
+            "temp_max" : _round_or_none(daily["temperature_2m_max"][i]),
+            "temp_min" : _round_or_none(daily["temperature_2m_min"][i]),
+        }
+        if i <= METEO_HORIZON_WIDGET_JOURS:
+            previsions.append(dict(jour))
+        previsions_etendues.append({**jour, "horizon_jours": i})
+
+    return {
+        "wmo_code"        : wmo_code,
+        "emoji"           : emoji,
+        "label"           : label,
+        "temp_min"        : round(temp_min, 1),
+        "temp_max"        : round(temp_max, 1),
+        "temp_matin"      : round(temp_matin, 1),
+        "temp_aprem"      : round(temp_aprem, 1),
+        "precipitations"  : round(precipitations, 1),
+        "proba_pluie"     : proba_pluie,
+        "proba_matin"     : proba_matin,
+        "proba_aprem"     : proba_aprem,
+        "vent_max_kmh"    : round(vent_max, 1),
+        "lever_soleil"    : lever_soleil[-5:],   # "HH:MM"
+        "coucher_soleil"  : coucher_soleil[-5:], # "HH:MM"
+        "conseil"         : conseil,
+        "date"            : date.today().isoformat(),
+        # [US-075 / CA2, CA3] Ajouts — absents de la version d'origine, sans
+        # impact sur les consommateurs existants (bot, /meteo/history).
+        "previsions"      : previsions,
+        "temp_actuelle"   : _round_or_none(current.get("temperature_2m")),
+        "ressenti"        : _round_or_none(current.get("apparent_temperature")),
+        "humidite"        : current.get("relative_humidity_2m"),
+        "vent_actuel_kmh" : _round_or_none(current.get("wind_speed_10m")),
+        # [US-182 / CA1] Ajout — les 14 jours suivant aujourd'hui.
+        "previsions_etendues": previsions_etendues,
+    }
+
+
+def fetch_meteo(
+    lat: float = METEO_LATITUDE,
+    lon: float = METEO_LONGITUDE,
+    timezone: str = METEO_TIMEZONE,
+) -> dict | None:
+    """
+    Interroge l'API Open-Meteo et retourne un dict avec les données météo
+    pertinentes pour le potager.
+
+    [US-075] `lat`/`lon`/`timezone` optionnels — repli sur les coordonnées du
+    bot par défaut (comportement inchangé pour le job 5h et /meteo Telegram),
+    même pattern que `fetch_meteo_history()`. Permet à `GET /meteo` d'interroger
+    la localisation réelle d'un potager (US-074).
+
+    Le dict retourné gagne des ajouts par rapport à la version d'origine, sans
+    retirer ni renommer aucune clé existante (non-régression bot, US-075/CA5) :
+    - `previsions` : jusqu'à 5 jours suivants (`date`, `wmo_code`, `emoji`,
+      `label`, `temp_max`, `temp_min`)
+    - `temp_actuelle`/`ressenti`/`humidite`/`vent_actuel_kmh` : instantané
+      courant Open-Meteo, absents (`None`) si l'API ne les fournit pas.
+    - [US-182] `previsions_etendues` : les `METEO_HORIZON_PREVISION_JOURS` jours
+      suivants, mêmes champs que `previsions` plus `horizon_jours` (1 = demain).
+
+    Sans cache : le job 5h et /meteo Telegram l'appellent directement. Les
+    lectures en cache passent par `app.services.previsions_meteo` (US-182).
+
+    Retourne None en cas d'erreur réseau.
+    """
+    params = _parametres_prevision(lat, lon, timezone)
+    localisations = [(lat, lon)]
+    debut = time.perf_counter()
+
     try:
         resp = requests.get(OPEN_METEO_URL, params=params, timeout=10)
         resp.raise_for_status()
         raw = resp.json()
     except requests.RequestException as e:
-        log.error(f"❌ MÉTÉO ERREUR     : {e}")
+        _journaliser_appel(localisations, timezone, "echec_reseau", debut, str(e))
         return None
 
     try:
-        daily   = raw["daily"]
-        hourly  = raw["hourly"]
-        current = raw.get("current") or {}
-        times   = hourly["time"]  # liste de "2026-03-25T00:00", "...T01:00"...
-
-        # Extraire la valeur horaire pour une heure cible (ex: 8 → 08:00)
-        def hourly_val(key: str, hour: int):
-            prefix = f"T{hour:02d}:00"
-            for i, t in enumerate(times):
-                if t.endswith(prefix):
-                    return hourly[key][i]
-            return None
-
-        wmo_code      = daily["weathercode"][0]
-        temp_min      = daily["temperature_2m_min"][0]
-        temp_max      = daily["temperature_2m_max"][0]
-        precipitations= daily["precipitation_sum"][0] or 0.0
-        proba_pluie   = daily["precipitation_probability_max"][0] or 0
-        vent_max      = daily["windspeed_10m_max"][0] or 0.0
-        lever_soleil  = daily["sunrise"][0]
-        coucher_soleil= daily["sunset"][0]
-
-        # Températures horaires pour le résumé potager
-        temp_matin    = hourly_val("temperature_2m", 8)  or temp_min
-        temp_aprem    = hourly_val("temperature_2m", 14) or temp_max
-        proba_matin   = hourly_val("precipitation_probability", 8)  or 0
-        proba_aprem   = hourly_val("precipitation_probability", 14) or 0
-
-        emoji, label  = _wmo_label(wmo_code)
-        conseil       = _conseil_potager(wmo_code, temp_matin, temp_aprem,
-                                         precipitations, vent_max)
-
-        # [US-075 / CA2] Prévision des jours suivants (jour 0 = aujourd'hui, déjà
-        # couvert ci-dessus) — jusqu'à 5 jours, selon ce que renvoie Open-Meteo.
-        previsions = []
-        for i in range(1, min(6, len(daily["time"]))):
-            p_code = daily["weathercode"][i]
-            p_emoji, p_label = _wmo_label(p_code)
-            previsions.append({
-                "date"     : daily["time"][i],
-                "wmo_code" : p_code,
-                "emoji"    : p_emoji,
-                "label"    : p_label,
-                "temp_max" : round(daily["temperature_2m_max"][i], 1),
-                "temp_min" : round(daily["temperature_2m_min"][i], 1),
-            })
-
-        def _round_or_none(v):
-            return round(v, 1) if v is not None else None
-
-        return {
-            "wmo_code"        : wmo_code,
-            "emoji"           : emoji,
-            "label"           : label,
-            "temp_min"        : round(temp_min, 1),
-            "temp_max"        : round(temp_max, 1),
-            "temp_matin"      : round(temp_matin, 1),
-            "temp_aprem"      : round(temp_aprem, 1),
-            "precipitations"  : round(precipitations, 1),
-            "proba_pluie"     : proba_pluie,
-            "proba_matin"     : proba_matin,
-            "proba_aprem"     : proba_aprem,
-            "vent_max_kmh"    : round(vent_max, 1),
-            "lever_soleil"    : lever_soleil[-5:],   # "HH:MM"
-            "coucher_soleil"  : coucher_soleil[-5:], # "HH:MM"
-            "conseil"         : conseil,
-            "date"            : date.today().isoformat(),
-            # [US-075 / CA2, CA3] Ajouts — absents de la version d'origine, sans
-            # impact sur les consommateurs existants (bot, /meteo/history).
-            "previsions"      : previsions,
-            "temp_actuelle"   : _round_or_none(current.get("temperature_2m")),
-            "ressenti"        : _round_or_none(current.get("apparent_temperature")),
-            "humidite"        : current.get("relative_humidity_2m"),
-            "vent_actuel_kmh" : _round_or_none(current.get("wind_speed_10m")),
-        }
-
+        meteo = _analyser_prevision(raw)
     except (KeyError, IndexError, TypeError) as e:
-        log.error(f"❌ MÉTÉO PARSE      : {e}")
+        _journaliser_appel(localisations, timezone, "echec_format", debut, repr(e))
         return None
+
+    _journaliser_appel(localisations, timezone, "succes", debut)
+    return meteo
+
+
+def fetch_meteo_groupe(
+    localisations: list[tuple[float, float]],
+    timezone: str = METEO_TIMEZONE,
+) -> list[dict | None] | None:
+    """
+    [US-182 / CA4] Prévision de plusieurs localisations en UN appel Open-Meteo
+    (coordonnées séparées par des virgules ; la réponse est une liste dans
+    l'ordre des coordonnées).
+
+    Retourne une liste alignée sur `localisations` — `None` pour une localisation
+    dont la réponse est malformée — ou `None` si l'appel lui-même échoue.
+    """
+    if not localisations:
+        return []
+
+    def _coordonnees(valeurs: list[float]) -> float | str:
+        # Une seule localisation : même paramètre numérique que `fetch_meteo`.
+        return valeurs[0] if len(valeurs) == 1 else ",".join(str(v) for v in valeurs)
+
+    params = _parametres_prevision(
+        _coordonnees([lat for lat, _ in localisations]),
+        _coordonnees([lon for _, lon in localisations]),
+        timezone,
+    )
+    debut = time.perf_counter()
+
+    try:
+        resp = requests.get(OPEN_METEO_URL, params=params, timeout=10)
+        resp.raise_for_status()
+        raw = resp.json()
+    except requests.RequestException as e:
+        _journaliser_appel(localisations, timezone, "echec_reseau", debut, str(e))
+        return None
+
+    # Open-Meteo rend un objet (et non une liste) pour une seule localisation.
+    reponses = raw if isinstance(raw, list) else [raw]
+    if len(reponses) != len(localisations):
+        _journaliser_appel(
+            localisations, timezone, "echec_format", debut,
+            f"{len(reponses)} réponses pour {len(localisations)} localisations",
+        )
+        return None
+
+    resultats: list[dict | None] = []
+    for (lat, lon), reponse in zip(localisations, reponses):
+        try:
+            resultats.append(_analyser_prevision(reponse))
+        except (KeyError, IndexError, TypeError) as e:
+            _journaliser_appel([(lat, lon)], timezone, "echec_format", debut, repr(e))
+            resultats.append(None)
+
+    issue = "succes" if all(r is not None for r in resultats) else "succes_partiel"
+    _journaliser_appel(localisations, timezone, issue, debut)
+    return resultats
 
 
 def format_meteo_commentaire(m: dict) -> str:

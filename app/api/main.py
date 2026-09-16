@@ -96,6 +96,7 @@ from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
 from app.services import email as svc_email
+from app.services import previsions_meteo as svc_previsions_meteo  # [US-182]
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import telegram_notify as svc_telegram_notify  # [US-091]
 from app.services import oauth_google as svc_oauth_google  # [US-090]
@@ -732,6 +733,7 @@ def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user))
                     "ville": p.ville,
                     "latitude": p.latitude,
                     "longitude": p.longitude,
+                    "altitude": p.altitude,  # [US-193 / CA1]
                     # [US-068 / CA7, CA8] Zone lue par le potager et son origine
                     # (jardinier | localisation | defaut) — jamais une supposition
                     # présentée comme un choix.
@@ -814,6 +816,8 @@ class CreerPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-193 / CA1] Altitude de la ville choisie, rendue par la recherche de ville.
+    altitude: Optional[float] = None
     # [US-081 / CA3, CA4] Bascule sur le potager créé. `True` par défaut :
     # l'onboarding (US-058) n'envoie pas ce champ et ne doit rien changer.
     activer: bool = True
@@ -824,6 +828,9 @@ class ModifierPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-193 / CA2] Accompagne TOUJOURS latitude/longitude : des coordonnées
+    # envoyées sans altitude effacent celle de l'ancienne ville.
+    altitude: Optional[float] = None
     # [US-068 / CA7] Zone choisie par le jardinier. Omise = inchangée ;
     # "auto" (ou "") = rendre la main à la localisation.
     zone_climatique: Optional[str] = None
@@ -851,6 +858,7 @@ def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_use
     try:
         potager = svc_potagers.creer_potager(
             db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude, activer=req.activer,
+            altitude=req.altitude,
         )
         utilisateur = db.query(User).filter(User.id == user.id).first()
         return {
@@ -926,6 +934,7 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
                 db, user.id, potager_id,
                 nom=req.nom.strip() if req.nom is not None else None,
                 ville=req.ville, latitude=req.latitude, longitude=req.longitude,
+                altitude=req.altitude,
             )
             if req.zone_climatique is not None:
                 svc_calendrier.definir_zone(
@@ -945,6 +954,7 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
         return {
             "id": potager.id, "nom": potager.nom, "ville": potager.ville,
             "latitude": potager.latitude, "longitude": potager.longitude,
+            "altitude": potager.altitude,
             "zone_climatique": zone, "zone_climatique_origine": origine,
         }
     finally:
@@ -2133,23 +2143,26 @@ def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
     Si le potager actif n'a pas encore de localisation renseignée, retourne
     `localisation_manquante: true` plutôt qu'un repli silencieux sur une météo
     qui ne correspondrait à aucun lieu réel du potager (CA4).
-    """
-    from utils.meteo import fetch_meteo, METEO_TIMEZONE
 
+    [US-182] Lu via le cache partagé par localisation ; ajoute
+    `previsions_etendues` (14 jours), `age_donnees_secondes` et `source_donnees`.
+    Open-Meteo indisponible : l'entrée du jour en cache si elle existe, sinon 502.
+    """
     db = SessionLocal()
     try:
         potager = db.query(Potager).filter(Potager.id == ctx.potager_id).first()
-        if potager is None or potager.latitude is None or potager.longitude is None:
+        lecture = svc_previsions_meteo.lire_prevision_potager(potager)
+        if lecture.statut == svc_previsions_meteo.STATUT_LOCALISATION_MANQUANTE:
             return {"localisation_manquante": True}
-
-        meteo = fetch_meteo(lat=potager.latitude, lon=potager.longitude, timezone=METEO_TIMEZONE)
-        if meteo is None:
+        if not lecture.disponible:
             raise HTTPException(status_code=502, detail="Impossible de récupérer les données Open-Meteo")
 
         return {
             "localisation_manquante": False,
             "ville": potager.ville,
-            **meteo,
+            **lecture.meteo,
+            "age_donnees_secondes": lecture.age_secondes,
+            "source_donnees": lecture.source,
         }
     finally:
         db.close()

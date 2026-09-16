@@ -102,6 +102,15 @@ test('[CA8] zone et origine lisibles', () => {
   assert.equal(zoneAffichable(reponse({})).zone, 'méditerranéen')
 })
 
+test('[US-193 / CA7, CA8] une zone déduite rappelle l\'altitude, comme au bot', () => {
+  assert.deepEqual(
+    zoneAffichable(reponse({}, { zone_climatique: 'montagnard', zone_climatique_origine: 'localisation', zone_altitude: 1326.4 })),
+    { zone: 'montagnard', origine: 'déduite de la localisation, 1 326 m' })
+  assert.equal(
+    zoneAffichable(reponse({}, { zone_climatique: 'continental', zone_climatique_origine: 'jardinier', zone_altitude: 1326 })).origine,
+    'choisie pour ce potager')
+})
+
 test('[CA9] attributions dédoublonnées', () => {
   assert.deepEqual(attributionsAffichables(reponse({}, { attributions: ['WRG', 'WRG'] })), ['WRG'])
 })

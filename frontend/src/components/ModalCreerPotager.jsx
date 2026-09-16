@@ -43,7 +43,8 @@ export default function ModalCreerPotager({ onClose }) {
         localisation?.ville,
         localisation?.latitude,
         localisation?.longitude,
-        basculer
+        basculer,
+        localisation?.altitude // [US-193 / CA1]
       )
       onClose()
     } catch (err) {

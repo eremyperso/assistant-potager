@@ -104,6 +104,10 @@ class Potager(Base):
     ville            = Column(String(255), nullable=True)  # [US-074] libellé affichable, jamais géocodé côté serveur
     latitude         = Column(Float, nullable=True)
     longitude        = Column(Float, nullable=True)
+    # [US-193 / CA1, CA2] Altitude (m) de la ville choisie, renseignée AVEC les
+    # coordonnées (recherche de ville Open-Meteo) — jamais saisie à la main.
+    # NULL = inconnue : la zone déduite ne suppose alors jamais « montagnard ».
+    altitude         = Column(Float, nullable=True)
     proprietaire_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
     plan             = Column(String(20), default="free")
     cree_le          = Column(DateTime, server_default=func.now())

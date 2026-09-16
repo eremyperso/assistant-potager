@@ -79,9 +79,10 @@ test('[CA3] la case de bascule existe et est cochée par défaut', () => {
 
 test("[CA3, CA4] le choix de bascule est transmis jusqu'à l'API", () => {
   assert.match(MODALE, /creerPotager\([\s\S]*?basculer[\s\S]*?\)/)
-  assert.match(CONTEXTE, /async function creerPotager\(nom, ville, latitude, longitude, activer = true\)/)
-  assert.match(API, /creerPotager: \(nom, ville, latitude, longitude, activer = true\)/)
-  assert.match(API, /activer \}/)
+  // [US-193 / CA1] L'altitude de la ville suit, après `activer`.
+  assert.match(CONTEXTE, /async function creerPotager\(nom, ville, latitude, longitude, activer = true, altitude = null\)/)
+  assert.match(API, /creerPotager: \(nom, ville, latitude, longitude, activer = true, altitude = null\)/)
+  assert.match(API, /activer, altitude \}/)
 })
 
 // ── CA5 — Bascule ⇒ rechargement, sinon simple rafraîchissement ─────────────
