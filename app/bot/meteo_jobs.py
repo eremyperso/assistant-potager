@@ -5,33 +5,61 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 from telegram import Update
 from telegram.ext import ContextTypes
 from database.db import SessionLocal, tenant_scope
-from utils.meteo import save_meteo_observation, fetch_meteo, format_meteo_commentaire
-from app.services.context import default_context
+from utils.meteo import (
+    LocalisationPotagerManquanteError,
+    fetch_meteo,
+    format_meteo_commentaire,
+    localisation_potager,
+    save_meteo_observation,
+)
+from app.services.context import current_context, default_context
 from app.services import potagers as svc_potagers
 from app.services import metriques_routage as svc_metriques_routage
-from .noyau import log
+from .noyau import _md, log
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # MÉTÉO
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _libelle_lieu(potager) -> str:
+    """Ville et coordonnées du potager, pour situer la météo affichée."""
+    coordonnees = f"{potager.latitude:.4f}, {potager.longitude:.4f}"
+    if potager.ville:
+        return f"📍 {_md(potager.ville)} ({coordonnees})"
+    return f"📍 {coordonnees}"
+
+
 async def cmd_meteo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
     /meteo — Déclenche manuellement la récupération météo et l'enregistre en base.
     Utile pour tester ou forcer une mise à jour hors du job automatique 5h00.
+
+    Météo calculée sur la localisation du potager actif (US-074), observation
+    rattachée à ce potager — pas les coordonnées globales du bot. Sans
+    localisation, aucun appel : même règle que `GET /meteo` (US-075 / CA4).
     """
     msg = await update.message.reply_text("🌤️ *Récupération météo en cours...*", parse_mode="Markdown")
+    potager_id = current_context().potager_id
     db  = SessionLocal()
     try:
-        meteo = save_meteo_observation(db)
+        try:
+            potager = localisation_potager(db, potager_id)
+        except LocalisationPotagerManquanteError:
+            await msg.edit_text(
+                "📍 Ce potager n'a pas encore de localisation : renseignez sa ville "
+                "dans l'application web pour obtenir sa météo."
+            )
+            return
+        lieu = _libelle_lieu(potager)
+        meteo = save_meteo_observation(db, potager_id=potager_id)
         if meteo is None:
             # Doublon ou erreur — tenter un fetch sans sauvegarde pour afficher quand même
-            meteo = fetch_meteo()
+            meteo = fetch_meteo(potager.latitude, potager.longitude)
             if meteo:
                 commentaire = format_meteo_commentaire(meteo)
                 await msg.edit_text(
-                    f"🌤️ *Météo du jour* _(déjà enregistrée aujourd'hui)_\n\n`{commentaire}`",
+                    f"🌤️ *Météo du jour* _(déjà enregistrée aujourd'hui)_\n{lieu}\n\n`{commentaire}`",
                     parse_mode="Markdown"
                 )
             else:
@@ -40,10 +68,10 @@ async def cmd_meteo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         commentaire = format_meteo_commentaire(meteo)
         await msg.edit_text(
-            f"🌤️ *Météo enregistrée !*\n\n`{commentaire}`",
+            f"🌤️ *Météo enregistrée !*\n{lieu}\n\n`{commentaire}`",
             parse_mode="Markdown"
         )
-        log.info("🌤️  MÉTÉO MANUELLE  : déclenchée par /meteo")
+        log.info(f"🌤️  MÉTÉO MANUELLE  : déclenchée par /meteo (potager_id={potager_id})")
     except Exception as e:
         log.error(f"❌ MÉTÉO COMMANDE   : {e}")
         await msg.edit_text(f"❌ Erreur : {e}")

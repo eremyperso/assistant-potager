@@ -504,36 +504,63 @@ def fetch_meteo_history(
         return None
 
 
-def save_meteo_observation(db: Session) -> dict | None:
+class LocalisationPotagerManquanteError(Exception):
+    """Le potager n'a pas de latitude/longitude renseignées (US-074)."""
+
+
+def localisation_potager(db: Session, potager_id: int):
+    """
+    Potager `potager_id`, garanti localisé (`latitude`/`longitude` renseignées).
+
+    Lève `LocalisationPotagerManquanteError` si le potager n'existe pas ou n'a
+    pas de localisation : jamais de repli silencieux sur les coordonnées du bot,
+    même règle que `GET /meteo` (US-075 / CA4).
+    """
+    from database.models import Potager
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    if potager is None or potager.latitude is None or potager.longitude is None:
+        raise LocalisationPotagerManquanteError(potager_id)
+    return potager
+
+
+def save_meteo_observation(db: Session, potager_id: int | None = None) -> dict | None:
     """
     Récupère la météo du jour et l'enregistre en base comme observation.
     Évite les doublons : si une observation météo existe déjà pour aujourd'hui,
     ne crée pas de doublon.
+
+    `potager_id` renseigné (commande /meteo Telegram) : météo calculée sur la
+    localisation de ce potager, observation rattachée à ce potager, anti-doublon
+    limité à ce potager ; lève `LocalisationPotagerManquanteError` si le potager
+    n'a pas de localisation. Sans `potager_id` (job 5 h) : coordonnées par défaut
+    du bot, comportement d'origine.
 
     Retourne le dict météo si succès, None sinon.
     """
     from database.models import Evenement
     from utils.date_utils import parse_date
 
+    potager = localisation_potager(db, potager_id) if potager_id is not None else None
+
     # ── Anti-doublon : vérifier si observation météo déjà présente aujourd'hui
     today_start = datetime.combine(date.today(), datetime.min.time())
     today_end   = datetime.combine(date.today(), datetime.max.time())
 
-    existing = (
-        db.query(Evenement)
-        .filter(
-            Evenement.type_action   == "observation",
-            Evenement.texte_original == "[AUTO-METEO]",
-            Evenement.date.between(today_start, today_end),
-        )
-        .first()
+    requete = db.query(Evenement).filter(
+        Evenement.type_action   == "observation",
+        Evenement.texte_original == "[AUTO-METEO]",
+        Evenement.date.between(today_start, today_end),
     )
+    if potager_id is not None:
+        requete = requete.filter(Evenement.potager_id == potager_id)
+    existing = requete.first()
     if existing:
         log.info(f"⏭️  MÉTÉO DOUBLON   : observation déjà présente pour aujourd'hui (id={existing.id})")
         return None
 
     # ── Appel API
-    meteo = fetch_meteo()
+    meteo = fetch_meteo(potager.latitude, potager.longitude) if potager else fetch_meteo()
     if not meteo:
         return None
 
@@ -553,6 +580,8 @@ def save_meteo_observation(db: Session) -> dict | None:
         texte_original = "[AUTO-METEO]",
         date           = parse_date(meteo["date"]),
     )
+    if potager_id is not None:
+        event.potager_id = potager_id
     db.add(event)
     db.commit()
     db.refresh(event)
