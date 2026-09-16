@@ -28,6 +28,12 @@ l'issue Jira correspondante — résumé préfixé `US-NNN : Titre`, description
 bloc de code (le markdown brut, tel quel). Idempotent : si une issue portant déjà
 ce préfixe existe, elle n'est pas recréée, sa clé est simplement retournée.
 
+Même fonction pour `backlog/INC-NNN_*.md` (format documenté dans
+`.github/agents/Analyste-Incident.agent.md`) : seul le préfixe `INC-` change,
+ce qui bascule le type d'issue créé sur `JIRA_ISSUE_TYPE_INCIDENT` (Bug) au
+lieu de `JIRA_ISSUE_TYPE` (Story), et joint les captures d'écran listées dans
+un éventuel champ `**Captures :**` après création.
+
 Mode dégradé
 ------------
 Sans `JIRA_API_TOKEN`, ou si l'API Jira est indisponible, l'outil **logue ce
@@ -41,7 +47,8 @@ Configuration (variables d'environnement)
     JIRA_EMAIL       email pour l'authentification Basic (défaut : eremy.perso@gmail.com)
     JIRA_API_TOKEN   token API Jira (obligatoire)
     JIRA_PROJECT     clé du projet Jira (défaut : SCRUM)
-    JIRA_ISSUE_TYPE  type d'issue créé par create-issue (défaut : Story)
+    JIRA_ISSUE_TYPE  type d'issue créé par create-issue pour une US (défaut : Story)
+    JIRA_ISSUE_TYPE_INCIDENT  type d'issue créé pour un incident INC-NNN (défaut : Bug)
     JIRA_ENABLED     active/désactive l'intégration (défaut : true si token présent)
     JIRA_STATUS_A_FAIRE   libellé Jira du statut "a_faire"   (défaut : À faire)
     JIRA_STATUS_EN_COURS  libellé Jira du statut "en_cours"  (défaut : En cours)
@@ -139,16 +146,23 @@ class StatutNonPiloteError(JiraTrackerError):
     """Tentative de positionner un statut que cet outil ne pilote pas."""
 
 
-def normaliser_us(us_number: int | str) -> str:
+def normaliser_us(identifiant: int | str) -> str:
     """
-    Normalise un identifiant d'US vers la forme `US-066`.
-    Accepte `66`, `"66"`, `"US-66"`, `"us-066"`, `"US066"`.
+    Normalise un identifiant logique vers sa forme canonique `US-066` ou `INC-004`.
+    Accepte `66`, `"66"`, `"US-66"`, `"us-066"`, `"US066"`, `"INC-4"`, `"inc004"`.
+
+    Le préfixe reconnu dans la valeur (`US` ou `INC`) est préservé — un numéro
+    seul reste implicitement `US`, comportement inchangé pour tout appelant qui
+    ne connaît que les US (transitions de statut en ligne de commande, tests).
+    `INC` désigne un incident/anomalie déclaré par `Analyste-Incident.agent.md`,
+    jamais une US planifiée par le PO.
     """
-    brut = str(us_number).strip().upper()
-    match = re.search(r"(\d+)", brut)
+    brut = str(identifiant).strip().upper()
+    match = re.search(r"(US|INC)?-?\s*(\d+)", brut)
     if not match:
-        raise JiraTrackerError(f"Identifiant d'US illisible : {us_number!r}")
-    return f"US-{int(match.group(1)):03d}"
+        raise JiraTrackerError(f"Identifiant illisible : {identifiant!r}")
+    prefixe = match.group(1) or "US"
+    return f"{prefixe}-{int(match.group(2)):03d}"
 
 
 def normaliser_statut(status: str) -> str:
@@ -178,6 +192,7 @@ def _config() -> dict:
         "token": os.environ.get("JIRA_API_TOKEN", "").strip(),
         "project": os.environ.get("JIRA_PROJECT", "SCRUM"),
         "issue_type": os.environ.get("JIRA_ISSUE_TYPE", "Story"),
+        "issue_type_incident": os.environ.get("JIRA_ISSUE_TYPE_INCIDENT", "Bug"),
         "enabled": os.environ.get("JIRA_ENABLED", "true").lower() in ("true", "1", "yes"),
     }
 
@@ -330,19 +345,25 @@ def update_issue_status(issue_key: str, status: str) -> bool:
 # ── Création d'issue depuis un fichier backlog (Persona PO) ─────────────────
 
 def _parse_backlog_md(content: str) -> dict:
-    """Extrait ID, titre et épic d'un fichier `backlog/US-NNN_*.md`.
+    """Extrait ID, titre, épic et captures d'un fichier `backlog/US-NNN_*.md`
+    ou `backlog/INC-NNN_*.md`.
 
-    Format documenté dans `.github/agents/Personna PO.agent.md` :
+    Format US documenté dans `.github/agents/Personna PO.agent.md` :
     `**ID :** US-XXX`, `**Titre :** ...`, `**Épic :** ...` (optionnel).
+    Format incident documenté dans `.github/agents/Analyste-Incident.agent.md` :
+    même `**ID :**`/`**Titre :**`, préfixe `INC-XXX`, plus `**Captures :**`
+    (optionnel) — chemins locaux, séparés par des virgules, de captures
+    d'écran à joindre à l'issue Jira après création.
     """
     def _champ(pattern: str) -> Optional[str]:
         m = re.search(pattern, content, flags=re.IGNORECASE)
         return m.group(1).strip() if m else None
 
     return {
-        "id": _champ(r"\*\*ID\s*:\*\*\s*(US-\d+)"),
+        "id": _champ(r"\*\*ID\s*:\*\*\s*((?:US|INC)-\d+)"),
         "titre": _champ(r"\*\*Titre\s*:\*\*\s*(.+)"),
         "epic": _champ(r"\*\*Épic\s*:\*\*\s*(.+)"),
+        "captures": _champ(r"\*\*Captures?\s*:\*\*\s*(.+)"),
     }
 
 
@@ -364,6 +385,40 @@ def _markdown_to_adf(text: str) -> dict:
             }
         ],
     }
+
+
+def _joindre_pieces_jointes(issue_key: str, chemins: list[str], cfg: dict) -> list[str]:
+    """Tente de joindre des fichiers locaux (captures d'écran d'incident) à une issue.
+
+    Best-effort, à l'image du reste du module : un chemin introuvable ou un
+    échec réseau est journalisé en WARNING et ignoré, jamais levé — une pièce
+    jointe manquante ne doit pas remettre en cause un ticket déjà créé, dont la
+    description textuelle reste la source de vérité (voir Analyste-Incident.agent.md).
+    """
+    url = f"{cfg['host']}/rest/api/3/issue/{issue_key}/attachments"
+    reussies: list[str] = []
+    for brut in chemins:
+        brut = brut.strip()
+        if not brut:
+            continue
+        chemin = Path(brut)
+        if not chemin.is_file():
+            log.warning("[jira_tracker] Pièce jointe introuvable, ignorée : %s", chemin)
+            continue
+        try:
+            with open(chemin, "rb") as fichier:
+                response = requests.post(
+                    url,
+                    headers={"X-Atlassian-Token": "no-check"},
+                    files={"file": (chemin.name, fichier)},
+                    auth=HTTPBasicAuth(cfg["email"], cfg["token"]),
+                    timeout=30,
+                )
+            response.raise_for_status()
+            reussies.append(chemin.name)
+        except (requests.RequestException, OSError) as err:
+            log.warning("[jira_tracker] Échec de la pièce jointe %s : %s", chemin, err)
+    return reussies
 
 
 def _resolve_epic_key(epic_titre: str, cfg: dict) -> Optional[str]:
@@ -437,11 +492,16 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
         log.info("[jira_tracker] %s déjà présente sous %s — création ignorée", identifiant, existante)
         return existante
 
+    # Un identifiant INC- (Analyste-Incident.agent.md) crée un Bug, jamais une
+    # Story — c'est le seul signal qui distingue un incident d'une US, le
+    # fichier backlog/ suit sinon exactement le même chemin de création.
+    type_issue = cfg["issue_type_incident"] if identifiant.startswith("INC-") else cfg["issue_type"]
+
     payload = {
         "fields": {
             "project": {"key": cfg["project"]},
             "summary": resume,
-            "issuetype": {"name": cfg["issue_type"]},
+            "issuetype": {"name": type_issue},
             "description": _markdown_to_adf(contenu),
         }
     }
@@ -491,6 +551,16 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
                 "[jira_tracker] %s créée sous %s mais transition vers « %s » "
                 "échouée — statut de création laissé tel quel",
                 identifiant, cle, statut_cible,
+            )
+
+    # Pièces jointes best-effort (incidents uniquement, champ optionnel) :
+    # ignorées silencieusement pour une US, qui ne porte jamais ce champ.
+    if champs.get("captures"):
+        jointes = _joindre_pieces_jointes(cle, champs["captures"].split(","), cfg)
+        if jointes:
+            log.info(
+                "[jira_tracker] %s (%s) : %d pièce(s) jointe(s) — %s",
+                identifiant, cle, len(jointes), ", ".join(jointes),
             )
 
     return cle

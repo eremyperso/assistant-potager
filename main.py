@@ -107,6 +107,7 @@ from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
+from app.services import recalage_calendrier as svc_recalage  # [US-070]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import resolve_parcelle  # [US-167]
@@ -1252,6 +1253,36 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
     try:
         calendrier = svc_calendrier.lire_calendrier(db, culture, ctx.potager_id)
         return svc_calendrier.calendrier_en_dict(calendrier)
+    finally:
+        db.close()
+
+
+@app.get("/plan/calendriers")
+def get_calendriers_plan(
+    culture: list[str] = Query(default=[]),
+    potager_id: int = Query(default=None),
+    date_ref: date = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-176 / CA1, CA2, CA11] Calendrier conseillé de toutes les cultures de
+    l'écran Plan, en UN appel (`?culture=tomate&culture=ail`). Relu à chaque
+    chargement : une correction au bot se voit au suivant, sans cache.
+    `potager_id` optionnel, comme `/plan` : consultation d'un potager archivé.
+
+    [US-070] `projections` : le calendrier RECALÉ de chaque tuile (parcelle ×
+    culture × variété) sur ses événements réels, à `date_ref` (bornée à
+    aujourd'hui, comme `/plan`). Lecture seule — aucun événement modifié."""
+    today = date.today()
+    date_ref_effective = min(date_ref, today) if date_ref else today
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        corps = svc_calendrier.calendriers_du_plan(db, culture, use_ctx.potager_id)
+        corps["date_ref_effective"] = date_ref_effective.isoformat()
+        corps["projections"] = svc_recalage.projections_du_plan(
+            db, culture, use_ctx.potager_id, date_ref_effective
+        )
+        return corps
     finally:
         db.close()
 

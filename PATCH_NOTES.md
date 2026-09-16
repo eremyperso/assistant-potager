@@ -1,3 +1,50 @@
+## [v3.65.0] — 2026-09-15
+
+### 🚀 Nouveautés
+- Recale sur l'écran Plan la frise d'une culture déjà semée sur sa date réelle de semis : levée et première récolte attendues se calculent depuis ce semis et les durées du référentiel, plus depuis la période conseillée (US-070 / CA1, CA2)
+- Retrouve l'origine d'une culture plantée par le chaînage semis → godet → plantation, et avance ou retarde la récolte attendue quand la plantation sort du délai de repiquage conseillé (US-070 / CA1, CA4)
+- Affiche à côté de la famille le nombre de jours avant la première récolte attendue, en fourchette quand le délai en est une, et « récolte attendue il y a N jours, aucune récolte notée » quand elle est dépassée (US-070 / CA3, CA12)
+- Ajoute à la frise l'état « en croissance », entre la levée et la première récolte, dans une teinte réservée cerclée de vert et nommé dans la légende dès qu'une tuile l'affiche (US-070 / CA7)
+- Bascule sur le réel dès qu'une récolte est notée : récolte terminale pour une culture végétative, étalée jusqu'à la fin de la période conseillée pour une reproductrice (US-070 / CA5, CA6)
+- Suit le plus ancien de plusieurs semis d'une même culture dans la parcelle, signale les autres séries sans jamais faire de moyenne, et rappelle ce qui reste de la période de semis pour en lancer une autre (US-070 / CA9, CA10)
+- Replace toute la projection à la date de référence choisie, événements postérieurs ignorés (US-070 / CA8)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/recalage_calendrier.py`, seul point de projection, en lecture seule : aucun événement, stock ni statistique n'est modifié (US-070 / CA13)
+- Enrichit `GET /plan/calendriers` d'un paramètre `date_ref` et d'un bloc `projections` par parcelle × culture × variété, sans changer les champs existants (US-070)
+- Étend `MonthStrip` d'une propriété `croissance` et `MonthStripLegend` d'`avecCroissance`, rétrocompatibles pour les autres écrans (US-070)
+- Met à jour la fiche d'aide `calendrier-et-zone-climatique.md` d'une section « Savoir où en est une culture déjà semée », et le corpus de mesure de deux questions (US-099 / CA9)
+
+### ⚠️ Breaking changes
+- Ne recale pas, et garde donc la frise conseillée, pour une plantation sans semis retrouvé, un semis sans filière connue ou une culture sans durée semis → récolte chiffrée — c'est le cas de la tomate et du poivron tant qu'US-177 n'est pas livrée
+
+## [v3.64.0] — 2026-09-15
+
+### 🚀 Nouveautés
+- Affiche sur l'écran Plan le **calendrier réel de ton potager** : la frise de chaque culture lit désormais les périodes de sa zone climatique et tient compte des corrections faites au bot, visibles au prochain chargement de l'écran (US-176 / CA1, CA2)
+- Distingue sur la frise les quatre phases du référentiel — **semis en pépinière, semis en pleine terre, plantation, récolte** — chacune dans sa couleur, et affiche la durée semis → première récolte en fourchette (« 70 à 90 jours ») ou en tiret (US-176 / CA3, CA4)
+- Tranche par une règle unique quand deux phases tombent le même mois (le concombre, semé en place ou planté en mai) : la couleur montre le geste le plus avancé, et le libellé du mois nomme toutes ses phases (US-176 / CA3bis)
+- Ajoute au calendrier cultural une **période de plantation** par zone climatique, lue dans Wind River Greens pour 16 cultures (tomate, poivron, aubergine, choux, cucurbitacées, aromatiques, capucine, fraise) et jamais déduite du semis en pépinière : `/calendrier fenetre tomate plantation mai-juin` la corrige, et `/calendrier tomate` l'affiche, vide comprise (US-068 / CA17 à CA24, CA27)
+- Comprend la plantation à la dictée, tranchée par la valeur : « plantation des poireaux : juin-juillet » corrige la période, « délai avant plantation des tomates : 42 à 56 jours » corrige le délai — une phrase dont la valeur ne tranche pas n'est pas devinée (US-068 / CA29)
+- Nomme sur la tuile un itinéraire autre que « standard » (« culture d'hiver ») plutôt que de fusionner plusieurs calendriers (US-176 / CA5)
+- Indique une seule fois, sous les cultures, la zone climatique retenue et son origine — choisie, déduite de la localisation ou par défaut — avec la commande pour la changer, ainsi que l'attribution de la source du calendrier (US-176 / CA8, CA9)
+- Garde la famille botanique affichée même pour une culture sans calendrier (US-176 / CA7)
+
+### ⚠️ Breaking changes
+- Remplace la bande « plantation » générique de la table provisoire par celle du référentiel : sans période de plantation connue pour la zone (courgette, poireau, laitue, ail…), aucun mois n'est coloré en plantation (US-176 / CA3)
+- Change la couleur du **semis en pleine terre** (violet) : le vert revient à la plantation, comme sur la maquette (US-176 / CA3bis)
+- Laisse **neutres** les frises des cultures sans calendrier pour la zone du potager (ail, échalote, pomme de terre, fraise, framboise, épinard, céleri…) que la table provisoire couvrait : aucune période n'est inventée, elles se complètent au bot avec `/calendrier fenetre` (US-176 / CA6)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /plan/calendriers?culture=…` et `calendrier_cultural.calendriers_du_plan` : le calendrier de toutes les cultures de l'écran en une seule lecture groupée, attendue avant l'affichage pour éviter tout clignotement (US-176 / CA11)
+- Garde l'écran Plan utilisable si cette lecture échoue : parcelles, cultures et familles s'affichent, les frises passent en mode dégradé sans valeur de repli (US-176 / CA12)
+- Supprime la table de calendrier provisoire de `frontend/src/lib/calendrier.js`, soldée par US-176 et non par US-068 comme annoncé ; `ANALYSE_REFONTE_UI_WEB_2026.md` §5.10 et le CA11 d'US-060 sont mis à jour (US-176 / CA13)
+- Fait évoluer `MonthStrip` de façon rétrocompatible (props `pepiniere` / `pleineTerre` / `plantation`, légende `variante="referentiel"` dérivée de `PHASES_REFERENTIEL`) : l'aperçu du design system s'affiche à l'identique (US-176 / CA14)
+- Ajoute à la fiche d'aide `calendrier-et-zone-climatique.md` une section sur la frise de l'écran Plan, avec deux questions de mesure, puis la plantation et la règle de priorité (US-176 / CA15, US-068 / CA30, US-099 / CA9)
+- Lit `outdoor_transplant_*` dans l'adaptateur Wind River Greens avec les règles de rejet transposées et un signalement, sans correction, des plantations incohérentes avec le semis et le délai de repiquage ; manifeste régénéré : 336 fenêtres dont 64 de plantation (US-068 / CA21 à CA24, CA26)
+- Étend le gabarit `calendrier_redaction_interne.json` à 106 cultures, avec une case `plantation` par zone, toujours livré vide (US-068 / CA25)
+- Aucune migration : `fenetre_culturale.phase` accueille la quatrième phase telle quelle ; en production, rejouer `python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json` (US-068 / CA17)
+
 ## [v3.63.0] — 2026-09-14
 
 ### 🚀 Nouveautés

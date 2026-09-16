@@ -120,3 +120,111 @@ def test_us079_create_issue_from_backlog_fichier_mal_forme(tmp_path):
 
     with pytest.raises(jt.JiraTrackerError):
         jt.create_issue_from_backlog(md)
+
+
+# ── Extension incidents (Analyste-Incident.agent.md) ─────────────────────────
+# Un incident réutilise exactement le pipeline US-079 : seul le préfixe INC-
+# change le type d'issue créé (Bug au lieu de Story) et déclenche la pose de
+# pièces jointes best-effort si le fichier référence des captures locales.
+
+def test_incident_normaliser_us_preserve_prefixe_inc():
+    """Le préfixe INC est préservé (contrairement à un numéro seul, toujours US par défaut)."""
+    assert jt.normaliser_us("INC-4") == "INC-004"
+    assert jt.normaliser_us("inc004") == "INC-004"
+    assert jt.normaliser_us(66) == "US-066"  # comportement historique inchangé
+
+
+def test_incident_parse_backlog_md_id_et_captures():
+    """_parse_backlog_md reconnaît un ID INC- et le champ optionnel Captures."""
+    contenu = (
+        "**ID :** INC-001\n"
+        "**Titre :** Erreur 500 sur /culture attributs tomate\n\n"
+        "**Captures :** captures/inc-001-a.png, captures/inc-001-b.png\n"
+    )
+    champs = jt._parse_backlog_md(contenu)
+    assert champs["id"] == "INC-001"
+    assert champs["captures"] == "captures/inc-001-a.png, captures/inc-001-b.png"
+
+
+def test_incident_create_issue_from_backlog_type_bug(jira_env, tmp_path, monkeypatch):
+    """Un fichier INC-NNN crée une issue de type JIRA_ISSUE_TYPE_INCIDENT (Bug), pas Story."""
+    monkeypatch.setenv("JIRA_ISSUE_TYPE_INCIDENT", "Bug")
+    md = tmp_path / "INC-001_test.md"
+    md.write_text(
+        "**ID :** INC-001\n**Titre :** Erreur 500 sur /culture attributs tomate\n\n"
+        "**Reproduction :**\nTaper /culture attributs tomate\n",
+        encoding="utf-8",
+    )
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": []}),
+            _mock_response({"transitions": [{"to": {"name": "À faire"}, "id": "31"}]}),
+        ]
+        mock_requests.post.side_effect = [
+            _mock_response({"key": "PIA-1000"}, status_code=201),
+            _mock_response({}),
+        ]
+
+        cle = jt.create_issue_from_backlog(md)
+
+    assert cle == "PIA-1000"
+    creation_call = mock_requests.post.call_args_list[0]
+    payload = creation_call.kwargs["json"]
+    assert payload["fields"]["issuetype"]["name"] == "Bug"
+    assert payload["fields"]["summary"] == "INC-001 : Erreur 500 sur /culture attributs tomate"
+
+
+def test_incident_create_issue_from_backlog_joint_capture_existante(jira_env, tmp_path):
+    """Une capture référencée et présente sur le disque est jointe après création."""
+    capture = tmp_path / "capture.png"
+    capture.write_bytes(b"\x89PNG\r\n")
+    md = tmp_path / "INC-002_test.md"
+    md.write_text(
+        f"**ID :** INC-002\n**Titre :** Défaut visuel\n\n**Captures :** {capture}\n",
+        encoding="utf-8",
+    )
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": []}),
+            _mock_response({"transitions": [{"to": {"name": "À faire"}, "id": "31"}]}),
+        ]
+        mock_requests.post.side_effect = [
+            _mock_response({"key": "PIA-1001"}, status_code=201),
+            _mock_response({}),
+            _mock_response({}, status_code=200),
+        ]
+
+        cle = jt.create_issue_from_backlog(md)
+
+    assert cle == "PIA-1001"
+    attachment_call = mock_requests.post.call_args_list[2]
+    assert attachment_call.args[0] == "https://test.atlassian.net/rest/api/3/issue/PIA-1001/attachments"
+    assert attachment_call.kwargs["headers"] == {"X-Atlassian-Token": "no-check"}
+
+
+def test_incident_create_issue_from_backlog_capture_introuvable_non_bloquant(jira_env, tmp_path):
+    """Une capture référencée mais absente du disque est ignorée : le ticket est quand même créé."""
+    md = tmp_path / "INC-003_test.md"
+    md.write_text(
+        "**ID :** INC-003\n**Titre :** Défaut visuel\n\n"
+        "**Captures :** /chemin/inexistant/capture.png\n",
+        encoding="utf-8",
+    )
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": []}),
+            _mock_response({"transitions": [{"to": {"name": "À faire"}, "id": "31"}]}),
+        ]
+        mock_requests.post.side_effect = [
+            _mock_response({"key": "PIA-1002"}, status_code=201),
+            _mock_response({}),
+        ]
+
+        cle = jt.create_issue_from_backlog(md)
+
+    assert cle == "PIA-1002"
+    # Seuls création + transition ont été postés — aucune tentative de pièce jointe
+    assert mock_requests.post.call_count == 2

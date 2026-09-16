@@ -5587,8 +5587,16 @@ def _formater_calendrier(calendrier, itineraire_cible: "str | None" = None) -> s
             entete += " — propre à votre potager"
         lignes.append(entete)
         if it.fenetres:
-            for fenetre in it.fenetres:
-                lignes.append(f"• {fenetre.libelle} : *{_md(fenetre.affichage)}*")
+            lues = {fenetre.phase: fenetre for fenetre in it.fenetres}
+            for phase in svc_calendrier.PHASES:
+                fenetre = lues.get(phase)
+                if fenetre:
+                    lignes.append(f"• {fenetre.libelle} : *{_md(fenetre.affichage)}*")
+                elif phase == svc_calendrier.PHASE_PLANTATION:
+                    # [US-068 / CA27] La plantation se dit vide plutôt que de se
+                    # taire : c'est le geste que la plupart des jardiniers font,
+                    # et son absence ne se déduit jamais du semis (CA18).
+                    lignes.append(f"• {svc_calendrier.LIBELLES_PHASES[phase]} : —")
         else:
             # [CA13] Frise neutre : dire qu'on ne sait pas, sans rien emprunter.
             texte = (
@@ -5621,7 +5629,7 @@ async def cmd_calendrier(update, ctx) -> None:
       <culture> [itinéraire]                               — consulter (zéro jeton)
       zone [oceanique|continental|mediterraneen|montagnard|auto]
                                                            — lire ou choisir la zone (CA7)
-      fenetre <culture> [itinéraire] <pepiniere|pleine_terre|recolte> <mars-mai|aucune>
+      fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
       duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|70-90|mention|aucune>
                                                            — corriger (CA10)
 
@@ -5633,12 +5641,13 @@ async def cmd_calendrier(update, ctx) -> None:
         "*Usage :*\n"
         "  /calendrier <culture>\n"
         "  /calendrier zone [océanique|continental|méditerranéen|montagnard|auto]\n"
-        "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|recolte> <mois-mois|aucune>\n"
+        "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|plantation|recolte> <mois-mois|aucune>\n"
         "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <jours|aucune>\n\n"
         "Exemples :\n"
         "  /calendrier tomate\n"
         "  /calendrier zone méditerranéen\n"
         "  /calendrier fenetre tomate pepiniere février-avril\n"
+        "  /calendrier fenetre tomate plantation mai-juin\n"
         "  /calendrier fenetre chou-fleur culture d'hiver recolte novembre-février\n"
         "  /calendrier duree courgette recolte 50-60\n\n"
         "_Vos corrections ne valent que pour votre potager._"

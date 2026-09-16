@@ -16,7 +16,9 @@
     "dans wind_river_associations.json — matériau de relecture, jamais à importer.",
     "",
     "[US-068] Le bloc 'cultures_calendriers' porte des DURÉES (levée, récolte en pleine",
-    "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv.",
+    "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv :",
+    "semis en pépinière, semis en pleine terre, PLANTATION (outdoor_transplant_*,",
+    "amendement du 15/09/2026 — lue, jamais recalculée depuis le repiquage) et récolte.",
     "⚠️ Les fenêtres amont sont en zones USDA : la zone lue pour chaque zone climatique",
     "est une DÉCISION déclarée (adaptateur_wind_river.ZONE_USDA_PAR_ZONE, calée sur la",
     "date de dernière gelée), pas une équivalence. Printemps seulement : la source ne",
@@ -89,18 +91,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "continental": {
           "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
           "recolte": "août-octobre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
           "recolte": "août-octobre"
         }
       }
@@ -267,21 +273,25 @@
         "oceanique": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "janvier-février",
           "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
           "recolte": "juillet-octobre"
         }
       }
@@ -296,21 +306,25 @@
         "oceanique": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
           "recolte": "mai-novembre"
         },
         "continental": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "janvier-février",
           "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
           "recolte": "juin-octobre"
         }
       }
@@ -325,21 +339,25 @@
         "oceanique": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "mars-mai",
+          "plantation": "avril-mai",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "février-mars",
           "semis_pleine_terre": "avril-mai",
+          "plantation": "avril-mai",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "janvier-février",
           "semis_pleine_terre": "mars-avril",
+          "plantation": "mars-avril",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "mai-juin",
           "recolte": "juillet-octobre"
         }
       }
@@ -458,21 +476,25 @@
         "oceanique": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
           "recolte": "juillet-septembre"
         },
         "continental": {
           "semis_pepiniere": "avril",
           "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
           "recolte": "août-septembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "mars",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
           "recolte": "juillet-août"
         },
         "montagnard": {
           "semis_pepiniere": "avril-mai",
           "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
           "recolte": "août-octobre"
         }
       }
@@ -513,18 +535,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "continental": {
           "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
           "recolte": "juillet-septembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février",
+          "plantation": "avril-mai",
           "recolte": "juin-août"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
           "recolte": "août-octobre"
         }
       }
@@ -539,18 +565,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "continental": {
           "semis_pepiniere": "mars",
+          "plantation": "mai-juin",
           "recolte": "juillet-septembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février",
+          "plantation": "avril-mai",
           "recolte": "juin-août"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin",
           "recolte": "août-octobre"
         }
       }
@@ -565,21 +595,25 @@
         "oceanique": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
           "recolte": "août-septembre"
         },
         "continental": {
           "semis_pepiniere": "avril",
           "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
           "recolte": "août-octobre"
         },
         "mediterraneen": {
           "semis_pepiniere": "mars",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "montagnard": {
           "semis_pepiniere": "avril-mai",
           "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
           "recolte": "septembre-octobre"
         }
       }
@@ -594,21 +628,25 @@
         "oceanique": {
           "semis_pepiniere": "mars-avril",
           "semis_pleine_terre": "mai-juin",
+          "plantation": "mai",
           "recolte": "août-septembre"
         },
         "continental": {
           "semis_pepiniere": "avril",
           "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin",
           "recolte": "août-octobre"
         },
         "mediterraneen": {
           "semis_pepiniere": "mars",
           "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai",
           "recolte": "juillet-septembre"
         },
         "montagnard": {
           "semis_pepiniere": "avril-mai",
           "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin",
           "recolte": "septembre-octobre"
         }
       }
@@ -749,18 +787,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
           "recolte": "juillet-octobre"
         }
       }
@@ -774,18 +816,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
           "recolte": "juillet-octobre"
         }
       }
@@ -800,18 +846,22 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
           "recolte": "juillet-octobre"
         }
       }
@@ -821,6 +871,20 @@
       "itineraire": "standard",
       "durees": {
         "levee": "10-16"
+      },
+      "fenetres": {
+        "oceanique": {
+          "plantation": "avril-juin"
+        },
+        "continental": {
+          "plantation": "mai-juin"
+        },
+        "mediterraneen": {
+          "plantation": "avril-mai"
+        },
+        "montagnard": {
+          "plantation": "juin-juillet"
+        }
       }
     },
     {
@@ -832,19 +896,42 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-juin",
           "recolte": "juin-novembre"
         },
         "continental": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "mai-juin",
           "recolte": "juin-novembre"
         },
         "mediterraneen": {
           "semis_pepiniere": "février-mars",
+          "plantation": "avril-mai",
           "recolte": "mai-décembre"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
+          "plantation": "juin-juillet",
           "recolte": "juillet-octobre"
+        }
+      }
+    },
+    {
+      "culture": "fraise",
+      "itineraire": "standard",
+      "durees": {},
+      "fenetres": {
+        "oceanique": {
+          "plantation": "mai-juin"
+        },
+        "continental": {
+          "plantation": "mai-juillet"
+        },
+        "mediterraneen": {
+          "plantation": "avril-juin"
+        },
+        "montagnard": {
+          "plantation": "juin-juillet"
         }
       }
     },
@@ -857,19 +944,23 @@
       "fenetres": {
         "oceanique": {
           "semis_pepiniere": "février-mars",
-          "semis_pleine_terre": "avril-juin"
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai"
         },
         "continental": {
           "semis_pepiniere": "mars-avril",
-          "semis_pleine_terre": "mai-juillet"
+          "semis_pleine_terre": "mai-juillet",
+          "plantation": "mai-juin"
         },
         "mediterraneen": {
           "semis_pepiniere": "février-mars",
-          "semis_pleine_terre": "avril-juin"
+          "semis_pleine_terre": "avril-juin",
+          "plantation": "avril-mai"
         },
         "montagnard": {
           "semis_pepiniere": "mars-avril",
-          "semis_pleine_terre": "juin-juillet"
+          "semis_pleine_terre": "juin-juillet",
+          "plantation": "juin"
         }
       }
     },

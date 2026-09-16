@@ -63,7 +63,7 @@ correspond pas à la réalité horticole.
 | **Granularité** | Culture **+ itinéraire cultural** (« culture précoce », « d'été », « d'automne », « d'hiver »). Jamais la variété | « Chou-fleur d'hiver » est une conduite, pas un cultivar. Aucune source horticole ne descend au niveau de la variété — y descendre reviendrait à tout saisir à la main |
 | **Climat** | Fenêtres **déclinées par zone climatique** ; le potager porte la sienne, pré-positionnée depuis sa localisation et corrigeable | Les fenêtres décalent de plusieurs semaines entre Lille et Perpignan. Un référentiel unique serait faux pour la majorité des jardiniers |
 | **Durées** | **Non déclinées** par zone, communes à toutes | Le délai entre semis et récolte relève de la physiologie de la plante, pas de la latitude. Divise par quatre la donnée à sourcer |
-| **Phases** | Semis **en pépinière** / semis **en pleine terre** / récolte — et non semis / plantation / récolte | Modèle des calendriers de semis du commerce. Le repiquage n'est pas une fenêtre autonome : il découle du semis en pépinière |
+| **Phases** *(révisé le 15/09/2026)* | Semis **en pépinière** / semis **en pleine terre** / **plantation** / récolte | Modèle des calendriers de semis du commerce, complété : la plantation (mise en place définitive, plant maison, acheté ou organe de multiplication) est une fenêtre **autonome, déclinée par zone**, jamais déduite du semis en pépinière. Arbitrage initial (« le repiquage découle du semis ») levé : il laissait muette la frise d'une tomate au seul geste que font la plupart des jardiniers, et vide par construction celle de l'ail ou de la pomme de terre. Voir l'amendement d'US-068 (CA17 à CA30) |
 | **Affichage** | Frise **recalée sur le réel**, avec un quatrième état « en croissance » et la durée restante en clair | Devant une culture déjà en terre, une fenêtre conseillée générique n'apprend rien : le jardinier a semé, il sait quand |
 | **Honnêteté** | L'application **n'invente jamais** une date ni une durée. Sans donnée : frise neutre, durée en tiret | Une projection fausse est pire que pas de projection. Une fourchette reste une fourchette, jamais une date certaine |
 
@@ -77,6 +77,7 @@ culture_config  ──┬── famille botanique                         [US-06
                         ├── fenêtres, déclinées par zone climatique
                         │     ├── semis en pépinière
                         │     ├── semis en pleine terre
+                        │     ├── plantation            (amendement du 15/09/2026)
                         │     └── récolte
                         └── durées, communes à toutes les zones
                               ├── semis → levée
@@ -157,7 +158,7 @@ pendant ou après, son CA8 prévoyant la cascade de dégradés `recalé → cons
 
 | Risque | Niveau | Traitement |
 |---|---|---|
-| **Source du référentiel** — les calendriers de semis du commerce sont des œuvres protégées ; les réutiliser tels quels n'est probablement pas licite | ✅ Levé (US-068, 13/09/2026) | Tranché en deux : les **durées** viennent de Wind River Greens (CC BY 4.0, déjà au socle — levée, récolte en pleine terre seulement, repiquage) ; les **fenêtres** viennent aussi de Wind River Greens (`planting_calendar.csv`, décision du 14/09/2026) : zones USDA lues par une correspondance **déclarée et à valider** (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4, calée sur la date de dernière gelée), gabarit par catégorie, printemps seulement, six règles de rejet — 272 fenêtres et 45 durées sur 32 cultures de `culture_config`. Ce que la source ne couvre pas (23 cultures : plantées plutôt que semées, moins de trois cultivars ou absentes ; semis d'été et d'automne) se rédige dans `calendrier_redaction_interne.json` (livré vide) ou se corrige au bot. Aucun calendrier du commerce n'est repris |
+| **Source du référentiel** — les calendriers de semis du commerce sont des œuvres protégées ; les réutiliser tels quels n'est probablement pas licite | ✅ Levé (US-068, 13/09/2026) | Tranché en deux : les **durées** viennent de Wind River Greens (CC BY 4.0, déjà au socle — levée, récolte en pleine terre seulement, repiquage) ; les **fenêtres** viennent aussi de Wind River Greens (`planting_calendar.csv`, décision du 14/09/2026) : zones USDA lues par une correspondance **déclarée et à valider** (océanique ← 7, continental ← 6, méditerranéen ← 8, montagnard ← 4, calée sur la date de dernière gelée), gabarit par catégorie, printemps seulement, six règles de rejet — 336 fenêtres (dont 64 de plantation, lues dans `outdoor_transplant_*` depuis le 15/09/2026) et 45 durées sur 33 cultures de `culture_config`. Ce que la source ne couvre pas (23 cultures : plantées plutôt que semées, moins de trois cultivars ou absentes ; semis d'été et d'automne) se rédige dans `calendrier_redaction_interne.json` (livré vide) ou se corrige au bot. Aucun calendrier du commerce n'est repris |
 | **Couverture du pré-remplissage** — une culture non couverte tombe en mode dégradé | 🟡 Moyen | Assumé et spécifié (US-068 / CA13). Le bot permet de compléter au fil de l'eau (CA10) |
 | **Le CA3 d'US-069 alourdit la saisie vocale** — demander le contexte à chaque semis casserait la fluidité | 🟡 Moyen | Spécifié : proposition en un seul geste de confirmation, sinon enregistrement sans contexte et correction ultérieure |
 | **Évolution d'un composant partagé** — US-070 modifie `MonthStrip`, utilisé par plusieurs écrans | 🟢 Faible | Ajout d'un état et paramétrage du mois mis en évidence : rétrocompatible, tous les usages en héritent |
@@ -168,6 +169,9 @@ pendant ou après, son CA8 prévoyant la cascade de dégradés `recalé → cons
 - [ ] Les trois US sont livrées, leurs CA cochés et leurs tests passants.
 - [ ] Le référentiel est pré-rempli pour **toutes les cultures réellement présentes** dans le
       potager de production, sans aucune culture fantôme créée.
+- [ ] *(15/09/2026)* Chaque culture du potager de production **qui se plante** porte une fenêtre de
+      plantation pour la zone de ce potager — issue de la source, du gabarit de rédaction interne
+      rempli à la main, ou d'une correction au bot. Une culture semée en place n'en porte pas.
 - [ ] Le jardinier peut corriger fenêtres, durées et contexte de semis **depuis le bot**, sans
       livraison ni intervention en base.
 - [ ] L'écran Plan affiche la frise recalée pour au moins une culture réelle du potager, avec sa

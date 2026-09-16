@@ -144,6 +144,7 @@ je veux voir le calendrier des courgettes,calendrier,intention
 calendrier du poireau,calendrier,elliptique
 quand semer les tomates ?,calendrier,elliptique
 à quelle période récolter les carottes,calendrier,elliptique
+quand planter les poireaux ?,calendrier,elliptique
 comment fonctionne le calendrier des semis ?,,savoir
 passe mon potager en zone méditerranéenne,calendrier zone,imperatif
 je veux que mon jardin soit en zone montagnarde,calendrier zone,intention
@@ -152,14 +153,19 @@ comment choisir la zone climatique de mon potager ?,,savoir
 corrige la période de semis en pépinière des tomates de février à avril,calendrier fenetre,imperatif
 je voudrais que la période de récolte de la courgette soit de juillet à octobre,calendrier fenetre,intention
 période de semis en pleine terre des carottes : mars à juin,calendrier fenetre,elliptique
+plantation des poireaux : juin-juillet,calendrier fenetre,elliptique
+corrige la période de plantation des tomates de mai à juin,calendrier fenetre,imperatif
 comment corriger une période de semis ?,,savoir
 corrige le délai de levée des carottes à 14 jours,calendrier duree,imperatif
 je voudrais que le délai de récolte de la courgette soit de 50 à 60 jours,calendrier duree,intention
 délai de levée des carottes : 14 à 21 jours,calendrier duree,elliptique
 les tomates lèvent en 7 à 14 jours,calendrier duree,elliptique
+délai avant plantation des tomates : 42 à 56 jours,calendrier duree,elliptique
 comment corriger un délai de levée ?,,savoir
 récolté 2 kg de tomates cerise,,hors_perimetre
 j'ai planté 3 pieds de tomate sur PlancheTomate,,hors_perimetre
+plantation de 10 poireaux le 3 mai,,hors_perimetre
+quand ai-je planté les tomates ?,,hors_perimetre
 arrosé les courgettes 30 min,,hors_perimetre
 semé carottes Nantaise rang 4,,hors_perimetre
 observation : pucerons sur fèves,,hors_perimetre

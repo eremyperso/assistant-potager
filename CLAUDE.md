@@ -258,11 +258,14 @@ python tools/mesurer_prediagnostic.py --detail
 psql -d potager -f migrations/migration_v46.sql
 #   /calendrier <culture>
 #   /calendrier zone [oceanique|continental|mediterraneen|montagnard|auto]
-#   /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine_terre|recolte> <mars-mai|aucune>
+#   /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
 #   /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage> <10|70-90|vivace|aucune>
 #   GET /cultures/{culture}/calendrier   (forme de lecture pour US-060 / US-070 / Lot E)
 # Tout est aussi DICTABLE (US-172) : « quand semer les tomates ? », « passe mon
 # potager en zone méditerranéenne », « délai de levée des carottes : 14 à 21 jours ».
+# « Plantation » se tranche par la VALEUR (CA29) : des mois corrigent la fenêtre
+# (« plantation des poireaux : juin-juillet »), des jours la durée `repiquage`
+# (« délai avant plantation des tomates : 42 à 56 jours ») ; sinon rien n'est deviné.
 # ⚠️ Frontière avec US-096 portée par la règle `calendrier_quand` de
 # interpreteur_commandes : verbe à l'INFINITIF exigé — « quand ai-je semé les
 # tomates ? » reste une question sur le journal du potager.
@@ -298,9 +301,15 @@ psql -d potager -f migrations/migration_v46.sql
 #              (identique au tag v1.0.0, extrait aux cultivars du périmètre).
 #              TOUT culture_config retrouvé dans la source (APPARIEMENTS_CALENDRIER,
 #              le particulier avant le général ; ALIAS_CALENDRIER : salade = laitue) :
-#              272 fenêtres et 45 durées sur 32 cultures. Attributs et associations
-#              restent sur les dix d'APPARIEMENTS. Couverture détaillée et motifs
-#              d'exclusion : wind_river_greens/SOURCE.md.
+#              336 fenêtres (dont 64 de plantation) et 45 durées sur 33 cultures.
+#              Attributs et associations restent sur les dix d'APPARIEMENTS.
+#              Couverture détaillée et motifs d'exclusion : wind_river_greens/SOURCE.md.
+#   PLANTATION (amendement d'US-068 du 15/09/2026) : quatrième phase, mise en
+#              place DÉFINITIVE, lue dans `outdoor_transplant_*` — JAMAIS déduite
+#              du semis en pépinière + délai de repiquage, et jamais un indice de
+#              pépinière pour la proposition de contexte d'US-069. Portée par 16
+#              cultures (dont la fraise, plantation seule) ; les autres se plantent
+#              au gabarit de rédaction interne ou au bot, ou se sèment en place.
 python tools/adapter_wind_river.py
 python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 # ⚠️ Deux choses à savoir avant de toucher aux fenêtres :
@@ -311,7 +320,8 @@ python tools/importer_referentiel.py data/referentiel/wind_river_attributs.json
 #   - Le calendrier source est un GABARIT PAR CATÉGORIE (10 profils pour 91
 #     tomates), printemps seulement : aucun semis de fin d'été ni d'automne.
 #     Six règles de rejet dans `construire_fenetres` — plantation majoritaire
-#     (ail, échalote, pomme de terre, fraise, framboise, menthe), jointure id +
+#     (ail, échalote, pomme de terre, fraise, framboise, menthe : semis et récolte
+#     écartés, plantation gardée sauf fiche de plantation d'automne), jointure id +
 #     catégorie, fenêtre à cheval sur l'année (artefact), phase minoritaire,
 #     médiane basse, semis contredit par les fiches de la source (pépinière du
 #     cornichon et du fenouil). `fenetres_incompletes` liste les cultures dont les
@@ -343,6 +353,22 @@ psql -d potager -f migrations/migration_v47.sql
 # que pour une saisie d'UN geste ; une dictée multi-gestes s'enregistre sans
 # contexte non dit, corrigeable ensuite. La clé `contexte_semis` PRÉSENTE et vide
 # dans un item vaut « sans préciser » : la phrase n'est pas relue derrière ce choix.
+
+# Calendrier recalé sur les événements réels [US-070]
+# Une culture EN PLACE se lit sur son propre calendrier : levée et première
+# récolte attendues depuis la date réelle du semis. Lecture seule, zéro jeton.
+#   GET /plan/calendriers?culture=…&date_ref=YYYY-MM-DD   bloc `projections`
+# Un seul module — app/services/recalage_calendrier.py :
+#   construire_series / semis_chaine   origine = SEMIS (parcelle, ou chaînage
+#                                      plantation → godet → semis) — jamais une
+#                                      plantation seule (durée absente : US-177)
+#   rattacher_recoltes                 plus ancienne série ouverte ; en végétatif
+#                                      la récolte CLÔT la série (CA6, CA10)
+#   projeter_serie                     fourchettes, état, mois de la frise (CA7)
+# ⚠️ Rien n'est deviné (CA11) : semis sans filière connue, durée `recolte` non
+# chiffrée ou culture sans référentiel → `sans_recalage`, la tuile garde la frise
+# CONSEILLÉE. Un semis chaîné à un godet vaut pépinière (même preuve que v47).
+# ⚠️ Aucune écriture, aucun calcul de stock touché (CA13) — un test le vérifie.
 
 # Menu de commandes natif Telegram [US-171]
 # Le menu (bouton « Menu » du client Telegram) n'est pas une liste tenue à la main :

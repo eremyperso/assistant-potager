@@ -218,6 +218,15 @@ class TestCA3Proposition:
         _calendrier(db, "courgette", "pleine_terre", "mai-juin")
         assert cs.proposer_contexte(db, "courgette", 1) is None
 
+    def test_us069_ca3_une_fenetre_de_plantation_n_est_pas_un_indice_de_pepiniere(self, db):
+        """[US-068 / CA19, amendement du 15/09/2026] Un plant acheté se plante sans
+        avoir été semé chez soi : la plantation ne départage pas les deux filières."""
+        _calendrier(db, "carotte", "pleine_terre", "mai-juin")
+        _calendrier(db, "carotte", "plantation", "mai")
+        assert cs.proposer_contexte(db, "carotte", 1).contexte == cs.CONTEXTE_PLEINE_TERRE
+        _calendrier(db, "radis", "plantation", "mai")
+        assert cs.proposer_contexte(db, "radis", 1) is None
+
     def test_us069_ca3_sans_referentiel_rien_n_est_propose(self, db):
         assert cs.proposer_contexte(db, "radis", 1) is None
         assert cs.proposer_contexte(db, "culture-inconnue", 1) is None

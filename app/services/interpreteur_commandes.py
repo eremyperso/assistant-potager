@@ -1202,7 +1202,16 @@ _PHASES_DITES: dict[str, str] = {
     "pepiniere": "semis_pepiniere", "godet": "semis_pepiniere", "godets": "semis_pepiniere",
     "abri": "semis_pepiniere", "pleine terre": "semis_pleine_terre",
     "place": "semis_pleine_terre", "direct": "semis_pleine_terre", "recolte": "recolte",
+    "plantation": "plantation", "mise en place": "plantation",
 }
+
+# [US-068 / CA29] « Plantation » désigne deux choses au calendrier : la FENÊTRE
+# de plantation (des mois) et la DURÉE semis → plantation en place, rangée sous
+# l'étape `repiquage` (des jours). Rien dans le mot ne les distingue ; c'est la
+# NATURE DE LA VALEUR qui tranche, et seulement elle : une règle de fenêtre
+# exige des mois, une règle de durée exige des jours. Une phrase dont la valeur
+# ne tranche pas (« plantation des tomates : 42 ») n'est reconnue par aucune des
+# deux — jamais devinée de l'une vers l'autre.
 
 
 @_regle(
@@ -1211,7 +1220,7 @@ _PHASES_DITES: dict[str, str] = {
     + r"(?:(?:avance|avancer|recule|reculer|decale|decaler)\s+)?" + _ARTICLE
     + r"(?:fenetre|periode)\s+(?:de\s+|d\s+)?"
     r"(?:semis\s+(?:en\s+|sous\s+)?(?P<phase>pepiniere|godets?|abri|pleine terre|place|direct)|"
-    r"(?P<phase_recolte>recolte))\s+"
+    r"(?P<phase_recolte>recolte|plantation|mise en place))\s+"
     r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
     + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|en|de|va|devient)\s+)?"
     r"(?:(?:de|d|en|a|au)\s+)?(?P<mois_debut>" + _MOIS_DITS + r")"
@@ -1233,9 +1242,36 @@ def _construire_calendrier_fenetre(groupes):
     return valeurs
 
 
+@_regle(
+    "calendrier_fenetre_plantation",
+    r"\A" + _INTENTION + _CORRIGER + _ARTICLE
+    + r"(?P<phase_recolte>plantation|mise en place)\s+(?:de|du|de la|des|d|pour)\s+" + _ARTICLE
+    + r"(?P<culture>[^\d:=,]+?)\s*"
+    # Sans « période » ni « fenêtre », la phrase ressemble à un geste daté
+    # (« plantation des poireaux le 3 mai ») : on exige une PLAGE de deux mois
+    # ou un séparateur explicite, jamais un mois seul glissé en fin de phrase.
+    r"(?:(?:[:=,]|est|soit|devient)\s*(?:(?:de|d|en|a|au)\s+)?(?P<mois_debut>" + _MOIS_DITS + r")"
+    r"(?:\s*(?:a|au|jusqu a|et)?\s*(?P<mois_fin>" + _MOIS_DITS + r"))?|"
+    r"(?:(?:de|d|en)\s+)?(?P<mois_debut_plage>" + _MOIS_DITS + r")"
+    r"\s*(?:a|au|jusqu a|et)?\s*(?P<mois_fin_plage>" + _MOIS_DITS + r"))\s*\Z",
+    "calendrier",
+    "fenetre",
+    declarative=True,
+)
+def _construire_calendrier_fenetre_plantation(groupes):
+    return _construire_calendrier_fenetre({
+        "culture": groupes["culture"],
+        "phase_recolte": groupes["phase_recolte"],
+        "mois_debut": groupes.get("mois_debut") or groupes.get("mois_debut_plage"),
+        "mois_fin": groupes.get("mois_fin") or groupes.get("mois_fin_plage"),
+    })
+
+
 _ETAPES_DITES: dict[str, str] = {
     "levee": "levee", "germination": "levee", "recolte": "recolte",
     "premiere recolte": "recolte", "repiquage": "repiquage",
+    # [CA29] Des JOURS avant la plantation : la durée semis → plantation en place.
+    "plantation": "repiquage", "mise en place": "repiquage",
 }
 
 
@@ -1243,7 +1279,7 @@ _ETAPES_DITES: dict[str, str] = {
     "calendrier_duree",
     r"\A" + _INTENTION + _CORRIGER + _ARTICLE
     + r"(?:delai|duree|temps)\s+(?:de\s+|d\s+|avant\s+(?:la\s+|le\s+)?|jusqu a\s+(?:la\s+|le\s+)?)?"
-    r"(?P<etape>levee|germination|premiere recolte|recolte|repiquage)\s+"
+    r"(?P<etape>levee|germination|premiere recolte|recolte|repiquage|plantation|mise en place)\s+"
     r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
     + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
     + _NOMBRE.format("jours_min")

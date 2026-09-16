@@ -9,6 +9,34 @@
 
 ---
 
+## 🔁 Renumérotation du 15/09/2026 — fiches créées dans `backlog/`
+
+La bande US-170 → US-178 prévue au §1 était déjà occupée (menu Telegram, commandes dictées,
+bioagresseurs, calendrier…). Conformément à la règle du §1, l'Épic entier est décalé, jamais troué.
+**Les numéros ci-dessous font foi ; ceux du corps du document sont ceux de la rédaction initiale.**
+
+| Dans ce document | Fiche créée | Migration |
+|---|---|---|
+| US-170 | `backlog/US-184_fermer-fuites-imputation-cle-tierce.md` | — |
+| US-171 | `backlog/US-185_coffre-applicatif-chiffrement-enveloppe.md` | v48 |
+| US-172 | `backlog/US-186_resolution-client-modele-par-potager.md` | v49 (RLS `questions_cache`, si absence confirmée) |
+| US-173 | `backlog/US-187_ecran-configuration-test-cle.md` | — |
+| US-174 | `backlog/US-188_journal-imputation-reconciliable-facture.md` | v50 |
+| US-175 | `backlog/US-189_releve-consommation-export-alertes-budget.md` | — |
+| US-176 | `backlog/US-190_consentement-corpus-contractuel-byok.md` | v51 |
+| US-177 | `backlog/US-191_echec-explicite-sans-repli-plateforme.md` | — |
+| US-178 | `backlog/US-192_purge-revocation-reversibilite-cle.md` | — |
+
+Points du §10 levés le 15/09/2026, à la création des fiches : (1) bande décalée ; (2) la dernière
+migration livrée est **v47**, pas v45 ; (3) `conso_tokens` porte déjà `tokens_in` / `tokens_out` /
+`appel_type` — pas de doublon à créer ; (4) **aucune politique RLS trouvée sur `questions_cache`** ;
+(5) `_resoudre_client` n'est appelé qu'au moment où l'appel part — résolution paresseuse par
+construction ; (6) le projet ne calcule **aucun embedding** — question fermée ; (7) les trois dettes
+d'imputation sont présentes ; (8) à vérifier par fournisseur à l'implémentation d'US-188.
+**US-092 est livrée** : elle n'est plus bloquante pour l'Épic.
+
+---
+
 ## ⚠️ Avertissement de source — à lire avant d'exécuter quoi que ce soit
 
 **Ce document n'a pas lu le dépôt.** Aucun accès au code n'était disponible lors de sa rédaction.

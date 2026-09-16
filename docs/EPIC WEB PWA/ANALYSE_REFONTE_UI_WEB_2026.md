@@ -609,7 +609,9 @@ filtre s'appliquait aussi à son contenu, et la parcelle s'affichait vide) ; une
 enregistrée sous la chaîne littérale `NULL` par une saisie ancienne n'affiche plus
 « Exposition NULL » mais est omise, comme la pastille « Sol ».
 
-**Dette ouverte — le calendrier cultural.** Les frises et la ligne « famille · durée » lisent
+**Dette soldée par US-176 (15/09/2026) — le calendrier cultural.** La table provisoire décrite ci-dessous a été **supprimée par US-176, et non par US-068** : US-068 a constitué le référentiel en base mais ne créait aucun écran. Depuis US-176, les frises et la ligne « famille · durée » lisent `GET /plan/calendriers` (zone du potager, corrections locales, quatre phases semis en pépinière / semis en pleine terre / plantation / récolte — la bande « plantation » revient le 15/09/2026, lue du référentiel après l'amendement d'US-068, jamais reconstituée du semis ; une teinte par phase, `bg-brand-soft` réservé à l'état « en croissance » d'US-070, et une règle de priorité unique, `PRIORITE_PHASES`, quand deux phases partagent un mois) ; `frontend/src/lib/calendrier.js` ne contient plus aucune valeur horticole. Historique de la dette :
+
+Les frises et la ligne « famille · durée » lisent
 une **table de correspondance provisoire** côté interface, `frontend/src/lib/calendrier.js`,
 sur le modèle de `familles.js` (§5.9) : les dix cultures de `WCULTURES` reprises telles
 quelles, complétées par les calendriers de semis courants pour la France métropolitaine, sur
@@ -622,8 +624,8 @@ volée, ni pour une culture inconnue ni pour une culture partiellement renseign�
 Le calendrier **réel** — référentiel corrigeable, zones climatiques, contexte de semis
 (pépinière vs pleine terre), recalage sur les événements de la parcelle, quatrième état « en
 croissance » et durée restante avant récolte — relève en totalité de
-[`EPIC_CALENDRIER_CULTURAL`](EPIC_CALENDRIER_CULTURAL.md) : **US-068** (référentiel en base,
-qui supprime `calendrier.js`), **US-069** (contexte de semis) et **US-070** (recalage sur le
+[`EPIC_CALENDRIER_CULTURAL`](EPIC_CALENDRIER_CULTURAL.md) : **US-068** (référentiel en base ;
+`calendrier.js` a finalement été soldé par **US-176**), **US-069** (contexte de semis) et **US-070** (recalage sur le
 réel, qui réutilise le paramètre `moisCourant` posé ici). La famille botanique suit le même
 chemin avec **US-067**, qui supprime `familles.js`.
 

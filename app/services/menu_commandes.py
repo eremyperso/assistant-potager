@@ -409,7 +409,7 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("phase", TYPE_VOCABULAIRE,
-                     "Quelle période : semis en pépinière, semis en pleine terre ou récolte ?",
+                     "Quelle période : semis en pépinière, semis en pleine terre, plantation ou récolte ?",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "PHASES")),
             Argument("mois_debut", TYPE_VOCABULAIRE, "À partir de quel mois ?",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "MOIS")),

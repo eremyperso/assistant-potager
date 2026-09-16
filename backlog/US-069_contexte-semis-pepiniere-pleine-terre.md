@@ -31,6 +31,7 @@ Cette US remplace et numérote l'ancienne US non numérotée `backlog/US_Disting
 - Dépendances : **US-068** (le référentiel fournit l'itinéraire probable du CA3 et les fenêtres du CA7) ; **US-070** en est la consommatrice. Aucune dépendance bloquante pour la partie statistique (CA6), livrable seule
 - Remplace : `backlog/US_Distinguer_semis_pepiniere_pleine_terre.md`, à supprimer
 - Point de vigilance : le CA3 ne doit pas transformer une saisie vocale en interrogatoire. Si la proposition ne peut pas être faite en un seul geste de confirmation, mieux vaut enregistrer sans contexte — le CA4 permet de corriger plus tard
+- **Amendement d'US-068 du 15/09/2026 — fenêtre de plantation.** Le référentiel porte une quatrième fenêtre, la plantation. Elle n'est **pas** un indice de semis en pépinière pour la proposition du CA3 (un plant acheté se plante sans avoir été semé chez soi) et ne concerne pas le contexte, qui reste propre au `semis` : aucun changement de comportement attendu, un test de non-régression le garantit (US-068 / CA19) — *livré le 15/09/2026 : `test_us069_ca3_une_fenetre_de_plantation_n_est_pas_un_indice_de_pepiniere`, aucune ligne de `contexte_semis.py` modifiée*
 - Point de vigilance : ne pas confondre le contexte du semis avec la parcelle de destination. Un semis en pépinière est rattaché à une parcelle comme tout événement (contrainte `parcelle_id`), ce qui ne le rend pas pour autant « en pleine terre »
 
 **Estimation :** 5 points

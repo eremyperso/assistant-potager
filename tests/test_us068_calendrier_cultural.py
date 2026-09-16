@@ -452,6 +452,34 @@ class TestCA9PreRemplissage:
         assert resultat.total_ecritures == 0
         assert db.query(ItineraireCultural).count() == 0
 
+    def test_us068_ca25_le_gabarit_porte_la_plantation_pour_chaque_zone(self):
+        """[CA25] Quatre phases par zone, dans chaque bloc — une case par phase du service."""
+        manifeste = json.loads(GABARIT_INTERNE.read_text(encoding="utf-8"))
+        for entree in manifeste["cultures_calendriers"]:
+            assert set(entree["fenetres"]) == set(cal.ZONES_CLIMATIQUES), entree["culture"]
+            for phases in entree["fenetres"].values():
+                assert tuple(phases) == cal.PHASES, entree["culture"]
+
+    def test_us068_ca25_le_gabarit_couvre_toutes_les_cultures_connues(self):
+        """[CA25] Plus seulement les dix du périmètre initial : chaque culture semée
+        par les migrations, et chaque culture du manifeste de la source, a sa case."""
+        import re
+
+        manifeste = json.loads(GABARIT_INTERNE.read_text(encoding="utf-8"))
+        cultures = [e["culture"] for e in manifeste["cultures_calendriers"]]
+        assert len(cultures) == len(set(cultures)), "une culture en double dans le gabarit"
+
+        semees: set[str] = set()
+        for migration in ("migration_v5", "migration_v6", "migration_v13"):
+            texte = (RACINE / "migrations" / f"{migration}.sql").read_text(encoding="utf-8")
+            for bloc in re.findall(r"INSERT INTO culture_config[^;]*;", texte, re.S):
+                semees |= {m.group(1).replace("''", "'") for m in
+                           re.finditer(r"\(\s*(?:\d+\s*,\s*)?'((?:[^']|'')*)'", bloc)}
+        semees.discard("courge butternut")  # supprimée par migration_v13
+        source = {e["culture"] for e in
+                  json.loads(MANIFESTE_WIND_RIVER.read_text(encoding="utf-8"))["cultures_calendriers"]}
+        assert (semees | source) - set(cultures) == set()
+
     def test_us068_ca9_les_calendriers_remontent_dans_les_donnees_derivees(self, db):
         _culture(db, "haricot")
         _importer(db, {"culture": "haricot", "durees": {"levee": "7-10"},
@@ -769,6 +797,96 @@ class TestCA9FenetresWindRiver:
         assert set(svc_adaptateur.ALIAS_CALENDRIER.values()) <= {"laitue"}
         assert par_nom["salade"]["fenetres"] == par_nom["laitue"]["fenetres"]
 
+    # ── Fenêtre de plantation — amendement du 15/09/2026 (CA17 à CA26) ───────
+
+    def test_us068_ca21_plantation_lue_dans_outdoor_transplant(self):
+        usda = svc_adaptateur.ZONE_USDA_PAR_ZONE["continental"]
+        calendrier = [
+            self._ligne(i, usda, indoor_sow_start="March", indoor_sow_end="March",
+                        outdoor_transplant_start="May", outdoor_transplant_end="June")
+            for i in (1, 2, 3)
+        ]
+        fenetres, _ = self._fenetres({"tomate": self._cultivars(3)}, calendrier)
+        assert fenetres["tomate"]["continental"] == {"semis_pepiniere": "mars", "plantation": "mai-juin"}
+        # Ordre du geste : la plantation vient entre les semis et la récolte.
+        assert list(svc_adaptateur.COLONNES_PHASE) == list(cal.PHASES)
+
+    def test_us068_ca22_plantation_contredite_par_des_fiches_de_semis_en_place(self):
+        usda = svc_adaptateur.ZONE_USDA_PAR_ZONE["oceanique"]
+        cultivars = (
+            self._cultivars(3, categorie="cucumber", sowing_method="Direct sow after last frost")
+            + [{"id": "4", "category": "cucumber",
+                "sowing_method": "Direct sow, or start indoors 3 weeks before"}]
+        )
+        calendrier = [
+            self._ligne(i, usda, categorie="cucumber", direct_sow_start="May", direct_sow_end="June",
+                        outdoor_transplant_start="May", outdoor_transplant_end="May")
+            for i in (1, 2, 3, 4)
+        ]
+        fenetres, resultat = self._fenetres({"cornichon": cultivars}, calendrier)
+        assert fenetres["cornichon"]["oceanique"] == {"semis_pleine_terre": "mai-juin"}
+        assert any(
+            e.startswith("cornichon.oceanique.plantation — contredite") and "mise en place" in e
+            for e in resultat.fenetres_ecartees
+        )
+
+    def test_us068_ca23_ce_qui_ne_se_seme_pas_garde_sa_plantation(self):
+        usda = svc_adaptateur.ZONE_USDA_PAR_ZONE["oceanique"]
+        cultivars = self._cultivars(3, categorie="herb", sowing_method="Plant divisions in spring")
+        calendrier = [
+            self._ligne(i, usda, categorie="herb", direct_sow_start="March", direct_sow_end="May",
+                        outdoor_transplant_start="April", outdoor_transplant_end="June",
+                        harvest_start="June", harvest_end="October")
+            for i in (1, 2, 3)
+        ]
+        fenetres, resultat = self._fenetres({"menthe": cultivars}, calendrier)
+        # Semis et récolte, calculés depuis un semis qui n'existe pas, restent écartés.
+        assert fenetres["menthe"]["oceanique"] == {"plantation": "avril-juin"}
+        assert resultat.fenetres_ecartees[0].startswith("menthe — ne se sème pas")
+
+    def test_us068_ca23_une_plantation_d_automne_contredit_le_gabarit_de_printemps(self):
+        usda = svc_adaptateur.ZONE_USDA_PAR_ZONE["oceanique"]
+        cultivars = self._cultivars(3, categorie="berry",
+                                    sowing_method="Plant dormant canes in early spring or fall.")
+        calendrier = [
+            self._ligne(i, usda, categorie="berry",
+                        outdoor_transplant_start="May", outdoor_transplant_end="June")
+            for i in (1, 2, 3)
+        ]
+        fenetres, resultat = self._fenetres({"framboise": cultivars}, calendrier)
+        assert fenetres == {}
+        assert any(e.startswith("framboise.plantation — contredite") for e in resultat.fenetres_ecartees)
+
+    def test_us068_ca24_incoherence_signalee_jamais_corrigee(self):
+        resultat = svc_adaptateur.ResultatAdaptation()
+        fenetres = {
+            "oceanique": {"semis_pepiniere": "avril", "plantation": "mars-mai"},
+            # Semé au 1er mars au plus tôt + 42 jours = avril : planter en mars est trop tôt.
+            "continental": {"semis_pepiniere": "mars", "plantation": "mars"},
+            "mediterraneen": {"semis_pepiniere": "février", "plantation": "avril-mai"},
+        }
+        copie = json.loads(json.dumps(fenetres))
+        svc_adaptateur.signaler_incoherences("tomate", {"repiquage": "42-56"}, fenetres, resultat)
+        assert fenetres == copie, "rien n'est ajusté"
+        assert len(resultat.fenetres_incoherentes) == 2
+        assert "commence avant le semis" in resultat.fenetres_incoherentes[0]
+        assert "42 jours" in resultat.fenetres_incoherentes[1]
+        # Sans semis en pépinière (plants achetés), aucune incohérence possible.
+        resultat = svc_adaptateur.ResultatAdaptation()
+        svc_adaptateur.signaler_incoherences("tomate", {}, {"oceanique": {"plantation": "mai"}}, resultat)
+        assert resultat.fenetres_incoherentes == []
+
+    def test_us068_ca26_le_manifeste_versionne_porte_la_plantation_de_la_source(self):
+        manifeste = json.loads(MANIFESTE_WIND_RIVER.read_text(encoding="utf-8"))
+        par_nom = {e["culture"]: e for e in manifeste["cultures_calendriers"]}
+        assert par_nom["tomate"]["fenetres"]["oceanique"]["plantation"] == "avril-mai"
+        for zone in cal.ZONES_CLIMATIQUES:
+            assert "plantation" in par_nom["poivron"]["fenetres"][zone]
+        # Semé en place, contredit par ses fiches, ou absent de la source : rien.
+        for culture in ("carotte", "haricot", "cornichon", "courgette", "poireau"):
+            assert all("plantation" not in p for p in par_nom[culture].get("fenetres", {}).values()), culture
+        assert "ail" not in par_nom
+
     def test_us068_ca9_le_particulier_passe_avant_le_general(self):
         lignes = [
             {"id": "1", "category": "bean", "name": "Kentucky Wonder Pole", "slug": "kentucky-wonder-pole",
@@ -1010,6 +1128,47 @@ class TestCA10Bot:
         assert "jamais des dates" in texte
 
     @pytest.mark.asyncio
+    async def test_us068_ca27_consultation_affiche_la_plantation_dans_l_ordre_du_geste(self, db):
+        _culture(db, "tomate")
+        _importer(db, {"culture": "tomate", "fenetres": {"oceanique": {
+            "recolte": "juillet-septembre", "plantation": "mai-juin", "semis_pepiniere": "mars-avril"}}})
+        texte = await self._appeler(db, "tomate")
+        assert "Plantation : *mai → juin*" in texte
+        assert texte.index("Semis en pépinière") < texte.index("Plantation") < texte.index("Récolte")
+
+    @pytest.mark.asyncio
+    async def test_us068_ca27_plantation_vide_dite_quand_une_autre_phase_est_renseignee(self, db):
+        """[CA27, CA18] L'aubergine a un semis en pépinière et un délai de
+        repiquage : sa plantation reste « — », jamais calculée."""
+        _culture(db, "aubergine")
+        _importer(db, {"culture": "aubergine", "durees": {"repiquage": "42-56"},
+                       "fenetres": {"oceanique": {"semis_pepiniere": "mars"}}})
+        texte = await self._appeler(db, "aubergine")
+        assert "Plantation : —" in texte
+        assert "Semis en pleine terre" not in texte
+
+    @pytest.mark.asyncio
+    async def test_us068_ca27_correction_de_la_plantation_confirme_avant_et_apres(self, db):
+        _culture(db, "tomate")
+        _importer(db, {"culture": "tomate", "fenetres": {"oceanique": {"plantation": "avril-mai"}}})
+        texte = await self._appeler(db, "fenetre", "tomate", "plantation", "mai-juin")
+        assert "avril → mai" in texte and "mai → juin" in texte
+        assert "propre à votre potager" in texte
+        partage = cal.lire_calendrier(db, "tomate", 2).itineraires[0].fenetre(cal.PHASE_PLANTATION)
+        assert (partage.mois_debut, partage.mois_fin) == (4, 5)
+
+    @pytest.mark.asyncio
+    async def test_us068_ca29_au_bot_la_sous_commande_tranche_entre_fenetre_et_duree(self, db):
+        """[CA29] « plantation » est aussi l'alias de la durée `repiquage` : c'est
+        la sous-commande qui dit laquelle des deux on corrige."""
+        _culture(db, "tomate")
+        _importer(db, {"culture": "tomate", "fenetres": {"oceanique": {"semis_pepiniere": "mars"}}})
+        texte = await self._appeler(db, "duree", "tomate", "plantation", "42-56")
+        assert "42 à 56 jours" in texte
+        it = cal.lire_calendrier(db, "tomate", 1).itineraires[0]
+        assert it.fenetre(cal.PHASE_PLANTATION) is None
+
+    @pytest.mark.asyncio
     async def test_us068_bot_consultation_dit_ce_qui_manque_pour_la_zone(self, db):
         _culture(db, "tomate")
         _importer(db, {"culture": "tomate", "fenetres": {"continental": {"recolte": "août"}}})
@@ -1096,6 +1255,15 @@ class TestDictable:
          {"culture": "tomates", "phase": "semis_pepiniere", "mois_debut": "février", "mois_fin": "avril"}),
         ("délai de levée des carottes : 14 à 21 jours", ("calendrier", "duree"),
          {"culture": "carottes", "etape": "levee", "jours_min": "14", "jours_max": "21"}),
+        # [CA29] Plantation : des MOIS corrigent la fenêtre…
+        ("plantation des poireaux : juin-juillet", ("calendrier", "fenetre"),
+         {"culture": "poireaux", "phase": "plantation", "mois_debut": "juin", "mois_fin": "juillet"}),
+        ("corrige la période de plantation des tomates de mai à juin", ("calendrier", "fenetre"),
+         {"culture": "tomates", "phase": "plantation", "mois_debut": "mai", "mois_fin": "juin"}),
+        # … des JOURS corrigent la durée semis → plantation en place.
+        ("délai avant plantation des tomates : 42 à 56 jours", ("calendrier", "duree"),
+         {"culture": "tomates", "etape": "repiquage", "jours_min": "42", "jours_max": "56"}),
+        ("quand planter les poireaux ?", ("calendrier", None), {"culture": "poireaux"}),
     ])
     def test_us068_phrase_reconnue(self, phrase, cle, valeurs):
         commande = interp.reconnaitre_par_regles(phrase)
@@ -1109,9 +1277,23 @@ class TestDictable:
         "calendrier des semis",
         "qu'est-ce que le délai de levée des carottes ?",
         "j'ai semé les tomates en pépinière en février",
+        "quand ai-je planté les tomates ?",           # [CA29] journal du potager (US-096)
+        "plantation de 10 poireaux le 3 mai",         # un geste daté, pas une fenêtre
+        "plantation des poireaux le 3 mai",
+        "plantation des tomates : 42",                # [CA29] la valeur ne tranche pas
+        "délai de plantation des poireaux : juin",    # des mois pour une durée : refusé
     ])
     def test_us068_phrase_voisine_non_captee(self, phrase):
         assert interp.reconnaitre_par_regles(phrase) is None
+
+    def test_us068_ca28_les_phases_proposees_en_boutons_sont_celles_du_service(self):
+        """[CA28] Quatre boutons, lus à `PHASES` — jamais recopiés."""
+        from app.services import menu_commandes as svc_menu
+
+        forme = {f.cle: f for f in svc_menu.FORMES_DICTABLES}[("calendrier", "fenetre")]
+        phase = next(a for a in forme.arguments if a.nom == "phase")
+        assert phase.vocabulaire == cal.PHASES
+        assert "plantation" in phase.question
 
     def test_us068_ecriture_dictee_toujours_confirmee(self):
         from app.services import menu_commandes as svc_menu

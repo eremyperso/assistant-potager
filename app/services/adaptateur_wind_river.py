@@ -34,7 +34,8 @@ trois annoncées. D'où trois décisions, mesurées et non intuitées :
   seul pour 84 aromatiques), dont la fin de récolte est une constante de
   catégorie. D'où une table de zones déclarée (`ZONE_USDA_PAR_ZONE`) et six
   règles de rejet, décrites à `construire_fenetres` — ce qui ne les franchit pas
-  reste vide, jamais complété.
+  reste vide, jamais complété. La PLANTATION (`outdoor_transplant_*`) y entre
+  depuis l'amendement d'US-068 du 15/09/2026, sous les mêmes règles.
 
 Les associations (`companion_plants.csv`, 21 880 arêtes, réduites à 217 sur notre
 périmètre) sont d'abord extraites **brutes** dans un fichier séparé
@@ -66,6 +67,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import date, timedelta
 from collections import Counter, defaultdict
 from statistics import median, median_low
 from dataclasses import dataclass, field
@@ -323,6 +325,9 @@ class ResultatAdaptation:
     #: [US-068] Cultures dont les fiches parlent d'un semis de fin d'été ou
     #: d'automne que le calendrier source ignore : retenues, mais incomplètes.
     fenetres_incompletes: list[str] = field(default_factory=list)
+    #: [US-068 / CA24] Semis en pépinière, délai de repiquage et plantation qui
+    #: ne s'enchaînent pas — SIGNALÉS, jamais corrigés.
+    fenetres_incoherentes: list[str] = field(default_factory=list)
     #: [US-068] Cultivars appariés par culture pour le calendrier (table étendue).
     cultivars_calendrier: dict[str, int] = field(default_factory=dict)
 
@@ -485,12 +490,14 @@ ZONE_USDA_PAR_ZONE: dict[str, int] = {
     "montagnard": 4,
 }
 
-#: Colonnes source de chaque phase. `outdoor_transplant_*` n'est pas repris : le
-#: modèle d'US-068 n'a pas de phase « plantation », et le délai de repiquage est
-#: déjà une durée (`construire_calendriers`).
+#: Colonnes source de chaque phase. [US-068 / CA21, amendement du 15/09/2026]
+#: `outdoor_transplant_*` est repris pour la fenêtre de PLANTATION — mise en
+#: place définitive, lue telle quelle, jamais recalculée depuis le semis en
+#: pépinière et le délai de repiquage (CA18).
 COLONNES_PHASE: dict[str, tuple[str, str]] = {
     svc_calendrier.PHASE_SEMIS_PEPINIERE: ("indoor_sow_start", "indoor_sow_end"),
     svc_calendrier.PHASE_SEMIS_PLEINE_TERRE: ("direct_sow_start", "direct_sow_end"),
+    svc_calendrier.PHASE_PLANTATION: ("outdoor_transplant_start", "outdoor_transplant_end"),
     svc_calendrier.PHASE_RECOLTE: ("harvest_start", "harvest_end"),
 }
 
@@ -524,11 +531,20 @@ def formater_mois(debut: int, fin: int) -> str:
 #: jugée contredire son propre calendrier (règles 1 et 6 de construire_fenetres).
 SEUIL_COHERENCE = 0.5
 
-#: Modes de semis (lus dans `sowing_method`) qui justifient chaque phase de semis.
+#: Modes (lus dans `sowing_method`) qui justifient chaque phase. [CA22] Une
+#: plantation est justifiée par tout ce qui passe par une mise en place : élevé
+#: à l'abri, mixte, ou planté sans être semé.
 _MODES_DE_PHASE: dict[str, frozenset] = {
     "semis_pepiniere": frozenset({MODE_PEPINIERE, MODE_MIXTE}),
     "semis_pleine_terre": frozenset({MODE_PLEINE_TERRE, MODE_MIXTE}),
+    "plantation": frozenset({MODE_PEPINIERE, MODE_MIXTE, MODE_NON_SEMIS}),
 }
+
+#: [CA23] Ce qui, dans la fiche d'une culture qui ne se sème pas, annonce une
+#: plantation d'automne — que le calendrier source, printemps seulement, ignore.
+#: « Plant dormant canes in early spring or fall » (framboise) contredit la
+#: fenêtre de printemps que le gabarit de catégorie lui donne.
+_PLANTATION_AUTOMNE = r"\bor (in )?(the )?fall\b|\bin (the )?fall\b|\bfall plant|autumn|overwinter"
 
 #: Ce qui, dans une fiche, annonce un semis ou une plantation hors printemps.
 _SEMIS_TARDIF = (
@@ -555,9 +571,12 @@ def construire_fenetres(
        sur l'ail : `varieties.csv` dit « planted in fall, harvest mid-summer »,
        son calendrier le sème en mars-mai et le récolte de décembre à novembre.
        Dès que la MOITIÉ des fiches classées décrivent une plantation (caïeux,
-       plants de pomme de terre, bulbes, griffes, boutures), la culture entière
-       est écartée — récolte comprise, puisque le gabarit de la catégorie la
-       calcule depuis un semis qui n'existe pas.
+       plants de pomme de terre, bulbes, griffes, boutures), ses fenêtres de
+       semis ET de récolte sont écartées — la récolte aussi, puisque le gabarit
+       de la catégorie la calcule depuis un semis qui n'existe pas. [CA23,
+       amendement du 15/09/2026] Sa **plantation** reste lue — c'est sa phase —
+       sauf si une de ses fiches décrit une plantation d'automne
+       (`_PLANTATION_AUTOMNE`) : le gabarit de printemps est alors contredit.
     2. **Jointure par identifiant ET catégorie.** Le slug n'est pas unique dans
        la source (`black-beauty` y est une aubergine, une courgette et un rosier).
     3. **Une fenêtre à cheval sur l'année est rejetée.** Dans ce jeu de données,
@@ -575,6 +594,9 @@ def construire_fenetres(
        ses quatre fiches disent « direct sow ». Une phase de semis n'est retenue
        que si au moins la MOITIÉ des fiches classées décrivent ce mode (mixte
        compris) : la source contre elle-même, sans aucun avis agronomique.
+       [CA22] Une fenêtre de **plantation** n'est retenue que si la moitié des
+       fiches classées décrivent une mise en place (abri, mixte ou plantée) :
+       un cornichon semé en place n'a pas de plantation.
 
     Une culture dont les fiches mentionnent un semis de fin d'été ou d'automne
     est retenue mais signalée incomplète (`fenetres_incompletes`) : le calendrier
@@ -596,12 +618,27 @@ def construire_fenetres(
             continue
         modes = [m for m in (classer_mode_semis(c.get("sowing_method")) for c in cultivars) if m]
         plantes = sum(1 for m in modes if m == MODE_NON_SEMIS)
+        phases_lues: tuple[str, ...] = tuple(COLONNES_PHASE)
         if modes and plantes / len(modes) >= SEUIL_COHERENCE:
+            # [CA23] Règle 1 révisée : ce qui ne se sème pas perd ses fenêtres de
+            # semis et de récolte (calculées depuis un semis qui n'existe pas),
+            # mais pas sa plantation — c'est précisément sa phase.
             resultat.fenetres_ecartees.append(
                 f"{culture} — ne se sème pas ({plantes} fiche(s) sur {len(modes)} décrivent une "
-                "plantation) : le calendrier source lui applique le gabarit de semis de sa catégorie"
+                "plantation) : semis et récolte écartés, le calendrier source lui applique le "
+                "gabarit de semis de sa catégorie"
             )
-            continue
+            automne = sum(
+                1 for c in cultivars
+                if re.search(_PLANTATION_AUTOMNE, (c.get("sowing_method") or "").lower())
+            )
+            if automne:
+                resultat.fenetres_ecartees.append(
+                    f"{culture}.plantation — contredite par les fiches de la source ({automne} sur "
+                    f"{len(cultivars)} décrivent une plantation d'automne, absente du calendrier source)"
+                )
+                continue
+            phases_lues = (svc_calendrier.PHASE_PLANTATION,)
         semis = [m for m in modes if m != MODE_NON_SEMIS]
         automne = sum(
             1 for c in cultivars
@@ -622,7 +659,7 @@ def construire_fenetres(
             if not lignes:
                 continue
 
-            for phase in COLONNES_PHASE:
+            for phase in phases_lues:
                 brutes = [fenetre_source(l, phase) for l in lignes]
                 portees = [f for f in brutes if f is not None]
                 if not portees:
@@ -630,11 +667,15 @@ def construire_fenetres(
                 etiquette = f"{culture}.{zone}.{phase}"
                 modes_admis = _MODES_DE_PHASE.get(phase)
                 if modes_admis is not None:
-                    decrits = sum(1 for m in semis if m in modes_admis)
-                    if not semis or decrits / len(semis) < SEUIL_COHERENCE:
+                    # [CA22] La plantation se juge sur TOUTES les fiches classées,
+                    # plantées comprises ; un semis, sur les seules fiches de semis.
+                    base = modes if phase == svc_calendrier.PHASE_PLANTATION else semis
+                    decrits = sum(1 for m in base if m in modes_admis)
+                    if not base or decrits / len(base) < SEUIL_COHERENCE:
+                        mode_dit = "une mise en place" if base is modes else "ce mode de semis"
                         resultat.fenetres_ecartees.append(
                             f"{etiquette} — contredite par les fiches de la source "
-                            f"({decrits} sur {len(semis)} décrivent ce mode de semis)"
+                            f"({decrits} sur {len(base)} décrivent {mode_dit})"
                         )
                         continue
                 valides = [f for f in portees if f[0] <= f[1]]
@@ -692,6 +733,44 @@ def _mode_dominant(modes: list[Optional[str]]) -> tuple[Optional[str], str]:
                 f"{compte[franc]} en {franc} et {compte[MODE_MIXTE]} mixtes sur {len(renseignes)} cultivars"
             )
     return mode, motif
+
+
+def signaler_incoherences(
+    culture: str, durees: dict[str, Any], fenetres: dict[str, dict[str, str]], resultat: ResultatAdaptation
+) -> None:
+    """
+    [US-068 / CA24] Signale, zone par zone, une plantation qui ne s'enchaîne pas
+    avec le semis en pépinière de la même culture. Deux contrôles, au mois :
+
+    - la plantation commence AVANT le semis en pépinière ;
+    - la plantation est TERMINÉE avant qu'un plant semé au premier jour de la
+      fenêtre de pépinière ait atteint le délai de repiquage minimal.
+
+    Rien n'est ajusté : la source est rapportée telle quelle, et c'est au
+    relecteur de trancher. Une plantation sans semis en pépinière (plants
+    achetés) n'est jamais une incohérence.
+    """
+    delai_min = None
+    if durees.get("repiquage"):
+        delai_min = (svc_calendrier.parser_duree(durees["repiquage"]) or (None,))[0]
+    for zone, phases in fenetres.items():
+        pepiniere = phases.get(svc_calendrier.PHASE_SEMIS_PEPINIERE)
+        plantation = phases.get(svc_calendrier.PHASE_PLANTATION)
+        if not pepiniere or not plantation:
+            continue
+        (semis_debut, _), (plant_debut, plant_fin) = (
+            svc_calendrier.parser_fenetre(pepiniere), svc_calendrier.parser_fenetre(plantation)
+        )
+        etiquette = f"{culture}.{zone} — semis en pépinière {pepiniere}, plantation {plantation}"
+        if plant_debut < semis_debut:
+            resultat.fenetres_incoherentes.append(f"{etiquette} : la plantation commence avant le semis")
+        elif delai_min is not None:
+            pret = (date(2001, semis_debut, 1) + timedelta(days=delai_min)).month
+            if plant_fin < pret:
+                resultat.fenetres_incoherentes.append(
+                    f"{etiquette} : terminée avant qu'un plant semé au plus tôt ait "
+                    f"{delai_min} jours (repiquage)"
+                )
 
 
 def construire_calendriers(
@@ -768,6 +847,8 @@ def construire_calendriers(
             resultat.durees_ecartees.append(
                 f"{culture}.recolte — mode de semis indéterminé ({motif_mode})"
             )
+
+        signaler_incoherences(culture, durees, fenetres.get(culture, {}), resultat)
 
         if durees or culture in fenetres:
             entree: dict[str, Any] = {"culture": culture, "itineraire": "standard", "durees": durees}
@@ -889,7 +970,9 @@ def construire_manifeste(
             "dans wind_river_associations.json — matériau de relecture, jamais à importer.",
             "",
             "[US-068] Le bloc 'cultures_calendriers' porte des DURÉES (levée, récolte en pleine",
-            "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv.",
+            "terre, repiquage en pépinière) et des FENÊTRES lues dans planting_calendar.csv :",
+            "semis en pépinière, semis en pleine terre, PLANTATION (outdoor_transplant_*,",
+            "amendement du 15/09/2026 — lue, jamais recalculée depuis le repiquage) et récolte.",
             "⚠️ Les fenêtres amont sont en zones USDA : la zone lue pour chaque zone climatique",
             "est une DÉCISION déclarée (adaptateur_wind_river.ZONE_USDA_PAR_ZONE, calée sur la",
             "date de dernière gelée), pas une équivalence. Printemps seulement : la source ne",
@@ -1382,6 +1465,12 @@ def formater_resultat(resultat: ResultatAdaptation) -> str:
         f"  ⚠️  Calendriers incomplets (printemps seulement) : {len(resultat.fenetres_incompletes)}"
     )
     for entree in resultat.fenetres_incompletes:
+        lignes.append(f"     • {entree}")
+    lignes.append(
+        f"  ⚠️  Pépinière / repiquage / plantation qui ne s'enchaînent pas [CA24] : "
+        f"{len(resultat.fenetres_incoherentes)} — signalés, rien n'est ajusté"
+    )
+    for entree in resultat.fenetres_incoherentes:
         lignes.append(f"     • {entree}")
     sans_cultivar = [c for c, n in resultat.cultivars_calendrier.items() if not n]
     if sans_cultivar:

@@ -11,7 +11,7 @@ Le modèle — celui des calendriers de semis, pas celui de la maquette
 --------------------------------------------------------------------
     culture_config ── itinéraire cultural (« standard », « culture d'hiver »…)
                         ├── fenêtres, PAR ZONE climatique
-                        │     semis en pépinière · semis en pleine terre · récolte
+                        │     semis en pépinière · semis en pleine terre · plantation · récolte
                         └── durées, COMMUNES à toutes les zones
                               semis → levée · semis → première récolte
                               semis → repiquage (itinéraire pépinière seulement)
@@ -109,17 +109,31 @@ _ZONE_DEFAUT_SECOURS = "oceanique"
 # ── [CA2] Phases des fenêtres ────────────────────────────────────────────────
 PHASE_SEMIS_PEPINIERE = "semis_pepiniere"
 PHASE_SEMIS_PLEINE_TERRE = "semis_pleine_terre"
+#: [CA17, amendement du 15/09/2026] Mise en place DÉFINITIVE d'un plant — issu
+#: de la pépinière, acheté, ou organe de multiplication (caïeu, tubercule…).
+#: Fenêtre autonome : elle n'est jamais déduite du semis en pépinière et du
+#: délai de repiquage (CA18), et ne fait pas d'un itinéraire un itinéraire
+#: « pépinière » (CA19, `_a_pepiniere`).
+PHASE_PLANTATION = "plantation"
 PHASE_RECOLTE = "recolte"
 
-#: Dans l'ordre où un calendrier se lit.
-PHASES: tuple[str, ...] = (PHASE_SEMIS_PEPINIERE, PHASE_SEMIS_PLEINE_TERRE, PHASE_RECOLTE)
+#: Dans l'ordre où un calendrier se lit — l'ordre du geste (CA20).
+PHASES: tuple[str, ...] = (
+    PHASE_SEMIS_PEPINIERE, PHASE_SEMIS_PLEINE_TERRE, PHASE_PLANTATION, PHASE_RECOLTE,
+)
 
 LIBELLES_PHASES: dict[str, str] = {
     PHASE_SEMIS_PEPINIERE: "Semis en pépinière",
     PHASE_SEMIS_PLEINE_TERRE: "Semis en pleine terre",
+    PHASE_PLANTATION: "Plantation",
     PHASE_RECOLTE: "Récolte",
 }
 
+#: ⚠️ « plantation » est AUSSI un alias de la durée `repiquage` (`_ALIAS_ETAPES`) :
+#: les deux tables ne sont jamais consultées ensemble — `fenetre` et `duree` sont
+#: deux sous-commandes. L'alias d'étape est GARDÉ (CA29) : au bot, la
+#: sous-commande tranche ; à la dictée, c'est la nature de la valeur — des mois
+#: pour la fenêtre, des jours pour la durée (`interpreteur_commandes`).
 #: « terre » seul n'est volontairement PAS un alias : « pomme de terre » se
 #: lirait alors comme une culture suivie d'une phase.
 _ALIAS_PHASES: dict[str, str] = {
@@ -127,6 +141,7 @@ _ALIAS_PHASES: dict[str, str] = {
     "godet": PHASE_SEMIS_PEPINIERE, "abri": PHASE_SEMIS_PEPINIERE,
     "pleine_terre": PHASE_SEMIS_PLEINE_TERRE, "semis_pleine_terre": PHASE_SEMIS_PLEINE_TERRE,
     "pleineterre": PHASE_SEMIS_PLEINE_TERRE, "place": PHASE_SEMIS_PLEINE_TERRE,
+    "plantation": PHASE_PLANTATION, "plantations": PHASE_PLANTATION,
     "recolte": PHASE_RECOLTE, "recoltes": PHASE_RECOLTE,
 }
 
@@ -214,7 +229,9 @@ def normaliser_zone(valeur: str) -> str:
 
 def normaliser_phase(valeur: str) -> str:
     """[CA2] Phase canonique d'une fenêtre, ou refus."""
-    return _resoudre(valeur, _ALIAS_PHASES, "une phase", ("pepiniere", "pleine_terre", "recolte"))
+    return _resoudre(
+        valeur, _ALIAS_PHASES, "une phase", ("pepiniere", "pleine_terre", "plantation", "recolte")
+    )
 
 
 def normaliser_etape(valeur: str) -> str:
@@ -774,6 +791,61 @@ def calendrier_en_dict(calendrier: Calendrier) -> dict:
             for it in calendrier.itineraires
         ],
         "attributions": calendrier.attributions,
+    }
+
+
+def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Optional[int]) -> dict:
+    """
+    [US-176 / CA1-CA9, CA11] Calendrier conseillé de TOUTES les cultures d'un
+    écran Plan, en une seule lecture groupée — jamais une requête par tuile.
+
+    Pour chaque culture, une seule frise : celle de l'itinéraire par défaut du
+    référentiel (« standard » en tête, cf. `_ordre_itineraire`), jamais une
+    fusion de plusieurs itinéraires (CA5). La durée servie est celle de l'étape
+    `recolte` — semis → première récolte — dans sa forme de lecture, tiret
+    compris (CA4). La plantation est servie comme toute phase du référentiel
+    (US-068 / CA20, amendement du 15/09/2026) — LUE, jamais reconstituée ici
+    depuis le semis en pépinière et le délai de repiquage (CA3 amendé).
+
+    Zone, origine et attributions sont rendues UNE fois pour l'ensemble (CA8,
+    CA9) ; les attributions ne portent que sur les valeurs réellement affichées.
+    La clé de `cultures` est le nom tel que demandé : l'écran le retrouve sans
+    renormaliser.
+    """
+    zone, origine = zone_du_potager(db, potager_id)
+    attributions: list[str] = []
+    resultat: dict[str, dict] = {}
+    for nom in dict.fromkeys(c for c in cultures if c and c.strip()):
+        calendrier = lire_calendrier(db, nom, potager_id)
+        it = calendrier.itineraires[0] if calendrier.itineraires else None
+        if it is None:
+            resultat[nom] = {
+                "culture_connue": calendrier.culture_connue, "renseigne": False,
+                "itineraire": None, "itineraire_standard": True,
+                "mois": {phase: [] for phase in PHASES}, "duree_recolte": TIRET,
+            }
+            continue
+        duree = it.duree(ETAPE_RECOLTE)
+        for valeur in (*it.fenetres, duree):
+            if valeur is not None and valeur.attribution and valeur.attribution not in attributions:
+                attributions.append(valeur.attribution)
+        resultat[nom] = {
+            "culture_connue": calendrier.culture_connue,
+            "renseigne": bool(it.fenetres) or bool(duree and duree.renseignee),
+            "itineraire": it.nom,
+            "itineraire_standard": normaliser_itineraire(it.nom) == ITINERAIRE_PAR_DEFAUT,
+            # Mois 1..12 par phase, fenêtre à cheval sur l'année comprise.
+            "mois": {phase: (it.fenetre(phase).mois if it.fenetre(phase) else []) for phase in PHASES},
+            "duree_recolte": duree.affichage if duree else TIRET,
+        }
+    log.info("[US-176] Calendriers du plan : potager_id=%s zone=%s (%s) cultures=%d",
+             potager_id, zone, origine, len(resultat))
+    return {
+        "zone_climatique": zone,
+        "zone_climatique_origine": origine,
+        "zone_libelle": libelle_zone(zone, origine),
+        "attributions": attributions,
+        "cultures": resultat,
     }
 
 

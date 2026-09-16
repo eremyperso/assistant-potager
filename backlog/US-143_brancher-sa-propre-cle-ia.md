@@ -2,6 +2,11 @@
 **Titre :** Brancher sa propre clé et son propre modèle d'IA sur son potager
 **Épic :** ÉPIC 3 — Fiabilité & coût
 
+> **Absorbée le 15/09/2026 par l'ÉPIC 7 — BYOK** (`docs/Epic 7 - BYOK  LLM du potager/epic-7-byok-cle-personnelle.md`) :
+> ses 21 critères sont répartis sans perte dans **US-184 → US-192** (correspondance au §4 du document
+> d'épic ; seul le CA16 est annulé, remplacé par la règle de cache asymétrique d'US-186). **Ne pas
+> implémenter cette fiche telle quelle.**
+
 **Story :**
 En tant que propriétaire d'un potager disposant déjà d'un abonnement à un service d'IA
 Je veux brancher ma propre clé et choisir mon modèle
