@@ -4,7 +4,7 @@ famille: "agronomie"
 source: "Assistant Potager — rédaction interne"
 licence: "proprietaire"
 niveau_confiance: "a-valider"
-culture: "bette"
+culture: "blette"
 type: "conduite"
 theme: "conduite-recolte"
 version: "1.0"
@@ -16,7 +16,7 @@ version: "1.0"
 
 **Intention :** geste
 **Organes concernés :** feuille, tige
-**On parle aussi de :** récolter des blettes ; couper les feuilles extérieures ; poirée en coupe ; ne pas arracher le pied ; cueillir au fur et à mesure ; bette qui repousse
+**On parle aussi de :** récolter des blettes ; couper les feuilles extérieures ; poirée en coupe ; ne pas arracher le pied ; cueillir au fur et à mesure ; blette qui repousse
 
 La blette se récolte feuille par feuille et non en arrachant le pied : les feuilles extérieures se prélèvent tandis que le cœur continue de produire, ce qui étale la récolte sur toute la saison. Un pied entièrement dépouillé repart mal, parce qu'il ne lui reste plus de surface pour se nourrir.
 

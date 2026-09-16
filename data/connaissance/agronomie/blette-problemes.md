@@ -4,7 +4,7 @@ famille: "agronomie"
 source: "Assistant Potager — rédaction interne"
 licence: "proprietaire"
 niveau_confiance: "a-valider"
-culture: "bette"
+culture: "blette"
 type: "probleme"
 theme: "problemes"
 version: "1.0"
@@ -16,7 +16,7 @@ version: "1.0"
 
 **Intention :** diagnostic
 **Organes concernés :** feuille
-**On parle aussi de :** mineuse de la blette ; galeries dans la feuille ; poirée cloquée ; taches translucides ; bette minée ; feuille boursouflée
+**On parle aussi de :** mineuse de la blette ; galeries dans la feuille ; poirée cloquée ; taches translucides ; blette minée ; feuille boursouflée
 
 Des plages claires et translucides, boursouflées, dessinant des galeries entre les deux faces de la feuille de blette, sont presque toujours l'œuvre de larves de mineuses installées à l'intérieur du limbe. Une maladie donnerait plutôt une tache traversante, visible identiquement des deux côtés, sans ce relief en cloque.
 
@@ -36,7 +36,7 @@ Retirer les feuilles les plus atteintes en commençant par les plus basses, arro
 
 **Intention :** diagnostic
 **Organes concernés :** tige, feuille
-**On parle aussi de :** blette qui monte ; montaison ; tige au centre ; poirée qui fleurit ; feuilles amères ; bette qui fait une hampe
+**On parle aussi de :** blette qui monte ; montaison ; tige au centre ; poirée qui fleurit ; feuilles amères ; blette qui fait une hampe
 
 Une tige raide qui s'élève au centre de la touffe signale la montaison : le pied bascule de la production de feuilles vers celle de graines, et les feuilles deviennent plus fermes et plus amères. Un coup de chaleur ou un choc de croissance après une sécheresse la déclenchent souvent, plus rarement une simple fin de cycle du pied.
 
