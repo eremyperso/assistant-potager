@@ -173,7 +173,7 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_ca9_args_insuffisants_un_seul_arg(self):
         """[CA9] /parcelle renommer sans assez d'arguments → usage + exemple."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         update = self._make_update()
         ctx = self._make_ctx(["renommer"])  # manque ancien ET nouveau
 
@@ -187,7 +187,7 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_ca9_args_insuffisants_seul_arg(self):
         """[CA9] /parcelle renommer <seularg> → usage + exemple."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         update = self._make_update()
         ctx = self._make_ctx(["renommer", "seularg"])  # manque le nouveau nom
 
@@ -201,7 +201,7 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_ca6_confirmation_succes(self):
         """[CA6] Renommage réussi → confirmation avec nb événements."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
 
         parcelle_mock = MagicMock()
         parcelle_mock.nom = "carré-sud"
@@ -209,8 +209,8 @@ class TestCmdParcelleRenommer:
         update = self._make_update()
         ctx = self._make_ctx(["renommer", "sud", "carré-sud"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parcelle_mock, 15)) as mock_rename:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parcelle_mock, 15)) as mock_rename:
             db_mock = MagicMock()
             MockSession.return_value = db_mock
 
@@ -226,13 +226,13 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_ca4_ancien_nom_introuvable(self):
         """[CA4] LookupError → message d'erreur 'introuvable'."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
 
         update = self._make_update()
         ctx = self._make_ctx(["renommer", "inexistante", "nouveau"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", side_effect=LookupError("inexistante")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", side_effect=LookupError("inexistante")):
             MockSession.return_value = MagicMock()
 
             await cmd_parcelle(update, ctx)
@@ -244,13 +244,13 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_ca5_nouveau_nom_deja_utilise(self):
         """[CA5] ValueError → message 'déjà utilisé'."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
 
         update = self._make_update()
         ctx = self._make_ctx(["renommer", "nord", "sud"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", side_effect=ValueError("déjà utilisé")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", side_effect=ValueError("déjà utilisé")):
             MockSession.return_value = MagicMock()
 
             await cmd_parcelle(update, ctx)
@@ -261,7 +261,7 @@ class TestCmdParcelleRenommer:
     @pytest.mark.asyncio
     async def test_nom_avec_espaces_reconstitue(self):
         """[CA1] Nouveau nom avec espaces correctement reconstitué depuis ctx.args."""
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
 
         parcelle_mock = MagicMock()
         parcelle_mock.nom = "grand nord"
@@ -269,8 +269,8 @@ class TestCmdParcelleRenommer:
         update = self._make_update()
         ctx = self._make_ctx(["renommer", "nord", "grand", "nord"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parcelle_mock, 0)) as mock_rename:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parcelle_mock, 0)) as mock_rename:
             MockSession.return_value = MagicMock()
 
             await cmd_parcelle(update, ctx)

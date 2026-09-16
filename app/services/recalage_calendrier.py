@@ -12,12 +12,14 @@ statistique recalculé. Il ne sert que l'écran Plan (`GET /plan/calendriers`).
 
 Six décisions, et où elles vivent
 ---------------------------------
-1. **L'origine est un SEMIS, jamais une plantation (CA1, CA11).** Le semis de la
-   parcelle, ou celui d'où découle une plantation par le chaînage existant
-   (`plantation.source_evenement_ids` → mise en godet → `origine_graines_id`,
-   US-029 / US-065). Une plantation sans semis retrouvé (plant acheté, ail)
-   n'est PAS projetée : le référentiel n'a aucune durée plantation → récolte
-   (US-177). La tuile garde alors la frise conseillée, plantation comprise.
+1. **Le SEMIS d'abord, la plantation à défaut (CA1, CA11 ; US-177 / CA7, CA8).**
+   Le semis de la parcelle, ou celui d'où découle une plantation par le chaînage
+   existant (`plantation.source_evenement_ids` → mise en godet →
+   `origine_graines_id`, US-029 / US-065). À défaut seulement — plant acheté en
+   jardinerie, ail, fraise — la plantation devient l'origine, avec la durée
+   plantation → première récolte du référentiel (US-177). Sans cette durée, rien
+   n'est projeté : la tuile garde la frise conseillée, plantation comprise.
+   L'ordre est écrit dans `ancrer_serie`, et nulle part ailleurs.
 2. **Le contexte de semis n'est pas deviné (CA11).** Un semis sans contexte
    (US-069) n'est pas recalé. Seule exception, et ce n'est pas une supposition :
    un semis chaîné à une mise en godet EST un semis de pépinière — la même
@@ -80,9 +82,15 @@ ETAT_EN_RECOLTE = "en_recolte"
 ETAT_SANS_RECALAGE = "sans_recalage"
 
 MOTIF_REFERENTIEL_ABSENT = "referentiel_absent"
+#: [US-177 / CA7] Plantation sans semis connu ET sans durée plantation → récolte
+#: au référentiel : rien n'est projeté, rien n'est emprunté.
 MOTIF_PLANTATION_SANS_SEMIS = "plantation_sans_semis"
 MOTIF_CONTEXTE_INCONNU = "contexte_inconnu"
 MOTIF_DUREE_RECOLTE_ABSENTE = "duree_recolte_absente"
+
+#: [US-177 / CA8] D'où part la projection d'une série. Le semis prime toujours.
+ORIGINE_SEMIS = "semis"
+ORIGINE_PLANTATION = "plantation"
 
 #: Clés de `mois` — les phases du référentiel, plus l'état « en croissance ».
 ETAT_CROISSANCE = "croissance"
@@ -213,6 +221,45 @@ def _jours(duree) -> Optional[tuple[int, int]]:
     return duree.jours_min, duree.jours_max if duree.jours_max is not None else duree.jours_min
 
 
+# ── Ancrage : d'où part la projection (CA1, CA11 ; US-177 / CA7, CA8) ────────
+@dataclass(frozen=True)
+class Ancrage:
+    """Le point de départ d'une projection et la durée qui s'y rapporte."""
+    mode: str
+    depart: _date
+    duree_recolte: tuple[int, int]
+
+
+def ancrer_serie(serie: Serie, itineraire) -> tuple[Optional[Ancrage], Optional[str]]:
+    """
+    [US-070 / CA1, CA11 ; US-177 / CA7, CA8] D'où part la projection d'une série,
+    ou le motif qui l'empêche. **Seul endroit où cette règle est écrite.**
+
+    L'ordre est la règle, et il ne se discute pas : le SEMIS d'abord, avec sa
+    durée semis → première récolte. C'est l'origine la plus informative — elle
+    seule donne une levée, et elle porte le décalage de plantation réelle (CA4).
+    La plantation ne sert qu'en son ABSENCE, avec la durée d'US-177, et pour un
+    plant acheté c'est la seule origine qui existe.
+
+    Un semis présent dont la durée manque n'emprunte PAS celle de la plantation :
+    les deux ne comptent pas depuis le même geste, et les mélanger produirait une
+    date que le référentiel n'a jamais dite. Le mode dégradé est préféré.
+    """
+    if serie.semis is not None:
+        if serie.contexte not in svc_contexte.CONTEXTES:
+            return None, MOTIF_CONTEXTE_INCONNU
+        duree = _jours(itineraire.duree(svc_calendrier.ETAPE_RECOLTE))
+        if duree is None:
+            return None, MOTIF_DUREE_RECOLTE_ABSENTE
+        return Ancrage(ORIGINE_SEMIS, serie.semis.jour, duree), None
+
+    if serie.plantation is not None:
+        duree = _jours(itineraire.duree(svc_calendrier.ETAPE_PLANTATION_RECOLTE))
+        if duree is not None:
+            return Ancrage(ORIGINE_PLANTATION, serie.plantation.jour, duree), None
+    return None, MOTIF_PLANTATION_SANS_SEMIS
+
+
 # ── Séries (CA1, CA10) ───────────────────────────────────────────────────────
 def construire_series(
     origines: list[Geste], index: dict[int, Geste]
@@ -338,19 +385,18 @@ def projeter_serie(
 
     if itineraire is None or itineraire.implicite:
         return sans_recalage(MOTIF_REFERENTIEL_ABSENT)
-    if serie.semis is None:
-        return sans_recalage(MOTIF_PLANTATION_SANS_SEMIS)
-    if serie.contexte not in svc_contexte.CONTEXTES:
-        return sans_recalage(MOTIF_CONTEXTE_INCONNU)
-    duree_recolte = _jours(itineraire.duree(svc_calendrier.ETAPE_RECOLTE))
-    if duree_recolte is None:
-        return sans_recalage(MOTIF_DUREE_RECOLTE_ABSENTE)
+    ancrage, motif = ancrer_serie(serie, itineraire)
+    if ancrage is None:
+        return sans_recalage(motif)  # type: ignore[arg-type]
 
-    base = serie.semis.jour
+    base, duree_recolte = ancrage.depart, ancrage.duree_recolte
+    depuis_plantation = ancrage.mode == ORIGINE_PLANTATION
 
     # [CA4] Plantation réelle hors du délai de repiquage conseillé : décalage.
+    # Sans objet quand la plantation EST l'origine (US-177) : il n'y a alors
+    # aucun semis dont elle pourrait s'écarter.
     decalage = 0
-    repiquage = _jours(itineraire.duree(svc_calendrier.ETAPE_REPIQUAGE))
+    repiquage = None if depuis_plantation else _jours(itineraire.duree(svc_calendrier.ETAPE_REPIQUAGE))
     if serie.plantation is not None and repiquage is not None:
         au_plus_tot = base + timedelta(days=repiquage[0])
         au_plus_tard = base + timedelta(days=repiquage[1])
@@ -359,7 +405,9 @@ def projeter_serie(
         elif serie.plantation.jour < au_plus_tot:
             decalage = (serie.plantation.jour - au_plus_tot).days
 
-    duree_levee = _jours(itineraire.duree(svc_calendrier.ETAPE_LEVEE))
+    # La levée se compte depuis le SEMIS : un plant mis en place a déjà levé, et
+    # lui appliquer ce délai annoncerait une germination qui a eu lieu ailleurs.
+    duree_levee = None if depuis_plantation else _jours(itineraire.duree(svc_calendrier.ETAPE_LEVEE))
     levee = (
         (base + timedelta(days=duree_levee[0]), base + timedelta(days=duree_levee[1]))
         if duree_levee else None
@@ -396,7 +444,8 @@ def projeter_serie(
     # [CA7] Quatre états mensuels, « en croissance » sans chevauchement.
     phase_semis = svc_contexte.phase_du_contexte(serie.contexte)
     mois: dict[str, list[int]] = {cle: [] for cle in CLES_MOIS}
-    mois[phase_semis] = [base.month]
+    if phase_semis is not None:
+        mois[phase_semis] = [base.month]
     if serie.plantation is not None:
         mois[svc_calendrier.PHASE_PLANTATION] = [serie.plantation.jour.month]
     mois[svc_calendrier.PHASE_RECOLTE] = _mois_entre(debut_recolte, fin_recolte)

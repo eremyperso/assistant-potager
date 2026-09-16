@@ -498,24 +498,24 @@ class TestCA8ConfirmationInchangee:
         """Le parseur ne court-circuite aucun flux : il alimente `_parse_and_save`
         avec des items pré-parsés, exactement comme le fait déjà le chemin
         modèle (`parse_message`) — donc la même confirmation, le même écran."""
-        import bot
-        with patch("bot.parser_saisie") as det, patch("bot.parse_commande") as llm:
+        from app import bot
+        with patch("app.bot.parser_saisie") as det, patch("app.bot.parse_commande") as llm:
             det.return_value = type("R", (), {
                 "reconnu": True,
                 "items": [{"action": "recolte", "culture": "tomate", "origine_parsing":
                            ORIGINE_DETERMINISTE}],
             })()
-            with patch("bot.current_context", return_value=CTX):
+            with patch("app.bot.current_context", return_value=CTX):
                 items = bot._parser_items("récolté 2 kg de tomates")
         assert llm.call_count == 0
         assert items[0]["origine_parsing"] == ORIGINE_DETERMINISTE
 
     def test_ca8_repli_modele_marque_son_origine(self, potager):
-        import bot
-        with patch("bot.parser_saisie") as det, patch("bot.parse_commande") as llm:
+        from app import bot
+        with patch("app.bot.parser_saisie") as det, patch("app.bot.parse_commande") as llm:
             det.return_value = type("R", (), {"reconnu": False, "items": None})()
             llm.return_value = [{"action": "recolte", "culture": "tomate"}]
-            with patch("bot.current_context", return_value=CTX):
+            with patch("app.bot.current_context", return_value=CTX):
                 items = bot._parser_items("phrase que la grammaire ne sait pas lire")
         assert items[0]["origine_parsing"] == ORIGINE_LLM
 
@@ -626,16 +626,16 @@ class TestCA12ModeDegrade:
         """Scénario Gherkin : un fournisseur qui répond 429 à tout appel. La
         forme couverte s'enregistre normalement, sans message d'indisponibilité."""
         from llm.passerelle import QuotaLLMDepasseError
-        import bot
+        from app import bot
 
-        with patch("bot.parse_commande", side_effect=QuotaLLMDepasseError("429")), \
-             patch("bot.current_context", return_value=CTX), \
+        with patch("app.bot.parse_commande", side_effect=QuotaLLMDepasseError("429")), \
+             patch("app.bot.current_context", return_value=CTX), \
              patch("llm.parseur_deterministe.parser_saisie") as _:
             # on n'intercepte PAS le vrai parseur : on veut son résultat réel
             pass
 
-        with patch("bot.parse_commande", side_effect=QuotaLLMDepasseError("429")) as llm, \
-             patch("bot.current_context", return_value=CTX), \
+        with patch("app.bot.parse_commande", side_effect=QuotaLLMDepasseError("429")) as llm, \
+             patch("app.bot.current_context", return_value=CTX), \
              patch("database.db.SessionLocal", return_value=potager), \
              patch.object(potager, "close", lambda: None):
             items = bot._parser_items("arrosé la parcelle planche-centrale")
@@ -654,10 +654,10 @@ class TestCA12ModeDegrade:
         """La contrepartie : ce que la grammaire ne couvre pas continue de
         dépendre du modèle, et le dit."""
         from llm.passerelle import QuotaLLMDepasseError
-        import bot
+        from app import bot
 
-        with patch("bot.parse_commande", side_effect=QuotaLLMDepasseError("429")), \
-             patch("bot.current_context", return_value=CTX), \
+        with patch("app.bot.parse_commande", side_effect=QuotaLLMDepasseError("429")), \
+             patch("app.bot.current_context", return_value=CTX), \
              patch("database.db.SessionLocal", return_value=potager), \
              patch.object(potager, "close", lambda: None), \
              pytest.raises(QuotaLLMDepasseError):

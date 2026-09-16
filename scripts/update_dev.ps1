@@ -1,8 +1,8 @@
-# update_dev.ps1 - Mise a jour de l'environnement de developpement
+# scripts/update_dev.ps1 - Mise a jour de l'environnement de developpement
 # -----------------------------------------------------------------
-# Usage manuel  : .\update_dev.ps1
-# Usage hook git: .\update_dev.ps1 -SkipPull
-# Forcer tout   : .\update_dev.ps1 -Force
+# Usage manuel  : .\scripts\update_dev.ps1   (depuis la racine du depot)
+# Usage hook git: .\scripts\update_dev.ps1 -SkipPull
+# Forcer tout   : .\scripts\update_dev.ps1 -Force
 #
 # Ce script :
 #   1. Tire le dernier code Git (sauf si -SkipPull)
@@ -13,7 +13,7 @@
 # Prerequis :
 #   - Python + pip dans le PATH
 #   - psql (PostgreSQL client) dans le PATH
-#   - Fichier .env.dev present (copier config.py.example et remplir les valeurs)
+#   - Fichier .env.dev present (copier .env.example et remplir les valeurs)
 # -----------------------------------------------------------------
 
 param(
@@ -24,7 +24,9 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ROOT         = $PSScriptRoot
+# Le script vit dans scripts/ : la racine du depot est son parent.
+$ROOT         = Split-Path -Parent $PSScriptRoot
+Set-Location $ROOT
 $ENV_FILE     = Join-Path $ROOT ".env.dev"
 $MIGRATIONS   = Join-Path $ROOT "migrations"
 $APPLIED_LOG  = Join-Path $ROOT ".migrations_applied"
@@ -42,7 +44,7 @@ Write-Host ""
 
 # --- Prerequis ---
 if (-not (Test-Path $ENV_FILE)) {
-    fail ".env.dev introuvable. Copiez config.py.example vers .env.dev et renseignez les valeurs."
+    fail ".env.dev introuvable. Copiez .env.example vers .env.dev et renseignez les valeurs."
 }
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     fail "python introuvable. Verifiez votre PATH."
@@ -156,5 +158,5 @@ ok "corpus ingere (idempotent : aucune ecriture si rien n'a change)"
 
 Write-Host ""
 Write-Host "[OK] Environnement dev a jour !" -ForegroundColor Green
-Write-Host "     Lancez le bot : python bot.py" -ForegroundColor DarkGray
+Write-Host "     Lancez le bot : python -m app.bot" -ForegroundColor DarkGray
 Write-Host ""

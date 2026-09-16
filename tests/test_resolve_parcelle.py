@@ -123,10 +123,10 @@ class TestDoSaveItemsParcelleBloquee:
             "date": None,
         }
 
-        with patch("bot.SessionLocal", return_value=test_db), \
-             patch("bot.resolve_parcelle", return_value=None):
+        with patch("app.bot.SessionLocal", return_value=test_db), \
+             patch("app.bot.resolve_parcelle", return_value=None):
 
-            from bot import _do_save_items
+            from app.bot import _do_save_items
             await _do_save_items(update_mock, [parsed_item], "planter 10 courgettes parcelle Ouest")
 
         # Vérifie que le message d'erreur a été envoyé
@@ -159,11 +159,11 @@ class TestDoSaveItemsParcelleBloquee:
             "date": None,
         }
 
-        with patch("bot.SessionLocal", return_value=test_db), \
-             patch("bot.resolve_parcelle", return_value=parcelle_nord), \
-             patch("bot.send_voice_reply", new_callable=AsyncMock):
+        with patch("app.bot.SessionLocal", return_value=test_db), \
+             patch("app.bot.resolve_parcelle", return_value=parcelle_nord), \
+             patch("app.bot.send_voice_reply", new_callable=AsyncMock):
 
-            from bot import _do_save_items
+            from app.bot import _do_save_items
             await _do_save_items(update_mock, [parsed_item], "planter 5 tomates parcelle Nord")
 
         # L'événement doit avoir été persisté avec la FK vers Nord
@@ -208,10 +208,10 @@ class TestCorrApplyParcelleValidation:
         groq_resp = MagicMock()
         groq_resp.choices[0].message.content = '{"parcelle": "bretagne"}'
 
-        with patch("bot.SessionLocal") as mock_session_cls, \
-             patch("bot.resolve_parcelle", return_value=None) as mock_resolve, \
+        with patch("app.bot.SessionLocal") as mock_session_cls, \
+             patch("app.bot.resolve_parcelle", return_value=None) as mock_resolve, \
              patch("llm.passerelle._client") as mock_groq_instance, \
-             patch("bot.MENU_KEYBOARD", None):
+             patch("app.bot.MENU_KEYBOARD", None):
 
             mock_db = MagicMock()
             mock_db.get.return_value = event_mock
@@ -221,7 +221,7 @@ class TestCorrApplyParcelleValidation:
             # son client plutôt que le constructeur du SDK Groq.
             mock_groq_instance.chat.completions.create.return_value = groq_resp
 
-            from bot import _corr_apply
+            from app.bot import _corr_apply
             await _corr_apply(update_mock, ctx_mock, "plantation sur parcelle bretagne")
 
         # resolve_parcelle doit avoir été appelée
@@ -262,10 +262,10 @@ class TestCorrApplyParcelleValidation:
         groq_resp = MagicMock()
         groq_resp.choices[0].message.content = '{"parcelle": "NORD"}'
 
-        with patch("bot.SessionLocal") as mock_session_cls, \
-             patch("bot.resolve_parcelle", return_value=parcelle_nord), \
+        with patch("app.bot.SessionLocal") as mock_session_cls, \
+             patch("app.bot.resolve_parcelle", return_value=parcelle_nord), \
              patch("llm.passerelle._client") as mock_groq_instance, \
-             patch("bot.MENU_KEYBOARD", None):
+             patch("app.bot.MENU_KEYBOARD", None):
 
             mock_db = MagicMock()
             mock_db.get.return_value = event_mock
@@ -275,7 +275,7 @@ class TestCorrApplyParcelleValidation:
             # son client plutôt que le constructeur du SDK Groq.
             mock_groq_instance.chat.completions.create.return_value = groq_resp
 
-            from bot import _corr_apply
+            from app.bot import _corr_apply
             await _corr_apply(update_mock, ctx_mock, "plantation sur parcelle nord")
 
         # Le mode doit être passé en corr_confirm

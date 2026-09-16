@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.db import Base, SessionLocal
 from database.models import Evenement, CultureConfig
-from main import app, get_current_user_ctx
+from app.api.main import app, get_current_user_ctx
 from app.services.context import default_context
 
 
@@ -22,7 +22,7 @@ def client(test_db):
 
     app.dependency_overrides[get_current_user_ctx] = default_context
     with patch('llm.rag.add_to_rag', MagicMock()), \
-         patch('main.SessionLocal', return_value=test_db):
+         patch('app.api.main.SessionLocal', return_value=test_db):
         with TestClient(app) as c:
             yield c
     app.dependency_overrides.pop(get_current_user_ctx, None)
@@ -41,7 +41,7 @@ class TestAPI:
         assert any(c["nom"] == "tomate" and c["type_organe_recolte"] == "reproducteur" for c in data["cultures"])
         assert any(c["nom"] == "salade" and c["type_organe_recolte"] == "végétatif" for c in data["cultures"])
 
-    @patch('main.parse_commande')
+    @patch('app.api.main.parse_commande')
     @patch('llm.rag.add_to_rag')
     def test_parse_inherits_type_organe_recolte(self, mock_rag, mock_parse, client, test_db):
         """Test que POST /parse hérite automatiquement le type_organe_recolte depuis culture_config."""
@@ -61,7 +61,7 @@ class TestAPI:
         assert event is not None
         assert event.type_organe_recolte == "reproducteur"
 
-    @patch('main.parse_commande')
+    @patch('app.api.main.parse_commande')
     @patch('llm.rag.add_to_rag')
     def test_parse_unknown_culture_no_type(self, mock_rag, mock_parse, client, test_db):
         """Test que POST /parse ne définit pas type_organe_recolte pour culture inconnue."""

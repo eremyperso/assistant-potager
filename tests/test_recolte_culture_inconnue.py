@@ -46,11 +46,11 @@ async def test_recolte_culture_jamais_plantee_bloquee(db_avec_tomate):
         "quantite": 3, "unite": "kg",
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_avec_tomate),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_avec_tomate),
     ):
         bot_module._ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "j'ai récolté 3 kg de mangue")
@@ -73,11 +73,11 @@ async def test_recolte_culture_connue_non_bloquee(db_avec_tomate):
         "quantite": 2, "unite": "kg", "parcelle": "centrale",
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_avec_tomate),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_avec_tomate),
     ):
         bot_module._ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "j'ai récolté 2 kg de tomates cerise, parcelle centrale")
@@ -97,11 +97,11 @@ async def test_semis_culture_nouvelle_pas_bloque(db_avec_tomate):
         "quantite": 5, "unite": "graines",
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_avec_tomate),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_avec_tomate),
         patch("utils.stock.get_type_organe", return_value="reproducteur"),
     ):
         bot_module._ACTION_PENDING.pop(1, None)

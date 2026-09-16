@@ -342,9 +342,6 @@ def test_us098_ca5_aucun_autre_module_n_interroge_la_table():
                 continue
             if motif.search(fichier.read_text(encoding="utf-8")):
                 fautifs.append(str(fichier.relative_to(RACINE)))
-    for fichier in (RACINE / "main.py", RACINE / "bot.py"):
-        if motif.search(fichier.read_text(encoding="utf-8")):
-            fautifs.append(fichier.name)
     assert not fautifs, f"requête directe sur knowledge_chunks hors du service : {fautifs}"
 
 

@@ -69,7 +69,7 @@ from unidecode import unidecode
 from app.services import bioagresseurs as svc_bioagresseurs
 from app.services import connaissance
 from app.services import referentiel_sources as svc_sources
-from config import PREDIAGNOSTIC_MAX_PISTES, PREDIAGNOSTIC_SEUIL_SYMPTOME
+from app.config import PREDIAGNOSTIC_MAX_PISTES, PREDIAGNOSTIC_SEUIL_SYMPTOME
 from database.models import (
     Bioagresseur,
     CultureBioagresseur,

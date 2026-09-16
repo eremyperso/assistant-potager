@@ -225,7 +225,7 @@ class TestSauvegardeDoubleEvenement:
     @pytest.mark.asyncio
     async def test_ca3_deux_items_recolte_creent_deux_evenements(self):
         """[CA3] _do_save_items crée un Evenement par item (pièces + poids), sans fusion."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         update = MagicMock()
         update.effective_message = AsyncMock()
@@ -240,7 +240,7 @@ class TestSauvegardeDoubleEvenement:
         fake_db.refresh = MagicMock()
 
         with (
-            patch("bot.SessionLocal", return_value=fake_db),
+            patch("app.bot.SessionLocal", return_value=fake_db),
             patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
         ):
             await bot_module._do_save_items(update, items, "récolté 2 betteraves 250g")
@@ -263,8 +263,8 @@ class TestClarificationPiecesManquantes:
     @pytest.mark.asyncio
     async def test_ca10_poids_seul_vegetatif_demande_clarification(self):
         """[CA10] Poids seul sur une culture végétative → demande le nombre de pieds, pas de sauvegarde."""
-        import bot as bot_module
-        from bot import _RECOLTE_PIECES_PENDING
+        from app import bot as bot_module
+        from app.bot import _RECOLTE_PIECES_PENDING
 
         user_id = 100
         update = MagicMock()
@@ -276,12 +276,12 @@ class TestClarificationPiecesManquantes:
         parsed_item = {"action": "recolte", "culture": "betterave", "quantite": 250, "unite": "g"}
 
         with (
-            patch("bot.parse_commande", return_value=[parsed_item]),
-            patch("bot._normalize_items", return_value=[parsed_item]),
+            patch("app.bot.parse_commande", return_value=[parsed_item]),
+            patch("app.bot._normalize_items", return_value=[parsed_item]),
             patch("utils.validation.validate_parsed_action", return_value=(True, "")),
             patch("utils.stock.get_type_organe", return_value="végétatif"),
             patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
-            patch("bot.SessionLocal"),
+            patch("app.bot.SessionLocal"),
         ):
             _RECOLTE_PIECES_PENDING.pop(user_id, None)
             await bot_module._parse_and_save(update, "récolté 250g de betterave")
@@ -297,8 +297,8 @@ class TestClarificationPiecesManquantes:
     @pytest.mark.asyncio
     async def test_ca10_poids_seul_reproducteur_pas_de_clarification(self):
         """[CA10] Poids seul sur une culture reproductrice → comportement normal, pas de clarification."""
-        import bot as bot_module
-        from bot import _RECOLTE_PIECES_PENDING
+        from app import bot as bot_module
+        from app.bot import _RECOLTE_PIECES_PENDING
 
         user_id = 101
         update = MagicMock()
@@ -310,26 +310,26 @@ class TestClarificationPiecesManquantes:
         parsed_item = {"action": "recolte", "culture": "tomate", "quantite": 2, "unite": "kg"}
 
         with (
-            patch("bot.parse_commande", return_value=[parsed_item]),
-            patch("bot._normalize_items", return_value=[parsed_item]),
+            patch("app.bot.parse_commande", return_value=[parsed_item]),
+            patch("app.bot._normalize_items", return_value=[parsed_item]),
             patch("utils.validation.validate_parsed_action", return_value=(True, "")),
             patch("utils.stock.get_type_organe", return_value="reproducteur"),
-            patch("bot.SessionLocal"),
-            patch("bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.SessionLocal"),
+            patch("app.bot.get_all_parcelles", return_value=[]),
         ):
             _RECOLTE_PIECES_PENDING.pop(user_id, None)
             await bot_module._parse_and_save(update, "récolté 2 kg de tomates")
 
         # Pas de clarification déclenchée pour le reproducteur
         assert user_id not in _RECOLTE_PIECES_PENDING
-        from bot import _ACTION_PENDING
+        from app.bot import _ACTION_PENDING
         _ACTION_PENDING.pop(user_id, None)
 
     @pytest.mark.asyncio
     async def test_ca10_reponse_nombre_pieds_combine_les_deux_items(self):
         """[CA10] La réponse au nombre de pieds reconstruit un item pièces et relance le parsing."""
-        import bot as bot_module
-        from bot import _RECOLTE_PIECES_PENDING
+        from app import bot as bot_module
+        from app.bot import _RECOLTE_PIECES_PENDING
 
         user_id = 102
         poids_item = {"action": "recolte", "culture": "betterave", "quantite": 250, "unite": "g"}
@@ -343,8 +343,8 @@ class TestClarificationPiecesManquantes:
         update.message.text = "2"
         update.message.reply_text = AsyncMock()
 
-        with patch("bot._parse_and_save", new_callable=AsyncMock) as mock_parse_save, \
-             patch("bot._verifier_liaison_ou_onboarding", new_callable=AsyncMock, return_value=True):
+        with patch("app.bot._parse_and_save", new_callable=AsyncMock) as mock_parse_save, \
+             patch("app.bot._verifier_liaison_ou_onboarding", new_callable=AsyncMock, return_value=True):
             await bot_module.handle_text(update, MagicMock())
 
         assert user_id not in _RECOLTE_PIECES_PENDING

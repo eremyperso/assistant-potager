@@ -421,7 +421,10 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "calendrier", "duree", "Corriger un délai du calendrier d'une culture",
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
-            Argument("etape", TYPE_VOCABULAIRE, "Quel délai : levée, récolte ou repiquage ?",
+            # [US-177] Quatre délais depuis l'ajout de plantation → récolte : le
+            # vocabulaire est DÉRIVÉ d'`ETAPES`, seule cette phrase se recopie.
+            Argument("etape", TYPE_VOCABULAIRE,
+                     "Quel délai : levée, récolte, repiquage ou plantation → récolte ?",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "ETAPES")),
             Argument("jours_min", TYPE_NOMBRE, "Combien de jours ?", unite="jours"),
             Argument("jours_max", TYPE_NOMBRE, "Jusqu'à combien de jours ?", obligatoire=False,

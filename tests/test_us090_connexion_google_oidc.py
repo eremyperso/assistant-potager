@@ -107,7 +107,7 @@ def test_db(_oauth_engine):
 
 @pytest.fixture
 def app_client(_oauth_engine, monkeypatch):
-    import main
+    from app.api import main
 
     TestSessionLocal = sessionmaker(bind=_oauth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
@@ -375,7 +375,7 @@ def test_us090_ca8_redirect_uri_hors_liste_blanche_rejetee(google_configure):
 
 def test_us090_ca9_identifiants_absents_par_defaut_en_test():
     """[CA9] Aucun identifiant en dur : l'environnement de test n'en a aucun."""
-    import config
+    from app import config
 
     assert config.GOOGLE_CLIENT_ID == ""
     assert config.GOOGLE_CLIENT_SECRET == ""
@@ -402,7 +402,7 @@ def test_us090_ca11_aucun_email_brevo_a_la_creation_verifiee(app_client, google_
     demande = _armer_flux(app_client)
     jeton = _id_token(paire_rsa, demande.nonce)
 
-    with patch("main.svc_email.envoyer_email_verification") as envoi, \
+    with patch("app.api.main.svc_email.envoyer_email_verification") as envoi, \
          patch.object(svc_oauth, "echanger_code_contre_jetons", return_value={"id_token": jeton}):
         resp = app_client.get(
             f"/auth/oauth/google/callback?code=le-code&state={demande.state}",
@@ -469,7 +469,7 @@ def test_us090_ca13_creation_non_verifiee_repasse_par_brevo(app_client, google_c
     demande = _armer_flux(app_client)
     jeton = _id_token(paire_rsa, demande.nonce, sub="sub-4", email="flou@workspace.fr", email_verified=False)
 
-    with patch("main.svc_email.envoyer_email_verification") as envoi, \
+    with patch("app.api.main.svc_email.envoyer_email_verification") as envoi, \
          patch.object(svc_oauth, "echanger_code_contre_jetons", return_value={"id_token": jeton}):
         resp = app_client.get(
             f"/auth/oauth/google/callback?code=le-code&state={demande.state}",
@@ -683,7 +683,7 @@ def test_us090_ca17_reponse_api_reste_generique(app_client, test_db):
 
 def test_us090_ca19_filtre_masque_les_secrets_des_logs_dacces():
     """[CA19] Le code d'autorisation est masqué avant écriture dans les logs."""
-    import main
+    from app.api import main
 
     filtre = main._FiltreSecretsOAuth()
     record = logging.LogRecord(

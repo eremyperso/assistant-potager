@@ -36,7 +36,7 @@ from unittest.mock import patch
 
 import pytest
 
-import bot
+from app import bot
 from app.services import cache_questions as cq
 from app.services import connaissance
 from app.services import metriques_routage as svc_metriques
@@ -428,8 +428,8 @@ def test_us099_ca10_reingerer_un_corpus_inchange_n_ecrit_rien(corpus):
 @pytest.mark.parametrize("chemin", [
     ".github/workflows/deploy.yml",       # prod — le chemin réellement emprunté
     ".github/workflows/deploy-dev.yml",   # dev  — idem
-    "deploy.sh",                          # script historique, gardé cohérent
-    "update_dev.ps1",                     # poste de développement
+    "scripts/deploy.sh",                          # script historique, gardé cohérent
+    "scripts/update_dev.ps1",                     # poste de développement
 ])
 def test_us099_ca10_l_ingestion_fait_partie_du_deploiement(chemin):
     """CA10 — « son ingestion est intégrée au déploiement au même titre qu'une
@@ -462,8 +462,8 @@ def test_us099_ca10_l_ingestion_suit_les_migrations_et_precede_le_redemarrage(ch
 @pytest.mark.parametrize("chemin", [
     ".github/workflows/deploy.yml",
     ".github/workflows/deploy-dev.yml",
-    "deploy.sh",
-    "update_dev.ps1",
+    "scripts/deploy.sh",
+    "scripts/update_dev.ps1",
 ])
 def test_us099_ca10_une_fiche_supprimee_quitte_l_index(chemin):
     """CA9/CA10 — supprimer une fiche du dépôt est la façon de RETIRER un

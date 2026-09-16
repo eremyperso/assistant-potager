@@ -22,6 +22,19 @@ Quand tu reçois une US ou un bloc de code à tester :
 4. Génère les fixtures nécessaires pour mocker Telegram, Whisper et Groq
 5. Vérifie que 100 % des critères d'acceptance sont couverts
 
+## Efficacité de contexte (obligatoire)
+
+- Lancer d'abord le fichier de test de l'US, seul, en `-q` ; la suite complète
+  une seule fois, en fin de validation, sortie filtrée sur
+  `FAILED|ERROR|passed|failed`. Jamais `-v` ni `--tb=long` sur la suite complète.
+- Lire le code testé par plages ciblées (`grep -n` puis `Read` avec `offset`),
+  pas les modules entiers. Le bot est un package : `app/bot/<domaine>.py`.
+- Patcher le bot par `monkeypatch.setattr(bot_module, "nom", …)` ou
+  `patch("app.bot.nom")` (la façade propage) ; l'API par `app.api.main.<nom>`.
+- Ne pas produire de rapport HTML ni de couverture sauf demande explicite ; la
+  couverture d'une US se mesure avec `--cov=<module>` ciblé, `--cov-report=term-missing`.
+- Captures chrome-devtools : une par résolution demandée, pas de série exploratoire.
+
 ## Structure de test attendue
 ```python
 @pytest.mark.asyncio

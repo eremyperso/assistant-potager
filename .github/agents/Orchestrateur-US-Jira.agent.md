@@ -173,6 +173,19 @@ JIRA_STATUS_EN_COURS=En cours  # libellé Jira du statut en_cours (défaut : En 
 JIRA_STATUS_EN_QA=Revue en cours  # libellé Jira du statut en_qa (défaut : Revue en cours)
 ```
 
+## Efficacité de contexte (obligatoire)
+
+Tu es l'agent le plus long : chaque fichier que tu charges est relu à chacun
+des appels suivants, pour toutes les étapes.
+
+- Lis chaque fichier `.agent.md` UNE fois, au moment de son étape — pas les
+  quatre d'avance.
+- Ne relis pas `CLAUDE.md` racine (déjà chargé). La fiche `docs/domaines/`
+  du domaine se lit une fois, à l'ÉTAPE 2.
+- Transmets au Developer et au QA le contenu de l'US, pas la conversation entière.
+- Les sorties de tests sont filtrées (`-q`, `grep -E "^(FAILED|ERROR)|passed|failed"`).
+- Les confirmations d'étape tiennent en trois lignes : étape, fichiers modifiés, résultat.
+
 ## Règles
 
 - **RÈGLE ABSOLUE** : lire le fichier `.agent.md` du sous-agent AVANT de l'exécuter — jamais de mémoire

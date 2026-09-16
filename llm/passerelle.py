@@ -71,7 +71,7 @@ import groq
 from groq import Groq
 
 from app.services.context import TenantContext, current_context
-from config import (
+from app.config import (
     GROQ_API_KEY,
     GROQ_MODELE_PAR_TYPE,
     GROQ_REASONING_EFFORT,

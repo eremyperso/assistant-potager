@@ -23,7 +23,7 @@ from app.services import liaison_telegram as svc_liaison
 from app.services import telegram_notify as svc_telegram_notify
 from database.db import Base
 from database.models import LiaisonTelegram, User, Potager, PotagerMembre
-from bot import cmd_start
+from app.bot import cmd_start
 
 
 # ── Fixtures partagées (bot.py — SQLite en mémoire, même moteur que conftest) ──
@@ -57,7 +57,7 @@ def _tg_ctx(args=None):
 @pytest.mark.asyncio
 async def test_us091_ca8_start_code_invalide_refuse(test_db):
     update = _mock_update()
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx(["INEXISTANT"]))
 
     update.message.reply_text.assert_awaited_once()
@@ -74,7 +74,7 @@ async def test_us091_ca8_start_code_expire_refuse(test_db):
     test_db.commit()
 
     update = _mock_update()
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx(["ABC234"]))
 
     assert "expiré" in update.message.reply_text.call_args[0][0]
@@ -94,7 +94,7 @@ async def test_us091_ca8_start_code_deja_utilise_refuse(test_db):
     test_db.commit()
 
     update = _mock_update()
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx(["ABC234"]))
 
     assert "déjà été utilisé" in update.message.reply_text.call_args[0][0]
@@ -111,7 +111,7 @@ async def test_us091_ca9_chat_deja_lie_renvoie_vers_delier_pwa(test_db):
     liaison = svc_liaison.creer_code_liaison(test_db, autre.id)
 
     update = _mock_update(chat_id=555)
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx([liaison.code]))
 
     message = update.message.reply_text.call_args[0][0]
@@ -134,7 +134,7 @@ async def test_us091_ca10_liaison_reussie_message_contextualise(test_db):
     user_id = user.id  # capturé avant que le handler ne ferme la session (db.close())
 
     update = _mock_update(chat_id=2468, first_name="Camille")
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx([liaison.code]))
 
     message = update.message.reply_text.call_args[0][0]
@@ -156,7 +156,7 @@ async def test_us091_ca11_liaison_reussie_sans_potager_aucun_blocage(test_db):
     liaison = svc_liaison.creer_code_liaison(test_db, user.id)
 
     update = _mock_update(chat_id=13131313)
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx([liaison.code]))
 
     message = update.message.reply_text.call_args[0][0]
@@ -172,7 +172,7 @@ async def test_us091_ca11_liaison_reussie_sans_potager_aucun_blocage(test_db):
 @pytest.mark.asyncio
 async def test_us091_ca12_start_sans_payload_chat_non_lie_onboarding(test_db):
     update = _mock_update(chat_id=99999999)
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx())
 
     message = update.message.reply_text.call_args[0][0]
@@ -209,7 +209,7 @@ async def test_us091_ca12_start_sans_payload_chat_lie_utilise_le_vrai_potager(te
     _donner_potager(test_db, user, nom="Mon potager")
 
     update = _mock_update(chat_id=2222)
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx())
 
     message = update.message.reply_text.call_args[0][0]
@@ -227,7 +227,7 @@ async def test_us091_ca13_envoi_proactif_apres_liaison_aboutit(test_db):
     liaison = svc_liaison.creer_code_liaison(test_db, user.id)
 
     update = _mock_update(chat_id=778899)
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_start(update, _tg_ctx([liaison.code]))
 
     with patch('app.services.telegram_notify.requests.post') as mock_post:
@@ -331,7 +331,7 @@ def rl_db(_rate_limit_engine):
 
 @pytest.fixture
 def rl_client(_rate_limit_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_rate_limit_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     main.app.state.limiter.reset()

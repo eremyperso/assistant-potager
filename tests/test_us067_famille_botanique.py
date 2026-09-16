@@ -274,7 +274,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_sans_argument_affiche_usage(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx([])
 
@@ -285,7 +285,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_sous_commande_inconnue_affiche_usage(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["bidule"])
 
@@ -296,7 +296,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_famille_args_insuffisants(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["famille", "pâtisson"])  # manque la famille
 
@@ -308,15 +308,15 @@ class TestCmdCultureHandler:
     @pytest.mark.asyncio
     async def test_ca4_famille_succes_confirme_ancien_et_nouveau(self):
         """[CA4] La commande confirme l'ancienne et la nouvelle valeur."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
 
         fiche_mock = MagicMock()
         fiche_mock.famille_rel.nom = "Cucurbitacée"
         update = self._make_update()
         ctx = self._make_ctx(["famille", "pâtisson", "Cucurbitacée"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_famille_culture",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_famille_culture",
                    return_value=([fiche_mock], "Autres")) as mock_corr:
             MockSession.return_value = MagicMock()
 
@@ -330,15 +330,15 @@ class TestCmdCultureHandler:
     @pytest.mark.asyncio
     async def test_famille_avec_espaces_reconstituee(self):
         """Un nom de famille à plusieurs mots (ctx.args[2:]) est reconstitué."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
 
         fiche_mock = MagicMock()
         fiche_mock.famille_rel.nom = "Petit pois précoce"
         update = self._make_update()
         ctx = self._make_ctx(["famille", "petitpois", "Petit", "pois", "précoce"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_famille_culture",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_famille_culture",
                    return_value=([fiche_mock], None)) as mock_corr:
             MockSession.return_value = MagicMock()
 
@@ -348,12 +348,12 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_famille_culture_inconnue(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["famille", "inconnue", "Solanacée"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_famille_culture", side_effect=LookupError("inconnue")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_famille_culture", side_effect=LookupError("inconnue")):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -363,7 +363,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_delai_retour_args_insuffisants(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Solanacée"])  # manque le nombre d'années
 
@@ -374,7 +374,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_delai_retour_valeur_non_entiere(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Solanacée", "quatre"])
 
@@ -385,7 +385,7 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_delai_retour_valeur_negative(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Solanacée", "-1"])
 
@@ -397,15 +397,15 @@ class TestCmdCultureHandler:
     @pytest.mark.asyncio
     async def test_ca14_delai_retour_succes_confirme_ancien_et_nouveau(self):
         """[CA14] La commande confirme l'ancien délai et le nouveau."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
 
         famille_mock = MagicMock()
         famille_mock.nom = "Solanacée"
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Solanacée", "4"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_delai_retour",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_delai_retour",
                    return_value=(famille_mock, 3)) as mock_corr:
             MockSession.return_value = MagicMock()
 
@@ -419,15 +419,15 @@ class TestCmdCultureHandler:
     @pytest.mark.asyncio
     async def test_delai_retour_famille_jamais_renseignee(self):
         """[CA13] Ancien délai None → affiché "non renseigné", pas "None"."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
 
         famille_mock = MagicMock()
         famille_mock.nom = "Lamiacée"
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Lamiacée", "2"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_delai_retour",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_delai_retour",
                    return_value=(famille_mock, None)):
             MockSession.return_value = MagicMock()
 
@@ -439,12 +439,12 @@ class TestCmdCultureHandler:
 
     @pytest.mark.asyncio
     async def test_delai_retour_famille_inconnue(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["delai_retour", "Inconnue", "3"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_familles.corriger_delai_retour", side_effect=LookupError("Inconnue")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_familles.corriger_delai_retour", side_effect=LookupError("Inconnue")):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)

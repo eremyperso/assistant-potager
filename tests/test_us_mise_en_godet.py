@@ -18,7 +18,7 @@ from sqlalchemy import inspect as sa_inspect
 from utils.actions import ACTION_MAP, normalize_action
 from database.models import Evenement
 from llm.groq_client import PARSE_PROMPT
-from bot import _build_recap
+from app.bot import _build_recap
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ from bot import _build_recap
 
 @pytest.fixture(autouse=True)
 def _override_auth():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     yield
@@ -317,7 +317,7 @@ class TestCA6MainParseSaveGodetFields:
         """CA6 — POST /parse crée un Evenement avec nb_graines_semees et nb_plants_godets."""
         from fastapi.testclient import TestClient
         from unittest.mock import patch
-        from main import app
+        from app.api.main import app
 
         parsed_mock = [{
             "action": "mise_en_godet",
@@ -331,9 +331,9 @@ class TestCA6MainParseSaveGodetFields:
             "date": None,
             "commentaire": None,
         }]
-        with patch("main.parse_commande", return_value=parsed_mock), \
-             patch("main.add_to_rag"), \
-             patch("main.SessionLocal", return_value=test_db):
+        with patch("app.api.main.parse_commande", return_value=parsed_mock), \
+             patch("app.api.main.add_to_rag"), \
+             patch("app.api.main.SessionLocal", return_value=test_db):
             client = TestClient(app)
             resp = client.post("/parse", json={"texte": "mis en godet 24 tomates cerise sur 30 graines"})
 
@@ -353,7 +353,7 @@ class TestCA7GetGodets:
         """CA7 — GET /godets retourne un godet sans plantation postérieure [US-026 format]."""
         from fastapi.testclient import TestClient
         from unittest.mock import patch
-        from main import app
+        from app.api.main import app
 
         test_db.add(Evenement(
             type_action="mise_en_godet",
@@ -364,7 +364,7 @@ class TestCA7GetGodets:
         ))
         test_db.commit()
 
-        with patch("main.SessionLocal", return_value=test_db):
+        with patch("app.api.main.SessionLocal", return_value=test_db):
             client = TestClient(app)
             resp = client.get("/godets")
 
@@ -379,9 +379,9 @@ class TestCA7GetGodets:
         """CA7 — GET /godets retourne une liste vide si aucun godet enregistré."""
         from fastapi.testclient import TestClient
         from unittest.mock import patch
-        from main import app
+        from app.api.main import app
 
-        with patch("main.SessionLocal", return_value=test_db):
+        with patch("app.api.main.SessionLocal", return_value=test_db):
             client = TestClient(app)
             resp = client.get("/godets")
 
@@ -402,7 +402,7 @@ class TestCA8GetGodetsExclusion:
         from fastapi.testclient import TestClient
         from unittest.mock import patch
         from datetime import datetime
-        from main import app
+        from app.api.main import app
 
         test_db.add(Evenement(
             type_action="mise_en_godet",
@@ -420,7 +420,7 @@ class TestCA8GetGodetsExclusion:
         ))
         test_db.commit()
 
-        with patch("main.SessionLocal", return_value=test_db):
+        with patch("app.api.main.SessionLocal", return_value=test_db):
             client = TestClient(app)
             resp = client.get("/godets")
 

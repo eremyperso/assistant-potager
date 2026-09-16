@@ -88,7 +88,7 @@ def test_us019_ca6_aucun_stock_si_tout_consomme(db):
 @pytest.mark.asyncio
 async def test_us019_ca1_plusieurs_varietes_menu_inline(db):
     """CA1 — 2 variétés disponibles → message avec InlineKeyboardMarkup."""
-    from bot import _GODET_PENDING, _parse_and_save
+    from app.bot import _GODET_PENDING, _parse_and_save
     from telegram import InlineKeyboardMarkup
     _GODET_PENDING.clear()
 
@@ -113,9 +113,9 @@ async def test_us019_ca1_plusieurs_varietes_menu_inline(db):
 
     mock_db = MagicMock()
 
-    with patch("bot.parse_commande", return_value=[parsed_item]), \
+    with patch("app.bot.parse_commande", return_value=[parsed_item]), \
          patch("utils.validation.validate_parsed_action", return_value=(True, "")), \
-         patch("bot.SessionLocal", return_value=mock_db), \
+         patch("app.bot.SessionLocal", return_value=mock_db), \
          patch("utils.stock.calcul_semis_par_culture", return_value=semis_dispo):
 
         await _parse_and_save(mock_update, "mise en godet courgette")
@@ -177,7 +177,7 @@ def test_us019_ca4_variete_deja_presente_pas_d_interception():
 @pytest.mark.asyncio
 async def test_us019_ca5_timeout_pending_expire():
     """CA5 — Callback sur pending expiré → message d'annulation."""
-    from bot import _GODET_PENDING, _GODET_TIMEOUT, _godet_variete_cb
+    from app.bot import _GODET_PENDING, _GODET_TIMEOUT, _godet_variete_cb
 
     user_id = 99
     _GODET_PENDING[user_id] = {
@@ -206,7 +206,7 @@ async def test_us019_ca5_timeout_pending_expire():
 @pytest.mark.asyncio
 async def test_us019_ca5_annulation_bouton_cancel():
     """CA5 — Clic sur 'Annuler' → pending supprimé, message d'annulation."""
-    from bot import _GODET_PENDING, _godet_variete_cb
+    from app.bot import _GODET_PENDING, _godet_variete_cb
 
     user_id = 100
     _GODET_PENDING[user_id] = {

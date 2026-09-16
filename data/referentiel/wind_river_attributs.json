@@ -86,7 +86,8 @@
       "itineraire": "standard",
       "durees": {
         "levee": "7-14",
-        "repiquage": "42-56"
+        "repiquage": "42-56",
+        "plantation_recolte": "75-78"
       },
       "fenetres": {
         "oceanique": {
@@ -467,6 +468,13 @@
       }
     },
     {
+      "culture": "pomme de terre",
+      "itineraire": "standard",
+      "durees": {
+        "plantation_recolte": "80-95"
+      }
+    },
+    {
       "culture": "concombre",
       "itineraire": "standard",
       "durees": {
@@ -530,7 +538,8 @@
       "itineraire": "standard",
       "durees": {
         "levee": "10-14",
-        "repiquage": "56-70"
+        "repiquage": "56-70",
+        "plantation_recolte": "70-78"
       },
       "fenetres": {
         "oceanique": {
@@ -560,7 +569,8 @@
       "itineraire": "standard",
       "durees": {
         "levee": "10-14",
-        "repiquage": "56-70"
+        "repiquage": "56-70",
+        "plantation_recolte": "65-75"
       },
       "fenetres": {
         "oceanique": {
@@ -704,6 +714,20 @@
       }
     },
     {
+      "culture": "ail",
+      "itineraire": "standard",
+      "durees": {
+        "plantation_recolte": "240-270"
+      }
+    },
+    {
+      "culture": "échalote",
+      "itineraire": "standard",
+      "durees": {
+        "plantation_recolte": "90-110"
+      }
+    },
+    {
       "culture": "poireau",
       "itineraire": "standard",
       "durees": {
@@ -841,7 +865,8 @@
       "itineraire": "standard",
       "durees": {
         "levee": "14-21",
-        "repiquage": "42-56"
+        "repiquage": "42-56",
+        "plantation_recolte": "90-95"
       },
       "fenetres": {
         "oceanique": {
@@ -933,6 +958,13 @@
         "montagnard": {
           "plantation": "juin-juillet"
         }
+      }
+    },
+    {
+      "culture": "framboise",
+      "itineraire": "standard",
+      "durees": {
+        "plantation_recolte": "75-85"
       }
     },
     {

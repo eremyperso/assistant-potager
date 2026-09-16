@@ -21,7 +21,7 @@ from database.models import Evenement, Parcelle
 
 @pytest.fixture(autouse=True)
 def _override_auth():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     yield
@@ -79,10 +79,10 @@ def _mock_query(events, total=None):
 
 def test_us027_ca1_structure_reponse():
     """CA1 — /historique retourne {total: int, evenements: [...]}."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     db_mock.query.return_value = _mock_query(EVENTS[:2], total=2)
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             resp = c.get("/historique")
     assert resp.status_code == 200
@@ -94,10 +94,10 @@ def test_us027_ca1_structure_reponse():
 
 def test_us027_ca1_champs_par_evenement():
     """CA1 — Chaque événement a date, type_action, culture, variete, quantite, unite, parcelle."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     db_mock.query.return_value = _mock_query([EVENTS[0]], total=1)
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             body = c.get("/historique").json()
     ev = body["evenements"][0]
@@ -109,11 +109,11 @@ def test_us027_ca1_champs_par_evenement():
 
 def test_us027_ca2_pagination_offset():
     """CA2 — offset et limit passés en query param sont appliqués."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     q = _mock_query(EVENTS[1:], total=3)
     db_mock.query.return_value = q
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             resp = c.get("/historique?limit=20&offset=20")
     assert resp.status_code == 200
@@ -123,10 +123,10 @@ def test_us027_ca2_pagination_offset():
 
 def test_us027_ca2_total_retourne():
     """CA2 — total reflète le nombre total avant pagination."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     db_mock.query.return_value = _mock_query(EVENTS[:1], total=45)
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             body = c.get("/historique").json()
     assert body["total"] == 45
@@ -136,11 +136,11 @@ def test_us027_ca2_total_retourne():
 
 def test_us027_ca4_filtre_action():
     """CA4 — ?action=recolte filtre les événements par type_action."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     q = _mock_query([EVENTS[1]], total=1)
     db_mock.query.return_value = q
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             resp = c.get("/historique?action=recolte")
     assert resp.status_code == 200
@@ -151,11 +151,11 @@ def test_us027_ca4_filtre_action():
 
 def test_us027_ca5_filtre_from_date():
     """CA5 — ?from=2026-05-01 filtre les événements à partir de cette date."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     q = _mock_query(EVENTS[:2], total=2)
     db_mock.query.return_value = q
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             resp = c.get("/historique?from=2026-05-01")
     assert resp.status_code == 200
@@ -164,11 +164,11 @@ def test_us027_ca5_filtre_from_date():
 
 def test_us027_ca5_filtre_to_date():
     """CA5 — ?to=2026-05-31 filtre les événements jusqu'à cette date."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     q = _mock_query(EVENTS[:1], total=1)
     db_mock.query.return_value = q
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             resp = c.get("/historique?to=2026-05-31")
     assert resp.status_code == 200
@@ -179,10 +179,10 @@ def test_us027_ca5_filtre_to_date():
 
 def test_us027_ca7_vide():
     """CA7 — Aucun événement → evenements=[], total=0."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     db_mock.query.return_value = _mock_query([], total=0)
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             body = c.get("/historique").json()
     assert body["evenements"] == []
@@ -193,10 +193,10 @@ def test_us027_ca7_vide():
 
 def test_us027_parcelle_dans_reponse():
     """CA1 — Le nom de parcelle est retourné via la relation ORM."""
-    from main import app
+    from app.api.main import app
     db_mock = MagicMock()
     db_mock.query.return_value = _mock_query([EVENTS[0]], total=1)
-    with patch("main.SessionLocal", return_value=db_mock):
+    with patch("app.api.main.SessionLocal", return_value=db_mock):
         with TestClient(app) as c:
             body = c.get("/historique").json()
     ev = body["evenements"][0]

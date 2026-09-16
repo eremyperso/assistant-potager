@@ -2,7 +2,7 @@
 # .githooks/post-merge
 # ─────────────────────────────────────────────────────────────────────────────
 # Déclenché automatiquement après chaque `git pull` (ou `git merge`) réussi.
-# Lance update_dev.ps1 si requirements.txt ou des migrations SQL ont changé.
+# Lance scripts/update_dev.ps1 si requirements.txt ou des migrations SQL ont changé.
 #
 # Activation (une seule fois, dans le projet) :
 #   git config core.hooksPath .githooks
@@ -21,10 +21,10 @@ if [ "$NEEDS_UPDATE" = "true" ]; then
     echo ""
     # Compatibilité Windows (Git Bash / pwsh)
     if command -v pwsh &>/dev/null; then
-        pwsh -NonInteractive -File "$(dirname "$0")/../update_dev.ps1" -SkipPull
+        pwsh -NonInteractive -File "$(dirname "$0")/../scripts/update_dev.ps1" -SkipPull
     elif command -v powershell &>/dev/null; then
-        powershell -NonInteractive -ExecutionPolicy Bypass -File "$(dirname "$0")/../update_dev.ps1" -SkipPull
+        powershell -NonInteractive -ExecutionPolicy Bypass -File "$(dirname "$0")/../scripts/update_dev.ps1" -SkipPull
     else
-        echo "⚠  PowerShell introuvable. Lancez manuellement : .\\update_dev.ps1 -SkipPull"
+        echo "⚠  PowerShell introuvable. Lancez manuellement : .\\scripts\\update_dev.ps1 -SkipPull"
     fi
 fi

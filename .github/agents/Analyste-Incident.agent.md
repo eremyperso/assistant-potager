@@ -92,7 +92,7 @@ dépassé son rôle.
    cité par supposition.
 3. Classe grosse maille :
    - **Zone(s) impactée(s)** : Frontend (`frontend/`) · API/Backend
-     (`main.py`, `app/services/*`) · Bot Telegram (`bot.py`) · Base de
+     (`app/api/main.py`, `app/services/*`) · Bot Telegram (`app/bot/`) · Base de
      données / migration · Référentiel ou corpus de connaissance
      (`data/referentiel/`, `data/connaissance/`) · Configuration/déploiement.
    - **Nature probable** : régression logique · défaut d'affichage/CSS ·
@@ -107,6 +107,16 @@ dépassé son rôle.
    explicitement dans la fiche : la correction devra respecter la règle de
    mise à jour du corpus dans la même livraison (voir `CLAUDE.md`, section
    « Corpus de connaissance »).
+
+## Efficacité de contexte (obligatoire)
+
+- L'ÉTAPE 2 se fait avec quelques `grep -n` ciblés — jamais en retraçant la
+  logique d'un module ni en le lisant en entier ; le bot est un package
+  (`app/bot/<domaine>.py`), viser le module, pas le package.
+- Chercher activement les pièces jointes (captures, journaux) aux emplacements
+  habituels avant de conclure « aucun fichier ».
+- Ne lis aucune fiche de `docs/domaines/` : l'orientation grosse maille n'en a
+  pas besoin, le diagnostic fin est le travail du Developer.
 
 ## ÉTAPE 3 — Rédaction de la fiche locale
 
@@ -214,7 +224,7 @@ fiche des attributs de conduite de la tomate, comme documenté dans /help.
 → ÉTAPE 0 : les trois éléments sont là (repro : la commande tapée ; obtenu :
 texte + capture cohérente ; attendu : la fiche attendue) → recevable.
 → ÉTAPE 2 : indice `/culture attributs` → grep sur `interpreteur_commandes.py`
-et `bot.py` → zone Bot Telegram, nature « à investiguer » si rien ne saute
+et `app/bot/` → zone Bot Telegram, nature « à investiguer » si rien ne saute
 aux yeux à la simple lecture.
 → ÉTAPE 3 : `backlog/INC-001_erreur-culture-attributs-tomate.md`.
 → ÉTAPE 4 :

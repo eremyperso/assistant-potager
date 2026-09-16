@@ -374,7 +374,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us174_bot_passe_le_potager_courant(self, db):
         """[CA6] Sans ce passage, la fiche servirait le local d'un autre potager."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "tomate")
         update, ctx = self._update(), self._ctx("tomate")
@@ -390,7 +390,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us174_bot_affiche_la_rubrique(self, db):
         """[CA1, CA2] Nom, fréquence, période quand elle existe."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "tomate")
         _rattacher(db, "tomate", "mildiou", "champignon", "courant",
@@ -410,7 +410,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us174_bot_dit_l_ignorance_plutot_qu_une_rubrique_vide(self, db):
         """[CA5] Jamais « rien ne l'attaque »."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "ail")
         update, ctx = self._update(), self._ctx("ail")
@@ -426,7 +426,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us174_bot_annonce_le_reste_et_la_commande_pour_le_voir(self, db):
         """[CA4] Une troncature muette laisserait croire la liste complète."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "tomate")
         for i in range(8):
@@ -444,7 +444,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us174_bot_marque_le_local(self, db):
         """[CA3] Le jardinier voit ce qui vient de chez lui."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "chou")
         _rattacher(db, "chou", "altise de Vitry", "insecte", "courant",
@@ -461,7 +461,7 @@ class TestCommandeBot:
     async def test_us174_bot_ne_prescrit_rien(self, db):
         """[CA9] Aucun mot de traitement ne peut apparaître : il n'y a rien à
         afficher qui en porte."""
-        import bot
+        from app import bot
 
         _seed_culture(db, "tomate")
         _rattacher(db, "tomate", "mildiou", "champignon", "courant")

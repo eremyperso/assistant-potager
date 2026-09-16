@@ -127,11 +127,11 @@ def _make_callback(data: str, user_id: int = 1):
 @pytest.mark.asyncio
 async def test_us009_ca7_annulation_callback():
     """CA7 — Bouton Annuler → aucune modification, message de confirmation."""
-    from bot import _parcelle_suppr_cb
+    from app.bot import _parcelle_suppr_cb
 
     update = _make_callback("parcelle_suppr_cancel")
 
-    with patch("bot.SessionLocal"):
+    with patch("app.bot.SessionLocal"):
         await _parcelle_suppr_cb(update, MagicMock())
 
     update.callback_query.edit_message_text.assert_awaited_once()
@@ -142,7 +142,7 @@ async def test_us009_ca7_annulation_callback():
 @pytest.mark.asyncio
 async def test_us009_ca5_message_final_avec_evenements():
     """CA5 — Message final indique le nombre d'événements réaffectés."""
-    from bot import _parcelle_suppr_cb
+    from app.bot import _parcelle_suppr_cb
 
     update = _make_callback("parcelle_suppr_confirm:42")
 
@@ -156,7 +156,7 @@ async def test_us009_ca5_message_final_avec_evenements():
     mock_db.query.return_value.filter.return_value.count.return_value = 5
     mock_db.query.return_value.filter.return_value.update.return_value = None
 
-    with patch("bot.SessionLocal", return_value=mock_db):
+    with patch("app.bot.SessionLocal", return_value=mock_db):
         mock_db.__enter__ = lambda s: mock_db
         mock_db.__exit__ = MagicMock(return_value=False)
         await _parcelle_suppr_cb(update, MagicMock())
@@ -169,14 +169,14 @@ async def test_us009_ca5_message_final_avec_evenements():
 @pytest.mark.asyncio
 async def test_us009_ca6_callback_parcelle_inexistante():
     """CA6 — Parcelle introuvable dans le callback → message d'erreur."""
-    from bot import _parcelle_suppr_cb
+    from app.bot import _parcelle_suppr_cb
 
     update = _make_callback("parcelle_suppr_confirm:999")
 
     mock_db = MagicMock()
     mock_db.get.return_value = None
 
-    with patch("bot.SessionLocal", return_value=mock_db):
+    with patch("app.bot.SessionLocal", return_value=mock_db):
         mock_db.__enter__ = lambda s: mock_db
         mock_db.__exit__ = MagicMock(return_value=False)
         await _parcelle_suppr_cb(update, MagicMock())

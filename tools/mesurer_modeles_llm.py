@@ -68,7 +68,7 @@ from app.services.evenements import (  # noqa: E402
     _normalize_unite_denombrement,
     _normalize_unite_semis,
 )
-from config import GROQ_API_KEY, GROQ_REASONING_EFFORT, GROQ_TIMEOUT_S  # noqa: E402
+from app.config import GROQ_API_KEY, GROQ_REASONING_EFFORT, GROQ_TIMEOUT_S  # noqa: E402
 from llm.groq_client import PARSE_PROMPT, _nettoyer_backticks, _today_context  # noqa: E402
 from llm.passerelle import _accepte_reasoning_effort  # noqa: E402
 

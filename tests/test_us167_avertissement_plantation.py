@@ -336,7 +336,7 @@ class TestBotIntegrationDoSaveItems:
         """[CA1, CA3] L'avertissement suit la confirmation d'enregistrement et
         précède le message 'Que voulez-vous faire ensuite ?' — jamais l'inverse,
         jamais un nouvel état conversationnel (pas de reply_markup dessus)."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         fake_event = MagicMock(id=1, parcelle_id=42)
         update = MagicMock()
@@ -349,10 +349,10 @@ class TestBotIntegrationDoSaveItems:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.SessionLocal"),
-                patch("bot.resolve_parcelle", return_value=MagicMock(id=42)),
-                patch("bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
-                patch("bot.svc_avertissements.evaluer_avertissements_plantation",
+                patch("app.bot.SessionLocal"),
+                patch("app.bot.resolve_parcelle", return_value=MagicMock(id=42)),
+                patch("app.bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
+                patch("app.bot.svc_avertissements.evaluer_avertissements_plantation",
                       return_value=["⚠️ conflit de rotation test"]),
             ):
                 await bot_module._do_save_items(update, items, "planté 5 poivrons parcelle nord")
@@ -376,7 +376,7 @@ class TestBotIntegrationDoSaveItems:
     async def test_sans_conflit_aucun_message_supplementaire(self):
         """[CA4] Pas d'avertissement à envoyer → aucun message de plus que
         d'habitude (recap + prochaine étape, rien d'autre)."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         fake_event = MagicMock(id=1, parcelle_id=42)
         update = MagicMock()
@@ -389,10 +389,10 @@ class TestBotIntegrationDoSaveItems:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.SessionLocal"),
-                patch("bot.resolve_parcelle", return_value=MagicMock(id=42)),
-                patch("bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
-                patch("bot.svc_avertissements.evaluer_avertissements_plantation", return_value=[]),
+                patch("app.bot.SessionLocal"),
+                patch("app.bot.resolve_parcelle", return_value=MagicMock(id=42)),
+                patch("app.bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
+                patch("app.bot.svc_avertissements.evaluer_avertissements_plantation", return_value=[]),
             ):
                 await bot_module._do_save_items(update, items, "planté 5 poivrons parcelle nord")
         finally:
@@ -404,7 +404,7 @@ class TestBotIntegrationDoSaveItems:
     async def test_action_hors_perimetre_n_evalue_aucun_avertissement(self):
         """[CA1] Seules plantation/semis déclenchent l'évaluation — un arrosage
         n'appelle même pas `evaluer_avertissements_plantation`."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         fake_event = MagicMock(id=1, parcelle_id=42)
         update = MagicMock()
@@ -416,10 +416,10 @@ class TestBotIntegrationDoSaveItems:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.SessionLocal"),
-                patch("bot.resolve_parcelle", return_value=MagicMock(id=42)),
-                patch("bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
-                patch("bot.svc_avertissements.evaluer_avertissements_plantation") as mock_eval,
+                patch("app.bot.SessionLocal"),
+                patch("app.bot.resolve_parcelle", return_value=MagicMock(id=42)),
+                patch("app.bot.svc_evenements.creer_evenement_confirme", return_value=fake_event),
+                patch("app.bot.svc_avertissements.evaluer_avertissements_plantation") as mock_eval,
             ):
                 await bot_module._do_save_items(update, items, "arrosé 10 min parcelle nord")
         finally:
@@ -430,7 +430,7 @@ class TestBotIntegrationDoSaveItems:
     @pytest.mark.asyncio
     async def test_evenement_toujours_enregistre_malgre_le_conflit(self):
         """[CA2] L'avertissement n'empêche jamais l'enregistrement."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         fake_event = MagicMock(id=1, parcelle_id=42)
         update = MagicMock()
@@ -443,10 +443,10 @@ class TestBotIntegrationDoSaveItems:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.SessionLocal"),
-                patch("bot.resolve_parcelle", return_value=MagicMock(id=42)),
-                patch("bot.svc_evenements.creer_evenement_confirme", return_value=fake_event) as mock_creer,
-                patch("bot.svc_avertissements.evaluer_avertissements_plantation",
+                patch("app.bot.SessionLocal"),
+                patch("app.bot.resolve_parcelle", return_value=MagicMock(id=42)),
+                patch("app.bot.svc_evenements.creer_evenement_confirme", return_value=fake_event) as mock_creer,
+                patch("app.bot.svc_avertissements.evaluer_avertissements_plantation",
                       return_value=["⚠️ conflit"]),
             ):
                 await bot_module._do_save_items(update, items, "planté 5 poivrons parcelle nord")
@@ -462,7 +462,7 @@ class TestBotIntegrationParseMulti:
 
     @pytest.mark.asyncio
     async def test_avertissement_envoye_pour_un_semis_direct(self):
-        import bot as bot_module
+        from app import bot as bot_module
 
         fake_event = MagicMock(id=1, parcelle_id=42)
         update = MagicMock()
@@ -475,14 +475,14 @@ class TestBotIntegrationParseMulti:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.require_role"),
-                patch("bot._parser_items", return_value=[parsed_item]),
-                patch("bot._normalize_items", return_value=[parsed_item]),
+                patch("app.bot.require_role"),
+                patch("app.bot._parser_items", return_value=[parsed_item]),
+                patch("app.bot._normalize_items", return_value=[parsed_item]),
                 patch("utils.validation.strip_culture_hallucinee", side_effect=lambda item, ligne: item),
-                patch("bot.SessionLocal"),
-                patch("bot.svc_evenements.creer_evenement_ligne", return_value=fake_event),
-                patch("bot.svc_evenements.compter_evenements", return_value=1),
-                patch("bot.svc_avertissements.evaluer_avertissements_plantation",
+                patch("app.bot.SessionLocal"),
+                patch("app.bot.svc_evenements.creer_evenement_ligne", return_value=fake_event),
+                patch("app.bot.svc_evenements.compter_evenements", return_value=1),
+                patch("app.bot.svc_avertissements.evaluer_avertissements_plantation",
                       return_value=["ℹ️ pas d'antécédent test"]),
             ):
                 await bot_module._parse_multi(update, ["semis 10 graines de carotte parcelle nord"])
@@ -516,7 +516,7 @@ class TestRegressionAutoReferenceProduction:
     async def test_premiere_plantation_sur_parcelle_vide_do_save_items(self, db):
         """[bot.py _do_save_items] Une plantation sans aucun antécédent réel ne
         doit jamais se citer elle-même comme conflit de rotation."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         solanacee = _seed_famille(db, "Solanacée", delai_retour_annees=4)
         _seed_culture(db, "tomate", famille=solanacee)
@@ -531,7 +531,7 @@ class TestRegressionAutoReferenceProduction:
 
         set_current_context(CTX)
         try:
-            with patch("bot.SessionLocal", return_value=db):
+            with patch("app.bot.SessionLocal", return_value=db):
                 await bot_module._do_save_items(update, items, "planté 3 tomates parcelle nord")
         finally:
             set_current_context(default_context())
@@ -543,7 +543,7 @@ class TestRegressionAutoReferenceProduction:
     @pytest.mark.asyncio
     async def test_premiere_plantation_sur_parcelle_vide_parse_multi(self, db):
         """[bot.py _parse_multi] Même garantie sur le second point d'écriture."""
-        import bot as bot_module
+        from app import bot as bot_module
 
         solanacee = _seed_famille(db, "Solanacée", delai_retour_annees=4)
         _seed_culture(db, "tomate", famille=solanacee)
@@ -559,11 +559,11 @@ class TestRegressionAutoReferenceProduction:
         set_current_context(CTX)
         try:
             with (
-                patch("bot.require_role"),
-                patch("bot._parser_items", return_value=[parsed_item]),
-                patch("bot._normalize_items", return_value=[parsed_item]),
+                patch("app.bot.require_role"),
+                patch("app.bot._parser_items", return_value=[parsed_item]),
+                patch("app.bot._normalize_items", return_value=[parsed_item]),
                 patch("utils.validation.strip_culture_hallucinee", side_effect=lambda item, ligne: item),
-                patch("bot.SessionLocal", return_value=db),
+                patch("app.bot.SessionLocal", return_value=db),
             ):
                 await bot_module._parse_multi(update, ["planté 3 tomates parcelle nord"])
         finally:
@@ -575,16 +575,16 @@ class TestRegressionAutoReferenceProduction:
 
     def test_premiere_plantation_sur_parcelle_vide_post_parse(self, db):
         """[main.py POST /parse] Même garantie sur le canal web."""
-        from main import TexteRequest, parse as main_parse
+        from app.api.main import TexteRequest, parse as main_parse
 
         solanacee = _seed_famille(db, "Solanacée", delai_retour_annees=4)
         _seed_culture(db, "tomate", famille=solanacee)
         _seed_parcelle(db, "NORD")
 
         with (
-            patch("main.add_to_rag", MagicMock()),
-            patch("main.SessionLocal", return_value=db),
-            patch("main.parse_commande", return_value=[{
+            patch("app.api.main.add_to_rag", MagicMock()),
+            patch("app.api.main.SessionLocal", return_value=db),
+            patch("app.api.main.parse_commande", return_value=[{
                 "action": "plantation", "culture": "tomate",
                 "quantite": 3, "unite": "plants", "parcelle": "NORD",
             }]),
@@ -612,7 +612,7 @@ class TestApiParseCanalWeb:
     def test_post_parse_plantation_avec_conflit_retourne_l_avertissement(self, db):
         """[CA1] Le déclenchement fonctionne aussi sur le canal web, sans
         modifier le contrat JSON existant (champ additif)."""
-        from main import TexteRequest, parse as main_parse
+        from app.api.main import TexteRequest, parse as main_parse
 
         solanacee = _seed_famille(db, "Solanacée", delai_retour_annees=3)
         _seed_culture(db, "tomate", famille=solanacee)
@@ -621,9 +621,9 @@ class TestApiParseCanalWeb:
         _seed_evenement(db, nord, "tomate", annee=2025)
 
         with (
-            patch("main.add_to_rag", MagicMock()),
-            patch("main.SessionLocal", return_value=db),
-            patch("main.parse_commande", return_value=[{
+            patch("app.api.main.add_to_rag", MagicMock()),
+            patch("app.api.main.SessionLocal", return_value=db),
+            patch("app.api.main.parse_commande", return_value=[{
                 "action": "plantation", "culture": "poivron",
                 "quantite": 5, "unite": "plants", "parcelle": "NORD",
             }]),
@@ -638,15 +638,15 @@ class TestApiParseCanalWeb:
         """[CA4, CA1] Non-régression : le flux d'enregistrement normal n'est pas
         affecté ; un arrosage n'est même pas une action déclenchante (US-167
         ne concerne que plantation/semis), donc rien n'est affiché."""
-        from main import TexteRequest, parse as main_parse
+        from app.api.main import TexteRequest, parse as main_parse
 
         _seed_culture(db, "tomate")
         _seed_evenement(db, _seed_parcelle(db, "NORD"), "tomate", annee=2026)
 
         with (
-            patch("main.add_to_rag", MagicMock()),
-            patch("main.SessionLocal", return_value=db),
-            patch("main.parse_commande", return_value=[{
+            patch("app.api.main.add_to_rag", MagicMock()),
+            patch("app.api.main.SessionLocal", return_value=db),
+            patch("app.api.main.parse_commande", return_value=[{
                 "action": "arrosage", "culture": "tomate", "duree_minutes": 10,
             }]),
         ):

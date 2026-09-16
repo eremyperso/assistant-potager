@@ -11,12 +11,18 @@ Tu es un rédacteur technique chargé de maintenir le fichier PATCH_NOTES.md du 
 Quand tu es invoqué :
 1. Lis le fichier PATCH_NOTES.md existant pour comprendre le format en cours
 2. Lis le fichier VERSION pour connaître la version courante
-3. Analyse les fichiers modifiés (staged) via `git diff --staged --name-only`
-4. Lis le contenu des diffs via `git diff --staged` pour comprendre les changements
+3. Analyse les fichiers modifiés (staged) via `git diff --staged --stat`
+4. Lis les diffs FICHIER PAR FICHIER (`git diff --staged -- <fichier>`), et seulement ceux dont le nom ne suffit pas à comprendre le changement — jamais `git diff --staged` complet, ni les fichiers de données (`data/`, `*.json`, `*.csv`) au-delà de `--stat`
 5. Détermine le type d'incrément SemVer (PATCH / MINOR / MAJOR) selon les règles ci-dessous
 6. Calcule le nouveau numéro de version et met à jour le fichier VERSION avec cette valeur (sans espace ni saut de ligne superflu)
 7. Insère une nouvelle entrée EN HAUT de PATCH_NOTES.md avec ce même numéro de version
 8. Ne modifie jamais les entrées existantes de PATCH_NOTES.md
+
+## Efficacité de contexte (obligatoire)
+
+- Ne lis que la première entrée de `PATCH_NOTES.md` (`Read` avec `limit`), pas le fichier entier (près de 200 Ko).
+- `VERSION` tient sur une ligne : le lire, ne pas le chercher.
+- Aucune relecture des modules de code : le diff suffit.
 
 ## Format d'une entrée
 ```markdown

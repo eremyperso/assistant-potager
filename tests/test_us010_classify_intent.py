@@ -29,7 +29,7 @@ def _classify(texte: str, groq_returns: str) -> str:
     # [US-092] Le client Groq vit desormais dans la passerelle unique :
     # c'est lui qu'on intercepte, plus le constructeur du SDK.
     with patch("llm.passerelle._client", mock_client):
-        from bot import classify_intent
+        from app.bot import classify_intent
         return classify_intent(texte)
 
 
@@ -145,7 +145,7 @@ def test_us010_erreur_groq_fallback_action():
     # [US-092] Le client Groq vit desormais dans la passerelle unique :
     # c'est lui qu'on intercepte, plus le constructeur du SDK.
     with patch("llm.passerelle._client", mock_client):
-        from bot import classify_intent
+        from app.bot import classify_intent
         result = classify_intent("Combien de tomates ?")
     assert result == "ACTION"  # fallback défini dans classify_intent()
 

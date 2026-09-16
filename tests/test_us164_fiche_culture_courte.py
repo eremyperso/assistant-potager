@@ -201,12 +201,12 @@ class TestCA13CommandeBotDescriptionAgronomique:
     @pytest.mark.asyncio
     async def test_us164_bot_affiche_la_description_agronomique_renseignee(self):
         """[Gherkin: Description agronomique renseignée]"""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["tomate"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte",
                    return_value=self._fiche("port indéterminé")):
             MockSession.return_value = MagicMock()
 
@@ -220,12 +220,12 @@ class TestCA13CommandeBotDescriptionAgronomique:
     async def test_us164_bot_signale_la_description_agronomique_incomplete(self):
         """[Gherkin: Description agronomique absente][CA13] Jamais omise en
         silence, jamais comblée — même principe d'honnêteté que CA6."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["tomate"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=self._fiche(None)):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=self._fiche(None)):
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -329,7 +329,7 @@ class TestCommandeBotFiche:
     async def test_us164_bot_restitue_une_fiche_complete(self):
         """[Gherkin: Fiche complète en zéro jeton] La réponse tient sur un
         message unique, lisible sur téléphone."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["tomate"])
 
@@ -345,8 +345,8 @@ class TestCommandeBotFiche:
                 for a in svc_attributs.ATTRIBUTS
             ),
         )
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche) as mock_gen:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche) as mock_gen:
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -366,7 +366,7 @@ class TestCommandeBotFiche:
     @pytest.mark.asyncio
     async def test_us164_bot_reconstitue_un_nom_de_culture_a_plusieurs_mots(self):
         """[CA1] `ctx.args` peut porter plusieurs tokens (« petit pois »)."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["petit", "pois"])
 
@@ -381,8 +381,8 @@ class TestCommandeBotFiche:
                 for a in svc_attributs.ATTRIBUTS
             ),
         )
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche) as mock_gen:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche) as mock_gen:
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -393,12 +393,12 @@ class TestCommandeBotFiche:
     async def test_us164_bot_signale_honnetement_une_culture_inconnue(self):
         """[Gherkin: Culture inconnue du référentiel][CA5] Message d'absence
         explicite, sans proposer de fiche voisine."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["artichaut"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", side_effect=LookupError("artichaut")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", side_effect=LookupError("artichaut")):
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -411,7 +411,7 @@ class TestCommandeBotFiche:
     async def test_us164_bot_attribut_absent_affiche_non_renseigne(self):
         """[Gherkin: Fiche partielle][CA6] Les attributs absents se lisent
         « non renseigné », jamais omis ni comblés."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["blette"])
 
@@ -432,8 +432,8 @@ class TestCommandeBotFiche:
             delai_retour_annees=None, description_agronomique=None,
             attributs=tuple(attributs),
         )
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -444,7 +444,7 @@ class TestCommandeBotFiche:
     @pytest.mark.asyncio
     async def test_us164_bot_famille_non_renseignee_est_dite_telle_quelle(self):
         """[CA6] Absence de famille explicitement affichée, pas omise."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["topinambour"])
 
@@ -459,8 +459,8 @@ class TestCommandeBotFiche:
                 for a in svc_attributs.ATTRIBUTS
             ),
         )
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -471,7 +471,7 @@ class TestCommandeBotFiche:
     @pytest.mark.asyncio
     async def test_us164_bot_attribution_affichee_avec_la_reponse(self):
         """[CA7 / US-166] La mention de source accompagne la réponse."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["tomate"])
         attribution = "Plant variety data from Wind River Greens (…), CC BY 4.0"
@@ -490,8 +490,8 @@ class TestCommandeBotFiche:
                 for a in svc_attributs.ATTRIBUTS
             ),
         )
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", return_value=fiche):
             MockSession.return_value = MagicMock()
 
             await cmd_fiche(update, ctx)
@@ -503,11 +503,11 @@ class TestCommandeBotFiche:
     @pytest.mark.asyncio
     async def test_us164_bot_sans_argument_affiche_l_usage(self):
         """Aucun nom de culture fourni : message d'usage, aucune requête base."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx([])
 
-        with patch("bot.svc_fiche_culture.generer_fiche_courte") as mock_gen:
+        with patch("app.bot.svc_fiche_culture.generer_fiche_courte") as mock_gen:
             await cmd_fiche(update, ctx)
 
         mock_gen.assert_not_called()
@@ -517,12 +517,12 @@ class TestCommandeBotFiche:
     @pytest.mark.asyncio
     async def test_us164_bot_n_appelle_jamais_le_modele(self):
         """[CA9] Ni sur une fiche connue, ni sur une culture inconnue."""
-        from bot import cmd_fiche
+        from app.bot import cmd_fiche
         update = self._make_update()
         ctx = self._make_ctx(["artichaut"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_fiche_culture.generer_fiche_courte", side_effect=LookupError("artichaut")), \
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_fiche_culture.generer_fiche_courte", side_effect=LookupError("artichaut")), \
              patch("llm.passerelle.appeler_chat") as mock_chat, \
              patch("llm.passerelle.transcrire") as mock_whisper:
             MockSession.return_value = MagicMock()
@@ -548,7 +548,7 @@ class TestCA4NonRegressionRoutage:
         `handle_text` — la restitution ne peut donc pas s'y déclencher, par
         construction, sans avoir à mocker tout le flux de saisie."""
         import inspect
-        import bot
+        from app import bot
 
         source = inspect.getsource(bot.handle_text)
 
@@ -560,7 +560,7 @@ class TestCA4NonRegressionRoutage:
         """[CA1] `/fiche` passe par le même point d'enregistrement unique que
         toutes les commandes métier (US-045) — aucun chemin d'exception créé
         pour cette US."""
-        import bot
+        from app import bot
 
         assert "fiche" not in bot._COMMANDES_SANS_GARDE_LIAISON
 
@@ -569,7 +569,7 @@ class TestCA4NonRegressionRoutage:
         """[Gherkin: Aucune régression du routage] `_corr_start` — point
         d'entrée du mode correction — démarre toujours son dialogue exactement
         comme avant cette US : /fiche ne l'a pas touché."""
-        import bot
+        from app import bot
         from app.services.context import default_context, set_current_context
 
         update = MagicMock()
@@ -580,7 +580,7 @@ class TestCA4NonRegressionRoutage:
 
         set_current_context(default_context())
         try:
-            with patch("bot.SessionLocal", return_value=db):
+            with patch("app.bot.SessionLocal", return_value=db):
                 await bot._corr_start(update, ctx)
         finally:
             set_current_context(default_context())

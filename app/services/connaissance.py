@@ -56,7 +56,7 @@ from sqlalchemy.orm import Session
 from unidecode import unidecode
 
 from app.services.context import TenantContext
-from config import RAG_MAX_PASSAGES, RAG_SEUIL_CONFIANCE
+from app.config import RAG_MAX_PASSAGES, RAG_SEUIL_CONFIANCE
 from database.models import CultureConfig, KnowledgeChunk, KnowledgeDocument
 
 log = logging.getLogger("potager")

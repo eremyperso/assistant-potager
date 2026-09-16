@@ -107,10 +107,10 @@ def test_ca1_perte_jardin_sauvegardee(db):
     state   = _build_pending(item, session)
     update  = _make_callback_update(user_id, "perte_source:jardin")
 
-    with patch("bot._PERTE_PENDING", {user_id: state}), \
-         patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {user_id: state}), \
+         patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     ev = session.query(Evenement).filter_by(type_action="perte").first()
@@ -136,10 +136,10 @@ def test_ca2_perte_pepiniere_sauvegardee(db):
     state   = _build_pending(item, session)
     update  = _make_callback_update(user_id, "perte_source:pepiniere")
 
-    with patch("bot._PERTE_PENDING", {user_id: state}), \
-         patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {user_id: state}), \
+         patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
@@ -170,10 +170,10 @@ def test_ca3_perte_var_j_bonne_variete(db):
     state   = _build_pending(item, session)
     update  = _make_callback_update(user_id, "perte_var_j:cerise")
 
-    with patch("bot._PERTE_PENDING", {user_id: state}), \
-         patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {user_id: state}), \
+         patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     ev = session.query(Evenement).filter_by(type_action="perte").first()
@@ -197,10 +197,10 @@ def test_ca4_perte_var_p_bonne_variete(db):
     state   = _build_pending(item, session)
     update  = _make_callback_update(user_id, "perte_var_p:cerise")
 
-    with patch("bot._PERTE_PENDING", {user_id: state}), \
-         patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {user_id: state}), \
+         patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
@@ -221,8 +221,8 @@ def test_ca5_cancel_rien_sauvegarde(db):
     }}
     update = _make_callback_update(user_id, "perte_cancel")
 
-    with patch("bot._PERTE_PENDING", pending_dict):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", pending_dict):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     nb = session.query(Evenement).filter(
@@ -245,8 +245,8 @@ def test_ca6_timeout_rien_sauvegarde(db):
     }}
     update = _make_callback_update(user_id, "perte_source:jardin")
 
-    with patch("bot._PERTE_PENDING", pending_dict):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", pending_dict):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     nb = session.query(Evenement).filter(
@@ -264,8 +264,8 @@ def test_ca7_pending_absent_pas_de_crash():
     user_id = 48
     update  = _make_callback_update(user_id, "perte_source:jardin")
 
-    with patch("bot._PERTE_PENDING", {}):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {}):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))
 
     update.callback_query.edit_message_text.assert_called_once()
@@ -289,10 +289,10 @@ def test_ca8_update_message_none_regression(db):
 
     assert update.message is None, "Ce test simule le cas réel : update.message doit être None"
 
-    with patch("bot._PERTE_PENDING", {user_id: state}), \
-         patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock):
-        from bot import _handle_perte_callback
+    with patch("app.bot._PERTE_PENDING", {user_id: state}), \
+         patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock):
+        from app.bot import _handle_perte_callback
         _run(_handle_perte_callback(update, _make_ctx()))  # ne doit pas lever AttributeError
 
     # Et l'événement est bien sauvegardé malgré update.message = None
@@ -342,10 +342,10 @@ def test_cx1_contexte_pepiniere_dans_texte_sauvegarde_direct(db):
     update = _make_message_update(999, "perte de 1 plant de tomate pépinière")
     item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 1}
 
-    with patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock), \
-         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
-        from bot import _parse_and_save
+    with patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("app.bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from app.bot import _parse_and_save
         _run(_parse_and_save(update, "perte de 1 plant de tomate pépinière", pre_parsed_items=[item]))
 
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
@@ -362,10 +362,10 @@ def test_cx2_contexte_potager_dans_texte_sauvegarde_direct(db):
     update = _make_message_update(998, "perte de 1 plant de tomate au potager")
     item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 1}
 
-    with patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock), \
-         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
-        from bot import _parse_and_save
+    with patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("app.bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from app.bot import _parse_and_save
         _run(_parse_and_save(update, "perte de 1 plant de tomate au potager", pre_parsed_items=[item]))
 
     ev = session.query(Evenement).filter_by(type_action="perte").first()
@@ -387,10 +387,10 @@ def test_cx3_variete_fuzzy_match_typo(db):
     # Groq a mal orthographié "cerise" → "cerize"
     item = {"action": "perte", "culture": "tomate", "variete": "cerize", "quantite": 1}
 
-    with patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock), \
-         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
-        from bot import _parse_and_save
+    with patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("app.bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from app.bot import _parse_and_save
         _run(_parse_and_save(update, "perte de 1 tomate cerize pépinière", pre_parsed_items=[item]))
 
     ev = session.query(Evenement).filter_by(type_action="perte_godet").first()
@@ -421,10 +421,10 @@ def test_perte_auto_variete_unique_non_precisee_sauvegarde_none(db):
     update  = _make_message_update(user_id, "perte de 2 pieds de tomate")
     item    = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 2}
 
-    with patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock), \
-         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
-        from bot import _parse_and_save, _action_confirm_cb
+    with patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("app.bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from app.bot import _parse_and_save, _action_confirm_cb
         _run(_parse_and_save(update, "perte de 2 pieds de tomate", pre_parsed_items=[item]))
 
         # [US-021] Une seule parcelle plantée en tomate → auto-détectée, puis
@@ -467,10 +467,10 @@ def test_perte_menu_jardin_variete_non_precisee_callback_sans_libelle(db):
     update = _make_message_update(995, "perte de 2 pieds de tomate")
     item   = {"action": "perte", "culture": "tomate", "variete": None, "quantite": 2}
 
-    with patch("bot.SessionLocal", return_value=session), \
-         patch("bot.send_voice_reply", new_callable=AsyncMock), \
-         patch("bot.AFTER_RECORD_KEYBOARD", MagicMock()):
-        from bot import _parse_and_save
+    with patch("app.bot.SessionLocal", return_value=session), \
+         patch("app.bot.send_voice_reply", new_callable=AsyncMock), \
+         patch("app.bot.AFTER_RECORD_KEYBOARD", MagicMock()):
+        from app.bot import _parse_and_save
         _run(_parse_and_save(update, "perte de 2 pieds de tomate", pre_parsed_items=[item]))
 
     update.message.reply_text.assert_called_once()

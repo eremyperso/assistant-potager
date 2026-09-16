@@ -283,13 +283,13 @@ class TestZoneClimatique:
     def test_us068_gherkin_potager_sans_zone_lit_la_zone_par_defaut(self, db):
         """Gherkin 5 — pas de zone, pas de localisation : zone par défaut, sans erreur."""
         self._courgette(db)
-        with patch("config.CALENDRIER_ZONE_DEFAUT", "continental"):
+        with patch("app.config.CALENDRIER_ZONE_DEFAUT", "continental"):
             calendrier = cal.lire_calendrier(db, "courgette", 1)
         assert (calendrier.zone, calendrier.zone_origine) == ("continental", cal.ORIGINE_ZONE_DEFAUT)
         assert calendrier.itineraires[0].fenetre(cal.PHASE_SEMIS_PLEINE_TERRE).mois_debut == 5
 
     def test_us068_ca8_zone_par_defaut_hors_vocabulaire_retombe_sur_oceanique(self):
-        with patch("config.CALENDRIER_ZONE_DEFAUT", "tropical"):
+        with patch("app.config.CALENDRIER_ZONE_DEFAUT", "tropical"):
             assert cal.zone_par_defaut() == "oceanique"
 
     def test_us068_ca8_potager_inexistant_ne_bloque_rien(self, db):
@@ -527,15 +527,22 @@ class TestCA9AdaptateurWindRiver:
             days_to_germination="7-14", days_to_harvest="72")}
         resultat = svc_adaptateur.ResultatAdaptation()
         durees = svc_adaptateur.construire_calendriers(par_culture, resultat)[0]["durees"]
-        assert durees == {"levee": "7-14", "repiquage": "42-56"}
+        # [US-177 / CA2] `days_to_harvest` reste écarté de `recolte` — il ne
+        # compte pas depuis le semis — et alimente désormais l'étape qui, elle,
+        # compte depuis la plantation.
+        assert durees == {"levee": "7-14", "repiquage": "42-56", "plantation_recolte": "72-72"}
         assert any("tomate.recolte" in e for e in resultat.durees_ecartees)
 
-    def test_us068_ca9_ce_qui_ne_se_seme_pas_ne_produit_rien(self):
+    def test_us068_ca9_ce_qui_ne_se_seme_pas_ne_donne_aucune_duree_de_semis(self):
         par_culture = {"ail": self._lignes(
             4, sowing_method="Plant cloves 2 inches deep in fall",
             days_to_germination="14-21", days_to_harvest="240-270")}
         resultat = svc_adaptateur.ResultatAdaptation()
-        assert svc_adaptateur.construire_calendriers(par_culture, resultat) == []
+        durees = svc_adaptateur.construire_calendriers(par_culture, resultat)[0]["durees"]
+        # Aucune durée comptée depuis un semis qui n'existe pas ; [US-177 / CA3]
+        # la plantation, elle, est le seul geste d'origine de l'ail.
+        assert "levee" not in durees and "recolte" not in durees and "repiquage" not in durees
+        assert durees == {"plantation_recolte": "240-270"}
 
     def test_us068_ca9_base_trop_faible_ecartee(self):
         par_culture = {"blette": self._lignes(
@@ -557,7 +564,8 @@ class TestCA9AdaptateurWindRiver:
         manifeste = json.loads(MANIFESTE_WIND_RIVER.read_text(encoding="utf-8"))
         assert manifeste["cultures_calendriers"], "le bloc du calendrier est livré"
         for entree in manifeste["cultures_calendriers"]:
-            assert set(entree["durees"]) <= {"levee", "recolte", "repiquage"}
+            # [US-177] Le vocabulaire est celui du service — quatre étapes.
+            assert set(entree["durees"]) <= set(cal.ETAPES)
             for valeur in entree["durees"].values():
                 assert cal.parser_duree(valeur) is not None
             for zone, phases in entree.get("fenetres", {}).items():
@@ -885,7 +893,10 @@ class TestCA9FenetresWindRiver:
         # Semé en place, contredit par ses fiches, ou absent de la source : rien.
         for culture in ("carotte", "haricot", "cornichon", "courgette", "poireau"):
             assert all("plantation" not in p for p in par_nom[culture].get("fenetres", {}).values()), culture
-        assert "ail" not in par_nom
+        # L'ail n'a aucune FENÊTRE issue de la source ; [US-177 / CA3] il porte en
+        # revanche sa durée plantation → récolte, seule, sans levée ni repiquage.
+        assert not par_nom.get("ail", {}).get("fenetres")
+        assert set(par_nom["ail"]["durees"]) == {"plantation_recolte"}
 
     def test_us068_ca9_le_particulier_passe_avant_le_general(self):
         lignes = [
@@ -1104,7 +1115,7 @@ class TestCA10Bot:
         return ctx
 
     async def _appeler(self, db, *args, tenant=CTX_A):
-        import bot
+        from app import bot
         update = self._update()
         with patch.object(bot, "SessionLocal", return_value=db), \
              patch.object(bot, "current_context", return_value=tenant):
@@ -1233,7 +1244,7 @@ class TestCA10Bot:
         assert texte.startswith("❌")
 
     def test_us068_bot_commande_enregistree_au_menu_et_a_l_aide(self):
-        import bot
+        from app import bot
         from app.services import menu_commandes as svc_menu
 
         assert "calendrier" in svc_menu.DESCRIPTIONS
@@ -1306,7 +1317,7 @@ class TestDictable:
     @pytest.mark.asyncio
     async def test_us068_arguments_dictes_executes_par_le_handler(self, db):
         """Les arguments produits par l'interpréteur passent tels quels au handler."""
-        import bot
+        from app import bot
 
         _culture(db, "tomate")
         commande = interp.reconnaitre_par_regles(
@@ -1337,7 +1348,7 @@ def _moteur_api():
 
 @pytest.fixture
 def client_api(_moteur_api, monkeypatch):
-    import main
+    from app.api import main
     monkeypatch.setattr(main, "SessionLocal", sessionmaker(bind=_moteur_api))
     main.app.state.limiter.reset()
     with TestClient(main.app) as client:

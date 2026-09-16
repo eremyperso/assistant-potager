@@ -35,14 +35,14 @@ class TestCA1FichierVersion:
         version_file = tmp_path / "VERSION"
         version_file.write_text("2.14.1\n")
         # Patch __file__ pour pointer vers tmp_path
-        import bot
+        from app import bot
         with patch("os.path.dirname", return_value=str(tmp_path)):
             result = bot._lire_version()
         assert result == "2.14.1"
 
     def test_lire_version_absent_retourne_inconnue(self, tmp_path, monkeypatch):
         """_lire_version() retourne 'inconnue' si le fichier n'existe pas."""
-        import bot
+        from app import bot
         with patch("os.path.dirname", return_value=str(tmp_path)):
             result = bot._lire_version()
         assert result == "inconnue"
@@ -51,7 +51,7 @@ class TestCA1FichierVersion:
         """_lire_version() strip les espaces et sauts de ligne."""
         version_file = tmp_path / "VERSION"
         version_file.write_text("  2.14.1  \n")
-        import bot
+        from app import bot
         with patch("os.path.dirname", return_value=str(tmp_path)):
             result = bot._lire_version()
         assert result == "2.14.1"
@@ -65,7 +65,7 @@ class TestCA2CA3ReponseNominale:
     @pytest.mark.asyncio
     async def test_version_contient_version(self):
         """/version répond avec le numéro de version."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "2.14.1"), \
              patch.object(bot, "_APP_GIT_SHA", "a1b2c3d"), \
@@ -78,7 +78,7 @@ class TestCA2CA3ReponseNominale:
     @pytest.mark.asyncio
     async def test_version_contient_sha(self):
         """/version répond avec le SHA git."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "2.14.1"), \
              patch.object(bot, "_APP_GIT_SHA", "a1b2c3d"), \
@@ -91,7 +91,7 @@ class TestCA2CA3ReponseNominale:
     @pytest.mark.asyncio
     async def test_version_contient_env(self):
         """/version répond avec l'environnement APP_ENV."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "2.14.1"), \
              patch.object(bot, "_APP_GIT_SHA", "a1b2c3d"), \
@@ -104,7 +104,7 @@ class TestCA2CA3ReponseNominale:
     @pytest.mark.asyncio
     async def test_version_utilise_markdown(self):
         """/version utilise parse_mode Markdown."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "2.14.1"), \
              patch.object(bot, "_APP_GIT_SHA", "a1b2c3d"), \
@@ -123,7 +123,7 @@ class TestCA4FichierAbsent:
     @pytest.mark.asyncio
     async def test_version_absente_repond_sans_exception(self):
         """/version répond 'inconnue' si VERSION est absent, sans lever d'exception."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "inconnue"), \
              patch.object(bot, "_APP_GIT_SHA", "inconnu"), \
@@ -141,7 +141,7 @@ class TestCA4FichierAbsent:
 class TestCA5GitIndisponible:
     def test_lire_git_sha_retourne_inconnu_si_git_absent(self):
         """_lire_git_sha() retourne 'inconnu' si git échoue."""
-        import bot
+        from app import bot
         with patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
             result = bot._lire_git_sha()
         assert result == "inconnu"
@@ -149,7 +149,7 @@ class TestCA5GitIndisponible:
     def test_lire_git_sha_retourne_inconnu_si_pas_repo(self):
         """_lire_git_sha() retourne 'inconnu' si le répertoire n'est pas un dépôt git."""
         import subprocess
-        import bot
+        from app import bot
         with patch("subprocess.run", side_effect=subprocess.CalledProcessError(128, "git")):
             result = bot._lire_git_sha()
         assert result == "inconnu"
@@ -157,7 +157,7 @@ class TestCA5GitIndisponible:
     @pytest.mark.asyncio
     async def test_version_sha_inconnu_dans_reponse(self):
         """/version affiche 'inconnu' comme SHA quand git n'est pas disponible."""
-        import bot
+        from app import bot
         update = _make_update()
         with patch.object(bot, "_APP_VERSION", "2.14.1"), \
              patch.object(bot, "_APP_GIT_SHA", "inconnu"), \
@@ -187,10 +187,10 @@ class TestCA6HealthEndpoint:
     def test_health_version_lue_depuis_fichier(self):
         """GET /health retourne la version lue depuis VERSION, pas une valeur codée en dur."""
         from fastapi.testclient import TestClient
-        import main
+        from app.api import main
         fake_session = _mock_session_local()
         with patch.object(main, "_APP_VERSION", "2.14.1"), \
-             patch("main.SessionLocal", return_value=fake_session):
+             patch("app.api.main.SessionLocal", return_value=fake_session):
             client = TestClient(main.app)
             response = client.get("/health")
 
@@ -202,9 +202,9 @@ class TestCA6HealthEndpoint:
     def test_health_retourne_status_ok(self):
         """GET /health retourne status: ok."""
         from fastapi.testclient import TestClient
-        import main
+        from app.api import main
         fake_session = _mock_session_local()
-        with patch("main.SessionLocal", return_value=fake_session):
+        with patch("app.api.main.SessionLocal", return_value=fake_session):
             client = TestClient(main.app)
             response = client.get("/health")
         assert response.status_code == 200

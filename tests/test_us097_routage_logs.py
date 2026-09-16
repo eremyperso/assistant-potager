@@ -313,19 +313,19 @@ class TestCA7AccesAdministrateur:
 
     def test_us097_ca7_admin_reconnu_par_email(self, monkeypatch):
         from fastapi import HTTPException
-        from main import require_admin_user
+        from app.api.main import require_admin_user
         from database.models import User
 
-        monkeypatch.setattr("main.ADMIN_EMAIL", "admin@example.com")
+        monkeypatch.setattr("app.api.main.ADMIN_EMAIL", "admin@example.com")
         admin = User(id=1, email="Admin@Example.com")  # casse différente : insensible à la casse
         assert require_admin_user(admin) is admin
 
     def test_us097_ca7_non_admin_refuse(self, monkeypatch):
         from fastapi import HTTPException
-        from main import require_admin_user
+        from app.api.main import require_admin_user
         from database.models import User
 
-        monkeypatch.setattr("main.ADMIN_EMAIL", "admin@example.com")
+        monkeypatch.setattr("app.api.main.ADMIN_EMAIL", "admin@example.com")
         autre = User(id=2, email="jardinier@example.com")
         with pytest.raises(HTTPException) as err:
             require_admin_user(autre)
@@ -333,10 +333,10 @@ class TestCA7AccesAdministrateur:
 
     def test_us097_ca7_admin_email_absent_refuse_tout_le_monde(self, monkeypatch):
         from fastapi import HTTPException
-        from main import require_admin_user
+        from app.api.main import require_admin_user
         from database.models import User
 
-        monkeypatch.setattr("main.ADMIN_EMAIL", "")
+        monkeypatch.setattr("app.api.main.ADMIN_EMAIL", "")
         with pytest.raises(HTTPException) as err:
             require_admin_user(User(id=1, email="admin@example.com"))
         assert err.value.status_code == 403
@@ -346,9 +346,9 @@ class TestCA7AccesAdministrateur:
         appel direct de la fonction d'endpoint (même limitation TestClient que
         ci-dessus), elle doit renvoyer une structure de données brute."""
         from unittest.mock import patch as _patch
-        import main as main_module
+        from app.api import main as main_module
 
-        with _patch("main.SessionLocal", return_value=test_db):
+        with _patch("app.api.main.SessionLocal", return_value=test_db):
             corps = main_module.admin_routage_metriques(_admin=None)
         assert isinstance(corps, dict)
         assert "par_etage" in corps and "comparaison_hypotheses" in corps

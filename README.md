@@ -50,13 +50,15 @@ Un assistant intelligent pour jardiniers amateurs, combinant un bot Telegram, un
      ```
 
 4. **Configurez les variables d'environnement**
-   - Copiez `config.py.example` vers `config.py`
-   - Éditez `config.py` avec vos clés API :
-     ```python
-     GROQ_API_KEY = "votre-cle-groq"
-     TELEGRAM_BOT_TOKEN = "votre-token-telegram"
-     DATABASE_URL = "postgresql://user:password@localhost/potager"
+   - Copiez `.env.example` vers `.env.dev` (ou `.env.prod`) à la racine du dépôt
+   - Renseignez vos clés :
+     ```ini
+     GROQ_API_KEY=votre-cle-groq
+     TELEGRAM_BOT_TOKEN=votre-token-telegram
+     DATABASE_URL=postgresql://user:password@localhost/potager
+     JWT_SECRET=un-secret-long-et-aleatoire
      ```
+   - `app/config.py` charge `.env.{APP_ENV}` depuis la racine, quel que soit le répertoire courant
 
 5. **Installez FFmpeg** (requis pour les voice notes Telegram)
    - Windows : `winget install ffmpeg`
@@ -65,7 +67,7 @@ Un assistant intelligent pour jardiniers amateurs, combinant un bot Telegram, un
 
 ## ⚙️ Configuration
 
-Le fichier `config.py` contient toutes les configurations nécessaires :
+Le module `app/config.py` lit toutes les configurations depuis `.env.{APP_ENV}` :
 
 - `GROQ_API_KEY` : Clé API Groq (gratuite)
 - `TELEGRAM_BOT_TOKEN` : Token du bot Telegram
@@ -79,7 +81,7 @@ Le fichier `config.py` contient toutes les configurations nécessaires :
 
 1. **Démarrez le bot**
    ```bash
-   python bot.py
+   python -m app.bot
    ```
 
 2. **Commandes disponibles**
@@ -94,7 +96,7 @@ Le fichier `config.py` contient toutes les configurations nécessaires :
 
 1. **Démarrez le serveur**
    ```bash
-   python main.py
+   uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
    ```
    L'API sera accessible sur http://localhost:8000
 
@@ -213,14 +215,20 @@ Les contributions sont les bienvenues !
 5. Ouvrez une Pull Request
 
 ### Structure du projet
-- `bot.py` : Bot Telegram principal
-- `main.py` : API FastAPI
+- `app/bot/` : Bot Telegram, un module par domaine (`python -m app.bot`)
+- `app/api/main.py` : API FastAPI (`uvicorn app.api.main:app`)
+- `app/services/` : Couche métier partagée par le bot et l'API
+- `app/config.py` : Configuration lue depuis `.env.{APP_ENV}`
 - `database/` : Modèles et connexion DB
-- `llm/` : Client Groq et prompts
+- `llm/` : Passerelle Groq, routeur, parseur déterministe
 - `utils/` : Utilitaires (actions, dates, météo, TTS)
-- `static/` : Fichiers PWA
-- `tests/` : Tests unitaires
-- `migrations/` : Scripts SQL de migration
+- `data/` : Référentiel structuré et corpus de connaissance
+- `frontend/` : Dashboard React (Vite) ; `static/` : ancienne PWA de repli
+- `scripts/` : `update_dev.ps1` (env dev) et `deploy.sh` (repli manuel)
+- `infra/` : Unités systemd ; `.github/workflows/` : déploiement dev / prod
+- `tools/` : Outils d'exploitation (import, ingestion, mesures)
+- `tests/` : Tests pytest ; `migrations/` : Scripts SQL de migration
+- `docs/domaines/` : Notes de conception par domaine, à lire avant de toucher un module
 
 ## 📝 Licence
 

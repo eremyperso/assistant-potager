@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# deploy.sh — Déploiement de l'Assistant Potager sur Scaleway
-# Usage : ./deploy.sh [user@host]
+# scripts/deploy.sh — Déploiement MANUEL de l'Assistant Potager sur Scaleway
+# Usage : ./scripts/deploy.sh [user@host]
+#
+# ATTENTION : le chemin nominal est le workflow GitHub Actions (.github/workflows/deploy.yml,
+# push sur main) : ce script est le repli manuel, à garder aligné avec lui.
 # Les secrets NE SONT PAS transmis ici — ils sont déjà sur le serveur dans /opt/potager/.env.prod
 #
 # Prérequis locaux :
@@ -10,13 +13,15 @@
 # Prérequis serveur :
 #   - Python 3.11+, pip, git installés
 #   - Fichier /opt/potager/.env.prod créé manuellement
-#   - Service systemd potager.service installé (voir infra/potager.service)
+#   - Services systemd potager-prod.service + potager-prod-bot.service installés
+#     (voir infra/potager-prod*.service — le bot se lance par `python -m app.bot`,
+#     l'API par `uvicorn app.api.main:app`)
 
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 DEPLOY_HOST="${1:-${DEPLOY_HOST:?'Variable DEPLOY_HOST non définie. Usage: ./deploy.sh user@host'}}"
-REMOTE_DIR="/opt/potager"
+REMOTE_DIR="/opt/potager-prod"
 BRANCH="${DEPLOY_BRANCH:-main}"
 
 echo "==> Déploiement sur ${DEPLOY_HOST} (branche: ${BRANCH})"
@@ -26,7 +31,7 @@ echo "==> [1/6] Synchronisation du code..."
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
   if [ ! -d '${REMOTE_DIR}/.git' ]; then
-    git clone https://github.com/\$(git -C ~ config user.name 2>/dev/null || echo 'owner')/sandbox-potager.git ${REMOTE_DIR}
+    git clone https://github.com/eremyperso/assistant-potager.git ${REMOTE_DIR}
   fi
   cd ${REMOTE_DIR}
   git fetch origin
@@ -88,23 +93,23 @@ ssh "${DEPLOY_HOST}" "
 
 # ── 5. Redémarrage du service systemd ──────────────────────────────────────────
 echo "==> [5/6] Redémarrage du service systemd..."
-ssh "${DEPLOY_HOST}" "sudo systemctl restart potager.service"
+ssh "${DEPLOY_HOST}" "sudo systemctl restart potager-prod.service potager-prod-bot.service"
 
 # ── 6. Smoke test ──────────────────────────────────────────────────────────────
 echo "==> [6/6] Smoke test (attente 10s démarrage)..."
 sleep 10
 ssh "${DEPLOY_HOST}" "
   set -euo pipefail
-  status=\$(systemctl is-active potager.service)
+  status=\$(systemctl is-active potager-prod.service)
   if [ \"\${status}\" != 'active' ]; then
-    echo 'ERREUR: Le service potager.service n est pas actif (\${status})'
-    systemctl status potager.service --no-pager
+    echo 'ERREUR: Le service potager-prod.service n est pas actif (\${status})'
+    systemctl status potager-prod.service --no-pager
     exit 1
   fi
-  echo 'Service potager.service: actif'
+  echo 'Service potager-prod.service: actif'
   # Vérification du endpoint /health
   export APP_ENV=prod
-  set -a && source /opt/potager/.env.prod && set +a
+  set -a && source ${REMOTE_DIR}/.env.prod && set +a
   curl --fail --silent --max-time 10 http://localhost:8000/health | grep -q 'ok' && echo 'Health check: OK' || (echo 'ERREUR: health check échoué'; exit 1)
 "
 

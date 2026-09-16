@@ -65,7 +65,7 @@ async def test_mise_en_godet_avec_variete_route_vers_creer_evenement_godet(test_
     creer_evenement_godet — jamais via creer_evenement_confirme — pour garantir
     parcelle_id=None et le lien origine_graines_id, quel que soit le chemin qui a
     mené jusqu'à la confirmation."""
-    import bot as bot_module
+    from app import bot as bot_module
 
     serre = Parcelle(nom="serre", nom_normalise="serre", ordre=1, actif=True, est_pepiniere=True)
     test_db.add(serre)
@@ -83,7 +83,7 @@ async def test_mise_en_godet_avec_variete_route_vers_creer_evenement_godet(test_
     update.effective_user.id = 999
     update.effective_message = AsyncMock()
 
-    with patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.SessionLocal", return_value=test_db):
         await bot_module._do_save_items(update, items, "mise en godet de 3 pois gourmand sur 3 graines")
 
     event = test_db.query(Evenement).filter(Evenement.type_action == "mise_en_godet").one()
@@ -97,7 +97,7 @@ async def test_mise_en_godet_culture_manquante_bloque_sans_ecriture(test_db, ctx
     """Reproduit le bug id=351 de bout en bout via _do_save_items : culture=None,
     variete="gourmand" — aucun événement fantôme ne doit être écrit, l'utilisateur
     reçoit un message d'erreur explicite."""
-    import bot as bot_module
+    from app import bot as bot_module
 
     items = [{
         "action": "mise_en_godet", "culture": None, "variete": "gourmand",
@@ -108,7 +108,7 @@ async def test_mise_en_godet_culture_manquante_bloque_sans_ecriture(test_db, ctx
     update.effective_user.id = 998
     update.effective_message = AsyncMock()
 
-    with patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.SessionLocal", return_value=test_db):
         await bot_module._do_save_items(update, items, "mise en godet de 3 gourmand sur 3 graines")
 
     assert test_db.query(Evenement).count() == 0

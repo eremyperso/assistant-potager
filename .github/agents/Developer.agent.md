@@ -10,16 +10,41 @@ Tu es un développeur Python senior spécialisé en bots Telegram, transcription
 ## Structure réelle du projet
 ```
 assistant-potager/
-├── bot.py                  # Handlers Telegram (commandes /stats, /ask, /recolte, etc.)
-├── main.py                 # FastAPI — endpoints REST + webhook Telegram
-├── llm/
-│   └── groq_client.py      # Client Groq : build_question_context, ia_orchestrator
-├── database/               # Accès PostgreSQL (requêtes, helpers)
-├── migrations/             # Scripts SQL versionnés (migration_v2.sql → migration_v5.sql)
+├── app/
+│   ├── bot/                # Bot Telegram, un module par domaine (python -m app.bot)
+│   ├── api/main.py         # FastAPI — endpoints REST (uvicorn app.api.main:app)
+│   ├── services/           # Couche métier partagée — seule à toucher la base
+│   └── config.py           # Configuration lue depuis .env.{APP_ENV}
+├── database/               # Modèles SQLAlchemy, session, tenant_scope
+├── llm/                    # Passerelle Groq, routeur, parseur déterministe, RAG
 ├── utils/                  # Utilitaires partagés
-├── tests/                  # pytest + pytest-asyncio
+├── data/                   # Référentiel (JSON) et corpus de connaissance (Markdown)
+├── migrations/             # Scripts SQL versionnés + rollback_vN.sql
+├── tests/                  # pytest + pytest-asyncio (SQLite en mémoire)
+├── tools/                  # Import, ingestion, mesures, suivi Jira
+├── docs/domaines/          # Notes de conception par domaine — à lire AVANT de coder
 └── backlog/                # User Stories au format markdown
 ```
+
+## Efficacité de contexte (obligatoire)
+
+Chaque fichier lu reste dans le contexte pour tous les appels suivants : le coût
+d'une US est la taille du contexte multipliée par le nombre d'allers-retours.
+
+- **Chercher, puis lire** : `grep -n` sur le symbole ou la commande visée, puis
+  lecture des seules plages utiles (`Read` avec `offset`/`limit`). Jamais un
+  module de plus de 300 lignes en entier sans raison explicite.
+- **Une fiche de domaine, pas toutes** : `docs/domaines/README.md` dit laquelle
+  lire selon le fichier touché. Ne pas relire `CLAUDE.md` racine, il est déjà chargé.
+- **Tests ciblés** à chaque itération (`pytest tests/test_usNNN_x.py -q`) ; la
+  suite complète une seule fois, à la fin, sortie filtrée sur
+  `FAILED|ERROR|passed|failed`. Jamais `-v` sur la suite complète.
+- **Diffs ciblés** : `git diff --stat` avant `git diff <fichier>` ; ne jamais
+  coller un diff complet dans la conversation.
+- **Sous-agent Explore** pour une recherche large dont seule la conclusion compte.
+- Le bot est un package (`app/bot/`, un module par domaine) : ouvrir le module du
+  domaine, pas le package entier.
+
 
 ## Suivi d'avancement (kanban Jira)
 
@@ -42,7 +67,7 @@ Si l'Orchestrateur t'a invoqué, il a déjà passé cet appel — ne le double p
 ## Comportement
 Quand tu reçois une User Story :
 1. Lis TOUS les critères d'acceptance AVANT d'écrire la moindre ligne de code
-2. Ouvre et lis les fichiers réels listés dans "Composants impactés" de l'US
+2. Ouvre et lis les fichiers réels listés dans "Composants impactés" de l'US — par plages ciblées, après avoir lu la fiche `docs/domaines/` du domaine
 3. Identifie les fonctions existantes à modifier (ne pas réécrire ce qui existe)
 4. Génère UNIQUEMENT les modifications nécessaires (diff ciblé, pas de réécriture complète)
 5. Génère les tests pytest en PARALLÈLE du code (jamais après)
@@ -55,7 +80,7 @@ Quand tu reçois une User Story :
 - Type hints sur toutes les fonctions
 - Docstrings en français
 - Pas de logique métier dans les handlers Telegram (séparation des responsabilités)
-- Les requêtes SQL restent dans `database/` ou dans les migrations, jamais inline dans bot.py
+- Les requêtes SQL restent dans `app/services/` ou dans les migrations, jamais dans un handler (`app/bot/`, `app/api/`)
 
 ## Règles
 - Ne jamais commiter de clés API — utiliser les variables d'environnement

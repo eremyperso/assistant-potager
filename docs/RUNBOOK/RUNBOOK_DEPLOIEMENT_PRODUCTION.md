@@ -2,7 +2,7 @@
 
 > **Statut :** Documentation d'exploitation (ops), reconstituée à partir de
 > `docs/SETUP.md`, `infra/*.service`, `.github/workflows/*.yml`,
-> `migrations/*.sql`, `config.py`, `main.py`, `bot.py` et
+> `migrations/*.sql`, `app/config.py`, `app/api/main.py`, `app/bot/` et
 > `docs/CONCEPTION_SECURISATION_API.md`.
 > **Date de rédaction :** 2026-08-24 — version applicative au moment de la
 > rédaction : `v3.38.0` (voir `VERSION`).
@@ -41,12 +41,12 @@
                     │                 │                          │
                     │  ┌──────────────▼───────────┐  ┌─────────┐│
                     │  │ potager-prod.service      │  │potager- ││
-                    │  │ uvicorn main:app :8000     │  │prod-bot││
+                    │  │ uvicorn app.api.main:app :8000     │  │prod-bot││
                     │  │ (API FastAPI + PWA/dist)   │  │.service ││
                     │  └──────────────┬───────────┘  │(polling)││
                     │  ┌──────────────▼───────────┐  └────┬────┘│
                     │  │ potager-dev.service        │       │     │
-                    │  │ uvicorn main:app :8001     │       │     │
+                    │  │ uvicorn app.api.main:app :8001     │       │     │
                     │  └──────────────┬───────────┘       │     │
                     │  ┌──────────────▼───────────┐  ┌────▼────┐│
                     │  │ potager-dev-bot.service    │  │Telegram ││
@@ -92,8 +92,8 @@
 | 3 | Nginx | Reverse proxy + terminaison TLS | Sur le serveur applicatif | 80/443 → 8000 (prod) / 8001 (dev) | `/etc/nginx/...` sur le serveur — **non versionné dans ce dépôt** |
 | 4 | Certificats TLS | HTTPS | Let's Encrypt (certbot) | — | Renouvellement auto certbot sur le serveur |
 | 5 | PostgreSQL | Stockage des données (événements, utilisateurs, potagers...) | Sur le serveur applicatif (package `postgresql-14`) | 5432 (local ; accès distant restreint par IP) | `migrations/*.sql` |
-| 6 | API FastAPI — PROD | Backend REST + sert `frontend/dist` | `potager-prod.service` | `:8000` | `infra/potager-prod.service`, `main.py` |
-| 7 | Bot Telegram — PROD | Commandes vocales/texte, jobs météo (05h) + purge (04h) | `potager-prod-bot.service` | polling sortant (aucun port entrant) | `infra/potager-prod-bot.service`, `bot.py` |
+| 6 | API FastAPI — PROD | Backend REST + sert `frontend/dist` | `potager-prod.service` | `:8000` | `infra/potager-prod.service`, `app/api/main.py` |
+| 7 | Bot Telegram — PROD | Commandes vocales/texte, jobs météo (05h) + purge (04h) | `potager-prod-bot.service` | polling sortant (aucun port entrant) | `infra/potager-prod-bot.service`, `app/bot/` (`python -m app.bot`) |
 | 8 | API FastAPI — DEV | Environnement de recette | `potager-dev.service` | `:8001` | `infra/potager-dev.service` |
 | 9 | Bot Telegram — DEV | Bot de recette | `potager-dev-bot.service` | polling sortant | `infra/potager-dev-bot.service` |
 | 10 | Frontend React (PWA) | Dashboard web (Vite build statique) | Buildé en CI, servi par l'API (`frontend/dist`) | même origine que l'API | `frontend/`, `.github/workflows/deploy*.yml` |
@@ -656,7 +656,7 @@ sélectionner le workflow → **Run workflow**.
 
 ### B2 — Manuel (CI indisponible, infra déjà provisionnée)
 
-`deploy.sh` reproduit une partie du pipeline (nécessite `DEPLOY_HOST`,
+`scripts/deploy.sh` reproduit une partie du pipeline (nécessite `DEPLOY_HOST`,
 suppose que `.env.prod`, PostgreSQL, Nginx et les unités systemd existent
 déjà — c'est un script de mise à jour de code, pas de provisionnement) :
 ```bash

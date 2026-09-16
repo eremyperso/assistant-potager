@@ -34,7 +34,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram.ext import CommandHandler
 
-import bot as bot_module
+from app import bot as bot_module
 from app.services import interpreteur_commandes as interp
 from app.services import menu_commandes as svc_menu
 from app.services.context import TenantContext
@@ -328,7 +328,9 @@ class TestCA5DicteeVocale:
     @pytest.mark.asyncio
     async def test_us172_ca5_le_canal_vocal_consulte_l_interpreteur(self):
         """[CA5] `handle_voice` passe la transcription au même point du flux."""
-        source = Path(bot_module.__file__).read_text(encoding="utf-8-sig")
+        source = "\n".join(
+            Path(m.__file__).read_text(encoding="utf-8-sig") for m in bot_module._SOUS_MODULES
+        )
         vocal = source.split("async def handle_voice")[1].split("\nasync def ")[0]
         assert "_traiter_commande_interpretee" in vocal
         # …et AVANT le parsing de geste : une phrase reconnue comme commande
@@ -478,7 +480,9 @@ class TestCA9CA14MemeCheminQueLaCommandeTapee:
 
     def test_us172_ca14_les_commandes_d_ecriture_portent_toutes_le_garde(self):
         """[CA14] Aucune commande d'écriture n'échappe au garde de rôle."""
-        source = Path(bot_module.__file__).read_text(encoding="utf-8-sig")
+        source = "\n".join(
+            Path(m.__file__).read_text(encoding="utf-8-sig") for m in bot_module._SOUS_MODULES
+        )
         for handler in ("cmd_parcelle", "cmd_culture", "cmd_association", "cmd_bioagresseur"):
             corps = source.split(f"async def {handler}(")[1].split("\nasync def ")[0]
             assert "_refuser_si_role_insuffisant" in corps, handler
@@ -1100,7 +1104,9 @@ class TestDefautsReleveEnDicteeReelle:
 
     def test_us172_le_canal_vocal_consulte_les_regles_avant_les_intents(self):
         """[CA5] L'ordre du flux vocal, lu dans le code plutôt que supposé."""
-        source = Path(bot_module.__file__).read_text(encoding="utf-8-sig")
+        source = "\n".join(
+            Path(m.__file__).read_text(encoding="utf-8-sig") for m in bot_module._SOUS_MODULES
+        )
         separateur = chr(10) + "async def "
         vocal = source.split("async def handle_voice")[1].split(separateur)[0]
         assert vocal.index("_traiter_commande_interpretee") < vocal.index("parser_saisie")
@@ -1156,7 +1162,9 @@ class TestCA21CA22NonRegression:
         qu'un message envoyé pendant une correction reste traité par la
         correction.
         """
-        source = Path(bot_module.__file__).read_text(encoding="utf-8-sig")
+        source = "\n".join(
+            Path(m.__file__).read_text(encoding="utf-8-sig") for m in bot_module._SOUS_MODULES
+        )
         corps = source.split("async def handle_text")[1].split("\nasync def ")[0]
 
         position_correction = corps.index("mode == 'corr_search'")
@@ -1170,7 +1178,9 @@ class TestCA21CA22NonRegression:
 
     def test_us172_ca21_le_mode_de_completion_survit_a_la_reinitialisation(self):
         """[CA21] Une saisie guidée en cours n'est pas interrompue par un message."""
-        source = Path(bot_module.__file__).read_text(encoding="utf-8-sig")
+        source = "\n".join(
+            Path(m.__file__).read_text(encoding="utf-8-sig") for m in bot_module._SOUS_MODULES
+        )
         corps = source.split("async def handle_text")[1].split("\nasync def ")[0]
         modes = corps.split("MODES_CORRECTION = {")[1].split("}")[0]
         assert "_INTERP_MODE_COMPLETION" in modes

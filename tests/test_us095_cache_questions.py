@@ -877,7 +877,9 @@ def test_us095_ca11_les_perimees_sont_nettoyees_a_l_ecriture_suivante(potager):
 def test_us095_ca11_aucun_job_planifie_ajoute():
     """CA11 — « aucun nouveau job planifié n'est ajouté pour cela » : le cache
     n'apparaît nulle part dans la planification du bot."""
-    bot_source = (RACINE / "bot.py").read_text(encoding="utf-8")
+    bot_source = "\n".join(
+        p.read_text(encoding="utf-8") for p in sorted((RACINE / "app" / "bot").glob("*.py"))
+    )
     assert "cache_questions" not in bot_source
 
 

@@ -159,14 +159,14 @@ def controler(domaines_aide: Iterable[str], fiches: Iterable[FicheAide],
 
 
 def domaines_de_l_aide() -> tuple[str, ...]:
-    """Les domaines déclarés par la commande d'aide, lus dans `bot.py`.
+    """Les domaines déclarés par la commande d'aide, lus dans `app/bot/aide.py`.
 
     Import tardif et volontairement local : ce module doit rester importable
     (et testable) sans `python-telegram-bot` ni jeton, exactement comme
     `app/services/menu_commandes.py` se construit à partir de noms qu'on lui
     passe plutôt qu'en allant les chercher lui-même.
     """
-    from bot import _HELP_DOMAINES
+    from app.bot.aide import _HELP_DOMAINES
     return tuple(_HELP_DOMAINES)
 
 

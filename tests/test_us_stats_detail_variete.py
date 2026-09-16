@@ -295,7 +295,7 @@ class TestFormatVarieteBlocTelegram:
 class TestExtractStatsCulture:
 
     def _call(self, texte):
-        from bot import _extract_stats_culture
+        from app.bot import _extract_stats_culture
         return _extract_stats_culture(texte)
 
     def test_ca8_stats_culture_simple(self):
@@ -331,11 +331,11 @@ class TestExtractStatsCulture:
 
 class TestCmdStatsAvecArg:
 
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_ca6_culture_inconnue(self, mock_voice, db):
         """[CA6] /stats [culture_inconnue] → 'Aucune donnée pour …'."""
-        from bot import cmd_stats
+        from app.bot import cmd_stats
 
         mock_update = MagicMock()
         mock_update.message.reply_text = AsyncMock()
@@ -343,17 +343,17 @@ class TestCmdStatsAvecArg:
         mock_ctx = MagicMock()
         mock_ctx.args = ["marsien"]
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await cmd_stats(mock_update, mock_ctx)
 
         call_args = mock_update.message.reply_text.call_args[0][0]
         assert "marsien" in call_args.lower()
 
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_ca3_culture_connue(self, mock_voice, db):
         """[CA3] /stats tomate → message détail variété."""
-        from bot import cmd_stats
+        from app.bot import cmd_stats
 
         _seed_config(db)
         db.add(Evenement(
@@ -368,18 +368,18 @@ class TestCmdStatsAvecArg:
         mock_ctx = MagicMock()
         mock_ctx.args = ["tomate"]
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await cmd_stats(mock_update, mock_ctx)
 
         call_args = mock_update.message.reply_text.call_args[0][0]
         assert "détail par variété" in call_args
         assert "Pour revenir à la synthèse" in call_args
 
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_ca2_hint_dans_synthese(self, mock_voice, db):
         """[CA2] /stats sans argument → hint 'Pour le détail d'une variété' présent."""
-        from bot import cmd_stats
+        from app.bot import cmd_stats
 
         mock_update = MagicMock()
         mock_update.message.reply_text = AsyncMock()
@@ -387,7 +387,7 @@ class TestCmdStatsAvecArg:
         mock_ctx = MagicMock()
         mock_ctx.args = []
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await cmd_stats(mock_update, mock_ctx)
 
         call_args = mock_update.message.reply_text.call_args[0][0]

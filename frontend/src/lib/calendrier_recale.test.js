@@ -113,3 +113,23 @@ test('[CA8] la date de référence part avec la lecture du calendrier', () => {
   const api = readFileSync(new URL('./api.js', import.meta.url), 'utf-8')
   assert.match(api, /p\.append\('date_ref', dateRef\)/)
 })
+
+test('[US-177 / CA7] plant acheté : projeté depuis la plantation, ni semis ni levée annoncés', () => {
+  // Gherkin 2 — tomate plantée le 10 mai, 60 à 80 jours, consultée le 1er juin.
+  const plant = courgette({
+    culture: 'tomate',
+    origine: { action: 'plantation', date: '2026-05-10', contexte: null },
+    plantation_reelle: '2026-05-10',
+    levee_attendue: null,
+    recolte_attendue: { debut: '2026-07-09', fin: '2026-07-29' },
+    jours_restants: { min: 38, max: 58 },
+    mois: { ...moisVides, plantation: [5], croissance: [6], recolte: [7] },
+  })
+  const reperes = reperesLisibles(plant)
+  assert.deepEqual(reperes, [
+    'planté le 10 mai',
+    '1re récolte attendue entre le 9 juillet et le 29 juillet',
+  ])
+  assert.equal(reperes.some((r) => r.startsWith('semé')), false)
+  assert.equal(resteLisible(plant), 'récolte attendue dans 38 à 58 jours')
+})

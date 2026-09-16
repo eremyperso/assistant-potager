@@ -57,11 +57,11 @@ MOCK_STOCKS = {
 
 @pytest.fixture
 def client():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal",                  return_value=MagicMock()),
+        patch("app.api.main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value=MOCK_STOCKS),
         patch("utils.stock.calcul_godets",          return_value={}),
         patch("utils.stock.calcul_semis",           return_value={}),
@@ -73,11 +73,11 @@ def client():
 
 @pytest.fixture
 def client_vide():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal",                  return_value=MagicMock()),
+        patch("app.api.main.SessionLocal",                  return_value=MagicMock()),
         patch("utils.stock.calcul_stock_cultures",  return_value={}),
         patch("utils.stock.calcul_godets",          return_value={}),
         patch("utils.stock.calcul_semis",           return_value={}),
@@ -154,12 +154,12 @@ def test_us025_ca6_vide_liste_vide():
 
 def test_us025_ca6_api_retourne_200_si_vide():
     """CA6 — GET /stats retourne 200 même si aucune culture."""
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     try:
         with (
-            patch("main.SessionLocal",                  return_value=MagicMock()),
+            patch("app.api.main.SessionLocal",                  return_value=MagicMock()),
             patch("utils.stock.calcul_stock_cultures",  return_value={}),
             patch("utils.stock.calcul_godets",          return_value={}),
             patch("utils.stock.calcul_semis",           return_value={}),

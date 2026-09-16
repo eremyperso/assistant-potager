@@ -43,7 +43,7 @@ async def test_ca4_bug_rapporte_phrase_multi_culture_segmentee(test_db):
     malgré le garde-fou "culture jamais plantée" déjà en place, parce que ce
     garde-fou était conditionné à len(items) == 1.
     """
-    import bot as bot_module
+    from app import bot as bot_module
 
     parcelle_nord = Parcelle(nom="test-planche-nord", nom_normalise="testplanchenord", ordre=1, actif=True)
     test_db.add(parcelle_nord)
@@ -61,9 +61,9 @@ async def test_ca4_bug_rapporte_phrase_multi_culture_segmentee(test_db):
     update.effective_message = update.message
 
     with (
-        patch("bot.parse_commande", return_value=items),
-        patch("bot._normalize_items", return_value=items),
-        patch("bot.SessionLocal", return_value=test_db),
+        patch("app.bot.parse_commande", return_value=items),
+        patch("app.bot._normalize_items", return_value=items),
+        patch("app.bot.SessionLocal", return_value=test_db),
     ):
         bot_module._ACTION_PENDING.pop(8063902186, None)
         await bot_module._parse_and_save(update, "cueilli 2 kilos de cerise, tomates, nord")

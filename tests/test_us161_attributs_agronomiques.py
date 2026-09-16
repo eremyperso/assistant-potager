@@ -415,12 +415,12 @@ class TestCA5CorrectionBot:
     @pytest.mark.asyncio
     async def test_us161_bot_corrige_et_confirme_les_deux_valeurs(self):
         """[CA5] La commande confirme l'ancienne ET la nouvelle valeur."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["exposition", "courgette", "plein", "soleil"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.corriger_attribut",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.corriger_attribut",
                    return_value=([MagicMock()], "mi-ombre", "plein soleil")) as mock_corr:
             MockSession.return_value = MagicMock()
 
@@ -436,12 +436,12 @@ class TestCA5CorrectionBot:
     async def test_us161_bot_refuse_une_valeur_hors_vocabulaire(self):
         """[CA2/CA5] Le refus est expliqué au jardinier, et il apprend que rien
         n'a changé."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["exposition", "courgette", "au", "soleil", "le", "matin"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.corriger_attribut",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.corriger_attribut",
                    side_effect=ValeurHorsVocabulaireError("valeur non admise")):
             MockSession.return_value = MagicMock()
 
@@ -452,12 +452,12 @@ class TestCA5CorrectionBot:
 
     @pytest.mark.asyncio
     async def test_us161_bot_signale_une_culture_inconnue(self):
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["profondeur", "kiwano", "2"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.corriger_attribut", side_effect=LookupError("kiwano")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.corriger_attribut", side_effect=LookupError("kiwano")):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -469,7 +469,7 @@ class TestCA5CorrectionBot:
     async def test_us161_bot_arguments_insuffisants_rappelle_les_valeurs_admises(self):
         """[CA2] Le message d'usage énonce le vocabulaire fermé : le jardinier
         n'a pas à le deviner."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["eau", "courgette"])  # valeur manquante
 
@@ -482,7 +482,7 @@ class TestCA5CorrectionBot:
     async def test_us161_bot_lit_les_attributs_et_dit_les_absents(self):
         """[CA4] L'affichage porte « non renseigné » pour ce que l'application
         ne sait pas."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["attributs", "topinambour"])
 
@@ -494,8 +494,8 @@ class TestCA5CorrectionBot:
             )
             for a in svc_attributs.ATTRIBUTS
         ]
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.lire_attributs", return_value=lus):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.lire_attributs", return_value=lus):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -522,7 +522,7 @@ class TestCA5CorrectionBot:
         italique, et Telegram refusait le message — « can't find end of the
         entity ». Aucun identifiant technique ne doit atteindre le rendu, et les
         entités doivent rester appariées."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["attributs", "tomate"])
         lus = self._lus(
@@ -530,8 +530,8 @@ class TestCA5CorrectionBot:
             attribution="Plant variety data from Wind River Greens (…), CC BY 4.0",
         )
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.lire_attributs", return_value=lus):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.lire_attributs", return_value=lus):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -545,14 +545,14 @@ class TestCA5CorrectionBot:
     async def test_us161_l_attribution_est_affichee_avec_la_reponse(self):
         """[US-166 / CA1] CC BY oblige à créditer la source AVEC la réponse, pas
         dans un README. Une mention par source, dédupliquée."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["attributs", "tomate"])
         attribution = "Plant variety data from Wind River Greens (…), CC BY 4.0"
         lus = self._lus(["plein soleil", "élevé", None, None], attribution=attribution)
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.lire_attributs", return_value=lus):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.lire_attributs", return_value=lus):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -566,12 +566,12 @@ class TestCA5CorrectionBot:
     async def test_us161_aucune_mention_de_source_si_rien_n_est_renseigne(self):
         """Une culture sans aucune valeur n'a aucune source à créditer : pas de
         pied de message vide."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["attributs", "topinambour"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_attributs.lire_attributs", return_value=self._lus([None] * 4)):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_attributs.lire_attributs", return_value=self._lus([None] * 4)):
             MockSession.return_value = MagicMock()
 
             await cmd_culture(update, ctx)
@@ -584,7 +584,7 @@ class TestCA5CorrectionBot:
     async def test_us161_sous_commande_inconnue_affiche_l_usage(self):
         """Une sous-commande qui n'est ni un attribut ni une commande connue
         retombe sur l'usage, sans rien écrire."""
-        from bot import cmd_culture
+        from app.bot import cmd_culture
         update = self._make_update()
         ctx = self._make_ctx(["couleur", "carotte", "orange"])
 
