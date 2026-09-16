@@ -249,8 +249,8 @@ class TestCA8CA9Instrumentation:
         mentionne l'origine de la date."""
         interdits = [
             "app/services/reponses_chiffrees.py", "app/services/questions.py",
-            "app/services/stock.py", "utils/stock.py", "llm/sql_agent.py", "bot.py",
-        ]
+            "app/services/stock.py", "utils/stock.py", "llm/sql_agent.py",
+        ] + sorted(p.relative_to(RACINE).as_posix() for p in (RACINE / "app" / "bot").glob("*.py"))
         for chemin in interdits:
             contenu = (RACINE / chemin).read_text(encoding="utf-8")
             assert "date_source" not in contenu, f"{chemin} lit une colonne d'instrumentation"
@@ -266,7 +266,9 @@ class TestCA10ConfirmationInchangee:
         """Scénario Gherkin : aucun message n'annonce que la date a été
         présumée — toute saisie sans ancrage retombe sur aujourd'hui sans
         que l'affichage change."""
-        contenu = (RACINE / "bot.py").read_text(encoding="utf-8").lower()
+        contenu = "\n".join(
+            p.read_text(encoding="utf-8") for p in (RACINE / "app" / "bot").glob("*.py")
+        ).lower()
         assert "présum" not in contenu
         assert "presum" not in contenu
 

@@ -29,7 +29,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from database.models import Parcelle, Evenement
-from bot import _build_action_summary
+from app.bot import _build_action_summary
 
 
 # ── _build_action_summary — rendu de l'avertissement ────────────────────────────
@@ -94,11 +94,11 @@ async def test_recolte_variete_hors_parcelle_declenche_avertissement(db_potager_
         "quantite": 2, "unite": "kg", "parcelle": "centrale",
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_potager_type),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_potager_type),
     ):
         bot_module._ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "j'ai ramassé 2 kilos de tomates cerise, parcelle centrale")
@@ -138,11 +138,11 @@ async def test_recolte_variete_hors_parcelle_plusieurs_candidates_propose_menu(d
         "quantite": 2, "unite": "kg", "parcelle": "centrale",   # ← incohérent (cerise n'y est pas)
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_potager_type),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_potager_type),
     ):
         bot_module._ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "j'ai ramassé 2 kilos de tomates cerise, parcelle centrale")
@@ -164,11 +164,11 @@ async def test_recolte_variete_coherente_pas_avertissement(db_potager_type):
         "quantite": 2, "unite": "kg", "parcelle": "centrale",
     }
 
-    import bot as bot_module
+    from app import bot as bot_module
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.SessionLocal", return_value=db_potager_type),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.SessionLocal", return_value=db_potager_type),
     ):
         bot_module._ACTION_PENDING.pop(1, None)
         await bot_module._parse_and_save(update, "j'ai ramassé 2 kilos de tomates coeur de boeuf, parcelle centrale")

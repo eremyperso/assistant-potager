@@ -1,9 +1,16 @@
 from dotenv import load_dotenv
 import os
 
-# Charge le bon fichier .env selon APP_ENV (dev | prod) — défaut : dev
+# Charge le bon fichier .env selon APP_ENV (dev | prod) — défaut : dev.
+# Cherché d'abord dans le répertoire courant (contrat historique, US-004), puis
+# à la RACINE du dépôt (app/config.py -> app -> racine) : un outil lancé depuis
+# un autre dossier trouve ainsi le même fichier que `python -m app.bot`.
 _env = os.environ.get("APP_ENV", "dev")
-load_dotenv(f".env.{_env}", override=True)
+RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_fichier_env = f".env.{_env}"
+if not os.path.exists(_fichier_env):
+    _fichier_env = os.path.join(RACINE_PROJET, _fichier_env)
+load_dotenv(_fichier_env, override=True)
 
 GROQ_API_KEY       = os.environ["GROQ_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]

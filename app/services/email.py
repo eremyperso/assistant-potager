@@ -11,7 +11,7 @@ import logging
 
 import httpx
 
-from config import BREVO_API_KEY, EMAIL_FROM, EMAIL_FROM_NOM, FRONTEND_URL
+from app.config import BREVO_API_KEY, EMAIL_FROM, EMAIL_FROM_NOM, FRONTEND_URL
 
 log = logging.getLogger("potager")
 

@@ -19,7 +19,7 @@ from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison
 from database.db import Base
 from database.models import LiaisonTelegram, User, Potager, PotagerMembre
-from bot import (
+from app.bot import (
     cmd_lier, handle_voice, handle_text, _verifier_liaison_ou_onboarding,
     _construire_application, _COMMANDES_SANS_GARDE_LIAISON,
 )
@@ -124,7 +124,7 @@ def _auth_engine():
 
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     main.app.state.limiter.reset()
@@ -167,8 +167,8 @@ async def test_us045_ca6_handle_text_chat_non_lie_bloque_avant_groq(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db), \
-         patch('bot.parse_message') as mock_parse:
+    with patch('app.bot.SessionLocal', return_value=test_db), \
+         patch('app.bot.parse_message') as mock_parse:
         await handle_text(update, tg_ctx)
 
     mock_parse.assert_not_called()
@@ -187,7 +187,7 @@ async def test_us045_ca6_handle_voice_chat_non_lie_bloque_avant_whisper(test_db)
 
     # [US-092] La transcription passe par la passerelle unique : c'est elle
     # qui doit rester muette pour un chat non lié, pas un client Groq local.
-    with patch('bot.SessionLocal', return_value=test_db), \
+    with patch('app.bot.SessionLocal', return_value=test_db), \
          patch('llm.passerelle.transcrire') as mock_transcrire:
         await handle_voice(update, tg_ctx)
 
@@ -220,7 +220,7 @@ async def test_us045_ca8_chat_lie_expose_user_id_dans_user_data(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         resultat = await _verifier_liaison_ou_onboarding(update, tg_ctx)
 
     assert resultat is True
@@ -242,7 +242,7 @@ async def test_us045_ca2_code_brut_en_texte_libre_lie_le_chat(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         resultat = await _verifier_liaison_ou_onboarding(update, tg_ctx, liaison.code)
 
     assert resultat is True
@@ -283,7 +283,7 @@ async def test_us045_cmd_lier_code_valide_lie_le_chat(test_db):
     tg_ctx.args = [liaison.code]
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_lier(update, tg_ctx)
 
     recharge = test_db.query(User).filter(User.id == user.id).first()
@@ -306,7 +306,7 @@ async def test_us045_cmd_lier_code_expire_message_explicite(test_db):
     tg_ctx = MagicMock()
     tg_ctx.args = ["EXPIRE1"]
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_lier(update, tg_ctx)
 
     assert "expiré" in update.message.reply_text.call_args[0][0]
@@ -348,7 +348,7 @@ def test_us045_ca6_ca7_toutes_les_commandes_metier_sont_gardees_sauf_onboarding(
 @pytest.mark.asyncio
 async def test_us045_ca6_commande_metier_bloquee_pour_chat_non_lie(test_db):
     """[CA6 révisé] /parcelle lister depuis un chat non lié → onboarding, pas de données."""
-    from bot import cmd_parcelle
+    from app.bot import cmd_parcelle
 
     update = MagicMock()
     update.effective_chat.id = 13131313
@@ -356,7 +356,7 @@ async def test_us045_ca6_commande_metier_bloquee_pour_chat_non_lie(test_db):
     tg_ctx = MagicMock()
     tg_ctx.args = ["lister"]
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await _avec_garde_liaison_test_helper(cmd_parcelle, update, tg_ctx)
 
     update.message.reply_text.assert_awaited_once()
@@ -366,14 +366,14 @@ async def test_us045_ca6_commande_metier_bloquee_pour_chat_non_lie(test_db):
 async def _avec_garde_liaison_test_helper(handler, update, ctx):
     """Reproduit exactement le comportement de _avec_garde_liaison() pour tester
     un handler individuel sans reconstruire toute l'Application."""
-    from bot import _avec_garde_liaison
+    from app.bot import _avec_garde_liaison
     return await _avec_garde_liaison(handler)(update, ctx)
 
 
 @pytest.mark.asyncio
 async def test_us045_ca9_start_help_lier_accessibles_sans_liaison(test_db):
     """[CA9] Non-régression : /start, /help, /lier restent utilisables sans liaison."""
-    from bot import cmd_start, cmd_help, _avec_garde_liaison
+    from app.bot import cmd_start, cmd_help, _avec_garde_liaison
 
     for nom, handler in (("start", cmd_start), ("help", cmd_help), ("lier", cmd_lier)):
         assert nom in _COMMANDES_SANS_GARDE_LIAISON

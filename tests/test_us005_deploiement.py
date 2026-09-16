@@ -9,16 +9,16 @@ import stat
 import pytest
 
 
-DEPLOY_SH = os.path.join(os.path.dirname(__file__), "..", "deploy.sh")
+DEPLOY_SH = os.path.join(os.path.dirname(__file__), "..", "scripts", "deploy.sh")
 WORKFLOW   = os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "deploy.yml")
-SERVICE    = os.path.join(os.path.dirname(__file__), "..", "infra", "potager.service")
+SERVICE    = os.path.join(os.path.dirname(__file__), "..", "infra", "potager-prod.service")
 
 
 class TestDeploySh:
     """CA1 — deploy.sh existe et contient les étapes obligatoires."""
 
     def test_fichier_existe(self):
-        assert os.path.isfile(DEPLOY_SH), "deploy.sh introuvable"
+        assert os.path.isfile(DEPLOY_SH), "scripts/deploy.sh introuvable"
 
     def test_contient_rsync_ou_git_pull(self):
         content = open(DEPLOY_SH).read()
@@ -91,7 +91,7 @@ class TestSystemdService:
     """CA3 — Le fichier systemd configure le redémarrage automatique."""
 
     def test_fichier_existe(self):
-        assert os.path.isfile(SERVICE), "infra/potager.service introuvable"
+        assert os.path.isfile(SERVICE), "infra/potager-prod.service introuvable"
 
     def test_restart_on_failure(self):
         content = open(SERVICE).read()

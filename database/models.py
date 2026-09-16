@@ -473,6 +473,13 @@ class DureeCulturale(Base):
     les zones : semis → levée, semis → première récolte, semis → repiquage (ce
     dernier pour un itinéraire passant par la pépinière seulement).
 
+    [US-177 / CA1] Une quatrième étape, `plantation_recolte`, compte depuis la
+    PLANTATION et non depuis le semis — la seule origine dont dispose un plant
+    acheté. Elle n'est portée que par un itinéraire qui se plante, et n'est
+    jamais déduite des trois autres (CA2). Aucune migration : `etape` n'a pas de
+    CHECK de vocabulaire (arbitrage de migration_v46), ce module en est le seul
+    garant via `calendrier_cultural.normaliser_etape`.
+
     En jours, fourchette possible (`jours_min` ≤ `jours_max`, égaux pour une
     valeur unique), ou mention libre (« vivace ») pour ce qui n'en relève pas —
     jamais les deux. Une durée absente se lit « — » : l'application n'invente
@@ -482,7 +489,7 @@ class DureeCulturale(Base):
 
     id            = Column(Integer, primary_key=True, index=True)
     itineraire_id = Column(Integer, ForeignKey("itineraire_cultural.id", ondelete="CASCADE"), nullable=False, index=True)
-    # 'levee' | 'recolte' | 'repiquage'
+    # 'levee' | 'recolte' | 'repiquage' | 'plantation_recolte' [US-177]
     etape         = Column(String(20), nullable=False)
     jours_min     = Column(Integer, nullable=True)
     jours_max     = Column(Integer, nullable=True)

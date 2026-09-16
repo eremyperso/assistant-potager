@@ -586,7 +586,7 @@ async def test_bot_menu_ne_propose_que_les_lots_capables() -> None:
     """Le menu ne promet jamais un choix que l'écriture refuserait : avec un seul lot
     assez fourni, aucune question n'est posée."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
+    from app.bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
     _GODET_LOT_PENDING.clear()
     update, message = _mock_update()
     captures = {}
@@ -597,7 +597,7 @@ async def test_bot_menu_ne_propose_que_les_lots_capables() -> None:
 
     # Act — 12 plants : seul le lot de 15 graines peut porter
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet", side_effect=_faux_candidats),
     ):
         pose = await _demander_lot_godet_si_ambigu(update, _parsed_godet(nb_plants=12), "12 choux")
@@ -663,7 +663,7 @@ async def test_bot_deux_lots_declenchent_le_menu_inline() -> None:
     """Deux lots candidats → question posée avec un bouton par lot, et l'appelant
     est prié de s'arrêter (aucun enregistrement immédiat)."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
+    from app.bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
     from telegram import InlineKeyboardMarkup
     _GODET_LOT_PENDING.clear()
     update, message = _mock_update()
@@ -671,7 +671,7 @@ async def test_bot_deux_lots_declenchent_le_menu_inline() -> None:
 
     # Act
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet", return_value=_LOTS_DEUX),
     ):
         pose = await _demander_lot_godet_si_ambigu(update, parsed, "5 choux en godet")
@@ -691,13 +691,13 @@ async def test_bot_deux_lots_declenchent_le_menu_inline() -> None:
 async def test_bot_lot_unique_ne_declenche_pas_de_question() -> None:
     """Un seul candidat : la déduction automatique suffit, aucune question."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
+    from app.bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
     _GODET_LOT_PENDING.clear()
     update, message = _mock_update()
 
     # Act
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet", return_value=_LOTS_DEUX[:1]),
     ):
         pose = await _demander_lot_godet_si_ambigu(update, _parsed_godet(), "5 choux en godet")
@@ -713,12 +713,12 @@ async def test_bot_lot_deja_choisi_ne_redemande_jamais() -> None:
     """Anti-boucle : une fois le choix fait (lot désigné OU refus explicite), la
     question n'est plus reposée."""
     # Arrange
-    from bot import _demander_lot_godet_si_ambigu
+    from app.bot import _demander_lot_godet_si_ambigu
     update, message = _mock_update()
 
     # Act
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet", return_value=_LOTS_DEUX),
     ):
         avec_lot   = await _demander_lot_godet_si_ambigu(
@@ -736,7 +736,7 @@ async def test_bot_lot_deja_choisi_ne_redemande_jamais() -> None:
 async def test_bot_callback_lot_choisi_transmet_l_origine() -> None:
     """Le callback fixe `origine_graines_id` puis relance la sauvegarde."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _godet_lot_cb
+    from app.bot import _GODET_LOT_PENDING, _godet_lot_cb
     parsed = _parsed_godet()
     _GODET_LOT_PENDING[42] = {
         "parsed": parsed, "texte": "5 choux en godet", "ts": time.time(),
@@ -747,7 +747,7 @@ async def test_bot_callback_lot_choisi_transmet_l_origine() -> None:
     update.callback_query.data = "godetlot:374"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_lot_cb(update, MagicMock())
 
     # Assert
@@ -762,13 +762,13 @@ async def test_bot_menu_sans_echappatoire_je_ne_sais_pas() -> None:
     """Le menu n'offre que les lots et « Annuler » : pas de bouton qui enregistrerait
     un godet orphelin alors que des lots existent et peuvent le porter."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
+    from app.bot import _GODET_LOT_PENDING, _demander_lot_godet_si_ambigu
     _GODET_LOT_PENDING.clear()
     update, message = _mock_update()
 
     # Act
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet", return_value=_LOTS_DEUX),
     ):
         await _demander_lot_godet_si_ambigu(update, _parsed_godet(), "5 choux en godet")
@@ -785,7 +785,7 @@ async def test_bot_menu_sans_echappatoire_je_ne_sais_pas() -> None:
 async def test_bot_callback_annulation_n_enregistre_rien() -> None:
     """Annuler ne sauvegarde aucun événement."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _godet_lot_cb
+    from app.bot import _GODET_LOT_PENDING, _godet_lot_cb
     _GODET_LOT_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t", "ts": time.time(), "labels": {},
     }
@@ -794,7 +794,7 @@ async def test_bot_callback_annulation_n_enregistre_rien() -> None:
     update.callback_query.data = "godetlot_cancel"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_lot_cb(update, MagicMock())
 
     # Assert
@@ -805,7 +805,7 @@ async def test_bot_callback_annulation_n_enregistre_rien() -> None:
 async def test_bot_callback_expire_ne_sauvegarde_pas() -> None:
     """Timeout dépassé → message d'annulation, aucun enregistrement."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _GODET_LOT_TIMEOUT, _godet_lot_cb
+    from app.bot import _GODET_LOT_PENDING, _GODET_LOT_TIMEOUT, _godet_lot_cb
     _GODET_LOT_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t",
         "ts": time.time() - _GODET_LOT_TIMEOUT - 1, "labels": {},
@@ -815,7 +815,7 @@ async def test_bot_callback_expire_ne_sauvegarde_pas() -> None:
     update.callback_query.data = "godetlot:374"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_lot_cb(update, MagicMock())
 
     # Assert
@@ -826,14 +826,14 @@ async def test_bot_callback_expire_ne_sauvegarde_pas() -> None:
 async def test_bot_callback_sans_pending_ne_sauvegarde_pas() -> None:
     """Cas d'erreur : plus aucun contexte en mémoire (redémarrage du bot)."""
     # Arrange
-    from bot import _GODET_LOT_PENDING, _godet_lot_cb
+    from app.bot import _GODET_LOT_PENDING, _godet_lot_cb
     _GODET_LOT_PENDING.clear()
     update, _ = _mock_update()
     update.callback_query = AsyncMock()
     update.callback_query.data = "godetlot:374"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_lot_cb(update, MagicMock())
 
     # Assert

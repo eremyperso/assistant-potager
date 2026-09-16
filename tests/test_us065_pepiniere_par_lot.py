@@ -652,12 +652,12 @@ def client_lots():
     """Client HTTP avec la lecture par lot mockée et l'authentification neutralisée."""
     from unittest.mock import MagicMock, patch
     from fastapi.testclient import TestClient
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
 
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal", return_value=MagicMock()),
+        patch("app.api.main.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.calcul_lots_pepiniere", return_value=[_LOT_MOCK]),
     ):
         yield TestClient(app)
@@ -697,7 +697,7 @@ def test_us065_endpoint_godet_detail_transmet_le_lot_cible() -> None:
     """[CA6] GET /godets/detail relaie semis_id au service et le rappelle en réponse."""
     from unittest.mock import MagicMock, patch
     from fastapi.testclient import TestClient
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
 
     cycle_vide = {
@@ -706,7 +706,7 @@ def test_us065_endpoint_godet_detail_transmet_le_lot_cible() -> None:
     }
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal", return_value=MagicMock()),
+        patch("app.api.main.SessionLocal", return_value=MagicMock()),
         patch("app.services.evenements.cycle_vie_culture", return_value=cycle_vide) as mock_cycle,
     ):
         client = TestClient(app)

@@ -15,6 +15,8 @@ Le modèle — celui des calendriers de semis, pas celui de la maquette
                         └── durées, COMMUNES à toutes les zones
                               semis → levée · semis → première récolte
                               semis → repiquage (itinéraire pépinière seulement)
+                              plantation → première récolte [US-177]
+                                           (itinéraire qui se plante seulement)
 
     potager ── zone climatique : choisie > déduite de la localisation > défaut
 
@@ -149,19 +151,38 @@ _ALIAS_PHASES: dict[str, str] = {
 ETAPE_LEVEE = "levee"
 ETAPE_RECOLTE = "recolte"
 ETAPE_REPIQUAGE = "repiquage"
+#: [US-177 / CA1] Quatrième étape : mise en place d'un PLANT → première récolte.
+#: Les trois autres comptent depuis le semis ; celle-ci depuis la plantation, et
+#: c'est toute sa raison d'être — un plant acheté en jardinerie n'a pas de semis,
+#: donc pas d'origine, donc aucune récolte attendue (US-070 / CA11). Elle n'est
+#: JAMAIS obtenue en retranchant `repiquage` à `recolte` (CA2) : ces deux durées
+#: ne sont pas comptées sur la même convention, et leur différence serait un
+#: chiffre que personne n'a mesuré.
+ETAPE_PLANTATION_RECOLTE = "plantation_recolte"
 
-ETAPES: tuple[str, ...] = (ETAPE_LEVEE, ETAPE_RECOLTE, ETAPE_REPIQUAGE)
+ETAPES: tuple[str, ...] = (
+    ETAPE_LEVEE, ETAPE_RECOLTE, ETAPE_REPIQUAGE, ETAPE_PLANTATION_RECOLTE,
+)
 
 LIBELLES_ETAPES: dict[str, str] = {
     ETAPE_LEVEE: "Semis → levée",
     ETAPE_RECOLTE: "Semis → première récolte",
     ETAPE_REPIQUAGE: "Semis → repiquage",
+    ETAPE_PLANTATION_RECOLTE: "Plantation → première récolte",
 }
 
+#: ⚠️ « plantation » seul reste l'alias de `repiquage` (semis → plantation en
+#: place) : c'est le mot qu'un jardinier emploie pour « dans combien de temps
+#: est-ce que je plante ». L'étape d'US-177 exige les DEUX bornes — la
+#: désambiguïsation est portée par le libellé saisi, jamais par un défaut.
 _ALIAS_ETAPES: dict[str, str] = {
     "levee": ETAPE_LEVEE, "germination": ETAPE_LEVEE,
     "recolte": ETAPE_RECOLTE, "maturite": ETAPE_RECOLTE,
     "repiquage": ETAPE_REPIQUAGE, "plantation": ETAPE_REPIQUAGE,
+    "plantation_recolte": ETAPE_PLANTATION_RECOLTE,
+    "plantation_premiere_recolte": ETAPE_PLANTATION_RECOLTE,
+    "plantation_maturite": ETAPE_PLANTATION_RECOLTE,
+    "plant_recolte": ETAPE_PLANTATION_RECOLTE,
 }
 
 #: [CA1] Nom de l'itinéraire implicite — celui d'une culture sans itinéraire
@@ -260,7 +281,7 @@ def est_etape(valeur: str) -> bool:
 # ═════════════════════════════════════════════════════════════════════════════
 def zone_par_defaut() -> str:
     """[CA8] Zone lue par un potager sans choix ni localisation exploitable."""
-    from config import CALENDRIER_ZONE_DEFAUT
+    from app.config import CALENDRIER_ZONE_DEFAUT
 
     zone = _ALIAS_ZONES.get(_cle(CALENDRIER_ZONE_DEFAUT))
     if zone is None:
@@ -661,6 +682,22 @@ def _passe_par_pepiniere(fenetres: list[FenetreCulturale], durees: list[DureeCul
     )
 
 
+def _se_plante(fenetres: list[FenetreCulturale], durees: list[DureeCulturale]) -> bool:
+    """
+    [US-177 / CA3] Un itinéraire se plante s'il a une fenêtre de plantation (dans
+    une zone quelconque) ou une durée plantation → récolte renseignée.
+
+    Symétrique de `_passe_par_pepiniere`, et indépendante d'elle : l'ail et la
+    fraise se plantent sans jamais passer par la pépinière, la laitue semée en
+    place ne se plante pas — l'étape ne leur est donc pas proposée du tout,
+    plutôt que proposée vide.
+    """
+    return any(f.phase == PHASE_PLANTATION for f in fenetres) or any(
+        d.etape == ETAPE_PLANTATION_RECOLTE and (d.jours_min is not None or d.mention)
+        for d in durees
+    )
+
+
 def _ordre_itineraire(nom_normalise: str) -> tuple[int, str]:
     return (0 if nom_normalise == ITINERAIRE_PAR_DEFAUT else 1, nom_normalise)
 
@@ -705,6 +742,10 @@ def lire_calendrier(db: Session, culture: str, potager_id: Optional[int]) -> Cal
         etapes = [ETAPE_LEVEE, ETAPE_RECOLTE]
         if _passe_par_pepiniere(fenetres, list(durees.values())):
             etapes.append(ETAPE_REPIQUAGE)
+        # [US-177 / CA3, CA6] Servie seulement pour ce qui se plante — omise,
+        # jamais affichée vide, pour une culture semée en place.
+        if _se_plante(fenetres, list(durees.values())):
+            etapes.append(ETAPE_PLANTATION_RECOLTE)
         lus.append(ItineraireLu(
             nom=it.nom,
             personnalise=it.potager_id is not None,
@@ -1024,7 +1065,8 @@ def corriger_duree(
     propre au potager.
 
     [CA3] Le repiquage est refusé sur un itinéraire qui a des fenêtres et aucune
-    en pépinière : une culture semée en place ne se repique pas.
+    en pépinière : une culture semée en place ne se repique pas. [US-177 / CA3]
+    Même refus, sur la fenêtre de plantation, pour `plantation_recolte`.
 
     Retourne (affichage avant, affichage après).
     """
@@ -1041,14 +1083,23 @@ def corriger_duree(
     affichage_avant = duree_avant.affichage if duree_avant is not None else TIRET
 
     local = _itineraire_personnalise(db, ctx.potager_id, culture, itineraire)
-    if etape == ETAPE_REPIQUAGE and valeurs is not None:
+    if etape in (ETAPE_REPIQUAGE, ETAPE_PLANTATION_RECOLTE) and valeurs is not None:
         fenetres = db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == local.id).all()
-        if fenetres and not any(f.phase == PHASE_SEMIS_PEPINIERE for f in fenetres):
+        # [US-177 / CA3] Même garde que le repiquage, sur l'autre phase : une
+        # culture semée en place ne se plante pas, et un itinéraire SANS aucune
+        # fenêtre ne préjuge de rien — le jardinier saisit ce qu'il connaît.
+        phase_requise, message = (
+            (PHASE_SEMIS_PEPINIERE,
+             "Cet itinéraire ne passe pas par la pépinière : il n'a pas de délai de "
+             "repiquage. Renseignez d'abord une fenêtre de semis en pépinière.")
+            if etape == ETAPE_REPIQUAGE else
+            (PHASE_PLANTATION,
+             "Cet itinéraire ne se plante pas : il n'a pas de délai entre la plantation "
+             "et la récolte. Renseignez d'abord une fenêtre de plantation.")
+        )
+        if fenetres and not any(f.phase == phase_requise for f in fenetres):
             db.rollback()
-            raise ValeurCalendrierInvalideError(
-                "Cet itinéraire ne passe pas par la pépinière : il n'a pas de délai de "
-                "repiquage. Renseignez d'abord une fenêtre de semis en pépinière."
-            )
+            raise ValeurCalendrierInvalideError(message)
 
     ligne = (
         db.query(DureeCulturale)

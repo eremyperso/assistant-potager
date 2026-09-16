@@ -916,7 +916,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us162_bot_lister_restitue_la_liste_ordonnee(self, db):
         """[CA2] Le bot affiche ce que le service a déjà ordonné."""
-        import bot
+        from app import bot
 
         lus = [
             svc_bio.BioagresseurLu(
@@ -940,7 +940,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us162_bot_culture_sans_lien_dit_l_ignorance(self, db):
         """[CA12] Le bot ne conclut jamais à l'absence de risque."""
-        import bot
+        from app import bot
 
         update, ctx = self._update(), self._ctx("lister", "carotte")
 
@@ -953,7 +953,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us162_bot_culture_inconnue(self, db):
         """[CA12] Distingué de « aucune information »."""
-        import bot
+        from app import bot
 
         update, ctx = self._update(), self._ctx("lister", "salsifis")
 
@@ -967,7 +967,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us162_bot_declarer_est_toujours_local(self, db):
         """[CA3] Une saisie au bot est locale au potager courant, jamais partagée."""
-        import bot
+        from app import bot
 
         update, ctx = self._update(), self._ctx("declarer", "insecte", "teigne", "du", "poireau")
 
@@ -983,7 +983,7 @@ class TestCommandeBot:
     @pytest.mark.asyncio
     async def test_us162_bot_rattacher_guide_vers_la_declaration(self, db):
         """Un bioagresseur inconnu n'est pas fabriqué : le bot dit quoi faire."""
-        import bot
+        from app import bot
 
         update, ctx = self._update(), self._ctx("rattacher", "poireau", "courant", "teigne")
 
@@ -999,7 +999,7 @@ class TestCommandeBot:
 
     @pytest.mark.asyncio
     async def test_us162_bot_sans_argument_affiche_l_usage(self, db):
-        import bot
+        from app import bot
 
         update, ctx = self._update(), self._ctx()
 

@@ -303,7 +303,7 @@ class TestCmdParcelleRenommerBot:
     async def test_006_bot_ca9_aucun_arg(self, mock_telegram_update, mock_ctx) -> None:
         """[CA9] /parcelle renommer (sans args) → message d'aide."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer"])
 
         # Act
@@ -318,7 +318,7 @@ class TestCmdParcelleRenommerBot:
     async def test_006_bot_ca9_un_seul_arg(self, mock_telegram_update, mock_ctx) -> None:
         """[CA9] /parcelle renommer <ancien> (sans nouveau) → message d'aide."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer", "sud"])
 
         # Act
@@ -337,14 +337,14 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA1] /parcelle renommer <ancien> <nouveau> déclenche rename_parcelle."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         parc_mock = MagicMock()
         parc_mock.nom = "nouveau-nom"
         ctx = mock_ctx(["renommer", "ancien-nom", "nouveau-nom"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parc_mock, 0)) as mock_rename:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parc_mock, 0)) as mock_rename:
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -357,14 +357,14 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA1] Nouveau nom multi-mots reconstitué depuis ctx.args (ex: 'grand nord')."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         parc_mock = MagicMock()
         parc_mock.nom = "grand nord"
         ctx = mock_ctx(["renommer", "nord", "grand", "nord"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parc_mock, 0)) as mock_rename:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parc_mock, 0)) as mock_rename:
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -379,14 +379,14 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA6] Renommage réussi avec événements pluriel → confirmation détaillée."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         parc_mock = MagicMock()
         parc_mock.nom = "carré-sud"
         ctx = mock_ctx(["renommer", "sud", "carré-sud"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parc_mock, 5)):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parc_mock, 5)):
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -403,14 +403,14 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA6] Renommage réussi avec 1 événement → forme singulier."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         parc_mock = MagicMock()
         parc_mock.nom = "est"
         ctx = mock_ctx(["renommer", "est-jardin", "est"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", return_value=(parc_mock, 1)):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", return_value=(parc_mock, 1)):
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -427,12 +427,12 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA4] LookupError → message indiquant que la parcelle est introuvable."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer", "fantome", "nouveau"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", side_effect=LookupError("fantome")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", side_effect=LookupError("fantome")):
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -449,12 +449,12 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """[CA5] ValueError → message indiquant que le nom est déjà utilisé."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer", "nord", "sud"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", side_effect=ValueError("déjà utilisé")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", side_effect=ValueError("déjà utilisé")):
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -470,12 +470,12 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """Exception inattendue → message d'erreur générique envoyé à l'utilisateur."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer", "nord", "nouveau"])
 
         # Act
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.rename_parcelle", side_effect=RuntimeError("DB crash")):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.rename_parcelle", side_effect=RuntimeError("DB crash")):
             MockSession.return_value = MagicMock()
             await cmd_parcelle(mock_telegram_update, ctx)
 
@@ -492,15 +492,15 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """La session DB est fermée (finally) même en cas de succès."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         parc_mock = MagicMock()
         parc_mock.nom = "est"
         ctx = mock_ctx(["renommer", "ouest", "est"])
         db_mock = MagicMock()
 
         # Act
-        with patch("bot.SessionLocal", return_value=db_mock), \
-             patch("bot.rename_parcelle", return_value=(parc_mock, 0)):
+        with patch("app.bot.SessionLocal", return_value=db_mock), \
+             patch("app.bot.rename_parcelle", return_value=(parc_mock, 0)):
             await cmd_parcelle(mock_telegram_update, ctx)
 
         # Assert
@@ -512,13 +512,13 @@ class TestCmdParcelleRenommerBot:
     ) -> None:
         """La session DB est fermée (finally) même en cas d'erreur."""
         # Arrange
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         ctx = mock_ctx(["renommer", "nord", "sud"])
         db_mock = MagicMock()
 
         # Act
-        with patch("bot.SessionLocal", return_value=db_mock), \
-             patch("bot.rename_parcelle", side_effect=LookupError("nord")):
+        with patch("app.bot.SessionLocal", return_value=db_mock), \
+             patch("app.bot.rename_parcelle", side_effect=LookupError("nord")):
             await cmd_parcelle(mock_telegram_update, ctx)
 
         # Assert

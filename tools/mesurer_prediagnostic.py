@@ -68,7 +68,7 @@ except (AttributeError, OSError):  # flux redirigé qui ne le supporte pas
 
 
 from app.services import prediagnostic as svc_prediagnostic  # noqa: E402
-from config import PREDIAGNOSTIC_SEUIL_SYMPTOME  # noqa: E402
+from app.config import PREDIAGNOSTIC_SEUIL_SYMPTOME  # noqa: E402
 from database.db import SessionLocal  # noqa: E402
 
 CORPUS_PAR_DEFAUT = "tests/corpus/us165_prediagnostic.csv"

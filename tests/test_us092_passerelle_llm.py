@@ -157,12 +157,13 @@ class TestCA1AuditPointDePassageUnique:
         import tools.audit_appels_llm as audit
 
         analyses = {c.name for c in audit._fichiers_a_auditer()}
-        assert {"bot.py", "main.py", "groq_client.py"} <= analyses
+        assert {"main.py", "saisie.py", "messages.py", "groq_client.py"} <= analyses
 
-        source_bot = (RACINE / "bot.py").read_text(encoding="utf-8-sig")
-        anomalies = [lib for _, lib, _ in audit._infractions_du_fichier(source_bot)
-                     if "non analysable" in lib]
-        assert anomalies == [], f"bot.py n'est pas réellement analysé : {anomalies}"
+        for fichier in sorted((RACINE / "app" / "bot").glob("*.py")):
+            source_bot = fichier.read_text(encoding="utf-8-sig")
+            anomalies = [lib for _, lib, _ in audit._infractions_du_fichier(source_bot)
+                         if "non analysable" in lib]
+            assert anomalies == [], f"{fichier.name} n'est pas réellement analysé : {anomalies}"
 
     def test_us092_ca1_fichier_illisible_nest_pas_declare_conforme(self):
         """CA1 : un fichier que l'audit n'arrive pas à analyser est signalé,
@@ -300,7 +301,7 @@ class TestCA4TranscriptionDansLaPasserelle:
     def test_us092_ca4_transcription_garde_son_propre_modele(self, tmp_path, client_ok):
         """CA4 : elle conserve son modèle (et donc son quota) propre — c'est
         celui qui saturera le premier en usage vocal."""
-        from config import GROQ_WHISPER_MODEL
+        from app.config import GROQ_WHISPER_MODEL
 
         fichier = tmp_path / "message.ogg"
         fichier.write_bytes(b"faux-audio")
@@ -521,13 +522,13 @@ class TestCA9ReplisDeclares:
     async def test_us092_ca9_bot_ne_plante_pas_et_previent(self, client_429):
         """CA9 : côté bot, une dictée pendant une saturation reçoit le message
         de repli — jamais un silence, jamais une trace technique."""
-        from bot import _parse_and_save
+        from app.bot import _parse_and_save
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
         update.callback_query = None
 
-        with patch("bot.require_role"):
+        with patch("app.bot.require_role"):
             await _parse_and_save(update, "récolté 2 kg de tomates")
 
         envoye = update.message.reply_text.await_args[0][0]
@@ -537,14 +538,14 @@ class TestCA9ReplisDeclares:
     @pytest.mark.asyncio
     async def test_us092_ca9_bot_ninvente_aucun_evenement(self, client_429):
         """CA9 : jamais une réponse inventée — rien n'est enregistré en base."""
-        from bot import _parse_and_save
+        from app.bot import _parse_and_save
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
         update.callback_query = None
 
-        with patch("bot.require_role"), \
-             patch("bot.SessionLocal") as session:
+        with patch("app.bot.require_role"), \
+             patch("app.bot.SessionLocal") as session:
             await _parse_and_save(update, "récolté 2 kg de tomates")
 
         session.assert_not_called()
@@ -590,12 +591,12 @@ def _db_api():
 @pytest.fixture
 def api_client():
     """Client HTTP de l'API, authentifié sur le potager par défaut."""
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
 
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal", return_value=_db_api()),
+        patch("app.api.main.SessionLocal", return_value=_db_api()),
         patch("utils.stock.calcul_stock_cultures", return_value=MOCK_STOCK),
         patch("utils.stock.format_stock_stats_json", return_value=MOCK_STOCK),
         patch("utils.stock.calcul_godets", return_value={}),
@@ -621,7 +622,7 @@ class TestCA10ApplicationUtileSansIA:
         """CA10 : la météo (Open-Meteo, aucun LLM) reste servie."""
         db_meteo = MagicMock()
         db_meteo.query.return_value.filter.return_value.first.return_value = None
-        with patch("main.SessionLocal", return_value=db_meteo):
+        with patch("app.api.main.SessionLocal", return_value=db_meteo):
             reponse = api_client.get("/meteo")
         assert reponse.status_code == 200
         client_429.chat.completions.create.assert_not_called()
@@ -639,14 +640,14 @@ class TestCA10ApplicationUtileSansIA:
     @pytest.mark.asyncio
     async def test_us092_ca10_bot_stats_reste_fonctionnel(self, client_429, test_db):
         """CA10 : côté bot, /stats répond sans toucher au modèle."""
-        from bot import cmd_stats
+        from app.bot import cmd_stats
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
         update.effective_message.reply_text = AsyncMock()
 
-        with patch("bot.SessionLocal", return_value=test_db), \
-             patch("bot.send_voice_reply", new_callable=AsyncMock):
+        with patch("app.bot.SessionLocal", return_value=test_db), \
+             patch("app.bot.send_voice_reply", new_callable=AsyncMock):
             await cmd_stats(update, None)
 
         # /stats passe par l'envoi découpé (update.effective_message)
@@ -656,7 +657,7 @@ class TestCA10ApplicationUtileSansIA:
     @pytest.mark.asyncio
     async def test_us092_ca10_bot_plan_reste_fonctionnel(self, client_429):
         """CA10 : côté bot, /plan répond sans toucher au modèle."""
-        from bot import cmd_plan
+        from app.bot import cmd_plan
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
@@ -664,10 +665,10 @@ class TestCA10ApplicationUtileSansIA:
         ctx.args = []
         ctx.user_data = {}
 
-        with patch("bot.SessionLocal", return_value=MagicMock()), \
-             patch("bot.calcul_occupation_parcelles", return_value={}), \
-             patch("bot.get_all_parcelles", return_value=[]), \
-             patch("bot.send_voice_reply", new_callable=AsyncMock):
+        with patch("app.bot.SessionLocal", return_value=MagicMock()), \
+             patch("app.bot.calcul_occupation_parcelles", return_value={}), \
+             patch("app.bot.get_all_parcelles", return_value=[]), \
+             patch("app.bot.send_voice_reply", new_callable=AsyncMock):
             await cmd_plan(update, ctx)
 
         update.message.reply_text.assert_awaited()
@@ -676,7 +677,7 @@ class TestCA10ApplicationUtileSansIA:
     @pytest.mark.asyncio
     async def test_us092_ca10_bot_historique_reste_fonctionnel(self, client_429, test_db):
         """CA10 : côté bot, /historique répond sans toucher au modèle."""
-        from bot import cmd_historique
+        from app.bot import cmd_historique
 
         update = MagicMock()
         update.message.reply_text = AsyncMock()
@@ -684,8 +685,8 @@ class TestCA10ApplicationUtileSansIA:
         ctx.args = []
         ctx.user_data = {}
 
-        with patch("bot.SessionLocal", return_value=test_db), \
-             patch("bot.send_voice_reply", new_callable=AsyncMock):
+        with patch("app.bot.SessionLocal", return_value=test_db), \
+             patch("app.bot.send_voice_reply", new_callable=AsyncMock):
             await cmd_historique(update, ctx)
 
         update.message.reply_text.assert_awaited()
@@ -838,7 +839,7 @@ class TestCA13EtancheiteDesJournaux:
 
     def test_us092_ca13_aucune_cle_dans_les_journaux(self, caplog, client_429):
         """CA13 : y compris sur le chemin d'erreur, aucune clé ne fuite."""
-        from config import GROQ_API_KEY
+        from app.config import GROQ_API_KEY
 
         with caplog.at_level(logging.DEBUG, logger="potager"), \
              pytest.raises(QuotaLLMDepasseError):

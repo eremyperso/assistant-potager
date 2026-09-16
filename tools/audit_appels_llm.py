@@ -132,7 +132,7 @@ def auditer() -> list[tuple[str, int, str, str]]:
     infractions: list[tuple[str, int, str, str]] = []
     for chemin in _fichiers_a_auditer():
         try:
-            # utf-8-sig : bot.py porte un BOM hérité — le lire en utf-8 strict
+            # utf-8-sig : l'ancien bot.py portait un BOM hérité — le lire en utf-8 strict
             # ferait échouer l'analyse et sortir le plus gros fichier du périmètre.
             source = chemin.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError):

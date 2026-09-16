@@ -190,7 +190,7 @@ def _moteur_api():
 
 @pytest.fixture
 def client_api(_moteur_api, monkeypatch):
-    import main
+    from app.api import main
     monkeypatch.setattr(main, "SessionLocal", sessionmaker(bind=_moteur_api))
     main.app.state.limiter.reset()
     with TestClient(main.app) as client:

@@ -149,11 +149,11 @@ class TestDeplStart:
     @pytest.mark.asyncio
     async def test_ca11_culture_none_demande_explicite(self):
         """[CA11] culture=None → mode depl_culture_ask."""
-        from bot import _depl_start
+        from app.bot import _depl_start
         update = _make_update()
         ctx = _make_ctx()
 
-        with patch("bot.SessionLocal") as MockSession:
+        with patch("app.bot.SessionLocal") as MockSession:
             MockSession.return_value.__enter__ = MagicMock()
             await _depl_start(update, ctx, None)
 
@@ -165,12 +165,12 @@ class TestDeplStart:
     @pytest.mark.asyncio
     async def test_ca2_aucune_plantation(self, db):
         """[CA2] Aucune plantation de la culture → message erreur + reset mode."""
-        from bot import _depl_start
+        from app.bot import _depl_start
 
         update = _make_update()
         ctx = _make_ctx()
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_start(update, ctx, "basilic")
 
         assert ctx.user_data.get("mode") is None
@@ -181,7 +181,7 @@ class TestDeplStart:
     @pytest.mark.asyncio
     async def test_ca3_variete_unique_saut_etape(self, db):
         """[CA3] Une seule variété → passe directement à la liste des parcelles."""
-        from bot import _depl_start
+        from app.bot import _depl_start
 
         _seed_plantation(db, "carotte", variete="Nantaise")
         db.commit()
@@ -189,9 +189,9 @@ class TestDeplStart:
         update = _make_update()
         ctx = _make_ctx()
 
-        with patch("bot.SessionLocal", return_value=db), \
-             patch("bot.get_all_parcelles", return_value=[]), \
-             patch("bot.calcul_occupation_parcelles", return_value={}):
+        with patch("app.bot.SessionLocal", return_value=db), \
+             patch("app.bot.get_all_parcelles", return_value=[]), \
+             patch("app.bot.calcul_occupation_parcelles", return_value={}):
             await _depl_start(update, ctx, "carotte")
 
         # Mode doit être depl_parcelle_select (saut de l'étape variété)
@@ -201,7 +201,7 @@ class TestDeplStart:
     @pytest.mark.asyncio
     async def test_ca4_plusieurs_varietes(self, db):
         """[CA4] Plusieurs variétés → demande de sélection."""
-        from bot import _depl_start
+        from app.bot import _depl_start
 
         _seed_plantation(db, "tomate", variete="Cœur de Bœuf")
         _seed_plantation(db, "tomate", variete="Cerise")
@@ -210,7 +210,7 @@ class TestDeplStart:
         update = _make_update()
         ctx = _make_ctx()
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_start(update, ctx, "tomate")
 
         assert ctx.user_data.get("mode") == "depl_variete_select"
@@ -227,7 +227,7 @@ class TestDeplParcelleSelect:
     @pytest.mark.asyncio
     async def test_ca7_recapitulatif_affiche(self, db):
         """[CA7] Récapitulatif culture/variété/parcelle/nb_records affiché."""
-        from bot import _depl_parcelle_select
+        from app.bot import _depl_parcelle_select
 
         parc = _seed_parcelle(db, "SERRE")
         _seed_plantation(db, "tomate", parcelle=parc)
@@ -241,8 +241,8 @@ class TestDeplParcelleSelect:
             depl_variete=None,
         )
 
-        with patch("bot.SessionLocal", return_value=db), \
-             patch("bot.resolve_parcelle", return_value=parc):
+        with patch("app.bot.SessionLocal", return_value=db), \
+             patch("app.bot.resolve_parcelle", return_value=parc):
             await _depl_parcelle_select(update, ctx, "serre")
 
         assert ctx.user_data.get("mode") == "depl_confirm"
@@ -254,7 +254,7 @@ class TestDeplParcelleSelect:
     @pytest.mark.asyncio
     async def test_ca9_annulation_reset(self, db):
         """[CA9] Taper 'annuler' reset le mode."""
-        from bot import _depl_parcelle_select
+        from app.bot import _depl_parcelle_select
 
         update = _make_update()
         ctx = _make_ctx(mode="depl_parcelle_select", depl_culture="tomate", depl_variete=None)
@@ -268,7 +268,7 @@ class TestDeplParcelleSelect:
     @pytest.mark.asyncio
     async def test_ca6_parcelle_inconnue_acceptee(self, db):
         """[CA6] Parcelle inconnue acceptée (mode depl_confirm atteint)."""
-        from bot import _depl_parcelle_select
+        from app.bot import _depl_parcelle_select
 
         _seed_plantation(db, "tomate")
         db.commit()
@@ -276,8 +276,8 @@ class TestDeplParcelleSelect:
         update = _make_update()
         ctx = _make_ctx(mode="depl_parcelle_select", depl_culture="tomate", depl_variete=None)
 
-        with patch("bot.SessionLocal", return_value=db), \
-             patch("bot.resolve_parcelle", return_value=None):
+        with patch("app.bot.SessionLocal", return_value=db), \
+             patch("app.bot.resolve_parcelle", return_value=None):
             await _depl_parcelle_select(update, ctx, "nouvelle-zone")
 
         assert ctx.user_data.get("mode") == "depl_confirm"
@@ -292,7 +292,7 @@ class TestDeplConfirm:
     @pytest.mark.asyncio
     async def test_ca8_update_groupe_et_trace(self, db):
         """[CA8] UPDATE groupé + trace [DÉPL ...] dans texte_original."""
-        from bot import _depl_confirm
+        from app.bot import _depl_confirm
 
         parc_old = _seed_parcelle(db, "NORD")
         parc_new = _seed_parcelle(db, "SERRE")
@@ -310,7 +310,7 @@ class TestDeplConfirm:
             depl_nb_records=2,
         )
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         # Vérifier la mise à jour en base
@@ -326,7 +326,7 @@ class TestDeplConfirm:
     @pytest.mark.asyncio
     async def test_ca8_update_filtre_par_variete(self, db):
         """[CA8] UPDATE doit cibler uniquement la variété choisie."""
-        from bot import _depl_confirm
+        from app.bot import _depl_confirm
 
         parc_old = _seed_parcelle(db, "NORD")
         parc_new = _seed_parcelle(db, "EST")
@@ -344,7 +344,7 @@ class TestDeplConfirm:
             depl_nb_records=1,
         )
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         db.expire_all()
@@ -358,7 +358,7 @@ class TestDeplConfirm:
     @pytest.mark.asyncio
     async def test_ca8_recolte_non_modifiee(self, db):
         """[CA8] Seuls les événements de type plantation sont modifiés, pas les récoltes."""
-        from bot import _depl_confirm
+        from app.bot import _depl_confirm
 
         parc_old = _seed_parcelle(db, "NORD")
         parc_new = _seed_parcelle(db, "SUD")
@@ -383,7 +383,7 @@ class TestDeplConfirm:
             depl_nb_records=1,
         )
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         db.expire_all()
@@ -396,7 +396,7 @@ class TestDeplConfirm:
     @pytest.mark.asyncio
     async def test_ca9_non_annule(self, db):
         """[CA9] Répondre 'non' annule sans modifier la base."""
-        from bot import _depl_confirm
+        from app.bot import _depl_confirm
 
         parc_old = _seed_parcelle(db, "NORD")
         parc_new = _seed_parcelle(db, "SUD")
@@ -423,7 +423,7 @@ class TestDeplConfirm:
     @pytest.mark.asyncio
     async def test_ca6_nouvelle_parcelle_creee(self, db):
         """[CA6] Parcelle inconnue → créée automatiquement à la confirmation."""
-        from bot import _depl_confirm
+        from app.bot import _depl_confirm
 
         e = _seed_plantation(db, "tomate")
         db.commit()
@@ -438,7 +438,7 @@ class TestDeplConfirm:
             depl_nb_records=1,
         )
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         nouvelle = db.query(Parcelle).filter(
@@ -459,14 +459,14 @@ class TestDeplVarieteSelect:
     @pytest.mark.asyncio
     async def test_toutes_les_varietes(self):
         """'toutes' → depl_variete = None."""
-        from bot import _depl_variete_select
+        from app.bot import _depl_variete_select
 
         update = _make_update()
         ctx = _make_ctx(mode="depl_variete_select", depl_culture="tomate")
 
-        with patch("bot.get_all_parcelles", return_value=[]), \
-             patch("bot.calcul_occupation_parcelles", return_value={}), \
-             patch("bot.SessionLocal"):
+        with patch("app.bot.get_all_parcelles", return_value=[]), \
+             patch("app.bot.calcul_occupation_parcelles", return_value={}), \
+             patch("app.bot.SessionLocal"):
             await _depl_variete_select(update, ctx, "toutes")
 
         assert ctx.user_data.get("depl_variete") is None
@@ -475,14 +475,14 @@ class TestDeplVarieteSelect:
     @pytest.mark.asyncio
     async def test_variete_specifique(self):
         """Nom de variété → depl_variete = nom."""
-        from bot import _depl_variete_select
+        from app.bot import _depl_variete_select
 
         update = _make_update()
         ctx = _make_ctx(mode="depl_variete_select", depl_culture="tomate")
 
-        with patch("bot.get_all_parcelles", return_value=[]), \
-             patch("bot.calcul_occupation_parcelles", return_value={}), \
-             patch("bot.SessionLocal"):
+        with patch("app.bot.get_all_parcelles", return_value=[]), \
+             patch("app.bot.calcul_occupation_parcelles", return_value={}), \
+             patch("app.bot.SessionLocal"):
             await _depl_variete_select(update, ctx, "Cerise")
 
         assert ctx.user_data.get("depl_variete") == "Cerise"
@@ -491,7 +491,7 @@ class TestDeplVarieteSelect:
     @pytest.mark.asyncio
     async def test_annulation_reset(self):
         """'annuler' → reset du mode."""
-        from bot import _depl_variete_select
+        from app.bot import _depl_variete_select
 
         update = _make_update()
         ctx = _make_ctx(mode="depl_variete_select", depl_culture="tomate")

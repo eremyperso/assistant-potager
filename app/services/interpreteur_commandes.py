@@ -1275,6 +1275,43 @@ _ETAPES_DITES: dict[str, str] = {
 }
 
 
+# [US-177 / CA5] Déclarée AVANT `calendrier_duree` : les deux visent la même
+# forme (`calendrier`/`duree`), et la première reconnue l'emporte (`cibles`).
+# Elle exige les DEUX bornes du trajet — « plantation … récolte » — là où la
+# règle générique n'en lit qu'une. C'est cette exigence, et non un ordre de
+# priorité, qui empêche la confusion avec `repiquage` (semis → plantation) :
+# « délai de plantation des tomates : 42 jours » ne porte pas « récolte » et ne
+# peut donc pas tomber ici. Une valeur en MOIS ne tombe dans aucune des deux —
+# elle reste une fenêtre (CA29 d'US-068).
+@_regle(
+    "calendrier_duree_plantation_recolte",
+    r"\A" + _INTENTION + _CORRIGER + _ARTICLE
+    + r"(?:delai|duree|temps)\s+"
+    r"(?:entre\s+(?:la\s+|le\s+)?|de\s+(?:la\s+|le\s+)?|d\s+)?"
+    r"(?:plantation|mise en place|plant|repiquage)\s+"
+    r"(?:a|au|et|jusqu a|vers)\s+(?:la\s+|le\s+)?(?:premiere\s+)?recolte\s+"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_plantation_recolte(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    if not culture:
+        return None
+    valeurs = {
+        "culture": culture,
+        "etape": "plantation_recolte",
+        "jours_min": groupes["jours_min"],
+    }
+    if groupes.get("jours_max"):
+        valeurs["jours_max"] = groupes["jours_max"]
+    return valeurs
+
+
 @_regle(
     "calendrier_duree",
     r"\A" + _INTENTION + _CORRIGER + _ARTICLE

@@ -19,7 +19,7 @@ from app.services import auth as svc_auth
 from app.services import liaison_telegram as svc_liaison
 from database.db import Base
 from database.models import User
-from bot import cmd_delier, _delier_confirm, handle_text, _COMMANDES_SANS_GARDE_LIAISON
+from app.bot import cmd_delier, _delier_confirm, handle_text, _COMMANDES_SANS_GARDE_LIAISON
 
 
 def _creer_user(db, email="jardinier@example.com", **kwargs):
@@ -87,7 +87,7 @@ async def test_cmd_delier_chat_non_lie_affiche_onboarding(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_delier(update, tg_ctx)
 
     update.message.reply_text.assert_awaited_once()
@@ -102,7 +102,7 @@ async def test_cmd_delier_chat_lie_propose_confirmation(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_delier(update, tg_ctx)
 
     assert tg_ctx.user_data['mode'] == 'delier_confirm'
@@ -123,7 +123,7 @@ async def test_delier_confirm_oui_dissocie(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {'mode': 'delier_confirm', 'delier_user_id': user.id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await _delier_confirm(update, tg_ctx, "✅ Oui, délier")
 
     recharge = test_db.query(User).filter(User.id == user.id).first()
@@ -141,7 +141,7 @@ async def test_delier_confirm_non_annule(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {'mode': 'delier_confirm', 'delier_user_id': user.id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await _delier_confirm(update, tg_ctx, "❌ Non, annuler")
 
     test_db.refresh(user)
@@ -163,7 +163,7 @@ async def test_ca5_handle_text_confirmation_ne_passe_pas_par_le_garde_potager(te
     tg_ctx = MagicMock()
     tg_ctx.user_data = {'mode': 'delier_confirm', 'delier_user_id': user.id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await handle_text(update, tg_ctx)
 
     recharge = test_db.query(User).filter(User.id == user.id).first()
@@ -194,7 +194,7 @@ def _auth_engine():
 
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     main.app.state.limiter.reset()

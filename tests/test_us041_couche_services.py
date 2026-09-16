@@ -50,7 +50,13 @@ _DIRECT_QUERY_RE = re.compile(r"\.query\(\s*(Evenement|Parcelle|CultureConfig)\b
 _DIRECT_GET_RE = re.compile(r"db\.get\(\s*(Evenement|Parcelle|CultureConfig)\b")
 
 
-@pytest.mark.parametrize("filename", ["bot.py", "main.py"])
+# Les appelants : l'API et chaque module du package bot (ex-bot.py monolithique).
+_FICHIERS_APPELANTS = ["app/api/main.py"] + sorted(
+    p.relative_to(ROOT).as_posix() for p in (ROOT / "app" / "bot").glob("*.py")
+)
+
+
+@pytest.mark.parametrize("filename", _FICHIERS_APPELANTS)
 def test_ca8_aucun_db_query_direct_hors_services(filename):
     source = (ROOT / filename).read_text(encoding="utf-8")
     query_hits = _DIRECT_QUERY_RE.findall(source)
@@ -60,7 +66,7 @@ def test_ca8_aucun_db_query_direct_hors_services(filename):
 
 
 def test_ca8_aucune_creation_directe_evenement_hors_services():
-    for filename in ("bot.py", "main.py"):
+    for filename in _FICHIERS_APPELANTS:
         source = (ROOT / filename).read_text(encoding="utf-8")
         assert "Evenement(" not in source, f"{filename} construit encore un Evenement() directement"
 

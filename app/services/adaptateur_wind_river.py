@@ -773,6 +773,38 @@ def signaler_incoherences(
                 )
 
 
+def _retenir_plantation_recolte(
+    culture: str,
+    lignes: list[dict],
+    durees: dict[str, Any],
+    resultat: ResultatAdaptation,
+    motif_mode: str,
+) -> None:
+    """
+    [US-177 / CA2] Durée plantation → première récolte, lue dans `days_to_harvest`
+    et **seulement** là où la source la compte depuis la plantation :
+
+    - culture élevée à l'abri (`MODE_PEPINIERE`) — SOURCE.md le consigne, et
+      c'est le motif même pour lequel cette colonne est écartée de `recolte` ;
+    - culture qui ne se sème pas (`MODE_NON_SEMIS` : ail, pomme de terre,
+      fraise) — la plantation est alors le seul geste d'origine possible, ce
+      n'est pas une convention supposée mais la seule lecture qui ait un sens.
+
+    Jamais pour un semis en place ni pour un mode indéterminé, et JAMAIS par
+    soustraction de `repiquage` à `recolte` : la valeur est lue ou elle est vide.
+    Mêmes règles d'agrégation que les autres durées (`_agreger_bornes`).
+    """
+    recolte, motif = _agreger_bornes([_bornes_jours(l.get("days_to_harvest")) for l in lignes])
+    if recolte is None:
+        resultat.durees_ecartees.append(f"{culture}.plantation_recolte — {motif}")
+        return
+    durees["plantation_recolte"] = f"{recolte[0]}-{recolte[1]}"
+    resultat.durees_retenues.append(
+        f"{culture}.plantation_recolte = {recolte[0]}-{recolte[1]} j "
+        f"({motif}, {motif_mode} : la source compte depuis la plantation)"
+    )
+
+
 def construire_calendriers(
     par_culture: dict[str, list[dict]],
     resultat: ResultatAdaptation,
@@ -795,6 +827,9 @@ def construire_calendriers(
        ces cultures, la durée reste vide — le jardinier la complète au bot.
     3. **Semis → repiquage n'est retenu qu'en pépinière**, depuis la consigne
        « start indoors N-M weeks ».
+    4. **Plantation → première récolte [US-177 / CA2]** reprend `days_to_harvest`
+       là où la source le compte depuis la plantation — à l'abri, ou pour ce qui
+       ne se sème pas. Voir `_retenir_plantation_recolte`.
 
     Semis → levée vaut quel que soit le mode, sauf pour ce qui ne se sème pas.
     Le mode voté tient compte des fiches « mixtes » (`_mode_dominant`).
@@ -809,6 +844,7 @@ def construire_calendriers(
 
         if mode == MODE_NON_SEMIS:
             resultat.durees_ecartees.append(f"{culture} — ne se sème pas ({motif_mode})")
+            _retenir_plantation_recolte(culture, lignes, durees, resultat, "ne se sème pas")
         else:
             levee, motif = _agreger_bornes([_bornes_jours(l.get("days_to_germination")) for l in lignes])
             if levee is None:
@@ -838,6 +874,10 @@ def construire_calendriers(
             resultat.durees_ecartees.append(
                 f"{culture}.recolte — élevée à l'abri : la source compte depuis la plantation"
             )
+            # [US-177 / CA2] Ce qui disqualifiait `days_to_harvest` pour l'étape
+            # ci-dessus le qualifie pour celle-ci : la source compte depuis la
+            # plantation, c'est exactement ce que cette durée mesure.
+            _retenir_plantation_recolte(culture, lignes, durees, resultat, "élevée à l'abri")
         elif mode == MODE_MIXTE:
             resultat.durees_ecartees.append(
                 f"{culture}.recolte — semée en place OU à l'abri selon le cultivar : "

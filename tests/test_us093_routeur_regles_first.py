@@ -388,7 +388,7 @@ async def test_us093_ca13_mode_correction_prioritaire_sur_le_routeur():
     """Un message qui ressemble à une question, reçu en pleine correction
     (mode corr_apply), doit rester traité par `_corr_apply` — le routeur ne
     doit jamais être atteint dans ce cas (CA13 / non-régression)."""
-    from bot import handle_text
+    from app.bot import handle_text
 
     update = MagicMock()
     update.message = AsyncMock()
@@ -399,9 +399,9 @@ async def test_us093_ca13_mode_correction_prioritaire_sur_le_routeur():
     ctx.user_data = {"mode": "corr_apply", "corr_event_id": 1}
 
     with (
-        patch("bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
-        patch("bot._corr_apply", new=AsyncMock()) as mock_corr_apply,
-        patch("bot._ask_question", new=AsyncMock()) as mock_ask_question,
+        patch("app.bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
+        patch("app.bot._corr_apply", new=AsyncMock()) as mock_corr_apply,
+        patch("app.bot._ask_question", new=AsyncMock()) as mock_ask_question,
         patch("llm.routeur.classer_demande") as mock_classer,
     ):
         await handle_text(update, ctx)

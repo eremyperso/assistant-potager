@@ -18,8 +18,8 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
-import bot as bot_module
-from bot import (
+from app import bot as bot_module
+from app.bot import (
     _build_action_summary,
     _ACTION_PENDING,
     _ACTION_TIMEOUT,
@@ -100,9 +100,9 @@ async def test_us021_ca1_affiche_confirmation_apres_parsing():
     parsed_item = {"action": "recolte", "culture": "tomate", "quantite": 2, "unite": "kg"}
 
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
         patch("utils.validation.validate_parsed_action", return_value=(True, "")),
-        patch("bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
         patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
     ):
         _ACTION_PENDING.pop(1, None)
@@ -131,7 +131,7 @@ async def test_us021_ca2_confirmation_enregistre():
 
     update = _make_callback_update(user_id=user_id, data="action_confirm")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_awaited_once()
@@ -151,7 +151,7 @@ async def test_us021_ca3_annulation_pas_enregistrement():
 
     update = _make_callback_update(user_id=user_id, data="action_cancel")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -175,7 +175,7 @@ async def test_us021_ca4_timeout_expire():
 
     update = _make_callback_update(user_id=user_id, data="action_confirm")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -195,7 +195,7 @@ async def test_us021_ca5_pending_absent():
 
     update = _make_callback_update(user_id=user_id, data="action_confirm")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -216,10 +216,10 @@ async def test_us021_ca6_question_pas_de_confirmation():
     parsed_question = {"action": None, "culture": None, "quantite": None}
 
     with (
-        patch("bot.parse_commande", return_value=[parsed_question]),
-        patch("bot._normalize_items", return_value=[parsed_question]),
+        patch("app.bot.parse_commande", return_value=[parsed_question]),
+        patch("app.bot._normalize_items", return_value=[parsed_question]),
         patch("utils.validation.validate_parsed_action", return_value=(False, "action None manquante — reroutage question")),
-        patch("bot._ask_question", new_callable=AsyncMock) as mock_ask,
+        patch("app.bot._ask_question", new_callable=AsyncMock) as mock_ask,
     ):
         _ACTION_PENDING.pop(user_id, None)
         await bot_module._parse_and_save(update, "combien de tomates ai-je récoltées ?")
@@ -240,11 +240,11 @@ async def test_us021_ca8_menu_parcelle_affiche():
     fake_parcelle.nom = "zone-tomates"
 
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
         patch("utils.validation.validate_parsed_action", return_value=(True, "")),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.get_all_parcelles", return_value=[fake_parcelle]),
-        patch("bot.SessionLocal"),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.get_all_parcelles", return_value=[fake_parcelle]),
+        patch("app.bot.SessionLocal"),
     ):
         _ACTION_PENDING.pop(user_id, None)
         update = _make_update(user_id=user_id)
@@ -274,7 +274,7 @@ async def test_us021_ca9_selection_parcelle_affiche_confirmation():
 
     update = _make_callback_update(user_id=user_id, data="action_parcelle:zone-tomates")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     # Pas de sauvegarde à cette étape
@@ -303,7 +303,7 @@ async def test_us021_ca10_sans_parcelle():
 
     update = _make_callback_update(user_id=user_id, data="action_parcelle_none")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -322,11 +322,11 @@ async def test_us021_ca11_aucune_parcelle_active():
     parsed_item = {"action": "semis", "culture": "laitue", "quantite": 5, "unite": "graines"}
 
     with (
-        patch("bot.parse_commande", return_value=[parsed_item]),
+        patch("app.bot.parse_commande", return_value=[parsed_item]),
         patch("utils.validation.validate_parsed_action", return_value=(True, "")),
-        patch("bot._normalize_items", return_value=[parsed_item]),
-        patch("bot.get_all_parcelles", return_value=[]),  # aucune parcelle active
-        patch("bot.SessionLocal"),
+        patch("app.bot._normalize_items", return_value=[parsed_item]),
+        patch("app.bot.get_all_parcelles", return_value=[]),  # aucune parcelle active
+        patch("app.bot.SessionLocal"),
     ):
         _ACTION_PENDING.pop(user_id, None)
         update = _make_update(user_id=user_id)
@@ -358,7 +358,7 @@ async def test_us021_ca12_ttl_pendant_selection_parcelle():
 
     update = _make_callback_update(user_id=user_id, data="action_parcelle:zone-nord")
 
-    with patch("bot._do_save_items", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._do_save_items", new_callable=AsyncMock) as mock_save:
         await _action_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()

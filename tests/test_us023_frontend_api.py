@@ -30,11 +30,11 @@ def _db():
 
 @pytest.fixture
 def app_client():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal", return_value=_db()),
+        patch("app.api.main.SessionLocal", return_value=_db()),
         patch("utils.stock.calcul_stock_cultures",   return_value=MOCK_STOCK),
         patch("utils.stock.format_stock_stats_json", return_value=MOCK_STOCK),
         patch("utils.stock.calcul_godets",           return_value=MOCK_GODETS_DICT),

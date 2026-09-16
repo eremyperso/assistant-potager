@@ -17,7 +17,7 @@ import logging
 
 import requests
 
-from config import TELEGRAM_BOT_TOKEN
+from app.config import TELEGRAM_BOT_TOKEN
 
 log = logging.getLogger("potager")
 

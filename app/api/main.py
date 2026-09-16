@@ -1,5 +1,5 @@
 """
-main.py — Assistant Potager v2 (moteur Groq, gratuit)
+app/api/main.py — Assistant Potager v2 (moteur Groq, gratuit)
 ─────────────────────────────────────────────────────
 Endpoints :
   GET  /health      → vérifier que l'API tourne
@@ -70,10 +70,13 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+# app/api/main.py -> app/api -> app -> racine du dépôt (VERSION, frontend/dist, static/)
+_RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # ── Version [US-008] ────────────────────────────────────────────────────────────
 def _lire_version() -> str:
     try:
-        _base = os.path.dirname(os.path.abspath(__file__))
+        _base = _RACINE
         with open(os.path.join(_base, "VERSION"), encoding="utf-8") as _f:
             return _f.read().strip()
     except OSError:
@@ -115,7 +118,7 @@ from utils.actions import normalize_action  # [US-167]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
-from config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
+from app.config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
 
 log = logging.getLogger("potager")
 
@@ -1166,8 +1169,8 @@ _MIME_EXT: dict[str, str] = {
 }
 
 # ── Frontend React (prioritaire) ou PWA fallback ──────────────────────────────
-_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
-_STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+_DIST = os.path.join(_RACINE, "frontend", "dist")
+_STATIC = os.path.join(_RACINE, "static")
 
 if os.path.isdir(_DIST):
     # Dashboard React buildé — servi en priorité

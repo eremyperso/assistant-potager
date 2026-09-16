@@ -15,8 +15,8 @@ from datetime import datetime
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import bot as bot_module
-from bot import (
+from app import bot as bot_module
+from app.bot import (
     _note_start,
     _note_category_selected,
     _note_details_received,
@@ -168,8 +168,8 @@ async def test_us038_ca4_ca5_extraction_et_recapitulatif(test_db):
     }
     _NOTE_PENDING.pop(user_id, None)
 
-    with patch("bot.extract_note_fields", return_value=fields) as mock_extract, \
-         patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.extract_note_fields", return_value=fields) as mock_extract, \
+         patch("app.bot.SessionLocal", return_value=test_db):
         await _note_details_received(
             update, ctx,
             "tomates parcelle Nord, mildiou sur les feuilles du bas, j'ai traité au purin d'ortie",
@@ -209,8 +209,8 @@ async def test_us038_resolution_culture_variete_vers_valeurs_canoniques(test_db)
     }
     _NOTE_PENDING.pop(user_id, None)
 
-    with patch("bot.extract_note_fields", return_value=fields_bruts), \
-         patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.extract_note_fields", return_value=fields_bruts), \
+         patch("app.bot.SessionLocal", return_value=test_db):
         await _note_details_received(update, ctx, "sur les haricot nain")
 
     assert _NOTE_PENDING[user_id]["fields"]["culture"] == "haricot"
@@ -230,7 +230,7 @@ async def test_us038_ca9_annulation_pendant_saisie_details():
     ctx.user_data['mode'] = 'note_details'
     ctx.user_data['note_category'] = 'observation'
 
-    with patch("bot.extract_note_fields") as mock_extract:
+    with patch("app.bot.extract_note_fields") as mock_extract:
         await _note_details_received(update, ctx, "annuler")
 
     mock_extract.assert_not_called()
@@ -271,7 +271,7 @@ async def test_us038_ca6_ca7_confirmation_enregistre_evenement(test_db):
 
     update = _make_callback_update(user_id=user_id, data="note_confirm")
 
-    with patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.SessionLocal", return_value=test_db):
         await _note_confirm_cb(update, _ctx())
 
     assert user_id not in _NOTE_PENDING
@@ -306,7 +306,7 @@ async def test_us038_ca6_resolution_parcelle(test_db):
 
     update = _make_callback_update(user_id=user_id, data="note_confirm")
 
-    with patch("bot.SessionLocal", return_value=test_db):
+    with patch("app.bot.SessionLocal", return_value=test_db):
         await _note_confirm_cb(update, _ctx())
 
     event = test_db.query(Evenement).order_by(Evenement.id.desc()).first()
@@ -325,7 +325,7 @@ async def test_us038_ca9_annulation_callback_pas_enregistrement():
 
     update = _make_callback_update(user_id=user_id, data="note_cancel")
 
-    with patch("bot._save_note_event", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._save_note_event", new_callable=AsyncMock) as mock_save:
         await _note_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -349,7 +349,7 @@ async def test_us038_timeout_expire_pas_enregistrement():
 
     update = _make_callback_update(user_id=user_id, data="note_confirm")
 
-    with patch("bot._save_note_event", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._save_note_event", new_callable=AsyncMock) as mock_save:
         await _note_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()
@@ -365,7 +365,7 @@ async def test_us038_pending_absent_message_expiration():
 
     update = _make_callback_update(user_id=user_id, data="note_confirm")
 
-    with patch("bot._save_note_event", new_callable=AsyncMock) as mock_save:
+    with patch("app.bot._save_note_event", new_callable=AsyncMock) as mock_save:
         await _note_confirm_cb(update, _ctx())
 
     mock_save.assert_not_awaited()

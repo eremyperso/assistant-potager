@@ -131,15 +131,15 @@ def _boutons_retour_proposes(update) -> bool:
 
 @pytest.mark.asyncio
 async def test_us097_ca9_boutons_proposes_pour_reponse_raisonnement():
-    import bot
+    from app import bot
 
     update, _ = _make_update()
     resultat = routeur.ReponseCascade(texte="Réponse savante.", etage_resolveur=routeur.ETAGE_RAISONNEMENT, routage_log_id=7)
 
     with (
-        patch("bot.current_context", return_value=CTX),
-        patch("bot.routeur.repondre_avec_cascade", return_value=resultat),
-        patch("bot.send_voice_reply", new=AsyncMock()),
+        patch("app.bot.current_context", return_value=CTX),
+        patch("app.bot.routeur.repondre_avec_cascade", return_value=resultat),
+        patch("app.bot.send_voice_reply", new=AsyncMock()),
     ):
         await bot._ask_question(update, "pourquoi mes tomates jaunissent ?")
 
@@ -148,15 +148,15 @@ async def test_us097_ca9_boutons_proposes_pour_reponse_raisonnement():
 
 @pytest.mark.asyncio
 async def test_us097_ca9_pas_de_boutons_pour_reponse_donnee():
-    import bot
+    from app import bot
 
     update, _ = _make_update()
     resultat = routeur.ReponseCascade(texte="4 kg de tomates.", etage_resolveur=routeur.ETAGE_DONNEE, routage_log_id=8)
 
     with (
-        patch("bot.current_context", return_value=CTX),
-        patch("bot.routeur.repondre_avec_cascade", return_value=resultat),
-        patch("bot.send_voice_reply", new=AsyncMock()),
+        patch("app.bot.current_context", return_value=CTX),
+        patch("app.bot.routeur.repondre_avec_cascade", return_value=resultat),
+        patch("app.bot.send_voice_reply", new=AsyncMock()),
     ):
         await bot._ask_question(update, "combien de tomates ai-je récolté ?")
 
@@ -167,15 +167,15 @@ async def test_us097_ca9_pas_de_boutons_pour_reponse_donnee():
 async def test_us097_pas_de_boutons_si_journal_non_ecrit():
     """routage_log_id absent (écriture du journal en échec) : rien à
     rattacher (CA10), donc pas de boutons proposés."""
-    import bot
+    from app import bot
 
     update, _ = _make_update()
     resultat = routeur.ReponseCascade(texte="Réponse savante.", etage_resolveur=routeur.ETAGE_RAISONNEMENT, routage_log_id=None)
 
     with (
-        patch("bot.current_context", return_value=CTX),
-        patch("bot.routeur.repondre_avec_cascade", return_value=resultat),
-        patch("bot.send_voice_reply", new=AsyncMock()),
+        patch("app.bot.current_context", return_value=CTX),
+        patch("app.bot.routeur.repondre_avec_cascade", return_value=resultat),
+        patch("app.bot.send_voice_reply", new=AsyncMock()),
     ):
         await bot._ask_question(update, "pourquoi mes tomates jaunissent ?")
 
@@ -198,14 +198,14 @@ def _make_callback_update(data: str):
 
 @pytest.mark.asyncio
 async def test_us097_ca9_callback_avis_positif_enregistre(test_db):
-    import bot
+    from app import bot
 
     ligne = _log(test_db)
     update = _make_callback_update(f"retour_routage:positif:{ligne.id}")
 
     with (
-        patch("bot.SessionLocal", lambda: _SessionPartagee(test_db)),
-        patch("bot.current_context", return_value=CTX),
+        patch("app.bot.SessionLocal", lambda: _SessionPartagee(test_db)),
+        patch("app.bot.current_context", return_value=CTX),
     ):
         await bot._retour_routage_cb(update, MagicMock())
 
@@ -217,14 +217,14 @@ async def test_us097_ca9_callback_avis_positif_enregistre(test_db):
 @pytest.mark.asyncio
 async def test_us097_ca13_callback_avis_negatif_naucun_appel_modele(test_db):
     """CA13 : un 👎 n'appelle jamais un modèle plus gros — pur point d'écriture."""
-    import bot
+    from app import bot
 
     ligne = _log(test_db)
     update = _make_callback_update(f"retour_routage:negatif:{ligne.id}")
 
     with (
-        patch("bot.SessionLocal", lambda: _SessionPartagee(test_db)),
-        patch("bot.current_context", return_value=CTX),
+        patch("app.bot.SessionLocal", lambda: _SessionPartagee(test_db)),
+        patch("app.bot.current_context", return_value=CTX),
         patch("llm.passerelle.appeler_chat") as mock_llm,
     ):
         await bot._retour_routage_cb(update, MagicMock())
@@ -235,13 +235,13 @@ async def test_us097_ca13_callback_avis_negatif_naucun_appel_modele(test_db):
 
 @pytest.mark.asyncio
 async def test_us097_ca11_callback_double_clic_message_deja_enregistre(test_db):
-    import bot
+    from app import bot
 
     ligne = _log(test_db)
     update1 = _make_callback_update(f"retour_routage:positif:{ligne.id}")
     update2 = _make_callback_update(f"retour_routage:positif:{ligne.id}")
 
-    with patch("bot.SessionLocal", lambda: _SessionPartagee(test_db)), patch("bot.current_context", return_value=CTX):
+    with patch("app.bot.SessionLocal", lambda: _SessionPartagee(test_db)), patch("app.bot.current_context", return_value=CTX):
         await bot._retour_routage_cb(update1, MagicMock())
         await bot._retour_routage_cb(update2, MagicMock())
 
@@ -253,7 +253,7 @@ async def test_us097_ca11_callback_double_clic_message_deja_enregistre(test_db):
 
 @pytest.mark.asyncio
 async def test_us097_callback_donnees_invalides_ne_leve_pas():
-    import bot
+    from app import bot
 
     update = _make_callback_update("retour_routage:pas_un_format_valide")
     await bot._retour_routage_cb(update, MagicMock())
@@ -290,37 +290,37 @@ def test_us097_ca12_top_questions_mal_notees(test_db):
 class TestEndpointWebRetour:
 
     def test_us097_web_retour_positif_ok(self, test_db):
-        import main
+        from app.api import main
         ligne = _log(test_db)
 
-        with patch("main.SessionLocal", return_value=_SessionPartagee(test_db)):
+        with patch("app.api.main.SessionLocal", return_value=_SessionPartagee(test_db)):
             reponse = main.deposer_retour_routage(
                 ligne.id, main.RetourRequest(avis="positif"), ctx=CTX,
             )
         assert reponse == {"ok": True}
 
     def test_us097_web_retour_avis_invalide_400(self, test_db):
-        import main
+        from app.api import main
         ligne = _log(test_db)
 
-        with patch("main.SessionLocal", return_value=_SessionPartagee(test_db)):
+        with patch("app.api.main.SessionLocal", return_value=_SessionPartagee(test_db)):
             with pytest.raises(HTTPException) as err:
                 main.deposer_retour_routage(ligne.id, main.RetourRequest(avis="neutre"), ctx=CTX)
         assert err.value.status_code == 400
 
     def test_us097_web_retour_introuvable_404(self, test_db):
-        import main
+        from app.api import main
 
-        with patch("main.SessionLocal", return_value=_SessionPartagee(test_db)):
+        with patch("app.api.main.SessionLocal", return_value=_SessionPartagee(test_db)):
             with pytest.raises(HTTPException) as err:
                 main.deposer_retour_routage(999, main.RetourRequest(avis="positif"), ctx=CTX)
         assert err.value.status_code == 404
 
     def test_us097_web_retour_deja_enregistre_409(self, test_db):
-        import main
+        from app.api import main
         ligne = _log(test_db)
 
-        with patch("main.SessionLocal", return_value=_SessionPartagee(test_db)):
+        with patch("app.api.main.SessionLocal", return_value=_SessionPartagee(test_db)):
             main.deposer_retour_routage(ligne.id, main.RetourRequest(avis="positif"), ctx=CTX)
             with pytest.raises(HTTPException) as err:
                 main.deposer_retour_routage(ligne.id, main.RetourRequest(avis="negatif"), ctx=CTX)

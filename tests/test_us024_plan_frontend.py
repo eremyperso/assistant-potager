@@ -39,11 +39,11 @@ MOCK_OCCUPATION = {
 
 @pytest.fixture
 def client():
-    from main import app, get_current_user_ctx
+    from app.api.main import app, get_current_user_ctx
     from app.services.context import default_context
     app.dependency_overrides[get_current_user_ctx] = default_context
     with (
-        patch("main.SessionLocal",              return_value=MagicMock()),
+        patch("app.api.main.SessionLocal",              return_value=MagicMock()),
         patch("utils.parcelles.get_all_parcelles",          return_value=MOCK_PARCELLES),
         patch("utils.parcelles.calcul_occupation_parcelles", return_value=MOCK_OCCUPATION),
     ):
@@ -120,9 +120,9 @@ def test_us024_ca5_occupation_pct_null_sans_superficie(client):
 
 def test_us024_ca6_aucune_parcelle(client):
     """CA6 — Aucune parcelle → parcelles=[], total=0, pas d'erreur."""
-    from main import app
+    from app.api.main import app
     with (
-        patch("main.SessionLocal",              return_value=MagicMock()),
+        patch("app.api.main.SessionLocal",              return_value=MagicMock()),
         patch("utils.parcelles.get_all_parcelles",          return_value=[]),
         patch("utils.parcelles.calcul_occupation_parcelles", return_value={}),
     ):

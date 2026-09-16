@@ -28,7 +28,7 @@ from utils.parcelles import (
     calcul_occupation_parcelles,
 )
 from database.models import Evenement, Parcelle, CultureConfig
-from bot import _alerte_recolte, SEUIL_ALERTE
+from app.bot import _alerte_recolte, SEUIL_ALERTE
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -333,15 +333,15 @@ class TestCmdPlan:
         """cmd_plan sans arg et sans cultures → aucune erreur, message envoyé."""
         update, ctx = _make_update_ctx(args=[])
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.calcul_occupation_parcelles", return_value={}),
-            patch("bot.get_all_parcelles", return_value=[]),
-            patch("bot.send_voice_reply", new_callable=AsyncMock),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.calcul_occupation_parcelles", return_value={}),
+            patch("app.bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.send_voice_reply", new_callable=AsyncMock),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_plan
+            from app.bot import cmd_plan
             await cmd_plan(update, ctx)
 
         update.message.reply_text.assert_called_once()
@@ -353,15 +353,15 @@ class TestCmdPlan:
         """CA5 — cmd_plan avec parcelle inconnue → message 'Aucune culture active'."""
         update, ctx = _make_update_ctx(args=["zzz"])
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.calcul_occupation_parcelles", return_value={}),
-            patch("bot.get_all_parcelles", return_value=[]),
-            patch("bot.send_voice_reply", new_callable=AsyncMock),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.calcul_occupation_parcelles", return_value={}),
+            patch("app.bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.send_voice_reply", new_callable=AsyncMock),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_plan
+            from app.bot import cmd_plan
             await cmd_plan(update, ctx)
 
         texte_envoye = update.message.reply_text.call_args[0][0]
@@ -381,15 +381,15 @@ class TestCmdPlan:
             "age_jours": 27,
         }]
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.calcul_occupation_parcelles", return_value={"NORD": cultures}),
-            patch("bot.get_all_parcelles", return_value=[]),
-            patch("bot.send_voice_reply", new_callable=AsyncMock),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.calcul_occupation_parcelles", return_value={"NORD": cultures}),
+            patch("app.bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.send_voice_reply", new_callable=AsyncMock),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_plan
+            from app.bot import cmd_plan
             await cmd_plan(update, ctx)
 
         texte_envoye = update.message.reply_text.call_args[0][0]
@@ -402,15 +402,15 @@ class TestCmdPlan:
         """CA6 — Le hint est présent en pied de message vue globale."""
         update, ctx = _make_update_ctx(args=[])
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.calcul_occupation_parcelles", return_value={}),
-            patch("bot.get_all_parcelles", return_value=[]),
-            patch("bot.send_voice_reply", new_callable=AsyncMock),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.calcul_occupation_parcelles", return_value={}),
+            patch("app.bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.send_voice_reply", new_callable=AsyncMock),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_plan
+            from app.bot import cmd_plan
             await cmd_plan(update, ctx)
 
         texte_envoye = update.message.reply_text.call_args[0][0]
@@ -426,11 +426,11 @@ class TestCmdParcelle:
     async def test_parcelle_ajouter_sans_nom(self) -> None:
         """CA13 — /parcelle ajouter sans nom → message d'erreur."""
         update, ctx = _make_update_ctx(args=["ajouter"])
-        with patch("bot.SessionLocal") as mock_sl:
+        with patch("app.bot.SessionLocal") as mock_sl:
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_parcelle
+            from app.bot import cmd_parcelle
             await cmd_parcelle(update, ctx)
 
         texte = update.message.reply_text.call_args[0][0]
@@ -443,14 +443,14 @@ class TestCmdParcelle:
         parcelle_existante = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
 
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.normalize_parcelle_name", return_value="nord"),
-            patch("bot.find_doublon", return_value=(parcelle_existante, None)),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.normalize_parcelle_name", return_value="nord"),
+            patch("app.bot.find_doublon", return_value=(parcelle_existante, None)),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_parcelle
+            from app.bot import cmd_parcelle
             await cmd_parcelle(update, ctx)
 
         texte = update.message.reply_text.call_args[0][0]
@@ -464,14 +464,14 @@ class TestCmdParcelle:
         parcelle_proche = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
 
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.normalize_parcelle_name", return_value="nrd"),
-            patch("bot.find_doublon", return_value=(None, parcelle_proche)),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.normalize_parcelle_name", return_value="nrd"),
+            patch("app.bot.find_doublon", return_value=(None, parcelle_proche)),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_parcelle
+            from app.bot import cmd_parcelle
             await cmd_parcelle(update, ctx)
 
         texte = update.message.reply_text.call_args[0][0]
@@ -485,15 +485,15 @@ class TestCmdParcelle:
         update, ctx = _make_update_ctx(args=["ajouter", "ouest"])
 
         with (
-            patch("bot.SessionLocal") as mock_sl,
-            patch("bot.normalize_parcelle_name", return_value="ouest"),
-            patch("bot.find_doublon", return_value=(None, None)),
-            patch("bot.get_all_parcelles", return_value=[]),
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.normalize_parcelle_name", return_value="ouest"),
+            patch("app.bot.find_doublon", return_value=(None, None)),
+            patch("app.bot.get_all_parcelles", return_value=[]),
         ):
             mock_db = MagicMock()
             mock_sl.return_value = mock_db
 
-            from bot import cmd_parcelle
+            from app.bot import cmd_parcelle
             await cmd_parcelle(update, ctx)
 
         texte = update.message.reply_text.call_args[0][0]
@@ -505,7 +505,7 @@ class TestCmdParcelle:
     async def test_parcelle_usage_sans_args(self) -> None:
         """Aucun argument → message d'usage affiché."""
         update, ctx = _make_update_ctx(args=[])
-        from bot import cmd_parcelle
+        from app.bot import cmd_parcelle
         await cmd_parcelle(update, ctx)
         texte = update.message.reply_text.call_args[0][0]
         assert "Usage" in texte

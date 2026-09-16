@@ -747,8 +747,8 @@ def test_us140_reingerer_un_corpus_inchange_n_ecrit_rien(corpus):
 @pytest.mark.parametrize("chemin", [
     ".github/workflows/deploy.yml",
     ".github/workflows/deploy-dev.yml",
-    "deploy.sh",
-    "update_dev.ps1",
+    "scripts/deploy.sh",
+    "scripts/update_dev.ps1",
 ])
 def test_us140_la_relecture_est_executee_au_deploiement(chemin):
     """CA7, CA10, CA13 — une règle de relecture qui ne s'exécute pas au

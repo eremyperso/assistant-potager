@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bot import cmd_help, cmd_parcelle, _cmd_parcelles_lister
+from app.bot import cmd_help, cmd_parcelle, _cmd_parcelles_lister
 from utils.parcelles import update_parcelle
 from database.models import Parcelle
 
@@ -340,8 +340,8 @@ class TestCmdParcelleListerCA1:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.get_all_parcelles", return_value=[p]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.get_all_parcelles", return_value=[p]):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -359,8 +359,8 @@ class TestCmdParcelleListerCA2BddVide:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.get_all_parcelles", return_value=[]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.get_all_parcelles", return_value=[]):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -379,8 +379,8 @@ class TestCmdParcellesAliasCA3:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.get_all_parcelles", return_value=[]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.get_all_parcelles", return_value=[]):
             await _cmd_parcelles_lister(mock_update, ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -401,8 +401,8 @@ class TestCmdParcellesAliasCA3:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.get_all_parcelles", return_value=[p]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.get_all_parcelles", return_value=[p]):
             await _cmd_parcelles_lister(mock_update, ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -422,8 +422,8 @@ class TestCmdParcelleModifierCA4Exposition:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.update_parcelle", return_value=(p, ["Exposition : sud"])):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.update_parcelle", return_value=(p, ["Exposition : sud"])):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -444,8 +444,8 @@ class TestCmdParcelleModifierCA5Superficie:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.update_parcelle", return_value=(p, ["Superficie : 8.5 m²"])):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.update_parcelle", return_value=(p, ["Superficie : 8.5 m²"])):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -466,8 +466,8 @@ class TestCmdParcelleModifierCA6DeuxChamps:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.update_parcelle", return_value=(p, ["Exposition : sud", "Superficie : 8.5 m²"])):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.update_parcelle", return_value=(p, ["Exposition : sud", "Superficie : 8.5 m²"])):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -486,9 +486,9 @@ class TestCmdParcelleModifierCA7Inexistante:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.update_parcelle", side_effect=LookupError("inexistante")), \
-             patch("bot.get_all_parcelles", return_value=[]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.update_parcelle", side_effect=LookupError("inexistante")), \
+             patch("app.bot.get_all_parcelles", return_value=[]):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -509,8 +509,8 @@ class TestCmdParcelleModifierCA8ParamInconnu:
             "Paramètre(s) inconnu(s) : couleur. Acceptés : exposition, superficie, ordre"
         )
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.update_parcelle", side_effect=err):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.update_parcelle", side_effect=err):
             await cmd_parcelle(mock_update, mock_ctx)
         # Assert
         texte = mock_update.message.reply_text.call_args[0][0]
@@ -559,9 +559,9 @@ class TestCmdParcelleAjouterCA10Pending:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.find_doublon", return_value=(None, None)), \
-             patch("bot.get_all_parcelles", return_value=[]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.find_doublon", return_value=(None, None)), \
+             patch("app.bot.get_all_parcelles", return_value=[]):
             await cmd_parcelle(mock_update, ctx)
         # Assert
         pending = ctx.user_data.get("parcelle_pending", {})
@@ -580,9 +580,9 @@ class TestCmdParcelleAjouterCA10Pending:
         mock_db = MagicMock()
         mock_db.close = MagicMock()
         # Act
-        with patch("bot.SessionLocal", return_value=mock_db), \
-             patch("bot.find_doublon", return_value=(None, None)), \
-             patch("bot.get_all_parcelles", return_value=[]):
+        with patch("app.bot.SessionLocal", return_value=mock_db), \
+             patch("app.bot.find_doublon", return_value=(None, None)), \
+             patch("app.bot.get_all_parcelles", return_value=[]):
             await cmd_parcelle(mock_update, ctx)
         # Assert
         assert ctx.user_data.get("mode") == "parcelle_confirm"

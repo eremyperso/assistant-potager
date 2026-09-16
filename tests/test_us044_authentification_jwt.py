@@ -16,7 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import config
+from app import config
 from app.services import auth as svc_auth
 from database.db import Base
 from database.models import User, Potager, PotagerMembre
@@ -49,7 +49,7 @@ def test_db(_auth_engine):
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
     """TestClient FastAPI branché sur le moteur SQLite de test (pas de mock)."""
-    import main
+    from app.api import main
 
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
@@ -221,7 +221,7 @@ def test_us044_ca5_token_expire_renvoie_code_token_expired(app_client, test_db):
 def test_us044_ca6_secret_jwt_vient_de_lenvironnement(monkeypatch):
     monkeypatch.setenv("JWT_SECRET", "un-secret-different-pour-le-test")
     import importlib
-    import config as config_module
+    config_module = importlib.import_module("app.config")  # l'objet de sys.modules, pas l'attribut en cache
     importlib.reload(config_module)
     try:
         assert config_module.JWT_SECRET == "un-secret-different-pour-le-test"
@@ -274,7 +274,7 @@ def test_us044_ca8_rate_limit_register_bloque_apres_n_tentatives(app_client):
 # ── CA9 — Envoi de l'e-mail de vérification à l'inscription ───────────────
 
 def test_us044_ca9_inscription_envoie_email_verification(app_client, test_db):
-    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
         resp = app_client.post("/auth/register", json={
             "email": "jardinier@example.com",
             "mot_de_passe": "motdepasse123",
@@ -287,7 +287,7 @@ def test_us044_ca9_inscription_envoie_email_verification(app_client, test_db):
 
 
 def test_us044_ca9_compte_cree_non_verifie_avec_token_hache(app_client, test_db):
-    with patch("main.svc_email.envoyer_email_verification"):
+    with patch("app.api.main.svc_email.envoyer_email_verification"):
         app_client.post("/auth/register", json={
             "email": "jardinier@example.com",
             "mot_de_passe": "motdepasse123",
@@ -302,7 +302,7 @@ def test_us044_ca9_compte_cree_non_verifie_avec_token_hache(app_client, test_db)
 # ── CA10 — Vérification du lien reçu par e-mail ────────────────────────────
 
 def _inscrire_et_capturer_token(app_client) -> str:
-    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
         app_client.post("/auth/register", json={
             "email": "jardinier@example.com",
             "mot_de_passe": "motdepasse123",
@@ -387,7 +387,7 @@ def test_us044_ca11_connexion_autorisee_apres_verification(app_client, test_db):
 def test_us044_ca12_resend_envoie_un_nouveau_token(app_client, test_db):
     ancien_token = _inscrire_et_capturer_token(app_client)
 
-    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
         resp = app_client.post("/auth/resend-verification", json={"email": "jardinier@example.com"})
     assert resp.status_code == 200
     mock_envoi.assert_called_once()
@@ -400,7 +400,7 @@ def test_us044_ca12_resend_envoie_un_nouveau_token(app_client, test_db):
 
 
 def test_us044_ca12_resend_compte_inconnu_meme_reponse_generique(app_client):
-    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
         resp = app_client.post("/auth/resend-verification", json={"email": "inconnu@example.com"})
     assert resp.status_code == 200
     mock_envoi.assert_not_called()
@@ -410,7 +410,7 @@ def test_us044_ca12_resend_compte_deja_verifie_meme_reponse_generique(app_client
     token = _inscrire_et_capturer_token(app_client)
     app_client.get("/auth/verify-email", params={"token": token})
 
-    with patch("main.svc_email.envoyer_email_verification") as mock_envoi:
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
         resp = app_client.post("/auth/resend-verification", json={"email": "jardinier@example.com"})
     assert resp.status_code == 200
     mock_envoi.assert_not_called()

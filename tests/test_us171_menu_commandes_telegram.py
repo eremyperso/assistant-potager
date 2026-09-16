@@ -20,7 +20,7 @@ import pytest
 from telegram import BotCommand, ReplyKeyboardRemove
 from telegram.ext import CommandHandler
 
-import bot as bot_module
+from app import bot as bot_module
 from app.services import menu_commandes as svc_menu
 
 
@@ -261,7 +261,7 @@ class TestCA7CA8ClavierPermanentRetire:
         """[CA7] Les libellés des anciens raccourcis ne sont plus émis en clavier."""
         import inspect
 
-        source = inspect.getsource(bot_module)
+        source = "\n".join(inspect.getsource(m) for m in bot_module._SOUS_MODULES)
         declaration = source.split("SANS_CLAVIER = ReplyKeyboardRemove()")[0]
 
         assert 'KeyboardButton("🎤 Nouvelle action vocale")' not in declaration
@@ -345,7 +345,7 @@ class TestCA11CA13ClaviersContextuelsIntacts:
         """[CA11] Les boutons de confirmation d'un événement sont inchangés."""
         import inspect
 
-        source = inspect.getsource(bot_module)
+        source = "\n".join(inspect.getsource(m) for m in bot_module._SOUS_MODULES)
 
         assert 'callback_data="action_confirm"' in source
         assert 'callback_data="action_cancel"' in source

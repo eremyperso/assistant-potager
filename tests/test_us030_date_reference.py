@@ -238,19 +238,19 @@ def test_us030_occupation_exclut_plantations_futures(db_session):
 
 def test_us030_ca10_parse_date_iso():
     """[US-030 / CA10] _parse_date_arg reconnaît le format YYYY-MM-DD."""
-    from bot import _parse_date_arg
+    from app.bot import _parse_date_arg
     assert _parse_date_arg("2025-05-01") == date(2025, 5, 1)
 
 
 def test_us030_ca10_parse_date_fr():
     """[US-030 / CA10] _parse_date_arg reconnaît le format JJ/MM/AAAA."""
-    from bot import _parse_date_arg
+    from app.bot import _parse_date_arg
     assert _parse_date_arg("01/05/2025") == date(2025, 5, 1)
 
 
 def test_us030_ca10_parse_date_invalide():
     """[US-030 / CA10/CA14] _parse_date_arg retourne None pour une date invalide."""
-    from bot import _parse_date_arg
+    from app.bot import _parse_date_arg
     assert _parse_date_arg("32/13/2025") is None
     assert _parse_date_arg("not-a-date") is None
     assert _parse_date_arg("tomate") is None
@@ -258,7 +258,7 @@ def test_us030_ca10_parse_date_invalide():
 
 def test_us030_ca10_parse_date_future_capee():
     """[US-030 / CA5] Date future → capée à aujourd'hui."""
-    from bot import _parse_date_arg
+    from app.bot import _parse_date_arg
     future = (date.today() + timedelta(days=365)).isoformat()
     result = _parse_date_arg(future)
     assert result == date.today()
@@ -266,7 +266,7 @@ def test_us030_ca10_parse_date_future_capee():
 
 def test_us030_ca14_looks_like_date():
     """[US-030 / CA14] _looks_like_date détecte les fausses dates."""
-    from bot import _looks_like_date
+    from app.bot import _looks_like_date
     assert _looks_like_date("32/13/2025") is True   # ressemble à date FR mais invalide
     assert _looks_like_date("2025-13-01") is True   # ressemble à date ISO mais invalide
     assert _looks_like_date("tomate")     is False
@@ -275,5 +275,5 @@ def test_us030_ca14_looks_like_date():
 
 def test_us030_ca16_parse_date_none_si_absent():
     """[US-030 / CA16] Pas d'arg date → date_ref reste None (comportement par défaut)."""
-    from bot import _parse_date_arg
+    from app.bot import _parse_date_arg
     assert _parse_date_arg("") is None

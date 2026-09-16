@@ -1,3 +1,36 @@
+## [v3.67.0] — 2026-09-16
+
+### 🔧 Améliorations techniques
+- Découpe le bot Telegram monolithique (`bot.py`, 7 000 lignes) en package `app/bot/` de 22 modules par domaine (saisie, godets, pertes, notes, correction, commandes, interprétation, application…), sans changement de comportement
+- Ajoute une façade `app.bot` qui expose tous les noms et propage les remplacements d'attributs aux sous-modules, pour que les tests existants continuent de patcher `bot.SessionLocal` ou `bot._do_save_items` sans réécriture
+- Déplace l'API dans `app/api/main.py` et la configuration dans `app/config.py` ; `.env.{APP_ENV}` est désormais aussi cherché à la racine du dépôt quand le répertoire courant ne le contient pas
+- Range `update_dev.ps1` et `deploy.sh` dans `scripts/`, les vérificateurs Jira dans `tools/`, et retire de la racine `bot_meteo_patch.py`, `config.py.example` et `.coverage` (artefacts de tests désormais ignorés par git)
+- Allège `CLAUDE.md` racine de 20 000 à environ 2 400 jetons : les notes de conception par domaine vivent dans `docs/domaines/` (lues à la demande) et des `CLAUDE.md` de sous-dossiers (`app/bot`, `app/services`, `data`, `frontend`, `tests`) sont chargés seulement quand on y travaille
+- Ajoute aux agents Developer, QA, Orchestrateur, Analyste-Incident et Patch Notes Writer une section « Efficacité de contexte » (chercher avant de lire, tests ciblés, diffs par fichier)
+- Aligne `scripts/deploy.sh` (repli manuel) sur les services réels `potager-prod` / `potager-prod-bot` et le dépôt `assistant-potager`
+
+### ⚠️ Breaking changes
+- Le bot se lance par `python -m app.bot` et l'API par `uvicorn app.api.main:app` : les unités systemd de `infra/` sont mises à jour et réinstallées par les workflows de déploiement, aucune action manuelle sur les serveurs
+- Le hook git `post-merge` et la documentation appellent `.\scripts\update_dev.ps1` ; tout script local qui invoquait `update_dev.ps1` à la racine doit être adapté
+- Un test qui lisait le source de `bot.py` par chemin doit concaténer `bot_module._SOUS_MODULES` ; un patch sur `main.X` devient `app.api.main.X`, sur `config.X` devient `app.config.X`
+
+## [v3.66.0] — 2026-09-16
+
+### 🚀 Nouveautés
+- Projette la première récolte d'un **plant acheté** ou d'une culture plantée sans semis connu (ail, fraisier) depuis sa date réelle de plantation : une tomate plantée le 10 mai affiche « 1re récolte attendue entre le 9 et le 29 juillet » sur l'écran Plan (US-177 / CA7)
+- Ajoute au calendrier cultural un quatrième délai, **plantation → première récolte**, affiché par `/calendrier <culture>` pour les seules cultures qui se plantent et servi par `GET /cultures/{culture}/calendrier` (US-177 / CA1, CA3, CA6)
+- Pré-remplit ce délai pour 8 cultures depuis Wind River Greens — tomate, poivron, aubergine, thym, ail, échalote, pomme de terre, framboise — là où la source compte depuis la plantation, sans jamais le déduire du délai de repiquage (US-177 / CA2)
+- Permet de le corriger pour son seul potager avec `/calendrier duree tomate plantation-recolte 60-80`, correction qu'aucun rejeu de l'import n'écrase (US-177 / CA4)
+- Comprend la dictée « délai entre la plantation et la récolte des tomates : 60 à 80 jours » sans la confondre avec le délai avant plantation ni avec une période de plantation (US-177 / CA5)
+
+### 🔧 Améliorations techniques
+- Écrit la priorité semis / plantation à un seul endroit, `recalage_calendrier.ancrer_serie` : le semis reste la référence dès qu'il existe, et un semis sans délai n'emprunte jamais celui de la plantation (US-177 / CA8)
+- Ajoute la quatrième étape au gabarit `calendrier_redaction_interne.json`, livrée vide, et documente sa provenance dans `wind_river_greens/SOURCE.md` (US-177 / CA2)
+- Met à jour la fiche d'aide `calendrier-et-zone-climatique.md`, qui annonçait qu'un plant acheté n'était jamais projeté (US-099 / CA9)
+
+### 💾 Base de données
+- Ajoute l'étape `plantation_recolte` à `duree_culturale` sans migration : la colonne `etape` n'a pas de contrainte de vocabulaire (arbitrage de migration_v46) et le nom tient dans son `VARCHAR(20)` (US-177)
+
 ## [v3.65.0] — 2026-09-15
 
 ### 🚀 Nouveautés

@@ -63,7 +63,7 @@ def _call_find_candidates_with_groq(description: str, groq_json: dict, db_sessio
     Appelle _find_candidates en mockant Groq + SessionLocal pour utiliser
     la session de test.
     """
-    from bot import _find_candidates
+    from app.bot import _find_candidates
 
     mock_resp = MagicMock()
     mock_resp.choices[0].message.content = json.dumps(groq_json)
@@ -74,7 +74,7 @@ def _call_find_candidates_with_groq(description: str, groq_json: dict, db_sessio
     # [US-092] _find_candidates passe par llm/passerelle.py : on intercepte
     # le client de la passerelle, plus un import local du SDK.
     with patch("llm.passerelle._client", mock_client), \
-         patch("bot.SessionLocal", return_value=db_session):
+         patch("app.bot.SessionLocal", return_value=db_session):
         results = _find_candidates(description)
     return results
 
@@ -200,7 +200,7 @@ class TestCA4_FmtEventVariete:
 
     def test_variete_affichee(self):
         """CA4 : événement avec variété → '… tomate (ronde) 10.0plants …'"""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e = _make_event(247, "plantation", "tomate", variete="ronde")
         result = _fmt_event(e)
@@ -209,7 +209,7 @@ class TestCA4_FmtEventVariete:
 
     def test_variete_position_avant_quantite(self):
         """CA4 : variété apareît avant la quantité."""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e = _make_event(247, "plantation", "tomate", variete="ronde", quantite=10.0)
         result = _fmt_event(e)
@@ -220,7 +220,7 @@ class TestCA4_FmtEventVariete:
 
     def test_format_complet(self):
         """CA4 : format exact '#247 07/04 — plantation tomate (ronde) 10.0plants'"""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e = _make_event(247, "plantation", "tomate", variete="ronde", quantite=10.0)
         result = _fmt_event(e)
@@ -236,7 +236,7 @@ class TestCA5_ListeMultiVariete:
 
     def test_deux_varietes_distinctes_dans_liste(self):
         """CA5 : _fmt_event sur deux événements de variétés différentes produit des lignes différentes."""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e1 = _make_event(100, "plantation", "tomate", variete="ronde")
         e2 = _make_event(101, "plantation", "tomate", variete="cerise")
@@ -256,7 +256,7 @@ class TestSansPrenthesesVides:
 
     def test_pas_de_parentheses_vides(self):
         """Scénario : événement tomate sans variété → pas de '()'."""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e = _make_event(162, "plantation", "tomate", variete=None)
         result = _fmt_event(e)
@@ -265,7 +265,7 @@ class TestSansPrenthesesVides:
 
     def test_affichage_sans_variete(self):
         """Scénario : format sans variété reste correct."""
-        from bot import _fmt_event
+        from app.bot import _fmt_event
 
         e = _make_event(162, "plantation", "tomate", variete=None, quantite=30.0)
         result = _fmt_event(e)

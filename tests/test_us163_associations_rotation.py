@@ -529,7 +529,7 @@ class _BotCommandeMixin:
 class TestCommandeBotAssociation(_BotCommandeMixin):
     @pytest.mark.asyncio
     async def test_sans_argument_affiche_l_usage(self):
-        from bot import cmd_association
+        from app.bot import cmd_association
         update, ctx = self._make_update(), self._make_ctx([])
 
         await cmd_association(update, ctx)
@@ -539,7 +539,7 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
     @pytest.mark.asyncio
     async def test_lister_appelle_le_service_et_formate_la_reponse(self):
         """[CA5] La formulation différenciée sort telle quelle dans le message."""
-        from bot import cmd_association
+        from app.bot import cmd_association
         update = self._make_update()
         ctx = self._make_ctx(["lister", "carotte"])
         lue = svc_associations.AssociationLue(
@@ -549,8 +549,8 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
             attribution="Saisi par le jardinier",
         )
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_associations.lire_associations", return_value=[lue]) as mock_lire:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_associations.lire_associations", return_value=[lue]) as mock_lire:
             MockSession.return_value = MagicMock()
             await cmd_association(update, ctx)
             mock_lire.assert_called_once_with(ANY, "carotte")
@@ -561,12 +561,12 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
 
     @pytest.mark.asyncio
     async def test_lister_entite_inconnue_message_honnete(self):
-        from bot import cmd_association
+        from app.bot import cmd_association
         update = self._make_update()
         ctx = self._make_ctx(["lister", "inconnue"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_associations.lire_associations",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_associations.lire_associations",
                    side_effect=svc_associations.EntiteInconnueError("inconnue")):
             MockSession.return_value = MagicMock()
             await cmd_association(update, ctx)
@@ -575,7 +575,7 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
 
     @pytest.mark.asyncio
     async def test_saisir_arguments_insuffisants_affiche_l_usage_precis(self):
-        from bot import cmd_association
+        from app.bot import cmd_association
         update = self._make_update()
         ctx = self._make_ctx(["saisir", "tomate", "basilic"])
 
@@ -585,14 +585,14 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
 
     @pytest.mark.asyncio
     async def test_saisir_appelle_le_service_avec_les_bons_arguments(self):
-        from bot import cmd_association
+        from app.bot import cmd_association
         update = self._make_update()
         ctx = self._make_ctx(
             ["saisir", "carotte", "aneth", "defavorable", "etabli", "concurrence", "racinaire"]
         )
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_associations.enregistrer_association",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_associations.enregistrer_association",
                    return_value=(MagicMock(), True)) as mock_enr:
             MockSession.return_value = MagicMock()
             await cmd_association(update, ctx)
@@ -606,12 +606,12 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
     async def test_saisir_valeur_invalide_restitue_le_message_du_service(self):
         """[CA1, CA2] Le motif du refus (vocabulaire fermé) atteint le jardinier
         tel quel, jamais une erreur générique."""
-        from bot import cmd_association
+        from app.bot import cmd_association
         update = self._make_update()
         ctx = self._make_ctx(["saisir", "tomate", "basilic", "favorable", "etabli", "motif"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.svc_associations.enregistrer_association",
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.svc_associations.enregistrer_association",
                    side_effect=svc_associations.ValeurAssociationInvalideError(
                        "« excellente » n'est pas une nature d'association admise."
                    )):
@@ -624,7 +624,7 @@ class TestCommandeBotAssociation(_BotCommandeMixin):
 class TestCommandeBotRotation(_BotCommandeMixin):
     @pytest.mark.asyncio
     async def test_arguments_insuffisants_affiche_l_usage(self):
-        from bot import cmd_rotation
+        from app.bot import cmd_rotation
         update, ctx = self._make_update(), self._make_ctx(["NORD"])
 
         await cmd_rotation(update, ctx)
@@ -633,12 +633,12 @@ class TestCommandeBotRotation(_BotCommandeMixin):
 
     @pytest.mark.asyncio
     async def test_parcelle_inconnue_message_explicite(self):
-        from bot import cmd_rotation
+        from app.bot import cmd_rotation
         update = self._make_update()
         ctx = self._make_ctx(["INTROUVABLE", "tomate"])
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.resolve_parcelle", return_value=None):
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.resolve_parcelle", return_value=None):
             MockSession.return_value = MagicMock()
             await cmd_rotation(update, ctx)
 
@@ -648,7 +648,7 @@ class TestCommandeBotRotation(_BotCommandeMixin):
     async def test_rotation_appelle_le_service_et_affiche_le_message_du_predicat(self):
         """[CA6] Le message affiché est celui du prédicat (`EvaluationRotation.message`),
         jamais un texte recomposé côté bot."""
-        from bot import cmd_rotation
+        from app.bot import cmd_rotation
         update = self._make_update()
         ctx = self._make_ctx(["NORD", "poivron"])
         parcelle = MagicMock(id=42, nom="NORD")
@@ -658,9 +658,9 @@ class TestCommandeBotRotation(_BotCommandeMixin):
             culture_precedente="tomate", campagne_derniere_occurrence=2025,
         )
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.resolve_parcelle", return_value=parcelle), \
-             patch("bot.svc_rotation.evaluer_rotation", return_value=evaluation) as mock_eval:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.resolve_parcelle", return_value=parcelle), \
+             patch("app.bot.svc_rotation.evaluer_rotation", return_value=evaluation) as mock_eval:
             MockSession.return_value = MagicMock()
             await cmd_rotation(update, ctx)
 
@@ -671,7 +671,7 @@ class TestCommandeBotRotation(_BotCommandeMixin):
 
     @pytest.mark.asyncio
     async def test_culture_a_plusieurs_mots_reconstituee(self):
-        from bot import cmd_rotation
+        from app.bot import cmd_rotation
         update = self._make_update()
         ctx = self._make_ctx(["NORD", "pomme", "de", "terre"])
         parcelle = MagicMock(id=42, nom="NORD")
@@ -679,9 +679,9 @@ class TestCommandeBotRotation(_BotCommandeMixin):
             statut=svc_rotation.STATUT_AUCUN_ANTECEDENT, culture="pomme de terre", campagne_reference=2026,
         )
 
-        with patch("bot.SessionLocal") as MockSession, \
-             patch("bot.resolve_parcelle", return_value=parcelle), \
-             patch("bot.svc_rotation.evaluer_rotation", return_value=evaluation) as mock_eval:
+        with patch("app.bot.SessionLocal") as MockSession, \
+             patch("app.bot.resolve_parcelle", return_value=parcelle), \
+             patch("app.bot.svc_rotation.evaluer_rotation", return_value=evaluation) as mock_eval:
             MockSession.return_value = MagicMock()
             await cmd_rotation(update, ctx)
 

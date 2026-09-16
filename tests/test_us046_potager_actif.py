@@ -18,7 +18,7 @@ from app.services import potager_actif as svc_potager_actif
 from app.services.context import current_context, set_current_context, default_context, TenantContext
 from database.db import Base
 from database.models import User, Potager, PotagerMembre
-from bot import cmd_potager, _potager_select_cb, _verifier_liaison_ou_onboarding
+from app.bot import cmd_potager, _potager_select_cb, _verifier_liaison_ou_onboarding
 
 
 def _creer_user(db, email="jardinier@example.com", **kwargs):
@@ -156,7 +156,7 @@ async def test_us046_ca5_bot_bloque_chat_lie_sans_potager(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         resultat = await _verifier_liaison_ou_onboarding(update, tg_ctx)
 
     assert resultat is False
@@ -177,7 +177,7 @@ async def test_us046_cmd_potager_liste_les_potagers_avec_actif_marque(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {"tenant_user_id": user.id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await cmd_potager(update, tg_ctx)
 
     update.message.reply_text.assert_awaited_once()
@@ -202,7 +202,7 @@ async def test_us046_potager_select_cb_change_et_persiste(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {"tenant_user_id": user_id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await _potager_select_cb(update, tg_ctx)
 
     update.callback_query.edit_message_text.assert_awaited_once()
@@ -224,7 +224,7 @@ async def test_us046_potager_select_cb_refuse_si_non_membre(test_db):
     tg_ctx = MagicMock()
     tg_ctx.user_data = {"tenant_user_id": autre.id}
 
-    with patch('bot.SessionLocal', return_value=test_db):
+    with patch('app.bot.SessionLocal', return_value=test_db):
         await _potager_select_cb(update, tg_ctx)
 
     assert "pas membre" in update.callback_query.edit_message_text.call_args[0][0]
@@ -246,7 +246,7 @@ def _auth_engine():
 
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     main.app.state.limiter.reset()

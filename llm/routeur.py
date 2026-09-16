@@ -73,7 +73,7 @@ from typing import Optional
 from unidecode import unidecode
 
 from app.services.context import TenantContext
-from config import RAG_ACTIF, RAG_SEUIL_CONFIANCE
+from app.config import RAG_ACTIF, RAG_SEUIL_CONFIANCE
 from database.db import SessionLocal
 from database.models import RoutageLog
 from llm import passerelle

@@ -33,7 +33,7 @@ from utils.stock import (
     _fmt_qte_unite,
 )
 from app.services.evenements import _normalize_unite_semis, _UNITES_SEMIS_CANONIQUES
-from bot import _do_save_items
+from app.bot import _do_save_items
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -89,13 +89,13 @@ class TestNormalisationUnite:
 class TestSauvegardeUniteM2:
 
     @pytest.mark.asyncio
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     async def test_ca2_quantite_m2_conservee_sans_conversion(self, mock_voice, db_with_parcelle_et_cultures):
         """[CA2 / reproduction bug id=274-275] Un semis '2 m2' ne doit PLUS perdre sa quantité
         ni se voir forcer l'unité 'graines'."""
         db = db_with_parcelle_et_cultures
         item = {"action": "semis", "culture": "haricot", "quantite": 2, "unite": "m2", "parcelle": "nord"}
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _do_save_items(_mock_update(), [item], "j'ai semé 2 m2 de haricot vert")
 
         ev = db.query(Evenement).filter_by(type_action="semis", culture="haricot").first()
@@ -104,25 +104,25 @@ class TestSauvegardeUniteM2:
         assert ev.unite == "m²"
 
     @pytest.mark.asyncio
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     async def test_ca3_type_organe_resolu_a_la_sauvegarde(self, mock_voice, db_with_parcelle_et_cultures):
         """[CA3 / reproduction bug id=274-275] type_organe_recolte doit être renseigné dès
         la sauvegarde, pas laissé NULL alors que la culture est connue."""
         db = db_with_parcelle_et_cultures
         item = {"action": "semis", "culture": "haricot", "quantite": 2, "unite": "m²", "parcelle": "nord"}
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _do_save_items(_mock_update(), [item], "semis haricot")
 
         ev = db.query(Evenement).filter_by(type_action="semis", culture="haricot").first()
         assert ev.type_organe_recolte == "reproducteur"
 
     @pytest.mark.asyncio
-    @patch("bot.send_voice_reply", new_callable=AsyncMock)
+    @patch("app.bot.send_voice_reply", new_callable=AsyncMock)
     async def test_ca3_culture_inconnue_type_organe_reste_none(self, mock_voice, db_with_parcelle_et_cultures):
         """Sans CultureConfig existante, _do_save_items n'invente pas de type_organe (CA7 gère ce cas en amont)."""
         db = db_with_parcelle_et_cultures
         item = {"action": "semis", "culture": "mache", "quantite": 1, "unite": "m²", "parcelle": "nord"}
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _do_save_items(_mock_update(), [item], "semis mache")
 
         ev = db.query(Evenement).filter_by(type_action="semis", culture="mache").first()
@@ -276,7 +276,7 @@ class TestClarificationCultureInconnue:
 
     @pytest.mark.asyncio
     async def test_ca7_semis_culture_inconnue_declenche_le_menu_et_ne_sauvegarde_pas(self, db_with_parcelle_et_cultures):
-        from bot import _parse_and_save, _SEMIS_CULTURE_PENDING
+        from app.bot import _parse_and_save, _SEMIS_CULTURE_PENDING
 
         db = db_with_parcelle_et_cultures
         item = {"action": "semis", "culture": "mache", "quantite": 1, "unite": "m²", "parcelle": "nord"}
@@ -286,7 +286,7 @@ class TestClarificationCultureInconnue:
         update.callback_query = None
         update.effective_user.id = 99
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _parse_and_save(update, "semé 1 m² de mâche", pre_parsed_items=[item])
 
         # Aucun événement enregistré : la sauvegarde est suspendue
@@ -300,7 +300,7 @@ class TestClarificationCultureInconnue:
 
     @pytest.mark.asyncio
     async def test_ca7_reponse_utilisateur_cree_cultureconfig_et_relance_la_sauvegarde(self, db_with_parcelle_et_cultures):
-        from bot import _semis_organe_cb, _SEMIS_CULTURE_PENDING
+        from app.bot import _semis_organe_cb, _SEMIS_CULTURE_PENDING
         import time
 
         db = db_with_parcelle_et_cultures
@@ -313,9 +313,9 @@ class TestClarificationCultureInconnue:
         update.callback_query.data = "semis_organe:végétatif"
         update.effective_user.id = 7
 
-        with patch("bot.SessionLocal", return_value=db), \
-             patch("bot._parse_and_save", new_callable=AsyncMock) as mock_save, \
-             patch("bot.send_voice_reply", new_callable=AsyncMock):
+        with patch("app.bot.SessionLocal", return_value=db), \
+             patch("app.bot._parse_and_save", new_callable=AsyncMock) as mock_save, \
+             patch("app.bot.send_voice_reply", new_callable=AsyncMock):
             await _semis_organe_cb(update, MagicMock())
 
         cfg = db.query(CultureConfig).filter_by(nom="mache").first()
@@ -326,7 +326,7 @@ class TestClarificationCultureInconnue:
 
     @pytest.mark.asyncio
     async def test_ca7_annulation_ne_cree_pas_de_cultureconfig(self, db_with_parcelle_et_cultures):
-        from bot import _semis_organe_cb, _SEMIS_CULTURE_PENDING
+        from app.bot import _semis_organe_cb, _SEMIS_CULTURE_PENDING
         import time
 
         db = db_with_parcelle_et_cultures
@@ -339,7 +339,7 @@ class TestClarificationCultureInconnue:
         update.callback_query.data = "semis_organe_cancel"
         update.effective_user.id = 8
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _semis_organe_cb(update, MagicMock())
 
         assert db.query(CultureConfig).filter_by(nom="mache").first() is None
@@ -408,14 +408,14 @@ class TestOccupationParcelleCA10:
         return db
 
     def test_ca10_semis_m2_occupation_directe(self, db_plan):
-        import main
+        from app.api import main
         from app.services.context import default_context
         nord = db_plan.query(Parcelle).filter_by(nom_normalise="nord").first()
         db_plan.add(Evenement(type_action="semis", culture="haricot", quantite=2, unite="m²",
                                parcelle_id=nord.id, date=datetime.now()))
         db_plan.commit()
 
-        with patch("main.SessionLocal", return_value=db_plan):
+        with patch("app.api.main.SessionLocal", return_value=db_plan):
             data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle_nord = next(p for p in data["parcelles"] if p["nom"] == "Nord")
@@ -424,14 +424,14 @@ class TestOccupationParcelleCA10:
 
     def test_ca10_semis_graines_reste_multiplie_par_empreinte_au_pied(self, db_plan):
         """Non-régression : les unités graines/pieds continuent d'utiliser l'empreinte au pied."""
-        import main
+        from app.api import main
         from app.services.context import default_context
         nord = db_plan.query(Parcelle).filter_by(nom_normalise="nord").first()
         db_plan.add(Evenement(type_action="semis", culture="carotte", quantite=100, unite="graines",
                                parcelle_id=nord.id, date=datetime.now()))
         db_plan.commit()
 
-        with patch("main.SessionLocal", return_value=db_plan):
+        with patch("app.api.main.SessionLocal", return_value=db_plan):
             data = main.get_plan(date_ref=None, ctx=default_context())
 
         parcelle_nord = next(p for p in data["parcelles"] if p["nom"] == "Nord")
@@ -450,7 +450,7 @@ class TestDeplacerCultureSemeePleineTerre:
 
     @pytest.mark.asyncio
     async def test_depl_start_trouve_une_culture_semee_pleine_terre(self, db_with_parcelle_et_cultures):
-        from bot import _depl_start
+        from app.bot import _depl_start
 
         db = db_with_parcelle_et_cultures
         nord = db.query(Parcelle).filter_by(nom_normalise="nord").first()
@@ -463,7 +463,7 @@ class TestDeplacerCultureSemeePleineTerre:
         ctx = MagicMock()
         ctx.user_data = {}
 
-        with patch("bot.SessionLocal", return_value=db):
+        with patch("app.bot.SessionLocal", return_value=db):
             await _depl_start(update, ctx, "haricot")
 
         # Ne doit PAS afficher le message d'échec "aucune plantation trouvée"
@@ -472,7 +472,7 @@ class TestDeplacerCultureSemeePleineTerre:
         assert ctx.user_data.get("mode") == "depl_parcelle_select"
 
     def test_get_parcelles_avec_culture_trouve_semis_pleine_terre(self, db_with_parcelle_et_cultures):
-        from bot import _get_parcelles_avec_culture
+        from app.bot import _get_parcelles_avec_culture
 
         db = db_with_parcelle_et_cultures
         nord = db.query(Parcelle).filter_by(nom_normalise="nord").first()
@@ -486,7 +486,7 @@ class TestDeplacerCultureSemeePleineTerre:
 
     def test_semis_pepiniere_sans_parcelle_non_localise(self, db_with_parcelle_et_cultures):
         """Un semis pépinière (parcelle_id=None) n'est jamais une 'localisation' déplaçable."""
-        from bot import _get_parcelles_avec_culture
+        from app.bot import _get_parcelles_avec_culture
 
         db = db_with_parcelle_et_cultures
         db.add(Evenement(type_action="semis", culture="haricot", quantite=50, unite="graines",

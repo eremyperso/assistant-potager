@@ -11,7 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from database.models import Base, Evenement, Parcelle
-from bot import _UNITES_SEMIS_VALIDES
+from app.bot import _UNITES_SEMIS_VALIDES
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -60,12 +60,12 @@ def test_unites_invalides_normalisees(unite):
 # ── Tests d'intégration via _do_save_items ───────────────────────────────────
 
 @pytest.mark.asyncio
-@patch("bot.send_voice_reply", new_callable=AsyncMock)
+@patch("app.bot.send_voice_reply", new_callable=AsyncMock)
 async def test_semis_unite_none_sauvegarde_graines(mock_voice, db):
     """Semis sans unité → sauvegardé avec unite='graines'."""
-    from bot import _do_save_items
+    from app.bot import _do_save_items
     item = {"action": "semis", "culture": "tomate", "quantite": 20, "unite": None}
-    with patch("bot.SessionLocal", return_value=db):
+    with patch("app.bot.SessionLocal", return_value=db):
         await _do_save_items(_mock_update(), [item], "semis tomate 20")
     ev = db.query(Evenement).filter_by(type_action="semis").first()
     assert ev is not None
@@ -73,12 +73,12 @@ async def test_semis_unite_none_sauvegarde_graines(mock_voice, db):
 
 
 @pytest.mark.asyncio
-@patch("bot.send_voice_reply", new_callable=AsyncMock)
+@patch("app.bot.send_voice_reply", new_callable=AsyncMock)
 async def test_semis_unite_pots_forcee_graines(mock_voice, db):
     """Semis avec unite='pots' → forcée à 'graines'."""
-    from bot import _do_save_items
+    from app.bot import _do_save_items
     item = {"action": "semis", "culture": "basilic", "quantite": 10, "unite": "pots"}
-    with patch("bot.SessionLocal", return_value=db):
+    with patch("app.bot.SessionLocal", return_value=db):
         await _do_save_items(_mock_update(), [item], "semis basilic 10 pots")
     ev = db.query(Evenement).filter_by(type_action="semis", culture="basilic").first()
     assert ev is not None
@@ -86,12 +86,12 @@ async def test_semis_unite_pots_forcee_graines(mock_voice, db):
 
 
 @pytest.mark.asyncio
-@patch("bot.send_voice_reply", new_callable=AsyncMock)
+@patch("app.bot.send_voice_reply", new_callable=AsyncMock)
 async def test_semis_unite_graines_conservee(mock_voice, db):
     """Semis avec unite='graines' → conservée telle quelle."""
-    from bot import _do_save_items
+    from app.bot import _do_save_items
     item = {"action": "semis", "culture": "carotte", "quantite": 50, "unite": "graines"}
-    with patch("bot.SessionLocal", return_value=db):
+    with patch("app.bot.SessionLocal", return_value=db):
         await _do_save_items(_mock_update(), [item], "semis carotte 50 graines")
     ev = db.query(Evenement).filter_by(type_action="semis", culture="carotte").first()
     assert ev is not None
@@ -99,12 +99,12 @@ async def test_semis_unite_graines_conservee(mock_voice, db):
 
 
 @pytest.mark.asyncio
-@patch("bot.send_voice_reply", new_callable=AsyncMock)
+@patch("app.bot.send_voice_reply", new_callable=AsyncMock)
 async def test_plantation_unite_non_affectee(mock_voice, db):
     """La normalisation ne s'applique PAS aux autres actions (plantation)."""
-    from bot import _do_save_items
+    from app.bot import _do_save_items
     item = {"action": "plantation", "culture": "tomate", "quantite": 3, "unite": "pots"}
-    with patch("bot.SessionLocal", return_value=db):
+    with patch("app.bot.SessionLocal", return_value=db):
         await _do_save_items(_mock_update(), [item], "plantation tomate 3 pots")
     ev = db.query(Evenement).filter_by(type_action="plantation").first()
     assert ev is not None

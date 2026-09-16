@@ -161,7 +161,7 @@ async def test_us170_ca6_ca7_question_sans_point_interrogation_atteint_le_routeu
     """CA6, CA7 — cas nominal du canal vocal : une question dictée SANS point
     d'interrogation est désormais classée par le routeur (bot._is_question,
     dont la moitié du critère reposait sur ce `?`, a disparu)."""
-    from bot import handle_text
+    from app.bot import handle_text
 
     update = _update_texte("ma production de tomate")
     ctx = MagicMock()
@@ -169,10 +169,10 @@ async def test_us170_ca6_ca7_question_sans_point_interrogation_atteint_le_routeu
 
     decision = routeur.DecisionRoutage(nature=routeur.NATURE_QUESTION_DATA, origine="regle", confiance=1.0)
     with (
-        patch("bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
+        patch("app.bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
         patch("llm.routeur.classer_demande", return_value=decision) as mock_classer,
-        patch("bot._ask_question", new=AsyncMock()) as mock_ask_question,
-        patch("bot._parse_and_save", new=AsyncMock()) as mock_parse,
+        patch("app.bot._ask_question", new=AsyncMock()) as mock_ask_question,
+        patch("app.bot._parse_and_save", new=AsyncMock()) as mock_parse,
     ):
         await handle_text(update, ctx)
 
@@ -185,7 +185,7 @@ async def test_us170_ca6_ca7_question_sans_point_interrogation_atteint_le_routeu
 async def test_us170_ca6_action_classee_par_le_routeur_part_toujours_au_parsing():
     """CA6 — non-régression : une saisie réelle, classée ACTION par le routeur,
     continue d'atteindre le parsing normal (aucun détour par _ask_question)."""
-    from bot import handle_text
+    from app.bot import handle_text
 
     update = _update_texte("récolté 2 kg de tomates")
     ctx = MagicMock()
@@ -193,10 +193,10 @@ async def test_us170_ca6_action_classee_par_le_routeur_part_toujours_au_parsing(
 
     decision = routeur.DecisionRoutage(nature=routeur.NATURE_ACTION, origine="regle", confiance=1.0)
     with (
-        patch("bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
+        patch("app.bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
         patch("llm.routeur.classer_demande", return_value=decision),
-        patch("bot._ask_question", new=AsyncMock()) as mock_ask_question,
-        patch("bot._parse_and_save", new=AsyncMock()) as mock_parse,
+        patch("app.bot._ask_question", new=AsyncMock()) as mock_ask_question,
+        patch("app.bot._parse_and_save", new=AsyncMock()) as mock_parse,
     ):
         await handle_text(update, ctx)
 
@@ -208,15 +208,15 @@ async def test_us170_ca6_action_classee_par_le_routeur_part_toujours_au_parsing(
 async def test_us170_ca8_gardes_de_conversation_restent_avant_le_routeur():
     """CA8 — non-régression explicite (US-093 / CA13, révisée) : un message reçu
     en pleine correction (mode corr_apply) ne doit jamais atteindre le routeur."""
-    from bot import handle_text
+    from app.bot import handle_text
 
     update = _update_texte("combien de tomates ?")
     ctx = MagicMock()
     ctx.user_data = {"mode": "corr_apply", "corr_event_id": 1}
 
     with (
-        patch("bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
-        patch("bot._corr_apply", new=AsyncMock()) as mock_corr_apply,
+        patch("app.bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
+        patch("app.bot._corr_apply", new=AsyncMock()) as mock_corr_apply,
         patch("llm.routeur.classer_demande") as mock_classer,
     ):
         await handle_text(update, ctx)
@@ -231,7 +231,7 @@ def test_us170_ca9_godets_en_attente_exclut_les_questions_de_production():
     production/rendement, que le catalogue sait désormais servir. Sans cette
     exclusion, la question restait interceptée à la PRIORITÉ 3b, avant même
     d'atteindre le routeur — chantier 3 seul n'aurait rien changé côté bot.py."""
-    import bot
+    from app import bot
 
     assert bot._is_requete_godets("combien de godet de tomate produit cette saison ?") is False
     # non-régression : la consultation des godets en attente, elle, reste détectée
@@ -245,15 +245,15 @@ async def test_us170_ca10_filet_us011_conserve():
     """CA10 — le filet de rerattrapage d'US-011 reste intact : une action sans
     `action` détectée après parsing reroute encore vers _ask_question, comme
     chemin résiduel (et non plus comme chemin nominal)."""
-    from bot import _parse_and_save
+    from app.bot import _parse_and_save
 
     update = MagicMock()
     update.message = AsyncMock()
     update.callback_query = None
 
     with (
-        patch("bot.require_role"),
-        patch("bot._ask_question", new=AsyncMock()) as mock_ask_question,
+        patch("app.bot.require_role"),
+        patch("app.bot._ask_question", new=AsyncMock()) as mock_ask_question,
     ):
         await _parse_and_save(
             update, "ma production de tomate",

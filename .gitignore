@@ -45,3 +45,8 @@ ds-bundle/
 
 # VSCode Counter
 .VSCodeCounter/
+
+# Artefacts de tests et de couverture (jamais versionnés)
+.coverage
+htmlcov/
+rapport_tests.html

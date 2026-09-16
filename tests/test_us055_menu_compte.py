@@ -33,7 +33,7 @@ def _auth_engine():
 
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     # [US-091] /auth/me résout désormais bot_username via un appel Telegram

@@ -5,13 +5,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from database.db import Base
 from database.models import Evenement
-from bot import cmd_stats
+from app.bot import cmd_stats
 
 
 class TestCmdStats:
     """Tests pour cmd_stats."""
 
-    @patch('bot.send_voice_reply', new_callable=AsyncMock)
+    @patch('app.bot.send_voice_reply', new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_cmd_stats_with_perte(self, mock_voice, test_db):
         """Test /stats avec calcul stock réel (plantations - pertes)."""
@@ -36,7 +36,7 @@ class TestCmdStats:
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db
-        with patch('bot.SessionLocal', return_value=test_db):
+        with patch('app.bot.SessionLocal', return_value=test_db):
             await cmd_stats(mock_update, None)
 
         # Vérifier
@@ -45,7 +45,7 @@ class TestCmdStats:
         assert "tomate : *10 plants* (planté 12, perdu 2)" in call_args
         assert "carotte : *50 graines*" in call_args
 
-    @patch('bot.send_voice_reply', new_callable=AsyncMock)
+    @patch('app.bot.send_voice_reply', new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_cmd_stats_with_perte_and_recolte(self, mock_voice, test_db):
         """Test /stats avec calcul stock réel (plantations - pertes - récoltes)."""
@@ -70,7 +70,7 @@ class TestCmdStats:
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db
-        with patch('bot.SessionLocal', return_value=test_db):
+        with patch('app.bot.SessionLocal', return_value=test_db):
             await cmd_stats(mock_update, None)
 
         # Vérifier
@@ -78,7 +78,7 @@ class TestCmdStats:
         assert "🥬 *Cultures végétatives (récolte destructive) :*" in call_args
         assert "salade : *19 plants* (planté 25, perdu 4, récolté 2)" in call_args
 
-    @patch('bot.send_voice_reply', new_callable=AsyncMock)
+    @patch('app.bot.send_voice_reply', new_callable=AsyncMock)
     @pytest.mark.asyncio
     async def test_cmd_stats_no_perte(self, mock_voice, test_db):
         """Test /stats sans pertes."""
@@ -94,7 +94,7 @@ class TestCmdStats:
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db
-        with patch('bot.SessionLocal', return_value=test_db):
+        with patch('app.bot.SessionLocal', return_value=test_db):
             await cmd_stats(mock_update, None)
 
         call_args = mock_message.reply_text.call_args[0][0]

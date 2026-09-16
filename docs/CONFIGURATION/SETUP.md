@@ -4,8 +4,8 @@
 ## Project Overview
 
 **Assistant Potager** is an intelligent gardening tracker for amateur gardeners. It combines:
-- A **Telegram Bot** (bot.py) for voice/text command input
-- A **FastAPI REST API** (main.py) serving a Progressive Web App
+- A **Telegram Bot** (`app/bot/`, `python -m app.bot`) for voice/text command input
+- A **FastAPI REST API** (`app/api/main.py`, `uvicorn app.api.main:app`) serving a Progressive Web App
 - **PostgreSQL** for event storage
 - **Groq LLM** (Llama 3.3-70b + Whisper) for natural language parsing and analytics
 
@@ -37,16 +37,16 @@ cd "C:\Users\eremy\OneDrive - SQLI\Documents\GitHub\assistant-potager"
 $env:APP_ENV = "dev"                  # reste actif pour tout le terminal, une seule fois
 
 # Bot Telegram — pas de --reload possible, il faut arrêter (Ctrl+C) et relancer
-# manuellement à chaque modification de bot.py / groq_client.py / config.py
-python bot.py
+# manuellement à chaque modification de app/bot/ / llm/ / app/config.py
+python -m app.bot
 
 # API FastAPI (http://localhost:8000) — sert aussi le frontend buildé (frontend/dist)
 # --reload recharge automatiquement à chaque modification de fichier Python
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-# NB: main.py n'a pas de bloc __main__ — `python main.py` ne lance rien, il faut passer par uvicorn.
+uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+# NB: app/api/main.py n'a pas de bloc __main__ — il faut passer par uvicorn.
 
 # Si Activate.ps1 est bloqué par la politique d'exécution PowerShell, contourner via :
-.\.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+.\.venv\Scripts\python.exe -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### Mettre à jour le frontend si l'interface change
@@ -64,19 +64,19 @@ cd frontend
 npm run build       # génère frontend/dist
 # puis (re)démarrer l'API pour qu'elle serve le nouveau build :
 cd ..
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-`main.py` sert `frontend/dist` en priorité (fallback sur `static/` si le build React est absent) —
+`app/api/main.py` sert `frontend/dist` en priorité (fallback sur `static/` si le build React est absent) —
 toute modification de l'UI nécessite un `npm run build` avant de se refléter via l'API,
 le mode `npm run dev` (port 3000) suffit pour itérer rapidement sans rebuild.
 
 ### Redéployer l'environnement dev local (pull + deps + migrations)
 
 ```powershell
-.\update_dev.ps1
-.\update_dev.ps1 -SkipPull   # depuis un hook git
-.\update_dev.ps1 -Force      # tout rejouer
+.\scripts\update_dev.ps1
+.\scripts\update_dev.ps1 -SkipPull   # depuis un hook git
+.\scripts\update_dev.ps1 -Force      # tout rejouer
 ```
 
 ## Environment Setup
@@ -87,13 +87,13 @@ Copy `.env.example` to `.env.dev` and fill in:
 - `GROQ_API_KEY`
 - `DATABASE_URL` — PostgreSQL connection string
 
-Config is loaded from `.env.{APP_ENV}` via `config.py`.
+Config is loaded from `.env.{APP_ENV}` (at the repo root) via `app/config.py`.
 
 ## Architecture
 
 ### Entry Points
 
-**bot.py** — Telegram bot. Handles voice notes (transcribed via Whisper) and text commands. Runs a daily 5am job to fetch weather via Open-Meteo.
+**app/bot/** — Telegram bot (package, one module per domain; see `app/bot/CLAUDE.md`). Handles voice notes (transcribed via Whisper) and text commands. Runs a daily 5am job to fetch weather via Open-Meteo.
 
 #### Telegram Bot — Commandes slash
 
@@ -312,7 +312,7 @@ le VPS.
 
 5. **Migration BDD** : `migrations/migration_v24.sql` (colonnes
    `verification_token_*` sur `users`) doit être rejouée si la base est
-   reconstruite de zéro — `update_dev.ps1` s'en charge automatiquement en dev.
+   reconstruite de zéro — `scripts/update_dev.ps1` s'en charge automatiquement en dev.
 
 ## Connexion Google (US-090) — OpenID Connect
 
@@ -362,7 +362,7 @@ environnement, jamais partagé entre dev et prod :
    immédiatement sans invalider l'ancien.
 2. Mettre à jour `GOOGLE_CLIENT_SECRET` dans le `.env.<env>` du serveur, puis
    redémarrer le service API (`systemctl restart potager-prod` / `potager-dev`) :
-   `config.py` ne relit l'environnement qu'au démarrage.
+   `app/config.py` ne relit l'environnement qu'au démarrage.
 3. Vérifier une connexion réelle de bout en bout, puis **supprimer l'ancien
    secret** depuis la console. Aucune session utilisateur n'est affectée : les
    jetons applicatifs US-044 sont signés avec `JWT_SECRET`, pas avec le secret

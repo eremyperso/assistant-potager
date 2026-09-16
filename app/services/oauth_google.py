@@ -29,8 +29,8 @@ from urllib.parse import urlencode
 import httpx
 from jose import JWTError, jwt
 
-import config
-from config import JWT_ALGORITHM, JWT_SECRET
+from app import config
+from app.config import JWT_ALGORITHM, JWT_SECRET
 
 log = logging.getLogger("potager")
 

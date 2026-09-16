@@ -31,7 +31,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-import bot as bot_module
+from app import bot as bot_module
 from app.services import calendrier_cultural as cal
 from app.services import contexte_semis as cs
 from app.services import evenements as svc_evenements
@@ -679,7 +679,7 @@ class TestCA9:
         assert "· " not in bot_module._fmt_event(ev)
 
     def test_us069_ca9_api_stats_expose_les_trois_totaux(self, monkeypatch):
-        import main
+        from app.api import main
         from fastapi.testclient import TestClient
         from sqlalchemy import create_engine
         from sqlalchemy.pool import StaticPool

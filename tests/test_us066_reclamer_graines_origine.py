@@ -55,7 +55,7 @@ def ctx():
 @pytest.fixture(autouse=True)
 def _pending_propre():
     """Aucun test ne doit hériter d'une question en attente d'un autre."""
-    from bot import _GODET_GRAINES_PENDING
+    from app.bot import _GODET_GRAINES_PENDING
     _GODET_GRAINES_PENDING.clear()
     yield
     _GODET_GRAINES_PENDING.clear()
@@ -91,7 +91,7 @@ _LOT_SOLDE = {**_LOT_OUVERT, "graines_en_germination": 0}
 
 def _patch_lot(lot):
     """Force le lot pressenti — isole la question de la résolution du lot."""
-    return patch("bot._lot_pressenti_pour_godet", return_value=lot)
+    return patch("app.bot._lot_pressenti_pour_godet", return_value=lot)
 
 
 # ── CA1 / CA2 — la question est posée, avec son contexte ────────────────────
@@ -100,7 +100,7 @@ def _patch_lot(lot):
 async def test_us066_ca1_question_posee_quand_graines_manquantes() -> None:
     """CA1 — « 5 tomates en godet » sans nombre de graines, lot ouvert → question."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _demander_graines_godet_si_manquant
+    from app.bot import _GODET_GRAINES_PENDING, _demander_graines_godet_si_manquant
     update, message = _mock_update()
     parsed = _parsed_godet()
 
@@ -118,7 +118,7 @@ async def test_us066_ca1_question_posee_quand_graines_manquantes() -> None:
 async def test_us066_ca2_question_rappelle_le_contexte_du_lot() -> None:
     """CA2 — culture, variété et graines restantes, plutôt qu'une question à l'aveugle."""
     # Arrange
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
     lot = {**_LOT_OUVERT, "variete": "Cœur de bœuf", "graines_en_germination": 7}
 
@@ -141,7 +141,7 @@ async def test_us066_ca2_question_rappelle_le_contexte_du_lot() -> None:
 async def test_us066_ca3_bouton_je_ne_sais_pas_present() -> None:
     """CA3 — la sortie explicite est offerte dès la question."""
     # Arrange
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     # Act
@@ -160,7 +160,7 @@ async def test_us066_ca3_bouton_je_ne_sais_pas_present() -> None:
 @pytest.mark.asyncio
 async def test_us066_ca4_pas_de_question_si_graines_deja_fournies() -> None:
     """CA4 — « 5 tomates en godet sur 6 graines » : rien à demander."""
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     with _patch_lot(_LOT_OUVERT):
@@ -175,7 +175,7 @@ async def test_us066_ca4_pas_de_question_si_graines_deja_fournies() -> None:
 @pytest.mark.asyncio
 async def test_us066_ca4_pas_de_question_sans_semis_rattachable() -> None:
     """CA4 — aucune courgette semée en pépinière : aucun reste à annoncer."""
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     with _patch_lot(None):
@@ -188,7 +188,7 @@ async def test_us066_ca4_pas_de_question_sans_semis_rattachable() -> None:
 @pytest.mark.asyncio
 async def test_us066_ca4_pas_de_question_si_lot_entierement_solde() -> None:
     """CA4 — un lot sans graine restante n'a plus rien à solder."""
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     with _patch_lot(_LOT_SOLDE):
@@ -201,7 +201,7 @@ async def test_us066_ca4_pas_de_question_si_lot_entierement_solde() -> None:
 @pytest.mark.asyncio
 async def test_us066_ca4_pas_de_question_deux_fois() -> None:
     """CA4 — anti-boucle : une fois traitée, la question n'est jamais reposée."""
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     with _patch_lot(_LOT_OUVERT):
@@ -216,7 +216,7 @@ async def test_us066_ca4_pas_de_question_deux_fois() -> None:
 @pytest.mark.asyncio
 async def test_us066_ca4_pas_de_question_sans_plants_repiques() -> None:
     """Edge case — sans nombre de plants, il n'y a rien à rapporter à des graines."""
-    from bot import _demander_graines_godet_si_manquant
+    from app.bot import _demander_graines_godet_si_manquant
     update, message = _mock_update()
 
     with _patch_lot(_LOT_OUVERT):
@@ -228,10 +228,10 @@ async def test_us066_ca4_pas_de_question_sans_plants_repiques() -> None:
 def test_us066_ca4_lot_pressenti_none_si_ambigu() -> None:
     """CA4 — deux lots candidats : le rattachement est incertain, donc aucun reste
     précis à annoncer. La question du LOT est posée avant, pas celle-ci."""
-    from bot import _lot_pressenti_pour_godet
+    from app.bot import _lot_pressenti_pour_godet
 
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lots_candidats_mise_en_godet",
               return_value=[_LOT_OUVERT, {**_LOT_OUVERT, "semis_id": 13}]),
     ):
@@ -240,10 +240,10 @@ def test_us066_ca4_lot_pressenti_none_si_ambigu() -> None:
 
 def test_us066_lot_pressenti_suit_le_lot_explicitement_choisi() -> None:
     """Le lot désigné au menu prime : c'est son reste qui sera annoncé."""
-    from bot import _lot_pressenti_pour_godet
+    from app.bot import _lot_pressenti_pour_godet
 
     with (
-        patch("bot.SessionLocal", return_value=MagicMock()),
+        patch("app.bot.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.lot_pepiniere_par_semis", return_value=_LOT_OUVERT) as mock_lot,
     ):
         lot = _lot_pressenti_pour_godet(_parsed_godet(origine_graines_id=12))
@@ -258,7 +258,7 @@ def test_us066_lot_pressenti_suit_le_lot_explicitement_choisi() -> None:
 async def test_us066_ca5_moins_de_graines_que_de_plants_redemande() -> None:
     """CA5 — Gherkin « Réponse incohérente refusée » : 5 plants sur 3 graines."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
     parsed = _parsed_godet(nb_plants=5)
     _GODET_GRAINES_PENDING[42] = {
         "parsed": parsed, "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
@@ -266,7 +266,7 @@ async def test_us066_ca5_moins_de_graines_que_de_plants_redemande() -> None:
     update, message = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_reponse(update, "3 graines")
 
     # Assert
@@ -281,7 +281,7 @@ async def test_us066_ca5_plus_de_graines_que_le_lot_redemande() -> None:
     """CA5 — cohérence avec le garde-fou de cumul : on ne solde pas 20 graines sur
     un lot qui n'en a plus que 10. Redemandé plutôt que refusé à l'écriture."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
     parsed = _parsed_godet(nb_plants=5)
     _GODET_GRAINES_PENDING[42] = {
         "parsed": parsed, "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
@@ -289,7 +289,7 @@ async def test_us066_ca5_plus_de_graines_que_le_lot_redemande() -> None:
     update, message = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_reponse(update, "20")
 
     # Assert
@@ -302,14 +302,14 @@ async def test_us066_ca5_plus_de_graines_que_le_lot_redemande() -> None:
 async def test_us066_ca5_reponse_non_numerique_redemande() -> None:
     """CA5 — une réponse sans chiffre ne consomme pas la question."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
     _GODET_GRAINES_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
     }
     update, message = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_reponse(update, "aucune idée")
 
     # Assert
@@ -322,7 +322,7 @@ async def test_us066_ca5_reponse_non_numerique_redemande() -> None:
 async def test_us066_reponse_valide_est_enregistree() -> None:
     """Happy path — la valeur saisie alimente `nb_graines_semees` et l'écriture suit."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
     parsed = _parsed_godet(nb_plants=5)
     _GODET_GRAINES_PENDING[42] = {
         "parsed": parsed, "texte": "5 tomates en godet", "ts": time.time(), "lot": _LOT_OUVERT,
@@ -330,7 +330,7 @@ async def test_us066_reponse_valide_est_enregistree() -> None:
     update, _ = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_reponse(update, "sur 8 graines")
 
     # Assert
@@ -344,7 +344,7 @@ async def test_us066_reponse_valide_est_enregistree() -> None:
 async def test_us066_borne_inclusive_egale_au_nombre_de_plants() -> None:
     """Un repiquage sans aucune perte (5 plants sur 5 graines) est légitime."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_reponse
     parsed = _parsed_godet(nb_plants=5)
     _GODET_GRAINES_PENDING[42] = {
         "parsed": parsed, "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
@@ -352,7 +352,7 @@ async def test_us066_borne_inclusive_egale_au_nombre_de_plants() -> None:
     update, _ = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()):
+    with patch("app.bot._save_godet_item", new=AsyncMock()):
         await _godet_graines_reponse(update, "5")
 
     # Assert
@@ -363,7 +363,7 @@ async def test_us066_borne_inclusive_egale_au_nombre_de_plants() -> None:
 async def test_us066_reponse_expiree_n_enregistre_rien() -> None:
     """Cas d'erreur — délai dépassé : rien n'est écrit, le jardinier re-saisit."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _GODET_GRAINES_TIMEOUT, _godet_graines_reponse
+    from app.bot import _GODET_GRAINES_PENDING, _GODET_GRAINES_TIMEOUT, _godet_graines_reponse
     _GODET_GRAINES_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t",
         "ts": time.time() - _GODET_GRAINES_TIMEOUT - 1, "lot": _LOT_OUVERT,
@@ -371,7 +371,7 @@ async def test_us066_reponse_expiree_n_enregistre_rien() -> None:
     update, _ = _mock_update()
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_reponse(update, "8")
 
     # Assert
@@ -385,7 +385,7 @@ async def test_us066_reponse_expiree_n_enregistre_rien() -> None:
 async def test_us066_ca3_je_ne_sais_pas_enregistre_sans_valeur() -> None:
     """CA3 — Gherkin « Le jardinier ne sait pas répondre » : aucune valeur inventée."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_cb
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_cb
     parsed = _parsed_godet()
     _GODET_GRAINES_PENDING[42] = {
         "parsed": parsed, "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
@@ -395,7 +395,7 @@ async def test_us066_ca3_je_ne_sais_pas_enregistre_sans_valeur() -> None:
     update.callback_query.data = "godetgraines_skip"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_cb(update, MagicMock())
 
     # Assert
@@ -408,7 +408,7 @@ async def test_us066_ca3_je_ne_sais_pas_enregistre_sans_valeur() -> None:
 async def test_us066_ca3_annulation_n_enregistre_rien() -> None:
     """Annuler abandonne la mise en godet entière."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, _godet_graines_cb
+    from app.bot import _GODET_GRAINES_PENDING, _godet_graines_cb
     _GODET_GRAINES_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
     }
@@ -417,7 +417,7 @@ async def test_us066_ca3_annulation_n_enregistre_rien() -> None:
     update.callback_query.data = "godetgraines_cancel"
 
     # Act
-    with patch("bot._save_godet_item", new=AsyncMock()) as mock_save:
+    with patch("app.bot._save_godet_item", new=AsyncMock()) as mock_save:
         await _godet_graines_cb(update, MagicMock())
 
     # Assert
@@ -457,7 +457,7 @@ def test_us066_ca3_etat_indetermine_conforme_a_us065(db, ctx) -> None:
 async def test_us066_ca6_reponse_interceptee_en_saisie_texte() -> None:
     """CA6 — la réponse texte est captée avant tout parsing Groq."""
     # Arrange
-    from bot import _GODET_GRAINES_PENDING, handle_text
+    from app.bot import _GODET_GRAINES_PENDING, handle_text
     _GODET_GRAINES_PENDING[42] = {
         "parsed": _parsed_godet(), "texte": "t", "ts": time.time(), "lot": _LOT_OUVERT,
     }
@@ -466,9 +466,9 @@ async def test_us066_ca6_reponse_interceptee_en_saisie_texte() -> None:
 
     # Act
     with (
-        patch("bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
-        patch("bot._godet_graines_reponse", new=AsyncMock()) as mock_reponse,
-        patch("bot.parse_commande") as mock_parse,
+        patch("app.bot._verifier_liaison_ou_onboarding", new=AsyncMock(return_value=True)),
+        patch("app.bot._godet_graines_reponse", new=AsyncMock()) as mock_reponse,
+        patch("app.bot.parse_commande") as mock_parse,
     ):
         await handle_text(update, MagicMock())
 
@@ -483,8 +483,8 @@ async def test_us066_ca6_reponse_interceptee_en_saisie_vocale() -> None:
     L'interception est branchée dans handle_voice, qui ne lisait aucun état en
     attente jusqu'ici."""
     # Arrange
-    import bot as bot_mod
-    from bot import _GODET_GRAINES_PENDING
+    from app import bot as bot_mod
+    from app.bot import _GODET_GRAINES_PENDING
     import inspect
 
     source_voice = inspect.getsource(bot_mod.handle_voice)

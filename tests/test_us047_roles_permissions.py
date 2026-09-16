@@ -161,7 +161,7 @@ def test_ca2_lecteur_peut_consulter_historique(test_db):
 
 @pytest.mark.asyncio
 async def test_ca4_bot_parse_and_save_bloque_lecteur_sans_appel_llm(test_db):
-    import bot as bot_module
+    from app import bot as bot_module
 
     update = MagicMock()
     update.message = AsyncMock()
@@ -171,8 +171,8 @@ async def test_ca4_bot_parse_and_save_bloque_lecteur_sans_appel_llm(test_db):
     set_current_context(CTX_LECTEUR)
     try:
         with (
-            patch("bot.parse_commande") as mock_parse_commande,
-            patch("bot.SessionLocal", return_value=test_db),
+            patch("app.bot.parse_commande") as mock_parse_commande,
+            patch("app.bot.SessionLocal", return_value=test_db),
         ):
             await bot_module._parse_and_save(update, "j'ai récolté 2 kg de tomates")
     finally:
@@ -189,7 +189,7 @@ async def test_ca4_bot_parse_and_save_bloque_lecteur_sans_appel_llm(test_db):
 async def test_ca4_bot_corr_start_bloque_lecteur(test_db):
     """Un lecteur ne peut pas entrer dans le flux /corriger (bloque aussi, en
     amont, l'appel Groq de _corr_apply)."""
-    import bot as bot_module
+    from app import bot as bot_module
 
     update = MagicMock()
     update.message = AsyncMock()
@@ -199,7 +199,7 @@ async def test_ca4_bot_corr_start_bloque_lecteur(test_db):
 
     set_current_context(CTX_LECTEUR)
     try:
-        with patch("bot.SessionLocal", return_value=test_db):
+        with patch("app.bot.SessionLocal", return_value=test_db):
             await bot_module._corr_start(update, tg_ctx)
     finally:
         set_current_context(default_context())
@@ -214,7 +214,7 @@ async def test_editor_bot_parse_and_save_nest_pas_bloque_par_le_garde(test_db):
     """[CA2] Editor autorisé à saisir : le garde de rôle ne l'arrête pas — le
     pipeline de parsing/confirmation se poursuit normalement (comportement
     hors permissions, non ré-testé ici)."""
-    import bot as bot_module
+    from app import bot as bot_module
 
     update = MagicMock()
     update.message = AsyncMock()
@@ -226,9 +226,9 @@ async def test_editor_bot_parse_and_save_nest_pas_bloque_par_le_garde(test_db):
     set_current_context(CTX_EDITOR)
     try:
         with (
-            patch("bot.parse_commande", return_value=items),
-            patch("bot._normalize_items", return_value=items),
-            patch("bot.SessionLocal", return_value=test_db),
+            patch("app.bot.parse_commande", return_value=items),
+            patch("app.bot._normalize_items", return_value=items),
+            patch("app.bot.SessionLocal", return_value=test_db),
         ):
             await bot_module._parse_and_save(update, "j'ai arrosé")
     finally:
@@ -255,7 +255,7 @@ def _auth_engine():
 
 @pytest.fixture
 def app_client(_auth_engine, monkeypatch):
-    import main
+    from app.api import main
     TestSessionLocal = sessionmaker(bind=_auth_engine)
     monkeypatch.setattr(main, "SessionLocal", TestSessionLocal)
     main.app.state.limiter.reset()
@@ -285,7 +285,7 @@ def test_ca4_post_parse_403_pour_lecteur_sans_appel_llm(app_client, _auth_engine
     access_token = svc_auth.creer_access_token(lecteur.id)
     db.close()
 
-    with patch("main.parse_commande") as mock_parse_commande:
+    with patch("app.api.main.parse_commande") as mock_parse_commande:
         resp = app_client.post(
             "/parse",
             json={"texte": "j'ai récolté 2 kg de tomates"},
@@ -307,7 +307,7 @@ def test_editor_post_parse_enregistre_normalement(app_client, _auth_engine):
     db.close()
 
     items = [{"action": "arrosage", "culture": None, "variete": None, "quantite": None, "unite": None}]
-    with patch("main.parse_commande", return_value=items):
+    with patch("app.api.main.parse_commande", return_value=items):
         resp = app_client.post(
             "/parse",
             json={"texte": "j'ai arrosé"},
