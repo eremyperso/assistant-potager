@@ -158,7 +158,7 @@ Aucun nouvel appel LLM n'est introduit par l'épic. C'est une condition de la De
 |---|---|---|
 | **Score jugé arbitraire** par le jardinier | 🟡 Moyen | Chaque point est motivé en clair (US-178 / CA6) ; les pondérations vivent à un seul endroit et sont documentées |
 | **`rusticite_min_c` non renseignée** → règle R2 muette pour toutes les cultures | 🟡 Moyen | Tâche de J1 : renseigner au bot les cultures du potager de production ; la rédaction interne (`attributs_redaction_interne.json`) porte déjà le champ. Aucune valeur n'est inventée par l'épic |
-| **Table « dernière gelée moyenne par zone »** est une décision, pas une mesure | 🟡 Moyen | Déclarée comme `ZONE_USDA_PAR_ZONE` l'est déjà : quatre valeurs, un seul endroit, « à valider par un humain », corrigeable |
+| **Table « dernière gelée moyenne par zone »** est une décision, pas une mesure | 🟢 Levé | Validée par un humain le 17/09/2026 (section 12) — quatre valeurs, un seul endroit, corrigeable |
 | **Potager sans localisation** → R3/R4 muettes, 3ᵉ étoile inaccessible | 🟢 Faible | Comportement voulu et affiché ; l'invitation à localiser existe déjà (US-076) |
 | **US-070 / US-176 non poussées** sur la branche de référence | 🔶 À lever | Cet épic suppose leur livraison telle que spécifiée. À confirmer par un push avant de démarrer US-178 |
 | **Question mal reconnue** au bot → appel LLM inutile | 🟢 Faible | Corpus de mesure étendu (US-179 / CA8), même méthode qu'US-172 |
@@ -181,7 +181,18 @@ Aucun nouvel appel LLM n'est introduit par l'épic. C'est une condition de la De
 - Pousser US-070 et US-176 sur la branche de référence.
 - Renseigner `rusticite_min_c` au bot (`/culture rusticite <culture> <valeur>`) pour les cultures du potager
   de production — travail de saisie, pas de développement.
-- Déclarer la table « dernière gelée moyenne par zone » (quatre valeurs), à valider par un humain.
+- ✅ Table « dernière gelée moyenne par zone » déclarée et validée par un humain le 17/09/2026 (jour-mois,
+  moyenne de la zone) :
+  ```python
+  DERNIERE_GELEE_MOYENNE_PAR_ZONE = {
+      "mediterraneen": "15-03",
+      "oceanique": "05-04",
+      "continental": "25-04",
+      "montagnard": "10-05",
+  }
+  ```
+  À reporter dans le module du moteur de confiance à l'ouverture d'US-178, même patron que
+  `adaptateur_wind_river.ZONE_USDA_PAR_ZONE` (une constante, un seul endroit, corrigeable en diff git).
 - Positionner les sept US en `To Do` (`python tools/jira_tracker.py create-issue backlog/US-1xx_*.md`).
 - Conception dans le projet Claude Design **« potager 2026 »** (celui de la maquette figée du 15/08) : la fiche
   d'US-183 et le bloc « règle de confiance » partagé avec US-180, à partir de `BRIEF_FICHE_CALENDRIER_CULTURE.md`.

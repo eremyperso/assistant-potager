@@ -1,0 +1,274 @@
+{
+  "cultures_maraicheres": [
+    {
+      "nom": "Tomate",
+      "famille": "Solanacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 11.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": -1.0,
+      "commentaire": "Gélif absolu. Les tissus éclatent au premier gel."
+    },
+    {
+      "nom": "Courgette",
+      "famille": "Cucurbitacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 12.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Destruction immédiate dès 0°C."
+    },
+    {
+      "nom": "Aubergine",
+      "famille": "Solanacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 12.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Très sensible au froid, exige une forte chaleur."
+    },
+    {
+      "nom": "Poivron / Piment",
+      "famille": "Solanacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 12.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Mêmes seuils critiques que l'aubergine."
+    },
+    {
+      "nom": "Concombre",
+      "famille": "Cucurbitacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 12.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Gélif complet."
+    },
+    {
+      "nom": "Melon",
+      "famille": "Cucurbitacées",
+      "periode_production": "Été",
+      "zero_vegetatif_c": 14.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Zéro végétatif très haut. Ne supporte aucune baisse thermique."
+    },
+    {
+      "nom": "Haricot",
+      "famille": "Fabacées",
+      "periode_production": "Printemps/Été",
+      "zero_vegetatif_c": 10.0,
+      "gel_destruction_feuillage_c": 0.0,
+      "gel_destruction_racine_c": 0.0,
+      "commentaire": "Les jeunes pousses et les gousses brunissent et meurent à 0°C."
+    },
+    {
+      "nom": "Pomme de terre",
+      "famille": "Solanacées",
+      "periode_production": "Printemps/Été",
+      "zero_vegetatif_c": 7.0,
+      "gel_destruction_feuillage_c": -2.0,
+      "gel_destruction_racine_c": -3.0,
+      "commentaire": "Le feuillage aérien noirci dès -2°C, mais le tubercule en sol peut rejeter si le gel est bref."
+    },
+    {
+      "nom": "Poireau d'été",
+      "famille": "Amaryllidacées",
+      "periode_production": "Été/Automne",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -4.0,
+      "gel_destruction_racine_c": -5.0,
+      "commentaire": "Les variétés d'été ont des tissus tendres qui ne résistent pas à l'hiver."
+    },
+    {
+      "nom": "Poireau d'hiver",
+      "famille": "Amaryllidacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -15.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Extrêmement rustique (ex: Bleu de Solaise). Concentre ses sucres pour faire antigel."
+    },
+    {
+      "nom": "Laitue de printemps",
+      "famille": "Astéracées",
+      "periode_production": "Printemps",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -3.0,
+      "gel_destruction_racine_c": -4.0,
+      "commentaire": "Les feuilles se vitrifient sous -3°C si elles ne sont pas protégées par un voile."
+    },
+    {
+      "nom": "Laitue d'hiver",
+      "famille": "Astéracées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -7.0,
+      "gel_destruction_racine_c": -9.0,
+      "commentaire": "Variétés spécifiques (ex: Passion blanche) adaptées aux hivers doux."
+    },
+    {
+      "nom": "Mâche",
+      "famille": "Caprifoliacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -15.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Rustique vraie, idéale pour les 4 zones climatiques françaises."
+    },
+    {
+      "nom": "Épinard",
+      "famille": "Amaranthacées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -8.0,
+      "gel_destruction_racine_c": -10.0,
+      "commentaire": "Très bonne résistance au froid, surtout sous paillis."
+    },
+    {
+      "nom": "Chicorée (Endive / Frisée)",
+      "famille": "Astéracées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -5.0,
+      "gel_destruction_racine_c": -7.0,
+      "commentaire": "La racine d'endive résiste bien au sol, mais le feuillage craint le gel fort."
+    },
+    {
+      "nom": "Bette / Blette",
+      "famille": "Amaranthacées",
+      "periode_production": "Automne",
+      "zero_vegetatif_c": 6.0,
+      "gel_destruction_feuillage_c": -4.0,
+      "gel_destruction_racine_c": -6.0,
+      "commentaire": "Les cardes épaisses et gorgées d'eau sont détruites par le gel moyen."
+    },
+    {
+      "nom": "Chou-fleur / Brocoli",
+      "famille": "Brassicacées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -5.0,
+      "gel_destruction_racine_c": -7.0,
+      "commentaire": "La pomme (fleur) est sensible et brunit dès -4°C, la plante meurt sous -6°C."
+    },
+    {
+      "nom": "Chou pommé (Cabus / Milan)",
+      "famille": "Brassicacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -10.0,
+      "gel_destruction_racine_c": -12.0,
+      "commentaire": "Les choux de Milan (frisés) résistent mieux au gel lourd que les choux lisses."
+    },
+    {
+      "nom": "Chou Kale / Chou frisé",
+      "famille": "Brassicacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -15.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Le gel améliore sa saveur en transformant l'amidon en sucre."
+    },
+    {
+      "nom": "Carotte",
+      "famille": "Apiacées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -4.0,
+      "gel_destruction_racine_c": -8.0,
+      "commentaire": "Les feuilles gèlent vite, mais la racine tolère de fortes gelées si le sol ne gèle pas à cœur."
+    },
+    {
+      "nom": "Navet",
+      "famille": "Brassicacées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -4.0,
+      "gel_destruction_racine_c": -7.0,
+      "commentaire": "La partie collet (hors de terre) est vulnérable au gel persistant."
+    },
+    {
+      "nom": "Panais",
+      "famille": "Apiacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -10.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Peut passer tout l'hiver en terre, même en zone continentale."
+    },
+    {
+      "nom": "Betterave",
+      "famille": "Amaranthacées",
+      "periode_production": "Automne",
+      "zero_vegetatif_c": 6.0,
+      "gel_destruction_feuillage_c": -3.0,
+      "gel_destruction_racine_c": -5.0,
+      "commentaire": "Doit être récoltée avant les grands froids de l'hiver."
+    },
+    {
+      "nom": "Radis de tous les mois",
+      "famille": "Brassicacées",
+      "periode_production": "Printemps/Automne",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -3.0,
+      "gel_destruction_racine_c": -4.0,
+      "commentaire": "Cycle très court, mais le petit bulbe devient creux s'il gèle."
+    },
+    {
+      "nom": "Radis d'hiver (Noir / Violet)",
+      "famille": "Brassicacées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 4.0,
+      "gel_destruction_feuillage_c": -6.0,
+      "gel_destruction_racine_c": -10.0,
+      "commentaire": "Beaucoup plus résistant que le radis de printemps."
+    },
+    {
+      "nom": "Topinambour",
+      "famille": "Astéracées",
+      "periode_production": "Hiver",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -15.0,
+      "gel_destruction_racine_c": -20.0,
+      "commentaire": "Le tubercule est quasiment indestructible par le froid en France."
+    },
+    {
+      "nom": "Céleri-branche",
+      "famille": "Apiacées",
+      "periode_production": "Automne",
+      "zero_vegetatif_c": 7.0,
+      "gel_destruction_feuillage_c": -3.0,
+      "gel_destruction_racine_c": -4.0,
+      "commentaire": "Sensible au gel, les branches deviennent molles et blanchissent."
+    },
+    {
+      "nom": "Céleri-rave",
+      "famille": "Apiacées",
+      "periode_production": "Automne/Hiver",
+      "zero_vegetatif_c": 6.0,
+      "gel_destruction_feuillage_c": -4.0,
+      "gel_destruction_racine_c": -7.0,
+      "commentaire": "La rave tolère de petits gels mais doit être protégée ou rentrée en cave au cœur de l'hiver."
+    },
+    {
+      "nom": "Ail / Oignon",
+      "famille": "Amaryllidacées",
+      "periode_production": "Hiver/Printemps",
+      "zero_vegetatif_c": 5.0,
+      "gel_destruction_feuillage_c": -12.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Les bulbes plantés à l'automne passent l'hiver sans aucune difficulté."
+    },
+    {
+      "nom": "Asperge",
+      "famille": "Asparagacées",
+      "periode_production": "Printemps",
+      "zero_vegetatif_c": 6.0,
+      "gel_destruction_feuillage_c": -2.0,
+      "gel_destruction_racine_c": -15.0,
+      "commentaire": "Le bourgeon/griffe sous terre est très rustique, mais le turion aérien (comestible) gèle dès -2°C."
+    }
+  ]
+}
