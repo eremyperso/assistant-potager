@@ -10,7 +10,7 @@ const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search'
  * Champ de recherche de ville réutilisable du design system [US-074].
  *
  * Composant contrôlé : `value` est soit `null` (rien de retenu), soit
- * `{ ville, latitude, longitude }` — la valeur que le parent transmettra telle
+ * `{ ville, latitude, longitude, altitude }` — la valeur que le parent transmettra telle
  * quelle à `POST /potagers` ou `PATCH /potagers/{id}`. Toute frappe qui
  * s'écarte de la ville déjà retenue invalide la sélection (`onSelect(null)`)
  * pour ne jamais soumettre un libellé qui ne correspond plus aux coordonnées
@@ -81,7 +81,9 @@ export function VilleSearch({ id, label = 'Ville', value, onSelect, placeholder 
     setQuery(libelle)
     setResultats([])
     setOuvert(false)
-    onSelect({ ville: libelle, latitude: r.latitude, longitude: r.longitude })
+    // [US-193 / CA1] L'altitude (`elevation`) est rendue avec les coordonnées :
+    // elle part avec elles, le jardinier n'a rien à saisir.
+    onSelect({ ville: libelle, latitude: r.latitude, longitude: r.longitude, altitude: r.elevation ?? null })
   }
 
   return (

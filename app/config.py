@@ -161,3 +161,12 @@ PREDIAGNOSTIC_MAX_PISTES = int(os.environ.get("PREDIAGNOSTIC_MAX_PISTES", "3"))
 # Réglable sans redéploiement ; une valeur hors vocabulaire retombe sur
 # `oceanique` (voir app.services.calendrier_cultural.zone_par_defaut).
 CALENDRIER_ZONE_DEFAUT = os.environ.get("CALENDRIER_ZONE_DEFAUT", "oceanique").strip().lower()
+
+# [US-193 / CA4] Altitude (mètres) à partir de laquelle la zone DÉDUITE d'un
+# potager localisé est montagnarde, quelles que soient latitude et longitude.
+# 700 m par défaut (à confirmer avec le porteur du produit). Réglable sans
+# redéploiement ; le choix du jardinier (`/calendrier zone`) prime toujours.
+try:
+    CALENDRIER_SEUIL_MONTAGNARD_M = float(os.environ.get("CALENDRIER_SEUIL_MONTAGNARD_M", "700"))
+except ValueError:
+    CALENDRIER_SEUIL_MONTAGNARD_M = 700.0

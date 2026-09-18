@@ -46,6 +46,7 @@ def test_ca7_owner_obtient_le_detail_complet(test_db):
         "ville": "Vitry-sur-Seine",
         "latitude": pytest.approx(48.787),
         "longitude": pytest.approx(2.393),
+        "altitude": None,  # [US-193 / CA1]
         "etat": "actif",
         "role": "owner",
         "nb_parcelles": 0,

@@ -12,6 +12,17 @@ from sqlalchemy.orm import sessionmaker
 from database.db import Base
 
 
+@pytest.fixture(autouse=True)
+def _cache_previsions_meteo_vide():
+    """[US-182] Le cache météo vit dans la mémoire du processus : chaque test
+    part d'un cache vide, sinon une prévision mise en cache par un test serait
+    servie au suivant sans appel Open-Meteo."""
+    from app.services import previsions_meteo
+    previsions_meteo.vider_cache()
+    yield
+    previsions_meteo.vider_cache()
+
+
 @pytest.fixture(scope="session")
 def test_engine():
     """Engine de test SQLite en mémoire."""

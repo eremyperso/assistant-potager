@@ -18,6 +18,9 @@ import {
   occTint, pctDe, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
   filtrerParcelles, parcelleSelectionnee,
 } from '../lib/plan.js'
+import {
+  confianceDeTuile, ETAT_CONFIANCE, ETAT_SANS_CALENDRIER,
+} from '../lib/confiance.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
@@ -25,11 +28,14 @@ import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import MetricStrip from '../components/MetricStrip.jsx'
+import FicheConfiance from '../components/FicheConfiance.jsx'
+import FicheCalendrier from '../components/FicheCalendrier.jsx'
 import { ObservationIcon, ObservationPanel } from '../components/Observations.jsx'
 import { useObservations } from '../hooks/useObservations.js'
 import { ObservationsUIProvider } from '../context/ObservationsUIContext.jsx'
 import {
   Card, CardHead, Badge, ProgressBar, SectionLabel, Tip, MonthStrip, MonthStripLegend,
+  PastilleConfiance, PuceConfiance, Etoiles,
 } from '../components/ui'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,7 +107,11 @@ function ParcelleRow({ parcelle, selected, onSelect }) {
  * en **mode dégradé** — frise neutre, durée en tiret — plutôt qu'avec des
  * valeurs par défaut qui auraient l'air d'un conseil (CA6).
  */
-function CultureTile({ c, parcelleId, moisRef, calendriers }) {
+function CultureTile({ c, parcelleId, moisRef, calendriers, confiances, dateRef }) {
+  const { potagerId } = usePotager()
+  // [US-180 / CA5] « Pourquoi ce niveau ? » ; [US-183 / CA2] la fiche calendrier.
+  const [pourquoi, setPourquoi] = useState(false)
+  const [ficheCalendrier, setFicheCalendrier] = useState(false)
   const obs = useObservations(
     `culture-row:${parcelleId}:${c.culture}:${c.variete || ''}`,
     { parcelleId, culture: c.culture, variete: c.variete },
@@ -119,6 +129,12 @@ function CultureTile({ c, parcelleId, moisRef, calendriers }) {
   // présence d'un calendrier : une culture sans frise garde sa famille. Repli
   // `null` — pas "Autres" (US-060/CA9).
   const famille = c.famille ?? null
+  // [US-180 / CA1, CA3, CA4] Confiance de l'action la plus pertinente À LA DATE
+  // DE RÉFÉRENCE. Sans geste d'actualité, la tuile ne montre aucune étoile, mais
+  // garde une entrée VISIBLE vers la fiche calendrier (retour terrain du
+  // 18/09/2026 : en septembre, toutes les tomates se taisaient et la fiche,
+  // ouverte par la seule frise, restait introuvable).
+  const { etat: etatConfiance, confiance } = confianceDeTuile(confiances, c.culture)
 
   return (
     <div className="bg-card-alt rounded-xl p-[13px]">
@@ -139,15 +155,30 @@ function CultureTile({ c, parcelleId, moisRef, calendriers }) {
           <span className="text-[11px] font-semibold text-txt3"> {formatUnite(c.unite)}</span>
         </span>
       </div>
-      <div className={`text-[11.5px] text-txt3 ${reperes.length ? 'mb-1' : 'mb-2.5'}`}>
-        {famille || TIRET} ·{' '}
-        {/* [US-070 / CA3, CA12] Le reste à courir remplace la durée conseillée ;
-            une récolte dépassée est dite, jamais masquée. */}
-        {reste
-          ? <span className={projection.etat === 'recolte_depassee' ? 'font-semibold text-amber' : 'font-semibold text-txt2'}>{reste}</span>
-          : frise.duree}
-        {/* [US-176 / CA5] Un itinéraire autre que « standard » est nommé. */}
-        {frise.itineraire && <span className="italic"> · {frise.itineraire}</span>}
+      <div className={`flex items-center gap-2 flex-wrap ${reperes.length ? 'mb-1' : 'mb-2.5'}`}>
+        <span className="text-[11.5px] text-txt3 min-w-0">
+          {famille || TIRET} ·{' '}
+          {/* [US-070 / CA3, CA12] Le reste à courir remplace la durée conseillée ;
+              une récolte dépassée est dite, jamais masquée. */}
+          {reste
+            ? <span className={projection.etat === 'recolte_depassee' ? 'font-semibold text-amber' : 'font-semibold text-txt2'}>{reste}</span>
+            : frise.duree}
+          {/* [US-176 / CA5] Un itinéraire autre que « standard » est nommé. */}
+          {frise.itineraire && <span className="italic"> · {frise.itineraire}</span>}
+        </span>
+        {/* [US-180 / CA1, CA8] Confiance de la semaine, à droite de la ligne. */}
+        {etatConfiance === ETAT_CONFIANCE ? (
+          <PastilleConfiance confiance={confiance} onClick={() => setPourquoi(true)} />
+        ) : (
+          // Même puce que Stocks : « calendrier », ou « pas de calendrier » quand la
+          // zone n'en a aucun — jamais une étoile par défaut (CA7).
+          <span className="ml-auto shrink-0">
+            <PuceConfiance
+              sansCalendrier={etatConfiance === ETAT_SANS_CALENDRIER}
+              onClick={() => setFicheCalendrier(true)}
+            />
+          </span>
+        )}
       </div>
       {reperes.length > 0 && (
         <div className="text-[11px] text-txt3 mb-2.5">
@@ -157,22 +188,55 @@ function CultureTile({ c, parcelleId, moisRef, calendriers }) {
       {/* [US-176 / CA3, CA3bis] Quatre phases du référentiel ; la plantation est
           lue, jamais reconstituée du semis en pépinière. [US-070 / CA7] Recalée,
           la frise suit la culture : semis, plantation, en croissance, récolte. */}
-      {recalee ? (
-        <MonthStrip
-          pepiniere={recalee.pepiniere}
-          pleineTerre={recalee.pleineTerre}
-          plantation={recalee.plantation}
-          croissance={recalee.croissance}
-          rec={recalee.rec}
-          moisCourant={moisRef}
+      {/* [US-183 / CA2] La frise est le troisième point d'appui de la tuile :
+          elle ouvre la fiche calendrier, sur la série de cette parcelle. Les deux
+          appuis existants (sélection, observations) ne changent pas. */}
+      <button
+        type="button"
+        onClick={() => setFicheCalendrier(true)}
+        title="Ouvrir la fiche calendrier"
+        aria-label={`Ouvrir la fiche calendrier : ${c.culture}`}
+        className="block w-full bg-transparent border-none p-0 cursor-pointer text-left rounded-md transition-opacity hover:opacity-75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+      >
+        {recalee ? (
+          <MonthStrip
+            pepiniere={recalee.pepiniere}
+            pleineTerre={recalee.pleineTerre}
+            plantation={recalee.plantation}
+            croissance={recalee.croissance}
+            rec={recalee.rec}
+            moisCourant={moisRef}
+          />
+        ) : (
+          <MonthStrip
+            pepiniere={frise.pepiniere}
+            pleineTerre={frise.pleineTerre}
+            plantation={frise.plantation}
+            rec={frise.rec}
+            moisCourant={moisRef}
+          />
+        )}
+      </button>
+      {pourquoi && (
+        <FicheConfiance
+          culture={c.culture}
+          confiance={confiance}
+          dateRef={confiances?.date || dateRef}
+          onOuvrirFiche={() => { setPourquoi(false); setFicheCalendrier(true) }}
+          onClose={() => setPourquoi(false)}
         />
-      ) : (
-        <MonthStrip
-          pepiniere={frise.pepiniere}
-          pleineTerre={frise.pleineTerre}
-          plantation={frise.plantation}
-          rec={frise.rec}
-          moisCourant={moisRef}
+      )}
+      {ficheCalendrier && (
+        // [US-183 / CA13] Aucune lecture de plus : calendrier, projections et
+        // confiance sont ceux que l'écran vient de charger, à la même date.
+        <FicheCalendrier
+          culture={c.culture}
+          dateRef={dateRef}
+          potagerId={potagerId}
+          parcelleId={parcelleId}
+          calendriers={calendriers ?? undefined}
+          confiances={confiances ?? undefined}
+          onClose={() => setFicheCalendrier(false)}
         />
       )}
       {c.has_observations && obs.open && <ObservationPanel items={obs.items} loading={obs.loading} />}
@@ -182,7 +246,7 @@ function CultureTile({ c, parcelleId, moisRef, calendriers }) {
 
 // ── Panneau de détail de la parcelle sélectionnée ────────────────────────────
 
-function DetailParcelle({ parcelle, moisRef, calendriers }) {
+function DetailParcelle({ parcelle, moisRef, calendriers, confiances, dateRef }) {
   const { id, nom, superficie_m2, cultures, has_observations, nb_observations } = parcelle
   const exposition = expositionAffichable(parcelle.exposition)
   const pct = pctDe(parcelle)
@@ -256,17 +320,22 @@ function DetailParcelle({ parcelle, moisRef, calendriers }) {
               <CultureTile
                 key={`${c.culture}-${c.variete || ''}-${i}`}
                 c={c} parcelleId={id} moisRef={moisRef} calendriers={calendriers}
+                confiances={confiances} dateRef={dateRef}
               />
             ))}
           </div>
           {/* [CA13] Légende de la pastille du modèle de stock, absente de la
               maquette mais clé de lecture du calcul de stock de l'application. */}
-          <div className="flex gap-4 mt-3.5 pt-3 border-t border-border-soft text-[11.5px] text-txt2">
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3.5 pt-3 border-t border-border-soft text-[11.5px] text-txt2">
             <span className="flex items-center gap-1.5">
               <PastilleOrgane typeOrgane="végétatif" />végétatif
             </span>
             <span className="flex items-center gap-1.5">
               <PastilleOrgane typeOrgane="reproducteur" />reproducteur
+            </span>
+            {/* [US-180, maquette gelée] Clé de lecture de la pastille de confiance. */}
+            <span className="flex items-center gap-1.5">
+              <Etoiles etoiles={2} taille={11} />confiance de la semaine — appuyer sur les étoiles explique le niveau, sur la frise ouvre la fiche calendrier
             </span>
           </div>
           {/* [US-176 / CA8, CA9] Zone lue et attribution : une fois pour toutes
@@ -300,6 +369,7 @@ export default function Plan({ refresh }) {
   const [search, setSearch] = useState('')      // [CA16] filtre local, non persisté
   const [selId, setSelId] = useState(null)
   const [calendriers, setCalendriers] = useState(null)
+  const [confiances, setConfiances] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -312,14 +382,24 @@ export default function Plan({ refresh }) {
       // ne bloque rien : les frises passent en mode dégradé, sans repli.
       const noms = culturesDuPlan(plan?.parcelles)
       let cal = null
+      // [US-180 / CA6] La confiance est lue en MÊME TEMPS que le calendrier, en un
+      // appel pour tout l'écran, et attendue avant l'affichage : aucune tuile ne
+      // passe d'un état sans indicateur à l'état renseigné sous les yeux.
+      let conf = null
       if (noms.length > 0) {
-        try {
-          cal = await api.calendriersPlan(noms, potagerId, dateRef)
-        } catch (e) {
-          console.warn('[US-176] Calendrier cultural indisponible', e)
-        }
+        const [resCal, resConf] = await Promise.allSettled([
+          api.calendriersPlan(noms, potagerId, dateRef),
+          api.confiancesPlan(noms, potagerId, dateRef),
+        ])
+        if (resCal.status === 'fulfilled') cal = resCal.value
+        else console.warn('[US-176] Calendrier cultural indisponible', resCal.reason)
+        // [CA7] Une confiance illisible n'empêche pas l'écran Plan : les frises,
+        // familles, quantités et durées restent affichées, sans indicateur.
+        if (resConf.status === 'fulfilled') conf = resConf.value
+        else console.warn('[US-180] Confiance indisponible', resConf.reason)
       }
       setCalendriers(cal)
+      setConfiances(conf)
       setData(plan)
     } catch (e) {
       setError(e.message)
@@ -397,7 +477,14 @@ export default function Plan({ refresh }) {
                   // La sélection remonte le composant à neuf : les panneaux
                   // d'observations d'une parcelle ne survivent pas au passage à
                   // la suivante.
-                  <DetailParcelle key={selection.id} parcelle={selection} moisRef={moisRef} calendriers={calendriers} />
+                  <DetailParcelle
+                    key={selection.id}
+                    parcelle={selection}
+                    moisRef={moisRef}
+                    calendriers={calendriers}
+                    confiances={confiances}
+                    dateRef={data?.date_ref_effective}
+                  />
                 )}
               </div>
             </div>

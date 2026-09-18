@@ -20,3 +20,8 @@ export { SectionLabel } from './SectionLabel.jsx'
 export { GroupHead, useGroups } from './GroupHead.jsx'
 export { Field } from './Field.jsx'
 export { VilleSearch } from './VilleSearch.jsx'
+
+// [US-180] Bloc « règle de confiance », partagé avec la fiche calendrier (US-183).
+export {
+  Etoiles, LigneRegle, BlocConfiance, SelecteurAction, PastilleConfiance, PuceConfiance,
+} from './RegleConfiance.jsx'

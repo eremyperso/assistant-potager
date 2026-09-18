@@ -96,6 +96,7 @@ from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services import auth as svc_auth
 from app.services import email as svc_email
+from app.services import previsions_meteo as svc_previsions_meteo  # [US-182]
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import telegram_notify as svc_telegram_notify  # [US-091]
 from app.services import oauth_google as svc_oauth_google  # [US-090]
@@ -111,6 +112,7 @@ from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import recalage_calendrier as svc_recalage  # [US-070]
+from app.services import confiance_semis as svc_confiance  # [US-178]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import resolve_parcelle  # [US-167]
@@ -732,6 +734,7 @@ def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user))
                     "ville": p.ville,
                     "latitude": p.latitude,
                     "longitude": p.longitude,
+                    "altitude": p.altitude,  # [US-193 / CA1]
                     # [US-068 / CA7, CA8] Zone lue par le potager et son origine
                     # (jardinier | localisation | defaut) — jamais une supposition
                     # présentée comme un choix.
@@ -814,6 +817,8 @@ class CreerPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-193 / CA1] Altitude de la ville choisie, rendue par la recherche de ville.
+    altitude: Optional[float] = None
     # [US-081 / CA3, CA4] Bascule sur le potager créé. `True` par défaut :
     # l'onboarding (US-058) n'envoie pas ce champ et ne doit rien changer.
     activer: bool = True
@@ -824,6 +829,9 @@ class ModifierPotagerRequest(BaseModel):
     ville: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # [US-193 / CA2] Accompagne TOUJOURS latitude/longitude : des coordonnées
+    # envoyées sans altitude effacent celle de l'ancienne ville.
+    altitude: Optional[float] = None
     # [US-068 / CA7] Zone choisie par le jardinier. Omise = inchangée ;
     # "auto" (ou "") = rendre la main à la localisation.
     zone_climatique: Optional[str] = None
@@ -851,6 +859,7 @@ def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_use
     try:
         potager = svc_potagers.creer_potager(
             db, user.id, req.nom.strip(), req.ville, req.latitude, req.longitude, activer=req.activer,
+            altitude=req.altitude,
         )
         utilisateur = db.query(User).filter(User.id == user.id).first()
         return {
@@ -926,6 +935,7 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
                 db, user.id, potager_id,
                 nom=req.nom.strip() if req.nom is not None else None,
                 ville=req.ville, latitude=req.latitude, longitude=req.longitude,
+                altitude=req.altitude,
             )
             if req.zone_climatique is not None:
                 svc_calendrier.definir_zone(
@@ -945,6 +955,7 @@ def modifier_potager(potager_id: int, req: ModifierPotagerRequest, user: User = 
         return {
             "id": potager.id, "nom": potager.nom, "ville": potager.ville,
             "latitude": potager.latitude, "longitude": potager.longitude,
+            "altitude": potager.altitude,
             "zone_climatique": zone, "zone_climatique_origine": origine,
         }
     finally:
@@ -1256,6 +1267,101 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
     try:
         calendrier = svc_calendrier.lire_calendrier(db, culture, ctx.potager_id)
         return svc_calendrier.calendrier_en_dict(calendrier)
+    finally:
+        db.close()
+
+
+@app.get("/cultures/{culture}/confiance")
+def get_confiance_culture(
+    culture: str,
+    action: str = Query(default=None),
+    date_cible: date = Query(default=None, alias="date"),
+    parcelle_id: int = Query(default=None),
+    itineraire: str = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-178 / CA9] Confiance d'un semis ou d'une plantation : 1 à 3 étoiles, un
+    score 0-100 et ses motifs — scopé au potager actif, en lecture seule et sans
+    aucun appel LLM (CA2).
+
+    `date` vaut aujourd'hui par défaut ; `action` non précisée vaut « semis », que
+    la parcelle tranche en pépinière ou pleine terre (CA8). Toujours 200 — une
+    culture sans fenêtre pour la zone rend `etoiles: null` et le motif qui le dit
+    (CA4), jamais une fenêtre empruntée."""
+    db = SessionLocal()
+    try:
+        confiance = svc_confiance.evaluer(
+            db, culture, action, date_cible or date.today(),
+            ctx.potager_id, parcelle_id, itineraire,
+        )
+        return svc_confiance.confiance_en_dict(confiance)
+    except svc_confiance.ActionInvalideError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.get("/plan/confiances")
+def get_confiances_plan(
+    culture: list[str] = Query(default=[]),
+    action: str = Query(default=None),
+    date_cible: date = Query(default=None, alias="date"),
+    parcelle_id: int = Query(default=None),
+    itineraire: str = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-178 / CA9, CA10] Confiance de PLUSIEURS cultures à une même date, en UN
+    appel (`?culture=tomate&culture=haricot`) et une seule lecture météo — ce dont
+    l'écran Plan (US-180) a besoin pour ne pas multiplier les requêtes."""
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        confiances = svc_confiance.evaluer_cultures(
+            db, culture, action, date_cible or date.today(),
+            use_ctx.potager_id, parcelle_id, itineraire,
+        )
+        return {
+            "date": (date_cible or date.today()).isoformat(),
+            "cultures": {
+                nom: svc_confiance.confiance_en_dict(c) for nom, c in confiances.items()
+            },
+        }
+    except svc_confiance.ActionInvalideError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.get("/plan/confiances/candidates")
+def get_confiances_candidates_plan(
+    culture: list[str] = Query(default=[]),
+    date_cible: date = Query(default=None, alias="date"),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-180 / CA1, CA3, CA6] Ce que chaque tuile de l'écran Plan peut proposer à
+    la date de référence : les actions EN FENÊTRE OU À UN MOIS, de la mieux placée
+    à la moins bonne, avec leurs motifs et la récolte attendue.
+
+    Un seul appel pour tout l'écran, une seule lecture météo (US-178 / CA9, CA10).
+    Toujours 200 : une culture sans fenêtre pour la zone rend `a_calendrier: false`
+    et aucune candidate — la tuile n'affiche alors rien, jamais une valeur de repli
+    (CA7). `potager_id` optionnel, comme `/plan` : consultation d'un potager archivé.
+    """
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        confiances = svc_confiance.confiances_du_plan(
+            db, culture, date_cible or date.today(), use_ctx.potager_id,
+        )
+        return {
+            "date": (date_cible or date.today()).isoformat(),
+            "cultures": {
+                nom: svc_confiance.confiances_culture_en_dict(c)
+                for nom, c in confiances.items()
+            },
+        }
     finally:
         db.close()
 
@@ -2133,23 +2239,26 @@ def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
     Si le potager actif n'a pas encore de localisation renseignée, retourne
     `localisation_manquante: true` plutôt qu'un repli silencieux sur une météo
     qui ne correspondrait à aucun lieu réel du potager (CA4).
-    """
-    from utils.meteo import fetch_meteo, METEO_TIMEZONE
 
+    [US-182] Lu via le cache partagé par localisation ; ajoute
+    `previsions_etendues` (14 jours), `age_donnees_secondes` et `source_donnees`.
+    Open-Meteo indisponible : l'entrée du jour en cache si elle existe, sinon 502.
+    """
     db = SessionLocal()
     try:
         potager = db.query(Potager).filter(Potager.id == ctx.potager_id).first()
-        if potager is None or potager.latitude is None or potager.longitude is None:
+        lecture = svc_previsions_meteo.lire_prevision_potager(potager)
+        if lecture.statut == svc_previsions_meteo.STATUT_LOCALISATION_MANQUANTE:
             return {"localisation_manquante": True}
-
-        meteo = fetch_meteo(lat=potager.latitude, lon=potager.longitude, timezone=METEO_TIMEZONE)
-        if meteo is None:
+        if not lecture.disponible:
             raise HTTPException(status_code=502, detail="Impossible de récupérer les données Open-Meteo")
 
         return {
             "localisation_manquante": False,
             "ville": potager.ville,
-            **meteo,
+            **lecture.meteo,
+            "age_donnees_secondes": lecture.age_secondes,
+            "source_donnees": lecture.source,
         }
     finally:
         db.close()

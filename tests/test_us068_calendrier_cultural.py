@@ -356,7 +356,8 @@ class TestZoneClimatique:
             cal.definir_zone(db, CTX_A, "continental")
 
     def test_us068_ca7_libelle_dit_l_origine_de_la_zone(self):
-        assert cal.libelle_zone("mediterraneen", cal.ORIGINE_ZONE_JARDINIER) == "méditerranéen"
+        # [US-193] Le choix du jardinier se dit aussi, comme les deux autres origines.
+        assert cal.libelle_zone("mediterraneen", cal.ORIGINE_ZONE_JARDINIER) == "méditerranéen (choix du jardinier)"
         assert "localisation" in cal.libelle_zone("oceanique", cal.ORIGINE_ZONE_LOCALISATION)
         assert "par défaut" in cal.libelle_zone("oceanique", cal.ORIGINE_ZONE_DEFAUT)
 

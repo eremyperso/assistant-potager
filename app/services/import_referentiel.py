@@ -158,11 +158,11 @@ C'est le **seul** chemin de pré-remplissage des attributs agronomiques : « auc
 second mécanisme », comme le pose US-140. Trois règles s'y ajoutent aux quatre
 invariants ci-dessus :
 
-- **Périmètre fermé (US-161 / CA7).** Seules les dix cultures du périmètre
-  initial (`attributs_culture.CULTURES_PERIMETRE_INITIAL`) sont pré-remplies.
-  Toute autre culture du fichier est comptée `cultures_hors_perimetre` et
-  ignorée — peupler les écrans de cultures jamais cultivées est un risque
-  constaté, pas théorique.
+- **Périmètre retiré (US-161 / CA7, levé le 17/09/2026).** La restriction aux
+  dix cultures du périmètre initial (`attributs_culture.CULTURES_PERIMETRE_INITIAL`)
+  ne gouverne plus l'import : toute culture déjà présente dans `culture_config`
+  peut recevoir ses attributs. `cultures_hors_perimetre` reste dans le rapport
+  pour compatibilité mais n'est plus jamais alimenté.
 - **Vocabulaire fermé (US-161 / CA2).** Chaque valeur passe par
   `attributs_culture.normaliser_valeur`, exactement comme une saisie au bot. Une
   valeur refusée est journalisée, comptée `attributs_refuses`, et **n'empêche
@@ -561,18 +561,23 @@ def _importer_attributs_cultures(
     db: Session, entrees: list[dict], source: Optional[ReferentielSource], resultat: ResultatImport
 ) -> None:
     """
-    [US-161 / CA2, CA3, CA6, CA7] Pré-remplit les attributs agronomiques de
-    conduite des cultures **existantes** du périmètre initial.
+    [US-161 / CA2, CA3, CA6] Pré-remplit les attributs agronomiques de conduite
+    des cultures **existantes**.
 
-    Quatre refus, dans cet ordre :
-    1. Culture hors des dix du périmètre initial → `cultures_hors_perimetre`.
-    2. Culture absente de `culture_config` → `cultures_ignorees`, jamais créée.
-    3. Valeur hors vocabulaire fermé → `attributs_refuses`, les autres attributs
+    ⚠️ Le filtre sur le périmètre initial des dix cultures (CA7) a été retiré à
+    la demande du jardinier : un manifeste peut désormais pré-remplir n'importe
+    quelle culture, pourvu qu'elle existe déjà. `attributs_culture.dans_perimetre_initial`
+    et `CULTURES_PERIMETRE_INITIAL` restent dans le code comme trace de la mesure
+    du 25/08/2026, mais ne gouvernent plus aucune écriture.
+
+    Trois refus, dans cet ordre :
+    1. Culture absente de `culture_config` → `cultures_ignorees`, jamais créée.
+    2. Valeur hors vocabulaire fermé → `attributs_refuses`, les autres attributs
        de la même culture restent écrits : un fichier source partiellement
        fautif enrichit ce qu'il peut.
-    4. Valeur déjà renseignée par une autre origine → `attributs_preserves`.
+    3. Valeur déjà renseignée par une autre origine → `attributs_preserves`.
 
-    Le quatrième est celui qui fait tenir le CA6 : un référentiel importé décrit
+    Le troisième est celui qui fait tenir le CA6 : un référentiel importé décrit
     une moyenne nationale, le jardinier décrit son terrain. Quand les deux
     divergent, c'est le terrain qui a raison.
     """
@@ -585,12 +590,6 @@ def _importer_attributs_cultures(
     for entree in entrees:
         culture = (entree.get("culture") or "").strip()
         if not culture:
-            continue
-
-        if not svc_attributs.dans_perimetre_initial(culture):
-            # [CA7] Pas une anomalie : le périmètre est fermé, et le fichier
-            # source peut légitimement être plus large que lui.
-            resultat.cultures_hors_perimetre.append(culture)
             continue
 
         fiches = configs_par_culture.get(normaliser_culture(culture))

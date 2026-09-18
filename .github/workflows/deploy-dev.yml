@@ -114,6 +114,9 @@ jobs:
             venv/bin/python tools/controler_aide_corpus.py
             venv/bin/python tools/controler_corpus_agronomie.py
             venv/bin/python tools/ingerer_connaissance.py --strict --elaguer
+            # [US-193 / CA3] Complément de migration_v48 : altitude des potagers
+            # déjà localisés (Open-Meteo). Idempotent, rend toujours 0.
+            venv/bin/python tools/renseigner_altitude_potagers.py
           "
 
       - name: Restart systemd services (API + Bot)

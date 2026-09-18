@@ -180,6 +180,7 @@ def obtenir_potager(db: Session, user_id: int, potager_id: int) -> Optional[dict
         "ville": potager.ville,
         "latitude": potager.latitude,
         "longitude": potager.longitude,
+        "altitude": potager.altitude,  # [US-193 / CA1]
         "etat": potager.etat,
         "role": role,
         "nb_parcelles": nb_parcelles,

@@ -663,12 +663,14 @@ class TestCA6CorrectionPrimeSurImport:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA7 — périmètre des dix cultures, aucune configuration créée
+# CA7 — ancien périmètre des dix cultures (levé le 17/09/2026), aucune
+# configuration créée
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestCA7PerimetreEtAucuneCreation:
     def test_us161_le_perimetre_compte_dix_cultures(self):
-        """[CA7] Le périmètre est celui d'US-140 / CA1, mesuré et non intuité."""
+        """[CA7] Trace de la mesure d'US-140 / CA1 : la constante existe encore,
+        mais ne gouverne plus aucune écriture (voir test suivant)."""
         assert len(svc_attributs.CULTURES_PERIMETRE_INITIAL) == 10
         assert "tomate" in svc_attributs.CULTURES_PERIMETRE_INITIAL
         assert "blette" in svc_attributs.CULTURES_PERIMETRE_INITIAL
@@ -679,9 +681,10 @@ class TestCA7PerimetreEtAucuneCreation:
         assert svc_attributs.dans_perimetre_initial("TOMATE") is True
         assert svc_attributs.dans_perimetre_initial("topinambour") is False
 
-    def test_us161_culture_hors_perimetre_ignoree(self, db, manifeste_attributs):
-        """[CA7] Le fichier source peut légitimement être plus large que le
-        périmètre : ce qui déborde est compté, pas écrit."""
+    def test_us161_culture_hors_ancien_perimetre_desormais_ecrite(self, db, manifeste_attributs):
+        """[CA7, levé le 17/09/2026] Une culture hors de l'ancien périmètre des
+        dix n'est plus rejetée à l'import : seule l'existence dans
+        `culture_config` compte encore."""
         _seed_culture(db, "topinambour", type_organe="végétatif")
         manifeste_attributs["cultures_attributs"].append(
             {"culture": "topinambour", "exposition": "mi-ombre"}
@@ -689,9 +692,10 @@ class TestCA7PerimetreEtAucuneCreation:
 
         resultat = svc_import.importer(db, manifeste_attributs)
 
-        assert "topinambour" in resultat.cultures_hors_perimetre
+        assert resultat.cultures_hors_perimetre == []
+        assert "topinambour.exposition" in resultat.attributs_ecrits
         relue = db.query(CultureConfig).filter(CultureConfig.nom == "topinambour").first()
-        assert relue.exposition is None
+        assert relue.exposition == "mi-ombre"
 
     def test_us161_import_ne_cree_aucune_configuration_de_culture(self, db, manifeste_attributs):
         """[CA7] 14 des 54 configurations mesurées ne portent aucun événement :
@@ -1031,27 +1035,27 @@ class TestManifesteRedactionInterne:
         assert relue.exposition == "ombre"
         assert "carotte.exposition" in resultat.attributs_preserves
 
-    def test_us161_le_gabarit_livre_est_lisible_et_n_ecrit_rien(self, db):
-        """Le fichier livré est vide de valeurs : l'importer tel quel est
-        inoffensif. C'est ce qui permet de le versionner avant de le remplir."""
-        _seed_culture(db, "carotte")
-        manifeste = svc_import.charger_manifeste(MANIFESTE_INTERNE_PROJET)
+    def test_us161_le_gabarit_interne_est_idempotent(self, db):
+        """[CA5] Le fichier porte désormais de vraies valeurs en permanence
+        (le périmètre qui limitait sa saisie a été levé le 17/09/2026) :
+        rejouer l'import ne doit ni dupliquer, ni réécraser, ni échouer."""
+        for entree in svc_import.charger_manifeste(MANIFESTE_INTERNE_PROJET)["cultures_attributs"]:
+            _seed_culture(db, entree["culture"])
 
-        resultat = svc_import.importer(db, manifeste)
+        premier = svc_import.importer(db, svc_import.charger_manifeste(MANIFESTE_INTERNE_PROJET))
+        second = svc_import.importer(db, svc_import.charger_manifeste(MANIFESTE_INTERNE_PROJET))
 
-        assert resultat.attributs_ecrits == []
-        assert resultat.attributs_refuses == []
-        relue = db.query(CultureConfig).filter(CultureConfig.nom == "carotte").first()
-        assert relue.exposition is None
+        assert premier.attributs_refuses == []
+        assert second.attributs_ecrits == []  # rejeu : rien à réécrire, valeur identique
 
-    def test_us161_le_gabarit_couvre_exactement_le_perimetre_initial(self):
-        """Le gabarit et le garde-fou de code ne peuvent pas diverger : dix
-        cultures ici, dix là, les mêmes."""
+    def test_us161_le_gabarit_ne_declare_aucune_culture_en_double(self):
+        """Le gabarit n'est plus borné par le périmètre initial (levé le
+        17/09/2026), mais une culture qui y apparaît deux fois écraserait
+        silencieusement sa propre valeur à la lecture."""
         manifeste = svc_import.charger_manifeste(MANIFESTE_INTERNE_PROJET)
 
         cultures = [e["culture"] for e in manifeste["cultures_attributs"]]
-        assert len(cultures) == 10
-        assert all(svc_attributs.dans_perimetre_initial(c) for c in cultures)
+        assert len(cultures) == len(set(cultures))
 
     def test_us161_le_gabarit_ne_declare_que_les_quatre_attributs(self):
         """Une clé inconnue dans le gabarit serait silencieusement ignorée à

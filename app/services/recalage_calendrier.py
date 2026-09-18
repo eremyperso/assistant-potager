@@ -52,7 +52,7 @@ from sqlalchemy.orm import Session
 
 from app.services import calendrier_cultural as svc_calendrier
 from app.services import contexte_semis as svc_contexte
-from database.models import Evenement
+from database.models import Evenement, Parcelle
 from utils.culture_resolve import normaliser_culture
 
 log = logging.getLogger("potager")
@@ -598,6 +598,16 @@ def projections_du_plan(
         )
         if projection is not None:
             resultat.append(projection.en_dict())
+
+    # [US-183 / CA8] La fiche calendrier s'ouvre aussi depuis Stocks, qui n'a pas
+    # la liste des parcelles : chaque série porte le nom de la sienne. Une lecture
+    # pour toutes les tuiles, jamais une par série.
+    ids = {p["parcelle_id"] for p in resultat}
+    noms_parcelles = (
+        dict(db.query(Parcelle.id, Parcelle.nom).filter(Parcelle.id.in_(ids)).all()) if ids else {}
+    )
+    for p in resultat:
+        p["parcelle_nom"] = noms_parcelles.get(p["parcelle_id"])
 
     log.info(
         "[US-070] Recalage du plan : potager_id=%s date_ref=%s tuiles=%d recalees=%d",

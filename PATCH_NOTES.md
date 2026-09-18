@@ -1,3 +1,108 @@
+## [v3.72.0] — 2026-09-18
+
+### 🚀 Nouveautés
+- Ajoute la **fiche calendrier d'une culture**, toutes variétés confondues : semer ou planter, séries déjà en terre et frise des douze mois, réunis en un seul endroit (US-183)
+- Ouvre cette fiche depuis la frise d'une tuile du Plan, en amenant sous les yeux la série de cette parcelle (US-183 / CA2)
+- Affiche sur chaque tuile du Plan le niveau de confiance du geste le mieux noté, **même hors saison**, comme la maquette gelée : en septembre, toutes les tomates se taisaient et la fiche restait introuvable ; « pas de calendrier » quand la zone n'en a aucun (US-180 / CA1, US-183 / CA2)
+- Ouvre cette fiche depuis l'écran Stocks par une puce sous le nom de chaque culture — les étoiles de la semaine, « pas de calendrier » ou « calendrier » —, soldant l'absence de calendrier sur cet écran ; le détail des récoltes garde son propre lien (US-183 / CA1)
+- Propose dans « Semer ou planter » les seuls gestes que le calendrier de la zone connaît, pré-positionné sur le mieux noté à la date consultée, avec la période conseillée, le niveau et ses règles, et la récolte attendue en fourchette (US-183 / CA4, CA5)
+- Liste dans « Déjà en terre » chaque série, la plus ancienne en tête : origine, levée et première récolte attendues, reste à courir, écart d'une récolte dépassée, ou tirets et raison quand rien ne peut être projeté (US-183 / CA8, CA9)
+- Recale la frise de la fiche sur la plus ancienne série en terre, conseillée sinon, et nomme ce qu'elle montre (US-183 / CA11)
+- Invite à localiser le potager depuis la fiche quand les règles météo restent indéterminées, par la modale existante (US-183 / CA7)
+- Affiche la fiche en feuille plein écran sur mobile, en modale centrée sur tablette et en panneau latéral sur ordinateur, fermée au clavier par Échap (US-183 / CA3, CA15)
+
+### 🔧 Améliorations techniques
+- Ajoute `actions` à `GET /plan/confiances/candidates` : tous les gestes qui ont une fenêtre, tirés de la même évaluation que les candidates de la tuile — la tuile et la fiche ne peuvent pas afficher deux niveaux différents (US-183 / CA4)
+- Ajoute `parcelle_nom` aux projections de `GET /plan/calendriers`, lu en une requête pour toutes les tuiles (US-183 / CA8)
+- Limite la fiche à deux lectures au plus, zéro depuis le Plan qui lui passe ce qu'il a déjà chargé (US-183 / CA13)
+- Ajoute au `Modal` partagé les dispositions `adaptative` et `basse`, rétrocompatibles, et la fermeture par Échap pour toutes les fenêtres (US-183 / CA3, CA15)
+- Ajoute la page de contrôle visuel `/fiche-calendrier`, qui rejoue les quatre états de la maquette gelée avec des réponses simulées (US-183 / CA18)
+
+### 📚 Documentation
+- Ajoute à la fiche d'aide du calendrier l'ouverture et la lecture de la fiche calendrier d'une culture (US-183 / CA17, US-099 / CA9)
+- Solde dans `ANALYSE_REFONTE_UI_WEB_2026.md` §5.11 l'écart « absence de calendrier sur Stocks » (US-183 / CA17)
+
+## [v3.71.0] — 2026-09-18
+
+### 🚀 Nouveautés
+- Affiche sur chaque tuile de culture de l'écran Plan, à droite de la ligne « famille · durée », une **pastille de 1 à 3 étoiles** avec son niveau en toutes lettres (faible, moyenne, élevée), dès qu'un semis ou une plantation tombe dans la période conseillée ou à un mois d'elle (US-180 / CA1)
+- Affiche le geste le mieux noté quand deux sont possibles le même mois, et tranche une égalité par la règle de priorité des phases déjà utilisée par la frise (US-180 / CA2)
+- Recalcule l'indicateur quand la date de référence recule ou avance, sans toucher aux périodes conseillées de la frise (US-180 / CA4)
+- Ouvre au toucher de la pastille « Pourquoi ce niveau ? » : les règles qui ont coûté des points, les autres dépliables sous « Voir les 5 règles », chacune avec ses points et son motif (US-180 / CA5)
+- Dit « pas de calendrier » sur la tuile d'une culture sans aucune période pour la zone, et n'affiche rien quand il n'y a simplement rien à semer ni à planter en ce moment (US-180 / CA3)
+- Expose les étoiles aux lecteurs d'écran sous forme écrite (« confiance deux sur trois ») et ne confie le niveau à aucune couleur (US-180 / CA8)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /plan/confiances/candidates` : les gestes possibles de toutes les cultures de l'écran en **un appel et une seule lecture météo**, jamais une requête par tuile (US-180 / CA6)
+- Ajoute le bloc « règle de confiance » au design system (`BlocConfiance`, `Etoiles`, `PastilleConfiance`), porté depuis la maquette gelée du 18/09/2026 et partagé avec la fiche calendrier d'une culture (US-180, US-183)
+- Laisse l'écran Plan entièrement utilisable quand le niveau de confiance ne peut pas être lu : frises, familles, quantités et durées s'affichent, aucun repli n'est inventé (US-180 / CA7)
+- Garde la règle de priorité des phases à un seul endroit — celui de la frise — un test l'interdisant au moteur de confiance (US-180 / CA2)
+- Ajoute la pastille, la puce et le bloc de règles à la page de contrôle visuel du design system, vérifiés à 375 px, 768 px et 1280 px
+
+### 📚 Documentation
+- Complète la fiche d'aide du calendrier avec la lecture des étoiles sur l'écran Plan, la mention « pas de calendrier » et « Pourquoi ce niveau ? » (US-180 / CA10, US-099 / CA9)
+
+## [v3.70.0] — 2026-09-17
+
+### 🚀 Nouveautés
+- Répond au bot à « je peux semer des haricots ce week-end ? », « c'est le moment de planter les tomates ? » ou « je sème les carottes ce week-end ou j'attends ? » par un niveau de **1 à 3 étoiles** et les raisons qui l'expliquent, sans consommer un seul jeton (US-179 / CA1, CA2)
+- Affiche la réponse dans l'ordre où elle se lit — culture · geste · zone, les étoiles, ce qui joue en faveur, puis contre, puis ce qui n'est pas connu, puis la récolte attendue en fourchette (US-179 / CA4)
+- Comprend la date de la question en **regardant vers l'avenir** : « ce week-end » est le samedi qui vient, comme « samedi », « demain », « dans dix jours » ou « le 20 mai » ; sans date, la réponse porte sur aujourd'hui (US-179 / CA1)
+- Demande la filière en un seul appui quand la culture se sème aussi bien en pépinière qu'en pleine terre, et ne demande rien quand elle ne se sème que d'une façon ; une parcelle pépinière nommée impose le semis à l'abri (US-179 / CA3)
+- Propose sous la réponse d'**enregistrer le semis ou la plantation** à la date demandée, filière et parcelle déjà remplies, ou de reposer la même question dix jours plus tard (US-179 / CA6)
+- Dit qu'aucun niveau n'est possible et comment compléter le calendrier quand la culture n'a aucune période connue pour la zone, plutôt que d'estimer (US-179 / CA5)
+- Calcule ce niveau par cinq règles déterministes — fenêtre conseillée de la zone, dernière gelée moyenne, gel annoncé sur quinze jours, fraîcheur des nuits, saison de récolte restante — chacune nommant ses points et son motif (US-178 / CA1, CA6)
+- Plafonne le niveau et affiche le motif quand une donnée manque : sans météo la troisième étoile est hors d'atteinte, et une sensibilité au gel inconnue ne rapporte aucun point (US-178 / CA5)
+- Ajoute la commande `/confiance <culture> <semis|pepiniere|pleine_terre|plantation> [date] [parcelle]` pour poser la même question au clavier (US-179)
+
+### 🐛 Corrections
+- Corrige la règle « saison restante » du niveau de confiance, qui récompensait le retard : comparée à la seule fin de la fenêtre de récolte, elle reportait la saison d'un an dès que ce mois était passé, offrant onze mois de marge à la culture la plus hors saison. Le même haricot semé le 19 septembre gagnait la règle en zone océanique et la perdait en zone montagnarde ; elle teste désormais l'appartenance à la saison de récolte (US-178 / CA1)
+- Distingue dans la réponse « récolte attendue après la fin de saison conseillée » de « saison de récolte déjà passée : la prochaine ouvre en juillet » — deux situations qui ne se corrigent pas de la même façon (US-178 / CA6)
+- Traite les fenêtres de récolte qui enjambent le 31 décembre (« novembre → février »), encore ouvertes en janvier bien qu'ayant commencé l'année précédente (US-178)
+- Empêche qu'une date déjà passée dite avec son année (« je peux semer des carottes le 10 avril 2026 ? » demandé après cette date) ne se retrouve absorbée dans le nom de la culture : la question rejoint désormais le routeur existant plutôt que d'évaluer en silence une culture au nom erroné à la date du jour (US-179 / CA13)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/confiance_semis.py` : barèmes, seuils d'étoiles (≥ 75 ★★★, ≥ 45 ★★) et dernière gelée moyenne par zone vivent dans un seul bloc « Barème », comme des décisions produit corrigeables en diff git (US-178 / CA3)
+- Expose `GET /cultures/{culture}/confiance` et `GET /plan/confiances` (lecture groupée, une seule lecture météo pour tout l'écran) (US-178 / CA9, CA10)
+- Ajoute quatre règles d'interprétation qui n'acceptent **jamais un verbe de semis nu** : sans modalité (« je peux », « c'est le moment », « ou j'attends ? »), la phrase reste une saisie, qui est le geste le plus fréquent du bot (US-179 / CA2)
+- Fait s'effacer le garde « demande de procédure » d'US-172 devant ces seules questions : « peut-on semer des haricots ? » n'est pas « comment semer des haricots ? » (US-179 / CA2)
+- Ajoute `interpreteur_commandes._ARBITRAGES`, table écrite des paires de commandes qui lisent légitimement la même phrase : « je peux semer des tomates sur la planche nord ? » reçoit la confiance et non la rotation, qui garde `/rotation` et sa formulation explicite (US-179)
+- Ouvre un mode `futur=True` dans `utils/date_utils` — jusqu'ici toute la grammaire datait le passé, un geste déjà fait ; sans ce mode, aucun appelant existant ne change de comportement (US-179 / CA1)
+- Enchaîne l'enregistrement sur le flux existant avec un item pré-parsé, sans créer de second chemin d'écriture ni consommer de jeton : confirmation, avertissements de rotation et demande de parcelle restent ceux du flux habituel (US-179 / CA6, CA7)
+- Étend `tests/corpus/us172_commandes.csv` de 25 formulations de la question et 6 phrases hors périmètre proches ; au 17/09/2026 : **100 % de reconnaissance, 0 faux positif**, 100 % sans appel modèle (US-179 / CA8)
+- Ajoute à la fiche d'aide `calendrier-et-zone-climatique.md` les sections « Savoir si c'est le moment de semer ou de planter » et « Sur quoi repose le niveau d'étoiles avant de semer », avec leurs questions de mesure (US-179 / CA11, US-099 / CA9)
+
+## [v3.69.0] — 2026-09-16
+
+### 🚀 Nouveautés
+- Déduit la zone **montagnarde** d'un potager localisé au-dessus de 700 m, quelles que soient sa latitude et sa longitude : Briançon, Chamonix ou Pontarlier ne lisent plus le calendrier océanique (US-193 / CA4)
+- Revoit les limites entre océanique, continental et méditerranéen sur un tableau de 22 villes de référence : Reims et Troyes passent en continental, Montélimar en méditerranéen (US-193 / CA5)
+- Conserve l'altitude de la ville choisie à la création et à la modification du potager, sans rien saisir de plus ; changer de ville met à jour ensemble coordonnées et altitude (US-193 / CA1, CA2)
+- Affiche l'altitude retenue avec la zone déduite, au bot comme sur l'écran Plan (« montagnard (déduite de la localisation, 1 326 m) »), et rappelle `/calendrier zone montagnard` quand l'altitude est inconnue (US-193 / CA7, CA8)
+- Précise « (choix du jardinier) » quand la zone a été choisie ; ce choix prime toujours sur l'altitude (US-193 / CA6)
+
+### 🔧 Améliorations techniques
+- Ajoute le réglage `CALENDRIER_SEUIL_MONTAGNARD_M` (700 par défaut), modifiable sans redéploiement (US-193 / CA4)
+- Ajoute `utils/altitude.py` (API d'élévation Open-Meteo, par lots de 100, jamais bloquant) et `tools/renseigner_altitude_potagers.py`, lancé après les migrations en dev, en prod et par `update_dev.ps1` pour les potagers déjà localisés (US-193 / CA3)
+- Expose `altitude` dans `GET /potagers`, `GET`/`PATCH /potagers/{id}` et `zone_altitude` dans `GET /plan/calendriers` ; `POST`/`PATCH /potagers` l'acceptent (US-193 / CA1)
+- Met à jour la fiche `calendrier-et-zone-climatique.md` du corpus de fonctionnement (US-193 / CA10)
+
+### 💾 Base de données
+- Ajoute la colonne `potagers.altitude` (migration_v48, rollback_v48) ; la zone choisie par un jardinier n'est jamais modifiée (US-193 / CA11)
+## [v3.68.0] — 2026-09-16
+
+### 🚀 Nouveautés
+- Étend la prévision météo du potager de 5 à **14 jours** (température minimale, maximale et temps attendu, avec l'horizon de chaque jour), pour que les conseils de semis et de plantation voient une gelée annoncée la semaine suivante (US-182 / CA1)
+- Garde le widget météo servi quand Open-Meteo ne répond pas, à partir de la prévision du jour déjà lue, en indiquant son ancienneté ; sans prévision du jour, l'erreur reste affichée comme avant (US-182 / CA5)
+
+### 🔧 Améliorations techniques
+- Ajoute le service `app/services/previsions_meteo.py` : cache en mémoire par localisation arrondie, fuseau et jour, valable une heure (`DUREE_VALIDITE_CACHE`, seule déclaration), partagé entre potagers et membres au même endroit (US-182 / CA2, CA3)
+- Ajoute une lecture groupée de plusieurs localisations ou potagers qui n'interroge Open-Meteo qu'une fois pour toutes celles absentes du cache, prête pour le moteur de confiance (US-182 / CA4, US-178)
+- Distingue trois issues de lecture — disponible (avec source et âge de la donnée), indisponible, localisation manquante — sans jamais présenter une prévision d'un autre jour comme celle du jour (US-182 / CA5, CA6)
+- Journalise chaque appel Open-Meteo sur une ligne structurée (localisation arrondie à ~1 km, jour, issue, durée), échecs en erreur avec leur motif (US-182 / CA7)
+- Branche `GET /meteo` sur le cache et ajoute `previsions_etendues`, `age_donnees_secondes` et `source_donnees` à sa réponse, sans retirer ni renommer aucune clé ; le job de 5 h et `/meteo` Telegram restent hors cache (US-182 / CA8)
+- Vide le cache météo avant chaque test (`tests/conftest.py`) pour qu'une prévision mise en cache par un test ne soit jamais servie au suivant
+
 ## [v3.67.0] — 2026-09-16
 
 ### 🔧 Améliorations techniques

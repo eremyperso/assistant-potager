@@ -293,34 +293,53 @@ def zone_par_defaut() -> str:
     return zone
 
 
-def zone_depuis_localisation(latitude: Optional[float], longitude: Optional[float]) -> Optional[str]:
+def seuil_montagnard() -> float:
+    """[US-193 / CA4] Altitude (m) à partir de laquelle la zone déduite est montagnarde."""
+    from app.config import CALENDRIER_SEUIL_MONTAGNARD_M
+
+    return CALENDRIER_SEUIL_MONTAGNARD_M
+
+
+def zone_depuis_localisation(
+    latitude: Optional[float], longitude: Optional[float], altitude: Optional[float] = None
+) -> Optional[str]:
     """
-    [CA7] Pré-positionne une zone à partir des coordonnées d'un potager.
+    [US-068 / CA7, US-193 / CA4, CA5, CA9] Pré-positionne une zone à partir de
+    la localisation d'un potager.
 
     Une règle volontairement GROSSIÈRE et déclarée comme telle : elle donne un
     point de départ, le jardinier corrige — c'est lui qui connaît son
     microclimat, et un fond de vallée n'a pas le calendrier du plateau voisin.
 
-    - hors de la France métropolitaine (Corse comprise) → None : aucune
-      supposition, le potager lit la zone par défaut ;
-    - arc méditerranéen et Corse : sud du 44,3ᵉ parallèle, à l'est du méridien
-      2,8° E (Roussillon, Languedoc, Provence, Côte d'Azur) ;
-    - quart nord-est : au nord du 45ᵉ parallèle, à l'est du méridien 4,5° E
-      (Rhône-Alpes du nord, Bourgogne, Franche-Comté, Lorraine, Alsace) ;
+    - hors de la France métropolitaine (Corse comprise) → None, altitude connue
+      ou non : aucune supposition, le potager lit la zone par défaut (CA9) ;
+    - au-delà de `CALENDRIER_SEUIL_MONTAGNARD_M` (700 m par défaut) →
+      montagnard, quelles que soient la latitude et la longitude (CA4) ;
+    - arc méditerranéen et Corse : sud du 44,7ᵉ parallèle, à l'est du méridien
+      2,8° E (Roussillon, Languedoc, Provence, Côte d'Azur, basse vallée du
+      Rhône jusqu'à Montélimar) ;
+    - est : à l'est du méridien 3,8° E (Champagne, Lorraine, Alsace, Bourgogne,
+      Franche-Comté, Rhône-Alpes) — gelées tardives ;
     - océanique partout ailleurs.
 
-    `montagnard` n'est JAMAIS déduit : il dépend de l'altitude, que les
-    coordonnées seules ne donnent pas. Le déduire de la longitude placerait
-    Grenoble et Chamonix dans la même case — mieux vaut ne rien supposer et
-    laisser le jardinier le choisir.
+    Les méridiens et parallèles sont calés sur le tableau des villes de
+    référence d'US-193 / CA5 (tests/test_us193_zone_altitude.py). Face à un
+    doute, la règle penche vers le plus froid : lire une ville de plaine en
+    continental retarde des semis, lire une ville froide en océanique fait
+    geler des plants.
+
+    Sans altitude connue, `montagnard` n'est JAMAIS déduit (CA3) : la position
+    seule placerait Grenoble et Chamonix dans la même case.
     """
     if latitude is None or longitude is None:
         return None
     if not (41.0 <= latitude <= 51.5 and -5.5 <= longitude <= 10.0):
         return None
-    if latitude < 44.3 and longitude >= 2.8:
+    if altitude is not None and altitude >= seuil_montagnard():
+        return "montagnard"
+    if latitude < 44.7 and longitude >= 2.8:
         return "mediterraneen"
-    if latitude >= 45.0 and longitude >= 4.5:
+    if longitude >= 3.8:
         return "continental"
     return "oceanique"
 
@@ -336,7 +355,7 @@ def zone_effective(potager: Optional[Potager]) -> tuple[str, str]:
         choisie = _ALIAS_ZONES.get(_cle(potager.zone_climatique or ""))
         if choisie is not None:
             return choisie, ORIGINE_ZONE_JARDINIER
-        deduite = zone_depuis_localisation(potager.latitude, potager.longitude)
+        deduite = zone_depuis_localisation(potager.latitude, potager.longitude, potager.altitude)
         if deduite is not None:
             return deduite, ORIGINE_ZONE_LOCALISATION
     return zone_par_defaut(), ORIGINE_ZONE_DEFAUT
@@ -344,11 +363,19 @@ def zone_effective(potager: Optional[Potager]) -> tuple[str, str]:
 
 def zone_du_potager(db: Session, potager_id: Optional[int]) -> tuple[str, str]:
     """[CA8] `zone_effective` à partir d'un identifiant — potager absent compris."""
+    return zone_et_altitude_du_potager(db, potager_id)[:2]
+
+
+def zone_et_altitude_du_potager(
+    db: Session, potager_id: Optional[int]
+) -> tuple[str, str, Optional[float]]:
+    """[US-193 / CA7] (zone, origine, altitude du potager) — l'altitude sert au libellé."""
     potager = (
         db.query(Potager).filter(Potager.id == potager_id).first()
         if potager_id is not None else None
     )
-    return zone_effective(potager)
+    zone, origine = zone_effective(potager)
+    return zone, origine, potager.altitude if potager is not None else None
 
 
 def definir_zone(
@@ -384,13 +411,30 @@ def definir_zone(
     return avant, apres
 
 
-def libelle_zone(zone: str, origine: Optional[str] = None) -> str:
-    """Libellé affichable d'une zone, avec son origine quand elle n'est pas choisie."""
+def formater_altitude(altitude: float) -> str:
+    """[US-193 / CA7] « 1 326 m » — arrondi au mètre, milliers séparés par une espace."""
+    return f"{round(altitude):,} m".replace(",", " ")
+
+
+def libelle_zone(zone: str, origine: Optional[str] = None, altitude: Optional[float] = None) -> str:
+    """
+    Libellé affichable d'une zone, avec son origine.
+
+    [US-193 / CA7] Une zone déduite de la localisation dit l'altitude retenue ;
+    sans altitude connue, elle rappelle qu'en montagne la zone se choisit.
+    """
     libelle = LIBELLES_ZONES.get(zone, zone)
     if origine == ORIGINE_ZONE_LOCALISATION:
-        return f"{libelle} (déduite de la localisation)"
+        if altitude is not None:
+            return f"{libelle} (déduite de la localisation, {formater_altitude(altitude)})"
+        return (
+            f"{libelle} (déduite de la localisation, altitude inconnue — en montagne, "
+            "choisissez votre zone : /calendrier zone montagnard)"
+        )
     if origine == ORIGINE_ZONE_DEFAUT:
         return f"{libelle} (zone par défaut)"
+    if origine == ORIGINE_ZONE_JARDINIER:
+        return f"{libelle} (choix du jardinier)"
     return libelle
 
 
@@ -597,6 +641,8 @@ class Calendrier:
     zone: str
     zone_origine: str
     itineraires: list[ItineraireLu] = field(default_factory=list)
+    #: [US-193 / CA7] Altitude du potager, rappelée quand la zone est déduite.
+    zone_altitude: Optional[float] = None
 
     @property
     def renseigne(self) -> bool:
@@ -713,10 +759,12 @@ def lire_calendrier(db: Session, culture: str, potager_id: Optional[int]) -> Cal
       n'est empruntée à une autre zone (CA13) ;
     - une culture sans itinéraire en porte un implicite, « standard », vide (CA1).
     """
-    zone, origine = zone_du_potager(db, potager_id)
+    zone, origine, altitude = zone_et_altitude_du_potager(db, potager_id)
     fiches = fiches_visibles(db, culture, potager_id)
     if not fiches:
-        return Calendrier(culture=culture, culture_connue=False, zone=zone, zone_origine=origine)
+        return Calendrier(
+            culture=culture, culture_connue=False, zone=zone, zone_origine=origine, zone_altitude=altitude,
+        )
 
     retenus = itineraires_visibles(db, fiches, potager_id)
     ids = [it.id for it in retenus.values()]
@@ -783,6 +831,7 @@ def lire_calendrier(db: Session, culture: str, potager_id: Optional[int]) -> Cal
         lus.append(_itineraire_implicite())
     return Calendrier(
         culture=culture, culture_connue=True, zone=zone, zone_origine=origine, itineraires=lus,
+        zone_altitude=altitude,
     )
 
 
@@ -809,6 +858,7 @@ def calendrier_en_dict(calendrier: Calendrier) -> dict:
         "culture_connue": calendrier.culture_connue,
         "zone_climatique": calendrier.zone,
         "zone_climatique_origine": calendrier.zone_origine,
+        "zone_altitude": calendrier.zone_altitude,
         "renseigne": calendrier.renseigne,
         "itineraires": [
             {
@@ -853,7 +903,7 @@ def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Option
     La clé de `cultures` est le nom tel que demandé : l'écran le retrouve sans
     renormaliser.
     """
-    zone, origine = zone_du_potager(db, potager_id)
+    zone, origine, altitude = zone_et_altitude_du_potager(db, potager_id)
     attributions: list[str] = []
     resultat: dict[str, dict] = {}
     for nom in dict.fromkeys(c for c in cultures if c and c.strip()):
@@ -884,7 +934,8 @@ def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Option
     return {
         "zone_climatique": zone,
         "zone_climatique_origine": origine,
-        "zone_libelle": libelle_zone(zone, origine),
+        "zone_altitude": altitude,
+        "zone_libelle": libelle_zone(zone, origine, altitude),
         "attributions": attributions,
         "cultures": resultat,
     }

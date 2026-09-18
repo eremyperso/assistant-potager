@@ -80,7 +80,7 @@ database/       modèles SQLAlchemy, session, tenant_scope
 llm/            passerelle Groq, routeur règles-first, parseur déterministe, RAG
 utils/          utilitaires (actions, dates, météo, TTS, stock)
 data/           référentiel structuré (JSON) et corpus de connaissance (Markdown)
-migrations/     SQL manuel, v2 → v47, rollback_vN.sql depuis v16
+migrations/     SQL manuel, v2 → v48, rollback_vN.sql depuis v16
 tests/          pytest, SQLite en mémoire
 tools/          import, ingestion, mesures, purge, suivi Jira
 scripts/        update_dev.ps1 (env dev), deploy.sh (repli manuel)
@@ -103,7 +103,7 @@ pytest tests/                                     # suite complète (SQLite, san
 pytest tests/test_us006_renommer_parcelle.py      # un fichier
 pytest tests/ -k "nom_du_test"                    # un test
 
-psql -d potager -f migrations/migration_v47.sql   # dernière migration
+psql -d potager -f migrations/migration_v48.sql   # dernière migration
 .\scripts\update_dev.ps1                          # pull + deps + migrations + corpus ; -SkipPull, -Force
 ```
 

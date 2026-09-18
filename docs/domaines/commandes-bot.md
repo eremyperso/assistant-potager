@@ -80,8 +80,42 @@ psql -d potager -f migrations/migration_v44.sql   # routage_logs : commande + is
 pytest tests/test_us172_interpreteur_commandes.py
 ```
 
-`tests/corpus/us172_commandes.csv` : 109 formulations de commande, 31 questions
-de savoir voisines, 16 phrases hors périmètre. Au 08/09/2026 : 100 % de
+`tests/corpus/us172_commandes.csv` : 154 formulations de commande, 36 questions
+de savoir voisines, 26 phrases hors périmètre — recomptées le 17/09/2026, les
+chiffres inscrits ici jusque-là étant restés ceux d'une version antérieure du
+corpus. Au 17/09/2026 : 100 % de
 reconnaissance, 0 exécution destructrice erronée, 100 % sans appel modèle.
 Ce chiffre mesure ce qu'on a su prévoir ; c'est `issue_interpretation` en
 production qui dira quelles formulations enrichir ensuite (CA18).
+
+## Deux lectures justes de la même phrase — `_ARBITRAGES` [US-179]
+
+« Je peux semer des tomates sur la planche nord ? » est à la fois une question de
+ROTATION (quels antécédents — US-163) et de SAISON (est-ce le moment — US-179).
+Jusqu'ici, deux commandes reconnues dans une phrase rendaient une `Ambiguite` et
+le bot demandait laquelle : c'est le bon réflexe quand l'une des deux ÉCRIT.
+Quand les deux ne font que LIRE, c'est un geste de plus sur la question la plus
+fréquente de l'application.
+
+`interpreteur_commandes._ARBITRAGES` déclare donc, paire par paire, celle qui
+répond — et la table est ÉCRITE, jamais déduite de l'ordre de déclaration des
+règles, qu'un bloc déplacé dans le fichier renverserait. Arbitrage du
+17/09/2026 : `{confiance, rotation} → confiance`. La rotation garde `/rotation`
+et sa formulation explicite (« vérifie la rotation des tomates sur la planche
+nord »), que `rotation_explicite` reconnaît seule. Une paire dont l'une des deux
+commandes écrit n'entre PAS dans cette table.
+
+## Reconnaître une question d'opportunité sans capter une saisie [US-179]
+
+Quatre règles (`confiance_modal`, `confiance_moment`, `confiance_jugement`,
+`confiance_ou_attendre`) traduisent « je peux semer des haricots ce week-end ? »
+en `/confiance`. Aucune ne reconnaît un verbe de semis NU : il faut une modalité.
+Sans cette exigence, elles capteraient la saisie — le geste le plus fréquent du
+bot — et écriraient un événement que le jardinier n'a pas fait.
+
+Le garde 1 (`_est_demande_de_savoir`) s'efface devant elles, et devant elles
+seules : « peut-on semer des haricots ? » s'ouvre comme une demande de procédure
+sans en être une. `_est_question_d_opportunite` est assemblé des mêmes briques
+que les règles, pour que le garde et elles ne puissent pas diverger.
+
+Détail et décisions : `docs/domaines/calendrier-cultural.md`, § « Je peux semer ? ».

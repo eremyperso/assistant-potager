@@ -711,6 +711,17 @@ déjà en base ; US-073 est un écran de consultation. La dette de famille botan
 (`EPIC_CALENDRIER_CULTURAL`) ne sont ni rouvertes ni aggravées : Stocks les lit à l'identique
 de Plan et Pépinière, dans leur périmètre déjà tracé.
 
+**Écart « absence de calendrier sur Stocks » — soldé par US-183 (18/09/2026).** Consigné à la
+livraison d'US-073 (« absence de calendrier `MonthStrip`, conforme à la maquette gelée »), il
+est levé sans remettre de frise dans la ligne : chaque ligne et chaque carte de Stocks portent,
+sous le nom de la culture, une **puce** (étoiles de la semaine, « pas de calendrier » ou
+« calendrier ») qui ouvre la **fiche calendrier de la culture** — semer ou planter avec la
+confiance de chaque geste, séries déjà en terre, frise conseillée ou recalée. La même fiche
+s'ouvre depuis la frise d'une tuile du Plan. Maquette gelée le 18/09/2026
+(`US-183 - Fiche calendrier culture - FIGE 2026-09-18.html`, `fiche-calendrier.jsx`) ; le
+détail des « N récoltes » garde son propre lien. Aucun nouvel endpoint : la fiche lit
+`GET /plan/calendriers` et la lecture groupée de confiance d'US-180.
+
 ## 6. Points ouverts / risques à trancher avant découpage en US
 
 Statut mis à jour après relecture et arbitrages produit (voir §5 pour le détail de chaque

@@ -20,6 +20,11 @@ import {
   TileNav,
   InfoBanner,
   Tip,
+  BlocConfiance,
+  Etoiles,
+  PastilleConfiance,
+  PuceConfiance,
+  SelecteurAction,
 } from '../components/ui'
 
 /**
@@ -136,6 +141,8 @@ export default function DesignSystemPreview() {
         />
       </section>
 
+      <ConfiancePreview />
+
       <TransversesPreview />
     </div>
   )
@@ -215,5 +222,94 @@ function TransversesPreview() {
         <ApiError message="Données indisponibles" onRetry={() => {}} />
       </section>
     </AppContextProvider>
+  )
+}
+
+// ── [US-180, US-183] Bloc « règle de confiance » — états de la maquette gelée ──
+// ⚠️ Valeurs de DÉMONSTRATION, reprises des états de la maquette du 18/09/2026 :
+// elles servent au contrôle visuel et n'engagent aucune agronomie.
+const R = (regle, etat, libelle, points, points_max) => ({ regle, etat, libelle, points, points_max })
+const DEMO_COURGETTE = {
+  action: 'semis_pleine_terre', etoiles: 2, score: 70, avertissements: [],
+  motifs: [
+    R('R1', 'gagne', 'Dans la fenêtre conseillée pour ta zone', 40, 40),
+    R('R2', 'indetermine', 'Sensibilité au gel inconnue pour cette culture', 0, 20),
+    R('R3', 'gagne', 'Aucun gel annoncé sur 14 jours', 20, 20),
+    R('R4', 'perdu', 'Nuits fraîches : levée lente probable', 0, 10),
+    R('R5', 'gagne', 'La récolte arriverait avant la fin de saison', 10, 10),
+  ],
+}
+const DEMO_TOMATE = {
+  action: 'plantation', etoiles: 3, score: 100, avertissements: [],
+  motifs: [
+    R('R1', 'gagne', 'Dans la fenêtre conseillée pour ta zone', 40, 40),
+    R('R2', 'gagne', 'Dernière gelée moyenne passée', 20, 20),
+    R('R3', 'gagne', 'Aucun gel annoncé sur 14 jours', 20, 20),
+    R('R4', 'gagne', 'Nuits douces sur les 7 prochains jours', 10, 10),
+    R('R5', 'gagne', 'La récolte arriverait avant la fin de saison', 10, 10),
+  ],
+}
+const DEMO_NON_LOCALISE = {
+  ...DEMO_COURGETTE,
+  avertissements: ["Sans météo, la troisième étoile est hors d'atteinte : 70 points possibles sur 100"],
+  motifs: [
+    R('R1', 'gagne', 'Dans la fenêtre conseillée pour ta zone', 40, 40),
+    R('R2', 'gagne', 'Dernière gelée moyenne passée', 20, 20),
+    R('R3', 'indetermine', 'Météo indisponible : localise ton potager pour la prendre en compte', 0, 20),
+    R('R4', 'indetermine', 'Météo indisponible', 0, 10),
+    R('R5', 'gagne', 'La récolte arriverait avant la fin de saison', 10, 10),
+  ],
+}
+
+function ConfiancePreview() {
+  const [action, setAction] = useState('plantation')
+  const titre = 'text-[11.5px] font-bold uppercase tracking-wider text-txt3'
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className={titre}>Bloc « règle de confiance » [US-180, US-183]</h2>
+      <div className="grid gap-3 md:grid-cols-3">
+        {[
+          ['Deux étoiles — une règle perdue, une indéterminée', DEMO_COURGETTE, null],
+          ['Trois étoiles — aucune perte', DEMO_TOMATE, null],
+          ['Deux étoiles — potager non localisé', DEMO_NON_LOCALISE, DEMO_NON_LOCALISE.avertissements[0]],
+        ].map(([t, c, note]) => (
+          <div key={t} className="flex flex-col gap-2">
+            <div className="text-[12px] text-txt2">{t}</div>
+            <BlocConfiance confiance={c} note={note} />
+          </div>
+        ))}
+      </div>
+
+      <h2 className={titre}>Sélecteur d'action [US-183]</h2>
+      <Card>
+        <SelecteurAction
+          actions={[{ ...DEMO_COURGETTE, action: 'semis_pepiniere', etoiles: 2 }, DEMO_TOMATE]}
+          value={action}
+          onChange={setAction}
+        />
+      </Card>
+
+      <h2 className={titre}>Pastille de tuile et puce de Stocks [US-180, US-183]</h2>
+      <Card>
+        {[['courgette', 'Cucurbitacée · 95 j', DEMO_COURGETTE], ['tomate', 'Solanacée · —', DEMO_TOMATE], ['ail', 'Alliacée · —', null]].map(([nom, ligne, c]) => (
+          <div key={nom} className="bg-card-alt rounded-xl p-[13px] mb-2 last:mb-0">
+            <div className="font-serif text-[15.5px] font-semibold text-txt capitalize">{nom}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11.5px] text-txt3">{ligne}</span>
+              {c
+                ? <PastilleConfiance confiance={c} onClick={() => {}} />
+                : <span className="ml-auto text-[11px] font-semibold text-txt3 shrink-0">— pas de calendrier</span>}
+            </div>
+            <div className="flex gap-1.5 flex-wrap mt-2">
+              <PuceConfiance confiance={c} sansCalendrier={!c} onClick={() => {}} />
+              <PuceConfiance confiance={null} onClick={() => {}} />
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 mt-3 text-[11.5px] text-txt2">
+          <Etoiles etoiles={2} taille={11} />confiance de la semaine — appuyer ouvre le détail des règles
+        </div>
+      </Card>
+    </section>
   )
 }

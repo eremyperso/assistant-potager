@@ -49,9 +49,9 @@ je veux voir la fiche du poivron,fiche,intention
 fiche de la tomate,fiche,elliptique
 comment lire une fiche de culture ?,,savoir
 vérifie la rotation du poireau sur la parcelle est,rotation,imperatif
-je peux planter des poivrons sur la nord ?,rotation,intention
+je peux planter des poivrons sur la nord ?,confiance,intention
 rotation du chou sur la planche nord,rotation,elliptique
-est-ce que je peux semer des carottes sur la planche nord,rotation,intention
+est-ce que je peux semer des carottes sur la planche nord,confiance,intention
 comment est calculée la rotation ?,,savoir
 montre-moi les associations de la courgette,association lister,imperatif
 je voudrais les associations de la tomate,association lister,intention
@@ -182,3 +182,36 @@ quand ai-je semé les tomates ?,,hors_perimetre
 j'ai semé les tomates en pépinière en février,,hors_perimetre
 qu'avais-je noté sur la parcelle nord ?,,hors_perimetre
 il me reste combien de tomates ?,,hors_perimetre
+je peux semer des haricots ce week-end ?,confiance,intention
+je peux planter les tomates samedi ?,confiance,intention
+est-ce que je peux semer des carottes demain ?,confiance,intention
+est-ce qu'on peut semer les épinards maintenant ?,confiance,intention
+peut-on planter les poireaux cette semaine ?,confiance,intention
+puis-je semer la mâche dans dix jours ?,confiance,intention
+à ton avis je peux planter les fraisiers maintenant ?,confiance,intention
+faut-il semer les haricots maintenant ?,confiance,intention
+dois-je planter les poireaux le 20 mai ?,confiance,intention
+ça vaut le coup de semer des haricots samedi ?,confiance,intention
+je peux semer des tomates en pépinière ?,confiance,intention
+je peux semer des haricots en pleine terre planche nord ?,confiance,intention
+je peux semer des haricots parcelle rang 3 ce week-end ?,confiance,intention
+c'est le moment de planter les tomates ?,confiance,elliptique
+c'est le bon moment pour semer des radis ?,confiance,elliptique
+est-ce le moment de semer des épinards ?,confiance,elliptique
+est-ce que c'est la bonne période pour planter l'ail ?,confiance,elliptique
+est-ce une bonne idée de semer des haricots demain ?,confiance,elliptique
+bonne idée de planter les courgettes ce week-end ?,confiance,elliptique
+c'est trop tôt pour semer des tomates ?,confiance,elliptique
+est-ce trop tard pour semer des carottes ?,confiance,elliptique
+je sème les carottes ce week-end ou j'attends ?,confiance,elliptique
+je plante les tomates demain ou j'attends ?,confiance,elliptique
+comment savoir si c'est le moment de semer ?,,savoir
+j'ai semé des haricots rang 3 samedi,,hors_perimetre
+je sème les carottes ce week-end,,hors_perimetre
+j'ai planté les tomates hier,,hors_perimetre
+j'ai repiqué les poireaux la semaine dernière,,hors_perimetre
+semis de haricots planche nord,,hors_perimetre
+tu penses quoi des haricots en ce moment ?,,hors_perimetre
+vérifie la rotation des tomates sur la planche nord,rotation,imperatif
+je veux vérifier la rotation des poireaux dans la serre,rotation,intention
+rotation des carottes sur le carré sud,rotation,elliptique

@@ -8,6 +8,9 @@
 // prototype `ScreenCultures` antérieur) et fait de la famille botanique le seul
 // regroupement principal — l'état (potager/pépinière/semis) devient un badge par
 // ligne, cf. docs/BRIEF_REFONTE_STOCKS_TRANSVERSE.md.
+//
+// [US-183] L'écart « absence de calendrier sur Stocks » est soldé : chaque ligne
+// porte une puce qui ouvre la fiche calendrier de SA culture (toutes variétés).
 import { useState, useEffect, useMemo } from 'react'
 import { Leaf, Sprout, Scale, AlertTriangle, FileDown, FileJson, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api.js'
@@ -16,12 +19,14 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
+import FicheCalendrier from '../components/FicheCalendrier.jsx'
 import { ObservationIcon, ObservationPanel } from '../components/Observations.jsx'
 import { useObservations } from '../hooks/useObservations.js'
 import { ObservationsUIProvider } from '../context/ObservationsUIContext.jsx'
 import {
-  Card, Badge, Tip, SearchField, Select, Btn, GroupHead, useGroups, Modal,
+  Card, Badge, Tip, SearchField, Select, Btn, GroupHead, useGroups, Modal, PuceConfiance,
 } from '../components/ui'
+import { confianceDeTuile, ETAT_CONFIANCE, ETAT_SANS_CALENDRIER } from '../lib/confiance.js'
 import { ChevronDown } from 'lucide-react'
 
 /**
@@ -257,9 +262,27 @@ function ModalRecoltes({ d, onClose }) {
   )
 }
 
+// ── Puce « fiche calendrier » (US-183 / CA1) ─────────────────────────────────────
+
+/**
+ * [US-183 / CA1] Sous le nom de la culture, à côté des badges : la ligne est
+ * déjà dense et son appui principal sert au détail des récoltes (maquette gelée
+ * du 18/09/2026). Toujours présente — la fiche est au niveau CULTURE.
+ */
+function PuceFiche({ d, confiances, onOpenFiche }) {
+  const { etat, confiance } = confianceDeTuile(confiances, d.culture)
+  return (
+    <PuceConfiance
+      confiance={etat === ETAT_CONFIANCE ? confiance : null}
+      sansCalendrier={etat === ETAT_SANS_CALENDRIER}
+      onClick={() => onOpenFiche(d.culture)}
+    />
+  )
+}
+
 // ── Ligne culture — tableau (grand écran) ───────────────────────────────────────
 
-function StockTableRow({ d, onOpenRec }) {
+function StockTableRow({ d, onOpenRec, confiances, onOpenFiche }) {
   const obs = useObservations(`stocks:${d.culture}:${d.variete}`, { culture: d.culture })
   return (
     <div>
@@ -275,6 +298,7 @@ function StockTableRow({ d, onOpenRec }) {
             <span className="inline-flex items-center text-[10.5px] font-bold uppercase tracking-wide text-txt2 bg-card-alt border border-border rounded px-1.5 py-0.5">
               {ORIGINE_LABELS[d.origine] ?? d.origine}
             </span>
+            <PuceFiche d={d} confiances={confiances} onOpenFiche={onOpenFiche} />
           </div>
         </div>
         <div className="text-[12px] text-txt2 leading-relaxed">
@@ -298,7 +322,7 @@ function StockTableRow({ d, onOpenRec }) {
 
 // ── Carte culture (petit écran) ──────────────────────────────────────────────
 
-function StockCard({ d, onOpenRec }) {
+function StockCard({ d, onOpenRec, confiances, onOpenFiche }) {
   const obs = useObservations(`stocks:${d.culture}:${d.variete}`, { culture: d.culture })
   const recKg = fmtKg(toKg(d.rendement_total, d.unite_rendement))
   return (
@@ -315,6 +339,7 @@ function StockCard({ d, onOpenRec }) {
         <span className="inline-flex items-center text-[10.5px] font-bold uppercase tracking-wide text-txt2 bg-card-alt border border-border rounded px-1.5 py-0.5">
           {ORIGINE_LABELS[d.origine] ?? d.origine}
         </span>
+        <PuceFiche d={d} confiances={confiances} onOpenFiche={onOpenFiche} />
       </div>
       <div className="text-[12px] text-txt2 mb-2.5">
         {d.parcelles.length > 0 ? d.parcelles.join(' · ') : 'Pépinière'}
@@ -409,11 +434,26 @@ export default function Stocks({ refresh }) {
   const [letter, setLetter] = useState(null)
   const [origineFiltre, setOrigineFiltre] = useState('Toutes origines')
   const [rec, setRec] = useState(null)
+  const [fiche, setFiche] = useState(null)          // [US-183] culture dont la fiche est ouverte
+  const [confiances, setConfiances] = useState(null)
   const [isOpen, toggle] = useGroups()
 
   async function load() {
     setLoading(true); setError(null)
-    try { setData(await api.statsVarietes(dateRef, potagerId)) }
+    try {
+      const stats = await api.statsVarietes(dateRef, potagerId)
+      // [US-183 / CA1] Confiance de la semaine de toutes les cultures, en UNE
+      // lecture groupée attendue avant l'affichage. Son échec n'ôte rien à
+      // l'écran : les puces restent, sans étoiles, et ouvrent la fiche.
+      const noms = [...new Set((stats?.varietes ?? []).map((d) => d.culture).filter(Boolean))]
+      let conf = null
+      if (noms.length > 0) {
+        try { conf = await api.confiancesPlan(noms, potagerId, dateRef) }
+        catch (e) { console.warn('[US-183] Confiance indisponible', e) }
+      }
+      setConfiances(conf)
+      setData(stats)
+    }
     catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -572,7 +612,7 @@ export default function Stocks({ refresh }) {
                   return (
                     <div key={f}>
                       <FamilleHeaderTable label={f} items={items} open={isOpen(f)} onToggle={() => toggle(f)} />
-                      {isOpen(f) && items.map((d, i) => <StockTableRow key={`${d.culture}-${d.variete}-${i}`} d={d} onOpenRec={setRec} />)}
+                      {isOpen(f) && items.map((d, i) => <StockTableRow key={`${d.culture}-${d.variete}-${i}`} d={d} onOpenRec={setRec} confiances={confiances} onOpenFiche={setFiche} />)}
                     </div>
                   )
                 })}
@@ -593,7 +633,7 @@ export default function Stocks({ refresh }) {
                       />
                       {isOpen(f) && (
                         <div className="flex flex-col gap-2.5">
-                          {items.map((d, i) => <StockCard key={`${d.culture}-${d.variete}-${i}`} d={d} onOpenRec={setRec} />)}
+                          {items.map((d, i) => <StockCard key={`${d.culture}-${d.variete}-${i}`} d={d} onOpenRec={setRec} confiances={confiances} onOpenFiche={setFiche} />)}
                         </div>
                       )}
                     </div>
@@ -606,6 +646,17 @@ export default function Stocks({ refresh }) {
       </div>
 
       {rec && <ModalRecoltes d={rec} onClose={() => setRec(null)} />}
+      {/* [US-183 / CA13] Une seule lecture de plus à l'ouverture : le calendrier
+          de la culture (projections comprises) ; la confiance est déjà chargée. */}
+      {fiche && (
+        <FicheCalendrier
+          culture={fiche}
+          dateRef={dateRefEffective}
+          potagerId={potagerId}
+          confiances={confiances ?? undefined}
+          onClose={() => setFiche(null)}
+        />
+      )}
     </ObservationsUIProvider>
   )
 }

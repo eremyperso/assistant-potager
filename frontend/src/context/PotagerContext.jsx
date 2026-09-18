@@ -59,8 +59,8 @@ export function PotagerContextProvider({ children }) {
   // potager courant et toutes les vues montées restent valides, un simple
   // rafraîchissement silencieux de la liste suffit à faire apparaître le
   // nouveau potager dans le menu.
-  async function creerPotager(nom, ville, latitude, longitude, activer = true) {
-    const cree = await api.creerPotager(nom, ville, latitude, longitude, activer)
+  async function creerPotager(nom, ville, latitude, longitude, activer = true, altitude = null) {
+    const cree = await api.creerPotager(nom, ville, latitude, longitude, activer, altitude)
     if (cree.actif) {
       window.location.reload()
     } else {
@@ -97,8 +97,8 @@ export function PotagerContextProvider({ children }) {
   // le tableau de bord — tant qu'aucun rechargement n'a eu lieu, `potagers`
   // reste vide côté contexte, donc `aucunPotager` reste vrai et `PotagerGate`
   // continue d'afficher `<Onboarding/>`, ce qui est justement l'effet recherché.
-  async function finaliserOnboarding({ nom, ville, latitude, longitude, parcelle }) {
-    await api.creerPotager(nom, ville, latitude, longitude)
+  async function finaliserOnboarding({ nom, ville, latitude, longitude, altitude, parcelle }) {
+    await api.creerPotager(nom, ville, latitude, longitude, true, altitude)
     if (parcelle?.nom?.trim()) {
       await api.creerParcelle(parcelle)
     }

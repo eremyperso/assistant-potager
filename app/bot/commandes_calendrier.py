@@ -48,7 +48,7 @@ def _formater_calendrier(calendrier, itineraire_cible: "str | None" = None) -> s
     """Rendu Telegram d'un calendrier — aucune date calculée, aucune valeur empruntée."""
     lignes = [
         f"📅 *{_md(calendrier.culture)}* — calendrier cultural",
-        f"Zone : {_md(svc_calendrier.libelle_zone(calendrier.zone, calendrier.zone_origine))}",
+        f"Zone : {_md(svc_calendrier.libelle_zone(calendrier.zone, calendrier.zone_origine, calendrier.zone_altitude))}",
     ]
     itineraires = calendrier.itineraires
     if itineraire_cible:
@@ -142,9 +142,9 @@ async def cmd_calendrier(update, ctx) -> None:
         # ── /calendrier zone [valeur] ─────────────────────────────────────────
         if sous_cmd == "zone":
             if len(ctx.args) == 1:
-                zone, origine = svc_calendrier.zone_du_potager(db, tenant_ctx.potager_id)
+                zone, origine, altitude = svc_calendrier.zone_et_altitude_du_potager(db, tenant_ctx.potager_id)
                 await update.message.reply_text(
-                    f"🗺️ Zone climatique du potager : *{_md(svc_calendrier.libelle_zone(zone, origine))}*\n"
+                    f"🗺️ Zone climatique du potager : *{_md(svc_calendrier.libelle_zone(zone, origine, altitude))}*\n"
                     "Pour la choisir : /calendrier zone <océanique|continental|méditerranéen|montagnard>\n"
                     "Pour revenir à la localisation : /calendrier zone auto",
                     parse_mode="Markdown",
@@ -159,9 +159,11 @@ async def cmd_calendrier(update, ctx) -> None:
             except (PermissionInsuffisanteError, PotagerArchiveError) as err:
                 await update.message.reply_text(f"⛔ {err}")
                 return
+            # [US-193 / CA7] L'altitude est celle du potager, avant comme après.
+            altitude = svc_calendrier.zone_et_altitude_du_potager(db, tenant_ctx.potager_id)[2]
             await update.message.reply_text(
-                f"✅ Zone climatique : *{_md(svc_calendrier.libelle_zone(*avant))}* → "
-                f"*{_md(svc_calendrier.libelle_zone(*apres))}*",
+                f"✅ Zone climatique : *{_md(svc_calendrier.libelle_zone(*avant, altitude))}* → "
+                f"*{_md(svc_calendrier.libelle_zone(*apres, altitude))}*",
                 parse_mode="Markdown",
             )
             return

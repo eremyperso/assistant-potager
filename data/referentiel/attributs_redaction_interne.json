@@ -2,9 +2,9 @@
   "_lisez_moi": [
     "[US-161] Attributs agronomiques de conduite — rédaction interne du projet.",
     "",
-    "CE FICHIER EST À REMPLIR À LA MAIN. Livré vide : toutes les valeurs sont à null,",
-    "et une valeur null n'écrit rien. L'importer en l'état ne fait donc rien — c'est",
-    "voulu, aucun chiffre agronomique n'est produit par un modèle de langage (CA10).",
+    "CE FICHIER SE REMPLIT À LA MAIN. Une valeur null n'écrit rien : c'est ce qui",
+    "permet de livrer des entrées partiellement renseignées sans risque — aucun",
+    "chiffre agronomique n'est produit par un modèle de langage (CA10).",
     "",
     "COMMENT LE REMPLIR",
     "  exposition          : 'plein soleil' | 'mi-ombre' | 'ombre'   (vocabulaire fermé)",
@@ -16,10 +16,12 @@
     "Laisser null tout ce qu'on ne sait pas : 'non renseigné' s'affiche tel quel et",
     "vaut mieux qu'une valeur inventée.",
     "",
-    "PÉRIMÈTRE — les dix cultures ci-dessous et elles seules (CA7, US-140/CA1).",
-    "Ajouter une onzième culture ici ne fera rien : l'import l'ignorera et la comptera",
-    "'hors périmètre'. Une culture absente de culture_config est ignorée aussi : ce",
-    "fichier enrichit des cultures déjà dictées, il n'en crée aucune.",
+    "PÉRIMÈTRE — retiré le 17/09/2026 (US-161/CA7). N'importe quelle culture peut",
+    "figurer ici du moment qu'elle existe déjà dans culture_config ; sinon elle est",
+    "ignorée et comptée dans le compte rendu, mais aucune fiche n'est créée depuis",
+    "ce fichier. `attributs_culture.CULTURES_PERIMETRE_INITIAL` (dix cultures)",
+    "reste dans le code comme trace de la mesure du 25/08/2026, mais ne filtre",
+    "plus rien à l'import.",
     "",
     "D'OÙ DOIVENT VENIR CES VALEURS",
     "De votre propre connaissance du terrain, éventuellement recoupée par lecture.",
@@ -47,77 +49,161 @@
     "url": null,
     "partageable": true
   },
-  "redige_le": "2026-09-01",
+  "redige_le": "2026-09-17",
   "cultures_attributs": [
     {
       "culture": "tomate",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": -1.0
     },
     {
       "culture": "haricot",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": 0.0
     },
     {
       "culture": "courgette",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": 0.0
     },
     {
       "culture": "chou",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": -12.0
     },
     {
       "culture": "carotte",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": -8.0
     },
     {
       "culture": "concombre",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": 0.0
     },
     {
       "culture": "cornichon",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": 0.0
     },
     {
       "culture": "poivron",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": 0.0
     },
     {
       "culture": "ail",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": -15.0
     },
     {
       "culture": "blette",
       "exposition": null,
       "besoin_eau": null,
       "profondeur_semis_cm": null,
-      "rusticite_min_c": null
+      "rusticite_min_c": -6.0
+    },
+    {
+      "culture": "asperge",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -15.0
+    },
+    {
+      "culture": "aubergine",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": 0.0
+    },
+    {
+      "culture": "betterave",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -5.0
+    },
+    {
+      "culture": "brocoli",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -7.0
+    },
+    {
+      "culture": "chou frisé",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -15.0
+    },
+    {
+      "culture": "haricot grimpant",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": 0.0
+    },
+    {
+      "culture": "mâche",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -15.0
+    },
+    {
+      "culture": "melon",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": 0.0
+    },
+    {
+      "culture": "navet",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -7.0
+    },
+    {
+      "culture": "oignon",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -15.0
+    },
+    {
+      "culture": "pomme de terre",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -3.0
+    },
+    {
+      "culture": "épinard",
+      "exposition": null,
+      "besoin_eau": null,
+      "profondeur_semis_cm": null,
+      "rusticite_min_c": -10.0
     }
   ]
 }
