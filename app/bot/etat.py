@@ -26,6 +26,18 @@ _ACTION_PENDING: dict[int, dict] = {}
 _ACTION_TIMEOUT = 60  # secondes
 
 
+# [US-179 / CA10] Question de confiance en attente d'un bouton (filière,
+# enregistrement, question décalée) {user_id: {culture, action, date, parcelle, ts}}
+# Volontairement ICI et non dans `ctx.user_data` : un `mode` posé dans user_data
+# capturerait la commande suivante du jardinier, ce que le CA10 interdit.
+_CONFIANCE_PENDING: dict[int, dict] = {}
+
+
+# Une recommandation vieille de plus longtemps ne vaut plus : la météo qui la
+# motivait a changé.
+_CONFIANCE_TIMEOUT = 900  # secondes
+
+
 # [US-038] Notes en attente de confirmation {user_id: {categorie, fields, texte, ts}}
 _NOTE_PENDING: dict[int, dict] = {}
 

@@ -61,6 +61,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "ask",
     "fiche",
     "calendrier",
+    "confiance",
     "association",
     "rotation",
     "bioagresseur",
@@ -91,6 +92,7 @@ DESCRIPTIONS: dict[str, str] = {
     "ask":         "Poser une question sur votre potager",
     "fiche":       "Fiche agronomique courte d'une culture",
     "calendrier":  "Quand semer et récolter, selon votre zone",
+    "confiance":   "Est-ce le moment de semer ou de planter ?",
     "association": "Cultures à associer ou à éloigner",
     "rotation":    "Vérifier la rotation avant de semer",
     "bioagresseur": "Ce qui attaque une culture",
@@ -395,6 +397,25 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     FormeCommande(
         "calendrier", None, "Consulter le calendrier d'une culture",
         (Argument("culture", TYPE_CULTURE, "Quelle culture ?"),),
+        confirmation=False,
+    ),
+
+    # ── [US-179] Confiance : est-ce le moment ? ──────────────────────────────
+    # L'ACTION est obligatoire, et c'est délibéré : c'est elle qui sépare, dans
+    # `ctx.args`, la culture (avant) de la date et de la parcelle (après).
+    # « pomme de terre » et « planche nord » sont l'une et l'autre en plusieurs
+    # mots ; sans pivot au milieu, aucune lecture positionnelle ne les distingue.
+    # Les règles d'interprétation la renseignent toujours — elle vient du verbe,
+    # qu'aucune d'elles ne rend facultatif.
+    FormeCommande(
+        "confiance", None, "Savoir si c'est le moment de semer ou de planter",
+        (
+            Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
+            Argument("action", TYPE_VOCABULAIRE, "Un semis ou une plantation ?",
+                     vocabulaire=_vocabulaire("app.services.confiance_semis", "ACTIONS")),
+            Argument("date", TYPE_DATE, "À quelle date ?", obligatoire=False),
+            Argument("parcelle", TYPE_PARCELLE, "Sur quelle parcelle ?", obligatoire=False),
+        ),
         confirmation=False,
     ),
     FormeCommande(

@@ -144,6 +144,18 @@ def _dernier_jour_semaine(cible: int, aujourd_hui: date) -> date:
     return aujourd_hui - timedelta(days=ecart)
 
 
+def _prochain_jour_semaine(cible: int, aujourd_hui: date, strict: bool = False) -> date:
+    """[US-179] « samedi » — la prochaine occurrence, aujourd'hui compris.
+
+    `strict` la veut STRICTEMENT à venir : c'est « samedi prochain », dit un
+    samedi, qui ne désigne pas le jour même.
+    """
+    ecart = (cible - aujourd_hui.weekday()) % 7
+    if strict and ecart == 0:
+        ecart = 7
+    return aujourd_hui + timedelta(days=ecart)
+
+
 # Les motifs sont essayés dans cet ordre : le plus spécifique d'abord
 # (« avant-hier » avant « hier », sans quoi « hier » mordrait dedans).
 _MOTIF_AVANT_HIER   = re.compile(r"\bavant[-\s]?hier\b")
@@ -161,6 +173,104 @@ _MOTIF_DATE_NUM     = re.compile(
 _MOTIF_DATE_MOIS    = re.compile(
     r"\b(?:le\s+)?(\d{1,2}|1er|premier)\s+(" + "|".join(_MOIS) + r")(?:\s+(\d{4}))?(?:\s+derniers?)?\b"
 )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-179] Ancrages TOURNÉS VERS L'AVENIR
+# -----------------------------------------------------------------------------
+# Toute la grammaire ci-dessus date le PASSÉ : elle sert à rattacher un geste
+# déjà fait (« j'ai semé samedi »), et `_construire` refuse explicitement une
+# date future. « Je peux semer samedi ? » pose la question inverse, et aucune
+# des deux lectures ne peut être la bonne partout — « samedi » vaut la dernière
+# occurrence pour un geste fait, la prochaine pour un geste à faire.
+#
+# D'où un mode, jamais un changement de comportement : `futur=True` est demandé
+# par l'appelant qui SAIT poser une question d'avenir (US-179). Sans lui, la
+# grammaire se comporte exactement comme avant — aucun appelant existant n'est
+# touché, et il n'y a toujours qu'une seule grammaire de dates dans le projet.
+# ─────────────────────────────────────────────────────────────────────────────
+_MOTIF_APRES_DEMAIN  = re.compile(r"\bapres[-\s]?demain\b")
+_MOTIF_DEMAIN        = re.compile(r"\bdemain\b")
+_MOTIF_MAINTENANT    = re.compile(r"\b(maintenant|tout de suite|en ce moment|ces jours ci|la tout de suite)\b")
+_MOTIF_DANS_JOURS    = re.compile(r"\bdans (\d{1,3}|" + "|".join(NOMBRES_LETTRES) + r")\s+jours?\b")
+_MOTIF_DANS_SEMAINES = re.compile(r"\bdans (\d{1,2}|" + "|".join(NOMBRES_LETTRES) + r")\s+semaines?\b")
+_MOTIF_SEMAINE_PROCH = re.compile(r"\b(?:la\s+)?semaine\s+prochaine\b")
+#: « cette semaine », « en ce moment » — la question porte sur le jour où elle
+#: est posée. Une semaine n'est pas une date : c'est aujourd'hui qui la borne,
+#: et étaler le score sur sept jours inventerait une précision qu'on n'a pas.
+_MOTIF_CETTE_SEMAINE = re.compile(r"\b(?:cette\s+semaine|ce\s+mois\s*ci)\b")
+# « ce week-end » : le SAMEDI qui vient. Le dimanche est l'autre moitié du
+# week-end, mais c'est le samedi que le jardinier a devant lui quand il pose la
+# question, et une fourchette de deux jours ne changerait aucun score.
+_MOTIF_WEEK_END      = re.compile(r"\b(?:ce\s+|le\s+|du\s+)?week[-\s]?end\b")
+_MOTIF_JOUR_PROCHAIN = re.compile(r"\b(" + "|".join(_JOURS_SEMAINE) + r")\s+(?:prochain|qui vient)\b")
+#: « samedi » tout court — la prochaine occurrence. Écarte « samedi dernier »,
+#: que `_resoudre_relatif` date déjà, et qui resterait sinon amputé de son mot.
+_MOTIF_JOUR_SEUL     = re.compile(
+    r"\b(?:ce\s+)?(" + "|".join(_JOURS_SEMAINE) + r")\b(?!\s+dernier)"
+)
+
+
+def _resoudre_futur(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
+    """[US-179] Ancrages à venir — « demain », « dans dix jours », « ce week-end »,
+    « samedi ». Essayés du plus spécifique au plus général, même règle qu'au-dessus."""
+    m = _MOTIF_APRES_DEMAIN.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui + timedelta(days=2)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_DEMAIN.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui + timedelta(days=1)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_MAINTENANT.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_DANS_JOURS.search(texte)
+    if m:
+        brut = m.group(1)
+        nb = int(brut) if brut.isdigit() else NOMBRES_LETTRES[brut]
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui + timedelta(days=nb)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_DANS_SEMAINES.search(texte)
+    if m:
+        brut = m.group(1)
+        nb = int(brut) if brut.isdigit() else NOMBRES_LETTRES[brut]
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui + timedelta(days=7 * nb)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_SEMAINE_PROCH.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui + timedelta(days=7)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_CETTE_SEMAINE.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(aujourd_hui),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_WEEK_END.search(texte)
+    if m:
+        return Ancrage(ANCRAGE_RESOLU, _iso(_prochain_jour_semaine(_JOURS_SEMAINE["samedi"], aujourd_hui)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_JOUR_PROCHAIN.search(texte)
+    if m:
+        cible = _JOURS_SEMAINE[m.group(1)]
+        return Ancrage(ANCRAGE_RESOLU, _iso(_prochain_jour_semaine(cible, aujourd_hui, strict=True)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    m = _MOTIF_JOUR_SEUL.search(texte)
+    if m:
+        cible = _JOURS_SEMAINE[m.group(1)]
+        return Ancrage(ANCRAGE_RESOLU, _iso(_prochain_jour_semaine(cible, aujourd_hui)),
+                       SOURCE_RELATIVE_RESOLUE, m.group(0), m.start(), m.end())
+
+    return None
 
 
 def _resoudre_relatif(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
@@ -202,22 +312,42 @@ def _resoudre_relatif(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
     return None
 
 
-def _construire(annee: int, mois: int, jour: int, aujourd_hui: date) -> Optional[date]:
-    """Construit la date, ou None si elle est impossible ou dans le futur.
+def _construire(
+    annee: int, mois: int, jour: int, aujourd_hui: date,
+    futur: bool = False, annee_dite: bool = False,
+) -> Optional[date]:
+    """Construit la date, ou None si elle est impossible ou du mauvais côté.
 
-    Une date future n'est jamais présumée : le garde-fou d'US-049 la refuserait
-    de toute façon, et une année sous-entendue mal devinée est exactement le
-    genre d'approximation que CA6 interdit."""
+    Par défaut (un geste DÉJÀ FAIT), une date future n'est jamais présumée : le
+    garde-fou d'US-049 la refuserait de toute façon, et une année sous-entendue
+    mal devinée est exactement le genre d'approximation que CA6 interdit.
+
+    [US-179] En mode `futur` — un geste À FAIRE — la lecture s'inverse : « le
+    20 mai » demandé en septembre désigne le 20 mai PROCHAIN, et l'année
+    sous-entendue bascule d'un an. Une année DITE, elle, ne se corrige jamais :
+    « le 20 mai 2025 » pour un semis à venir est une contradiction, et on rend
+    la main plutôt que de la trancher."""
     try:
         candidate = date(annee, mois, jour)
     except ValueError:
         return None
+    if futur:
+        if candidate >= aujourd_hui:
+            return candidate
+        if annee_dite:
+            return None
+        try:
+            return date(annee + 1, mois, jour)
+        except ValueError:
+            return None
     return candidate if candidate <= aujourd_hui else None
 
 
-def _resoudre_absolu(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
+def _resoudre_absolu(texte: str, aujourd_hui: date, futur: bool = False) -> Optional[Ancrage]:
     """Dates explicitement dictées — « le 25/05 », « le 21/07/2026 »,
-    « le 14 juillet », « le 1er juin 2025 »."""
+    « le 14 juillet », « le 1er juin 2025 ».
+
+    [US-179] `futur` inverse le sens de lecture de l'année sous-entendue."""
     m = _MOTIF_DATE_NUM.search(texte)
     if m:
         jour, mois = int(m.group(1)), int(m.group(2))
@@ -228,10 +358,10 @@ def _resoudre_absolu(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
             annee = int(brut_annee)
             if annee < 100:
                 annee += 2000
-        resolue = _construire(annee, mois, jour, aujourd_hui)
+        resolue = _construire(annee, mois, jour, aujourd_hui, futur, brut_annee is not None)
         if resolue is None:
             # Année sous-entendue incohérente, jour/mois impossibles, date
-            # future : on ne devine pas, on rend la main au modèle.
+            # du mauvais côté : on ne devine pas, on rend la main au modèle.
             return Ancrage(ANCRAGE_INCONNU, expression=m.group(0), debut=m.start(), fin=m.end())
         return Ancrage(ANCRAGE_RESOLU, _iso(resolue), SOURCE_EXPLICITE,
                        m.group(0), m.start(), m.end())
@@ -242,7 +372,7 @@ def _resoudre_absolu(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
         jour = 1 if brut_jour in ("1er", "premier") else int(brut_jour)
         mois = _MOIS[m.group(2)]
         annee = int(m.group(3)) if m.group(3) else aujourd_hui.year
-        resolue = _construire(annee, mois, jour, aujourd_hui)
+        resolue = _construire(annee, mois, jour, aujourd_hui, futur, m.group(3) is not None)
         if resolue is None:
             return Ancrage(ANCRAGE_INCONNU, expression=m.group(0), debut=m.start(), fin=m.end())
         return Ancrage(ANCRAGE_RESOLU, _iso(resolue), SOURCE_EXPLICITE,
@@ -251,7 +381,9 @@ def _resoudre_absolu(texte: str, aujourd_hui: date) -> Optional[Ancrage]:
     return None
 
 
-def resoudre_ancrage_temporel(texte: str, aujourd_hui: Optional[date] = None) -> Ancrage:
+def resoudre_ancrage_temporel(
+    texte: str, aujourd_hui: Optional[date] = None, futur: bool = False,
+) -> Ancrage:
     """[US-094 / CA2] Lit l'ancrage temporel d'une phrase, sans appel au modèle.
 
     Trois issues, et trois seulement :
@@ -268,6 +400,12 @@ def resoudre_ancrage_temporel(texte: str, aujourd_hui: Optional[date] = None) ->
       sur le repli LLM : c'est précisément le cas où présumer coûte cher.
 
     `aujourd_hui` n'est là que pour rendre les tests déterministes.
+
+    [US-179] `futur=True` est demandé par l'appelant qui pose une question
+    d'AVENIR (« je peux semer samedi ? ») : « samedi » y vaut la prochaine
+    occurrence et non la dernière, « le 20 mai » le 20 mai prochain, et le
+    vocabulaire « demain / dans dix jours / ce week-end » s'ouvre. Sans lui,
+    rien ne change pour les appelants qui datent un geste déjà fait.
     """
     aujourd_hui = aujourd_hui or date.today()
     normalise = _normaliser(texte)
@@ -276,10 +414,19 @@ def resoudre_ancrage_temporel(texte: str, aujourd_hui: Optional[date] = None) ->
 
     # L'absolu d'abord : « le 6 mars dernier » porte à la fois une date
     # explicite et le mot « dernier ». C'est la date dictée qui fait foi.
-    for resolveur in (_resoudre_absolu, _resoudre_relatif):
-        ancrage = resolveur(normalise, aujourd_hui)
+    # L'absolu d'abord, puis — en mode futur seulement — les ancrages à venir,
+    # avant les ancrages passés qu'ils ne recouvrent jamais (« samedi dernier »
+    # reste daté par `_resoudre_relatif`).
+    ancrage = _resoudre_absolu(normalise, aujourd_hui, futur)
+    if ancrage is not None:
+        return ancrage
+    if futur:
+        ancrage = _resoudre_futur(normalise, aujourd_hui)
         if ancrage is not None:
             return ancrage
+    ancrage = _resoudre_relatif(normalise, aujourd_hui)
+    if ancrage is not None:
+        return ancrage
 
     if any(re.search(rf"\b{re.escape(mot)}", normalise) for mot in _MOTS_TEMPORELS):
         return Ancrage(ANCRAGE_INCONNU)

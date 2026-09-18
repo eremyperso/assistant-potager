@@ -27,6 +27,7 @@ US-178 calcule la confiance ; cette US la met dans la main du jardinier, là où
 - [ ] CA10 : Aucun état de conversation (`ctx.user_data`) n'est laissé ouvert après une réponse sans appui sur un bouton ; un test vérifie qu'une commande suivante n'est pas capturée par cette US
 - [ ] CA11 : La fiche d'aide `calendrier-et-zone-climatique.md` gagne une section « Savoir si c'est le moment », avec au moins deux questions de mesure servies (US-099 / CA9), et le corpus de mesure reste classé
 - [ ] CA12 : Des tests couvrent : reconnaissance des formulations du CA8, résolution des dates du CA1, déduction d'action et proposition de filière du CA3, réponse complète du CA4, absence de score du CA5, enchaînement des boutons du CA6 jusqu'à la confirmation existante, potager multi-parcelles du CA7, échappement du CA9, absence d'état résiduel du CA10
+- [x] CA13 : Une date **dite mais rejetée** par le mode avenir (une année déjà passée dans la phrase, ex. « je peux semer des carottes le 10 avril 2026 ? » demandé après cette date) ne se retrouve jamais absorbée dans le nom de la culture. La règle renonce (`_construire_confiance` rend `None`) et la phrase rejoint le routeur de questions existant (CA2), plutôt que de produire une « culture » absurde évaluée en silence à la date du jour
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : interaction Telegram, enregistrement (par réutilisation)
@@ -36,6 +37,7 @@ US-178 calcule la confiance ; cette US la met dans la main du jardinier, là où
 - Point de vigilance — **ordre des handlers** : la question « je peux semer… » contient le mot « semer » que la grammaire d'enregistrement pourrait capter ; l'ouverture interrogative (`_ouverture_interrogative`, `_est_demande_de_savoir`) doit être testée **avant** la règle d'enregistrement, et le corpus du CA8 contient les deux formes pour le garantir
 - Point de vigilance — **fluidité** : la proposition de filière du CA3 ne doit pas transformer la question en interrogatoire ; si la culture ne se sème que d'une façon dans le référentiel, aucune question n'est posée (même règle qu'US-069)
 - Point de vigilance : la réponse reste au **conditionnel** (« récolte attendue »), et une fourchette reste une fourchette
+- Point de vigilance — **année dite déjà passée (CA13)** : `_extraire_date(…, futur=True)` ne corrige jamais une année explicitement dite (`_construire`, `utils/date_utils.py`) ; sans garde-fou, ce fragment de date non retiré se fait absorber par `_decouper_culture_parcelle` dans le nom de la culture, et la réponse est évaluée à tort à la date du jour. Constaté en usage sur « je peux semer des carottes le 10 avril 2026 ? » posé après cette date (réponse : « Carottes le 10 avril 2026 · … » sans calendrier trouvé)
 
 **Estimation :** 5 points
 

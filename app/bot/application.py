@@ -41,6 +41,7 @@ from .commandes_culture import (
     cmd_rotation,
 )
 from .commandes_calendrier import cmd_calendrier
+from .commandes_confiance import cmd_confiance, _confiance_cb
 from .commandes_plan import cmd_plan
 from .commandes_stats import (
     cmd_ask,
@@ -182,6 +183,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "culture",   cmd_culture)  # [US-067]
     _enregistrer_commande(app, "fiche",     cmd_fiche)  # [US-164]
     _enregistrer_commande(app, "calendrier", cmd_calendrier)  # [US-068]
+    _enregistrer_commande(app, "confiance", cmd_confiance)  # [US-179]
     _enregistrer_commande(app, "association", cmd_association)  # [US-163]
     _enregistrer_commande(app, "rotation",    cmd_rotation)  # [US-163]
     _enregistrer_commande(app, "bioagresseur", cmd_bioagresseur)  # [US-162]
@@ -206,6 +208,8 @@ def _construire_application() -> "Application":
     # [US-021] Confirmation avant enregistrement — boutons inline
     app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
     app.add_handler(CallbackQueryHandler(_semis_organe_cb, pattern=r"^semis_organe"))
+    # [US-179] Filière, enregistrement, question décalée de dix jours
+    app.add_handler(CallbackQueryHandler(_confiance_cb, pattern=r"^conf:"))
 
     # [US-038] Confirmation avant enregistrement d'une note — boutons inline
     app.add_handler(CallbackQueryHandler(_note_confirm_cb, pattern=r"^note_"))

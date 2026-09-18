@@ -112,6 +112,7 @@ from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import recalage_calendrier as svc_recalage  # [US-070]
+from app.services import confiance_semis as svc_confiance  # [US-178]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import resolve_parcelle  # [US-167]
@@ -1266,6 +1267,68 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
     try:
         calendrier = svc_calendrier.lire_calendrier(db, culture, ctx.potager_id)
         return svc_calendrier.calendrier_en_dict(calendrier)
+    finally:
+        db.close()
+
+
+@app.get("/cultures/{culture}/confiance")
+def get_confiance_culture(
+    culture: str,
+    action: str = Query(default=None),
+    date_cible: date = Query(default=None, alias="date"),
+    parcelle_id: int = Query(default=None),
+    itineraire: str = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-178 / CA9] Confiance d'un semis ou d'une plantation : 1 à 3 étoiles, un
+    score 0-100 et ses motifs — scopé au potager actif, en lecture seule et sans
+    aucun appel LLM (CA2).
+
+    `date` vaut aujourd'hui par défaut ; `action` non précisée vaut « semis », que
+    la parcelle tranche en pépinière ou pleine terre (CA8). Toujours 200 — une
+    culture sans fenêtre pour la zone rend `etoiles: null` et le motif qui le dit
+    (CA4), jamais une fenêtre empruntée."""
+    db = SessionLocal()
+    try:
+        confiance = svc_confiance.evaluer(
+            db, culture, action, date_cible or date.today(),
+            ctx.potager_id, parcelle_id, itineraire,
+        )
+        return svc_confiance.confiance_en_dict(confiance)
+    except svc_confiance.ActionInvalideError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.get("/plan/confiances")
+def get_confiances_plan(
+    culture: list[str] = Query(default=[]),
+    action: str = Query(default=None),
+    date_cible: date = Query(default=None, alias="date"),
+    parcelle_id: int = Query(default=None),
+    itineraire: str = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-178 / CA9, CA10] Confiance de PLUSIEURS cultures à une même date, en UN
+    appel (`?culture=tomate&culture=haricot`) et une seule lecture météo — ce dont
+    l'écran Plan (US-180) a besoin pour ne pas multiplier les requêtes."""
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        confiances = svc_confiance.evaluer_cultures(
+            db, culture, action, date_cible or date.today(),
+            use_ctx.potager_id, parcelle_id, itineraire,
+        )
+        return {
+            "date": (date_cible or date.today()).isoformat(),
+            "cultures": {
+                nom: svc_confiance.confiance_en_dict(c) for nom, c in confiances.items()
+            },
+        }
+    except svc_confiance.ActionInvalideError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         db.close()
 

@@ -1,3 +1,33 @@
+## [v3.70.0] — 2026-09-17
+
+### 🚀 Nouveautés
+- Répond au bot à « je peux semer des haricots ce week-end ? », « c'est le moment de planter les tomates ? » ou « je sème les carottes ce week-end ou j'attends ? » par un niveau de **1 à 3 étoiles** et les raisons qui l'expliquent, sans consommer un seul jeton (US-179 / CA1, CA2)
+- Affiche la réponse dans l'ordre où elle se lit — culture · geste · zone, les étoiles, ce qui joue en faveur, puis contre, puis ce qui n'est pas connu, puis la récolte attendue en fourchette (US-179 / CA4)
+- Comprend la date de la question en **regardant vers l'avenir** : « ce week-end » est le samedi qui vient, comme « samedi », « demain », « dans dix jours » ou « le 20 mai » ; sans date, la réponse porte sur aujourd'hui (US-179 / CA1)
+- Demande la filière en un seul appui quand la culture se sème aussi bien en pépinière qu'en pleine terre, et ne demande rien quand elle ne se sème que d'une façon ; une parcelle pépinière nommée impose le semis à l'abri (US-179 / CA3)
+- Propose sous la réponse d'**enregistrer le semis ou la plantation** à la date demandée, filière et parcelle déjà remplies, ou de reposer la même question dix jours plus tard (US-179 / CA6)
+- Dit qu'aucun niveau n'est possible et comment compléter le calendrier quand la culture n'a aucune période connue pour la zone, plutôt que d'estimer (US-179 / CA5)
+- Calcule ce niveau par cinq règles déterministes — fenêtre conseillée de la zone, dernière gelée moyenne, gel annoncé sur quinze jours, fraîcheur des nuits, saison de récolte restante — chacune nommant ses points et son motif (US-178 / CA1, CA6)
+- Plafonne le niveau et affiche le motif quand une donnée manque : sans météo la troisième étoile est hors d'atteinte, et une sensibilité au gel inconnue ne rapporte aucun point (US-178 / CA5)
+- Ajoute la commande `/confiance <culture> <semis|pepiniere|pleine_terre|plantation> [date] [parcelle]` pour poser la même question au clavier (US-179)
+
+### 🐛 Corrections
+- Corrige la règle « saison restante » du niveau de confiance, qui récompensait le retard : comparée à la seule fin de la fenêtre de récolte, elle reportait la saison d'un an dès que ce mois était passé, offrant onze mois de marge à la culture la plus hors saison. Le même haricot semé le 19 septembre gagnait la règle en zone océanique et la perdait en zone montagnarde ; elle teste désormais l'appartenance à la saison de récolte (US-178 / CA1)
+- Distingue dans la réponse « récolte attendue après la fin de saison conseillée » de « saison de récolte déjà passée : la prochaine ouvre en juillet » — deux situations qui ne se corrigent pas de la même façon (US-178 / CA6)
+- Traite les fenêtres de récolte qui enjambent le 31 décembre (« novembre → février »), encore ouvertes en janvier bien qu'ayant commencé l'année précédente (US-178)
+- Empêche qu'une date déjà passée dite avec son année (« je peux semer des carottes le 10 avril 2026 ? » demandé après cette date) ne se retrouve absorbée dans le nom de la culture : la question rejoint désormais le routeur existant plutôt que d'évaluer en silence une culture au nom erroné à la date du jour (US-179 / CA13)
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/confiance_semis.py` : barèmes, seuils d'étoiles (≥ 75 ★★★, ≥ 45 ★★) et dernière gelée moyenne par zone vivent dans un seul bloc « Barème », comme des décisions produit corrigeables en diff git (US-178 / CA3)
+- Expose `GET /cultures/{culture}/confiance` et `GET /plan/confiances` (lecture groupée, une seule lecture météo pour tout l'écran) (US-178 / CA9, CA10)
+- Ajoute quatre règles d'interprétation qui n'acceptent **jamais un verbe de semis nu** : sans modalité (« je peux », « c'est le moment », « ou j'attends ? »), la phrase reste une saisie, qui est le geste le plus fréquent du bot (US-179 / CA2)
+- Fait s'effacer le garde « demande de procédure » d'US-172 devant ces seules questions : « peut-on semer des haricots ? » n'est pas « comment semer des haricots ? » (US-179 / CA2)
+- Ajoute `interpreteur_commandes._ARBITRAGES`, table écrite des paires de commandes qui lisent légitimement la même phrase : « je peux semer des tomates sur la planche nord ? » reçoit la confiance et non la rotation, qui garde `/rotation` et sa formulation explicite (US-179)
+- Ouvre un mode `futur=True` dans `utils/date_utils` — jusqu'ici toute la grammaire datait le passé, un geste déjà fait ; sans ce mode, aucun appelant existant ne change de comportement (US-179 / CA1)
+- Enchaîne l'enregistrement sur le flux existant avec un item pré-parsé, sans créer de second chemin d'écriture ni consommer de jeton : confirmation, avertissements de rotation et demande de parcelle restent ceux du flux habituel (US-179 / CA6, CA7)
+- Étend `tests/corpus/us172_commandes.csv` de 25 formulations de la question et 6 phrases hors périmètre proches ; au 17/09/2026 : **100 % de reconnaissance, 0 faux positif**, 100 % sans appel modèle (US-179 / CA8)
+- Ajoute à la fiche d'aide `calendrier-et-zone-climatique.md` les sections « Savoir si c'est le moment de semer ou de planter » et « Sur quoi repose le niveau d'étoiles avant de semer », avec leurs questions de mesure (US-179 / CA11, US-099 / CA9)
+
 ## [v3.69.0] — 2026-09-16
 
 ### 🚀 Nouveautés

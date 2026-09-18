@@ -1,4 +1,4 @@
-# Calendrier cultural — US-068, US-069, US-070, US-177
+# Calendrier cultural — US-068, US-069, US-070, US-177, US-178
 
 ## Calendrier cultural et zone climatique [US-068]
 
@@ -182,3 +182,131 @@ se sème pas) — JAMAIS par soustraction de `repiquage` à `recolte`.
 la dictée d'US-177 exige les DEUX bornes, plantation ET récolte.
 
 ⚠️ Aucune écriture, aucun calcul de stock touché (CA13) — un test le vérifie.
+
+## Moteur de confiance semis / plantation [US-178]
+
+« Est-ce raisonnable de semer ça, ici, maintenant ? » — 1 à 3 étoiles et les
+MOTIFS qui l'expliquent, à zéro jeton. Le module CALCULE et EXPOSE ; il n'affiche
+rien (consommateurs : US-179 bot, US-180 écran Plan) et n'écrit rien (CA11).
+
+```
+GET /cultures/{culture}/confiance?action=&date=&parcelle_id=&itineraire=
+GET /plan/confiances?culture=…&culture=…&action=&date=      (lecture groupée, UNE lecture météo)
+```
+
+Un seul module — `app/services/confiance_semis.py` :
+
+| Règle | Ce qu'elle lit | Points |
+|---|---|---|
+| R1 fenêtre conseillée de la zone | `fenetre_culturale` via `lire_calendrier` | 40 / 20 (mois adjacent) / 0 |
+| R2 dernière gelée moyenne de la ZONE | `culture_config.rusticite_min_c` + table déclarée | 20 / 10 / 0 |
+| R3 gel annoncé sur la quinzaine | prévisions en cache (US-182) | 20 / 0 |
+| R4 nuits douces (7 j) | prévisions en cache (US-182) | 10 / 0 |
+| R5 saison restante | durée `recolte` / `plantation_recolte` + fenêtre `recolte` | 10 / 0 |
+
+⚠️ **R5 teste une APPARTENANCE à la saison de récolte, jamais l'antériorité de
+sa seule fin** — correctif du 18/09/2026, constaté sur deux potagers réels.
+Comparer à la seule borne de fin obligeait, quand ce mois était déjà passé, à
+reporter la saison d'un an ; ce report offrait onze mois de marge à la culture la
+PLUS hors saison. Le même haricot semé le 19 septembre GAGNAIT la règle en zone
+océanique (récolte juillet → août, reportée à l'an prochain) et la PERDAIT en
+zone montagnarde (récolte août → octobre, encore ouverte) : plus on était en
+retard, plus on marquait. Le report, lui, reste indispensable — un ail planté en
+octobre se récolte bien dans la fenêtre « mars → mai » de l'année suivante — et
+vit désormais dans `prochaine_saison_de_recolte`, qui rend l'intervalle entier.
+Son balayage commence à l'année PRÉCÉDENTE : une fenêtre qui enjambe le 31/12
+(« novembre → février ») est encore ouverte en janvier bien qu'ayant commencé
+l'année d'avant. Le motif perdu distingue « après la fin de saison » de « saison
+de récolte déjà passée », qui ne se corrigent pas de la même façon.
+
+⚠️ Quatre décisions à ne pas rouvrir sans rouvrir l'US :
+
+- **UN SEUL ENDROIT** (CA3) : barèmes, seuils d'étoiles (≥ 75 ★★★, ≥ 45 ★★),
+  `DERNIERE_GELEE_MOYENNE_PAR_ZONE`, `SEUIL_NUITS_DOUCES_C`, `SEUIL_GELIVITE_C`
+  vivent dans le bloc « Barème » du module, et nulle part ailleurs. Ce sont des
+  **décisions produit**, comme `ZONE_USDA_PAR_ZONE` — pas des mesures. La table
+  des dernières gelées (méditerranéen 15-03, océanique 05-04, continental 25-04,
+  montagnard 10-05) est celle que le plan d'épic 8 § 12 a fait **valider par un
+  humain le 17/09/2026** : la changer, c'est rouvrir l'arbitrage, et un test la
+  compare valeur par valeur. Les deux seuils 🧪 restent des hypothèses.
+- **MUET PLUTÔT QUE MENTEUR** (CA5) : une donnée absente rend un motif
+  `indetermine` à 0 point et ABAISSE `score_max_atteignable` — sans météo le
+  plafond est 70, la troisième étoile est hors d'atteinte et un avertissement le
+  dit. Aucune valeur par défaut, aucune compensation.
+- **PAS DE SCORE SANS R1** : la phase demandée sans fenêtre pour la zone rend un
+  tiret (`etoiles: null`), jamais la fenêtre d'une autre phase ni d'une autre
+  zone (CA4). La priorité des corrections locales est celle de `lire_calendrier`,
+  sans second mécanisme.
+- **R2 ET R3 RESTENT DEUX RÈGLES** : climatologie de la zone d'un côté, météo de
+  la quinzaine de l'autre. Les fusionner perdrait le motif « trop tôt pour ta
+  zone » quand la quinzaine est douce.
+
+Le résultat porte aussi la **fourchette de récolte attendue** si l'action a lieu à
+cette date (`recolte_attendue`, bornes ou rien) : le gabarit de réponse du bot
+(`docs/EPIC 8-confiance-calendrier/GABARIT_REPONSE_CONFIANCE_BOT.md`) interdit à
+US-179 de recalculer quoi que ce soit ou de reformuler un motif — les libellés
+rendus ici sont donc ceux du gabarit, à la lettre, et un test les fige.
+
+⚠️ Une parcelle déclarée pépinière IMPOSE le semis en pépinière quand la filière
+n'est pas dite (CA8) ; une plantation qu'on y demande n'est pas corrigée en
+douce — elle porte un avertissement. Un semis en pépinière tient R2, R3 et R4
+pour acquises : la pépinière non chauffée de février attend l'abri d'US-181.
+
+
+## « Je peux semer ? » au bot [US-179]
+
+Le moteur d'US-178 mis dans la main du jardinier, à zéro jeton. Trois fichiers,
+et trois seulement :
+
+| Fichier | Rôle |
+|---|---|
+| `interpreteur_commandes.py` (bloc « Confiance ») | quatre règles reconnaissent la question et la traduisent en `/confiance` |
+| `menu_commandes.FORMES_DICTABLES` | la commande, ses quatre arguments, `confirmation=False` |
+| `app/bot/commandes_confiance.py` | le handler, le gabarit de réponse, les boutons |
+
+Forme : `/confiance <culture> <semis|pepiniere|pleine_terre|plantation> [date] [parcelle]`.
+
+⚠️ Cinq décisions à ne pas rouvrir sans rouvrir l'US :
+
+- **L'ACTION EST LE PIVOT** de `ctx.args`, et c'est pour cela qu'elle est
+  obligatoire : « pomme de terre » et « planche nord » comptent chacune plusieurs
+  mots, et sans un jeton connu entre les deux, aucune lecture positionnelle ne
+  dit où finit l'une. Les quatre règles la renseignent toujours — elle vient du
+  verbe, qu'aucune ne rend facultatif.
+- **AUCUNE RÈGLE NE RECONNAÎT UN VERBE DE SEMIS NU.** Il faut une MODALITÉ
+  (« je peux », « c'est le moment », « bonne idée », « ou j'attends ? »). Sans
+  cette exigence, la règle capterait la SAISIE, qui est le geste le plus fréquent
+  du bot : « je sème les carottes ce week-end » reste une déclaration, seule
+  l'alternative finale en fait une question. Le corpus porte les deux formes
+  côte à côte pour que ça ne puisse pas se perdre.
+- **LE GARDE 1 D'US-172 S'EFFACE ICI, ET ICI SEULEMENT** : « peut-on semer des
+  haricots ? » s'ouvre comme une demande de procédure et n'en est pas une.
+  `_est_question_d_opportunite` est assemblé des mêmes briques que les règles,
+  pour que le garde et elles ne puissent pas diverger. « comment semer des
+  haricots ? », sans modalité, reste une demande de savoir.
+- **ARBITRAGE CONFIANCE ⟩ ROTATION** (17/09/2026, `_ARBITRAGES`) : « je peux
+  semer des tomates sur la planche nord ? » est à la fois une question de
+  rotation (US-163) et de saison. Les deux lectures sont justes ; demander
+  laquelle ajouterait un geste à la question la plus fréquente de l'application.
+  La confiance répond ; la rotation garde `/rotation` et sa formulation explicite
+  (« vérifie la rotation des tomates sur la planche nord »). La table est ÉCRITE,
+  jamais déduite de l'ordre de déclaration des règles.
+- **AUCUN NOUVEAU CHEMIN D'ÉCRITURE** : le bouton « Enregistrer » appelle
+  `saisie._parse_and_save` avec un item PRÉ-PARSÉ — même contrat que le parseur
+  déterministe d'US-094. Donc la confirmation habituelle, les avertissements de
+  rotation, la demande de parcelle : tout est celui du flux existant, et aucun
+  jeton n'est consommé.
+
+L'état de la question vit dans `etat._CONFIANCE_PENDING` (15 min), jamais dans
+`ctx.user_data['mode']` qui capturerait la commande suivante (CA10).
+
+⚠️ **La grammaire de dates a gagné un MODE, pas une seconde grammaire.**
+`utils/date_utils.resoudre_ancrage_temporel(..., futur=True)` : jusqu'ici tout
+`date_utils` datait le PASSÉ (`_construire` refuse explicitement une date future),
+parce qu'il ne servait qu'à rattacher un geste déjà fait. « Samedi » vaut la
+dernière occurrence pour « j'ai semé samedi », la prochaine pour « je peux semer
+samedi » — aucune lecture ne peut être la bonne partout. Le mode ouvre
+« demain », « après-demain », « dans N jours », « dans N semaines », « la semaine
+prochaine », « cette semaine », « ce week-end » (le samedi qui vient) et le jour
+de semaine seul, et fait basculer d'un an l'année sous-entendue d'une date
+absolue. Sans `futur=True`, rien ne change pour les appelants existants.

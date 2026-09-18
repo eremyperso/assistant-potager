@@ -324,7 +324,14 @@ def _est_demande_de_savoir(normalise: str) -> bool:
     demander qu'on la supprime est la forme la plus agaçante de la non-réponse.
     L'inverse — supprimer la parcelle de quelqu'un qui demandait comment faire —
     est bien pire. D'où un garde testé le premier, et jamais après une règle.
+
+    [US-179] Une exception, et une seule : « peut-on semer des haricots ? »
+    s'ouvre comme une demande de procédure et n'en est pas une — elle demande
+    un avis sur MAINTENANT. Le garde s'efface devant un verbe de semis ou de
+    plantation précédé d'une modalité, jamais ailleurs.
     """
+    if _est_question_d_opportunite(normalise):
+        return False
     return bool(_MOTIF_SAVOIR.match(normalise) or _MOTIF_SAVOIR_INTERNE.search(normalise))
 
 
@@ -413,7 +420,7 @@ def _nom_plausible(fragment: str) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 # Dates — celles d'US-094, jamais une seconde règle
 # ─────────────────────────────────────────────────────────────────────────────
-def _extraire_date(fragment: str) -> tuple[Optional[str], str]:
+def _extraire_date(fragment: str, futur: bool = False) -> tuple[Optional[str], str]:
     """Résout un éventuel ancrage temporel et rend la phrase privée de celui-ci.
 
     Réutilise `utils.date_utils.resoudre_ancrage_temporel` — la grammaire de
@@ -422,10 +429,14 @@ def _extraire_date(fragment: str) -> tuple[Optional[str], str]:
     RECHERCHE et non par ses bornes : `date_utils` normalise à sa façon (les
     traits d'union y survivent), et deux tables d'index différentes ne se
     superposent pas.
+
+    [US-179] `futur` demande la lecture d'AVENIR de cette même grammaire :
+    « samedi » y est le samedi qui vient, « le 20 mai » le 20 mai prochain.
+    Aucune seconde grammaire, un mode — voir `utils.date_utils`.
     """
     from utils.date_utils import ANCRAGE_RESOLU, resoudre_ancrage_temporel
 
-    ancrage = resoudre_ancrage_temporel(fragment)
+    ancrage = resoudre_ancrage_temporel(fragment, futur=futur)
     if ancrage.statut != ANCRAGE_RESOLU or not ancrage.date_iso:
         return None, fragment
 
@@ -1356,6 +1367,275 @@ def _construire_calendrier_duree_levee_verbe(groupes):
 
 
 # ── Bioagresseurs ────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Confiance semis / plantation — « je peux semer des haricots ? » [US-179]
+# -----------------------------------------------------------------------------
+# La question d'AVENIR, à distinguer de trois voisines qui partagent ses mots :
+#
+#   « j'ai semé des haricots samedi »      → un ENREGISTREMENT (US-094)
+#   « quand semer les haricots ? »         → le CALENDRIER (US-068, règle ci-dessus)
+#   « comment semer des haricots ? »       → une PROCÉDURE (garde 1)
+#   « je peux semer des haricots ? »       → ICI
+#
+# Ce qui les sépare tient en un mot : la MODALITÉ (« je peux », « c'est le
+# moment », « bonne idée »). Aucune des règles ci-dessous ne reconnaît un verbe
+# de semis nu — sans quoi elle capterait la saisie, qui est le geste le plus
+# fréquent du bot, et le CA8 du corpus la ferait tomber immédiatement.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: Verbes du geste, à l'infinitif (les formes conjuguées sont dans la règle D).
+_VERBE_CONFIANCE = r"(?P<verbe>semer|planter|repiquer|mettre en terre)"
+
+#: L'ouverture interrogative de ces questions, sous toutes ses formes dictées :
+#: « est-ce que », « est-ce qu' », « est-ce ». Écrite avec ou sans trait
+#: d'union, prononcée sans — la normalisation les a déjà ramenées l'une à
+#: l'autre.
+_EST_CE = r"(?:est ce\s+(?:que\s+|qu\s+)?)?"
+_PREAMBULE_CONFIANCE = r"\A(?:dis moi\s+|sais tu\s+|a ton avis\s+)?" + _EST_CE
+
+#: La modalité qui fait d'un verbe de semis une QUESTION sur l'opportunité.
+_MODAL_CONFIANCE = (
+    r"(?:je peux|on peut|peut on|puis je|je pourrais|pourrais je|"
+    r"je dois|dois je|faut il|il faut|"
+    r"c est raisonnable de|ca vaut le coup de|ca vaut la peine de)"
+)
+
+#: « c'est trop tôt pour semer ? » — la même question posée par son risque.
+_JUGEMENT_CONFIANCE = (
+    r"(?:une\s+)?(?:bonne idee|bon|judicieux|prudent|raisonnable|"
+    r"trop tot|trop tard|urgent)"
+)
+
+
+#: [CA2] Ce qui, dans ces questions, ressemble à une demande de PROCÉDURE sans en
+#: être une — « peut-on semer… », « est-ce qu'on peut planter… ». Assemblé des
+#: mêmes briques que les règles ci-dessous, pour que le garde et les règles ne
+#: puissent pas diverger : ce que l'un laisse passer, les autres le reconnaissent.
+_MOTIF_OPPORTUNITE = re.compile(
+    _PREAMBULE_CONFIANCE + r"(?:" + _MODAL_CONFIANCE + r"|"
+    r"(?:(?:c est|ce serait|ca serait|il est|il serait)\s+)?"
+    r"(?:(?:le|la|un|une)\s+)?(?:(?:bon|bonne|meilleur)\s+)?"
+    r"(?:moment|periode|saison|temps)\s+(?:de|d|pour)|"
+    + _JUGEMENT_CONFIANCE + r"\s+(?:de|d|pour|que de)"
+    r")\s+" + _VERBE_CONFIANCE
+)
+
+
+def _est_question_d_opportunite(normalise: str) -> bool:
+    """[US-179 / CA2] « peut-on semer des haricots ? » n'est pas « comment semer
+    des haricots ? ».
+
+    La première demande un avis sur MAINTENANT, la seconde une procédure. Le
+    garde 1 ne les sépare pas — « peut-on » y ouvre une demande de savoir — et
+    c'est ici, et seulement ici, qu'il s'efface : devant un verbe de semis ou de
+    plantation, précédé de sa modalité. « comment semer des haricots ? », qui
+    n'en porte aucune, reste une demande de savoir.
+    """
+    return bool(_MOTIF_OPPORTUNITE.match(normalise))
+
+
+def _action_du_verbe(verbe: str) -> Optional[str]:
+    """« semer » → un semis, « planter » / « repiquer » → une plantation.
+
+    La filière (pépinière ou pleine terre) n'est PAS déduite du verbe : elle se
+    lit dans la phrase si elle y est, se tranche au référentiel sinon (US-069).
+    """
+    normalise, _ = normaliser(verbe or "")
+    if normalise.startswith("sem"):
+        return "semis"
+    if normalise.startswith(("plant", "repiq", "mettre")):
+        return "plantation"
+    return None
+
+
+def _filiere_dite(fragment: str) -> tuple[Optional[str], str]:
+    """Retire de la phrase la filière qu'elle nomme, et la rend.
+
+    Retourne `(action de confiance, phrase sans la mention)` — ou
+    `(None, phrase)` si la phrase ne dit rien de la filière. Les deux valeurs
+    rendues sont celles du moteur de confiance (`confiance_semis.ACTIONS`),
+    jamais un troisième vocabulaire.
+    """
+    normalise, index = normaliser(fragment or "")
+    for motif, action in (
+        (r"\b(?:en|sous|dans)\s+(?:la\s+|une\s+|le\s+|des\s+|les\s+)?"
+         r"(?:pepiniere|pepinieres|godet|godets|caissette|caissettes|abri|serre chaude|"
+         r"mini serre|interieur)\b", "semis_pepiniere"),
+        (r"\b(?:en|directement en|a\s+meme\s+la)\s+(?:la\s+)?"
+         r"(?:pleine terre|place|terre)\b|\bdehors\b|\ben exterieur\b", "semis_pleine_terre"),
+    ):
+        trouve = re.search(motif, normalise)
+        if trouve is None:
+            continue
+        avant = _fragment_source(fragment, index, 0, trouve.start())
+        apres = _fragment_source(fragment, index, trouve.end(), len(index))
+        return action, f"{avant} {apres}".strip()
+    return None, fragment
+
+
+def _marqueurs_parcelle() -> frozenset:
+    """Vocabulaire qui annonce une parcelle — celui du parseur déterministe.
+
+    Il est LU, jamais recopié : une parcelle nommée « planche » l'est pour les
+    deux grammaires ou pour aucune. Les mots de rang lui sont joints ici, et
+    ici seulement : dans une saisie (« trois rangs de carottes ») « rang »
+    porte une quantité, ambiguïté que le parseur refuse justement de trancher ;
+    dans une QUESTION d'opportunité, où aucune quantité n'est en jeu, « rang 3 »
+    ne peut désigner qu'un endroit du potager.
+    """
+    from llm.parseur_deterministe import _MARQUEURS_PARCELLE, _MOTS_RANG
+
+    return _MARQUEURS_PARCELLE | _MOTS_RANG
+
+
+#: « … des haricots, ce serait bien ? » — la queue de politesse qui suit la
+#: culture sans en faire partie.
+_QUEUE_CONFIANCE = re.compile(
+    r"\s*(?:,|\?|!|\.)*\s*(?:cette annee|en ce moment|deja|encore|quand meme|"
+    r"a ton avis|selon toi|ou pas|non)?\s*[\?\.!]*\s*\Z",
+    re.IGNORECASE,
+)
+
+
+def _decouper_culture_parcelle(fragment: str) -> tuple[Optional[str], Optional[str]]:
+    """« des haricots planche nord » → (« haricots », « planche nord »).
+
+    Le découpage se fait sur le MARQUEUR de parcelle, et sur lui seul : sans
+    marqueur, tout le fragment est la culture. C'est délibérément moins habile
+    qu'une résolution en base — mais une règle d'interprétation est pure, et
+    proposer « haricots » comme parcelle parce qu'elle y ressemble coûterait
+    plus cher que de demander la parcelle au bouton d'enregistrement (CA7).
+    """
+    propre = _nettoyer_nom(_QUEUE_CONFIANCE.sub("", fragment or ""))
+    if not propre:
+        return None, None
+    normalise, index = normaliser(propre)
+    mots = normalise.split()
+    marqueurs = _marqueurs_parcelle()
+    for rang, mot in enumerate(mots):
+        if mot not in marqueurs:
+            continue
+        if rang == 0:                      # la phrase ne nomme aucune culture
+            return None, None
+        debut = len(" ".join(mots[:rang])) + 1
+        # « parcelle rang 3 » : le mot « parcelle » n'est pas le nom, il
+        # l'annonce. « planche nord », « rang 3 » : le marqueur EN fait partie.
+        nom_debut = debut + len(mot) + 1 if mot in ("parcelle", "parcelles") else debut
+        culture = _nettoyer_nom(_fragment_source(propre, index, 0, debut))
+        parcelle = _nettoyer_nom(_fragment_source(propre, index, nom_debut, len(index)))
+        # La préposition qui annonçait la parcelle (« des haricots SUR LA
+        # planche nord ») reste accrochée à la culture. Elle se retire mot à
+        # mot, et par le vocabulaire déjà déclaré des mots qui ne peuvent pas
+        # nommer quelque chose — jamais par une seconde liste.
+        mots_culture = culture.split()
+        while mots_culture and normaliser(mots_culture[-1])[0] in _MOTS_NON_NOM:
+            mots_culture.pop()
+        culture = " ".join(mots_culture)
+        if not _nom_plausible(culture):
+            return None, None
+        return culture, (parcelle if _nom_plausible(parcelle) else None)
+    return (propre if _nom_plausible(propre) else None), None
+
+
+def _construire_confiance(groupes: Valeurs) -> Optional[Valeurs]:
+    """Valeurs de `/confiance` lues dans la question — culture, action, date, parcelle.
+
+    L'action est TOUJOURS renseignée : elle vient du verbe, que chacune des
+    règles impose. C'est elle qui sépare, dans `ctx.args`, la culture (avant) de
+    la date et de la parcelle (après) — sans quoi « pomme de terre » et
+    « planche nord », tous deux en plusieurs mots, ne se distingueraient pas.
+    """
+    action = _action_du_verbe(groupes.get("verbe", ""))
+    if action is None:
+        return None
+    queue = groupes.get("queue", "")
+    # [US-179 / garde-fou] Une date DITE mais rejetée par le mode avenir — une
+    # année déjà passée pour un geste à faire, ex. « le 10 avril 2026 » demandé
+    # en septembre 2026 (`_construire`, date_utils.py) — ne doit jamais glisser
+    # dans `_decouper_culture_parcelle` avec le reste de la phrase : elle y
+    # serait lue comme un bout du nom de culture (« carottes le 10 avril 2026 »),
+    # avec une évaluation silencieuse à la date du jour. On renonce à la règle :
+    # la phrase rejoint le routeur de questions existant (CA2).
+    from utils.date_utils import ANCRAGE_INCONNU, resoudre_ancrage_temporel
+
+    if resoudre_ancrage_temporel(queue, futur=True).statut == ANCRAGE_INCONNU:
+        return None
+    # [CA1] La date est lue par la grammaire du projet, en mode AVENIR : ici
+    # « samedi » est le samedi qui vient, pas le dernier.
+    date_iso, reste = _extraire_date(queue, futur=True)
+    filiere, reste = _filiere_dite(reste)
+    if filiere is not None:
+        # Une filière dite ne vaut que pour un semis : « planter en pleine
+        # terre » reste une plantation.
+        action = filiere if action == "semis" else action
+    culture, parcelle = _decouper_culture_parcelle(reste)
+    if not culture:
+        return None
+    valeurs: Valeurs = {"culture": culture, "action": action}
+    if date_iso:
+        valeurs["date"] = date_iso
+    if parcelle:
+        valeurs["parcelle"] = parcelle
+    return valeurs
+
+
+@_regle(
+    "confiance_modal",
+    _PREAMBULE_CONFIANCE + _MODAL_CONFIANCE + r"\s+" + _VERBE_CONFIANCE
+    + r"\s+" + _ARTICLE + r"(?P<queue>.+)",
+    "confiance",
+    None,
+)
+def _construire_confiance_modal(groupes):
+    return _construire_confiance(groupes)
+
+
+@_regle(
+    "confiance_moment",
+    _PREAMBULE_CONFIANCE + r"(?:(?:c est|ce serait|ca serait|il est)\s+)?"
+    r"(?:(?:le|la|un|une)\s+)?(?:(?:bon|bonne|meilleur)\s+)?"
+    r"(?:moment|periode|saison|temps)\s+(?:de|d|pour)\s+"
+    + _VERBE_CONFIANCE + r"\s+" + _ARTICLE + r"(?P<queue>.+)",
+    "confiance",
+    None,
+)
+def _construire_confiance_moment(groupes):
+    return _construire_confiance(groupes)
+
+
+@_regle(
+    "confiance_jugement",
+    _PREAMBULE_CONFIANCE + r"(?:(?:c est|ce serait|ca serait|il serait)\s+)?"
+    + _JUGEMENT_CONFIANCE + r"\s+(?:de|d|pour|que de)\s+"
+    + _VERBE_CONFIANCE + r"\s+" + _ARTICLE + r"(?P<queue>.+)",
+    "confiance",
+    None,
+)
+def _construire_confiance_jugement(groupes):
+    return _construire_confiance(groupes)
+
+
+@_regle(
+    "confiance_ou_attendre",
+    r"\A(?:je|j|on)\s+(?P<verbe>seme|semes|plante|plantes|repique|repiques)\s+"
+    + _ARTICLE + r"(?P<queue>.+?)\s+ou\s+"
+    r"(?:j attends|j attend|on attend|je patiente|j hesite|pas|"
+    r"c est trop tot|trop tot|c est trop tard|trop tard)\s*[\?\.!]*\s*\Z",
+    "confiance",
+    None,
+)
+def _construire_confiance_ou_attendre(groupes):
+    """« je sème les carottes ce week-end ou j'attends ? »
+
+    La seule règle de cette US dont le verbe est CONJUGUÉ, donc la seule qui
+    pourrait mordre sur une saisie. L'alternative finale (« ou j'attends »)
+    est obligatoire, et c'est elle qui fait la question : sans elle, « je sème
+    les carottes ce week-end » est une déclaration, et le corpus du CA8 porte
+    les deux formes côte à côte pour le garantir.
+    """
+    return _construire_confiance(groupes)
+
+
 def _vocabulaire_de(commande: str, sous_commande: Optional[str], nom_argument: str) -> tuple[str, ...]:
     forme = FORMES_PAR_CLE[(commande, sous_commande)]
     for argument in forme.arguments:
@@ -1609,6 +1889,40 @@ def _construire_commande(
     )
 
 
+#: [US-179] Arbitrages entre deux commandes qui lisent légitimement la même
+#: phrase. « Je peux semer des tomates sur la planche nord ? » est à la fois une
+#: question de ROTATION (quels antécédents sur cette planche — US-163) et une
+#: question de SAISON (est-ce le moment — US-179). Les deux lectures sont
+#: justes ; demander laquelle ajouterait un geste à la question la plus fréquente
+#: de l'application.
+#:
+#: Arbitrage produit du 17/09/2026 : la CONFIANCE répond. La rotation reste
+#: atteignable par `/rotation` et par sa formulation explicite (« vérifie la
+#: rotation des tomates sur la planche nord »), que la règle `rotation_explicite`
+#: reconnaît seule.
+#:
+#: Cette table est ÉCRITE, jamais déduite de l'ordre de déclaration des règles :
+#: un bloc déplacé dans ce fichier ne doit pas pouvoir renverser un arbitrage
+#: produit.
+_ARBITRAGES: dict[frozenset, str] = {
+    frozenset({"confiance", "rotation"}): "confiance",
+}
+
+
+def _arbitrer(trouvees: list[CommandeInterpretee]) -> Optional[CommandeInterpretee]:
+    """La commande qui répond quand deux se reconnaissent, ou None s'il faut demander."""
+    commandes = {c.commande for c in trouvees}
+    gagnante = _ARBITRAGES.get(frozenset(commandes))
+    if gagnante is None:
+        return None
+    retenue = next(c for c in trouvees if c.commande == gagnante)
+    log.info(
+        "🎛️  INTERPRETEUR   : arbitrage %s → /%s",
+        " + ".join(sorted(commandes)), gagnante,
+    )
+    return retenue
+
+
 def _appliquer_regle(
     regle: Regle, texte: str, normalise: str, index: list[int]
 ) -> Optional[CommandeInterpretee]:
@@ -1669,6 +1983,12 @@ def reconnaitre_par_regles(texte: str) -> "CommandeInterpretee | Ambiguite | Non
         return None
     if len(trouvees) == 1:
         return trouvees[0]
+    # [US-179] Deux lectures JUSTES de la même phrase, tranchées par un arbitrage
+    # produit déclaré — le seul cas où la plus probable l'emporte, et parce
+    # qu'aucune des deux n'écrit quoi que ce soit.
+    arbitree = _arbitrer(trouvees)
+    if arbitree is not None:
+        return arbitree
     # [CA12] Deux commandes distinctes reconnues dans la même phrase : le doute
     # ne fait jamais agir. La précision est demandée, la plus probable n'est pas
     # exécutée.
