@@ -1,4 +1,4 @@
-# Calendrier cultural — US-068, US-069, US-070, US-177, US-178
+# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183
 
 ## Calendrier cultural et zone climatique [US-068]
 
@@ -310,3 +310,44 @@ samedi » — aucune lecture ne peut être la bonne partout. Le mode ouvre
 prochaine », « cette semaine », « ce week-end » (le samedi qui vient) et le jour
 de semaine seul, et fait basculer d'un an l'année sous-entendue d'une date
 absolue. Sans `futur=True`, rien ne change pour les appelants existants.
+
+
+## Confiance sur l'écran Plan et fiche calendrier [US-180, US-183]
+
+Le moteur d'US-178 mis sous les yeux, dans la PWA, à zéro jeton. Maquette gelée
+le 18/09/2026 (`US-183 - Fiche calendrier culture`, projet Claude Design
+« potager 2026 ») : elle fait foi pour la pastille de tuile, la puce de Stocks,
+« Pourquoi ce niveau ? » et la fiche.
+
+```
+GET /plan/confiances/candidates?culture=…&culture=…&date=   (UNE lecture météo pour l'écran)
+```
+
+`confiance_semis.confiances_de_culture` évalue les trois gestes et rend deux
+listes tirées de la MÊME évaluation :
+
+| Clé | Contenu | Consommateur |
+|---|---|---|
+| `candidates` | gestes dont R1 est gagnée (en fenêtre ou à un mois), score décroissant | pastille de la tuile, puce de Stocks |
+| `actions` | tous les gestes dont la phase a une fenêtre, ordre du geste | sélecteur de la fiche calendrier |
+
+⚠️ Trois décisions à ne pas rouvrir sans rouvrir l'US :
+
+- **« EN FENÊTRE OU À UN MOIS » = R1 GAGNÉE**, rien d'autre : aucune seconde
+  marge d'approche. Le barème d'US-178 reste seul juge.
+- **LA PRIORITÉ DES PHASES VIT AVEC LA FRISE** (`PRIORITE_PHASES`,
+  `frontend/src/lib/calendrier.js`) : le serveur ne tranche pas les égalités, un
+  test interdit qu'une copie apparaisse dans le moteur.
+- **TUILE ET FICHE NE PEUVENT PAS DIVERGER** : depuis le Plan, la fiche reçoit la
+  lecture groupée déjà chargée (zéro lecture de plus) ; depuis Stocks, la même
+  lecture groupée faite au chargement de l'écran, plus `GET /plan/calendriers`
+  pour la culture (au plus deux lectures, US-183 / CA13).
+
+Les projections d'US-070 portent désormais `parcelle_nom` (une requête pour
+toutes les tuiles) : la fiche s'ouvre aussi depuis Stocks, qui n'a pas la liste
+des parcelles.
+
+⚠️ **Pas de bouton d'enregistrement dans la fiche** tant que la PWA n'a pas de
+flux d'enregistrement : `FicheCalendrier` ne le rend que si l'appelant fournit
+`onEnregistrer`, et aucun écran ne le fournit. `/parse` n'en est pas un — il
+passe par le modèle de langage et écrit sans confirmation.

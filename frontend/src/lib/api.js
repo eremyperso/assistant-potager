@@ -163,6 +163,16 @@ export const api = {
     if (dateRef) p.append('date_ref', dateRef)
     return get(`/plan/calendriers?${p.toString()}`)
   },
+  // [US-180 / CA6] Confiance de la semaine de toutes les cultures de l'écran Plan,
+  // en un appel et une seule lecture météo : les actions en fenêtre ou à un mois
+  // de la date de référence, de la mieux placée à la moins bonne.
+  confiancesPlan: (cultures, potagerId, dateRef) => {
+    const p = new URLSearchParams()
+    for (const c of cultures) p.append('culture', c)
+    if (potagerId) p.append('potager_id', potagerId)
+    if (dateRef) p.append('date', dateRef)
+    return get(`/plan/confiances/candidates?${p.toString()}`)
+  },
   stats:      (dateRef, potagerId) => get(`/stats${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-072] Détail par variété toutes cultures confondues, avec parcelles — écran Stocks (US-073)
   statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),

@@ -122,7 +122,7 @@ export function phasesDuMois(frise, i) {
 // de la mise en forme. Le vocabulaire reste au CONDITIONNEL — « attendue » — et
 // une fourchette reste une fourchette : aucune date unique n'est fabriquée.
 
-const MOIS_NOMS = [
+export const MOIS_NOMS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ]

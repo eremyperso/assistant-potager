@@ -1,3 +1,47 @@
+## [v3.72.0] — 2026-09-18
+
+### 🚀 Nouveautés
+- Ajoute la **fiche calendrier d'une culture**, toutes variétés confondues : semer ou planter, séries déjà en terre et frise des douze mois, réunis en un seul endroit (US-183)
+- Ouvre cette fiche depuis la frise d'une tuile du Plan, en amenant sous les yeux la série de cette parcelle (US-183 / CA2)
+- Affiche sur chaque tuile du Plan le niveau de confiance du geste le mieux noté, **même hors saison**, comme la maquette gelée : en septembre, toutes les tomates se taisaient et la fiche restait introuvable ; « pas de calendrier » quand la zone n'en a aucun (US-180 / CA1, US-183 / CA2)
+- Ouvre cette fiche depuis l'écran Stocks par une puce sous le nom de chaque culture — les étoiles de la semaine, « pas de calendrier » ou « calendrier » —, soldant l'absence de calendrier sur cet écran ; le détail des récoltes garde son propre lien (US-183 / CA1)
+- Propose dans « Semer ou planter » les seuls gestes que le calendrier de la zone connaît, pré-positionné sur le mieux noté à la date consultée, avec la période conseillée, le niveau et ses règles, et la récolte attendue en fourchette (US-183 / CA4, CA5)
+- Liste dans « Déjà en terre » chaque série, la plus ancienne en tête : origine, levée et première récolte attendues, reste à courir, écart d'une récolte dépassée, ou tirets et raison quand rien ne peut être projeté (US-183 / CA8, CA9)
+- Recale la frise de la fiche sur la plus ancienne série en terre, conseillée sinon, et nomme ce qu'elle montre (US-183 / CA11)
+- Invite à localiser le potager depuis la fiche quand les règles météo restent indéterminées, par la modale existante (US-183 / CA7)
+- Affiche la fiche en feuille plein écran sur mobile, en modale centrée sur tablette et en panneau latéral sur ordinateur, fermée au clavier par Échap (US-183 / CA3, CA15)
+
+### 🔧 Améliorations techniques
+- Ajoute `actions` à `GET /plan/confiances/candidates` : tous les gestes qui ont une fenêtre, tirés de la même évaluation que les candidates de la tuile — la tuile et la fiche ne peuvent pas afficher deux niveaux différents (US-183 / CA4)
+- Ajoute `parcelle_nom` aux projections de `GET /plan/calendriers`, lu en une requête pour toutes les tuiles (US-183 / CA8)
+- Limite la fiche à deux lectures au plus, zéro depuis le Plan qui lui passe ce qu'il a déjà chargé (US-183 / CA13)
+- Ajoute au `Modal` partagé les dispositions `adaptative` et `basse`, rétrocompatibles, et la fermeture par Échap pour toutes les fenêtres (US-183 / CA3, CA15)
+- Ajoute la page de contrôle visuel `/fiche-calendrier`, qui rejoue les quatre états de la maquette gelée avec des réponses simulées (US-183 / CA18)
+
+### 📚 Documentation
+- Ajoute à la fiche d'aide du calendrier l'ouverture et la lecture de la fiche calendrier d'une culture (US-183 / CA17, US-099 / CA9)
+- Solde dans `ANALYSE_REFONTE_UI_WEB_2026.md` §5.11 l'écart « absence de calendrier sur Stocks » (US-183 / CA17)
+
+## [v3.71.0] — 2026-09-18
+
+### 🚀 Nouveautés
+- Affiche sur chaque tuile de culture de l'écran Plan, à droite de la ligne « famille · durée », une **pastille de 1 à 3 étoiles** avec son niveau en toutes lettres (faible, moyenne, élevée), dès qu'un semis ou une plantation tombe dans la période conseillée ou à un mois d'elle (US-180 / CA1)
+- Affiche le geste le mieux noté quand deux sont possibles le même mois, et tranche une égalité par la règle de priorité des phases déjà utilisée par la frise (US-180 / CA2)
+- Recalcule l'indicateur quand la date de référence recule ou avance, sans toucher aux périodes conseillées de la frise (US-180 / CA4)
+- Ouvre au toucher de la pastille « Pourquoi ce niveau ? » : les règles qui ont coûté des points, les autres dépliables sous « Voir les 5 règles », chacune avec ses points et son motif (US-180 / CA5)
+- Dit « pas de calendrier » sur la tuile d'une culture sans aucune période pour la zone, et n'affiche rien quand il n'y a simplement rien à semer ni à planter en ce moment (US-180 / CA3)
+- Expose les étoiles aux lecteurs d'écran sous forme écrite (« confiance deux sur trois ») et ne confie le niveau à aucune couleur (US-180 / CA8)
+
+### 🔧 Améliorations techniques
+- Ajoute `GET /plan/confiances/candidates` : les gestes possibles de toutes les cultures de l'écran en **un appel et une seule lecture météo**, jamais une requête par tuile (US-180 / CA6)
+- Ajoute le bloc « règle de confiance » au design system (`BlocConfiance`, `Etoiles`, `PastilleConfiance`), porté depuis la maquette gelée du 18/09/2026 et partagé avec la fiche calendrier d'une culture (US-180, US-183)
+- Laisse l'écran Plan entièrement utilisable quand le niveau de confiance ne peut pas être lu : frises, familles, quantités et durées s'affichent, aucun repli n'est inventé (US-180 / CA7)
+- Garde la règle de priorité des phases à un seul endroit — celui de la frise — un test l'interdisant au moteur de confiance (US-180 / CA2)
+- Ajoute la pastille, la puce et le bloc de règles à la page de contrôle visuel du design system, vérifiés à 375 px, 768 px et 1280 px
+
+### 📚 Documentation
+- Complète la fiche d'aide du calendrier avec la lecture des étoiles sur l'écran Plan, la mention « pas de calendrier » et « Pourquoi ce niveau ? » (US-180 / CA10, US-099 / CA9)
+
 ## [v3.70.0] — 2026-09-17
 
 ### 🚀 Nouveautés

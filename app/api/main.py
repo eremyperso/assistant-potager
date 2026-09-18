@@ -1333,6 +1333,39 @@ def get_confiances_plan(
         db.close()
 
 
+@app.get("/plan/confiances/candidates")
+def get_confiances_candidates_plan(
+    culture: list[str] = Query(default=[]),
+    date_cible: date = Query(default=None, alias="date"),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-180 / CA1, CA3, CA6] Ce que chaque tuile de l'écran Plan peut proposer à
+    la date de référence : les actions EN FENÊTRE OU À UN MOIS, de la mieux placée
+    à la moins bonne, avec leurs motifs et la récolte attendue.
+
+    Un seul appel pour tout l'écran, une seule lecture météo (US-178 / CA9, CA10).
+    Toujours 200 : une culture sans fenêtre pour la zone rend `a_calendrier: false`
+    et aucune candidate — la tuile n'affiche alors rien, jamais une valeur de repli
+    (CA7). `potager_id` optionnel, comme `/plan` : consultation d'un potager archivé.
+    """
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        confiances = svc_confiance.confiances_du_plan(
+            db, culture, date_cible or date.today(), use_ctx.potager_id,
+        )
+        return {
+            "date": (date_cible or date.today()).isoformat(),
+            "cultures": {
+                nom: svc_confiance.confiances_culture_en_dict(c)
+                for nom, c in confiances.items()
+            },
+        }
+    finally:
+        db.close()
+
+
 @app.get("/plan/calendriers")
 def get_calendriers_plan(
     culture: list[str] = Query(default=[]),

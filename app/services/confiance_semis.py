@@ -691,3 +691,105 @@ def confiance_en_dict(confiance: Confiance) -> dict:
             "max": confiance.recolte_max.isoformat() if confiance.recolte_max else None,
         },
     }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Lecture de l'écran Plan [US-180]
+# ═════════════════════════════════════════════════════════════════════════════
+#: [US-180 / CA1] Les gestes qu'une tuile peut porter. La récolte n'en est pas
+#: un : on ne décide pas de récolter, on récolte quand c'est prêt.
+ACTIONS_DE_TUILE: tuple[str, ...] = (
+    ACTION_SEMIS_PEPINIERE, ACTION_SEMIS_PLEINE_TERRE, ACTION_PLANTATION,
+)
+
+
+@dataclass(frozen=True)
+class ConfiancesCulture:
+    """[US-180 / CA1, CA3] Ce qu'une tuile de l'écran Plan peut proposer à une date.
+
+    Trois états, et trois seulement — la tuile n'en invente pas un quatrième :
+
+    - `candidates` non vide → la ligne de confiance, sur la mieux placée ;
+    - `candidates` vide et `a_calendrier` → rien à semer ni à planter ce mois-ci ;
+    - `a_calendrier` faux → aucune fenêtre pour la zone (dégradé d'US-176 / CA6).
+    """
+    culture: str
+    culture_connue: bool
+    #: Au moins une phase de SEMIS ou de PLANTATION a une fenêtre pour la zone.
+    #: La récolte n'y compte pas : elle ne se décide pas depuis la tuile.
+    a_calendrier: bool
+    #: [CA1] Actions en fenêtre ou à un mois, du meilleur score au moins bon.
+    #: L'égalité n'est PAS tranchée ici : la règle de priorité des phases vit
+    #: avec la frise qui la sert déjà (US-176 / CA3bis, `lib/calendrier.js`).
+    candidates: list[Confiance]
+    #: [US-183 / CA4] TOUTES les actions dont la phase a une fenêtre pour la
+    #: zone, dans l'ordre du geste — le sélecteur de la fiche calendrier. Même
+    #: évaluation que `candidates`, donc la tuile et la fiche ne peuvent pas
+    #: afficher deux niveaux différents pour la même culture au même instant.
+    actions: list[Confiance]
+
+
+def confiances_de_culture(
+    db: Session,
+    culture: str,
+    date_cible: date,
+    potager_id: Optional[int],
+    lecture_meteo: Optional[svc_previsions.LecturePrevision] = None,
+) -> ConfiancesCulture:
+    """
+    [US-180 / CA1, CA3] Les actions PERTINENTES pour cette culture à cette date.
+
+    « Pertinente » n'a pas de second mécanisme : c'est exactement R1 gagnée —
+    la date tombe dans la fenêtre conseillée de la zone, ou à un mois d'elle.
+    Le barème d'US-178 reste donc le seul juge de l'approche (US-178 / CA3).
+
+    Aucune parcelle n'est passée : l'écran Plan lit une culture, pas un geste sur
+    une planche. Les trois actions sont demandées NOMMÉMENT, donc aucune n'est
+    tranchée en douce par `est_pepiniere` (US-178 / CA8).
+    """
+    evaluations = [
+        evaluer(db, culture, action, date_cible, potager_id, lecture_meteo=lecture_meteo)
+        for action in ACTIONS_DE_TUILE
+    ]
+    candidates = [
+        c for c in evaluations
+        if not c.sans_score
+        and any(m.regle == R1_FENETRE and m.etat == ETAT_GAGNE for m in c.motifs)
+    ]
+    candidates.sort(key=lambda c: -(c.score or 0))
+    return ConfiancesCulture(
+        culture=culture,
+        culture_connue=any(c.culture_connue for c in evaluations),
+        a_calendrier=any(not c.sans_score for c in evaluations),
+        candidates=candidates,
+        actions=[c for c in evaluations if not c.sans_score],
+    )
+
+
+def confiances_du_plan(
+    db: Session,
+    cultures: Iterable[str],
+    date_cible: date,
+    potager_id: Optional[int],
+) -> dict[str, ConfiancesCulture]:
+    """
+    [US-180 / CA6] Toutes les tuiles de l'écran Plan en UNE lecture : une seule
+    prévision météo pour l'écran entier (US-178 / CA9, CA10), jamais une requête
+    par tuile ni par action.
+    """
+    lecture = _lire_meteo(db, potager_id)
+    return {
+        nom: confiances_de_culture(db, nom, date_cible, potager_id, lecture)
+        for nom in dict.fromkeys(c for c in cultures if c and c.strip())
+    }
+
+
+def confiances_culture_en_dict(confiances: ConfiancesCulture) -> dict:
+    """Forme servie à l'écran Plan — les trois états d'une tuile, sans repli."""
+    return {
+        "culture": confiances.culture,
+        "culture_connue": confiances.culture_connue,
+        "a_calendrier": confiances.a_calendrier,
+        "candidates": [confiance_en_dict(c) for c in confiances.candidates],
+        "actions": [confiance_en_dict(c) for c in confiances.actions],
+    }
