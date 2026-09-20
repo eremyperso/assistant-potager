@@ -47,7 +47,7 @@ relis cette fiche avant de livrer.*
 | `recoltes-et-pertes.md` | le type d'organe récolté (`culture_config`), la déduction de stock à la récolte, le rendement en poids, la vente de plants |
 | `semis-godet-plantation.md` | le chaînage semis → godet → plantation, le calcul des graines soldées, la déduction des godets à la plantation, la filière d'un semis — pépinière ou pleine terre : reconnaissance, proposition, reprise de l'existant (`app/services/contexte_semis.py`, `migrations/migration_v47.sql`) |
 | `pepiniere-par-lot.md` | la lecture par lot (`calcul_lots_pepiniere`), les états de germination, le signalement d'incohérence de saisie |
-| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`), le plan d'occupation, ce que l'interpréteur de commandes rend dictable sur les parcelles (`app/services/interpreteur_commandes.py`) |
+| `parcelles-et-plan.md` | les parcelles (renommage, suppression logique, `est_pepiniere`, abri et paillage déclarés — US-181), le plan d'occupation, ce que l'interpréteur de commandes rend dictable sur les parcelles (`app/services/interpreteur_commandes.py`) |
 | `enregistrer-un-geste.md` | le référentiel d'actions (`utils/actions.py`), le parsing d'une phrase, l'étape de validation, la datation, l'interprétation d'une phrase en COMMANDE et ce qu'elle relit avant d'écrire (`app/services/interpreteur_commandes.py`, `app/services/menu_commandes.FORMES_DICTABLES`) |
 | `journal-et-corrections.md` | l'écran Journal (filtres, pagination, export), le parcours de correction et de suppression (dont la correction de la filière d'un semis), les façons de l'ouvrir (commande tapée, phrase dictée) |
 | `potager-cycle-de-vie.md` | l'archivage, la suppression logique, le délai de grâce et la purge |

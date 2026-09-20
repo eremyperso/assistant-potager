@@ -908,6 +908,7 @@ def creer_parcelle(req: CreerParcelleRequest, ctx: TenantContext = Depends(get_c
             "id": parcelle.id, "nom": parcelle.nom, "exposition": parcelle.exposition,
             "superficie_m2": parcelle.superficie_m2, "est_pepiniere": parcelle.est_pepiniere,
             "type_sol": parcelle.type_sol,
+            "abri": parcelle.abri, "paillage": parcelle.paillage,
         }
     finally:
         db.close()
@@ -2009,6 +2010,8 @@ def get_plan(
                 "nom":           p.nom,
                 "exposition":    p.exposition,
                 "superficie_m2": p.superficie_m2,
+                "abri":          p.abri,        # [US-181] None = non renseigné ≠ "aucun"
+                "paillage":      p.paillage,
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
                 "has_observations": nb_obs_parcelle > 0,

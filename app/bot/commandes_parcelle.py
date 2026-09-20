@@ -63,6 +63,10 @@ async def cmd_parcelle(update, ctx) -> None:
                     details.append(f"{p.superficie_m2} m²")
                 if p.est_pepiniere:
                     details.append("🌱 pépinière")
+                if p.abri and p.abri != "aucun":
+                    details.append(f"abri : {p.abri}")
+                if p.paillage:
+                    details.append("paillée")
                 detail_str = f" · {' · '.join(details)}" if details else ""
                 lignes.append(f"📍 *{p.nom.upper()}*{detail_str}")
             lignes.append("\n_Ajouter : /parcelle ajouter [nom] [exposition] [superficie]_")

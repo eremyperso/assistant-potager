@@ -46,3 +46,10 @@ Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun gest
 **On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant
 
 Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y rattache reste alors un semis à couvert, en attente de repiquage, et n'est jamais compté comme une culture en place au jardin, même si le lieu est nommé. Sans cette déclaration, semer dans sa serre en la nommant reviendrait à dire qu'on a semé en pleine terre, et le stock s'en trouverait faussé dès la première barquette. La déclaration se fait aussi en une phrase — « la serre est une pépinière » — sans connaître la syntaxe attendue.
+
+## Dire qu'une parcelle est sous serre, sous tunnel, sous châssis ou paillée
+
+**Intention :** procédure
+**On parle aussi de :** abri ; serre ; tunnel ; châssis ; voile ; paillage ; paillée ; protection ; sous abri
+
+Une parcelle peut porter un abri — aucun, voile, châssis, tunnel ou serre — et un paillage, oui ou non. Ce sont deux déclarations du jardinier, distinctes de la pépinière : une serre sert souvent de pépinière, pas toujours, et une pépinière est souvent abritée, pas toujours. Elles se disent en une phrase — « la parcelle 2 est sous serre », « rang 3 paillé », « la parcelle 2 est sans abri » — ou par la commande de modification de parcelle, avec les paramètres abri et paillage. Une parcelle jamais renseignée reste « non renseignée », ce qui n'est pas « sans abri ». Ces deux déclarations ne servent qu'à une chose : le niveau de confiance avant de semer ou de planter. Elles ne changent ni le stock, ni la pépinière, ni les statistiques. Un voile posé puis retiré en cours de saison n'est pas une déclaration de parcelle : « j'ai mis un voile sur le rang 3 » reste un geste du journal.

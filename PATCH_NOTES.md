@@ -1,3 +1,26 @@
+## [v3.73.0] — 2026-09-20
+
+### 🚀 Nouveautés
+- Ajoute à chaque parcelle un **abri** (aucun, voile, châssis, tunnel, serre) et un **paillage** (oui / non), distincts de « non renseigné » et de la pépinière (US-181 / CA1)
+- Permet de les déclarer au bot par `/parcelle modifier serre abri=serre paillage=oui` ou par une phrase — « la parcelle 2 est sous serre », « rang 3 paillé », « la parcelle 2 est sans abri » —, sans appel au modèle ; « j'ai mis un voile sur le rang 3 hier » et les questions restent hors déclaration (US-181 / CA2)
+- Fait peser l'abri sur la confiance : une serre ou un tunnel rendent sans objet la dernière gelée, le gel annoncé et les nuits fraîches ; un châssis ou un voile, le seul gel annoncé ; un paillage, les seules nuits fraîches (US-181 / CA4)
+- Dit en clair dans le motif que la parcelle a compté — « Gel annoncé le 3 avril — parcelle sous serre, règle sans objet » (US-181 / CA5)
+- Garde la période conseillée intacte : une plantation de janvier sous serre reste hors fenêtre (US-181 / CA6)
+- Expose `abri` et `paillage` dans `GET /plan` et `POST /parcelles` (US-181 / CA3, lecture seule)
+
+### 🔧 Améliorations techniques
+- Tient la table de modulation à un seul endroit du moteur, à côté des pondérations d'US-178 (`REGLES_ACQUISES_PAR_ABRI`, `REGLES_ACQUISES_PAR_PAILLAGE`), corrigeable là (US-181 / CA4)
+- Ajoute deux règles à la grammaire déterministe de l'interpréteur de commandes (`parcelle_abri`, `parcelle_abri_imperatif`, `parcelle_paillage`) et refuse « est-ce que… » comme déclaration (US-181 / CA2)
+
+### 💾 Base de données
+- Ajoute `parcelles.abri` (VARCHAR nullable) et `parcelles.paillage` (BOOLEAN nullable), sans reprise de l'existant — migration v49 et `rollback_v49.sql` (US-181 / CA7)
+
+### 📚 Documentation
+- Relit la fiche d'aide des parcelles et celle du niveau de confiance (US-181 / CA9, US-099 / CA9)
+
+### ⚠️ Reste à livrer
+- L'édition depuis l'écran de paramètres de la PWA (CA3) est reportée : aucun endpoint de modification de parcelle n'existe encore
+
 ## [v3.72.0] — 2026-09-18
 
 ### 🚀 Nouveautés
