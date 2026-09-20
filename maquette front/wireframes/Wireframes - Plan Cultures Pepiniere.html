@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="design_doc_mode" content="canvas">
+<title>Wireframes — Plan, Cultures, Pépinière</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:#2A3322;font-size:12px;line-height:1.4}
+a{color:#2A3322}a:hover{color:#4A7C22}
+.frame{position:absolute;background:#fff;border:1.5px solid #2A3322;border-radius:6px;overflow:hidden}
+.fh{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:#2A3322;letter-spacing:.02em}
+.fh small{font-weight:400;opacity:.75;margin-left:8px}
+.notes{position:absolute;display:flex;flex-direction:column;gap:14px;width:280px}.notes .note{position:static;width:auto}.note{position:absolute;background:#FBF3D5;border:1.5px solid #2A3322;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.5;width:280px}
+.note b{display:block;margin-bottom:4px}
+.q{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10.5px;margin-right:5px}
+.pad{padding:14px}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1.5px solid #2A3322;background:#F4F4EF}
+.tabs{display:flex;gap:6px}
+.tab{padding:5px 11px;border:1.5px solid #2A3322;border-radius:20px;font-weight:600;font-size:11.5px}
+.tab.on{background:#2A3322;color:#fff}
+.h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.h2{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5A6650;margin-bottom:8px}
+.box{border:1.5px solid #2A3322;border-radius:5px;padding:10px}
+.ghost{border:1.5px dashed #8A9480;border-radius:5px;color:#6B7562}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid #2A3322;border-radius:5px;padding:5px 10px;font-weight:700;font-size:11px;background:#fff}
+.btn.p{background:#2A3322;color:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1.5px solid #2A3322;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;align-items:center}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;border:1.5px solid #2A3322;vertical-align:-2px;margin-right:5px}
+.ph1{background:#CFE3F5}.ph2{background:#CBE2B4}.ph3{background:#F6D9A4}.ph0{background:repeating-linear-gradient(45deg,#fff 0 3px,#DDE1D6 3px 6px)}
+.parc{position:absolute;border:1.5px solid #2A3322;border-radius:4px;background:#fff;overflow:hidden}
+.parc .nm{position:absolute;left:6px;top:4px;font-size:10.5px;font-weight:700;background:#fff;padding:0 3px;border-radius:2px}
+.parc .sq{position:absolute;right:6px;top:4px;font-size:9.5px;color:#5A6650;background:#fff;padding:0 3px}
+.parc .pct{position:absolute;right:6px;bottom:4px;font-size:10px;font-weight:700;background:#fff;padding:0 3px}
+.rang{position:absolute;left:8px;right:8px;height:9px;border-radius:5px;border:1.5px solid #2A3322}
+.rang i{position:absolute;left:-2px;top:-2px;bottom:-2px;border-radius:5px;border:1.5px solid #2A3322}
+.row{display:flex;gap:8px;align-items:center}
+.line{height:8px;background:#DDE1D6;border-radius:4px}
+.line.s{width:60%}.line.xs{width:38%}
+.mo{display:grid;grid-template-columns:repeat(12,1fr);gap:2px}
+.mo span{height:9px;border-radius:2px;border:1px solid #8A9480;background:#fff}
+.mo span.on{background:#2A3322;border-color:#2A3322}
+.mo span.now{outline:2px solid #2A3322;outline-offset:1px}
+.mol{display:grid;grid-template-columns:repeat(12,1fr);font-size:8.5px;color:#6B7562;text-align:center;margin-top:3px}
+.card{border:1.5px solid #2A3322;border-radius:6px;padding:10px;background:#fff}
+.stars{font-size:12px;letter-spacing:.05em}
+.flow{position:absolute;height:0;border-top:1.5px dashed #2A3322}
+.arr{position:absolute;width:0;height:0;border-left:6px solid #2A3322;border-top:5px solid transparent;border-bottom:5px solid transparent}
+.lot{position:absolute;height:14px;border:1.5px solid #2A3322;border-radius:7px;background:#fff;font-size:9.5px;font-weight:700;padding:0 6px;line-height:11px;white-space:nowrap}
+.lot.late{border-style:dashed;background:#FBF3D5}
+.win{position:absolute;top:0;bottom:0;background:#EEF2E6;border-left:1.5px dashed #8A9480;border-right:1.5px dashed #8A9480}
+</style>
+</head>
+<body>
+
+<!-- ─────────── Section 0 : principe ─────────── -->
+<div class="fh" style="top:20px;left:40px;color:#2A3322;font-size:20px">Plan · Cultures · Pépinière — wireframes v1 <small>18 septembre 2026 · bas niveau de fidélité, pour trancher la logique avant le rendu</small></div>
+
+<div class="note" style="top:70px;left:40px;width:420px">
+<b>Règle de répartition retenue</b>
+<span class="q">Plan</span>surface et occupation, rien d'autre. Où est quoi, quelle place reste.<br>
+<span class="q">Cultures</span>tout ce qui se sait sur une culture : référentiel, calendrier de la zone, confiance du moment, variétés, voisinages, bioagresseurs.<br>
+<span class="q">Pépinière</span>ce qui se passe sous abri : quand sortir un lot, ce qui est disponible pour le plan, ce qui traîne.
+</div>
+<div class="note" style="top:70px;left:480px;width:400px">
+<b>Ce que le Plan ne fait plus</b>
+La tuile de culture perd sa frise 12 mois et sa puce de confiance (US-183 reste : la fiche s'ouvre désormais depuis Cultures et Stocks, plus depuis Plan). La tuile du Plan redevient : nom, variété, quantité, rang. Un lien « Voir la culture → » emmène vers Cultures.
+</div>
+<div class="note" style="top:70px;left:900px;width:400px">
+<b>Données mobilisées — rien de nouveau en base</b>
+Parcelle : nom, superficie m², ordre, exposition, flag pépinière.<br>
+Événement : culture, variété, rang (entier), quantité, phase déduite (semé / en place / en récolte).<br>
+Référentiel : fenêtres de la zone, durées, famille, associations, bioagresseurs.
+</div>
+
+<!-- ─────────── Section 1 : PLAN ─────────── -->
+<div class="fh" style="top:250px;left:40px;color:#2A3322;font-size:15px">1 · Plan — sous-onglet « Vue plan » <small>1180 px · les parcelles sont des rectangles dont l'aire est proportionnelle à la superficie, rangés dans l'ordre existant</small></div>
+
+<div class="frame" style="top:280px;left:40px;width:1180px;height:740px">
+  <div class="bar"><span class="h1">Plan</span><div class="tabs"><span class="tab">Parcelles</span><span class="tab on">Vue plan</span><span class="tab">Rotation</span></div><span style="margin-left:auto" class="pill">au 18 sept.</span><span class="btn">Réordonner</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 300px;gap:14px;height:calc(100% - 44px)">
+    <div>
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <div class="leg"><span><i class="sw ph1"></i>semé</span><span><i class="sw ph2"></i>en place</span><span><i class="sw ph3"></i>en récolte</span><span><i class="sw ph0"></i>libre</span></div>
+        <div class="leg"><span class="pill">Pleine terre · 6</span><span class="pill" style="border-style:dashed">Sous abri · 1</span></div>
+      </div>
+      <!-- pleine terre : treemap ordonnée, ligne par ligne -->
+      <div style="position:relative;height:430px;border:1.5px solid #2A3322;border-radius:6px;background:#FAFAF6">
+        <div class="parc" style="left:10px;top:10px;width:300px;height:200px"><span class="nm">planche-centrale</span><span class="sq">12 m²</span>
+          <div class="rang" style="top:42px"><i class="ph2" style="width:100%"></i></div>
+          <div class="rang" style="top:72px"><i class="ph2" style="width:70%"></i></div>
+          <div class="rang" style="top:102px"><i class="ph3" style="width:100%"></i></div>
+          <div class="rang" style="top:132px"><i class="ph1" style="width:45%"></i></div>
+          <div class="rang" style="top:162px;border-style:dashed;border-color:#8A9480"></div>
+          <span class="pct">78 %</span></div>
+        <div class="parc" style="left:320px;top:10px;width:250px;height:200px"><span class="nm">planche-ombre</span><span class="sq">10 m²</span>
+          <div class="rang" style="top:42px"><i class="ph1" style="width:100%"></i></div>
+          <div class="rang" style="top:72px"><i class="ph1" style="width:100%"></i></div>
+          <div class="rang" style="top:102px"><i class="ph3" style="width:60%"></i></div>
+          <div class="rang" style="top:132px;border-style:dashed;border-color:#8A9480"></div>
+          <div class="rang" style="top:162px;border-style:dashed;border-color:#8A9480"></div>
+          <span class="pct">52 %</span></div>
+        <div class="parc" style="left:580px;top:10px;width:200px;height:200px"><span class="nm">planche-courges</span><span class="sq">8 m²</span>
+          <div class="rang" style="top:42px"><i class="ph2" style="width:100%"></i></div>
+          <div class="rang" style="top:72px"><i class="ph2" style="width:100%"></i></div>
+          <div class="rang" style="top:102px"><i class="ph2" style="width:100%"></i></div>
+          <span class="pct">100 %</span></div>
+        <div class="parc" style="left:10px;top:220px;width:250px;height:100px"><span class="nm">carré-aromates</span><span class="sq">5 m²</span>
+          <div class="rang" style="top:40px"><i class="ph3" style="width:100%"></i></div>
+          <div class="rang" style="top:64px"><i class="ph3" style="width:30%"></i></div>
+          <span class="pct">65 %</span></div>
+        <div class="parc" style="left:270px;top:220px;width:200px;height:100px"><span class="nm">planche-nord</span><span class="sq">4 m²</span>
+          <div class="rang" style="top:40px;border-style:dashed;border-color:#8A9480"></div>
+          <div class="rang" style="top:64px;border-style:dashed;border-color:#8A9480"></div>
+          <span class="pct" style="color:#6B7562">libre</span></div>
+        <div class="parc" style="left:480px;top:220px;width:150px;height:100px"><span class="nm">butte</span><span class="sq">3 m²</span>
+          <div class="rang" style="top:40px"><i class="ph1" style="width:100%"></i></div>
+          <span class="pct">40 %</span></div>
+        <div class="parc" style="left:640px;top:220px;width:140px;height:100px;border-style:dashed;background:repeating-linear-gradient(45deg,#fff 0 4px,#F1F3EC 4px 8px)"><span class="nm">SERRE</span><span class="sq">2,5 m²</span><span class="pct" style="color:#6B7562">→ Pépinière</span></div>
+        <div style="position:absolute;left:10px;bottom:8px;font-size:10.5px;color:#6B7562">Aire = superficie déclarée. Un rang = une ligne ; sa longueur = part de la quantité par rapport au rang le plus fourni de la parcelle. Rang pointillé = déclaré mais vide.</div>
+      </div>
+      <div class="row" style="margin-top:10px;gap:14px;font-size:11px;color:#5A6650"><span>Total 44,5 m² · 42 m² pleine terre</span><span>·</span><span>Occupation 63 %</span><span>·</span><span>Libre : planche-nord entière, 2 rangs sur planche-ombre</span></div>
+    </div>
+    <!-- panneau latéral : parcelle sélectionnée -->
+    <div class="box" style="height:100%;display:flex;flex-direction:column;gap:10px">
+      <div><div class="h2">Parcelle sélectionnée</div><div class="h1">planche-centrale</div><div style="font-size:11px;color:#5A6650">12 m² · mi-ombre · limoneux · 78 % occupée</div></div>
+      <div class="h2" style="margin:0">Rangs</div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 1</b><span class="pill ph2">en place</span></div><div style="font-size:11px">Tomate <i>noire de Crimée</i> · 8 plants · depuis 1 juin</div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 2</b><span class="pill ph2">en place</span></div><div style="font-size:11px">Tomate <i>cerise</i> · 5 plants</div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 3</b><span class="pill ph3">en récolte</span></div><div style="font-size:11px">Courgette · 6 plants · 1ʳᵉ récolte 16 juil.</div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 4</b><span class="pill ph1">semé</span></div><div style="font-size:11px">Haricot · 2 m² · levée attendue 22 sept.</div></div>
+      <div class="card ghost" style="padding:8px;font-size:11px">Rang 5 — vide · <u>ajouter une culture</u></div>
+      <div style="margin-top:auto;display:flex;gap:6px"><span class="btn">Fiche parcelle</span><span class="btn p">Journal du jour</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:280px;left:1250px"><div class="note">
+<b>Pourquoi une treemap ordonnée et pas un plan « libre »</b>
+Sans position ni dimensions en base, tout placement serait inventé. La proportion des aires est la seule vérité disponible ; l'ordre d'affichage est déjà une donnée. Le jour où l'on ajoute longueur × largeur, les rectangles prennent la bonne forme sans changer la lecture.
+</div>
+<div class="note">
+<b>Un rang = un trait</b>
+Choix retenu (option 3, réinterprétée) : les cultures d'une parcelle sont ses rangs, les uns sous les autres. La longueur du trait = quantité relative dans la parcelle ; la couleur = phase du moment. Les points de l'option dessinée auraient promis un comptage plant par plant que la base ne garantit pas (semis en m²).
+</div>
+<div class="note">
+<b>Interactions</b>
+Appui sur une parcelle → panneau latéral (mobile : feuille). Appui sur un rang → surbrillance du rang dans le panneau. « Réordonner » = glisser les parcelles dans l'ordre existant ; aucun placement libre.<br>
+La serre est dessinée, hachurée, et renvoie vers Pépinière : c'est là qu'elle se lit.
+</div>
+<div class="note">
+<b>Ce que la vue plan ne montre pas</b>
+Ni calendrier, ni confiance, ni famille. Les couleurs de famille sont réservées à l'onglet Rotation (hors périmètre), qui reprendra exactement ce dessin avec une autre palette.
+</div></div>
+
+<!-- Plan mobile -->
+<div class="fh" style="top:1040px;left:40px;color:#2A3322;font-size:15px">1b · Vue plan — mobile 375</div>
+<div class="frame" style="top:1070px;left:40px;width:375px;height:700px">
+  <div class="bar" style="padding:8px 12px"><span class="h1">Plan</span><div class="tabs"><span class="tab" style="padding:3px 8px">Parcelles</span><span class="tab on" style="padding:3px 8px">Vue plan</span></div></div>
+  <div class="pad" style="padding:12px">
+    <div class="leg" style="gap:9px;margin-bottom:8px;font-size:10px"><span><i class="sw ph1"></i>semé</span><span><i class="sw ph2"></i>en place</span><span><i class="sw ph3"></i>récolte</span><span><i class="sw ph0"></i>libre</span></div>
+    <div style="position:relative;height:410px;border:1.5px solid #2A3322;border-radius:6px;background:#FAFAF6">
+      <div class="parc" style="left:8px;top:8px;width:200px;height:150px"><span class="nm">planche-centrale</span>
+        <div class="rang" style="top:30px"><i class="ph2" style="width:100%"></i></div><div class="rang" style="top:52px"><i class="ph2" style="width:70%"></i></div><div class="rang" style="top:74px"><i class="ph3" style="width:100%"></i></div><div class="rang" style="top:96px"><i class="ph1" style="width:45%"></i></div><div class="rang" style="top:118px;border-style:dashed;border-color:#8A9480"></div><span class="pct">78 %</span></div>
+      <div class="parc" style="left:216px;top:8px;width:120px;height:150px"><span class="nm">ombre</span>
+        <div class="rang" style="top:30px"><i class="ph1" style="width:100%"></i></div><div class="rang" style="top:52px"><i class="ph1" style="width:100%"></i></div><div class="rang" style="top:74px"><i class="ph3" style="width:60%"></i></div><div class="rang" style="top:96px;border-style:dashed;border-color:#8A9480"></div><span class="pct">52 %</span></div>
+      <div class="parc" style="left:8px;top:166px;width:160px;height:110px"><span class="nm">courges</span><div class="rang" style="top:30px"><i class="ph2" style="width:100%"></i></div><div class="rang" style="top:52px"><i class="ph2" style="width:100%"></i></div><div class="rang" style="top:74px"><i class="ph2" style="width:100%"></i></div><span class="pct">100 %</span></div>
+      <div class="parc" style="left:176px;top:166px;width:160px;height:110px"><span class="nm">aromates</span><div class="rang" style="top:30px"><i class="ph3" style="width:100%"></i></div><div class="rang" style="top:52px"><i class="ph3" style="width:30%"></i></div><span class="pct">65 %</span></div>
+      <div class="parc" style="left:8px;top:284px;width:130px;height:110px"><span class="nm">nord</span><div class="rang" style="top:30px;border-style:dashed;border-color:#8A9480"></div><div class="rang" style="top:52px;border-style:dashed;border-color:#8A9480"></div><span class="pct" style="color:#6B7562">libre</span></div>
+      <div class="parc" style="left:146px;top:284px;width:100px;height:110px"><span class="nm">butte</span><div class="rang" style="top:30px"><i class="ph1" style="width:100%"></i></div><span class="pct">40 %</span></div>
+      <div class="parc" style="left:254px;top:284px;width:82px;height:110px;border-style:dashed;background:repeating-linear-gradient(45deg,#fff 0 4px,#F1F3EC 4px 8px)"><span class="nm">SERRE</span></div>
+    </div>
+    <div style="font-size:11px;color:#5A6650;margin-top:8px">44,5 m² · occupation 63 % · appuyer sur une parcelle</div>
+    <!-- feuille -->
+    <div class="box" style="position:absolute;left:8px;right:8px;bottom:8px;background:#fff;box-shadow:0 -4px 0 #2A3322">
+      <div class="row" style="justify-content:space-between"><div><div class="h1">planche-ombre</div><div style="font-size:11px;color:#5A6650">10 m² · 52 % · 3 rangs sur 5</div></div><span class="btn">✕</span></div>
+      <div class="row" style="margin-top:8px;gap:6px"><span class="pill ph1">R1 tomate cœur de bœuf</span><span class="pill ph1">R2 tomate cerise</span></div>
+      <div class="row" style="margin-top:5px;gap:6px"><span class="pill ph3">R3 tomate noire</span><span class="pill ghost" style="border-style:dashed">R4 vide</span><span class="pill ghost" style="border-style:dashed">R5 vide</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────── Section 2 : CULTURES ─────────── -->
+<div class="fh" style="top:1040px;left:460px;color:#2A3322;font-size:15px">2 · Cultures — grille de cartes <small>1180 px · tout ce que l'application sait d'une culture, à un endroit</small></div>
+<div class="frame" style="top:1070px;left:460px;width:1180px;height:360px">
+  <div class="bar"><span class="h1">Cultures</span><div class="tabs"><span class="tab on">Au potager · 9</span><span class="tab">Toutes · 84</span></div><span style="margin-left:auto" class="box ghost" style="padding:4px 10px">🔍 rechercher une culture…</span><span class="pill">Trier : confiance ↓</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div class="card"><div class="row" style="justify-content:space-between"><div><div class="h1">Tomate</div><div style="font-size:11px;color:#5A6650;font-style:italic">3 variétés · Solanacée</div></div><span class="stars">★★★</span></div>
+      <div class="mo" style="margin-top:8px"><span></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span class="on"></span><span class="on"></span><span class="on now"></span><span></span><span></span><span></span></div>
+      <div class="row" style="margin-top:8px;justify-content:space-between;font-size:11px"><span class="pill ph3">en récolte · 2 parcelles</span><span>fenêtre : planter avr–mai</span></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div><div class="h1">Courgette</div><div style="font-size:11px;color:#5A6650;font-style:italic">1 variété · Cucurbitacée</div></div><span class="stars">★★☆</span></div>
+      <div class="mo" style="margin-top:8px"><span></span><span></span><span></span><span class="on"></span><span></span><span></span><span class="on"></span><span class="on"></span><span class="now"></span><span></span><span></span><span></span></div>
+      <div class="row" style="margin-top:8px;justify-content:space-between;font-size:11px"><span class="pill ph3">en récolte · 1 parcelle</span><span>fenêtre passée</span></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div><div class="h1">Haricot</div><div style="font-size:11px;color:#5A6650;font-style:italic">1 variété · Fabacée</div></div><span class="stars">★★☆</span></div>
+      <div class="mo" style="margin-top:8px"><span></span><span></span><span></span><span></span><span class="on"></span><span class="on"></span><span class="on"></span><span></span><span class="now"></span><span></span><span></span><span></span></div>
+      <div class="row" style="margin-top:8px;justify-content:space-between;font-size:11px"><span class="pill ph1">semé · 1 parcelle</span><span>semer : trop tard</span></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div><div class="h1">Ail</div><div style="font-size:11px;color:#5A6650;font-style:italic">1 variété · Alliacée</div></div><span style="font-size:10.5px;color:#6B7562">pas de calendrier</span></div>
+      <div class="mo ghost" style="margin-top:8px;border:none"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span class="now"></span><span></span><span></span><span></span></div>
+      <div class="row" style="margin-top:8px;justify-content:space-between;font-size:11px"><span class="pill ph2">en place · 2 parcelles</span><span><u>compléter</u></span></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div><div class="h1">Épinard</div><div style="font-size:11px;color:#5A6650;font-style:italic">Amaranthacée</div></div><span class="stars">★★★</span></div>
+      <div class="mo" style="margin-top:8px"><span></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span></span><span class="on"></span><span class="on now"></span><span class="on"></span><span></span><span></span></div>
+      <div class="row" style="margin-top:8px;justify-content:space-between;font-size:11px"><span class="pill" style="border-style:dashed">pas au potager</span><span><b>semer maintenant</b></span></div></div>
+    <div class="card ghost" style="display:flex;align-items:center;justify-content:center;font-size:12px">+ 3 autres cultures au potager · <u>voir toutes</u></div>
+  </div>
+  <div class="pad" style="padding-top:0"><div class="box ghost" style="padding:8px 12px;font-size:11px">Tri « confiance ↓ » = ce qu'il est bon de faire maintenant remonte. Les cultures hors potager avec une fenêtre ouverte (Épinard) apparaissent en pointillé : c'est la suggestion de la semaine.</div></div>
+</div>
+
+<div class="notes" style="top:1070px;left:1670px"><div class="note">
+<b>La carte dit trois choses</b>
+1. Le nom, les variétés, la famille (référentiel).<br>2. La frise 12 mois de la zone avec le mois courant.<br>3. Où elle en est au potager (phase, nb parcelles) et ce qu'on peut faire maintenant, avec la confiance en étoiles.<br>Les étoiles ici sont celles de la meilleure action possible aujourd'hui — la même règle que la fiche US-183.
+</div>
+<div class="note">
+<b>Deux onglets</b>
+« Au potager » : les cultures présentes (semées, en place ou en récolte) ou en pépinière. « Toutes » : le référentiel de la zone, 84 fiches, filtrable par famille et par mois. La recherche traverse les deux.
+</div></div>
+
+<!-- Fiche culture -->
+<div class="fh" style="top:1810px;left:40px;color:#2A3322;font-size:15px">2b · Fiche culture <small>panneau latéral 560 px sur desktop, plein écran mobile · sections dans l'ordre d'utilité</small></div>
+<div class="frame" style="top:1840px;left:40px;width:560px;height:1080px">
+  <div class="bar"><div><div class="h1">Tomate</div><div style="font-size:11px;color:#5A6650">Solanacée · zone océanique · au 18 septembre</div></div><span class="btn" style="margin-left:auto">✕</span></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:14px">
+    <div><div class="h2">Maintenant</div>
+      <div class="card"><div class="row" style="justify-content:space-between"><b>Rien à semer ni planter ce mois-ci</b><span class="stars">★★★ · fenêtre fermée</span></div>
+      <div style="font-size:11px;color:#5A6650;margin-top:4px">Prochaine fenêtre : semer en pépinière février → mars. Récolte en cours sur 2 parcelles jusqu'à fin septembre.</div>
+      <div class="row" style="margin-top:8px;gap:6px"><span class="btn">Ouvrir la fiche calendrier (US-183)</span></div></div></div>
+    <div><div class="h2">Calendrier de la zone</div>
+      <div class="mo"><span></span><span class="on"></span><span class="on"></span><span></span><span></span><span></span><span class="on"></span><span class="on"></span><span class="on now"></span><span></span><span></span><span></span></div>
+      <div class="mol"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span></div>
+      <div class="leg" style="margin-top:6px;font-size:10.5px"><span><i class="sw ph1"></i>semis pépinière</span><span><i class="sw ph2"></i>plantation</span><span><i class="sw ph3"></i>récolte</span></div></div>
+    <div><div class="h2">Référentiel</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:11.5px">
+        <div><span style="color:#5A6650">Famille</span><br><b>Solanacée</b></div><div><span style="color:#5A6650">Exposition</span><br><b>Plein soleil</b></div>
+        <div><span style="color:#5A6650">Durée plantation → récolte</span><br><b>non renseignée (US-177)</b></div><div><span style="color:#5A6650">Besoin en eau</span><br><b>Élevé</b></div>
+        <div><span style="color:#5A6650">Rusticité</span><br><b>gélive · 2 °C</b></div><div><span style="color:#5A6650">Source</span><br><b>Wind River Greens · CC BY 4.0</b></div></div></div>
+    <div><div class="h2">Variétés cultivées · 3</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="card" style="padding:7px 10px" ><div class="row" style="justify-content:space-between"><i>cœur de bœuf</i><span style="font-size:11px">planche-ombre · en récolte</span></div></div>
+        <div class="card" style="padding:7px 10px"><div class="row" style="justify-content:space-between"><i>cerise</i><span style="font-size:11px">ombre, courges, SERRE · en récolte + lot pépinière</span></div></div>
+        <div class="card" style="padding:7px 10px"><div class="row" style="justify-content:space-between"><i>noire de Crimée</i><span style="font-size:11px">centrale, ombre · en récolte</span></div></div></div></div>
+    <div><div class="h2">Voisinages</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><span class="pill ph2">+ basilic</span><span class="pill ph2">+ carotte</span><span class="pill ph2">+ œillet d'Inde</span><span class="pill" style="background:#F7D6D0">− pomme de terre</span><span class="pill" style="background:#F7D6D0">− fenouil</span></div></div>
+    <div><div class="h2">Bioagresseurs · 4</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="card" style="padding:7px 10px"><div class="row" style="justify-content:space-between"><b>Mildiou</b><span class="pill">saison : juil → sept</span></div><div style="font-size:11px;color:#5A6650">taches brunes, feutrage blanc sous la feuille</div></div>
+        <div class="card" style="padding:7px 10px"><div class="row" style="justify-content:space-between"><b>Doryphore</b><span class="pill">mai → août</span></div></div>
+        <div class="card ghost" style="padding:7px 10px;font-size:11px">+ 2 autres</div></div></div>
+  </div>
+</div>
+
+<div class="notes" style="top:1840px;left:630px"><div class="note">
+<b>Ordre des sections</b>
+« Maintenant » en premier : la seule chose qui change chaque semaine. Le reste est stable et se lit en descendant. La fiche calendrier US-183 (séries en terre, projections, règles) reste un écran à part, ouvert d'ici et de Stocks : la fiche culture ne la duplique pas, elle y renvoie.
+</div>
+<div class="note">
+<b>Ce qui manque encore en données</b>
+Besoin en eau, rusticité, saison des bioagresseurs : présents au référentiel (CultureConfig, Bioagresseur). Durée plantation → récolte : attend US-177 ; la case le dit plutôt que d'inventer.
+</div></div>
+
+<!-- ─────────── Section 3 : PÉPINIÈRE ─────────── -->
+<div class="fh" style="top:1810px;left:960px;color:#2A3322;font-size:15px">3 · Pépinière — calendrier par culture <small>1180 px · les lots posés dans la fenêtre de semis en pépinière de la zone</small></div>
+<div class="frame" style="top:1840px;left:960px;width:1180px;height:760px">
+  <div class="bar"><span class="h1">Pépinière</span><div class="tabs"><span class="tab">Lots</span><span class="tab on">Calendrier</span></div><span style="margin-left:auto" class="pill">au 18 sept.</span><span class="pill" style="border-style:dashed">SERRE · 2,5 m²</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 300px;gap:14px">
+    <div>
+      <!-- bandeau des trois réponses -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+        <div class="card" style="background:#FBF3D5"><div class="h2" style="margin-bottom:3px">À sortir</div><div class="h1">2 lots</div><div style="font-size:11px">Tomate cerise · 15 sept — repiquage attendu dans 3 j · Chou · 1 sept — <b>en retard de 6 j</b></div></div>
+        <div class="card"><div class="h2" style="margin-bottom:3px">Disponibles pour le plan</div><div class="h1">41 plants</div><div style="font-size:11px">3 lots au stade godet · ira en planche-nord (libre) ou rangs 4–5 de planche-ombre</div></div>
+        <div class="card"><div class="h2" style="margin-bottom:3px">À semer ce mois-ci</div><div class="h1">Épinard, laitue d'hiver</div><div style="font-size:11px">fenêtres ouvertes en pépinière, aucun lot en cours</div></div>
+      </div>
+      <!-- gantt par culture -->
+      <div class="box" style="padding:0;overflow:hidden">
+        <div style="display:grid;grid-template-columns:130px 1fr;border-bottom:1.5px solid #2A3322;background:#F4F4EF"><div style="padding:6px 10px;font-size:10.5px;font-weight:700">Culture</div><div class="mol" style="padding:6px 0;margin:0;font-size:10px;font-weight:700"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span style="color:#2A3322;text-decoration:underline">S</span><span>O</span><span>N</span><span>D</span></div></div>
+        <div style="display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid #C9CEC0;height:52px"><div style="padding:8px 10px"><b>Tomate</b><div style="font-size:10px;color:#5A6650">2 lots</div></div><div style="position:relative"><div class="win" style="left:8.3%;width:16.7%"></div><div class="lot" style="left:12%;top:8px;width:120px">cœur de bœuf · 1 avr → terre</div><div class="lot late" style="left:70.5%;top:30px;width:150px">cerise · 15 sept · repiquage +3 j</div></div></div>
+        <div style="display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid #C9CEC0;height:52px"><div style="padding:8px 10px"><b>Chou</b><div style="font-size:10px;color:#5A6650">1 lot</div></div><div style="position:relative"><div class="win" style="left:41.6%;width:25%"></div><div class="lot late" style="left:66.6%;top:19px;width:140px">frisé · 1 sept · retard 6 j</div></div></div>
+        <div style="display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid #C9CEC0;height:52px"><div style="padding:8px 10px"><b>Poireau</b><div style="font-size:10px;color:#5A6650">1 lot</div></div><div style="position:relative"><div class="win" style="left:0;width:25%"></div><div class="lot" style="left:8%;top:19px;width:110px">1 fév → terre le 10 mai</div></div></div>
+        <div style="display:grid;grid-template-columns:130px 1fr;border-bottom:1px solid #C9CEC0;height:44px;background:#FAFAF6"><div style="padding:8px 10px"><b>Épinard</b><div style="font-size:10px;color:#5A6650">aucun lot</div></div><div style="position:relative"><div class="win" style="left:58.3%;width:25%"></div><div class="lot ghost" style="left:66.6%;top:15px;border-style:dashed;background:#fff">+ semer maintenant</div></div></div>
+        <div style="display:grid;grid-template-columns:130px 1fr;height:44px;background:#FAFAF6"><div style="padding:8px 10px"><b>Laitue d'hiver</b><div style="font-size:10px;color:#5A6650">aucun lot</div></div><div style="position:relative"><div class="win" style="left:66.6%;width:16.7%"></div><div class="lot ghost" style="left:68%;top:15px;border-style:dashed;background:#fff">+ semer maintenant</div></div></div>
+        <div style="position:absolute;left:0"></div>
+      </div>
+      <div class="leg" style="margin-top:8px;font-size:10.5px"><span><i class="sw" style="background:#EEF2E6;border-style:dashed"></i>fenêtre de semis en pépinière (zone)</span><span><i class="sw"></i>lot : du semis à la sortie prévue</span><span><i class="sw" style="background:#FBF3D5;border-style:dashed"></i>lot à sortir / en retard</span><span>trait vertical S = aujourd'hui</span></div>
+    </div>
+    <!-- panneau lot -->
+    <div class="box" style="display:flex;flex-direction:column;gap:9px">
+      <div><div class="h2">Lot sélectionné</div><div class="h1">Chou frisé</div><div style="font-size:11px;color:#5A6650">semé le 1 sept · 18 jours · SERRE</div></div>
+      <div class="card" style="background:#FBF3D5;padding:8px"><b>En retard de 6 jours</b><div style="font-size:11px">Repiquage attendu à 12 j pour cette culture. Les plants filent au-delà.</div></div>
+      <div class="row" style="justify-content:space-between;font-size:11.5px"><span>Semés</span><b>48</b></div>
+      <div class="row" style="justify-content:space-between;font-size:11.5px"><span>Levés</span><b>40 · 83 %</b></div>
+      <div class="row" style="justify-content:space-between;font-size:11.5px"><span>Disponibles</span><b>40</b></div>
+      <div class="h2" style="margin:4px 0 0">Où les mettre</div>
+      <div class="card ghost" style="padding:7px;font-size:11px">planche-nord · 4 m² libre · plein soleil ✓</div>
+      <div class="card ghost" style="padding:7px;font-size:11px">planche-ombre · rangs 4–5 libres · mi-ombre</div>
+      <div style="margin-top:auto;display:flex;gap:6px"><span class="btn">Détail du lot</span><span class="btn p">Mettre en terre</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:1840px;left:2170px"><div class="note">
+<b>La question n° 1 : quand sortir un lot</b>
+Chaque lot est une barre du semis à la sortie prévue (durée de repiquage du référentiel). Dépassée, la barre passe en pointillé ambre et remonte dans « À sortir ». Le bandeau du haut donne les trois réponses attendues sans lire le gantt.
+</div>
+<div class="note">
+<b>Fenêtres de la zone</b>
+La bande grisée par ligne = fenêtre de semis en pépinière (FenetreCulturale, action « semis_pepiniere »). Une culture avec fenêtre ouverte et sans lot apparaît en bas, grisée, avec « + semer maintenant » : c'est le pont vers la suggestion de Cultures.
+</div>
+<div class="note">
+<b>« Où les mettre » relie Pépinière et Plan</b>
+Le panneau du lot propose les rangs libres du Plan (planche-nord entière, rangs 4–5 de planche-ombre), exposition comparée à celle du référentiel. « Mettre en terre » saisit l'événement de plantation avec parcelle et rang pré-remplis.
+</div>
+<div class="note">
+<b>Onglet « Lots » inchangé</b>
+Les cartes actuelles (3 stades, donut, décomposition) restent telles quelles sous l'onglet Lots. Le calendrier est un second regard sur les mêmes données, pas un remplacement.
+</div></div>
+
+<!-- ─────────── Section 4 : liens entre écrans ─────────── -->
+<div class="fh" style="top:2640px;left:960px;color:#2A3322;font-size:15px">4 · Comment les trois écrans se renvoient <small>chaque flèche est un lien réel dans les wireframes ci-dessus</small></div>
+<div style="position:absolute;top:2680px;left:960px;width:1180px;height:220px">
+  <div class="box" style="position:absolute;left:0;top:40px;width:300px;height:120px"><div class="h1">Plan</div><div style="font-size:11px;margin-top:4px">où est quoi · quelle place reste</div><div style="font-size:11px;margin-top:10px">→ Cultures : « voir la culture » sur un rang<br>→ Pépinière : la SERRE hachurée</div></div>
+  <div class="box" style="position:absolute;left:440px;top:40px;width:300px;height:120px"><div class="h1">Cultures</div><div style="font-size:11px;margin-top:4px">tout sur une culture · quoi faire maintenant</div><div style="font-size:11px;margin-top:10px">→ Fiche calendrier US-183 (séries, projections, règles)<br>→ Pépinière : « semer en pépinière » ouvre un lot</div></div>
+  <div class="box" style="position:absolute;left:880px;top:40px;width:300px;height:120px"><div class="h1">Pépinière</div><div style="font-size:11px;margin-top:4px">quand sortir · combien disponibles · quoi semer</div><div style="font-size:11px;margin-top:10px">→ Plan : « où les mettre » pré-remplit parcelle + rang<br>→ Cultures : le nom de la culture sur chaque ligne</div></div>
+  <div class="flow" style="left:300px;top:100px;width:140px"></div><div class="arr" style="left:434px;top:95px"></div>
+  <div class="flow" style="left:740px;top:100px;width:140px"></div><div class="arr" style="left:874px;top:95px"></div>
+  <div class="flow" style="left:150px;top:160px;width:880px;border-top:none;border-bottom:1.5px dashed #2A3322;height:30px;border-left:1.5px dashed #2A3322;border-right:1.5px dashed #2A3322"></div>
+  <div class="arr" style="left:145px;top:158px;transform:rotate(-90deg)"></div>
+  <div style="position:absolute;left:520px;top:196px;font-size:10.5px;color:#5A6650;background:#fff;padding:0 6px">Pépinière → Plan : « mettre en terre »</div>
+</div>
+
+</body>
+</html>
