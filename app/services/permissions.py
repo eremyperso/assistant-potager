@@ -26,6 +26,11 @@ log = logging.getLogger("potager")
 # [US-047] Rôles ordonnés par niveau croissant de droits.
 NIVEAUX_ROLE = {"lecteur": 0, "editor": 1, "owner": 2}
 
+# [US-085] Libellé de chaque rôle tel qu'il se dit dans une phrase (« tu es
+# éditeur ») — même vocabulaire que `frontend/src/lib/roles.js`, pour que le bot
+# et la PWA nomment un rôle de la même façon.
+LIBELLES_ROLE = {"owner": "propriétaire", "editor": "éditeur", "lecteur": "lecteur"}
+
 
 class PermissionInsuffisanteError(Exception):
     """[CA1, CA2, CA3] Le rôle du membre n'atteint pas le rôle minimum requis

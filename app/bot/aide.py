@@ -319,6 +319,8 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/lier [code] — Relier ce chat à votre compte web\n"
         "/delier — Dissocier ce chat de votre compte web\n"
         "/potager — Changer de potager actif\n"
+        # [US-087 / CA10] Même section que /lier et /potager : c'est de l'appartenance.
+        "/rejoindre [code] — Rejoindre un potager avec un code d'invitation\n"
         "/meteo — Météo + conseil potager\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
         "/version — Version déployée\n"

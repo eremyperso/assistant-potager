@@ -71,6 +71,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "parcelles",
     "culture",
     "potager",
+    "rejoindre",
     "lier",
     "tts_on",
     "tts_off",
@@ -101,6 +102,7 @@ DESCRIPTIONS: dict[str, str] = {
     "parcelles":   "Lister vos parcelles",
     "culture":     "Corriger la fiche d'une culture",
     "potager":     "Changer de potager actif",
+    "rejoindre":   "Rejoindre un potager avec un code d'invitation",  # [US-087]
     "lier":        "Relier ce chat à votre compte web",
     "tts_on":      "Activer les réponses vocales",
     "tts_off":     "Couper les réponses vocales",
@@ -528,7 +530,7 @@ COMMANDES_DICTABLES: frozenset[str] = frozenset(f.commande for f in FORMES_DICTA
 # ── Ce qu'une phrase ne peut pas porter — décisions du 08/09/2026 (CA7, CA8) ──
 # Une commande n'entre ici que sur une décision DÉFINITIVE, jamais parce qu'elle
 # n'est « pas encore faite » : c'est la condition pour que le test de parité
-# reste un garde-fou et non une formalité. Les cinq commandes ci-dessous restent
+# reste un garde-fou et non une formalité. Les six commandes ci-dessous restent
 # pleinement fonctionnelles à la saisie manuelle — les exclure de l'interpréteur
 # ne les retire pas du bot, exactement comme les exclure du menu ne les en
 # retirait pas.
@@ -549,6 +551,11 @@ MOTIFS_EXCLUSION_INTERPRETEUR: dict[str, str] = {
         "Action rare et destructive SUR L'IDENTITÉ. La rendre atteignable à une "
         "phrase mal transcrite serait un mauvais service — même raisonnement que "
         "son exclusion du menu (US-171)."
+    ),
+    "rejoindre": (
+        "Le code d'invitation est une chaîne à coller, pas à dicter : la "
+        "transcription vocale d'un code est fausse par construction — même "
+        "raisonnement que /lier (US-087)."
     ),
     "version": (
         "Diagnostic sans usage quotidien pour le jardinier."

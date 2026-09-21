@@ -11,16 +11,25 @@ d'un potager résolu. `creer_invitation`/`retirer_membre` visent un potager
 explicite (potager_id de l'URL), pas nécessairement le potager actif de
 l'appelant — le TenantContext est donc construit ici, ciblé sur ce potager,
 via `potager_actif.role_utilisateur`, puis passé à `require_role`.
+
+[US-085] Source de vérité des droits : `potager_membres.role`, et elle seule —
+c'est elle qu'interroge `require_role` (via `role_utilisateur`). Un potager peut
+compter plusieurs owners. `Potager.proprietaire_id` (socle US-040) n'est que le
+CRÉATEUR D'ORIGINE : posé une fois à `creer_potager`, jamais relu pour décider
+d'un droit, jamais réécrit par un changement de rôle, un retrait ou un départ.
+La règle « un potager garde au moins un owner » vit dans UNE fonction,
+`_garantir_un_owner_restant`, appelée par tout chemin qui peut retirer un owner.
 """
 import logging
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
-from app.services.permissions import require_role
+from app.services.permissions import LIBELLES_ROLE, NIVEAUX_ROLE, require_role
 from app.services import auth as svc_auth
 from app.services import cache_questions as svc_cache_questions
 from app.services import connaissance as svc_connaissance
@@ -39,6 +48,22 @@ _ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 _LONGUEUR_CODE = 8
 _TTL_JOURS = 7
 _ROLES_INVITABLES = {"editor", "lecteur"}
+# [US-085 / CA1] Un rôle se CHANGE vers n'importe lequel des trois — contrairement à
+# l'invitation, qui ne propose jamais `owner` (le rôle se donne à un membre déjà là).
+_ROLES_ATTRIBUABLES = set(NIVEAUX_ROLE)
+
+# [US-085 / CA8] Ce que le nouveau rôle permet, dit au membre concerné par Telegram.
+_CE_QUE_PERMET_LE_ROLE = {
+    "owner": (
+        "Tu peux désormais tout faire sur ce potager : enregistrer des événements, "
+        "inviter ou retirer des membres, l'archiver ou le supprimer."
+    ),
+    "editor": (
+        "Tu peux enregistrer des événements (semis, récoltes, observations…), "
+        "mais pas gérer les membres ni le potager."
+    ),
+    "lecteur": "Tu peux consulter le potager, sans y enregistrer d'événement.",
+}
 
 # [US-084 / CA7] Délai de grâce entre la suppression logique (soft-delete) et la
 # purge physique — l'owner peut restaurer son potager pendant toute cette durée.
@@ -71,6 +96,27 @@ class DejaMembreError(Exception):
 
 class MembreInconnuError(Exception):
     """[CA5] Tentative de retrait d'un utilisateur qui n'est pas membre du potager."""
+
+
+class DernierOwnerError(Exception):
+    """[US-085 / CA3, CA4] L'opération laisserait le potager sans aucun owner.
+
+    Une seule exception pour les trois chemins qui peuvent faire disparaître un
+    owner — changement de rôle, retrait par un owner (`retirer_membre`, US-048) et
+    départ volontaire (US-086) : même message et même statut HTTP côté PWA, comme
+    `PermissionInsuffisanteError`. `propose_archivage` ajoute la seconde issue
+    (archiver puis supprimer) quand l'appelant cherche à SORTIR du potager ; un
+    owner qui veut seulement se rétrograder n'a, lui, qu'une marche à suivre."""
+
+    def __init__(self, action_label: str, propose_archivage: bool = False) -> None:
+        self.action_label = action_label
+        message = (
+            f"Tu es le seul propriétaire de ce potager, tu ne peux pas {action_label}. "
+            "Désigne d'abord un autre propriétaire"
+        )
+        if propose_archivage:
+            message += ", ou archive puis supprime le potager"
+        super().__init__(message + ".")
 
 
 class PotagerNonArchiveError(Exception):
@@ -257,7 +303,8 @@ def renseigner_altitudes_manquantes(
 
 
 def _notifier_cycle_vie(
-    db: Session, potager: Potager, acteur_id: int, texte_action: str, precision: str = ""
+    db: Session, potager: Potager, acteur_id: int, texte_action: str, precision: str = "",
+    roles_destinataires: Optional[frozenset[str]] = None,
 ) -> None:
     """[US-083 / CA9] Notifie chaque AUTRE membre du potager ayant un compte
     Telegram lié — l'acteur de l'action n'a pas besoin de se notifier lui-même.
@@ -266,17 +313,22 @@ def _notifier_cycle_vie(
 
     [US-084 / CA9] `precision` complète la phrase pour les actions dont la
     conséquence n'est pas évidente au seul énoncé de l'action (date effective
-    de purge après une suppression)."""
+    de purge après une suppression).
+
+    [US-086 / CA7, US-087 / CA8] `roles_destinataires` restreint la diffusion aux
+    membres portant l'un de ces rôles — les owners, pour un départ ou une arrivée,
+    qui ne concernent pas les autres membres. `None` : tous les autres membres."""
     acteur = db.query(User).filter(User.id == acteur_id).first()
     nom_acteur = (acteur.nom or acteur.email) if acteur else "Un membre"
 
-    membres = (
+    requete = (
         db.query(PotagerMembre, User)
         .join(User, User.id == PotagerMembre.user_id)
         .filter(PotagerMembre.potager_id == potager.id, PotagerMembre.user_id != acteur_id)
-        .all()
     )
-    for _membre, membre_user in membres:
+    if roles_destinataires is not None:
+        requete = requete.filter(PotagerMembre.role.in_(roles_destinataires))
+    for _membre, membre_user in requete.all():
         if membre_user.telegram_chat_id is None:
             continue
         texte = f"{nom_acteur} a {texte_action} le potager « {potager.nom} »."
@@ -714,6 +766,77 @@ def accepter_invitation(db: Session, user_id: int, code: str) -> PotagerMembre:
     return membre
 
 
+@dataclass(frozen=True)
+class AdhesionPotager:
+    """[US-087] Ce dont le bot a besoin pour répondre à un `/rejoindre` réussi.
+
+    `devenu_actif` : le potager rejoint est devenu le potager actif (l'utilisateur n'en
+    avait aucun). Sinon `potager_actif_nom` nomme le potager actif, resté inchangé."""
+    potager_id: int
+    potager_nom: str
+    role: str
+    role_libelle: str
+    peut_ecrire: bool
+    devenu_actif: bool
+    potager_actif_nom: Optional[str]
+
+
+def rejoindre_potager(db: Session, user_id: int, code: str) -> AdhesionPotager:
+    """[US-087 / CA3, CA6, CA8] Adhésion par code depuis Telegram : enveloppe d'`accepter_invitation`,
+    qui reste la SEULE à connaître les règles de validation (code inconnu, expiré, déjà utilisé,
+    déjà membre — ses exceptions remontent telles quelles au handler du bot).
+
+    [CA6] Jamais de bascule silencieuse (US-046) : un utilisateur qui avait un potager actif le
+    garde — y compris quand ce n'était que le défaut TRANSITOIRE de `resoudre_tenant_context`
+    (plusieurs potagers, aucun choix persisté), que `accepter_invitation` écraserait sinon
+    puisque `potager_actif_id` est alors NULL. Sans potager actif, le potager rejoint le devient.
+
+    [CA8] Les owners du potager ayant un compte Telegram lié sont informés de l'arrivée. Propre à
+    cette porte d'entrée : `POST /invitations/{code}/accepter` (PWA) ne notifie personne.
+    Le code d'invitation n'est jamais journalisé ici."""
+    try:
+        actif_avant = svc_potager_actif.resoudre_tenant_context(db, user_id).potager_id
+    except svc_potager_actif.AucunPotagerError:
+        actif_avant = None
+
+    membre = accepter_invitation(db, user_id, code)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if actif_avant is not None and user.potager_actif_id != actif_avant:
+        user.potager_actif_id = actif_avant
+        db.commit()
+
+    potager = db.query(Potager).filter(Potager.id == membre.potager_id).first()
+    potager_actif_nom = None
+    if actif_avant is not None:
+        actif = db.query(Potager).filter(Potager.id == actif_avant).first()
+        potager_actif_nom = actif.nom if actif else None
+    devenu_actif = (
+        actif_avant is None
+        and user.potager_actif_id == potager.id
+        and potager.etat == svc_potager_actif.ETAT_ACTIF
+    )
+
+    role_libelle = LIBELLES_ROLE.get(membre.role, membre.role)
+    log.info(
+        "[US-087] Potager rejoint depuis Telegram : potager_id=%s user_id=%s role=%s devenu_actif=%s",
+        potager.id, user_id, membre.role, devenu_actif,
+    )
+    _notifier_cycle_vie(
+        db, potager, user_id, "rejoint", precision=f"Rôle : {role_libelle}.",
+        roles_destinataires=frozenset({"owner"}),
+    )
+    return AdhesionPotager(
+        potager_id=potager.id,
+        potager_nom=potager.nom,
+        role=membre.role,
+        role_libelle=role_libelle,
+        peut_ecrire=NIVEAUX_ROLE.get(membre.role, -1) >= NIVEAUX_ROLE["editor"],
+        devenu_actif=devenu_actif,
+        potager_actif_nom=potager_actif_nom,
+    )
+
+
 def lister_membres(db: Session, potager_id: int) -> list[dict]:
     """Membres d'un potager (email, nom, rôle), triés par id utilisateur.
 
@@ -731,12 +854,143 @@ def lister_membres(db: Session, potager_id: int) -> list[dict]:
     return [{"user_id": u.id, "email": u.email, "nom": u.nom, "role": m.role} for m, u in rows]
 
 
+def _garantir_un_owner_restant(
+    db: Session, potager_id: int, membre_user_id: int, action_label: str, propose_archivage: bool = False,
+) -> None:
+    """[US-085 / CA3, CA4] Garde UNIQUE « un potager garde au moins un owner » : lève
+    `DernierOwnerError` si `membre_user_id` est le dernier owner, donc si lui retirer
+    son rôle (rétrogradation, retrait, départ) laisserait le potager orphelin.
+
+    ⚠️ À appeler DANS la transaction qui écrit ensuite, avant le `commit` : le
+    `SELECT … FOR UPDATE` garde les lignes des owners verrouillées jusqu'à ce
+    commit. Sans lui, deux owners qui se rétrogradent en même temps liraient chacun
+    « l'autre est encore owner » et le potager finirait sans propriétaire. Le second
+    attend, relit après le commit du premier — sous PostgreSQL une ligne devenue
+    non-owner sort du résultat — et se voit refuser. (SQLite, qui sert aux tests,
+    ignore `FOR UPDATE` : un seul écrivain à la fois de toute façon.)"""
+    owners = [
+        uid for (uid,) in (
+            db.query(PotagerMembre.user_id)
+            .filter(PotagerMembre.potager_id == potager_id, PotagerMembre.role == "owner")
+            .order_by(PotagerMembre.user_id)  # même ordre de verrouillage partout : pas d'interblocage
+            .with_for_update()
+            .all()
+        )
+    ]
+    if owners == [membre_user_id]:
+        raise DernierOwnerError(action_label, propose_archivage)
+
+
+def _supprimer_appartenance(
+    db: Session, potager_id: int, membre_user_id: int, action_label: str, propose_archivage: bool = False,
+) -> None:
+    """[US-048 / CA5, CA6 ; US-085 / CA4] Supprime le lien d'appartenance d'un membre —
+    logique commune au retrait par un owner (`retirer_membre`) et au départ volontaire
+    (US-086) : la garde « dernier owner » et l'invalidation du potager actif ne
+    vivent qu'ici. Le contrôle des droits reste à la charge de l'appelant. Ne touche
+    à aucune donnée métier : événements, parcelles et photos restent au potager.
+
+    L'invalidation (`potager_actif_id = NULL`) suffit à couper l'accès : au prochain
+    accès, `resoudre_tenant_context` rebascule sur un autre potager de l'intéressé
+    ou lève `AucunPotagerError` (409 « aucun potager », cf. get_current_user_ctx)."""
+    membre = (
+        db.query(PotagerMembre)
+        .filter(PotagerMembre.user_id == membre_user_id, PotagerMembre.potager_id == potager_id)
+        .first()
+    )
+    if membre is None:
+        raise MembreInconnuError("Cet utilisateur n'est pas membre de ce potager")
+
+    if membre.role == "owner":
+        _garantir_un_owner_restant(db, potager_id, membre_user_id, action_label, propose_archivage)
+
+    db.delete(membre)
+
+    membre_user = db.query(User).filter(User.id == membre_user_id).first()
+    if membre_user.potager_actif_id == potager_id:
+        membre_user.potager_actif_id = None  # [CA6] invalidation immédiate
+
+    db.commit()
+
+
 def retirer_membre(db: Session, user_id: int, potager_id: int, membre_user_id: int) -> None:
     """[CA5, CA6] Un owner retire un membre — celui-ci perd l'accès immédiatement :
     si ce potager était son potager actif, il est invalidé (l'utilisateur retiré
-    reçoit alors un 409 'aucun potager' au prochain accès, cf. get_current_user_ctx)."""
+    reçoit alors un 409 'aucun potager' au prochain accès, cf. get_current_user_ctx).
+
+    [US-085 / CA4] Un owner ne peut pas se retirer s'il est le dernier."""
     ctx = _ctx_pour_potager(db, user_id, potager_id)
     require_role(ctx, "owner", "retirer un membre")
+
+    _supprimer_appartenance(db, potager_id, membre_user_id, "te retirer", propose_archivage=True)
+    log.info("[US-048] Membre retiré : potager_id=%s membre_user_id=%s par=%s", potager_id, membre_user_id, user_id)
+
+
+def quitter_potager(db: Session, user_id: int, potager_id: int) -> None:
+    """[US-086 / CA1-CA5, CA7, CA8] Un membre se retire LUI-MÊME d'un potager — sans autre
+    permission que d'en être membre : l'asymétrie d'avant (un owner retire, un membre ne
+    peut pas partir) disparaît.
+
+    [CA2, CA3] Un owner non unique part comme n'importe quel membre ; le dernier owner est
+    refusé par la garde unique d'US-085 (`DernierOwnerError`, avec la marche à suivre :
+    désigner un autre propriétaire, ou archiver puis supprimer).
+    [CA4, CA8] La suppression d'appartenance et l'invalidation du potager actif sont
+    celles de `retirer_membre` (`_supprimer_appartenance`) : dès la requête suivante,
+    API comme bot, le potager n'apparaît plus dans les potagers de l'ancien membre.
+    [CA5] Aucune donnée métier n'est touchée : le potager appartient au collectif.
+    [CA7] Les owners restants ayant un compte Telegram lié sont informés du départ."""
+    role = svc_potager_actif.role_utilisateur(db, user_id, potager_id)
+    if role is None:
+        raise svc_potager_actif.PotagerNonMembreError("Cet utilisateur n'est pas membre de ce potager")
+
+    _supprimer_appartenance(db, potager_id, user_id, "le quitter", propose_archivage=True)
+    log.info("[US-086] Potager quitté : potager_id=%s user_id=%s role=%s", potager_id, user_id, role)
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    _notifier_cycle_vie(db, potager, user_id, "quitté", roles_destinataires=frozenset({"owner"}))
+
+
+def _notifier_changement_role(
+    db: Session, potager: Potager, acteur_id: int, membre_user_id: int, nouveau_role: str
+) -> None:
+    """[US-085 / CA8] Informe le membre dont le rôle vient de changer, s'il a un compte
+    Telegram lié (US-045) : son nouveau rôle et ce qu'il lui permet. Best-effort comme
+    `_notifier_cycle_vie` — l'absence de liaison ou une panne Telegram ne fait jamais
+    échouer le changement de rôle."""
+    membre_user = db.query(User).filter(User.id == membre_user_id).first()
+    if membre_user is None or membre_user.telegram_chat_id is None:
+        return
+    acteur = db.query(User).filter(User.id == acteur_id).first()
+    nom_acteur = (acteur.nom or acteur.email) if acteur else "Un propriétaire"
+    texte = (
+        f"{nom_acteur} a changé ton rôle sur le potager « {potager.nom} » : "
+        f"tu es maintenant {LIBELLES_ROLE[nouveau_role]}. {_CE_QUE_PERMET_LE_ROLE[nouveau_role]}"
+    )
+    svc_telegram_notify.envoyer_message(membre_user.telegram_chat_id, texte)
+
+
+def modifier_role_membre(
+    db: Session, user_id: int, potager_id: int, membre_user_id: int, nouveau_role: str,
+) -> PotagerMembre:
+    """[US-085 / CA1-CA6, CA8] Un owner change le rôle d'un membre du potager : correction
+    d'un rôle mal attribué (`lecteur` ↔ `editor`), promotion d'un autre owner (CA2) ou
+    rétrogradation de lui-même (CA3). Réservé aux owners (CA5) : un editor ou un lecteur
+    ne peut modifier aucun rôle, y compris le sien.
+
+    [CA3, CA4] Rétrograder un owner — soi-même ou un autre — passe par la garde unique
+    `_garantir_un_owner_restant` : le dernier owner ne peut jamais l'être. La garde et
+    l'écriture partagent la même transaction (pas de course entre deux rétrogradations).
+
+    [CA6] Le changement est immédiat : `potager_membres.role` est relu à chaque requête
+    (`resoudre_tenant_context`, `role_utilisateur`), sans jeton ni cache à invalider.
+    `Potager.proprietaire_id` n'est pas touché — cf. la docstring du module.
+
+    Demander le rôle que le membre a déjà est sans effet et ne notifie personne."""
+    ctx = _ctx_pour_potager(db, user_id, potager_id)
+    require_role(ctx, "owner", "modifier le rôle d'un membre")
+
+    if nouveau_role not in _ROLES_ATTRIBUABLES:
+        raise RoleInvalideError("Le rôle doit être 'owner', 'editor' ou 'lecteur'")
 
     membre = (
         db.query(PotagerMembre)
@@ -746,11 +1000,23 @@ def retirer_membre(db: Session, user_id: int, potager_id: int, membre_user_id: i
     if membre is None:
         raise MembreInconnuError("Cet utilisateur n'est pas membre de ce potager")
 
-    db.delete(membre)
+    ancien_role = membre.role
+    if ancien_role == nouveau_role:
+        return membre
 
-    membre_user = db.query(User).filter(User.id == membre_user_id).first()
-    if membre_user.potager_actif_id == potager_id:
-        membre_user.potager_actif_id = None  # [CA6] invalidation immédiate
+    if ancien_role == "owner":
+        _garantir_un_owner_restant(
+            db, potager_id, membre_user_id,
+            "te rétrograder" if membre_user_id == user_id else "rétrograder ce propriétaire",
+        )
 
+    membre.role = nouveau_role
     db.commit()
-    log.info("[US-048] Membre retiré : potager_id=%s membre_user_id=%s par=%s", potager_id, membre_user_id, user_id)
+    log.info(
+        "[US-085] Rôle modifié : potager_id=%s membre_user_id=%s %s→%s par=%s",
+        potager_id, membre_user_id, ancien_role, nouveau_role, user_id,
+    )
+
+    potager = db.query(Potager).filter(Potager.id == potager_id).first()
+    _notifier_changement_role(db, potager, user_id, membre_user_id, nouveau_role)
+    return membre

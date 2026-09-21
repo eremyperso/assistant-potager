@@ -35,7 +35,9 @@ Onboarding self-service [US-048] :
   POST   /invitations/{code}/accepter            → accepter une invitation
   GET    /potagers/{id}/membres                  → lister les membres d'un potager
   DELETE /potagers/{id}/membres/{membre_user_id} → retirer un membre (owner)
-  POST   /potagers/{id}/archiver                 → archiver un potager, lecture seule (owner) [US-083]
+  PATCH  /potagers/{id}/membres/{membre_user_id} → changer le rôle d'un membre / passer la main (owner) [US-085]
+  POST   /potagers/{id}/quitter                  → se retirer soi-même d'un potager (tout membre, sauf le dernier owner) [US-086]
+  POST   /potagers/{id}/archiver                → archiver un potager, lecture seule (owner) [US-083]
   POST   /potagers/{id}/desarchiver              → désarchiver un potager (owner) [US-083]
   GET    /potagers/{id}/impact-suppression       → décompte réel avant suppression (owner) [US-084]
   DELETE /potagers/{id}                          → supprimer un potager archivé, délai de grâce 30 j (owner) [US-084]
@@ -842,6 +844,12 @@ class InviterMembreRequest(BaseModel):
     email_invite: Optional[str] = None
 
 
+class ModifierRoleMembreRequest(BaseModel):
+    # [US-085 / CA1] Mêmes valeurs que `role_propose` de l'invitation (US-048),
+    # plus 'owner' : 'owner' | 'editor' | 'lecteur'.
+    role: str
+
+
 @app.post("/potagers", status_code=201)
 def creer_potager(req: CreerPotagerRequest, user: User = Depends(get_current_user)):
     """[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et
@@ -1025,7 +1033,8 @@ def lister_membres_potager(potager_id: int, user: User = Depends(get_current_use
 @app.delete("/potagers/{potager_id}/membres/{membre_user_id}")
 def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = Depends(get_current_user)):
     """[US-048 / CA5, CA6] Un owner retire un membre — celui-ci perd l'accès
-    immédiatement (potager actif invalidé s'il pointait vers ce potager)."""
+    immédiatement (potager actif invalidé s'il pointait vers ce potager).
+    [US-085 / CA4] 409 si ce retrait laisserait le potager sans owner."""
     db = SessionLocal()
     try:
         try:
@@ -1034,6 +1043,56 @@ def retirer_membre_potager(potager_id: int, membre_user_id: int, user: User = De
             raise HTTPException(status_code=403, detail=str(e))
         except svc_potagers.MembreInconnuError as e:
             raise HTTPException(status_code=404, detail=str(e))
+        except svc_potagers.DernierOwnerError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {"success": True}
+    finally:
+        db.close()
+
+
+@app.patch("/potagers/{potager_id}/membres/{membre_user_id}")
+def modifier_role_membre_potager(
+    potager_id: int, membre_user_id: int, req: ModifierRoleMembreRequest,
+    user: User = Depends(get_current_user),
+):
+    """[US-085 / CA1-CA6] Un owner change le rôle d'un membre : 'owner' | 'editor' |
+    'lecteur'. Vise le potager de l'URL, pas nécessairement le potager actif de
+    l'appelant (même principe que POST /potagers/{id}/invitations). 403 pour tout
+    non-owner, y compris sur son propre rôle ; 409 si le changement laisserait le
+    potager sans owner. Effet immédiat : le rôle est relu à chaque requête."""
+    db = SessionLocal()
+    try:
+        try:
+            membre = svc_potagers.modifier_role_membre(db, user.id, potager_id, membre_user_id, req.role)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_potagers.RoleInvalideError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except svc_potagers.MembreInconnuError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except svc_potagers.DernierOwnerError as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        return {"user_id": membre.user_id, "role": membre.role}
+    finally:
+        db.close()
+
+
+@app.post("/potagers/{potager_id}/quitter")
+def quitter_potager(potager_id: int, user: User = Depends(get_current_user)):
+    """[US-086 / CA1-CA5, CA7, CA8] Le membre se retire lui-même du potager — identité
+    seule, aucune permission particulière autre que d'en être membre (403 sinon,
+    comme POST /potagers/{id}/activer). 409 pour le dernier owner, avec la marche à
+    suivre dans le message (désigner un autre propriétaire, ou archiver puis
+    supprimer). Aucune donnée métier n'est effacée ; l'accès est coupé dès la
+    requête suivante et le potager actif est invalidé s'il pointait ici."""
+    db = SessionLocal()
+    try:
+        try:
+            svc_potagers.quitter_potager(db, user.id, potager_id)
+        except svc_potager_actif.PotagerNonMembreError:
+            raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
+        except svc_potagers.DernierOwnerError as e:
+            raise HTTPException(status_code=409, detail=str(e))
         return {"success": True}
     finally:
         db.close()

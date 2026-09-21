@@ -17,6 +17,7 @@ from .liaison import (
     cmd_delier,
     cmd_lier,
     cmd_potager,
+    cmd_rejoindre,
     cmd_start,
 )
 from .enregistrement import _action_confirm_cb
@@ -78,12 +79,19 @@ async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ci-dessous plutôt que par un appel direct à app.add_handler(CommandHandler(...)).
 _COMMANDES_SANS_GARDE_LIAISON = {"start", "help", "lier", "delier"}  # [CA9] onboarding + [US-050] identité seule
 
+# [US-087 / CA1, CA6] Commandes soumises au garde de liaison — un chat non relié est
+# renvoyé vers le parcours de liaison — mais qui n'exigent PAS de potager résolu :
+# `/rejoindre` sert précisément à en obtenir un. Sans cette exception, le garde
+# répondrait « vous n'êtes membre d'aucun potager » à qui n'en a pas encore, donc à
+# celui qui en a le plus besoin.
+_COMMANDES_SANS_EXIGENCE_DE_POTAGER = {"rejoindre"}
 
-def _avec_garde_liaison(handler):
+
+def _avec_garde_liaison(handler, exiger_potager: bool = True):
     """[CA6, CA7] Enveloppe un handler de commande pour exiger une liaison active
     avant d'exécuter le moindre traitement métier (priorité 0)."""
     async def _handler_garde(update: Update, ctx: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        if not await _verifier_liaison_ou_onboarding(update, ctx):
+        if not await _verifier_liaison_ou_onboarding(update, ctx, exiger_potager=exiger_potager):
             return
         return await handler(update, ctx, *args, **kwargs)
     _handler_garde._garde_liaison = True  # introspectable par les tests (CA6/CA7)
@@ -132,7 +140,8 @@ def _enregistrer_commande(app: "Application", nom: str, handler) -> None:
     if nom in _COMMANDES_SANS_GARDE_LIAISON:
         app.add_handler(CommandHandler(nom, handler))
     else:
-        app.add_handler(CommandHandler(nom, _avec_garde_liaison(handler)))
+        exiger_potager = nom not in _COMMANDES_SANS_EXIGENCE_DE_POTAGER
+        app.add_handler(CommandHandler(nom, _avec_garde_liaison(handler, exiger_potager)))
 
 
 def _construire_application() -> "Application":
@@ -167,6 +176,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
     _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
+    _enregistrer_commande(app, "rejoindre",  cmd_rejoindre)  # [US-087]
 
     # Commandes TTS
     _enregistrer_commande(app, "tts",        cmd_tts)

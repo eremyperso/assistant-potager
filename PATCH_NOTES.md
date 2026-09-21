@@ -1,3 +1,29 @@
+## [v3.74.0] — 2026-09-20
+
+### 🚀 Nouveautés
+- Permet à un propriétaire de **changer le rôle d'un membre** depuis « Paramètres du potager › Membres » — corriger un lecteur en éditeur, nommer un autre propriétaire ou se rétrograder soi-même —, avec effet immédiat et sans reconnexion (US-085 / CA1, CA2, CA6, CA9)
+- Demande une confirmation avant de nommer un propriétaire ou de se rétrograder, en rappelant ce que ce rôle permet : archiver, supprimer le potager, gérer les membres (US-085 / CA7)
+- Informe par Telegram le membre dont le rôle change, avec son nouveau rôle et ce qu'il lui permet (US-085 / CA8)
+- Garantit qu'un potager garde toujours au moins un propriétaire : le dernier ne peut être ni rétrogradé, ni retiré, ni partir, et le refus dit quoi faire — désigner un autre propriétaire, ou archiver puis supprimer (US-085 / CA3, CA4 ; US-086 / CA2)
+- Permet à tout membre de **quitter un potager** depuis la zone sensible des paramètres, avec une confirmation qui rappelle qu'il faudra une nouvelle invitation ; ses événements, parcelles et photos restent au potager (US-086 / CA1, CA3, CA5, CA6)
+- Coupe l'accès de l'ancien membre aussitôt et le ramène sur un autre de ses potagers, ou vers le parcours de création et d'adhésion sans écran d'erreur ; prévient les propriétaires liés à Telegram du départ (US-086 / CA4, CA7, CA8)
+- Ajoute la commande Telegram **`/rejoindre <code>`** : rejoindre un potager avec un code d'invitation sans ouvrir l'application, quelle que soit la casse du code (US-087 / CA1, CA3, CA7)
+- Confirme le potager rejoint et le rôle obtenu ; ne le rend actif que si l'on n'en avait aucun, sinon renvoie vers `/potager` — jamais de bascule silencieuse (US-087 / CA4, CA6)
+- Répond par un message distinct à un code inconnu, expiré, déjà utilisé ou d'un potager dont on est déjà membre, et prévient les propriétaires liés à Telegram de l'arrivée (US-087 / CA5, CA8)
+- Mentionne `/rejoindre` dans `/help` et dans le menu natif Telegram, à côté de `/potager` et `/lier` (US-087 / CA10)
+
+### 🔧 Améliorations techniques
+- Ajoute `PATCH /potagers/{id}/membres/{user_id}` (rôle) et `POST /potagers/{id}/quitter`, et fait répondre 409 au retrait du dernier propriétaire (US-085 / CA1 ; US-086 / CA1)
+- Pose la règle « au moins un propriétaire » en une seule fonction, `_garantir_un_owner_restant`, appelée par le changement de rôle, le retrait et le départ ; elle verrouille les lignes des owners (`SELECT … FOR UPDATE`) pour que deux rétrogradations simultanées ne laissent pas un potager orphelin (US-085 / CA4)
+- Factorise la suppression d'appartenance et l'invalidation du potager actif entre `retirer_membre` et `quitter_potager` (US-086)
+- Documente que `potager_membres.role` fait seul foi pour les droits, `Potager.proprietaire_id` restant le créateur d'origine (US-085)
+- Laisse le garde de liaison exiger un chat relié sans exiger de potager pour `/rejoindre`, qui sert justement à en obtenir un (US-087 / CA1)
+- Étend `RoleSelect` d'une variante `compact` (ligne de liste, container query) et la notification de cycle de vie d'un filtre de rôles destinataires (US-085 / CA9 ; US-086 / CA7)
+- Exclut `/rejoindre` de l'interpréteur de commandes : un code ne se dicte pas (US-087)
+
+### 📚 Documentation
+- Relit la fiche « Partager un potager et répartir les rôles » : le rôle n'est plus figé à l'invitation, trois sections s'ajoutent (rejoindre depuis Telegram, changer de rôle, quitter) avec neuf questions de mesure (US-085, US-086, US-087 ; US-099 / CA9)
+
 ## [v3.73.0] — 2026-09-20
 
 ### 🚀 Nouveautés

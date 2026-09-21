@@ -16,8 +16,11 @@
 // archivés ». Dans ce cas `detail` (GET /potagers/{id}) est la SEULE source de
 // vérité : `potagerActif` décrit un potager différent, le préremplissage
 // optimiste ne s'applique qu'en consultant son propre potager actif.
+//
+// [US-086 / CA6] La zone sensible n'est plus réservée à l'owner : tout membre
+// non-owner y trouve « Quitter ce potager » (l'owner y garde archiver/supprimer).
 import { useState, useEffect, useCallback } from 'react'
-import { Settings, Sprout, Users, AlertTriangle, Archive, ArchiveRestore, Trash2 } from 'lucide-react'
+import { Settings, Sprout, Users, AlertTriangle, Archive, ArchiveRestore, Trash2, LogOut } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { libelleRole, teinteRole } from '../lib/roles.js'
@@ -25,12 +28,14 @@ import { Modal, Card, SectionLabel, Field, VilleSearch, Btn, Badge, InfoBanner }
 import GestionMembres from '../components/GestionMembres.jsx'
 import ModalArchiverPotager from '../components/ModalArchiverPotager.jsx'
 import ModalSupprimerPotager from '../components/ModalSupprimerPotager.jsx'
+import ModalQuitterPotager from '../components/ModalQuitterPotager.jsx'
 
 const LIBELLE_ETAT = { actif: 'Actif', archive: 'Archivé', supprime: 'Supprimé' }
 
 // Navigation latérale de l'écran, reprise de la maquette 2026 (ModalGererPotager
-// / web-account.jsx) : Identité, Membres, Zone sensible. « sensible » est filtrée
-// pour un rôle non-owner, comme la Card qu'elle pilote.
+// / web-account.jsx) : Identité, Membres, Zone sensible. [US-086] « sensible »
+// est proposée à tout membre dont le rôle est connu : l'owner y archive/supprime,
+// les autres y quittent le potager.
 const ONGLETS = [
   { cle: 'identite', icone: Sprout, libelle: 'Identité' },
   { cle: 'membres', icone: Users, libelle: 'Membres' },
@@ -51,6 +56,8 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
   // [US-084 / CA1] Suppression définitive — proposée uniquement sur un potager
   // déjà archivé (l'action n'existe pas ailleurs, elle n'est pas juste désactivée).
   const [modaleSupprimer, setModaleSupprimer] = useState(false)
+  // [US-086 / CA6] Départ volontaire — proposé à tout membre non-owner.
+  const [modaleQuitter, setModaleQuitter] = useState(false)
   const [erreurLifecycle, setErreurLifecycle] = useState(null)
   const [loadingLifecycle, setLoadingLifecycle] = useState(false)
 
@@ -194,7 +201,7 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
             ne pas perdre la saisie en cours si l'utilisateur change d'onglet. */}
         <div className="flex flex-col @[640px]/parametres:flex-row gap-3 @[640px]/parametres:gap-5">
           <nav className="flex @[640px]/parametres:flex-col gap-1 overflow-x-auto @[640px]/parametres:overflow-visible pb-1 @[640px]/parametres:pb-0 border-b @[640px]/parametres:border-b-0 @[640px]/parametres:border-r border-border-soft @[640px]/parametres:w-[172px] @[640px]/parametres:shrink-0 @[640px]/parametres:pr-3">
-            {ONGLETS.filter((o) => estOwner || o.cle !== 'sensible').map((o) => {
+            {ONGLETS.filter((o) => role || o.cle !== 'sensible').map((o) => {
               const actif = section === o.cle
               const Icone = o.icone
               return (
@@ -270,7 +277,10 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
                 [US-084 / CA1, CA10] La suppression définitive s'y ajoute, visible
                 du seul owner d'un potager DÉJÀ ARCHIVÉ : sur un potager actif elle
                 est absente, pas grisée — c'est l'archivage qui est le geste
-                attendu à ce stade. US-085/086 y ajouteront leurs propres actions. */}
+                attendu à ce stade.
+                [US-086 / CA6] Un membre non-owner n'y trouve que « Quitter ce
+                potager » ; un owner qui veut partir se rétrograde d'abord
+                (US-085, Membres), puis retrouve cette action comme non-owner. */}
             <div className={section === 'sensible' ? 'contents' : 'hidden'}>
               {estOwner && (
                 <Card bg="bg-red-soft">
@@ -318,6 +328,28 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
                   </div>
                 </Card>
               )}
+
+              {/* [US-086 / CA6, CA type] Même habillage « zone sensible » (fond rouge
+                  doux, action bordée de rouge) que celle de l'owner : le départ est
+                  à sens unique, la confirmation le rappelle avant d'agir. */}
+              {!estOwner && role && (
+                <Card bg="bg-red-soft">
+                  <SectionLabel>Zone sensible</SectionLabel>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-[13px] text-txt2">
+                      Tu peux te retirer de ce potager à tout moment. Tes contributions y restent.
+                    </p>
+                    <Btn
+                      kind="ghost"
+                      icon={LogOut}
+                      onClick={() => setModaleQuitter(true)}
+                      className="justify-start text-red border-red/30"
+                    >
+                      Quitter ce potager
+                    </Btn>
+                  </div>
+                </Card>
+              )}
             </div>
           </div>
         </div>
@@ -334,6 +366,22 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
           onClose={() => setModaleSupprimer(false)}
           onSupprime={() => {
             setModaleSupprimer(false)
+            window.location.reload()
+          }}
+        />
+      )}
+
+      {/* [US-086 / CA4, CA8] Le potager quitté disparaît des potagers de l'ancien
+          membre, et son potager actif est invalidé s'il pointait ici : rechargement
+          complet, comme les autres actions de cycle de vie — l'app repart des
+          potagers restants, ou du parcours d'adhésion/création s'il n'en reste aucun. */}
+      {modaleQuitter && (
+        <ModalQuitterPotager
+          potagerId={potagerId}
+          nom={nomAffiche}
+          onClose={() => setModaleQuitter(false)}
+          onQuitte={() => {
+            setModaleQuitter(false)
             window.location.reload()
           }}
         />

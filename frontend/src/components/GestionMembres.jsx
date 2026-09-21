@@ -13,12 +13,17 @@
 // explicitement (jamais le potager actif, CA6), sans quoi cette modale
 // afficherait toujours les membres du potager actif quel que soit l'écran
 // Paramètres réellement ouvert.
+// [US-085 / CA9] Le badge de rôle devient, pour l'owner, un `RoleSelect` compact :
+// corriger un rôle, nommer un autre propriétaire (CA2) ou se rétrograder (CA3),
+// à côté du retrait. Nommer un propriétaire — et se rétrograder soi-même — passe
+// par une confirmation explicite (CA7) ; le refus « dernier propriétaire » du
+// serveur (CA3/CA4) s'affiche tel quel.
 import { useState, useEffect } from 'react'
-import { UserMinus, Users, Copy, Key, Pencil, Eye } from 'lucide-react'
+import { UserMinus, Users, Copy, Key, Pencil, Eye, Crown, AlertTriangle } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { initiales, nomAffiche } from '../lib/identite.js'
-import { libelleRole, teinteRole } from '../lib/roles.js'
+import { confirmationChangementRole, libelleRole, teinteRole } from '../lib/roles.js'
 import { Modal, Btn, RoleSelect, Badge } from './ui'
 
 // [US-055] Icône + description par rôle invitable — porté depuis `ROLE_OPTS`
@@ -27,6 +32,13 @@ import { Modal, Btn, RoleSelect, Badge } from './ui'
 const ROLES_INVITABLES = [
   { value: 'editor', icon: Pencil, sub: 'Saisit récoltes, semis et cultures' },
   { value: 'lecteur', icon: Eye, sub: 'Consulte sans rien modifier' },
+]
+
+// [US-085 / CA1] Un rôle se change vers n'importe lequel des trois, `owner`
+// compris — alors qu'une invitation ne propose jamais `owner`.
+const ROLES_ATTRIBUABLES = [
+  { value: 'owner', icon: Crown, sub: 'Gère le potager et ses membres' },
+  ...ROLES_INVITABLES,
 ]
 
 /** « expire dans 6 j » / « expire dans moins d'un jour » à partir d'un ISO. */
@@ -45,6 +57,9 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
   const [rolePropose, setRolePropose] = useState('editor')
   const [invitation, setInvitation] = useState(null)
   const [copie, setCopie] = useState(false)
+  // [US-085 / CA7] Changement de rôle en attente de confirmation : { membre, nouveauRole, type }.
+  const [changementEnAttente, setChangementEnAttente] = useState(null)
+  const [roleEnCours, setRoleEnCours] = useState(null) // user_id dont le rôle est en cours de modification
 
   async function recharger() {
     setLoading(true)
@@ -82,6 +97,40 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
     }
   }
 
+  // [US-085 / CA7] Nommer un propriétaire ou se rétrograder demande une
+  // confirmation ; toute autre correction de rôle s'applique directement.
+  function demanderChangementRole(membre, nouveauRole) {
+    const type = confirmationChangementRole({
+      ancienRole: membre.role,
+      nouveauRole,
+      estMoi: membre.user_id === moiId,
+    })
+    if (type) setChangementEnAttente({ membre, nouveauRole, type })
+    else if (nouveauRole !== membre.role) appliquerChangementRole(membre, nouveauRole)
+  }
+
+  async function appliquerChangementRole(membre, nouveauRole) {
+    setError(null)
+    setRoleEnCours(membre.user_id)
+    try {
+      await api.modifierRoleMembre(potagerId, membre.user_id, nouveauRole)
+      // [CA6] Son propre rôle vient de changer : bandeau, onglets et actions
+      // réservées à l'owner doivent le refléter — rechargement complet, même
+      // convention que les actions de cycle de vie (US-083) plutôt qu'une
+      // synchronisation manuelle de plusieurs composants.
+      if (membre.user_id === moiId) {
+        window.location.reload()
+        return
+      }
+      await recharger()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setRoleEnCours(null)
+      setChangementEnAttente(null)
+    }
+  }
+
   function copierCode() {
     navigator.clipboard?.writeText(invitation.code).then(() => {
       setCopie(true)
@@ -93,21 +142,39 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
     <>
       {error && <p className="text-red text-[13px] mb-2">{error}</p>}
 
-      <div className="flex flex-col gap-2 mb-4">
+      {/* [US-085 / CA9] Container query : composant réutilisé en modale (menu Compte)
+          comme en section de l'écran Paramètres — sous 420 px de large, le sélecteur
+          de rôle passe sur sa propre ligne sous le nom, au-delà il reste sur la ligne. */}
+      <div className="@container/membres flex flex-col gap-2 mb-4">
         {loading && <span className="text-[13px] text-txt3">Chargement…</span>}
         {!loading && membres.map((m) => (
-          <div key={m.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-card-alt">
+          <div key={m.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 rounded-xl bg-card-alt">
             <span className="w-[34px] h-[34px] rounded-full bg-brand-soft text-brand-text flex items-center justify-center text-[13px] font-bold shrink-0">
               {initiales(m.nom, m.email)}
             </span>
-            <span className="flex-1 min-w-0">
+            <span className="flex-1 min-w-[9rem]">
               <span className="flex items-center gap-1.5 text-[13.5px] font-semibold text-txt truncate">
                 {nomAffiche(m.nom, m.email)}
                 {m.user_id === moiId && <span className="text-[11px] font-medium text-txt3">(vous)</span>}
               </span>
               <span className="block text-[11.5px] text-txt3 truncate mt-px">{m.email}</span>
             </span>
-            <Badge tint={teinteRole(m.role)}>{libelleRole(m.role)}</Badge>
+            {/* [US-085 / CA9] L'owner change le rôle depuis la ligne ; en lecture
+                seule (non-owner) le rôle reste un simple badge, comme avant. */}
+            {lectureSeule ? (
+              <Badge tint={teinteRole(m.role)}>{libelleRole(m.role)}</Badge>
+            ) : (
+              <RoleSelect
+                compact
+                placement="below"
+                value={m.role}
+                options={ROLES_ATTRIBUABLES}
+                onChange={(role) => demanderChangementRole(m, role)}
+                disabled={roleEnCours === m.user_id}
+                ariaLabel={`Rôle de ${nomAffiche(m.nom, m.email)}`}
+                className="order-last w-full @[420px]/membres:order-none @[420px]/membres:w-auto"
+              />
+            )}
             {/* [US-082 / CA6] Retrait masqué en lecture seule — le back refuse déjà
                 toute tentative, mais le front ne propose pas une action inutilisable. */}
             {!lectureSeule && m.role !== 'owner' && (
@@ -118,6 +185,11 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
               >
                 <UserMinus size={15} />
               </button>
+            )}
+            {/* [US-085 / CA type] Place du bouton de retrait gardée vide sur les lignes
+                d'owner (non retirables) : les sélecteurs de rôle restent alignés en colonne. */}
+            {!lectureSeule && m.role === 'owner' && (
+              <span aria-hidden="true" className="hidden @[420px]/membres:block w-[15px] shrink-0" />
             )}
           </div>
         ))}
@@ -145,6 +217,40 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
           )}
         </div>
       )}
+
+      {/* [US-085 / CA7] Confirmation explicite avant de nommer un propriétaire (ou de
+          se retirer soi-même ce pouvoir) : les conséquences sont dites, pas supposées. */}
+      {changementEnAttente && (
+        <Modal
+          title={changementEnAttente.type === 'promotion' ? 'Nommer un propriétaire' : 'Passer la main'}
+          icon={Crown}
+          sub={nomAffiche(changementEnAttente.membre.nom, changementEnAttente.membre.email)}
+          onClose={() => setChangementEnAttente(null)}
+          width={440}
+        >
+          <p className="flex items-start gap-2 text-[13.5px] text-txt leading-relaxed mb-4">
+            <AlertTriangle size={16} className="text-amber shrink-0 mt-0.5" />
+            {changementEnAttente.type === 'promotion'
+              ? `${nomAffiche(changementEnAttente.membre.nom, changementEnAttente.membre.email)} deviendra propriétaire de ce potager, avec les mêmes droits que toi : archiver ou supprimer le potager, gérer les membres.`
+              : `Tu ne seras plus propriétaire de ce potager (rôle : ${libelleRole(changementEnAttente.nouveauRole)}). Tu ne pourras plus l'archiver, le supprimer ni gérer ses membres — seul un autre propriétaire pourra te rendre ce rôle.`}
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <Btn kind="ghost" onClick={() => setChangementEnAttente(null)} disabled={roleEnCours !== null}>
+              Annuler
+            </Btn>
+            <Btn
+              kind="soft"
+              className="text-amber border-amber/40"
+              onClick={() => appliquerChangementRole(changementEnAttente.membre, changementEnAttente.nouveauRole)}
+              disabled={roleEnCours !== null}
+            >
+              {roleEnCours !== null
+                ? '…'
+                : changementEnAttente.type === 'promotion' ? 'Nommer propriétaire' : 'Me rétrograder'}
+            </Btn>
+          </div>
+        </Modal>
+      )}
     </>
   )
 
@@ -157,7 +263,7 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
       sub={`${potagerActif?.nom || '—'} · ${membres.length} membre${membres.length > 1 ? 's' : ''}`}
       onClose={onClose}
       width={520}
-      foot="Seul le propriétaire peut inviter ou retirer un membre."
+      foot="Seul le propriétaire peut inviter, retirer un membre ou changer son rôle."
     >
       {contenu}
     </Modal>
