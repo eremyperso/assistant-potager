@@ -51,6 +51,7 @@ COMMANDES_EXCLUES: frozenset[str] = frozenset({
 # Une commande absente de ce tuple se range à la fin, par ordre alphabétique.
 ORDRE_METIER: tuple[str, ...] = (
     # Gestes du quotidien
+    "gestes",
     "note",
     "corriger",
     "vendre",
@@ -84,6 +85,7 @@ ORDRE_METIER: tuple[str, ...] = (
 # Écrite pour le jardinier, pas pour le développeur : ce que la commande lui
 # donne, dans son vocabulaire — celui des domaines métier de l'aide en ligne.
 DESCRIPTIONS: dict[str, str] = {
+    "gestes":      "Vos gestes préparés, en attente de confirmation",  # [US-224]
     "note":        "Noter une observation, guidé pas à pas",
     "corriger":    "Corriger ou supprimer un événement",
     "vendre":      "Enregistrer une vente de plants",
@@ -285,6 +287,14 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         ),
     ),
     FormeCommande("parcelle", "lister", "Lister vos parcelles", confirmation=False),
+
+    # ── La file de gestes [US-224 / CA10] ────────────────────────────────────
+    # Dictable, et sans confirmation : c'est une CONSULTATION. Le niveau 1
+    # qu'elle ouvre ne peut rien écrire (CA5), et demander « voulez-vous
+    # vraiment voir vos gestes en attente ? » doublerait chaque reprise de file.
+    # Ce n'est pas un code à coller — la raison qui écarte /lier et /rejoindre
+    # ne s'applique pas ici.
+    FormeCommande("gestes", None, "Voir vos gestes en attente", confirmation=False),
 
     # ── Consultation ─────────────────────────────────────────────────────────
     FormeCommande(

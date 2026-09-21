@@ -35,6 +35,7 @@ from . import (
     commandes_plan,
     commandes_stats,
     meteo_jobs,
+    file_gestes,
     messages,
     application,
 )
@@ -61,6 +62,7 @@ _SOUS_MODULES = (
     commandes_plan,
     commandes_stats,
     meteo_jobs,
+    file_gestes,
     messages,
     application,
 )

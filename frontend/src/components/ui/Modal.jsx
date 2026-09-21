@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 
 /**
@@ -15,7 +15,17 @@ import { X } from 'lucide-react'
  * conteneur. `centree` (défaut) garde le comportement historique.
  *
  * [US-183 / CA15] Échap ferme la fenêtre, quelle que soit la disposition.
+ *
+ * [US-195 / CA8] Deux fiches peuvent s'empiler (fiche culture puis fiche
+ * calendrier) : Échap ne ferme alors que **la plus haute**. Chaque fenêtre
+ * ouverte s'inscrit dans `PILE` et n'écoute la touche que si elle est au sommet
+ * — sans quoi les deux se fermeraient d'un coup. À la fermeture, le focus
+ * clavier revient sur l'élément qui l'avait avant l'ouverture : fermer une fiche
+ * rend l'écran dans son état exact.
  */
+
+/** Les fenêtres modales ouvertes, de la plus ancienne à la plus haute. */
+const PILE = []
 const DISPOSITIONS = {
   centree: {
     fond: 'items-center justify-center p-5',
@@ -44,9 +54,27 @@ export function Modal({
   bodyClassName = 'p-4 overflow-y-auto min-h-0',
   disposition = 'centree',
 }) {
+  const jeton = useRef({})
+
+  useEffect(() => {
+    const moi = jeton.current
+    const precedent = typeof document !== 'undefined' ? document.activeElement : null
+    PILE.push(moi)
+    return () => {
+      const i = PILE.indexOf(moi)
+      if (i >= 0) PILE.splice(i, 1)
+      // [US-195 / CA8] Le focus retourne d'où il venait — la carte, le bouton
+      // ou la ligne qui a ouvert la fiche.
+      if (precedent?.isConnected) precedent.focus?.()
+    }
+  }, [])
+
   useEffect(() => {
     if (!onClose) return undefined
-    const surTouche = (e) => { if (e.key === 'Escape') onClose() }
+    const surTouche = (e) => {
+      // [US-195 / CA8] Seule la fenêtre au SOMMET de la pile répond à Échap.
+      if (e.key === 'Escape' && PILE[PILE.length - 1] === jeton.current) onClose()
+    }
     window.addEventListener('keydown', surTouche)
     return () => window.removeEventListener('keydown', surTouche)
   }, [onClose])

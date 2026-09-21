@@ -34,6 +34,11 @@ je veux les stats des tomates,stats,intention
 bilan des tomates,stats,elliptique
 stats des tomates,stats,elliptique
 comment est calculé le bilan ?,,savoir
+montre-moi mes gestes en attente,gestes,imperatif
+je veux voir ma file de gestes,gestes,intention
+gestes à confirmer,gestes,elliptique
+qu'est-ce qui m'attend ?,gestes,elliptique
+mes actions préparées,gestes,elliptique
 montre-moi mes derniers événements,historique,imperatif
 je veux voir l'historique,historique,intention
 historique,historique,elliptique

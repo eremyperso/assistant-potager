@@ -1,17 +1,40 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v49),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v51),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v49.sql
+psql -d potager -f migrations/migration_v51.sql
 ```
 
 ## Ce que portent les dernières migrations
 
+- **v51 [US-224]** — transforme `gestes_intentions` en **file d'attente**.
+  `consomme_le` devient `traite_le` (renommage délibéré : ce n'est plus « ce
+  lien a servi », à l'ouverture, mais « ce geste est sorti de la file », à la
+  confirmation ou à l'abandon — garder l'ancien nom aurait laissé cohabiter
+  deux sémantiques opposées sous la même colonne), et ajoute `etat`
+  (`en_attente | confirme | abandonne | perime`), `motif_refus` et
+  `avertissement_le`. `expire_le` ne change pas de forme, seulement de valeur :
+  trois jours depuis le dépôt, **par geste** — jamais par pile. Crée
+  `files_gestes_reglages`, une ligne par compte pour ce qui relève de la
+  RELANCE et n'appartient à aucun geste (coupure, dernière invitation,
+  dernière relance, message à remplacer) ; **pas de RLS** sur celle-ci, comme
+  `liaisons_telegram` : c'est une table de compte, pas de jardin. La RLS de
+  `gestes_intentions` est INCHANGÉE, et c'est un choix : US-224 fait du bot un
+  écrivain sur cette table, il arme donc `app.potager_id` sur le potager DU
+  GESTE avant chaque mise à jour (`file_gestes._ecriture`) plutôt que de
+  relâcher le `WITH CHECK`, ce qui aurait ouvert l'écriture croisée entre
+  potagers.
+- **v50 [US-196]** — crée `gestes_intentions` : un geste pré-parsé déposé par
+  la PWA, que le bot confirme. La table existe parce que l'API et le bot sont
+  DEUX PROCESSUS — un cache mémoire ne traverse pas cette frontière. Sa policy
+  RLS est **tolérante au GUC non armé en lecture**, seul moyen pour le bot de
+  retrouver un geste par son code avant de savoir de quel potager il relève ;
+  l'écriture, elle, exige le GUC.
 - **v47 [US-069]** — ajoute `evenements.contexte_semis` nullable (`pepiniere` |
   `pleine_terre` | NULL), avec un CHECK qui n'autorise ce contexte que sur un
   `semis`, et rejoue le seul backfill non présomptueux : un semis chaîné à une

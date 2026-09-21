@@ -227,6 +227,67 @@ avant tout chiffrage — impact potentiellement fort sur les habitudes des utili
   sur tous les écrans, ce qui n'existe pas aujourd'hui (TopBar actuelle n'affiche qu'un
   titre court sans description).
 
+### 5.1 bis Navigation contextuelle de la coquille (US-195, livrée)
+
+La navigation à deux niveaux du §5.1 ne savait que **changer de vue** : `App.jsx` tenait un
+état `view` et un `setView(id)`, sans paramètre. Une vue ne pouvait donc rien recevoir de
+celle qui l'ouvrait — impossible d'écrire « Fiche parcelle → » qui ouvre Parcelles *sur
+cette parcelle*, ou « Journal du jour » qui ouvre le Journal *filtré sur la date*.
+
+US-195 ajoute deux mécanismes, **sans introduire de routeur**.
+
+**1. L'intention.** Un petit objet de contexte qu'une vue passe à une autre :
+`aller('pepiniere', { lot: '128' })`. La vue d'arrivée l'applique **une fois** puis la
+consomme ; y revenir plus tard par la navigation normale ne la rejoue pas.
+
+| Vue | Clés reconnues | Effet |
+|---|---|---|
+| `plan` (Parcelles) | `parcelle` | sélectionne la parcelle et l'amène à l'écran |
+| `plan-vue` | `parcelle` | fait défiler jusqu'à sa carte |
+| `cultures` | `culture` | ouvre la fiche de la culture |
+| `pepiniere` | `onglet`, `emplacement`, `lot` | ouvre l'onglet, filtre l'emplacement, ouvre la fiche du lot |
+| `journal` | `date`, `culture` | pose le filtre de date, et de culture s'il est donné |
+
+Ces clés — **et elles seules** — vivent dans `frontend/src/lib/intentions.js`, qui les lit,
+les valide et les consomme (`npm test` : `intentions.test.js`). Une clé inconnue ou une
+valeur invalide est ignorée ; une chose absente (parcelle supprimée, lot inconnu) ouvre la
+vue **normalement** avec un message court, jamais une erreur.
+
+La même intention peut arriver par l'adresse — `/?vue=pepiniere&lot=128`, pour un lien
+partagé ou une étiquette scannée (US-221). Elle est alors lue **une fois au chargement du
+module**, validée contre la table ci-dessus, puis **retirée de la barre d'adresse** par
+`replaceState` : recharger ne la rejoue pas. Comme elle est lue avant tout écran, elle
+survit à l'écran de connexion. Elle ne se lit qu'à la racine, de sorte que les trois entrées
+existantes — `/verifier-email` (US-044), `/reinitialiser-mot-de-passe` (US-057) et le
+fragment de retour OAuth `/auth/callback#…` (US-090) — ne sont **jamais** interceptées.
+
+⚖️ Une intention est un **contexte de lecture, jamais une commande** : elle ne déclenche
+aucune écriture, même reçue par l'adresse.
+
+**2. La mémoire des écrans.** Un écran quitté puis rouvert pendant la session est rendu dans
+son **état exact** : sous-onglet, sélection, recherche, tri, filtre, position de défilement,
+focus. C'est la règle 25 du wireframe v4 (« remonter rend l'état exact, sans cul-de-sac et
+sans tunnel »). Elle vaut entre sous-onglets d'une même activité comme entre activités.
+
+- `context/NavigationContext.jsx` porte `aller()`, `useIntention(vue, appliquer)` et
+  `useEtatEcran(vue, defauts, intention)`.
+- Une **intention reçue l'emporte toujours** sur l'état mémorisé.
+- La position de défilement est tenue par la coquille : le conteneur qui défile est unique
+  et survit au changement de vue, il faut donc relever sa hauteur avant de quitter.
+- L'état vit en **mémoire de page** — jamais `localStorage`, jamais l'adresse : un
+  rechargement repart d'un écran neuf.
+
+**Les fiches ne sont pas des navigations.** Fiche culture, fiche calendrier, fiche lot sont
+des panneaux posés par-dessus l'écran : les fermer rend l'écran intact, puisqu'il n'a jamais
+été démonté. Deux fiches peuvent s'empiler, et `Modal` tient désormais une pile pour
+qu'Échap ne ferme que **la plus haute** ; à la fermeture, le focus revient sur l'élément qui
+avait ouvert la fiche.
+
+**Hors périmètre, assumé (dette).** Aucun routeur n'est introduit et le **bouton Retour du
+navigateur garde son comportement actuel** : il quitte l'application au lieu de remonter
+d'un niveau de zoom. Un routeur reste la seule façon correcte de le traiter ; c'est une
+dette à rouvrir si le besoin se confirme à l'usage — voir §7.4.
+
 ### 5.2 Création d'un "Tableau de bord" (nouvelle vue racine)
 
 - Agrège des informations aujourd'hui déjà présentes ailleurs (météo → nulle part
@@ -1005,6 +1066,11 @@ voir §5.8.
 ### 7.4 Dette technique connue, à résorber pendant le Lot B
 
 Deux points introduits volontairement par le Lot A, à traiter au fil des US du Lot B :
+
+0. **Bouton Retour du navigateur** (dette ouverte par US-195, §5.1 bis) : la coquille
+   navigue par état, sans routeur ; le bouton Retour quitte donc l'application au lieu de
+   remonter d'un niveau de zoom. Rouvrir avec un routeur si l'usage le réclame.
+
 
 1. **Alias de tokens `--g-*`** : plutôt que réécrire les 391 occurrences des anciens tokens
    dans les 20 fichiers de vues (hors périmètre d'US-052 et à fort risque de régression),

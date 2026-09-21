@@ -350,7 +350,23 @@ Les projections d'US-070 portent désormais `parcelle_nom` (une requête pour
 toutes les tuiles) : la fiche s'ouvre aussi depuis Stocks, qui n'a pas la liste
 des parcelles.
 
-⚠️ **Pas de bouton d'enregistrement dans la fiche** tant que la PWA n'a pas de
-flux d'enregistrement : `FicheCalendrier` ne le rend que si l'appelant fournit
-`onEnregistrer`, et aucun écran ne le fournit. `/parse` n'en est pas un — il
-passe par le modèle de langage et écrit sans confirmation.
+**Le bouton d'enregistrement de la fiche existe depuis US-196.** La règle
+d'US-183 n'a pas changé — `FicheCalendrier` ne le rend que si l'appelant fournit
+`onEnregistrer` — mais Plan et Stocks le fournissent désormais tous les deux.
+Le bouton n'écrit pas : c'est `BoutonGeste` (`frontend/src/components/`), qui
+PRÉPARE une intention de geste (`POST /gestes/intentions`) et ouvre le compagnon
+Telegram dessus. `/parse` n'est toujours pas un flux d'enregistrement — il passe
+par le modèle de langage et écrit sans confirmation.
+
+- **AUCUN SECOND CHEMIN D'ÉCRITURE** : l'unique écriture reste
+  `saisie._parse_and_save`, avec son item pré-parsé. C'est le contrat du bouton
+  « Enregistrer » d'US-179, repris à la lettre par `app/bot/geste_prerempli.py` —
+  donc confirmation (US-021), avertissement de rotation (US-167), parcelle
+  demandée si elle manque, et zéro jeton.
+- **LE BOUTON RESTE ACTIF HORS FENÊTRE** (US-196 / CA15, arbitrage A8) : la
+  confiance conseille, elle n'interdit pas. Aucune condition de fenêtre ni de
+  niveau d'étoiles ne garde le bouton, et un test du front le vérifie.
+- **UN GESTE NE SE DATE JAMAIS DANS LE FUTUR** : la date de référence d'un écran
+  peut l'être, pas le geste. La règle s'écrit deux fois exprès — `lib/gestes.js`
+  pour que le bouton la DISE avant qu'on appuie, `intentions_geste.py` en
+  garde-fou serveur.

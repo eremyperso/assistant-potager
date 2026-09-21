@@ -5,6 +5,8 @@ import {
   Modal, Btn, Badge, InfoBanner, MonthStrip, BlocConfiance, SelecteurAction,
 } from './ui'
 import ModalModifierPotager from './ModalModifierPotager.jsx'
+import BoutonGeste from './BoutonGeste.jsx'
+import { gesteDeActionConfiance } from '../lib/gestes.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import {
   actionsDeFiche, meilleureCandidate, meteoIndeterminee, recolteLisible, dateLongue,
@@ -29,14 +31,18 @@ import { moisDeLaDate } from '../lib/plan.js'
  * compris après un échec de l'écran), la fiche les lit elle-même, une fois.
  * Une lecture échouée ici laisse la fiche ouverte avec ce qu'elle a (CA14).
  *
- * [CA6] ⚠️ Le bouton d'enregistrement n'est rendu que si l'appelant fournit
- * `onEnregistrer` : la PWA n'a pas encore de flux d'enregistrement, et la fiche
- * n'en crée pas un (« aucun nouveau chemin d'écriture »).
+ * [CA6] Le bouton d'enregistrement n'est rendu que si l'appelant fournit
+ * `onEnregistrer` — la règle d'US-183 est inchangée, seule sa conséquence l'est :
+ * [US-196] le flux existe désormais, et les deux appelants (Plan, Stocks) le
+ * fournissent. La fiche ne crée toujours aucun chemin d'écriture : elle délègue
+ * à `BoutonGeste`, qui PRÉPARE un geste et ouvre le compagnon. `onEnregistrer`
+ * n'est plus un enregistreur mais un signal — « un geste vient de partir » —
+ * dont l'écran se sert pour se relire au retour d'onglet (US-196 / CA12).
  */
 export default function FicheCalendrier({
   culture, dateRef, potagerId, parcelleId = null,
   calendriers: calendriersFournis, confiances: confiancesFournies,
-  onEnregistrer, onClose,
+  onEnregistrer, ecran = null, onClose,
 }) {
   const [calendriers, setCalendriers] = useState(calendriersFournis)
   const [confiances, setConfiances] = useState(confiancesFournies)
@@ -100,6 +106,7 @@ export default function FicheCalendrier({
           entree={confiances?.cultures?.[culture] ?? null}
           confianceLue={confiances != null}
           onEnregistrer={onEnregistrer}
+          ecran={ecran}
         />
       )}
     </Modal>
@@ -115,7 +122,7 @@ function BlocTitre({ children, sub }) {
   )
 }
 
-function CorpsFiche({ culture, dateRef, parcelleId, calendriers, entree, confianceLue, onEnregistrer }) {
+function CorpsFiche({ culture, dateRef, parcelleId, calendriers, entree, confianceLue, onEnregistrer, ecran }) {
   const series = seriesDeCulture(calendriers, culture, parcelleId)
   const frise = friseDeFiche(calendriers, culture, series)
   const attribution = attributionDeFiche(calendriers)
@@ -125,7 +132,8 @@ function CorpsFiche({ culture, dateRef, parcelleId, calendriers, entree, confian
         <BlocTitre>Semer ou planter</BlocTitre>
         <PartieSemerPlanter
           culture={culture} dateRef={dateRef} calendriers={calendriers}
-          entree={entree} confianceLue={confianceLue} onEnregistrer={onEnregistrer}
+          parcelleId={parcelleId}
+          entree={entree} confianceLue={confianceLue} onEnregistrer={onEnregistrer} ecran={ecran}
         />
       </section>
 
@@ -165,7 +173,7 @@ function CorpsFiche({ culture, dateRef, parcelleId, calendriers, entree, confian
 }
 
 /** [CA4-CA7] Partie 1 : sélecteur, fenêtre, confiance, récolte attendue. */
-function PartieSemerPlanter({ culture, dateRef, calendriers, entree, confianceLue, onEnregistrer }) {
+function PartieSemerPlanter({ culture, dateRef, parcelleId, calendriers, entree, confianceLue, onEnregistrer, ecran }) {
   const actions = actionsDeFiche(entree)
   // [CA4] Pré-positionné sur la meilleure confiance ; à égalité, la règle de la frise.
   const [choisie, setChoisie] = useState(() => meilleureCandidate(actions)?.action ?? null)
@@ -226,11 +234,18 @@ function PartieSemerPlanter({ culture, dateRef, calendriers, entree, confianceLu
           />
         </div>
       )}
-      {onEnregistrer && (
+      {/* [US-196 / CA13, CA15] Le bouton reste ACTIF hors fenêtre : la confiance
+          conseille, elle n'interdit pas (arbitrage A8). La parcelle est
+          pré-remplie quand la fiche a été ouverte depuis une parcelle. */}
+      {onEnregistrer && gesteDeActionConfiance(a.action) && (
         <div className="flex justify-end mt-3">
-          <Btn kind="primary" onClick={() => onEnregistrer({ culture, action: a.action, date: dateRef })}>
-            {LIBELLE_ENREGISTRER[a.action]}
-          </Btn>
+          <BoutonGeste
+            geste={{ ...gesteDeActionConfiance(a.action), culture, parcelleId }}
+            dateRef={dateRef}
+            ecran={ecran}
+            libelle={LIBELLE_ENREGISTRER[a.action]}
+            onLance={() => onEnregistrer({ culture, action: a.action, date: dateRef })}
+          />
         </div>
       )}
       {localiser && potagerActif && (

@@ -14,6 +14,7 @@ ne doivent JAMAIS faire échouer l'action déclenchante (archivage, désarchivag
 d'un potager...) — tout échec est journalisé, jamais levé.
 """
 import logging
+from typing import Optional
 
 import requests
 
@@ -30,12 +31,91 @@ def envoyer_message(chat_id: int, texte: str) -> bool:
     Retourne `True` si l'API Telegram a accepté l'envoi, `False` sinon —
     ne lève jamais d'exception (réseau indisponible, chat_id invalide,
     utilisateur ayant bloqué le bot...)."""
+    return envoyer(chat_id, texte) is not None
+
+
+# ── [US-224 / CA5] Un envoi sortant qui sait poster un CLAVIER ───────────────
+# Jusqu'ici, l'envoi sortant ne savait poster que du texte brut. C'est suffisant
+# pour annoncer un archivage (US-083) ou l'arrivée d'un membre (US-085), qui
+# n'appellent aucune réponse. Ça ne l'est pas pour inviter à traiter une file :
+# sans clavier, toute invitation dégénère en « envoyez /gestes pour les
+# traiter », et perd l'essentiel de son intérêt. Constaté à l'envoi d'un message
+# de test sur l'environnement de dev le 21/09/2026.
+#
+# Le clavier est passé en STRUCTURE (une liste de rangées de `(libellé, donnée)`)
+# plutôt qu'en JSON déjà formé : l'appelant est un service métier, il n'a pas à
+# connaître la forme d'un `inline_keyboard` de l'API Bot.
+Bouton = tuple  # (libellé: str, callback_data: str)
+
+
+def _clavier(boutons: Optional[list[list["Bouton"]]]) -> Optional[dict]:
+    if not boutons:
+        return None
+    return {
+        "inline_keyboard": [
+            [{"text": libelle, "callback_data": donnee} for libelle, donnee in rangee]
+            for rangee in boutons
+        ]
+    }
+
+
+def envoyer(
+    chat_id: int,
+    texte: str,
+    boutons: Optional[list[list["Bouton"]]] = None,
+    parse_mode: Optional[str] = None,
+) -> Optional[int]:
+    """[US-224 / CA5] Envoie un message, avec clavier éventuel, et rend son id.
+
+    L'identifiant est ce qui permet à la relance suivante de REMPLACER
+    celle-ci plutôt que d'empiler des bulles identiques (CA20). `None` en cas
+    d'échec — best-effort, comme `envoyer_message` : un envoi perdu l'est sans
+    bruit, mais il est journalisé, et le CA18 s'appuie sur ce retour pour
+    savoir que l'information doit passer aussi par l'application.
+    """
+    charge: dict = {"chat_id": chat_id, "text": texte}
+    clavier = _clavier(boutons)
+    if clavier:
+        charge["reply_markup"] = clavier
+    if parse_mode:
+        charge["parse_mode"] = parse_mode
     try:
-        response = requests.post(f"{_API_BASE}/sendMessage", json={"chat_id": chat_id, "text": texte}, timeout=10)
+        response = requests.post(f"{_API_BASE}/sendMessage", json=charge, timeout=10)
+        response.raise_for_status()
+        return response.json()["result"]["message_id"]
+    except (requests.RequestException, KeyError, ValueError) as err:
+        log.warning("[telegram_notify] Échec d'envoi à chat_id=%s : %s", chat_id, err)
+        return None
+
+
+def editer_message(
+    chat_id: int,
+    message_id: int,
+    texte: str,
+    boutons: Optional[list[list["Bouton"]]] = None,
+    parse_mode: Optional[str] = None,
+) -> bool:
+    """[US-224 / CA20] Remplace un message déjà posté — la relance ne s'empile pas.
+
+    `False` quand l'édition est refusée : message supprimé par le jardinier,
+    contenu identique, message trop ancien. L'appelant repart alors d'un envoi
+    neuf, et c'est pour ça que ce retour n'est pas ignoré.
+    """
+    charge: dict = {"chat_id": chat_id, "message_id": message_id, "text": texte}
+    clavier = _clavier(boutons)
+    if clavier:
+        charge["reply_markup"] = clavier
+    if parse_mode:
+        charge["parse_mode"] = parse_mode
+    try:
+        response = requests.post(f"{_API_BASE}/editMessageText", json=charge, timeout=10)
         response.raise_for_status()
         return True
     except requests.RequestException as err:
-        log.warning("[telegram_notify] Échec d'envoi à chat_id=%s : %s", chat_id, err)
+        log.info(
+            "[telegram_notify] Édition impossible (chat_id=%s, message_id=%s) : %s",
+            chat_id, message_id, err,
+        )
         return False
 
 

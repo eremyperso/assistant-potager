@@ -1,3 +1,109 @@
+## [v3.76.0] — 2026-09-21
+
+**ÉPIC 9 — US-224** : les gestes lancés depuis l'application ne se perdent plus. Ils
+s'accumulent dans une **file d'attente** qui tient trois jours, et le compagnon invite à
+les traiter quand le jardinier est disponible — au lieu d'un laissez-passer de quinze
+minutes qu'une hésitation suffisait à brûler.
+
+### 🚀 Nouveautés
+
+**La file de gestes en attente**
+- Dépose désormais les gestes lancés depuis un écran dans une **file d'attente** au lieu d'ouvrir un lien à usage unique : rien n'est enregistré, et rien n'est perdu (US-224 / CA1)
+- Garde un geste en attente **trois jours**, chacun avec sa propre échéance : confirmer un geste ne prolonge jamais les autres, et un geste déposé le troisième jour n'est pas emporté par la purge de ceux du premier (US-224 / CA3)
+- Signale un geste identique déjà en attente **sans le refuser** : semer deux fois la même chose le même jour est un cas réel (US-224 / CA4)
+- Rend le lien reçu depuis l'application **réutilisable tant que le geste l'est** : le rouvrir redonne le même geste au lieu de répondre « déjà utilisé » (US-224 / CA11)
+
+**Ce que le compagnon présente**
+- Présente la file en **deux niveaux** : d'abord le nombre de gestes en attente et le détail des trois premiers, avec deux boutons qui n'enregistrent rien — commencer, ou couper les rappels — puis le récapitulatif habituel du geste, précédé de sa position (US-224 / CA5, CA6)
+- Remplace « Annuler » par **trois issues nommées sans ambiguïté** : *Confirmer*, *Plus tard* (le geste reste en file, et on le dit) et *Abandonner ce geste* (US-224 / CA7)
+- Ne retire un geste de la file qu'à la **confirmation ou à l'abandon explicite** : un délai de confirmation dépassé, une conversation refermée ou un rappel ignoré le laissent en attente (US-224 / CA8)
+- Enchaîne les gestes sans redemander le contexte : après chaque confirmation, ce qui reste est annoncé et le suivant est proposé — et l'on peut s'arrêter à tout moment (US-224 / CA9)
+- Ajoute la commande **`/gestes`**, dictable, pour rouvrir sa file sans dépendre d'un rappel (US-224 / CA10)
+- Groupe la file par potager quand elle en couvre plusieurs, et bascule sur le potager du geste en le disant (US-224 / CA13)
+- Refuse **en clair, avec son motif**, un geste dont le contexte a disparu — parcelle supprimée, potager archivé ou quitté, rôle devenu lecteur — et le retire de la file plutôt que de le laisser échouer à chaque reprise (US-224 / CA12)
+
+**Être rappelé sans être harcelé**
+- Envoie **une seule invitation** au premier geste déposé sur une file vide : préparer quatre gestes à la suite n'envoie pas quatre messages (US-224 / CA14)
+- Relance ensuite **une fois par demi-journée**, sur deux créneaux (matin, fin d'après-midi) et jamais à l'heure du dépôt, chaque rappel remplaçant le précédent au lieu d'empiler des bulles identiques (US-224 / CA15, CA20)
+- Arrête les rappels **au bout de trois jours**, et remet ce compteur à zéro à la moindre activité sur la file — sans jamais rallonger la vie d'un geste (US-224 / CA16, CA19)
+- Annonce **quatre heures avant** la purge d'un geste qu'il va être vidé, en le nommant, puis dit à la purge ce qui a été vidé et ce que cela décrivait : rien ne disparaît en silence (US-224 / CA17, CA18)
+- Permet de **couper les rappels sans vider la file** : les gestes restent, les sollicitations cessent, et le réglage se défait aussi facilement (US-224 / CA20)
+
+**Dans l'application**
+- Laisse désormais **déposer un geste sans compagnon activé** : la file se remplit, et l'application invite à activer le compagnon pour pouvoir confirmer — on prépare sa journée d'abord, on active une fois (US-224 / CA21)
+- Affiche **en permanence, sur tous les écrans, le nombre de gestes en attente**, relu une fois au retour sur l'onglet et jamais par interrogation périodique (US-224 / CA22)
+- Permet de **consulter la file et d'en retirer un geste** depuis l'application ; la confirmation, elle, reste au compagnon (US-224 / CA23)
+- Signale un geste **vidé faute de confirmation** jusqu'à ce qu'on l'ait vu, même si la notification Telegram s'est perdue en chemin (US-224 / CA18)
+
+**La date du geste**
+- Conserve la **date du dépôt** sur un geste confirmé trois jours plus tard : c'est le jour où l'on était au potager qui compte, et le récapitulatif l'affiche avant qu'on valide (US-224 / CA25)
+- Maintient la règle « jamais dans le futur » au moment du dépôt ; la file sert à confirmer plus tard ce qui a été fait, pas à programmer un geste à venir (US-224 / CA26)
+
+### 🔧 Améliorations techniques
+- Apprend à l'envoi sortant du compagnon à poster un **clavier** et à **remplacer** un message déjà envoyé : sans cela, toute invitation dégénérait en « envoyez /gestes pour les traiter » (US-224 / CA5, CA20)
+- Sépare la file (`app/services/file_gestes.py`) de sa cadence de relance (`app/services/relances_file.py`) : deux sujets, deux règles d'arrêt, et les mélanger les rendait illisibles
+- Ajoute un rendez-vous **horaire** du bot pour l'avertissement, la purge et les relances — l'échéance des quatre heures dépend du dépôt de chaque geste, pas d'un créneau fixe
+- Renomme `app/services/intentions_geste.py` → `file_gestes.py` et `app/bot/geste_prerempli.py` → `app/bot/file_gestes.py` : un laissez-passer et une file ne portent pas le même nom
+- Met à jour les fiches `compagnon-telegram.md` et `enregistrer-un-geste.md` du corpus dans la même livraison (US-099 / CA9), ainsi que les fiches de domaine `commandes-bot.md` et `migrations.md` (US-224 / CA27)
+
+### 💾 Base de données
+- Ajoute `migration_v51.sql` (et son rollback) : `gestes_intentions` gagne `etat`, `motif_refus` et `avertissement_le`, et `consomme_le` devient `traite_le` — ce n'est plus « ce lien a servi » mais « ce geste est sorti de la file »
+- Crée `files_gestes_reglages` : une ligne par compte pour la coupure des rappels, la dernière invitation, la dernière relance et le message à remplacer
+- Laisse la politique RLS de `gestes_intentions` inchangée : le bot arme `app.potager_id` sur le potager du geste avant chaque écriture, plutôt que de relâcher le contrôle
+
+### ⚠️ Breaking changes
+- Un lien de geste d'US-196 n'est plus reconnu comme tel : les gestes déjà ouverts sont marqués abandonnés par la migration, avec leur motif — ils n'avaient de toute façon rien écrit
+
+## [v3.75.0] — 2026-09-21
+
+**ÉPIC 9 — Socle commun Plan, Cultures, Pépinière** (US-194, US-195, US-196) : les trois
+briques que les épics 10 à 12 réutiliseront — le mot qui dit où en est une culture, la
+navigation qui emporte son contexte d'un écran à l'autre, et le bouton qui transforme une
+consultation en geste enregistré.
+
+### 🚀 Nouveautés
+
+**La phase du moment d'une culture (US-194)**
+- Ajoute à chaque culture en place sa **phase** — *semée*, *en place* ou *en récolte* — lisible du même mot sur tous les écrans, avec la date depuis laquelle elle dure et le nombre de séries concernées (US-194 / CA1, CA5, CA6)
+- Donne une phase à **toute** culture en place, même sans calendrier de référence : une récolte notée fait « en récolte », une plantation fait « en place », un semis fait « semée » (US-194 / CA2)
+- Laisse un semis dont le délai de levée est inconnu en « semée » jusqu'à sa première récolte — le dernier geste connu, jamais une levée supposée (US-194 / CA2, CA11)
+- Ajoute la pastille de phase et sa légende au design system, lisibles en niveaux de gris grâce au mot et accordées aux couleurs de la frise, mode sombre compris (US-194 / CA9, CA10)
+
+**Passer d'un écran à l'autre sans se reperdre (US-195)**
+- Permet à un écran d'en ouvrir un autre **sur ce qu'il désigne** — la bonne parcelle, le bon lot, le journal du bon jour — au lieu de rouvrir un écran vide (US-195 / CA1, CA2)
+- Ouvre l'écran normalement avec un message court quand la chose désignée n'existe plus, jamais sur une erreur ni un écran vide, et porte le focus clavier sur ce qui est désigné en l'annonçant aux lecteurs d'écran (US-195 / CA3, CA4)
+- Accepte une adresse du type `/?vue=pepiniere&lot=128` : lue une fois au démarrage, appliquée, puis retirée de la barre d'adresse — recharger ne la rejoue pas (US-195 / CA5)
+- Conserve le lien à travers la connexion : un jardinier déconnecté qui l'ouvre se connecte, puis arrive sur ce qu'il visait ; si le lien nomme un autre de ses potagers, la bascule est faite **et dite** (US-195 / CA6, CA7)
+- Rend un écran quitté puis rouvert dans son **état exact** — onglet, recherche, tri, filtre, sélection, défilement —, y compris après avoir ouvert puis fermé une fiche ; deux fiches peuvent s'empiler, Échap ne ferme que la plus haute (US-195 / CA8, CA9)
+
+**Préparer un geste dans l'application, le confirmer au compagnon (US-196)**
+- Ajoute le **bouton d'enregistrement de la fiche calendrier** : « Semer en pépinière », « Semer en place » ou « Planter » ouvre le compagnon Telegram sur un récapitulatif déjà rempli — culture, parcelle, date — qu'il reste à confirmer (US-196 / CA13)
+- Prépare le geste **sans rien écrire** : la parcelle, la quantité ou toute autre information manquante est demandée par le compagnon, dans son flux habituel, et rien n'est enregistré avant « Confirmer » (US-196 / CA5)
+- Propose à côté du bouton la **phrase équivalente à dicter**, copiable en un appui, pour qui préfère parler à son potager (US-196 / CA9)
+- Ouvre l'**activation du compagnon** d'abord quand le compte n'y est pas encore relié, puis reprend le geste là où il en était (US-196 / CA10)
+- Garde le bouton **actif hors de la période conseillée** : le niveau de confiance conseille, il n'interdit pas (US-196 / CA15)
+- Ne date **jamais un geste dans le futur** : une date de référence à venir est ramenée au jour, et le bouton l'annonce avant qu'on appuie (US-196 / CA14)
+- Bascule sur le potager du geste, et le dit, quand il diffère du potager actif du compagnon — jamais d'écriture silencieuse ailleurs (US-196 / CA7)
+- Refuse en clair un lien expiré, déjà utilisé, ouvert depuis un autre compte, ou d'un potager qu'on a quitté, en invitant à relancer depuis l'application (US-196 / CA6)
+- Relit l'écran **une seule fois** au retour sur l'onglet, pour que le geste confirmé y apparaisse sans rafraîchir à la main et sans interrogation périodique (US-196 / CA12)
+- Masque tout bouton d'action pour un membre en lecture seule (US-196 / CA11)
+
+### 🔧 Améliorations techniques
+- Calcule la phase en **une seule fonction** de `app/services/recalage_calendrier.py`, exposée par `GET /plan` (`phase`, `phase_depuis`, `nb_series`) ; aucun champ existant n'est retiré, et rien côté front ne la recalcule (US-194 / CA1, CA6)
+- Laisse stocks, projections et niveaux de confiance strictement inchangés, vérifié par test sur `GET /plan/calendriers`, `GET /godets` et `GET /stats` (US-194 / CA8)
+- Ajoute le contexte de navigation et la mémoire de session des écrans **sans introduire de routeur** : le bouton Retour du navigateur garde son comportement, et la dette est notée dans `ANALYSE_REFONTE_UI_WEB_2026.md` (US-195 / CA10, CA12)
+- Isole la lecture, la validation et la consommation d'une intention de navigation dans `frontend/src/lib/intentions.js`, couverte par `npm test` (US-195 / CA11)
+- Ajoute `POST /gestes/intentions`, qui valide et dépose un geste pré-parsé **sans écrire aucun événement** : action du référentiel et ouverte à la PWA, parcelle et lot du potager consulté, rôle éditeur minimum (US-196 / CA1, CA2)
+- Fait de `/start <code>` un point d'entrée à deux payloads, distingués par le seul préfixe du code ; un code de liaison (US-045, US-091) garde intégralement son traitement (US-196 / CA6)
+- Réutilise le chemin du bouton « Enregistrer » d'US-179 — `saisie._parse_and_save` avec un item pré-parsé — plutôt que d'ouvrir un second chemin d'écriture ; coût en jetons inchangé (US-196 / CA5)
+- Mutualise bouton, préparation, phrase à dicter et détour d'activation dans un seul composant, `BoutonGeste`, destiné à tous les boutons d'action des épics 9 à 12 (US-196 / CA9)
+- Vérifie par test que chaque gabarit de phrase proposé est reconnu par le parseur déterministe, sans appel au modèle (US-196 / CA9)
+- Relit dans la même livraison `parcelles-et-plan.md` (US-194 / CA11) puis `compagnon-telegram.md`, `enregistrer-un-geste.md` et `calendrier-et-zone-climatique.md`, et retire de `docs/domaines/calendrier-cultural.md` la mention « pas de bouton d'enregistrement », devenue fausse (US-196 / CA16)
+
+### 💾 Base de données
+- Ajoute la table `gestes_intentions` (code opaque à usage unique, compte, potager, geste pré-parsé, expiration à 15 minutes), sous RLS par potager, avec purge des intentions périmées — `migration_v50.sql` et son rollback (US-196 / CA3, CA4)
+- Aucune migration pour US-194 ni US-195 : la phase se calcule à la lecture, la navigation ne persiste rien
+
 ## [v3.74.0] — 2026-09-20
 
 ### 🚀 Nouveautés

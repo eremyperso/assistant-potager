@@ -8,6 +8,9 @@ index_terms:
   - "plan d'occupation"
   - "parcelle libre"
   - "non localisé"
+  - "semée"
+  - "en place"
+  - "en récolte"
 ---
 
 # Les parcelles et le plan d'occupation
@@ -22,9 +25,11 @@ Une parcelle est l'unité de lieu du potager : une planche, un carré, un bac, u
 ## Savoir ce qui pousse et ce qui est libre
 
 **Intention :** procédure
-**On parle aussi de :** plan du potager ; occupation ; place disponible ; qu'est-ce qui pousse ; où planter
+**On parle aussi de :** plan du potager ; occupation ; place disponible ; qu'est-ce qui pousse ; où planter ; semée ; en place ; en récolte ; phase ; où en est ma culture
 
 Le plan d'occupation montre, parcelle par parcelle, les cultures encore en place à la date consultée, avec leur variété, le nombre de pieds et l'âge de la plantation en jours. Une culture n'y figure que tant qu'il en reste des pieds : entièrement récoltée ou perdue, elle en disparaît, et la parcelle réapparaît comme disponible. Les cultures en place dont la parcelle n'a jamais été précisée sont regroupées à part, sous la mention « non localisé ».
+
+Chaque culture en place porte en plus un mot qui dit où elle en est à la date consultée : **semée**, **en place** ou **en récolte**. Une culture est *semée* depuis le jour du semis et jusqu'à sa levée ; elle passe *en place* à la date de levée attendue par le calendrier, ou dès le jour de la plantation quand c'est un plant qui a été mis en terre ; elle devient *en récolte* à la première récolte notée, et le reste ensuite, même après plusieurs cueillettes. Une culture dont le calendrier ne donne aucun délai de levée reste *semée* jusqu'à sa première récolte : c'est le dernier geste réellement connu, et rien n'est supposé à sa place. La date affichée à côté du mot est celle de ce geste ; quand elle vient d'une levée attendue, elle est annoncée comme attendue, jamais comme constatée. Un semis en pépinière ou en serre n'a pas de mot : il n'est pas une culture en place au jardin. Enfin, quand plusieurs semis échelonnés se succèdent sur la même ligne, le mot est celui du plus ancien encore en place, et le nombre de séries est affiché à côté plutôt que mélangé.
 
 ## Renommer une parcelle sans perdre son historique
 

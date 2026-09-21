@@ -3,6 +3,8 @@
 Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
 import time
+from typing import Optional
+
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
@@ -202,14 +204,41 @@ def _preparer_contexte_semis(items: list[dict], texte: str) -> None:
         db.close()
 
 
-def _boutons_confirmation(items: list[dict]) -> InlineKeyboardMarkup:
+def _boutons_confirmation(items: list[dict], geste_file: Optional[dict] = None) -> InlineKeyboardMarkup:
     """[US-021] Confirmer / Annuler — et [US-069 / CA3] pour un semis unique sans
     contexte dit, une seconde rangée qui corrige la proposition ET enregistre,
-    dans le même geste. « Confirmer » adopte la proposition affichée."""
-    rangees = [[
-        InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
-        InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
-    ]]
+    dans le même geste. « Confirmer » adopte la proposition affichée.
+
+    [US-224 / CA7] Un geste venu de la file offre TROIS issues nommées sans
+    ambiguïté — *Confirmer* (enregistre et retire de la file), *Plus tard*
+    (repose le geste dans la file, et le dit), *Abandonner ce geste* (le retire
+    définitivement, et le dit). Le libellé « Annuler » disparaît de ce flux : il
+    ne permettait pas de distinguer « j'annule la confirmation » de « j'annule
+    le geste », et c'est cette confusion qui faisait perdre des gestes préparés.
+    """
+    if geste_file:
+        rangees = [
+            [InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm")],
+        ]
+        # [US-224 / CA25] Un geste confirmé trois jours après son dépôt porte la
+        # date de son DÉPÔT : c'est le jour où le jardinier était au potager. Le
+        # récapitulatif l'affiche (ligne « 📅 Date ») et permet de la corriger —
+        # d'un bouton, parce qu'un geste rattrapé de la veille se corrige d'un
+        # doigt, pas en redictant la phrase. Le bouton n'apparaît que s'il
+        # change quelque chose.
+        if len(items) == 1 and items[0].get("date") != date.today().isoformat():
+            rangees.append([InlineKeyboardButton(
+                "📅 Plutôt aujourd'hui", callback_data="action_dater_aujourdhui",
+            )])
+        rangees.append([
+            InlineKeyboardButton("⏳ Plus tard", callback_data="action_plus_tard"),
+            InlineKeyboardButton("🗑 Abandonner ce geste", callback_data="action_abandonner"),
+        ])
+    else:
+        rangees = [[
+            InlineKeyboardButton("✅ Confirmer", callback_data="action_confirm"),
+            InlineKeyboardButton("❌ Annuler",   callback_data="action_cancel"),
+        ]]
     if len(items) == 1:
         item = items[0]
         if (
@@ -404,7 +433,15 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
 
 
 async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
-    """[US-021] Callback inline — sélection parcelle, confirmation ou annulation."""
+    """[US-021] Callback inline — sélection parcelle, confirmation ou annulation.
+
+    [US-224 / CA7, CA8] Quand le récapitulatif est le niveau 2 d'un geste de la
+    file, trois issues le remplacent — *Confirmer*, *Plus tard*, *Abandonner ce
+    geste* — et une seule d'entre elles, avec l'abandon, retire le geste de la
+    file. Un délai de confirmation dépassé, lui, ne le retire PAS : c'était la
+    troisième façon de perdre un geste préparé sous US-196, et elle disparaît
+    ici.
+    """
     import time
     query = update.callback_query
     await query.answer()
@@ -421,13 +458,31 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
 
     pending = _ACTION_PENDING.get(user_id)  # ne pas pop avant confirmation finale
 
+    # [US-224 / CA7, CA8] « Plus tard » et « Abandonner ce geste » : deux
+    # issues, deux phrases distinctes, et le geste sait laquelle lui a été
+    # appliquée. Traitées AVANT le contrôle de délai : reposer un geste reste
+    # possible même si le récapitulatif a vieilli à l'écran.
+    if data in ("action_plus_tard", "action_abandonner"):
+        _ACTION_PENDING.pop(user_id, None)
+        await _issue_geste_file(update, ctx, pending, data)
+        return
+
     if pending is None:
         await query.edit_message_text("⏱ Action expirée. Veuillez re-saisir votre commande.")
         return
 
     if time.time() - pending["ts"] > _ACTION_TIMEOUT:
         _ACTION_PENDING.pop(user_id, None)
-        await query.edit_message_text("⏱ *Confirmation expirée (60 s), action annulée.*", parse_mode="Markdown")
+        if pending.get("geste_file"):
+            # [US-224 / CA8] Le geste est TOUJOURS là : dépasser le délai de
+            # confirmation n'est pas l'abandonner.
+            await query.edit_message_text(
+                f"⏱ *Confirmation expirée ({_ACTION_TIMEOUT} s).*\n\n"
+                "Ce geste est toujours en attente dans votre file — /gestes le rouvre.",
+                parse_mode="Markdown",
+            )
+        else:
+            await query.edit_message_text("⏱ *Confirmation expirée (60 s), action annulée.*", parse_mode="Markdown")
         return
 
     # [CA9/CA10] Sélection de parcelle
@@ -440,7 +495,22 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         # [US-069 / CA3] Une parcelle pépinière est un indice : proposition recalculée.
         _preparer_contexte_semis(pending["items"], pending["texte"])
         summary = _build_action_summary(pending["items"])
-        await query.edit_message_text(summary, parse_mode="Markdown", reply_markup=_boutons_confirmation(pending["items"]))
+        await query.edit_message_text(
+            summary, parse_mode="Markdown",
+            reply_markup=_boutons_confirmation(pending["items"], pending.get("geste_file")),
+        )
+        return
+
+    # [US-224 / CA25] La date du dépôt corrigée d'un bouton — et le récapitulatif
+    # se réaffiche plutôt que d'enregistrer : corriger n'est pas confirmer.
+    if data == "action_dater_aujourdhui":
+        for item in pending["items"]:
+            item["date"] = date.today().isoformat()
+        log.info("[US-224 / CA25] Date du geste ramenée au jour — user_id=%s", user_id)
+        await query.edit_message_text(
+            _build_action_summary(pending["items"]), parse_mode="Markdown",
+            reply_markup=_boutons_confirmation(pending["items"], pending.get("geste_file")),
+        )
         return
 
     # [US-069 / CA3] Contexte choisi au clavier : corrige la proposition ET
@@ -468,6 +538,72 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     await query.edit_message_text("⏳ Enregistrement en cours...", reply_markup=None)
     log.info(f"[US-021] Confirmation reçue — user_id={user_id}, {len(pending['items'])} item(s)")
     await _do_save_items(update, pending["items"], pending["texte"])
+
+    # [US-224 / CA7, CA9] Le geste ne quitte la file qu'APRÈS l'écriture, jamais
+    # avant : un enregistrement qui échoue doit laisser le geste en attente
+    # plutôt que le faire disparaître sans trace. La confirmation faite, le
+    # compagnon annonce ce qui reste et propose le suivant.
+    geste_file = pending.get("geste_file")
+    if geste_file:
+        from app.services import file_gestes as svc_file
+        from .file_gestes import proposer_suivant
+        svc_file.confirmer(_GesteDeLaFile(geste_file))
+        await proposer_suivant(update, ctx, geste_file["user_id"])
+
+
+class _GesteDeLaFile:
+    """[US-224] Le minimum dont `file_gestes` a besoin pour sortir un geste.
+
+    L'état de confirmation (`_ACTION_PENDING`) ne garde qu'un dictionnaire —
+    jamais un objet SQLAlchemy, dont la session serait refermée depuis
+    longtemps au moment où le jardinier appuie. Ce porteur rend les deux seuls
+    attributs que `confirmer` / `abandonner` lisent.
+    """
+
+    def __init__(self, geste_file: dict):
+        self.id = geste_file["id"]
+        self.potager_id = geste_file["potager_id"]
+
+
+async def _issue_geste_file(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, pending: Optional[dict], data: str,
+) -> None:
+    """[US-224 / CA7, CA8] « Plus tard » repose le geste ; « Abandonner » le retire.
+
+    Les deux le DISENT : c'est toute la raison d'avoir séparé ces deux libellés
+    de l'« Annuler » d'US-196, qui ne permettait pas de savoir lequel des deux
+    venait de se produire.
+    """
+    from app.services import file_gestes as svc_file
+    from .file_gestes import proposer_suivant, reposer_pour_la_session
+
+    query = update.callback_query
+    geste_file = (pending or {}).get("geste_file")
+    if not geste_file:
+        # Un clavier de file survivant à un redémarrage du bot : l'état mémoire
+        # est perdu, la file ne l'est pas — c'est justement ce qu'elle apporte.
+        await query.edit_message_text(
+            "⏱ Ce récapitulatif n'est plus actif, mais vos gestes sont toujours "
+            "en attente — /gestes les rouvre."
+        )
+        return
+
+    if data == "action_abandonner":
+        svc_file.abandonner(_GesteDeLaFile(geste_file))
+        log.info("[US-224 / CA7] Geste abandonné depuis le récapitulatif : id=%s", geste_file["id"])
+        await query.edit_message_text(
+            "🗑 *Geste abandonné* — il a été retiré de votre file, et rien n'a été "
+            "enregistré.",
+            parse_mode="Markdown",
+        )
+    else:
+        reposer_pour_la_session(ctx, geste_file["id"])
+        log.info("[US-224 / CA8] Geste reposé dans la file : id=%s", geste_file["id"])
+        await query.edit_message_text(
+            "⏳ *Geste remis en attente* — il reste dans votre file, /gestes le rouvre.",
+            parse_mode="Markdown",
+        )
+    await proposer_suivant(update, ctx, geste_file["user_id"])
 
 
 def _build_recap_tts(p: dict) -> str:

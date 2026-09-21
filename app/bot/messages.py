@@ -354,7 +354,10 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             pieces_item["unite"]    = "plants"
             items.append(pieces_item)
             log.info(f"[US-036 CA10] Nombre de pieds détecté: {nb_pieds} — user_id={user_id}")
-            await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
+            await _parse_and_save(
+                update, pending["texte"], pre_parsed_items=items,
+                geste_file=pending.get("geste_file"),
+            )
             return
         else:
             await update.message.reply_text(
@@ -381,7 +384,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             log.info(f"[US-021 CA9] Quantité détectée: {qty} {unite} — user_id={user_id}")
 
             # Continuer avec confirmation
-            await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
+            # [INC-003] `geste_file` reprend ici la valeur mise de côté par
+            # `_QUANTITE_PENDING` — sans quoi le geste de la file est enregistré
+            # sans jamais être retiré de la file.
+            await _parse_and_save(
+                update, pending["texte"], pre_parsed_items=items,
+                geste_file=pending.get("geste_file"),
+            )
             return
         else:
             await update.message.reply_text(

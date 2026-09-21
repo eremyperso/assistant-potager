@@ -9,6 +9,7 @@ import { api } from '../lib/api.js'
 import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -430,12 +431,21 @@ function Reperes({ items }) {
 export default function Pepiniere({ refresh }) {
   const { dateRef } = useDateRef()
   const { potagerId } = usePotager()
+  const { annoncer, signaler } = useNavigation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lotOuvert, setLotOuvert] = useState(null)
-  const [q, setQ] = useState('')            // local, non persisté
-  const [tri, setTri] = useState(TRIS[0])
+  // [US-195 / CA2] Une étiquette scannée ou un lien partagé ouvrent CE lot
+  // (`/?vue=pepiniere&lot=128`). `onglet` et `emplacement` sont reconnus par la
+  // lib mais n'ont pas encore d'écran à piloter : ils arriveront avec US-215 et
+  // US-216, sans nouvelle clé à déclarer.
+  // [CA9] Recherche et tri font l'état exact de l'écran, rendu tel quel au retour.
+  const intention = useIntention('pepiniere', () => {})
+  const [etat, setEtat] = useEtatEcran('pepiniere', { q: '', tri: TRIS[0] })
+  const { q, tri } = etat
+  const setQ = (v) => setEtat({ q: v })
+  const setTri = (v) => setEtat({ tri: v })
   const [isOpen, toggle] = useGroups()
 
   async function load() {
@@ -448,6 +458,21 @@ export default function Pepiniere({ refresh }) {
   useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
   const tousLots = data?.lots ?? []
+
+  // [US-195 / CA3, CA4] Le lot désigné par l'intention, une fois les lots
+  // chargés : sa fiche s'ouvre et son arrivée est annoncée. Lot inconnu — sorti
+  // de pépinière, supprimé, d'un autre potager — l'écran s'ouvre quand même, et
+  // le dit. L'intention ne déclenche aucune écriture : elle ne fait qu'ouvrir.
+  useEffect(() => {
+    if (!intention?.lot || loading) return
+    const cible = tousLots.find((l) => String(l.lot_id) === String(intention.lot))
+    if (cible) {
+      setLotOuvert(cible)
+      annoncer(`Lot ${cible.culture}${cible.variete ? ` · ${cible.variete}` : ''} ouvert.`)
+    } else {
+      signaler("Ce lot de semis n'existe plus.")
+    }
+  }, [loading, data, intention])
 
   // [CA13] Le filtre porte à la fois sur la culture et sur la variété ; la date
   // de référence, absente de la maquette, est conservée dans la barre de filtres.

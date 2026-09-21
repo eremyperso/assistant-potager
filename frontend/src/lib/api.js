@@ -141,6 +141,11 @@ async function del(path, body) {
     err.code = detail?.detail?.code
     throw err
   }
+  // [US-224] Un 204 n'a PAS de corps : `res.json()` y lève
+  // « Unexpected end of JSON input », et l'appelant croit à un échec alors que
+  // la suppression a bien eu lieu — constaté à l'écran sur le retrait d'un
+  // geste de la file, qui laissait la liste inchangée.
+  if (res.status === 204) return null
   return res.json()
 }
 
@@ -208,6 +213,23 @@ export const api = {
   },
   // [US-055] Identité du compte connecté + état de la liaison Telegram (menu Compte)
   moi: () => get('/auth/me'),
+
+  // [US-224 / CA1] Dépose un geste dans la FILE d'attente. N'écrit AUCUN
+  // événement : rend l'identifiant du geste, son échéance (trois jours), le
+  // lien profond, la phrase équivalente à dicter, le compte de la file et de
+  // quoi dire si un geste identique y attend déjà (CA4) ou si le compagnon
+  // n'est pas encore activé (CA21). Un seul appelant, `components/BoutonGeste.jsx`.
+  preparerGeste: (corps) => post('/gestes/intentions', corps),
+  // [US-224 / CA22, CA23] La file : ce qui attend d'être confirmé, et ce qui
+  // vient d'en sortir (dont ce qui a été VIDÉ — le CA18 ne peut pas compter sur
+  // la seule notification Telegram). Lue à l'ouverture et au retour d'onglet,
+  // JAMAIS en interrogation périodique.
+  lireFileGestes: () => get('/gestes/file'),
+  // [US-224 / CA23] Retire un geste de la file depuis l'application. On ne peut
+  // pas l'y confirmer : la confirmation reste au compagnon (arbitrage A16).
+  retirerGesteDeLaFile: (id) => del(`/gestes/file/${id}`),
+  // [US-224 / CA18] Acquitte ce qui a été vidé — l'information a été vue.
+  acquitterGestesSortis: () => del('/gestes/file/sortis'),
   // [US-045] Génère un code de liaison Telegram (TTL 10 min) pour le compte connecté
   genererCodeLiaisonTelegram: () => post('/auth/lien/generer-code'),
   // [US-050 / CA1] Dissocie le chat Telegram lié au compte — identité seule, sans corps de requête

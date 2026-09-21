@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useLayoutEffect, useRef } from 'react'
 import { useTheme } from './hooks/useTheme.js'
 import { AppContextProvider } from './context/AppContext.jsx'
 import { AuthContextProvider, useAuth } from './context/AuthContext.jsx'
@@ -9,6 +9,12 @@ import BottomNav from './components/BottomNav.jsx'
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
 import { VUE_PAR_DEFAUT } from './navigation.js'
+import { NavigationProvider } from './context/NavigationContext.jsx'
+import { consommerIntentionAdresse } from './lib/intentions.js'
+import BasculePotagerIntention from './components/BasculePotagerIntention.jsx'
+import MessageIntention from './components/MessageIntention.jsx'
+import BandeauFile from './components/BandeauFile.jsx'  // [US-224]
+import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224]
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import Stocks    from './views/Stocks.jsx'
@@ -61,6 +67,14 @@ function consommerRetourOAuth() {
 // `useState` ferait perdre le résultat du premier appel, seul à voir le fragment.
 const RETOUR_OAUTH = consommerRetourOAuth()
 
+// [US-195 / CA5, CA6] L'intention portée par l'adresse (`/?vue=pepiniere&lot=128`)
+// est lue UNE fois, au chargement du module, et aussitôt effacée de la barre
+// d'adresse : recharger la page ne la rejoue pas. Elle attend ici que la
+// connexion soit faite — c'est ce qui la fait survivre à l'écran d'authentification
+// (CA6). Lue à la RACINE seulement : les chemins de vérification d'e-mail, de
+// réinitialisation de mot de passe et de retour OAuth ne sont jamais interceptés.
+const INTENTION_ADRESSE = consommerIntentionAdresse()
+
 // Écrans de la navigation à deux niveaux [US-053].
 // Les sections dont le contenu relève d'un lot ultérieur sont rendues en
 // `Placeholder` explicite plutôt qu'en lien mort [CA6].
@@ -93,10 +107,12 @@ const VIEWS = {
   journal: (props) => <Journal {...props} />,
 }
 
-function AppInner() {
+function AppInner({ intentionAdresse }) {
   useTheme()
 
-  const [view, setView] = useState(VUE_PAR_DEFAUT)
+  const [view, setView] = useState(() =>
+    intentionAdresse?.vue && VIEWS[intentionAdresse.vue] ? intentionAdresse.vue : VUE_PAR_DEFAUT
+  )
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading]     = useState(false)
 
@@ -107,20 +123,53 @@ function AppInner() {
   }, [])
 
   const renderView = VIEWS[view] ?? VIEWS[VUE_PAR_DEFAUT]
+  const vueValide = useCallback((id) => Boolean(VIEWS[id]), [])
+
+  // [US-195 / CA9] La position de défilement fait partie de l'état exact d'un
+  // écran. Le conteneur qui défile est UNIQUE et survit au changement de vue :
+  // sans mémoire, on arriverait sur l'écran suivant à la hauteur du précédent.
+  // Relevée juste avant de quitter, rendue juste après avoir affiché — en
+  // mémoire de page, jamais persistée.
+  const mainRef = useRef(null)
+  const defilements = useRef(new Map())
+
+  const changerVue = useCallback((id) => {
+    if (!VIEWS[id]) return
+    defilements.current.set(view, mainRef.current?.scrollTop ?? 0)
+    setView(id)
+  }, [view])
+
+  useLayoutEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = defilements.current.get(view) ?? 0
+  }, [view])
 
   return (
-    <div className="flex flex-col h-dvh bg-bg">
-      <TopBar view={view} onGo={setView} onRefresh={handleRefresh} loading={loading} />
+    <NavigationProvider
+      vue={view}
+      onVue={changerVue}
+      vueValide={vueValide}
+      intentionInitiale={intentionAdresse}
+    >
+      <BasculePotagerIntention intentionAdresse={intentionAdresse} />
+      <FileGestesProvider>
+      <div className="flex flex-col h-dvh bg-bg">
+        <TopBar view={view} onGo={changerVue} onRefresh={handleRefresh} loading={loading} />
 
-      <main className="flex-1 overflow-y-auto min-h-0">
-        <PageHeader view={view} onGo={setView} />
-        <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-7">
-          {renderView({ refresh: refreshKey })}
-        </div>
-      </main>
+        <main ref={mainRef} className="flex-1 overflow-y-auto min-h-0">
+          <PageHeader view={view} onGo={changerVue} />
+          <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-7">
+            <MessageIntention />
+            {/* [US-224 / CA22] Le compte de la file, sur tous les écrans — une
+                file invisible serait une file oubliée. */}
+            <BandeauFile />
+            {renderView({ refresh: refreshKey })}
+          </div>
+        </main>
 
-      <BottomNav view={view} onGo={setView} />
-    </div>
+        <BottomNav view={view} onGo={changerVue} />
+      </div>
+      </FileGestesProvider>
+    </NavigationProvider>
   )
 }
 
@@ -134,7 +183,7 @@ function PotagerGate() {
 
   return (
     <AppContextProvider>
-      <AppInner />
+      <AppInner intentionAdresse={INTENTION_ADRESSE} />
     </AppContextProvider>
   )
 }

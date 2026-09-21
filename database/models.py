@@ -26,8 +26,10 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
          issue_savoir sur routage_logs
 [US-068] Ajout du référentiel de calendrier cultural (ItineraireCultural,
          FenetreCulturale, DureeCulturale) et de Potager.zone_climatique
+[US-224] GesteIntention devient une file (etat, traite_le, motif_refus,
+         avertissement_le) et ajout du modèle FileGestesReglage (relance)
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, JSON
 # [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
 # aucun pilote (psycopg2 n'est sollicité qu'à la création du moteur). Le
 # `with_variant(Text(), "sqlite")` posé sur la colonne laisse les tests tourner
@@ -1190,3 +1192,79 @@ class KnowledgeChunk(Base):
     embedding      = Column(Text, nullable=True)
 
     document       = relationship("KnowledgeDocument", back_populates="fragments")
+
+
+class GesteIntention(Base):
+    """[US-196, US-224] Un geste préparé par la PWA, en attente dans la file.
+
+    N'est PAS un événement : rien ici n'apparaît au Journal, dans un stock ou
+    dans une statistique (US-224 / CA1). Un geste en attente n'est qu'une
+    **préparation** — le seul chemin d'écriture reste `saisie._parse_and_save`,
+    qui le recevra sous la forme d'un item pré-parsé, exactement comme le
+    bouton « Enregistrer » d'US-179.
+
+    US-196 en faisait un laissez-passer : un code à usage unique, quinze
+    minutes, consommé À L'OUVERTURE du lien. Trois façons d'y perdre un geste
+    (annuler le récapitulatif, laisser passer les 60 s de confirmation, fermer
+    la conversation) et aucune de le rejouer. US-224 en fait une FILE :
+
+    * `etat` dit où en est le geste, et lui seul l'en retire (CA3, CA8) — ni
+      l'ouverture du lien, ni un délai de confirmation dépassé ne le touchent ;
+    * `expire_le` est à trois jours du dépôt de CE geste : la péremption se
+      compte par geste, jamais par pile (CA3) ;
+    * `code` n'est plus à usage unique : le lien reste valide tant que le geste
+      l'est (CA11).
+
+    ⚠️ RLS par potager (migration_v50), policy tolérante au GUC non armé en
+    LECTURE seulement : le bot cherche un geste avant de savoir de quel potager
+    il relève. Il arme `app.potager_id` sur le potager DU GESTE avant toute
+    écriture (`file_gestes._ecriture`), la policy restant stricte là où elle
+    protège.
+    """
+    __tablename__ = "gestes_intentions"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    # [US-196 / CA3] ≥128 bits d'aléa, préfixe réservé, compatible `?start=`.
+    code        = Column(String(64), unique=True, nullable=False, index=True)
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
+    potager_id  = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
+    # [CA2] Item au contrat de `llm.parseur_deterministe` (US-094). JSON générique
+    # plutôt que JSONB : la même définition doit tenir sous SQLite (tests).
+    geste       = Column(JSON, nullable=False)
+    ecran       = Column(String(32), nullable=True)
+    cree_le     = Column(DateTime, server_default=func.now())
+    # [CA3] Trois jours à compter du dépôt de CE geste.
+    expire_le   = Column(DateTime, nullable=False)
+    # [CA3, CA8] en_attente | confirme | abandonne | perime — voir
+    # `app.services.file_gestes.ETAT_*`, qui est la seule référence.
+    etat        = Column(String(16), nullable=False, default="en_attente")
+    # [CA8] Instant de SORTIE de la file, jamais d'ouverture du lien.
+    traite_le   = Column(DateTime, nullable=True)
+    # [CA12] Pourquoi ce geste n'a pas pu être joué — dit en clair, jamais tu.
+    motif_refus = Column(String(200), nullable=True)
+    # [CA17] L'avertissement « vidé dans 4 heures », une fois par geste.
+    avertissement_le = Column(DateTime, nullable=True)
+
+
+class FileGestesReglage(Base):
+    """[US-224 / CA14, CA15, CA19, CA20] La relance d'une file, par compte.
+
+    Tout ce qui ne relève d'aucun geste en particulier : la coupure des
+    relances (CA20 — la soupape de l'US), la trace de la dernière invitation
+    (CA14 — une seule par session de préparation), celle de la dernière relance
+    (CA15 — deux créneaux par jour), l'instant de la dernière activité (CA19 —
+    qui remet le compteur à zéro sans jamais rallonger la vie d'un geste) et
+    l'identifiant du message à remplacer plutôt qu'à empiler (CA20).
+
+    Pas de RLS : aucune donnée de potager ici. Même traitement que
+    `LiaisonTelegram` (US-045), pour la même raison — c'est une table de
+    compte, pas une table de jardin. Une ligne créée à la demande.
+    """
+    __tablename__ = "files_gestes_reglages"
+
+    user_id                = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    relances_actives       = Column(Boolean, nullable=False, default=True)
+    derniere_activite_le   = Column(DateTime, nullable=True)
+    derniere_invitation_le = Column(DateTime, nullable=True)
+    derniere_relance_le    = Column(DateTime, nullable=True)
+    message_relance_id     = Column(Integer, nullable=True)

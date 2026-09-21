@@ -92,6 +92,22 @@ MOTIF_DUREE_RECOLTE_ABSENTE = "duree_recolte_absente"
 ORIGINE_SEMIS = "semis"
 ORIGINE_PLANTATION = "plantation"
 
+#: [US-194 / CA1] La PHASE DU MOMENT d'une ligne en place — le dernier geste
+#: connu, jamais une supposition. À ne pas confondre avec `ETAT_*` ci-dessus :
+#: l'état dit où en est la RÉCOLTE ATTENDUE et disparaît sans référentiel, la
+#: phase dit ce que le jardinier voit dans sa parcelle et existe toujours.
+PHASE_SEMEE = "semee"
+PHASE_EN_PLACE = "en_place"
+PHASE_EN_RECOLTE = "en_recolte"
+PHASES: tuple[str, ...] = (PHASE_SEMEE, PHASE_EN_PLACE, PHASE_EN_RECOLTE)
+
+#: [US-194 / CA5] D'où vient `phase_depuis` — une levée ATTENDUE ne se présente
+#: jamais comme constatée, c'est ce champ qui le dit à l'affichage.
+DEPUIS_RECOLTE = "recolte"
+DEPUIS_PLANTATION = "plantation"
+DEPUIS_LEVEE_ATTENDUE = "levee_attendue"
+DEPUIS_SEMIS = "semis"
+
 #: Clés de `mois` — les phases du référentiel, plus l'état « en croissance ».
 ETAT_CROISSANCE = "croissance"
 CLES_MOIS: tuple[str, ...] = (
@@ -469,6 +485,41 @@ def projeter_serie(
     )
 
 
+@dataclass(frozen=True)
+class SerieRetenue:
+    """[CA10 ; US-194 / CA1] La série d'une tuile qui porte sa lecture, ses
+    récoltes rattachées et le compte des autres — jamais une moyenne."""
+    serie: Serie
+    recoltes: list[Geste]
+    series_suivantes: int
+    nb_series: int
+
+
+def serie_retenue(
+    origines: list[Geste], recoltes: list[Geste], index: dict[int, Geste],
+    organe: Optional[str], date_ref: _date,
+) -> Optional[SerieRetenue]:
+    """
+    [CA10 ; US-194 / CA1, CA3] La plus ancienne série encore OUVERTE d'une tuile,
+    ou la dernière si toutes sont closes (culture végétative entièrement
+    récoltée). **Seul endroit où cette sélection est écrite** : la projection
+    (US-070) et la phase du moment (US-194) lisent donc la même série.
+    """
+    horizon = date_ref - timedelta(days=HORIZON_SERIE_JOURS)
+    series = [s for s in construire_series(origines, index) if s.origine.jour >= horizon]
+    if not series:
+        return None
+    par_serie, close = rattacher_recoltes(series, recoltes, organe)
+    ouvertes = [i for i, c in enumerate(close) if not c]
+    retenue = ouvertes[0] if ouvertes else len(series) - 1
+    return SerieRetenue(
+        serie=series[retenue],
+        recoltes=par_serie[retenue],
+        series_suivantes=sum(1 for i in ouvertes if i > retenue),
+        nb_series=len(series),
+    )
+
+
 def projeter_tuile(
     *,
     parcelle_id: int,
@@ -483,20 +534,91 @@ def projeter_tuile(
 ) -> Optional[Projection]:
     """[CA10] Projection d'une tuile : la plus ancienne série encore en place,
     les suivantes comptées — jamais une moyenne. None sans aucune série."""
-    horizon = date_ref - timedelta(days=HORIZON_SERIE_JOURS)
-    series = [s for s in construire_series(origines, index) if s.origine.jour >= horizon]
-    if not series:
+    retenue = serie_retenue(origines, recoltes, index, organe, date_ref)
+    if retenue is None:
         return None
-    par_serie, close = rattacher_recoltes(series, recoltes, organe)
-    ouvertes = [i for i, c in enumerate(close) if not c]
-    # Toutes closes (culture végétative entièrement récoltée) : la dernière.
-    retenue = ouvertes[0] if ouvertes else len(series) - 1
-    suivantes = sum(1 for i in ouvertes if i > retenue)
     return projeter_serie(
         parcelle_id=parcelle_id, culture=culture, variete=variete,
-        serie=series[retenue], recoltes=par_serie[retenue], itineraire=itineraire,
-        organe=organe, date_ref=date_ref, series_suivantes=suivantes,
+        serie=retenue.serie, recoltes=retenue.recoltes, itineraire=itineraire,
+        organe=organe, date_ref=date_ref, series_suivantes=retenue.series_suivantes,
     )
+
+
+# ── Phase du moment (US-194) ─────────────────────────────────────────────────
+@dataclass(frozen=True)
+class PhaseDuMoment:
+    """[US-194 / CA1, CA5] Ce que le jardinier voit dans sa parcelle à la date de
+    référence : un mot, la date depuis laquelle il vaut, et d'où vient cette date."""
+    phase: str
+    depuis: _date
+    nature: str
+    nb_series: int = 1
+
+    def en_dict(self) -> dict:
+        return {
+            "phase": self.phase,
+            "phase_depuis": self.depuis.isoformat(),
+            "phase_depuis_nature": self.nature,
+            "nb_series": self.nb_series,
+        }
+
+
+def phase_de_serie(
+    serie: Serie, recoltes: list[Geste], itineraire, date_ref: _date,
+) -> tuple[str, _date, str]:
+    """
+    [US-194 / CA1, CA2, CA5] La phase du moment d'UNE série et sa date de début.
+    **Seul endroit où cette règle est écrite** — aucun autre fichier, front
+    compris, ne recalcule une phase.
+
+    L'ordre EST la règle :
+    1. une récolte rattachée → **en récolte**, depuis la première (le réel prime) ;
+    2. une plantation → **en place**, depuis elle : le plant a levé ailleurs, et
+       lui appliquer un délai de levée annoncerait une germination déjà passée ;
+    3. un semis dont la levée attendue est atteinte → **en place**, depuis le
+       DÉBUT de la fourchette — une date attendue, que `nature` dit attendue ;
+    4. sinon → **semée**, depuis le semis. Un semis dont le référentiel ne donne
+       aucun délai de levée y reste jusqu'à sa première récolte : c'est le dernier
+       geste CONNU, pas une supposition (⚖️ arbitrage d'US-194).
+
+    Ne lève jamais et rend toujours une phase, même sans référentiel (CA2).
+    """
+    if recoltes:
+        return PHASE_EN_RECOLTE, recoltes[0].jour, DEPUIS_RECOLTE
+    if serie.semis is None:
+        return PHASE_EN_PLACE, serie.plantation.jour, DEPUIS_PLANTATION  # type: ignore[union-attr]
+    if serie.plantation is not None:
+        return PHASE_EN_PLACE, serie.plantation.jour, DEPUIS_PLANTATION
+
+    duree_levee = (
+        _jours(itineraire.duree(svc_calendrier.ETAPE_LEVEE))
+        if itineraire is not None and not itineraire.implicite else None
+    )
+    if duree_levee is not None:
+        levee_debut = serie.semis.jour + timedelta(days=duree_levee[0])
+        if date_ref >= levee_debut:
+            return PHASE_EN_PLACE, levee_debut, DEPUIS_LEVEE_ATTENDUE
+    return PHASE_SEMEE, serie.semis.jour, DEPUIS_SEMIS
+
+
+def phase_de_tuile(
+    *,
+    origines: list[Geste],
+    recoltes: list[Geste],
+    index: dict[int, Geste],
+    itineraire,
+    organe: Optional[str],
+    date_ref: _date,
+) -> Optional[PhaseDuMoment]:
+    """[US-194 / CA1, CA3] Phase du moment d'une tuile — celle de la série
+    retenue, avec le nombre de séries à côté. None sans aucune série."""
+    retenue = serie_retenue(origines, recoltes, index, organe, date_ref)
+    if retenue is None:
+        return None
+    phase, depuis, nature = phase_de_serie(
+        retenue.serie, retenue.recoltes, itineraire, date_ref
+    )
+    return PhaseDuMoment(phase=phase, depuis=depuis, nature=nature, nb_series=retenue.nb_series)
 
 
 # ── Lecture en base ──────────────────────────────────────────────────────────
@@ -524,19 +646,39 @@ def _geste(evenement: Evenement) -> Optional[Geste]:
     )
 
 
-def projections_du_plan(
+@dataclass(frozen=True)
+class TuileLue:
+    """[US-194 / CA1] Une tuile du Plan (parcelle × culture × variété) et tout ce
+    dont sa lecture a besoin. `culture` / `variete` sont normalisées — ce sont les
+    clés ; `nom_culture` / `nom_variete` sont ce qui a été dicté, pour l'affichage."""
+    parcelle_id: int
+    culture: str
+    variete: str
+    nom_culture: str
+    nom_variete: str
+    origines: list[Geste]
+    recoltes: list[Geste]
+    itineraire: object
+    organe: Optional[str]
+
+
+def lire_tuiles(
     db: Session, cultures: Iterable[str], potager_id: Optional[int], date_ref: _date
-) -> list[dict]:
+) -> tuple[list[TuileLue], dict[int, Geste]]:
     """
-    [CA1-CA12] Projection de chaque tuile (parcelle × culture × variété) des
-    cultures demandées, à la date de référence — en une lecture des événements.
+    [CA1, CA5, CA8 ; US-194 / CA1, CA7] Les tuiles des cultures demandées et
+    l'index de tous les gestes, en UNE lecture des événements.
+
+    **Seul endroit où le plan est lu en base** : la projection (US-070) et la
+    phase du moment (US-194) en partent toutes les deux, donc d'exactement les
+    mêmes séries — deux règles ne peuvent pas diverger sur les mêmes tuiles.
 
     Les événements postérieurs à `date_ref` sont ignorés (US-030) : reculer la
-    date de référence replace toute la projection à cette date (CA8).
+    date de référence replace toute la lecture à cette date (CA8).
     """
     demandees = {normaliser_culture(c) for c in cultures if c and c.strip()}
     if not demandees:
-        return []
+        return [], {}
 
     plancher = datetime.combine(date_ref - timedelta(days=2 * HORIZON_SERIE_JOURS), datetime.min.time())
     plafond = datetime.combine(date_ref, datetime.max.time())
@@ -576,7 +718,7 @@ def projections_du_plan(
 
     calendriers: dict[str, object] = {}
     organes: dict[str, Optional[str]] = {}
-    resultat: list[dict] = []
+    lues: list[TuileLue] = []
     for (parcelle_id, culture, variete), origines in tuiles.items():
         if culture not in calendriers:
             lu = svc_calendrier.lire_calendrier(db, culture, potager_id)
@@ -590,11 +732,31 @@ def projections_du_plan(
             and (r.parcelle_id == parcelle_id or (r.parcelle_id is None and seules))
             and (r.variete in ("", variete))
         ]
+        lues.append(TuileLue(
+            parcelle_id=parcelle_id, culture=culture, variete=variete,
+            nom_culture=noms[(parcelle_id, culture, variete)][0],
+            nom_variete=noms[(parcelle_id, culture, variete)][1],
+            origines=origines, recoltes=recoltes_tuile,
+            itineraire=calendriers[culture], organe=organes[culture],
+        ))
+    return lues, index
+
+
+def projections_du_plan(
+    db: Session, cultures: Iterable[str], potager_id: Optional[int], date_ref: _date
+) -> list[dict]:
+    """
+    [CA1-CA12] Projection de chaque tuile (parcelle × culture × variété) des
+    cultures demandées, à la date de référence.
+    """
+    lues, index = lire_tuiles(db, cultures, potager_id, date_ref)
+    resultat: list[dict] = []
+    for tuile in lues:
         projection = projeter_tuile(
-            parcelle_id=parcelle_id, culture=noms[(parcelle_id, culture, variete)][0],
-            variete=noms[(parcelle_id, culture, variete)][1],
-            origines=origines, recoltes=recoltes_tuile, index=index,
-            itineraire=calendriers[culture], organe=organes[culture], date_ref=date_ref,
+            parcelle_id=tuile.parcelle_id, culture=tuile.nom_culture,
+            variete=tuile.nom_variete, origines=tuile.origines,
+            recoltes=tuile.recoltes, index=index, itineraire=tuile.itineraire,
+            organe=tuile.organe, date_ref=date_ref,
         )
         if projection is not None:
             resultat.append(projection.en_dict())
@@ -613,5 +775,59 @@ def projections_du_plan(
         "[US-070] Recalage du plan : potager_id=%s date_ref=%s tuiles=%d recalees=%d",
         potager_id, date_ref.isoformat(), len(resultat),
         sum(1 for p in resultat if p["etat"] != ETAT_SANS_RECALAGE),
+    )
+    return resultat
+
+
+def phases_du_plan(
+    db: Session, cultures: Iterable[str], potager_id: Optional[int], date_ref: _date
+) -> dict[tuple[int, str, str], dict]:
+    """
+    [US-194 / CA1, CA4, CA6, CA7, CA8] Phase du moment de chaque ligne en place,
+    indexée par `(parcelle_id, culture normalisée, variété normalisée)` — la clé
+    que l'écran Plan reconstitue pour ses lignes d'occupation.
+
+    Lecture seule, exactement la même que `projections_du_plan` : aucune
+    écriture, aucun stock, aucune projection ni confiance touchés (CA8).
+
+    [CA4] Un semis en PÉPINIÈRE n'est pas une culture en place : il n'a pas de
+    phase. Même exclusion que `calcul_occupation_parcelles` — une série née d'un
+    semis, sans plantation, dans une parcelle `est_pepiniere`, est écartée. Une
+    PLANTATION dans une parcelle de pépinière, elle, reste en place, comme dans
+    l'occupation.
+    """
+    lues, index = lire_tuiles(db, cultures, potager_id, date_ref)
+    if not lues:
+        return {}
+
+    ids = {t.parcelle_id for t in lues}
+    pepinieres = {
+        pid for pid, est in
+        db.query(Parcelle.id, Parcelle.est_pepiniere).filter(Parcelle.id.in_(ids)).all()
+        if est
+    }
+
+    resultat: dict[tuple[int, str, str], dict] = {}
+    for tuile in lues:
+        retenue = serie_retenue(
+            tuile.origines, tuile.recoltes, index, tuile.organe, date_ref
+        )
+        if retenue is None:
+            continue
+        # [CA4] L'exclusion porte sur l'ORIGINE de la série, pas sur la phase :
+        # un semis de pépinière levé reste un semis de pépinière, il n'est pas
+        # pour autant une culture en place.
+        if tuile.parcelle_id in pepinieres and retenue.serie.plantation is None:
+            continue
+        phase, depuis, nature = phase_de_serie(
+            retenue.serie, retenue.recoltes, tuile.itineraire, date_ref
+        )
+        resultat[(tuile.parcelle_id, tuile.culture, tuile.variete)] = PhaseDuMoment(
+            phase=phase, depuis=depuis, nature=nature, nb_series=retenue.nb_series,
+        ).en_dict()
+
+    log.info(
+        "[US-194] Phases du plan : potager_id=%s date_ref=%s lignes=%d",
+        potager_id, date_ref.isoformat(), len(resultat),
     )
     return resultat

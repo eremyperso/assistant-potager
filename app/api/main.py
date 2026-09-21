@@ -44,6 +44,13 @@ Onboarding self-service [US-048] :
   GET    /potagers/corbeille                     → potagers supprimés restaurables (owner) [US-084]
   POST   /potagers/{id}/restaurer                → restaurer un potager supprimé (owner) [US-084]
 
+Geste préparé dans la PWA, confirmé au compagnon [US-196] :
+  POST   /gestes/intentions  → dépose un geste dans la file, rend le lien profond Telegram
+  GET    /gestes/file        → ce qui attend d'être confirmé, et ce qui vient d'en sortir
+  DELETE /gestes/file/{id}   → retire un geste de la file depuis l'application
+  DELETE /gestes/file/sortis → acquitte ce qui a été vidé (US-224 / CA18)
+                            et la phrase équivalente à dicter — n'écrit AUCUN événement
+
 Météo personnalisée [US-075] :
   GET /meteo → météo du jour + prévision 5 jours, sur la localisation du potager actif
 
@@ -65,6 +72,7 @@ from urllib.parse import urlencode
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi import Response
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -121,6 +129,8 @@ from utils.parcelles import resolve_parcelle  # [US-167]
 from utils.actions import normalize_action  # [US-167]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
+from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
 from app.config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
 
@@ -1393,6 +1403,217 @@ def get_confiances_plan(
         db.close()
 
 
+class PreparerGesteRequest(BaseModel):
+    """[US-196 / CA1] Un geste pré-parsé — tout facultatif sauf l'action."""
+    action: str
+    culture: Optional[str] = None
+    variete: Optional[str] = None
+    quantite: Optional[float] = None
+    unite: Optional[str] = None
+    parcelle_id: Optional[int] = None
+    rang: Optional[str] = None
+    lot_id: Optional[int] = None
+    date: Optional[str] = None
+    contexte_semis: Optional[str] = None
+    ecran: Optional[str] = None
+    potager_id: Optional[int] = None
+
+
+@app.post("/gestes/intentions", status_code=201)
+def deposer_geste_en_file(
+    req: PreparerGesteRequest,
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-224 / CA1, CA2, CA4, CA21] Dépose un geste dans la file d'attente.
+
+    ⚠️ **N'écrit aucun événement.** Le dépôt range un geste pré-parsé dans la
+    file du compte, pour trois jours, et rend de quoi ouvrir le compagnon
+    dessus. L'enregistrement, lui, reste le flux du bot, confirmation comprise :
+    c'est la règle « les boutons d'action ouvrent le flux existant avec des
+    champs pré-remplis, ils n'écrivent pas eux-mêmes » (arbitrage A16).
+
+    Ni Journal, ni stock, ni statistique ne voient passer un geste en attente.
+
+    [CA21] Le dépôt NE dépend PAS d'un compagnon activé — c'est l'inverse
+    d'US-196 / CA10, et c'est voulu : on prépare sa journée d'abord, on active
+    une fois. `compagnon_actif` dit à l'écran s'il doit inviter à l'activation.
+    """
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, req.potager_id)
+        try:
+            depot = svc_file_gestes.deposer_geste(
+                db, use_ctx,
+                action=req.action, culture=req.culture, variete=req.variete,
+                quantite=req.quantite, unite=req.unite, parcelle_id=req.parcelle_id,
+                rang=req.rang, lot_id=req.lot_id, date=req.date,
+                contexte_semis=req.contexte_semis, ecran=req.ecran,
+            )
+        except PermissionInsuffisanteError as e:
+            # [CA24] Un membre en lecture seule est refusé ici aussi, et pas
+            # seulement privé de bouton côté PWA : l'écran cache, le serveur
+            # interdit — jamais l'un sans l'autre.
+            raise HTTPException(status_code=403, detail=str(e))
+        except PotagerArchiveError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_file_gestes.ActionNonOuverteError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except (svc_file_gestes.ParcelleHorsPotagerError,
+                svc_file_gestes.LotHorsPotagerError) as e:
+            raise HTTPException(status_code=404, detail=str(e))
+
+        geste = depot.geste
+        item = svc_file_gestes.item_du_geste(geste)
+
+        # [CA14] Une invitation au premier dépôt sur une file vide, et une
+        # seule. Best-effort : un compagnon injoignable ne fait pas échouer un
+        # dépôt, la file l'attendra (CA21).
+        compagnon_actif = False
+        try:
+            svc_relances_file.inviter_si_premier_depot(db, use_ctx.user_id, depot)
+            compagnon_actif = svc_relances_file.compagnon_joignable(db, use_ctx.user_id)
+        except Exception as e:  # noqa: BLE001 — observabilité, jamais bloquant
+            log.warning("[US-224 / CA14] Invitation impossible : %s", e)
+
+        return {
+            "id": geste.id,
+            "code": geste.code,
+            # Suffixe « Z » explicite, même correctif que /auth/lien/generer-code :
+            # `expire_le` est un datetime naïf en UTC, sans lui le navigateur le
+            # lirait comme une heure locale et décalerait l'échéance affichée.
+            "expire_le": geste.expire_le.isoformat() + "Z",
+            # [CA11] Le lien ne transporte QUE le code (point de vigilance de
+            # l'US), et il n'est plus à usage unique : il reste valide tant que
+            # le geste l'est. `None` si l'identifiant public du bot est
+            # introuvable — la PWA retombe alors sur la seule phrase à dicter.
+            "lien": svc_file_gestes.lien_profond(
+                geste.code, svc_telegram_notify.obtenir_username_bot(),
+            ),
+            # [US-196 / CA9] La phrase équivalente, copiable, reconnue par le
+            # parseur déterministe — le repli de qui préfère dicter.
+            "phrase": svc_file_gestes.phrase_a_dicter(item),
+            # [CA4] Signalé, pas interdit : semer deux fois la même chose le
+            # même jour est un cas réel.
+            "doublon": depot.doublon,
+            # [CA22] Le compte que l'application affiche en permanence.
+            "en_attente": depot.nb_en_attente,
+            # [CA21] Faux → l'application invite à activer le compagnon, sans
+            # jamais bloquer le dépôt.
+            "compagnon_actif": compagnon_actif,
+            # Ce que la PWA affiche sur le bouton et son récapitulatif — jamais
+            # de champ que l'écran n'a pas envoyé.
+            "geste": {
+                "action": item.get("action"),
+                "culture": item.get("culture"),
+                "parcelle": item.get("parcelle"),
+                "date": item.get("date"),
+                "contexte_semis": item.get("contexte_semis"),
+            },
+        }
+    finally:
+        db.close()
+
+
+def _geste_pour_pwa(geste) -> dict:
+    """[CA22, CA23] Ce qu'un écran a besoin de savoir d'un geste en attente.
+
+    Ni le code, ni l'item complet : une liste de file se lit, elle ne se rejoue
+    pas depuis l'application — la confirmation reste au compagnon (A16).
+    """
+    item = geste.geste or {}
+    return {
+        "id": geste.id,
+        "potager_id": geste.potager_id,
+        "action": item.get("action"),
+        "culture": item.get("culture"),
+        "variete": item.get("variete"),
+        "parcelle": item.get("parcelle"),
+        "date": item.get("date"),
+        "contexte_semis": item.get("contexte_semis"),
+        "ecran": geste.ecran,
+        "depose_le": geste.cree_le.isoformat() + "Z" if geste.cree_le else None,
+        "expire_le": geste.expire_le.isoformat() + "Z" if geste.expire_le else None,
+        "etat": geste.etat,
+        "motif_refus": geste.motif_refus,
+    }
+
+
+@app.get("/gestes/file")
+def lire_file_gestes(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-224 / CA22, CA23] Ce qui attend d'être confirmé, et ce qui vient d'en sortir.
+
+    Deux listes, et elles ne disent pas la même chose :
+
+    * `en_attente` — la file, tous potagers confondus : c'est elle que
+      l'application montre en permanence et sur tous les écrans concernés. Une
+      file invisible serait une file oubliée (CA22).
+    * `sortis` — ce qui a été confirmé, abandonné ou **vidé** récemment. La
+      notification de purge du CA18 est best-effort et peut se perdre : cette
+      liste est le second porteur de l'information, pour qu'un geste jamais
+      confirmé ne puisse pas passer pour enregistré.
+
+    Une seule lecture, au retour d'onglet — aucune interrogation périodique.
+    """
+    db = SessionLocal()
+    try:
+        en_attente = svc_file_gestes.lister_en_attente(db, ctx.user_id)
+        sortis = svc_file_gestes.lister_sortis_recents(db, ctx.user_id)
+        return {
+            "en_attente": [_geste_pour_pwa(g) for g in en_attente],
+            "nb_en_attente": len(en_attente),
+            "sortis": [_geste_pour_pwa(g) for g in sortis],
+            # [CA20] L'état de la soupape, pour que l'application puisse le dire
+            # plutôt que de laisser croire à des relances qui ne viendront pas.
+            "relances_actives": svc_relances_file.relances_actives(db, ctx.user_id),
+        }
+    finally:
+        db.close()
+
+
+@app.delete("/gestes/file/sortis", status_code=204)
+def acquitter_gestes_sortis(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-224 / CA18] Le jardinier a vu ce qui avait été vidé — la trace peut partir.
+
+    Déclenché par l'écran, jamais par le bot : c'est l'application qui sait que
+    l'information a été lue.
+
+    ⚠️ Déclaré AVANT `/gestes/file/{geste_id}` : FastAPI résout les routes dans
+    l'ordre de déclaration, et « sortis » se laisserait sinon capturer comme un
+    identifiant.
+    """
+    db = SessionLocal()
+    try:
+        svc_file_gestes.acquitter_sortis(db, ctx.user_id)
+        return Response(status_code=204)
+    finally:
+        db.close()
+
+
+@app.delete("/gestes/file/{geste_id}", status_code=204)
+def retirer_geste_de_la_file(
+    geste_id: int,
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-224 / CA23] Retirer un geste de la file depuis l'application.
+
+    On peut l'y consulter et l'y retirer ; on ne peut pas l'y confirmer. La
+    confirmation reste au compagnon — c'est l'arbitrage A16, et c'est ce qui
+    empêche cette US d'ouvrir un second chemin d'écriture.
+    """
+    db = SessionLocal()
+    try:
+        geste = svc_file_gestes.geste_par_id(db, geste_id, ctx.user_id)
+        if geste is None:
+            raise HTTPException(status_code=404, detail="Ce geste n'attend plus dans votre file.")
+        svc_file_gestes.abandonner(geste)
+        # [CA19] Retirer un geste est une activité sur la file : le compteur de
+        # relance repart de zéro, la vie des autres gestes ne bouge pas.
+        svc_relances_file.noter_activite(db, ctx.user_id)
+        return Response(status_code=204)
+    finally:
+        db.close()
+
+
 @app.get("/plan/confiances/candidates")
 def get_confiances_candidates_plan(
     culture: list[str] = Query(default=[]),
@@ -2020,6 +2241,16 @@ def get_plan(
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
 
+        # [US-194 / CA1, CA6] Phase du moment de chaque ligne en place — semée,
+        # en place, en récolte. Calculée par le service de recalage, jamais ici :
+        # l'API ne fait que rapprocher la clé (parcelle, culture, variété).
+        cultures_du_plan = {
+            c.get("culture") for lignes in occupation.values() for c in lignes if c.get("culture")
+        }
+        phases = svc_recalage.phases_du_plan(
+            db, cultures_du_plan, use_ctx.potager_id, date_ref_effective
+        )
+
         result = []
         for p in parcelles:
             cultures_raw = occupation.get(p.nom, [])
@@ -2047,6 +2278,18 @@ def get_plan(
             ]
             for c in cultures:
                 c["has_observations"] = c["nb_observations"] > 0
+                # [US-194 / CA2, CA6] Toujours les trois champs, même sans
+                # référentiel ; None seulement quand la ligne n'a aucune série
+                # en place (semis de pépinière exclu par CA4).
+                phase = phases.get((
+                    p.id,
+                    normaliser_culture(c["culture"] or ""),
+                    (c["variete"] or "").strip().lower(),
+                )) or {}
+                c["phase"] = phase.get("phase")
+                c["phase_depuis"] = phase.get("phase_depuis")
+                c["phase_depuis_nature"] = phase.get("phase_depuis_nature")
+                c["nb_series"] = phase.get("nb_series")
 
             # [US-037 / CA10] Calcul occupation réel : une culture semée en m² occupe
             # directement cette surface (aucune conversion via une empreinte au pied) ;

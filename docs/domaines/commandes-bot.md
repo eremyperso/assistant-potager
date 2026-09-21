@@ -52,9 +52,90 @@ silencieusement : y compris quand il n'était que le défaut transitoire de
 `resoudre_tenant_context` (plusieurs potagers, aucun choix persisté), que
 `accepter_invitation` écraserait sinon.
 
+## Les deux payloads de `/start` [US-091, US-196, US-224]
+
+`/start` accepte un argument, et il en existe désormais **deux familles**. Le
+préfixe seul les distingue, en un point unique —
+`file_gestes.est_code_geste`, appelé par `cmd_start` :
+
+| Payload | Préfixe | Ce que c'est | Qui le traite |
+|---|---|---|---|
+| `ABCDEF` | aucun, 6 caractères majuscules sans ambiguïté | code de liaison d'un compte web (US-045, deep-link US-091) | `liaison._demarrer_avec_code` |
+| `g<22 caractères>` | `g` minuscule | geste déposé dans la file depuis la PWA (US-196, US-224) | `bot.file_gestes.traiter_code_geste` |
+
+⚠️ **Le préfixe est réservé, et c'est la minuscule qui le réserve** :
+`liaison_telegram._ALPHABET` est entièrement majuscule, et `lier_chat_id` met en
+majuscules avant de chercher. Les deux familles ne peuvent donc pas se
+confondre — ni aujourd'hui, ni après un changement de longueur de l'une ou de
+l'autre. Un code de liaison inconnu garde son traitement et son message : le
+test de préfixe ne détourne jamais un code qui ne lui appartient pas.
+
+⚠️ **Un geste préparé ne s'enregistre pas ici.** `bot.file_gestes` remet l'item
+pré-parsé dans `saisie._parse_and_save` — le chemin du bouton « Enregistrer »
+d'US-179, à la lettre. Aucun second chemin d'écriture, zéro jeton, et le potager
+du geste l'emporte sur le potager actif (bascule faite ET dite, US-088).
+
+⚠️ **Le code n'est plus à usage unique** [US-224 / CA11]. Il désigne un geste de
+la file et reste valable tant que ce geste l'est — trois jours. Rouvrir le même
+lien redonne le même geste ; c'est ce qui manquait à US-196, où « Annuler »
+brûlait le geste et où rouvrir répondait « déjà utilisé ».
+
+## La file de gestes et sa commande — `/gestes` [US-224]
+
+La PWA **dépose**, le compagnon **confirme**, et entre les deux le geste attend.
+Trois modules, trois responsabilités qui ne se mélangent pas :
+
+| Module | Ce qu'il porte |
+|---|---|
+| `app/services/file_gestes.py` | la file elle-même : déposer, lister, sortir (confirmer / abandonner / refuser), vérifier le contexte, périmer |
+| `app/services/relances_file.py` | la CADENCE : invitation unique, deux créneaux par jour, arrêt à 3 jours, coupure, avertissement et notification de purge |
+| `app/bot/file_gestes.py` | les deux niveaux de présentation, la commande `/gestes`, les callbacks `file:`, et le job horaire |
+
+**La règle de consommation est le cœur de l'US** : un geste ne sort de la file
+qu'à la **confirmation** ou à l'**abandon explicite**. « Plus tard », un délai de
+confirmation dépassé (les 60 s d'US-021), une conversation refermée ou une
+relance ignorée le laissent en attente. C'est l'inverse d'US-196, dont le
+`consomme_le` était posé à l'OUVERTURE du lien — trois façons d'y perdre un
+geste préparé, aucune de le rejouer.
+
+La présentation a **deux niveaux**, et le premier ne peut rien écrire : ses deux
+seules actions sont `file:commencer` et `file:couper`, ce qui le rend sûr à
+poser dans une notification. Le second est le récapitulatif d'US-021, inchangé,
+avec trois issues au lieu de deux (`action_confirm`, `action_plus_tard`,
+`action_abandonner`) — « Annuler » disparaît de ce flux parce qu'il ne
+distinguait pas « j'annule la confirmation » de « j'annule le geste ».
+
+**La cadence** : une invitation au premier dépôt sur une file vide (et une
+seule), puis une relance par demi-journée sur deux créneaux fixes (9 h, 18 h —
+jamais à l'heure du dépôt), un arrêt au bout de 3 jours, un avertissement 4 h
+avant la purge d'un geste, une notification à la purge. Sept messages au pire
+sur trois jours. Toute activité sur la file remet le compteur à zéro sans jamais
+rallonger la vie d'un geste. La coupure (`file:couper`) est la soupape : elle
+arrête tout **sans vider la file**, et elle est rappelée sur chaque relance.
+
+⚠️ **L'envoi sortant a dû apprendre le clavier** (`telegram_notify.envoyer`,
+`editer_message`). Il ne savait poster que du texte brut : suffisant pour
+annoncer un archivage, insuffisant pour inviter à traiter une file — sans
+clavier, toute invitation dégénère en « envoyez /gestes pour les traiter ».
+
+Un seul job, **horaire** (`app/bot/file_gestes.job_file_gestes`) : l'avertissement
+des 4 heures tombe à une heure qui dépend du dépôt de chaque geste, pas d'un
+créneau fixe, donc il lui faut une maille plus fine qu'une demi-journée. Les
+relances, elles, ne partent qu'aux créneaux — c'est `relances_file.doit_relancer`
+qui en juge, jamais la planification.
+
+`/gestes` est **dictable** (US-172) : c'est une consultation, pas un code à
+coller, et le niveau 1 qu'elle ouvre n'écrit rien. La règle de reconnaissance
+s'appelle `file_gestes` et exige un mot d'attente (`en attente`, `a confirmer`,
+`file`) — c'est ce qui la sépare d'`historique`, qui possède déjà « mes derniers
+gestes » et dit exactement le contraire : ce qui est FAIT, pas ce qui attend.
+
+`/start` reste exclu de l'interprétation par phrase, ci-dessous : c'est un point
+d'entrée à payload, pas une commande qu'on dicte.
+
 ## Piloter le bot par une phrase [US-172]
 
-Les 25 commandes du bot ont toutes leur décision : 18 sont DICTABLES pour de
+Les 26 commandes du bot ont toutes leur décision : 19 sont DICTABLES pour de
 bon, 1 est un alias de sa cible canonique (`/parcelles` = `/parcelle lister`), et
 6 sont écartées sur décision motivée (`/ask`, `/start`, `/lier`, `/rejoindre`,
 `/delier`, `/version`). `/rejoindre` [US-087] suit le raisonnement de `/lier` : un

@@ -19,6 +19,7 @@ Décisions de domaine (menu natif US-171, dictée US-172) : `docs/domaines/comma
 | `saisie` | `_parse_and_save` (cœur de la saisie dictée) et les rappels qui y reviennent |
 | `correction` / `deplacement` | corriger ou supprimer un événement ; déplacer une culture |
 | `commandes_*` | une commande slash par domaine : parcelle, culture, calendrier, plan, stats |
+| `file_gestes` | `/gestes`, la file préparée par la PWA (US-224) : niveau 1 (liste, boutons `file:`), niveau 2 (le récapitulatif d'US-021), `/start g<code>`, job horaire (relance, avertissement, purge) |
 | `meteo_jobs` | `/meteo`, jobs planifiés (météo 05h, purge 04h) |
 | `messages` | `handle_voice`, `handle_text` — points d'entrée des messages libres |
 | `application` | `_construire_application`, enregistrement des handlers, `main()` |

@@ -221,11 +221,20 @@ async def _semis_organe_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
 
 
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
-async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items=None):
+async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items=None,
+                          geste_file=None):
     """Parse le texte → liste d'événements → PostgreSQL → récapitulatif.
 
     pre_parsed_items : items déjà extraits par parse_message() (single-pass).
     Si None, appel de secours à parse_commande() (bulk, multi-lignes, fallback).
+
+    geste_file : [US-224 / CA6, CA7] le geste de la file dont ce récapitulatif
+    est le niveau 2 — `{id, potager_id, user_id, position, total}`. Sa seule
+    conséquence ici est d'être rangé dans l'état de confirmation : c'est lui qui
+    fait afficher *Confirmer / Plus tard / Abandonner ce geste* au lieu de
+    *Confirmer / Annuler*, et qui permet au délai de confirmation dépassé de
+    LAISSER le geste en file plutôt que de le perdre (CA8). `None` pour une
+    saisie dictée : le flux est alors rigoureusement celui d'US-021.
     """
     # Gestion des callback queries : update.message peut être None
     message = update.message or (update.callback_query.message if update.callback_query else None)
@@ -572,7 +581,13 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
 
         if type_organe_p == "végétatif":
             user_id = update.effective_user.id
-            _RECOLTE_PIECES_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+            # [INC-003] `geste_file` doit survivre à cette clarification, sinon la
+            # reprise dans messages.py rappelle `_parse_and_save` sans lui : le
+            # geste finit enregistré hors du contrat de la file (jamais retiré,
+            # réapparaît à chaque /gestes).
+            _RECOLTE_PIECES_PENDING[user_id] = {
+                "items": items, "texte": texte, "ts": _time.time(), "geste_file": geste_file,
+            }
             log.info("[US-036 CA10] Poids sans nb de pieds pour '%s' (végétatif) — user_id=%s", culture_p, user_id)
             await message.reply_text(
                 f"🌿 Combien de pieds de *{culture_p}* avez-vous récoltés au total ? "
@@ -825,7 +840,11 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # [US-021] Confirmation avant enregistrement
     import time as _time
     user_id = update.effective_user.id
-    _ACTION_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+    _ACTION_PENDING[user_id] = {
+        "items": items, "texte": texte, "ts": _time.time(),
+        # [US-224 / CA7, CA8] Présent seulement pour un geste venu de la file.
+        "geste_file": geste_file,
+    }
 
     # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
     # [fix bug id=351] mise_en_godet ajouté — un godet n'est jamais rattaché à une
@@ -955,7 +974,13 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         and not items[0].get("quantite")
     ):
         user_id = update.effective_user.id
-        _QUANTITE_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time.time()}
+        # [INC-003] Idem : sans `geste_file` ici, un semis/récolte/plantation de
+        # la file dont la quantité manque perd son rattachement à la file dès
+        # cette question — la confirmation qui suivra n'appellera jamais
+        # `svc_file.confirmer`, et le geste reste indéfiniment `en_attente`.
+        _QUANTITE_PENDING[user_id] = {
+            "items": items, "texte": texte, "ts": _time.time(), "geste_file": geste_file,
+        }
         log.info(f"[US-021 CA9] Quantité manquante pour '{items[0].get('action')}' — user_id={user_id}")
         await message.reply_text(
             "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"

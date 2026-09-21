@@ -87,11 +87,20 @@ async def _demarrer_avec_code(update: Update, ctx: ContextTypes.DEFAULT_TYPE, co
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Message de bienvenue — gère aussi le deep-link d'activation
-    `/start <code>` [US-091 / CA8-CA12]. Volontairement hors du garde de
+    """Message de bienvenue — gère aussi les deux deep-links `/start <code>` :
+    activation du compagnon [US-091 / CA8-CA12] et geste préparé dans la PWA
+    [US-196 / CA5]. Volontairement hors du garde de
     liaison (_COMMANDES_SANS_GARDE_LIAISON) : c'est justement le point
     d'entrée qui doit pouvoir lire le payload du deep-link avant tout blocage."""
     if ctx.args:
+        # [US-196, US-224] Deux familles de codes passent désormais par ici, et
+        # le préfixe seul les distingue : un code de liaison (US-045/US-091)
+        # garde intégralement son traitement, y compris quand il est inconnu.
+        from app.services import file_gestes as svc_file_gestes
+        if svc_file_gestes.est_code_geste(ctx.args[0]):
+            from .file_gestes import traiter_code_geste
+            await traiter_code_geste(update, ctx, ctx.args[0])
+            return
         await _demarrer_avec_code(update, ctx, ctx.args[0])
         return
 

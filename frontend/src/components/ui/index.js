@@ -25,3 +25,6 @@ export { VilleSearch } from './VilleSearch.jsx'
 export {
   Etoiles, LigneRegle, BlocConfiance, SelecteurAction, PastilleConfiance, PuceConfiance,
 } from './RegleConfiance.jsx'
+
+// [US-194] Phase du moment d'une culture en place — Vue plan, Cultures, fiche culture.
+export { PastillePhase, LegendePhases } from './PastillePhase.jsx'

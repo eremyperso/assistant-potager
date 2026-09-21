@@ -59,3 +59,32 @@ Une phrase ne sert pas qu'à rapporter ce qu'on a fait au jardin : elle sert aus
 **On parle aussi de :** vérifier avant ; récapitulatif chiffré ; valeur en toutes lettres ; se tromper de nom de parcelle ; erreur de dictée ; mal dicter un nom ; nom approchant
 
 Une demande qui modifie quelque chose est toujours récapitulée avant d'être exécutée, et le récapitulatif rappelle la commande équivalente — de quoi l'apprendre sans avoir eu à l'apprendre. Toute valeur chiffrée y est relue en chiffres et en toutes lettres avec son unité, parce qu'un « un » et un « dix » ne s'entendent pas de la même façon selon la qualité du micro. Un nom de parcelle mal dicté n'est jamais remplacé d'autorité par un nom voisin : le nom approchant est proposé, et rien ne se fait tant qu'il n'a pas été confirmé. Une demande à laquelle il manque une information ne échoue pas non plus : ce qui manque est demandé, valeurs possibles à l'appui.
+
+## Une troisième façon de commencer un geste
+
+**Intention :** comprendre
+**On parle aussi de :** bouton de l'application ; depuis l'écran ; pré-rempli ; sans dicter
+
+Un geste peut naître de trois façons, et toutes trois finissent au même endroit. On peut le dicter à la voix, l'écrire en texte — et désormais le lancer depuis un écran de l'application web, qui le prépare avec ce qu'il a sous les yeux : la plante affichée, la planche, la date consultée. Dans les trois cas, c'est le même récapitulatif qui s'affiche dans la conversation, la même relecture, et la même confirmation avant que quoi que ce soit ne soit inscrit.
+
+## Un geste préparé attend, il ne se perd pas en route
+
+**Intention :** comprendre
+**On parle aussi de :** geste en attente ; je n'ai pas confirmé tout de suite ; file d'attente ; préparer plusieurs gestes ; confirmer plus tard
+
+Un geste lancé depuis un écran n'est pas enregistré : il est **mis en attente**, et il y reste trois jours. On peut donc en préparer plusieurs à la suite, devant l'écran, et les confirmer plus tard — c'est la façon normale de s'en servir, pas un rattrapage.
+
+Pendant ces trois jours, rien ne fait perdre un geste préparé. Fermer la conversation, laisser passer le délai d'un récapitulatif, répondre « plus tard », ignorer un rappel : le geste est toujours là, et se retrouve en demandant ses gestes en attente. Seules deux choses l'en retirent : le confirmer, ce qui l'inscrit au journal, ou l'abandonner explicitement, ce qui n'inscrit rien. Passé trois jours, il est vidé — et on en est prévenu avant comme après, parce qu'un geste préparé ne doit jamais être confondu avec un geste enregistré.
+
+Chaque geste a sa propre échéance : en confirmer un ne prolonge pas les autres.
+
+## Quelle date porte un geste lancé depuis un écran
+
+**Intention :** comprendre
+**On parle aussi de :** date du geste ; pas la date que je regardais ; date à venir ; mauvaise date ; confirmé deux jours après
+
+Un écran se consulte volontiers en avant : on regarde où en sera le jardin dans trois semaines. Un geste, lui, raconte ce qui vient d'être fait, et ne se date donc jamais dans le futur. Quand la date consultée est à venir, le geste lancé depuis cet écran prend la date du jour — et le bouton l'annonce avant qu'on appuie, jamais après coup. Quand la date consultée est passée, c'est elle qui est retenue : on peut donc rattraper un geste oublié sans rien redire.
+
+Cette date est fixée **au moment où le geste est préparé**, et elle ne bouge plus. Un geste confirmé trois jours après avoir été préparé porte donc la date de sa préparation, pas celle de sa confirmation : c'est le jour où l'on était au potager qui compte. Le récapitulatif l'affiche en clair avant qu'on valide.
+
+Préparer un geste n'est pas le programmer : la file sert à confirmer plus tard ce qui a déjà été fait, elle ne sert pas à planifier un semis pour samedi prochain.

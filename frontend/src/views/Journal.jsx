@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
 import { phraseEvenement, libelleAction, grouperParJour } from '../lib/journal.js'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -213,14 +214,30 @@ function EventRow({ e, last }) {
 
 export default function Journal({ refresh }) {
   const { potagerId } = usePotager()
+  const { annoncer } = useNavigation()
   const [data, setData]                 = useState({ total: 0, evenements: [] })
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
+  // [US-195 / CA2] « Journal du jour » ouvre cet écran FILTRÉ sur la date — et
+  // sur la culture si le lien la donne. [CA9] Les mêmes filtres font l'état exact
+  // de l'écran : la coquille les rend tels quels au retour.
+  const intention = useIntention('journal', (recue) => {
+    setEtat({ ...(recue.date ? { date: recue.date } : {}), ...(recue.culture ? { culture: recue.culture } : {}) })
+    // [CA4] Un filtre posé par un lien se dit : sans cela, le lecteur d'écran
+    // annonce une liste plus courte sans jamais expliquer pourquoi.
+    annoncer(`Journal filtré${recue.date ? ` sur le ${recue.date.split('-').reverse().join('/')}` : ''}${recue.culture ? ` sur ${recue.culture}` : ''}.`)
+  })
   // Le filtre porte le LIBELLÉ de catégorie (« Pertes »), pas un `type_action` :
   // une catégorie en recouvre parfois plusieurs, détaillés dans `valeurs`.
-  const [actionFilter, setActionFilter] = useState(TOUTES_ACTIONS)
-  const [cultureFilter, setCulture]     = useState('')
-  const [dateFilter, setDateFilter]     = useState(null)
+  const [etat, setEtat] = useEtatEcran(
+    'journal', { action: TOUTES_ACTIONS, culture: '', date: null }, intention,
+  )
+  const actionFilter  = etat.action
+  const cultureFilter = etat.culture
+  const dateFilter    = etat.date
+  const setActionFilter = (v) => setEtat({ action: v })
+  const setCulture      = (v) => setEtat({ culture: v })
+  const setDateFilter   = (v) => setEtat({ date: v })
   const [page, setPage]                 = useState(0)
 
   async function load(pg = page) {

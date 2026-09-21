@@ -12,6 +12,7 @@
 // [US-183] L'écart « absence de calendrier sur Stocks » est soldé : chaque ligne
 // porte une puce qui ouvre la fiche calendrier de SA culture (toutes variétés).
 import { useState, useEffect, useMemo } from 'react'
+import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import { Leaf, Sprout, Scale, AlertTriangle, FileDown, FileJson, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
@@ -525,6 +526,9 @@ export default function Stocks({ refresh }) {
   )
 
   return (
+    // [US-196 / CA12] Un geste lancé depuis une puce relit les stocks UNE FOIS
+    // au retour sur l'onglet — jamais d'interrogation périodique.
+    <RelectureAuRetourProvider relire={load}>
     <ObservationsUIProvider>
       <div className="flex flex-col gap-3.5">
         {filtres}
@@ -654,9 +658,16 @@ export default function Stocks({ refresh }) {
           dateRef={dateRefEffective}
           potagerId={potagerId}
           confiances={confiances ?? undefined}
+          // [US-196 / CA13] La puce de Stocks fournit `onEnregistrer` — c'est
+          // ce qui rend le bouton de la fiche (US-183 / CA6). Aucune parcelle
+          // n'est pré-remplie : Stocks est une vue transverse, le compagnon la
+          // demandera dans son flux habituel plutôt qu'en deviner une.
+          onEnregistrer={() => setFiche(null)}
+          ecran="stocks"
           onClose={() => setFiche(null)}
         />
       )}
     </ObservationsUIProvider>
+    </RelectureAuRetourProvider>
   )
 }

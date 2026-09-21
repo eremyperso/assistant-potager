@@ -7,7 +7,8 @@
 // culture, bandeau de métriques, observations à deux niveaux, pastille
 // végétatif/reproducteur, badge « Libre ») sont **conservées et logées** dans
 // cette mise en page, jamais abandonnées au passage.
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import { MapPin, Leaf } from 'lucide-react'
 import { api } from '../lib/api.js'
 import {
@@ -23,6 +24,7 @@ import {
 } from '../lib/confiance.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useNavigation, useIntention, useEtatEcran } from '../context/NavigationContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -236,6 +238,12 @@ function CultureTile({ c, parcelleId, moisRef, calendriers, confiances, dateRef 
           parcelleId={parcelleId}
           calendriers={calendriers ?? undefined}
           confiances={confiances ?? undefined}
+          // [US-196 / CA13] La tuile du Plan fournit `onEnregistrer` : c'est ce
+          // qui rend le bouton de la fiche (US-183 / CA6). La fermeture de la
+          // fiche est le seul effet ici — la relecture est prise en charge par
+          // `RelectureAuRetourProvider` (CA12).
+          onEnregistrer={() => setFicheCalendrier(false)}
+          ecran="plan"
           onClose={() => setFicheCalendrier(false)}
         />
       )}
@@ -246,7 +254,7 @@ function CultureTile({ c, parcelleId, moisRef, calendriers, confiances, dateRef 
 
 // ── Panneau de détail de la parcelle sélectionnée ────────────────────────────
 
-function DetailParcelle({ parcelle, moisRef, calendriers, confiances, dateRef }) {
+function DetailParcelle({ parcelle, moisRef, calendriers, confiances, dateRef, ancre }) {
   const { id, nom, superficie_m2, cultures, has_observations, nb_observations } = parcelle
   const exposition = expositionAffichable(parcelle.exposition)
   const pct = pctDe(parcelle)
@@ -259,7 +267,10 @@ function DetailParcelle({ parcelle, moisRef, calendriers, confiances, dateRef })
   const attributions = attributionsAffichables(calendriers)
 
   return (
-    <div className="flex flex-col gap-4">
+    // [US-195 / CA4] Point d'ancrage du focus : une intention qui désigne cette
+    // parcelle amène le clavier ICI, pas en haut de page. `tabIndex={-1}` le
+    // rend focalisable par programme sans l'ajouter à l'ordre de tabulation.
+    <div ref={ancre} tabIndex={-1} className="flex flex-col gap-4 outline-none">
       <Card>
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-serif text-[24px] font-semibold text-brand-text tracking-tight">{nom}</span>
@@ -363,11 +374,21 @@ function DetailParcelle({ parcelle, moisRef, calendriers, confiances, dateRef })
 export default function Plan({ refresh }) {
   const { dateRef } = useDateRef()
   const { potagerId } = usePotager()
+  const { annoncer, signaler } = useNavigation()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [search, setSearch] = useState('')      // [CA16] filtre local, non persisté
-  const [selId, setSelId] = useState(null)
+  // [US-195 / CA9] Recherche et sélection font l'état EXACT de cet écran : ils
+  // sont tenus par la coquille, qui les rend tels quels au retour. En mémoire de
+  // session seulement — rien n'est persisté.
+  const intention = useIntention('plan', (recue) => {
+    if (recue.parcelle) setEtat({ parcelle: recue.parcelle })
+  })
+  const [etat, setEtat] = useEtatEcran('plan', { search: '', parcelle: null }, intention)
+  const { search, parcelle: selId } = etat
+  const setSearch = (v) => setEtat({ search: v })
+  const setSelId = (id) => setEtat({ parcelle: id })
+  const ficheRef = useRef(null)
   const [calendriers, setCalendriers] = useState(null)
   const [confiances, setConfiances] = useState(null)
 
@@ -420,6 +441,20 @@ export default function Plan({ refresh }) {
   // l'était.
   const selection = parcelleSelectionnee(filtered, selId)
 
+  // [US-195 / CA3] Une intention qui désigne une parcelle supprimée ou absente
+  // du potager : l'écran s'ouvre normalement sur la première de la liste, et on
+  // le DIT — jamais une erreur ni un écran vide.
+  useEffect(() => {
+    if (!intention?.parcelle || loading || parcelles.length === 0) return
+    if (parcelles.some((p) => p.id === intention.parcelle)) {
+      annoncer(`Parcelle ${selection?.nom ?? ''} sélectionnée.`)
+      // [CA4] Le focus va sur la fiche désignée, pas en haut de page.
+      ficheRef.current?.focus?.()
+    } else {
+      signaler("Cette parcelle n'existe plus.")
+    }
+  }, [loading, parcelles, intention])
+
   const moisRef = moisDeLaDate(data?.date_ref_effective)
 
   const nbActives = filtered.filter((p) => p.cultures.length > 0).length
@@ -429,6 +464,9 @@ export default function Plan({ refresh }) {
   if (error) return <ApiError message={error} onRetry={load} />
 
   return (
+    // [US-196 / CA12] Un geste lancé depuis une tuile relit le plan UNE FOIS au
+    // retour sur l'onglet — jamais d'interrogation périodique.
+    <RelectureAuRetourProvider relire={load}>
     <ObservationsUIProvider>
       <div className="flex flex-col gap-3.5">
         {/* [CA16] Sélecteur de date de référence + filtre culture, composants US-059. */}
@@ -479,6 +517,7 @@ export default function Plan({ refresh }) {
                   // la suivante.
                   <DetailParcelle
                     key={selection.id}
+                    ancre={ficheRef}
                     parcelle={selection}
                     moisRef={moisRef}
                     calendriers={calendriers}
@@ -492,5 +531,6 @@ export default function Plan({ refresh }) {
         )}
       </div>
     </ObservationsUIProvider>
+    </RelectureAuRetourProvider>
   )
 }

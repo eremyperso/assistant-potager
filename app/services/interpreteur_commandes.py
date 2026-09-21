@@ -842,6 +842,26 @@ def _construire_stats(groupes):
 
 
 @_regle(
+    "file_gestes",
+    # [US-224 / CA10] « mes gestes en attente », « ma file », « qu'est-ce qui
+    # m'attend ». Jamais « mes derniers gestes », qui appartient à l'historique
+    # et dit le contraire : ce qui est FAIT, pas ce qui attend de l'être. C'est
+    # la seule collision possible entre les deux règles, et elle est fermée par
+    # l'exigence d'un mot d'attente (`en attente`, `a confirmer`, `file`).
+    r"\A" + _INTENTION + _MONTRER + _ARTICLE
+    + r"(?:(?:gestes?|saisies?|actions?)\s+(?:en\s+attente|a\s+confirmer|a\s+valider)\b"
+    r"|file(?:\s+(?:de|des)\s+gestes?)?\b"
+    r"|qu est ce qui m attend\b"
+    r"|ce qui m attend\b"
+    r"|(?:gestes?|actions?)\s+prepare(?:es|e|s)?\b)",
+    "gestes",
+    None,
+)
+def _construire_file_gestes(groupes):
+    return {}
+
+
+@_regle(
     "historique",
     r"\A" + _INTENTION + _MONTRER + _ARTICLE
     + r"(?:historique\b(?!\s+(?:de|des|du|d)\b)"

@@ -25,6 +25,8 @@ import {
   PastilleConfiance,
   PuceConfiance,
   SelecteurAction,
+  PastillePhase,
+  LegendePhases,
 } from '../components/ui'
 
 /**
@@ -67,6 +69,26 @@ export default function DesignSystemPreview() {
           <Badge tint="violet">violet</Badge>
           <Badge tint="brand" solid>solid</Badge>
         </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
+          Phase du moment — PastillePhase et LegendePhases [US-194]
+        </h2>
+        <div className="flex flex-wrap gap-2 items-center">
+          <PastillePhase ligne={{ phase: 'semee', phase_depuis: '2026-09-12', phase_depuis_nature: 'semis', nb_series: 1 }} />
+          <PastillePhase ligne={{ phase: 'en_place', phase_depuis: '2026-09-20', phase_depuis_nature: 'levee_attendue', nb_series: 1 }} />
+          <PastillePhase ligne={{ phase: 'en_recolte', phase_depuis: '2026-07-16', phase_depuis_nature: 'recolte', nb_series: 1 }} />
+          {/* Une clé inconnue ne rend RIEN — jamais une phase par défaut. */}
+          <PastillePhase ligne={{ phase: 'en_fleur' }} />
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* `avecDate` : le complément dit « attendue » quand elle l'est (CA5). */}
+          <PastillePhase avecDate ligne={{ phase: 'semee', phase_depuis: '2026-09-12', phase_depuis_nature: 'semis', nb_series: 1 }} />
+          <PastillePhase avecDate ligne={{ phase: 'en_place', phase_depuis: '2026-09-20', phase_depuis_nature: 'levee_attendue', nb_series: 2 }} />
+          <PastillePhase avecDate ligne={{ phase: 'en_recolte', phase_depuis: '2026-07-16', phase_depuis_nature: 'recolte', nb_series: 1 }} />
+        </div>
+        <LegendePhases avecLibre />
       </section>
 
       <section className="flex flex-col gap-3">

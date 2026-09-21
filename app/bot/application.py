@@ -9,6 +9,7 @@ from database.db import current_potager_id
 from utils.tts import is_tts_enabled
 from app.services.context import default_context
 from app.services import menu_commandes as svc_menu_commandes
+from app.services import relances_file as svc_relances_file  # [US-224]
 from .noyau import log
 from .aide import cmd_help, cmd_version
 from .liaison import (
@@ -21,6 +22,7 @@ from .liaison import (
     cmd_start,
 )
 from .enregistrement import _action_confirm_cb
+from .file_gestes import cmd_gestes, file_cb, job_file_gestes  # [US-224]
 from .godets import _godet_graines_cb, _godet_lot_cb, _godet_variete_cb
 from .pertes import _handle_perte_callback, _vendu_variete_cb
 from .notes import _note_confirm_cb, _note_start
@@ -173,6 +175,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "ask",        cmd_ask)
     _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
     _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
+    _enregistrer_commande(app, "gestes",     cmd_gestes)  # [US-224]
     _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
     _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
@@ -217,6 +220,8 @@ def _construire_application() -> "Application":
 
     # [US-021] Confirmation avant enregistrement — boutons inline
     app.add_handler(CallbackQueryHandler(_action_confirm_cb, pattern=r"^action_"))
+    # [US-224 / CA5] Le niveau 1 de la file — aucune de ses actions n'écrit.
+    app.add_handler(CallbackQueryHandler(file_cb, pattern=r"^file:"))
     app.add_handler(CallbackQueryHandler(_semis_organe_cb, pattern=r"^semis_organe"))
     # [US-179] Filière, enregistrement, question décalée de dix jours
     app.add_handler(CallbackQueryHandler(_confiance_cb, pattern=r"^conf:"))
@@ -263,6 +268,23 @@ def _construire_application() -> "Application":
         name="purge_potagers_supprimes",
     )
     log.info("🗑️  JOB PURGE       : planifié à 04h00 Europe/Paris")
+
+    # ── [US-224 / CA15, CA17, CA18] Rendez-vous horaire de la file de gestes ──
+    # Horaire, et non quotidien : l'avertissement des 4 heures avant purge tombe
+    # à une heure qui dépend du dépôt de chaque geste, pas d'un créneau fixe.
+    # Les relances, elles, ne partent qu'aux deux créneaux de
+    # `relances_file.CRENEAUX_RELANCE` — c'est le service qui en juge, pas la
+    # planification.
+    app.job_queue.run_repeating(
+        job_file_gestes,
+        interval=3600,
+        first=300,
+        name="file_gestes",
+    )
+    log.info(
+        "📋 JOB FILE GESTES : toutes les heures · relances à %s",
+        ", ".join(f"{h}h" for h in svc_relances_file.CRENEAUX_RELANCE),
+    )
 
     return app
 
