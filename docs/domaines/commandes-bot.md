@@ -34,11 +34,32 @@ Le clavier de raccourcis permanent n'existe plus : `noyau.SANS_CLAVIER`
 (`ReplyKeyboardRemove`) le retire activement chez les jardiniers qui l'avaient.
 Les claviers contextuels de validation, eux, sont inchangés.
 
+## Un garde de liaison sans exigence de potager — `/rejoindre` [US-087]
+
+Toute commande passe par `_enregistrer_commande`, donc par le garde de liaison :
+un chat non relié est renvoyé vers le parcours de liaison. Ce garde exige aussi un
+potager résolu (US-046, CA5) — ce qui aurait répondu « vous n'êtes membre d'aucun
+potager » à celui qui utilise `/rejoindre` pour en obtenir un. `/rejoindre` figure
+donc dans `_COMMANDES_SANS_EXIGENCE_DE_POTAGER` (`app/bot/application.py`) : liaison
+exigée, potager non. Ce n'est pas une exemption du garde — `_garde_liaison` reste
+posé sur le handler, et `_COMMANDES_SANS_GARDE_LIAISON` (onboarding et identité) ne
+change pas.
+
+Le handler (`app/bot/liaison.py`) ne porte aucune règle de validation : il traduit
+en message chacune des erreurs d'`accepter_invitation`, appelée par
+`potagers.rejoindre_potager`. Le potager actif n'est jamais basculé
+silencieusement : y compris quand il n'était que le défaut transitoire de
+`resoudre_tenant_context` (plusieurs potagers, aucun choix persisté), que
+`accepter_invitation` écraserait sinon.
+
 ## Piloter le bot par une phrase [US-172]
 
-Les 24 commandes du bot sont DICTABLES : 18 le sont pour de bon, 1 est un alias
-de sa cible canonique (`/parcelles` = `/parcelle lister`), et 5 sont écartées
-sur décision motivée (`/ask`, `/start`, `/lier`, `/delier`, `/version`).
+Les 25 commandes du bot ont toutes leur décision : 18 sont DICTABLES pour de
+bon, 1 est un alias de sa cible canonique (`/parcelles` = `/parcelle lister`), et
+6 sont écartées sur décision motivée (`/ask`, `/start`, `/lier`, `/rejoindre`,
+`/delier`, `/version`). `/rejoindre` [US-087] suit le raisonnement de `/lier` : un
+code d'invitation est une chaîne à coller, la transcription vocale d'un code est
+fausse par construction.
 Deux fichiers, et deux seulement :
 
 - `app/services/menu_commandes.py` — le catalogue ENRICHI, à côté de celui du menu d'US-171 dont il se dérive :

@@ -81,7 +81,9 @@ test('[CA6] en lecture seule, GestionMembres masque le retrait et l\'encart d\'i
 
 // ── CA5 — Zone sensible : archiver/désarchiver (US-083), rien pour les autres rôles ─
 
-test("[CA5] la zone sensible n'apparaît que pour l'owner", () => {
+// [US-086] La zone sensible s'ouvre aussi aux membres non-owner — mais pour « Quitter »
+// seulement (cf. us086_quitter_potager.test.js) : archiver/supprimer restent à l'owner.
+test("[CA5] les actions d'archivage et de suppression n'apparaissent que pour l'owner", () => {
   assert.match(ECRAN, /\{estOwner && \(\s*<Card bg="bg-red-soft">/)
 })
 

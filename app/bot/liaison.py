@@ -12,6 +12,7 @@ from app.services.context import current_context, set_current_context
 from app.services import evenements as svc_evenements
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
+from app.services import potagers as svc_potagers
 from app.services.permissions import require_role, PermissionInsuffisanteError
 from database.models import Potager as _Potager
 from .noyau import MENU_KEYBOARD, _md, log
@@ -171,7 +172,8 @@ async def _resoudre_et_armer_contexte(update: Update, ctx: ContextTypes.DEFAULT_
 
 
 async def _verifier_liaison_ou_onboarding(
-    update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_brut: str | None = None
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_brut: str | None = None,
+    exiger_potager: bool = True,
 ) -> bool:
     """[US-045 / CA6, CA7] Garde de priorité 0 — appelée en tout premier dans
     handle_voice/handle_text, avant tout appel Groq (transcription ou
@@ -180,6 +182,10 @@ async def _verifier_liaison_ou_onboarding(
     sinon bloqué) et que le traitement normal peut continuer ; False si un
     message d'onboarding/d'erreur a déjà été envoyé et que le handler
     appelant doit s'arrêter immédiatement (`return`).
+
+    [US-087 / CA1, CA6] `exiger_potager=False` : la liaison reste exigée (un chat non lié
+    est renvoyé vers le parcours de liaison), mais l'absence de potager ne bloque plus —
+    c'est la situation même de qui utilise `/rejoindre` pour obtenir son premier potager.
     """
     chat_id = update.effective_chat.id
     db = SessionLocal()
@@ -187,6 +193,8 @@ async def _verifier_liaison_ou_onboarding(
         user_id = svc_liaison_telegram.resoudre_user_id_pour_chat(db, chat_id)
         if user_id is not None:
             ctx.user_data['tenant_user_id'] = user_id  # [CA8] disponible pour construire un TenantContext
+            if not exiger_potager:
+                return True
             return await _resoudre_et_armer_contexte(update, ctx, db, user_id)
 
         # [CA2] Un message texte (pas vocal — pas d'appel Groq) ressemblant à un
@@ -312,6 +320,85 @@ async def _delier_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte:
         )
     else:
         await update.message.reply_text("↩️ Dissociation annulée.", reply_markup=MENU_KEYBOARD)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-087] Rejoindre un potager avec un code d'invitation
+# ──────────────────────────────────────────────────────────────────────────────
+
+_MSG_AIDE_REJOINDRE = (
+    "🔑 *Rejoindre un potager*\n\n"
+    "Usage : `/rejoindre VOTRECODE`\n\n"
+    "Le code compte 8 caractères : ton hôte le génère depuis l'application web "
+    "(réglages de son potager, onglet Membres)."
+)
+_MSG_REJOINDRE_CODE_INCONNU = "❌ Ce code d'invitation est inconnu. Vérifie-le : il compte 8 caractères."
+_MSG_REJOINDRE_CODE_EXPIRE = (
+    "⌛ Ce code d'invitation a expiré. Demande à ton hôte d'en générer un nouveau "
+    "depuis l'application web."
+)
+_MSG_REJOINDRE_CODE_UTILISE = (
+    "❌ Ce code d'invitation a déjà été utilisé. Demande à ton hôte d'en générer un nouveau."
+)
+_MSG_REJOINDRE_DEJA_MEMBRE = "ℹ️ Tu es déjà membre de ce potager : rien à faire."
+
+
+def _message_potager_rejoint(adhesion: svc_potagers.AdhesionPotager) -> str:
+    """[US-087 / CA4, CA6] Confirmation en français courant : le potager rejoint et le rôle
+    obtenu, puis — selon le cas — l'annonce du potager actif ou le rappel de `/potager`."""
+    libelle = adhesion.role_libelle
+    en_tant_que = f"en tant qu'{libelle}" if libelle[:1] in "aeiouyéèêîô" else f"en tant que {libelle}"
+    texte = f"✅ Tu as rejoint *{_md(adhesion.potager_nom)}* {en_tant_que}."
+    if adhesion.devenu_actif:
+        suite = (
+            "tu peux y saisir tes événements." if adhesion.peut_ecrire
+            else "tu peux le consulter, sans y enregistrer d'événement."
+        )
+        texte += f"\n\nC'est maintenant ton potager actif : {suite}"
+    elif adhesion.potager_actif_nom:
+        texte += (
+            f"\n\nTon potager actif reste *{_md(adhesion.potager_actif_nom)}*. "
+            f"Pour basculer sur *{_md(adhesion.potager_nom)}*, envoie /potager."
+        )
+    return texte
+
+
+async def cmd_rejoindre(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/rejoindre <code> — [US-087] Rejoint un potager avec un code d'invitation (US-048).
+
+    Une porte d'entrée de plus vers `svc_potagers.rejoindre_potager`, qui réutilise
+    `accepter_invitation` : aucune règle de validation n'est écrite ici, seulement la
+    traduction de chaque refus en un message qui lui est propre (CA5). Enregistrée par
+    `_enregistrer_commande` : le garde de liaison exige un chat relié (CA1), sans exiger
+    de potager. Commande de slash pure — aucun appel Groq (CA9). Le code n'est jamais
+    journalisé, ni ici ni dans la réponse."""
+    if not ctx.args:
+        await update.message.reply_text(_MSG_AIDE_REJOINDRE, parse_mode="Markdown")
+        return
+
+    # La casse et les espaces parasites sont absorbés par `accepter_invitation` (CA7).
+    code = ctx.args[0].strip()
+    user_id = ctx.user_data.get('tenant_user_id')
+    db = SessionLocal()
+    try:
+        try:
+            adhesion = svc_potagers.rejoindre_potager(db, user_id, code)
+        except svc_potagers.InvitationInvalideError:
+            await update.message.reply_text(_MSG_REJOINDRE_CODE_INCONNU)
+            return
+        except svc_potagers.InvitationExpireeError:
+            await update.message.reply_text(_MSG_REJOINDRE_CODE_EXPIRE)
+            return
+        except svc_potagers.InvitationDejaUtiliseeError:
+            await update.message.reply_text(_MSG_REJOINDRE_CODE_UTILISE)
+            return
+        except svc_potagers.DejaMembreError:
+            await update.message.reply_text(_MSG_REJOINDRE_DEJA_MEMBRE)
+            return
+    finally:
+        db.close()
+
+    await update.message.reply_text(_message_potager_rejoint(adhesion), parse_mode="Markdown")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

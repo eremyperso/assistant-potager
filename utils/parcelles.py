@@ -274,7 +274,39 @@ def create_parcelle(
 # [US_Plan_occupation_parcelles] Mise à jour des métadonnées d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere"}
+_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere", "abri", "paillage"}
+
+#: [US-181 / CA1] Vocabulaire fermé de l'abri, validé ICI au point d'écriture (pas de
+#: CHECK SQL). « aucun » = déclaré sans abri ; NULL en base = jamais renseigné.
+ABRI_AUCUN = "aucun"
+ABRIS: tuple[str, ...] = (ABRI_AUCUN, "voile", "chassis", "tunnel", "serre")
+_ALIAS_ABRI: dict[str, str] = {"sans": ABRI_AUCUN, "non": ABRI_AUCUN, "sans abri": ABRI_AUCUN}
+LIBELLES_ABRI: dict[str, str] = {
+    ABRI_AUCUN: "aucun", "voile": "voile", "chassis": "châssis",
+    "tunnel": "tunnel", "serre": "serre",
+}
+
+
+def normaliser_abri(valeur: str) -> str:
+    """[US-181 / CA1] Ramène « Châssis », « sans » … au vocabulaire fermé.
+    Lève ValueError si la valeur en est hors."""
+    cle = unidecode(str(valeur or "")).strip().lower()
+    cle = _ALIAS_ABRI.get(cle, cle)
+    if cle not in ABRIS:
+        raise ValueError(
+            "abri doit être : aucun, voile, châssis, tunnel ou serre"
+        )
+    return cle
+
+
+def _booleen(valeur: str, champ: str) -> bool:
+    """oui/non/true/false → bool ; ValueError sinon."""
+    v = unidecode(str(valeur or "")).strip().lower()
+    if v in ("true", "oui", "1"):
+        return True
+    if v in ("false", "non", "0"):
+        return False
+    raise ValueError(f"{champ} doit être true ou false")
 
 
 def update_parcelle(
@@ -295,7 +327,7 @@ def update_parcelle(
     if inconnus:
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
-            f"Acceptés : exposition, superficie, ordre, pepiniere"
+            f"Acceptés : exposition, superficie, ordre, pepiniere, abri, paillage"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -331,6 +363,12 @@ def update_parcelle(
         val_bool = val_str == "true"
         parcelle.est_pepiniere = val_bool
         modifs.append(f"Pépinière : {'oui' if val_bool else 'non'}")
+    if "abri" in kwargs:
+        parcelle.abri = normaliser_abri(kwargs["abri"])
+        modifs.append(f"Abri : {LIBELLES_ABRI[parcelle.abri]}")
+    if "paillage" in kwargs:
+        parcelle.paillage = _booleen(kwargs["paillage"], "paillage")
+        modifs.append(f"Paillage : {'oui' if parcelle.paillage else 'non'}")
 
     db.commit()
     db.refresh(parcelle)

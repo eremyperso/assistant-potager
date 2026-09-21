@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import calendar
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Iterable, Optional
 
@@ -125,6 +125,29 @@ POINTS_MAX: dict[str, int] = {
     R4_NUITS_DOUCES: 10,
     R5_SAISON_RESTANTE: 10,
 }
+
+#: [US-181 / CA4] 🧪 Modulateurs de règles — une DÉCISION PRODUIT, pas une mesure,
+#: corrigeable ici et nulle part ailleurs. Un abri déclaré rend la règle SANS
+#: OBJET (acquise d'office, motif dit en clair) ; il ne « réchauffe » pas la
+#: prévision. R1 (fenêtre conseillée) et R5 ne sont jamais modulées : un abri ne
+#: rend pas une plantation de janvier recommandée (CA6). R2 (dernière gelée de la
+#: ZONE) n'est levée que par une serre ou un tunnel — un voile ou un châssis ne
+#: protègent pas d'une gelée de printemps tardive.
+#: « aucun » et « non renseigné » (None) ne modifient rien.
+REGLES_ACQUISES_PAR_ABRI: dict[str, frozenset[str]] = {
+    "serre": frozenset({R2_DERNIERE_GELEE, R3_GEL_ANNONCE, R4_NUITS_DOUCES}),
+    "tunnel": frozenset({R2_DERNIERE_GELEE, R3_GEL_ANNONCE, R4_NUITS_DOUCES}),
+    "chassis": frozenset({R3_GEL_ANNONCE}),
+    "voile": frozenset({R3_GEL_ANNONCE}),
+}
+#: Le paillage n'agit que sur les nuits fraîches.
+REGLES_ACQUISES_PAR_PAILLAGE: frozenset[str] = frozenset({R4_NUITS_DOUCES})
+
+_MOTIF_ABRI: dict[str, str] = {
+    "serre": "parcelle sous serre", "tunnel": "parcelle sous tunnel",
+    "chassis": "parcelle sous châssis", "voile": "parcelle sous voile",
+}
+MOTIF_PAILLEE = "parcelle paillée"
 
 LIBELLES_REGLES: dict[str, str] = {
     R1_FENETRE: "Fenêtre conseillée",
@@ -485,6 +508,43 @@ def _regle_nuits_douces(
                   "Nuits fraîches : levée lente probable", 0)
 
 
+def _moduler_par_parcelle(
+    motifs: list[Motif], parcelle: Optional[Parcelle], action: str
+) -> list[Motif]:
+    """
+    [US-181 / CA4, CA5] SEUL endroit où l'abri et le paillage pèsent : une règle
+    visée par la table de modulation est acquise d'office, et son motif dit en
+    clair que la parcelle a compté — le jardinier voit que l'abri a joué, non que
+    la météo était clémente. Sans parcelle, ou avec un abri « aucun » / non
+    renseigné et un paillage absent : rien ne change.
+    """
+    if parcelle is None:
+        return motifs
+    raisons: dict[str, str] = {}
+    if parcelle.paillage:
+        for regle in REGLES_ACQUISES_PAR_PAILLAGE:
+            raisons[regle] = MOTIF_PAILLEE
+    for regle in REGLES_ACQUISES_PAR_ABRI.get(parcelle.abri or "", frozenset()):
+        raisons[regle] = _MOTIF_ABRI[parcelle.abri]  # l'abri prime sur le paillage
+    if not raisons:
+        return motifs
+    resultat: list[Motif] = []
+    for m in motifs:
+        raison = raisons.get(m.regle)
+        if raison is None:
+            resultat.append(m)
+            continue
+        # Un motif déjà « sans objet » (semis en pépinière) ou indéterminé ne se
+        # cite pas : on repart du nom de la règle.
+        base = m.libelle if action in ACTIONS_PLEINE_TERRE and not m.indetermine else m.libelle_regle
+        resultat.append(replace(
+            m, etat=ETAT_GAGNE, points=m.points_max,
+            libelle=f"{base} — {raison}, règle sans objet",
+        ))
+        log.info("[US-181] %s modulée par la parcelle %s : %s", m.regle, parcelle.id, raison)
+    return resultat
+
+
 def _etape_recolte(action: str) -> str:
     """[US-177 / CA8] `plantation_recolte` pour une plantation, `recolte` pour un
     semis — jamais l'une pour l'autre, et la règle tient à un seul endroit."""
@@ -613,6 +673,7 @@ def evaluer(
         _regle_nuits_douces(action_retenue, lecture_meteo, date_cible),
         _regle_saison_restante(itineraire_lu, action_retenue, date_cible),
     ]
+    motifs = _moduler_par_parcelle(motifs, parcelle, action_retenue)
 
     score = sum(m.points for m in motifs)
     # [CA5] Une règle indéterminée ne se compense pas : elle ABAISSE le plafond,

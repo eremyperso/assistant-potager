@@ -1,13 +1,13 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v47),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v49),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v47.sql
+psql -d potager -f migrations/migration_v49.sql
 ```
 
 ## Ce que portent les dernières migrations

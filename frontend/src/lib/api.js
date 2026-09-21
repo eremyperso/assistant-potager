@@ -248,6 +248,11 @@ export const api = {
   accepterInvitation: (code) => post(`/invitations/${code}/accepter`),
   listerMembres: (potagerId) => get(`/potagers/${potagerId}/membres`),
   retirerMembre: (potagerId, membreUserId) => del(`/potagers/${potagerId}/membres/${membreUserId}`),
+  // [US-085 / CA1] Changer le rôle d'un membre ('owner' | 'editor' | 'lecteur') — owner uniquement
+  modifierRoleMembre: (potagerId, membreUserId, role) =>
+    patch(`/potagers/${potagerId}/membres/${membreUserId}`, { role }),
+  // [US-086 / CA1] Se retirer soi-même d'un potager — tout membre, sauf le dernier owner (409)
+  quitterPotager: (potagerId) => post(`/potagers/${potagerId}/quitter`),
 }
 
 // [US-044] Endpoints d'authentification — pas de token requis pour register/login,

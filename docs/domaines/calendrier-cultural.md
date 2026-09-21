@@ -250,7 +250,10 @@ rendus ici sont donc ceux du gabarit, à la lettre, et un test les fige.
 ⚠️ Une parcelle déclarée pépinière IMPOSE le semis en pépinière quand la filière
 n'est pas dite (CA8) ; une plantation qu'on y demande n'est pas corrigée en
 douce — elle porte un avertissement. Un semis en pépinière tient R2, R3 et R4
-pour acquises : la pépinière non chauffée de février attend l'abri d'US-181.
+pour acquises. [US-181] L'abri et le paillage DÉCLARÉS sur la parcelle acquièrent
+d'office R2/R3/R4 (serre, tunnel), R3 (châssis, voile) ou R4 (paillage) : la table
+`REGLES_ACQUISES_PAR_ABRI` de `confiance_semis.py` est une décision produit, à
+corriger là. R1 et R5 ne sont jamais modulées ; « non renseigné » ≠ « aucun ».
 
 
 ## « Je peux semer ? » au bot [US-179]

@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="design_doc_mode" content="canvas">
+<title>Wireframes v2 — US-183, Plan géométrique, Pépinière</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:#2A3322;font-size:12px;line-height:1.4}
+a{color:#2A3322}a:hover{color:#4A7C22}
+.frame{position:absolute;background:#fff;border:1.5px solid #2A3322;border-radius:6px;overflow:hidden}
+.fh{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:#2A3322;letter-spacing:.02em}
+.fh small{font-weight:400;opacity:.75;margin-left:8px}
+.notes{position:absolute;display:flex;flex-direction:column;gap:14px;width:300px}
+.notes .note{position:static;width:auto}
+.note{position:absolute;background:#FBF3D5;border:1.5px solid #2A3322;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.5;width:300px}
+.note b{display:block;margin-bottom:4px}
+.note.new{background:#E6F0DA}
+.q{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10.5px;margin-right:5px}
+.opt{display:inline-block;background:#fff;border:1.5px dashed #2A3322;border-radius:3px;padding:0 5px;font-weight:700;font-size:10px;letter-spacing:.04em}
+.bo{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10px;letter-spacing:.04em}
+.pad{padding:14px}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1.5px solid #2A3322;background:#F4F4EF}
+.tabs{display:flex;gap:6px}
+.tab{padding:5px 11px;border:1.5px solid #2A3322;border-radius:20px;font-weight:600;font-size:11.5px}
+.tab.on{background:#2A3322;color:#fff}
+.h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.h2{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5A6650;margin-bottom:8px}
+.box{border:1.5px solid #2A3322;border-radius:5px;padding:10px}
+.ghost{border:1.5px dashed #8A9480;border-radius:5px;color:#6B7562}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid #2A3322;border-radius:5px;padding:5px 10px;font-weight:700;font-size:11px;background:#fff}
+.btn.p{background:#2A3322;color:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1.5px solid #2A3322;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;align-items:center}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;border:1.5px solid #2A3322;vertical-align:-2px;margin-right:5px}
+.ph1{background:#CFE3F5}.ph2{background:#CBE2B4}.ph3{background:#F6D9A4}.ph0{background:repeating-linear-gradient(45deg,#fff 0 3px,#DDE1D6 3px 6px)}
+.row{display:flex;gap:8px;align-items:center}
+.card{border:1.5px solid #2A3322;border-radius:6px;padding:10px;background:#fff}
+.stars{font-size:12px;letter-spacing:.05em}
+.mo{display:grid;grid-template-columns:repeat(12,1fr);gap:2px}
+.mo span{height:11px;border-radius:2px;border:1px solid #8A9480;background:#fff}
+.mo span.on{background:#2A3322;border-color:#2A3322}
+.mo span.now{outline:2px solid #2A3322;outline-offset:1px}
+.mol{display:grid;grid-template-columns:repeat(12,1fr);font-size:8.5px;color:#6B7562;text-align:center;margin-top:3px}
+.radio{display:inline-flex;align-items:center;gap:6px;border:1.5px solid #2A3322;border-radius:20px;padding:4px 11px;font-size:11.5px;font-weight:600}
+.radio.on{background:#2A3322;color:#fff}
+.radio i{width:9px;height:9px;border-radius:50%;border:1.5px solid currentColor;display:inline-block}
+.radio.on i{background:#fff}
+.rule{display:grid;grid-template-columns:18px 1fr auto;gap:8px;align-items:start;font-size:11px;padding:5px 0;border-top:1px solid #DDE1D6}
+.rule b{font-size:11px}
+/* plan géométrique */
+.parc{position:absolute;border:1.5px solid #2A3322;border-radius:4px;background:#fff;overflow:hidden}
+.parc.est{border-style:dashed;background:repeating-linear-gradient(45deg,#fff 0 5px,#FAFAF6 5px 10px)}
+.parc .nm{position:absolute;left:6px;top:4px;font-size:10.5px;font-weight:700;background:#fff;padding:0 3px;border-radius:2px}
+.parc .sq{position:absolute;right:6px;top:4px;font-size:9.5px;color:#5A6650;background:#fff;padding:0 3px}
+.parc .pct{position:absolute;right:6px;bottom:4px;font-size:10px;font-weight:700;background:#fff;padding:0 3px}
+.rg{position:absolute;height:8px;border-radius:4px;border:1.5px solid #2A3322}
+.zone{position:absolute;border:1.5px solid #2A3322;border-radius:50%/40%;background:#CBE2B4}
+.surf{position:absolute;border:1.5px solid #2A3322;border-radius:3px;background:#CFE3F5;background-image:radial-gradient(#2A3322 .8px,transparent .9px);background-size:7px 7px}
+.poq{position:absolute;width:10px;height:10px;border-radius:50%;border:1.5px solid #2A3322;background:#CBE2B4}
+.scale{position:absolute;font-size:9px;color:#5A6650}
+.tick{position:absolute;border-top:1px solid #8A9480}
+/* pépinière */
+.lotb{position:absolute;height:14px;border:1.5px solid #2A3322;border-radius:7px;background:#fff;font-size:9.5px;font-weight:700;padding:0 6px;line-height:11px;white-space:nowrap}
+.lotb.late{border-style:dashed;background:#FBF3D5}
+.win{position:absolute;top:0;bottom:0;background:#EEF2E6;border-left:1.5px dashed #8A9480;border-right:1.5px dashed #8A9480}
+.qr{width:54px;height:54px;border:1.5px solid #2A3322;background:conic-gradient(#2A3322 0 25%,#fff 0 50%,#2A3322 0 75%,#fff 0);background-size:9px 9px;flex:none}
+.qr.s{width:34px;height:34px;background-size:6px 6px}
+.etiq{border:1.5px dashed #2A3322;border-radius:4px;padding:8px;display:flex;gap:9px;align-items:center;background:#fff}
+.flow{position:absolute;height:0;border-top:1.5px dashed #2A3322}
+.arr{position:absolute;width:0;height:0;border-left:6px solid #2A3322;border-top:5px solid transparent;border-bottom:5px solid transparent}
+</style>
+</head>
+<body>
+
+<div class="fh" style="top:20px;left:40px;font-size:20px">Wireframes v2 — la fiche US-183, le Plan géométrique, la Pépinière comme poste de travail <small>19 septembre 2026 · bas niveau de fidélité</small></div>
+
+<div class="note" style="top:66px;left:40px;width:420px">
+<b>Les trois sujets de ce tour</b>
+<span class="q">1</span>Ce qu'on voit quand on appuie sur « Ouvrir la fiche calendrier » depuis la fiche culture — jusqu'ici c'était un bouton sans destination dessinée.<br>
+<span class="q">2</span>Le Plan cesse d'être une treemap : longueur × largeur entrent dans la parcelle, l'espacement et le mode d'implantation dans le référentiel, et le dessin devient calculé.<br>
+<span class="q">3</span>La Pépinière passe de tableau de bord à outil de travail : ce qu'il y a à faire aujourd'hui, où c'est posé, et — en option — des étiquettes à QR code.
+</div>
+<div class="note" style="top:66px;left:480px;width:400px">
+<b>Règle de saisie tenue dans tout le document</b>
+<span class="bo">BACKOFFICE</span> Cultures, semis et plantations se créent et se modifient au backoffice (et au bot). Ces écrans <b>lisent</b>. Les boutons d'action qui restent ouvrent le flux existant avec des champs pré-remplis, ils n'écrivent pas eux-mêmes — c'est déjà la règle d'US-183 (CA6).<br>
+Conséquence : espacements, mode d'implantation, longueur et largeur de parcelle se renseignent au backoffice. Le front ne propose jamais de les corriger, seulement de signaler qu'ils manquent.
+</div>
+<div class="note" style="top:66px;left:900px;width:400px">
+<b>Ce qui existe déjà</b>
+La fiche US-183 a une maquette haute fidélité dans ce projet (<i>Fiche calendrier culture - US-183.html</i>). Le wireframe ci-dessous n'en est pas un remplacement : il montre <b>l'enchaînement</b> depuis Cultures et les états que la maquette ne couvre pas encore (série sans projection, fenêtre fermée).<br>
+L'analyse pépinière multi-emplacements du 17/07 est reprise telle quelle en section 3b.
+</div>
+
+<!-- ═══════════ 1 · US-183 ═══════════ -->
+<div class="fh" style="top:290px;left:40px;font-size:15px;white-space:normal;width:580px">1 · Ce qu'ouvre le bouton « Ouvrir la fiche calendrier » <small style="margin-left:0">panneau 560 px sur desktop · plein écran à 375 px · la fiche lit et projette, elle n'écrit rien</small></div>
+
+<div class="frame" style="top:332px;left:40px;width:560px;height:1010px">
+  <div class="bar"><div><div class="h1">Tomate — calendrier</div><div style="font-size:11px;color:#5A6650">ouvert depuis Cultures · date de référence 18 septembre</div></div><span class="btn" style="margin-left:auto">✕</span></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:14px">
+
+    <div><div class="h2">1 · Semer ou planter</div>
+      <div class="row" style="gap:6px;margin-bottom:9px"><span class="radio on"><i></i>Semer en pépinière</span><span class="radio"><i></i>Planter</span><span style="font-size:10.5px;color:#6B7562">« semer en place » absent : pas de fenêtre pour la zone</span></div>
+      <div class="card">
+        <div class="row" style="justify-content:space-between"><b>Fenêtre conseillée : février à mars</b><span class="stars">☆☆☆ · zéro étoile</span></div>
+        <div style="font-size:11px;color:#5A6650;margin-top:3px">Hors fenêtre au 18 septembre. Prochaine ouverture dans 4 mois et 2 semaines.</div>
+        <div style="margin-top:8px">
+          <div class="rule"><span>−2</span><span><b>Fenêtre du référentiel</b> — 18 sept. hors de février–mars</span><span class="pill">perdu</span></div>
+          <div class="rule"><span>·</span><span><b>Température du sol</b> — non évaluée hors fenêtre</span><span class="pill ghost" style="border-style:dashed">indéterminé</span></div>
+          <div class="rule"><span>·</span><span><b>Risque de gel à 14 jours</b> — non évaluée hors fenêtre</span><span class="pill ghost" style="border-style:dashed">indéterminé</span></div>
+        </div>
+        <div class="row" style="margin-top:9px;gap:6px"><span class="btn ghost" style="font-weight:600">Enregistrer le semis — hors fenêtre, non bloqué</span></div>
+        <div style="font-size:10.5px;color:#6B7562;margin-top:5px">Le bouton reste actif : la confiance conseille, elle n'interdit pas. Il ouvre le flux d'enregistrement existant, culture / action / date pré-remplies, parcelle demandée.</div>
+      </div></div>
+
+    <div><div class="h2">2 · Déjà en terre · 4 séries</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div class="card" style="padding:8px 10px;border-width:2px"><div class="row" style="justify-content:space-between"><b>planche-ombre · rang 3 — cœur de bœuf</b><span class="pill ph3">en récolte</span></div>
+          <div style="font-size:11px;color:#5A6650;margin-top:2px">Plantée le 12 mai (plants de pépinière, lot #114) · 1ʳᵉ récolte attendue 20 juil., <b>constatée le 28 juil.</b> · reste à courir ~2 semaines</div>
+          <div style="font-size:10.5px;margin-top:3px">Série la plus ancienne — la frise ci-dessous est recalée dessus</div></div>
+        <div class="card" style="padding:8px 10px"><div class="row" style="justify-content:space-between"><b>planche-centrale · rang 1 — noire de Crimée</b><span class="pill ph3">en récolte</span></div>
+          <div style="font-size:11px;color:#5A6650;margin-top:2px">Plantée le 1 juin · 1ʳᵉ récolte constatée 22 juil. · reste à courir ~1 à 3 semaines</div></div>
+        <div class="card" style="padding:8px 10px"><div class="row" style="justify-content:space-between"><b>planche-courges · rang 2 — cerise</b><span class="pill ph3">en récolte</span></div>
+          <div style="font-size:11px;color:#5A6650;margin-top:2px">Plantée le 20 mai · récolte attendue 5 août, <b>dépassée de 44 j sans récolte constatée</b></div></div>
+        <div class="card" style="padding:8px 10px;background:#FBF3D5"><div class="row" style="justify-content:space-between"><b>SERRE · lot #131 — cerise</b><span class="pill ph1">semé</span></div>
+          <div style="font-size:11px;color:#5A6650;margin-top:2px">Semée le 15 sept. · levée —, récolte — · <b>pas de durée plantation → récolte au référentiel (US-177) : projection impossible</b></div>
+          <div style="font-size:10.5px;margin-top:3px">Listée avec ses tirets et sa raison, jamais masquée (CA9)</div></div>
+      </div>
+      <div style="font-size:10.5px;color:#6B7562;margin-top:6px">Ouvrir depuis une tuile du Plan pré-positionne la série de <i>cette</i> parcelle (CA2) : elle passe en premier et en trait épais.</div></div>
+
+    <div><div class="h2">3 · Frise · recalée</div>
+      <div class="row" style="justify-content:space-between;margin-bottom:5px"><span style="font-size:11px"><b>Recalée</b> sur la série du 12 mai — planche-ombre</span><span class="pill">conseillé</span></div>
+      <div class="mo"><span></span><span></span><span></span><span></span><span class="ph2"></span><span class="ph2"></span><span class="ph2"></span><span class="ph3"></span><span class="ph3 now"></span><span class="ph3"></span><span></span><span></span></div>
+      <div class="mol"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span></div>
+      <div class="leg" style="margin-top:6px;font-size:10.5px"><span><i class="sw ph2"></i>en croissance</span><span><i class="sw ph3"></i>récolte</span><span>cadre = mois de la date de référence</span></div>
+      <div style="font-size:10.5px;color:#6B7562;margin-top:6px">Bascule « conseillé » : la même frise avec les quatre phases du référentiel, sans décalage. Le composant MonthStrip n'est pas modifié (CA12).</div></div>
+
+    <div style="font-size:10.5px;color:#6B7562;border-top:1px solid #DDE1D6;padding-top:8px">Calendrier : Wind River Greens · CC BY 4.0 — attribution présente une seule fois (CA16)</div>
+  </div>
+</div>
+
+<div class="fh" style="top:300px;left:640px;font-size:15px">1b · L'autre moitié des cas — 375 px</div>
+<div class="frame" style="top:332px;left:640px;width:375px;height:700px">
+  <div class="bar" style="padding:9px 12px"><div><div class="h1">Épinard — calendrier</div><div style="font-size:10.5px;color:#5A6650">depuis Cultures · au 18 sept.</div></div><span class="btn" style="margin-left:auto">✕</span></div>
+  <div class="pad" style="padding:12px;display:flex;flex-direction:column;gap:12px">
+    <div class="row" style="gap:5px"><span class="radio on" style="padding:3px 9px"><i></i>Semer en place</span><span class="radio" style="padding:3px 9px"><i></i>Semer en pépinière</span></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><b>Fenêtre : août à octobre</b><span class="stars">★★★</span></div>
+      <div style="font-size:11px;color:#5A6650;margin-top:2px">Récolte attendue si semé aujourd'hui : <b>mi-novembre à mi-décembre</b></div>
+      <div style="margin-top:7px">
+        <div class="rule"><span>+2</span><span><b>Fenêtre</b> — dans la fenêtre</span><span class="pill ph2">gagné</span></div>
+        <div class="rule"><span>+1</span><span><b>Sol</b> — 14 °C sur 7 j, seuil 8 °C</span><span class="pill ph2">gagné</span></div>
+        <div class="rule"><span>+1</span><span><b>Pluie 48 h</b> — 6 mm annoncés</span><span class="pill ph2">gagné</span></div>
+        <div class="rule"><span>0</span><span><b>Gel à 14 j</b> — aucun</span><span class="pill ph2">gagné</span></div>
+      </div>
+      <div class="row" style="margin-top:8px"><span class="btn p" style="width:100%">Enregistrer le semis</span></div>
+    </div>
+    <div class="box ghost" style="padding:8px;font-size:11px">Rien en terre → la partie « Déjà en terre » <b>est absente</b>, pas un bloc vide (CA10).</div>
+    <div><div class="row" style="justify-content:space-between;margin-bottom:4px"><span style="font-size:11px"><b>Conseillé</b> — calendrier de la zone</span></div>
+      <div class="mo"><span></span><span class="ph1"></span><span class="ph1"></span><span></span><span></span><span></span><span></span><span class="ph1"></span><span class="ph1 now"></span><span class="ph1"></span><span class="ph3"></span><span class="ph3"></span></div>
+      <div class="mol"><span>J</span><span>F</span><span>M</span><span>A</span><span>M</span><span>J</span><span>J</span><span>A</span><span>S</span><span>O</span><span>N</span><span>D</span></div></div>
+    <div class="box" style="background:#FBF3D5;padding:8px;font-size:11px"><b>Troisième état à dessiner</b> — sans localisation du potager, les règles météo passent « indéterminé » et la fiche porte l'invitation à localiser (CA7).</div>
+  </div>
+</div>
+
+<div class="fh" style="top:1052px;left:640px;font-size:15px">1c · D'où l'on vient, où l'on revient</div>
+<div class="frame" style="top:1084px;left:640px;width:375px;height:320px">
+  <div class="pad" style="display:flex;flex-direction:column;gap:9px">
+    <div class="card" style="padding:8px"><b>Cultures → carte Tomate → fiche culture</b><div style="font-size:11px;color:#5A6650">bloc « Maintenant » · bouton <i>Ouvrir la fiche calendrier</i></div></div>
+    <div style="text-align:center;font-size:14px">↓</div>
+    <div class="card" style="padding:8px;border-width:2px"><b>Fiche calendrier US-183</b><div style="font-size:11px;color:#5A6650">panneau par-dessus, la fiche culture reste derrière</div></div>
+    <div style="text-align:center;font-size:14px">↑</div>
+    <div class="card" style="padding:8px"><b>Fermer → retour à l'état exact</b><div style="font-size:11px;color:#5A6650">onglet, recherche, tri, parcelle sélectionnée (CA3)</div></div>
+    <div class="box ghost" style="padding:7px;font-size:10.5px">Trois entrées au total : Cultures (nouveau), Stocks (CA1), tuile du Plan (CA2).</div>
+  </div>
+</div>
+
+<div class="notes" style="top:332px;left:1055px"><div class="note new">
+<b>Ce que la fiche culture ne redit pas</b>
+La fiche culture porte la frise, les variétés, les voisinages, les bioagresseurs. La fiche US-183 porte le <b>geste</b> : quelle action, quelle confiance, quelles règles, quelles séries en cours. Le recouvrement se limite à la frise 12 mois, et elle n'est pas la même : conseillée dans l'une, recalée dans l'autre. C'est la raison d'être des deux écrans.
+</div>
+<div class="note">
+<b>Les quatre états à couvrir</b>
+1. Fenêtre ouverte, rien en terre → épinard, mobile.<br>
+2. Fenêtre fermée, plusieurs séries en terre → tomate, desktop.<br>
+3. Aucune fenêtre pour la zone (ail) → partie 1 remplacée par « aucun calendrier » + lien d'aide, jamais une estimation (CA4).<br>
+4. Lecture en échec → la fiche reste ouverte avec ce qu'elle a, aucune valeur de repli (CA14).
+</div>
+<div class="note">
+<b>Le point de vigilance d'US-183</b>
+La confiance affichée ici et celle de la tuile du Plan (US-180) viennent de la même lecture groupée, à la même date de référence. Deux valeurs différentes pour la même culture au même instant est un bug. Dans le wireframe, les étoiles sont toujours accompagnées de leur équivalent textuel (CA15).
+</div>
+<div class="note">
+<b>Ce qui reste à trancher</b>
+Le bouton « Enregistrer » hors fenêtre : actif comme dessiné, ou masqué ? Dessiné actif — la confiance conseille. À confirmer.<br>
+La série dépassée de 44 j (planche-courges) : simple mention, ou action « clôturer la culture » (US Enregistrer_arrachage) proposée depuis ici ?
+</div></div>
+
+<!-- ═══════════ 2 · PLAN GÉOMÉTRIQUE ═══════════ -->
+<div class="fh" style="top:1440px;left:40px;font-size:15px">2 · Le Plan devient calculé — longueur × largeur, espacements, mode d'implantation</div>
+
+<div class="frame" style="top:1472px;left:40px;width:1180px;height:380px">
+  <div class="bar"><span class="h1">Modèle et moteur de rendu</span><span style="margin-left:auto;font-size:11px;color:#5A6650">ce que le front lit · tout se saisit au backoffice</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:300px 300px 1fr;gap:14px">
+    <div class="box" style="display:flex;flex-direction:column;gap:7px">
+      <div class="h2" style="margin:0">Parcelle <span class="bo">BACKOFFICE</span></div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:4px">
+        <div><b>nom</b></div>
+        <div><b>superficie_m2</b> <span style="color:#5A6650">— obligatoire, reste la donnée métier</span></div>
+        <div><b>longueur_m</b> <span style="color:#5A6650">— nullable</span></div>
+        <div><b>largeur_m</b> <span style="color:#5A6650">— nullable</span></div>
+        <div><b>orientation_rangs</b> <span style="color:#5A6650">— nullable, défaut : dans la longueur</span></div>
+      </div>
+      <div class="box ghost" style="padding:7px;font-size:10.5px;margin-top:auto">Pas de <i>forme</i> pour l'instant : rectangle partout. Une parcelle en L se déclare en deux parcelles.</div>
+    </div>
+    <div class="box" style="display:flex;flex-direction:column;gap:7px">
+      <div class="h2" style="margin:0">Référentiel culture <span class="bo">BACKOFFICE</span></div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:4px">
+        <div><b>espacement_sur_rang_cm</b> min / max</div>
+        <div><b>espacement_rangs_cm</b> min / max</div>
+        <div><b>mode_implantation</b></div>
+        <div style="padding-left:10px;color:#5A6650">RANG · SURFACE · POQUET · GRAND_DEVELOPPEMENT</div>
+      </div>
+      <div class="box ghost" style="padding:7px;font-size:10.5px">Remplace le champ unique <i>espacement</i> (« 60 à 80 cm »), qui ne dit pas lequel des deux il décrit. La reprise des 84 fiches est un chantier backoffice à part.</div>
+      <div style="font-size:10.5px;color:#5A6650;margin-top:auto">Implantation : <b>quantité</b> + <b>unité</b> (plants · m² · poquets · ml) — déjà présents.</div>
+    </div>
+    <div class="box">
+      <div class="h2" style="margin:0 0 4px">Les six règles du moteur</div>
+      <div class="rule" style="border:none"><span><b>1</b></span><span><b>Combien de rangs</b> — largeur ÷ espacement entre rangs, arrondi au plus bas. Sans largeur : un rang par culture déclarée, comme en v1.</span><span class="pill">géométrie</span></div>
+      <div class="rule"><span><b>2</b></span><span><b>Longueur du trait</b> — quantité × espacement sur rang ÷ longueur de la parcelle. 10 tomates = 7 m, 10 poireaux = 2 m : les traits cessent d'être équivalents.</span><span class="pill">RANG</span></div>
+      <div class="rule"><span><b>3</b></span><span><b>Semis en surface</b> — un bloc dont l'aire = m² semés ÷ superficie, tramé. Aucun plant dessiné.</span><span class="pill">SURFACE</span></div>
+      <div class="rule"><span><b>4</b></span><span><b>Grand développement</b> — emprise = quantité × surface théorique du référentiel (courgette 0,99 m², potiron 3 m²), dessinée en galet, pas en rang.</span><span class="pill">GRAND_DÉV.</span></div>
+      <div class="rule"><span><b>5</b></span><span><b>Sans dimensions</b> — rectangle neutre déduit de la superficie (ratio 4:3), hachuré, et la mention <i>dimensions estimées</i>. Jamais présenté comme la géométrie réelle.</span><span class="pill" style="border-style:dashed">repli</span></div>
+      <div class="rule"><span><b>6</b></span><span><b>Débordement</b> — si le calcul dépasse la parcelle, on n'écrase pas : le trait s'arrête au bord et la parcelle porte « déborde de 18 % ». C'est une information agronomique, pas une erreur d'affichage.</span><span class="pill" style="background:#F7D6D0">alerte</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:1472px;left:1250px"><div class="note">
+<b>L'échelle change la lecture de l'occupation</b>
+En v1, « 78 % occupé » sortait d'un comptage de rangs. Avec les emprises, c'est une vraie somme de m² : tomates 3,8 + courgettes 2 + haricot 1 = 6,8 sur 12. Le chiffre devient comparable d'une parcelle à l'autre et la place restante s'exprime en m² — ce que le jardinier cherche.
+</div>
+<div class="note">
+<b>Ce que ça coûte au backoffice</b>
+Deux nombres par parcelle (six parcelles ici). Pour le référentiel : deux espacements et un mode par culture, à reprendre sur les cultures réellement utilisées d'abord — une vingtaine — pas sur les 84 d'un coup. Le moteur doit fonctionner sur un référentiel à moitié rempli dès le premier jour.
+</div><div class="note new">
+<b>Position des plants : toujours pas en base</b>
+Le plan reste <b>calculé</b>, jamais dessiné à la main. Aucune coordonnée x / y par plant. Ce que l'ajout de L × l change, c'est la crédibilité du dessin — pas le volume de saisie : deux nombres par parcelle, une fois.
+</div>
+<div class="note">
+<b>Dégradation propre</b>
+Trois niveaux, et l'écran dit toujours lequel il montre :<br>
+<b>A</b> L × l + espacements → géométrie proportionnelle.<br>
+<b>B</b> espacements sans dimensions → traits proportionnels entre eux, cadre neutre.<br>
+<b>C</b> ni l'un ni l'autre → le dessin de la v1, part de la quantité maximale.<br>
+Un potager réel mélangera les trois pendant longtemps. Le mélange doit être lisible, pas honteux.
+</div>
+<div class="note">
+<b>Couleur = phase, forme = mode</b>
+La palette reste celle de la v1 (semé / en place / en récolte). Le mode d'implantation se lit à la <b>forme</b> : trait, bloc tramé, galet, points. Deux variables visuelles, deux lectures indépendantes — pas de troisième palette.
+</div></div>
+
+<div class="fh" style="top:1892px;left:40px;font-size:15px">2b · Le même potager, trois niveaux de donnée <small>à l'échelle · 1 m = 46 px</small></div>
+<div class="frame" style="top:1924px;left:40px;width:1180px;height:400px">
+  <div class="pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;height:100%">
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="row" style="justify-content:space-between"><b>A · 4 × 3 m déclarés</b><span class="pill ph2">géométrie</span></div>
+      <div style="position:relative;height:190px">
+        <div class="parc" style="left:0;top:14px;width:184px;height:138px">
+          <div class="rg" style="left:6px;top:26px;width:160px"><span></span></div>
+          <div class="rg ph2" style="left:6px;top:26px;width:139px"></div>
+          <div class="rg" style="left:6px;top:52px;width:160px"></div>
+          <div class="rg ph2" style="left:6px;top:52px;width:83px"></div>
+          <div class="zone" style="left:6px;top:76px;width:55px;height:52px"></div>
+          <div class="zone" style="left:64px;top:76px;width:55px;height:52px"></div>
+          <div class="surf" style="left:124px;top:76px;width:46px;height:52px"></div>
+        </div>
+        <div class="scale" style="left:0;top:0">4 m</div><div class="tick" style="left:0;top:10px;width:184px"></div>
+        <div class="scale" style="left:190px;top:70px">3 m</div>
+        <div style="position:absolute;left:0;top:158px;font-size:10.5px;color:#5A6650">3 rangs possibles (3 m ÷ 90 cm). R1 : 5 tomates × 70 cm = 3,5 m sur 4. R2 : 3 tomates = 2,1 m.</div>
+      </div>
+      <div style="font-size:11px;display:flex;flex-direction:column;gap:3px">
+        <div class="row"><span class="sw ph2"></span><span>trait = rang, longueur réelle</span></div>
+        <div class="row"><span class="sw" style="background:#CBE2B4;border-radius:50%"></span><span>galet = 2 pieds de courgette, 2 m² d'emprise</span></div>
+        <div class="row"><span class="sw ph1"></span><span>bloc tramé = 1 m² de haricot semé</span></div>
+      </div>
+      <div class="box" style="padding:7px;font-size:10.5px;margin-top:auto"><b>12 m² · occupé 6,8 m² · 57 %</b><br>Le reste libre est une vraie surface, pas un rang vide : « 5,2 m² disponibles, soit ~1 rang de 4 m ».</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="row" style="justify-content:space-between"><b>B · 10 m², dimensions absentes</b><span class="pill" style="border-style:dashed">estimé</span></div>
+      <div style="position:relative;height:190px">
+        <div class="parc est" style="left:0;top:14px;width:168px;height:126px">
+          <div class="rg" style="left:6px;top:22px;width:144px"></div><div class="rg ph1" style="left:6px;top:22px;width:144px"></div>
+          <div class="rg" style="left:6px;top:46px;width:144px"></div><div class="rg ph1" style="left:6px;top:46px;width:101px"></div>
+          <div class="rg" style="left:6px;top:70px;width:144px"></div><div class="rg ph3" style="left:6px;top:70px;width:58px"></div>
+          <div class="rg ghost" style="left:6px;top:94px;width:144px;border-style:dashed"></div>
+        </div>
+        <div style="position:absolute;left:0;top:146px;font-size:10.5px;color:#5A6650"><b>Dimensions estimées — représentation indicative.</b> Rectangle 4:3 déduit de 10 m². Les traits restent proportionnels entre eux (quantité × espacement), mais leur rapport au cadre ne veut rien dire.</div>
+      </div>
+      <div class="box ghost" style="padding:7px;font-size:10.5px;margin-top:auto">Appel à compléter, en lecture seule : <i>« renseigner 4,0 × 2,5 m au backoffice rendrait ce dessin exact »</i>. Le front ne propose pas de champ.</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div class="row" style="justify-content:space-between"><b>C · espacements inconnus</b><span class="pill" style="border-style:dashed">v1</span></div>
+      <div style="position:relative;height:190px">
+        <div class="parc est" style="left:0;top:14px;width:150px;height:112px">
+          <div class="rg" style="left:6px;top:20px;width:126px"></div><div class="rg ph2" style="left:6px;top:20px;width:126px"></div>
+          <div class="rg" style="left:6px;top:44px;width:126px"></div><div class="rg ph2" style="left:6px;top:44px;width:88px"></div>
+          <div class="rg" style="left:6px;top:68px;width:126px"></div><div class="rg ph3" style="left:6px;top:68px;width:44px"></div>
+        </div>
+        <div style="position:absolute;left:0;top:132px;font-size:10.5px;color:#5A6650">Ail, échalote, fleurs compagnes : 40 fiches du référentiel n'ont aucun espacement. Le trait redevient « part de la quantité par rapport au rang le plus fourni » — la règle de la v1, conservée comme dernier repli.</div>
+      </div>
+      <div class="box" style="padding:7px;font-size:10.5px;margin-top:auto;background:#FBF3D5"><b>Question ouverte</b><br>Ce niveau C mérite-t-il un marquage visible (cadre hachuré, comme dessiné), ou doit-il rester discret pour ne pas transformer le Plan en tableau de bord de complétude du référentiel ?</div>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="fh" style="top:2364px;left:40px;font-size:15px">2c · Vue plan complète <small>1180 px · parcelles à l'échelle les unes par rapport aux autres, 1 m = 34 px</small></div>
+<div class="frame" style="top:2396px;left:40px;width:1180px;height:720px">
+  <div class="bar"><span class="h1">Plan</span><div class="tabs"><span class="tab">Parcelles</span><span class="tab on">Vue plan</span><span class="tab">Rotation</span></div><span style="margin-left:auto" class="pill">au 19 sept.</span><span class="pill">Échelle 1 m</span><span class="btn">Réordonner</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 310px;gap:14px;height:calc(100% - 45px)">
+    <div>
+      <div class="row" style="justify-content:space-between;margin-bottom:9px">
+        <div class="leg"><span><i class="sw ph1"></i>semé</span><span><i class="sw ph2"></i>en place</span><span><i class="sw ph3"></i>en récolte</span><span><i class="sw ph0"></i>libre</span></div>
+        <div class="leg"><span style="font-size:10.5px">forme : <b>trait</b> rang · <b>galet</b> grand développement · <b>bloc tramé</b> semis en surface</span></div>
+      </div>
+      <div style="position:relative;height:440px;border:1.5px solid #2A3322;border-radius:6px;background:#FAFAF6">
+        <div class="parc" style="left:16px;top:16px;width:136px;height:102px"><span class="nm">centrale</span><span class="sq">4 × 3 m</span>
+          <div class="rg" style="left:5px;top:22px;width:118px"></div><div class="rg ph2" style="left:5px;top:22px;width:103px"></div>
+          <div class="rg" style="left:5px;top:42px;width:118px"></div><div class="rg ph2" style="left:5px;top:42px;width:61px"></div>
+          <div class="zone" style="left:5px;top:60px;width:40px;height:36px"></div><div class="zone" style="left:48px;top:60px;width:40px;height:36px"></div>
+          <div class="surf" style="left:92px;top:60px;width:32px;height:36px"></div>
+          <span class="pct">57 %</span></div>
+        <div class="parc" style="left:168px;top:16px;width:170px;height:82px"><span class="nm">ombre</span><span class="sq">5 × 2,4 m</span>
+          <div class="rg" style="left:5px;top:20px;width:150px"></div><div class="rg ph1" style="left:5px;top:20px;width:150px"></div>
+          <div class="rg" style="left:5px;top:38px;width:150px"></div><div class="rg ph1" style="left:5px;top:38px;width:104px"></div>
+          <div class="rg" style="left:5px;top:56px;width:150px"></div><div class="rg ph3" style="left:5px;top:56px;width:60px"></div>
+          <span class="pct">52 %</span></div>
+        <div class="parc" style="left:354px;top:16px;width:136px;height:68px"><span class="nm">courges</span><span class="sq">4 × 2 m</span>
+          <div class="zone" style="left:6px;top:22px;width:38px;height:38px"></div><div class="zone" style="left:47px;top:22px;width:38px;height:38px"></div><div class="zone" style="left:88px;top:22px;width:38px;height:38px"></div>
+          <span class="pct">100 %</span></div>
+        <div class="parc" style="left:506px;top:16px;width:102px;height:68px"><span class="nm">aromates</span><span class="sq">3 × 2 m</span>
+          <div class="poq" style="left:10px;top:28px"></div><div class="poq" style="left:32px;top:28px"></div><div class="poq" style="left:54px;top:28px"></div><div class="poq" style="left:76px;top:28px"></div>
+          <div class="poq" style="left:10px;top:48px"></div><div class="poq" style="left:32px;top:48px"></div>
+          <span class="pct">65 %</span></div>
+        <div class="parc est" style="left:16px;top:134px;width:136px;height:102px"><span class="nm">nord</span><span class="sq">4 m² estimé</span>
+          <div class="rg ghost" style="left:5px;top:34px;width:118px;border-style:dashed"></div><div class="rg ghost" style="left:5px;top:58px;width:118px;border-style:dashed"></div>
+          <span class="pct" style="color:#6B7562">libre</span></div>
+        <div class="parc" style="left:168px;top:134px;width:102px;height:51px"><span class="nm">butte</span><span class="sq">3 × 1,5 m</span>
+          <div class="rg" style="left:5px;top:26px;width:88px"></div><div class="rg ph1" style="left:5px;top:26px;width:88px"></div>
+          <span class="pct">40 %</span></div>
+        <div class="parc" style="left:286px;top:134px;width:85px;height:51px;border-style:dashed;background:repeating-linear-gradient(45deg,#fff 0 4px,#F1F3EC 4px 8px)"><span class="nm">SERRE</span><span class="pct" style="color:#6B7562">→ Pépinière</span></div>
+        <div style="position:absolute;left:16px;bottom:34px;font-size:10.5px;color:#5A6650">Les parcelles gardent leur taille relative réelle : « courges » fait bien deux fois « butte ». L'ordre d'affichage reste celui déclaré ; aucun placement libre, aucune position inventée.</div>
+        <div style="position:absolute;left:16px;bottom:12px;display:flex;align-items:center;gap:6px;font-size:10px;color:#5A6650"><span style="display:inline-block;width:34px;height:0;border-top:1.5px solid #2A3322"></span>1 m<span style="margin-left:10px;display:inline-block;width:6px;height:6px;border:1.5px dashed #8A9480"></span>cadre hachuré = dimensions estimées</div>
+      </div>
+      <div class="row" style="margin-top:10px;gap:14px;font-size:11px;color:#5A6650;flex-wrap:wrap"><span>Total 44,5 m²</span><span>·</span><span>Occupé 26,2 m² — <b>59 %</b></span><span>·</span><span>Libre : 18,3 m², dont 4 m² d'un seul tenant (nord)</span><span>·</span><span>2 parcelles sans dimensions</span></div>
+    </div>
+    <div class="box" style="height:100%;display:flex;flex-direction:column;gap:9px">
+      <div><div class="h2">Parcelle sélectionnée</div><div class="h1">planche-centrale</div><div style="font-size:11px;color:#5A6650">12 m² · 4,0 × 3,0 m · rangs dans la longueur · mi-ombre</div></div>
+      <div class="row" style="gap:5px"><span class="pill ph2">occupé 6,8 m²</span><span class="pill">libre 5,2 m²</span></div>
+      <div class="h2" style="margin:2px 0 0">Implantations · 4</div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 1 · Tomate</b><span class="pill ph2">en place</span></div><div style="font-size:11px"><i>noire de Crimée</i> · 5 plants · 70 cm sur le rang → <b>3,5 m sur 4,0</b></div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Rang 2 · Tomate</b><span class="pill ph2">en place</span></div><div style="font-size:11px"><i>cerise</i> · 3 plants · <b>2,1 m sur 4,0</b> — 2 plants tiendraient encore</div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Courgette</b><span class="pill ph3">en récolte</span></div><div style="font-size:11px">2 pieds · grand développement · emprise 2,0 m²</div></div>
+      <div class="card" style="padding:8px"><div class="row" style="justify-content:space-between"><b>Haricot</b><span class="pill ph1">semé</span></div><div style="font-size:11px">1 m² semé en surface · levée attendue 22 sept.</div></div>
+      <div class="box ghost" style="padding:8px;font-size:11px">Reste 5,2 m² — soit environ <b>1 rang de 4 m</b> à 90 cm d'écartement, ou 2 pieds de courge.</div>
+      <div style="margin-top:auto;display:flex;gap:6px"><span class="btn">Fiche parcelle</span><span class="btn">Voir la culture →</span></div>
+      <div style="font-size:10px;color:#6B7562">Aucune écriture depuis cet écran <span class="bo">BACKOFFICE</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:2520px;left:1250px"><div class="note new">
+<b>« Reste 5,2 m², soit 1 rang de 4 m »</b>
+C'est la phrase que le Plan ne pouvait pas écrire en v1 et qui justifie à elle seule longueur × largeur. Elle relie directement la Pépinière au Plan : 40 choux disponibles, 5,2 m² libres, 40 × 0,16 m² = 6,4 m² — ça ne rentre pas tout à fait, et l'application peut le dire.
+</div>
+<div class="note">
+<b>Le poquet, quatrième mode</b>
+Dessiné sur « aromates » : des ronds espacés plutôt qu'un trait. Concerne les aromatiques, les courges semées en place, les fèves. Peu de fiches, mais un rang de persil dessiné comme un rang de poireaux serait faux.
+</div>
+<div class="note">
+<b>Orientation des rangs</b>
+Dessinés dans la longueur par défaut. Le champ <i>orientation</i> existe pour les parcelles où c'est l'inverse, mais il n'a d'intérêt visuel que si le jardinier reconnaît sa parcelle — donc à garder pour plus tard, quand le plan aura une boussole.
+</div></div>
+
+<!-- ═══════════ 3 · PÉPINIÈRE ═══════════ -->
+<div class="fh" style="top:3140px;left:40px;font-size:15px">3 · La pépinière comme poste de travail <small>la question n'est plus « qu'est-ce que j'ai » mais « qu'est-ce que je fais maintenant, et où »</small></div>
+
+<div class="frame" style="top:3172px;left:40px;width:1180px;height:692px">
+  <div class="bar"><span class="h1">Pépinière</span><div class="tabs"><span class="tab on">Aujourd'hui</span><span class="tab">Lots</span><span class="tab">Calendrier</span><span class="tab">Emplacements</span></div><span style="margin-left:auto" class="pill">au 19 sept.</span><span class="btn">Étiquettes <span class="opt">OPTION</span></span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 320px;gap:14px;height:calc(100% - 45px)">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div class="card" style="background:#FBF3D5"><div class="h2" style="margin-bottom:3px">À repiquer</div><div class="h1">2 lots · 78 plants</div><div style="font-size:11px">chou frisé <b>+6 j</b> · tomate cerise dans 3 j</div></div>
+        <div class="card"><div class="h2" style="margin-bottom:3px">À endurcir</div><div class="h1">1 lot</div><div style="font-size:11px">poireau — sortie progressive avant mise en terre, J+3 sur 7</div></div>
+        <div class="card"><div class="h2" style="margin-bottom:3px">Prêts pour le plan</div><div class="h1">41 plants</div><div style="font-size:11px">5,2 m² libres en centrale, 4 m² en nord</div></div>
+        <div class="card"><div class="h2" style="margin-bottom:3px">À semer</div><div class="h1">2 cultures</div><div style="font-size:11px">épinard, laitue d'hiver — fenêtre ouverte, aucun lot</div></div>
+      </div>
+
+      <div class="box" style="padding:0;overflow:hidden;flex:1">
+        <div class="row" style="padding:8px 12px;border-bottom:1.5px solid #2A3322;background:#F4F4EF;justify-content:space-between"><b>Les lots, du plus urgent au plus calme</b><span style="font-size:10.5px;color:#5A6650">tri : jours d'écart au repiquage attendu</span></div>
+
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 150px 96px;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid #C9CEC0;background:#FBF3D5">
+          <div class="qr s" title="étiquette"></div>
+          <div><b>#128 · Chou frisé</b><div style="font-size:10.5px;color:#5A6650">semé le 1 sept. · 18 j · SERRE, plaque 3</div></div>
+          <div style="font-size:11px"><b>48 semés → 40 levés</b><div style="font-size:10.5px;color:#5A6650">levée 83 % · 8 non levés</div></div>
+          <div style="font-size:11px"><b style="color:#8A3A28">Repiquage +6 j</b><div style="font-size:10.5px;color:#5A6650">attendu à 12 j · les plants filent</div></div>
+          <div><span class="btn p" style="font-size:10px;padding:4px 7px">Repiquer</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 150px 96px;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid #C9CEC0">
+          <div class="qr s"></div>
+          <div><b>#131 · Tomate cerise</b><div style="font-size:10.5px;color:#5A6650">semé le 15 sept. · 4 j · SERRE, plaque 1</div></div>
+          <div style="font-size:11px"><b>60 semés → 12 levés</b><div style="font-size:10.5px;color:#5A6650">levée en cours · 20 %</div></div>
+          <div style="font-size:11px">Repiquage dans 3 j<div style="font-size:10.5px;color:#5A6650">attendu le 22 sept.</div></div>
+          <div><span class="btn" style="font-size:10px;padding:4px 7px">Noter la levée</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 150px 96px;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid #C9CEC0">
+          <div class="qr s"></div>
+          <div><b>#119 · Poireau</b> <span class="pill ph2">godet</span><div style="font-size:10.5px;color:#5A6650">semé le 1 fév. · repiqué le 3 mars · châssis froid</div></div>
+          <div style="font-size:11px"><b>41 disponibles</b><div style="font-size:10.5px;color:#5A6650">sur 55 semés · 3 pertes depuis</div></div>
+          <div style="font-size:11px">Endurcissement J+3/7<div style="font-size:10.5px;color:#5A6650">mise en terre vers le 26 sept.</div></div>
+          <div><span class="btn" style="font-size:10px;padding:4px 7px">Mettre en terre</span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:44px 1fr 150px 150px 96px;gap:10px;align-items:center;padding:9px 12px">
+          <div class="qr s" style="opacity:.35"></div>
+          <div style="color:#6B7562"><b>#103 · Basilic</b><div style="font-size:10.5px">semé le 12 juin · 99 j · aucun mouvement depuis 70 j</div></div>
+          <div style="font-size:11px;color:#6B7562">6 restants</div>
+          <div style="font-size:11px;color:#6B7562">Dormant<div style="font-size:10.5px">ni repiqué, ni planté, ni perdu</div></div>
+          <div><span class="btn" style="font-size:10px;padding:4px 7px">Clôturer</span></div>
+        </div>
+      </div>
+      <div style="font-size:10.5px;color:#6B7562">Chaque bouton ouvre le flux d'enregistrement existant avec le lot, la culture et la date pré-remplis. <span class="bo">BACKOFFICE</span> Aucune écriture directe.</div>
+    </div>
+
+    <div class="box" style="display:flex;flex-direction:column;gap:9px">
+      <div><div class="h2">Lot sélectionné</div><div class="h1">#128 · Chou frisé</div><div style="font-size:11px;color:#5A6650">semé le 1 sept. · SERRE · plaque 3</div></div>
+      <div class="card" style="background:#FBF3D5;padding:8px"><b>En retard de 6 jours</b><div style="font-size:11px">Repiquage attendu à 12 j pour cette culture.</div></div>
+      <div class="h2" style="margin:2px 0 0">Traçabilité</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
+        <div class="row" style="justify-content:space-between"><span>Graines prélevées au stock</span><b>48</b></div>
+        <div class="row" style="justify-content:space-between"><span>Levés</span><b>40 · 83 %</b></div>
+        <div class="row" style="justify-content:space-between"><span>Repiqués en godet</span><b>—</b></div>
+        <div class="row" style="justify-content:space-between"><span>Pertes déclarées</span><b>0</b></div>
+        <div class="row" style="justify-content:space-between"><span>Mis en terre</span><b>—</b></div>
+      </div>
+      <div class="box ghost" style="padding:7px;font-size:10.5px">Le lot est la clé du chaînage graine → godet → plantation (US-020, US-029). Tout ce qui est fait sur ce lot depuis le terrain revient ici.</div>
+      <div class="h2" style="margin:2px 0 0">Où les mettre</div>
+      <div class="card ghost" style="padding:7px;font-size:11px"><b>planche-nord</b> · 4 m² libres · plein soleil ✓<div style="color:#6B7562">40 choux à 40 × 40 cm = 6,4 m² → il en resterait 15 en godet</div></div>
+      <div class="card ghost" style="padding:7px;font-size:11px"><b>planche-centrale</b> · 5,2 m² libres · mi-ombre<div style="color:#6B7562">soit environ 1 rang de 4 m — 10 plants</div></div>
+      <div style="margin-top:auto;display:flex;gap:6px"><span class="btn">Détail du lot</span><span class="btn p">Repiquer</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:3172px;left:1250px"><div class="note new">
+<b>Pourquoi l'étiquette vaut le coup</b>
+Tout ce qui manque à l'application se saisit debout devant une plaque : le nombre de levés, la perte, le repiquage. Le téléphone en main, il faut aujourd'hui ouvrir l'app, trouver la pépinière, trouver le lot — trois écrans avant le premier chiffre. Le QR les supprime. C'est le seul argument ; s'il ne tient pas, l'option tombe.
+</div>
+<div class="note">
+<b>Pourquoi ça doit rester une option</b>
+Une étiquette imprimée est une donnée figée collée sur du vivant : le lot bouge, l'étiquette ment. Elle ne doit donc jamais porter autre chose que l'identité du lot et un rappel de date. Et l'application doit être complète sans imprimante — la liste des lots de 3a fait le même travail, deux appuis plus loin.
+</div>
+<div class="note">
+<b>Sans imprimante</b>
+Variante à considérer : un numéro de lot court (#128) écrit au crayon sur l'étiquette plastique que le jardinier a déjà, et un champ « aller au lot n° » dans l'app. Zéro impression, 80 % du bénéfice. Peut-être le vrai premier pas.
+</div>
+<div class="note">
+<b>Quatre onglets, est-ce trop ?</b>
+Aujourd'hui · Lots · Calendrier · Emplacements. « Emplacements » n'a de sens qu'à partir de deux pépinières déclarées — il peut n'apparaître que dans ce cas. « Aujourd'hui » devient l'onglet par défaut : c'est l'écran qu'on ouvre en passant.
+</div><div class="note new">
+<b>Ce qui change par rapport à la v1</b>
+La v1 répondait à « quand sortir un lot ». Un outil de travail répond à quatre questions de plus : <b>quoi faire aujourd'hui</b> (repiquer, endurcir, noter la levée), <b>où c'est posé</b> physiquement, <b>ce qui ne bouge plus</b> (les lots dormants, que personne ne clôture jamais), et <b>ce qui sera prêt quand</b>.
+</div>
+<div class="note">
+<b>Le lot dormant</b>
+Le basilic de juin : ni repiqué, ni planté, ni déclaré perdu. Ces lots fantômes faussent tous les stocks (INC-001). Les faire remonter en bas de liste, grisés, avec une seule action « clôturer », coûte peu et nettoie la base par le geste plutôt que par une corvée d'inventaire.
+</div>
+<div class="note">
+<b>L'endurcissement, étape manquante</b>
+Entre le godet et la terre il y a une semaine de sortie progressive que le modèle ne connaît pas. Deux options : un vrai stade (migration, événement) ou un simple compte à rebours affiché avant la date de mise en terre prévue. <b>Dessiné en compte à rebours</b> — aucun coût de modèle. À trancher.
+</div>
+<div class="note">
+<b>Taux de levée : la donnée la plus utile et la moins saisie</b>
+48 semés → 40 levés, c'est ce qui permet de dire au printemps suivant « sème 20 % de plus ». Encore faut-il que quelqu'un compte. D'où l'étiquette : le comptage se fait devant la plaque, pas devant un écran.
+</div></div>
+
+<div class="fh" style="top:3888px;left:40px;font-size:15px">3b · Emplacements — répondre à « ai-je encore de la place dans la serre ? » <small>reprend l'analyse du 17/07</small></div>
+<div class="frame" style="top:3920px;left:40px;width:700px;height:400px">
+  <div class="bar"><span class="h1">Pépinière</span><div class="tabs"><span class="tab">Aujourd'hui</span><span class="tab">Lots</span><span class="tab">Calendrier</span><span class="tab on">Emplacements</span></div></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:11px">
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:11px">
+      <div class="card"><div class="row" style="justify-content:space-between"><b>SERRE</b><span class="pill">2,5 m² · 3 plaques</span></div>
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <div class="box" style="flex:1;padding:6px;font-size:10.5px;background:#CBE2B4"><b>Plaque 1</b><br>tomate cerise #131<br>60 alvéoles</div>
+          <div class="box" style="flex:1;padding:6px;font-size:10.5px;background:#CBE2B4"><b>Plaque 3</b><br>chou frisé #128<br>48 alvéoles</div>
+          <div class="box ghost" style="flex:1;padding:6px;font-size:10.5px">Plaque 2<br>libre</div>
+        </div>
+        <div style="font-size:10.5px;color:#5A6650;margin-top:7px">2 plaques sur 3 · 108 alvéoles occupées</div></div>
+      <div class="card"><div class="row" style="justify-content:space-between"><b>Châssis froid</b><span class="pill">1,2 m²</span></div>
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <div class="box" style="flex:2;padding:6px;font-size:10.5px;background:#CBE2B4"><b>Godets</b><br>poireau #119 · 41 godets</div>
+          <div class="box ghost" style="flex:1;padding:6px;font-size:10.5px">libre</div>
+        </div>
+        <div style="font-size:10.5px;color:#5A6650;margin-top:7px">Endurcissement en cours — J+3 sur 7</div></div>
+    </div>
+    <div class="box ghost" style="padding:9px;font-size:11px"><b>Ce que ça demande au modèle</b> — aujourd'hui une mise en godet est créée avec <i>parcelle_id = NULL</i> en dur, et les stocks pépinière s'agrègent par (culture, variété) sans notion de lieu. Deux parcelles pépinière donnent donc « carotte : 80 graines » en un seul bloc. Rendre <i>parcelle_id</i> renseignable sur <i>mise_en_godet</i>, puis entrer la parcelle dans la clé d'agrégation : c'est la piste 2 de l'analyse. La notion de <b>plaque</b> dessinée ci-dessus va un cran plus loin et n'existe nulle part — <b>à trancher avant de la dessiner en haute fidélité.</b></div>
+  </div>
+</div>
+
+<div class="fh" style="top:3888px;left:780px;font-size:15px">3c · Le terrain — 375 px</div>
+<div class="frame" style="top:3920px;left:780px;width:375px;height:660px">
+  <div class="bar" style="padding:9px 12px"><span class="h1">Lot #128</span><span class="pill" style="margin-left:auto">scanné à 9 h 12</span></div>
+  <div class="pad" style="padding:12px;display:flex;flex-direction:column;gap:11px">
+    <div class="box" style="background:#FBF3D5;padding:9px"><b>Chou frisé · semé le 1 sept.</b><div style="font-size:11px">18 jours · SERRE, plaque 3 · <b>repiquage en retard de 6 j</b></div></div>
+    <div class="h2" style="margin:0">Le geste, en un appui</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <span class="btn p" style="height:48px">Repiquer en godet</span>
+      <span class="btn" style="height:48px">Mettre en terre</span>
+      <span class="btn" style="height:48px">Noter la levée</span>
+      <span class="btn" style="height:48px">Déclarer une perte</span>
+    </div>
+    <div class="box" style="padding:9px"><div class="h2" style="margin-bottom:6px">Noter la levée</div>
+      <div class="row" style="justify-content:space-between;font-size:12px"><span>Semés</span><b>48</b></div>
+      <div class="row" style="justify-content:space-between;margin-top:6px"><span style="font-size:12px">Levés</span><span class="row" style="gap:7px"><span class="btn" style="width:30px;height:30px">−</span><b style="font-size:15px">40</b><span class="btn" style="width:30px;height:30px">+</span></span></div>
+      <div style="font-size:11px;color:#5A6650;margin-top:6px">83 % — au-dessus de la moyenne du chou (75 %)</div>
+    </div>
+    <div class="box ghost" style="padding:9px;font-size:11px">Le même écran s'ouvre par scan d'étiquette <b>ou</b> depuis la liste des lots. Le scan ne fait que remplacer la navigation ; il n'ajoute aucun chemin d'écriture.</div>
+    <div style="font-size:10.5px;color:#6B7562;margin-top:auto">Cibles d'appui 48 px — gants, terre, écran mouillé.</div>
+  </div>
+</div>
+
+<div class="fh" style="top:4360px;left:40px;font-size:15px">3d · Étiquettes à QR code <small class="opt" style="margin-left:8px">OPTION — rien ne dépend d'elles</small></div>
+<div class="frame" style="top:4392px;left:40px;width:700px;height:470px">
+  <div class="bar"><span class="h1">Étiquettes de semis</span><span style="margin-left:auto" class="pill">3 lots sélectionnés</span><span class="btn">Imprimer</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 250px;gap:14px">
+    <div>
+      <div class="h2">Planche A4 · 12 étiquettes 70 × 37 mm</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+        <div class="etiq"><div class="qr"></div><div style="font-size:11px"><b>CHOU FRISÉ</b><div>lot #128 · semé 1/09</div><div style="color:#5A6650">48 · SERRE pl.3</div><div style="color:#5A6650;font-size:10px">repiquage ~13/09</div></div></div>
+        <div class="etiq"><div class="qr"></div><div style="font-size:11px"><b>TOMATE CERISE</b><div>lot #131 · semé 15/09</div><div style="color:#5A6650">60 · SERRE pl.1</div><div style="color:#5A6650;font-size:10px">repiquage ~27/09</div></div></div>
+        <div class="etiq"><div class="qr"></div><div style="font-size:11px"><b>POIREAU</b><div>lot #119 · semé 1/02</div><div style="color:#5A6650">41 godets · châssis</div><div style="color:#5A6650;font-size:10px">en terre ~26/09</div></div></div>
+        <div class="etiq ghost" style="justify-content:center;font-size:11px;color:#6B7562">9 emplacements libres —<br>réimprimer un lot existant</div>
+      </div>
+      <div class="box ghost" style="padding:8px;font-size:10.5px;margin-top:10px">Papier ordinaire glissé dans une pochette, ou étiquette autocollante sur plaque. Le QR encode une URL de lot ; l'étiquette reste lisible à l'œil sans téléphone — le texte porte déjà l'essentiel.</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div class="h2" style="margin:0">Ce que fait le scan</div>
+      <div class="card" style="padding:8px;font-size:11px"><b>1 · Ouvre le lot</b><br>l'écran 3c, déjà authentifié si la session est ouverte</div>
+      <div class="card" style="padding:8px;font-size:11px"><b>2 · Rien d'autre</b><br>pas d'écriture au scan, pas de geste automatique</div>
+      <div class="box" style="padding:8px;font-size:11px;background:#FBF3D5"><b>À trancher</b><br>Un QR est-il lisible par un tiers ? Jeton opaque non devinable, révocable, sans donnée dans l'URL — et que voit quelqu'un qui n'est pas membre du potager : rien, ou une page « demander l'accès » ?</div>
+      <div class="box ghost" style="padding:8px;font-size:10.5px">Deux autres usages possibles, non dessinés : étiquette de parcelle (scan → rangs de la parcelle) et étiquette de bocal de graines (scan → stock de la variété).</div>
+    </div>
+  </div>
+</div>
+
+
+
+<!-- ═══════════ 4 · à trancher ═══════════ -->
+<div class="fh" style="top:4910px;left:40px;font-size:15px">4 · Ce qui bloque la haute fidélité</div>
+<div class="frame" style="top:4942px;left:40px;width:1180px;height:246px">
+  <div class="pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;height:100%">
+    <div class="box"><div class="h2">Plan</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:7px">
+        <div><b>1.</b> Longueur × largeur en base : confirmé ? C'est une migration et un écran de backoffice.</div>
+        <div><b>2.</b> Scission de <i>espacement</i> en deux colonnes + <i>mode_implantation</i> : sur les 84 fiches, ou sur les cultures utilisées d'abord ?</div>
+        <div><b>3.</b> Le marquage « dimensions estimées » : visible ou discret ?</div>
+      </div></div>
+    <div class="box"><div class="h2">Fiche US-183</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:7px">
+        <div><b>4.</b> Bouton d'enregistrement hors fenêtre : actif ou masqué ?</div>
+        <div><b>5.</b> Une récolte attendue dépassée de 44 jours : mention seule, ou proposition de clôture ?</div>
+        <div><b>6.</b> La maquette haute fidélité existante couvre-t-elle déjà ces états, ou faut-il la reprendre ?</div>
+      </div></div>
+    <div class="box"><div class="h2">Pépinière</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:7px">
+        <div><b>7.</b> L'endurcissement : stade du modèle, ou simple compte à rebours ?</div>
+        <div><b>8.</b> La <i>plaque</i> : notion réelle à créer, ou l'emplacement s'arrête à la parcelle pépinière ?</div>
+        <div><b>9.</b> QR code : on garde l'option pour plus tard, ou on part sur le numéro de lot manuscrit ?</div>
+      </div></div>
+  </div>
+</div>
+
+</body>
+</html>

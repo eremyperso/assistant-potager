@@ -11,7 +11,7 @@ Décisions de domaine (menu natif US-171, dictée US-172) : `docs/domaines/comma
 | `etat` | dictionnaires `_*_PENDING` et délais `_*_TIMEOUT` partagés par les flux |
 | `normalisation` | `_parser_items`, `_normalize_items`, inférence action / culture / date |
 | `aide` | `/help`, `/version`, `_HELP_DOMAINES` (lu par `tools/controler_aide_corpus.py`) |
-| `liaison` | `/start`, `/lier`, `/delier`, `/potager`, garde de liaison et de rôle |
+| `liaison` | `/start`, `/lier`, `/delier`, `/potager`, `/rejoindre`, garde de liaison et de rôle |
 | `enregistrement` | récapitulatif, boutons de confirmation, `_do_save_items`, `_parse_multi` |
 | `godets` / `pertes` / `notes` | flux conversationnels dédiés |
 | `interpretation` | commande dictée (US-172) : proposition, complétion, exécution par introspection |

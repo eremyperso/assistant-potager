@@ -559,7 +559,7 @@ def _decouper_details_parcelle(
 #: par un mot (« exposée sud »), elle ne pose plus de question.
 _DIRECTION_COLLEE_A_UNE_SUPERFICIE = re.compile(
     r"\s(?:nord est|nord ouest|sud est|sud ouest|nord|sud|est|ouest)\s+"
-    r"(?=-?\d+(?:[.,]\d+)?\s*(?:m2|m|metres? carres?))"
+    r"(?=-?\d+(?:[.,]\d+)?\s*(?:m2|mb|metres? carres?))"
 )
 
 
@@ -710,6 +710,68 @@ def _construire_parcelle_exposition(groupes):
     if not _nom_plausible(nom):
         return None
     return {"nom": nom, "modification": f"exposition={groupes['valeur'].replace(' ', '-')}"}
+
+
+def _est_question_fermee(nom: str) -> bool:
+    """« est-ce que la parcelle 2 est sous serre ? » interroge, elle ne déclare pas."""
+    normalise, _ = normaliser(nom)
+    return normalise.startswith("est ce")
+
+
+@_regle(
+    "parcelle_abri",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:(?:est|sont|reste|restent|passe|passent)\s+(?:maintenant\s+)?"
+    r"(?:sous|abritee?s?\s+(?:sous|par))|(?:est|sont)\s+(?P<sans>sans))\s+"
+    r"(?:(?:une?|le|la|l)\s+)?(?P<abri>serre|tunnel|chassis|voile|abri)\b",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_abri(groupes):
+    # [US-181 / CA2] « la parcelle 2 est sous serre » DÉCLARE l'état de la parcelle.
+    # « j'ai mis un voile sur le rang 3 hier » ne contient ni « sous » ni
+    # « sans » devant l'abri : il ne passe pas ici et rejoint le flux habituel.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    if groupes.get("sans"):
+        if groupes["abri"] != "abri":
+            return None  # « sans serre » : pas une déclaration d'abri
+        valeur = "aucun"
+    elif groupes["abri"] == "abri":
+        return None      # « sous abri » ne dit pas lequel : le vocabulaire est fermé
+    else:
+        valeur = groupes["abri"]
+    return {"nom": nom, "modification": f"abri={valeur}"}
+
+
+@_regle(
+    "parcelle_abri_imperatif",
+    r"\A" + _INTENTION + r"(?:mets|mettre|passe|passer|place|placer)\s+"
+    + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+sous\s+(?:(?:une?|le|la|l)\s+)?"
+    r"(?P<abri>serre|tunnel|chassis|voile)\b",
+    "parcelle",
+    "modifier",
+)
+def _construire_parcelle_abri_imperatif(groupes):
+    return _construire_parcelle_abri(groupes)
+
+
+@_regle(
+    "parcelle_paillage",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:(?:n\s+)?(?:est|sont)\s+)?(?P<neg>(?:pas|non)\s+)?paillee?s?\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_paillage(groupes):
+    # [US-181 / CA2] « rang 3 paillé » : la phrase entière est la déclaration.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    return {"nom": nom, "modification": f"paillage={'non' if groupes.get('neg') else 'oui'}"}
 
 
 @_regle(
@@ -1858,7 +1920,7 @@ def _construire_help(groupes):
 #: motif a validée. Les autres sont relus sur le texte d'origine, casse et
 #: accents intacts.
 _GROUPES_NORMALISES: frozenset[str] = frozenset({
-    "valeur", "annees", "categorie", "frequence",
+    "valeur", "annees", "categorie", "frequence", "abri",
     # [US-068] Calendrier cultural
     "zone", "phase", "phase_recolte", "etape", "mois_debut", "mois_fin", "jours_min", "jours_max",
 })
@@ -2242,10 +2304,12 @@ def nombre_en_lettres(valeur: str) -> str:
 #: chiffrée, donc relue en toutes lettres comme les autres (CA11).
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
+    "abri": None, "paillage": None,
 }
 _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
     "pepiniere": "pépinière", "ordre": "ordre d'affichage",
+    "abri": "abri", "paillage": "paillage",
 }
 
 

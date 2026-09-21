@@ -849,6 +849,10 @@ class Parcelle(Base):
                       (voir utils.stock._cond_semis_pleine_terre)
     - type_sol      : [migration_v28 / US-058] texte libre informatif (ex. "Limoneux"),
                       non exploité par le calcul de stock/plan
+    - abri, paillage : [migration_v49 / US-181] déclarés par le jardinier, NULL =
+                      jamais renseigné (distinct de abri='aucun'). Ne pilotent que
+                      la confiance (app/services/confiance_semis.py) ; `abri` n'est
+                      PAS `est_pepiniere`.
     """
     __tablename__ = "parcelles"
 
@@ -861,6 +865,8 @@ class Parcelle(Base):
     actif         = Column(Boolean, default=True, nullable=False)
     est_pepiniere = Column(Boolean, default=False, nullable=False)
     type_sol      = Column(String, nullable=True)
+    abri          = Column(String(16), nullable=True)
+    paillage      = Column(Boolean, nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent

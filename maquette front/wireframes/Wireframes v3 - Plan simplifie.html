@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="design_doc_mode" content="canvas">
+<title>Wireframes v3 — Plan simplifié</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:#2A3322;font-size:12px;line-height:1.4}
+a{color:#2A3322}a:hover{color:#4A7C22}
+.frame{position:absolute;background:#fff;border:1.5px solid #2A3322;border-radius:6px;overflow:hidden}
+.fh{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:#2A3322;letter-spacing:.02em}
+.fh small{font-weight:400;opacity:.75;margin-left:8px}
+.notes{position:absolute;display:flex;flex-direction:column;gap:14px;width:300px}
+.notes .note{position:static;width:auto}
+.note{position:absolute;background:#FBF3D5;border:1.5px solid #2A3322;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.5;width:300px}
+.note b{display:block;margin-bottom:4px}
+.note.new{background:#E6F0DA}
+.q{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10.5px;margin-right:5px}
+.bo{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10px;letter-spacing:.04em}
+.opt{display:inline-block;background:#fff;border:1.5px dashed #2A3322;border-radius:3px;padding:0 5px;font-weight:700;font-size:10px;letter-spacing:.04em}
+.pad{padding:14px}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1.5px solid #2A3322;background:#F4F4EF}
+.tabs{display:flex;gap:6px}
+.tab{padding:5px 11px;border:1.5px solid #2A3322;border-radius:20px;font-weight:600;font-size:11.5px}
+.tab.on{background:#2A3322;color:#fff}
+.h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.h2{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5A6650;margin-bottom:8px}
+.box{border:1.5px solid #2A3322;border-radius:5px;padding:10px}
+.ghost{border:1.5px dashed #8A9480;border-radius:5px;color:#6B7562}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid #2A3322;border-radius:5px;padding:5px 10px;font-weight:700;font-size:11px;background:#fff}
+.btn.p{background:#2A3322;color:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1.5px solid #2A3322;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;align-items:center}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;border:1.5px solid #2A3322;vertical-align:-2px;margin-right:5px}
+.ph1{background:#CFE3F5}.ph2{background:#CBE2B4}.ph3{background:#F6D9A4}.ph0{background:repeating-linear-gradient(45deg,#fff 0 3px,#DDE1D6 3px 6px)}
+.row{display:flex;gap:8px;align-items:center}
+.card{border:1.5px solid #2A3322;border-radius:6px;padding:10px;background:#fff}
+.rule{display:grid;grid-template-columns:20px 1fr auto;gap:9px;align-items:start;font-size:11.5px;padding:6px 0;border-top:1px solid #DDE1D6}
+/* — les trois modes — */
+.tr{height:11px;border:1.5px solid #2A3322;border-radius:6px;position:relative}
+.tr.srf::after{content:'';position:absolute;inset:0;border-radius:inherit;background:repeating-linear-gradient(45deg,#2A3322 0 1.5px,transparent 1.5px 5px);opacity:.5}
+.poqs{display:flex;gap:5px;height:11px}
+.poqs i{display:block;width:13px;border:1.5px solid #2A3322;border-radius:6px}
+.vide{height:11px;border:1.5px dashed #8A9480;border-radius:6px}
+/* — rangée d'un rang — */
+.rgrid{display:grid;grid-template-columns:42px 1fr 122px 52px;gap:8px;align-items:center;padding:3px 0}
+.rgrid .no{font-size:10.5px;font-weight:700;color:#5A6650}
+.rgrid .lb{font-size:10.5px;line-height:1.25}
+.rgrid .lb i{color:#5A6650}
+.parcel{border:1.5px solid #2A3322;border-radius:6px;background:#fff;padding:8px 10px}
+.parcel.sel{box-shadow:0 0 0 2.5px #2A3322;background:#FCFCF8}
+.parcel.abri{border-style:dashed;background:repeating-linear-gradient(45deg,#fff 0 5px,#F1F3EC 5px 10px)}
+.phd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px}
+.phd .n{font-size:12.5px;font-weight:700}
+.phd .m{font-size:10px;color:#5A6650;white-space:nowrap}
+.phd .fp{font-size:10px;font-weight:700;white-space:nowrap;text-decoration:underline}
+.flow{position:absolute;height:0;border-top:1.5px dashed #2A3322}
+.arr{position:absolute;width:0;height:0;border-left:6px solid #2A3322;border-top:5px solid transparent;border-bottom:5px solid transparent}
+</style>
+</head>
+<body>
+
+<div class="fh" style="top:20px;left:40px;font-size:20px">Wireframes v3 — le Plan simplifié <small>19 septembre 2026 · V1 de rendu : répartition des cultures, pas de géométrie</small></div>
+
+<div class="note" style="top:64px;left:40px;width:420px">
+<b>Le principe, en une phrase</b>
+Une parcelle affiche ses rangs, un rang par culture. Un rang est un trait horizontal dont la longueur dit la <b>quantité relative</b> dans cette parcelle. Aucun plant n'est dessiné, aucune surface réelle n'est calculée.
+</div>
+<div class="note new" style="top:64px;left:480px;width:400px">
+<b>Ce que la v2 proposait et qui est retiré</b>
+Longueur × largeur des parcelles, espacements du référentiel, emprise en m² par culture, nombre de rangs déduit de la largeur, alerte de débordement, échelle « 1 m = 34 px », parcelles à l'aire proportionnelle.<br>
+Les données restent utiles côté agronomie — elles ne conditionnent plus le rendu.
+</div>
+<div class="note" style="top:64px;left:900px;width:420px">
+<b>Les huit données du Plan</b>
+Parcelle · superficie m² · nombre de rangs · culture du rang · quantité · unité de quantité · mode d'implantation · phase de la culture.<br>
+Rien d'autre n'est lu. La longueur et la largeur de la parcelle ne sont pas nécessaires à cette V1.
+</div>
+
+<!-- ═══════════ 1 · les trois modes ═══════════ -->
+<div class="fh" style="top:250px;left:40px;font-size:15px">1 · Trois modes de représentation <small>le mode d'implantation donne la forme, la phase donne la couleur</small></div>
+
+<div class="frame" style="top:282px;left:40px;width:700px;height:440px">
+  <div class="bar"><span class="h1">Vocabulaire graphique</span><span style="margin-left:auto;font-size:11px;color:#5A6650">tout le Plan se lit avec ces trois formes</span></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:11px">
+    <div class="box">
+      <div class="row" style="justify-content:space-between;margin-bottom:7px"><b>Culture en rang</b><span class="pill">RANG · plants, pieds, ml</span></div>
+      <div class="rgrid"><span class="no">Rang 1</span><div class="tr ph2"></div><span class="lb">Tomate<br><i>8 plants</i></span><span class="pill ph2">en place</span></div>
+      <div class="rgrid"><span class="no">Rang 3</span><div class="tr ph2" style="width:38%"></div><span class="lb">Courgette<br><i>3 plants</i></span><span class="pill ph2">en place</span></div>
+      <div style="font-size:10.5px;color:#5A6650;margin-top:4px">Un trait plein. La longueur est la part de la quantité, rien de plus : 3 plants sur 8 → 38 % du trait le plus long de la parcelle.</div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between;margin-bottom:7px"><b>Semis à la volée / en surface</b><span class="pill">SURFACE · m²</span></div>
+      <div class="rgrid"><span class="no">Rang 4</span><div class="tr srf ph1"></div><span class="lb">Carotte<br><i>2 m²</i></span><span class="pill ph1">semé</span></div>
+      <div style="font-size:10.5px;color:#5A6650;margin-top:4px">Même gabarit de trait, tramé à 45°. Le nombre de graines n'existe pas dans la donnée : la quantité s'écrit en m², à côté.</div>
+    </div>
+    <div class="box">
+      <div class="row" style="justify-content:space-between;margin-bottom:7px"><b>Culture en poquets</b><span class="pill">POQUET · poquets</span></div>
+      <div class="rgrid"><span class="no">Rang 2</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Courge<br><i>5 poquets</i></span><span class="pill ph3">récolte</span></div>
+      <div style="font-size:10.5px;color:#5A6650;margin-top:4px">Le trait est segmenté : un segment = un poquet, pas un plant. Au-delà de 12 poquets, 12 segments et « ×18 » en libellé — on ne compte pas à l'écran.</div>
+    </div>
+  </div>
+</div>
+
+<div class="fh" style="top:250px;left:760px;font-size:15px">1b · La règle de longueur</div>
+<div class="frame" style="top:282px;left:760px;width:540px;height:356px">
+  <div class="bar"><span class="h1">Comment se calcule un trait</span></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div class="box" style="background:#F4F4EF">
+      <b style="font-size:12.5px">longueur = quantité du rang ÷ quantité du rang le plus fourni de la parcelle, <u>à unité égale</u></b>
+      <div style="font-size:11px;color:#5A6650;margin-top:5px">Trait minimum 12 % pour rester visible et cliquable. Plafond 100 % : jamais de dépassement, donc jamais d'alerte de débordement.</div>
+    </div>
+    <div class="box">
+      <div class="h2" style="margin-bottom:6px">planche centrale · 4 rangs occupés</div>
+      <div class="rgrid"><span class="no">Rang 1</span><div class="tr ph2"></div><span class="lb">Tomate · 8 plants</span><span class="lb" style="text-align:right"><b>100 %</b></span></div>
+      <div class="rgrid"><span class="no">Rang 2</span><div class="tr ph2" style="width:62%"></div><span class="lb">Tomate · 5 plants</span><span class="lb" style="text-align:right"><b>62 %</b></span></div>
+      <div class="rgrid"><span class="no">Rang 3</span><div class="tr ph2" style="width:38%"></div><span class="lb">Courgette · 3 plants</span><span class="lb" style="text-align:right"><b>38 %</b></span></div>
+      <div class="rgrid"><span class="no">Rang 4</span><div class="tr srf ph1"></div><span class="lb">Carotte · 2 m²</span><span class="lb" style="text-align:right"><b>100 %</b></span></div>
+      <div style="font-size:10.5px;color:#5A6650;margin-top:6px">Le rang 4 est le seul en m² : il est à lui seul son maximum, donc pleine longueur. Comparer un trait de plants à un trait de m² n'a pas de sens — <b>la quantité est toujours écrite à côté du trait</b>, c'est ce qui rend l'échelle inoffensive.</div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:282px;left:1330px"><div class="note new">
+<b>Pourquoi l'unité borne la comparaison</b>
+Sans espacements en base, 8 plants de tomate et 8 plants de radis occupent le même trait. Normaliser par unité, et écrire la quantité, évite de promettre une précision qui n'existe pas. Le jardinier compare ce qui est comparable : ses rangs de plants entre eux.
+</div>
+<div class="note">
+<b>Deux variables visuelles, pas trois</b>
+Forme = mode d'implantation (trait, trame, segments). Couleur = phase (semé, en place, en récolte). Pas de palette de famille dans cette vue : elle est réservée à l'onglet Rotation.
+</div>
+<div class="note">
+<b>Le rang vide reste dessiné</b>
+Le nombre de rangs déclaré fait la hauteur de la parcelle. Un rang sans culture est un trait pointillé cliquable : c'est la place libre, exprimée dans la seule unité dont on dispose — le rang.
+</div></div>
+
+<!-- ═══════════ 2 · vue plan desktop ═══════════ -->
+<div class="fh" style="top:790px;left:40px;font-size:15px">2 · Plan — sous-onglet « Vue plan » <small>1180 px · parcelles en cartes de largeur égale, dans l'ordre déclaré · aucune mise à l'échelle entre parcelles</small></div>
+
+<div class="frame" style="top:822px;left:40px;width:1180px;height:712px">
+  <div class="bar"><span class="h1">Plan</span><div class="tabs"><span class="tab">Parcelles</span><span class="tab on">Vue plan</span><span class="tab">Rotation</span></div><span style="margin-left:auto" class="pill">au 19 sept.</span><span class="btn">Réordonner</span><span class="btn p">Journal du jour</span></div>
+  <div class="pad" style="height:calc(100% - 45px)">
+    <div style="display:flex;flex-direction:column;gap:9px;height:100%">
+      <div class="row" style="justify-content:space-between">
+        <div class="leg"><span><i class="sw ph1"></i>semé</span><span><i class="sw ph2"></i>en place</span><span><i class="sw ph3"></i>en récolte</span><span><i class="sw ph0"></i>rang libre</span></div>
+        <div class="leg" style="font-size:10.5px"><span>trait = rang · trame = surface · segments = poquets</span><span style="color:#5A6650">· appui sur un rang → fiche culture</span></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start">
+
+        <div class="parcel">
+          <div class="phd"><span class="n">planche-centrale</span><span class="m">12 m² · 4 rangs sur 5 · <a class="fp" href="#">Fiche parcelle →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="tr ph2"></div><span class="lb">Tomate<br><i>noire de Crimée · 8 plants</i></span><span class="pill ph2">en place</span></div>
+          <div class="rgrid"><span class="no">Rang 2</span><div class="tr ph2" style="width:62%"></div><span class="lb">Tomate<br><i>cerise · 5 plants</i></span><span class="pill ph2">en place</span></div>
+          <div class="rgrid"><span class="no">Rang 3</span><div class="tr ph3" style="width:38%"></div><span class="lb">Courgette<br><i>3 plants</i></span><span class="pill ph3">récolte</span></div>
+          <div class="rgrid"><span class="no">Rang 4</span><div class="tr srf ph1"></div><span class="lb">Carotte<br><i>2 m² semés</i></span><span class="pill ph1">semé</span></div>
+          <div class="rgrid"><span class="no">Rang 5</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre<br><i><u>ajouter une culture</u></i></span><span class="pill ghost" style="border-style:dashed">—</span></div>
+        </div>
+
+        <div class="parcel">
+          <div class="phd"><span class="n">planche-courges</span><span class="m">8 m² · 3 rangs sur 3 · <a class="fp" href="#">Fiche →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="poqs"><i class="ph2"></i><i class="ph2"></i><i class="ph2"></i><i class="ph2"></i></div><span class="lb">Courge butternut<br><i>4 poquets</i></span><span class="pill ph2">en place</span></div>
+          <div class="rgrid"><span class="no">Rang 2</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Potiron<br><i>3 poquets</i></span><span class="pill ph3">récolte</span></div>
+          <div class="rgrid"><span class="no">Rang 3</span><div class="tr ph2"></div><span class="lb">Haricot à rames<br><i>12 plants</i></span><span class="pill ph2">en place</span></div>
+        </div>
+
+        <div class="parcel">
+          <div class="phd"><span class="n">planche-ombre</span><span class="m">10 m² · 3 rangs sur 5 · <a class="fp" href="#">Fiche →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="tr ph1"></div><span class="lb">Épinard<br><i>3 m² semés</i></span><span class="pill ph1">semé</span></div>
+          <div class="rgrid"><span class="no">Rang 2</span><div class="tr ph1" style="width:100%"></div><span class="lb">Mâche<br><i>24 plants</i></span><span class="pill ph1">semé</span></div>
+          <div class="rgrid"><span class="no">Rang 3</span><div class="tr ph3" style="width:50%"></div><span class="lb">Laitue<br><i>12 plants</i></span><span class="pill ph3">récolte</span></div>
+          <div class="rgrid"><span class="no">Rang 4</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre</span><span class="pill ghost" style="border-style:dashed">—</span></div>
+          <div class="rgrid"><span class="no">Rang 5</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre</span><span class="pill ghost" style="border-style:dashed">—</span></div>
+        </div>
+
+        <div class="parcel">
+          <div class="phd"><span class="n">carré-aromates</span><span class="m">5 m² · 2 rangs sur 2 · <a class="fp" href="#">Fiche →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Persil<br><i>5 poquets</i></span><span class="pill ph3">récolte</span></div>
+          <div class="rgrid"><span class="no">Rang 2</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Ciboulette<br><i>2 poquets</i></span><span class="pill ph3">récolte</span></div>
+        </div>
+
+        <div class="parcel">
+          <div class="phd"><span class="n">butte</span><span class="m">3 m² · 1 rang sur 1 · <a class="fp" href="#">Fiche →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="tr srf ph1"></div><span class="lb">Radis<br><i>1 m² semé</i></span><span class="pill ph1">semé</span></div>
+        </div>
+
+        <div class="parcel">
+          <div class="phd"><span class="n">planche-nord</span><span class="m">4 m² · 0 rang sur 2 · <b>libre</b> · <a class="fp" href="#">Fiche →</a></span></div>
+          <div class="rgrid"><span class="no">Rang 1</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre<br><i><u>ajouter une culture</u></i></span><span class="pill ghost" style="border-style:dashed">—</span></div>
+          <div class="rgrid"><span class="no">Rang 2</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre</span><span class="pill ghost" style="border-style:dashed">—</span></div>
+        </div>
+
+        <div class="parcel abri">
+          <div class="phd"><span class="n">SERRE</span><span class="m">2,5 m² · sous abri · <a class="fp" href="#">Fiche →</a></span></div>
+          <div style="font-size:10.5px;color:#5A6650">3 lots en cours — la pépinière ne se compte pas en rangs. <u>Voir Pépinière →</u></div>
+        </div>
+
+        <div class="parcel ghost" style="display:flex;align-items:center;font-size:10.5px">planche-est · <b style="margin:0 4px">nombre de rangs non renseigné</b> — la parcelle apparaît, sans dessin. <span class="bo" style="margin-left:5px">BACKOFFICE</span></div>
+
+      </div>
+      <div class="row" style="margin-top:auto;gap:12px;font-size:11px;color:#5A6650;flex-wrap:wrap"><span>Total 44,5 m²</span><span>·</span><span><b>13 rangs occupés sur 18</b> déclarés — 72 %</span><span>·</span><span>Libre : planche-nord (2 rangs), planche-ombre (2 rangs), planche-centrale (1 rang)</span></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="notes" style="top:822px;left:1250px"><div class="note new">
+<b>Plus de treemap, plus d'échelle</b>
+Les parcelles ne sont plus des rectangles d'aire proportionnelle : une carte par parcelle, toutes de même largeur, dans l'ordre déclaré. La superficie reste écrite en clair. C'est le seul moyen d'avoir des traits lisibles sur une petite parcelle comme sur une grande, et ça supprime toute promesse de plan à l'échelle.
+</div>
+<div class="note">
+<b>La mesure d'occupation change</b>
+Ce n'est plus un pourcentage de m² (que la V1 ne sait pas calculer) mais <b>rangs occupés / rangs déclarés</b>. Honnête, calculable dès aujourd'hui, et directement actionnable : « 5 rangs libres, dont 2 d'un seul tenant au nord ».
+</div>
+<div class="note">
+<b>Ce que le jardinier lit en trois secondes</b>
+1. Les cultures présentes — un libellé par rang, jamais masqué.<br>
+2. Le nombre de rangs occupés — la hauteur de la carte.<br>
+3. Qui prend le plus de place — le trait le plus long.<br>
+4. Ce qui est semé en surface — la trame.<br>
+5. La phase — la couleur et le mot.
+</div>
+<div class="note new">
+<b>Le panneau de détail est supprimé</b>
+Il reformatait les mêmes informations que la carte. La carte devient donc l'unique représentation : elle porte le lien vers la fiche parcelle, chaque rang mène à sa culture, et « Journal du jour » remonte dans la barre de l'écran pour ne plus dépendre d'une sélection.
+</div>
+<div class="note">
+<b>Parcelles incomplètes</b>
+Sans nombre de rangs, la parcelle s'affiche quand même, en pointillé, sans dessin, avec la mention du champ manquant. Elle ne disparaît jamais du Plan et l'écran ne propose pas de la corriger : la saisie reste au backoffice.
+</div>
+<div class="note">
+<b>La serre ne se dessine pas ici</b>
+Une parcelle sous abri n'a pas de rangs mais des lots. Carte hachurée, compte des lots, lien vers Pépinière. Aucun trait, pour ne pas suggérer une occupation qui se lit ailleurs.
+</div></div>
+
+<!-- ═══════════ 2b · mobile ═══════════ -->
+<div class="fh" style="top:1850px;left:40px;font-size:15px">2b · Vue plan — 375 px</div>
+<div class="frame" style="top:1882px;left:40px;width:375px;height:700px">
+  <div class="bar" style="padding:8px 12px"><span class="h1">Plan</span><div class="tabs"><span class="tab" style="padding:3px 8px">Parcelles</span><span class="tab on" style="padding:3px 8px">Vue plan</span></div><span class="btn p" style="margin-left:auto;padding:4px 8px">Journal</span></div>
+  <div class="pad" style="padding:12px;display:flex;flex-direction:column;gap:9px">
+    <div class="leg" style="gap:9px;font-size:10px"><span><i class="sw ph1"></i>semé</span><span><i class="sw ph2"></i>en place</span><span><i class="sw ph3"></i>récolte</span><span><i class="sw ph0"></i>libre</span></div>
+    <div style="font-size:10.5px;color:#5A6650">44,5 m² · 13 rangs occupés sur 18</div>
+
+    <div class="parcel">
+      <div class="phd"><span class="n">planche-centrale</span><span class="m">12 m² · 4/5 · <a class="fp" href="#">Fiche →</a></span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R1</span><div class="tr ph2"></div><span class="lb">Tomate · 8 pl.</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R2</span><div class="tr ph2" style="width:62%"></div><span class="lb">Tomate · 5 pl.</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R3</span><div class="tr ph3" style="width:38%"></div><span class="lb">Courgette · 3</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R4</span><div class="tr srf ph1"></div><span class="lb">Carotte · 2 m²</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R5</span><div class="vide"></div><span class="lb" style="color:#6B7562">libre</span></div>
+    </div>
+    <div class="parcel">
+      <div class="phd"><span class="n">planche-courges</span><span class="m">8 m² · 3/3 · <a class="fp" href="#">Fiche →</a></span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R1</span><div class="poqs"><i class="ph2"></i><i class="ph2"></i><i class="ph2"></i><i class="ph2"></i></div><span class="lb">Courge · 4 poq.</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R2</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Potiron · 3 poq.</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R3</span><div class="tr ph2"></div><span class="lb">Haricot · 12 pl.</span></div>
+    </div>
+    <div class="parcel">
+      <div class="phd"><span class="n">carré-aromates</span><span class="m">5 m² · 2/2 · <a class="fp" href="#">Fiche →</a></span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R1</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Persil · 5 poq.</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R2</span><div class="poqs"><i class="ph3"></i><i class="ph3"></i></div><span class="lb">Ciboulette · 2</span></div>
+    </div>
+    <div class="parcel" style="opacity:.5">
+      <div class="phd"><span class="n">planche-ombre</span><span class="m">10 m² · 3/5</span></div>
+      <div class="rgrid" style="grid-template-columns:34px 1fr 96px;gap:7px"><span class="no">R1</span><div class="tr ph1"></div><span class="lb">Épinard · 3 m²</span></div>
+    </div>
+    <div style="font-size:10.5px;color:#5A6650">La liste défile : planche-ombre, butte, planche-nord, SERRE. Une seule colonne, aucune feuille de détail — appui sur un rang → fiche culture, appui sur « Fiche → » → fiche parcelle.</div>
+  </div>
+</div>
+
+<!-- ═══════════ 3 · règles UX ═══════════ -->
+<div class="fh" style="top:1850px;left:460px;font-size:15px">3 · Règles UX et interaction du Plan <small>mises à jour pour cette V1 · remplacent les six règles du moteur géométrique de la v2</small></div>
+<div class="frame" style="top:1882px;left:460px;width:760px;height:864px">
+  <div class="bar"><span class="h1">Règles</span><span style="margin-left:auto;font-size:11px;color:#5A6650">lecture seule · toute saisie reste au backoffice <span class="bo">BACKOFFICE</span></span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div>
+      <div class="h2">Rendu</div>
+      <div class="rule" style="border:none"><b>1</b><span><b>Une carte par parcelle</b>, largeur égale, ordre déclaré. Pas d'aire proportionnelle, pas de position, pas de forme.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>2</b><span><b>Un rang = une ligne</b>, du rang 1 au dernier rang déclaré. La hauteur de la carte vient du nombre de rangs.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>3</b><span><b>Longueur = quantité relative</b> au rang le plus fourni de la parcelle, à unité égale. Plancher 12 %, plafond 100 %.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>4</b><span><b>Forme = mode d'implantation</b> : trait plein (rang), trait tramé (surface), trait segmenté (poquets, 12 segments maximum).</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>5</b><span><b>Couleur = phase</b> : semé, en place, en récolte. Jamais la famille, jamais la confiance.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>6</b><span><b>Libellé toujours visible</b> à droite du trait : culture, variété si connue, quantité + unité. Aucun survol requis pour identifier un rang.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>7</b><span><b>Rang sans culture</b> : trait pointillé, mention « libre », action <i>ajouter une culture</i>.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>8</b><span><b>Parcelle sous abri</b> : carte hachurée, compte de lots, lien Pépinière. Pas de rangs.</span><span class="pill">rendu</span></div>
+      <div class="rule"><b>9</b><span><b>Donnée manquante</b> : la parcelle reste affichée avec le nom du champ absent. Pas de valeur inventée, pas d'estimation.</span><span class="pill" style="border-style:dashed">repli</span></div>
+    </div>
+    <div>
+      <div class="h2">Interaction</div>
+      <div class="rule" style="border:none"><b>10</b><span><b>Pas de panneau de détail, pas de feuille.</b> La carte de parcelle porte déjà tout ce qu'un panneau afficherait ; le dupliquer dans un second format n'ajoute rien. Aucun état « parcelle sélectionnée ».</span><span class="pill" style="background:#F7D6D0">non</span></div>
+      <div class="rule"><b>11</b><span><b>Appui sur un rang</b> → fiche de la culture de ce rang, directement. Cible de 44 px minimum sur mobile, trait et libellé compris. Un rang libre ouvre <i>ajouter une culture</i>.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>11b</b><span><b>« Fiche parcelle → »</b> dans l'en-tête de chaque carte : le seul accès à la parcelle elle-même, puisque le rang mène à la culture.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>12</b><span><b>Aucun geste de dessin</b> : pas de zoom, pas de pan, pas de glisser-déposer de culture, pas de redimensionnement. Le Plan n'est pas un éditeur.</span><span class="pill" style="background:#F7D6D0">non</span></div>
+      <div class="rule"><b>13</b><span><b>« Réordonner »</b> : seule action de mise en page, glisse l'ordre des parcelles. Rien d'autre n'est déplaçable.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>14</b><span><b>« Journal du jour »</b> est une action de l'écran Plan, dans la barre du haut, indépendante de toute sélection. Elle ne disparaît plus avec le panneau.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>14b</b><span><b>Pied de vue</b> : total m², rangs occupés / déclarés, liste des rangs libres. Trois chiffres, pas un tableau de bord.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>15</b><span><b>Date de référence</b> affichée en haut : la phase est celle du jour, jamais une projection.</span><span class="pill">interaction</span></div>
+      <div class="rule"><b>16</b><span><b>Couleur non porteuse seule</b> : la phase est aussi écrite en mot sur chaque rang, et le mode se lit à la forme. Lisible en niveaux de gris.</span><span class="pill">a11y</span></div>
+      <div class="rule"><b>17</b><span><b>Sorties du Plan</b> : le rang → fiche culture, l'en-tête de carte → fiche parcelle, la carte SERRE → Pépinière, la barre → Journal du jour. Quatre sorties, aucune vue dupliquée.</span><span class="pill">interaction</span></div>
+      <div class="box" style="background:#FBF3D5;padding:9px;margin-top:11px;font-size:11px"><b>Règle générale</b><br>Si une information demande un calcul géométrique pour s'afficher, elle n'est pas dans cette V1. La précision agronomique reste dans la fiche culture et les données de plantation.</div>
+    </div>
+  </div>
+</div>
+
+<div class="notes" style="top:1882px;left:1250px"><div class="note">
+<b>Ce que ça libère</b>
+Aucune saisie backoffice supplémentaire : superficie, nombre de rangs, quantité, unité et mode d'implantation existent déjà ou sont un champ à valeur par défaut (RANG). Le rendu peut partir sans attendre la reprise des 84 fiches du référentiel.
+</div>
+<div class="note new">
+<b>Mode d'implantation : le seul champ à garantir</b>
+C'est la seule donnée du lot qui n'a pas toujours de valeur. Défaut retenu : <b>RANG</b>, sauf si l'unité de quantité est le m² (→ SURFACE) ou le poquet (→ POQUET). L'unité suffit donc à décider dans la quasi-totalité des cas.
+</div>
+<div class="note">
+<b>Reporté, pas abandonné</b>
+Longueur × largeur, espacements, emprise en m², « reste 5,2 m² soit 1 rang de 4 m », débordement : la v2 reste le dossier de référence pour le jour où ces données existent. Le dessin en traits ne devient alors qu'un niveau de repli — la lecture ne change pas.
+</div></div>
+
+<!-- ═══════════ 4 · avant / après ═══════════ -->
+<div class="fh" style="top:2800px;left:40px;font-size:15px">4 · Ce qui change par rapport à la v2</div>
+<div class="frame" style="top:2832px;left:40px;width:1180px;height:300px">
+  <div class="pad" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;height:100%">
+    <div class="box" style="display:flex;flex-direction:column;gap:6px">
+      <div class="h2" style="margin:0">Retiré du rendu</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:4px">
+        <div>Parcelles à l'aire proportionnelle (treemap v1 et plan à l'échelle v2)</div>
+        <div>Longueur × largeur, orientation des rangs</div>
+        <div>Espacement sur le rang et entre rangs</div>
+        <div>Nombre de rangs déduit de la largeur</div>
+        <div>Emprise en m² par culture, galets de grand développement</div>
+        <div>Occupation en % de surface, alerte de débordement</div>
+        <div>Échelle, règle graduée, mention « dimensions estimées »</div>
+      </div>
+    </div>
+    <div class="box" style="display:flex;flex-direction:column;gap:6px">
+      <div class="h2" style="margin:0">Conservé</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:4px">
+        <div>Le rang comme unité de lecture, du rang 1 au dernier</div>
+        <div>La palette de phase : semé, en place, en récolte</div>
+        <div>La forme selon le mode d'implantation</div>
+        <div>Le rang libre en pointillé, cliquable</div>
+        <div>La même carte sur desktop et sur mobile, sans panneau de détail</div>
+        <div>La serre renvoyée vers Pépinière</div>
+        <div>Lecture seule, saisie au backoffice</div>
+      </div>
+    </div>
+    <div class="box" style="display:flex;flex-direction:column;gap:6px;background:#FBF3D5">
+      <div class="h2" style="margin:0">À trancher avant la haute fidélité</div>
+      <div style="font-size:11.5px;display:flex;flex-direction:column;gap:5px">
+        <div><b>1.</b> Deux colonnes de cartes en desktop, ou une seule colonne plus large maintenant que le panneau est retiré ?</div>
+        <div><b>2.</b> Le plancher de 12 % sur les traits très courts : acceptable, ou trait à sa vraie proportion même illisible ?</div>
+        <div><b>3.</b> « 13 rangs sur 18 » suffit-il comme mesure d'occupation, ou faut-il garder un pourcentage par parcelle sur la carte ?</div>
+        <div><b>4.</b> Le mode d'implantation est-il saisi, ou entièrement déduit de l'unité de quantité en V1 ?</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
