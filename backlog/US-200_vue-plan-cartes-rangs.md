@@ -1,6 +1,6 @@
 **ID :** US-200
 **Titre :** Afficher la Vue plan — une carte par parcelle, un trait par rang
-**Épic :** ÉPIC 10 — Plan : l'occupation en rangs *(numéro à valider, voir le plan des épics 9 à 12)*
+**Épic :** ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information *(numéro à valider, voir le plan des épics 9 à 12)*
 
 **Story :**
 En tant que jardinier
@@ -44,7 +44,7 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 - [ ] CA1 : Le sous-onglet « Vue plan » remplace son écran d'attente et applique les règles V1 à V17 à partir de la seule lecture de `GET /plan` (US-198) — aucune autre requête
 - [ ] CA2 : Les longueurs, plancher, plafond, segments et « ×N », le texte du pied de vue et les libellés de rang sont calculés par une lib sans React (`frontend/src/lib/planVue.js`) couverte par `npm test`, sur le modèle de `plan.js` et `pepiniere.js`
 - [ ] CA3 : Les teintes de phase viennent de `PastillePhase` / `LegendePhases` (US-194) ; les trames (surface, rang libre, pépinière) sont des tokens du design system avec leur variante sombre
-- [ ] CA4 : Les composants de carte, de rang et de trait acceptent une **palette en paramètre**, pour que l'onglet Rotation (hors périmètre, en construction) les reprenne sans les modifier
+- [ ] CA4 : Les composants de carte, de rang et de trait acceptent une **palette en paramètre**, pour que l'onglet Rotation (hors périmètre, en construction) les reprenne sans les modifier, et une **variante de taille**, pour que l'onglet Parcelles les reprenne agrandis (US-222, niveau 2 du zoom) sans en refaire un second dessin
 
 *Mise en page*
 - [ ] CA5 : Deux colonnes de cartes à partir de 720 px de **largeur de conteneur**, une en dessous, jamais trois (A1) ; container queries, jamais de breakpoint d'écran (règle « Responsive » de `frontend/CLAUDE.md`)
@@ -67,7 +67,7 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 - Zone fonctionnelle concernée : consultation (PWA, écran Plan)
 - Migration BDD requise : **non**
 - Dépendances : **US-198** (répartition, bloquante), **US-194** (phase et pastille, bloquante) ; US-208 (type de pépinière) et US-199 (unité poquet) enrichissent le rendu sans le bloquer
-- Suites : US-201 (interactions et sorties), US-202 (réordonner)
+- Suites : US-201 (interactions et sorties), US-202 (réordonner), US-222 (l'onglet Parcelles reprend ses composants agrandis), US-223 (l'ordre des sous-onglets et l'onglet d'entrée)
 - Impact tokens : zéro
 - Impact design system : nouveaux composants `CartePlanParcelle`, `RangPlan`, `TraitRang` (quatre variantes : plein, tramé, segmenté, libre) ; `PastillePhase` et `LegendePhases` réutilisés ; aucun composant existant modifié
 - Point de vigilance : les observations (US-039) ne sont **pas** portées sur la Vue plan ; elles restent sur l'onglet Parcelles

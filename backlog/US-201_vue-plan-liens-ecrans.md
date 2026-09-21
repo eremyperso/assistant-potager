@@ -1,6 +1,6 @@
 **ID :** US-201
 **Titre :** Relier la Vue plan et l'onglet Parcelles aux autres écrans — rang, fiche parcelle, pépinière, journal du jour
-**Épic :** ÉPIC 10 — Plan : l'occupation en rangs *(numéro à valider, voir le plan des épics 9 à 12)*
+**Épic :** ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information *(numéro à valider, voir le plan des épics 9 à 12)*
 
 **Story :**
 En tant que jardinier
@@ -38,7 +38,7 @@ Elle ajoute aussi à l'onglet **Parcelles** l'entrée vers la fiche culture. ⚖
 - [ ] CA7 : Les rangs de la carte « non localisé » ouvrent eux aussi la fiche de leur culture, sans contexte de parcelle
 
 *Onglet Parcelles*
-- [ ] CA8 : Chaque tuile de culture de l'onglet Parcelles porte un lien « Voir la culture » qui ouvre la même fiche culture, avec la parcelle en contexte. Tout le reste de la tuile est **inchangé** : frise, pastille de confiance, ouverture de la fiche calendrier, observations, sélection (arbitrage A7)
+- [ ] CA8 : Chaque tuile de culture de l'onglet Parcelles porte un lien « Voir la culture » qui ouvre la même fiche culture, avec la parcelle en contexte ; la tuile entière est une cible d'appui menant au même endroit. Tout le reste de la tuile est **inchangé** : frise, pastille de confiance, ouverture de la fiche calendrier, observations, sélection (arbitrages A7 et A21). Le **numéro de rang et le trait** que la v4 ajoute à cette tuile ne sont pas de cette US : ils viennent avec US-222, qui recoud l'onglet Parcelles sur la Vue plan
 
 *Définition de terminé*
 - [ ] CA9 : La correspondance « élément appuyé → destination et intention » vit dans la lib de la Vue plan et est couverte par `npm test` (rang occupé, rang libre, en-tête, pépinière avec une ou plusieurs pépinières, non localisé, lecteur)
@@ -51,7 +51,7 @@ Elle ajoute aussi à l'onglet **Parcelles** l'entrée vers la fiche culture. ⚖
 - Dépendances : **US-200** (Vue plan), **US-195** (navigation contextuelle), **US-207** (fiche culture), **US-196** (geste pré-rempli) — toutes bloquantes pour la sortie qu'elles portent ; US-203 (rang pré-rempli), optionnelle
 - Impact tokens : zéro
 - Point de vigilance : aucune sortie ne duplique une vue. La Vue plan ne réaffiche ni la frise, ni la confiance, ni le détail d'une parcelle : elle **renvoie** vers l'écran qui les porte
-- Point ouvert (arbitrage A7) : faut-il, une fois l'écran Cultures livré, retirer de la tuile de l'onglet Parcelles sa frise et sa puce de confiance comme le proposait la v1 ? Ce serait revenir sur une partie d'US-180 et d'US-183 ; à décider par le PO, hors de cette US
+- Point tranché (arbitrages A7 puis A21) : la tuile de l'onglet Parcelles **garde** sa frise et sa puce de confiance. La v1 proposait de les retirer ; la v4 confirme l'inverse en faisant du niveau 2 le seul porteur de la frise conseillée et de la confiance (matrice « qui porte quoi », § 2). Reste à vérifier en haute fidélité que la tuile tient à 375 px une fois son trait de rang ajouté (US-222)
 - Wireframe : v3 § 3, colonne « Interaction », règles 10 à 14 et 17
 
 **Estimation :** 3 points

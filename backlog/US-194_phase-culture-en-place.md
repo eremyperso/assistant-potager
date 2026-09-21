@@ -8,7 +8,7 @@ Je veux voir, pour chaque culture de mes parcelles, si elle vient d'être semée
 Afin de lire l'état de mon potager d'un coup d'œil, avec le même mot sur le Plan, sur l'écran Cultures et dans la fiche d'une culture
 
 **Contexte fonctionnel :**
-Les trois wireframes colorent chaque culture par sa **phase du moment** : *semé*, *en place*, *en récolte* (v1 : « phase déduite » ; v3 règle 5 : « Couleur = phase »). La Vue plan (US-200) en fait sa couleur, l'écran Cultures (US-205) sa pastille « en récolte · 2 parcelles », la fiche culture (US-207) la ligne de chaque variété cultivée.
+Les quatre wireframes colorent chaque culture par sa **phase du moment** : *semé*, *en place*, *en récolte* (v1 : « phase déduite » ; v3 règle 5 : « Couleur = phase »). La Vue plan (US-200) en fait sa couleur, l'écran Cultures (US-205) sa pastille « en récolte · 2 parcelles », la fiche culture (US-207) la ligne de chaque variété cultivée.
 
 Cette phase n'existe nulle part aujourd'hui. Ce qui existe : l'état d'une série recalée (US-070 : `a_venir`, `recolte_attendue`, `en_recolte`, `recolte_depassee`, `sans_recalage`), qui dépend du référentiel et disparaît quand la culture n'en a pas. La phase doit, elle, être **toujours** calculable : une plantation sans référentiel reste « en place », une récolte notée reste une récolte.
 

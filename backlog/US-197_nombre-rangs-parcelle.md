@@ -1,6 +1,6 @@
 **ID :** US-197
 **Titre :** Déclarer le nombre de rangs d'une parcelle
-**Épic :** ÉPIC 10 — Plan : l'occupation en rangs *(numéro à valider, voir le plan des épics 9 à 12)*
+**Épic :** ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information *(numéro à valider, voir le plan des épics 9 à 12)*
 
 **Story :**
 En tant que jardinier

@@ -1,6 +1,6 @@
 **ID :** US-198
 **Titre :** Répartir les cultures en place sur les rangs de leur parcelle — lecture serveur de la Vue plan
-**Épic :** ÉPIC 10 — Plan : l'occupation en rangs *(numéro à valider, voir le plan des épics 9 à 12)*
+**Épic :** ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information *(numéro à valider, voir le plan des épics 9 à 12)*
 
 **Story :**
 En tant que jardinier
@@ -48,7 +48,7 @@ Cette US calcule la répartition **côté serveur, à un seul endroit**, et l'aj
 - Zone fonctionnelle concernée : analyse (lecture), consultation
 - Migration BDD requise : **non**
 - Dépendances : **US-194** (phase), **US-197** (nombre de rangs) — bloquantes ; US-199 (unité poquet) pour que le mode poquet apparaisse, non bloquante ; US-070 (séries, livrée)
-- Consommateurs : US-200 (Vue plan), US-217 (où mettre les plants d'un lot), US-215 (« Prêts pour le plan »)
+- Consommateurs : US-200 (Vue plan), US-222 (détail de parcelle, même répartition), US-217 (où mettre les plants d'un lot), US-215 (« Prêts pour le plan »)
 - Impact tokens : zéro
 - Point de vigilance : la **longueur** d'un trait n'est pas calculée ici. C'est de la mise en forme (quantité par rang comparée au rang le plus fourni de la même unité), portée par la lib de la Vue plan (US-200)
 - Point de vigilance : la répartition ne dit **rien de la surface**. « 1 rang libre » n'est pas « 1,2 m² libre » : la géométrie de la v2 est reportée (plan des épics § 9)

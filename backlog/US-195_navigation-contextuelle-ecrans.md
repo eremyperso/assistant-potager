@@ -16,6 +16,8 @@ Cette US ajoute ce mécanisme, **sans introduire de routeur** : une vue peut en 
 
 ⚖️ Les **fiches** (culture, calendrier, lot) ne sont pas des navigations : ce sont des panneaux ouverts par-dessus l'écran. Les fermer rend l'écran dans son état exact — règle déjà posée par US-183 / CA3, généralisée ici.
 
+⚖️ Le wireframe v4 étend cette exigence au **zoom d'information** : quatre niveaux — potager entier, parcelle, culture, calendrier — que l'on descend par appui et que l'on remonte par le retour ou les onglets, « sans cul-de-sac » et « sans tunnel ». Remonter doit rendre le niveau d'origine dans son état exact, pas seulement fermer un panneau (règle 25) : c'est l'objet du CA9.
+
 **Critères d'acceptance :**
 
 *L'intention entre deux écrans*
@@ -42,24 +44,27 @@ Cette US ajoute ce mécanisme, **sans introduire de routeur** : une vue peut en 
 *Les panneaux*
 - [ ] CA8 : Ouvrir puis fermer une fiche (culture, calendrier, lot) rend l'écran dans son état exact : onglet, recherche, tri, filtre, sélection, position de défilement. Deux fiches peuvent s'empiler (fiche culture puis fiche calendrier) ; Échap ferme la plus haute seulement
 
+*Les niveaux du zoom*
+- [ ] CA9 : Un écran quitté puis rouvert pendant la session est rendu dans son **état exact** : sous-onglet, parcelle sélectionnée, onglet de la Pépinière, recherche, tri, filtre, position de défilement et focus. C'est la règle 25 de la v4 — « remonter rend l'état exact » — et elle vaut pour les allers-retours entre sous-onglets d'une même activité (Vue plan ↔ Parcelles, US-222, US-223) comme entre activités. Une intention reçue (CA1) l'emporte toujours sur l'état mémorisé ; l'état vit en mémoire de session, il n'est jamais persisté
+
 *Hors périmètre, dit explicitement*
-- [ ] CA9 : Aucun routeur n'est introduit et le bouton Retour du navigateur garde son comportement actuel ; c'est noté comme dette dans `ANALYSE_REFONTE_UI_WEB_2026.md`
+- [ ] CA10 : Aucun routeur n'est introduit et le bouton Retour du navigateur garde son comportement actuel ; c'est noté comme dette dans `ANALYSE_REFONTE_UI_WEB_2026.md`
 
 *Définition de terminé*
-- [ ] CA10 : La lecture, la validation et la consommation d'une intention vivent dans une lib (`frontend/src/lib/intentions.js`) couverte par `npm test` : clés reconnues, valeurs invalides, clé inconnue, intention par l'adresse, retrait de l'adresse, conservation à travers la connexion
-- [ ] CA11 : Aucune fiche du corpus n'est concernée (navigation d'interface) ; la note d'architecture de la coquille (`ANALYSE_REFONTE_UI_WEB_2026.md`) décrit le mécanisme en une section
+- [ ] CA11 : La lecture, la validation et la consommation d'une intention vivent dans une lib (`frontend/src/lib/intentions.js`) couverte par `npm test` : clés reconnues, valeurs invalides, clé inconnue, intention par l'adresse, retrait de l'adresse, conservation à travers la connexion, restitution d'un état de niveau et priorité de l'intention sur cet état
+- [ ] CA12 : Aucune fiche du corpus n'est concernée (navigation d'interface) ; la note d'architecture de la coquille (`ANALYSE_REFONTE_UI_WEB_2026.md`) décrit le mécanisme en une section
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : consultation (PWA, coquille)
 - Migration BDD requise : **non**
 - Dépendances : US-053 (coquille à deux niveaux, livrée), US-054 et US-088 (potager actif, livrées)
-- Consommateurs : US-201 (sorties de la Vue plan), US-207 (fiche culture), US-215 et US-216 (Pépinière), US-221 (étiquettes)
+- Consommateurs : US-201 (sorties de la Vue plan), US-207 (fiche culture), US-215 et US-216 (Pépinière), US-221 (étiquettes), US-222 et US-223 (niveaux du zoom de l'activité Plan)
 - Impact tokens : zéro
 - Point de vigilance : l'intention est un **contexte de lecture**, jamais une commande. Elle ne déclenche aucune écriture, même par l'adresse (règle d'US-221 : « le scan ne fait que remplacer la navigation »)
 - Point de vigilance : l'intention par l'adresse ne porte que des identifiants courts (numéro de lot, identifiant de parcelle) ; le jeton d'une étiquette (US-221) est résolu côté serveur, jamais interprété par le front
 - Point de vigilance : le mécanisme de l'adresse doit cohabiter avec les deux entrées existantes — `/reinitialiser-mot-de-passe?token=…` (US-057) et le fragment de retour OAuth (US-090) — sans les intercepter
 
-**Estimation :** 3 points
+**Estimation :** 5 points
 
 **Scénario Gherkin :**
 ```gherkin

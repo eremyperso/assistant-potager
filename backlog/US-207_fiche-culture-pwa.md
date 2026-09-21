@@ -49,7 +49,7 @@ La fiche culture est le point d'arrivée de plusieurs écrans : carte de l'écra
 - Zone fonctionnelle concernée : consultation (PWA)
 - Migration BDD requise : **non**
 - Dépendances : **US-206** (lecture de la fiche), **US-195** (liens vers parcelle et lot, retour à l'état exact) ; US-183 (fiche calendrier, livrée) ; US-194 (pastille de phase) ; US-196 pour le bouton d'enregistrement de la fiche calendrier
-- Consommateurs : US-201, US-205, US-215, US-216, US-218
+- Consommateurs : US-201, US-205, US-215, US-216, US-218, US-222 (tuile de l'onglet Parcelles)
 - Impact tokens : zéro
 - Impact design system : un composant `FicheCulture` ; réutilise `Modal` (disposition adaptative), `MonthStrip`, `Etoiles`, `PastillePhase`, `Badge`, `FicheCalendrier`. L'empilement de deux fenêtres modales est vérifié sur le composant partagé, pas contourné dans la fiche
 - Point de vigilance : la section *Maintenant* **ne recalcule rien** ; elle met en forme la confiance et le calendrier déjà lus. Deux valeurs différentes entre la carte, la fiche culture et la fiche calendrier au même instant sont un bug
