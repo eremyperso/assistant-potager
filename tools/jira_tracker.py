@@ -566,7 +566,100 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
     return cle
 
 
-def sync_backlog(backlog_dir: "str | Path" = "backlog") -> list[tuple[str, Optional[str], str]]:
+def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
+    """
+    Repousse vers Jira le contenu d'un fichier backlog dont l'issue existe déjà :
+    résumé, description et épic (`parent`). Le statut n'est JAMAIS touché, ni les
+    pièces jointes (Jira ne les dédoublonne pas : les rejouer créerait des doublons).
+
+    Si aucune issue ne porte ce préfixe, elle est créée (`create_issue_from_backlog`).
+    Épic introuvable : avertissement, le `parent` actuel est conservé.
+
+    Retourne la clé Jira, `None` en mode dégradé. Ne lève jamais pour une cause
+    externe ; lève `JiraTrackerError` si le fichier est illisible ou mal formé.
+    """
+    chemin = Path(md_path)
+    try:
+        contenu = chemin.read_text(encoding="utf-8")
+    except OSError as err:
+        raise JiraTrackerError(f"Impossible de lire {chemin} : {err}")
+
+    champs = _parse_backlog_md(contenu)
+    if not champs["id"] or not champs["titre"]:
+        raise JiraTrackerError(
+            f"{chemin} : champs « ID » et/ou « Titre » introuvables "
+            "(format attendu : voir Personna PO.agent.md)"
+        )
+
+    identifiant = normaliser_us(champs["id"])
+    resume = f"{identifiant} : {champs['titre']}"
+
+    cfg = _config()
+    if not cfg["enabled"] or not cfg["token"]:
+        log.warning(
+            "[jira_tracker] Jira désactivé ou token absent — %s aurait été mise à jour "
+            "sous « %s » (mode dégradé)", identifiant, resume,
+        )
+        return None
+
+    cle = _resolve_issue_key(identifiant, cfg)
+    if cle is None:
+        return create_issue_from_backlog(chemin)
+
+    fields: dict = {"summary": resume, "description": _markdown_to_adf(contenu)}
+    if champs["epic"]:
+        epic_key = _resolve_epic_key(champs["epic"], cfg)
+        if epic_key:
+            fields["parent"] = {"key": epic_key}
+        else:
+            log.warning(
+                "[jira_tracker] Épic « %s » introuvable — parent de %s inchangé",
+                champs["epic"], identifiant,
+            )
+
+    try:
+        response = requests.put(
+            f"{cfg['host']}/rest/api/3/issue/{cle}",
+            json={"fields": fields},
+            auth=HTTPBasicAuth(cfg["email"], cfg["token"]),
+            timeout=15,
+        )
+        response.raise_for_status()
+    except requests.RequestException as err:
+        detail = getattr(err.response, "text", "") if err.response is not None else ""
+        log.warning(
+            "[jira_tracker] Échec de mise à jour de %s (%s) : %s %s (mode dégradé)",
+            identifiant, cle, err, detail,
+        )
+        return None
+
+    log.info("[jira_tracker] %s (%s) mise à jour depuis %s", identifiant, cle, chemin.name)
+    return cle
+
+
+def _resoudre_cibles_backlog(cible: str, backlog_dir: str = "backlog") -> list[Path]:
+    """Transforme une cible CLI en fichiers backlog : chemin, motif glob
+    (PowerShell n'expanse pas les jokers), plage `197-202`, ou identifiant (`US-197`, `197`)."""
+    plage = re.fullmatch(r"(?:US-?)?(\d+)-(\d+)", cible.strip(), flags=re.IGNORECASE)
+    if plage:
+        debut, fin = int(plage.group(1)), int(plage.group(2))
+        return [c for n in range(debut, fin + 1) for c in _resoudre_cibles_backlog(str(n), backlog_dir)]
+    chemin = Path(cible)
+    if chemin.is_file():
+        return [chemin]
+    if any(j in cible for j in "*?["):
+        return sorted(Path(".").glob(cible))
+    try:
+        ident = normaliser_us(cible)
+    except JiraTrackerError:
+        return [chemin]  # laissera update_issue_from_backlog signaler l'erreur
+    trouves = sorted(Path(backlog_dir).glob(f"{ident}_*.md"))
+    return trouves or [chemin]
+
+
+def sync_backlog(
+    backlog_dir: "str | Path" = "backlog", mettre_a_jour: bool = False,
+) -> list[tuple[str, Optional[str], str]]:
     """
     Synchronise TOUT le dossier `backlog/` vers Jira : crée dans Jira chaque US
     qui n'y existe pas encore (statut `À faire`), sans jamais déclencher de
@@ -588,7 +681,8 @@ def sync_backlog(backlog_dir: "str | Path" = "backlog") -> list[tuple[str, Optio
     resultats: list[tuple[str, Optional[str], str]] = []
     for chemin in sorted(dossier.glob("*.md")):
         try:
-            cle = create_issue_from_backlog(chemin)
+            cle = (update_issue_from_backlog(chemin) if mettre_a_jour
+                   else create_issue_from_backlog(chemin))
         except JiraTrackerError as err:
             resultats.append((chemin.name, None, f"ignoré : {err}"))
             continue
@@ -674,7 +768,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Commandes:\n"
             "  <issue_key> <statut>        Mettre à jour le statut d'une issue\n"
             "  create-issue <backlog.md>   Créer l'issue Jira depuis un fichier backlog\n"
-            "  sync-backlog [dossier]      Créer dans Jira toutes les US du backlog pas encore créées\n"
+            "  update-issue <backlog.md>   Repousser résumé/description/épic d'une issue existante\n"
+            "  sync-backlog [dossier] [--update]  Créer les US manquantes (--update : mettre aussi à jour les existantes)\n"
             "  list-sprints                Lister les sprints actifs\n"
             "  list-sprint <sprint_id>     Lister les issues d'un sprint\n\n"
             f"Statuts acceptés : {', '.join(sorted(STATUTS_JIRA))}\n",
@@ -694,9 +789,24 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"✅ Issue créée/existante : {cle}")
         return 0
 
+    if args[0] == "update-issue" and len(args) > 1:
+        code = 0
+        for cible in args[1:]:
+            for chemin in _resoudre_cibles_backlog(cible):
+                try:
+                    cle = update_issue_from_backlog(chemin)
+                except JiraTrackerError as err:
+                    print(f"❌ {err}", file=sys.stderr)
+                    code = 2
+                    continue
+                print(f"  {'✅' if cle else '⏭ '} {chemin.name} → {cle or 'mode dégradé'}")
+        return code
+
     if args[0] == "sync-backlog":
-        dossier = args[1] if len(args) > 1 else "backlog"
-        resultats = sync_backlog(dossier)
+        options = [a for a in args[1:] if a.startswith("--")]
+        positionnels = [a for a in args[1:] if not a.startswith("--")]
+        dossier = positionnels[0] if positionnels else "backlog"
+        resultats = sync_backlog(dossier, mettre_a_jour="--update" in options)
         if not resultats:
             print(f"Aucun fichier .md trouvé dans {dossier}/")
             return 0

@@ -228,3 +228,35 @@ def test_incident_create_issue_from_backlog_capture_introuvable_non_bloquant(jir
     assert cle == "PIA-1002"
     # Seuls création + transition ont été postés — aucune tentative de pièce jointe
     assert mock_requests.post.call_count == 2
+
+
+def test_update_issue_from_backlog_put_sans_toucher_statut(jira_env, tmp_path):
+    """Une issue existante reçoit résumé, description et parent par PUT ; aucune transition."""
+    md = tmp_path / "US-197_x.md"
+    md.write_text("**ID :** US-197\n**Titre :** Nouveau titre\n**Épic :** Refonte\n", encoding="utf-8")
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": [{"key": "PIA-50", "fields": {"summary": "US-197 : Ancien"}}]}),
+            _mock_response({"issues": [{"key": "PIA-10"}]}),  # _resolve_epic_key
+        ]
+        mock_requests.put.return_value = _mock_response()
+
+        cle = jt.update_issue_from_backlog(md)
+
+    assert cle == "PIA-50"
+    appel = mock_requests.put.call_args
+    assert appel.args[0] == "https://test.atlassian.net/rest/api/3/issue/PIA-50"
+    champs = appel.kwargs["json"]["fields"]
+    assert champs["summary"] == "US-197 : Nouveau titre"
+    assert champs["parent"] == {"key": "PIA-10"}
+    mock_requests.post.assert_not_called()
+
+
+def test_update_issue_from_backlog_token_absent(tmp_path, monkeypatch):
+    monkeypatch.setenv("JIRA_API_TOKEN", "")
+    md = tmp_path / "US-197_x.md"
+    md.write_text("**ID :** US-197\n**Titre :** T\n", encoding="utf-8")
+    with patch.object(jt, "requests") as mock_requests:
+        assert jt.update_issue_from_backlog(md) is None
+    mock_requests.put.assert_not_called()
