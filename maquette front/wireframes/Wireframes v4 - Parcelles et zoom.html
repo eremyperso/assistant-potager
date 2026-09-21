@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="design_doc_mode" content="canvas">
+<title>Wireframes v4 — Parcelles et zoom d'information</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;color:#2A3322;font-size:12px;line-height:1.4}
+a{color:#2A3322}a:hover{color:#4A7C22}
+.frame{position:absolute;background:#fff;border:1.5px solid #2A3322;border-radius:6px;overflow:hidden}
+.fh{position:absolute;white-space:nowrap;font-size:12px;font-weight:700;color:#2A3322;letter-spacing:.02em}
+.fh small{font-weight:400;opacity:.75;margin-left:8px}
+.notes{position:absolute;display:flex;flex-direction:column;gap:14px;width:300px}
+.notes .note{position:static;width:auto}
+.note{position:absolute;background:#FBF3D5;border:1.5px solid #2A3322;border-radius:4px;padding:10px 12px;font-size:12px;line-height:1.5;width:300px}
+.note>b:first-child{display:block;margin-bottom:4px}
+.note.new{background:#E6F0DA}
+.bo{display:inline-block;background:#2A3322;color:#fff;border-radius:3px;padding:0 5px;font-weight:700;font-size:10px;letter-spacing:.04em}
+.pad{padding:14px}
+.bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1.5px solid #2A3322;background:#F4F4EF}
+.tabs{display:flex;gap:6px}
+.tab{padding:5px 11px;border:1.5px solid #2A3322;border-radius:20px;font-weight:600;font-size:11.5px}
+.tab.on{background:#2A3322;color:#fff}
+.tab.off{border-style:dashed;color:#8A9480;border-color:#8A9480;font-weight:400}
+.h1{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.h2{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#5A6650;margin-bottom:8px}
+.box{border:1.5px solid #2A3322;border-radius:5px;padding:10px}
+.ghost{border:1.5px dashed #8A9480;border-radius:5px;color:#6B7562}
+.btn{display:inline-flex;align-items:center;justify-content:center;border:1.5px solid #2A3322;border-radius:5px;padding:5px 10px;font-weight:700;font-size:11px;background:#fff}
+.btn.p{background:#2A3322;color:#fff}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1.5px solid #2A3322;border-radius:20px;padding:1px 8px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.leg{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;align-items:center}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;border:1.5px solid #2A3322;vertical-align:-2px;margin-right:5px}
+.ph1{background:#CFE3F5}.ph1b{background:#D9D2EE}.ph2{background:#CBE2B4}.ph3{background:#F6D9A4}.ph0{background:repeating-linear-gradient(45deg,#fff 0 3px,#DDE1D6 3px 6px)}
+.row{display:flex;gap:8px;align-items:center}
+.rule{display:grid;grid-template-columns:24px 1fr auto;gap:9px;align-items:start;font-size:11.5px;padding:6px 0;border-top:1px solid #DDE1D6}
+.tr{height:11px;border:1.5px solid #2A3322;border-radius:6px;position:relative}
+.tr.srf::after{content:'';position:absolute;inset:0;border-radius:inherit;background:repeating-linear-gradient(45deg,#2A3322 0 1.5px,transparent 1.5px 5px);opacity:.5}
+.poqs{display:flex;gap:5px;height:11px}
+.poqs i{display:block;width:13px;border:1.5px solid #2A3322;border-radius:6px}
+.vide{height:11px;border:1.5px dashed #8A9480;border-radius:6px}
+.rgrid{display:grid;grid-template-columns:42px 1fr 122px 52px;gap:8px;align-items:center;padding:3px 0}
+.rgrid .no{font-size:10.5px;font-weight:700;color:#5A6650}
+.rgrid .lb{font-size:10.5px;line-height:1.25}
+.rgrid .lb i{color:#5A6650}
+.parcel{border:1.5px solid #2A3322;border-radius:6px;background:#fff;padding:8px 10px}
+.phd{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px}
+.phd .n{font-size:12.5px;font-weight:700}
+.phd .m{font-size:10px;color:#5A6650;white-space:nowrap}
+.phd .fp{font-size:10px;font-weight:700;white-space:nowrap;text-decoration:underline}
+.fp{font-size:10px;font-weight:700;text-decoration:underline;white-space:nowrap}
+/* liste maître */
+.plist{display:flex;flex-direction:column;gap:6px}
+.pline{display:grid;grid-template-columns:24px 1fr auto;gap:8px;align-items:center;border:1.5px solid #2A3322;border-radius:5px;padding:6px 8px;background:#fff}
+.pline.on{background:#EDF2E6;box-shadow:0 0 0 2px #2A3322}
+.pline .pin{width:24px;height:24px;border:1.5px solid #2A3322;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.pline .nm{font-size:11.5px;font-weight:700;line-height:1.2}
+.pline .sb{font-size:9.5px;color:#5A6650}
+.pline .rr{font-size:10.5px;font-weight:700;white-space:nowrap}
+/* tuile de culture */
+.ctile{border:1.5px solid #2A3322;border-radius:5px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.ctile .sep{border-top:1px solid #DDE1D6}
+.ms{display:flex;gap:1.5px}
+.ms i{display:block;width:9px;height:11px;border:1px solid #C9CEC0;border-radius:1px}
+.ms i.a{background:#CFE3F5;border-color:#2A3322}.ms i.b{background:#D9D2EE;border-color:#2A3322}
+.ms i.c{background:#CBE2B4;border-color:#2A3322}.ms i.d{background:#F6D9A4;border-color:#2A3322}
+.ms i.now{box-shadow:0 0 0 1.5px #2A3322}
+/* niveaux de zoom */
+.lvl{border:1.5px solid #2A3322;border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:7px;background:#fff}
+.lvl .tag{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5A6650}
+.lvl .ti{font-size:12.5px;font-weight:700;line-height:1.2}
+.lvl .qz{font-size:11px;font-style:italic;color:#4A5542}
+.lvl dl{font-size:10.5px;line-height:1.45}
+.lvl dt{font-weight:700;color:#5A6650;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;margin-top:5px}
+.mini{border:1.5px solid #2A3322;border-radius:4px;padding:4px;background:#fff}
+.mini .t{height:4px;border:1px solid #2A3322;border-radius:3px;margin-bottom:3px}
+.mini .t:last-child{margin:0}
+.zarr{display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#2A3322}
+/* matrice */
+.mx{width:100%;border-collapse:collapse;font-size:11px}
+.mx th,.mx td{border:1px solid #DDE1D6;padding:3px 6px;text-align:left;vertical-align:middle}
+.mx th{background:#F4F4EF;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;color:#5A6650}
+.mx td.c{text-align:center;font-weight:700;width:76px}
+.mx tr:nth-child(even) td{background:#FCFCF8}
+/* flux */
+.fbox{border:1.5px solid #2A3322;border-radius:5px;padding:8px 10px;background:#fff;font-size:11px}
+.fbox b{display:block;font-size:11.5px}
+</style>
+</head>
+<body>
+
+<div class="fh" style="top:20px;left:40px;font-size:20px">Wireframes v4 — l'onglet Parcelles et le zoom d'information <small>21 septembre 2026 · complément de la v3 « Plan simplifié »</small></div>
+
+<div class="note" style="top:64px;left:40px;width:420px">
+<b>Ce que la v3 avait laissé de côté</b>
+La v3 a redéfini le seul sous-onglet « Vue plan ». L'onglet <b>Parcelles</b>, lui, est resté celui d'US-060 : maître-détail, occupation en % de surface, tuiles de culture sans lien avec le dessin. Deux écrans du même objet, conçus séparément.
+</div>
+<div class="note new" style="top:64px;left:480px;width:400px">
+<b>Le zoom est conservé — comme navigation</b>
+« Du plus gros vers le plus détaillé » reste le principe de l'activité Plan : le potager entier, puis une parcelle, puis une culture, puis son calendrier. Ce zoom se fait par <b>appui</b>, pas par pincement : la règle 12 de la v3 (ni zoom graphique, ni pan, ni glisser-déposer) est maintenue.
+</div>
+<div class="note" style="top:64px;left:900px;width:420px">
+<b>Rotation : mise de côté, place tenue</b>
+L'onglet reste visible, désactivé, avec la mention « à venir ». Il n'est pas retiré de la barre : sa disparition puis son retour coûteraient plus que l'attente. Les composants de carte, de rang et de trait acceptent une palette en paramètre (US-200 / CA4) pour qu'il les reprenne sans les modifier.
+</div>
+
+<!-- ══════ 0 · les quatre niveaux ══════ -->
+<div class="fh" style="top:250px;left:40px;font-size:15px">0 · Le zoom d'information <small>quatre niveaux, un objet par niveau — chaque niveau redessine l'objet du précédent en plus grand</small></div>
+
+<div class="frame" style="top:282px;left:40px;width:1300px;height:462px">
+  <div class="bar"><span class="h1">Du potager au plant</span><span style="margin-left:auto;font-size:11px;color:#5A6650">appui pour descendre · retour pour remonter · aucun geste de dessin</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr 26px 1fr;gap:0;align-items:stretch">
+
+    <div class="lvl">
+      <div><span class="tag">niveau 1 · onglet « Vue plan »</span><div class="ti">Le potager entier</div></div>
+      <div class="qz">« Où est quoi, et où me reste-t-il de la place ? »</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+        <div class="mini"><div class="t ph2"></div><div class="t ph2" style="width:62%"></div><div class="t ph3" style="width:38%"></div></div>
+        <div class="mini"><div class="t ph2"></div><div class="t ph3" style="width:55%"></div></div>
+        <div class="mini"><div class="t ph1"></div><div class="t ph1" style="width:70%"></div><div class="t" style="border-style:dashed;border-color:#8A9480"></div></div>
+        <div class="mini"><div class="t" style="border-style:dashed;border-color:#8A9480"></div><div class="t" style="border-style:dashed;border-color:#8A9480"></div></div>
+      </div>
+      <dl>
+        <dt>porte</dt><dd>Toutes les parcelles, un trait par rang, la phase du jour, la quantité écrite.</dd>
+        <dt>ne porte pas</dt><dd>Exposition, abri, frise des douze mois, confiance, observations.</dd>
+        <dt>descend vers</dt><dd>Un rang → niveau 3. L'en-tête d'une carte → niveau 2.</dd>
+      </dl>
+    </div>
+
+    <div class="zarr">›</div>
+
+    <div class="lvl" style="background:#FCFCF8;box-shadow:0 0 0 2px #2A3322">
+      <div><span class="tag">niveau 2 · onglet « Parcelles »</span><div class="ti">Une parcelle</div></div>
+      <div class="qz">« Que se passe-t-il dans cette planche ? »</div>
+      <div class="mini" style="padding:6px">
+        <div class="row" style="justify-content:space-between;font-size:9px;font-weight:700;margin-bottom:4px"><span>planche-centrale</span><span style="color:#5A6650">4 rangs sur 5</span></div>
+        <div class="row" style="gap:5px;margin-bottom:4px"><div class="t ph2" style="flex:1;height:6px;margin:0"></div><span style="font-size:8.5px">Tomate</span></div>
+        <div class="row" style="gap:5px;margin-bottom:4px"><div class="t ph2" style="flex:1;height:6px;margin:0;max-width:62%"></div><span style="font-size:8.5px">Tomate</span></div>
+        <div class="row" style="gap:5px"><div class="t ph3" style="flex:1;height:6px;margin:0;max-width:38%"></div><span style="font-size:8.5px">Courgette</span></div>
+      </div>
+      <dl>
+        <dt>porte</dt><dd>Le <b>même trait</b>, agrandi, dans une tuile par culture : famille, durée, frise des douze mois, confiance. Plus la superficie, l'exposition, l'abri, le paillage et les observations.</dd>
+        <dt>ne porte pas</dt><dd>Le reste du potager — il est dans la liste de gauche, en index, pas en dessin.</dd>
+        <dt>descend vers</dt><dd>Une tuile → niveau 3.</dd>
+      </dl>
+    </div>
+
+    <div class="zarr">›</div>
+
+    <div class="lvl">
+      <div><span class="tag">niveau 3 · fiche culture</span><div class="ti">Une culture, dans cette parcelle</div></div>
+      <div class="qz">« D'où vient-elle, où en est-elle, qu'est-ce que j'en fais ? »</div>
+      <div class="mini" style="padding:6px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:9px;font-weight:700">Tomate · noire de Crimée</div>
+        <div style="height:5px;background:#EDEFE8;border-radius:3px"></div>
+        <div style="height:5px;background:#EDEFE8;border-radius:3px;width:70%"></div>
+        <div style="height:5px;background:#EDEFE8;border-radius:3px;width:85%"></div>
+      </div>
+      <dl>
+        <dt>porte</dt><dd>Le lot d'origine, les dates réelles, les quantités, les récoltes, les bioagresseurs, les gestes à faire.</dd>
+        <dt>s'ouvre</dt><dd>En panneau par-dessus le niveau d'où l'on vient, avec la parcelle en contexte.</dd>
+        <dt>descend vers</dt><dd>La fiche calendrier → niveau 4.</dd>
+      </dl>
+    </div>
+
+    <div class="zarr">›</div>
+
+    <div class="lvl">
+      <div><span class="tag">niveau 4 · fiche calendrier</span><div class="ti">Le calendrier de cette série</div></div>
+      <div class="qz">« Puis-je encore semer ? Quand vais-je récolter ? »</div>
+      <div class="mini" style="padding:6px">
+        <div class="ms" style="gap:2px"><i class="a"></i><i class="a"></i><i class="b"></i><i class="b"></i><i class="c"></i><i class="c"></i><i class="d now"></i><i class="d"></i><i class="d"></i><i></i><i></i><i></i></div>
+        <div style="font-size:8.5px;color:#5A6650;margin-top:5px">référentiel recalé sur les événements réels</div>
+      </div>
+      <dl>
+        <dt>porte</dt><dd>Les fenêtres du référentiel du potager, recalées sur les événements de <b>cette</b> parcelle, et la confiance du jour.</dd>
+        <dt>déjà livré</dt><dd>US-183, US-176, US-180. Le zoom s'y branche, il ne le redessine pas.</dd>
+      </dl>
+    </div>
+
+  </div>
+  <div style="padding:0 14px 12px">
+    <div class="box" style="background:#FBF3D5;font-size:11.5px"><b>La règle du zoom</b> — un niveau agrandit l'objet du niveau précédent et ajoute ce que ce niveau ne pouvait pas porter. Il ne le reformate jamais. C'est ce qui a fait supprimer le panneau de détail de la Vue plan en v3, et c'est la même règle qui recoud ici la tuile de culture au trait de rang : <b>un seul dessin, quatre grossissements</b>.</div>
+  </div>
+</div>
+
+<!-- ══════ 1 · onglet Parcelles revu ══════ -->
+<div class="fh" style="top:836px;left:40px;font-size:15px">1 · Onglet « Parcelles » revu <small>1180 px · niveau 2 du zoom · maître-détail conservé, contenu du détail recousu sur la Vue plan</small></div>
+
+<div class="frame" style="top:868px;left:40px;width:1180px;height:596px">
+  <div class="bar"><span class="h1">Plan</span><div class="tabs"><span class="tab">Vue plan</span><span class="tab on">Parcelles</span><span class="tab off">Rotation · à venir</span></div><span style="margin-left:auto" class="pill">au 21 sept.</span><span class="btn p">Journal du jour</span></div>
+  <div class="pad" style="display:grid;grid-template-columns:290px 1fr;gap:14px;align-items:start">
+
+    <div>
+      <div class="h2">Mes parcelles · 8</div>
+      <div class="plist">
+        <div class="pline on"><span class="pin">◉</span><span><span class="nm">planche-centrale</span><br><span class="sb">4 cultures · 12 m²</span></span><span class="rr">4/5</span></div>
+        <div class="pline"><span class="pin">◉</span><span><span class="nm">planche-courges</span><br><span class="sb">3 cultures · 8 m²</span></span><span class="rr">3/3</span></div>
+        <div class="pline"><span class="pin">◉</span><span><span class="nm">planche-ombre</span><br><span class="sb">3 cultures · 10 m²</span></span><span class="rr">3/5</span></div>
+        <div class="pline"><span class="pin">◉</span><span><span class="nm">carré-aromates</span><br><span class="sb">2 cultures · 5 m²</span></span><span class="rr">2/2</span></div>
+        <div class="pline"><span class="pin">◉</span><span><span class="nm">butte</span><br><span class="sb">1 culture · 3 m²</span></span><span class="rr">1/1</span></div>
+        <div class="pline"><span class="pin">◉</span><span><span class="nm">planche-nord</span><br><span class="sb">libre · 4 m²</span></span><span class="rr">0/2</span></div>
+        <div class="pline"><span class="pin">▨</span><span><span class="nm">SERRE</span><br><span class="sb">pépinière chaude · 3 lots</span></span><span class="rr">—</span></div>
+        <div class="pline ghost"><span class="pin" style="border-style:dashed">◉</span><span><span class="nm">planche-est</span><br><span class="sb">nombre de rangs non renseigné</span></span><span class="rr">—</span></div>
+      </div>
+      <div class="box ghost" style="margin-top:9px;font-size:10.5px;padding:8px">La liste est un <b>index</b>, pas un dessin. Le taux d'occupation s'y lit en rangs — la même mesure que la Vue plan.</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="box">
+        <div class="phd" style="margin-bottom:7px">
+          <span class="n" style="font-size:15px">planche-centrale</span>
+          <span class="m"><a class="fp" href="#">← Voir dans la Vue plan</a></span>
+        </div>
+        <div class="row" style="flex-wrap:wrap;gap:6px">
+          <span class="pill">12 m²</span><span class="pill">Exposition plein soleil</span><span class="pill">plein air</span><span class="pill">paillée</span>
+          <span class="pill" style="margin-left:auto"><b>4 rangs occupés sur 5</b></span>
+          <span class="fp">2 observations</span>
+        </div>
+      </div>
+
+      <div class="box" style="display:flex;flex-direction:column;gap:9px">
+        <div class="row" style="justify-content:space-between;align-items:baseline">
+          <span><b style="font-size:12.5px">Cultures en place</b> <span style="font-size:10.5px;color:#5A6650">· 4 cultures · 16 plants · rangs 1 à 4</span></span>
+          <div class="leg" style="gap:10px;font-size:10px"><span><i class="sw ph1"></i>semis pépinière</span><span><i class="sw ph1b"></i>semis pleine terre</span><span><i class="sw ph2"></i>plantation</span><span><i class="sw ph3"></i>récolte</span></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+
+          <div class="ctile">
+            <div class="rgrid" style="grid-template-columns:40px 1fr 112px"><span class="no">Rang 1</span><div class="tr ph2"></div><span class="lb">Tomate <i>noire de Crimée</i><br><b>8 plants</b> · en place</span></div>
+            <div class="sep"></div>
+            <div class="row" style="justify-content:space-between"><span style="font-size:10.5px;color:#5A6650">Solanacée · 90-100 j</span><div class="ms"><i></i><i></i><i class="a"></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="d"></i><i class="d"></i><i class="d now"></i><i></i><i></i><i></i></div></div>
+            <div class="row" style="justify-content:space-between"><span class="pill" style="font-size:9.5px">confiance : à planter jusqu'au 15 juin</span><a class="fp" href="#">Voir la culture →</a></div>
+          </div>
+
+          <div class="ctile">
+            <div class="rgrid" style="grid-template-columns:40px 1fr 112px"><span class="no">Rang 2</span><div class="tr ph2" style="width:62%"></div><span class="lb">Tomate <i>cerise</i><br><b>5 plants</b> · en place</span></div>
+            <div class="sep"></div>
+            <div class="row" style="justify-content:space-between"><span style="font-size:10.5px;color:#5A6650">Solanacée · 70-80 j</span><div class="ms"><i></i><i></i><i class="a"></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="d"></i><i class="d"></i><i class="d now"></i><i></i><i></i><i></i></div></div>
+            <div class="row" style="justify-content:space-between"><span class="fp">1 observation</span><a class="fp" href="#">Voir la culture →</a></div>
+          </div>
+
+          <div class="ctile">
+            <div class="rgrid" style="grid-template-columns:40px 1fr 112px"><span class="no">Rang 3</span><div class="tr ph3" style="width:38%"></div><span class="lb">Courgette<br><b>3 plants</b> · en récolte</span></div>
+            <div class="sep"></div>
+            <div class="row" style="justify-content:space-between"><span style="font-size:10.5px;color:#5A6650">Cucurbitacée · 50-60 j</span><div class="ms"><i></i><i></i><i></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="d"></i><i class="d"></i><i class="d now"></i><i class="d"></i><i></i><i></i></div></div>
+            <div class="row" style="justify-content:flex-end"><a class="fp" href="#">Voir la culture →</a></div>
+          </div>
+
+          <div class="ctile">
+            <div class="rgrid" style="grid-template-columns:40px 1fr 112px"><span class="no">Rang 4</span><div class="tr srf ph1b"></div><span class="lb">Carotte<br><b>2 m²</b> · semé en place</span></div>
+            <div class="sep"></div>
+            <div class="row" style="justify-content:space-between"><span style="font-size:10.5px;color:#5A6650">Apiacée · 90-110 j</span><div class="ms"><i></i><i class="b"></i><i class="b"></i><i class="b"></i><i class="b"></i><i></i><i class="d"></i><i class="d"></i><i class="d now"></i><i class="d"></i><i class="d"></i><i></i></div></div>
+            <div class="row" style="justify-content:space-between"><span style="font-size:10.5px;color:#5A6650">trame = semis en surface</span><a class="fp" href="#">Voir la culture →</a></div>
+          </div>
+
+          <div class="ctile ghost" style="grid-column:1/-1;padding:7px 8px">
+            <div class="rgrid" style="grid-template-columns:40px 1fr auto;padding:0"><span class="no">Rang 5</span><div class="vide"></div><span style="font-size:10.5px"><b>libre</b> — <a class="fp" href="#">Semer en place</a> · <a class="fp" href="#">Planter</a></span></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="notes" style="top:868px;left:1250px"><div class="note new">
+<b>Le changement principal</b>
+La tuile de culture <b>porte son numéro de rang et son trait</b>. C'est le rang de la Vue plan, agrandi : même forme, même couleur, même quantité écrite. Le jardinier retrouve l'objet qu'il vient d'appuyer, et tout ce que la Vue plan ne pouvait pas afficher vient s'y ajouter.
+</div>
+<div class="note new">
+<b>Plus de barre d'occupation en % de surface</b>
+US-060 affichait « Occupation de la surface · 72 % » avec sa barre. Cette valeur n'est pas calculable honnêtement (v3) : elle est remplacée par <b>« 4 rangs occupés sur 5 »</b>, la mesure de la Vue plan. Une seule façon de dire l'occupation dans toute l'activité Plan.
+</div>
+<div class="note">
+<b>Le rang libre devient actionnable ici aussi</b>
+Il était réservé à la Vue plan. Le détail de parcelle le montre en dernière ligne, pleine largeur, avec les deux mêmes intentions : <i>Semer en place</i> ou <i>Planter</i>, pré-remplies sur cette parcelle (et ce rang).
+</div>
+<div class="note">
+<b>Ce que ce niveau garde seul</b>
+Exposition, abri, paillage, superficie, observations de parcelle et de culture, famille, durée, frise des douze mois, pastille de confiance. Rien de tout cela ne remonte dans la Vue plan : c'est ce qui justifie que les deux niveaux existent.
+</div>
+<div class="note">
+<b>La liste de gauche reste</b>
+Elle n'est pas une seconde Vue plan : aucune parcelle n'y est dessinée. Elle sert à changer de parcelle sans remonter d'un niveau — huit lignes compactes, l'occupation en rangs, la pépinière et la parcelle incomplète toujours listées.
+</div>
+<div class="note new">
+<b>Impact backlog</b>
+US-060 : CA2 et CA5 amendés (occupation en rangs, barre de surface retirée), CA7 étendu (rang + trait sur la tuile), CA17 précisé (Rotation désactivée).<br>
+US-201 : CA8 élargi — la tuile gagne le trait en plus du lien.<br>
+Une US nouvelle est nécessaire : « Recoudre l'onglet Parcelles sur la Vue plan ».
+</div></div>
+
+<!-- ══════ 1b · mobile ══════ -->
+<div class="fh" style="top:1620px;left:40px;font-size:15px">1b · Parcelles — 375 px</div>
+<div class="frame" style="top:1652px;left:40px;width:375px;height:584px">
+  <div class="bar" style="padding:8px 12px"><span class="h1">Plan</span><div class="tabs"><span class="tab" style="padding:3px 8px">Vue plan</span><span class="tab on" style="padding:3px 8px">Parcelles</span></div><span class="btn p" style="margin-left:auto;padding:4px 8px">Journal</span></div>
+  <div class="pad" style="padding:12px;display:flex;flex-direction:column;gap:9px">
+    <div class="row" style="gap:6px;overflow:hidden"><span class="pill" style="background:#2A3322;color:#fff">planche-centrale 4/5</span><span class="pill">planche-courges 3/3</span><span class="pill">planche…</span></div>
+    <div style="font-size:10px;color:#5A6650">La liste se replie en sélecteur horizontal : la parcelle choisie reste visible sans écran de retour.</div>
+    <div class="box" style="padding:8px">
+      <div class="phd" style="margin-bottom:6px"><span class="n">planche-centrale</span><a class="fp" href="#">← Vue plan</a></div>
+      <div class="row" style="flex-wrap:wrap;gap:5px"><span class="pill">12 m²</span><span class="pill">plein soleil</span><span class="pill"><b>4 rangs sur 5</b></span></div>
+      <div style="margin-top:6px"><span class="fp">2 observations</span></div>
+    </div>
+    <div style="font-size:10.5px"><b>Cultures en place</b> · 4 · rangs 1 à 4</div>
+    <div class="ctile" style="padding:7px">
+      <div class="rgrid" style="grid-template-columns:32px 1fr;gap:7px"><span class="no">R1</span><div class="tr ph2"></div></div>
+      <div style="font-size:10.5px">Tomate <i style="color:#5A6650">noire de Crimée</i> · <b>8 plants</b><br><span style="color:#5A6650">en place · Solanacée · 90-100 j</span></div>
+      <div class="ms"><i></i><i></i><i class="a"></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="d"></i><i class="d"></i><i class="d now"></i><i></i><i></i><i></i></div>
+      <div class="row" style="justify-content:space-between"><span class="pill" style="font-size:9px">confiance</span><a class="fp" href="#">Voir la culture →</a></div>
+    </div>
+    <div class="ctile" style="padding:7px">
+      <div class="rgrid" style="grid-template-columns:32px 1fr;gap:7px"><span class="no">R2</span><div class="tr ph2" style="width:62%"></div></div>
+      <div style="font-size:10.5px">Tomate <i style="color:#5A6650">cerise</i> · <b>5 plants</b><br><span style="color:#5A6650">en place · Solanacée · 70-80 j</span></div>
+      <div class="ms"><i></i><i></i><i class="a"></i><i class="a"></i><i class="c"></i><i class="c"></i><i class="d"></i><i class="d"></i><i class="d now"></i><i></i><i></i><i></i></div>
+      <div class="row" style="justify-content:flex-end"><a class="fp" href="#">Voir la culture →</a></div>
+    </div>
+    <div class="ctile ghost" style="padding:7px">
+      <div class="rgrid" style="grid-template-columns:32px 1fr;gap:7px;padding:0"><span class="no">R5</span><div class="vide"></div></div>
+      <div style="font-size:10.5px"><b>libre</b> — <a class="fp" href="#">Semer</a> · <a class="fp" href="#">Planter</a></div>
+    </div>
+    <div style="font-size:10px;color:#5A6650">Une colonne, la phase écrite sous le libellé, cible d'appui de 44 px sur la tuile entière.</div>
+  </div>
+</div>
+
+<!-- ══════ 2 · matrice de responsabilités ══════ -->
+<div class="fh" style="top:1620px;left:460px;font-size:15px">2 · Qui porte quoi <small>la garantie qu'aucun niveau ne répète un autre</small></div>
+<div class="frame" style="top:1652px;left:460px;width:780px;height:596px">
+  <div class="bar"><span class="h1">Répartition des informations</span><span style="margin-left:auto;font-size:11px;color:#5A6650">● porte · ↘ renvoie · — absent</span></div>
+  <div class="pad">
+    <table class="mx">
+      <tr><th>Information</th><th class="c">N1 Vue plan</th><th class="c">N2 Parcelles</th><th class="c">N3 Fiche culture</th><th class="c">N4 Calendrier</th></tr>
+      <tr><td>Toutes les parcelles d'un coup d'œil</td><td class="c">●</td><td class="c">index</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Superficie en m²</td><td class="c">●</td><td class="c">●</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Exposition, abri, paillage</td><td class="c">—</td><td class="c">●</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Rangs occupés / déclarés</td><td class="c">●</td><td class="c">●</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Trait de rang (forme, longueur, couleur)</td><td class="c">●</td><td class="c">● agrandi</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Quantité et unité</td><td class="c">●</td><td class="c">●</td><td class="c">●</td><td class="c">—</td></tr>
+      <tr><td>Mode d'implantation</td><td class="c">forme</td><td class="c">forme + mot</td><td class="c">●</td><td class="c">—</td></tr>
+      <tr><td>Phase du jour</td><td class="c">●</td><td class="c">●</td><td class="c">●</td><td class="c">●</td></tr>
+      <tr><td>Rang libre actionnable</td><td class="c">●</td><td class="c">●</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Famille botanique · durée de culture</td><td class="c">—</td><td class="c">●</td><td class="c">●</td><td class="c">—</td></tr>
+      <tr><td>Frise des douze mois</td><td class="c">—</td><td class="c">● standard</td><td class="c">↘</td><td class="c">● recalée</td></tr>
+      <tr><td>Pastille de confiance</td><td class="c">—</td><td class="c">●</td><td class="c">↘</td><td class="c">●</td></tr>
+      <tr><td>Observations (parcelle, culture)</td><td class="c">—</td><td class="c">●</td><td class="c">●</td><td class="c">—</td></tr>
+      <tr><td>Événements réels, lot d'origine, récoltes</td><td class="c">—</td><td class="c">—</td><td class="c">●</td><td class="c">repères</td></tr>
+      <tr><td>Bioagresseurs, gestes à faire</td><td class="c">—</td><td class="c">—</td><td class="c">●</td><td class="c">—</td></tr>
+      <tr><td>Journal du jour</td><td class="c">barre</td><td class="c">barre</td><td class="c">—</td><td class="c">—</td></tr>
+      <tr><td>Lots de pépinière</td><td class="c">↘</td><td class="c">↘</td><td class="c">●</td><td class="c">—</td></tr>
+    </table>
+    <div class="box" style="background:#FBF3D5;margin-top:10px;font-size:11px">Les seules lignes cochées deux fois sont celles du <b>zoom</b> : superficie, rangs, trait, quantité, phase. Elles sont l'objet qu'on agrandit, pas une information dupliquée. Tout le reste appartient à un seul niveau.</div>
+  </div>
+</div>
+
+<!-- ══════ 3 · navigation ══════ -->
+<div class="fh" style="top:2300px;left:460px;font-size:15px">3 · Les chemins entre les niveaux</div>
+<div class="frame" style="top:2332px;left:460px;width:780px;height:458px">
+  <div class="bar"><span class="h1">Descendre, remonter</span><span style="margin-left:auto;font-size:11px;color:#5A6650">aucun cul-de-sac, aucun écran sans retour</span></div>
+  <div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div class="box">
+      <div class="h2" style="margin-bottom:7px">Descendre</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;font-size:11px">
+        <div class="fbox"><b>Vue plan → Parcelles</b>« Fiche parcelle → » dans l'en-tête d'une carte : l'onglet Parcelles s'ouvre sur cette parcelle.</div>
+        <div class="fbox"><b>Vue plan → Fiche culture</b>Appui sur un rang occupé : la fiche s'ouvre en panneau, parcelle en contexte.</div>
+        <div class="fbox"><b>Parcelles → Fiche culture</b>« Voir la culture → » sur la tuile, ou appui sur la tuile entière.</div>
+        <div class="fbox"><b>Fiche culture → Calendrier</b>La série de cette parcelle est mise en avant (US-183 / CA2).</div>
+        <div class="fbox"><b>Rang libre → geste</b><i>Semer en place</i> ou <i>Planter</i>, pré-rempli sur la parcelle et le rang. Depuis les deux niveaux.</div>
+        <div class="fbox"><b>Carte de pépinière → Pépinière</b>Onglet « Emplacements » si plusieurs pépinières, « Aujourd'hui » sinon.</div>
+      </div>
+    </div>
+    <div class="box">
+      <div class="h2" style="margin-bottom:7px">Remonter</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;font-size:11px">
+        <div class="fbox"><b>Parcelles → Vue plan</b>« ← Voir dans la Vue plan » : la Vue plan s'ouvre, cette carte visible.</div>
+        <div class="fbox"><b>Fermer une fiche</b>Rend le niveau d'origine dans son état exact : défilement, parcelle sélectionnée, focus sur l'élément appuyé.</div>
+        <div class="fbox"><b>Onglets</b>Toujours accessibles : on peut sauter un niveau dans les deux sens, l'échelle n'est pas un tunnel.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════ 4 · règles ══════ -->
+<div class="fh" style="top:2372px;left:40px;font-size:15px">4 · Règles ajoutées</div>
+<div class="frame" style="top:2404px;left:40px;width:375px;height:590px">
+  <div class="bar" style="padding:9px 12px"><span class="h1">18 → 26</span><span style="margin-left:auto;font-size:10.5px;color:#5A6650">complètent les 17 de la v3</span></div>
+  <div class="pad" style="padding:12px">
+    <div class="rule" style="border:none"><b>18</b><span><b>Le zoom est une navigation, pas un geste.</b> Quatre niveaux, un objet par niveau. La règle 12 tient : ni pincement, ni pan, ni glisser-déposer.</span></div>
+    <div class="rule"><b>19</b><span><b>L'ordre des sous-onglets suit le zoom</b> : Vue plan, puis Parcelles, puis Rotation.</span></div>
+    <div class="rule"><b>20</b><span><b>Un niveau n'en répète jamais un autre</b> : il agrandit l'objet et ajoute ce que le précédent ne portait pas.</span></div>
+    <div class="rule"><b>21</b><span><b>Parcelles garde le maître-détail</b> : la liste de gauche est un index, aucune parcelle n'y est dessinée.</span></div>
+    <div class="rule"><b>22</b><span><b>La tuile de culture porte son numéro de rang et son trait</b> — même forme, même couleur, même quantité que la Vue plan.</span></div>
+    <div class="rule"><b>23</b><span><b>L'occupation se dit partout en rangs</b> occupés / déclarés. Le pourcentage de surface quitte l'onglet Parcelles.</span></div>
+    <div class="rule"><b>24</b><span><b>Les observations restent au niveau 2</b> (parcelle, et couple culture + variété). La Vue plan ne les porte pas.</span></div>
+    <div class="rule"><b>25</b><span><b>Remonter rend l'état exact</b> : défilement, parcelle sélectionnée, focus.</span></div>
+    <div class="rule"><b>26</b><span><b>Rotation reste dans la barre</b>, désactivée, « à venir ». Les composants de rang acceptent une palette en paramètre pour l'accueillir plus tard.</span></div>
+  </div>
+</div>
+
+<div class="fh" style="top:2822px;left:460px;font-size:15px">5 · À trancher</div>
+<div class="frame" style="top:2854px;left:460px;width:780px;height:262px">
+  <div class="pad" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;height:100%">
+    <div class="box" style="background:#FBF3D5;display:flex;flex-direction:column;gap:7px;font-size:11.5px">
+      <div class="h2" style="margin:0">Décisions ouvertes par cette v4</div>
+      <div><b>1.</b> Le Plan s'ouvre-t-il sur la <b>Vue plan</b> (le zoom large, cohérent avec la règle 19) ou sur <b>Parcelles</b>, l'habitude actuelle des utilisateurs ?</div>
+      <div><b>2.</b> Faut-il <b>fusionner les deux niveaux en un écran</b> — appui sur une carte de la Vue plan qui la déplie en place — plutôt que garder deux sous-onglets ?</div>
+      <div><b>3.</b> Le pourcentage de surface disparaît-il vraiment de l'onglet Parcelles, alors qu'US-060 l'a livré et que les utilisateurs le lisent depuis un an ?</div>
+      <div><b>4.</b> La tuile garde-t-elle frise <i>et</i> confiance (arbitrage A7) maintenant qu'elle porte aussi son trait de rang — ou est-ce trop pour une tuile ?</div>
+    </div>
+    <div class="box" style="display:flex;flex-direction:column;gap:7px;font-size:11.5px">
+      <div class="h2" style="margin:0">Reste des décisions de la v3</div>
+      <div>Une ou deux colonnes de cartes dans la Vue plan en desktop.</div>
+      <div>Le plancher de 12 % sur les traits très courts.</div>
+      <div>« 13 rangs sur 18 » comme seule mesure d'occupation.</div>
+      <div>Le mode d'implantation : saisi, ou déduit de l'unité de quantité en V1.</div>
+      <div class="box ghost" style="margin-top:auto;font-size:10.5px;padding:8px">Ces quatre points étaient déjà au tableau de la v3 § 4. La v4 n'en tranche aucun : elle ajoute le niveau qui manquait.</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
