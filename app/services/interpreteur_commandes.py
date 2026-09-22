@@ -775,6 +775,31 @@ def _construire_parcelle_paillage(groupes):
 
 
 @_regle(
+    "parcelle_rangs",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:ait|a|fasse|fait|compte|comporte|possede|contient|est\s+(?:a|de))\s+"
+    r"(?P<valeur>\d{1,3})\s+rangs?\b",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_rangs(groupes):
+    # [US-197 / CA3, CA4] « la planche nord A 5 rangs » DÉCLARE la planche ;
+    # « planté 4 salades SUR 3 rangs dans la planche nord » compte un geste.
+    # Ce qui sépare les deux n'est pas le mot « rang », c'est le verbe qui le
+    # précède : la règle exige un verbe d'état ou de possession collé au
+    # nombre, et « sur » n'en est pas un. Aucune plantation ne passe ici.
+    #
+    # La borne haute reste au point d'écriture (`utils.parcelles._nb_rangs`) :
+    # « 200 rangs » est reconnu PUIS refusé avec la forme attendue, là où un
+    # motif à deux chiffres l'aurait silencieusement renvoyé au modèle.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    return {"nom": nom, "modification": f"rangs={groupes['valeur']}"}
+
+
+@_regle(
     "parcelle_lister",
     r"\A" + _INTENTION + _MONTRER + _ARTICLE + r"(?:liste des\s+)?parcelles\s*\Z",
     "parcelle",
@@ -2324,12 +2349,15 @@ def nombre_en_lettres(valeur: str) -> str:
 #: chiffrée, donc relue en toutes lettres comme les autres (CA11).
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
-    "abri": None, "paillage": None,
+    "abri": None, "paillage": None, "rangs": None,
 }
 _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
     "pepiniere": "pépinière", "ordre": "ordre d'affichage",
     "abri": "abri", "paillage": "paillage",
+    # [US-197] « rangs » et non « rangs de la parcelle » : le récapitulatif est
+    # déjà titré « Modifier une parcelle », et c'est la planche qu'il nomme.
+    "rangs": "nombre de rangs",
 }
 
 

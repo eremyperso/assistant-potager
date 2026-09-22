@@ -29,7 +29,7 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-224] GesteIntention devient une file (etat, traite_le, motif_refus,
          avertissement_le) et ajout du modèle FileGestesReglage (relance)
 """
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, SmallInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, JSON
 # [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
 # aucun pilote (psycopg2 n'est sollicité qu'à la création du moteur). Le
 # `with_variant(Text(), "sqlite")` posé sur la colonne laisse les tests tourner
@@ -855,6 +855,13 @@ class Parcelle(Base):
                       jamais renseigné (distinct de abri='aucun'). Ne pilotent que
                       la confiance (app/services/confiance_semis.py) ; `abri` n'est
                       PAS `est_pepiniere`.
+    - nb_rangs      : [migration_v52 / US-197] nombre de rangs DÉCLARÉS de la
+                      planche, entier 1 à 99, NULL = jamais renseigné — ce qui
+                      n'est PAS « zéro rang ». C'est le dénominateur de la Vue
+                      plan (« 13 rangs occupés sur 18 déclarés »), sans rapport
+                      avec le « rang » d'un ÉVÉNEMENT, qui est un multiplicateur
+                      de geste. N'entre dans aucun calcul de stock, d'occupation
+                      en surface (`occupation_pct`) ni de confiance.
     """
     __tablename__ = "parcelles"
 
@@ -869,6 +876,10 @@ class Parcelle(Base):
     type_sol      = Column(String, nullable=True)
     abri          = Column(String(16), nullable=True)
     paillage      = Column(Boolean, nullable=True)
+    # [US-197 / migration_v52] Bornes 1–99 garanties par le CHECK SQL
+    # `ck_parcelles_nb_rangs` et revalidées au point d'écriture Python
+    # (`utils.parcelles.update_parcelle`), que SQLite ne porte pas.
+    nb_rangs      = Column(SmallInteger, nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent

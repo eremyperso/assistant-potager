@@ -32,6 +32,7 @@ async def cmd_parcelle(update, ctx) -> None:
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
         "  /parcelle modifier serre pepiniere=true\n"
+        "  /parcelle modifier nord rangs=5   (ou rangs=aucun)\n"
         "  /parcelle renommer sud carré-sud\n\n"
         "_Pour supprimer une parcelle : /help parcelle_"
     )
@@ -67,6 +68,13 @@ async def cmd_parcelle(update, ctx) -> None:
                     details.append(f"abri : {p.abri}")
                 if p.paillage:
                     details.append("paillée")
+                # [US-197 / CA5] Le nombre de rangs se dit TOUJOURS, y compris
+                # absent : c'est le dénominateur de la Vue plan, et son silence
+                # se lirait comme « zéro rang » plutôt que « jamais déclaré ».
+                details.append(
+                    f"{p.nb_rangs} rang{'s' if p.nb_rangs > 1 else ''}"
+                    if p.nb_rangs is not None else "rangs non renseignés"
+                )
                 detail_str = f" · {' · '.join(details)}" if details else ""
                 lignes.append(f"📍 *{p.nom.upper()}*{detail_str}")
             lignes.append("\n_Ajouter : /parcelle ajouter [nom] [exposition] [superficie]_")

@@ -1,17 +1,28 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v51),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v52),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v51.sql
+psql -d potager -f migrations/migration_v52.sql
 ```
 
 ## Ce que portent les dernières migrations
 
+- **v52 [US-197]** — ajoute `parcelles.nb_rangs` (SMALLINT nullable) : le
+  nombre de rangs DÉCLARÉS d'une planche, dénominateur de la Vue plan
+  (« 13 rangs occupés sur 18 déclarés »). **Aucun backfill** — NULL veut dire
+  « jamais renseigné », et le lire comme « zéro rang » ferait passer chaque
+  planche existante pour une planche sans place. Contrairement à `parcelles.abri`
+  (v49), dont le vocabulaire se révise en Python, la borne 1–99 est une propriété
+  stable du domaine : elle est posée en CHECK SQL (`ck_parcelles_nb_rangs`) et
+  redoublée au point d'écriture (`utils.parcelles._nb_rangs`), que SQLite — donc
+  les tests — n'obtiendrait pas du CHECK. La colonne ne pilote AUCUN calcul :
+  ni stock, ni `occupation_pct`, ni confiance. Elle n'a rien à voir avec le
+  « rang » d'un événement, qui reste un multiplicateur de geste.
 - **v51 [US-224]** — transforme `gestes_intentions` en **file d'attente**.
   `consomme_le` devient `traite_le` (renommage délibéré : ce n'est plus « ce
   lien a servi », à l'ouverture, mais « ce geste est sorti de la file », à la

@@ -11,6 +11,8 @@ index_terms:
   - "semée"
   - "en place"
   - "en récolte"
+  - "nombre de rangs"
+  - "rangs déclarés"
 ---
 
 # Les parcelles et le plan d'occupation
@@ -58,3 +60,16 @@ Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y 
 **On parle aussi de :** abri ; serre ; tunnel ; châssis ; voile ; paillage ; paillée ; protection ; sous abri
 
 Une parcelle peut porter un abri — aucun, voile, châssis, tunnel ou serre — et un paillage, oui ou non. Ce sont deux déclarations du jardinier, distinctes de la pépinière : une serre sert souvent de pépinière, pas toujours, et une pépinière est souvent abritée, pas toujours. Elles se disent en une phrase — « la parcelle 2 est sous serre », « rang 3 paillé », « la parcelle 2 est sans abri » — ou par la commande de modification de parcelle, avec les paramètres abri et paillage. Une parcelle jamais renseignée reste « non renseignée », ce qui n'est pas « sans abri ». Ces deux déclarations ne servent qu'à une chose : le niveau de confiance avant de semer ou de planter. Elles ne changent ni le stock, ni la pépinière, ni les statistiques. Un voile posé puis retiré en cours de saison n'est pas une déclaration de parcelle : « j'ai mis un voile sur le rang 3 » reste un geste du journal.
+
+## Dire combien de rangs compte une parcelle
+
+**Intention :** procédure
+**On parle aussi de :** nombre de rangs ; rangs déclarés ; combien de rangs ; déclarer ses rangs ; taille d'une parcelle en rangs
+
+Une parcelle peut porter son **nombre de rangs** : combien de rangs elle compte au total, de 1 à 99. C'est le dénominateur du plan — « 13 rangs occupés sur 18 déclarés » — et donc la seule façon de savoir combien de rangs restent à cultiver. Il se déclare en une phrase — « la planche nord a 5 rangs », « la parcelle centrale fait 4 rangs » — ou par la commande de modification de parcelle, avec le paramètre rangs. Comme toute phrase qui écrit, elle est récapitulée et confirmée avant d'être appliquée, et elle ne consomme aucun jeton.
+
+Une parcelle jamais renseignée reste « rangs non renseignés », ce qui n'est pas « zéro rang » : c'est une parcelle qu'on n'a pas mesurée, pas une parcelle sans place. Pour revenir à cet état, on repasse le paramètre rangs à « aucun ». Une valeur hors de 1 à 99, ou qui n'est pas un nombre entier, est refusée et la valeur précédente est conservée.
+
+Le mot « rang » a deux sens dans l'application, et ils ne se mélangent jamais. Le nombre de rangs d'une parcelle, c'est celui-ci. Le nombre de rangs d'un geste, c'est un multiplicateur : « planté 4 salades sur 3 rangs dans la parcelle nord » enregistre 12 salades et ne touche pas au nombre de rangs de la parcelle. Ce qui sépare les deux à l'oreille comme à l'écrit, c'est le verbe : la parcelle *a* des rangs, le geste se fait *sur* des rangs.
+
+Le nombre de rangs n'entre dans aucun calcul : ni le stock, ni le pourcentage d'occupation en surface, ni le niveau de confiance avant de semer. Une parcelle pépinière peut parfaitement porter un nombre de rangs — une pépinière de poireaux en pleine terre en a. Il ne se saisit pas depuis l'application web : c'est une déclaration qui se fait au compagnon.

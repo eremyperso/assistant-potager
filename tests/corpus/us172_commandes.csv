@@ -18,6 +18,10 @@ mets la serre en pépinière,parcelle modifier,imperatif
 la serre est une pépinière,parcelle modifier,elliptique
 "la planche sud fait 8,5 m²",parcelle modifier,elliptique
 l'exposition de la parcelle nord est plein sud,parcelle modifier,elliptique
+la planche nord a 5 rangs,parcelle modifier,elliptique
+la planche centrale fait 4 rangs,parcelle modifier,elliptique
+je veux que la planche nord ait 12 rangs,parcelle modifier,intention
+"planté 4 salades sur 3 rangs dans la planche nord",,hors_perimetre
 comment modifier une parcelle ?,,savoir
 liste mes parcelles,parcelle lister,imperatif
 je veux voir mes parcelles,parcelle lister,intention

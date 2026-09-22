@@ -274,7 +274,15 @@ def create_parcelle(
 # [US_Plan_occupation_parcelles] Mise à jour des métadonnées d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere", "abri", "paillage"}
+_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere", "abri", "paillage", "rangs"}
+
+#: [US-197 / CA1, CA2] Le nombre de rangs DÉCLARÉS d'une planche. Bornes du
+#: domaine, doublées du CHECK `ck_parcelles_nb_rangs` (migration_v52) : la base
+#: les garantit, ce point d'écriture les explique au jardinier.
+NB_RANGS_MIN, NB_RANGS_MAX = 1, 99
+#: Ce qui remet le nombre de rangs à « non renseigné » — distinct de « zéro rang »,
+#: qui n'existe pas : une planche sans rangs déclarés n'est pas une planche pleine.
+_RANGS_AUCUN: frozenset[str] = frozenset({"aucun", "aucune", "non renseigne", "non", "vide", ""})
 
 #: [US-181 / CA1] Vocabulaire fermé de l'abri, validé ICI au point d'écriture (pas de
 #: CHECK SQL). « aucun » = déclaré sans abri ; NULL en base = jamais renseigné.
@@ -299,6 +307,32 @@ def normaliser_abri(valeur: str) -> str:
     return cle
 
 
+def _nb_rangs(valeur: str) -> Optional[int]:
+    """[US-197 / CA1, CA2] Lit un nombre de rangs déclaré, ou None pour « non renseigné ».
+
+    Refuse tout ce qui n'est pas un entier de 1 à 99 — « 0 rang » compris, qui
+    dirait « cette planche n'a aucune place » là où le jardinier voulait dire
+    « je ne l'ai pas mesurée » (`rangs=aucun`). La valeur précédente est
+    conservée : la ValueError remonte avant toute affectation.
+    """
+    brut = unidecode(str(valeur or "")).strip().lower()
+    if brut in _RANGS_AUCUN:
+        return None
+    try:
+        nombre = int(brut)
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"rangs doit être un entier de {NB_RANGS_MIN} à {NB_RANGS_MAX} "
+            f"(ex : rangs=5), ou « rangs=aucun » pour ne plus le renseigner"
+        )
+    if not NB_RANGS_MIN <= nombre <= NB_RANGS_MAX:
+        raise ValueError(
+            f"un nombre de rangs va de {NB_RANGS_MIN} à {NB_RANGS_MAX} "
+            f"(ex : rangs=5), ou « rangs=aucun » pour ne plus le renseigner"
+        )
+    return nombre
+
+
 def _booleen(valeur: str, champ: str) -> bool:
     """oui/non/true/false → bool ; ValueError sinon."""
     v = unidecode(str(valeur or "")).strip().lower()
@@ -316,6 +350,7 @@ def update_parcelle(
     Met à jour les métadonnées d'une parcelle existante.
 
     Paramètres acceptés via kwargs : exposition, superficie (float m²), ordre (int),
+    rangs ([US-197] entier 1-99 ou "aucun" pour revenir à « non renseigné »),
     pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
     "semis pleine terre", voir utils.stock._cond_semis_pleine_terre).
     Lève ValueError  si un paramètre est inconnu ou mal typé.
@@ -327,7 +362,7 @@ def update_parcelle(
     if inconnus:
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
-            f"Acceptés : exposition, superficie, ordre, pepiniere, abri, paillage"
+            f"Acceptés : exposition, superficie, ordre, pepiniere, abri, paillage, rangs"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -369,6 +404,14 @@ def update_parcelle(
     if "paillage" in kwargs:
         parcelle.paillage = _booleen(kwargs["paillage"], "paillage")
         modifs.append(f"Paillage : {'oui' if parcelle.paillage else 'non'}")
+    if "rangs" in kwargs:
+        # [US-197 / CA2] Validé AVANT affectation : une valeur refusée laisse la
+        # parcelle exactement dans l'état où le jardinier l'avait laissée.
+        parcelle.nb_rangs = _nb_rangs(kwargs["rangs"])
+        modifs.append(
+            f"Rangs : {parcelle.nb_rangs}" if parcelle.nb_rangs is not None
+            else "Rangs : non renseigné"
+        )
 
     db.commit()
     db.refresh(parcelle)

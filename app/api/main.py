@@ -2314,6 +2314,14 @@ def get_plan(
                 "superficie_m2": p.superficie_m2,
                 "abri":          p.abri,        # [US-181] None = non renseigné ≠ "aucun"
                 "paillage":      p.paillage,
+                # [US-197 / CA6] Le dénominateur en RANGS de la Vue plan (US-200),
+                # avec l'ordre d'affichage et la nature pépinière qu'elle lit
+                # déjà en base mais que cet endpoint ne servait pas encore.
+                # None = non renseigné, jamais 0 : c'est la Vue plan qui dira
+                # quelle commande prononcer pour le déclarer.
+                "nb_rangs":      p.nb_rangs,
+                "ordre":         p.ordre,
+                "est_pepiniere": bool(p.est_pepiniere),
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
                 "has_observations": nb_obs_parcelle > 0,
