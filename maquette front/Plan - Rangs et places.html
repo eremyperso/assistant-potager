@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plan – rangs et places</title>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F5F7F1;--card:#fff;--alt:#F1F5EB;--bd:#E2E7DA;--bd2:#EDF0E7;--brand:#4A7C22;--brandSoft:#EAF3DE;--txt:#16210C;--txt2:#5A6B4B;--txt3:#8A9880;--amber:#B0740F;--amberSoft:#FBF1DC;--violet:#6B4FA0;--violetSoft:#EDE8F7;--red:#AF3A2F;--redSoft:#FAE5E2;--empty:#E6EBDF}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif}
+a{color:var(--brand)}a:hover{color:#2F5416}
+.page{max-width:1320px;margin:0 auto;padding:28px 24px 48px;display:flex;flex-direction:column;gap:18px}
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;justify-content:space-between}
+.eyebrow{font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--txt2);text-transform:uppercase}
+.date{font-size:13px;color:var(--txt2)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 18px;font-size:13px;color:var(--txt2)}
+.legend .it{display:flex;gap:7px;align-items:center}
+.legend .sep{width:1px;height:18px;background:var(--bd)}
+.sw{width:11px;height:14px;border-radius:3px;display:inline-block}
+.grid{container-type:inline-size}
+.cards{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}
+@container (min-width:1000px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 18px 10px;box-shadow:0 1px 2px rgba(22,33,12,.06),0 4px 14px rgba(22,33,12,.05);container-type:inline-size;min-width:0}
+.ch{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.ch h2{font:600 18px/1.2 Lora,Georgia,serif;margin:0}
+.ch a{font-size:13px;font-weight:600;color:var(--txt)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:13px;color:var(--txt2)}
+.meta>span{display:flex;align-items:center;gap:6px}
+.meta .miss{color:var(--red);font-weight:600}
+.pic{width:16px;height:16px;flex:0 0 auto;background:var(--txt3);-webkit-mask:no-repeat center/contain var(--m);mask:no-repeat center/contain var(--m)}
+.miss .pic{background:var(--red)}
+.pic-surf{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round'%3E%3Crect x='3.5' y='3.5' width='17' height='17' rx='2'/%3E%3Cpath d='M3.5 9.5h17M3.5 14.5h17' stroke-dasharray='2 2.5'/%3E%3C/svg%3E")}
+.pic-long{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 7v10M22 7v10M5 12h14M8 9l-3 3 3 3M16 9l3 3-3 3'/%3E%3C/svg%3E")}
+.pic-larg{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 2h10M7 22h10M12 5v14M9 8l3-3 3 3M9 16l3 3 3-3'/%3E%3C/svg%3E")}
+.pic-rang{--m:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='2' y='4' width='20' height='3' rx='1.5'/%3E%3Crect x='2' y='10.5' width='20' height='3' rx='1.5'/%3E%3Crect x='2' y='17' width='20' height='3' rx='1.5'/%3E%3C/svg%3E")}
+.meta b{color:var(--txt);font-weight:600}
+.dim{display:flex;align-items:center;gap:6px}
+.dimbox{width:34px;height:14px;border:1.5px solid var(--txt3);border-radius:2px;position:relative}
+.dimbox:after{content:"";position:absolute;left:3px;right:3px;top:50%;border-top:1.5px dashed var(--txt3)}
+.warn{margin-top:10px;font-size:12.5px;color:var(--txt2);background:var(--alt);border-radius:8px;padding:8px 10px}
+.warn i{color:var(--txt)}
+.rows{margin-top:12px;display:flex;flex-direction:column}
+.row{display:grid;grid-template-columns:30px 22px minmax(100px,170px) minmax(0,1fr) 62px 104px;gap:12px;align-items:center;padding:7px 4px;border-top:1px solid var(--bd2);border-radius:6px}
+.row:focus-visible,.row:hover{background:var(--alt);outline:none}
+.rn{font-size:12px;font-weight:700;color:var(--txt2)}
+.lab{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lab b{font-weight:600}.lab span{color:var(--txt2)}
+.lab small{display:block;font-size:11.5px;color:var(--txt3)}
+.espi{display:inline-block;width:14px;height:9px;margin-right:3px;vertical-align:-1px;background:currentColor;-webkit-mask:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 18' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 2v14M26 2v14M6 9h16M9 6 6 9l3 3M19 6l3 3-3 3'/%3E%3C/svg%3E");mask:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 18' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 2v14M26 2v14M6 9h16M9 6 6 9l3 3M19 6l3 3-3 3'/%3E%3C/svg%3E")}
+.track{position:relative;height:22px;border-radius:999px;background:#EEF1EA;min-width:0;overflow:hidden}
+.track .fill{position:absolute;inset:0 auto 0 0;border-radius:999px}
+.syms{position:absolute;inset:0;display:flex;align-items:center}
+.syms>span{flex:1 1 0;display:flex;justify-content:center;align-items:center;min-width:0}
+.sym{font-size:14px;line-height:1}
+.ghost{width:9px;height:9px;opacity:.35;background:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238A9880' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 21v-7.2M12 13.8c0-3.2 2.2-5.4 5.4-5.4 0 3.2-2.2 5.4-5.4 5.4zM12 13.8c0-2.8-1.9-4.7-4.7-4.7 0 2.8 1.9 4.7 4.7 4.7z'/%3E%3C/svg%3E")}
+.over{position:absolute;right:4px;top:3px;font-size:11px;font-weight:700;color:var(--red);background:var(--redSoft);border-radius:999px;padding:1px 6px}
+.bed{background-image:radial-gradient(circle,rgba(90,70,30,.55) 1px,transparent 1.6px),radial-gradient(circle,rgba(90,70,30,.35) 1px,transparent 1.6px);background-size:7px 6px,9px 7px;background-position:0 0,3px 3px}
+.free .track{background:transparent;border:1.5px dashed #D3DACA}
+.ico{font-size:17px;line-height:1}
+.num{font-size:13px;text-align:right;font-variant-numeric:tabular-nums;color:var(--txt2)}
+.num b{color:var(--txt);font-weight:600}
+.num small{display:block;font-size:11px;color:var(--txt3)}
+.pill{justify-self:end;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;white-space:nowrap;display:flex;align-items:center;gap:5px}.pill:before{content:"";width:11px;height:11px;background:currentColor;-webkit-mask:no-repeat center/contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M12 21v-7.2M12 13.8c0-3.2 2.2-5.4 5.4-5.4 0 3.2-2.2 5.4-5.4 5.4zM12 13.8c0-2.8-1.9-4.7-4.7-4.7 0 2.8 1.9 4.7 4.7 4.7z'/%3E%3C/svg%3E")}.p-libre:before{display:none}.pill:before{width:13px;height:13px}.p-semee:before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M3 20.5h18'/%3E%3Cellipse cx='7' cy='15.5' rx='2' ry='2.8' transform='rotate(-30 7 15.5)'/%3E%3Cellipse cx='16.5' cy='15.5' rx='2' ry='2.8' transform='rotate(30 16.5 15.5)'/%3E%3Cpath d='M12 4v6M9.5 7.5 12 10l2.5-2.5'/%3E%3C/svg%3E")}.p-place:before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 20.5h18M12 20.5V11M12 14c0-4 2.6-6.6 6.6-6.6 0 4-2.6 6.6-6.6 6.6zM12 11c0-3.4-2.2-5.6-5.6-5.6 0 3.4 2.2 5.6 5.6 5.6z'/%3E%3C/svg%3E")}.p-recolte:before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18l-1.7 9.2a2 2 0 0 1-2 1.6H6.7a2 2 0 0 1-2-1.6zM8 10l3-6.5M16 10l-3-6.5M9 14.5v2.5M15 14.5v2.5'/%3E%3C/svg%3E")}
+.p-place{background:var(--brandSoft);color:#3B6A1B}.p-recolte{background:var(--amberSoft);color:#8A5A08}.p-semee{background:var(--violetSoft);color:var(--violet)}.p-libre{background:transparent;border:1px dashed #C9D2BD;color:var(--txt2)}
+.add{font-size:12.5px;color:var(--brand);font-weight:600}
+.foot{display:flex;flex-wrap:wrap;gap:6px 28px;font-size:13px;color:var(--txt2);padding:4px 2px}
+.foot b{color:var(--txt)}
+.note{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:18px 20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px 32px}
+.note h3{font:600 15px/1.3 Lora,Georgia,serif;margin:0 0 6px}
+.note p{margin:0 0 6px;color:var(--txt2);text-wrap:pretty}
+.note code{font:12.5px ui-monospace,Menlo,monospace;background:var(--alt);padding:1px 5px;border-radius:4px;color:var(--txt)}
+.note table{border-collapse:collapse;font-size:12.5px;width:100%}
+.note td{padding:3px 0;border-bottom:1px solid var(--bd2)}.note td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+@container (max-width:560px){.row{grid-template-columns:28px minmax(0,1fr) auto;grid-template-areas:"n l p" "n t t" "n c c"}.rn{grid-area:n;align-self:start}.row>.ico,.row>span:nth-child(2):empty{display:none}.lab{grid-area:l}.track{grid-area:t}.num{grid-area:c;text-align:left}.num small{display:inline;margin-left:6px}.pill{grid-area:p}}
+</style></head>
+<body>
+<div class="page">
+<div class="top"><div class="eyebrow">Mes parcelles · 8</div><div class="date">État au mercredi 23 septembre 2026</div></div>
+<div class="legend">
+<span class="it"><span class="sw" style="background:#CFE3B8;border-radius:50%;width:12px;height:12px"></span>En place</span>
+<span class="it"><span class="sw" style="background:#EFD29A;border-radius:50%;width:12px;height:12px"></span>En récolte</span>
+<span class="it"><span class="sw" style="background:#D5CAEC;border-radius:50%;width:12px;height:12px"></span>Semée</span>
+<span class="it"><span class="sw" style="border:1.5px dashed #C9D2BD;border-radius:50%;width:12px;height:12px"></span>Libre</span>
+<span class="sep"></span>
+<span class="it"><span class="ico">🍅</span>7 symboles = rang plein (en proportion)</span>
+<span class="it"><span class="sw bed" style="width:22px;background-color:#D9EBC6;border-radius:999px"></span>Semis à la volée : part de la surface du rang</span>
+<span class="it"><span class="ghost" style="width:12px;height:12px;opacity:.6"></span>= place restante</span>
+<span class="sep"></span>
+<span class="it">Rangs numérotés dans l’ordre d’installation</span>
+</div>
+<div class="grid"><div class="cards" id="cards"></div></div>
+<div class="foot" id="foot"></div>
+<div class="note">
+<div><h3>Nouveau paramètre : longueur de rang</h3><p>La parcelle porte <code>longueur_rang_m</code> (décimal, nullable), à côté de <code>nb_rangs</code>. C’est la longueur utile d’un rang, dans le sens où l’on plante.</p><p>Il se déclare au compagnon : « planche-centrale a des rangs de 12 m ». Largeur déduite, affichée seulement : superficie ÷ longueur.</p></div>
+<div><h3>Calcul des places</h3><p><code>places = ⌊ longueur_rang × 100 ÷ espacement_cm ⌋</code></p><p>L’espacement sur le rang vient du référentiel culture (US-161). Chaque rang montre 7 symboles : leur nombre donne la part des places occupées, pas un compte de plants. Semis à la volée : surface semée ÷ (longueur × 0,40 m de largeur standard).</p><p>Plus de plants que de places : le rang est plein et « +N » s’écrit en alerte.</p></div>
+<div><h3>Espacements utilisés ici</h3><table id="esp"></table></div>
+</div>
+</div>
+<script>
+const ESP={Tomate:50,'Tomate cœur de bœuf':40,Courgette:100,Aubergine:60,Poivron:50,Potiron:150,Pâtisson:100,Carotte:5,Rutabaga:25,Concombre:60,'Tomate cerise':60};
+const PH={place:['En place','#D9EBC6','p-place'],recolte:['En récolte','#F4DDB0','p-recolte'],semee:['Semée','#DDD3F0','p-semee']};
+const SYM={Tomate:'🍅','Tomate cœur de bœuf':'🍅','Tomate cerise':'🍒',Courgette:'🥒',Aubergine:'🍆',Poivron:'🫑',Potiron:'🎃',Pâtisson:'🎃',Carotte:'🥕',Rutabaga:'🥔',Concombre:'🥒'};
+const MAXS=7,LARG_STD=0.4;
+function trackHTML(col,sym,slots,fullSlots,pct,over){
+ let s='';for(let k=0;k<slots;k++)s+=k<fullSlots?`<span><span class="sym">${sym}</span></span>`:'<span><span class="ghost"></span></span>';
+ pct=slots?Math.min(fullSlots,slots)/slots*100:0;
+ return `<div class="track"><div class="fill" style="width:${pct}%;background:${col}"></div><div class="syms">${s}</div>${over>0?`<span class="over">+${over}</span>`:''}</div>`;
+}
+const PARCELLES=[
+{nom:'planche-centrale',surf:69,long:12,nbRangs:14,rangs:[
+['Tomate','',1,'place'],['Courgette','jaune',7,'recolte'],['Tomate cœur de bœuf','',26,'recolte'],['Aubergine','greffé',3,'place'],['Poivron','divers',4,'recolte'],['Tomate','jaune',2,'place'],['Potiron','',3,'place'],['Pâtisson','année 2024',4,'recolte'],['Tomate','noire de Crimée',4,'place'],['Carotte','',2,'place','m'],['Tomate','',1,'place'],['Courgette','',1,'semee','g']]},
+{nom:'planche-ombre',surf:27,long:9,nbRangs:9,rangs:[
+['Carotte','',0,'place','m'],['Rutabaga','',30,'semee','g'],['Concombre','Corinto',4,'recolte'],['Tomate cerise','',3,'recolte'],['Tomate cœur de bœuf','',10,'place'],['Potiron','',3,'recolte'],['Pâtisson','année 2024',3,'place'],['Tomate','noire de Crimée',3,'place'],['Courgette','jaune',2,'place']]},
+{nom:'planche-est',surf:18,long:null,nbRangs:null,rangs:[['Courgette','jaune',3,'recolte'],['Tomate cerise','',8,'place'],['Poivron','',2,'place']]}
+];
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const fmt=n=>String(n).replace('.',',');
+function unit(q,m){return m==='m'?'m² semés':m==='g'?(q>1?'graines':'graine'):m==='p'?(q>1?'poquets':'poquet'):(q>1?'plants':'plant')}
+function rowHTML(p,r,i,maxQ){
+ const [c,v,q,ph,mode]=r,[phL,col,cls]=PH[ph],sym=SYM[c]||'🌱';let track='',num='',cap=null;
+ if(p.long){cap=Math.floor(p.long*100/ESP[c]);}
+ if(mode==='m'){
+  const surfRang=p.long*LARG_STD,ratio=Math.min(q/surfRang,1);
+  track=`<div class="track"><div class="fill bed" style="width:${q?Math.max(ratio*100,6):0}%;background-color:${col}"></div></div>`;
+  num='';
+ }else if(cap){
+  const filled=Math.min(q,cap),over=q-cap;
+  track=trackHTML(col,sym,MAXS,filled?Math.max(1,Math.round(filled/cap*MAXS)):0,0,over);
+  num=over>0?`<span style="color:var(--red)">${over} en trop</span>`:`reste <b>${cap-filled}</b><small>${unit(cap-filled,mode)}</small>`;
+ }else{
+  const n=Math.max(1,Math.round(q/maxQ*MAXS));/*proportion au rang le plus rempli*/
+  track=trackHTML(col,sym,MAXS,n,0,0).replace(/<span><span class="ghost"><\/span><\/span>/g,'');
+  track=track.replace('class="syms"',`class="syms" style="right:auto;width:${n/MAXS*100}%"`);
+  num=`<b>${q}</b><small>places ?</small>`;
+ }
+ const tip=`Rang ${i+1}, ${c}${v?' '+v:''}, ${q} ${unit(q,mode)}, ${phL.toLowerCase()}${cap&&mode!=='m'?` · espacement ${ESP[c]} cm → ${cap} places sur ${fmt(p.long)} m`:''}`;
+ return `<div class="row" tabindex="0" title="${esc(tip)}" aria-label="${esc(tip)}"><span class="rn">R${i+1}</span><span class="ico">${sym}</span><div class="lab"><b>${esc(c)}</b> <span>${esc(v)}</span><small>${q} ${unit(q,mode)}${cap&&mode!=='m'?` · <span class="espi" title="Espacement entre plants"></span>${ESP[c]} cm`:''}</small></div>${track}<div class="num">${num}</div><span class="pill ${cls}">${phL}</span></div>`;
+}
+function freeHTML(p,i){
+ const cap=Math.floor(p.long*100/50);
+ return `<div class="row free" tabindex="0" aria-label="Rang ${i+1}, libre, ${fmt(p.long)} mètres"><span class="rn">R${i+1}</span><span></span><div class="lab"><b style="color:var(--txt2)">libre</b><small>${fmt(p.long)} m · ex. ${cap} tomates</small></div><div class="track"><div class="syms">${'<span><span class="ghost"></span></span>'.repeat(MAXS)}</div></div><div class="num"></div><span class="pill p-libre">Libre</span></div>`;
+}
+document.getElementById('cards').innerHTML=PARCELLES.map(p=>{
+ const maxQ=Math.max(...p.rangs.map(r=>r[2]));const occ=p.rangs.length;
+ const libres=p.nbRangs?Math.max(p.nbRangs-occ,0):0;
+ const larg=p.long&&p.surf?fmt((p.surf/p.long).toFixed(2).replace(/\.?0+$/,'')):null;
+ let warn='';
+ if(!p.long)warn+=`<div class="warn">Longueur de rang non renseignée : les places ne peuvent pas être calculées. Dites au compagnon : <i>« ${p.nom} a des rangs de 6 m »</i>.</div>`;
+ if(!p.nbRangs)warn+=`<div class="warn">Nombre de rangs non renseigné. Dites au compagnon : <i>« ${p.nom} a 5 rangs »</i>.</div>`;
+ const M=(pic,ok,txt,missTxt,t)=>`<span class="${ok?'':'miss'}" title="${t}"><span class="pic pic-${pic}"></span>${ok?txt:missTxt}</span>`;
+ return `<section class="card" aria-label="${p.nom}"><div class="ch"><h2>${p.nom}</h2><a href="#">Fiche parcelle →</a></div>
+ <div class="meta">${M('surf',p.surf,`<b>${p.surf} m²</b>`,'? m²','Superficie')}${M('long',p.long,`rangs de <b>${fmt(p.long)} m</b>`,'longueur ?','Longueur de rang')}${M('larg',larg,`largeur <b>${larg} m</b>`,'largeur ?','Largeur de la parcelle')}${M('rang',p.nbRangs,`<b>${occ}</b> rangs sur ${p.nbRangs}${libres?` · <b>${libres}</b> libres`:''}`,`${occ} rangs occupés · total ?`,'Nombre de rangs')}</div>${warn}
+ <div class="rows">${p.rangs.map((r,i)=>rowHTML(p,r,i,maxQ)).join('')}${Array.from({length:libres},(_,k)=>freeHTML(p,occ+k)).join('')}</div></section>`;
+}).join('');
+let tot=0,dec=0,occT=0,sansL=0;PARCELLES.forEach(p=>{tot+=p.surf;occT+=p.rangs.length;if(p.nbRangs)dec+=p.nbRangs;if(!p.long)sansL++;});
+document.getElementById('foot').innerHTML=`<span><b>${tot} m²</b> cultivés</span><span><b>${occT}</b> rangs occupés sur ${dec} déclarés</span><span><b>${sansL}</b> parcelle sans longueur de rang</span>`;
+document.getElementById('esp').innerHTML=Object.entries(ESP).map(([k,v])=>`<tr><td>${k}</td><td>${v} cm</td></tr>`).join('');
+</script>
+</body></html>

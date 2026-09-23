@@ -95,6 +95,8 @@ où voir les séries de haricots que j'ai déjà en terre ?,calendrier-et-zone-c
 comment dire que ma parcelle est sous serre ou paillée ?,parcelles-et-plan.md#05-dire-qu-une-parcelle-est-sous-serre-sous-tunnel-sous-chassis
 comment dire combien de rangs compte ma parcelle ?,parcelles-et-plan.md#06-dire-combien-de-rangs-compte-une-parcelle
 comment déclarer le nombre de rangs d'une parcelle ?,parcelles-et-plan.md#06-dire-combien-de-rangs-compte-une-parcelle
+comment déclarer la longueur de ma parcelle ?,parcelles-et-plan.md#06-dire-combien-de-rangs-compte-une-parcelle
+la largeur d'une planche se déclare-t-elle ?,parcelles-et-plan.md#06-dire-combien-de-rangs-compte-une-parcelle
 comment rejoindre un potager avec un code d'invitation depuis telegram ?,potager-partage-et-roles.md#04-rejoindre-un-potager-depuis-telegram-avec-un-code
 puis-je saisir mon code d'invitation sans ouvrir l'application ?,potager-partage-et-roles.md#04-rejoindre-un-potager-depuis-telegram-avec-un-code
 que devient mon potager actif quand je rejoins un autre jardin ?,potager-partage-et-roles.md#04-rejoindre-un-potager-depuis-telegram-avec-un-code
@@ -121,3 +123,16 @@ de combien de façons peut-on commencer un geste ?,enregistrer-un-geste.md#07-un
 pourquoi mon geste est daté d'aujourd'hui et pas de la date que je regardais ?,enregistrer-un-geste.md#09-quelle-date-porte-un-geste-lance-depuis-un-ecran
 comment enregistrer un semis depuis la fiche d'une culture ?,calendrier-et-zone-climatique.md#13-enregistrer-un-semis-ou-une-plantation-depuis-la-fiche-d-une
 puis-je semer hors de la période conseillée malgré le niveau d'étoiles ?,calendrier-et-zone-climatique.md#13-enregistrer-un-semis-ou-une-plantation-depuis-la-fiche-d-une
+combien de rangs sont libres dans ma parcelle ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+comment le plan compte-t-il les rangs occupés ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+pourquoi un rang affiche-t-il places non calculées ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+d'où vient l'espacement entre deux pieds sur le rang ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+comment lire la vue plan de mon potager ?,parcelles-et-plan.md#08-lire-la-vue-plan
+que veut dire la couleur d'un rang sur le plan ?,parcelles-et-plan.md#08-lire-la-vue-plan
+pourquoi certains traits du plan sont hachurés ou en segments ?,parcelles-et-plan.md#08-lire-la-vue-plan
+combien de pieds tiennent sur un rang ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+que se passe-t-il quand un rang est surchargé de pieds ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+existe-t-il un pourcentage de remplissage des rangs ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+que veut dire un pictogramme sur un rang du plan ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan
+pourquoi mon rang affiche-t-il +4 en rouge ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan
+comment lire la piste d'un rang ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan

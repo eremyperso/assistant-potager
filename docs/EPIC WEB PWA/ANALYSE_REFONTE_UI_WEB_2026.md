@@ -395,6 +395,14 @@ l'écran (`plan-vue`/`plan-rot` restant en `Placeholder`, cf. §5.3 bis).
   dans le prototype) — mais les **vues fonctionnelles spécifiques seront traitées plus
   tard**, dans un chantier séparé avec ses propres US. Ne pas bloquer le Lot B (Plan) sur
   ces deux fonctionnalités.
+- **Mise à jour (US-200, septembre 2026)** : la « Vue plan » est **livrée**, mais pas sous la
+  forme annoncée ici. La V1 retenue (wireframe v3, « Plan simplifié ») abandonne la
+  représentation à l'échelle et le glisser-déposer : une carte par parcelle, un trait par
+  rang, la longueur du trait disant la quantité relative à unité égale, la forme le mode
+  d'implantation et la couleur la phase. L'écran est en **lecture seule** — la saisie reste
+  au compagnon. Les interactions (appui sur un rang, sorties) relèvent d'US-201, le
+  réordonnancement d'US-202. La **« Rotation des cultures » reste à venir** et demeure un
+  `Placeholder`.
 
 ### 5.4 Renommage Historique → Journal
 
@@ -689,6 +697,33 @@ croissance » et durée restante avant récolte — relève en totalité de
 `calendrier.js` a finalement été soldé par **US-176**), **US-069** (contexte de semis) et **US-070** (recalage sur le
 réel, qui réutilise le paramètre `moisCourant` posé ici). La famille botanique suit le même
 chemin avec **US-067**, qui supprime `familles.js`.
+
+**Révision du 23/09/2026 — la Vue plan se lit en places (US-228).** Le sous-onglet
+« Vue plan », resté en `Placeholder` jusqu'à US-200, dessine depuis le 23/09/2026 chaque rang
+comme une **piste de places** : une fente par place, un pictogramme par pied installé, une
+marque en creux par place restante, et le reste en chiffres à droite (« reste 15 plants »,
+« 4 en trop »). La maquette gelée qui fait foi est
+`maquette front/haute-fidelite/Plan - Rangs et places.html`.
+
+Ce que cela change pour la lecture de l'écran Plan, et qu'il faut savoir en lisant ce qui
+précède :
+
+- le **pourcentage d'occupation en surface** ne figure pas sur la Vue plan — il reste sur
+  l'onglet Parcelles, où la fiche de parcelle le porte avec son infobulle. La Vue plan
+  mesure l'occupation **en rangs** (« N rangs occupés sur M déclarés »), et ne l'a jamais
+  mesurée autrement ;
+- les places sont une **capacité de rang**, jamais un second taux d'occupation : il n'existe
+  ni total de places ni pourcentage de remplissage, nulle part (RT13, arbitrage A25) ;
+- le seuil de passage à deux colonnes de cartes passe de 720 à **1000 px de largeur de
+  conteneur** (arbitrage A23) : une carte qui porte des pistes a besoin de plus de largeur.
+  Container query, comme avant, jamais un breakpoint d'écran ;
+- les **pictogrammes** sont un jeu SVG monochrome du design system, teinté par la phase, et
+  non des emoji (arbitrage A27) : un emoji change de dessin selon le poste, et sa couleur
+  entrerait en concurrence avec la couleur de phase.
+
+Un rang sans longueur de parcelle ou sans espacement de culture retombe sur le **trait
+relatif** d'US-200, suivi de « N places ? » : au premier jour, où rien n'est mesuré, l'écran
+est exactement celui d'US-200.
 
 ### 5.11 Écran Stocks — évolution en écran transverse unique (US-072, US-073) — ✅ livrées (16/08/2026, v3.33.0)
 
@@ -1060,8 +1095,9 @@ voir §5.8.
   source des métadonnées horticoles, exposition/besoin en eau), indépendant d'un écran.
 - **Lot F — Guide d'utilisation intégré** : parcours web (navigation) + volet explicatif sur
   l'usage du bot Telegram comme backoffice. Cf. §5.5.
-- **Lot G — Vues fonctionnelles détaillées « Vue plan » et « Rotation »** : hors périmètre
-  immédiat, chantier séparé une fois le Lot B livré. Cf. §5.3 bis.
+- **Lot G — Vues fonctionnelles détaillées « Vue plan » et « Rotation »** : chantier séparé,
+  ouvert après le Lot B. **« Vue plan » livrée par US-200** (V1 en traits de rang, lecture
+  seule) ; **« Rotation » reste à venir**. Cf. §5.3 bis.
 
 ### 7.4 Dette technique connue, à résorber pendant le Lot B
 

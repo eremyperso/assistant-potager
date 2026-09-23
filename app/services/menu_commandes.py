@@ -287,9 +287,11 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
                      # [US-197 / CA9] Les clés acceptées sont celles de
                      # `utils.parcelles._CHAMPS_MODIFIER`, seul point d'écriture qui
                      # les valide : exposition, superficie, ordre, pepiniere, abri,
-                     # paillage, rangs. La question n'en cite qu'une — la liste
-                     # complète est dans /parcelle, pas dans une relance vocale.
-                     "Que faut-il modifier ? (par exemple : exposition=sud, rangs=5)"),
+                     # paillage, rangs, longueur ([US-225]). La question n'en cite
+                     # qu'une — la liste complète est dans /parcelle, pas dans une
+                     # relance vocale.
+                     "Que faut-il modifier ? (par exemple : exposition=sud, "
+                     "rangs=5, longueur=12)"),
         ),
     ),
     FormeCommande("parcelle", "lister", "Lister vos parcelles", confirmation=False),

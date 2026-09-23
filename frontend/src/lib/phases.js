@@ -32,9 +32,24 @@ export const DEPUIS_SEMIS = 'semis'
  * Mode sombre compris : ce sont des variables CSS redéfinies dans `index.css`,
  * jamais une couleur en dur.
  */
+/**
+ * [US-200, retour de terrain] La FORME d'une pastille de phase, en plus de sa
+ * teinte. Une Vue plan qui répète « En place » sur chaque rang coûte la moitié
+ * de la largeur d'une carte ; le mot se retire donc des rangs — mais la couleur
+ * ne peut pas rester seule (V16, RT4). La forme prend le relais : un anneau
+ * pour ce qui est semé et pas encore levé, un disque plein pour ce qui est en
+ * place, un carré pour ce qui se récolte. L'écran se lit encore en niveaux de
+ * gris, et la légende de tête donne les mots.
+ */
+export const FORME_ANNEAU = 'anneau'
+export const FORME_DISQUE = 'disque'
+export const FORME_CARRE = 'carre'
+
 export const PHASES = Object.freeze([
   Object.freeze({
     cle: PHASE_SEMEE,
+    anneau: 'ring-violet',
+    forme: FORME_ANNEAU,
     libelle: 'Semée',
     court: 'semée',
     teinte: 'bg-violet-soft text-violet',
@@ -43,6 +58,8 @@ export const PHASES = Object.freeze([
   }),
   Object.freeze({
     cle: PHASE_EN_PLACE,
+    anneau: 'ring-brand',
+    forme: FORME_DISQUE,
     libelle: 'En place',
     court: 'en place',
     teinte: 'bg-brand-soft text-brand',
@@ -51,9 +68,17 @@ export const PHASES = Object.freeze([
     // elle s'effacerait. Même traitement que `MonthStripLegend` pour « en
     // croissance » — un cerclage la rend visible sans changer sa famille.
     contour: 'ring-1 ring-inset ring-brand',
+    // [US-200] À 11 px, la teinte réservée — volontairement très claire pour
+    // tenir sous un trait large — ne se voit plus : une pastille pleine de
+    // `bg-brand-soft` se lit comme un anneau vide et se confond avec « semée ».
+    // La PUCE dense prend donc la teinte pleine de la famille, sans toucher à
+    // la réservation d'US-070 / CA7, qui porte sur `bg-brand-soft`.
+    puce: 'bg-brand',
   }),
   Object.freeze({
     cle: PHASE_EN_RECOLTE,
+    anneau: 'ring-amber',
+    forme: FORME_CARRE,
     libelle: 'En récolte',
     court: 'en récolte',
     teinte: 'bg-amber-soft text-amber',
@@ -65,6 +90,8 @@ export const PHASES = Object.freeze([
 /** [CA9] « Libre » : une parcelle sans culture en place. Option de la légende. */
 export const PHASE_LIBRE = Object.freeze({
   cle: 'libre',
+  anneau: 'ring-txt3/60',
+  forme: FORME_ANNEAU,
   libelle: 'Libre',
   court: 'libre',
   teinte: 'bg-card-alt text-txt3',

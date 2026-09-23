@@ -1,3 +1,64 @@
+## [v3.78.0] — 2026-09-23
+
+**ÉPIC 10 — US-227** : un rang cesse d'être un trait, il devient une **piste de places**.
+Maintenant que la parcelle dit sa longueur (US-225) et que le référentiel dit l'écart
+entre deux pieds (US-226), le plan sait combien de pieds tiennent sur un rang — et
+combien il en reste. Il le dit sans jamais corriger une quantité dictée, et se tait
+franchement quand une des deux mesures manque.
+
+### 🚀 Nouveautés
+
+**Savoir ce qu'il reste de place sur un rang (US-227)**
+- Compte les **places d'un rang** — longueur de la parcelle ÷ espacement de la culture : une planche de 12 m et des tomates tous les 50 cm donnent 24 places, 9 prises, 15 restantes (US-227 / R10)
+- Se tait dans trois cas seulement, et le dit clairement : parcelle sans longueur (aucun de ses rangs n'est alors chiffré), culture sans espacement connu, semis au mètre carré — jamais une moyenne, jamais l'espacement d'une culture voisine (US-227 / R11)
+- Compte une place par **individu posé** : un plant, une graine, un poquet — un poquet de trois graines occupe une place, pas trois (US-227 / R12)
+- **Signale** un rang surchargé sans rien corriger : 26 pieds sur 22 places affichent 22 prises, 0 restante et 4 de dépassement, la quantité déclarée restant celle qui a été dite (US-227 / R14)
+- Mesure un **semis en ligne** en mètres, pas en places : part du rang semée, mètres restants, et son propre dépassement quand la ligne est plus longue que le rang (US-227 / R15)
+- Donne à un **rang libre** sa longueur et une capacité d'exemple **nommée** (« 24 tomates »), prise sur une culture réellement présente dans la parcelle — jamais sur un espacement par défaut (US-227 / R16)
+- Ajoute aux totaux du plan le nombre de **parcelles sans longueur**, et rien d'autre : il n'existe ni total de places ni pourcentage de remplissage, ni par rang, ni par parcelle, ni en pied de vue — l'occupation se mesure en rangs, comme avant (US-227 / R17, CA4)
+
+### 🔧 Améliorations techniques
+- Greffe le calcul sur la lecture unique d'US-198 : `GET /plan` passe à la répartition l'index de fiches culture qu'il avait déjà lu, les places ne coûtent donc **aucune requête supplémentaire**, quel que soit le nombre de parcelles (US-227 / CA1, CA6)
+- Laisse intacts l'occupation, le stock, les projections, la confiance et tous les champs d'US-198 : un test compare les réponses avec et sans les places (US-227 / CA7)
+- Complète `docs/domaines/plan-et-rangs.md` et la fiche d'aide du jardinier : la formule, ses trois cas d'échec, et pourquoi une place n'est ni un taux d'occupation ni une promesse — 24 tomates sur un rang, personne ne les plante (US-227 / CA9)
+
+## [v3.77.0] — 2026-09-23
+
+**ÉPIC 10 — US-225 & US-226** : le rang cesse d'être un trait dont la longueur ne veut
+rien dire. Une parcelle peut désormais dire **combien elle mesure**, et l'application
+sait lire dans le référentiel **la distance entre deux pieds sur un rang** — les deux
+ingrédients qui manquaient pour compter des places. Ni l'une ni l'autre n'invente quoi
+que ce soit : ce qui n'est pas dit reste « non renseigné ».
+
+### 🚀 Nouveautés
+
+**Dire combien mesure une parcelle (US-225)**
+- Ajoute la **longueur** d'une parcelle, de 0,5 à 200 mètres : la longueur *utile*, celle où l'on plante, allées et bordures exclues (US-225 / CA1)
+- Accepte `/parcelle modifier <nom> longueur=12`, `longueur=12,5` comme `longueur=12.5`, et `longueur=aucune` pour revenir à « non renseignée » ; une valeur refusée laisse la précédente intacte (US-225 / CA2)
+- Reconnaît la déclaration **en une phrase**, sans consommer de jeton : « la parcelle centrale fait 12 mètres de long », « la parcelle nord mesure 8 m », « parcelle-centrale a des rangs de 12 m » (US-225 / CA3)
+- Distingue la déclaration du geste : « semé 3 mètres de carottes dans la parcelle nord » reste un semis et ne touche pas à la longueur de la parcelle (US-225 / CA4)
+- Dit la longueur dans `/parcelle lister`, ou « longueur non renseignée » — comme le nombre de rangs, son silence se lirait « zéro mètre » (US-225 / CA5)
+- Expose la longueur au plan, avec la **largeur qui s'en déduit** (superficie ÷ longueur) : une largeur ne se déclare jamais, elle n'est qu'un repère de cohérence (US-225 / CA6)
+- Accepte une longueur incohérente avec la superficie et la **signale** sans jamais corriger la valeur dite : le jardinier seul sait laquelle des deux est fausse (US-225 / CA7)
+- Prévient **dans la confirmation même** qu'une parcelle de 5 m² déclarée longue de 100 m ferait 5 cm de large : c'est le seul moment où le jardinier a la valeur sous les yeux, et la faute de frappe partait jusque-là sans un mot dans le compte des places (US-225 / CA7)
+
+**Savoir combien de pieds tiennent sur un rang (US-226)**
+- Dérive du référentiel l'**espacement sur le rang** d'une culture, en centimètres : la fiche note « 110 × 135 cm », le premier nombre est la distance entre deux pieds, le second l'écart entre rangs (US-226 / CA1)
+- Lit toutes les formes de cette chaîne — séparateur, espaces, virgule décimale — et la valeur unique (« 50 cm ») ; ce qui est vide, illisible ou hors de 1 à 400 cm donne **« non renseigné »**, jamais une moyenne ni l'espacement d'une culture voisine (US-226 / CA2)
+- Expose cet espacement sur chaque ligne de culture du plan, sans rien retirer ni renommer de ce qui s'affichait déjà (US-226 / CA4)
+- Respecte la **fiche personnalisée** d'un potager, qui prime sur la fiche partagée ; une variété partage l'espacement de sa culture, sauf à avoir sa propre fiche (US-226 / CA6, CA7)
+- Ajoute `tools/controler_espacements.py`, qui dit où porter l'effort de saisie : il ne liste que les cultures **réellement présentes dans les potagers**, et ne modifie rien (US-226 / CA8)
+
+### 🔧 Améliorations techniques
+- Regroupe la lecture des fiches culture du plan dans `app/services/plan.attributs_par_culture()` : surface au sol et espacement sortent de la **même** requête, la dérivation ne coûte aucune lecture de plus (US-226 / CA5)
+- Journalise en avertissement, une fois par culture et par lecture, un espacement qui contredit de plus de 10 % la surface au sol de sa fiche : c'est une anomalie de référentiel, pas une erreur d'exécution (US-226 / CA3)
+- Corrige au passage les règles de superficie dictée, qui écrivaient une valeur sur une **question** : « est-ce que la parcelle nord mesure 8 m ? » interrogeait et enregistrait à la fois
+
+### 💾 Base de données
+- Ajoute `parcelles.longueur_m` (`NUMERIC(5,1)` nullable, contrainte 0,5 à 200) — migration `v53`, rollback fourni, **aucun backfill** : la longueur ne se déduit jamais de la superficie
+- N'ajoute **aucune colonne de largeur** : elle se déduit à la lecture et n'est jamais réinjectée dans un calcul
+- N'ajoute aucune colonne pour l'espacement : US-226 lit la chaîne existante de `culture_config`
+
 ## [v3.76.0] — 2026-09-21
 
 **ÉPIC 9 — US-224** : les gestes lancés depuis l'application ne se perdent plus. Ils

@@ -264,6 +264,7 @@ def _parcelle_mock(nom: str, *, nb_rangs=None, ordre=0, pepiniere=False, superfi
     p.abri = None
     p.paillage = None
     p.nb_rangs = nb_rangs
+    p.longueur_m = None  # [US-225] non renseignée
     p.ordre = ordre
     p.est_pepiniere = pepiniere
     p.actif = True
@@ -338,13 +339,19 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
 
     Un test de comportement ne prouverait l'absence d'effet que sur les cas
     qu'il énumère ; ce contrôle-ci la prouve à la source. Ajouter `nb_rangs`
-    dans un moteur de calcul fait échouer ce test, et c'est le point : la Vue
-    plan (US-200) le DESSINE, elle ne le fait entrer dans aucun total.
+    dans un moteur de calcul fait échouer ce test, et c'est le point : ni le
+    stock, ni l'occupation en surface, ni la confiance ne le lisent.
+
+    [US-198] La répartition en rangs s'y ajoute : elle est le DÉNOMINATEUR du
+    plan en rangs (rangs libres, dépassement, totaux), et rien d'autre — elle
+    ne touche toujours ni au stock, ni à `occupation_pct`, ni à la confiance,
+    ce que garde `test_us197_ca7_stock_et_confiance_intacts`.
     """
     autorises = {
         Path("database/models.py"),
         Path("utils/parcelles.py"),
         Path("app/services/interpreteur_commandes.py"),
+        Path("app/services/repartition_rangs.py"),   # [US-198] le plan en rangs
         Path("app/bot/commandes_parcelle.py"),
         Path("app/api/main.py"),
     }
@@ -373,11 +380,17 @@ def test_us197_ca7_stock_et_confiance_intacts() -> None:
 
 def test_us197_ca8_aucune_saisie_dans_la_pwa() -> None:
     """CA8 — Règle RT1 : la déclaration reste au backoffice (le bot)."""
+    # [US-200] La Vue plan LIT le nombre de rangs servi par `GET /plan` — c'est
+    # le dénominateur qu'elle dessine. Ce qui reste interdit, c'est de l'ÉCRIRE :
+    # ni champ de saisie, ni corps de requête. La déclaration reste au compagnon.
+    ECRITURE = ("<Field", "<input", "onChange", "JSON.stringify", "body:", "value=")
     sources = list((RACINE / "frontend" / "src").glob("**/*.jsx"))
     sources += list((RACINE / "frontend" / "src").glob("**/*.js"))
     ecrivains = [
-        str(f.relative_to(RACINE)) for f in sources
-        if "nb_rangs" in f.read_text(encoding="utf-8")
+        f"{f.relative_to(RACINE)}:{n}"
+        for f in sources
+        for n, ligne in enumerate(f.read_text(encoding="utf-8").splitlines(), 1)
+        if "nb_rangs" in ligne and any(marqueur in ligne for marqueur in ECRITURE)
     ]
     assert not ecrivains, f"la PWA ne doit offrir aucun champ de rangs : {ecrivains}"
 

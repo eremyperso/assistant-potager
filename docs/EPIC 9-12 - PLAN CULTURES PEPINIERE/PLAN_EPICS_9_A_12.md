@@ -6,10 +6,11 @@
 > `ÉPIC 11 — Cultures : tout savoir d'une culture` ·
 > `ÉPIC 12 — Pépinière : le poste de travail sous abri`
 > ⚖️ *Numéros à valider, même réserve que l'ÉPIC 8 : le persona PO ne liste encore que les épics 1 à 6.*
-> **Statut :** 📝 Cadré — aucune US implémentée
-> **Cadrage arrêté au :** 19/09/2026, **complété le 21/09/2026** (wireframe v4)
-> **Volume :** 30 US (US-194 à US-223), 130 points (hypothèse, à rechiffrer US par US, hors conception des maquettes)
-> **Sources :** quatre wireframes produits avec Claude Design, dossier `maquette front/wireframes/`
+> **Statut :** 🔨 En cours — US-194, US-197, US-198 et US-224 livrées, US-200 en cours
+> **Cadrage arrêté au :** 19/09/2026, **complété le 21/09/2026** (wireframe v4) puis le **23/09/2026** (maquette haute fidélité *Plan – rangs et places*)
+> **Volume :** 34 US (US-194 à US-228), 146 points (hypothèse, à rechiffrer US par US, hors conception des maquettes)
+> **Sources :** quatre wireframes produits avec Claude Design, dossier `maquette front/wireframes/` ;
+> maquette haute fidélité gelée dans `maquette front/haute-fidelite/`
 > (tracké depuis les commits `8e1e717` et `f1f63db` : les références des US restent valides)
 > **Branche de référence lue :** `epic-9-12-refonte-plan-cultures-pepiniere`, HEAD `f1f63db`, v3.74.0
 > (US-181 « abri et paillage » et US-085/086/087 « rôles » sont livrées depuis le cadrage du 19/09)
@@ -22,6 +23,26 @@
 > - deux US nouvelles : **US-222** (recoudre l'onglet Parcelles sur la Vue plan) et **US-223** (la barre de l'activité Plan) ;
 > - quatre US amendées : **US-195** (retour à l'état exact d'un niveau, 3 → 5 points), **US-200** (variante de taille des composants de rang), **US-201** (CA8 élargi, arbitrage A7 confirmé), **US-198** et **US-207** (consommateurs) ;
 > - **aucun nouvel épic** : la v4 n'ouvre pas de chantier, elle complète le Plan (A22).
+
+> ### 🆕 Ce que la maquette haute fidélité a changé, le 23/09
+> `maquette front/haute-fidelite/Plan - Rangs et places.html` est la maquette **gelée** de la Vue plan
+> au sens de RT9. Elle ne rediscute ni la répartition des écrans, ni le zoom : elle change la **nature du
+> rang**. Un rang n'est plus un trait dont la longueur dit une quantité *relative* ; c'est une **piste de
+> places** — combien de pieds y tiennent, combien y sont, combien il en reste. Conséquences :
+> - la parcelle gagne une **longueur**, unique et partagée par tous ses rangs, base de tout calcul de
+>   place ; la largeur s'en déduit et ne s'affiche que pour mémoire ;
+> - l'espacement sur le rang, que la maquette croyait acquis, doit être rendu **exploitable** : la
+>   colonne existante est une chaîne libre (§ 5) ;
+> - une règle transverse de plus : **RT14** (une place est une capacité de rang, jamais un taux
+>   d'occupation) ;
+> - six arbitrages de plus : **A23** à **A28** ;
+> - quatre US nouvelles : **US-225** (longueur de la parcelle), **US-226** (espacement sur le rang),
+>   **US-227** (places et restes), **US-228** (piste des places) ;
+> - quatre US amendées : **US-198** (étendue par US-227), **US-200** (V3 devient le mode dégradé, seuil
+>   de colonnes à 1000 px), **US-222** (D5, D7, D10), **US-217** (la suggestion peut enfin se dire en
+>   places) ;
+> - **aucun nouvel épic**, et **aucune US réécrite** : US-198 est livrée, US-200 est en cours, toutes
+>   deux restent valides. Le trait relatif devient le mode dégradé que la maquette prévoit elle-même.
 
 ---
 
@@ -36,6 +57,7 @@ traite**, pas au-delà.
 | `Wireframes v2 - Plan Cultures Pepiniere.html` (v2) | 19/09 | Enchaînement Cultures → fiche calendrier d'US-183. Plan **géométrique** (longueur × largeur, espacements). Pépinière **poste de travail** : onglets Aujourd'hui · Lots · Calendrier · Emplacements, écran de terrain, étiquettes à QR code | Enchaînement et **Pépinière** font foi. Le Plan géométrique est **reporté** par la v3 |
 | `Wireframes v3 - Plan simplifie.html` (v3) | 19/09 | **Vue plan V1** : une carte par parcelle, un trait par rang, trois formes, dix-sept règles de rendu et d'interaction | Fait foi pour la **Vue plan** |
 | `Wireframes v4 - Parcelles et zoom.html` (v4) | 21/09 | Le **zoom d'information** en quatre niveaux, l'onglet **Parcelles** refondu sur la Vue plan, la matrice « qui porte quoi », neuf règles de plus (18 à 26) | Fait foi pour l'**onglet Parcelles**, l'ordre des sous-onglets et la circulation entre niveaux. Il ne rouvre ni la Vue plan (v3), ni Cultures (v1), ni la Pépinière (v1 + v2) |
+| `haute-fidelite/Plan - Rangs et places.html` | 23/09 | Le **rendu** de la Vue plan : carte, en-tête, ligne de rang, légende, pied de vue, encarts d'absence — et la **piste de places** qui remplace le trait relatif | **Maquette gelée (RT9)**, elle fait foi sur le rendu du niveau 1 et, par héritage, sur la tuile du niveau 2. Elle ne rouvre ni la répartition des écrans (v1), ni le zoom (v4), ni la Pépinière |
 
 ## 2. La règle de répartition (v1, conservée)
 
@@ -77,6 +99,9 @@ C'est le même objet agrandi, pas une information dupliquée.
 | Exposition, abri, paillage (US-181) | — | ● | — | — |
 | Rangs occupés / déclarés | ● | ● | — | — |
 | Trait de rang (forme, longueur, couleur) | ● | ● agrandi | — | — |
+| Longueur de la parcelle, largeur déduite | ● | ● | — | — |
+| Places d'un rang, places restantes, dépassement | ● | ● agrandi | — | — |
+| Espacement sur le rang | ● en libellé | ● | ● | — |
 | Quantité et unité | ● | ● | ● | — |
 | Mode d'implantation | forme | forme + mot | ● | — |
 | Phase du jour (US-194) | ● | ● | ● | ● |
@@ -138,6 +163,7 @@ par-dessus l'écran, jamais des navigations : les fermer rend l'écran d'origine
 | **RT11** | **Droits** : un membre en lecture seule ne voit aucune action d'écriture ; propriétaire et éditeur les voient | US-047, US-085 |
 | **RT12** | **Un niveau n'en répète jamais un autre** : il agrandit l'objet du précédent et ajoute ce que le précédent ne portait pas (matrice § 3.2). Remonter rend le niveau d'origine dans son **état exact** — défilement, sélection, focus — et les onglets restent accessibles : l'échelle n'est pas un tunnel | v4 règles 18, 20, 25 |
 | **RT13** | **Une seule mesure d'occupation dans toute l'activité Plan : les rangs occupés sur rangs déclarés.** Le pourcentage de surface quitte l'écran ; une parcelle sans nombre de rangs affiche « — », jamais un chiffre reconstitué | v3 § 4.3, v4 règle 23, A3, A20 |
+| **RT14** | **Une place est une capacité de rang, jamais un taux d'occupation.** Les places disent, rang par rang, ce qui tient et ce qui reste ; elles ne s'additionnent pas, ne se ramènent pas à un pourcentage, et n'apparaissent ni en pied de vue ni dans aucun total. RT13 n'est pas rouverte. Une place n'est pas non plus un conseil : elle dit ce que la géométrie permet, pas ce qu'il est raisonnable de planter | maquette 23/09, A25 |
 
 ## 5. Écarts constatés entre les wireframes et le modèle réel
 
@@ -160,6 +186,10 @@ déjà ». Vérification faite, voici ce qui n'existe pas — et l'US qui le cr�
 | « Parcelle sous abri » = carte hachurée sans rangs (v3 règle 8) | L'**abri** (US-181, livrée en v3.73.0) et la **pépinière** (`est_pepiniere`) sont deux attributs distincts ; une serre de production porte des rangs | La carte hachurée est celle d'une **parcelle pépinière** (US-200) ; l'abri et le paillage s'affichent au niveau 2 (US-222) |
 | Règles « Sol » et « Pluie 48 h » dans la fiche calendrier (v2 § 1b) | Le moteur d'US-178 a cinq règles : fenêtre, dernière gelée, gel sur quinze jours, nuits douces, saison restante | La fiche livrée par US-183 fait foi ; rien à développer |
 | Pépinière chaude ou froide (demande du 19/09) | `est_pepiniere` est un booléen. « Un semis en pépinière tient R2, R3 et R4 pour acquises : la pépinière non chauffée de février attend l'abri d'US-181 » | US-208, US-220 |
+| Une **longueur de rang** par parcelle (maquette 23/09 : « la parcelle porte `longueur_rang_m` ») | Aucune colonne. La parcelle porte `nom`, `superficie_m2`, `exposition`, `type_sol`, `ordre`, `est_pepiniere`, et `nb_rangs` depuis US-197 | US-225 — et la longueur est portée par la **parcelle**, pas par le rang : une planche a une longueur unique, que tous ses rangs partagent |
+| L'espacement sur le rang « vient du référentiel culture (US-161) » (maquette 23/09) | **Il n'en vient pas.** `culture_config.espacement` est une **chaîne libre** (`'110 × 135 cm'`), nullable, ajoutée par la migration v8 et renseignée par la v13 sur les seules cucurbitacées ; US-161 n'a rien ajouté là-dessus. Elle porte **deux** distances, pas une | US-226. La convention est heureusement vérifiable : dans la v13, `A ≤ B` et `surface_m2 = A × B ÷ 10000` sur toutes les entrées — **A est l'espacement sur le rang**, et `surface_m2` sert de contrôle |
+| Le rang libre propose « ex. 24 tomates » (maquette 23/09) | La maquette calcule cet exemple avec un espacement **codé en dur à 50 cm**, quelle que soit la parcelle | Une valeur inventée au sens de RT2. L'exemple n'est gardé que s'il s'appuie sur une culture **réellement présente** dans la parcelle, et il la nomme (A26, US-227 / R16) |
+| Les pictogrammes de culture (🍅 🥒 🎃) | Aucune correspondance culture → symbole n'existe, et un emoji système change de dessin et de couleur selon le poste — une troisième palette, contre RT4 | Jeu de **pictogrammes SVG** monochromes teintés par la phase, avec forme neutre de repli (A27, US-228 / CA3) |
 
 ## 6. Arbitrages proposés — à confirmer avant la haute fidélité
 
@@ -190,6 +220,12 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | **A20** | Le pourcentage de surface disparaît-il vraiment de l'onglet Parcelles, livré par US-060 et lu depuis un an ? (v4 § 5.3) | **Oui** : ligne, barre, infobulle et code couleur retirés, remplacés par « N rangs occupés sur M ». La superficie en m² reste | Deux mesures d'occupation qui ne mesurent pas la même chose, sur le même écran, se contredisent à l'œil (RT13). Le code couleur est en plus une troisième palette (RT4). **Décision produit à confirmer : c'est une régression visible, à annoncer dans les patch notes** | US-222 |
 | **A21** | La tuile garde-t-elle frise **et** confiance maintenant qu'elle porte aussi son trait de rang ? (v4 § 5.4) | **Oui**, elle garde tout : c'est le niveau qui porte la frise conseillée et la confiance. La vérification se fait en haute fidélité à 375 px ; si la tuile déborde, c'est la frise qui se réduit, jamais le trait ni la quantité | Retirer frise ou confiance reviendrait sur US-180 et US-183 ; le trait, lui, est ce qui recoud les deux niveaux | US-222 |
 | **A22** | Faut-il un épic de plus pour le zoom ? | **Non.** Le zoom est une règle, pas un chantier : ses niveaux 1 et 2 sont le Plan, le 3 est Cultures, le 4 est livré. L'ÉPIC 10 est renommé « Plan : l'occupation en rangs et le zoom d'information » et absorbe US-222 et US-223 | Un épic transverse obligerait à livrer trois écrans ensemble ; la découpe actuelle reste livrable vague par vague | ÉPIC 10 |
+| **A23** | Deux colonnes à 720 px (A1) ou à 1000 px (maquette 23/09) ? | **1000 px**, ce qui **révise A1** | La ligne de rang de la maquette porte six zones — numéro, pictogramme, libellé, piste, reste, phase. À 720 px de conteneur, la piste tombe sous la largeur où ses fentes restent lisibles. A1 avait été posé sur un trait nu | US-200, US-228 |
+| **A24** | D'où vient l'espacement sur le rang, puisque la colonne est une chaîne libre ? | **Parser la chaîne existante**, `A × B cm` → A, avec `surface_m2` en contrôle de cohérence. Aucune colonne, aucune migration. Chaîne absente ou illisible → « places non calculées », jamais une moyenne | La convention est vérifiée sur toutes les entrées de la migration v13. Ouvrir une colonne numérique déclarable coûterait une migration et une commande de plus **avant** que le premier écran ne s'affiche. Si le terrain montre que les valeurs du référentiel sont fausses — elles viennent d'un calcul de surface au sol, généreux pour une planche —, la colonne déclarable devient une US à part, sans rien invalider | US-226 |
+| **A25** | Les places créent-elles une seconde mesure d'occupation, contre RT13 ? | **Non** : une place est une **capacité de rang**. Aucun total, aucun pourcentage de remplissage, ni par parcelle ni en pied de vue. La mesure d'occupation reste « N rangs sur M » (RT13, nouvelle RT14) | Deux mesures d'occupation sur le même écran se contredisent à l'œil — c'est exactement le motif d'A20. Un « potager rempli à 62 % de ses places » serait ce chiffre-là | US-227 |
+| **A26** | Le rang libre annonce-t-il « ex. 24 tomates » ? | **Oui, mais nommé et sourcé** : l'exemple s'appuie sur une culture réellement présente dans la parcelle et dont l'espacement est connu, et il la nomme. Aucune culture de référence → la longueur seule | L'exemple est ce qui rend un rang libre actionnable. Mais l'espacement de 50 cm codé en dur dans la maquette est une valeur inventée (RT2), et invisible comme telle : le jardinier lirait « 24 » comme un fait | US-227, US-228 |
+| **A27** | Emoji système ou pictogrammes maison pour les places prises ? | **Pictogrammes SVG** monochromes du design system, teintés par la phase, avec forme neutre de repli | Un emoji change de dessin et de couleur selon l'OS, et sa couleur propre entre en concurrence avec la couleur de phase : ce serait une troisième palette (RT4), et un contraste non maîtrisable en thème sombre | US-228 |
+| **A28** | Faut-il attendre longueur, espacement et places pour livrer la Vue plan ? | **Non.** US-200 part avec le trait relatif, que la maquette conserve elle-même comme **mode dégradé** pour toute parcelle sans longueur. US-225, US-226 et US-227 suivent, puis US-228 remplace la piste | Au premier jour, **aucune** parcelle n'a de longueur et la plupart des cultures n'ont pas d'espacement : un écran qui attendrait ces données n'aurait rien à afficher pendant des semaines. Le mode dégradé n'est pas un pis-aller, c'est l'état initial de tout potager | US-200, US-228 |
 
 ## 7. Découpage
 
@@ -201,12 +237,12 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | US-195 | Ouvrir un écran depuis un autre avec son contexte, et le retrouver dans son état exact | 5 | US-053 (livrée) |
 | US-196 | Préparer un geste dans la PWA et le faire confirmer au compagnon Telegram | 8 | US-045, US-091, US-179, US-183 (livrées) |
 
-### ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information (40 points)
+### ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information (56 points)
 
 | US | Titre | Pts | Dépend de |
 |---|---|---|---|
-| US-197 | Déclarer le nombre de rangs d'une parcelle | 3 | — |
-| US-198 | Répartir les cultures en place sur les rangs de leur parcelle | 5 | US-194, US-197 |
+| US-197 | Déclarer le nombre de rangs d'une parcelle ✅ | 3 | — |
+| US-198 | Répartir les cultures en place sur les rangs de leur parcelle ✅ | 5 | US-194, US-197 |
 | US-199 | Reconnaître le poquet et le mètre de rang comme unités d'implantation | 2 | US-168 (livrée) |
 | US-200 | Afficher la Vue plan : une carte par parcelle, un trait par rang | 8 | US-198, US-194 |
 | US-201 | Relier la Vue plan et l'onglet Parcelles aux autres écrans | 3 | US-200, US-195, US-196, US-207 |
@@ -214,6 +250,14 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | US-203 | Préciser à la saisie le rang où l'on sème ou plante *(optionnelle)* | 5 | US-198 |
 | **US-222** | **Recoudre l'onglet Parcelles sur la Vue plan — le niveau 2 du zoom** | **8** | **US-198, US-200, US-195, US-196, US-207** |
 | **US-223** | **Ordonner la barre de l'activité Plan — zoom, date, journal du jour** | **3** | **US-053 (livrée), US-195** |
+| **US-225** | **Déclarer la longueur d'une parcelle, base de calcul de tous ses rangs** | **3** | **—** |
+| **US-226** | **Rendre exploitable l'espacement sur le rang d'une culture** | **3** | **—** |
+| **US-227** | **Calculer les places d'un rang et ce qu'il en reste** | **5** | **US-225, US-226, US-198** |
+| **US-228** | **Dessiner le rang comme une piste de places** | **5** | **US-227, US-200** |
+
+> Les quatre dernières viennent de la maquette gelée du 23/09. US-225 et US-226 sont des US de
+> **données**, livrables seules et en parallèle ; US-227 est une extension du module de répartition
+> déjà livré ; US-228 remplace le remplissage du rang dans les composants d'US-200, sans les refaire.
 
 ### ÉPIC 11 — Cultures : tout savoir d'une culture (18 points)
 
@@ -247,8 +291,8 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 
 | Vague | Contenu | Pourquoi dans cet ordre |
 |---|---|---|
-| **A — Données** | US-194, US-197, US-199, US-206, US-208, US-209, US-213 | Aucun écran ; chacune est livrable seule et débloque les suivantes |
-| **B — Socle et Plan** | US-195, US-198, US-200, US-223, US-207, US-196, US-201, **US-222**, US-202 | La Vue plan est la plus attendue ; la barre se range avec elle, la fiche culture et le geste pré-rempli en sont les sorties, et l'onglet Parcelles se recoud **une fois** que le trait de rang existe |
+| **A — Données** | US-194 ✅, US-197 ✅, US-199, **US-225**, **US-226**, US-206, US-208, US-209, US-213 | Aucun écran ; chacune est livrable seule et débloque les suivantes. US-225 et US-226 sont le prix d'entrée de la piste de places : sans longueur ni espacement, aucune place n'est calculable |
+| **B — Socle et Plan** | US-195, US-198 ✅, US-200, US-223, **US-227**, **US-228**, US-207, US-196, US-201, **US-222**, US-202 | La Vue plan est la plus attendue : elle part **avec le trait relatif** (A28), c'est-à-dire l'état réel de tout potager au premier jour. Les places arrivent ensuite — US-227 les calcule, US-228 les dessine — et le niveau 2 en hérite quand il se recoud. La barre se range avec l'écran, la fiche culture et le geste pré-rempli en sont les sorties |
 | **C — Cultures** | US-204, US-205 | Réutilise la fiche culture déjà livrée en B |
 | **D — Pépinière** | US-210, US-211, US-212, US-214, US-216, US-215, US-217, US-218, US-219, US-220 | Les données du lot d'abord (emplacement, levée, échéances), l'écran ensuite |
 | **Options** | US-203, US-221 | À déclencher sur usage |
@@ -258,9 +302,14 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 - L'**onglet Rotation** du Plan, encore en construction. Il garde sa place dans la barre, désactivé
   (US-223) ; les composants de la Vue plan acceptent une palette passée en paramètre pour qu'il les
   reprenne tels quels (v1, v3, v4 règle 26).
-- Le **Plan géométrique** de la v2 — longueur × largeur, orientation des rangs, espacements sur le rang
-  et entre rangs, emprise en m², débordement, échelle. **Reporté, pas abandonné** : la v2 reste le
-  dossier de référence le jour où ces données existeront (v3 § 4).
+- Le **Plan géométrique** de la v2 — orientation des rangs, espacement **entre** rangs, emprise réelle en
+  m², débordement, dessin à l'échelle, position des parcelles les unes par rapport aux autres.
+  **Reporté, pas abandonné** : la v2 reste le dossier de référence le jour où ces données existeront
+  (v3 § 4).
+  ⚖️ *La maquette du 23/09 en prélève le strict minimum et rien de plus* : une **longueur** par parcelle
+  (US-225) et l'espacement **sur** le rang (US-226). Ces deux valeurs suffisent à compter des places ;
+  elles ne dessinent aucune géométrie, ne positionnent rien, et la largeur n'est même pas stockée. Ce
+  n'est pas une réouverture du plan géométrique, c'est une mesure de capacité.
 - La **fusion des niveaux 1 et 2** en un seul écran dépliable (A19).
 - Le **pourcentage de surface** comme mesure d'occupation (A20) ; le calcul `occupation_pct` reste en
   base, seul son affichage disparaît de l'activité Plan.
@@ -274,6 +323,14 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 
 ## 10. Ce qui reste à confirmer avec le PO
 
+0. Les arbitrages **A23 à A28** du § 6, nés de la maquette du 23/09 — en particulier **A24** (lire la
+   chaîne d'espacement plutôt qu'ouvrir une colonne déclarable : c'est le choix qui décide si l'écran
+   s'affiche cette semaine ou dans trois), **A25** (les places ne deviennent jamais un taux
+   d'occupation) et **A28** (livrer la Vue plan en mode dégradé avant d'avoir les places).
+   ⚠️ **Question ouverte de référentiel** : les espacements de la migration v13 ont été saisis pour
+   calculer une **surface au sol**, en valeurs de plein champ. Sur une planche de potager conduite
+   serré, ils donneront des capacités basses. Qui vérifie, et sur quelles cultures ? L'outil d'US-226 /
+   CA8 dit lesquelles comptent réellement.
 1. Les arbitrages A1 à A22 du § 6, en particulier **A6** (parcelle sans nombre de rangs), **A16** (geste
    confirmé au compagnon plutôt qu'un formulaire web), **A18** (le Plan s'ouvre sur la Vue plan) et
    surtout **A20** (retrait du pourcentage d'occupation livré par US-060, visible pour les utilisateurs

@@ -2,6 +2,31 @@
 **Titre :** Dessiner le rang comme une piste de places
 **Épic :** ÉPIC 10 — Plan : l'occupation en rangs et le zoom d'information *(numéro à valider, voir le plan des épics 9 à 12)*
 
+**Ajustement de rendu validé après implémentation :** la référence devient
+`maquette front/Plan - Rangs et places.html`, avec **sept symboles
+proportionnels**. La dernière validation demande les **emoji de culture exacts
+de la maquette**, dans la piste et en tête de rang sur les cartes larges, ainsi
+que les graines, la jeune pousse et le panier dans les pastilles et la légende.
+Elle remplace le choix intermédiaire de repères neutres et l'arbitrage A27.
+Les places restantes portent une pousse en contour ; les rangs libres n'ont
+plus de lien « ajouter une culture ». Cet ajustement
+remplace les silhouettes et le regroupement par seize décrits ci-dessous
+(P1, P2, P13, CA3) : aucun repère ne vaut un nombre de plants. Le nombre plein
+est l'arrondi de `prises / places × 7`, borné à sept et au minimum un si une
+place est prise ; le fond garde la proportion et le plancher de P3. Les comptes
+exacts et la phase écrite restent visibles. Les calculs serveur, les modes
+dégradés et le périmètre des US livrées restent inchangés : **pas de largeur
+standard de 40 cm pour les surfaces**, ni d'interactions US-201/222/223.
+Les critères ci-dessous et les notes de livraison initiale restent l'historique
+de la première version ; la nouvelle référence s'applique aux contrôles visuels
+CA1/7/12 et à la documentation CA13.
+
+L'en-tête P11 suit également cette référence : quatre pictogrammes distincts
+(superficie, longueur, largeur, rangs), valeurs manquantes en rouge avec « ? »,
+total de rangs inconnu explicitement signalé, rangs libres affichés si connus.
+La largeur reste fournie par le serveur ; une incohérence reste signalée, et
+les pépinières conservent leur compte de lots.
+
 **Story :**
 En tant que jardinier
 Je veux voir sur chaque rang mes pieds installés et les places qui restent
@@ -39,27 +64,27 @@ C'est un changement de nature, pas d'habillage. Le trait d'US-200 disait une qua
 **Critères d'acceptance :**
 
 *Rendu*
-- [ ] CA1 : P1 à P15 sont appliquées, et le rendu correspond à la **maquette gelée** `maquette front/haute-fidelite/Plan - Rangs et places.html` à 375 px, 768 px et desktop ; vérification chrome-devtools à 375 px avant de déclarer l'US terminée (`frontend/CLAUDE.md`, RT9)
-- [ ] CA2 : Le calcul des fentes, du regroupement de P2, du plancher de P3 et des libellés est fait dans `frontend/src/lib/planVue.js` (US-200 / CA2), **sans React**, couvert par `npm test`. Aucune règle métier n'y est recalculée : les places, les restes et les dépassements viennent tels quels de `GET /plan` (RT7)
-- [ ] CA3 : Un jeu de **pictogrammes SVG** monochromes entre au design system, teintés par la couleur de phase, avec une **forme neutre de repli** pour toute culture non couverte. La correspondance culture → pictogramme est une table de présentation isolée, sur le modèle de `familles.js`, et son absence n'empêche jamais le rendu (A27)
-- [ ] CA4 : La piste et ses états sont un composant du design system (`PisteDesPlaces`), consommé par `RangPlan` d'US-200 ; il accepte la **palette en paramètre** et la **variante de taille** déjà prévues par US-200 / CA4, pour que l'onglet Parcelles (US-222) et l'onglet Rotation le reprennent sans second dessin
+- [x] CA1 : P1 à P15 sont appliquées, et le rendu correspond à la **maquette gelée** `maquette front/haute-fidelite/Plan - Rangs et places.html` à 375 px, 768 px et desktop ; vérification chrome-devtools à 375 px avant de déclarer l'US terminée (`frontend/CLAUDE.md`, RT9)
+- [x] CA2 : Le calcul des fentes, du regroupement de P2, du plancher de P3 et des libellés est fait dans `frontend/src/lib/planVue.js` (US-200 / CA2), **sans React**, couvert par `npm test`. Aucune règle métier n'y est recalculée : les places, les restes et les dépassements viennent tels quels de `GET /plan` (RT7)
+- [x] CA3 : Un jeu de **pictogrammes SVG** monochromes entre au design system, teintés par la couleur de phase, avec une **forme neutre de repli** pour toute culture non couverte. La correspondance culture → pictogramme est une table de présentation isolée, sur le modèle de `familles.js`, et son absence n'empêche jamais le rendu (A27)
+- [x] CA4 : La piste et ses états sont un composant du design system (`PisteDesPlaces`), consommé par `RangPlan` d'US-200 ; il accepte la **palette en paramètre** et la **variante de taille** déjà prévues par US-200 / CA4, pour que l'onglet Parcelles (US-222) et l'onglet Rotation le reprennent sans second dessin
 
 *Mise en page*
-- [ ] CA5 : Deux colonnes de cartes à partir de **1000 px de largeur de conteneur**, une en dessous, jamais trois — le seuil de la maquette, qui remplace les 720 px d'A1 (arbitrage A23). Container query, jamais de breakpoint d'écran
-- [ ] CA6 : Sous **560 px de largeur de carte**, la ligne de rang se replie en trois zones — libellé et pastille de phase sur la première ligne, piste sur la deuxième, reste sur la troisième — le numéro de rang restant en marge. Le pictogramme de tête de ligne disparaît, la piste ne rétrécit jamais sous 44 px de haut de cible d'appui
-- [ ] CA7 : Aucun défilement horizontal de la page à 375 px, libellés longs et pistes à seize fentes compris
+- [x] CA5 : Deux colonnes de cartes à partir de **1000 px de largeur de conteneur**, une en dessous, jamais trois — le seuil de la maquette, qui remplace les 720 px d'A1 (arbitrage A23). Container query, jamais de breakpoint d'écran
+- [x] CA6 : Sous **560 px de largeur de carte**, la ligne de rang se replie en trois zones — libellé et pastille de phase sur la première ligne, piste sur la deuxième, reste sur la troisième — le numéro de rang restant en marge. Le pictogramme de tête de ligne disparaît, la piste ne rétrécit jamais sous 44 px de haut de cible d'appui
+- [x] CA7 : Aucun défilement horizontal de la page à 375 px, libellés longs et pistes à seize fentes compris
 
 *États*
-- [ ] CA8 : Les cinq cas sont rendus et distincts : places calculées, mode dégradé (P6), semis en ligne (P7), semis en surface (P8), rang libre (P9)
-- [ ] CA9 : Au premier jour — aucune parcelle n'a de longueur, aucune culture d'espacement — l'écran est **exactement celui d'US-200** : longueur relative partout, mention par carte, pied de vue complet. Aucune régression, aucun écran vide
+- [x] CA8 : Les cinq cas sont rendus et distincts : places calculées, mode dégradé (P6), semis en ligne (P7), semis en surface (P8), rang libre (P9)
+- [x] CA9 : Au premier jour — aucune parcelle n'a de longueur, aucune culture d'espacement — l'écran est **exactement celui d'US-200** : longueur relative partout, mention par carte, pied de vue complet. Aucune régression, aucun écran vide
 
 *Accessibilité*
-- [ ] CA10 : Le nom accessible d'un rang dit tout, places comprises : « Rang 1, tomate, 9 plants sur 24 places, 15 restantes, en place ». La piste et ses pictogrammes sont décoratifs (`aria-hidden`) : rien d'essentiel n'est porté par le seul dessin
-- [ ] CA11 : Contrastes AA dans les deux thèmes, pour le pictogramme plein comme pour la marque en creux ; la marque en creux reste perceptible sur fond sombre
+- [x] CA10 : Le nom accessible d'un rang dit tout, places comprises : « Rang 1, tomate, 9 plants sur 24 places, 15 restantes, en place ». La piste et ses pictogrammes sont décoratifs (`aria-hidden`) : rien d'essentiel n'est porté par le seul dessin
+- [x] CA11 : Contrastes AA dans les deux thèmes, pour le pictogramme plein comme pour la marque en creux ; la marque en creux reste perceptible sur fond sombre
 
 *Définition de terminé*
-- [ ] CA12 : La page de contrôle visuel d'US-200 / CA11 gagne : piste normale, piste à seize fentes avec regroupement, rang surchargé, semis en ligne partiel et débordant, rang libre avec et sans capacité d'exemple, parcelle sans longueur, largeur incohérente, thème sombre
-- [ ] CA13 : La fiche `parcelles-et-plan.md` gagne « Lire un rang » : ce qu'est une place, pourquoi certains rangs n'en ont pas, pourquoi un pictogramme peut valoir plusieurs pieds, et ce que veut dire « +4 » (US-099 / CA9). `ANALYSE_REFONTE_UI_WEB_2026.md` (§ 5.10) note que la Vue plan se lit désormais en places et que le pourcentage de surface n'y figure plus
+- [x] CA12 : La page de contrôle visuel d'US-200 / CA11 gagne : piste normale, piste à seize fentes avec regroupement, rang surchargé, semis en ligne partiel et débordant, rang libre avec et sans capacité d'exemple, parcelle sans longueur, largeur incohérente, thème sombre
+- [x] CA13 : La fiche `parcelles-et-plan.md` gagne « Lire un rang » : ce qu'est une place, pourquoi certains rangs n'en ont pas, pourquoi un pictogramme peut valoir plusieurs pieds, et ce que veut dire « +4 » (US-099 / CA9). `ANALYSE_REFONTE_UI_WEB_2026.md` (§ 5.10) note que la Vue plan se lit désormais en places et que le pourcentage de surface n'y figure plus
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : consultation (PWA, écran Plan)
@@ -118,5 +143,13 @@ Scénario: Lecture en niveaux de gris
   Then une place prise et une place restante restent distinguables par leur forme
   And chaque rang porte sa phase écrite en toutes lettres
 ```
+
+**Livraison (23/09/2026) :**
+- Nouveaux fichiers : `frontend/src/components/ui/PisteDesPlaces.jsx` (la piste, le jeu de silhouettes et le pictogramme de cote) et `frontend/src/lib/pictosCultures.js` (la table culture → silhouette, isolée). `TraitRang` n'est pas supprimé : il est devenu le **mode dégradé** de la piste (P6, P8)
+- P15 / CA11 — les pictogrammes prennent la teinte **forte** de la phase sur un remplissage en teinte **douce** (la paire du design system) : un pictogramme de la couleur du remplissage s'y effacerait, et la marque en creux reste perceptible en thème sombre
+- P2 — l'équivalence « 1 pictogramme = N » est écrite **sur le rang lui-même**, sous son libellé, en plus de l'avertissement de la légende : la légende ne dit pas quel rang est concerné
+- CA5 — le seuil de deux colonnes passe de 720 à 1000 px : `test_us200_ca5_deux_colonnes_par_container_query_jamais_trois` a été mis à jour, la règle (container query, jamais trois colonnes) est inchangée
+- CA1, CA7 — contrôle visuel chrome-devtools à 375 px, en desktop deux colonnes et en thème sombre, sur `/vue-plan` : aucun défilement horizontal, les cinq états distincts
+- **Reste ouvert** : l'unité `ml` de P7 n'est pas encore produite par la dictée (US-199 non livrée) — le rendu est en place et couvert par les tests, mais aucun geste réel ne porte cette unité aujourd'hui
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `plan`, `design-system`

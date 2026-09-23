@@ -274,7 +274,10 @@ def create_parcelle(
 # [US_Plan_occupation_parcelles] Mise à jour des métadonnées d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-_CHAMPS_MODIFIER = {"exposition", "superficie", "ordre", "pepiniere", "abri", "paillage", "rangs"}
+_CHAMPS_MODIFIER = {
+    "exposition", "superficie", "ordre", "pepiniere", "abri", "paillage",
+    "rangs", "longueur",
+}
 
 #: [US-197 / CA1, CA2] Le nombre de rangs DÉCLARÉS d'une planche. Bornes du
 #: domaine, doublées du CHECK `ck_parcelles_nb_rangs` (migration_v52) : la base
@@ -333,6 +336,103 @@ def _nb_rangs(valeur: str) -> Optional[int]:
     return nombre
 
 
+#: [US-225 / CA1] La longueur UTILE d'une planche, celle où l'on plante — allées
+#: et bordures exclues. Bornes du domaine, doublées du CHECK
+#: `ck_parcelles_longueur_m` (migration_v53) : la base les garantit, ce point
+#: d'écriture les explique au jardinier.
+LONGUEUR_MIN, LONGUEUR_MAX = 0.5, 200.0
+#: Ce qui remet la longueur à « non renseignée » — distinct de « zéro mètre »,
+#: qui n'existe pas : une planche non mesurée n'est pas une planche sans place.
+_LONGUEUR_AUCUNE: frozenset[str] = frozenset(
+    {"aucun", "aucune", "non renseigne", "non renseignee", "non", "vide", ""}
+)
+#: L'unité dictée ne doit pas faire échouer la saisie : « longueur=12m » et
+#: « longueur=12 mètres » disent la même chose que « longueur=12 ».
+_UNITE_LONGUEUR = re.compile(r"\s*(?:metres?|m)\s*$")
+
+#: [US-225 / CA7] En deçà, la largeur déduite n'est plus une planche : c'est le
+#: signe que la longueur ou la superficie est fausse. Non bloquant — la valeur
+#: dite par le jardinier est enregistrée telle quelle, et c'est l'écran qui le
+#: dit (RT2). On ne corrige jamais une donnée à sa place.
+LARGEUR_MIN_PLAUSIBLE = 0.2
+
+
+def format_longueur(valeur: Optional[float]) -> str:
+    """[US-225 / CA5] « 12 m », « 12,5 m », ou « non renseignée ».
+
+    Une décimale au plus, et jamais un « .0 » inutile : le jardinier a dit
+    « douze mètres », il doit relire douze mètres.
+    """
+    if valeur is None:
+        return "non renseignée"
+    arrondie = round(float(valeur), 1)
+    if arrondie == int(arrondie):
+        return f"{int(arrondie)} m"
+    return f"{arrondie:.1f} m".replace(".", ",")
+
+
+def format_largeur(valeur: Optional[float]) -> str:
+    """[US-225 / CA7] « 5 cm », « 75 cm », « 1,2 m » — l'unité qui se lit.
+
+    Une largeur incohérente se compte en centimètres : écrire « 0,05 m de
+    large » laisserait passer le zéro qui fait toute l'anomalie.
+    """
+    if valeur is None:
+        return "non déduite"
+    if valeur < 0.01:
+        return "moins de 1 cm"
+    if valeur < 1:
+        return f"{valeur * 100:.0f} cm"
+    return f"{round(valeur, 2):g} m".replace(".", ",")
+
+
+def largeur_deduite(
+    superficie_m2: Optional[float], longueur_m: Optional[float]
+) -> Tuple[Optional[float], bool]:
+    """[US-225 / CA6, CA7] Largeur DÉDUITE d'une parcelle et sa cohérence.
+
+    La largeur ne se déclare pas et ne se stocke pas : elle vaut
+    `superficie_m2 ÷ longueur_m`, arrondie à 2 décimales, et ne sert que de
+    repère d'affichage. Elle est `None` dès que l'une des deux valeurs manque —
+    jamais supposée, jamais moyennée.
+
+    Retourne `(largeur, incoherente)`. `incoherente` signale une largeur trop
+    faible pour être une planche (CA7) : la valeur reste rendue telle quelle,
+    c'est l'écran qui le dira.
+    """
+    if not superficie_m2 or not longueur_m:
+        return None, False
+    largeur = round(float(superficie_m2) / float(longueur_m), 2)
+    return largeur, largeur < LARGEUR_MIN_PLAUSIBLE
+
+
+def _longueur_m(valeur: str) -> Optional[float]:
+    """[US-225 / CA1, CA2] Lit une longueur déclarée, ou None pour « non renseignée ».
+
+    Accepte « 12 », « 12.5 », « 12,5 » et l'unité dictée (« 12 m », « 12 mètres »).
+    Refuse tout le reste — « 0 m » compris, qui dirait « cette planche n'a aucune
+    place » là où le jardinier voulait dire « je ne l'ai pas mesurée »
+    (`longueur=aucune`). La valeur précédente est conservée : la ValueError
+    remonte avant toute affectation.
+    """
+    brut = unidecode(str(valeur or "")).strip().lower()
+    if brut in _LONGUEUR_AUCUNE:
+        return None
+    brut = _UNITE_LONGUEUR.sub("", brut).replace(",", ".").strip()
+    attendu = (
+        f"une longueur va de {LONGUEUR_MIN} à {LONGUEUR_MAX:.0f} mètres "
+        f"(ex : longueur=12 ou longueur=12,5), ou « longueur=aucune » pour ne "
+        f"plus la renseigner"
+    )
+    try:
+        nombre = round(float(brut), 1)
+    except (ValueError, TypeError):
+        raise ValueError(attendu)
+    if not LONGUEUR_MIN <= nombre <= LONGUEUR_MAX:
+        raise ValueError(attendu)
+    return nombre
+
+
 def _booleen(valeur: str, champ: str) -> bool:
     """oui/non/true/false → bool ; ValueError sinon."""
     v = unidecode(str(valeur or "")).strip().lower()
@@ -351,6 +451,9 @@ def update_parcelle(
 
     Paramètres acceptés via kwargs : exposition, superficie (float m²), ordre (int),
     rangs ([US-197] entier 1-99 ou "aucun" pour revenir à « non renseigné »),
+    longueur ([US-225] décimale 0,5-200 m ou "aucune" — base de calcul des
+    places de TOUS les rangs de la planche ; la largeur, elle, ne se déclare
+    pas : elle se déduit, voir `largeur_deduite`),
     pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
     "semis pleine terre", voir utils.stock._cond_semis_pleine_terre).
     Lève ValueError  si un paramètre est inconnu ou mal typé.
@@ -362,7 +465,8 @@ def update_parcelle(
     if inconnus:
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
-            f"Acceptés : exposition, superficie, ordre, pepiniere, abri, paillage, rangs"
+            f"Acceptés : exposition, superficie, ordre, pepiniere, abri, "
+            f"paillage, rangs, longueur"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -412,6 +516,32 @@ def update_parcelle(
             f"Rangs : {parcelle.nb_rangs}" if parcelle.nb_rangs is not None
             else "Rangs : non renseigné"
         )
+    if "longueur" in kwargs:
+        # [US-225 / CA2] Validée AVANT affectation, comme les rangs : une valeur
+        # refusée laisse la planche exactement dans l'état où elle était.
+        parcelle.longueur_m = _longueur_m(kwargs["longueur"])
+        modifs.append(
+            f"Longueur : {format_longueur(parcelle.longueur_m)} de long"
+            if parcelle.longueur_m is not None else "Longueur : non renseignée"
+        )
+
+    # [US-225 / CA7] Cohérence longueur × superficie : signalée, jamais corrigée,
+    # jamais bloquante. Le CA7 confie cette phrase à l'écran (US-228), mais la
+    # confirmation du compagnon est le SEUL moment où le jardinier a la valeur
+    # sous les yeux à l'instant où il la dit — relevé de terrain du 23/09/2026 :
+    # une planche de 5 m² déclarée longue de 100 m ferait 5 cm de large, et la
+    # faute de frappe partait sans un mot dans le compte des places (US-227).
+    # Le contrôle porte sur l'état APRÈS écriture : corriger la superficie d'une
+    # planche déjà mesurée doit alerter autant que corriger sa longueur.
+    if {"longueur", "superficie"} & set(kwargs):
+        largeur, incoherente = largeur_deduite(parcelle.superficie_m2, parcelle.longueur_m)
+        if incoherente:
+            modifs.append(
+                f"⚠️ {format_longueur(parcelle.longueur_m)} sur "
+                f"{parcelle.superficie_m2:g} m², cela ferait une parcelle de "
+                f"{format_largeur(largeur)} de large. Rien n'a été corrigé — "
+                f"vérifiez la longueur ou la superficie."
+            )
 
     db.commit()
     db.refresh(parcelle)

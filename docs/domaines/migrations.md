@@ -1,17 +1,29 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v52),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v53),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v52.sql
+psql -d potager -f migrations/migration_v53.sql
 ```
 
 ## Ce que portent les dernières migrations
 
+- **v53 [US-225]** — ajoute `parcelles.longueur_m` (NUMERIC(5,1) nullable,
+  CHECK 0,5–200) : la longueur UTILE de la planche dans le sens où l'on plante,
+  base de calcul des places de TOUS ses rangs (US-227). NULL = jamais
+  renseignée, ce qui n'est PAS « zéro mètre ». AUCUN backfill : la longueur ne
+  se déduit jamais de la superficie.
+  ⚠️ Aucune colonne de LARGEUR, et c'est délibéré : la largeur se déduit à la
+  lecture (`superficie_m2 ÷ longueur_m`, `utils.parcelles.largeur_deduite`), ne
+  sert qu'à l'affichage et n'est jamais réinjectée dans un calcul. La stocker
+  aurait créé un triplet longueur × largeur × superficie dont deux valeurs sur
+  trois auraient dérivé à la première correction.
+  Comme la borne 1–99 de `nb_rangs` (v52), les bornes sont une propriété stable
+  du domaine : CHECK SQL, revalidé au point d'écriture Python.
 - **v52 [US-197]** — ajoute `parcelles.nb_rangs` (SMALLINT nullable) : le
   nombre de rangs DÉCLARÉS d'une planche, dénominateur de la Vue plan
   (« 13 rangs occupés sur 18 déclarés »). **Aucun backfill** — NULL veut dire

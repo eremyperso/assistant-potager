@@ -42,6 +42,13 @@
 
     --shadow: 0 1px 2px rgba(22, 33, 12, .06), 0 4px 14px rgba(22, 33, 12, .05);
 
+    /* [US-200 / CA3] Trames de la Vue plan — la FORME porte le mode
+       d'implantation, jamais la couleur seule (V16). Deux teintes : celle
+       qui hachure un trait de semis en surface, celle qui hachure la carte
+       d'une parcelle pépinière. */
+    --trame-trait: rgba(22, 33, 12, .45);
+    --trame-carte: #F1F3EC;
+
     /* Météo — précipitations */
     --g-rain:      #2A6E8F;
     --g-rain-dim:  #E3EFF4;
@@ -113,6 +120,10 @@
 
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
 
+    /* [US-200 / CA3] Trames de la Vue plan — variante sombre. */
+    --trame-trait: rgba(228, 237, 211, .5);
+    --trame-carte: #212C18;
+
     /* Météo — précipitations */
     --g-rain:      #6FAECB;
     --g-rain-dim:  #12242C;
@@ -139,4 +150,29 @@
   /* Masquer la scrollbar sur mobile */
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; }
+}
+
+/* [US-200 / CA3] Trames de la Vue plan — le mode d'implantation se lit à la
+   FORME, ce qui garde l'écran lisible en niveaux de gris (V16). Déclarées ici
+   plutôt qu'en classe Tailwind arbitraire : une trame est un token du design
+   system, avec sa variante sombre, pas une valeur en dur dans un composant. */
+@layer components {
+  /* Semis à la volée : même gabarit de trait, hachuré à 45°. */
+  .trame-surface::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: repeating-linear-gradient(
+      45deg, var(--trame-trait) 0 1.5px, transparent 1.5px 5px
+    );
+  }
+
+  /* Parcelle pépinière : la carte entière est hachurée — elle ne se compte pas
+     en rangs mais en lots (V8). */
+  .trame-pepiniere {
+    background-image: repeating-linear-gradient(
+      45deg, transparent 0 5px, var(--trame-carte) 5px 10px
+    );
+  }
 }

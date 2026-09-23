@@ -46,6 +46,104 @@ Cette US calcule la répartition **côté serveur, à un seul endroit**, et l'aj
 - [x] CA8 : La fiche `parcelles-et-plan.md` dit comment le Plan compte les rangs, pourquoi ils sont numérotés dans l'ordre d'installation, et ses deux limites assumées : des semis échelonnés d'une même variété forment une seule ligne, et une récolte partielle ne libère pas de rang tant que la ligne reste en place (US-099 / CA9)
 - [x] CA9 : Des tests couvrent : une ligne sur un rang, une plantation « sur 3 rangs », deux installations de la même ligne, quantité par rang en plants et en m², déduction du mode pour chaque unité, numérotation et rangs libres, parcelle sans nombre de rangs, dépassement, parcelle pépinière avec lots et avec une plantation, non localisé, date de référence passée
 
+## Complément demandé le 23/09/2026 : compléter les rangs avant d'en ouvrir
+
+**Statut : implémenté dans le périmètre validé, validation ciblée réussie.**
+La validation globale du dépôt n'est pas verte (voir bilan ci-dessous).
+Les points d'affinage non validés restent hors de cette implémentation.
+
+Ce comportement appartient à **US-198**, car il change le nombre de rangs
+occupés et la quantité affectée à chacun. Il dépend des capacités calculées par
+**US-227** ; **US-228** ne fait qu'afficher la répartition et son éventuel
+dépassement. Pour les plantations éligibles, il remplace R2 (un seul rang par
+défaut) et R3 (division uniforme), pas la quantité déclarée. Les garanties
+historiques d'US-227 sur l'absence de modification des champs d'US-198 devront
+être adaptées à ce nouveau périmètre lors de sa livraison.
+
+### Critères d'acceptance supplémentaires
+
+- [x] CA10 — **Déclenchement** : pour une plantation sans nombre de rangs explicitement indiqué, utiliser les places restantes des rangs de même culture normalisée, même variété et même unité avant d'occuper un rang libre. Ne pas fusionner deux variétés ni assimiler une variété non précisée à une variété connue sans résolution préalable. La règle s'applique aussi à la première plantation d'une culture : sans rang compatible existant, commencer par les rangs libres. Une capacité nulle en places restantes est différente d'une capacité inconnue. Si les caractéristiques nécessaires sont insuffisantes (longueur, espacement ou nombre total de rangs), conserver les règles actuelles, sans inventer de capacité ni de rang libre. Périmètre livré : plantations en plants ou pieds ; autres unités inchangées en attendant arbitrage.
+- [x] CA11 — **Compléter l'existant** : affecter au maximum les places disponibles sur chaque rang compatible, dans l'ordre croissant des numéros de rangs. Si la quantité ajoutée tient entièrement dans ces places, aucun rang libre n'est occupé. Un remplissage exactement à capacité n'ouvre pas de rang supplémentaire et ne déclenche pas de dépassement. Ne pas redistribuer uniformément les quantités entre les rangs.
+- [x] CA12 — **Répartir tout le résiduel** : après saturation des rangs compatibles, ou dès la première plantation si aucun n'existe, affecter le résiduel aux rangs libres dans l'ordre croissant de leurs numéros, avec la capacité de la culture plantée, jamais avec la capacité d'exemple d'une autre culture. Répéter sur autant de rangs libres que nécessaire et disponibles ; le dernier peut être partiellement rempli. Les rangs occupés par d'autres cultures ne sont ni déplacés ni utilisés. Le cas d'une première plantation sans aucun rang libre relève de CA19.
+- [x] CA13 — **Débordement en dernier recours** : lorsqu'il ne reste plus de rang libre et qu'un rang compatible existe, ajouter tout le résiduel au dernier rang de cette culture dans l'ordre d'affectation, y compris s'il vient d'être ouvert. Ce rang affiche le dépassement en unités, ses places restantes valent zéro. Aucun rang fictif supplémentaire n'est créé par cette affectation ; la quantité n'est ni écrêtée ni rejetée. L'exception sans aucun rang compatible est définie en CA19.
+- [x] CA14 — **Conservation et priorité à la déclaration** : la somme des quantités affectées est exactement égale à la quantité déjà en place plus la plantation ajoutée. Une déclaration explicite « sur N rangs » conserve sa sémantique actuelle, notamment son multiplicateur, et ne déclenche pas cette affectation automatique. Le stock n'est décompté qu'une fois pour la quantité réellement enregistrée ; répartir n'est pas enregistrer plusieurs fois le geste.
+- [x] CA15 — **Une vérité serveur** : la répartition, les quantités propres à chaque rang, leurs places restantes et leurs dépassements sont cohérents dans `GET /plan` et chez tous ses consommateurs. Les compteurs de rangs et totaux sont mis à jour ; aucun calcul concurrent n'est ajouté dans le frontend. Le contrat doit permettre des quantités différentes par rang : un unique `quantite_par_rang` moyen ne suffit pas. Les lectures répétées ne cumulent pas l'affectation.
+- [x] CA16 — **Validation et documentation** : couvrir les exemples ci-dessous, les décisions d'affinage validées, les déclarations explicites et la conservation des quantités par des tests serveur puis d'affichage. Mettre à jour `docs/domaines/plan-et-rangs.md` et `data/connaissance/doc_app/parcelles-et-plan.md` dans la livraison fonctionnelle ; garder `tests/test_us099_corpus_fonctionnement.py` vert.
+- [x] CA17 — **Plantations déjà enregistrées** : appliquer aussi la nouvelle répartition aux plantations existantes sans nombre de rangs explicitement déclaré. À la livraison, 16 salades auparavant affichées sur R1 avec une capacité de 13 et R2 libre sont affichées en 13 sur R1 et 3 sur R2. Le recalcul ne modifie ni les gestes ni leurs quantités dans le journal, et ne rejoue aucun mouvement de stock. Les rangs explicitement déclarés restent respectés.
+- [x] CA18 — **Recalcul après correction des caractéristiques** : une correction de longueur ou d'espacement entraîne le recalcul de la répartition déduite, des places et des dépassements, sans figer l'affectation obtenue à la confirmation. Par exemple, pour 16 plants sans rang explicitement déclaré et au moins deux rangs disponibles, passer d'une capacité de 13 à 10 donne 10 plants sur le premier rang et 6 sur le second, sans modifier le total enregistré. Si les caractéristiques deviennent insuffisantes, appliquer le repli de CA10.
+- [x] CA19 — **Nouvelle culture dans une parcelle pleine** : si aucun rang compatible ni aucun rang libre n'existe, conserver le comportement actuel R7 : afficher la nouvelle culture sur un rang supplémentaire portant toute sa quantité et signaler le dépassement du nombre de rangs de la parcelle. Ne pas la mélanger aux autres cultures ni masquer la plantation. Si sa quantité dépasse aussi la capacité de ce rang, afficher également ce dépassement en unités, distinct du dépassement de la parcelle.
+
+### Exemples d'acceptance
+
+Pour une même culture compatible, capacité de **13 plants par rang** (4 m,
+espacement 30 cm), avec initialement **4 plants sur R1**, sans nombre de rangs
+dans la nouvelle plantation. Chaque exemple est indépendant.
+
+| Ajout | Rangs libres avant ajout | Répartition attendue après ajout | Dépassement |
+|---|---|---|---|
+| 5 plants | R2 à R5 | R1 : 9 ; R2 à R5 restent libres | Aucun |
+| 9 plants | R2 à R5 | R1 : 13 ; R2 à R5 restent libres | Aucun |
+| 12 plants | R2 à R5 | R1 : 13 ; R2 : 3 ; R3 à R5 restent libres | Aucun, au lieu de 16 sur R1 et « 3 en trop » |
+| 30 plants | R2 à R5 | R1 : 13 ; R2 : 13 ; R3 : 8 ; R4 et R5 restent libres | Aucun |
+| 12 plants | Aucun | R1 : 16 | 3 sur R1 |
+| 30 plants | R2 seulement | R1 : 13 ; R2 : 21 | 8 sur R2 |
+
+Autre cas : R1 porte 10 plants, R2 en porte 8, tous deux de la même culture
+compatible. Un ajout de 7 donne R1 : 13 et R2 : 12, sans ouvrir de nouveau
+rang, dans l'ordre croissant validé.
+
+Première plantation : aucun plant de cette culture n'est encore présent et
+R1 à R5 sont libres. Avec la même capacité de 13 plants par rang, planter
+30 plants sans préciser de rang donne R1 : 13, R2 : 13, R3 : 4 ; R4 et R5
+restent libres, sans dépassement.
+
+### Décisions validées le 23/09/2026
+
+| Point | Décision |
+|---|---|
+| Identité compatible | Même culture normalisée, même variété et même unité. |
+| Ordre d'affectation | Ordre croissant des rangs compatibles, puis ordre croissant des rangs libres. |
+| Caractéristiques insuffisantes | Conserver les règles actuelles si les données nécessaires au calcul manquent. |
+| Première plantation | Appliquer également la répartition automatique dès la première plantation de la culture. |
+| Plantations déjà enregistrées | Recalculer aussi leur répartition lorsqu'aucun nombre de rangs n'a été explicitement déclaré, sans modifier les gestes ni leurs quantités (CA17). |
+| Correction de longueur ou d'espacement | Recalculer la répartition déduite, sans la figer à la confirmation (CA18). |
+| Première plantation sans rang libre | Afficher la nouvelle culture sur un rang supplémentaire et signaler le dépassement de la parcelle, sans mélange avec les autres cultures (CA19). |
+
+### Décisions à valider avant développement
+
+La demande fixe le remplissage puis le débordement, mais pas encore ces cas.
+Les propositions ci-dessous ne sont pas des décisions acquises.
+
+| Point ouvert | Proposition d'affinage |
+|---|---|
+| Unités et gestes concernés | Limiter ce complément aux plantations en plants et à capacité calculable. Les semis, graines, poquets, mètres linéaires, m², pépinières et cultures non localisées gardent leurs règles actuelles, sauf extension explicite. |
+| Autres changements et dates passées | Préciser le traitement des corrections/suppressions de gestes, des récoltes et des dates de référence passées, notamment les caractéristiques à utiliser pour une consultation passée après correction de longueur ou d'espacement. Le recalcul après correction de ces caractéristiques est acquis (CA18), mais ne tranche pas ces autres cas. |
+| Confirmation du geste | Proposer la répartition dans le récapitulatif avant confirmation. Si elle est enregistrée, revérifier les disponibilités à la validation et traiter deux plantations concurrentes sans double consommation des mêmes places. |
+
+### Bilan d'implémentation du complément
+
+- Le serveur reconstruit les affectations en lecture depuis les installations
+  ordonnées, en conservant une seule requête pour les installations. Aucune
+  migration, écriture de geste ni modification de stock.
+- `disposition.rangs[].quantite_par_rang` porte la quantité réelle et devient
+  la source d'affichage ; la moyenne historique de ligne reste disponible.
+- Les tests couvrent les exemples chiffrés, les gestes explicites puis implicites,
+  les rangs non consécutifs, les variétés et unités distinctes, les données
+  manquantes, la date passée, le recalcul de capacité et l'isolation par potager.
+- Repli conservatoire pour les lignes dont la quantité nette diffère de la
+  somme des installations (récoltes, pertes) : règle antérieure R2/R3, en attente
+  de l'arbitrage ci-dessus. Les dimensions utilisées pour une date passée sont
+  les valeurs courantes, comme auparavant. Récapitulatif de confirmation inchangé.
+- Build frontend réussi ; 68 tests JavaScript de la vue Plan et 47 tests du
+  corpus fonctionnel passent. Rendu DOM du cas 13 puis 3 contrôlé à 375, 768
+  et 1440 px, sans débordement horizontal. Capture visuelle non validée : page
+  partagée masquée et profil Chrome DevTools déjà utilisé.
+- Suite Python complète : 3 861 réussites, 38 échecs, 15 erreurs, 4 ignorés.
+  Les échecs concernent notamment des fixtures SQLite inter-threads, des mocks
+  asynchrones et le corpus agronomique. L'échec voisin US-024 CA5 attend un
+  pourcentage de surface malgré l'absence d'attributs de surface dans son mock ;
+  ce calcul n'est pas modifié par le complément. Pas de correction hors périmètre.
+
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : analyse (lecture), consultation
 - Migration BDD requise : **non**
