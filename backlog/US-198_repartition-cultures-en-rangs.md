@@ -19,6 +19,8 @@ Et une quatrième est un faux ami : le **rang d'un événement** n'est pas une p
 
 Cette US calcule la répartition **côté serveur, à un seul endroit**, et l'ajoute à `GET /plan`. Elle ne dessine rien (US-200). Elle sert aussi la Pépinière (« où mettre les plants », US-217) : les deux écrans ne peuvent pas compter différemment la place libre.
 
+⚖️ **Étendue par US-227 (maquette gelée du 23/09).** Cette US dit quels rangs sont occupés ; elle ne dit rien de la **capacité** d'un rang. La maquette haute fidélité `Plan - Rangs et places.html` demande en plus, par rang, ses **places**, ses places prises et ses places restantes. Ce calcul est ajouté au même module par **US-227** (règles R10 à R17), qui **étend les CA2 et CA3** ci-dessous sans en retirer ni renommer un seul champ. Les règles R1 à R9 tiennent telles quelles.
+
 **Règles de répartition :**
 
 | # | Règle |
@@ -34,25 +36,43 @@ Cette US calcule la répartition **côté serveur, à un seul endroit**, et l'aj
 | R9 | Les cultures **non localisées** forment un bloc à part, sans rang ni numérotation |
 
 **Critères d'acceptance :**
-- [ ] CA1 : Les règles R1 à R9 sont implémentées **dans un seul module de service**, en lecture seule, qui réutilise l'occupation, les séries (US-070) et la phase (US-194) existantes sans les recalculer
-- [ ] CA2 : `GET /plan` ajoute à chaque culture d'une parcelle : `mode_implantation`, `rangs`, `quantite_par_rang`, `date_installation`, `numeros_rangs` ; et à chaque parcelle une `disposition` : rangs déclarés, rangs occupés, rangs libres (ou inconnu), dépassement, liste ordonnée des rangs (numéro, ligne ou libre), mode de numérotation (`ordre_installation`, puis `positions` ou `mixte` avec US-203), nombre de lots en cours pour une pépinière. Aucun champ existant n'est retiré ni renommé ; l'onglet Parcelles est inchangé
-- [ ] CA3 : `GET /plan` ajoute un bloc de **totaux** : superficie totale déclarée ; rangs déclarés et occupés sur les seules parcelles non pépinières qui ont un nombre de rangs (le pourcentage ne mêle jamais une parcelle sans dénominateur) ; nombre de parcelles sans nombre de rangs ; liste des rangs libres par parcelle, dans l'ordre des parcelles
-- [ ] CA4 : Tout est calculé **à la date de référence** (US-030) : une installation postérieure n'occupe pas encore de rang
-- [ ] CA5 : Une seule lecture : `GET /plan` ne fait pas une requête par parcelle ni par ligne ; son temps de réponse est mesuré avant et après sur une base de taille réelle et consigné dans l'US à la livraison
-- [ ] CA6 : Aucun calcul existant ne change : stock, `occupation_pct`, projections, confiance. Un test compare les réponses de `GET /stats`, `GET /godets` et les champs historiques de `GET /plan` avant et après
-- [ ] CA7 : Une fiche de domaine `docs/domaines/plan-et-rangs.md` consigne les règles R1 à R9 et les deux sens du mot « rang » ; elle entre dans la table de `docs/domaines/README.md` dans le même commit
-- [ ] CA8 : La fiche `parcelles-et-plan.md` dit comment le Plan compte les rangs, pourquoi ils sont numérotés dans l'ordre d'installation, et ses deux limites assumées : des semis échelonnés d'une même variété forment une seule ligne, et une récolte partielle ne libère pas de rang tant que la ligne reste en place (US-099 / CA9)
-- [ ] CA9 : Des tests couvrent : une ligne sur un rang, une plantation « sur 3 rangs », deux installations de la même ligne, quantité par rang en plants et en m², déduction du mode pour chaque unité, numérotation et rangs libres, parcelle sans nombre de rangs, dépassement, parcelle pépinière avec lots et avec une plantation, non localisé, date de référence passée
+- [x] CA1 : Les règles R1 à R9 sont implémentées **dans un seul module de service**, en lecture seule, qui réutilise l'occupation, les séries (US-070) et la phase (US-194) existantes sans les recalculer
+- [x] CA2 : `GET /plan` ajoute à chaque culture d'une parcelle : `mode_implantation`, `rangs`, `quantite_par_rang`, `date_installation`, `numeros_rangs` ; et à chaque parcelle une `disposition` : rangs déclarés, rangs occupés, rangs libres (ou inconnu), dépassement, liste ordonnée des rangs (numéro, ligne ou libre), mode de numérotation (`ordre_installation`, puis `positions` ou `mixte` avec US-203), nombre de lots en cours pour une pépinière. Aucun champ existant n'est retiré ni renommé ; l'onglet Parcelles est inchangé
+- [x] CA3 : `GET /plan` ajoute un bloc de **totaux** : superficie totale déclarée ; rangs déclarés et occupés sur les seules parcelles non pépinières qui ont un nombre de rangs (le pourcentage ne mêle jamais une parcelle sans dénominateur) ; nombre de parcelles sans nombre de rangs ; liste des rangs libres par parcelle, dans l'ordre des parcelles
+- [x] CA4 : Tout est calculé **à la date de référence** (US-030) : une installation postérieure n'occupe pas encore de rang
+- [x] CA5 : Une seule lecture : `GET /plan` ne fait pas une requête par parcelle ni par ligne ; son temps de réponse est mesuré avant et après sur une base de taille réelle et consigné dans l'US à la livraison
+- [x] CA6 : Aucun calcul existant ne change : stock, `occupation_pct`, projections, confiance. Un test compare les réponses de `GET /stats`, `GET /godets` et les champs historiques de `GET /plan` avant et après
+- [x] CA7 : Une fiche de domaine `docs/domaines/plan-et-rangs.md` consigne les règles R1 à R9 et les deux sens du mot « rang » ; elle entre dans la table de `docs/domaines/README.md` dans le même commit
+- [x] CA8 : La fiche `parcelles-et-plan.md` dit comment le Plan compte les rangs, pourquoi ils sont numérotés dans l'ordre d'installation, et ses deux limites assumées : des semis échelonnés d'une même variété forment une seule ligne, et une récolte partielle ne libère pas de rang tant que la ligne reste en place (US-099 / CA9)
+- [x] CA9 : Des tests couvrent : une ligne sur un rang, une plantation « sur 3 rangs », deux installations de la même ligne, quantité par rang en plants et en m², déduction du mode pour chaque unité, numérotation et rangs libres, parcelle sans nombre de rangs, dépassement, parcelle pépinière avec lots et avec une plantation, non localisé, date de référence passée
 
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : analyse (lecture), consultation
 - Migration BDD requise : **non**
 - Dépendances : **US-194** (phase), **US-197** (nombre de rangs) — bloquantes ; US-199 (unité poquet) pour que le mode poquet apparaisse, non bloquante ; US-070 (séries, livrée)
-- Consommateurs : US-200 (Vue plan), US-222 (détail de parcelle, même répartition), US-217 (où mettre les plants d'un lot), US-215 (« Prêts pour le plan »)
+- Consommateurs : US-200 (Vue plan), **US-227** (places d'un rang — étend ce module), US-222 (détail de parcelle, même répartition), US-217 (où mettre les plants d'un lot), US-215 (« Prêts pour le plan »)
 - Impact tokens : zéro
-- Point de vigilance : la **longueur** d'un trait n'est pas calculée ici. C'est de la mise en forme (quantité par rang comparée au rang le plus fourni de la même unité), portée par la lib de la Vue plan (US-200)
+- Point de vigilance : la **longueur** d'un trait n'est pas calculée ici. C'est de la mise en forme (quantité par rang comparée au rang le plus fourni de la même unité), portée par la lib de la Vue plan (US-200). ⚖️ *Avec US-227, ce trait relatif devient le mode dégradé : le remplissage normal vient des places, calculées côté serveur — la frontière ne bouge donc pas, elle se déplace du bon côté*
+- Point de vigilance : la répartition ne dit rien de la **longueur de la parcelle** non plus, parce qu'elle n'existe pas encore (US-225). Tant qu'elle manque, aucune capacité de rang n'est calculable
 - Point de vigilance : la répartition ne dit **rien de la surface**. « 1 rang libre » n'est pas « 1,2 m² libre » : la géométrie de la v2 est reportée (plan des épics § 9)
 - Point de vigilance : **reproducteur vs végétatif**. Un rang de haricots reste occupé tant que les pieds restent, récolte après récolte ; un rang de laitues se libère quand la ligne quitte le plan d'occupation, c'est-à-dire quand il ne reste plus de pieds
+
+**Mesure de CA5 à la livraison :**
+
+Base synthétique (aucune base de production accessible depuis le poste de
+développement) : 12 parcelles, 3 000 événements, 1 321 lignes d'occupation,
+SQLite en mémoire, moyenne sur 10 appels.
+
+| | Temps |
+|---|---|
+| Occupation seule (avant) | 175,6 ms |
+| Occupation + répartition (après) | 193,4 ms |
+| Surcoût de la répartition | **+17,8 ms**, soit ~10 % |
+
+Le surcoût est une requête d'agrégation unique, plus une lecture des lots de
+pépinière quand le potager en compte une. Il ne croît ni avec le nombre de
+parcelles ni avec le nombre de lignes, ce que tient
+`test_us198_ca5_le_nombre_de_lectures_ne_depend_pas_de_la_taille_du_plan`.
 
 **Estimation :** 5 points
 

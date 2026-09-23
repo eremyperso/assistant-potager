@@ -16,13 +16,15 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 
 ⚖️ **Conception avant implémentation (RT9).** Le wireframe v3 fixe la structure et les règles ; la maquette haute fidélité est produite dans le projet Claude Design « potager 2026 » et **gelée avant le code**, après tranchage des arbitrages du plan des épics.
 
+⚖️ **Maquette gelée le 23/09/2026 — et ce qu'elle déplace.** `maquette front/haute-fidelite/Plan - Rangs et places.html` fait foi sur le rendu. Elle transforme le trait de rang en **piste de places** (combien de pieds tiennent, combien il en reste), ce qui suppose une **longueur de parcelle** (US-225) et un **espacement exploitable** (US-226), dont aucun n'existe aujourd'hui. Ce changement est porté par **US-228**, pas ici : cette US livre la carte, les lignes, l'en-tête, la légende, le pied de vue, les états et l'accessibilité, avec le trait de **longueur relative** — que la maquette conserve explicitement comme **mode dégradé** pour toute parcelle sans longueur. La Vue plan est donc à l'écran dès cette US, et se complète sans être refaite.
+
 **Règles de rendu :**
 
 | # | Règle |
 |---|---|
 | V1 | **Une carte par parcelle**, de largeur égale, dans l'ordre déclaré (`ordre`, puis nom). Pas d'aire proportionnelle, pas de position, pas de forme |
 | V2 | **Un rang = une ligne**, du rang 1 au dernier ; la hauteur de la carte vient du nombre de rangs |
-| V3 | **Longueur** = quantité par rang ÷ quantité par rang la plus forte de la parcelle **à unité égale**. Plancher 12 %, plafond 100 % : jamais de dépassement de trait (A2) |
+| V3 | **Longueur** = quantité par rang ÷ quantité par rang la plus forte de la parcelle **à unité égale**. Plancher 12 %, plafond 100 % : jamais de dépassement de trait (A2). ⚖️ *Remplacé par la piste de places d'US-228 dès que la parcelle a une longueur ; cette règle reste le **mode dégradé** de la maquette du 23/09, et à ce titre ne disparaît jamais* |
 | V4 | **Forme = mode** : trait plein (rang), trait tramé à 45° (surface), trait segmenté (poquet) — un segment par poquet, douze au plus, et « ×18 » écrit au-delà. En mode poquet, douze segments font la largeur entière |
 | V5 | **Couleur = phase** (US-194) : semée, en place, en récolte. Jamais la famille, jamais la confiance |
 | V6 | **Libellé toujours visible** à droite du trait : culture, variété si connue, quantité et unité du rang. Aucun survol requis |
@@ -30,10 +32,10 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 | V8 | **Parcelle pépinière** : carte hachurée, type de pépinière (US-208, « type non renseigné » sinon), nombre de lots en cours, lien vers la Pépinière. Aucun rang de semis. Une plantation faite dans cette parcelle reste dessinée en rang sous le compte des lots |
 | V9 | **Donnée manquante** (A6) : sans nombre de rangs, les cultures restent dessinées, sans rang libre, avec la mention « nombre de rangs non renseigné » et la phrase à dire au compagnon. Sans nombre de rangs **et** sans culture : carte en pointillé, sans dessin, même mention. Une parcelle ne disparaît jamais du Plan, et l'écran ne propose jamais de la corriger |
 | V10 | **Dépassement** : « 6 rangs occupés pour 5 déclarés », en teinte d'alerte, toutes les lignes affichées |
-| V11 | **En-tête de carte** : nom · superficie (ou « superficie non renseignée ») · « N rangs sur M » · « Fiche parcelle → ». Pas de pourcentage sur la carte (A3) |
+| V11 | **En-tête de carte** : nom · superficie (ou « superficie non renseignée ») · « N rangs sur M » · « N libres » · « Fiche parcelle → ». Pas de pourcentage sur la carte (A3). *US-228 y ajoute « rangs de 12 m · largeur 5,75 m » quand la longueur est déclarée* |
 | V12 | **Numérotation** (A5) : « Rang 1… » dans l'ordre d'installation, et la légende le dit une fois pour l'écran. Les rangs suivants d'une culture posée sur plusieurs rangs sont regroupés visuellement et leur libellé réduit à la quantité |
 | V13 | **Légende** en tête : les trois phases et « rang libre », les trois formes, la règle de numérotation |
-| V14 | **Pied de vue** : total en m², rangs occupés sur rangs déclarés avec leur pourcentage, rangs libres par parcelle, nombre de parcelles sans nombre de rangs. « Trois chiffres, pas un tableau de bord » |
+| V14 | **Pied de vue** : total en m², rangs occupés sur rangs déclarés, nombre de parcelles sans nombre de rangs. « Trois chiffres, pas un tableau de bord » — la maquette du 23/09 en retire le pourcentage et lui substitue, avec US-228, le nombre de parcelles sans longueur |
 | V15 | **Date de référence** affichée en haut ; la phase est celle de ce jour, jamais une projection |
 | V16 | **La couleur ne porte jamais seule** : la phase est aussi écrite en mot sur chaque rang, le mode se lit à la forme ; l'écran reste lisible en niveaux de gris |
 | V17 | Les cultures **non localisées** forment une dernière carte, sans rang ni numéro, avec la phrase à dire pour les rattacher |
@@ -47,7 +49,7 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 - [ ] CA4 : Les composants de carte, de rang et de trait acceptent une **palette en paramètre**, pour que l'onglet Rotation (hors périmètre, en construction) les reprenne sans les modifier, et une **variante de taille**, pour que l'onglet Parcelles les reprenne agrandis (US-222, niveau 2 du zoom) sans en refaire un second dessin
 
 *Mise en page*
-- [ ] CA5 : Deux colonnes de cartes à partir de 720 px de **largeur de conteneur**, une en dessous, jamais trois (A1) ; container queries, jamais de breakpoint d'écran (règle « Responsive » de `frontend/CLAUDE.md`)
+- [ ] CA5 : Deux colonnes de cartes à partir de **1000 px** de **largeur de conteneur**, une en dessous, jamais trois — seuil de la maquette gelée, qui **remplace les 720 px** de l'arbitrage A1 (arbitrage A23) ; container queries, jamais de breakpoint d'écran (règle « Responsive » de `frontend/CLAUDE.md`). Sous **560 px de largeur de carte**, la ligne de rang se replie (voir US-228 / CA6)
 - [ ] CA6 : À 375 px, une colonne : numéro abrégé (« R1 »), trait, libellé court ; la phase **reste écrite** sous le libellé (V16) — la colonne de pastille du desktop se replie, elle ne disparaît pas
 - [ ] CA7 : Aucun défilement horizontal de la page à 375 px, libellés longs compris (troncature avec texte complet accessible)
 
@@ -67,12 +69,13 @@ Le jardinier lit, dans l'ordre (v3) : les cultures présentes, un libellé par r
 - Zone fonctionnelle concernée : consultation (PWA, écran Plan)
 - Migration BDD requise : **non**
 - Dépendances : **US-198** (répartition, bloquante), **US-194** (phase et pastille, bloquante) ; US-208 (type de pépinière) et US-199 (unité poquet) enrichissent le rendu sans le bloquer
-- Suites : US-201 (interactions et sorties), US-202 (réordonner), US-222 (l'onglet Parcelles reprend ses composants agrandis), US-223 (l'ordre des sous-onglets et l'onglet d'entrée)
+- Suites : **US-228** (le trait devient une piste de places — maquette gelée du 23/09), US-201 (interactions et sorties), US-202 (réordonner), US-222 (l'onglet Parcelles reprend ses composants agrandis), US-223 (l'ordre des sous-onglets et l'onglet d'entrée)
 - Impact tokens : zéro
 - Impact design system : nouveaux composants `CartePlanParcelle`, `RangPlan`, `TraitRang` (quatre variantes : plein, tramé, segmenté, libre) ; `PastillePhase` et `LegendePhases` réutilisés ; aucun composant existant modifié
 - Point de vigilance : les observations (US-039) ne sont **pas** portées sur la Vue plan ; elles restent sur l'onglet Parcelles
 - Point de vigilance : « la quantité est toujours écrite à côté du trait, c'est ce qui rend l'échelle inoffensive » (v3). Un trait de plants ne se compare jamais à un trait de m² : chaque unité a son propre maximum dans la parcelle
 - Wireframe : `maquette front/wireframes/Wireframes v3 - Plan simplifie.html`, § 1, 1b, 2, 2b, 3 (colonne « Rendu »)
+- Maquette haute fidélité : `maquette front/haute-fidelite/Plan - Rangs et places.html`, gelée le 23/09/2026 (RT9). Elle fait foi sur la carte, l'en-tête, la légende, la ligne de rang, le pied de vue et les deux encarts d'absence ; sa **piste de places** relève d'US-228
 
 **Estimation :** 8 points (hors conception : la maquette haute fidélité est un préalable)
 

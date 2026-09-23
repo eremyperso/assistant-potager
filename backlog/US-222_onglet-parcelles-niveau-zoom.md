@@ -26,12 +26,12 @@ Cette US recoud le niveau 2 sur le niveau 1 : la tuile de culture porte **son nu
 | D2 | **Aucune teinte d'occupation** : le code couleur vert / ambre / rouge d'US-060 disparaît. Dans l'activité Plan, la couleur dit la phase et rien d'autre (RT4). Seul le dépassement garde une teinte d'alerte |
 | D3 | **Parcelle pépinière** dans la liste : « pépinière chaude · 3 lots » (US-208, « type non renseigné » sinon), occupation « — ». Son détail porte ses lots en cours et le lien vers la Pépinière, pas des rangs de semis ; une plantation faite dans cette parcelle reste dessinée en rang (US-200 / V8) |
 | D4 | **Parcelle sans nombre de rangs** : listée normalement, occupation « — », sous-titre « nombre de rangs non renseigné » (A6). Son détail dessine ses cultures, sans rang libre, avec la mention et la phrase à dire au compagnon |
-| D5 | **En-tête du détail** : le nom, « ← Voir dans la Vue plan », puis les pastilles superficie, exposition, abri ou plein air et paillage (US-181, livrée), « **N rangs occupés sur M** », et le lien « N observations » (US-039) |
+| D5 | **En-tête du détail** : le nom, « ← Voir dans la Vue plan », puis les pastilles superficie, **longueur et largeur déduite** (US-225, « longueur non renseignée » sinon), exposition, abri ou plein air et paillage (US-181, livrée), « **N rangs occupés sur M** », et le lien « N observations » (US-039) |
 | D6 | **La ligne « Occupation de la surface », son infobulle, son pourcentage et sa barre sont retirés** (A20). La superficie en m² reste ; l'occupation se dit en rangs, d'un bout à l'autre de l'activité Plan |
-| D7 | **La tuile de culture porte en tête son numéro de rang et son trait** : même forme (mode d'implantation), même couleur (phase), même longueur relative que dans la Vue plan, même quantité écrite. C'est le composant d'US-200 dans sa variante agrandie, jamais un second dessin |
+| D7 | **La tuile de culture porte en tête son numéro de rang et sa piste** : même forme (mode d'implantation), même couleur (phase), **mêmes places prises et restantes** que dans la Vue plan, même quantité écrite. C'est le composant d'US-200 et d'US-228 dans sa variante agrandie, jamais un second dessin. Tant qu'US-228 n'est pas livrée, ou pour une parcelle sans longueur, c'est le trait de longueur relative d'US-200 / V3 qui est repris — le niveau 2 dégrade exactement comme le niveau 1 |
 | D8 | **Le reste de la tuile est inchangé** (A21) : famille · durée de culture, frise des douze mois (`MonthStrip`, non modifié), pastille de confiance, observations de la culture, ouverture de la fiche calendrier, lien « Voir la culture → » (US-201 / CA8). La phase reste écrite en mot (RT4) |
 | D9 | **Culture posée sur plusieurs rangs** : une seule tuile, ses numéros annoncés (« Rangs 1 et 2 »), un trait par rang, la quantité par rang écrite une fois |
-| D10 | **Rang libre** : dernière ligne du détail, pleine largeur, trait pointillé et mot « libre », avec les deux intentions *Semer en place* et *Planter* pré-remplies sur cette parcelle et ce rang (US-196, US-203 si livrée) |
+| D10 | **Rang libre** : dernière ligne du détail, pleine largeur, piste entièrement en creux et mot « libre », sa longueur et sa capacité d'exemple nommée si elle existe (US-227 / R16, US-228 / P9), avec les deux intentions *Semer en place* et *Planter* pré-remplies sur cette parcelle et ce rang (US-196, US-203 si livrée) |
 | D11 | **Dépassement** : « 6 rangs occupés pour 5 déclarés », en teinte d'alerte, toutes les tuiles affichées (même règle que US-200 / V10) |
 | D12 | **375 px** : la liste se replie en **sélecteur horizontal** de pastilles « nom + occupation », la parcelle choisie restant visible sans écran de retour ; une seule colonne de tuiles ; la phase écrite sous le libellé ; cible d'appui de 44 px sur la tuile entière |
 
@@ -39,7 +39,7 @@ Cette US recoud le niveau 2 sur le niveau 1 : la tuile de culture porte **son nu
 
 *Lecture*
 - [ ] CA1 : L'onglet n'ajoute **aucune lecture** : il consomme la réponse de `GET /plan` enrichie par US-198 (`disposition`, `numeros_rangs`, `mode_implantation`, `quantite_par_rang`), la même que la Vue plan. Changer de parcelle ne déclenche aucune requête (RT6)
-- [ ] CA2 : La longueur d'un trait est calculée **par la même fonction** que la Vue plan (`frontend/src/lib/planVue.js`, US-200 / CA2), dans la même parcelle et à unité égale : un rang a la même longueur relative aux deux niveaux. Un test compare les deux rendus pour un même jeu de données
+- [ ] CA2 : Le remplissage d'un rang est calculé **par la même fonction** que la Vue plan (`frontend/src/lib/planVue.js`, US-200 / CA2), dans la même parcelle : un rang porte les mêmes places prises et restantes aux deux niveaux — ou, à défaut de longueur, la même longueur relative à unité égale. Un test compare les deux rendus pour un même jeu de données, dans les deux modes
 
 *Rendu*
 - [ ] CA3 : Les règles D1 à D12 sont appliquées
@@ -68,7 +68,7 @@ Cette US recoud le niveau 2 sur le niveau 1 : la tuile de culture porte **son nu
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : consultation (PWA, écran Plan)
 - Migration BDD requise : **non**
-- Dépendances : **US-198** (répartition en rangs dans `GET /plan`, bloquante), **US-200** (composants de trait et de rang, bloquante), **US-195** (retour à l'état exact, lien vers la Vue plan), **US-196** (geste du rang libre), **US-207** (fiche culture) ; US-201 porte déjà le lien « Voir la culture » sur la tuile ; US-181 (abri et paillage, livrée) et US-208 (type de pépinière) enrichissent l'en-tête sans bloquer
+- Dépendances : **US-198** (répartition en rangs dans `GET /plan`, bloquante), **US-200** (composants de trait et de rang, bloquante), **US-228** (piste des places — non bloquante : livrée avant, le niveau 2 en hérite sans travail ; livrée après, elle amende D7 aux deux niveaux d'un coup), **US-195** (retour à l'état exact, lien vers la Vue plan), **US-196** (geste du rang libre), **US-207** (fiche culture) ; US-201 porte déjà le lien « Voir la culture » sur la tuile ; US-181 (abri et paillage, livrée) et US-208 (type de pépinière) enrichissent l'en-tête sans bloquer
 - Impact tokens : zéro
 - Impact design system : aucun composant nouveau — `TraitRang`, `RangPlan` et `PastillePhase` gagnent une variante de taille ; `ProgressBar` perd son usage sur l'écran Plan
 - Point de vigilance : **régression visible pour les utilisateurs actuels** — le pourcentage d'occupation est lu depuis un an. Son retrait relève de l'arbitrage A20 : à confirmer avant la maquette haute fidélité, et à annoncer dans `PATCH_NOTES.md` en disant ce qui le remplace
