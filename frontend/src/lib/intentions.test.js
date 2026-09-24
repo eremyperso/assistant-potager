@@ -22,7 +22,9 @@ test('[CA2] les cinq vues du tableau, avec exactement leurs clés', () => {
   assert.deepEqual(clesDe('plan-vue'), ['parcelle'])
   assert.deepEqual(clesDe('cultures'), ['culture'])
   assert.deepEqual(clesDe('pepiniere'), ['onglet', 'emplacement', 'lot'])
-  assert.deepEqual(clesDe('journal'), ['date', 'culture'])
+  // [US-232 / CA8] « Tout voir » de la carte « Sol et entretien » ouvre le
+  // Journal filtré sur une parcelle et sur une liste de gestes.
+  assert.deepEqual(clesDe('journal'), ['date', 'culture', 'parcelle', 'gestes'])
 })
 
 test('[CA2] une vue hors du tableau n’a pas d’intention', () => {

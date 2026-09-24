@@ -573,6 +573,94 @@ def evenements_recents(db: Session, ctx: TenantContext, limit: int = 10) -> list
     )
 
 
+# ── [US-232] Le sol d'une parcelle ────────────────────────────────────────────
+#
+# Un paillage, un apport de compost, un binage sont DÉJÀ enregistrés : ce sont
+# des événements rattachés à une parcelle. Mais ils se noient dans un journal
+# trié par date, toutes parcelles confondues. La question du jardinier n'est pas
+# « qu'ai-je fait le 12 septembre », c'est « qu'ai-je apporté à cette planche ».
+#
+# Rien n'est inventé ici : aucun nouveau type de geste, aucune écriture. On
+# filtre et on regroupe ce qui existe, à l'échelle de la parcelle.
+
+#: [CA2] Les gestes qui portent sur le SOL d'une parcelle, et non sur une
+#: culture — la liste vit ICI et nulle part ailleurs. La carte « Sol et
+#: entretien » de la fiche parcelle et le filtre du Journal (S5) la reçoivent
+#: tous les deux de `GET /plan` : ils ne peuvent pas diverger.
+#:
+#: [S4] Un semis, une plantation, une récolte, un arrosage, une taille portent
+#: sur une culture : ils n'en font pas partie. Le désherbage et le binage, si —
+#: c'est la planche qu'on désherbe, pas le plant.
+GESTES_SOL: tuple[str, ...] = ("paillage", "amendement", "desherbage", "binage")
+
+#: [Livrable annexe] Ce que la maquette montre et que l'application ne sait PAS
+#: encore enregistrer : aucun `type_action` ne les porte aujourd'hui, et cette
+#: US n'en crée aucun. Chacun relève d'une US à part.
+GESTES_SOL_SANS_EQUIVALENT: tuple[str, ...] = (
+    "engrais vert",          # un semis dont la finalité est le sol, pas la récolte
+    "travail du sol",        # bêchage, grelinette, décompactage
+)
+
+#: [S5] Ce que la carte montre avant de renvoyer au Journal.
+NB_INTERVENTIONS_SOL = 8
+
+
+def _intervention_sol(event: Evenement) -> dict:
+    """[S3] Une intervention telle que la fiche parcelle la lit — les champs
+    bruts, jamais une phrase toute faite : c'est l'écran qui la compose."""
+    return {
+        "id": event.id,
+        "date": str(event.date)[:10] if event.date else None,
+        "type_action": event.type_action,
+        "quantite": event.quantite,
+        "unite": event.unite,
+        "rang": event.rang,
+        "culture": event.culture,
+        "commentaire": event.commentaire,
+        "traitement": event.traitement,
+    }
+
+
+def interventions_sol(
+    db: Session,
+    ctx: TenantContext,
+    *,
+    limite: int = NB_INTERVENTIONS_SOL,
+    jusqua: Optional[str] = None,
+) -> dict[int, dict]:
+    """
+    [US-232 / CA1, CA3] Les interventions de sol de TOUTES les parcelles, en une
+    seule lecture — changer de parcelle dans l'onglet Parcelles ne doit
+    déclencher aucune requête de plus (RT6).
+
+    Rend `{parcelle_id: {"interventions": [...], "total": n}}` : les `limite`
+    plus récentes en antéchronologique (S2), et le total réel qui dit s'il faut
+    proposer « Tout voir » (S5). Une parcelle sans intervention est simplement
+    absente — c'est l'appelant qui décide de la phrase à dire (S6).
+    """
+    q = (
+        db.query(Evenement)
+        .filter(
+            Evenement.potager_id == ctx.potager_id,
+            Evenement.parcelle_id.isnot(None),
+            Evenement.type_action.in_(GESTES_SOL),
+        )
+        .order_by(Evenement.date.desc(), Evenement.id.desc())
+    )
+    if jusqua:
+        q = q.filter(Evenement.date <= f"{jusqua} 23:59:59")
+
+    par_parcelle: dict[int, dict] = {}
+    for event in q.all():
+        entree = par_parcelle.setdefault(
+            event.parcelle_id, {"interventions": [], "total": 0}
+        )
+        entree["total"] += 1
+        if len(entree["interventions"]) < limite:
+            entree["interventions"].append(_intervention_sol(event))
+    return par_parcelle
+
+
 def lister_evenements(
     db: Session,
     ctx: TenantContext,

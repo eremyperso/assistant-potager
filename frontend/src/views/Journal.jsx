@@ -222,15 +222,24 @@ export default function Journal({ refresh }) {
   // sur la culture si le lien la donne. [CA9] Les mêmes filtres font l'état exact
   // de l'écran : la coquille les rend tels quels au retour.
   const intention = useIntention('journal', (recue) => {
-    setEtat({ ...(recue.date ? { date: recue.date } : {}), ...(recue.culture ? { culture: recue.culture } : {}) })
+    setEtat({
+      ...(recue.date ? { date: recue.date } : {}),
+      ...(recue.culture ? { culture: recue.culture } : {}),
+      // [US-232 / CA8] « Tout voir » de la carte « Sol et entretien » arrive
+      // ici : une parcelle, et la liste de gestes que le serveur a servie. Le
+      // Journal ne connaît pas cette liste, il la reçoit — c'est ce qui garantit
+      // qu'elle ne diverge pas de celle du domaine [CA2].
+      ...(recue.parcelle ? { parcelle: recue.parcelle } : {}),
+      ...(recue.gestes ? { gestes: recue.gestes } : {}),
+    })
     // [CA4] Un filtre posé par un lien se dit : sans cela, le lecteur d'écran
     // annonce une liste plus courte sans jamais expliquer pourquoi.
-    annoncer(`Journal filtré${recue.date ? ` sur le ${recue.date.split('-').reverse().join('/')}` : ''}${recue.culture ? ` sur ${recue.culture}` : ''}.`)
+    annoncer(`Journal filtré${recue.date ? ` sur le ${recue.date.split('-').reverse().join('/')}` : ''}${recue.culture ? ` sur ${recue.culture}` : ''}${recue.parcelle ? ` sur la parcelle ${recue.parcelle}` : ''}${recue.gestes ? ' sur les gestes de sol' : ''}.`)
   })
   // Le filtre porte le LIBELLÉ de catégorie (« Pertes »), pas un `type_action` :
   // une catégorie en recouvre parfois plusieurs, détaillés dans `valeurs`.
   const [etat, setEtat] = useEtatEcran(
-    'journal', { action: TOUTES_ACTIONS, culture: '', date: null }, intention,
+    'journal', { action: TOUTES_ACTIONS, culture: '', date: null, parcelle: '', gestes: '' }, intention,
   )
   const actionFilter  = etat.action
   const cultureFilter = etat.culture
@@ -238,6 +247,12 @@ export default function Journal({ refresh }) {
   const setActionFilter = (v) => setEtat({ action: v })
   const setCulture      = (v) => setEtat({ culture: v })
   const setDateFilter   = (v) => setEtat({ date: v })
+  // [US-232 / CA8] Le filtre venu du lien : une parcelle et une liste de gestes.
+  // Il se retire d'un appui, comme tout autre filtre — et l'état exact de
+  // l'écran le retrouve au retour (US-195 / CA9).
+  const parcelleFilter = etat.parcelle
+  const gestesFilter   = etat.gestes
+  const retirerFiltreLien = () => setEtat({ parcelle: '', gestes: '' })
   const [page, setPage]                 = useState(0)
 
   async function load(pg = page) {
@@ -245,7 +260,11 @@ export default function Journal({ refresh }) {
     try {
       const params = { limit: PAGE_SIZE, offset: pg * PAGE_SIZE }
       const categorie = CATEGORIE_PAR_LABEL[actionFilter]
-      if (categorie) params.action = categorie.valeurs.join(',')
+      // [US-232 / CA8] Les gestes reçus du lien priment sur la catégorie du
+      // menu : ils SONT le filtre, et le serveur les reçoit tels quels.
+      if (gestesFilter) params.action = gestesFilter
+      else if (categorie) params.action = categorie.valeurs.join(',')
+      if (parcelleFilter) params.parcelle = parcelleFilter
       if (dateFilter) { params.from = dateFilter; params.to = dateFilter }
       // [US-083 / CA7] Si on consulte un potager archivé, passer son ID
       if (potagerId) params.potager_id = potagerId
@@ -260,7 +279,7 @@ export default function Journal({ refresh }) {
   // [CA4] Un changement de filtre transmis au serveur ramène à la première page.
   // Le filtre culture reste un filtrage local de la page déjà chargée : il ne
   // recharge rien et ne modifie donc pas la pagination (comme avant la refonte).
-  useEffect(() => { setPage(0); load(0) }, [refresh, actionFilter, dateFilter, potagerId])
+  useEffect(() => { setPage(0); load(0) }, [refresh, actionFilter, dateFilter, potagerId, parcelleFilter, gestesFilter])
   useEffect(() => { load(page) }, [page])
 
   const evenements = data.evenements || []
@@ -298,6 +317,26 @@ export default function Journal({ refresh }) {
   return (
     <div className="flex flex-col gap-3.5">
       {filtres}
+
+      {/* [US-232 / CA8] Le filtre posé par « Tout voir » — nommé, et retirable.
+          Un journal plus court sans rien qui l'explique serait un journal qui
+          ment par omission. */}
+      {(parcelleFilter || gestesFilter) && (
+        <div className="flex items-center gap-2 text-[12.5px] text-txt2 bg-card-alt rounded-lg px-3 py-2">
+          <span>
+            Filtré sur{parcelleFilter ? <> la parcelle <strong className="text-txt">{parcelleFilter}</strong></> : null}
+            {gestesFilter ? <>{parcelleFilter ? ' et ' : ' '}les gestes de sol et d’entretien</> : null}
+          </span>
+          <button
+            type="button"
+            onClick={retirerFiltreLien}
+            className="ml-auto font-semibold underline whitespace-nowrap
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
+          >
+            Retirer ce filtre
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <LoadingSkeleton lines={6} />

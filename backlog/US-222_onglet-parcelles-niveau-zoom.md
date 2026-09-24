@@ -118,3 +118,78 @@ Scénario: Sur le téléphone
 ```
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `plan`, `design-system`
+
+---
+
+## ⚠️ AMENDEMENT du 24/09/2026 — la fiche parcelle ne porte plus le détail des cultures
+
+**Origine :** maquette `Parcelle - Fiche.html` (projet Claude Design
+`10f5afa7-58f8-4eb0-8dae-ca5834dfff59`), qui **fige** le niveau 2 et tranche
+autrement que cette US ne l'avait écrit.
+
+**Ce que la maquette montre :** la fiche d'une parcelle porte son en-tête, un
+**bandeau d'occupation** — « 3 rangs occupés sur 7 », les cases d'occupation, les
+noms des cultures présentes — et un bouton primaire **« Voir les cultures dans le
+Plan → »**. Puis la carte « Caractéristiques » (US-229, US-230), la carte
+« Rotation » (US-231) et la carte « Sol et entretien » (US-232). **Aucune tuile
+de culture**, aucune frise des douze mois, aucune pastille de confiance, aucun
+rang libre actionnable.
+
+**Pourquoi :** la règle du zoom d'information dit qu'un niveau « ajoute ce que le
+niveau précédent ne pouvait pas porter ». Dessiner les rangs aux deux niveaux
+faisait exactement l'inverse : deux dessins du même objet, qu'il fallait ensuite
+garantir identiques (c'était tout l'objet de CA2). La maquette retire le doublon
+au lieu de le réconcilier — **le rang vit dans le Plan, la parcelle vit dans sa
+fiche**. Ce que la fiche gagne à la place, c'est ce que le Plan ne peut pas
+porter : les caractéristiques, la rotation, le journal du sol.
+
+### Règles remplacées
+
+| # | Ce qui remplace |
+|---|---|
+| D5 | **En-tête allégé** : le nom, une ligne d'état en teinte secondaire (« Pleine terre · sans abri · active »), et « ← Voir dans la Vue plan ». Les pastilles de superficie, dimensions, exposition, abri et paillage sont **retirées** : elles répétaient ce que la carte « Caractéristiques » dit juste en dessous, en mieux (US-229 / C2, C3) |
+| D5b | **Bandeau d'occupation**, sous l'en-tête : « N rangs occupés sur M » (D11 pour le dépassement), les cases d'occupation, les noms des cultures présentes, et le bouton primaire **« Voir les cultures dans le Plan → »**. Une parcelle **libre** le dit ici ; une parcelle **sans nombre de rangs** y porte sa mention (D4) |
+| D7 à D10 | **Retirés.** La tuile de culture, ses numéros de rang, sa piste, sa frise, sa pastille de confiance, ses observations de culture et le rang libre actionnable **ne sont plus rendus dans l'onglet Parcelles**. Ils vivent dans la Vue plan (US-200, US-228) et dans la fiche culture (US-206, US-207) |
+| D12 | Inchangé pour l'index ; la fiche, n'ayant plus de grille de tuiles, tient à 375 px sans palier |
+
+### Critères d'acceptance remplacés
+
+- **CA2 est sans objet** : il n'y a plus deux dessins d'un rang à réconcilier. La
+  garantie devient plus forte — il n'en existe qu'un.
+- **CA4** : `TraitRang`, `RangPlan` et `PastillePhase` ne sont plus consommés par
+  cet écran. Leur variante de taille reste utile à US-228 et à la fiche culture.
+- **CA6** : ce qui était « conservé à l'identique » d'US-060 (compteur de
+  cultures, variété, quantité avec son unité, frise, confiance, fiche calendrier
+  depuis la tuile) **déménage** : les cultures et leurs quantités se lisent dans
+  le Plan, la frise et la confiance dans la fiche culture. Le bandeau D5b garde
+  le **nom** des cultures présentes, et rien de plus.
+- **CA7 / CA9** : l'appui sur une tuile et l'appui sur un rang libre disparaissent
+  avec les tuiles. Le seul chemin vers une culture depuis cette fiche est le
+  bouton D5b, qui mène au Plan.
+- **CA15** : la composition à couvrir par `npm test` devient celle du **bandeau**
+  (occupation, cases, noms de cultures, parcelle libre, sans nombre de rangs,
+  dépassement, pépinière) — plus celle d'une tuile.
+
+### Ce qui reste vrai, et qu'il ne faut pas perdre
+
+- **D1 à D4** (l'index, l'absence de teinte d'occupation, la pépinière, la
+  parcelle sans nombre de rangs) : inchangés.
+- **D6** : le pourcentage d'occupation de surface reste retiré (A20).
+- **D11** : le dépassement garde sa teinte d'alerte, dans le bandeau.
+- **CA11** (retour à l'état exact), **CA12** (lecture seule), **CA14** (chargement
+  et échec) : inchangés.
+
+### Point de vigilance — une régression à assumer
+
+La frise des douze mois, la pastille de confiance et l'ouverture de la fiche
+calendrier depuis une tuile **n'existent nulle part ailleurs tant qu'US-206 et
+US-207 ne sont pas livrées**. Retirer les tuiles avant elles les ferait
+disparaître de l'application. **Ordre de livraison imposé** : US-206 et US-207
+d'abord, le retrait ensuite — ou les deux dans la même livraison. À annoncer dans
+`PATCH_NOTES.md` en disant où chaque chose se lit désormais.
+
+**Impact sur les autres US de l'épic** : US-201 / CA8 (lien « Voir la culture »
+depuis une tuile de l'onglet Parcelles) devient sans objet ; US-227 et US-228
+perdent leur consommateur « niveau 2 » ; US-229 / C1 se relit « entre l'en-tête
+et la carte Rotation » ; US-231 et US-232 gardent leur place, la fiche ayant
+désormais de la place pour elles.

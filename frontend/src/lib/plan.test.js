@@ -8,7 +8,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  occTint, pctDe, estEnPlants, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
+  estEnPlants, totalPlants, formatUnite, expositionAffichable, moisDeLaDate,
   filtrerParcelles, parcelleSelectionnee,
 } from './plan.js'
 
@@ -25,29 +25,10 @@ const culture = (champs) => ({
   ...champs,
 })
 
-// ── CA12 — code couleur d'occupation ─────────────────────────────────────────
-
-test('[CA12] le code couleur d’occupation garde ses seuils', async (t) => {
-  await t.test('sous 55 % : vert (marque)', () => {
-    assert.equal(occTint(0), 'brand')
-    assert.equal(occTint(54), 'brand')
-  })
-
-  await t.test('de 55 à 79 % : ambre', () => {
-    assert.equal(occTint(55), 'amber')
-    assert.equal(occTint(79), 'amber')
-  })
-
-  await t.test('à partir de 80 % : rouge — scénario « parcelle occupée à 85 % »', () => {
-    assert.equal(occTint(80), 'red')
-    assert.equal(occTint(85), 'red')
-  })
-
-  await t.test('une parcelle sans superficie déclarée se lit comme 0 %', () => {
-    assert.equal(pctDe(parcelle({ occupation_pct: null })), 0)
-    assert.equal(pctDe(parcelle({ occupation_pct: 62 })), 62)
-  })
-})
+// [US-222 / CA5] Les tests du code couleur d'occupation (occTint) et du
+// pourcentage (pctDe) ont ete retires avec les fonctions qu'ils couvraient :
+// l'activite Plan ne rend plus d'occupation en surface. Ce qui la remplace est
+// couvert par `planParcelles.test.js` - l'occupation en rangs, aux deux niveaux.
 
 // ── CA6 / CA18 — unités ──────────────────────────────────────────────────────
 

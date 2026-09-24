@@ -277,6 +277,11 @@ def create_parcelle(
 _CHAMPS_MODIFIER = {
     "exposition", "superficie", "ordre", "pepiniere", "abri", "paillage",
     "rangs", "longueur",
+    # [US-230 / CA2] Les deux champs que la fiche web sait corriger et
+    # qu'aucune fonction ne couvrait encore. Ils rejoignent le point d'écriture
+    # existant plutôt que de vivre dans un handler : les bornes du domaine
+    # n'ont qu'un seul endroit où se tenir.
+    "type_sol", "actif",
 }
 
 #: [US-197 / CA1, CA2] Le nombre de rangs DÉCLARÉS d'une planche. Bornes du
@@ -308,6 +313,42 @@ def normaliser_abri(valeur: str) -> str:
             "abri doit être : aucun, voile, châssis, tunnel ou serre"
         )
     return cle
+
+
+#: [US-230 / CA2] Vocabulaire fermé du type de sol, validé ICI au point
+#: d'écriture — même principe que l'abri (US-181), sans CHECK SQL et sans
+#: migration : la colonne `parcelles.type_sol` existe depuis migration_v28 et
+#: ne change pas. Les libellés stockés gardent leur capitale, comme les valeurs
+#: déjà écrites par US-058 (« Argileux », « Limoneux »).
+TYPES_SOL: dict[str, str] = {
+    "argileux": "Argileux",
+    "limoneux": "Limoneux",
+    "sableux": "Sableux",
+    "humifere": "Humifère",
+    "calcaire": "Calcaire",
+}
+#: Ce qu'un jardinier dit pour la même chose.
+_ALIAS_TYPE_SOL: dict[str, str] = {
+    "argile": "argileux", "limon": "limoneux", "sable": "sableux",
+    "sablonneux": "sableux", "humus": "humifere", "humifere": "humifere",
+}
+
+
+def normaliser_type_sol(valeur: str) -> str:
+    """[US-230 / CA2] Ramène « argile », « Sablonneux » … au vocabulaire fermé.
+
+    Lève ValueError si la valeur en est hors. `None` ne passe pas par ici : il
+    veut dire « non renseigné » et remet la colonne à `NULL` (CA6), ce que
+    `update_parcelle` traite avant d'appeler cette fonction.
+    """
+    cle = unidecode(str(valeur or "")).strip().lower()
+    cle = _ALIAS_TYPE_SOL.get(cle, cle)
+    if cle not in TYPES_SOL:
+        raise ValueError(
+            "type de sol doit être : "
+            + ", ".join(TYPES_SOL[c].lower() for c in TYPES_SOL)
+        )
+    return TYPES_SOL[cle]
 
 
 def _nb_rangs(valeur: str) -> Optional[int]:
@@ -443,6 +484,54 @@ def _booleen(valeur: str, champ: str) -> bool:
     raise ValueError(f"{champ} doit être true ou false")
 
 
+class ChampInvalide(ValueError):
+    """[US-230 / E5] Un refus du domaine qui sait QUEL champ il refuse.
+
+    Le message reste celui du domaine, mot pour mot — c'est celui que le
+    compagnon donne (CA11). Ce qui s'y ajoute, c'est le nom du champ, pour que
+    l'écran puisse poser le message **sous le champ fautif** plutôt qu'en haut
+    de la carte, et y laisser les autres modifications intactes.
+    """
+
+    def __init__(self, champ: str, message: str) -> None:
+        super().__init__(message)
+        self.champ = champ
+
+
+def valider_champs(**kwargs) -> None:
+    """[US-230 / CA2, CA5, CA13] Rejoue les contrôles d'`update_parcelle` SANS
+    écrire, pour que rien ne soit écrit à moitié quand plusieurs champs partent
+    ensemble.
+
+    C'est le **même** code de validation, appelé sur les mêmes valeurs : un
+    refus porte donc mot pour mot le message que le compagnon aurait donné
+    (CA11). Lève ValueError au premier champ fautif, en le nommant.
+    """
+    inconnus = set(kwargs) - _CHAMPS_MODIFIER
+    if inconnus:
+        raise ValueError(f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}")
+    controles = [
+        ("rangs", _nb_rangs), ("longueur", _longueur_m),
+        ("abri", normaliser_abri), ("type_sol", normaliser_type_sol),
+        ("paillage", lambda v: _booleen(v, "paillage")),
+        ("pepiniere", lambda v: _booleen(v, "pepiniere")),
+        ("actif", lambda v: _booleen(v, "actif")),
+        ("superficie", float),
+    ]
+    for champ, parseur in controles:
+        if kwargs.get(champ) is None:
+            continue
+        try:
+            parseur(kwargs[champ])
+        except (ValueError, TypeError) as e:
+            message = (
+                "superficie doit être un nombre décimal (ex : 8.5)"
+                if champ == "superficie" and not isinstance(e, ChampInvalide)
+                else str(e)
+            )
+            raise ChampInvalide(champ, message) from None
+
+
 def update_parcelle(
     db: Session, nom: str, potager_id: Optional[int] = None, **kwargs
 ) -> Tuple[Parcelle, List[str]]:
@@ -455,7 +544,15 @@ def update_parcelle(
     places de TOUS les rangs de la planche ; la largeur, elle, ne se déclare
     pas : elle se déduit, voir `largeur_deduite`),
     pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
-    "semis pleine terre", voir utils.stock._cond_semis_pleine_terre).
+    "semis pleine terre", voir utils.stock._cond_semis_pleine_terre),
+    type_sol ([US-230] vocabulaire fermé, voir `normaliser_type_sol`),
+    actif ([US-230 / CA2] bool "true"/"false" — passer à false reprend le retrait
+    d'US-009 et réaffecte les gestes rattachés).
+
+    [US-230 / CA6] Une valeur `None` (et non une chaîne) remet à `NULL` les
+    champs qui acceptent « non renseigné » : exposition, superficie, abri,
+    paillage, type_sol, rangs, longueur. Ce n'est ni une chaîne vide, ni un
+    `false` : le silence ne devient jamais une déclaration.
     Lève ValueError  si un paramètre est inconnu ou mal typé.
     Lève LookupError si la parcelle est introuvable.
 
@@ -466,7 +563,7 @@ def update_parcelle(
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
             f"Acceptés : exposition, superficie, ordre, pepiniere, abri, "
-            f"paillage, rangs, longueur"
+            f"paillage, rangs, longueur, type_sol, actif"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -480,14 +577,23 @@ def update_parcelle(
     modifs: List[str] = []
     if "exposition" in kwargs:
         parcelle.exposition = kwargs["exposition"]
-        modifs.append(f"Exposition : {kwargs['exposition']}")
+        modifs.append(
+            f"Exposition : {kwargs['exposition']}"
+            if kwargs["exposition"] is not None else "Exposition : non renseignée"
+        )
     if "superficie" in kwargs:
-        try:
-            val = float(kwargs["superficie"])
-        except (ValueError, TypeError):
-            raise ValueError("superficie doit être un nombre décimal (ex : 8.5)")
-        parcelle.superficie_m2 = val
-        modifs.append(f"Superficie : {val} m²")
+        # [US-230 / CA6] `None` veut dire « non renseigné » et remet la colonne
+        # à NULL — ce qui n'est ni zéro mètre carré, ni une chaîne vide.
+        if kwargs["superficie"] is None:
+            parcelle.superficie_m2 = None
+            modifs.append("Superficie : non renseignée")
+        else:
+            try:
+                val = float(kwargs["superficie"])
+            except (ValueError, TypeError):
+                raise ValueError("superficie doit être un nombre décimal (ex : 8.5)")
+            parcelle.superficie_m2 = val
+            modifs.append(f"Superficie : {val} m²")
     if "ordre" in kwargs:
         try:
             val_ord = int(kwargs["ordre"])
@@ -503,11 +609,30 @@ def update_parcelle(
         parcelle.est_pepiniere = val_bool
         modifs.append(f"Pépinière : {'oui' if val_bool else 'non'}")
     if "abri" in kwargs:
-        parcelle.abri = normaliser_abri(kwargs["abri"])
-        modifs.append(f"Abri : {LIBELLES_ABRI[parcelle.abri]}")
+        # [US-230 / CA6, US-181] Trois états distincts, jamais confondus :
+        # « serre », « aucun » (= le jardinier déclare le plein air) et NULL
+        # (= la question n'a jamais été posée). `None` est le seul chemin vers
+        # le troisième — une chaîne vide reste refusée par le vocabulaire.
+        if kwargs["abri"] is None:
+            parcelle.abri = None
+            modifs.append("Abri : non renseigné")
+        else:
+            parcelle.abri = normaliser_abri(kwargs["abri"])
+            modifs.append(f"Abri : {LIBELLES_ABRI[parcelle.abri]}")
     if "paillage" in kwargs:
-        parcelle.paillage = _booleen(kwargs["paillage"], "paillage")
-        modifs.append(f"Paillage : {'oui' if parcelle.paillage else 'non'}")
+        if kwargs["paillage"] is None:
+            parcelle.paillage = None
+            modifs.append("Paillage : non renseigné")
+        else:
+            parcelle.paillage = _booleen(kwargs["paillage"], "paillage")
+            modifs.append(f"Paillage : {'oui' if parcelle.paillage else 'non'}")
+    if "type_sol" in kwargs:
+        if kwargs["type_sol"] is None:
+            parcelle.type_sol = None
+            modifs.append("Type de sol : non renseigné")
+        else:
+            parcelle.type_sol = normaliser_type_sol(kwargs["type_sol"])
+            modifs.append(f"Type de sol : {parcelle.type_sol.lower()}")
     if "rangs" in kwargs:
         # [US-197 / CA2] Validé AVANT affectation : une valeur refusée laisse la
         # parcelle exactement dans l'état où le jardinier l'avait laissée.
@@ -524,6 +649,31 @@ def update_parcelle(
             f"Longueur : {format_longueur(parcelle.longueur_m)} de long"
             if parcelle.longueur_m is not None else "Longueur : non renseignée"
         )
+
+    if "actif" in kwargs:
+        # [US-230 / CA2, US-009] Le statut de la parcelle. Repasser à
+        # « inactive » N'EST PAS une simple colonne à écrire : c'est le retrait
+        # d'US-009, qui réaffecte les gestes rattachés en « Non localisé ». La
+        # fiche web et la commande du compagnon doivent en passer par le même
+        # chemin, sans quoi un retrait fait depuis le web laisserait derrière
+        # lui des événements pointant une parcelle qui n'existe plus à l'écran.
+        val_actif = _booleen(kwargs["actif"], "actif")
+        if val_actif is False and parcelle.actif is not False:
+            _q_evt = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id)
+            if potager_id is not None:
+                _q_evt = _q_evt.filter(Evenement.potager_id == potager_id)
+            nb_reaffectes = _q_evt.count()
+            _q_evt.update({"parcelle_id": None}, synchronize_session="fetch")
+            modifs.append(
+                f"Statut : inactive — {nb_reaffectes} geste"
+                f"{'s' if nb_reaffectes > 1 else ''} repassé"
+                f"{'s' if nb_reaffectes > 1 else ''} en « Non localisé »"
+            )
+        elif val_actif is True and parcelle.actif is False:
+            # Réactiver ne rend pas ses gestes à la parcelle : ils ont été
+            # délocalisés, et rien ne dit qu'ils lui revenaient.
+            modifs.append("Statut : active")
+        parcelle.actif = val_actif
 
     # [US-225 / CA7] Cohérence longueur × superficie : signalée, jamais corrigée,
     # jamais bloquante. Le CA7 confie cette phrase à l'écran (US-228), mais la

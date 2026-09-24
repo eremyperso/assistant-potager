@@ -124,6 +124,7 @@ from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import recalage_calendrier as svc_recalage  # [US-070]
 from app.services import repartition_rangs as svc_rangs  # [US-198]
+from app.services import rotation as svc_rotation  # [US-163, US-231]
 from app.services import confiance_semis as svc_confiance  # [US-178]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
@@ -979,6 +980,90 @@ def creer_parcelle(req: CreerParcelleRequest, ctx: TenantContext = Depends(get_c
             "superficie_m2": parcelle.superficie_m2, "est_pepiniere": parcelle.est_pepiniere,
             "type_sol": parcelle.type_sol,
             "abri": parcelle.abri, "paillage": parcelle.paillage,
+        }
+    finally:
+        db.close()
+
+
+class ModifierParcelleRequest(BaseModel):
+    """[US-230 / CA1, E4] Un seul appel porte tous les champs modifiés, et
+    **eux seuls** : `exclude_unset` distingue « champ non touché » de « champ
+    remis à non renseigné » (`null`). Les deux ne veulent pas dire la même
+    chose, et confondre les deux écraserait silencieusement le travail d'un
+    autre jardinier (CA14).
+
+    `extra="allow"` n'ouvre rien : c'est ce qui permet de **nommer** le champ
+    refusé plutôt que de renvoyer une erreur de schéma illisible (CA1). La
+    largeur, en particulier, tombe ici — elle se déduit, elle ne se déclare pas.
+    """
+    model_config = {"extra": "allow"}
+
+    nom: Optional[str] = None
+    superficie_m2: Optional[float] = None
+    longueur_m: Optional[float] = None
+    nb_rangs: Optional[int] = None
+    exposition: Optional[str] = None
+    type_sol: Optional[str] = None
+    abri: Optional[str] = None
+    paillage: Optional[bool] = None
+    est_pepiniere: Optional[bool] = None
+    actif: Optional[bool] = None
+
+
+@app.patch("/parcelles/{parcelle_id}")
+def modifier_parcelle(
+    parcelle_id: int,
+    req: ModifierParcelleRequest,
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-230] Le second chemin d'écriture des caractéristiques d'une parcelle
+    — le premier restant la phrase dite au compagnon.
+
+    Le handler ne connaît aucune borne : elles vivent toutes dans
+    `utils.parcelles`, et c'est `svc_parcelles.modifier_parcelle` qui les y
+    appelle (CA2, CA3). Une valeur hors borne envoyée sans passer par le
+    formulaire se heurte donc au **même refus, mot pour mot**, que le
+    compagnon (CA5, CA11)."""
+    extras = sorted(req.model_extra or {})
+    if extras:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Champ(s) non modifiable(s) depuis la fiche : {', '.join(extras)}",
+        )
+    champs = req.model_dump(exclude_unset=True)
+    if not champs:
+        raise HTTPException(status_code=400, detail="Aucune modification transmise")
+    if "nom" in champs and not (champs["nom"] or "").strip():
+        raise HTTPException(status_code=400, detail="Nom de parcelle requis")
+    db = SessionLocal()
+    try:
+        try:
+            parcelle, modifs = svc_parcelles.modifier_parcelle(db, ctx, parcelle_id, champs)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Parcelle introuvable")
+        except ValueError as e:
+            # [E5] Le message vient du domaine et nomme la borne ; le champ
+            # fautif l'accompagne pour que l'écran le place SOUS lui, sans
+            # perdre les autres modifications à l'écran.
+            raise HTTPException(
+                status_code=400,
+                detail={"message": str(e), "champ": getattr(e, "champ", None)},
+            )
+        # [CA9] La réponse porte l'état complet de la parcelle, largeur déduite
+        # comprise : l'écran met à jour son en-tête et la Vue plan sans
+        # recharger, et sans recalculer la largeur de son côté (CA3).
+        largeur, incoherente = largeur_deduite(parcelle.superficie_m2, parcelle.longueur_m)
+        return {
+            "id": parcelle.id, "nom": parcelle.nom,
+            "superficie_m2": parcelle.superficie_m2, "longueur_m": parcelle.longueur_m,
+            "largeur_m": largeur, "largeur_incoherente": incoherente,
+            "nb_rangs": parcelle.nb_rangs, "exposition": parcelle.exposition,
+            "type_sol": parcelle.type_sol, "abri": parcelle.abri,
+            "paillage": parcelle.paillage, "est_pepiniere": parcelle.est_pepiniere,
+            "actif": parcelle.actif,
+            "modifications": modifs,
         }
     finally:
         db.close()
@@ -2296,6 +2381,13 @@ def get_plan(
         # [US-039 / CA1, CA5] Indicateur d'observations par parcelle / ligne de culture
         obs_index = build_observations_index(db)
 
+        # [US-232 / CA1, CA3] Le journal du SOL de chaque parcelle — paillage,
+        # amendement, désherbage, binage — en UNE lecture pour tout le plan :
+        # changer de parcelle dans l'onglet Parcelles ne déclenche aucune
+        # requête de plus. Le service filtre et regroupe des événements qui
+        # existent déjà ; il n'en crée aucun type nouveau.
+        sol_index = svc_evenements.interventions_sol(db, use_ctx, jusqua=dr.isoformat() if dr else None)
+
         # [US-194 / CA1, CA6] Phase du moment de chaque ligne en place — semée,
         # en place, en récolte. Calculée par le service de recalage, jamais ici :
         # l'API ne fait que rapprocher la clé (parcelle, culture, variété).
@@ -2316,6 +2408,15 @@ def get_plan(
             db, parcelles, occupation, use_ctx.potager_id, dr,
             attributs_culture=attributs_culture,
         )
+
+        # [US-231 / CA1, CA3] La carte « Rotation » de chaque parcelle — trois
+        # campagnes passées et le conseil de la campagne à venir. Calculée par
+        # `app/services/rotation.py`, le MÊME service que l'avertissement de
+        # plantation (US-163) : la fiche et le geste ne peuvent pas se
+        # contredire. Une seule lecture pour tout l'onglet : changer de parcelle
+        # ne déclenche aucune requête de plus (RT6). [R8] Les pépinières n'y
+        # figurent pas — une rotation n'a pas de sens sur des godets.
+        rotations = svc_rotation.historique_du_plan(db, use_ctx, parcelles)
 
         result = []
         for p in parcelles:
@@ -2404,6 +2505,15 @@ def get_plan(
                 "nom":           p.nom,
                 "exposition":    p.exposition,
                 "superficie_m2": p.superficie_m2,
+                # [US-229 / CA1] Le type de sol (US-058) et le statut actif
+                # (US-009) rejoignent la réponse : la carte « Caractéristiques »
+                # de la fiche parcelle les nomme, et changer de parcelle ne doit
+                # déclencher aucune lecture de plus. `actif` est toujours vrai
+                # ici — `get_all_parcelles` ne sert que les parcelles actives —
+                # mais le champ fait partie du contrat, et c'est lui qui dit
+                # « Active » plutôt qu'une valeur supposée par l'écran.
+                "type_sol":      p.type_sol,
+                "actif":         bool(p.actif),
                 "abri":          p.abri,        # [US-181] None = non renseigné ≠ "aucun"
                 "paillage":      p.paillage,
                 # [US-197 / CA6] Le dénominateur en RANGS de la Vue plan (US-200),
@@ -2432,6 +2542,13 @@ def get_plan(
                 # déclarés, occupés, libres (ou inconnus), dépassement assumé,
                 # liste ordonnée des rangs et mode de numérotation.
                 "disposition": repartition["dispositions"].get(p.nom),
+                # [US-232 / S2, S5] Les huit dernières interventions de sol, du
+                # plus récent au plus ancien, et le total réel — c'est lui qui
+                # dit s'il faut proposer « Tout voir ».
+                "sol": sol_index.get(p.id, {"interventions": [], "total": 0}),
+                # [US-231 / R8] None pour une pépinière : l'absence de rotation
+                # est une absence de SENS, pas une donnée manquante.
+                "rotation": rotations.get(p.id),
             })
 
         # [US-200 / V17, CA1] Les cultures dont la parcelle n'a jamais été dite.
@@ -2461,6 +2578,17 @@ def get_plan(
             # [US-198 / CA3] Totaux du plan en rangs — le pourcentage ne mêle
             # jamais une parcelle sans dénominateur.
             "totaux": repartition["totaux"],
+            # [US-230 / CA3] Les listes fermées de la fiche viennent du DOMAINE,
+            # jamais du frontend : un vocabulaire recopié dans l'écran serait un
+            # second endroit où la règle vivrait, et il dériverait. Servies ici
+            # plutôt que par un appel dédié — US-229 / CA1 interdit d'ajouter
+            # une lecture à l'onglet Parcelles.
+            "vocabulaires": svc_parcelles.vocabulaires_fiche(),
+            # [US-232 / CA2] La liste des gestes tenus pour « sol et entretien »
+            # est définie dans le DOMAINE, à un seul endroit. La carte de la
+            # fiche parcelle et le filtre du Journal la reçoivent tous les deux
+            # d'ici : les deux ne peuvent pas diverger.
+            "gestes_sol": list(svc_evenements.GESTES_SOL),
         }
     finally:
         db.close()

@@ -638,6 +638,38 @@ besoin en eau, calendrier) reste, lui, du ressort du Lot E (§5.3).
 
 ### 5.10 Écran Plan (US-060) — écarts assumés avec la maquette
 
+> ⚠️ **Amendé par US-222 (épic 10, septembre 2026).** L'onglet Parcelles est devenu le
+> **niveau 2 du zoom d'information** et a été recousu sur la Vue plan (US-200). Trois critères
+> d'acceptance d'US-060 sont **remplacés** — ils ne sont pas réécrits ci-dessous, ils ne valent
+> simplement plus :
+>
+> | CA d'US-060 | Ce qu'il disait | Ce qui le remplace (US-222) |
+> |---|---|---|
+> | **CA2** | pourcentage d'occupation à droite de chaque ligne de la liste | l'occupation **en rangs** — « 4/5 », ou « — » sans dénominateur (D1) |
+> | **CA5** | ligne « Occupation de la surface », son infobulle et sa `ProgressBar` | « N rangs occupés sur M », sans barre ni infobulle (D6, arbitrage A20) |
+> | **CA12** | code couleur vert / ambre / rouge du taux d'occupation | **aucune teinte d'occupation** : dans le Plan la couleur dit la phase (RT4), seul le dépassement alerte (D2) |
+>
+> **CA7 est étendu** : la tuile de culture porte en tête son numéro de rang et sa piste — le
+> composant `RangPlan` d'US-200 et d'US-228 dans sa variante `taille="grande"`, jamais un second
+> dessin (D7, CA4). Le palier à trois colonnes de `.wcult-grid` (1400 px) tombe au passage : une
+> tuile porte désormais une piste et a besoin de largeur, pour la même raison qu'A23 sur la Vue plan.
+> `occTint` et `pctDe` ont été retirés de `frontend/src/lib/plan.js` avec leurs tests ; `ProgressBar`
+> reste au design system, sans usage sur l'écran Plan. Ce qui suit décrit l'écran **tel qu'US-060
+> l'avait livré**, et reste la référence pour tout ce qu'US-222 n'a pas touché.
+>
+> ⚠️ **Amendé une seconde fois le 24/09/2026** par la maquette `Parcelle - Fiche.html` :
+> la fiche d'une parcelle **ne porte plus le détail de ses cultures**. Les tuiles, la frise
+> des douze mois, la pastille de confiance et les rangs libres actionnables cèdent la place
+> à un bandeau « N rangs occupés sur M » et à un bouton « Voir les cultures dans le Plan → ».
+> Le rang vit dans le Plan, la parcelle vit dans sa fiche. L'amendement de référence est en
+> fin de `backlog/US-222_onglet-parcelles-niveau-zoom.md` ; il n'est **pas encore livré**, et
+> attend US-206 / US-207 qui reprendront la frise et la confiance.
+>
+> ⚠️ **US-230 (24/09/2026)** ouvre l'écriture web des caractéristiques d'une parcelle
+> (`PATCH /parcelles/{id}`) : la carte d'US-229 bascule en édition sur place. Le CA9 d'US-229
+> — bouton « Modifier » désactivé — est **levé**.
+
+
 L'écran livré porte `ScreenPlan` (`web-screens.jsx`) sur les données réelles de `GET /plan` :
 liste des parcelles à gauche sous l'intitulé « Mes parcelles · N », fiche de la parcelle
 sélectionnée à droite (nom serif en couleur de marque, pastilles de caractéristiques,

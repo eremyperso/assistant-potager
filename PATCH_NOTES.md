@@ -1,3 +1,161 @@
+## [v3.84.0] — 2026-09-24
+
+**ÉPIC 10 — US-231** : la rotation **se lit enfin à froid**. L'application savait
+déjà dire « ces tomates reviennent trop tôt » — mais seulement à l'instant où on
+les plante. Ce savoir existe désormais **posément**, sur la fiche d'une parcelle,
+quand on prépare la saison. **Voir venir une répétition avant de la commettre.**
+
+### 🚀 Nouveautés
+- Ajoute la carte **« Rotation »** sur la fiche d'une parcelle, juste après « Caractéristiques » : les trois campagnes précédentes, puis la campagne à venir (US-231).
+- Affiche une **vignette par famille botanique** ayant occupé la parcelle chaque année, la famille en gras et les cultures dessous — plusieurs familles la même année font plusieurs vignettes.
+- Donne à chaque famille une **teinte stable** d'une parcelle et d'une année à l'autre : la couleur identifie la famille, elle ne juge jamais ce qui a été fait.
+- Porte dans la colonne en pointillés de l'**année à venir** les familles compatibles au regard du délai de retour du référentiel.
+- Annonce sous la grille une **alerte de répétition** : « Solanacées deux années de suite sur cette parcelle. À éviter en 2027. » — une seule par famille en cause.
+- Ouvre la culture nommée d'un appui sur son nom ; la carte reste en **lecture seule**, aucun geste n'y est déclenché.
+
+### ⚖️ Honnêteté avant complétude
+- Une culture dont la **famille n'est pas renseignée** se dit « Famille non renseignée » et se trouve **exclue** de l'alerte comme du conseil : l'ignorance ne devient jamais un « tout va bien ».
+- Une **année sans donnée** reste une colonne vide — elle ne se saute pas ; une parcelle sans aucun antécédent l'annonce en une phrase et garde son conseil.
+- Faute de délai de retour dans le référentiel, la colonne de conseil **dit ce qui l'empêche** au lieu de proposer une liste.
+- Une parcelle **pépinière** n'a pas de carte : une rotation n'a pas de sens sur un emplacement de godets.
+
+### 🔧 Améliorations techniques
+- Fait de `app/services/rotation.py` le **seul** endroit qui décide ce qui fait antécédent : la carte et l'avertissement de plantation (US-163) lisent désormais les mêmes événements et appliquent le même prédicat — un test vérifie qu'ils ne peuvent pas se contredire.
+- Sert les quatre années de **toutes** les parcelles avec `GET /plan`, en une lecture : changer de parcelle ne déclenche aucune requête de plus, et aucun endpoint n'est ajouté.
+- Ajoute huit teintes de famille au design system (`--fam-N-*`, clair et sombre), **sans ambre ni rouge** : ces deux couleurs disent déjà « attention » et « refus » ailleurs dans l'application.
+- Étend la page de contrôle visuel `/plan-parcelles` avec les cinq cas de la carte : répétition sur deux ans, sur trois ans, famille inconnue, aucun antécédent, référentiel muet.
+
+### 📚 Documentation
+- Ajoute « Lire la rotation d'une parcelle année par année » au corpus de connaissance, et complète `docs/domaines/plan-et-rangs.md` avec les six garanties de la carte.
+
+## [v3.83.0] — 2026-09-24
+
+**ÉPIC 10 — US-232, et l'amendement du 24/09/2026** : la fiche d'une parcelle
+**perd le détail de ses cultures** et gagne le **journal de son sol**. Deux
+changements, une seule idée : un niveau de zoom ajoute ce que le précédent ne
+pouvait pas porter, il ne le redessine jamais. **Le rang vit dans le Plan, la
+parcelle vit dans sa fiche.**
+
+### 🚀 Nouveautés
+- Ajoute la carte **« Sol et entretien »** sur la fiche d'une parcelle : paillage, amendement, désherbage et binage de **cette planche**, du plus récent au plus ancien (US-232).
+- Répond enfin à « qu'ai-je apporté à cette planche ? » — une question que le journal, trié par date et toutes parcelles confondues, ne savait pas poser. Rien de neuf n'est enregistré : ces gestes existaient déjà, ils sont filtrés et regroupés.
+- Affiche les **huit dernières** interventions ; au-delà, « Tout voir » ouvre le Journal **filtré sur cette parcelle et sur ces mêmes gestes**. Le filtre posé par un lien est nommé en haut de la liste et se retire d'un appui.
+- Le bouton **« Ajouter »** prépare un geste avec la parcelle déjà en contexte — il n'écrit rien, le compagnon relit et confirme. Les quatre gestes de sol rejoignent ceux que la PWA peut préparer.
+- Remplace les tuiles de culture de la fiche par un **bandeau d'occupation** — « 4 rangs occupés sur 5 », une case par rang, les **noms** des cultures — et un bouton **« Voir les cultures dans le Plan → »** (amendement d'US-222).
+- Remplace les pastilles d'en-tête par une **ligne d'état** : « Pleine terre · sans abri · active ». Elles répétaient ce que la carte « Caractéristiques » dit juste en dessous, en mieux.
+
+### ⚠️ Ce qui quitte l'onglet Parcelles
+- **La frise des douze mois, la pastille de confiance et l'ouverture de la fiche calendrier depuis une tuile ne sont plus atteignables depuis cet écran.** Elles restent dans la Vue plan, dans Stocks et sur le Dashboard, et reviendront sur la fiche d'une culture (US-206, US-207). Régression assumée, annoncée par l'amendement.
+- Les **rangs libres actionnables** quittent la fiche : « Semer en place » et « Planter » se proposent sur la Vue plan, là où le rang est dessiné.
+
+### 🔧 Améliorations techniques
+- L'onglet Parcelles ne fait plus qu'**une seule lecture** (`GET /plan`) : les appels au calendrier cultural et à la confiance ne servaient que les tuiles, ils sont retirés.
+- Le journal du sol est servi **avec le plan**, en une requête pour toutes les parcelles : changer de parcelle ne déclenche aucune lecture de plus.
+- La liste des gestes tenus pour « sol et entretien » vit **à un seul endroit**, dans le domaine (`evenements.GESTES_SOL`) : la carte et le filtre du Journal la reçoivent tous les deux du serveur, ils ne peuvent pas diverger.
+- Supprime `tuilesDeParcelle()` et `numerosTexte()`, sans consommateur, et avec eux les deux tests de réconciliation des deux niveaux : il n'existe plus deux dessins d'un rang à garantir identiques, il n'en existe qu'un.
+
+### 📚 Documentation
+- Réécrit « Ouvrir une parcelle : l'onglet Parcelles » et ajoute « Retrouver ce qu'on a apporté au sol d'une parcelle » au corpus de connaissance, avec les deux catégories de la maquette que l'application **ne sait pas encore** enregistrer : engrais vert et travail du sol.
+- Complète `docs/domaines/plan-et-rangs.md` : pourquoi les tuiles partent, et les trois garanties du journal du sol.
+
+## [v3.82.0] — 2026-09-24
+
+**ÉPIC 10 — US-230** : la carte **« Caractéristiques »** d'une parcelle devient
+**modifiable sur place**. US-229 nommait ce qui manque et s'arrêtait là : le
+seul chemin de correction restait la phrase dite au compagnon, une phrase par
+champ. Un jardinier qui découvrait quatre champs vides sur une planche devait en
+dicter quatre. Un bouton bascule désormais la même carte en saisie, un second
+appui enregistre — et le compagnon reste exactement aussi capable qu'avant.
+
+### 🚀 Nouveautés
+- **« Modifier »** bascule la carte en édition **sur place** : mêmes champs, même ordre, même place. Ni fenêtre, ni page à part. « Annuler » restaure les valeurs d'origine sans rien envoyer (US-230).
+- Ajoute la route d'écriture `PATCH /parcelles/{id}`, réservée au rôle qui crée déjà une parcelle. Tout part en **un seul enregistrement**, et **seuls les champs réellement touchés** sont transmis : deux personnes qui corrigent la même parcelle au même moment n'écrasent chacune que ce qu'elles ont modifié.
+- Rend le **type de sol** et le **statut** (active / inactive) modifiables — depuis le web comme depuis le compagnon, qui les apprend au passage. Le type de sol prend un vocabulaire : argileux, limoneux, sableux, humifère, calcaire.
+- Ajoute à chaque liste un choix **« Non renseigné »** qui **efface** vraiment la valeur. Ce n'est ni « Non », ni « Aucun » : le silence ne devient jamais une déclaration.
+- Annonce avant d'enregistrer ce qu'une bascule entraîne ailleurs : passer une parcelle en **pépinière** la sort du calcul des semis en pleine terre ; la passer en **inactive** repasse ses gestes en « Non localisé ».
+
+### 🛠️ Corrections et garde-fous
+- Une valeur hors borne reçoit **le même refus, mot pour mot, que le compagnon** — y compris envoyée sans passer par le formulaire. Les `min`/`max` des champs sont un confort de frappe, jamais la règle : elle vit au point d'écriture, et lui seul.
+- Le message de refus se place **sous le champ fautif** : les autres corrections restent à l'écran, et la carte reste en édition. Rien n'est écrit tant qu'une valeur est refusée.
+- La **largeur** ne se saisit pas : sa case dit « Calculée : superficie ÷ longueur », et elle se recalcule à l'enregistrement. Une largeur invraisemblable est signalée, jamais corrigée d'office.
+- Échec réseau pendant l'enregistrement : la saisie est conservée, l'erreur est dite, une relance est proposée — et rien n'a été écrit à moitié. Quitter l'onglet en cours d'édition demande confirmation.
+- Un membre en **lecture seule** ne voit pas le bouton « Modifier » : il n'est pas grisé, il n'est pas là.
+- Les listes fermées (abri, type de sol) sont **servies par le serveur** avec le plan : l'écran les rend, il ne les définit pas. L'exposition reste une proposition, et une valeur déjà enregistrée hors liste n'est jamais perdue.
+- Corrige la page de contrôle visuel de l'onglet Parcelles, dont le scénario « lecture seule » ne changeait pas réellement de rôle — elle ne vérifiait donc rien.
+
+### 📐 Conception
+- **La maquette `Parcelle - Fiche.html` retire le détail des cultures de la fiche d'une parcelle** : bandeau « N rangs occupés sur M » et bouton « Voir les cultures dans le Plan → » à la place des tuiles, de la frise et des rangs libres. Le rang vit dans le Plan, la parcelle vit dans sa fiche. Les US de l'épic 10 sont amendées en conséquence (US-222 porte l'amendement de référence ; US-201, US-227, US-228, US-229, US-231, US-232 le répercutent).
+- **Ce retrait n'est pas livré ici** : la frise des douze mois et la pastille de confiance n'existent nulle part ailleurs tant qu'US-206 et US-207 ne le sont pas. L'ordre de livraison est inscrit dans l'amendement.
+
+### 📚 Documentation
+- Corpus : `parcelles-et-plan.md` gagne « Corriger les caractéristiques d'une parcelle depuis le web » et cesse de dire que rangs et longueur ne se saisissent pas depuis l'application.
+- `docs/domaines/plan-et-rangs.md` documente le second chemin d'écriture et les six garanties qui le tiennent.
+
+## [v3.81.0] — 2026-09-24
+
+**ÉPIC 10 — US-229** : la fiche d'une parcelle gagne sa carte
+**« Caractéristiques »**. Tout ce que l'application sait d'une planche s'y lit
+d'un coup d'œil — et surtout, **ce qu'elle n'en sait pas y est nommé** au lieu
+d'être masqué. C'est enfin là qu'on comprend pourquoi la Vue plan affiche
+« — » au lieu d'un compte de rangs, ou pourquoi la confiance avant un semis
+reste basse.
+
+### 🚀 Nouveautés
+- Ajoute la carte **« Caractéristiques »** sous l'en-tête d'une parcelle : nom, superficie, longueur, largeur déduite, nombre de rangs, exposition, type de sol, abri, paillage, pépinière et statut (US-229).
+- Affiche un champ jamais renseigné en **état manquant** — cadre en pointillés et « Non renseigné » écrit en toutes lettres : il n'est ni masqué, ni réduit à un tiret, ni rempli d'une valeur de repli.
+- Distingue **« Non renseigné » de « Non »** pour le paillage et l'abri : déclarer qu'on ne paille pas dit quelque chose, ne l'avoir jamais dit ne dit rien.
+- Signale dans la liste de gauche, par une **pastille discrète « Informations à compléter »**, les parcelles auxquelles il manque une caractéristique.
+- Propose sous la grille la **phrase à dire au compagnon**, bâtie avec le nom réel de la parcelle et ciblée sur le champ manquant quand il n'y en a qu'un, avec un bouton de copie.
+- Retire longueur, largeur et nombre de rangs de la carte d'une **pépinière** : ces trois champs n'ont pas de sens pour elle, et leur absence ne la signale donc pas comme incomplète.
+- Rend la carte entière d'une parcelle **inactive**, dont le statut le dit : une parcelle inactive n'est pas une parcelle cassée.
+
+### 🐛 Corrections
+- Corrige la pastille de paillage de l'en-tête de parcelle, qui affichait « Paillage true » : la colonne est un booléen, elle se lit désormais « Paillage oui » ou « Paillage non », et disparaît quand la question n'a jamais été posée (US-181).
+
+### 🔧 Améliorations techniques
+- Ajoute `type_sol` (US-058) et `actif` (US-009) à la réponse de `GET /plan` : la carte se nourrit de la lecture **déjà faite** par l'onglet, changer de parcelle ne déclenche toujours aucune requête.
+- La largeur reste déduite par `utils.parcelles.largeur_deduite` et par elle seule — aucune division n'est réécrite côté frontend, et elle n'est jamais présentée comme une valeur déclarée (US-225).
+
+### 💾 Base de données
+- **Aucune migration** : les onze champs de la carte existent tous déjà sur `parcelles`.
+
+### 🧪 Tests
+- Nouveau `tests/test_us229_fiche_parcelle_caracteristiques.py` : les champs servis par `GET /plan`, l'absence de tout endpoint de fiche, la largeur déduite à un seul endroit, l'absence de migration et le bouton « Modifier » désactivé.
+- Étend `frontend/src/lib/planParcelles.test.js` : ordre des champs, parcelle complète sans aucun manque, parcelle dont tout manque, silence distingué de « Non », largeur incohérente signalée sans être corrigée, pépinière, parcelle inactive, phrase compagnon.
+
+### 📚 Documentation
+- Nouvelle section de corpus « Voir et compléter les caractéristiques d'une parcelle » (`parcelles-et-plan.md`) et section « La fiche d'une parcelle et ses caractéristiques » dans `docs/domaines/plan-et-rangs.md`.
+
+### ⏭️ À suivre
+- L'édition de ces mêmes champs depuis le web fait l'objet d'**US-230** : d'ici là, le bouton « Modifier » est visible mais désactivé, et les caractéristiques se déclarent au compagnon.
+
+## [v3.80.0] — 2026-09-24
+
+**ÉPIC 10 — US-222** : l'onglet **Parcelles** devient le **niveau 2 du zoom
+d'information**. En ouvrant une planche, on y retrouve exactement les rangs que la
+Vue plan vient de montrer — mêmes numéros, mêmes traits, mêmes places prises et
+restantes —, agrandis, avec ce que la carte ne pouvait pas porter : exposition,
+abri, paillage, frise des douze mois, confiance et observations.
+
+### 🚀 Nouveautés
+- La tuile d'une culture porte désormais **son numéro de rang et sa piste** : c'est le dessin de la Vue plan repris tel quel, en plus grand, jamais un second dessin. Une culture posée sur deux rangs reste une seule tuile, ses numéros annoncés ensemble (« Rangs 3 et 4 »).
+- **Les rangs libres sont actionnables depuis la fiche de parcelle** : *Semer en place* et *Planter* y préparent le geste sur cette parcelle et ce rang, et le déposent dans la file du compagnon — rien n'est enregistré sans confirmation.
+- L'en-tête du détail gagne la **longueur de rang et la largeur déduite** (US-225), l'**abri et le paillage** (US-181), et le lien **« ← Voir dans la Vue plan »** qui remonte d'un niveau sur cette parcelle.
+- Une parcelle **pépinière** dit son type et ses lots et renvoie vers la Pépinière ; une parcelle **sans nombre de rangs** garde ses cultures dessinées et porte la phrase à dire au compagnon ; une parcelle **libre** propose son premier rang.
+- Sur téléphone, la liste des parcelles se replie en **sélecteur horizontal** de pastilles : la parcelle choisie reste visible, sans écran de retour.
+
+### ⚠️ Changement visible
+- **Le pourcentage d'occupation de la surface disparaît de l'écran Plan** — sa ligne, son infobulle, sa barre et son code couleur vert / ambre / rouge (arbitrage A20). Ce qui le remplace : l'**occupation en rangs**, partout — « 4/5 » dans la liste, « 4 rangs occupés sur 5 » dans le détail. Les deux ne mesuraient pas la même chose, et c'est le compte en rangs qui dit où il reste de la place. La superficie en m² reste affichée. Dans le Plan, la couleur ne dit plus que la phase d'une culture ; seule une parcelle en dépassement garde une teinte d'alerte.
+
+### 🧪 Tests
+- Nouveau `frontend/src/lib/planParcelles.test.js` : la **réconciliation des deux niveaux** (un rang porte les mêmes places et la même longueur dans la Vue plan et dans l'onglet Parcelles, avec et sans longueur déclarée), culture sur un ou deux rangs, surface, poquets, parcelle sans nombre de rangs, dépassement, pépinière, parcelle libre.
+- Page de contrôle visuel `/vue-parcelles`, sur le modèle de `/vue-plan` : plan complet, lecture seule, aucune parcelle, échec de lecture, thème sombre.
+- Répare au passage trois tests du corpus de connaissance dont les ancres de fragments avaient été décalées par les livraisons précédentes.
+
+### 📚 Documentation
+- `data/connaissance/doc_app/parcelles-et-plan.md` : nouvelle section « Ouvrir une parcelle : l'onglet Parcelles », et retrait des deux mentions du pourcentage d'occupation en surface (US-099 / CA9).
+- `ANALYSE_REFONTE_UI_WEB_2026.md` §5.10 : les CA2, CA5 et CA12 d'US-060 sont déclarés remplacés par cette US, son CA7 étendu.
+
 ## [v3.79.1] — 2026-09-24
 
 ### 🐛 Corrections

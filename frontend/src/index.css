@@ -42,6 +42,21 @@
 
     --shadow: 0 1px 2px rgba(22, 33, 12, .06), 0 4px 14px rgba(22, 33, 12, .05);
 
+    /* [US-231 / R3] Teintes des familles botaniques — IDENTITÉ, jamais
+       jugement (RT4). Ni ambre ni rouge : ces deux-là disent déjà « attention »
+       et « refus » partout ailleurs, et une famille n'est ni l'un ni l'autre.
+       Huit triplets fond / encre / bord, assez contrastés pour se distinguer
+       côte à côte, assez doux pour qu'une colonne de vignettes reste calme.
+       Attribués par `lib/familles.js` depuis le NOM de la famille. */
+    --fam-1-soft: #E6F0D8; --fam-1-txt: #3B6A1B; --fam-1-bord: #C9DFAE;
+    --fam-2-soft: #E0EFF4; --fam-2-txt: #21657F; --fam-2-bord: #BEDCE6;
+    --fam-3-soft: #EBE6F6; --fam-3-txt: #5E4593; --fam-3-bord: #D5CBEC;
+    --fam-4-soft: #DEF0EA; --fam-4-txt: #1F6B58; --fam-4-bord: #BBE0D4;
+    --fam-5-soft: #F3E9F1; --fam-5-txt: #7C3F6B; --fam-5-bord: #E4CFDF;
+    --fam-6-soft: #EDEFE0; --fam-6-txt: #5E6620; --fam-6-bord: #D8DCBF;
+    --fam-7-soft: #E4E8F5; --fam-7-txt: #3F4E8C; --fam-7-bord: #C7CFEA;
+    --fam-8-soft: #F0EAE0; --fam-8-txt: #6E5432; --fam-8-bord: #DED2BF;
+
     /* [US-200 / CA3] Trames de la Vue plan — la FORME porte le mode
        d'implantation, jamais la couleur seule (V16). Deux teintes : celle
        qui hachure un trait de semis en surface, celle qui hachure la carte
@@ -119,6 +134,17 @@
     --header-glass: rgba(228, 237, 211, .10);
 
     --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .3);
+
+    /* [US-231 / R3] Teintes des familles — variante sombre : fonds profonds,
+       encres claires, même ordre et même sens que le mode clair. */
+    --fam-1-soft: #1F2D12; --fam-1-txt: #9FD164; --fam-1-bord: #33471F;
+    --fam-2-soft: #13252D; --fam-2-txt: #7BB9D4; --fam-2-bord: #23414D;
+    --fam-3-soft: #201A33; --fam-3-txt: #AE97DD; --fam-3-bord: #362D52;
+    --fam-4-soft: #122A24; --fam-4-txt: #74C6AE; --fam-4-bord: #204439;
+    --fam-5-soft: #2B1B27; --fam-5-txt: #D49CC4; --fam-5-bord: #463040;
+    --fam-6-soft: #26290F; --fam-6-txt: #C3CB6F; --fam-6-bord: #3E431C;
+    --fam-7-soft: #1A1F35; --fam-7-txt: #9AA8E0; --fam-7-bord: #2D3556;
+    --fam-8-soft: #2A2317; --fam-8-txt: #D3B589; --fam-8-bord: #453A27;
 
     /* [US-200 / CA3] Trames de la Vue plan — variante sombre. */
     --trame-trait: rgba(228, 237, 211, .5);

@@ -89,3 +89,23 @@ Scénario: Voir la culture depuis l'onglet Parcelles
 ```
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `plan`, `navigation`
+
+---
+
+## ⚠️ AMENDEMENT du 24/09/2026 — la fiche parcelle ne porte plus le détail des cultures
+
+Origine : maquette `Parcelle - Fiche.html`, détaillée dans l'amendement de
+**US-222**, qui fait foi. La fiche d'une parcelle porte désormais un simple
+**bandeau d'occupation** (« N rangs occupés sur M », les noms des cultures) et
+un bouton « Voir les cultures dans le Plan → » : plus aucune tuile de culture,
+plus aucun rang libre actionnable.
+
+- **CA8 devient sans objet** : il n'y a plus de tuile de culture dans l'onglet
+  Parcelles pour y porter « Voir la culture → ». Le chemin vers une culture
+  depuis une fiche de parcelle passe par le bouton « Voir les cultures dans le
+  Plan → », puis par le rang, comme au niveau 1.
+- I1 à I5 et les autres CA sont **inchangés** : ce sont les sorties de la Vue
+  plan, que cet amendement ne touche pas.
+- Le point tranché « la tuile de l'onglet Parcelles garde sa frise et sa puce de
+  confiance » (A7 puis A21) est **caduc** : la tuile disparaît. La frise et la
+  confiance deviennent portées par la fiche culture (US-206, US-207) seule.

@@ -2416,6 +2416,8 @@ _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     # [US-225 / CA5] Des mètres, jamais des mètres carrés : c'est précisément la
     # confusion que le récapitulatif doit lever avant d'écrire.
     "longueur": "m",
+    # [US-230] Deux champs sans unité : un vocabulaire fermé et un booléen.
+    "type_sol": None, "actif": None,
 }
 _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
@@ -2427,6 +2429,11 @@ _LIBELLES_MODIFICATION: dict[str, str] = {
     # [US-225] « longueur » seule : c'est la planche que le récapitulatif nomme
     # juste au-dessus, et la longueur d'un rang est celle de sa planche.
     "longueur": "longueur",
+    # [US-230] La fiche web a ajouté ces deux champs au point d'écriture du
+    # domaine ; le compagnon les sait donc modifier lui aussi, et son
+    # récapitulatif doit savoir les nommer.
+    "type_sol": "type de sol",
+    "actif": "statut",
 }
 
 

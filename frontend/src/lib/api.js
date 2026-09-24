@@ -121,7 +121,12 @@ async function patch(path, body) {
   const res = await requeteAvecRefresh(path, options)
   if (!res.ok) {
     const detail = await res.clone().json().catch(() => ({}))
-    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    const err = new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    // [US-230 / E5] Le champ fautif, quand le serveur l'a nommé : l'écran pose
+    // le message SOUS ce champ-là, et laisse les autres saisies en place.
+    err.champ = detail?.detail?.champ ?? null
+    err.statut = res.status
+    throw err
   }
   return res.json()
 }
@@ -267,6 +272,11 @@ export const api = {
     post('/parcelles', {
       nom, exposition, superficie_m2: superficieM2, est_pepiniere: estPepiniere, type_sol: typeSol,
     }),
+  // [US-230 / E4] Le second chemin d'écriture des caractéristiques d'une
+  // parcelle — un SEUL appel porte tous les champs modifiés, et eux seuls :
+  // `champs` est construit par `lib/planParcelles.js#chargeUtile`, qui n'y met
+  // que ce que le jardinier a touché. Rien n'est écrit champ par champ.
+  modifierParcelle: (parcelleId, champs) => patch(`/parcelles/${parcelleId}`, champs),
   accepterInvitation: (code) => post(`/invitations/${code}/accepter`),
   listerMembres: (potagerId) => get(`/potagers/${potagerId}/membres`),
   retirerMembre: (potagerId, membreUserId) => del(`/potagers/${potagerId}/membres/${membreUserId}`),

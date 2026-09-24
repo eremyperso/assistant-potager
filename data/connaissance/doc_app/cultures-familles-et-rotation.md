@@ -15,7 +15,7 @@ index_terms:
 ## Consulter ce qui est connu d'une culture
 
 **Intention :** procédure
-**On parle aussi de :** fiche ; ce que tu sais sur ; renseignements ; exposition ; besoin en eau ; rusticité
+**On parle aussi de :** fiche ; ce que tu sais sur ; ce que tu sais déjà sur une culture ; ce que l'assistant sait d'une culture ; renseignements ; exposition ; besoin en eau ; rusticité
 
 Une fiche courte rassemble ce qui est connu d'une culture : sa famille botanique, le délai à respecter avant de la refaire au même endroit, et ses conditions de conduite — exposition, besoin en eau, profondeur de semis, température supportée. Elle est assemblée à la lecture, sans rien inventer : ce qui n'est pas renseigné s'affiche comme non renseigné, et une culture inconnue est annoncée comme telle plutôt que remplacée par une voisine approchante.
 

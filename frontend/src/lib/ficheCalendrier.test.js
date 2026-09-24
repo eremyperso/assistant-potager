@@ -213,12 +213,22 @@ test('[CA13] la fiche ne lit que ce que l’écran d’origine ne lui a pas donn
   assert.equal((fiche.match(/api\.\w+\(/g) || []).length, 2)
 })
 
-test('[CA13, CA2] depuis le Plan, la fiche reçoit le calendrier, la confiance et la parcelle', () => {
+// ⚠️ [US-222, amendement du 24/09/2026] La fiche parcelle ne porte plus de
+// tuiles de culture : la frise, la pastille de confiance et l'ouverture de la
+// fiche calendrier depuis une tuile ont quitté `Plan.jsx`. Régression ASSUMÉE
+// et annoncée dans `PATCH_NOTES.md` — elles reviennent avec la fiche culture
+// (US-206, US-207). Ce que ces tests garantissaient est donc vérifié là où le
+// chemin existe encore : Stocks, et le composant lui-même.
+
+test('[CA13, CA2] la fiche reçoit ce que l’écran a déjà chargé — aucune lecture de plus', () => {
+  const stocks = source('../views/Stocks.jsx')
+  const bloc = stocks.slice(stocks.indexOf('<FicheCalendrier'), stocks.indexOf('/>', stocks.indexOf('<FicheCalendrier')))
+  assert.ok(bloc.includes('dateRef='), 'prop absente : dateRef=')
+  // L'onglet Parcelles, lui, n'ouvre plus la fiche : il n'a plus de tuile d'où
+  // l'ouvrir, et ne lit donc plus ni calendrier ni confiance.
   const plan = source('../views/Plan.jsx')
-  const bloc = plan.slice(plan.indexOf('<FicheCalendrier'), plan.indexOf('/>', plan.indexOf('<FicheCalendrier')))
-  for (const prop of ['calendriers=', 'confiances=', 'parcelleId={parcelleId}', 'dateRef={dateRef}']) {
-    assert.ok(bloc.includes(prop), `prop absente : ${prop}`)
-  }
+  assert.doesNotMatch(plan, /<FicheCalendrier/)
+  assert.doesNotMatch(plan, /api\.calendriersPlan|api\.confiancesPlan/)
 })
 
 test('[CA1] depuis Stocks, chaque ligne ET chaque carte portent la puce qui ouvre la fiche', () => {
@@ -235,15 +245,15 @@ test('[CA15] la fiche se ferme au clavier (Échap, dans le Modal partagé)', () 
   assert.match(source('../components/ui/Modal.jsx'), /e\.key === 'Escape'/)
 })
 
-test('[CA2, retour terrain 18/09] chaque tuile du Plan garde une entrée VISIBLE vers la fiche', () => {
-  // Sans geste d'actualité (la tomate en septembre), la pastille d'étoiles se tait
-  // mais la puce « calendrier » la remplace : jamais une tuile sans porte d'entrée.
-  const plan = source('../views/Plan.jsx')
-  assert.match(plan, /etatConfiance === ETAT_CONFIANCE \? \(\s*<PastilleConfiance[\s\S]*?\) : \([\s\S]*?<PuceConfiance[\s\S]*?onClick=\{\(\) => setFicheCalendrier\(true\)\}/)
+test('[CA2, retour terrain 18/09] chaque ligne de Stocks garde une entrée VISIBLE vers la fiche', () => {
+  // Sans geste d'actualité, la pastille d'étoiles se tait mais la puce
+  // « calendrier » la remplace : jamais une ligne sans porte d'entrée.
+  const stocks = source('../views/Stocks.jsx')
+  assert.match(stocks, /<PuceConfiance[\s\S]*?onClick=/)
 })
 
 test('[retour terrain 18/09] « Pourquoi ce niveau ? » mène explicitement à la fiche calendrier', () => {
-  const plan = source('../views/Plan.jsx')
-  assert.match(plan, /onOuvrirFiche=\{\(\) => \{ setPourquoi\(false\); setFicheCalendrier\(true\) \}\}/)
+  // Le chemin vit dans le composant de confiance lui-même : il est donc
+  // conservé pour tous les écrans qui le rendront, fiche culture comprise.
   assert.match(source('../components/FicheConfiance.jsx'), /Voir la fiche calendrier/)
 })

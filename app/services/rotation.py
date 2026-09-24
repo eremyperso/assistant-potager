@@ -140,6 +140,62 @@ def _familles_id_par_culture(db: Session, ctx: TenantContext) -> dict[str, int]:
     return mapping
 
 
+@dataclass(frozen=True)
+class Antecedent:
+    """[US-231 / CA1, CA2] Un passage de culture sur une parcelle, ramené à sa
+    campagne. `famille_id` à None dit une culture dont la famille botanique est
+    inconnue : elle est **gardée** — la carte « Rotation » la nomme (R7) — mais
+    elle n'est jamais un antécédent établi, ni pour le conflit d'US-163 ni pour
+    l'alerte et le conseil d'US-231."""
+
+    culture: str
+    campagne: int
+    famille_id: Optional[int] = None
+
+
+def _requete_antecedents(db: Session, ctx: TenantContext):
+    """[Notes techniques US-163] Bulletins météo exclus : aucune culture, donc
+    pas un antécédent. Aucun filtre sur `type_action` : un événement rattaché à
+    une parcelle et portant une culture atteste d'un passage, quel que soit le
+    verbe employé — c'est le rattachement à la parcelle qui fait la preuve, et
+    c'est ce qui exclut un semis de pépinière (rattaché à la pépinière, R8)."""
+    return db.query(Evenement).filter(
+        Evenement.potager_id == ctx.potager_id,
+        Evenement.culture.isnot(None),
+        Evenement.date.isnot(None),
+        or_(
+            Evenement.texte_original.is_(None),
+            Evenement.texte_original != BULLETIN_AUTO_METEO,
+        ),
+    )
+
+
+def antecedents_de_parcelle(
+    db: Session, ctx: TenantContext, parcelle_id: int
+) -> list[Antecedent]:
+    """[US-231 / CA1] L'historique exploitable d'UNE parcelle — la lecture que
+    `evaluer_rotation` (US-163) et la carte « Rotation » partagent."""
+    familles_par_culture = _familles_id_par_culture(db, ctx)
+    evenements = _requete_antecedents(db, ctx).filter(
+        Evenement.parcelle_id == parcelle_id
+    ).all()
+    return _en_antecedents(evenements, familles_par_culture)
+
+
+def _en_antecedents(evenements, familles_par_culture: dict[str, int]) -> list[Antecedent]:
+    antecedents: list[Antecedent] = []
+    for evenement in evenements:
+        campagne = _campagne(evenement.date)
+        if campagne is None:
+            continue
+        antecedents.append(Antecedent(
+            culture=evenement.culture,
+            campagne=campagne,
+            famille_id=familles_par_culture.get(normaliser_culture(evenement.culture)),
+        ))
+    return antecedents
+
+
 def evaluer_rotation(
     db: Session,
     ctx: TenantContext,
@@ -183,35 +239,14 @@ def evaluer_rotation(
             ),
         )
 
-    # [Notes techniques] Bulletins météo exclus : aucune culture, pas un antécédent.
-    evenements = (
-        db.query(Evenement)
-        .filter(
-            Evenement.potager_id == ctx.potager_id,
-            Evenement.parcelle_id == parcelle_id,
-            Evenement.culture.isnot(None),
-            Evenement.date.isnot(None),
-            or_(
-                Evenement.texte_original.is_(None),
-                Evenement.texte_original != BULLETIN_AUTO_METEO,
-            ),
-        )
-        .all()
-    )
-
-    familles_par_culture = _familles_id_par_culture(db, ctx)
+    # [US-231 / CA1] Le MÊME historique que la carte « Rotation » de la fiche
+    # parcelle : une seule lecture sait quels événements font antécédent, et
+    # les deux restitutions ne peuvent donc pas se contredire.
+    antecedents = antecedents_de_parcelle(db, ctx, parcelle_id)
 
     # [Notes techniques] Une culture inconnue du référentiel (fantôme, ex.
     # 'radi') n'entre jamais dans l'historique exploitable.
-    exploitables: list[tuple[str, int, int]] = []
-    for evenement in evenements:
-        famille_id = familles_par_culture.get(normaliser_culture(evenement.culture))
-        if famille_id is None:
-            continue
-        campagne = _campagne(evenement.date)
-        if campagne is None:
-            continue
-        exploitables.append((evenement.culture, campagne, famille_id))
+    exploitables = [a for a in antecedents if a.famille_id is not None]
 
     if not exploitables:
         return EvaluationRotation(
@@ -221,8 +256,8 @@ def evaluer_rotation(
         )
 
     memes_famille = [
-        (nom, campagne) for nom, campagne, famille_id in exploitables
-        if famille_id == fiche_avec_famille.famille_id and campagne <= campagne_reference
+        (a.culture, a.campagne) for a in exploitables
+        if a.famille_id == fiche_avec_famille.famille_id and a.campagne <= campagne_reference
     ]
     if not memes_famille:
         return EvaluationRotation(
@@ -245,3 +280,279 @@ def evaluer_rotation(
         culture_precedente=culture_precedente,
         campagne_derniere_occurrence=campagne_derniere,
     )
+
+
+# ── [US-231] La rotation qui se LIT, à froid, hors du geste ──────────────────
+#
+# US-163 sait dire « planter ceci ici entre en conflit » — au moment où l'on
+# plante. Ce savoir n'existait qu'à cet instant : rien ne le donnait à lire
+# posément, quand on prépare la saison. Ce bloc rend visible l'historique que
+# `evaluer_rotation` parcourt déjà, et formule le conseil de l'année à venir
+# avec le MÊME prédicat (CA1) — écart entre campagnes contre délai de retour de
+# la famille. Aucun second calcul, aucune duplication côté frontend (CA1).
+#
+# ⚖️ Honnêteté avant complétude : une famille inconnue se dit, une année sans
+# donnée se dit vide, et une culture sans famille est EXCLUE du conseil comme
+# de l'alerte — son absence ne produit jamais un « tout va bien » (R7).
+
+#: [R1] Trois campagnes derrière, puis la campagne à venir.
+NB_CAMPAGNES_AFFICHEES = 3
+
+#: [R7] Ce qu'une famille inconnue dit d'elle-même — jamais « Autres ».
+MENTION_FAMILLE_INCONNUE = "Famille non renseignée"
+
+#: [R5] Une alerte nomme le nombre d'années en mots, et la fenêtre en tient trois.
+_ANNEES_EN_MOTS = {2: "deux", 3: "trois"}
+
+
+def _familles_du_referentiel(db: Session, ctx: TenantContext) -> dict[int, dict]:
+    """id de famille → nom, délai de retour, et les cultures du référentiel qui
+    la portent. Une famille sans aucune culture visible depuis ce potager ne peut
+    pas être conseillée : on ne conseille pas de semer ce que l'application ne
+    connaît pas."""
+    familles: dict[int, dict] = {}
+    for config in lister_cultures_config(db, ctx):
+        if config.famille_id is None or config.famille_rel is None:
+            continue
+        fiche = familles.setdefault(config.famille_id, {
+            "id": config.famille_id,
+            "nom": config.famille_rel.nom,
+            "delai_retour_annees": config.famille_rel.delai_retour_annees,
+            "cultures": [],
+        })
+        if config.nom not in fiche["cultures"]:
+            fiche["cultures"].append(config.nom)
+    return familles
+
+
+def _campagnes_affichees(campagne_a_venir: int) -> list[int]:
+    return [
+        campagne_a_venir - NB_CAMPAGNES_AFFICHEES + i
+        for i in range(NB_CAMPAGNES_AFFICHEES)
+    ]
+
+
+def _colonnes(
+    antecedents: list[Antecedent], familles: dict[int, dict], campagnes: list[int]
+) -> tuple[list[dict], list[str]]:
+    """[R1, R2, R6, R7] Une colonne par campagne, une vignette par famille. Une
+    année sans donnée reste une colonne VIDE — elle ne se saute pas (R6)."""
+    colonnes: list[dict] = []
+    sans_famille: list[str] = []
+    for campagne in campagnes:
+        vignettes: dict[object, dict] = {}
+        for antecedent in [a for a in antecedents if a.campagne == campagne]:
+            connue = antecedent.famille_id is not None and antecedent.famille_id in familles
+            cle = antecedent.famille_id if connue else None
+            vignette = vignettes.setdefault(cle, {
+                "famille_id": antecedent.famille_id if connue else None,
+                "famille": (
+                    familles[antecedent.famille_id]["nom"] if connue
+                    else MENTION_FAMILLE_INCONNUE
+                ),
+                "inconnue": not connue,
+                "cultures": [],
+            })
+            if antecedent.culture not in vignette["cultures"]:
+                vignette["cultures"].append(antecedent.culture)
+            if not connue and antecedent.culture not in sans_famille:
+                sans_famille.append(antecedent.culture)
+        # [R2] Les familles nommées d'abord, l'inconnue en dernier : ce n'est pas
+        # une famille, c'est une lacune.
+        ordonnees = sorted(
+            vignettes.values(), key=lambda v: (v["inconnue"], v["famille"].lower())
+        )
+        colonnes.append({"annee": campagne, "familles": ordonnees})
+    return colonnes, sans_famille
+
+
+def _derniere_campagne_par_famille(antecedents: list[Antecedent]) -> dict[int, int]:
+    """Toute l'histoire connue, pas seulement la fenêtre affichée : un délai de
+    retour de cinq ans se juge sur cinq ans, même si la carte n'en montre trois."""
+    dernieres: dict[int, int] = {}
+    for antecedent in antecedents:
+        if antecedent.famille_id is None:
+            continue
+        precedente = dernieres.get(antecedent.famille_id)
+        if precedente is None or antecedent.campagne > precedente:
+            dernieres[antecedent.famille_id] = antecedent.campagne
+    return dernieres
+
+
+def _alertes(
+    antecedents: list[Antecedent], familles: dict[int, dict], campagne_a_venir: int
+) -> list[dict]:
+    """[R5] Une famille présente plusieurs campagnes **consécutives** jusqu'à la
+    campagne courante menace l'année à venir : c'est cette répétition-là qui se
+    dit, une seule fois par famille en cause. Une répétition ancienne et
+    interrompue n'est plus une répétition en cours — le conseil, lui, la voit."""
+    campagne_courante = campagne_a_venir - 1
+    par_famille: dict[int, set] = {}
+    for antecedent in antecedents:
+        if antecedent.famille_id is None or antecedent.famille_id not in familles:
+            continue
+        par_famille.setdefault(antecedent.famille_id, set()).add(antecedent.campagne)
+
+    alertes: list[dict] = []
+    for famille_id, campagnes in par_famille.items():
+        suite = 0
+        while (campagne_courante - suite) in campagnes:
+            suite += 1
+        if suite < 2:
+            continue
+        suite = min(suite, NB_CAMPAGNES_AFFICHEES)
+        nom = familles[famille_id]["nom"]
+        alertes.append({
+            "famille_id": famille_id,
+            "famille": nom,
+            "annees": suite,
+            "annee_a_eviter": campagne_a_venir,
+            "message": (
+                f"{nom} {_ANNEES_EN_MOTS.get(suite, suite)} années de suite sur "
+                f"cette parcelle. À éviter en {campagne_a_venir}."
+            ),
+        })
+    return sorted(alertes, key=lambda a: (-a["annees"], a["famille"].lower()))
+
+
+def _conseil(
+    familles: dict[int, dict], dernieres: dict[int, int], campagne_a_venir: int
+) -> dict:
+    """[R4, CA1] Les familles compatibles pour la campagne à venir — le MÊME
+    prédicat qu'`evaluer_rotation` : l'écart entre campagnes comparé au délai de
+    retour du référentiel. Une famille sans délai renseigné n'est jamais
+    conseillée : l'inconnu ne se présente pas comme un feu vert (US-163 / CA13)."""
+    conseillees = []
+    for famille in familles.values():
+        delai = famille["delai_retour_annees"]
+        if delai is None:
+            continue
+        derniere = dernieres.get(famille["id"])
+        if derniere is not None and campagne_a_venir - derniere < delai:
+            continue
+        conseillees.append({
+            "famille_id": famille["id"],
+            "famille": famille["nom"],
+            "delai_retour_annees": delai,
+            "derniere_campagne": derniere,
+            "cultures": famille["cultures"],
+        })
+    conseillees.sort(key=lambda f: f["famille"].lower())
+    mention = None
+    if not any(f["delai_retour_annees"] is not None for f in familles.values()):
+        mention = (
+            "Aucun délai de retour n'est renseigné dans le référentiel : je ne "
+            f"formule pas de conseil pour {campagne_a_venir}."
+        )
+    elif not conseillees:
+        mention = (
+            "Aucune famille du référentiel n'est compatible avec "
+            f"{campagne_a_venir} au regard de son délai de retour."
+        )
+    return {"annee": campagne_a_venir, "familles": conseillees, "mention": mention}
+
+
+def _mention_familles_inconnues(cultures: list[str]) -> Optional[str]:
+    """[R7] L'absence se signale en une ligne — et se paie en exclusion, jamais
+    en silence."""
+    if not cultures:
+        return None
+    liste = ", ".join(cultures)
+    if len(cultures) == 1:
+        return (
+            f"Famille botanique non renseignée pour {liste} : cette culture "
+            "n'entre ni dans l'alerte de répétition ni dans le conseil."
+        )
+    return (
+        f"Famille botanique non renseignée pour {liste} : ces cultures n'entrent "
+        "ni dans l'alerte de répétition ni dans le conseil."
+    )
+
+
+def _carte_rotation(
+    antecedents: list[Antecedent], familles: dict[int, dict], campagne_a_venir: int
+) -> dict:
+    colonnes, sans_famille = _colonnes(
+        antecedents, familles, _campagnes_affichees(campagne_a_venir)
+    )
+    exploitables = [a for a in antecedents if a.famille_id is not None]
+    dernieres = _derniere_campagne_par_famille(exploitables)
+    return {
+        "campagne_a_venir": campagne_a_venir,
+        "campagnes": colonnes,
+        # [R4] La colonne en pointillés — « Conseillé ».
+        "conseil": _conseil(familles, dernieres, campagne_a_venir),
+        "alertes": _alertes(antecedents, familles, campagne_a_venir),
+        "cultures_sans_famille": sans_famille,
+        "mention_familles_inconnues": _mention_familles_inconnues(sans_famille),
+        # [R6] Aucun antécédent : ce n'est pas « aucun conflit », c'est un
+        # silence — et il se dit, sans faire disparaître la colonne de conseil.
+        "aucun_antecedent": not exploitables,
+        "mention_aucun_antecedent": (
+            None if exploitables
+            else "Aucune culture enregistrée sur cette parcelle avant "
+                 f"{campagne_a_venir - 1}."
+        ),
+    }
+
+
+def campagne_a_venir_par_defaut(aujourdhui: Optional[_date] = None) -> int:
+    """[R1] La campagne à venir est l'année qui suit l'année en cours."""
+    return (aujourdhui or _date.today()).year + 1
+
+
+def historique_parcelle(
+    db: Session,
+    ctx: TenantContext,
+    parcelle_id: int,
+    campagne_a_venir: Optional[int] = None,
+) -> dict:
+    """[US-231 / CA1, CA2] La carte « Rotation » d'UNE parcelle."""
+    return _carte_rotation(
+        antecedents_de_parcelle(db, ctx, parcelle_id),
+        _familles_du_referentiel(db, ctx),
+        campagne_a_venir or campagne_a_venir_par_defaut(),
+    )
+
+
+def historique_du_plan(
+    db: Session,
+    ctx: TenantContext,
+    parcelles,
+    campagne_a_venir: Optional[int] = None,
+) -> dict[int, dict]:
+    """[US-231 / CA3] Les quatre années de TOUTES les parcelles, en une lecture
+    unique servie avec l'onglet Parcelles : changer de parcelle ne déclenche
+    aucune requête de plus (RT6).
+
+    [R8] Une pépinière n'a pas de rotation — un emplacement de godets ne porte
+    pas de succession de familles. Elle n'a donc pas d'entrée ici, et la carte
+    n'est pas rendue.
+    """
+    campagne_a_venir = campagne_a_venir or campagne_a_venir_par_defaut()
+    concernees = [p for p in parcelles if not getattr(p, "est_pepiniere", False)]
+    if not concernees:
+        return {}
+
+    familles = _familles_du_referentiel(db, ctx)
+    familles_par_culture = _familles_id_par_culture(db, ctx)
+    ids = [p.id for p in concernees]
+    evenements = (
+        _requete_antecedents(db, ctx)
+        .filter(Evenement.parcelle_id.in_(ids))
+        .all()
+    )
+
+    par_parcelle: dict[int, list] = {identifiant: [] for identifiant in ids}
+    for evenement in evenements:
+        if evenement.parcelle_id in par_parcelle:
+            par_parcelle[evenement.parcelle_id].append(evenement)
+
+    return {
+        identifiant: _carte_rotation(
+            _en_antecedents(par_parcelle[identifiant], familles_par_culture),
+            familles,
+            campagne_a_venir,
+        )
+        for identifiant in ids
+    }

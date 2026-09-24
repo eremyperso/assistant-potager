@@ -111,3 +111,19 @@ Scénario: Rang libre
 - US-199 n'étant pas livrée, R15 s'appuie sur l'unité `ml` telle qu'elle sera normalisée : le code la reconnaît déjà, aucune ligne du parc n'en porte encore
 
 **Labels GitHub :** `us`, `backend`, `plan`, `parcelles`
+
+---
+
+## ⚠️ AMENDEMENT du 24/09/2026 — la fiche parcelle ne porte plus le détail des cultures
+
+Origine : maquette `Parcelle - Fiche.html`, détaillée dans l'amendement de
+**US-222**, qui fait foi. La fiche d'une parcelle porte désormais un simple
+**bandeau d'occupation** (« N rangs occupés sur M », les noms des cultures) et
+un bouton « Voir les cultures dans le Plan → » : plus aucune tuile de culture,
+plus aucun rang libre actionnable.
+
+- Le calcul des places est **inchangé** : il ne dessinait rien, et rien de ce
+  qu'il produit ne disparaît.
+- Sa liste de consommateurs perd **US-222** : le niveau 2 ne reprend plus le
+  dessin des rangs. Restent US-228 (la piste, dans la Vue plan), US-217 et
+  US-215.

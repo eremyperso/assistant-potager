@@ -243,7 +243,11 @@ def test_us176_ca13_table_provisoire_supprimee_du_frontend():
     assert "plant:" not in source
     plan = (RACINE / "frontend" / "src" / "views" / "Plan.jsx").read_text(encoding="utf-8")
     assert "calendrierDe" not in plan
-    assert "calendriersPlan" in plan
+    # [US-222, amendement du 24/09/2026] L'onglet Parcelles n'a plus de frise à
+    # dessiner : il ne lit plus le calendrier. Le point de lecture restant est
+    # la fiche calendrier elle-même — c'est là que la garantie se vérifie.
+    fiche = (RACINE / "frontend" / "src" / "components" / "FicheCalendrier.jsx").read_text(encoding="utf-8")
+    assert "calendriersPlan" in fiche
 
 
 def test_us176_ca14_autres_usages_de_la_frise_inchanges():

@@ -3,20 +3,14 @@
 // Aucune de ces fonctions ne connaît React : elles ne manipulent que la charge
 // utile de `GET /plan`.
 
-/**
- * [CA12] Code couleur d'occupation, inchangé depuis l'écran précédent : vert
- * sous 55 %, ambre de 55 à 79 %, rouge à partir de 80 %. Mêmes seuils que le
- * repli automatique de `ProgressBar`, qui colore donc la barre sans qu'on ait à
- * lui passer de teinte.
+/*
+ * [US-222 / CA5] `occTint` et `pctDe` ont été RETIRÉS avec la livraison du
+ * niveau 2 du zoom (arbitrage A20) : l'activité Plan ne rend plus ni
+ * pourcentage d'occupation de surface, ni barre, ni code couleur de
+ * remplissage. L'occupation s'y dit **en rangs**, d'un bout à l'autre
+ * (`lib/planParcelles.js`), et la couleur n'y dit plus que la phase (RT4).
+ * `occupation_pct` reste servi par `GET /plan` — aucun écran ne l'affiche.
  */
-export function occTint(pct) {
-  return pct >= 80 ? 'red' : pct >= 55 ? 'amber' : 'brand'
-}
-
-/** Une parcelle sans superficie déclarée n'a pas de taux : elle se lit comme 0 %. */
-export function pctDe(parcelle) {
-  return parcelle?.occupation_pct ?? 0
-}
 
 /**
  * [CA6] Unités qui comptent réellement des plants. Une culture suivie en m² ou

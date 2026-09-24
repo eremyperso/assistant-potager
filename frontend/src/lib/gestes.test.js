@@ -229,7 +229,8 @@ test('[CA12] Plan et Stocks se relisent avec leur propre chargement', () => {
 // ── CA13, CA15 : les deux points d’entrée de la fiche calendrier ────────────
 
 test('[CA13] Plan et Stocks fournissent `onEnregistrer` — le bouton d’US-183 existe enfin', () => {
-  assert.match(lire('../views/Plan.jsx'), /onEnregistrer=\{\(\) => setFicheCalendrier\(false\)\}/)
+  // [US-222, amendement] L'onglet Parcelles n'ouvre plus la fiche calendrier :
+  // il n'a plus de tuile d'où l'ouvrir. Stocks reste le point d'entrée servi.
   assert.match(lire('../views/Stocks.jsx'), /onEnregistrer=\{\(\) => setFiche\(null\)\}/)
 })
 

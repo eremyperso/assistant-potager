@@ -353,6 +353,9 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
         Path("app/services/interpreteur_commandes.py"),
         Path("app/services/repartition_rangs.py"),   # [US-198] le plan en rangs
         Path("app/bot/commandes_parcelle.py"),
+        # [US-230] La fiche web : ce service TRADUIT les noms de champs de
+        # l'API vers ceux du point d'ecriture du domaine. Il ne calcule rien.
+        Path("app/services/parcelles.py"),
         Path("app/api/main.py"),
     }
     fautifs = []
