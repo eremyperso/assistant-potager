@@ -87,7 +87,7 @@ L'assistant est d'abord **rétrospectif** : il enregistre et restitue ce que vou
 
 Savoir cela vous évitera d'attendre de l'assistant ce qu'il ne peut pas donner — et vous montre où il excelle : **ne jamais oublier ce que vous avez fait**.
 
-### 1.3 Les deux façons d'accéder à l'application
+## 1.3 Les deux façons d'accéder à l'application
 
 L'Assistant Potager a **deux visages**, qui partagent exactement les mêmes données.
 
@@ -197,7 +197,7 @@ Chaque étape retire automatiquement du stock de l'étape précédente. Le calcu
 
 **Cas particulier — le semis direct.** Certains légumes ne passent jamais par la pépinière : carottes, radis, haricots, épinards. Vous les semez directement en pleine terre. Dans ce cas, il n'y a ni étape godet ni étape plantation : le semis entre directement au stock de la culture, et vous passez du semis à la récolte. Précisez-le en dictant : *« semis direct carottes en parcelle B »*.
 
-### 2.3 Les parcelles structurent tout
+## 2.3 Les parcelles structurent tout
 
 Une **parcelle** est une zone identifiée de votre potager : une planche, un carré, un bac, une butte, une serre, un rang. Vous leur donnez les noms que vous voulez — *nord*, *maison*, *planche-oignon*, *B2*.
 
@@ -402,7 +402,7 @@ Le bot vous montre les parcelles existantes et demande confirmation avant de cr�
 
 Les parcelles se créent aussi depuis l'application web, mais uniquement pendant l'assistant de création du potager. Ensuite, c'est ici, depuis le compagnon de terrain, que la vie des parcelles se gère.
 
-### 5.4 Ajuster une parcelle
+## 5.4 Ajuster une parcelle
 
 ```
 /parcelle modifier nord exposition=sud
@@ -509,7 +509,7 @@ Un geste qui ne figure pas dans cette liste n'est pas enregistré : l'assistant 
 
 Sans date dictée, le geste est daté du jour de la saisie — ce qui reste une supposition et non une certitude. C'est la raison pour laquelle les calculs de rotation raisonnent à la saison plutôt qu'au jour près.
 
-### 6.5 Quantités, unités et rangs
+## 6.5 Quantités, unités et rangs
 
 Le **rang** est un multiplicateur : *« planté 4 salades sur 3 rangs »* enregistre **12 plants**, pas 4.
 
@@ -655,7 +655,7 @@ Ou en langage naturel : *« vendu 5 plants de tomate Saint-Pierre »*, *« donn�
 
 Ces sorties sont déduites de votre stock de godets, exactement comme une plantation. Elles apparaissent distinctement dans le tableau de bord. Cette distinction évite de gonfler la production d'une saison avec des plants qui ont fini dans le jardin de quelqu'un d'autre.
 
-### 8.5 Les pertes en pépinière
+## 8.5 Les pertes en pépinière
 
 ```
 Perdu 4 plants de poivron en godet, fonte des semis
@@ -801,7 +801,7 @@ Le bot affiche quatre boutons. Le choix détermine la question qu'il vous posera
 
 > **À retenir sur la catégorie Arrosage.** Constater que le sol est sec n'est pas arroser. Cette catégorie consigne un *constat* — sol sec, sol détrempé, fuite du goutte-à-goutte — et **n'ajoute aucun apport d'eau** à l'historique de la parcelle. Le « dernier arrosage » reste celui que vous avez réellement fait et dicté comme tel. La même distinction vaut pour la note de paillage.
 
-### 11.4 Répondre à la question guidée
+## 11.4 Répondre à la question guidée
 
 Selon la catégorie, le bot pose une question adaptée. Vous répondez **en langage naturel**, d'un seul bloc, sans format imposé.
 
@@ -1108,7 +1108,7 @@ Les **10 derniers événements** enregistrés, du plus récent au plus ancien. P
 
 Pour aller plus loin — filtrer par type de geste, par culture ou par date, remonter page par page, exporter en tableur — passez par l'écran **Journal** du tableau de bord. L'export reprend exactement ce qui est à l'écran, filtres appliqués : ce qui est exporté est donc ce qui a été relu.
 
-### 15.4 Poser une question libre
+## 15.4 Poser une question libre
 
 C'est la fonction la plus souple : vous posez une question, l'assistant cherche la réponse.
 
@@ -1213,7 +1213,7 @@ La famille se corrige culture par culture — la culture doit avoir été dicté
 
 Ces corrections s'appliquent sans attendre une nouvelle version de l'application.
 
-### 16.4 Pourquoi la famille décide de la rotation
+## 16.4 Pourquoi la famille décide de la rotation
 
 Deux cultures d'une même famille épuisent le sol de la même façon et partagent les mêmes maladies : c'est la famille, et non le légume, qui commande le délai avant de revenir au même endroit.
 

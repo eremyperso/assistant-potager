@@ -1,3 +1,9 @@
+## [v3.84.1] — 2026-09-24
+
+**Correctif déploiement DEV** : découpe huit chapitres trop longs du guide
+d'exploitation en fragments autonomes sous la limite Telegram de 4096 caractères.
+Le contrôle strict CA12 du corpus peut désormais s'exécuter sans avertissement.
+
 ## [v3.84.0] — 2026-09-24
 
 **ÉPIC 10 — US-231** : la rotation **se lit enfin à froid**. L'application savait
