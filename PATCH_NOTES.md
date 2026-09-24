@@ -1,3 +1,24 @@
+## [v3.79.1] — 2026-09-24
+
+### 🐛 Corrections
+- Corrige l'absence des récoltes en pièces (plants) d'une culture végétative dans l'historique des récoltes de la vue Stocks : elles n'apparaissaient nulle part alors que le stock les avait bien déduites (INC-008).
+- Corrige l'acceptation sans contrôle d'une récolte destructive supérieure au stock réellement en place : une récolte de 50 salades pouvait être enregistrée alors qu'il n'en restait que 23, faussant ensuite le stock et le plan (INC-009).
+
+## [v3.79.0] — 2026-09-24
+
+**Sécurisation API REST PWA** : l'API publique applique maintenant les règles
+de défense en profondeur prévues pour limiter l'exploration et l'automatisation
+des endpoints d'authentification.
+
+### 🔐 Sécurité
+- Désactive Swagger, ReDoc et le schéma OpenAPI en production (`APP_ENV=prod`), tout en les conservant en dev/test.
+- Durcit le rate limiting applicatif : `POST /auth/register` est limité à 3 inscriptions/heure, `POST /auth/login` à 10 tentatives/minute, `POST /auth/refresh` à 30 appels/minute et le renvoi de vérification à 2 demandes/heure.
+- Lit l'IP réelle via `X-Forwarded-For` uniquement lorsque la requête arrive d'un proxy explicitement fiable (`API_TRUSTED_PROXY_IPS`), afin d'éviter le contournement par en-tête forgé.
+- Ajoute un honeypot d'inscription (`website`) : les bots qui le remplissent reçoivent une réponse neutre, sans création de compte ni envoi d'e-mail.
+
+### 🧪 Tests
+- Ajoute des tests de non-régression sur l'IP forwardée fiable/non fiable, le rate limit de refresh et le honeypot d'inscription.
+
 ## [v3.78.0] — 2026-09-23
 
 **ÉPIC 10 — US-227** : un rang cesse d'être un trait, il devient une **piste de places**.

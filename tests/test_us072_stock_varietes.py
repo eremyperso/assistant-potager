@@ -312,6 +312,73 @@ def test_ca5_stock_actuel_reproducteur_ignore_les_recoltes_pieces(db):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# [INC-008] Les récoltes en PIÈCES (pool distinct du poids, US-036) doivent être
+# exposées au même titre que `rendement_total`/`nb_recoltes_poids` — sans ces
+# champs, une culture jamais pesée (ex : salade récoltée en plants) n'a aucune
+# trace de ses récoltes côté API, alors que le stock, lui, les a bien déduites.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_inc008_recoltes_en_pieces_exposees_pour_culture_vegetative(db):
+    maison = _add_parcelle(db, "Maison")
+    _add_culture_config(db, "salade", "végétatif")
+    db.add_all([
+        _ev(type_action="plantation", culture="salade", quantite=53,
+            unite="plants", parcelle_id=maison.id),
+        _ev(type_action="recolte", culture="salade", quantite=3, unite="plants"),
+        _ev(type_action="recolte", culture="salade", quantite=24, unite="plants"),
+    ])
+    db.commit()
+
+    result = calcul_stock_varietes(db)
+    entry = _entry(result, "salade", "Variété non précisée")
+    assert entry["nb_recoltes"] == 2
+    assert entry["recoltes_total"] == 27
+    assert entry["unite_recolte"] == "plants"
+    # [comportement existant, inchangé] jamais pesée : le pool poids reste à zéro
+    assert entry["nb_recoltes_poids"] == 0
+    assert entry["rendement_total"] == 0.0
+    assert entry["stock_actuel"] == 26  # 53 planté - 27 récolté (déduction déjà correcte avant INC-008)
+
+
+def test_inc008_pool_pieces_et_pool_poids_coexistent_sans_se_melanger(db):
+    """[US-036] Une culture végétative récoltée À LA FOIS en pièces et pesée :
+    les deux pools comptent séparément, aucun total ne les mélange."""
+    maison = _add_parcelle(db, "Maison")
+    _add_culture_config(db, "betterave", "végétatif")
+    db.add_all([
+        _ev(type_action="plantation", culture="betterave", quantite=10,
+            unite="plants", parcelle_id=maison.id),
+        _ev(type_action="recolte", culture="betterave", quantite=2, unite="plants"),
+        _ev(type_action="recolte", culture="betterave", quantite=0.5, unite="kg"),
+    ])
+    db.commit()
+
+    result = calcul_stock_varietes(db)
+    entry = _entry(result, "betterave", "Variété non précisée")
+    assert entry["nb_recoltes"] == 1
+    assert entry["recoltes_total"] == 2
+    assert entry["unite_recolte"] == "plants"
+    assert entry["nb_recoltes_poids"] == 1
+    assert entry["rendement_total"] == 500.0
+    assert entry["unite_rendement"] == "g"
+
+
+def test_inc008_pep_porte_des_champs_recolte_a_zero(db):
+    """[R8-like, cohérence de forme] Un lot en pépinière n'a pas encore été
+    récolté : les trois champs existent mais restent à zéro, jamais absents."""
+    _add_culture_config(db, "poireau", "végétatif")
+    db.add(_ev(type_action="mise_en_godet", culture="poireau",
+                nb_graines_semees=20, nb_plants_godets=20))
+    db.commit()
+
+    result = calcul_stock_varietes(db)
+    entry = _entry(result, "poireau", "Variété non précisée", etat="pep")
+    assert entry["nb_recoltes"] == 0
+    assert entry["recoltes_total"] == 0
+    assert entry["unite_recolte"] == ""
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # CA3 — origine pépinière prioritaire sur semis_pleine_terre
 # ══════════════════════════════════════════════════════════════════════════════
 

@@ -40,6 +40,7 @@ from utils.stock import (
     calcul_godets_par_culture,
     calcul_stock_par_variete,
     stock_actif_variete,
+    UNITES_POIDS_EN_G,
 )
 
 log = logging.getLogger("potager")
@@ -220,15 +221,22 @@ class TauxGerminationImpossibleError(EvenementInvalideError):
 
 
 class StockInsuffisantError(EvenementInvalideError):
-    """[fix contrôle quantité perte] Une perte (jardin ou godet) réclame plus de
-    plants que ce qu'il reste réellement en stock pour cette culture/variété dans
-    ce potager. Sans ce garde-fou, une perte pouvait être enregistrée pour une
+    """[fix contrôle quantité perte][INC-009] Une perte (jardin ou godet) ou une
+    récolte DESTRUCTIVE (culture végétative, en pièces) réclame plus de plants
+    que ce qu'il reste réellement en stock pour cette culture/variété dans ce
+    potager. Sans ce garde-fou, le geste pouvait être enregistré pour une
     quantité qui dépasse ce qui existe (ex: perte de 5 navets « jaune » alors que
-    seuls 2 plants « jaune » sont encore actifs au jardin), ou même pour une
-    variété totalement absente du potager. Blocage dur, même logique que les
-    autres garde-fous de quantité de ce module (LotGrainesEpuiseesError,
-    TauxGerminationImpossibleError) : aucun scénario légitime ne permet de perdre
-    plus de plants qu'il n'en reste."""
+    seuls 2 plants « jaune » sont encore actifs au jardin, ou récolte de 50
+    salades alors qu'il n'en reste que 23 en place), ou même pour une variété
+    totalement absente du potager. Blocage dur, même logique que les autres
+    garde-fous de quantité de ce module (LotGrainesEpuiseesError,
+    TauxGerminationImpossibleError) : aucun scénario légitime ne permet de
+    retirer plus de plants qu'il n'en reste.
+
+    [INC-009] Une récolte REPRODUCTRICE (tomate, courgette...) ne consomme pas
+    le pied — elle n'est jamais soumise à ce contrôle — et une récolte PESÉE
+    (kg/g/mg) n'est pas un décompte de pieds : voir l'appel dans
+    `valider_evenement`."""
 
     def __init__(self, action: str, culture: str, variete: Optional[str], quantite: float, stock_disponible: float):
         self.action = action
@@ -238,8 +246,9 @@ class StockInsuffisantError(EvenementInvalideError):
         self.stock_disponible = stock_disponible
         label = f"{culture} {variete}" if variete else culture
         lieu = "en godet" if action == "perte_godet" else "au jardin"
+        verbe = "Récolte" if action == "recolte" else "Perte"
         super().__init__(
-            f"Perte de {quantite:g} « {label} » impossible : il n'y a que "
+            f"{verbe} de {quantite:g} « {label} » impossible : il n'y a que "
             f"{stock_disponible:g} plant(s) {lieu} actuellement dans ce potager."
         )
 
@@ -247,11 +256,14 @@ class StockInsuffisantError(EvenementInvalideError):
 def _stock_disponible_perte(
     db: Session, ctx: TenantContext, action_norm: str, culture: str, variete: Optional[str]
 ) -> float:
-    """[fix contrôle quantité perte] Stock actif utilisable pour valider une perte :
-    godets en pépinière pour `perte_godet`, plants actifs au jardin pour `perte`.
-    Somme sur toutes les variétés si `variete` n'est pas précisé — une perte non
-    qualifiée porte sur l'ensemble du stock de la culture, pas sur une seule
-    variété."""
+    """[fix contrôle quantité perte][INC-009] Stock actif utilisable pour valider
+    une perte ou une récolte destructive : godets en pépinière pour
+    `perte_godet`, plants actifs au jardin pour `perte` et pour `recolte`
+    (même calcul — `calcul_stock_par_variete`/`stock_actif_variete` retranchent
+    déjà les récoltes en pièces déjà enregistrées, donc ce stock est bien celui
+    disponible AVANT le geste en cours de validation). Somme sur toutes les
+    variétés si `variete` n'est pas précisé — un geste non qualifié porte sur
+    l'ensemble du stock de la culture, pas sur une seule variété."""
     if action_norm == "perte_godet":
         rows = calcul_godets_par_culture(db, culture, potager_id=ctx.potager_id)
         stock_ligne = lambda r: r.get("stock_residuel_godet") or 0
@@ -288,6 +300,7 @@ def valider_evenement(
     parcelle: Optional[Parcelle] = None,
     nom_parcelle_brut: Optional[str] = None,
     quantite: Optional[float] = None,
+    unite: Optional[str] = None,
 ) -> None:
     """
     [US-049] Garde-fou unique et non contournable — appelé par TOUTE fonction de ce
@@ -322,6 +335,12 @@ def valider_evenement(
        CE potager — sinon `StockInsuffisantError`. S'applique aussi à `perte_godet`
        bien qu'il fasse partie de `_ACTIONS_SOURCE_CULTURE` : cette exemption ne
        porte que sur l'historique de plantation, pas sur le stock de godets.
+    5. [INC-009] Pour `recolte`, même contrôle que la règle 4, mais seulement
+       quand la récolte est réellement DESTRUCTIVE : culture non reproductrice
+       (`type_organe_recolte`, cf. `utils.stock.stock_plants`) et récolte en
+       pièces, pas en poids (`unite` hors kg/g/mg — une pesée ne dit rien du
+       nombre de pieds restés en terre). Une récolte reproductrice (tomate,
+       courgette...) ou pesée n'est jamais soumise à ce contrôle.
     """
     if nom_parcelle_brut and parcelle is None:
         raise ParcelleInconnueError(nom_parcelle_brut)
@@ -355,6 +374,18 @@ def valider_evenement(
         stock_disponible = _stock_disponible_perte(db, ctx, action_norm, culture, variete)
         if quantite > stock_disponible:
             raise StockInsuffisantError(action_norm, culture, variete, quantite, stock_disponible)
+
+    # [INC-009] `recolte` : même garde-fou que `perte`, mais seulement quand
+    # elle retire réellement des pieds du jardin — une récolte pesée (kg/g/mg)
+    # ne compte pas de plants, et une culture reproductrice (tomate,
+    # courgette...) laisse le pied en place après la cueillette
+    # (`utils.stock.stock_plants`, US-036).
+    if action_norm == "recolte" and quantite is not None:
+        est_poids = (unite or "").strip().lower() in UNITES_POIDS_EN_G
+        if not est_poids and get_type_organe(db, culture, potager_id=ctx.potager_id) != "reproducteur":
+            stock_disponible = _stock_disponible_perte(db, ctx, action_norm, culture, variete)
+            if quantite > stock_disponible:
+                raise StockInsuffisantError(action_norm, culture, variete, quantite, stock_disponible)
 
     if parcelle is not None:
         from app.services.parcelles import parcelles_avec_culture
@@ -938,6 +969,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         variete=parsed.get("variete"), parcelle=parcelle_obj,
         nom_parcelle_brut=parsed.get("parcelle"),
         quantite=_to_float(parsed.get("quantite")),
+        unite=parsed.get("unite"),
     )
 
     action_norm = normalize_action(parsed.get("action"))
@@ -1221,6 +1253,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     culture_final  = corrections.get("culture", event.culture)
     variete_final  = corrections.get("variete", event.variete)
     quantite_final = corrections.get("quantite", event.quantite)
+    unite_final    = corrections.get("unite", event.unite)
     if "parcelle" in corrections:
         parcelle_id_final = corrections.get("_parcelle_id")
     else:
@@ -1231,6 +1264,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         action=action_final, culture=culture_final,
         variete=variete_final, parcelle=parcelle_final,
         quantite=_to_float(quantite_final),
+        unite=unite_final,
     )
 
     # [US-069 / CA1, CA4] Le contexte se corrige comme tout champ — et tombe de

@@ -34,6 +34,13 @@ D'autres cultures ne se récoltent qu'une fois, parce qu'on en consomme la feuil
 
 Une perte retire des pieds du stock sans rien ajouter à la production : c'est ce qui distingue un pied dévoré par les limaces d'un pied effectivement consommé. La perte s'annonce comme n'importe quel autre geste, en disant ce qui a été perdu et combien, et vaut pour toutes les cultures, reproductrices comprises. Déclarer une perte plutôt que rien du tout est ce qui garde le stock crédible en fin de saison.
 
+## Pourquoi une récolte ou une perte peut être refusée
+
+**Intention :** diagnostic
+**On parle aussi de :** il n'y a que ; impossible ; stock insuffisant ; trop de pieds ; plus de plants que prévu ; refusé
+
+Une récolte ou une perte en pièces ne peut jamais retirer plus de pieds qu'il n'en reste en place pour cette culture — le compagnon le refuse et rappelle combien il en reste réellement. Cette vérification ne concerne que le pied lui-même : une récolte pesée, en kilos ou en grammes, n'est pas un compte de pieds et n'y est jamais soumise, pas plus qu'une récolte sur une culture reproductrice, dont le pied reste en place quoi qu'on en cueille. Préciser une variété limite ce contrôle à celle-ci ; sans variété dite, c'est l'ensemble des pieds de la culture qui compte.
+
 ## Ce que le rendement additionne, et ce qu'il ne mélange jamais
 
 **Intention :** comprendre
