@@ -12,6 +12,7 @@ Un service = un module, sans dépendance à Telegram ni à FastAPI. Les handlers
 | `calendrier_cultural`, `contexte_semis`, `recalage_calendrier` | `docs/domaines/calendrier-cultural.md` |
 | `menu_commandes`, `interpreteur_commandes` | `docs/domaines/commandes-bot.md` |
 | `connaissance`, `memoire_potager`, `cache_questions` | `docs/domaines/socle-connaissance.md` |
+| `repartition_rangs` | `docs/domaines/plan-et-rangs.md` |
 
 ## Invariants transverses
 

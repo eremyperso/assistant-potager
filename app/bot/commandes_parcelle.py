@@ -5,7 +5,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
-from utils.parcelles import normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle
+from utils.parcelles import normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle, format_longueur
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
@@ -32,6 +32,8 @@ async def cmd_parcelle(update, ctx) -> None:
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
         "  /parcelle modifier serre pepiniere=true\n"
+        "  /parcelle modifier nord rangs=5   (ou rangs=aucun)\n"
+        "  /parcelle modifier nord longueur=12   (ou longueur=aucune)\n"
         "  /parcelle renommer sud carré-sud\n\n"
         "_Pour supprimer une parcelle : /help parcelle_"
     )
@@ -67,6 +69,20 @@ async def cmd_parcelle(update, ctx) -> None:
                     details.append(f"abri : {p.abri}")
                 if p.paillage:
                     details.append("paillée")
+                # [US-197 / CA5] Le nombre de rangs se dit TOUJOURS, y compris
+                # absent : c'est le dénominateur de la Vue plan, et son silence
+                # se lirait comme « zéro rang » plutôt que « jamais déclaré ».
+                details.append(
+                    f"{p.nb_rangs} rang{'s' if p.nb_rangs > 1 else ''}"
+                    if p.nb_rangs is not None else "rangs non renseignés"
+                )
+                # [US-225 / CA5] La longueur se dit TOUJOURS elle aussi : c'est
+                # la base de calcul des places de tous les rangs, et son silence
+                # se lirait comme « zéro mètre » plutôt que « jamais mesurée ».
+                details.append(
+                    f"{format_longueur(p.longueur_m)} de long"
+                    if p.longueur_m is not None else "longueur non renseignée"
+                )
                 detail_str = f" · {' · '.join(details)}" if details else ""
                 lignes.append(f"📍 *{p.nom.upper()}*{detail_str}")
             lignes.append("\n_Ajouter : /parcelle ajouter [nom] [exposition] [superficie]_")

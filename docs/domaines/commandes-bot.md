@@ -182,10 +182,18 @@ psql -d potager -f migrations/migration_v44.sql   # routage_logs : commande + is
 pytest tests/test_us172_interpreteur_commandes.py
 ```
 
-`tests/corpus/us172_commandes.csv` : 154 formulations de commande, 36 questions
-de savoir voisines, 26 phrases hors périmètre — recomptées le 17/09/2026, les
-chiffres inscrits ici jusque-là étant restés ceux d'une version antérieure du
-corpus. Au 17/09/2026 : 100 % de
+`tests/corpus/us172_commandes.csv` : 162 formulations de commande, 36 questions
+de savoir voisines, 27 phrases hors périmètre — recomptées le 22/09/2026 (les
+chiffres d'avant le 17/09/2026 étaient restés ceux d'une version antérieure du
+corpus).
+
+⚠️ Une règle DÉCLARATIVE se juge sur ce qu'elle refuse autant que sur ce qu'elle
+reconnaît, et le nombre de rangs d'une planche [US-197] en est le cas d'école :
+« la planche nord **a** 5 rangs » déclare la planche, « planté 4 salades **sur**
+3 rangs dans la planche nord » compte un geste de 12 plants. Le mot « rang » est
+le même, le verbe ne l'est pas — `parcelle_rangs` exige un verbe d'état ou de
+possession collé au nombre. Le corpus porte les deux formes CÔTE À CÔTE : c'est
+lui, et non la relecture du motif, qui empêche la confusion de revenir. Au 17/09/2026 : 100 % de
 reconnaissance, 0 exécution destructrice erronée, 100 % sans appel modèle.
 Ce chiffre mesure ce qu'on a su prévoir ; c'est `issue_interpretation` en
 production qui dira quelles formulations enrichir ensuite (CA18).

@@ -1,17 +1,40 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v51),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v53),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v51.sql
+psql -d potager -f migrations/migration_v53.sql
 ```
 
 ## Ce que portent les dernières migrations
 
+- **v53 [US-225]** — ajoute `parcelles.longueur_m` (NUMERIC(5,1) nullable,
+  CHECK 0,5–200) : la longueur UTILE de la planche dans le sens où l'on plante,
+  base de calcul des places de TOUS ses rangs (US-227). NULL = jamais
+  renseignée, ce qui n'est PAS « zéro mètre ». AUCUN backfill : la longueur ne
+  se déduit jamais de la superficie.
+  ⚠️ Aucune colonne de LARGEUR, et c'est délibéré : la largeur se déduit à la
+  lecture (`superficie_m2 ÷ longueur_m`, `utils.parcelles.largeur_deduite`), ne
+  sert qu'à l'affichage et n'est jamais réinjectée dans un calcul. La stocker
+  aurait créé un triplet longueur × largeur × superficie dont deux valeurs sur
+  trois auraient dérivé à la première correction.
+  Comme la borne 1–99 de `nb_rangs` (v52), les bornes sont une propriété stable
+  du domaine : CHECK SQL, revalidé au point d'écriture Python.
+- **v52 [US-197]** — ajoute `parcelles.nb_rangs` (SMALLINT nullable) : le
+  nombre de rangs DÉCLARÉS d'une planche, dénominateur de la Vue plan
+  (« 13 rangs occupés sur 18 déclarés »). **Aucun backfill** — NULL veut dire
+  « jamais renseigné », et le lire comme « zéro rang » ferait passer chaque
+  planche existante pour une planche sans place. Contrairement à `parcelles.abri`
+  (v49), dont le vocabulaire se révise en Python, la borne 1–99 est une propriété
+  stable du domaine : elle est posée en CHECK SQL (`ck_parcelles_nb_rangs`) et
+  redoublée au point d'écriture (`utils.parcelles._nb_rangs`), que SQLite — donc
+  les tests — n'obtiendrait pas du CHECK. La colonne ne pilote AUCUN calcul :
+  ni stock, ni `occupation_pct`, ni confiance. Elle n'a rien à voir avec le
+  « rang » d'un événement, qui reste un multiplicateur de geste.
 - **v51 [US-224]** — transforme `gestes_intentions` en **file d'attente**.
   `consomme_le` devient `traite_le` (renommage délibéré : ce n'est plus « ce
   lien a servi », à l'ouverture, mais « ce geste est sorti de la file », à la

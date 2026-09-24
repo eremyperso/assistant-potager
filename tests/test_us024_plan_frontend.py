@@ -14,9 +14,18 @@ from database.models import Parcelle
 
 def _parcelle(nom, exposition=None, superficie=None):
     p = MagicMock(spec=Parcelle)
+    p.id           = abs(hash(nom)) % 1000
     p.nom          = nom
     p.exposition   = exposition
     p.superficie_m2 = superficie
+    p.abri         = None
+    p.paillage     = None
+    # [US-197, US-198] Une parcelle non mesurée : pas de nombre de rangs déclaré,
+    # donc des rangs libres « inconnus » et aucun dénominateur pour les totaux.
+    p.nb_rangs     = None
+    p.longueur_m     = None  # [US-225] non renseignée
+    p.ordre        = 0
+    p.est_pepiniere = False
     p.actif        = True
     return p
 

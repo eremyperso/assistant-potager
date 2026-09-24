@@ -17,6 +17,7 @@ import BandeauFile from './components/BandeauFile.jsx'  // [US-224]
 import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224]
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
+import PlanVue   from './views/PlanVue.jsx'  // [US-200]
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
 import Journal    from './views/Journal.jsx'
@@ -84,12 +85,11 @@ const VIEWS = {
   bord: (props) => <Dashboard {...props} />,
   stats: (props) => <Stats {...props} />,
   plan: (props) => <Plan {...props} />,
-  'plan-vue': () => (
-    <Placeholder
-      title="Vue plan à l'échelle"
-      body="Représentation en plan des planches et des rangs, avec placement des cultures par glisser-déposer."
-    />
-  ),
+  // [US-200] L'écran d'attente d'US-053 laisse place à la Vue plan : une carte
+  // par parcelle, un trait par rang. Le glisser-déposer annoncé par le
+  // Placeholder n'est PAS revenu — la V1 retenue (wireframe v3) est en lecture
+  // seule, la saisie reste au compagnon.
+  'plan-vue': (props) => <PlanVue {...props} />,
   'plan-rot': () => (
     <Placeholder
       title="Rotation des cultures"

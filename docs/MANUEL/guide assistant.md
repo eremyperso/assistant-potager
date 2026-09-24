@@ -1436,7 +1436,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 |---|---|
 | `/parcelle lister` · `/parcelles` | Lister les parcelles |
 | `/parcelle ajouter <nom> [exposition] [m²]` | Créer une parcelle |
-| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere` |
+| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere`, `abri`, `paillage`, `rangs` (1 à 99, ou `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m — la longueur utile de la planche, base du calcul des places de tous ses rangs ; `longueur=aucune` pour revenir à « non renseignée ». La largeur ne se déclare pas : elle se déduit de la superficie) |
 | `/parcelle renommer <ancien> <nouveau>` | Renommer, avec propagation sur tout l'historique |
 | `/parcelle supprimer <nom>` | Retirer une parcelle — les événements passent en « Non localisé » |
 

@@ -12,6 +12,8 @@ C'est le lien que les wireframes tracent de la Pépinière vers le Plan (v1 § 4
 
 La v2 y ajoutait un calcul de place (« 40 choux à 40 × 40 cm = 6,4 m² → il en resterait 15 en godet ») qui reposait sur la géométrie des parcelles, **reportée** par la v3. Cette US s'en tient donc aux **rangs libres**, tels que la répartition d'US-198 les compte — la même source que la Vue plan : les deux écrans ne peuvent pas dire deux choses différentes de la place qui reste.
 
+⚖️ **Ce que la maquette du 23/09 rouvre.** US-225 (longueur de la parcelle), US-226 (espacement sur le rang) et US-227 (places d'un rang) rendent enfin calculable ce que la v2 demandait, **sans** la géométrie complète : « rang 4 de planche-ombre, 15 places de chou disponibles ». Si ces trois US sont livrées avant celle-ci, la suggestion s'exprime **en places quand elles sont connues, en rangs libres sinon** — jamais les deux mesures côte à côte, et toujours depuis le calcul d'US-227, jamais un calcul parallèle (US-227 / CA8). Si elles ne le sont pas, cette US reste livrable telle quelle, en rangs libres seuls.
+
 **Critères d'acceptance :**
 
 *Les suggestions*
@@ -35,7 +37,7 @@ La v2 y ajoutait un calcul de place (« 40 choux à 40 × 40 cm = 6,4 m² → il
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : analyse (lecture), consultation (PWA)
 - Migration BDD requise : **non**
-- Dépendances : **US-198** (rangs libres), **US-216** (fiche du lot), US-196 (geste pré-rempli), US-161 (exposition de la culture, livrée) ; US-203 pour le rang pré-rempli (optionnelle)
+- Dépendances : **US-198** (rangs libres), **US-216** (fiche du lot), US-196 (geste pré-rempli), US-161 (exposition de la culture, livrée) ; US-203 pour le rang pré-rempli (optionnelle) ; **US-227** (places d'un rang) enrichit la suggestion sans la bloquer — voir l'encart de contexte
 - Impact tokens : zéro
 - Point de vigilance : la **rotation** n'est pas évaluée dans les suggestions en V1 ; elle l'est à la confirmation de la plantation (US-167). L'intégrer ici est une extension possible, à décider avec l'onglet Rotation du Plan
 - Point de vigilance : **reproducteur vs végétatif** — sans effet sur la suggestion ; il décidera ensuite de la vie du rang (occupé récolte après récolte pour une reproductrice, libéré avec la ligne pour une végétative, US-198)

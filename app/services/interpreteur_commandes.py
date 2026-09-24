@@ -665,6 +665,65 @@ def _construire_parcelle_pepiniere_imperatif(groupes):
     return _construire_parcelle_pepiniere(groupes)
 
 
+#: [US-225 / CA3] « la SURFACE de la planche fait 12 m » parle de superficie, pas
+#: de longueur : ces trois mots rendent la main aux règles de superficie, qui
+#: suivent immédiatement. Sans ce garde-fou, l'ordre des règles — longueur
+#: d'abord, pour que « mesure 8 m » ne soit pas lu « 8 m² » — détournerait la
+#: phrase la plus explicite qui soit sur la superficie.
+_MOTS_DE_SUPERFICIE = re.compile(r"\b(?:superficie|surface|taille)\b")
+
+
+def _construire_parcelle_longueur(groupes):
+    """[US-225 / CA3, CA4] « la planche centrale fait 12 mètres de long ».
+
+    Ce qui sépare cette déclaration d'un geste (« semé 3 mètres de carottes dans
+    la planche nord », US-199) n'est pas le mot « mètres », c'est la place du
+    nom : ici la planche est SUJET d'un verbe d'état, là elle est complément de
+    lieu d'un verbe d'action. Aucun semis ne passe par ce motif.
+    """
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    normalise, _ = normaliser(nom)
+    if _MOTS_DE_SUPERFICIE.search(normalise):
+        return None
+    return {"nom": nom, "modification": f"longueur={groupes['valeur'].replace(',', '.')}"}
+
+
+# ⚠️ Ces deux règles précèdent délibérément celles de superficie : « la planche
+# nord mesure 8 m » est une LONGUEUR (US-225 / CA3), là où `parcelle_superficie`
+# lirait « 8 m² » sur son motif `m\b`. La superficie garde « m2 » et « mètres
+# carrés », que les motifs ci-dessous excluent par leur ancre de fin.
+@_regle(
+    "parcelle_longueur",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:fait|fasse|mesure|mesurent|est\s+longue\s+de)\s+(?:de\s+)?"
+    + _NOMBRE.format("valeur")
+    + r"\s*(?:metres?|m)\b(?:\s+de\s+long(?:ueur)?)?\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_longueur_verbe(groupes):
+    return _construire_parcelle_longueur(groupes)
+
+
+@_regle(
+    "parcelle_longueur_rangs",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:a|ait|possede|compte|comporte|contient|avec)\s+des\s+rangs\s+de\s+"
+    + _NOMBRE.format("valeur")
+    + r"\s*(?:metres?|m)\b(?:\s+de\s+long(?:ueur)?)?\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_longueur_rangs(groupes):
+    # [US-225] « des rangs de 12 m » et « 12 m de long » disent le MÊME nombre :
+    # la longueur est une propriété de la planche, jamais d'un rang pris à part.
+    return _construire_parcelle_longueur(groupes)
+
+
 @_regle(
     "parcelle_superficie",
     _INTENTION
@@ -677,7 +736,11 @@ def _construire_parcelle_pepiniere_imperatif(groupes):
 )
 def _construire_parcelle_superficie(groupes):
     nom = _nettoyer_nom(groupes["nom"])
-    if not _nom_plausible(nom):
+    # [US-225] Le garde-fou des questions fermées, que ces deux règles étaient
+    # les seules règles déclaratives de parcelle à ne pas porter : « est-ce que
+    # la planche nord mesure 8 m ? » INTERROGE, elle ne déclare pas, et écrivait
+    # pourtant une superficie de 8 m² sans que rien ne le signale.
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
         return None
     return {"nom": nom, "modification": f"superficie={groupes['valeur'].replace(',', '.')}"}
 
@@ -772,6 +835,31 @@ def _construire_parcelle_paillage(groupes):
     if not _nom_plausible(nom) or _est_question_fermee(nom):
         return None
     return {"nom": nom, "modification": f"paillage={'non' if groupes.get('neg') else 'oui'}"}
+
+
+@_regle(
+    "parcelle_rangs",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:ait|a|fasse|fait|compte|comporte|possede|contient|est\s+(?:a|de))\s+"
+    r"(?P<valeur>\d{1,3})\s+rangs?\b",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_rangs(groupes):
+    # [US-197 / CA3, CA4] « la planche nord A 5 rangs » DÉCLARE la planche ;
+    # « planté 4 salades SUR 3 rangs dans la planche nord » compte un geste.
+    # Ce qui sépare les deux n'est pas le mot « rang », c'est le verbe qui le
+    # précède : la règle exige un verbe d'état ou de possession collé au
+    # nombre, et « sur » n'en est pas un. Aucune plantation ne passe ici.
+    #
+    # La borne haute reste au point d'écriture (`utils.parcelles._nb_rangs`) :
+    # « 200 rangs » est reconnu PUIS refusé avec la forme attendue, là où un
+    # motif à deux chiffres l'aurait silencieusement renvoyé au modèle.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    return {"nom": nom, "modification": f"rangs={groupes['valeur']}"}
 
 
 @_regle(
@@ -2324,12 +2412,21 @@ def nombre_en_lettres(valeur: str) -> str:
 #: chiffrée, donc relue en toutes lettres comme les autres (CA11).
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
-    "abri": None, "paillage": None,
+    "abri": None, "paillage": None, "rangs": None,
+    # [US-225 / CA5] Des mètres, jamais des mètres carrés : c'est précisément la
+    # confusion que le récapitulatif doit lever avant d'écrire.
+    "longueur": "m",
 }
 _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
     "pepiniere": "pépinière", "ordre": "ordre d'affichage",
     "abri": "abri", "paillage": "paillage",
+    # [US-197] « rangs » et non « rangs de la parcelle » : le récapitulatif est
+    # déjà titré « Modifier une parcelle », et c'est la planche qu'il nomme.
+    "rangs": "nombre de rangs",
+    # [US-225] « longueur » seule : c'est la planche que le récapitulatif nomme
+    # juste au-dessus, et la longueur d'un rang est celle de sa planche.
+    "longueur": "longueur",
 }
 
 

@@ -28,3 +28,13 @@ export {
 
 // [US-194] Phase du moment d'une culture en place — Vue plan, Cultures, fiche culture.
 export { PastillePhase, LegendePhases } from './PastillePhase.jsx'
+
+// [US-200] Le dessin de la Vue plan : une carte par parcelle, un trait par rang.
+// Repris tel quel par l'onglet Rotation (palette) et l'onglet Parcelles (taille).
+export { CartePlanParcelle } from './CartePlanParcelle.jsx'
+export { RangPlan } from './RangPlan.jsx'
+export { TraitRang } from './TraitRang.jsx'
+
+// [US-228] La piste des places — un rang dessiné en places prises et restantes.
+// `TraitRang` en reste le MODE DÉGRADÉ, pour les rangs sans places calculables.
+export { PisteDesPlaces, IconeCote } from './PisteDesPlaces.jsx'

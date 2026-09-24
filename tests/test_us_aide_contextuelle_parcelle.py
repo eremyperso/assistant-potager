@@ -336,6 +336,11 @@ class TestCmdParcelleListerCA1:
         p.nom = "nord"
         p.exposition = "sud"
         p.superficie_m2 = 10.0
+        # [US-197] Le double doit porter un nombre de rangs RÉEL : /parcelle
+        # lister le compare à 1 pour accorder « rang(s) », et un MagicMock
+        # non renseigné ferait échouer la comparaison, pas l'affichage.
+        p.nb_rangs = None
+        p.longueur_m = None  # [US-225] non renseignée
         mock_ctx.args = ["lister"]
         mock_db = MagicMock()
         mock_db.close = MagicMock()
@@ -396,6 +401,8 @@ class TestCmdParcellesAliasCA3:
         p.nom = "sud"
         p.exposition = None
         p.superficie_m2 = None
+        p.nb_rangs = None  # [US-197] voir le commentaire de CA1
+        p.longueur_m = None  # [US-225] non renseignée
         ctx = MagicMock()
         ctx.args = []
         mock_db = MagicMock()

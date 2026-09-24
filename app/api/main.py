@@ -122,10 +122,11 @@ from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import recalage_calendrier as svc_recalage  # [US-070]
+from app.services import repartition_rangs as svc_rangs  # [US-198]
 from app.services import confiance_semis as svc_confiance  # [US-178]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
-from utils.parcelles import resolve_parcelle  # [US-167]
+from utils.parcelles import resolve_parcelle, largeur_deduite  # [US-167, US-225]
 from utils.actions import normalize_action  # [US-167]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
@@ -2229,8 +2230,11 @@ def get_plan(
         parcelles     = svc_plan.get_parcelles(db, use_ctx)
         occupation    = svc_plan.get_occupation(db, use_ctx, dr)
 
-        # Index surface_m2 par nom de culture (insensible à la casse)
-        surface_par_culture = svc_plan.surface_par_culture(db, use_ctx)
+        # Index des attributs de fiche culture par nom (insensible à la casse) —
+        # surface au sol et, [US-226 / CA4, CA5], espacement SUR LE RANG dérivé
+        # de la chaîne du référentiel. Une seule lecture de `culture_config`
+        # pour les deux : la dérivation ne coûte aucune requête de plus.
+        attributs_culture = svc_plan.attributs_par_culture(db, use_ctx)
 
         # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
         # table figée frontend/src/lib/familles.js (supprimée), relue à chaque
@@ -2251,6 +2255,17 @@ def get_plan(
             db, cultures_du_plan, use_ctx.potager_id, date_ref_effective
         )
 
+        # [US-198 / CA1, CA2, CA3] Répartition en rangs — calculée à un seul
+        # endroit, en lecture seule, pour que le Plan et la Pépinière ne comptent
+        # jamais différemment la place qui reste. L'API ne fait que recopier.
+        # [US-227 / CA1, CA6] L'index de fiches culture déjà lu plus haut lui est
+        # passé tel quel : les places d'un rang se calculent dans la même lecture,
+        # sans dupliquer la dérivation d'espacement d'US-226.
+        repartition = svc_rangs.repartition_du_plan(
+            db, parcelles, occupation, use_ctx.potager_id, dr,
+            attributs_culture=attributs_culture,
+        )
+
         result = []
         for p in parcelles:
             cultures_raw = occupation.get(p.nom, [])
@@ -2263,9 +2278,16 @@ def get_plan(
                     "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") == "m²" else int(c.get("nb_plants") or 0),
                     "unite":      c.get("unite") or "plants",
                     "type_organe": c.get("type_organe") or "végétatif",
-                    "surface_m2_par_plant": surface_par_culture.get(
-                        (c.get("culture") or "").lower(), None
-                    ),
+                    "surface_m2_par_plant": (
+                        attributs_culture.get((c.get("culture") or "").lower()) or {}
+                    ).get("surface_m2"),
+                    # [US-226 / CA4] L'espacement sur le rang, en cm entiers ou
+                    # None (« non renseigné »). La chaîne d'origine reste exposée
+                    # telle quelle partout où elle l'était déjà : aucun affichage
+                    # existant ne change.
+                    "espacement_rang_cm": (
+                        attributs_culture.get((c.get("culture") or "").lower()) or {}
+                    ).get("espacement_rang_cm"),
                     "famille": familles_par_culture.get(
                         normaliser_culture(c.get("culture") or ""), None
                     ),
@@ -2276,8 +2298,21 @@ def get_plan(
                 }
                 for c in cultures_raw
             ]
-            for c in cultures:
+            for c, brut in zip(cultures, cultures_raw):
                 c["has_observations"] = c["nb_observations"] > 0
+                # [US-198 / CA2] La ligne telle que la Vue plan la dessinera :
+                # son mode d'implantation, ses rangs et ce que chacun porte.
+                # Champs toujours présents ; `rangs` à None pour une culture non
+                # localisée, qui n'occupe aucun rang (R9).
+                rang = repartition["lignes"].get(svc_rangs.cle_ligne(p.nom, brut), {})
+                c["mode_implantation"] = rang.get("mode_implantation")
+                c["rangs"] = rang.get("rangs")
+                c["quantite_par_rang"] = rang.get("quantite_par_rang")
+                c["date_installation"] = (
+                    rang["date_installation"].isoformat()
+                    if rang.get("date_installation") else None
+                )
+                c["numeros_rangs"] = rang.get("numeros_rangs", [])
                 # [US-194 / CA2, CA6] Toujours les trois champs, même sans
                 # référentiel ; None seulement quand la ligne n'a aucune série
                 # en place (semis de pépinière exclu par CA4).
@@ -2306,6 +2341,12 @@ def get_plan(
                 if surface_utilisee > 0:
                     occupation_pct = min(100, round(surface_utilisee / p.superficie_m2 * 100))
 
+            # [US-225 / CA6, CA7] La largeur ne se déclare pas : elle se déduit
+            # ici, à la lecture, et n'est jamais réinjectée dans un calcul.
+            largeur_m, largeur_incoherente = largeur_deduite(
+                p.superficie_m2, p.longueur_m
+            )
+
             nb_obs_parcelle = len(obs_index["parcelle"].get(p.id, []))
             result.append({
                 "id":            p.id,
@@ -2314,13 +2355,62 @@ def get_plan(
                 "superficie_m2": p.superficie_m2,
                 "abri":          p.abri,        # [US-181] None = non renseigné ≠ "aucun"
                 "paillage":      p.paillage,
+                # [US-197 / CA6] Le dénominateur en RANGS de la Vue plan (US-200),
+                # avec l'ordre d'affichage et la nature pépinière qu'elle lit
+                # déjà en base mais que cet endpoint ne servait pas encore.
+                # None = non renseigné, jamais 0 : c'est la Vue plan qui dira
+                # quelle commande prononcer pour le déclarer.
+                "nb_rangs":      p.nb_rangs,
+                # [US-225 / CA6, CA7] La longueur de la planche — base de calcul
+                # des places de TOUS ses rangs (US-227) — et la largeur qui s'en
+                # DÉDUIT. `largeur_deduite` à True dit qu'aucun jardinier n'a
+                # saisi cette largeur : elle n'existe pas en base et ne rentre
+                # dans aucun calcul. `largeur_incoherente` signale une planche
+                # trop étroite pour être vraie, sans jamais corriger la valeur.
+                "longueur_m":    p.longueur_m,
+                "largeur_m":     largeur_m,
+                "largeur_deduite": largeur_m is not None,
+                "largeur_incoherente": largeur_incoherente,
+                "ordre":         p.ordre,
+                "est_pepiniere": bool(p.est_pepiniere),
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
                 "has_observations": nb_obs_parcelle > 0,
                 "nb_observations":  nb_obs_parcelle,
+                # [US-198 / CA2] Occupation de la parcelle EN RANGS — rangs
+                # déclarés, occupés, libres (ou inconnus), dépassement assumé,
+                # liste ordonnée des rangs et mode de numérotation.
+                "disposition": repartition["dispositions"].get(p.nom),
             })
 
-        return {"parcelles": result, "total": len(result), "date_ref_effective": date_ref_effective.isoformat()}
+        # [US-200 / V17, CA1] Les cultures dont la parcelle n'a jamais été dite.
+        # Elles n'occupent aucun rang (R9) mais la Vue plan leur consacre une
+        # dernière carte : servies ici pour qu'elle n'ait pas de seconde requête
+        # à faire. Le bloc est toujours présent, vide le plus souvent.
+        non_localisees = []
+        for brut in occupation.get(None, []) or []:
+            rang = repartition["lignes"].get(svc_rangs.cle_ligne(None, brut), {})
+            unite = brut.get("unite") or "plants"
+            non_localisees.append({
+                "culture": brut.get("culture", ""),
+                "variete": brut.get("variete"),
+                "nb_plants": (
+                    (brut.get("nb_plants") or 0) if unite == "m²"
+                    else int(brut.get("nb_plants") or 0)
+                ),
+                "unite": unite,
+                "mode_implantation": rang.get("mode_implantation"),
+            })
+
+        return {
+            "parcelles": result,
+            "total": len(result),
+            "date_ref_effective": date_ref_effective.isoformat(),
+            "non_localisees": non_localisees,
+            # [US-198 / CA3] Totaux du plan en rangs — le pourcentage ne mêle
+            # jamais une parcelle sans dénominateur.
+            "totaux": repartition["totaux"],
+        }
     finally:
         db.close()
 

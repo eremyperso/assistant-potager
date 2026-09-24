@@ -30,7 +30,7 @@ Cette US ajoute les deux unités au vocabulaire normalisé à l'écriture (US-16
 - Zone fonctionnelle concernée : interaction Telegram, enregistrement
 - Migration BDD requise : **non** — normalisation à l'écriture, aucune donnée existante à reprendre (aucune ligne en poquets ni en mètres aujourd'hui)
 - Dépendances : US-168 (normalisation des unités à l'écriture, livrée), US-094 (parseur déterministe, livré)
-- Consommateurs : US-198 (déduction du mode d'implantation), US-200 (formes du trait)
+- Consommateurs : US-198 (déduction du mode d'implantation), US-200 (formes du trait), **US-227 et US-228** (le semis en ligne est le seul geste qui se dessine en **part de rang semée** plutôt qu'en places : sans l'unité `ml`, un rang de carottes reste compté en graines, ce qui donne des « places » discutables — voir US-227 / R12 et R15)
 - Impact tokens : zéro sur le chemin déterministe
 - Point de vigilance : **reproducteur vs végétatif**. Des courges semées en poquets sont reproductives : les récoltes en kg s'additionnent au rendement de la saison sans toucher aux poquets. Des radis semés sur 3 m de rang sont végétatifs : leur récolte en bottes ou en kg ne réduit pas les mètres — la ligne quitte le plan quand elle est déclarée entièrement récoltée ou perdue, comme aujourd'hui pour les m²
 - Point de vigilance : « touffe » est ambigu (une touffe de ciboulette plantée = un poquet ; « une touffe de mauvaises herbes » n'est pas un geste). Il n'est reconnu comme unité que dans une phrase de semis ou de plantation
