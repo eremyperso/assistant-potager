@@ -57,6 +57,7 @@ from database.db import tenant_scope, SessionLocal
 from database.models import Evenement, GesteIntention, Parcelle, Potager
 from llm.parseur_deterministe import ORIGINE_DETERMINISTE
 from utils.actions import normalize_action
+from app.services.evenements import GESTES_SOL
 
 log = logging.getLogger("potager")
 
@@ -111,7 +112,15 @@ ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRME, ETAT_ABANDONNE, ETAT_PERIME)
 #: de cette liste est refusé même s'il existe dans `ACTION_MAP` : la PWA ne doit
 #: pas pouvoir préparer une observation (texte libre) ni un traitement (produit à
 #: identifier), que le flux du bot sait mal recevoir pré-rempli.
-GESTES_OUVERTS_PWA: tuple[str, ...] = ("semis", "plantation")
+#:
+#: [US-232 / CA7] Les gestes de SOL rejoignent la liste : le bouton « Ajouter »
+#: de la carte « Sol et entretien » prépare un paillage, un amendement, un
+#: désherbage ou un binage avec la parcelle en contexte. Ils remplissent les
+#: deux conditions posées ci-dessus — la grammaire déterministe les reconnaît
+#: (« paillage parcelle planche_centrale »), et ils n'ont ni texte libre ni
+#: produit à identifier. La liste reste celle du DOMAINE : elle est importée de
+#: `evenements.GESTES_SOL`, jamais recopiée.
+GESTES_OUVERTS_PWA: tuple[str, ...] = ("semis", "plantation") + GESTES_SOL
 
 #: Écrans reconnus comme origine — champ de MESURE, jamais lu par le flux
 #: d'enregistrement. Une valeur inconnue est simplement ignorée, pas refusée :

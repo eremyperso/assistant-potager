@@ -398,7 +398,7 @@ export function rangsDeLaCarte(parcelle) {
   // COMBIEN il en tient : l'index rapproche les deux sans rien recalculer.
   const places = new Map((parcelle?.disposition?.rangs ?? []).map((r) => [r.numero, r]))
 
-  for (const c of cultures) {
+  cultures.forEach((c, cleLigne) => {
     const numeros = c?.numeros_rangs ?? []
     const mode = c.mode_implantation || MODE_RANG
     const longueur = longueurRang(c, maxima)
@@ -411,6 +411,11 @@ export function rangsDeLaCarte(parcelle) {
         numero,
         numeroCourt: `R${numero}`,
         libre: false,
+        // [US-222] Rattachement du rang à SA ligne de culture. L'onglet
+        // Parcelles regroupe les rangs d'une même culture sous une seule tuile
+        // (D9) : sans cette clé, deux lignes homonymes — même culture, deux
+        // semis — se confondraient en une seule tuile.
+        cleLigne,
         // [V12] Rang suivant d'une culture posée sur plusieurs rangs : groupé
         // avec le précédent, libellé réduit à la quantité.
         suite: i > 0 && numeros[i - 1] === numero - 1,
@@ -452,7 +457,7 @@ export function rangsDeLaCarte(parcelle) {
       rang.nomAccessible = nomAccessibleRang(rang)
       rangs.push(rang)
     })
-  }
+  })
 
   // [V7] Les rangs libres : trait pointillé, mot « libre ». Ils n'existent que
   // si le nombre de rangs est déclaré — sans dénominateur, aucun rang libre (V9).
@@ -464,6 +469,7 @@ export function rangsDeLaCarte(parcelle) {
       numero: r.numero,
       numeroCourt: `R${r.numero}`,
       libre: true,
+      cleLigne: null,
       total: '',
       quantiteTotale: null,
       nbRangsLigne: 0,

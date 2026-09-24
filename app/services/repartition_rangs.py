@@ -259,6 +259,62 @@ def _quantite_par_rang(quantite: float, rangs: int, mode: str) -> float:
     return float(arrondi) if arrondi > 0 or quantite <= 0 else 1.0
 
 
+def _remplir_les_rangs(
+    rangs: list[dict], residuel: float, capacite: int, numero: int, declares: int,
+) -> int:
+    """
+    [US-198 / CA10-19] Verse `residuel` dans les rangs d'une ligne : les rangs
+    déjà ouverts d'abord, jusqu'à leur capacité, puis autant de rangs libres que
+    la parcelle en déclare encore. Sans rang libre, l'excédent reste sur le
+    dernier rang. Rend le numéro de rang atteint dans la parcelle.
+    """
+    for rang in rangs:
+        ajout = min(residuel, max(0, capacite - rang["quantite_par_rang"]))
+        rang["quantite_par_rang"] += ajout
+        residuel -= ajout
+    while residuel > 0 and numero < declares:
+        numero += 1
+        ajout = min(residuel, capacite)
+        rangs.append({"numero": numero, "quantite_par_rang": ajout})
+        residuel -= ajout
+    if residuel > 0:
+        if not rangs:
+            numero += 1
+            rangs.append({"numero": numero, "quantite_par_rang": 0})
+        rangs[-1]["quantite_par_rang"] += residuel
+    return numero
+
+
+def _retirer_des_rangs(rangs: list[dict], retrait: float) -> bool:
+    """
+    [INC-007] Retire `retrait` unités d'une ligne en partant de son DERNIER rang
+    et en remontant ses rangs.
+
+    C'est la règle d'une récolte (ou d'une perte) dont le rang n'est pas précisé :
+    le jardinier vide la fin de sa ligne. Rien n'est redistribué entre les rangs
+    — l'ancien repli R2/R3 recalculait « quantité nette ÷ rangs déclarés » et
+    ramenait 53 salades sur 4 rangs à 2 rangs de 25, en libérant deux rangs à
+    tort. Aucune autre culture n'est touchée : la ligne ne partage ses rangs
+    avec personne.
+
+    Un rang entièrement vidé cesse d'être occupé — sauf s'il est le dernier de la
+    ligne, qu'on garde à zéro pour ne jamais masquer une culture encore au plan
+    d'occupation (R7). Rend True si au moins un rang a été libéré, ce qui impose
+    de renuméroter la parcelle.
+    """
+    for rang in reversed(rangs):
+        if retrait <= 0:
+            break
+        pris = min(retrait, rang["quantite_par_rang"])
+        rang["quantite_par_rang"] -= pris
+        retrait -= pris
+    restants = [rang for rang in rangs if rang["quantite_par_rang"] > 0] or rangs[:1]
+    if len(restants) == len(rangs):
+        return False
+    rangs[:] = restants
+    return True
+
+
 def _affectations_par_rang(
     parcelle: Parcelle, entrees: list[dict], rangs_installes: dict[tuple, int],
     installations: list[dict], attributs: dict[str, dict], longueur: Optional[float],
@@ -269,6 +325,7 @@ def _affectations_par_rang(
         gestes_par_ligne.setdefault(geste["cle"], []).append(geste)
     affectations: dict[tuple, list[dict]] = {}
     capacites: dict[tuple, int] = {}
+    ecarts: dict[tuple, float] = {}
     actions: list[dict] = []
     for entree in entrees:
         cle = cle_ligne(parcelle.nom, entree)
@@ -283,10 +340,15 @@ def _affectations_par_rang(
             and parcelle.nb_rangs is not None and capacite is not None
             and not parcelle.est_pepiniere
             and (not gestes or any(geste["rangs"] is None for geste in gestes))
-            and (not gestes or sum(geste["quantite"] for geste in gestes) == quantite)
         )
         if automatique:
             capacites[cle] = capacite
+            # [INC-007] Une récolte ou une perte ne fait plus retomber la ligne
+            # sur R2/R3 : les installations sont rejouées telles quelles, et
+            # l'écart entre la quantité nette et ce qui a été installé est
+            # appliqué après coup, par la fin de la ligne.
+            if gestes:
+                ecarts[cle] = quantite - sum(geste["quantite"] for geste in gestes)
             actions.extend(gestes or [{
                 "cle": cle, "rangs": None, "quantite": quantite,
                 "date": entree.get("date_plantation"), "id": 0,
@@ -314,22 +376,32 @@ def _affectations_par_rang(
                 numero += 1
                 rangs.append({"numero": numero, "quantite_par_rang": quantite})
             continue
-        residuel = action["quantite"]
-        capacite = capacites[cle]
-        for rang in rangs:
-            ajout = min(residuel, max(0, capacite - rang["quantite_par_rang"]))
-            rang["quantite_par_rang"] += ajout
-            residuel -= ajout
-        while residuel > 0 and numero < parcelle.nb_rangs:
-            numero += 1
-            ajout = min(residuel, capacite)
-            rangs.append({"numero": numero, "quantite_par_rang": ajout})
-            residuel -= ajout
-        if residuel > 0:
-            if not rangs:
-                numero += 1
-                rangs.append({"numero": numero, "quantite_par_rang": 0})
-            rangs[-1]["quantite_par_rang"] += residuel
+        numero = _remplir_les_rangs(
+            rangs, action["quantite"], capacites[cle], numero, parcelle.nb_rangs,
+        )
+
+    # [INC-007] L'écart net de chaque ligne, une fois ses installations rejouées :
+    # une récolte se retire par la fin de la ligne, un ajout non journalisé se
+    # verse comme un geste implicite de plus.
+    libere = False
+    for cle, ecart in ecarts.items():
+        if ecart > 0:
+            numero = _remplir_les_rangs(
+                affectations[cle], ecart, capacites[cle], numero, parcelle.nb_rangs,
+            )
+        elif ecart < 0:
+            libere = _retirer_des_rangs(affectations[cle], -ecart) or libere
+
+    # Un rang libéré laisserait un trou dans la numérotation de la parcelle : les
+    # numéros sont un ordre d'installation (A5), pas une position en terre, donc
+    # ils se resserrent sans rien déplacer sur le terrain.
+    if libere:
+        tous = sorted(
+            (rang for rangs in affectations.values() for rang in rangs),
+            key=lambda rang: rang["numero"],
+        )
+        for index, rang in enumerate(tous, start=1):
+            rang["numero"] = index
     return affectations
 
 

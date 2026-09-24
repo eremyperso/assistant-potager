@@ -10,6 +10,9 @@ Critères couverts :
 - CA6  aucun calcul existant ne change (stock, occupation_pct, occupation servie)
 - CA9  R1 à R9 : rangs, quantité par rang, modes, numérotation, libres,
        dépassement, pépinière, non localisé, date passée
+
+INC-007 : une récolte sans rang précisé se retire par la fin de la ligne — elle ne
+redistribue plus les plants entre les rangs et ne libère plus de rang à tort.
 """
 from __future__ import annotations
 
@@ -279,15 +282,153 @@ def test_us198_ca10_affectation_isolee_par_potager(db):
     assert [rang["quantite_par_rang"] for rang in disposition["rangs"] if not rang["libre"]] == [13, 3]
 
 
-def test_us198_recolte_partielle_conserve_la_regle_actuelle(db):
+# ══════════════════════════════════════════════════════════════════════════════
+# INC-007 — une récolte sans rang précisé se retire par la FIN de la ligne : elle
+# ne redistribue plus les plants entre les rangs et ne libère plus de rang à tort
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _planche_salade(db):
+    """Le jeu de test du déclarant : 5 rangs de 13 places, 53 salades, 12 betteraves."""
+    parcelle = db.get(Parcelle, 1)
+    parcelle.longueur_m = 4
+    parcelle.nb_rangs = 5
+    _geste(db, type_action="plantation", culture="laitue", quantite=13, rang=2,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    _geste(db, type_action="plantation", culture="betterave", quantite=12,
+           unite="pieds", parcelle_id=1, date=datetime(2026, 6, 2))
+    _geste(db, type_action="plantation", culture="laitue", quantite=27,
+           parcelle_id=1, date=datetime(2026, 6, 3))
+
+
+def _quantites(disposition) -> list:
+    return [rang["quantite_par_rang"] for rang in disposition["rangs"] if not rang["libre"]]
+
+
+def test_inc007_recolte_sans_rang_retire_du_dernier_rang(db):
+    """Les rangs précédents gardent leur compte, seul le dernier de la ligne baisse."""
+    _planche_salade(db)
+    _geste(db, type_action="recolte", culture="laitue", quantite=3,
+           parcelle_id=1, date=datetime(2026, 6, 10))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    assert _quantites(disposition) == [13, 13, 12, 13, 11]
+    assert disposition["rangs_occupes"] == 5
+
+
+def test_inc007_recolte_ne_libere_aucun_rang_de_la_ligne(db):
+    """Aucun rang ne se libère quand la ligne reste en place : 5 occupés, 0 libre."""
+    _planche_salade(db)
+    _geste(db, type_action="recolte", culture="laitue", quantite=3,
+           parcelle_id=1, date=datetime(2026, 6, 10))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    assert disposition["rangs_libres"] == 0
+    assert [rang["numero"] for rang in disposition["rangs"]] == [1, 2, 3, 4, 5]
+
+
+def test_inc007_recolte_ne_touche_pas_les_autres_cultures(db):
+    """La betterave du rang 3 ne bouge pas d'un pied quand on récolte des salades."""
+    _planche_salade(db)
+    _geste(db, type_action="recolte", culture="laitue", quantite=3,
+           parcelle_id=1, date=datetime(2026, 6, 10))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    betterave = [rang for rang in disposition["rangs"] if rang["culture"] == "betterave"]
+    assert [(rang["numero"], rang["quantite_par_rang"]) for rang in betterave] == [(3, 12)]
+
+
+def test_inc007_recolte_resorbe_le_depassement_de_places(db):
+    """Le rang qui débordait d'un plant rentre dans ses places après la récolte."""
+    _planche_salade(db)
+    _geste(db, type_action="recolte", culture="laitue", quantite=3,
+           parcelle_id=1, date=datetime(2026, 6, 10))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    salades = [rang for rang in disposition["rangs"] if rang["culture"] == "laitue"]
+    assert [rang["depassement_places"] for rang in salades] == [0, 0, 0, 0]
+    assert [rang["places_restantes"] for rang in salades] == [0, 0, 0, 2]
+
+
+def test_inc007_recolte_remonte_les_rangs_quand_le_dernier_n_y_suffit_pas(db):
+    """30 salades sur 13, 13, 4 : récolter 14 vide le rang 3 puis entame le 2."""
     db.get(Parcelle, 1).longueur_m = 4
     _geste(db, type_action="plantation", culture="laitue", quantite=30,
            parcelle_id=1, date=datetime(2026, 6, 1))
     _geste(db, type_action="recolte", culture="laitue", quantite=14,
            parcelle_id=1, date=datetime(2026, 6, 2))
     disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
-    assert disposition["rangs_occupes"] == 1
-    assert disposition["rangs"][0]["quantite_par_rang"] == 16
+    assert _quantites(disposition) == [13, 3]
+    assert disposition["rangs_occupes"] == 2
+    assert disposition["rangs_libres"] == 3
+
+
+def test_inc007_un_rang_vide_cesse_d_occuper_et_la_numerotation_se_resserre(db):
+    """Le rang 2 vidé disparaît : la betterave qui suivait devient le rang 2."""
+    db.get(Parcelle, 1).longueur_m = 4
+    _geste(db, type_action="plantation", culture="laitue", quantite=26,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    _geste(db, type_action="plantation", culture="betterave", quantite=12,
+           unite="pieds", parcelle_id=1, date=datetime(2026, 6, 2))
+    _geste(db, type_action="recolte", culture="laitue", quantite=13,
+           parcelle_id=1, date=datetime(2026, 6, 3))
+    resultat = _repartir_mesure(db)
+    disposition = resultat["dispositions"]["planche centrale"]
+    occupes = [rang for rang in disposition["rangs"] if not rang["libre"]]
+    assert [(rang["numero"], rang["culture"]) for rang in occupes] == [
+        (1, "laitue"), (2, "betterave"),
+    ]
+    assert resultat["lignes"][_cle("planche centrale", "laitue")]["numeros_rangs"] == [1]
+
+
+def test_inc007_une_perte_se_retire_comme_une_recolte(db):
+    """Une perte suit la même règle : par la fin de la ligne, sans redistribution."""
+    db.get(Parcelle, 1).longueur_m = 4
+    _geste(db, type_action="plantation", culture="laitue", quantite=27,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    _geste(db, type_action="perte", culture="laitue", quantite=5,
+           parcelle_id=1, date=datetime(2026, 6, 2))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    assert _quantites(disposition) == [13, 9]
+
+
+def test_inc007_ligne_entierement_declaree_conserve_le_repli_r2_r3(db):
+    """Non-régression : une ligne dont tous les gestes disent leurs rangs garde R2/R3."""
+    db.get(Parcelle, 1).longueur_m = 4
+    _geste(db, type_action="plantation", culture="laitue", quantite=13, rang=2,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    _geste(db, type_action="recolte", culture="laitue", quantite=3,
+           parcelle_id=1, date=datetime(2026, 6, 2))
+    disposition = _repartir_mesure(db)["dispositions"]["planche centrale"]
+    assert _quantites(disposition) == [12, 12]
+
+
+def test_inc007_une_ligne_videe_mais_encore_au_plan_garde_un_rang(db):
+    """[R7] Aucune culture masquée : la ligne à zéro garde son dernier rang."""
+    db.get(Parcelle, 1).longueur_m = 4
+    _geste(db, type_action="plantation", culture="laitue", quantite=26,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    occupation = calcul_occupation_parcelles(db, DATE_REF, potager_id=1)
+    occupation["planche centrale"][0]["nb_plants"] = 0
+    resultat = repartition_du_plan(
+        db, get_all_parcelles(db, potager_id=1), occupation, potager_id=1,
+        date_ref=DATE_REF, attributs_culture={"laitue": {"espacement_rang_cm": 30}},
+    )
+    disposition = resultat["dispositions"]["planche centrale"]
+    occupes = [rang for rang in disposition["rangs"] if not rang["libre"]]
+    assert [(rang["numero"], rang["culture"], rang["quantite_par_rang"]) for rang in occupes] == [
+        (1, "laitue", 0),
+    ]
+
+
+def test_inc007_quantite_nette_superieure_aux_installations_ouvre_un_rang(db):
+    """L'écart inverse se verse comme un geste implicite : 13 places puis le reste."""
+    parcelle = db.get(Parcelle, 1)
+    parcelle.longueur_m = 4
+    _geste(db, type_action="plantation", culture="laitue", quantite=13,
+           parcelle_id=1, date=datetime(2026, 6, 1))
+    occupation = calcul_occupation_parcelles(db, DATE_REF, potager_id=1)
+    occupation["planche centrale"][0]["nb_plants"] = 20
+    resultat = repartition_du_plan(
+        db, get_all_parcelles(db, potager_id=1), occupation, potager_id=1,
+        date_ref=DATE_REF, attributs_culture={"laitue": {"espacement_rang_cm": 30}},
+    )
+    assert _quantites(resultat["dispositions"]["planche centrale"]) == [13, 7]
 
 
 def _cle(parcelle: str, culture: str, variete: str = "", unite: str = "plants",

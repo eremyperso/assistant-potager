@@ -9,8 +9,9 @@ pourquoi mon stock de tomate ne baisse pas quand je recolte ?,recoltes-et-pertes
 pourquoi mes haricots ne diminuent pas apres la cueillette ?,recoltes-et-pertes.md#00-pourquoi-mon-stock-ne-baisse-pas-quand-je-cueille
 quelles cultures perdent un pied a chaque recolte ?,recoltes-et-pertes.md#01-quand-recolter-fait-vraiment-baisser-le-stock
 quelle difference entre declarer une perte et une recolte ?,recoltes-et-pertes.md#02-declarer-une-perte-plutot-qu-une-recolte
-comment est compté le rendement en kilos de mes cultures ?,recoltes-et-pertes.md#03-ce-que-le-rendement-additionne-et-ce-qu-il-ne-melange-jamais
-"j'ai vendu des plants de tomate, ou est-ce que ca se voit ?",recoltes-et-pertes.md#04-ceder-ou-vendre-une-partie-de-sa-production
+pourquoi ma recolte de salades a ete refusee ?,recoltes-et-pertes.md#03-pourquoi-une-recolte-ou-une-perte-peut-etre-refusee
+comment est compté le rendement en kilos de mes cultures ?,recoltes-et-pertes.md#04-ce-que-le-rendement-additionne-et-ce-qu-il-ne-melange-jamais
+"j'ai vendu des plants de tomate, ou est-ce que ca se voit ?",recoltes-et-pertes.md#05-ceder-ou-vendre-une-partie-de-sa-production
 "comment s'enchainent le semis, le godet et la plantation ?",semis-godet-plantation.md#00-les-trois-etapes-que-suit-un-plant-avant-la-pleine-terre
 pourquoi mes semis n'apparaissent pas en pepiniere ?,semis-godet-plantation.md#01-pourquoi-mes-semis-n-apparaissent-pas-dans-la-pepiniere
 "j'ai repiqué vingt plants sur trente graines, que deviennent les autres ?",semis-godet-plantation.md#02-ce-que-la-mise-en-godet-retire-au-semis-d-origine
@@ -125,14 +126,28 @@ comment enregistrer un semis depuis la fiche d'une culture ?,calendrier-et-zone-
 puis-je semer hors de la période conseillée malgré le niveau d'étoiles ?,calendrier-et-zone-climatique.md#13-enregistrer-un-semis-ou-une-plantation-depuis-la-fiche-d-une
 combien de rangs sont libres dans ma parcelle ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
 comment le plan compte-t-il les rangs occupés ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
-pourquoi un rang affiche-t-il places non calculées ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
-d'où vient l'espacement entre deux pieds sur le rang ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
-comment lire la vue plan de mon potager ?,parcelles-et-plan.md#08-lire-la-vue-plan
-que veut dire la couleur d'un rang sur le plan ?,parcelles-et-plan.md#08-lire-la-vue-plan
-pourquoi certains traits du plan sont hachurés ou en segments ?,parcelles-et-plan.md#08-lire-la-vue-plan
-combien de pieds tiennent sur un rang ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
+pourquoi un rang affiche-t-il places non calculées ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
+d'où vient l'espacement entre deux pieds sur le rang ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
+comment lire la vue plan de mon potager ?,parcelles-et-plan.md#09-lire-la-vue-plan
+que veut dire la couleur d'un rang sur le plan ?,parcelles-et-plan.md#09-lire-la-vue-plan
+pourquoi certains traits du plan sont hachurés ou en segments ?,parcelles-et-plan.md#09-lire-la-vue-plan
+combien de pieds tiennent sur un rang ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
 que se passe-t-il quand un rang est surchargé de pieds ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
-existe-t-il un pourcentage de remplissage des rangs ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
-que veut dire un pictogramme sur un rang du plan ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan
-pourquoi mon rang affiche-t-il +4 en rouge ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan
-comment lire la piste d'un rang ?,parcelles-et-plan.md#09-lire-un-rang-sur-le-plan
+existe-t-il un pourcentage de remplissage des rangs ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
+comment modifier les caractéristiques d'une parcelle depuis le site ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+puis-je corriger le type de sol d'une parcelle sans passer par le bot ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+que se passe-t-il si je passe une parcelle en inactive ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+que veut dire un pictogramme sur un rang du plan ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
+pourquoi mon rang affiche-t-il +4 en rouge ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
+comment lire la piste d'un rang ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
+à quoi sert l'onglet Parcelles ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
+pourquoi l'onglet Parcelles n'affiche-t-il plus de pourcentage d'occupation ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
+où est-ce que je vois les caractéristiques d'une parcelle ?,parcelles-et-plan.md#11-voir-et-completer-les-caracteristiques-d-une-parcelle
+pourquoi une parcelle affiche-t-elle non renseigné ?,parcelles-et-plan.md#11-voir-et-completer-les-caracteristiques-d-une-parcelle
+ou sont passees les tuiles de culture de l'onglet parcelles ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
+ou voir ce qui a pousse sur une parcelle les annees precedentes ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
+que planter l'an prochain sur cette planche ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
+comment savoir si une famille revient deux ans de suite au meme endroit ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
+ou voir ce que j'ai apporte au sol d'une parcelle ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+ai-je deja paille cette planche cette annee ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+ou est l'historique des amendements d'une parcelle ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle

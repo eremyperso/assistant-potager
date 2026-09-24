@@ -223,9 +223,22 @@ class TestRendementMensuelVegetatif:
 class TestSauvegardeDoubleEvenement:
 
     @pytest.mark.asyncio
-    async def test_ca3_deux_items_recolte_creent_deux_evenements(self):
-        """[CA3] _do_save_items crée un Evenement par item (pièces + poids), sans fusion."""
+    async def test_ca3_deux_items_recolte_creent_deux_evenements(self, db):
+        """[CA3] _do_save_items crée un Evenement par item (pièces + poids), sans fusion.
+
+        [INC-009] `db` réel (plutôt qu'un `MagicMock` bidon) et une plantation
+        préalable de 2 betteraves : depuis INC-009, une récolte en pièces est
+        soumise au même garde-fou de stock qu'une perte — un stock à zéro
+        (comme le rendait `calcul_stock_par_variete` sur un `MagicMock` non
+        configuré) refuserait désormais la récolte de 2 pièces testée ici."""
         from app import bot as bot_module
+
+        _seed_betterave(db)
+        db.add(Evenement(
+            type_action="plantation", culture="betterave", quantite=5,
+            unite="plants", date=datetime(2026, 6, 1),
+        ))
+        db.commit()
 
         update = MagicMock()
         update.effective_message = AsyncMock()
@@ -236,20 +249,17 @@ class TestSauvegardeDoubleEvenement:
             {"action": "recolte", "culture": "betterave", "quantite": 250, "unite": "g"},
         ]
 
-        fake_db = MagicMock()
-        fake_db.refresh = MagicMock()
-
         with (
-            patch("app.bot.SessionLocal", return_value=fake_db),
+            patch("app.bot.SessionLocal", return_value=db),
             patch("utils.culture_resolve.culture_deja_plantee", return_value=True),
         ):
             await bot_module._do_save_items(update, items, "récolté 2 betteraves 250g")
 
-        # Un Evenement ajouté par item, donc 2 appels à db.add()
-        assert fake_db.add.call_count == 2
-        evenements_ajoutes = [call.args[0] for call in fake_db.add.call_args_list]
-        quantites = sorted(e.quantite for e in evenements_ajoutes)
-        unites    = sorted(e.unite for e in evenements_ajoutes)
+        # Un Evenement ajouté par item, donc 2 récoltes distinctes en base.
+        recoltes = db.query(Evenement).filter_by(type_action="recolte").all()
+        assert len(recoltes) == 2
+        quantites = sorted(e.quantite for e in recoltes)
+        unites    = sorted(e.unite for e in recoltes)
         assert quantites == [2.0, 250.0]
         assert unites == ["g", "plants"]
 

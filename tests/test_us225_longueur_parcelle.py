@@ -480,6 +480,9 @@ def test_us225_ca8_aucun_moteur_de_calcul_ne_lit_la_longueur() -> None:
         Path("utils/parcelles.py"),
         Path("app/services/interpreteur_commandes.py"),
         Path("app/bot/commandes_parcelle.py"),
+        # [US-230] La fiche web : ce service TRADUIT les noms de champs de
+        # l'API vers ceux du point d'ecriture du domaine. Il ne calcule rien.
+        Path("app/services/parcelles.py"),
         Path("app/api/main.py"),
         # [US-227] La longueur est devenue la base des places d'un rang — elle
         # se lit donc aussi dans la répartition, et nulle part ailleurs.

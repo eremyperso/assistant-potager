@@ -108,8 +108,11 @@ test('jourLisible : 1er du mois, date absente sans plantage', () => {
 })
 
 test('[CA8] la date de référence part avec la lecture du calendrier', () => {
-  const plan = readFileSync(new URL('../views/Plan.jsx', import.meta.url), 'utf-8')
-  assert.match(plan, /calendriersPlan\(noms, potagerId, dateRef\)/)
+  // [US-222, amendement] L'onglet Parcelles ne lit plus le calendrier — il n'a
+  // plus de frise à recaler. Le point de lecture restant est la fiche
+  // calendrier elle-même, et c'est elle qui doit emporter la date.
+  const fiche = readFileSync(new URL('../components/FicheCalendrier.jsx', import.meta.url), 'utf-8')
+  assert.match(fiche, /api\.calendriersPlan\(\[culture\], potagerId, dateRef\)/)
   const api = readFileSync(new URL('./api.js', import.meta.url), 'utf-8')
   assert.match(api, /p\.append\('date_ref', dateRef\)/)
 })

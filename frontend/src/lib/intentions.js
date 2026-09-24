@@ -39,7 +39,11 @@ export const INTENTIONS = Object.freeze({
   'plan-vue': Object.freeze({ parcelle: ENTIER }),
   cultures: Object.freeze({ culture: TEXTE }),
   pepiniere: Object.freeze({ onglet: TEXTE, emplacement: TEXTE, lot: TEXTE }),
-  journal: Object.freeze({ date: DATE_ISO, culture: TEXTE }),
+  // [US-232 / CA8] « Tout voir » ouvre le Journal filtré sur UNE parcelle et sur
+  // les gestes de sol. `gestes` transporte la liste de `type_action` telle que
+  // le serveur l'a servie (`GET /plan` → `gestes_sol`) : le Journal ne la
+  // recopie pas, sinon elle divergerait de celle du domaine [CA2].
+  journal: Object.freeze({ date: DATE_ISO, culture: TEXTE, parcelle: TEXTE, gestes: TEXTE }),
 })
 
 /** Clé réservée de l'adresse : le potager visé (CA7). Jamais une clé de vue. */

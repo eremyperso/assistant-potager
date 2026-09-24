@@ -1201,6 +1201,14 @@ def calcul_stock_varietes(
                 "rendement_total":   round(v["rendement_total"], 3) if v["rendement_total"] else 0.0,
                 "unite_rendement":   v["unite_rendement"],
                 "nb_recoltes_poids": v["nb_recoltes_poids"],
+                # [INC-008] Récoltes en PIÈCES (nombre de plants/pieds récoltés,
+                # pool distinct du poids — cf. StockCulture.stock_plants) : sans
+                # ces trois champs, une culture récoltée uniquement en pièces
+                # (jamais pesée) n'a aucune trace de ses récoltes côté API, alors
+                # que `stock_actuel` ci-dessus les a bien déduites.
+                "nb_recoltes":       v["nb_recoltes"],
+                "recoltes_total":    _fmt_qte_unite(v["recoltes_total"], unite_v),
+                "unite_recolte":     v["unite_recolte"] or unite_v,
             })
 
     # ── État "pep" ───────────────────────────────────────────────────────────
@@ -1228,6 +1236,11 @@ def calcul_stock_varietes(
             "rendement_total":   0.0,
             "unite_rendement":   "",
             "nb_recoltes_poids": 0,
+            # [INC-008] Un lot en pépinière n'a pas encore été récolté (R8, US-198) :
+            # champs à zéro par cohérence de forme avec la branche "potager"/"semis".
+            "nb_recoltes":       0,
+            "recoltes_total":    0,
+            "unite_recolte":     "",
         })
 
     return result

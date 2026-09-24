@@ -153,3 +153,20 @@ Scénario: Lecture en niveaux de gris
 - **Reste ouvert** : l'unité `ml` de P7 n'est pas encore produite par la dictée (US-199 non livrée) — le rendu est en place et couvert par les tests, mais aucun geste réel ne porte cette unité aujourd'hui
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `plan`, `design-system`
+
+---
+
+## ⚠️ AMENDEMENT du 24/09/2026 — la fiche parcelle ne porte plus le détail des cultures
+
+Origine : maquette `Parcelle - Fiche.html`, détaillée dans l'amendement de
+**US-222**, qui fait foi. La fiche d'une parcelle porte désormais un simple
+**bandeau d'occupation** (« N rangs occupés sur M », les noms des cultures) et
+un bouton « Voir les cultures dans le Plan → » : plus aucune tuile de culture,
+plus aucun rang libre actionnable.
+
+- **CA4 se relit** : la variante de taille de `PisteDesPlaces` n'a plus l'onglet
+  Parcelles pour consommateur. Elle reste due à l'onglet Rotation et à la fiche
+  culture (US-206, US-207).
+- La note « Suites : US-222 (le niveau 2 reprend la piste agrandie) » est
+  **caduque**. Tout le reste de l'US — la piste, ses états, l'en-tête de carte
+  P11 dans la Vue plan — est inchangé.

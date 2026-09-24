@@ -14,6 +14,7 @@ const PREVIEWS = {
   '/shell': () => import('./views/_ShellPreview.jsx'),
   '/fiche-calendrier': () => import('./views/_FicheCalendrierPreview.jsx'),  // [US-183]
   '/vue-plan': () => import('./views/_PlanVuePreview.jsx'),  // [US-200]
+  '/vue-parcelles': () => import('./views/_PlanParcellesPreview.jsx'),  // [US-222]
 }
 
 const chargeur = PREVIEWS[window.location.pathname]

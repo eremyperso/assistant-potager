@@ -160,25 +160,36 @@ function Metric({ value, unit, tint, sub, align = 'right' }) {
   )
 }
 
-// ── Lien + modale « N récolte(s) » (CA12-CA14) ──────────────────────────────────
+// ── Lien + modale « N récolte(s) » (CA12-CA14, [INC-008] pièces + poids) ────────
+
+/** [INC-008] Une variété récoltée UNIQUEMENT en pièces (ex : salade, jamais
+ * pesée) a `nb_recoltes_poids === 0` mais `nb_recoltes > 0` : les deux pools
+ * comptent, la vue Stocks ne doit ignorer aucun des deux. */
+function nbRecoltesTotal(d) {
+  return (d.nb_recoltes_poids || 0) + (d.nb_recoltes || 0)
+}
 
 function RecLink({ d, onOpen, dim }) {
-  if (!d.nb_recoltes_poids) return <span className="text-[10.5px] text-txt3">non pesé</span>
+  const nb = nbRecoltesTotal(d)
+  if (!nb) return <span className="text-[10.5px] text-txt3">aucune récolte</span>
   return (
     <button
       onClick={() => onOpen(d)}
       className={`bg-transparent border-none p-0 cursor-pointer font-sans font-semibold text-brand-text underline decoration-border underline-offset-2 ${dim ? 'text-[10.5px]' : 'text-[11.5px]'}`}
     >
-      {d.nb_recoltes_poids} récolte{d.nb_recoltes_poids > 1 ? 's' : ''}
+      {nb} récolte{nb > 1 ? 's' : ''}
     </button>
   )
 }
 
-/** [CA13/CA14] Historique chronologique des récoltes pesées d'une variété précise,
- * isolée côté client depuis `GET /historique` (filtré par culture + action=recolte
- * côté serveur — la variété n'est pas un paramètre de cet endpoint). */
+/** [CA13/CA14][INC-008] Historique chronologique des récoltes d'une variété
+ * précise, isolée côté client depuis `GET /historique` (filtré par culture +
+ * action=recolte côté serveur — la variété n'est pas un paramètre de cet
+ * endpoint). Deux pools distincts, jamais mélangés dans un même total (US-036) :
+ * pesées (kg/g/mg, converties en kg) et en pièces (plants/pieds comptés). */
 function ModalRecoltes({ d, onClose }) {
-  const [evenements, setEvenements] = useState(null)
+  const [pesees, setPesees] = useState(null)
+  const [enPieces, setEnPieces] = useState(null)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -189,17 +200,27 @@ function ModalRecoltes({ d, onClose }) {
       .then((res) => {
         setTotal(res.total)
         const varieteMatch = (v) => (v || 'Variété non précisée') === d.variete
-        const pesees = (res.evenements || [])
-          .filter((e) => varieteMatch(e.variete) && ['kg', 'g', 'mg'].includes((e.unite || '').toLowerCase()))
-          .map((e) => ({ date: e.date, kg: e.unite === 'kg' ? e.quantite : e.quantite / (e.unite === 'mg' ? 1000000 : 1000) }))
-          .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        setEvenements(pesees)
+        const memeVariete = (res.evenements || []).filter((e) => varieteMatch(e.variete))
+        setPesees(
+          memeVariete
+            .filter((e) => ['kg', 'g', 'mg'].includes((e.unite || '').toLowerCase()))
+            .map((e) => ({ date: e.date, kg: e.unite === 'kg' ? e.quantite : e.quantite / (e.unite === 'mg' ? 1000000 : 1000) }))
+            .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        )
+        setEnPieces(
+          memeVariete
+            .filter((e) => !['kg', 'g', 'mg'].includes((e.unite || '').toLowerCase()))
+            .map((e) => ({ date: e.date, quantite: e.quantite, unite: e.unite || 'plants' }))
+            .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        )
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [d.culture, d.variete])
 
-  const cumule = (evenements || []).reduce((s, e) => s + e.kg, 0)
+  const cumuleKg = (pesees || []).reduce((s, e) => s + e.kg, 0)
+  const cumulePieces = (enPieces || []).reduce((s, e) => s + (e.quantite || 0), 0)
+  const nbTotal = (pesees?.length || 0) + (enPieces?.length || 0)
   // [CA14] `/historique` plafonne à 100 événements par page (toutes actions de
   // récolte de la culture, avant isolement de la variété) — au-delà, le total
   // affiché ci-dessous ne peut pas être garanti complet pour cette variété.
@@ -215,10 +236,11 @@ function ModalRecoltes({ d, onClose }) {
       foot={!loading && !error && (
         <div className="flex items-baseline justify-between">
           <span className="text-[12.5px] text-txt2">
-            {evenements.length} récolte{evenements.length > 1 ? 's' : ''} pesée{evenements.length > 1 ? 's' : ''}
+            {nbTotal} récolte{nbTotal > 1 ? 's' : ''}
           </span>
-          <span className="font-serif text-[18px] font-bold text-txt">
-            {fmtKg(cumule)}<em className="not-italic text-[12px] text-txt3 ml-1">kg</em>
+          <span className="font-serif text-[15px] font-bold text-txt text-right">
+            {cumuleKg > 0 && <div>{fmtKg(cumuleKg)}<em className="not-italic text-[12px] text-txt3 ml-1">kg</em></div>}
+            {cumulePieces > 0 && <div>{cumulePieces}<em className="not-italic text-[12px] text-txt3 ml-1">{enPieces[0]?.unite}</em></div>}
           </span>
         </div>
       )}
@@ -236,27 +258,51 @@ function ModalRecoltes({ d, onClose }) {
               </span>
             </div>
           )}
-          {evenements.length === 0 && (
-            <p className="text-sm italic text-txt3">Aucune récolte pesée enregistrée pour cette variété.</p>
+          {nbTotal === 0 && (
+            <p className="text-sm italic text-txt3">Aucune récolte enregistrée pour cette variété.</p>
           )}
-          {evenements.map((e, i) => {
-            const max = Math.max(...evenements.map((x) => x.kg), 0.01)
-            return (
-              <div key={i} className="grid grid-cols-[86px_1fr_62px] items-center gap-2.5 py-2 border-b border-border-soft last:border-0">
-                <span className="text-[12.5px] text-txt2">{e.date}</span>
-                <span className="relative h-[7px] rounded bg-brand-soft">
-                  <span className="absolute inset-y-0 left-0 rounded bg-brand" style={{ width: `${(e.kg / max) * 100}%` }} />
-                </span>
-                <span className="text-right text-[13.5px] font-bold tabular-nums text-txt">
-                  {fmtKg(e.kg)}<em className="not-italic text-[10.5px] text-txt3 ml-0.5">kg</em>
-                </span>
-              </div>
-            )
-          })}
-          <p className="mt-3.5 text-[12px] leading-relaxed text-txt3">
-            Seules les récoltes pesées apparaissent ici. Une cueillette notée sans poids reste dans le journal
-            mais ne compte pas dans le total.
-          </p>
+          {enPieces.length > 0 && (
+            <div className="mb-3">
+              {pesees.length > 0 && (
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-txt3 mb-1.5">En pièces</div>
+              )}
+              {enPieces.map((e, i) => {
+                const max = Math.max(...enPieces.map((x) => x.quantite), 1)
+                return (
+                  <div key={i} className="grid grid-cols-[86px_1fr_62px] items-center gap-2.5 py-2 border-b border-border-soft last:border-0">
+                    <span className="text-[12.5px] text-txt2">{e.date}</span>
+                    <span className="relative h-[7px] rounded bg-amber-soft">
+                      <span className="absolute inset-y-0 left-0 rounded bg-amber" style={{ width: `${(e.quantite / max) * 100}%` }} />
+                    </span>
+                    <span className="text-right text-[13.5px] font-bold tabular-nums text-txt">
+                      {String(e.quantite).replace('.', ',')}<em className="not-italic text-[10.5px] text-txt3 ml-0.5">{e.unite}</em>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {pesees.length > 0 && (
+            <div>
+              {enPieces.length > 0 && (
+                <div className="text-[10.5px] font-bold uppercase tracking-wide text-txt3 mb-1.5">Pesées</div>
+              )}
+              {pesees.map((e, i) => {
+                const max = Math.max(...pesees.map((x) => x.kg), 0.01)
+                return (
+                  <div key={i} className="grid grid-cols-[86px_1fr_62px] items-center gap-2.5 py-2 border-b border-border-soft last:border-0">
+                    <span className="text-[12.5px] text-txt2">{e.date}</span>
+                    <span className="relative h-[7px] rounded bg-brand-soft">
+                      <span className="absolute inset-y-0 left-0 rounded bg-brand" style={{ width: `${(e.kg / max) * 100}%` }} />
+                    </span>
+                    <span className="text-right text-[13.5px] font-bold tabular-nums text-txt">
+                      {fmtKg(e.kg)}<em className="not-italic text-[10.5px] text-txt3 ml-0.5">kg</em>
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </Modal>
@@ -371,9 +417,12 @@ function StockCard({ d, onOpenRec, confiances, onOpenFiche }) {
       </div>
       <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-border-soft">
         <span className="text-[11.5px] text-txt3">
-          {d.nb_recoltes_poids ? `${d.nb_recoltes_poids} récolte${d.nb_recoltes_poids > 1 ? 's' : ''} pesée${d.nb_recoltes_poids > 1 ? 's' : ''}` : 'aucune récolte pesée'}
+          {/* [INC-008] Une récolte en pièces (jamais pesée) compte ici aussi —
+             sinon une culture comme la salade affiche "aucune récolte" alors
+             qu'elle en a bien, seulement non pesées. */}
+          {nbRecoltesTotal(d) ? `${nbRecoltesTotal(d)} récolte${nbRecoltesTotal(d) > 1 ? 's' : ''}` : 'aucune récolte'}
         </span>
-        {d.nb_recoltes_poids > 0 && (
+        {nbRecoltesTotal(d) > 0 && (
           <button
             onClick={() => onOpenRec(d)}
             className="inline-flex items-center gap-1 bg-transparent border-none p-0 cursor-pointer font-sans text-[12.5px] font-semibold text-brand-text"

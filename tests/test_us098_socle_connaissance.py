@@ -726,6 +726,47 @@ def test_us098_ca12_un_fragment_trop_court_est_signale():
     assert defaut is not None and "trop court" in defaut
 
 
+def test_us098_ca12_un_fragment_trop_long_pour_telegram_est_signale():
+    """[US-229 / INC-010] Un fragment servi tel quel (CA7) au-delà de 4096
+    caractères casse edit_text/send_message côté Telegram — signalé, jamais
+    bloqué par défaut, jamais scindé mécaniquement (CA12)."""
+    defaut = ing.controler_autonomie(
+        ing.Section(intitule="Trop long", contenu="x" * 4097)
+    )
+    assert defaut is not None
+    assert "4097" in defaut
+    assert "Telegram" in defaut
+
+
+def test_us098_ca12_un_fragment_de_longueur_normale_nest_pas_signale():
+    """Non-régression : un fragment sous la limite ne déclenche aucun défaut."""
+    defaut = ing.controler_autonomie(
+        ing.Section(intitule="Normal", contenu="Un contenu de longueur ordinaire, "
+                    "largement au-dessus du minimum et bien en-dessous de 4096.")
+    )
+    assert defaut is None
+
+
+def test_us098_ca12_fragment_trop_long_ningere_pas_bloque(base, tmp_path):
+    """Le défaut est signalé mais n'empêche pas l'ingestion par défaut — comme
+    les autres défauts CA12, seul `--strict` (niveau CLI, `main()`) bloquerait."""
+    fiche = tmp_path / "trop_long.md"
+    contenu_section = "Une phrase répétée pour dépasser la limite Telegram. " * 90
+    assert len(contenu_section) > 4096
+    fiche.write_text(
+        "---\ntitre: Fiche trop longue\nfamille: doc_app\n"
+        "source: Test\nniveau_confiance: verifie\n---\n\n"
+        f"## Une idée très développée\n\n{contenu_section}\n",
+        encoding="utf-8",
+    )
+    rapport = ing.Rapport()
+    ing.ingerer_fichier(base, fiche, tmp_path, rapport)
+    assert len(rapport.avertissements) == 1
+    assert "Telegram" in rapport.avertissements[0]
+    # Non bloquant par défaut : le document est bien ingéré malgré l'avertissement.
+    assert rapport.crees == 1
+
+
 def test_us098_ingestion_refuse_une_culture_absente_du_referentiel(base, tmp_path):
     """CA2 — un libellé de culture inconnu est refusé, jamais replié en NULL
     silencieux : le fragment perdrait sa métadonnée sans que rien ne le dise."""

@@ -13,7 +13,7 @@ from utils.tts import send_voice_reply
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import retours as svc_retours
-from .noyau import AFTER_RECORD_KEYBOARD, MENU_KEYBOARD, log
+from .noyau import AFTER_RECORD_KEYBOARD, MENU_KEYBOARD, log, _decouper_en_blocs
 
 
 _GODETS_KEYWORDS = (
@@ -366,10 +366,20 @@ async def _ask_question(update: Update, question: str):
         reponse = resultat.texte
         log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 
+        # [INC-010] Une réponse de savoir peut recopier un fragment tel quel
+        # (CA7 : zéro reformulation) au-delà des 4096 caractères que Telegram
+        # accepte sur un edit_text/reply_text — découpage nécessaire pour ne
+        # pas perdre la réponse trouvée derrière un Message_too_long.
+        blocs = _decouper_en_blocs(f"🔍 *Réponse :*\n\n{reponse}")
         try:
-            await msg.edit_text(f"🔍 *Réponse :*\n\n{reponse}", parse_mode="Markdown")
+            await msg.edit_text(blocs[0], parse_mode="Markdown")
         except Exception:
-            await msg.edit_text(f"🔍 Réponse :\n\n{reponse}")
+            await msg.edit_text(blocs[0].replace("*", "").replace("_", ""))
+        for bloc in blocs[1:]:
+            try:
+                await update.message.reply_text(bloc, parse_mode="Markdown")
+            except Exception:
+                await update.message.reply_text(bloc.replace("*", "").replace("_", ""))
 
         # [US-097 / CA9] Retour 👍/👎 uniquement pour les réponses de savoir ou
         # de raisonnement (étages 2 et 3) — jamais pour une donnée du potager,
