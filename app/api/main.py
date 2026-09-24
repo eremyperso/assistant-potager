@@ -67,6 +67,7 @@ import re
 import tempfile
 import uuid
 from datetime import date
+from ipaddress import ip_address
 from typing import Optional
 from urllib.parse import urlencode
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
@@ -133,7 +134,7 @@ from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
-from app.config import FRONTEND_URL, ADMIN_EMAIL  # [US-090, US-097]
+from app.config import APP_ENV, FRONTEND_URL, ADMIN_EMAIL  # [US-044, US-090, US-097]
 
 log = logging.getLogger("potager")
 
@@ -164,12 +165,56 @@ class _FiltreSecretsOAuth(logging.Filter):
 
 logging.getLogger("uvicorn.access").addFilter(_FiltreSecretsOAuth())
 
-# ── Initialisation ─────────────────────────────────────────────────────────────
-app = FastAPI(title="Assistant Potager 🌿", version=_APP_VERSION)
+def _ips_proxies_confiance() -> set[str]:
+    """[US-044] Proxies autorisés à fournir l'IP client via X-Forwarded-For."""
+    valeur = os.environ.get("API_TRUSTED_PROXY_IPS", "127.0.0.1,::1")
+    return {ip.strip() for ip in valeur.split(",") if ip.strip()}
+
+
+_PROXIES_CONFIANCE = _ips_proxies_confiance()
+
+
+def _urls_documentation_api(app_env: str) -> dict[str, Optional[str]]:
+    """[US-044] URLs de documentation ouvertes hors prod, fermées en production."""
+    if app_env.strip().lower() == "prod":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {"docs_url": "/docs", "redoc_url": "/redoc", "openapi_url": "/openapi.json"}
+
+
+def _ip_valide(candidate: str) -> bool:
+    try:
+        ip_address(candidate)
+        return True
+    except ValueError:
+        return False
+
+
+def _cle_rate_limit_ip(request: Request) -> str:
+    """[US-044 / CA8] Clé de rate limit par IP réelle derrière Nginx.
+
+    X-Forwarded-For n'est honoré que si la requête arrive d'un proxy local de
+    confiance ; sinon un client pourrait forger l'en-tête et contourner les
+    limites applicatives.
+    """
+    ip_proxy = request.client.host if request.client else ""
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if ip_proxy in _PROXIES_CONFIANCE and forwarded_for:
+        ip_client = forwarded_for.split(",")[0].strip()
+        if _ip_valide(ip_client):
+            return ip_client
+        log.warning("[US-044] X-Forwarded-For invalide ignoré — proxy=%s", ip_proxy)
+    return get_remote_address(request)
+
+
+app = FastAPI(
+    title="Assistant Potager 🌿",
+    version=_APP_VERSION,
+    **_urls_documentation_api(APP_ENV),
+)
 Base.metadata.create_all(bind=engine)   # crée la table si elle n'existe pas
 
 # ── Rate limiting [US-044 / CA8] — protège /auth/login et /auth/register ──────
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=_cle_rate_limit_ip, default_limits=["60/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -193,7 +238,7 @@ def _cle_rate_limit_par_compte(request: Request) -> str:
             return f"user:{payload['sub']}"
         except (svc_auth.TokenExpireError, svc_auth.TokenInvalideError):
             pass
-    return get_remote_address(request)
+    return _cle_rate_limit_ip(request)
 
 # ── CORS — autorise le frontend Netlify + dev local ────────────────────────────
 app.add_middleware(
@@ -322,6 +367,7 @@ class RegisterRequest(BaseModel):
     email: str
     mot_de_passe: str
     nom: Optional[str] = None
+    website: Optional[str] = None
 
 
 class LoginRequest(BaseModel):
@@ -347,10 +393,14 @@ class ReinitialiserMotDePasseRequest(BaseModel):
 
 
 @app.post("/auth/register", status_code=201)
-@limiter.limit("5/minute")
+@limiter.limit("3/hour")
 def auth_register(request: Request, req: RegisterRequest):
     """[CA1/CA7] Inscription par e-mail + mot de passe. Mot de passe haché (bcrypt),
     jamais stocké ni loggé en clair. 409 si l'e-mail est déjà utilisé."""
+    if req.website and req.website.strip():
+        log.warning("[US-044] Honeypot inscription déclenché — ip=%s", _cle_rate_limit_ip(request))
+        return {"message": "Compte créé. Vérifiez votre boîte mail."}
+
     if not req.email or "@" not in req.email:
         raise HTTPException(status_code=400, detail="E-mail invalide")
     if not req.mot_de_passe or len(req.mot_de_passe) < 8:
@@ -400,7 +450,8 @@ def auth_login(request: Request, req: LoginRequest):
 
 
 @app.post("/auth/refresh")
-def auth_refresh(req: RefreshRequest):
+@limiter.limit("30/minute")
+def auth_refresh(req: RefreshRequest, request: Request = None):
     """[CA3] Nouvel access token à partir d'un refresh token valide, sans redemander le mot de passe."""
     try:
         payload = svc_auth.decoder_refresh_token(req.refresh_token)
@@ -439,7 +490,7 @@ def auth_verify_email(token: str):
 
 
 @app.post("/auth/resend-verification")
-@limiter.limit("5/minute")
+@limiter.limit("2/hour")
 def auth_resend_verification(request: Request, req: ResendVerificationRequest):
     """[CA12] Renvoie un e-mail de vérification si le compte existe et n'est
     pas encore vérifié. Réponse générique identique dans tous les cas

@@ -126,6 +126,12 @@ RACINE_PAR_DEFAUT = "data/connaissance"
 # titre orphelin ou une phrase de liaison.
 _LONGUEUR_MIN_FRAGMENT = 80
 
+# [INC-010] Limite dure de l'API Telegram pour un message (edit_text/
+# send_message). Un fragment au-delà est toujours servi correctement (le bot
+# découpe à l'envoi), mais dépasser cette taille pour UNE idée signale souvent
+# une section qui gagnerait à être scindée éditorialement.
+_LONGUEUR_MAX_SAFE_TELEGRAM = 4096
+
 # [CA12] Ouvertures qui trahissent une dépendance au fragment précédent — un
 # fragment autonome nomme son sujet, il ne le reprend pas par un pronom.
 _OUVERTURES_DEPENDANTES = (
@@ -379,6 +385,10 @@ def controler_autonomie(section: Section) -> Optional[str]:
     for ouverture in _OUVERTURES_DEPENDANTES:
         if debut.startswith(ouverture):
             return f"ouvre par « {ouverture.strip()} » — dépend du fragment précédent"
+    if len(contenu) > _LONGUEUR_MAX_SAFE_TELEGRAM:
+        return (f"fragment de {len(contenu)} caractères, au-delà de la limite "
+                f"Telegram ({_LONGUEUR_MAX_SAFE_TELEGRAM}) — servi découpé en "
+                "plusieurs messages, envisager de scinder la section")
     return None
 
 

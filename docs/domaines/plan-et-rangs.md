@@ -89,10 +89,31 @@ Le journal, le stock et les quantités d'occupation ne sont jamais modifiés.
 Les événements postérieurs à la date de référence sont exclus ; les dimensions
 et espacements restent les valeurs courantes, comme avant cette évolution.
 
-Limite conservatoire en attendant l'arbitrage sur récoltes et pertes : si la
-quantité nette d'une ligne diffère de la somme de ses installations, cette
-ligne conserve R2/R3. Aucune nouvelle règle de retrait des plants par rang
-n'est introduite. Les confirmations de gestes restent inchangées.
+## Ce qu'une récolte retire, et où (INC-007)
+
+Une ligne dont la quantité nette diffère de la somme de ses installations —
+récolte, perte — **ne retombe pas** sur R2/R3 : ses installations sont rejouées
+telles quelles, puis l'écart est appliqué. C'est ce qui manquait au 23/09/2026,
+et le repli inventait une redistribution : 53 salades réparties 13 / 13 / 13 / 14
+sur une planche de cinq rangs redevenaient, après une récolte de 3, deux rangs de
+25 — total juste, suivi par rang perdu, deux rangs libérés à tort.
+
+| Écart net | Ce qui se passe |
+|---|---|
+| Négatif (récolte, perte) sans rang précisé | retrait depuis le **dernier** rang de la ligne, en remontant ses rangs (`_retirer_des_rangs`) |
+| Positif | versé comme un geste implicite de plus : rangs compatibles puis rangs libres (`_remplir_les_rangs`) |
+
+Rien n'est redistribué entre les rangs, et **aucune autre culture n'est
+touchée** : une ligne ne partage ses rangs avec personne. Un rang entièrement
+vidé cesse d'être occupé, sauf s'il est le dernier de la ligne — on le garde à
+zéro plutôt que de masquer une culture encore au plan d'occupation (R7). Quand un
+rang se libère ainsi, les numéros de la parcelle se resserrent : ils disent un
+ordre d'installation (A5), pas une position en terre, donc rien ne bouge sur le
+terrain.
+
+Une ligne dont **tous** les gestes déclarent leurs rangs garde R2/R3, récolte ou
+pas : son jardinier a dit lui-même sur combien de rangs elle tient. Les
+confirmations de gestes, le journal et le stock restent inchangés.
 
 ## D'où vient l'espacement sur le rang (US-226)
 
@@ -213,10 +234,10 @@ conseil.
 
 - Des **semis échelonnés** d'une même variété forment une seule ligne : le plan
   d'occupation les regroupe, la répartition ne les sépare donc pas non plus.
-- Une **récolte partielle ne libère pas de rang** tant que la ligne reste en
-  place. Un rang de haricots reste occupé récolte après récolte ; un rang de
-  laitues se libère quand la ligne quitte le plan d'occupation, c'est-à-dire
-  quand il ne reste plus de pieds.
+- Une **récolte partielle ne libère pas de rang** tant qu'il y reste des pieds.
+  Un rang de haricots reste occupé récolte après récolte ; un rang vidé jusqu'au
+  dernier pied se libère (INC-007), et la ligne entière quitte le plan quand elle
+  quitte l'occupation.
 
 ## Le dessin, et où il s'arrête (US-200)
 

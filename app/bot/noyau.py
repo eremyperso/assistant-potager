@@ -132,14 +132,13 @@ def _looks_like_date(s: str) -> bool:
     return bool(_DATE_ISO_RE.match(s) or _DATE_FR_RE.match(s))
 
 
-async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
-    """Envoie un texte long en découpant par blocs de ≤4096 chars sur des sauts de ligne."""
-    MAX = 4096
+def _decouper_en_blocs(texte: str, max_len: int = 4096) -> list:
+    """Découpe un texte en blocs de ≤max_len caractères sur des sauts de ligne."""
     lines = texte.split("\n")
     chunks, current = [], ""
     for line in lines:
         candidate = (current + "\n" + line) if current else line
-        if len(candidate) > MAX:
+        if len(candidate) > max_len:
             if current:
                 chunks.append(current)
             current = line
@@ -147,6 +146,12 @@ async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str =
             current = candidate
     if current:
         chunks.append(current)
+    return chunks
+
+
+async def _send_chunked(update, texte: str, reply_markup=None, parse_mode: str = "Markdown"):
+    """Envoie un texte long en découpant par blocs de ≤4096 chars sur des sauts de ligne."""
+    chunks = _decouper_en_blocs(texte)
 
     for i, chunk in enumerate(chunks):
         is_last = (i == len(chunks) - 1)

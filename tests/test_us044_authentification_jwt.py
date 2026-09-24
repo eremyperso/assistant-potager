@@ -7,6 +7,7 @@ env, anti-énumération sur /auth/register, rate-limit basique.
 """
 import time
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -269,6 +270,72 @@ def test_us044_ca8_rate_limit_register_bloque_apres_n_tentatives(app_client):
         statuses.append(resp.status_code)
 
     assert 429 in statuses
+
+
+def test_us044_ca8_documentation_api_desactivee_en_prod():
+    from app.api import main
+
+    assert main._urls_documentation_api("prod") == {
+        "docs_url": None,
+        "redoc_url": None,
+        "openapi_url": None,
+    }
+    assert main._urls_documentation_api("dev") == {
+        "docs_url": "/docs",
+        "redoc_url": "/redoc",
+        "openapi_url": "/openapi.json",
+    }
+
+
+def test_us044_ca8_rate_limit_utilise_ip_forwardee_du_proxy_de_confiance(monkeypatch):
+    """Le rate limit applicatif lit X-Forwarded-For seulement depuis Nginx local."""
+    from app.api import main
+
+    monkeypatch.setattr(main, "_PROXIES_CONFIANCE", {"127.0.0.1"})
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"X-Forwarded-For": "203.0.113.10, 127.0.0.1"},
+    )
+
+    assert main._cle_rate_limit_ip(request) == "203.0.113.10"
+
+
+def test_us044_ca8_rate_limit_ignore_ip_forwardee_non_fiable(monkeypatch):
+    """Un client direct ne peut pas forger X-Forwarded-For pour contourner la limite."""
+    from app.api import main
+
+    monkeypatch.setattr(main, "_PROXIES_CONFIANCE", {"127.0.0.1"})
+    request = SimpleNamespace(
+        client=SimpleNamespace(host="198.51.100.5"),
+        headers={"X-Forwarded-For": "203.0.113.10"},
+    )
+
+    assert main._cle_rate_limit_ip(request) == "198.51.100.5"
+
+
+def test_us044_ca8_rate_limit_refresh_bloque_apres_n_tentatives(app_client, test_db):
+    user = _creer_utilisateur(test_db)
+    refresh_token = svc_auth.creer_refresh_token(user.id)
+
+    statuses = [
+        app_client.post("/auth/refresh", json={"refresh_token": refresh_token}).status_code
+        for _ in range(35)
+    ]
+
+    assert 429 in statuses
+
+
+def test_us044_ca8_honeypot_register_ninscrit_pas_le_bot(app_client, test_db):
+    with patch("app.api.main.svc_email.envoyer_email_verification") as mock_envoi:
+        resp = app_client.post("/auth/register", json={
+            "email": "bot@example.com",
+            "mot_de_passe": "motdepasse123",
+            "website": "https://spam.example",
+        })
+
+    assert resp.status_code == 201
+    assert test_db.query(User).filter(User.email == "bot@example.com").first() is None
+    mock_envoi.assert_not_called()
 
 
 # ── CA9 — Envoi de l'e-mail de vérification à l'inscription ───────────────

@@ -55,7 +55,7 @@ Internet
 ┌──────────────────────────────────┐
 │  COUCHE 3 — Vérification e-mail  │  ← Filtre les comptes fantômes
 │  Brevo transactionnel             │     seuls les comptes vérifiés
-│  is_verified + token              │     peuvent se connecter
+│  email_verifie + token hashé      │     peuvent se connecter
 └──────────────────────────────────┘
 ```
 
@@ -275,11 +275,15 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from slowapi.util import get_remote_address
 
 def get_real_ip(request: Request) -> str:
-    """Récupère l'IP réelle derrière Nginx."""
+    """Récupère l'IP réelle derrière Nginx sans accepter un en-tête forgé."""
+    trusted_proxy_ips = {"127.0.0.1", "::1"}
+    proxy_ip = request.client.host if request.client else ""
     forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host
+    if proxy_ip in trusted_proxy_ips and forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+        ip_address(client_ip)  # valide la syntaxe
+        return client_ip
+    return get_remote_address(request)
 
 # Dans rate_limit.py, remplacer :
 limiter = Limiter(key_func=get_real_ip, ...)
@@ -304,23 +308,24 @@ C'est la mesure la plus efficace contre la pollution de données : un bot peut i
 
 -- Étape 1 : Ajout des colonnes (nullable d'abord, pattern incrémental)
 ALTER TABLE users
-    ADD COLUMN is_verified BOOLEAN NOT NULL DEFAULT FALSE,
-    ADD COLUMN verification_token VARCHAR(64),
-    ADD COLUMN verification_token_expires_at TIMESTAMP;
+    ADD COLUMN email_verifie BOOLEAN NOT NULL DEFAULT FALSE,
+    ADD COLUMN verification_token_hash VARCHAR(255),
+    ADD COLUMN verification_token_expire_le TIMESTAMP,
+    ADD COLUMN verification_token_utilise_le TIMESTAMP;
 
 -- Étape 2 : Marquer les utilisateurs existants comme vérifiés
 -- (ils ont déjà prouvé leur identité par usage)
-UPDATE users SET is_verified = TRUE WHERE id IS NOT NULL;
+UPDATE users SET email_verifie = TRUE WHERE id IS NOT NULL;
 
 -- Étape 3 : Index pour la recherche par token
-CREATE INDEX idx_users_verification_token
-    ON users(verification_token)
-    WHERE verification_token IS NOT NULL;
+CREATE INDEX idx_users_verification_token_hash
+    ON users(verification_token_hash)
+    WHERE verification_token_hash IS NOT NULL;
 
 -- Étape 4 : Nettoyage automatique des comptes non vérifiés (> 48h)
 -- À exécuter via un job planifié (APScheduler, cf. US-124)
 -- DELETE FROM users
--- WHERE is_verified = FALSE
+-- WHERE email_verifie = FALSE
 -- AND created_at < NOW() - INTERVAL '48 hours';
 ```
 
@@ -334,10 +339,15 @@ class User(Base):
 
     # ... colonnes existantes ...
 
-    is_verified = Column(Boolean, nullable=False, default=False)
-    verification_token = Column(String(64), nullable=True)
-    verification_token_expires_at = Column(DateTime, nullable=True)
+    email_verifie = Column(Boolean, nullable=False, default=False)
+    verification_token_hash = Column(String(255), nullable=True)
+    verification_token_expire_le = Column(DateTime, nullable=True)
+    verification_token_utilise_le = Column(DateTime, nullable=True)
 ```
+
+> **Règle sécurité :** la valeur brute du token ne doit jamais être stockée en
+> base. Le service stocke uniquement son hash SHA-256 et transmet le token brut
+> dans l'e-mail transactionnel.
 
 ### 5.2 Flux d'inscription modifié
 
@@ -347,8 +357,8 @@ Utilisateur                    API FastAPI                    Brevo
     ├── POST /auth/register ──────►│                            │
     │   {email, password, nom}     │                            │
     │                              ├── Créer user               │
-    │                              │   is_verified=False        │
-    │                              │   token=secrets.token_hex  │
+    │                              │   email_verifie=False      │
+    │                              │   token_hash=sha256(token) │
     │                              │                            │
     │                              ├── Envoyer e-mail ─────────►│
     │                              │   via Brevo API            │
@@ -358,13 +368,13 @@ Utilisateur                    API FastAPI                    Brevo
     │   (clic sur le lien)         │                            │
     ├── GET /auth/verify ─────────►│                            │
     │   ?token=abc123...           │                            │
-    │                              ├── is_verified = True       │
-    │                              │   verification_token = NULL│
+    │                              ├── email_verifie = True     │
+    │                              │   token_utilise_le = now() │
     │◄── 200 "Compte activé"      │                            │
     │                              │                            │
     ├── POST /auth/login ─────────►│                            │
     │   {email, password}          │                            │
-    │                              ├── Vérifier is_verified     │
+    │                              ├── Vérifier email_verifie   │
     │◄── 200 {access_token, ...}   │   ✅ → JWT                │
     │   OU 403 "E-mail non vérifié"│   ❌ → refus              │
 ```
@@ -377,7 +387,7 @@ Utilisateur                    API FastAPI                    Brevo
 import secrets
 from datetime import datetime, timedelta
 
-TOKEN_EXPIRY_HOURS = 48
+TOKEN_EXPIRY_HOURS = 24
 
 def generate_verification_token() -> tuple[str, datetime]:
     """Génère un token de vérification et sa date d'expiration."""
@@ -392,6 +402,10 @@ def generate_verification_token() -> tuple[str, datetime]:
 @app.post("/auth/register", status_code=201)
 @limiter.limit("3/hour")
 async def register(request: Request, data: RegisterSchema, db: Session = Depends(get_db)):
+    if data.website:
+        logger.warning("Honeypot inscription déclenché depuis %s", get_real_ip(request))
+        return {"message": "Compte créé. Vérifiez votre boîte mail."}
+
     # ... validation existante (email unique, password hash) ...
 
     token, expires_at = generate_verification_token()
@@ -400,9 +414,9 @@ async def register(request: Request, data: RegisterSchema, db: Session = Depends
         email=data.email,
         nom=data.nom,
         password_hash=hash_password(data.password),
-        is_verified=False,
-        verification_token=token,
-        verification_token_expires_at=expires_at,
+        email_verifie=False,
+        verification_token_hash=hash_token(token),
+        verification_token_expire_le=expires_at,
     )
     db.add(user)
     db.commit()
@@ -422,21 +436,20 @@ async def register(request: Request, data: RegisterSchema, db: Session = Depends
 @app.get("/auth/verify-email")
 async def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(
-        User.verification_token == token
+        User.verification_token_hash == hash_token(token)
     ).first()
 
     if not user:
         raise HTTPException(404, "Lien de vérification invalide.")
 
-    if user.verification_token_expires_at < datetime.utcnow():
+    if user.verification_token_expire_le < datetime.utcnow():
         raise HTTPException(410, "Lien expiré. Demandez un nouveau lien.")
 
-    if user.is_verified:
-        raise HTTPException(400, "Ce compte est déjà vérifié.")
+    if user.email_verifie:
+        return {"message": "Compte déjà activé."}
 
-    user.is_verified = True
-    user.verification_token = None
-    user.verification_token_expires_at = None
+    user.email_verifie = True
+    user.verification_token_utilise_le = datetime.utcnow()
     db.commit()
 
     # Option A : Rediriger vers la page de connexion PWA
@@ -449,7 +462,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 ```
 
 ```python
-# routes/auth.py — login modifié (ajout du garde is_verified)
+# routes/auth.py — login modifié (ajout du garde email_verifie)
 
 @app.post("/auth/login")
 @limiter.limit("10/minute")
@@ -459,7 +472,7 @@ async def login(request: Request, data: LoginSchema, db: Session = Depends(get_d
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(401, "E-mail ou mot de passe incorrect.")
 
-    if not user.is_verified:
+    if not user.email_verifie:
         raise HTTPException(
             403,
             "Votre e-mail n'a pas été vérifié. "
@@ -479,13 +492,13 @@ async def resend_verification(
 ):
     user = db.query(User).filter(User.email == data.email).first()
 
-    if not user or user.is_verified:
+    if not user or user.email_verifie:
         # Réponse identique pour ne pas révéler l'existence d'un compte
         return {"message": "Si ce compte existe, un e-mail a été envoyé."}
 
     token, expires_at = generate_verification_token()
-    user.verification_token = token
-    user.verification_token_expires_at = expires_at
+    user.verification_token_hash = hash_token(token)
+    user.verification_token_expire_le = expires_at
     db.commit()
 
     await send_verification_email(user.email, user.nom, token)
@@ -502,8 +515,8 @@ import httpx
 import os
 
 BREVO_API_KEY = os.getenv("BREVO_API_KEY")
-BREVO_SENDER_EMAIL = os.getenv("BREVO_SENDER_EMAIL", "noreply@eremy.fr")
-BREVO_SENDER_NAME = os.getenv("BREVO_SENDER_NAME", "Assistant Potager")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@eremy.fr")
+EMAIL_FROM_NOM = os.getenv("EMAIL_FROM_NOM", "Assistant Potager")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://potager.eremy.fr")
 
 async def send_verification_email(to_email: str, to_name: str, token: str):
@@ -512,8 +525,8 @@ async def send_verification_email(to_email: str, to_name: str, token: str):
 
     payload = {
         "sender": {
-            "name": BREVO_SENDER_NAME,
-            "email": BREVO_SENDER_EMAIL,
+            "name": EMAIL_FROM_NOM,
+            "email": EMAIL_FROM,
         },
         "to": [{"email": to_email, "name": to_name}],
         "subject": "Activez votre compte Assistant Potager 🌱",
@@ -669,9 +682,10 @@ Ces mesures s'intègrent naturellement dans le backlog existant :
 ```bash
 # .env.prod — ajouts
 APP_ENV=prod                              # Mesure 1
+API_TRUSTED_PROXY_IPS=127.0.0.1,::1       # Mesure 2b — seuls ces proxies portent X-Forwarded-For
 BREVO_API_KEY=xkeysib-...                 # Mesure 4
-BREVO_SENDER_EMAIL=noreply@eremy.fr       # Mesure 4
-BREVO_SENDER_NAME=Assistant Potager       # Mesure 4
+EMAIL_FROM=noreply@eremy.fr               # Mesure 4
+EMAIL_FROM_NOM=Assistant Potager          # Mesure 4
 FRONTEND_URL=https://potager.eremy.fr     # Mesure 4
 ```
 
