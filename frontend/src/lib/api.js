@@ -188,6 +188,14 @@ export const api = {
   statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   godets:     (dateRef, potagerId) => get(`/godets${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   cultures:   () => get('/cultures'),
+  // [US-204] Lecture unique de l'écran Cultures — les deux onglets, la
+  // suggestion de la semaine, la météo-disponibilité. `dateRef`/`potagerId` optionnels.
+  vueCultures: (dateRef, potagerId) =>
+    get(`/cultures/vue${qs({ ...(dateRef && { date: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  // [US-206/US-207] Fiche structurée d'une culture — référentiel, variétés
+  // cultivées, voisinages, bioagresseurs. `dateRef`/`potagerId` optionnels.
+  ficheCulture: (culture, potagerId, dateRef) =>
+    get(`/cultures/${encodeURIComponent(culture)}/fiche${qs({ ...(potagerId && { potager_id: potagerId }), ...(dateRef && { date: dateRef }) })}`),
   historique: (params = {}) => get(`/historique${qs(params)}`),
   meteoHistory: (days = 30) => get(`/meteo/history${qs({ days })}`),
   // [US-075/US-076] Météo du jour + prévision 5 jours sur la localisation du

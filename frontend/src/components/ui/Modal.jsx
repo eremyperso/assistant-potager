@@ -22,6 +22,12 @@ import { X } from 'lucide-react'
  * — sans quoi les deux se fermeraient d'un coup. À la fermeture, le focus
  * clavier revient sur l'élément qui l'avait avant l'ouverture : fermer une fiche
  * rend l'écran dans son état exact.
+ *
+ * [US-207 / CA18] `width`, pour la variante `adaptative`, pilote la largeur du
+ * panneau latéral desktop (`lg:`) via une variable CSS — 460 par défaut (fiche
+ * calendrier d'US-183, inchangée), 560 pour la fiche culture. La largeur de la
+ * modale centrée en tablette (`min-[480px]:max-w-[560px]`) est commune aux deux
+ * fiches et reste fixe : seul le panneau desktop se paramètre.
  */
 
 /** Les fenêtres modales ouvertes, de la plus ancienne à la plus haute. */
@@ -39,7 +45,7 @@ const DISPOSITIONS = {
   },
   adaptative: {
     fond: 'min-[480px]:items-center min-[480px]:justify-center min-[480px]:p-5 lg:p-0 lg:items-stretch lg:justify-end',
-    boite: 'h-full min-[480px]:h-auto min-[480px]:max-h-[calc(100%-48px)] min-[480px]:rounded-[18px] lg:h-full lg:max-h-full lg:rounded-none lg:border-l lg:border-border min-[480px]:max-w-[560px] lg:max-w-[460px]',
+    boite: 'h-full min-[480px]:h-auto min-[480px]:max-h-[calc(100%-48px)] min-[480px]:rounded-[18px] lg:h-full lg:max-h-full lg:rounded-none lg:border-l lg:border-border min-[480px]:max-w-[560px] lg:max-w-[var(--modal-largeur-desktop)]',
   },
 }
 
@@ -80,6 +86,11 @@ export function Modal({
   }, [onClose])
 
   const d = DISPOSITIONS[disposition] || DISPOSITIONS.centree
+  const styleLargeur = disposition === 'centree'
+    ? { maxWidth: width }
+    : disposition === 'adaptative'
+      ? { '--modal-largeur-desktop': `${width}px` }
+      : undefined
   return (
     <div
       className={`fixed inset-0 z-50 flex ${d.fond}`}
@@ -91,8 +102,9 @@ export function Modal({
         aria-modal="true"
         aria-label={typeof title === 'string' ? title : undefined}
         className={`bg-card w-full flex flex-col overflow-hidden shadow-[0_30px_80px_rgba(0,0,0,.35)] ${d.boite}`}
-        // Les dispositions `basse` et `adaptative` portent leurs largeurs en classes.
-        style={disposition === 'centree' ? { maxWidth: width } : undefined}
+        // Les dispositions `basse` porte sa largeur en classe ; `centree` et
+        // `adaptative` la paramètrent depuis `width` (CA18).
+        style={styleLargeur}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border bg-brand-soft">

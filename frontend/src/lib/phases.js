@@ -13,6 +13,8 @@ import { TEINTE_EN_CROISSANCE_RESERVEE, jourLisible } from './calendrier.js'
 export const PHASE_SEMEE = 'semee'
 export const PHASE_EN_PLACE = 'en_place'
 export const PHASE_EN_RECOLTE = 'en_recolte'
+/** [US-205 / CA21] Pas une phase EN TERRE : aucune ligne en place, mais des lots en cours (US-204 / CA3). */
+export const PHASE_EN_PEPINIERE = 'en_pepiniere'
 
 /** D'où vient `phase_depuis` — le serveur le dit, le front ne le devine pas (CA5). */
 export const DEPUIS_RECOLTE = 'recolte'
@@ -99,7 +101,26 @@ export const PHASE_LIBRE = Object.freeze({
   contour: 'ring-1 ring-inset ring-txt3/40',
 })
 
-const PAR_CLE = Object.freeze(Object.fromEntries(PHASES.map((p) => [p.cle, p])))
+/**
+ * [US-205 / CA21] Quatrième pastille : aucune ligne en terre, mais des lots de
+ * pépinière en cours (US-204 / CA3). Un CONTOUR plutôt qu'une teinte pleine —
+ * elle se distingue des trois phases sans emprunter une couleur qui leur
+ * appartient déjà (RT4).
+ */
+export const PHASE_EN_PEPINIERE_DEF = Object.freeze({
+  cle: PHASE_EN_PEPINIERE,
+  anneau: 'ring-txt2',
+  forme: FORME_DISQUE,
+  libelle: 'En pépinière',
+  court: 'en pépinière',
+  teinte: 'bg-card text-txt2',
+  pastille: 'bg-card',
+  contour: 'ring-1 ring-inset ring-txt2/60',
+})
+
+const PAR_CLE = Object.freeze(
+  Object.fromEntries([...PHASES, PHASE_EN_PEPINIERE_DEF].map((p) => [p.cle, p])),
+)
 
 /** La phase déclarée, ou `null` si la clé est absente ou inconnue — jamais un repli. */
 export function phase(cle) {

@@ -13,6 +13,7 @@ const PREVIEWS = {
   '/design-system': () => import('./views/_DesignSystemPreview.jsx'),
   '/shell': () => import('./views/_ShellPreview.jsx'),
   '/fiche-calendrier': () => import('./views/_FicheCalendrierPreview.jsx'),  // [US-183]
+  '/fiche-culture': () => import('./views/_FicheCulturePreview.jsx'),  // [US-207]
   '/vue-plan': () => import('./views/_PlanVuePreview.jsx'),  // [US-200]
   '/vue-parcelles': () => import('./views/_PlanParcellesPreview.jsx'),  // [US-222]
 }

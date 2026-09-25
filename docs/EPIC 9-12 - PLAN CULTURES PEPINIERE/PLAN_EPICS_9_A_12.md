@@ -8,7 +8,7 @@
 > ⚖️ *Numéros à valider, même réserve que l'ÉPIC 8 : le persona PO ne liste encore que les épics 1 à 6.*
 > **Statut :** 🔨 En cours — US-194, US-197, US-198 et US-224 livrées, US-200 en cours
 > **Cadrage arrêté au :** 19/09/2026, **complété le 21/09/2026** (wireframe v4) puis le **23/09/2026** (maquette haute fidélité *Plan – rangs et places*)
-> **Volume :** 34 US (US-194 à US-228), 146 points (hypothèse, à rechiffrer US par US, hors conception des maquettes)
+> **Volume :** 34 US (US-194 à US-228), 152 points (+6 le 25/09 : US-205 et US-207 relevées à 8) (hypothèse, à rechiffrer US par US, hors conception des maquettes)
 > **Sources :** quatre wireframes produits avec Claude Design, dossier `maquette front/wireframes/` ;
 > maquette haute fidélité gelée dans `maquette front/haute-fidelite/`
 > (tracké depuis les commits `8e1e717` et `f1f63db` : les références des US restent valides)
@@ -23,6 +23,26 @@
 > - deux US nouvelles : **US-222** (recoudre l'onglet Parcelles sur la Vue plan) et **US-223** (la barre de l'activité Plan) ;
 > - quatre US amendées : **US-195** (retour à l'état exact d'un niveau, 3 → 5 points), **US-200** (variante de taille des composants de rang), **US-201** (CA8 élargi, arbitrage A7 confirmé), **US-198** et **US-207** (consommateurs) ;
 > - **aucun nouvel épic** : la v4 n'ouvre pas de chantier, elle complète le Plan (A22).
+
+> ### 🆕 Ce que la maquette « Cultures — écran et fiche » a changé, le 25/09
+> `Cultures - Ecran et fiche.html` (projet Claude Design *potager 2026*, avec `cultures-data.jsx`,
+> `cultures-ecran.jsx`, `cultures-fiche.jsx`, `fiche-calendrier.jsx`, `web-parts.jsx`,
+> `web-tokens.jsx`) est la maquette **gelée** de l'ÉPIC 11 au sens de RT9. Elle ne rouvre ni la
+> répartition des écrans (v1), ni la frontière avec la fiche calendrier (v2 § 1c), ni le zoom
+> (v4). Elle tranche le rendu et le **full responsive**. Conséquences :
+> - **aucune US nouvelle, aucun épic nouveau** : quatre US amendées, US-204 à US-207 ;
+> - **US-204** gagne CA5 bis (récolte attendue), CA5 ter (mois actifs pour le filtre par mois) et
+>   l'équivalent écrit de la confiance ; estimation inchangée ;
+> - **US-205** gagne CA18 à CA23 — deux formes de barre d'outils, compteur de filtres actifs,
+>   tri par famille en groupes titrés, quatrième pastille « En pépinière », cibles de 44 px,
+>   pied de carte aligné — et passe de 5 à 8 points ;
+> - **US-206** est précisée (lot = numéro + stade + emplacement), estimation inchangée ;
+> - **US-207** gagne CA18 à CA24 — panneau de 560 px, container query interne à 400 px, badge de
+>   contexte, pied persistant, voisinages en quatre groupes, bioagresseurs détaillés, sept états
+>   à trois largeurs — et passe de 5 à 8 points ;
+> - **un seul point technique à trancher** : la variante `adaptative` du `Modal` partagé plafonne
+>   à 460 px sur desktop et la fiche culture en demande 560 — largeur **paramétrable**, valeur
+>   par défaut inchangée pour US-183 (voir A29).
 
 > ### 🆕 Ce que la maquette haute fidélité a changé, le 23/09
 > `maquette front/haute-fidelite/Plan - Rangs et places.html` est la maquette **gelée** de la Vue plan
@@ -57,6 +77,7 @@ traite**, pas au-delà.
 | `Wireframes v2 - Plan Cultures Pepiniere.html` (v2) | 19/09 | Enchaînement Cultures → fiche calendrier d'US-183. Plan **géométrique** (longueur × largeur, espacements). Pépinière **poste de travail** : onglets Aujourd'hui · Lots · Calendrier · Emplacements, écran de terrain, étiquettes à QR code | Enchaînement et **Pépinière** font foi. Le Plan géométrique est **reporté** par la v3 |
 | `Wireframes v3 - Plan simplifie.html` (v3) | 19/09 | **Vue plan V1** : une carte par parcelle, un trait par rang, trois formes, dix-sept règles de rendu et d'interaction | Fait foi pour la **Vue plan** |
 | `Wireframes v4 - Parcelles et zoom.html` (v4) | 21/09 | Le **zoom d'information** en quatre niveaux, l'onglet **Parcelles** refondu sur la Vue plan, la matrice « qui porte quoi », neuf règles de plus (18 à 26) | Fait foi pour l'**onglet Parcelles**, l'ordre des sous-onglets et la circulation entre niveaux. Il ne rouvre ni la Vue plan (v3), ni Cultures (v1), ni la Pépinière (v1 + v2) |
+| `Cultures - Ecran et fiche.html` | 25/09 | Le **rendu et le responsive** de l'écran Cultures et de la fiche culture : grille 1/2/3 colonnes, deux formes de barre d'outils, cinq états d'écran, fiche en feuille / modale / panneau de 560 px, sept états de fiche | **Maquette gelée (RT9)** pour l'ÉPIC 11. Elle ne rouvre ni la Vue plan (v3, 23/09), ni le zoom (v4), ni la Pépinière |
 | `haute-fidelite/Plan - Rangs et places.html` | 23/09 | Le **rendu** de la Vue plan : carte, en-tête, ligne de rang, légende, pied de vue, encarts d'absence — et la **piste de places** qui remplace le trait relatif | **Maquette gelée (RT9)**, elle fait foi sur le rendu du niveau 1 et, par héritage, sur la tuile du niveau 2. Elle ne rouvre ni la répartition des écrans (v1), ni le zoom (v4), ni la Pépinière |
 
 ## 2. La règle de répartition (v1, conservée)
@@ -225,6 +246,7 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | **A25** | Les places créent-elles une seconde mesure d'occupation, contre RT13 ? | **Non** : une place est une **capacité de rang**. Aucun total, aucun pourcentage de remplissage, ni par parcelle ni en pied de vue. La mesure d'occupation reste « N rangs sur M » (RT13, nouvelle RT14) | Deux mesures d'occupation sur le même écran se contredisent à l'œil — c'est exactement le motif d'A20. Un « potager rempli à 62 % de ses places » serait ce chiffre-là | US-227 |
 | **A26** | Le rang libre annonce-t-il « ex. 24 tomates » ? | **Oui, mais nommé et sourcé** : l'exemple s'appuie sur une culture réellement présente dans la parcelle et dont l'espacement est connu, et il la nomme. Aucune culture de référence → la longueur seule | L'exemple est ce qui rend un rang libre actionnable. Mais l'espacement de 50 cm codé en dur dans la maquette est une valeur inventée (RT2), et invisible comme telle : le jardinier lirait « 24 » comme un fait | US-227, US-228 |
 | **A27** | Emoji système ou pictogrammes maison pour les places prises ? | **Pictogrammes SVG** monochromes du design system, teintés par la phase, avec forme neutre de repli | Un emoji change de dessin et de couleur selon l'OS, et sa couleur propre entre en concurrence avec la couleur de phase : ce serait une troisième palette (RT4), et un contraste non maîtrisable en thème sombre | US-228 |
+| **A29** ✅ | Comment porter le panneau de 560 px de la fiche culture, alors que le `Modal` partagé plafonne à 460 ? (maquette 25/09) | **Tranché par le PO le 25/09/2026 : largeur paramétrable** sur la variante `adaptative`, valeur par défaut inchangée à 460 px | Une variante de plus dupliquerait la gestion de la pile (Échap sur la plus haute, retour du focus), déjà livrée et déjà partagée par la fiche calendrier et la fiche parcelle. ⚠️ **À confirmer : c'est une modification d'un composant partagé en production** | US-207 |
 | **A28** | Faut-il attendre longueur, espacement et places pour livrer la Vue plan ? | **Non.** US-200 part avec le trait relatif, que la maquette conserve elle-même comme **mode dégradé** pour toute parcelle sans longueur. US-225, US-226 et US-227 suivent, puis US-228 remplace la piste | Au premier jour, **aucune** parcelle n'a de longueur et la plupart des cultures n'ont pas d'espacement : un écran qui attendrait ces données n'aurait rien à afficher pendant des semaines. Le mode dégradé n'est pas un pis-aller, c'est l'état initial de tout potager | US-200, US-228 |
 
 ## 7. Découpage
@@ -259,14 +281,20 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 > **données**, livrables seules et en parallèle ; US-227 est une extension du module de répartition
 > déjà livré ; US-228 remplace le remplissage du rang dans les composants d'US-200, sans les refaire.
 
-### ÉPIC 11 — Cultures : tout savoir d'une culture (18 points)
+### ÉPIC 11 — Cultures : tout savoir d'une culture (24 points)
 
 | US | Titre | Pts | Dépend de |
 |---|---|---|---|
 | US-204 | Lire en une fois ce qu'affiche l'écran Cultures | 5 | US-194 |
-| US-205 | Afficher l'écran Cultures | 5 | US-204, US-207 |
+| US-205 | Afficher l'écran Cultures | **8** | US-204, US-207 |
 | US-206 | Composer la fiche d'une culture pour la PWA | 3 | US-194 |
-| US-207 | Ouvrir la fiche d'une culture et enchaîner vers sa fiche calendrier | 5 | US-206, US-195 |
+| US-207 | Ouvrir la fiche d'une culture et enchaîner vers sa fiche calendrier | **8** | US-206, US-195 |
+
+> US-205 et US-207 sont relevées de 5 à 8 points le **25/09/2026**, après le gel de la maquette
+> « Cultures — écran et fiche » : le périmètre fonctionnel est inchangé, c'est le **full
+> responsive** qui coûte (deux formes de barre d'outils et deux panneaux à 375 px pour l'écran ;
+> pied persistant, container queries internes et largeur paramétrable du `Modal` pour la fiche).
+> **Aucune US nouvelle** : la maquette ne demande ni donnée ni lecture de plus.
 
 ### ÉPIC 12 — Pépinière : le poste de travail sous abri (56 points)
 
@@ -293,7 +321,7 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 |---|---|---|
 | **A — Données** | US-194 ✅, US-197 ✅, US-199, **US-225**, **US-226**, US-206, US-208, US-209, US-213 | Aucun écran ; chacune est livrable seule et débloque les suivantes. US-225 et US-226 sont le prix d'entrée de la piste de places : sans longueur ni espacement, aucune place n'est calculable |
 | **B — Socle et Plan** | US-195, US-198 ✅, US-200, US-223, **US-227**, **US-228**, US-207, US-196, US-201, **US-222**, US-202 | La Vue plan est la plus attendue : elle part **avec le trait relatif** (A28), c'est-à-dire l'état réel de tout potager au premier jour. Les places arrivent ensuite — US-227 les calcule, US-228 les dessine — et le niveau 2 en hérite quand il se recoud. La barre se range avec l'écran, la fiche culture et le geste pré-rempli en sont les sorties |
-| **C — Cultures** | US-204, US-205 | Réutilise la fiche culture déjà livrée en B |
+| **C — Cultures** | US-204, US-205 | Réutilise la fiche culture déjà livrée en B. La maquette du 25/09 est gelée : rien ne bloque plus le démarrage |
 | **D — Pépinière** | US-210, US-211, US-212, US-214, US-216, US-215, US-217, US-218, US-219, US-220 | Les données du lot d'abord (emplacement, levée, échéances), l'écran ensuite |
 | **Options** | US-203, US-221 | À déclencher sur usage |
 

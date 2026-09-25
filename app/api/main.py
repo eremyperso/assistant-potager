@@ -126,6 +126,8 @@ from app.services import recalage_calendrier as svc_recalage  # [US-070]
 from app.services import repartition_rangs as svc_rangs  # [US-198]
 from app.services import rotation as svc_rotation  # [US-163, US-231]
 from app.services import confiance_semis as svc_confiance  # [US-178]
+from app.services import fiche_culture as svc_fiche_culture  # [US-164, US-206]
+from app.services import vue_cultures as svc_vue_cultures  # [US-204]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import resolve_parcelle, largeur_deduite  # [US-167, US-225]
@@ -1474,6 +1476,51 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
     try:
         calendrier = svc_calendrier.lire_calendrier(db, culture, ctx.potager_id)
         return svc_calendrier.calendrier_en_dict(calendrier)
+    finally:
+        db.close()
+
+
+@app.get("/cultures/vue")
+def get_vue_cultures(
+    date_cible: date = Query(default=None, alias="date"),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-204 / CA1-CA10] Lecture unique de l'écran Cultures : pour chaque
+    culture du référentiel visible par le potager (et celles hors référentiel
+    plantées quand même), présence au potager, calendrier de la zone,
+    confiance du moment et fenêtre utile — une seule requête, une seule
+    lecture météo, aucune règle recalculée côté front (CA7)."""
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        vue = svc_vue_cultures.composer_vue_cultures(db, use_ctx, date_cible or date.today())
+        return svc_vue_cultures.vue_cultures_en_dict(vue)
+    finally:
+        db.close()
+
+
+@app.get("/cultures/{culture}/fiche")
+def get_fiche_culture(
+    culture: str,
+    date_cible: date = Query(default=None, alias="date"),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-206 / CA1-CA13] Fiche structurée d'une culture pour la PWA :
+    identité, attributs de conduite, durées, variétés cultivées, voisinages et
+    bioagresseurs — réutilise les mêmes fonctions de lecture que `/fiche` au
+    bot (CA10), zéro jeton, zéro appel réseau (CA11).
+
+    Toujours 200 : une culture inconnue du référentiel rend `fiche_absente`
+    à vrai, jamais une 404 ni une culture voisine proposée (CA8)."""
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        fiche = svc_fiche_culture.composer_fiche_pwa(
+            db, culture, use_ctx.potager_id, date_cible or date.today(),
+        )
+        return svc_fiche_culture.fiche_pwa_en_dict(fiche)
     finally:
         db.close()
 

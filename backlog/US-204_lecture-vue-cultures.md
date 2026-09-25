@@ -19,9 +19,11 @@ Assembler cela côté front demanderait quatre lectures (`GET /plan`, `GET /pepi
 *Contenu*
 - [ ] CA1 : `GET /cultures/vue` (date de référence et potager en paramètres, comme les autres lectures) rend, pour chaque culture : nom, famille, présence d'un calendrier pour la zone, mois des quatre phases de la zone, et les blocs des CA2 à CA5 ; plus, une fois pour l'écran, la zone climatique et son origine, les attributions de source et la liste des familles présentes
 - [ ] CA2 : **Périmètre** — onglet « Toutes » : toutes les cultures du référentiel visibles par le potager (partagées et locales). Onglet « Au potager » : les cultures ayant au moins une ligne en place (US-194) ou un lot de pépinière en cours (US-065). Une culture présente au potager mais **inconnue du référentiel** y figure avec la mention « hors référentiel », jamais masquée. Les deux effectifs sont rendus
-- [ ] CA3 : **Présence au potager** — variétés présentes, nombre de parcelles où la culture est en place, répartition par phase (US-194), phase la plus avancée présente, nombre de lots en pépinière. Aucune quantité de stock : c'est le rôle de Stocks
-- [ ] CA4 : **Confiance du moment** — le geste le mieux noté à la date de référence et ses étoiles, tirés de **la même évaluation** que la pastille du Plan et la puce de Stocks (`confiances_de_culture`, US-180) ; sans calendrier pour la zone, aucune étoile (tiret), jamais une valeur par défaut (US-178 / CA5). Un test compare, pour une même culture et une même date, la valeur de cette lecture et celle de `GET /plan/confiances/candidates`
-- [ ] CA5 : **Fenêtre** — pour chaque culture, l'état de sa prochaine fenêtre utile : *maintenant* (la date de référence est dans une fenêtre de semis ou de plantation — R1 à son maximum), *bientôt* (la fenêtre s'ouvre le mois suivant — R1 au barème du mois adjacent), *plus tard* (le prochain geste et ses mois), *aucune* (pas de calendrier pour la zone). Le libellé écrit (« semer maintenant », « prochaine fenêtre : semer en pépinière février → mars ») est mis en forme par le front
+- [ ] CA3 : **Présence au potager** — variétés présentes, nombre de parcelles où la culture est en place, répartition par phase (US-194), phase la plus avancée présente, nombre de lots en pépinière. Une culture **sans aucune ligne en terre mais avec des lots** est rendue sans phase et avec son nombre de lots : l'écran l'affiche alors « En pépinière · N lots » (US-205 / CA5 bis). Aucune quantité de stock : c'est le rôle de Stocks
+- [ ] CA4 : **Confiance du moment** — le geste le mieux noté à la date de référence, ses étoiles et son **équivalent écrit** (*élevée* / *moyenne* / *faible*, décision produit écrite à un seul endroit et partagée avec le Plan et Stocks), tirés de **la même évaluation** que la pastille du Plan et la puce de Stocks (`confiances_de_culture`, US-180) ; sans calendrier pour la zone, aucune étoile (tiret), jamais une valeur par défaut (US-178 / CA5). Un test compare, pour une même culture et une même date, la valeur de cette lecture et celle de `GET /plan/confiances/candidates`
+- [ ] CA5 : **Fenêtre** — pour chaque culture, l'état de sa prochaine fenêtre utile : *maintenant* (la date de référence est dans une fenêtre de semis ou de plantation — R1 à son maximum), *bientôt* (la fenêtre s'ouvre le mois suivant — R1 au barème du mois adjacent), *plus tard* (le prochain geste et ses mois), *aucune* (pas de calendrier pour la zone). La lecture rend **trois valeurs brutes** : l'état, le **geste** concerné (« semer en place », « semer en pépinière », « planter ») et les **mois de la fenêtre** (« février → mars ») ; le libellé écrit (« Semer maintenant », « bientôt : planter octobre → novembre », « prochaine fenêtre : semer en pépinière février → mars ») est assemblé par le front, à un seul endroit (US-205 / CA14)
+- [ ] CA5 bis *(amendement 25/09)* : **Récolte attendue** — quand la fenêtre est *maintenant*, la lecture rend la récolte attendue si le geste est fait **à la date de référence** (« entre le 25 octobre et le 15 novembre », « à partir de mai 2027 »), calculée par le moteur d'US-177 ; absente si les durées ne sont pas renseignées, jamais estimée (RT2). C'est la fiche culture qui l'affiche (US-207 / CA4), pas la carte
+- [ ] CA5 ter *(amendement 25/09)* : **Mois actifs** — pour le filtre par mois de l'écran (US-205 / CA3), la lecture rend l'union des mois de **semis** et de **plantation** de la frise de la zone. Les mois de récolte n'entrent pas dans ce filtre : on y cherche ce qu'on peut mettre en terre
 - [ ] CA6 : **Suggestion de la semaine** — au plus **trois** cultures absentes du potager (ni ligne en place, ni lot en cours), dont la fenêtre est *maintenant* et la confiance d'au moins deux étoiles, les mieux notées d'abord (à égalité, par nom), marquées comme suggestions. Ces seuils sont des décisions produit écrites à un seul endroit
 
 *Lecture*
@@ -78,3 +80,31 @@ Scénario: Culture hors référentiel
 ```
 
 **Labels GitHub :** `us`, `backend`, `cultures`, `api`
+
+---
+
+## 🆕 Amendement du 25/09/2026 — maquette haute fidélité « Cultures — écran et fiche »
+
+Source : projet Claude Design *potager 2026*, fichier `Cultures - Ecran et fiche.html`
+(+ `cultures-data.jsx`, `cultures-ecran.jsx`, `cultures-fiche.jsx`, `fiche-calendrier.jsx`,
+`web-parts.jsx`, `web-tokens.jsx`). Cette maquette est **gelée au sens de RT9** pour
+l'écran Cultures et la fiche culture, et à déposer dans `maquette front/haute-fidelite/`.
+
+Elle ne rouvre ni la répartition des écrans (v1 § 2), ni le partage avec la fiche
+calendrier (v2 § 1c), ni le zoom (v4). Elle tranche le **rendu** et, surtout, le
+**full responsive** : trois dispositions nommées — *feuille* (375 px), *modale centrée*
+(768 px), *panneau latéral* (1180 px) — et une barre d'outils qui change de forme,
+pas seulement de largeur.
+
+### Ce que la maquette ajoute à cette lecture
+
+| Ce que la maquette affiche | Où | CA |
+|---|---|---|
+| « Semer maintenant » / « bientôt : … » / « prochaine fenêtre : … » | pied de carte | CA5, geste + mois rendus bruts |
+| « Récolte attendue **entre mars et avril** si le geste est fait le 18 septembre » | fiche, section *Maintenant* | **CA5 bis** (nouveau) |
+| Filtre « Tous les mois / Janvier… » | barre d'outils | **CA5 ter** (nouveau) |
+| « ★★★ élevée » | carte et fiche | CA4 (équivalent écrit ajouté) |
+| « En pépinière · 1 lot » sans phase en terre | pied de carte | CA3 (précisé) |
+
+**Estimation révisée :** 5 points (inchangée — les trois ajouts se calculent dans la même
+lecture groupée, sans requête supplémentaire ; CA7 reste le garde-fou).
