@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cultures — écran et fiche culture (ÉPIC 11)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#11140E;color:#DDE3D3;min-height:100vh}
+button,input,select{font-family:inherit}
+a{color:#4A7C22;text-decoration:none}a:hover{color:#2F5416}
+.s::-webkit-scrollbar{width:9px;height:9px}.s::-webkit-scrollbar-thumb{background:rgba(120,140,100,.4);border-radius:5px}.s::-webkit-scrollbar-track{background:transparent}
+.tbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 18px;background:#191E13;border-bottom:1px solid #2B3320}
+.ttitle{font-size:13px;font-weight:700;letter-spacing:.01em;margin-right:6px}
+.tgrp{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.tlab{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:#7C8B6C;margin-right:2px}
+.tbtn{padding:5px 11px;border-radius:8px;border:1px solid #333D27;background:transparent;color:#B9C4A9;font-size:12px;cursor:pointer}
+.tbtn.on{background:#4A7C22;border-color:#4A7C22;color:#fff;font-weight:700}
+.tnote{padding:10px 18px;font-size:11.5px;line-height:1.55;color:#8C9A7C;background:#151A0F;border-bottom:1px solid #2B3320}
+.stage{padding:26px 18px 60px;display:flex;flex-direction:column;align-items:flex-start;gap:9px;overflow-x:auto}
+.stage>*{margin-inline:auto}
+.dlabel{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7C8B6C}
+.device{position:relative;overflow:hidden;border-radius:16px;border:1px solid #2B3320;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+.wtip{position:relative;display:inline-flex}
+.wbanner-act{flex-shrink:0}
+.cu-grid-wrap{container-type:inline-size}
+.cu-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@container (min-width:520px){.cu-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@container (min-width:900px){.cu-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.cu-card{transition:border-color .15s,transform .15s}
+.cu-card:hover{transform:translateY(-1px)}
+.cu-card:focus-visible{outline:2px solid #4A7C22;outline-offset:2px}
+.fc-body{container-type:inline-size}
+.fc-ref{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px}
+@container (max-width:400px){.fc-ref{grid-template-columns:minmax(0,1fr)}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" src="web-tokens.jsx"></script>
+<script type="text/babel" src="web-parts.jsx"></script>
+<script type="text/babel" src="fiche-calendrier.jsx"></script>
+<script type="text/babel" src="cultures-data.jsx"></script>
+<script type="text/babel" src="cultures-ecran.jsx"></script>
+<script type="text/babel" src="cultures-fiche.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const SIZES = { s375: { w: 375, h: 812, label: 'Mobile', mode: 'sheet' }, s768: { w: 768, h: 960, label: 'Tablette portrait', mode: 'center' }, s1180: { w: 1180, h: 860, label: 'Desktop', mode: 'side' } };
+const ETATS_ECRAN = [['normal', 'Nominal'], ['chargement', 'Chargement'], ['conf', 'Confiance indisponible'], ['vide', 'Au potager vide'], ['echec', 'Échec de lecture']];
+const ETATS_FICHE = [
+  [{ id: 'tomate' }, 'Tomate · fenêtre fermée, séries en terre'],
+  [{ id: 'epinard' }, 'Épinard · fenêtre ouverte'],
+  [{ id: 'courgette', ctx: { parcelle: 'planche-centrale', rang: 2 } }, 'Courgette · depuis un rang du Plan'],
+  [{ id: 'ail' }, 'Ail · sans calendrier'],
+  [{ id: 'verveine' }, 'Verveine · hors référentiel'],
+  [{ id: 'mache', echec: true }, 'Lecture échouée'],
+  [{ id: 'courgette', ctx: { parcelle: 'planche-centrale', rang: 2 }, cal: true }, 'Fiche calendrier empilée']];
+
+function Root() {
+  const [dark, setDark] = useState(false);
+  const [size, setSize] = useState(() => localStorage.getItem('cu-size') || 's1180');
+  const [etat, setEtat] = useState('normal');
+  const [fiche, setFiche] = useState(null);
+  const [cal, setCal] = useState(false);
+  useEffect(() => { localStorage.setItem('cu-size', size); }, [size]);
+  useEffect(() => {
+    const k = (e) => { if (e.key !== 'Escape') return; if (cal) setCal(false); else setFiche(null); };
+    window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
+  }, [cal]);
+  const W = dark ? WEB_DARK : WEB_LIGHT;
+  const s = SIZES[size];
+  const c = fiche && CULTURES.find((x) => x.id === fiche.id);
+  const ouvrir = (f) => { setFiche(f); setCal(!!f.cal); };
+  const cle = (f) => f.id + (f.ctx ? '@' : '') + (f.echec ? '!' : '') + (f.cal ? '+' : '');
+  return (
+    <WCtx.Provider value={W}>
+      <div className="tbar">
+        <span className="ttitle">ÉPIC 11 — Cultures : écran et fiche culture</span>
+        <div className="tgrp"><span className="tlab">Écran</span>
+          {ETATS_ECRAN.map(([k, l]) => <button key={k} className={'tbtn' + (etat === k ? ' on' : '')} onClick={() => setEtat(k)}>{l}</button>)}
+        </div>
+        <div className="tgrp"><span className="tlab">Largeur</span>
+          {Object.entries(SIZES).map(([k, v]) => <button key={k} className={'tbtn' + (size === k ? ' on' : '')} onClick={() => setSize(k)}>{v.w}</button>)}
+        </div>
+        <button className="tbtn" onClick={() => setDark((d) => !d)}>{dark ? 'Thème clair' : 'Thème sombre'}</button>
+      </div>
+      <div className="tbar" style={{ paddingTop: 8 }}>
+        <div className="tgrp"><span className="tlab">Ouvrir la fiche</span>
+          {ETATS_FICHE.map(([f, l]) => <button key={l} className={'tbtn' + (fiche && cle(fiche) === cle(f) && (!!f.cal === cal) ? ' on' : '')} onClick={() => ouvrir(f)}>{l}</button>)}
+          <button className="tbtn" onClick={() => { setFiche(null); setCal(false); }}>Fermer</button>
+        </div>
+      </div>
+      <div className="tnote">
+        US-205 : une carte par culture, sans quantité — frise conseillée de la zone, présence au potager, confiance du meilleur geste et libellé de fenêtre. Tri « confiance ↓ » par défaut ; les suggestions de la semaine (au plus {SUGG_MAX}) s’insèrent en pointillé dans « Au potager ».
+        US-207 : un appui ouvre la fiche culture (feuille plein écran, modale centrée, panneau de 560 px), six sections dans l’ordre d’utilité ; « Ouvrir la fiche calendrier » empile la fiche d’US-183 telle quelle. Échap ferme la plus haute ; l’écran garde onglet, recherche, tri, filtres et défilement.
+        Date de référence : {DATE_REF}. Extrait du référentiel ({CULTURES.length} cultures au lieu de 84).
+      </div>
+      <div className="stage">
+        <div className="dlabel">{s.label} · {s.w} × {s.h} · {s.mode === 'sheet' ? 'fiche plein écran' : s.mode === 'center' ? 'fiche en modale centrée' : 'fiche en panneau latéral'}</div>
+        <div className="device" style={{ width: s.w, height: s.h, background: W.bg }}>
+          <EcranCultures mode={s.mode} etat={etat} onOpen={(id) => ouvrir({ id })} />
+          {c && <FicheCulture key={cle(fiche)} mode={s.mode} c={c} ctx={fiche.ctx} echec={fiche.echec} confKO={etat === 'conf'} onClose={() => { setFiche(null); setCal(false); }} onCal={() => setCal(true)} />}
+          {c && cal && <FicheShell key={'cal' + cle(fiche)} mode={s.mode} d={calDe(c, fiche.ctx)} onClose={() => setCal(false)} />}
+        </div>
+      </div>
+    </WCtx.Provider>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+</script>
+</body>
+</html>

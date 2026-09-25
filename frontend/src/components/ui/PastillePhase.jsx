@@ -1,7 +1,7 @@
 import {
   phase as lirePhase, entreesLegende, libelleComplet, depuisLisible,
   FORME_CARRE, FORME_ANNEAU, PHASE_LIBRE,
-  PHASE_SEMEE, PHASE_EN_PLACE, PHASE_EN_RECOLTE,
+  PHASE_SEMEE, PHASE_EN_PLACE, PHASE_EN_RECOLTE, PHASE_EN_PEPINIERE,
 } from '../../lib/phases.js'
 
 export function IconePhase({ phase, taille = 14, className = '' }) {
@@ -21,6 +21,7 @@ export function IconePhase({ phase, taille = 14, className = '' }) {
       </>}
       {phase === PHASE_EN_PLACE && <path d="M3 20.5h18M12 20.5V11M12 14c0-4 2.6-6.6 6.6-6.6 0 4-2.6 6.6-6.6 6.6zM12 11c0-3.4-2.2-5.6-5.6-5.6 0 3.4 2.2 5.6 5.6 5.6z" />}
       {phase === PHASE_EN_RECOLTE && <path d="M3 10h18l-1.7 9.2a2 2 0 0 1-2 1.6H6.7a2 2 0 0 1-2-1.6zM8 10l3-6.5M16 10l-3-6.5M9 14.5v2.5M15 14.5v2.5" />}
+      {phase === PHASE_EN_PEPINIERE && <path d="M7.4 12.6h9.2l-1 7a1.6 1.6 0 0 1-1.6 1.4h-3.8a1.6 1.6 0 0 1-1.6-1.4zM6.8 12.6h10.4M12 12.6V9.3M12 9.3c0-2 1.5-3.4 3.4-3.4 0 2-1.5 3.4-3.4 3.4z" />}
     </svg>
   )
 }
@@ -55,13 +56,20 @@ function classesForme(p, pleine) {
  * pastille « en récolte · 2 parcelles » de l'écran Cultures (US-205) et la ligne
  * de variété de la fiche culture (US-207).
  */
-export function PastillePhase({ ligne, avecDate = false, className = '' }) {
+/**
+ * [US-205 / CA21] `small` : variante compacte (fiche culture, pied de carte) —
+ * même teinte et même mot, juste moins de rembourrage. `contour` force le
+ * traitement à contour de la pastille « en pépinière » même hors de
+ * `lib/phases.js` (jamais utilisé ailleurs qu'ici pour l'instant).
+ */
+export function PastillePhase({ ligne, avecDate = false, small = false, className = '' }) {
   const p = lirePhase(ligne?.phase)
   if (!p) return null
   const date = avecDate ? depuisLisible(ligne) : ''
+  const contour = p.cle === PHASE_EN_PEPINIERE
   return (
     <span
-      className={`inline-flex items-center gap-1.5 text-[11.5px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap ${p.teinte} ${className}`}
+      className={`inline-flex items-center gap-1.5 ${small ? 'text-[11px] px-2 py-[1px]' : 'text-[11.5px] px-2.5 py-0.5'} font-semibold rounded-full whitespace-nowrap ${p.teinte} ${contour ? 'border border-border' : ''} ${className}`}
       title={libelleComplet(ligne)}
     >
       <IconePhase phase={p.cle} />

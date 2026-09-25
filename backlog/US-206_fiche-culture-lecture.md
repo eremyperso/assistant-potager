@@ -17,12 +17,12 @@ Ce qui manque, c'est une **lecture structurée pour la PWA** : le bot rend du te
 **Critères d'acceptance :**
 
 *Contenu*
-- [ ] CA1 : `GET /cultures/{culture}/fiche` (potager et date de référence en paramètres) rend l'**identité** de la culture : nom, famille botanique et son délai de retour, type d'organe récolté (végétatif ou reproducteur), itinéraires connus
+- [ ] CA1 : `GET /cultures/{culture}/fiche` (potager et date de référence en paramètres) rend l'**identité** de la culture : nom, famille botanique et son délai de retour — rendus séparément, l'écran les assemblant en « Solanacée · retour 4 ans » —, type d'organe récolté (végétatif ou reproducteur), itinéraires connus
 - [ ] CA2 : Les **caractéristiques de conduite** (US-161) — exposition, besoin en eau, profondeur de semis, rusticité minimale — chacune avec sa source ; une caractéristique inconnue vaut « non renseigné », jamais une valeur devinée ni complétée par un modèle
 - [ ] CA3 : Les **durées** du référentiel — levée, semis → première récolte, délai avant plantation, plantation → première récolte (US-177), et le délai semis → repiquage en godet quand US-213 est livrée — chacune en fourchette ou « non renseignée ». Une durée absente n'est jamais déduite d'une autre (US-177)
-- [ ] CA4 : Les **variétés cultivées** à la date de référence : pour chaque variété, les parcelles où elle est en place avec leur phase (US-194), et les lots de pépinière en cours avec leur numéro (US-209, quand livrée) et leur stade. Une variété seulement en pépinière y figure
+- [ ] CA4 : Les **variétés cultivées** à la date de référence : pour chaque variété, les parcelles où elle est en place avec leur phase (US-194), et les lots de pépinière en cours avec leur numéro (US-209, quand livrée), leur **stade** (« semé en caissette », « en godet ») et leur **emplacement** (la pépinière où ils sont posés, US-210). La fiche affiche « lot #128 · Serre » : les trois valeurs sont rendues séparément, le front les assemble. Une variété seulement en pépinière y figure, avec une liste de parcelles vide — jamais masquée
 - [ ] CA5 : Les **voisinages** (US-163) : associations favorables et défavorables, y compris celles saisies au niveau de la famille ; chacune avec la culture ou la famille voisine, son motif et son niveau de preuve, pour que l'écran distingue « défavorable » de « déconseillé par la pratique traditionnelle » (US-163)
-- [ ] CA6 : Les **bioagresseurs** (US-162, US-174) : tous ceux rattachés à la culture, les plus fréquents d'abord, avec leur catégorie, leur période de risque **seulement si elle est renseignée** et leur description de symptôme quand elle existe, plus leur nombre total. Un bioagresseur déclaré localement par **ce** potager y figure ; celui d'un autre potager jamais (US-174 / CA6, CA7)
+- [ ] CA6 : Les **bioagresseurs** (US-162, US-174) : tous ceux rattachés à la culture, les plus fréquents d'abord, avec leur catégorie (« champignon », « insecte », « mollusque », « virus »), leur période de risque **seulement si elle est renseignée** et leur description de symptôme quand elle existe, plus leur nombre total — l'écran n'en affiche que cinq et déplie le reste (US-207 / CA8), la lecture les rend donc **tous en une fois**, jamais par page. Un bioagresseur déclaré localement par **ce** potager y figure ; celui d'un autre potager jamais (US-174 / CA6, CA7)
 - [ ] CA7 : Les **attributions** de source des valeurs rendues, dédoublonnées (Wind River Greens, EPPO…)
 
 *Honnêteté et cas limites*
@@ -47,7 +47,27 @@ Ce qui manque, c'est une **lecture structurée pour la PWA** : le bot rend du te
 - Point de vigilance : aucune donnée de phytosanitaire, aucun dosage — il n'existe aucune colonne où en stocker un (US-162 / CA10)
 - Wireframe : v1 § 2b « Fiche culture » et ses notes
 
-**Estimation :** 3 points
+**Estimation :** 3 points (inchangée au 25/09 : la maquette ne demande aucune donnée nouvelle)
+
+---
+
+## 🆕 Amendement du 25/09/2026 — maquette gelée « Cultures — écran et fiche »
+
+La maquette `Cultures - Ecran et fiche.html` confirme cette lecture **sans l'élargir**. Trois
+précisions seulement, toutes de forme :
+
+1. **CA1** — famille et délai de retour rendus séparément ; c'est l'écran qui écrit
+   « Solanacée · retour 4 ans » sur une seule ligne du bloc *Référentiel*.
+2. **CA4** — un lot se lit « lot #128 · Serre » : numéro **et** emplacement **et** stade.
+   L'emplacement vient d'US-210 ; tant qu'elle n'est pas livrée, il est absent, et la fiche
+   écrit « lot #128 » seul — jamais « emplacement inconnu » inventé (RT2).
+3. **CA6** — la liste complète des bioagresseurs est rendue en une fois, l'écran gérant le
+   « + N autres ».
+
+Les neuf entrées du bloc *Référentiel* de la maquette (famille · retour, exposition, besoin en
+eau, rusticité minimale, profondeur de semis, levée, délai avant plantation, plantation →
+1ʳᵉ récolte, organe récolté) sont exactement CA1 à CA3. Chacune vaut « non renseigné » quand
+elle manque, et la maquette le rend visuellement : valeur en gris et en graisse normale.
 
 **Scénario Gherkin :**
 ```gherkin

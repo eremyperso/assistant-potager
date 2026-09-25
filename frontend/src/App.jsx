@@ -18,6 +18,7 @@ import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import PlanVue   from './views/PlanVue.jsx'  // [US-200]
+import Cultures  from './views/Cultures.jsx'  // [US-205]
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
 import Journal    from './views/Journal.jsx'
@@ -96,12 +97,9 @@ const VIEWS = {
       body="Historique des familles cultivées par parcelle sur trois ans, avec alerte en cas de retour trop rapide d'une même famille."
     />
   ),
-  cultures: () => (
-    <Placeholder
-      title="Mes cultures"
-      body="Fiches par culture et par variété : famille botanique, durée, exposition, besoin en eau et calendrier cultural sur douze mois."
-    />
-  ),
+  // [US-205] L'écran d'attente d'US-053 laisse place à l'écran Cultures : une
+  // carte par culture, au potager ou dans tout le référentiel.
+  cultures: (props) => <Cultures {...props} />,
   pepiniere: (props) => <Pepiniere {...props} />,
   stocks: (props) => <Stocks {...props} />,
   journal: (props) => <Journal {...props} />,
