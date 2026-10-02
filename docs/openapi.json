@@ -1,0 +1,3667 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Assistant Potager 🌿",
+    "version": "3.84.1"
+  },
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Auth Register",
+        "description": "[CA1/CA7] Inscription par e-mail + mot de passe. Mot de passe haché (bcrypt),\njamais stocké ni loggé en clair. 409 si l'e-mail est déjà utilisé.",
+        "operationId": "auth_register_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Auth Login",
+        "description": "[CA2] Connexion — renvoie un access token (15 min) et un refresh token (30 j).\n[CA11] 403 EMAIL_NOT_VERIFIED si l'e-mail du compte n'est pas encore vérifié.",
+        "operationId": "auth_login_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Auth Refresh",
+        "description": "[CA3] Nouvel access token à partir d'un refresh token valide, sans redemander le mot de passe.",
+        "operationId": "auth_refresh_auth_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/verify-email": {
+      "get": {
+        "summary": "Auth Verify Email",
+        "description": "[CA10] Valide le lien de vérification reçu par e-mail (clic direct, GET).\nUsage unique : un rejeu du même token renvoie la même erreur qu'un token\ninvalide, sans distinction exploitable.",
+        "operationId": "auth_verify_email_auth_verify_email_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/resend-verification": {
+      "post": {
+        "summary": "Auth Resend Verification",
+        "description": "[CA12] Renvoie un e-mail de vérification si le compte existe et n'est\npas encore vérifié. Réponse générique identique dans tous les cas\n(compte inconnu, déjà vérifié, ou renvoi effectif) — anti-énumération,\ncohérent avec CA7.",
+        "operationId": "auth_resend_verification_auth_resend_verification_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendVerificationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/mot-de-passe-oublie": {
+      "post": {
+        "summary": "Auth Mot De Passe Oublie",
+        "description": "[US-057 / CA1] Envoie un e-mail de réinitialisation si le compte existe\net a un mot de passe défini. Réponse générique identique dans tous les cas\n(compte inconnu, Telegram-only, ou envoi effectif) — anti-énumération,\nmême principe que /auth/resend-verification (CA12).",
+        "operationId": "auth_mot_de_passe_oublie_auth_mot_de_passe_oublie_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MotDePasseOublieRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/reinitialiser-mot-de-passe": {
+      "post": {
+        "summary": "Auth Reinitialiser Mot De Passe",
+        "description": "[US-057 / CA3, CA4] Valide le token reçu par e-mail et remplace le mot\nde passe. Usage unique : un rejeu du même token renvoie la même erreur\nqu'un token invalide, sans distinction exploitable.",
+        "operationId": "auth_reinitialiser_mot_de_passe_auth_reinitialiser_mot_de_passe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReinitialiserMotDePasseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/oauth/providers": {
+      "get": {
+        "summary": "Auth Oauth Providers",
+        "description": "[CA4] Connecteurs réellement utilisables dans cet environnement.\n\nLa PWA masque purement et simplement le bouton Google quand il vaut `false`\n— pas de bouton en erreur, pas de « bientôt disponible » : sans identifiants\nGoogle configurés, le connecteur n'existe pas pour l'utilisateur.",
+        "operationId": "auth_oauth_providers_auth_oauth_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/oauth/google/start": {
+      "get": {
+        "summary": "Auth Oauth Google Start",
+        "description": "[CA5, CA6] Démarre le flux Authorization Code + PKCE et redirige vers\nl'écran de consentement Google.\n\nRien de sensible n'est confié au navigateur : `code_verifier`, `state` et\n`nonce` partent dans un cookie signé `HttpOnly`, seul le `code_challenge`\n(leur empreinte) circule dans l'URL.",
+        "operationId": "auth_oauth_google_start_auth_oauth_google_start_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/oauth/google/callback": {
+      "get": {
+        "summary": "Auth Oauth Google Callback",
+        "description": "[CA3, CA5, CA7, CA10-CA14] Retour de Google : vérifie l'état, échange le\ncode côté serveur, valide l'id_token, puis résout ou crée le compte et émet\nles jetons **applicatifs** US-044 (access 15 min + refresh 30 j).\n\nAucun jeton Google n'est conservé. Tous les chemins d'échec ramènent\nl'utilisateur sur l'écran de connexion avec un code de message\ncompréhensible (CA3) — jamais de page blanche ni de trace technique.",
+        "operationId": "auth_oauth_google_callback_auth_oauth_google_callback_get",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Auth Me",
+        "description": "[US-055 / CA1] Identité du compte connecté + état de la liaison Telegram,\npour le menu Compte de la PWA (nom, e-mail, « relié / à faire »).\n\nLecture seule sur des colonnes existantes — aucune règle métier nouvelle.\nIdentité seule (pas de potager requis, même dépendance que\n/auth/lien/generer-code) : le menu Compte doit rester consultable par un\ncompte qui n'appartient encore à aucun potager (cf. US-046 / CA5).\nLe rôle n'est volontairement pas renvoyé ici : il dépend du potager actif\net vient déjà de GET /potagers.",
+        "operationId": "auth_me_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/auth/lien/generer-code": {
+      "post": {
+        "summary": "Auth Generer Code Liaison",
+        "description": "[US-045 / CA1 ; US-091 / CA17] Génère un code à usage unique (TTL 10 min)\npour lier ce compte web à un chat Telegram via la commande /lier du bot (ou\nle deep-link /start). Identité seule (pas de potager requis) : on doit\npouvoir lier son Telegram avant même d'appartenir à un potager.\n\nLimité à 5 générations/heure/compte (CA17) : le deep-link et le QR de\nl'écran d'activation en multiplient les appels par rapport à la simple\nmodale existante.",
+        "operationId": "auth_generer_code_liaison_auth_lien_generer_code_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/auth/lien/delier": {
+      "post": {
+        "summary": "Auth Delier",
+        "description": "[US-050 / CA1] Dissocie le chat Telegram actuellement lié à ce compte.\nIdentité seule (pas de potager requis, CA5) — même dépendance que\n/auth/lien/generer-code, jamais get_current_user_ctx pour cette action.",
+        "operationId": "auth_delier_auth_lien_delier_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/potagers": {
+      "get": {
+        "summary": "Lister Potagers",
+        "description": "[US-046 / CA2, CA5] Liste les potagers de l'utilisateur connecté, potager\nactif marqué. Identité seule : une liste vide est une réponse valide (CA5),\npas une erreur — c'est au frontend de proposer la création/adhésion.\n\n[US-080 / CA5] `etat` filtre le cycle de vie : `actif` (défaut),\n`archive` ou `tous`. Un potager supprimé n'apparaît dans aucun cas.",
+        "operationId": "lister_potagers_potagers_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "etat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "actif",
+              "title": "Etat"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Creer Potager",
+        "description": "[US-048 / CA1, CA2] Crée un potager — l'utilisateur en devient owner et\nce potager devient son potager actif. Identité seule (pas de potager requis\nau préalable, CA7). [US-074 / CA3] `ville` est optionnelle, choisie via le\nmodule de recherche de ville unifié.\n\n[US-081 / CA3, CA4, CA7] Sert aussi la création d'un potager **additionnel**\ndepuis la PWA : `activer=false` crée le potager sans quitter le potager\ncourant. Un nom déjà porté par un autre potager de l'utilisateur reste\nautorisé (l'avertissement est purement informatif, côté interface).",
+        "operationId": "creer_potager_potagers_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreerPotagerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/corbeille": {
+      "get": {
+        "summary": "Lister Corbeille Potagers",
+        "description": "[US-084 / CA6] Potagers supprimés restaurables — point d'accès dédié du\ndroit au remords, réservé à leur owner.\n\n⚠️ Déclarée AVANT `/potagers/{potager_id}` : FastAPI résout les routes dans\nl'ordre de déclaration, l'ordre inverse ferait tomber « corbeille » dans le\nparamètre entier `potager_id` (422). Un potager supprimé n'apparaît nulle\npart ailleurs (US-080 / CA7), y compris avec `etat=tous`.",
+        "operationId": "lister_corbeille_potagers_potagers_corbeille_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/potagers/{potager_id}": {
+      "get": {
+        "summary": "Detail Potager",
+        "description": "[US-082 / CA2, CA6, CA7, CA8] Détail d'un potager pour l'écran Paramètres\n— réservé à ses membres, quel que soit leur rôle (CA6 : le frontend adapte\nl'affichage aux droits, cette lecture reste ouverte à tout membre). Un\npotager inexistant, supprimé ou dont l'appelant n'est pas membre reçoit le\nmême refus générique, sans révéler laquelle de ces situations s'applique\n(même principe que GET /potagers/{id}/membres).",
+        "operationId": "detail_potager_potagers__potager_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Modifier Potager",
+        "description": "[US-074 / CA4] Un owner corrige nom/ville/latitude/longitude d'un potager\ndéjà créé — seul moyen de localiser un potager existant qui n'a jamais eu\nde localisation. Vise le potager de l'URL, pas nécessairement le potager\nactif de l'appelant (même principe que POST /potagers/{id}/invitations).",
+        "operationId": "modifier_potager_potagers__potager_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifierPotagerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Supprimer Potager",
+        "description": "[US-084 / CA1, CA2, CA4, CA5, CA10] Supprime un potager ARCHIVÉ — owner\nuniquement. Suppression logique : le potager disparaît immédiatement pour\ntous les membres (CA5), ses données ne sont effacées qu'au terme du délai\nde grâce (CA7), pendant lequel il reste restaurable (CA6).\n\n409 (et non 403) sur un potager non archivé : les droits sont là, c'est\nl'état qui bloque — même convention que POST /potagers/{id}/activer face à\nun potager archivé (US-080 / CA6).",
+        "operationId": "supprimer_potager_potagers__potager_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupprimerPotagerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/activer": {
+      "post": {
+        "summary": "Activer Potager",
+        "description": "[US-046 / CA2, CA3, CA4] Change le potager actif de l'utilisateur connecté.",
+        "operationId": "activer_potager_potagers__potager_id__activer_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/parcelles": {
+      "post": {
+        "summary": "Creer Parcelle",
+        "description": "[US-058 / CA3, CA5] Première porte d'entrée HTTP pour créer une parcelle —\njusqu'ici réservée au bot Telegram (`utils/parcelles.create_parcelle`, commande\n`/parcelle ajouter`). Utilisée par l'assistant de création du premier potager\njuste après POST /potagers (le potager créé est déjà le potager actif à ce\nmoment, cf. `svc_potagers.creer_potager`).",
+        "operationId": "creer_parcelle_parcelles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreerParcelleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/parcelles/{parcelle_id}": {
+      "patch": {
+        "summary": "Modifier Parcelle",
+        "description": "[US-230] Le second chemin d'écriture des caractéristiques d'une parcelle\n— le premier restant la phrase dite au compagnon.\n\nLe handler ne connaît aucune borne : elles vivent toutes dans\n`utils.parcelles`, et c'est `svc_parcelles.modifier_parcelle` qui les y\nappelle (CA2, CA3). Une valeur hors borne envoyée sans passer par le\nformulaire se heurte donc au **même refus, mot pour mot**, que le\ncompagnon (CA5, CA11).",
+        "operationId": "modifier_parcelle_parcelles__parcelle_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "parcelle_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Parcelle Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifierParcelleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/invitations": {
+      "post": {
+        "summary": "Creer Invitation",
+        "description": "[US-048 / CA3] Un owner invite un membre par code, avec un rôle proposé\n(editor|lecteur). Vise le potager de l'URL, pas nécessairement le potager\nactif de l'appelant.",
+        "operationId": "creer_invitation_potagers__potager_id__invitations_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviterMembreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/invitations/{code}/accepter": {
+      "post": {
+        "summary": "Accepter Invitation",
+        "description": "[US-048 / CA4, CA8] Accepte une invitation — insère le membre dans\npotager_membres avec le rôle proposé. Identité seule (l'utilisateur peut\nn'avoir encore aucun potager, CA7).",
+        "operationId": "accepter_invitation_invitations__code__accepter_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/membres": {
+      "get": {
+        "summary": "Lister Membres Potager",
+        "description": "[US-048] Liste les membres d'un potager — réservé à ses membres.",
+        "operationId": "lister_membres_potager_potagers__potager_id__membres_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/membres/{membre_user_id}": {
+      "delete": {
+        "summary": "Retirer Membre Potager",
+        "description": "[US-048 / CA5, CA6] Un owner retire un membre — celui-ci perd l'accès\nimmédiatement (potager actif invalidé s'il pointait vers ce potager).\n[US-085 / CA4] 409 si ce retrait laisserait le potager sans owner.",
+        "operationId": "retirer_membre_potager_potagers__potager_id__membres__membre_user_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          },
+          {
+            "name": "membre_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Membre User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Modifier Role Membre Potager",
+        "description": "[US-085 / CA1-CA6] Un owner change le rôle d'un membre : 'owner' | 'editor' |\n'lecteur'. Vise le potager de l'URL, pas nécessairement le potager actif de\nl'appelant (même principe que POST /potagers/{id}/invitations). 403 pour tout\nnon-owner, y compris sur son propre rôle ; 409 si le changement laisserait le\npotager sans owner. Effet immédiat : le rôle est relu à chaque requête.",
+        "operationId": "modifier_role_membre_potager_potagers__potager_id__membres__membre_user_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          },
+          {
+            "name": "membre_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Membre User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModifierRoleMembreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/quitter": {
+      "post": {
+        "summary": "Quitter Potager",
+        "description": "[US-086 / CA1-CA5, CA7, CA8] Le membre se retire lui-même du potager — identité\nseule, aucune permission particulière autre que d'en être membre (403 sinon,\ncomme POST /potagers/{id}/activer). 409 pour le dernier owner, avec la marche à\nsuivre dans le message (désigner un autre propriétaire, ou archiver puis\nsupprimer). Aucune donnée métier n'est effacée ; l'accès est coupé dès la\nrequête suivante et le potager actif est invalidé s'il pointait ici.",
+        "operationId": "quitter_potager_potagers__potager_id__quitter_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/archiver": {
+      "post": {
+        "summary": "Archiver Potager",
+        "description": "[US-083 / CA1, CA2, CA5, CA9] Archive un potager — owner uniquement.\nPasse en lecture seule (CA4) ; invalide le potager actif des membres qui\npointaient dessus (CA5) ; notifie les autres membres liés à Telegram (CA9).",
+        "operationId": "archiver_potager_potagers__potager_id__archiver_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/desarchiver": {
+      "post": {
+        "summary": "Desarchiver Potager",
+        "description": "[US-083 / CA2, CA8, CA9] Désarchive un potager — owner uniquement.\nRend l'écriture immédiatement possible, sans rebasculer le potager actif\nde qui que ce soit (CA8) ; notifie les autres membres liés à Telegram (CA9).",
+        "operationId": "desarchiver_potager_potagers__potager_id__desarchiver_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/impact-suppression": {
+      "get": {
+        "summary": "Impact Suppression Potager",
+        "description": "[US-084 / CA3, CA10] Décompte réel de ce que la suppression fera perdre —\nalimente l'écran de confirmation, owner uniquement (un editor/lecteur n'a\nmême pas à connaître ce décompte, l'action lui étant interdite).",
+        "operationId": "impact_suppression_potager_potagers__potager_id__impact_suppression_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/restaurer": {
+      "post": {
+        "summary": "Restaurer Potager",
+        "description": "[US-084 / CA6] Droit au remords — restaure un potager supprimé encore\ndans son délai de grâce. Il revient à l'état `archive`, jamais `actif`.",
+        "operationId": "restaurer_potager_potagers__potager_id__restaurer_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "description": "Vérification que le serveur est opérationnel.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cultures": {
+      "get": {
+        "summary": "Get Cultures",
+        "description": "Retourne la liste des cultures configurées avec leur type d'organe récolté.\nUtile pour l'interface PWA et la validation des saisies.",
+        "operationId": "get_cultures_cultures_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/cultures/{culture}/calendrier": {
+      "get": {
+        "summary": "Get Calendrier Culture",
+        "description": "[US-068 / CA1-CA4, CA8, CA11-CA13] Calendrier cultural d'une culture, tel que\nle lit le potager actif : itinéraires, fenêtres de SA zone, durées communes.\n\nAucun écran ne le consomme encore (US-060, US-070, vue Cultures du Lot E) :\nc'est la forme de lecture qu'ils trouveront. Toujours 200 — une culture\ninconnue ou sans référentiel rend `culture_connue` / `renseigne` à faux, une\nfrise vide et des durées nulles. Jamais une période ni un délai inventés, et\njamais une date calculée : des mois et des jours, rien d'autre.",
+        "operationId": "get_calendrier_culture_cultures__culture__calendrier_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cultures/vue": {
+      "get": {
+        "summary": "Get Vue Cultures",
+        "description": "[US-204 / CA1-CA10] Lecture unique de l'écran Cultures : pour chaque\nculture du référentiel visible par le potager (et celles hors référentiel\nplantées quand même), présence au potager, calendrier de la zone,\nconfiance du moment et fenêtre utile — une seule requête, une seule\nlecture météo, aucune règle recalculée côté front (CA7).",
+        "operationId": "get_vue_cultures_cultures_vue_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cultures/{culture}/fiche": {
+      "get": {
+        "summary": "Get Fiche Culture",
+        "description": "[US-206 / CA1-CA13] Fiche structurée d'une culture pour la PWA :\nidentité, attributs de conduite, durées, variétés cultivées, voisinages et\nbioagresseurs — réutilise les mêmes fonctions de lecture que `/fiche` au\nbot (CA10), zéro jeton, zéro appel réseau (CA11).\n\nToujours 200 : une culture inconnue du référentiel rend `fiche_absente`\nà vrai, jamais une 404 ni une culture voisine proposée (CA8).",
+        "operationId": "get_fiche_culture_cultures__culture__fiche_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cultures/{culture}/confiance": {
+      "get": {
+        "summary": "Get Confiance Culture",
+        "description": "[US-178 / CA9] Confiance d'un semis ou d'une plantation : 1 à 3 étoiles, un\nscore 0-100 et ses motifs — scopé au potager actif, en lecture seule et sans\naucun appel LLM (CA2).\n\n`date` vaut aujourd'hui par défaut ; `action` non précisée vaut « semis », que\nla parcelle tranche en pépinière ou pleine terre (CA8). Toujours 200 — une\nculture sans fenêtre pour la zone rend `etoiles: null` et le motif qui le dit\n(CA4), jamais une fenêtre empruntée.",
+        "operationId": "get_confiance_culture_cultures__culture__confiance_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Action"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "parcelle_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Parcelle Id"
+            }
+          },
+          {
+            "name": "itineraire",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Itineraire"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plan/confiances": {
+      "get": {
+        "summary": "Get Confiances Plan",
+        "description": "[US-178 / CA9, CA10] Confiance de PLUSIEURS cultures à une même date, en UN\nappel (`?culture=tomate&culture=haricot`) et une seule lecture météo — ce dont\nl'écran Plan (US-180) a besoin pour ne pas multiplier les requêtes.",
+        "operationId": "get_confiances_plan_plan_confiances_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Action"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "parcelle_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Parcelle Id"
+            }
+          },
+          {
+            "name": "itineraire",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Itineraire"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/gestes/intentions": {
+      "post": {
+        "summary": "Deposer Geste En File",
+        "description": "[US-224 / CA1, CA2, CA4, CA21] Dépose un geste dans la file d'attente.\n\n⚠️ **N'écrit aucun événement.** Le dépôt range un geste pré-parsé dans la\nfile du compte, pour trois jours, et rend de quoi ouvrir le compagnon\ndessus. L'enregistrement, lui, reste le flux du bot, confirmation comprise :\nc'est la règle « les boutons d'action ouvrent le flux existant avec des\nchamps pré-remplis, ils n'écrivent pas eux-mêmes » (arbitrage A16).\n\nNi Journal, ni stock, ni statistique ne voient passer un geste en attente.\n\n[CA21] Le dépôt NE dépend PAS d'un compagnon activé — c'est l'inverse\nd'US-196 / CA10, et c'est voulu : on prépare sa journée d'abord, on active\nune fois. `compagnon_actif` dit à l'écran s'il doit inviter à l'activation.",
+        "operationId": "deposer_geste_en_file_gestes_intentions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreparerGesteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/gestes/file": {
+      "get": {
+        "summary": "Lire File Gestes",
+        "description": "[US-224 / CA22, CA23] Ce qui attend d'être confirmé, et ce qui vient d'en sortir.\n\nDeux listes, et elles ne disent pas la même chose :\n\n* `en_attente` — la file, tous potagers confondus : c'est elle que\n  l'application montre en permanence et sur tous les écrans concernés. Une\n  file invisible serait une file oubliée (CA22).\n* `sortis` — ce qui a été confirmé, abandonné ou **vidé** récemment. La\n  notification de purge du CA18 est best-effort et peut se perdre : cette\n  liste est le second porteur de l'information, pour qu'un geste jamais\n  confirmé ne puisse pas passer pour enregistré.\n\nUne seule lecture, au retour d'onglet — aucune interrogation périodique.",
+        "operationId": "lire_file_gestes_gestes_file_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/gestes/file/sortis": {
+      "delete": {
+        "summary": "Acquitter Gestes Sortis",
+        "description": "[US-224 / CA18] Le jardinier a vu ce qui avait été vidé — la trace peut partir.\n\nDéclenché par l'écran, jamais par le bot : c'est l'application qui sait que\nl'information a été lue.\n\n⚠️ Déclaré AVANT `/gestes/file/{geste_id}` : FastAPI résout les routes dans\nl'ordre de déclaration, et « sortis » se laisserait sinon capturer comme un\nidentifiant.",
+        "operationId": "acquitter_gestes_sortis_gestes_file_sortis_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/gestes/file/{geste_id}": {
+      "delete": {
+        "summary": "Retirer Geste De La File",
+        "description": "[US-224 / CA23] Retirer un geste de la file depuis l'application.\n\nOn peut l'y consulter et l'y retirer ; on ne peut pas l'y confirmer. La\nconfirmation reste au compagnon — c'est l'arbitrage A16, et c'est ce qui\nempêche cette US d'ouvrir un second chemin d'écriture.",
+        "operationId": "retirer_geste_de_la_file_gestes_file__geste_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "geste_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Geste Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plan/confiances/candidates": {
+      "get": {
+        "summary": "Get Confiances Candidates Plan",
+        "description": "[US-180 / CA1, CA3, CA6] Ce que chaque tuile de l'écran Plan peut proposer à\nla date de référence : les actions EN FENÊTRE OU À UN MOIS, de la mieux placée\nà la moins bonne, avec leurs motifs et la récolte attendue.\n\nUn seul appel pour tout l'écran, une seule lecture météo (US-178 / CA9, CA10).\nToujours 200 : une culture sans fenêtre pour la zone rend `a_calendrier: false`\net aucune candidate — la tuile n'affiche alors rien, jamais une valeur de repli\n(CA7). `potager_id` optionnel, comme `/plan` : consultation d'un potager archivé.",
+        "operationId": "get_confiances_candidates_plan_plan_confiances_candidates_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plan/calendriers": {
+      "get": {
+        "summary": "Get Calendriers Plan",
+        "description": "[US-176 / CA1, CA2, CA11] Calendrier conseillé de toutes les cultures de\nl'écran Plan, en UN appel (`?culture=tomate&culture=ail`). Relu à chaque\nchargement : une correction au bot se voit au suivant, sans cache.\n`potager_id` optionnel, comme `/plan` : consultation d'un potager archivé.\n\n[US-070] `projections` : le calendrier RECALÉ de chaque tuile (parcelle ×\nculture × variété) sur ses événements réels, à `date_ref` (bornée à\naujourd'hui, comme `/plan`). Lecture seule — aucun événement modifié.",
+        "operationId": "get_calendriers_plan_plan_calendriers_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          },
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/parse": {
+      "post": {
+        "summary": "Parse",
+        "description": "Reçoit une phrase dictée → parse via Groq → sauvegarde en base.\nGère les phrases multiples (ex: tomates ET courgettes → 2 événements).\nLa date réelle (hier, lundi...) est stockée correctement.",
+        "operationId": "parse_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TexteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/voice": {
+      "post": {
+        "summary": "Voice",
+        "description": "[PWA iPhone] Reçoit un blob audio MediaRecorder →\n  1. Groq Whisper → texte transcrit\n  2. classify_intent_pwa() → ACTION | INTERROGER\n  3. parse_commande() ou repondre_question()\n  4. Retourne { reponse, intent, texte, recap, session_id }",
+        "operationId": "voice_voice_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_voice_voice_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/ask": {
+      "post": {
+        "summary": "Ask",
+        "description": "Répond en langage naturel à une question sur l'historique du potager.\nExemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'",
+        "operationId": "ask_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TexteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/routage/{routage_log_id}/retour": {
+      "post": {
+        "summary": "Deposer Retour Routage",
+        "description": "[US-097 / CA9-CA11] Dépose un avis 👍/👎 sur une réponse de savoir ou de\nraisonnement, rattaché à son entrée de journal. Facultatif, ne bloque\nrien : un doublon (avis déjà donné) renvoie 409, pas une erreur bloquante\npour l'appelant. Point d'accroche pour un futur contrôle web (CA9) — aucune\nvue Q&A n'existe encore côté PWA pour l'exposer directement.",
+        "operationId": "deposer_retour_routage_routage__routage_log_id__retour_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "routage_log_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Routage Log Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetourRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/routage/metriques": {
+      "get": {
+        "summary": "Admin Routage Metriques",
+        "description": "[US-097 / CA5-CA8] Métriques de routage — lecture seule, réservée à\nl'administrateur de la plateforme. Aucun calcul ici n'appelle un modèle\n(CA8) ; aucun tableau de bord graphique n'est construit (CA7).",
+        "operationId": "admin_routage_metriques_admin_routage_metriques_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/admin/savoir/lacunes": {
+      "get": {
+        "summary": "Admin Savoir Lacunes",
+        "description": "[US-098 / CA14] Questions de savoir que la base n'a pas su servir.\n\nC'est la liste de travail éditorial d'US-099, US-140 et US-141 : elle dit\nquoi écrire, dans quel ordre, sur la foi de questions réellement posées —\net non d'une intuition sur ce dont un jardinier aurait besoin.",
+        "operationId": "admin_savoir_lacunes_admin_savoir_lacunes_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/routage/retours-negatifs": {
+      "get": {
+        "summary": "Admin Routage Retours Negatifs",
+        "description": "[US-097 / CA12] Questions les plus souvent jugées mauvaises — alimente\nle corpus de routage (US-093/CA9) et la liste des lacunes de la base de\nconnaissance.",
+        "operationId": "admin_routage_retours_negatifs_admin_routage_retours_negatifs_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats": {
+      "get": {
+        "summary": "Stats",
+        "description": "[US-002/CA4] Statistiques JSON avec stock agronomique différencié.\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "operationId": "stats_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/varietes": {
+      "get": {
+        "summary": "Get Stats Varietes",
+        "description": "[US-072] Détail par variété, toutes cultures et tous états confondus (potager /\nsemis / pépinière), avec leurs parcelles d'origine réelles — alimente l'écran Stocks\ntransverse (US-073). Nouvelle agrégation en lecture seule : ne modifie ni /stats ni\n/godets (CA8), aucune migration BDD (CA9).\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "operationId": "get_stats_varietes_stats_varietes_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/rendement": {
+      "get": {
+        "summary": "Get Rendement",
+        "description": "[US_Stats_rendement_timeline] Timeline mensuelle des récoltes par culture.\n[US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "operationId": "get_rendement_stats_rendement_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "annee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Annee"
+            }
+          },
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/activite": {
+      "get": {
+        "summary": "Get Activite",
+        "description": "[US_Stats_activite_potager] Heatmap d'activité quotidienne (nb événements/jour).\n[US-030] date_ref optionnel (YYYY-MM-DD) : plafonne la borne haute à cette date.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "operationId": "get_activite_stats_activite_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "annee",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Annee"
+            }
+          },
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plan": {
+      "get": {
+        "summary": "Get Plan",
+        "description": "[US-024] Plan d'occupation des parcelles pour le dashboard frontend.\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).\n\nRetourne la liste des parcelles actives avec leurs cultures en cours.\nLes parcelles sans culture sont incluses avec cultures=[].",
+        "operationId": "get_plan_plan_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/observations": {
+      "get": {
+        "summary": "Get Observations",
+        "description": "[US-039 / CA3] Détail des observations pour un point d'accès du dashboard :\n  - parcelle_id + culture + variete → ligne de culture précise (Plan)\n  - parcelle_id seul                → carte parcelle (Plan)\n  - culture seule                   → agrégat culture (Stocks)",
+        "operationId": "get_observations_observations_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "parcelle_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Parcelle Id"
+            }
+          },
+          {
+            "name": "culture",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "variete",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Variete"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/godets": {
+      "get": {
+        "summary": "Get Godets",
+        "description": "[US-026] État de la pépinière : godets en attente de plantation + cultures tout plantées.\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).\n\nUtilise calcul_godets() pour un stock agrégé par (culture, variété) avec déduction\ndes plantations. Retourne deux listes :\n- en_attente  : cultures avec stock_residuel_godet > 0\n- tout_plante : cultures entièrement plantées (stock = 0), listées dans l'encart \"Tout planté\"",
+        "operationId": "get_godets_godets_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pepiniere/lots": {
+      "get": {
+        "summary": "Get Pepiniere Lots",
+        "description": "[US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.\n\nUn lot = un événement de semis en pépinière, identifié par sa date ; les mises\nen godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).\nChaque lot porte son propre avancement (`taux_germination`), son état de\ngermination à trois valeurs (`etat_germination` : en_cours / close /\nindeterminee) et le signalement d'une éventuelle incohérence de saisie\n(`incoherence_saisie`).\n\nCette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui\nconserve exactement son contrat actuel — écrans Stocks, Statistiques et bot\ninchangés (CA5).\n\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "operationId": "get_pepiniere_lots_pepiniere_lots_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/godets/detail": {
+      "get": {
+        "summary": "Get Godet Detail",
+        "description": "[US-029] Cycle de vie complet semis → godets → plantations pour une (culture, variété).\nUtilisé par le panneau de détail de la pépinière frontend.\n\n[US-065 / CA6] `semis_id` (ou `sans_semis_rattache`) restreint le détail à un lot\nprécis. Sans ces paramètres, le comportement historique agrégé est conservé.",
+        "operationId": "get_godet_detail_godets_detail_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "culture",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "variete",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Variete"
+            }
+          },
+          {
+            "name": "semis_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "description": "[US-065 CA6] Cible le lot issu de ce semis",
+              "title": "Semis Id"
+            },
+            "description": "[US-065 CA6] Cible le lot issu de ce semis"
+          },
+          {
+            "name": "sans_semis_rattache",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "[US-065 CA6] Cible le lot des godets sans semis parent",
+              "default": false,
+              "title": "Sans Semis Rattache"
+            },
+            "description": "[US-065 CA6] Cible le lot des godets sans semis parent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/meteo": {
+      "get": {
+        "summary": "Meteo Potager",
+        "description": "[US-075 / CA3, CA4] Météo du jour + prévision 5 jours, calculées sur la\nlocalisation réelle du potager actif (`Potager.ville`/`latitude`/`longitude`,\nUS-074) — pas les coordonnées globales du bot Telegram.\n\nSi le potager actif n'a pas encore de localisation renseignée, retourne\n`localisation_manquante: true` plutôt qu'un repli silencieux sur une météo\nqui ne correspondrait à aucun lieu réel du potager (CA4).\n\n[US-182] Lu via le cache partagé par localisation ; ajoute\n`previsions_etendues` (14 jours), `age_donnees_secondes` et `source_donnees`.\nOpen-Meteo indisponible : l'entrée du jour en cache si elle existe, sinon 502.",
+        "operationId": "meteo_potager_meteo_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/meteo/history": {
+      "get": {
+        "summary": "Meteo History",
+        "description": "Historique météo journalier (températures min/max + précipitations) depuis Open-Meteo Archive.\nGratuit, sans authentification, zéro token Groq.\n\nParamètres optionnels lat/lon permettent d'interroger n'importe quel potager.\nRetourne : { jours: [...], meta: { lat, lon, timezone, days, start_date, end_date } }",
+        "operationId": "meteo_history_meteo_history_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 7,
+              "description": "Nombre de jours d'historique",
+              "default": 30,
+              "title": "Days"
+            },
+            "description": "Nombre de jours d'historique"
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Latitude GPS (défaut : potager configuré)",
+              "title": "Lat"
+            },
+            "description": "Latitude GPS (défaut : potager configuré)"
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "description": "Longitude GPS (défaut : potager configuré)",
+              "title": "Lon"
+            },
+            "description": "Longitude GPS (défaut : potager configuré)"
+          },
+          {
+            "name": "timezone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Fuseau IANA (défaut : Europe/Paris)",
+              "title": "Timezone"
+            },
+            "description": "Fuseau IANA (défaut : Europe/Paris)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/historique": {
+      "get": {
+        "summary": "Historique",
+        "description": "[US-027] Retourne les événements paginés avec filtres optionnels.\n[US-030] date_ref optionnel (YYYY-MM-DD) : borne haute, prioritaire sur to_date.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).\nEx: /historique?culture=tomate&action=recolte&from=2026-05-01&to=2026-05-31&offset=20\nRetourne : { total: int, evenements: [...], date_ref_effective: str }",
+        "operationId": "historique_historique_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Action"
+            }
+          },
+          {
+            "name": "culture",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "parcelle",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Parcelle"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "To"
+            }
+          },
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_voice_voice_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_voice_voice_post"
+      },
+      "CreerParcelleRequest": {
+        "properties": {
+          "nom": {
+            "type": "string",
+            "title": "Nom"
+          },
+          "exposition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exposition"
+          },
+          "superficie_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superficie M2"
+          },
+          "est_pepiniere": {
+            "type": "boolean",
+            "title": "Est Pepiniere",
+            "default": false
+          },
+          "type_sol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Sol"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nom"
+        ],
+        "title": "CreerParcelleRequest"
+      },
+      "CreerPotagerRequest": {
+        "properties": {
+          "nom": {
+            "type": "string",
+            "title": "Nom"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ville"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "activer": {
+            "type": "boolean",
+            "title": "Activer",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "nom"
+        ],
+        "title": "CreerPotagerRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InviterMembreRequest": {
+        "properties": {
+          "role_propose": {
+            "type": "string",
+            "title": "Role Propose"
+          },
+          "email_invite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Invite"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role_propose"
+        ],
+        "title": "InviterMembreRequest"
+      },
+      "LoginRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "mot_de_passe": {
+            "type": "string",
+            "title": "Mot De Passe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "mot_de_passe"
+        ],
+        "title": "LoginRequest"
+      },
+      "ModifierParcelleRequest": {
+        "properties": {
+          "nom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom"
+          },
+          "superficie_m2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superficie M2"
+          },
+          "longueur_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longueur M"
+          },
+          "nb_rangs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nb Rangs"
+          },
+          "exposition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exposition"
+          },
+          "type_sol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Sol"
+          },
+          "abri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abri"
+          },
+          "paillage": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paillage"
+          },
+          "est_pepiniere": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Est Pepiniere"
+          },
+          "actif": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actif"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ModifierParcelleRequest",
+        "description": "[US-230 / CA1, E4] Un seul appel porte tous les champs modifiés, et\n**eux seuls** : `exclude_unset` distingue « champ non touché » de « champ\nremis à non renseigné » (`null`). Les deux ne veulent pas dire la même\nchose, et confondre les deux écraserait silencieusement le travail d'un\nautre jardinier (CA14).\n\n`extra=\"allow\"` n'ouvre rien : c'est ce qui permet de **nommer** le champ\nrefusé plutôt que de renvoyer une erreur de schéma illisible (CA1). La\nlargeur, en particulier, tombe ici — elle se déduit, elle ne se déclare pas."
+      },
+      "ModifierPotagerRequest": {
+        "properties": {
+          "nom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom"
+          },
+          "ville": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ville"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "zone_climatique": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Climatique"
+          }
+        },
+        "type": "object",
+        "title": "ModifierPotagerRequest"
+      },
+      "ModifierRoleMembreRequest": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "title": "ModifierRoleMembreRequest"
+      },
+      "MotDePasseOublieRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "MotDePasseOublieRequest"
+      },
+      "PreparerGesteRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action"
+          },
+          "culture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Culture"
+          },
+          "variete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variete"
+          },
+          "quantite": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantite"
+          },
+          "unite": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unite"
+          },
+          "parcelle_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parcelle Id"
+          },
+          "rang": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rang"
+          },
+          "lot_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lot Id"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "contexte_semis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contexte Semis"
+          },
+          "ecran": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ecran"
+          },
+          "potager_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Potager Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "PreparerGesteRequest",
+        "description": "[US-196 / CA1] Un geste pré-parsé — tout facultatif sauf l'action."
+      },
+      "RefreshRequest": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshRequest"
+      },
+      "RegisterRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "mot_de_passe": {
+            "type": "string",
+            "title": "Mot De Passe"
+          },
+          "nom": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nom"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "mot_de_passe"
+        ],
+        "title": "RegisterRequest"
+      },
+      "ReinitialiserMotDePasseRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "title": "Token"
+          },
+          "nouveau_mot_de_passe": {
+            "type": "string",
+            "title": "Nouveau Mot De Passe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "nouveau_mot_de_passe"
+        ],
+        "title": "ReinitialiserMotDePasseRequest"
+      },
+      "ResendVerificationRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "ResendVerificationRequest"
+      },
+      "RetourRequest": {
+        "properties": {
+          "avis": {
+            "type": "string",
+            "title": "Avis"
+          }
+        },
+        "type": "object",
+        "required": [
+          "avis"
+        ],
+        "title": "RetourRequest"
+      },
+      "SupprimerPotagerRequest": {
+        "properties": {
+          "mot_de_passe": {
+            "type": "string",
+            "title": "Mot De Passe"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mot_de_passe"
+        ],
+        "title": "SupprimerPotagerRequest"
+      },
+      "TexteRequest": {
+        "properties": {
+          "texte": {
+            "type": "string",
+            "title": "Texte"
+          }
+        },
+        "type": "object",
+        "required": [
+          "texte"
+        ],
+        "title": "TexteRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
