@@ -32,7 +32,7 @@ export function gesteDeActionConfiance(action) {
 }
 
 /** `YYYY-MM-DD` d'une Date locale — jamais `toISOString()`, qui décale en UTC. */
-function jourLocal(d = new Date()) {
+export function jourLocal(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }

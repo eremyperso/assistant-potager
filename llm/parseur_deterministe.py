@@ -49,6 +49,7 @@ from unidecode import unidecode
 
 from app.services.context import TenantContext
 from utils.actions import ACTION_MAP
+from utils.unites_implantation import GESTES_IMPLANTATION
 from utils.date_utils import (
     ANCRAGE_INCONNU,
     ANCRAGE_RESOLU,
@@ -142,6 +143,11 @@ _UNITES: dict[str, str] = {
     "plant": "plants", "plants": "plants", "plante": "plants", "plantes": "plants",
     "pied": "plants", "pieds": "plants",
     "m2": "m²",
+    # [US-199 / CA1] Unités d'implantation. Les formes à plusieurs mots (« mètres
+    # de rang », « mètres carrés ») et celles qui dépendent du geste (« touffe »,
+    # « mètre » seul) sont ramenées à ces jetons par `_regrouper_unites_implantation`.
+    "poquet": "poquets", "poquets": "poquets",
+    "ml": "ml",
 }
 
 # Mots vides : présents dans la phrase, porteurs d'aucune information de champ.
@@ -168,8 +174,9 @@ _MARQUEURS_PARCELLE: frozenset[str] = frozenset({"parcelle", "parcelles", "carre
 # le modèle signale par `action="AMBIGUE"`. La grammaire ne tranche pas.
 _MOTS_RANG: frozenset[str] = frozenset({
     "rang", "rangs", "rangee", "rangees", "range", "ranges", "ranger", "rangers",
-    "ilot", "ilots", "poquet", "poquets", "barquette", "barquettes",
+    "ilot", "ilots", "barquette", "barquettes",
 })
+# [US-199] « poquet(s) » n'est plus du vocabulaire de rangs : c'est une unité.
 
 # Articles indéfinis : nombres en toutes lettres, mais bien plus souvent de
 # simples déterminants. Ils ne valent « 1 » que collés à une unité (« un kilo »).
@@ -248,6 +255,52 @@ def _extraire_geste(mots: list[str]) -> tuple[Optional[str], list[str]]:
             if tete[debut:debut + len(cible)] == cible:
                 return canonique, mots[:debut] + mots[debut + len(cible):]
     return None, mots
+
+
+_METRES = frozenset({"metre", "metres"})
+_CARRES = frozenset({"carre", "carres"})
+
+
+def _regrouper_unites_implantation(mots: list[str], geste: str) -> list[str]:
+    """[US-199 / CA1, CA3] Ramène à un seul jeton les unités dites en plusieurs
+    mots, avant que « rang » ne déclenche le repli et que « carré » ne soit lu
+    comme un marqueur de parcelle :
+
+    * « mètres carrés » → ``m2`` (une surface, quel que soit le geste) ;
+    * « mètres de rang / de ligne / linéaires » → ``ml`` ;
+    * « mètre » seul, derrière un nombre, dans un semis ou une plantation → ``ml`` ;
+    * « touffe » / « trou », derrière un nombre, dans un semis ou une plantation
+      → ``poquet`` (« une touffe de mauvaises herbes » n'est pas un geste).
+    """
+    sortie: list[str] = []
+    i = 0
+    en_implantation = geste in GESTES_IMPLANTATION
+    while i < len(mots):
+        mot = mots[i]
+        suite = mots[i + 1:i + 3]
+        apres_nombre = bool(sortie) and (
+            re.fullmatch(r"\d+(?:\.\d+)?", sortie[-1]) is not None or sortie[-1] in NOMBRES_LETTRES
+        )
+        if mot in _METRES or (mot == "m" and apres_nombre):
+            if suite[:1] and suite[0] in _CARRES:
+                sortie.append("m2")
+                i += 2
+                continue
+            if suite[:2] in (["de", "rang"], ["de", "ligne"]) or (suite[:1] and suite[0] in {"lineaire", "lineaires"}):
+                sortie.append("ml")
+                i += 3 if suite[:1] == ["de"] else 2
+                continue
+            if en_implantation and apres_nombre:
+                sortie.append("ml")
+                i += 1
+                continue
+        elif mot in {"trou", "trous", "touffe", "touffes"} and en_implantation and apres_nombre:
+            sortie.append("poquet")
+            i += 1
+            continue
+        sortie.append(mot)
+        i += 1
+    return sortie
 
 
 def _extraire_nombres(mots: list[str]) -> tuple[list[tuple[int, float]], list[str]]:
@@ -402,6 +455,8 @@ def parser_saisie(
     geste, mots = _extraire_geste(mots)
     if geste is None:
         return _repli("aucun geste reconnu en tête de phrase", texte)
+
+    mots = _regrouper_unites_implantation(mots, geste)
 
     if any(m in _MOTS_RANG for m in mots):
         return _repli("vocabulaire de rangs — partage quantité/rang ambigu", texte)

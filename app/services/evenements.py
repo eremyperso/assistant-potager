@@ -31,6 +31,12 @@ from llm.parseur_deterministe import ORIGINE_LLM
 from utils.actions import normalize_action
 from utils.date_utils import SOURCE_MODELE_INCERTAIN, SOURCE_PRESUMEE, parse_date
 from utils.parcelles import resolve_parcelle
+from utils.unites_implantation import (
+    UNITE_ML,
+    UNITE_POQUETS,
+    normaliser_unite_implantation,
+    unite_implantation_dans_texte,
+)
 from utils.stock import (
     get_type_organe,
     _find_plantation_sources,
@@ -220,6 +226,27 @@ class TauxGerminationImpossibleError(EvenementInvalideError):
         )
 
 
+class UniteImplantationRefuseeError(EvenementInvalideError):
+    """[US-199 / CA4] Un poquet ou un mètre de rang pour un geste de pépinière
+    (mise en godet, perte de godet, semis en pépinière). Ces gestes se comptent en
+    plants : le Plan n'a ni poquet ni rang à dessiner pour un godet, et accepter
+    l'unité en silence fausserait le stock de la pépinière. Blocage dur."""
+
+    def __init__(self, action: str, unite: str):
+        self.action = action
+        self.unite = unite
+        refusee = "poquets" if unite == UNITE_POQUETS else "mètres de rang"
+        if action == "semis":
+            geste, attendu = "semis en pépinière", "des graines (« 30 graines »)"
+        elif action == "mise_en_godet":
+            geste, attendu = "mise en godet", "des plants (« 4 plants »)"
+        else:
+            geste, attendu = "perte de godet", "des plants (« 2 plants »)"
+        super().__init__(
+            f"Un {geste} ne se compte pas en {refusee} : il se compte en {attendu}."
+        )
+
+
 class StockInsuffisantError(EvenementInvalideError):
     """[fix contrôle quantité perte][INC-009] Une perte (jardin ou godet) ou une
     récolte DESTRUCTIVE (culture végétative, en pièces) réclame plus de plants
@@ -290,6 +317,32 @@ _ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "per
 _ACTIONS_CULTURE_OBLIGATOIRE = _ACTIONS_SOURCE_CULTURE | {"recolte", "perte"}
 
 
+def refuser_unite_implantation_en_pepiniere(
+    action_norm: Optional[str],
+    unite: Optional[str],
+    texte: Optional[str],
+    contexte_semis: Optional[str],
+    parcelle: Optional[Parcelle],
+) -> None:
+    """[US-199 / CA4] Règle 6 de `valider_evenement`. Pure : aucun accès à la base."""
+    if action_norm in ("mise_en_godet", "perte_godet"):
+        en_pepiniere = True
+    elif action_norm == "semis":
+        en_pepiniere = (
+            contexte_semis == svc_contexte_semis.CONTEXTE_PEPINIERE
+            or bool(parcelle is not None and parcelle.est_pepiniere)
+        )
+    else:
+        return
+    if not en_pepiniere:
+        return
+    detectee = normaliser_unite_implantation(unite, action_norm) or unite_implantation_dans_texte(
+        texte, action_norm
+    )
+    if detectee in (UNITE_POQUETS, UNITE_ML):
+        raise UniteImplantationRefuseeError(action_norm, detectee)
+
+
 def valider_evenement(
     db: Session,
     ctx: TenantContext,
@@ -301,6 +354,8 @@ def valider_evenement(
     nom_parcelle_brut: Optional[str] = None,
     quantite: Optional[float] = None,
     unite: Optional[str] = None,
+    texte: Optional[str] = None,
+    contexte_semis: Optional[str] = None,
 ) -> None:
     """
     [US-049] Garde-fou unique et non contournable — appelé par TOUTE fonction de ce
@@ -341,6 +396,10 @@ def valider_evenement(
        pièces, pas en poids (`unite` hors kg/g/mg — une pesée ne dit rien du
        nombre de pieds restés en terre). Une récolte reproductrice (tomate,
        courgette...) ou pesée n'est jamais soumise à ce contrôle.
+    6. [US-199 / CA4] Un poquet ou un mètre de rang n'est jamais accepté pour un
+       geste de pépinière (mise en godet, perte de godet, semis en pépinière) —
+       `UniteImplantationRefuseeError`. `texte` sert quand le geste efface son
+       unité (la mise en godet range sa quantité dans `nb_plants_godets`).
     """
     if nom_parcelle_brut and parcelle is None:
         raise ParcelleInconnueError(nom_parcelle_brut)
@@ -348,6 +407,7 @@ def valider_evenement(
     from utils.culture_resolve import culture_deja_plantee
 
     action_norm = normalize_action(action)
+    refuser_unite_implantation_en_pepiniere(action_norm, unite, texte, contexte_semis, parcelle)
     if not culture:
         if action_norm in _ACTIONS_CULTURE_OBLIGATOIRE:
             raise CultureManquanteError(action_norm)
@@ -463,6 +523,10 @@ def _normalize_unite_denombrement(unite_brute: Optional[str], action_norm: Optio
     Toute autre unité (g, kg, graines, m², None...) traverse inchangée."""
     if unite_brute is None or action_norm == "semis":
         return unite_brute
+    # [US-199 / CA1] poquets / ml : unités d'implantation, jamais converties.
+    implantation = normaliser_unite_implantation(unite_brute, action_norm)
+    if implantation:
+        return implantation
     cle = unite_brute.lower().strip()
     return _UNITES_DENOMBREMENT_CANONIQUES.get(cle, unite_brute)
 
@@ -479,7 +543,8 @@ _UNITES_SEMIS_CANONIQUES: dict[str, str] = {
 
 
 def _normalize_unite_semis(unite_brute: Optional[str], texte_original: Optional[str] = None) -> str:
-    """Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²' (jamais forcée si m²).
+    """Normalise l'unité d'un semis vers 'graines'|'pieds'|'m²'|'poquets'|'ml'
+    (jamais forcée si m²).
 
     [fix unité semis hallucinée] Quand `texte_original` est fourni, une unité autre
     que "graines" n'est retenue que si elle est réellement mentionnée dans la
@@ -493,11 +558,16 @@ def _normalize_unite_semis(unite_brute: Optional[str], texte_original: Optional[
     comportement d'origine est conservé à l'identique.
     """
     cle = (unite_brute or "").lower().strip()
-    canonique = _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
+    # [US-199 / CA1, CA3] poquets / ml d'abord : « mètre » seul est un mètre de rang.
+    canonique = normaliser_unite_implantation(unite_brute, "semis") or _UNITES_SEMIS_CANONIQUES.get(cle, "graines")
 
     if texte_original is not None and canonique != "graines":
         from utils.validation import unite_semis_ancree_dans_texte
         if not unite_semis_ancree_dans_texte(canonique, texte_original):
+            # [US-199 / CA3] Le modèle a dit « m² » pour « 3 mètres de carottes » :
+            # le texte ancre un mètre de rang, pas une surface.
+            if canonique == "m²" and unite_semis_ancree_dans_texte(UNITE_ML, texte_original):
+                return UNITE_ML
             log.info(
                 "[fix unité semis hallucinée] Unité '%s' (→ '%s') absente du texte → "
                 "retour au défaut 'graines' | texte=%r",
@@ -937,6 +1007,8 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
+        unite=parsed.get("unite"), texte=texte_original,
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
     )
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
@@ -988,6 +1060,8 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
+        unite=parsed.get("unite"), texte=texte_original,
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
     )
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
@@ -1058,6 +1132,8 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         nom_parcelle_brut=parsed.get("parcelle"),
         quantite=_to_float(parsed.get("quantite")),
         unite=parsed.get("unite"),
+        texte=texte,
+        contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
     )
 
     action_norm = normalize_action(parsed.get("action"))
@@ -1185,7 +1261,10 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     # légitimement une nouvelle culture), donc toujours un no-op ici, mais l'appel
     # reste présent pour que ce point d'écriture ne soit jamais oublié si les règles
     # évoluent (cf. CA5 : parcourir toutes les fonctions d'écriture).
-    valider_evenement(db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str, parcelle=None)
+    valider_evenement(
+        db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str, parcelle=None,
+        unite=parsed.get("unite"), texte=texte,
+    )
 
     # [fix bug id=355] nb_plants_godets ne peut jamais dépasser nb_graines_semees
     # (taux de réussite > 100% impossible) — bloqué avant écriture, pas seulement
@@ -1342,6 +1421,13 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     variete_final  = corrections.get("variete", event.variete)
     quantite_final = corrections.get("quantite", event.quantite)
     unite_final    = corrections.get("unite", event.unite)
+    # [US-199 / CA1] Une correction d'unité passe par la même table qu'une création :
+    # « 4 m » corrigé sur un semis s'écrit `ml`, jamais « m » brut.
+    if "unite" in corrections:
+        unite_impl = normaliser_unite_implantation(unite_final, normalize_action(action_final))
+        if unite_impl:
+            corrections = {**corrections, "unite": unite_impl}
+            unite_final = unite_impl
     if "parcelle" in corrections:
         parcelle_id_final = corrections.get("_parcelle_id")
     else:
@@ -1353,6 +1439,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
         variete=variete_final, parcelle=parcelle_final,
         quantite=_to_float(quantite_final),
         unite=unite_final,
+        contexte_semis=corrections.get("contexte_semis", event.contexte_semis),
     )
 
     # [US-069 / CA1, CA4] Le contexte se corrige comme tout champ — et tombe de

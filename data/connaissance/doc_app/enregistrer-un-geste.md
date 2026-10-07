@@ -88,3 +88,10 @@ Un écran se consulte volontiers en avant : on regarde où en sera le jardin dan
 Cette date est fixée **au moment où le geste est préparé**, et elle ne bouge plus. Un geste confirmé trois jours après avoir été préparé porte donc la date de sa préparation, pas celle de sa confirmation : c'est le jour où l'on était au potager qui compte. Le récapitulatif l'affiche en clair avant qu'on valide.
 
 Préparer un geste n'est pas le programmer : la file sert à confirmer plus tard ce qui a déjà été fait, elle ne sert pas à planifier un semis pour samedi prochain.
+
+## Dire une quantité : poquets, mètres de rang et autres unités
+
+**Intention :** comprendre
+**On parle aussi de :** poquet ; mètre de rang ; mètres linéaires ; ml ; mètre carré ; unité d'une quantité ; trou ; touffe
+
+L'unité se lit dans la phrase, sans conversion. « Semé 5 poquets de courge » s'enregistre **5 poquets** ; « semé 3 mètres de carottes » ou « 3 mètres de rang » s'enregistre **3 mètres de rang** (noté « ml »), alors que « semé 2 mètres carrés de carottes » reste une **surface** de 2 m². La différence tient au seul mot « carrés » : sans lui, un mètre est un mètre de rang. « Trou » et « touffe » valent poquet dans une phrase de semis ou de plantation uniquement. Un poquet et un mètre de rang se disent pour un semis en pleine terre, une plantation, une perte ou une récolte ; ils sont refusés pour une mise en godet et pour un semis en pépinière, qui se comptent en plants ou en graines — l'assistant le rappelle dans sa réponse. Le récapitulatif écrit l'unité en toutes lettres : « 5 poquets », « 3 m de rang ».

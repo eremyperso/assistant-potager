@@ -254,7 +254,7 @@ Champs à extraire :
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
-  "unite"            : string,   // kg | g | l | plants | graines | pieds | m²
+  "unite"            : string,   // kg | g | l | plants | graines | pieds | m² | poquets | ml
   "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
   "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
   "duree_minutes"    : number,   // durée en minutes
@@ -273,6 +273,9 @@ RÈGLE unité de semis (action="semis" UNIQUEMENT) : trois unités possibles, à
 - "X m²" ou "X mètres carrés" ou "à la volée" (sans nombre de graines/pieds précisé, juste une surface) → unite="m²", quantite=X. NE JAMAIS convertir cette surface en nombre de graines ou de pieds : la valeur numérique reste telle quelle.
 - "X graines" ou semis en barquette/godet destiné à germer avant repiquage → unite="graines"
 - "X pieds" ou "X plants" semés directement en terre (pas en godet) → unite="pieds"
+- "X poquets" (ou "X trous", "X touffes" dans une phrase de semis/plantation) → unite="poquets", quantite=X. Jamais converti en graines ni en plants.
+- "X mètres de rang", "X mètres linéaires", "X mètres de ligne", "X ml", ou "X mètres" SANS le mot "carrés" → unite="ml", quantite=X. Jamais converti en m². "X mètres carrés" reste unite="m²".
+Les unités "poquets" et "ml" valent aussi pour une plantation, une perte ou une récolte ("perdu 2 poquets de courge"). Elles ne valent JAMAIS pour une mise en godet ni un semis en pépinière.
 Si aucune unité n'est mentionnée et qu'aucun indice de surface n'est présent → unite=null (ne pas inventer).
 
 RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne À LA FOIS un NOMBRE DE PIEDS/PLANTS ET un POIDS (ex : "2 betteraves pour 250 grammes", "récolté 3 salades, 600g au total"), NE JAMAIS additionner ces deux valeurs. Retourner DEUX objets recolte distincts dans un tableau :
@@ -537,7 +540,7 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
       "culture": string|null,
       "variete": string|null,
       "quantite": number|null,
-      "unite": "kg|g|l|plants|graines|pieds|m²"|null,
+      "unite": "kg|g|l|plants|graines|pieds|m²|poquets|ml"|null,
       "parcelle": string|null,
       "rang": number|null,
       "duree_minutes": number|null,
@@ -554,6 +557,9 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 - "X m²" / "X mètres carrés" / "à la volée" → unite="m²", quantite=X (JAMAIS converti en graines ou pieds)
 - "X graines" ou semis en barquette destiné à germer avant repiquage → unite="graines"
 - "X pieds" / "X plants" semés directement en terre → unite="pieds"
+- "X poquets" / "X trous" / "X touffes" → unite="poquets" (JAMAIS converti en graines ni en plants)
+- "X mètres de rang" / "X mètres linéaires" / "X ml" / "X mètres" sans « carrés » → unite="ml" (JAMAIS converti en m²)
+- poquets et ml ne valent jamais pour une mise en godet ni un semis en pépinière
 
 === RÈGLE binage / éclaircie / désherbage ===
 Trois gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :

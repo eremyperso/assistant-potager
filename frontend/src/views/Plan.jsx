@@ -44,7 +44,6 @@ import { peutEnregistrer } from '../lib/gestes.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useNavigation, useIntention, useEtatEcran } from '../context/NavigationContext.jsx'
-import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -952,9 +951,9 @@ export default function Plan({ refresh }) {
     <RelectureAuRetourProvider relire={load}>
     <ObservationsUIProvider>
       <div className="flex flex-col gap-3.5">
-        {/* [CA16 d'US-060] Sélecteur de date de référence + filtre culture. */}
+        {/* [CA16 d'US-060] Filtre culture. [US-223 / CA5] Le sélecteur de date de
+            référence est passé dans la barre de l'activité. */}
         <div className="flex items-center gap-2">
-          <DateRefPicker />
           <CultureFilter value={search} onChange={setSearch} className="relative flex-1 min-w-0" />
         </div>
 

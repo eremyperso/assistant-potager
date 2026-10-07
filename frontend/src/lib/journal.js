@@ -14,6 +14,8 @@
 // Isolé dans `lib/` plutôt que dans la vue pour être testable sans rendu React
 // (`npm test`, `node --test`) — même parti pris que `lib/plan.js` (US-060).
 
+import { formatUnite } from './plan.js'
+
 /** Libellés au SINGULIER — les libellés de catégorie du filtre sont au pluriel
  *  (« Récoltes »), ce qui ne se dit pas dans une phrase d'événement. Couvre les
  *  16 `ACTIONS_VALIDES` de `utils/validation.py`, pas seulement les types
@@ -65,7 +67,7 @@ export function phraseEvenement(e) {
 
   const quantites = []
   if (e.quantite != null) {
-    quantites.push(`${fmtQuantite(e.quantite)}${e.unite ? ` ${e.unite}` : ''}`)
+    quantites.push(`${fmtQuantite(e.quantite)}${e.unite ? ` ${formatUnite(e.unite)}` : ''}`)
   }
   if (e.nb_plants_godets != null) {
     quantites.push(`${e.nb_plants_godets} godet${e.nb_plants_godets > 1 ? 's' : ''}`)

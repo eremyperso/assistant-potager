@@ -210,6 +210,8 @@ _JOURS_SEMAINE: tuple[str, ...] = (
 MOTIF_SANS_CALENDRIER = "Aucun calendrier pour cette culture dans ta zone"
 MOTIF_LOCALISER = "Météo indisponible : localise ton potager pour la prendre en compte"
 MOTIF_METEO_INDISPONIBLE = "Météo indisponible"
+#: La météo est lisible, mais la date évaluée sort des 14 jours de prévision.
+MOTIF_HORIZON = "Date au-delà de l'horizon de prévision"
 MOTIF_PLAFOND_SANS_METEO = (
     "Sans météo, la troisième étoile est hors d'atteinte : {maximum} points possibles sur 100"
 )
@@ -475,8 +477,7 @@ def _regle_gel_annonce(
     if not jours:
         if not lecture.disponible:
             return _motif(R3_GEL_ANNONCE, ETAT_INDETERMINE, MOTIF_METEO_INDISPONIBLE, 0)
-        return _motif(R3_GEL_ANNONCE, ETAT_INDETERMINE,
-                      "Date au-delà de l'horizon de prévision", 0)
+        return _motif(R3_GEL_ANNONCE, ETAT_INDETERMINE, MOTIF_HORIZON, 0)
     gel = next((j for j, t in jours if t is not None and t <= SEUIL_GEL_C), None)
     if gel is not None:
         return _motif(R3_GEL_ANNONCE, ETAT_PERDU, f"Gel annoncé le {_libelle_jour(gel)}", 0)
@@ -498,8 +499,7 @@ def _regle_nuits_douces(
     if not temperatures:
         if not lecture.disponible:
             return _motif(R4_NUITS_DOUCES, ETAT_INDETERMINE, MOTIF_METEO_INDISPONIBLE, 0)
-        return _motif(R4_NUITS_DOUCES, ETAT_INDETERMINE,
-                      "Date au-delà de l'horizon de prévision", 0)
+        return _motif(R4_NUITS_DOUCES, ETAT_INDETERMINE, MOTIF_HORIZON, 0)
     moyenne = sum(temperatures) / len(temperatures)
     if moyenne >= SEUIL_NUITS_DOUCES_C:
         return _motif(R4_NUITS_DOUCES, ETAT_GAGNE,

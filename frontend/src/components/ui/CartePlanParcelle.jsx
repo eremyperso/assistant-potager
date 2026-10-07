@@ -56,7 +56,7 @@ export function CartePlanParcelle({
         <button
           type="button"
           onClick={onFiche}
-          className="text-[13px] font-semibold underline text-txt2 whitespace-nowrap shrink-0
+          className="inline-flex items-center min-h-[44px] text-[13px] font-semibold underline text-txt2 whitespace-nowrap shrink-0
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
         >
           Fiche parcelle →
@@ -103,7 +103,7 @@ export function CartePlanParcelle({
         <button
           type="button"
           onClick={onPepiniere}
-          className="text-[10.5px] font-bold underline text-txt2 mb-1.5
+          className="inline-flex items-center min-h-[44px] text-[13px] font-semibold underline text-txt2 mb-1.5
                      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
         >
           Voir Pépinière →

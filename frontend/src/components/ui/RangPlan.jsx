@@ -24,7 +24,10 @@ import { palettePhases, gabarit, capitaliser } from '../../lib/planVue.js'
  * Le contenu visible est masqué aux technologies d'assistance, qui liraient
  * sinon deux fois la même chose.
  *
- * [US-201] `onSelect` est la seule prise laissée aux interactions à venir.
+ * [US-201] `onSelect` est la seule prise des interactions : un rang occupé
+ * ouvre sa culture, un rang libre « ajouter une culture ». Sans `onSelect` (rang
+ * libre d'un membre en lecture seule), la ligne se lit mais n'est pas un bouton
+ * [CA3] — et la mention « ajouter une culture » n'est pas affichée.
  */
 export function RangPlan({
   rang,
@@ -35,12 +38,16 @@ export function RangPlan({
   const g = gabarit(taille)
   const nom = capitaliser(rang.culture)
   const reste = rang.reste
+  const actionnable = Boolean(onSelect)
+  const Racine = actionnable ? 'button' : 'div'
+  const propsRacine = actionnable
+    ? { type: 'button', onClick: onSelect }
+    : { role: 'group', tabIndex: 0 }
 
   return (
-    <button
-      type="button"
-      aria-label={rang.nomAccessible}
-      onClick={onSelect}
+    <Racine
+      {...propsRacine}
+      aria-label={rang.libre && actionnable ? `${rang.nomAccessible}, ajouter une culture` : rang.nomAccessible}
       // [CA6] Deux gabarits, par largeur de CARTE (container query) :
       //  - sous 560 px, trois zones empilées — libellé, piste, reste — le
       //    numéro restant en marge ;
@@ -50,7 +57,7 @@ export function RangPlan({
           grid-cols-[24px_minmax(0,1fr)_auto]
           @[560px]/carte:grid-cols-[28px_22px_minmax(0,1.25fr)_minmax(0,1fr)_80px_104px]
           @[560px]/carte:gap-x-3 @[560px]/carte:gap-y-0
-                  hover:bg-card-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+                  ${actionnable ? 'hover:bg-card-alt' : ''} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
     >
       <span aria-hidden="true" className="contents">
         {/* [V12, A5] Numéro dans l'ordre d'installation, abrégé à toutes les
@@ -82,6 +89,10 @@ export function RangPlan({
             {/* [P9] Un rang libre dit sa longueur et, s'il y en a une, la
                 capacité d'exemple nommée — « 12 m · ex. 24 tomates ». */}
             {rang.libre ? rang.sousLibelleLibre : <span className="whitespace-nowrap">{rang.sousLibelle?.quantite}</span>}
+            {/* [US-201 / I3, CA3] L'invite n'existe que si le rang est actionnable. */}
+            {rang.libre && actionnable && (
+              <span className="font-semibold text-brand-text">{rang.sousLibelleLibre ? ' · ' : ''}ajouter une culture</span>
+            )}
             {!rang.libre && rang.sousLibelle?.espacement && (
               <span className="whitespace-nowrap">
                 {' · '}
@@ -130,7 +141,7 @@ export function RangPlan({
           ) : <PastillePhase ligne={rang} />}
         </span>
       </span>
-    </button>
+    </Racine>
   )
 }
 

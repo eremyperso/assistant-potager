@@ -19,6 +19,7 @@ from .noyau import MENU_KEYBOARD, _md, log
 from .etat import (
     _ACTIONS_SOURCE,
     _ACTION_PENDING,
+    _CULTURE_PENDING,
     _GODET_PENDING,
     _PERTE_PENDING,
     _QUANTITE_PENDING,
@@ -363,6 +364,29 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         )
         return
 
+    # [US-201 / I3] Un semis ou une plantation venu de la file sans culture —
+    # « ajouter une culture » sur un rang libre de la Vue plan — : la culture est
+    # demandée AVANT la quantité et la confirmation. Réservé aux gestes de la
+    # file : une phrase dictée sans culture garde son comportement habituel.
+    if (
+        geste_file is not None
+        and len(items) == 1
+        and normalize_action(items[0].get("action")) in ["semis", "plantation"]
+        and not (items[0].get("culture") or "").strip()
+    ):
+        user_id = update.effective_user.id
+        _CULTURE_PENDING[user_id] = {
+            "items": items, "texte": texte, "ts": time.time(), "geste_file": geste_file,
+        }
+        log.info(f"[US-201] Culture manquante pour '{items[0].get('action')}' — user_id={user_id}")
+        verbe = "semer" if normalize_action(items[0].get("action")) == "semis" else "planter"
+        await message.reply_text(
+            f"🌱 Quelle culture voulez-vous {verbe} ? (ex: tomate, carotte…)\n"
+            "_Dites « annuler » pour laisser ce geste dans votre file._",
+            parse_mode="Markdown",
+        )
+        return
+
     # [US-049] Garde-fou "culture jamais plantée" — appelle la validation centrale
     # unique (app/services/evenements.py::valider_evenement), qui reste de toute
     # façon l'autorité finale au moment de l'écriture (défense en profondeur) ;
@@ -395,6 +419,27 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 return
     finally:
         db_chk.close()
+
+    # [US-199 / CA4] Un poquet ou un mètre de rang pour une mise en godet : refusé
+    # AVANT le récapitulatif, avec le rappel des unités attendues. Le semis en
+    # pépinière dépend du contexte (demandé plus loin) : il est refusé à l'écriture.
+    from app.services.evenements import (
+        EvenementInvalideError as _EvtInvalide,
+        refuser_unite_implantation_en_pepiniere as _refuser_implantation,
+    )
+    for _item_u in items:
+        _action_u = normalize_action(_item_u.get("action"))
+        if _action_u not in ("mise_en_godet", "perte_godet"):
+            continue
+        try:
+            _refuser_implantation(
+                _action_u, _item_u.get("unite"), texte, _item_u.get("contexte_semis"), None,
+            )
+        except _EvtInvalide as e:
+            log.warning(f"❌ UNITÉ D'IMPLANTATION EN PÉPINIÈRE : {e} | texte={texte!r}")
+            if msg: await msg.edit_text(f"❌ {e}")
+            else:   await message.reply_text(f"❌ {e}", reply_markup=MENU_KEYBOARD)
+            return
 
     # [US-037 / CA7] Semis d'une culture inconnue de CultureConfig — demander
     # à l'utilisateur si elle est végétative ou reproductive avant d'enregistrer.

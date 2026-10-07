@@ -924,18 +924,33 @@ def phrase_a_dicter(item: dict) -> str:
     return " ".join(morceaux)
 
 
+def echapper_markdown(texte: str) -> str:
+    """Neutralise les caractères du Markdown Telegram dans un nom saisi par l'utilisateur.
+
+    `planche_centrale` ouvre une mise en italique que rien ne referme : Telegram
+    refuse alors tout le message (« Can't parse entities ») et `/gestes` plante.
+    Les noms de parcelle, de culture et de potager sont libres — ils sont
+    échappés avant d'entrer dans un texte posté en `parse_mode="Markdown"`.
+    """
+    for car in ("_", "*", "`", "["):
+        texte = texte.replace(car, "\\" + car)
+    return texte
+
+
 def libelle_court(geste: GesteIntention) -> str:
     """[CA5] Une ligne de file : geste, culture, parcelle, date.
 
     Quatre champs, ceux que le CA5 nomme — assez pour reconnaître son geste
     dans une liste, pas assez pour croire l'avoir déjà enregistré.
+
+    Le résultat est destiné à un message Markdown : les noms y sont échappés.
     """
     item = geste.geste or {}
-    morceaux = [str(item.get("action") or "geste")]
+    morceaux = [echapper_markdown(str(item.get("action") or "geste"))]
     if item.get("culture"):
-        morceaux.append(str(item["culture"]))
+        morceaux.append(echapper_markdown(str(item["culture"])))
     if item.get("parcelle"):
-        morceaux.append(f"— {item['parcelle']}")
+        morceaux.append(f"— {echapper_markdown(str(item['parcelle']))}")
     if item.get("date"):
         morceaux.append(f"({item['date']})")
     return " ".join(morceaux)

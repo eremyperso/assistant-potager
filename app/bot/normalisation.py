@@ -5,6 +5,9 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 from llm.groq_client import parse_commande
 from llm.parseur_deterministe import ORIGINE_LLM, parser_saisie
 from app.services.context import current_context
+from app.services.evenements import _normalize_unite_semis
+from utils.actions import normalize_action
+from utils.unites_implantation import UNITES_IMPLANTATION, normaliser_unite_implantation
 from datetime import date, timedelta
 from .noyau import log
 
@@ -178,6 +181,20 @@ def _normalize_items(items: list, texte_original: str = "") -> list:
                     if inferred:
                         item["date"] = inferred
                         log.info(f"🔧 DATE INFÉRÉE    : '{inferred}'")
+
+        # [US-199 / CA1, CA2] poquets / ml : l'unité dite par le modèle (« trou »,
+        # « mètre ») prend la forme normalisée dès le récapitulatif, la même que
+        # celle du chemin déterministe — jamais une forme brute à confirmer puis
+        # réécrite à l'enregistrement.
+        action_item = normalize_action(item.get("action"))
+        if action_item == "semis" and texte_original:
+            unite_semis = _normalize_unite_semis(item.get("unite"), texte_original)
+            if unite_semis in UNITES_IMPLANTATION:
+                item["unite"] = unite_semis
+        else:
+            unite_impl = normaliser_unite_implantation(item.get("unite"), action_item)
+            if unite_impl:
+                item["unite"] = unite_impl
 
         culture  = item.get("culture")
         quantite = item.get("quantite")

@@ -102,7 +102,10 @@ _ANCRES_UNITE_SEMIS: dict[str, tuple[str, ...]] = {
         "pied", "pieds", "plant", "plants", "plante", "plantes",
         "plantule", "plantules", "poquet", "poquets",
     ),
-    "m²": ("metre", "metres", "carre", "carres"),
+    # [US-199 / CA3] « mètre » seul n'ancre plus une surface : c'est un mètre de rang.
+    "m²": ("carre", "carres"),
+    "poquets": ("poquet", "poquets", "trou", "trous", "touffe", "touffes"),
+    "ml": ("ml", "metre", "metres", "m", "lineaire", "lineaires"),
 }
 
 
@@ -131,6 +134,9 @@ def unite_semis_ancree_dans_texte(unite_canonique: str, texte_original: str) -> 
         return True
 
     mots_texte = {_normalise_mot(m) for m in re.findall(r"[^\W\d_]+", texte_norm, flags=re.UNICODE)}
+    # [US-199 / CA3] « 2 mètres carrés » est une surface, jamais un mètre de rang.
+    if unite_canonique == "ml" and mots_texte & {"carre", "carres"}:
+        return False
     return bool(set(_ANCRES_UNITE_SEMIS.get(unite_canonique, ())) & mots_texte)
 
 

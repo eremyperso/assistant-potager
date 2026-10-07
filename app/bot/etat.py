@@ -69,6 +69,15 @@ _QUANTITE_PENDING: dict[int, dict] = {}
 _QUANTITE_TIMEOUT = 60  # secondes
 
 
+# [US-201 / I3] Geste de la file sans culture (« ajouter une culture » sur un
+# rang libre de la Vue plan) : le compagnon la demande avant tout le reste.
+# {user_id: {items, texte, ts, geste_file}}
+_CULTURE_PENDING: dict[int, dict] = {}
+
+
+_CULTURE_TIMEOUT = 300  # secondes
+
+
 # [US-036 CA10] Récolte végétative pesée sans nombre de pieds → clarification {user_id: {items, texte, ts}}
 _RECOLTE_PIECES_PENDING: dict[int, dict] = {}
 

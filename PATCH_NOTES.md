@@ -1,3 +1,40 @@
+## [v3.85.0] — 2026-10-07
+
+**ÉPIC 10 — US-199, US-201, US-223** : le Plan **s'ouvre sur le reste de l'application**
+et parle enfin la langue du jardinier. On peut dire « 5 poquets de courge » ou
+« 3 mètres de carottes » et être compris tel quel ; un appui sur un rang du Plan
+mène à la culture, à la parcelle ou au Journal ; la barre de l'activité Plan range
+ses sous-onglets du plus large au plus détaillé.
+
+### 🚀 Nouveautés
+- Reconnaît le **poquet** (« 5 poquets », « 2 touffes », « 3 trous ») et le **mètre de rang** (« 3 mètres de rang », « 3 ml », « 3 mètres » en semis) comme unités d'un semis, d'une plantation, d'une perte ou d'une récolte (US-199).
+- Distingue « 3 mètres de carottes » (mètre de rang) de « 2 mètres carrés de carottes » (surface), à la dictée comme à la commande (US-199).
+- Écrit l'unité en toutes lettres au récapitulatif du bot et dans la PWA : « 5 poquets », « 1 poquet », « 3 m de rang » (US-199).
+- Refuse un poquet ou un mètre de rang pour une mise en godet, une perte de godet ou un semis en pépinière, en rappelant les plants ou les graines attendus (US-199).
+- Ouvre la **fiche de la culture** d'un appui sur un rang occupé de la Vue plan, y compris sur la carte « non localisé » (US-201).
+- Propose *Semer en place* ou *Planter* sur un rang libre et dépose le geste dans la file du compagnon — rien n'est écrit depuis la PWA, et un membre en lecture seule n'y est pas invité (US-201).
+- Relie « Fiche parcelle → », la carte d'une pépinière et « Journal du jour » à leurs écrans, sans aucun état de sélection sur le Plan (US-201).
+- Demande la culture au compagnon quand un geste déposé depuis un rang libre n'en a pas : « Quelle culture ? » avant toute quantité, « annuler » laisse le geste dans la file (US-201).
+- Range les sous-onglets du Plan dans l'ordre **Vue plan → Parcelles → Rotation** et ouvre l'activité sur la Vue plan (US-223).
+- Garde **Rotation · à venir** visible mais désactivée : elle ne se focalise pas, s'annonce « indisponible » aux lecteurs d'écran et n'ouvre rien (US-223).
+- Restitue le **dernier sous-onglet visité** quand on revient au Plan pendant la session ; une nouvelle session repart de la Vue plan (US-223).
+- Porte la **date de référence** et « Journal du jour » dans une barre commune aux deux sous-onglets actifs, avec des cibles de 44 px et un libellé qui s'abrège à l'étroit (US-223).
+
+### 🐛 Corrections
+- Corrige une unité corrigée à la main (« corriger » puis « 4 m ») : elle s'enregistre `ml`, et le résumé de correction comme la trace d'audit écrivent la forme normalisée (US-199).
+- Corrige le plantage de `/gestes` quand un nom de parcelle ou de culture contient un `_` (`planche_centrale`) : les noms sont échappés avant d'entrer dans un message Markdown (US-201).
+- Corrige le bandeau « Confiance indisponible » de l'écran Cultures : une date de référence hors des 14 jours de prévision n'est plus présentée comme une météo illisible (US-204).
+
+### 🔧 Améliorations techniques
+- Ajoute `utils/unites_implantation.py`, table unique lue par le parseur déterministe, la normalisation à l'écriture, la correction et le garde-fou de pépinière : les deux chemins donnent la même unité (US-199).
+- Étend `valider_evenement` d'une règle 6 (unité d'implantation en pépinière), appliquée aussi aux corrections (US-199).
+- Fait porter par `GET /cultures/vue` un champ `confiance_indisponible` (`meteo` | `hors_horizon` | `null`) à côté de `meteo_disponible` (US-204).
+- Isole dans la lib de la Vue plan la table « élément appuyé → destination et intention », couverte par `npm test` (US-201).
+- Déclare dans la navigation l'entrée de l'activité Plan et la mémorisation du dernier sous-onglet, en un seul endroit (US-223).
+
+### 📚 Documentation
+- Met à jour les fiches `enregistrer-un-geste.md`, `stock-plants-calcul.md`, `parcelles-et-plan.md`, `compagnon-telegram.md` et le guide utilisateur (§ 6.2, § 6.5) dans la même livraison (US-099 / CA9).
+
 ## [v3.84.1] — 2026-09-24
 
 **Correctif déploiement DEV** : découpe huit chapitres trop longs du guide

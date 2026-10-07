@@ -88,9 +88,12 @@ def test_us228_les_phases_partagent_les_icones_de_la_maquette() -> None:
         assert f"phase === {phase}" in phases
 
 
-def test_us228_le_rang_libre_ne_propose_pas_de_lien_ajouter() -> None:
-    """Un rang libre n'affiche aucune invitation d'ajout non implémentée."""
-    assert "ajouter une culture" not in _lire(RANG).lower()
+def test_us228_le_rang_libre_ne_propose_l_ajout_que_s_il_est_actionnable() -> None:
+    """[US-201 / CA3] L'invitation d'ajout, désormais implémentée, n'est rendue
+    que pour un rang libre actionnable — jamais pour un membre en lecture seule."""
+    source = _lire(RANG)
+    assert "rang.libre && actionnable" in source
+    assert "{rang.libre && actionnable && (" in source
 
 
 def test_us228_les_rangs_partagent_les_colonnes_et_les_libelles_sont_concis() -> None:

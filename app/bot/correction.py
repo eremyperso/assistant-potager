@@ -7,6 +7,8 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
 from utils.parcelles import resolve_parcelle
+from utils.actions import normalize_action
+from utils.unites_implantation import UNITES_IMPLANTATION, libelle_unite, normaliser_unite_implantation
 from llm import passerelle
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from app.services.context import current_context
@@ -33,7 +35,10 @@ def _fmt_event(e) -> str:
     act  = e.type_action or "?"
     cult = f" {e.culture}" if e.culture else ""
     var  = f" ({e.variete})" if e.variete else ""
-    qte  = f" {e.quantite}{e.unite or ''}" if e.quantite else ""
+    if e.quantite and (e.unite or "").lower() in UNITES_IMPLANTATION:   # [US-199 / CA7]
+        qte = f" {e.quantite} {libelle_unite(e.unite, e.quantite)}"
+    else:
+        qte = f" {e.quantite}{e.unite or ''}" if e.quantite else ""
     parc = f" [{e.parcelle}]" if e.parcelle else ""
     rang = f" x{e.rang}rangs" if e.rang else ""
     trt  = f" ({e.traitement})" if e.traitement else ""
@@ -572,6 +577,14 @@ JSON brut uniquement."""
         log.info(f"✅ PARCELLE RÉSOLUE : {nom_parcelle_corr!r} → {parcelle_resolue.nom!r} (id={parcelle_resolue.id})")
 
     log.info(f"✏️ CORRECTIONS     : {corrections}")
+
+    # [US-199 / CA1] L'unité corrigée prend sa forme normalisée dès le résumé : le
+    # jardinier confirme `ml`, et la trace d'audit écrit « ml », pas le « m » dicté.
+    if "unite" in corrections:
+        action_corr = normalize_action(corrections.get("action") or event_actuel.get("action"))
+        unite_corr = normaliser_unite_implantation(corrections["unite"], action_corr)
+        if unite_corr:
+            corrections["unite"] = unite_corr
 
     # Préparer le résumé lisible avant confirmation
     LABELS = {

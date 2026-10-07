@@ -11,7 +11,8 @@ function fmtFR(iso) {
   return `${d}/${m}/${y}`
 }
 
-export default function DateRefPicker({ className = 'flex items-center gap-1.5' }) {
+// [US-223 / CA6] `haute` : cible d'appui de 44 px, pour la barre de l'activité Plan.
+export default function DateRefPicker({ className = 'flex items-center gap-1.5', haute = false }) {
   const { dateRef, setDateRef } = useDateRef()
   const isPast = Boolean(dateRef)
 
@@ -19,7 +20,7 @@ export default function DateRefPicker({ className = 'flex items-center gap-1.5' 
     <div className={className}>
       <div className="relative inline-flex items-center">
         {/* décoration visuelle — l'input overlay intercepte les événements */}
-        <div className={`flex items-center gap-1.5 px-3 h-[38px] rounded-[10px] border text-[13.5px] font-medium select-none cursor-pointer transition-colors ${
+        <div className={`flex items-center gap-1.5 px-3 ${haute ? 'h-[44px]' : 'h-[38px]'} rounded-[10px] border text-[13.5px] font-medium select-none cursor-pointer transition-colors ${
           isPast
             ? 'bg-amber-soft border-amber text-amber'
             : 'bg-card border-border text-txt3'

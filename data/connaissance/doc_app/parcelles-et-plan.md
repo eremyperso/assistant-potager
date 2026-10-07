@@ -140,6 +140,22 @@ Une parcelle pépinière ne se dessine pas en rangs de semis : sa carte est hach
 
 En haut de l'écran, la date de référence rappelle que les phases affichées sont celles de ce jour-là, jamais une projection. En bas, trois chiffres, pas un tableau de bord : la surface totale, les rangs occupés sur les rangs déclarés avec leur pourcentage, et les rangs libres parcelle par parcelle. Aucun pourcentage d'occupation en surface n'est affiché nulle part dans le Plan : l'occupation s'y dit en rangs, d'un bout à l'autre.
 
+## Ouvrir une culture, une parcelle ou la pépinière depuis la Vue plan
+
+**Intention :** agir
+**On parle aussi de :** appuyer sur un rang ; que se passe-t-il quand j'appuie sur un rang du plan ; toucher un rang ; ajouter une culture sur un rang libre ; semer en place ; planter ; fiche parcelle depuis le plan ; Journal du jour ; carte de la pépinière ; ouvrir la fiche d'une culture depuis le plan
+
+La Vue plan ne répète rien de ce que d'autres écrans disent mieux : elle **renvoie**. Il n'y a ni panneau de détail ni parcelle « sélectionnée » ; chaque appui ouvre directement sa destination.
+
+- **Un rang occupé** ouvre la **fiche de sa culture**, par-dessus la Vue plan, avec la parcelle (et le rang) en contexte. Si on ouvre ensuite la fiche calendrier depuis cette fiche, c'est la série de cette parcelle qui est mise en avant. En fermant la fiche, la Vue plan se retrouve telle qu'on l'a laissée, au même endroit de la page, et le focus revient sur le rang. La zone d'appui couvre toute la ligne du rang, au moins 44 px de haut.
+- **Un rang libre** porte la mention « ajouter une culture » et propose **Semer en place** ou **Planter**. Rien n'est enregistré par la page : le choix prépare l'action, déjà rattachée à la parcelle, dans la file du compagnon de terrain, qui demande la culture, relit et attend la confirmation. Un membre du potager en **lecture seule** ne voit pas la mention et ne peut pas appuyer sur un rang libre.
+- **« Fiche parcelle → »**, dans l'en-tête de chaque carte, ouvre l'onglet Parcelles sur cette parcelle — c'est le seul accès à la parcelle elle-même depuis la Vue plan.
+- **La carte d'une pépinière** (« Voir Pépinière → ») ouvre la Pépinière sur cet emplacement : l'onglet Emplacements si le potager compte plusieurs pépinières, Aujourd'hui s'il n'en compte qu'une.
+- **Les cultures non localisées** ouvrent elles aussi leur fiche, sans parcelle en contexte.
+- **« Journal du jour »**, dans la barre de l'activité Plan, à côté du sélecteur de date, ouvre le Journal filtré sur le jour affiché ; il ne dépend d'aucune sélection.
+
+La Vue plan n'est pas un éditeur : aucun zoom, aucun déplacement de la vue, aucun glisser-déposer de culture, aucun redimensionnement.
+
 ## Ouvrir une parcelle : l'onglet Parcelles
 
 **Intention :** comprendre
@@ -217,3 +233,14 @@ Une ligne porte sa date à gauche — le jour et le mois, l'année seulement si 
 La carte montre les **huit dernières** interventions ; au-delà, un lien « Tout voir » ouvre le Journal filtré sur cette parcelle et sur ces mêmes gestes. Une planche dont le sol n'a jamais rien reçu n'a pas de carte vide : elle dit « Rien d'enregistré sur le sol de cette parcelle ». Le bouton **« Ajouter »** prépare un geste avec la parcelle déjà en contexte — il n'écrit rien, c'est le compagnon qui relit et confirme —, et la phrase à dicter est proposée à côté, prête à copier : « paillage parcelle planche du nord ». Un membre en lecture seule voit la liste entière, sans le bouton.
 
 Deux catégories que l'on pourrait attendre ici **n'existent pas encore** dans l'application : l'**engrais vert** et le **travail du sol** (bêchage, grelinette). Aucun geste ne les porte aujourd'hui, et la carte n'invente pas ce qu'elle ne sait pas enregistrer.
+
+## Les trois onglets de l'activité Plan
+
+**Intention :** comprendre
+**On parle aussi de :** sous-onglets du Plan ; par quel écran s'ouvre le Plan ; Rotation à venir ; rotation grisée ; revenir au dernier écran vu
+
+L'activité Plan compte trois sous-onglets, rangés du plus large au plus détaillé : **Vue plan**, puis **Parcelles**, puis **Rotation**. Le Plan s'ouvre sur la Vue plan. Rotation reste visible mais grisée, sous le libellé « Rotation · à venir » : elle n'est pas disponible, un appui n'ouvre rien, et les lecteurs d'écran l'annoncent comme indisponible. En attendant, la rotation d'une planche se lit dans sa fiche.
+
+Quand on quitte le Plan pour une autre activité puis qu'on y revient, l'écran quitté se rouvre tel qu'on l'avait laissé, avec la planche choisie. Cette mémoire dure le temps de la session : en rouvrant l'application, le Plan repart de la Vue plan.
+
+Sous ces sous-onglets, la barre porte deux éléments identiques sur les deux écrans actifs : le **sélecteur de date de référence** et le bouton **« Journal du jour »**, qui ouvre le Journal filtré sur ce jour sans qu'aucune planche ait besoin d'être choisie. Sur un petit écran, le bouton s'abrège en « Journal ».

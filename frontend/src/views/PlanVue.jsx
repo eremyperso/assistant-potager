@@ -10,19 +10,28 @@
 // déjà faite par `app/services/repartition_rangs.py` (US-198), la phase par le
 // recalage (US-194). Cet écran ne recompte rien.
 //
-// Les INTERACTIONS (appui sur un rang, sorties, « Journal du jour ») sont
-// l'objet d'US-201, le réordonnancement d'US-202 : ici les éléments sont posés
-// et atteignables, leurs destinations viennent ensuite.
+// [US-201] Les SORTIES : un rang occupé ouvre la fiche de sa culture, un rang
+// libre propose *Semer en place* / *Planter*, l'en-tête mène à la parcelle, la
+// carte d'une pépinière à la Pépinière, la barre au Journal du jour. Quelle
+// destination pour quel appui ? `destinationXxx` de `lib/planVue.js` le dit
+// (CA9) : cet écran ne fait que les appliquer. Pas de panneau de détail, aucun
+// état de sélection, aucun geste de dessin (I1, I7) — « le Plan n'est pas un
+// éditeur ». Le réordonnancement est l'objet d'US-202.
 import { useState, useEffect, useMemo } from 'react'
-import { Leaf } from 'lucide-react'
+import { Leaf, Sprout } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { vueDuPlan, palettePhases } from '../lib/planVue.js'
+import {
+  vueDuPlan, palettePhases, CHOIX_AJOUT, destinationRang, destinationNonLocalisee,
+  destinationFicheParcelle, destinationPepiniere,
+} from '../lib/planVue.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
-import DateRefPicker from '../components/DateRefPicker.jsx'
+import { useNavigation } from '../context/NavigationContext.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
-import { CartePlanParcelle, TraitRang, SectionLabel } from '../components/ui'
+import FicheCulture from '../components/FicheCulture.jsx'
+import BoutonGeste from '../components/BoutonGeste.jsx'
+import { CartePlanParcelle, TraitRang, SectionLabel, Modal } from '../components/ui'
 import { MarqueLibre, PictoCulture } from '../components/ui/PisteDesPlaces.jsx'
 import { IconePhase } from '../components/ui/PastillePhase.jsx'
 import { phase, PHASE_LIBRE } from '../lib/phases.js'
@@ -63,17 +72,26 @@ function LegendePlan() {
  * [V17] Les cultures dont la parcelle n'a jamais été dite : une dernière carte,
  * sans rang ni numéro, avec la phrase à prononcer pour les rattacher.
  */
-function CarteNonLocalisees({ lignes, phrase }) {
+function CarteNonLocalisees({ lignes, phrase, onCulture }) {
   return (
     <section
       aria-label="Cultures non localisées"
       className="rounded-xl border border-dashed border-txt3/60 bg-card p-3"
     >
       <h3 className="font-serif text-[13.5px] font-bold text-txt mb-1.5">Cultures non localisées</h3>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col">
         {lignes.map((l, i) => (
-          <li key={`${l.culture}-${l.variete}-${i}`} className="text-[11.5px] text-txt truncate">
-            {l.libelle}
+          <li key={`${l.culture}-${l.variete}-${i}`}>
+            {/* [US-201 / CA7] Comme un rang : la fiche de la culture, sans
+                contexte de parcelle. Le libellé entier est la cible, 44 px. */}
+            <button
+              type="button"
+              onClick={() => onCulture(l)}
+              className="w-full min-h-[44px] text-left text-[13px] text-txt rounded-lg px-1
+                         hover:bg-card-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              {l.libelle}
+            </button>
           </li>
         ))}
       </ul>
@@ -102,12 +120,52 @@ function PiedDeVue({ pied }) {
   )
 }
 
+/**
+ * [US-201 / I3, CA3] « Ajouter une culture » sur un rang libre : le choix entre
+ * *Semer en place* et *Planter*. Rien n'est enregistré ici — chaque bouton
+ * dépose un geste pré-rempli avec la parcelle dans la file (US-196 / US-224),
+ * et c'est le compagnon qui demande la culture, relit et confirme.
+ */
+function ModalAjoutCulture({ cible, dateRef, onClose }) {
+  return (
+    <Modal
+      title="Ajouter une culture"
+      icon={Sprout}
+      sub={`${cible.nomParcelle} · rang ${cible.rang}`}
+      onClose={onClose}
+      disposition="basse"
+    >
+      <p className="text-[13px] text-txt2 leading-relaxed mb-4">
+        Que voulez-vous faire sur ce rang libre ? Votre compagnon vous demandera
+        la culture, puis vous relira avant d’enregistrer.
+      </p>
+      <div className="flex flex-col gap-4">
+        {CHOIX_AJOUT.map((choix, i) => (
+          <BoutonGeste
+            key={choix.cle}
+            geste={{ ...choix.geste, parcelleId: cible.parcelleId, parcelleNom: cible.nomParcelle }}
+            dateRef={dateRef}
+            ecran="plan-vue"
+            libelle={choix.libelle}
+            kind={i === 0 ? 'primary' : 'soft'}
+          />
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
 export default function PlanVue({ refresh }) {
   const { dateRef } = useDateRef()
-  const { potagerId } = usePotager()
+  const { potagerId, potagerActif } = usePotager()
+  const { aller } = useNavigation()
+  const role = potagerActif?.role
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  // [I1] Aucun état « parcelle sélectionnée » : seule la fenêtre ouverte par
+  // l'appui en cours se mémorise, et elle disparaît à sa fermeture.
+  const [ouvert, setOuvert] = useState(null)
 
   async function load() {
     setLoading(true)
@@ -134,15 +192,22 @@ export default function PlanVue({ refresh }) {
   if (error) return <ApiError message={error} onRetry={load} />
 
   const vide = vue.cartes.length === 0 && vue.nonLocalisees.length === 0
+  // La date de référence que la vue a réellement servie (jamais dans le futur).
+  const dateJour = vue.dateRef ?? dateRef
+
+  // [US-201 / CA9] Une destination, appliquée : une fenêtre par-dessus la Vue
+  // plan, ou un autre écran. `null` (rang libre en lecture seule) n'ouvre rien.
+  function appliquer(destination) {
+    if (!destination) return
+    if (destination.type === 'aller') aller(destination.vue, destination.intention)
+    else setOuvert(destination)
+  }
 
   return (
     <div className="flex flex-col gap-3.5">
-      {/* [V15] Date de référence en haut : la phase est celle de CE jour,
-          jamais une projection. */}
-      <div className="flex items-center gap-2">
-        <DateRefPicker />
-      </div>
-
+      {/* [V15] La phase est celle du jour de référence, jamais une projection.
+          [US-223 / CA5] Le sélecteur de date et « Journal du jour » ont rejoint
+          la barre de l'activité (`BarreActivitePlan`), communs aux deux onglets. */}
       {vide ? (
         // [CA8] Aucune parcelle : le message de l'onglet Parcelles, mot pour mot.
         <div className="flex flex-col items-center gap-3 mt-12 text-txt3">
@@ -162,16 +227,53 @@ export default function PlanVue({ refresh }) {
             <SectionLabel>Mes parcelles · {vue.cartes.length}</SectionLabel>
             <div className="grid grid-cols-1 gap-[18px] items-start @[1000px]/plan:grid-cols-2">
               {vue.cartes.map((carte) => (
-                <CartePlanParcelle key={carte.id} carte={carte} palette={palette} />
+                <CartePlanParcelle
+                  key={carte.id}
+                  carte={carte}
+                  palette={palette}
+                  // [I4] Le seul accès à la parcelle elle-même.
+                  onFiche={() => appliquer(destinationFicheParcelle(carte))}
+                  // [I5] La carte d'une pépinière mène à la Pépinière.
+                  onPepiniere={carte.pepiniere
+                    ? () => appliquer(destinationPepiniere(carte, vue.cartes))
+                    : undefined}
+                  // [I2, I3] Un rang occupé ouvre sa culture ; un rang libre
+                  // propose d'ajouter — ou rien du tout en lecture seule.
+                  onRang={(rang) => appliquer(destinationRang(rang, carte, { role }))}
+                />
               ))}
               {vue.nonLocalisees.length > 0 && (
-                <CarteNonLocalisees lignes={vue.nonLocalisees} phrase={vue.phraseNonLocalisees} />
+                <CarteNonLocalisees
+                  lignes={vue.nonLocalisees}
+                  phrase={vue.phraseNonLocalisees}
+                  onCulture={(ligne) => appliquer(destinationNonLocalisee(ligne))}
+                />
               )}
             </div>
           </div>
 
           <PiedDeVue pied={vue.pied} />
         </>
+      )}
+
+      {/* [US-201 / CA1, CA5] La fiche s'ouvre PAR-DESSUS la Vue plan, qui reste
+          montée : la fermer rend l'écran dans son état exact, défilement
+          compris, et le focus revient sur le rang d'origine (`Modal`,
+          US-195 / CA8). */}
+      {ouvert?.type === 'culture' && (
+        <FicheCulture
+          culture={ouvert.culture}
+          dateRef={dateJour}
+          potagerId={potagerId}
+          parcelleId={ouvert.parcelleId}
+          nomParcelle={ouvert.nomParcelle || null}
+          rang={ouvert.rang}
+          ecran="plan-vue"
+          onClose={() => setOuvert(null)}
+        />
+      )}
+      {ouvert?.type === 'ajout' && (
+        <ModalAjoutCulture cible={ouvert} dateRef={dateJour} onClose={() => setOuvert(null)} />
       )}
     </div>
   )

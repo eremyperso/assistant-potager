@@ -6,6 +6,7 @@ import {
   famillesDisponibles, comparerConfiance, comparerAlpha, grouperParFamille, listeFiltree,
   autresDansToutes, nombreFiltresActifs, nomAccessibleCarte, friseDeLigne,
   TRI_ALPHA, TRI_FAMILLE, TRI_CONFIANCE,
+  messageConfianceIndisponible,
 } from './cultures.js'
 
 const L = (over = {}) => ({
@@ -162,4 +163,14 @@ test('friseDeLigne [CA5] — mois 1..12 du serveur convertis en index 0-based', 
   assert.deepEqual(frise.pleineTerre, [3, 4])
   assert.deepEqual(frise.rec, [6, 7])
   assert.deepEqual(frise.pepiniere, [])
+})
+
+test('[confiance] une date hors horizon n’est pas présentée comme une panne météo', () => {
+  assert.match(messageConfianceIndisponible('hors_horizon'), /14 prochains jours/)
+  assert.doesNotMatch(messageConfianceIndisponible('hors_horizon'), /n’a pas pu être lue/)
+})
+
+test('[confiance] une météo illisible (ou une cause inconnue) garde le message de panne', () => {
+  assert.match(messageConfianceIndisponible('meteo'), /n’a pas pu être lue/)
+  assert.match(messageConfianceIndisponible(undefined), /n’a pas pu être lue/)
 })

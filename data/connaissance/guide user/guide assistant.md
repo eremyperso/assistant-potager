@@ -477,7 +477,7 @@ L'assistant reconnaît de nombreux synonymes pour chaque geste : *récolter, cue
 | **Culture** | quasi toujours | tomate, courgette, carotte, poivron |
 | **Variété** | non | cerise, Nantaise, Cœur de bœuf, Butternut |
 | **Quantité** | non | 2.5 · 12 · 30 |
-| **Unité** | non | kg, g, graines, plants, pieds, m², minutes |
+| **Unité** | non | kg, g, graines, plants, pieds, poquets, m de rang, m², minutes |
 | **Parcelle** | non | nord, B2, serre, maison |
 | **Rangs** | non | nombre de rangs plantés |
 | **Date** | non | par défaut : aujourd'hui |
@@ -513,9 +513,9 @@ Sans date dictée, le geste est daté du jour de la saisie — ce qui reste une 
 
 Le **rang** est un multiplicateur : *« planté 4 salades sur 3 rangs »* enregistre **12 plants**, pas 4.
 
-Les unités s'adaptent au contexte : *kg* et *g* pour les récoltes pesées, *graines* pour les semis, *plants* et *pieds* pour les comptages, *m²* pour un semis à la volée, *minutes* pour les durées d'arrosage, *litre* pour les traitements.
+Les unités s'adaptent au contexte : *kg* et *g* pour les récoltes pesées, *graines* pour les semis, *plants* et *pieds* pour les comptages, *m²* pour un semis à la volée, *poquets* pour des courges ou des haricots semés en poquets, *mètres de rang* pour un semis en ligne (*« semé 3 mètres de carottes »*), *minutes* pour les durées d'arrosage, *litre* pour les traitements.
 
-**Une unité n'est jamais convertie en une autre.** Deux mètres carrés de haricots semés à la volée restent deux mètres carrés : personne ne devine combien de pieds en sortiront. C'est aussi pour cela qu'il vaut mieux rester constant dans ses unités pour une même culture (voir la section 15.6, sur les totaux qui semblent faux).
+**Une unité n'est jamais convertie en une autre.** Deux mètres carrés de haricots semés à la volée restent deux mètres carrés : personne ne devine combien de pieds en sortiront. De même, 5 poquets de courge restent 5 poquets, et 3 mètres de rang restent 3 mètres de rang — jamais des mètres carrés : seul le mot « carrés » fait d'un mètre une surface. Poquets et mètres de rang ne se disent ni pour une mise en godet ni pour un semis en pépinière, qui se comptent en plants ou en graines. C'est aussi pour cela qu'il vaut mieux rester constant dans ses unités pour une même culture (voir la section 15.6, sur les totaux qui semblent faux).
 
 ### 6.6 Plusieurs gestes d'un coup
 

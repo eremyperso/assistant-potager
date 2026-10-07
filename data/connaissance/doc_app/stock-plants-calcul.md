@@ -38,7 +38,7 @@ Un semis démarré à couvert — sans parcelle indiquée, ou dans une parcelle 
 **Intention :** diagnostic
 **On parle aussi de :** unités mélangées ; grammes et pieds ; total qui semble faux ; chiffre incohérent ; mètres carrés
 
-Deux unités différentes pour une même culture ne s'additionnent jamais : cent graines et deux mètres carrés ne font pas cent deux de quoi que ce soit. Lorsqu'une culture a été saisie tantôt d'une façon, tantôt d'une autre, seule l'unité la plus représentée est comptée dans le total ; les autres en sont exclues plutôt que converties au jugé. Reprendre les gestes concernés pour les ramener à une même unité rétablit un total juste.
+Deux unités différentes pour une même culture ne s'additionnent jamais : cent graines et deux mètres carrés ne font pas cent deux de quoi que ce soit. Lorsqu'une culture a été saisie tantôt d'une façon, tantôt d'une autre, seule l'unité la plus représentée est comptée dans le total ; les autres en sont exclues plutôt que converties au jugé. Reprendre les gestes concernés pour les ramener à une même unité rétablit un total juste. Le poquet et le mètre de rang sont des unités à part entière : un poquet n'est jamais compté en plants ni en graines, un mètre de rang jamais en mètres carrés. Trois poquets de courge et deux plants de courge ne font donc pas cinq, et une perte de deux poquets se retire des poquets. Une récolte pesée en kilos d'une culture semée en poquets s'ajoute au rendement sans changer le nombre de poquets.
 
 ## Consulter le potager tel qu'il était à une date passée
 

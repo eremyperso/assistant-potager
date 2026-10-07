@@ -12,6 +12,7 @@
 // (`docs/domaines/plan-et-rangs.md`, « Il ne dessine rien »).
 import { formatUnite } from './plan.js'
 import { phase as lirePhase, PHASE_LIBRE } from './phases.js'
+import { gesteDeActionConfiance, peutEnregistrer } from './gestes.js'
 
 /** [V3] Plancher d'un trait : sous 12 %, un rang ne se voit ni ne se vise. */
 export const PLANCHER_PCT = 12
@@ -68,7 +69,8 @@ export function nombre(valeur, decimales = 1) {
 export function quantiteTexte(quantite, unite) {
   const q = nombre(quantite)
   if (!q) return ''
-  const u = formatUnite(unite)
+  // [US-199] « 1 poquet », pas « 1 poquets ».
+  const u = Number(quantite) === 1 && cleUnite(unite) === 'poquets' ? 'poquet' : formatUnite(unite)
   return u ? `${q} ${u}` : q
 }
 
@@ -77,6 +79,7 @@ const UNITES_COURTES = Object.freeze({
   plants: 'pl.', plant: 'pl.', pieds: 'pl.', pied: 'pl.',
   poquets: 'poq.', poquet: 'poq.',
   graines: 'gr.', graine: 'gr.',
+  'm de rang': 'm',
 })
 
 export function uniteCourte(unite) {
@@ -102,7 +105,8 @@ export function capitaliser(mot) {
  * compte pas. C'est elle qui borne la comparaison des traits [V3].
  */
 export function cleUnite(unite) {
-  return formatUnite(unite || '').trim().toLowerCase()
+  const u = (unite || '').trim().toLowerCase()
+  return u === 'm2' ? 'm²' : u
 }
 
 // ── Longueur d'un trait ──────────────────────────────────────────────────────
@@ -688,6 +692,77 @@ export function vueDuPlan(plan) {
       'Dites au compagnon : « la tomate est dans la planche nord » pour les rattacher.',
     pied: piedDeVue(plan?.totaux),
   }
+}
+
+// ── Les sorties de la Vue plan [US-201] ──────────────────────────────────────
+
+/**
+ * [US-201 / CA9] Ce que chaque appui de la Vue plan ouvre — la table, et elle
+ * seule. L'écran ne décide rien : il reçoit une destination et l'applique.
+ *
+ * « Quatre sorties, aucune vue dupliquée » (règle 17) : le rang mène à sa
+ * culture, l'en-tête de carte à la parcelle, la carte d'une pépinière à la
+ * Pépinière, la barre au Journal. Un rang libre propose un geste ; rien n'est
+ * écrit dans la PWA.
+ *
+ * Une destination est un objet `{ type, … }` :
+ *   - `culture` — ouvre la fiche culture (`parcelleId`/`nomParcelle`/`rang`
+ *     absents pour une culture non localisée) ;
+ *   - `ajout`   — propose *Semer en place* / *Planter* sur un rang libre ;
+ *   - `aller`   — change d'écran : `{ vue, intention }` pour `aller()` (US-195) ;
+ *   - `null`    — rien ne s'ouvre (rang libre d'un membre en lecture seule).
+ */
+
+/** [I3] Les deux gestes proposés sur un rang libre, tirés du vocabulaire de confiance. */
+export const CHOIX_AJOUT = Object.freeze([
+  Object.freeze({ cle: 'semer', libelle: 'Semer en place', geste: gesteDeActionConfiance('semis_pleine_terre') }),
+  Object.freeze({ cle: 'planter', libelle: 'Planter', geste: gesteDeActionConfiance('plantation') }),
+])
+
+/** [I2, I3, CA3] Appui sur un rang : sa culture, ou « ajouter une culture ». */
+export function destinationRang(rang, carte, { role } = {}) {
+  if (!rang) return null
+  if (rang.libre) {
+    // [CA3, RT11] Lecture seule : un rang libre n'est pas actionnable.
+    if (!peutEnregistrer(role)) return null
+    return { type: 'ajout', parcelleId: carte?.id ?? null, nomParcelle: carte?.nom ?? '', rang: rang.numero }
+  }
+  return {
+    type: 'culture',
+    culture: rang.culture,
+    parcelleId: carte?.id ?? null,
+    nomParcelle: carte?.nom ?? '',
+    rang: rang.numero,
+  }
+}
+
+/** [CA7] Appui sur une culture non localisée : sa fiche, sans contexte de parcelle. */
+export function destinationNonLocalisee(ligne) {
+  if (!ligne?.culture) return null
+  return { type: 'culture', culture: ligne.culture, parcelleId: null, nomParcelle: '', rang: null }
+}
+
+/** [I4] « Fiche parcelle → » : l'onglet Parcelles, cette parcelle sélectionnée. */
+export function destinationFicheParcelle(carte) {
+  return { type: 'aller', vue: 'plan', intention: { parcelle: carte?.id } }
+}
+
+/**
+ * [I5] Carte d'une pépinière : la Pépinière sur cet emplacement — « Emplacements »
+ * si le potager compte plusieurs pépinières, « Aujourd'hui » sinon.
+ */
+export function destinationPepiniere(carte, cartes = []) {
+  const plusieurs = cartes.filter((c) => c.pepiniere).length > 1
+  return {
+    type: 'aller',
+    vue: 'pepiniere',
+    intention: { onglet: plusieurs ? 'emplacements' : 'aujourdhui', emplacement: carte?.nom },
+  }
+}
+
+/** [I6] « Journal du jour » : le Journal filtré sur la date de référence, sans sélection. */
+export function destinationJournal(dateRef) {
+  return { type: 'aller', vue: 'journal', intention: { date: dateRef } }
 }
 
 // ── Palette et tailles [CA4] ─────────────────────────────────────────────────

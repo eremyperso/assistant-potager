@@ -8,7 +8,7 @@ import TopBar    from './components/TopBar.jsx'
 import BottomNav from './components/BottomNav.jsx'
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
-import { VUE_PAR_DEFAUT } from './navigation.js'
+import { VUE_PAR_DEFAUT, NAV_OF, vueDeSection } from './navigation.js'
 import { NavigationProvider } from './context/NavigationContext.jsx'
 import { consommerIntentionAdresse } from './lib/intentions.js'
 import BasculePotagerIntention from './components/BasculePotagerIntention.jsx'
@@ -131,11 +131,22 @@ function AppInner({ intentionAdresse }) {
   const mainRef = useRef(null)
   const defilements = useRef(new Map())
 
+  // [US-223 / CA4] Dernière vue visitée par section, en mémoire de page : revenir
+  // au Plan rouvre le sous-onglet quitté ; une nouvelle session repart de l'entrée.
+  const dernieres = useRef({ [NAV_OF[view]]: view })
+
   const changerVue = useCallback((id) => {
     if (!VIEWS[id]) return
     defilements.current.set(view, mainRef.current?.scrollTop ?? 0)
+    dernieres.current[NAV_OF[id]] = id
     setView(id)
   }, [view])
+
+  // Un appui sur une section de la navigation principale (TopBar, BottomNav) —
+  // distinct d'un appui sur un sous-onglet, qui ouvre exactement son identifiant.
+  const changerSection = useCallback((navId) => {
+    changerVue(vueDeSection(navId, dernieres.current))
+  }, [changerVue])
 
   useLayoutEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = defilements.current.get(view) ?? 0
@@ -151,7 +162,7 @@ function AppInner({ intentionAdresse }) {
       <BasculePotagerIntention intentionAdresse={intentionAdresse} />
       <FileGestesProvider>
       <div className="flex flex-col h-dvh bg-bg">
-        <TopBar view={view} onGo={changerVue} onRefresh={handleRefresh} loading={loading} />
+        <TopBar view={view} onGo={changerSection} onRefresh={handleRefresh} loading={loading} />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto min-h-0">
           <PageHeader view={view} onGo={changerVue} />
@@ -164,7 +175,7 @@ function AppInner({ intentionAdresse }) {
           </div>
         </main>
 
-        <BottomNav view={view} onGo={changerVue} />
+        <BottomNav view={view} onGo={changerSection} />
       </div>
       </FileGestesProvider>
     </NavigationProvider>

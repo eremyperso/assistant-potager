@@ -1201,3 +1201,5 @@ agents Developer et QA-tester :
 À conserver tant que le chantier de refonte est en cours ; à supprimer (avec
 `src/views/_DesignSystemPreview.jsx`, `src/views/_ShellPreview.jsx` et le routage
 correspondant dans `main.jsx`) à la clôture du chantier.
+
+> **[US-223]** Le CA17 d'US-060 (sous-onglets Parcelles, Vue plan, Rotation, dans cet ordre) est **remplacé** par US-223 : Vue plan, Parcelles, Rotation « à venir » désactivée, Vue plan en entrée.

@@ -353,7 +353,7 @@ def _fmt_qte_unite(valeur: float, unite: str) -> float | int:
     """[US-037 / CA9] Une surface m² est fractionnable (1.5 m²) — ne jamais tronquer
     en entier comme pour un nombre de plants/graines/pieds. Un m² entier (2.0) s'affiche
     "2", pas "2.0"."""
-    if unite == "m²":
+    if unite in ("m²", "ml"):   # [US-199] un mètre de rang se fractionne aussi (2,5 m)
         arrondi = round(valeur, 2)
         return int(arrondi) if arrondi == int(arrondi) else arrondi
     return int(valeur)

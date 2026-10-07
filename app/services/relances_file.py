@@ -151,7 +151,7 @@ def texte_file(db: Session, gestes: list[GesteIntention], entete: str) -> str:
     detailles = 0
     for potager_id, gestes_du_potager in groupes.items():
         if multi:
-            lignes.append(f"🌻 {_nom_potager(db, potager_id)}")
+            lignes.append(f"🌻 {svc_file.echapper_markdown(_nom_potager(db, potager_id))}")
         for geste in gestes_du_potager:
             if detailles >= NB_GESTES_DETAILLES:
                 break

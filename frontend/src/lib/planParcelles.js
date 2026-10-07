@@ -18,7 +18,7 @@ import {
   capitaliser, nombre, MENTION_SANS_RANGS, MENTION_SANS_LONGUEUR,
   TYPE_PEPINIERE_INCONNU,
 } from './planVue.js'
-import { expositionAffichable } from './plan.js'
+import { expositionAffichable, formatUnite } from './plan.js'
 // [US-231 / R3] La teinte d'une famille — identité stable, jamais jugement.
 import { teinteFamille } from './familles.js'
 
@@ -675,7 +675,7 @@ export function libelleIntervention(ev) {
   const precision = (ev?.commentaire || ev?.traitement || '').trim()
   let texte = precision ? `${geste} ${precision}` : geste
   if (ev?.quantite != null) {
-    texte += `, ${nombre(ev.quantite)}${ev.unite ? ` ${ev.unite}` : ''}`
+    texte += `, ${nombre(ev.quantite)}${ev.unite ? ` ${formatUnite(ev.unite)}` : ''}`
   }
   // [S3] Le rang, quand l'événement en porte un — la parcelle entière sinon.
   if (ev?.rang != null) texte += ` sur R${ev.rang}`

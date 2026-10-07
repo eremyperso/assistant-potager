@@ -19,7 +19,10 @@ from utils.notes import is_note_request as _is_note_request
 from app.services.context import current_context
 from app.services import interpreteur_commandes as svc_interpreteur
 from .noyau import MENU_KEYBOARD, log
-from .etat import _GODET_GRAINES_PENDING, _QUANTITE_PENDING, _RECOLTE_PIECES_PENDING
+from .etat import (
+    _CULTURE_PENDING, _CULTURE_TIMEOUT, _GODET_GRAINES_PENDING, _QUANTITE_PENDING,
+    _RECOLTE_PIECES_PENDING,
+)
 from .liaison import _delier_confirm, _verifier_liaison_ou_onboarding, cmd_start
 from .enregistrement import _parse_multi
 from .godets import _godet_graines_reponse
@@ -365,6 +368,28 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown"
             )
             _RECOLTE_PIECES_PENDING[user_id] = pending  # remettre en attente
+            return
+
+    # [US-201 / I3] Culture en attente (geste « ajouter une culture » de la Vue
+    # plan) ? La réponse EST la culture : elle rejoint le texte du geste, pour
+    # que la garde anti-hallucination (US-011 bis) la retrouve dans sa source.
+    if user_id in _CULTURE_PENDING:
+        import time as _t
+        pending = _CULTURE_PENDING.pop(user_id)
+        if _t.time() - pending.get("ts", 0) <= _CULTURE_TIMEOUT:
+            if texte_raw.strip().lower().rstrip(" .!") in ("annuler", "abandonner", "stop"):
+                await update.message.reply_text(
+                    "👌 Le geste reste dans votre file — reprenez-le avec /gestes."
+                )
+                return
+            culture = texte_raw.strip()
+            items = pending["items"]
+            items[0]["culture"] = culture
+            log.info(f"[US-201] Culture reçue: {culture!r} — user_id={user_id}")
+            await _parse_and_save(
+                update, f"{pending['texte']} {culture}", pre_parsed_items=items,
+                geste_file=pending.get("geste_file"),
+            )
             return
 
     # [US-021 CA9] Quantité en attente ? Traiter comme quantité

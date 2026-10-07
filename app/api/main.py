@@ -2474,7 +2474,7 @@ def get_plan(
                     "variete":    c.get("variete"),
                     # [US-037 / CA10] Une surface m² est fractionnable (ex: 1.5 m²) —
                     # ne jamais tronquer en int comme pour un nombre de plants/graines.
-                    "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") == "m²" else int(c.get("nb_plants") or 0),
+                    "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") in ("m²", "ml") else int(c.get("nb_plants") or 0),
                     "unite":      c.get("unite") or "plants",
                     "type_organe": c.get("type_organe") or "végétatif",
                     "surface_m2_par_plant": (
@@ -2610,7 +2610,7 @@ def get_plan(
                 "culture": brut.get("culture", ""),
                 "variete": brut.get("variete"),
                 "nb_plants": (
-                    (brut.get("nb_plants") or 0) if unite == "m²"
+                    (brut.get("nb_plants") or 0) if unite in ("m²", "ml")
                     else int(brut.get("nb_plants") or 0)
                 ),
                 "unite": unite,

@@ -6,7 +6,9 @@ import TopBar from '../components/TopBar.jsx'
 import PageHeader from '../components/PageHeader.jsx'
 import BottomNav from '../components/BottomNav.jsx'
 import { Placeholder } from '../components/ui'
-import { VUE_PAR_DEFAUT, navEntry } from '../navigation.js'
+import { AppContextProvider } from '../context/AppContext.jsx'
+import { NavigationProvider } from '../context/NavigationContext.jsx'
+import { VUE_PAR_DEFAUT, navEntry, vueDeSection } from '../navigation.js'
 
 /**
  * Page de contrôle visuel de la coquille applicative [US-053, US-054, US-055].
@@ -90,8 +92,11 @@ export default function ShellPreview() {
   return (
     <AuthContextProvider>
       <PotagerContextProvider>
+       {/* [US-223] La barre du Plan lit la date de référence et la navigation. */}
+       <AppContextProvider>
+        <NavigationProvider vue={view} onVue={setView}>
         <div className="flex flex-col h-dvh bg-bg">
-          <TopBar view={view} onGo={setView} onRefresh={() => {}} loading={false} />
+          <TopBar view={view} onGo={(id) => setView(vueDeSection(id))} onRefresh={() => {}} loading={false} />
           <main className="flex-1 overflow-y-auto min-h-0">
             <PageHeader view={view} onGo={setView} />
             <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-7">
@@ -101,8 +106,10 @@ export default function ShellPreview() {
               />
             </div>
           </main>
-          <BottomNav view={view} onGo={setView} />
+          <BottomNav view={view} onGo={(id) => setView(vueDeSection(id))} />
         </div>
+        </NavigationProvider>
+       </AppContextProvider>
       </PotagerContextProvider>
     </AuthContextProvider>
   )

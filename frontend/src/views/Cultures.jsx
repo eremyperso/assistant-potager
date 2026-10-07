@@ -20,7 +20,7 @@ import { MOIS_NOMS } from '../lib/calendrier.js'
 import {
   TRI_CONFIANCE, TRI_ALPHA, TRI_FAMILLE, TRI_PAR_DEFAUT,
   famillesDisponibles, listeFiltree, grouperParFamille, autresDansToutes,
-  nombreFiltresActifs, visibleDansOnglet,
+  nombreFiltresActifs, visibleDansOnglet, messageConfianceIndisponible,
 } from '../lib/cultures.js'
 
 const capitale = (s) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -278,7 +278,7 @@ export default function Cultures({ refresh }) {
       {!meteoDisponible && !chargement && !erreur && (
         <InfoBanner
           tint="amber" icon={Cloud} title="Confiance indisponible"
-          body="La météo du potager n’a pas pu être lue : aucune étoile n’est affichée. Frises et présence au potager restent à jour."
+          body={messageConfianceIndisponible(vue?.confiance_indisponible)}
         />
       )}
 

@@ -16,6 +16,8 @@ import { api } from '../lib/api.js'
 import { AuthContextProvider } from '../context/AuthContext.jsx'
 import { PotagerContextProvider } from '../context/PotagerContext.jsx'
 import { AppContextProvider } from '../context/AppContext.jsx'
+import { NavigationProvider } from '../context/NavigationContext.jsx'
+import { FileGestesProvider } from '../context/FileGestesContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import PlanVue from './PlanVue.jsx'
 import { Btn } from '../components/ui'
@@ -245,6 +247,17 @@ function simulerApi(etat) {
     if (!etat.plan) throw new Error('Le plan est indisponible pour le moment.')
     return etat.plan
   }
+  // [US-201] Les sorties : la fiche culture se lit (échec simulé : la fiche
+  // s'ouvre quand même, section par section — US-207 / CA12), et un geste se
+  // dépose sans rien écrire. Le corps déposé est noté dans la console.
+  api.ficheCulture = async () => { throw new Error('démo') }
+  api.calendriersPlan = async () => { throw new Error('démo') }
+  api.confiancesPlan = async () => { throw new Error('démo') }
+  api.lireFileGestes = async () => ({ gestes: [], recents: [] })
+  api.preparerGeste = async (corps) => {
+    console.info('[US-201] geste déposé', corps)
+    return { phrase: `${corps.action} (démo)`, compagnon_actif: true, lien: null, en_attente: 1 }
+  }
 }
 
 export default function PlanVuePreview() {
@@ -254,11 +267,15 @@ export default function PlanVuePreview() {
 
   const etat = ETATS[cle]
   simulerApi(etat)
+  // [US-201] Sans coquille, on note simplement où `aller()` voulait mener.
+  const [sortie, setSortie] = useState(null)
 
   return (
     <AuthContextProvider>
       <PotagerContextProvider>
         <AppContextProvider>
+          <NavigationProvider vue="plan-vue" onVue={(v) => setSortie(v)}>
+          <FileGestesProvider>
           <div className="min-h-dvh bg-bg p-4 flex flex-col gap-3">
             <h1 className="font-serif text-2xl font-bold text-txt">Vue plan — US-200 / US-228</h1>
             <div className="flex flex-wrap gap-2">
@@ -271,8 +288,11 @@ export default function PlanVuePreview() {
                 Thème {theme === 'dark' ? 'clair' : 'sombre'}
               </Btn>
             </div>
+            {sortie && <p role="status" className="text-[13px] text-txt2">Sortie demandée : {sortie}</p>}
             <PlanVue key={cle} refresh={0} />
           </div>
+          </FileGestesProvider>
+          </NavigationProvider>
         </AppContextProvider>
       </PotagerContextProvider>
     </AuthContextProvider>

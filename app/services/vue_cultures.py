@@ -61,6 +61,10 @@ ORDRE_PHASES: tuple[str, ...] = ("semee", "en_place", "en_recolte")
 PLAFOND_SUGGESTIONS = 3
 SEUIL_ETOILES_SUGGESTION = 2
 
+#: Causes d'une confiance muette (`VueCultures.confiance_indisponible`).
+CAUSE_METEO = "meteo"
+CAUSE_HORS_HORIZON = "hors_horizon"
+
 ETAT_MAINTENANT = "maintenant"
 ETAT_BIENTOT = "bientot"
 ETAT_PLUS_TARD = "plus_tard"
@@ -115,6 +119,10 @@ class VueCultures:
     #: [CA10] Météo indisponible : la confiance de TOUTES les cultures reste
     #: sans étoile, la réponse le dit plutôt que de laisser deviner pourquoi.
     meteo_disponible: bool
+    #: Pourquoi la confiance est muette : `CAUSE_METEO` (météo illisible, potager
+    #: non localisé) ou `CAUSE_HORS_HORIZON` (météo lisible, mais la date de
+    #: référence sort des 14 jours de prévision). None quand elle est évaluée.
+    confiance_indisponible: Optional[str] = None
 
 
 def _etat_fenetre(fenetre, date_ref: _date) -> str:
@@ -237,13 +245,23 @@ def composer_vue_cultures(db: Session, ctx: TenantContext, date_ref: _date) -> V
     # [CA10] Pas de seconde lecture météo (CA7) : R3/R4 indéterminées disent déjà
     # que la météo n'a pas pu être lue — la même lecture partagée par toutes les
     # évaluations de `confiances_du_plan` (CA6), jamais relue ici.
-    meteo_disponible = not any(
-        m.etat == svc_confiance.ETAT_INDETERMINE
+    motifs_meteo_muets = [
+        m
         for entree in confiances.values()
         for action in entree.actions
         for m in action.motifs
         if m.regle in (svc_confiance.R3_GEL_ANNONCE, svc_confiance.R4_NUITS_DOUCES)
-    )
+        and m.etat == svc_confiance.ETAT_INDETERMINE
+    ]
+    # Une vraie panne l'emporte : « hors horizon » n'est dit que si TOUS les
+    # motifs muets le sont (date passée, ou à plus de 14 jours).
+    if not motifs_meteo_muets:
+        cause_muette = None
+    elif all(m.libelle == svc_confiance.MOTIF_HORIZON for m in motifs_meteo_muets):
+        cause_muette = CAUSE_HORS_HORIZON
+    else:
+        cause_muette = CAUSE_METEO
+    meteo_disponible = cause_muette is None
 
     zone, origine, altitude = svc_calendrier.zone_et_altitude_du_potager(db, potager_id)
     attributions: list[str] = []
@@ -314,6 +332,7 @@ def composer_vue_cultures(db: Session, ctx: TenantContext, date_ref: _date) -> V
         effectif_toutes=len(univers),
         effectif_au_potager=len(au_potager),
         meteo_disponible=meteo_disponible,
+        confiance_indisponible=cause_muette,
     )
 
 
@@ -332,6 +351,7 @@ def vue_cultures_en_dict(vue: VueCultures) -> dict:
         "effectif_toutes": vue.effectif_toutes,
         "effectif_au_potager": vue.effectif_au_potager,
         "meteo_disponible": vue.meteo_disponible,
+        "confiance_indisponible": vue.confiance_indisponible,
         "cultures": [
             {
                 "culture": l.culture,

@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from database.db import SessionLocal
 from utils.actions import normalize_action
 from utils.parcelles import resolve_parcelle
+from utils.unites_implantation import libelle_unite
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.tts import send_voice_reply
 from app.services.context import current_context
@@ -280,7 +281,7 @@ def _build_action_summary(items: list[dict]) -> str:
             if rang:
                 lines.append(f"⚖️ Quantité : *{int(qte)} {unite}/rang × {rang} rangs*")
             else:
-                lines.append(f"⚖️ Quantité : *{qte} {unite}*".strip())
+                lines.append(f"⚖️ Quantité : *{qte} {libelle_unite(unite, qte)}*".strip())
         if p.get("parcelle"):
             lines.append(f"📍 Parcelle : *{p['parcelle']}*")
         elif p.get("_parcelle_demandee") is not True:
@@ -299,7 +300,7 @@ def _build_action_summary(items: list[dict]) -> str:
         for i, p in enumerate(items, 1):
             action  = p.get("action") or "action"
             culture = p.get("culture") or "?"
-            qte_str = f" — {p['quantite']} {p.get('unite') or ''}".strip() if p.get("quantite") is not None else ""
+            qte_str = f" — {p['quantite']} {libelle_unite(p.get('unite'), p['quantite'])}".strip() if p.get("quantite") is not None else ""
             lines.append(f"{i}. *{action}* {culture}{qte_str}")
             if p.get("_avertissement_coherence"):
                 avertissements.append(f"{i}. {p['_avertissement_coherence']}")
@@ -407,7 +408,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
         lines_out = [f"✅ *{len(saved_items)} actions enregistrées !*\n"]
         for parsed, event_id in saved_items:
             cult  = parsed.get("culture") or "?"
-            qte   = str(parsed["quantite"]) + " " + (parsed.get("unite") or "") if parsed.get("quantite") else ""
+            qte   = str(parsed["quantite"]) + " " + libelle_unite(parsed.get("unite"), parsed["quantite"]) if parsed.get("quantite") else ""
             d     = parsed.get("date") or str(date.today())
             lines_out.append(f"• *{cult}* {qte} — _{d}_ ✔")
         recap_multi = "\n".join(lines_out)
@@ -627,7 +628,7 @@ def _build_recap_tts(p: dict) -> str:
                 total = int(qte) * int(rang)
                 parties.append(f"{total} {unite} de {label} sur {rang} rangs.")
             else:
-                parties.append(f"{qte} {unite} de {label}.".strip())
+                parties.append(f"{qte} {libelle_unite(unite, qte)} de {label}.".strip())
         else:
             parties.append(f"Culture : {label}.")
 
@@ -679,7 +680,7 @@ def _build_recap(p: dict, event_id: int) -> str:
             total   = int(qte_val) * int(rang)
             qte_str = f"{int(qte_val)} {unite}/rang × {rang} rangs = *{total} {unite} total*"
         else:
-            qte_str = f"{qte_val} {unite}".strip()
+            qte_str = f"{qte_val} {libelle_unite(unite, qte_val)}".strip()
 
     fields = [
         ("🌱 Action",      p.get("action")),
