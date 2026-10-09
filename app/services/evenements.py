@@ -84,6 +84,17 @@ class ParcelleInconnueError(EvenementInvalideError):
         super().__init__(f"La parcelle « {nom_parcelle} » n'existe pas dans votre potager.")
 
 
+class ParcelleNonPepiniereError(EvenementInvalideError):
+    """[US-210 / CA2] Une mise en godet nomme une parcelle qui n'est pas une pépinière :
+    seuls les emplacements de pépinière reçoivent des godets."""
+
+    def __init__(self, nom_parcelle: str):
+        self.nom_parcelle = nom_parcelle
+        super().__init__(
+            f"« {nom_parcelle} » n'est pas une pépinière : seule une pépinière peut recevoir des godets."
+        )
+
+
 class ParcelleIncoherenteError(EvenementInvalideError):
     """Culture/variété sans historique sur la parcelle précise citée, alors que la
     culture existe bien ailleurs dans le potager — peut légitimement être corrigée
@@ -400,6 +411,8 @@ def valider_evenement(
        geste de pépinière (mise en godet, perte de godet, semis en pépinière) —
        `UniteImplantationRefuseeError`. `texte` sert quand le geste efface son
        unité (la mise en godet range sa quantité dans `nb_plants_godets`).
+    7. [US-210 / CA2] Une mise en godet ne peut porter qu'une parcelle pépinière —
+       `ParcelleNonPepiniereError`.
     """
     if nom_parcelle_brut and parcelle is None:
         raise ParcelleInconnueError(nom_parcelle_brut)
@@ -408,6 +421,10 @@ def valider_evenement(
 
     action_norm = normalize_action(action)
     refuser_unite_implantation_en_pepiniere(action_norm, unite, texte, contexte_semis, parcelle)
+    # [US-210 / CA2, CA3] Règle 7 : une mise en godet n'est jamais enregistrée sur une
+    # parcelle ordinaire — à la création comme à la correction du Journal.
+    if action_norm == "mise_en_godet" and parcelle is not None and not parcelle.est_pepiniere:
+        raise ParcelleNonPepiniereError(parcelle.nom)
     if not culture:
         if action_norm in _ACTIONS_CULTURE_OBLIGATOIRE:
             raise CultureManquanteError(action_norm)
@@ -1121,7 +1138,8 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         if variete_src and not parsed.get("variete"):
             parsed["variete"] = variete_src
             log.info(f"[US-029 CA5] Variété '{variete_src}' héritée du godet → plantation '{parsed['culture']}'")
-        if src_ids:
+        if src_ids and not (parsed.get("_lot_numero") and source_evenement_ids):
+            # [US-209 / CA5] Une plantation qui cite son lot garde SON chaînage.
             source_evenement_ids = src_ids
             log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
 
@@ -1153,6 +1171,11 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         source_evenement_ids=source_evenement_ids,
+        # [US-209 / CA5] Perte ou vente de plants imputée au lot cité.
+        origine_graines_id=(
+            _to_int(parsed.get("origine_graines_id"))
+            if action_norm in ("perte_godet", "vendu") else None
+        ),
         type_organe_recolte=type_organe_semis,
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
@@ -1207,6 +1230,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         ):
             raise LotSemisInconnuError(origine_graines_id)
         semis_parent_variete = semis_parent.variete
+        parsed["_lot_numero"] = semis_parent.numero_lot   # [US-209 / CA8]
         log.info(
             "[fix rattachement lot godet] Godet rattaché au lot choisi id=%s (%s) pour '%s'",
             origine_graines_id, str(semis_parent.date)[:10], culture_str,
@@ -1219,6 +1243,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         if len(candidats) == 1:
             origine_graines_id   = candidats[0]["semis_id"]
             semis_parent_variete = candidats[0]["variete"]
+            parsed["_lot_numero"] = candidats[0].get("numero_lot")   # [US-209 / CA8]
             log.info(f"[US-029 CA3] Godet lié au semis id={origine_graines_id} pour '{culture_str}/{variete_str}'")
         elif len(candidats) > 1:
             # Ambiguïté non levée en amont. Enregistrer un orphelin ici rouvrirait
@@ -1261,8 +1286,15 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     # légitimement une nouvelle culture), donc toujours un no-op ici, mais l'appel
     # reste présent pour que ce point d'écriture ne soit jamais oublié si les règles
     # évoluent (cf. CA5 : parcourir toutes les fonctions d'écriture).
+    # [US-210 / CA1, CA2] La pépinière où l'on pose les godets : dite, jamais devinée.
+    # Non dite → sans parcelle, comme avant. Nommée mais inconnue ou ordinaire → refus.
+    parcelle_godet: Optional[Parcelle] = None
+    nom_parcelle_godet = parsed.get("parcelle")
+    if nom_parcelle_godet:
+        parcelle_godet = resolve_parcelle(db, nom_parcelle_godet, potager_id=ctx.potager_id)
     valider_evenement(
-        db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str, parcelle=None,
+        db, ctx, action="mise_en_godet", culture=culture_str, variete=variete_str,
+        parcelle=parcelle_godet, nom_parcelle_brut=nom_parcelle_godet,
         unite=parsed.get("unite"), texte=texte,
     )
 
@@ -1297,7 +1329,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
         variete=parsed.get("variete"),
         quantite=_to_float(parsed.get("quantite")),
         unite=_normalize_unite_denombrement(parsed.get("unite"), "mise_en_godet"),
-        parcelle_id=None,
+        parcelle_id=parcelle_godet.id if parcelle_godet else None,
         rang=None,
         duree=None,
         traitement=None,

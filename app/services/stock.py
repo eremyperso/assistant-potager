@@ -54,6 +54,16 @@ def lot_pepiniere_par_semis(db: Session, ctx: TenantContext, semis_id: int, date
     return _stock.lot_pepiniere_par_semis(db, semis_id, date_ref, potager_id=ctx.potager_id)
 
 
+def lot_pepiniere_par_numero(db: Session, ctx: TenantContext, numero: int, date_ref: Optional[_date] = None):
+    """[US-209] Lot de pépinière désigné par son numéro court, dans le potager du contexte."""
+    return _stock.lot_pepiniere_par_numero(db, numero, date_ref, potager_id=ctx.potager_id)
+
+
+def ids_godets_du_lot(db: Session, ctx: TenantContext, semis_id: int) -> list:
+    """[US-209] Mises en godet d'un lot, pour chaîner une plantation à CE lot."""
+    return _stock.ids_godets_du_lot(db, semis_id, potager_id=ctx.potager_id)
+
+
 def calcul_godets_par_culture(db: Session, ctx: TenantContext, culture: str, date_ref: Optional[_date] = None):
     return _stock.calcul_godets_par_culture(db, culture, date_ref, potager_id=ctx.potager_id)
 

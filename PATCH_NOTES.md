@@ -1,3 +1,38 @@
+## [v3.86.0] — 2026-10-09
+
+**ÉPIC 9 — US-208, US-209, US-210** : la pépinière **a un type, un numéro de lot et une adresse**.
+On déclare une pépinière chaude ou froide, on écrit « lot 128 » sur l'étiquette de la barquette
+et on le retrouve d'un mot, et chaque godet sait dans quelle pépinière il se trouve.
+
+### 🚀 Nouveautés
+- Déclare une pépinière **chaude** (chauffée ou à l'intérieur) ou **froide** : « le châssis est une pépinière froide », « ma mini-serre est chauffée », `/parcelle modifier serre pepiniere=chaude` (US-208).
+- Laisse le type **non renseigné** quand le jardinier ne le dit pas : une pépinière n'est jamais supposée chaude ou froide, et le type est écrit tel quel sur la fiche parcelle et la carte du lot (US-208).
+- Numérote chaque semis de pépinière d'un **numéro court** (« lot 128 »), unique dans le potager, attribué dans l'ordre et jamais réutilisé (US-209).
+- Ajoute `/lot` : la liste des 15 lots les plus récents (`/lot tomate` pour filtrer) et `/lot 128` pour la fiche d'un lot, sans appel au modèle (US-209).
+- Reconnaît un lot cité dans un geste : « mise en godet de 40 plants du lot 128 », « perdu 5 plants du lot 128 », « vendu 6 plants du lot 128 », « planté 10 plants du lot 128 » (US-209).
+- Signale un numéro inconnu ou d'une autre culture que celle dite, sans rien rattacher en silence (US-209).
+- Affiche le numéro `#128` sur les cartes et la fiche des lots de la Pépinière, avec un champ « Aller au lot n° » et le lien `lot=128` (US-209).
+- Ajoute `/help lot` et complète `/help` parcelle avec le type de pépinière (US-208, US-209).
+- Rattache une mise en godet à sa **pépinière** quand elle est dite (« mise en godet 40 choux sous le châssis froid ») ; non dite, le godet reste sans parcelle et rien n'est déduit (US-210).
+- Refuse une parcelle ordinaire pour une mise en godet en proposant les pépinières existantes, sans rien enregistrer (US-210).
+- Permet de corriger l'emplacement d'un godet depuis le Journal (pépinière acceptée, parcelle ordinaire refusée) (US-210).
+- Affiche l'**emplacement courant** d'un lot — celui des godets s'il y en a, sinon celui du semis, sinon « Emplacement non renseigné » — et isole les « godets sans semis rattaché » dans un lot à part (US-210).
+
+### 🔧 Améliorations techniques
+- Expose `type_pepiniere` sur les parcelles et sur les lots de l'API (US-208).
+- Ajoute `GET /pepiniere/lots/{numero}` : 404 « Aucun lot n° N dans ce potager » pour un numéro inconnu ou d'un autre potager (US-209).
+- Ajoute `app/services/lots_pepiniere.py` (lecture et résolution d'une référence de lot, fiche Telegram) et `database/numerotation_lots.py` (écouteur `before_flush` : tous les chemins d'écriture sont numérotés dans la transaction du semis) (US-209).
+- Étend le routeur et le parseur déterministes : « pépinière chaude/froide/chauffée » et `annonce_un_geste`, qui évite qu'une plantation dictée parte en `/confiance` (US-208, INC-011).
+- Calcule l'emplacement courant des lots dans `utils/stock.py`, sans changer les totaux de stocks, de godets ni de statistiques (US-210).
+
+### 💾 Base de données
+- Ajoute `parcelles.type_pepiniere` (`chaude` | `froide` | NULL) et sa contrainte `ck_parcelles_type_pepiniere`, sans reprise de l'existant — migration v54 (US-208).
+- Ajoute `evenements.numero_lot`, son index unique partiel par potager, la contrainte `ck_evenements_numero_lot_semis_seul` et `potagers.compteur_lots` ; numérote les semis de pépinière existants à la suite — migration v55 (US-209).
+- Fournit `rollback_v54.sql` et `rollback_v55.sql` (US-208, US-209).
+
+### 📚 Documentation
+- Met à jour les fiches `pepiniere-par-lot.md`, `semis-godet-plantation.md`, `enregistrer-un-geste.md`, `parcelles-et-plan.md`, le guide utilisateur et `docs/domaines/` (commandes-bot, migrations) dans la même livraison (US-099 / CA9).
+
 ## [v3.85.0] — 2026-10-07
 
 **ÉPIC 10 — US-199, US-201, US-223** : le Plan **s'ouvre sur le reste de l'application**

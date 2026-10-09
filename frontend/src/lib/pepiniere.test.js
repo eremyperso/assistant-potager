@@ -2,7 +2,7 @@
 // (`node --test`, sans dépendance de test supplémentaire).
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from './pepiniere.js'
+import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu } from './pepiniere.js'
 
 /** Lot minimal : seuls les champs pertinents au scénario sont renseignés. */
 const lot = (champs) => ({
@@ -132,4 +132,32 @@ test('jours écoulés depuis le semis', () => {
   const ref = new Date('2026-08-12T09:00:00')
   assert.equal(joursDepuis('2026-08-02', ref), 10)
   assert.equal(joursDepuis(null, ref), null)
+})
+
+test('[US-208 / CA6] emplacement d\'un lot : type écrit, jamais supposé', () => {
+  assert.equal(emplacementLot({ parcelle: 'Serre', type_pepiniere: 'chaude' }), 'Serre · pépinière chaude')
+  assert.equal(emplacementLot({ parcelle: 'Châssis', type_pepiniere: 'froide' }), 'Châssis · pépinière froide')
+  assert.equal(emplacementLot({ parcelle: 'Véranda', type_pepiniere: null }), 'Véranda · type non renseigné')
+  assert.equal(emplacementLot({ parcelle: null }), 'Pépinière')
+  // [US-210 / CA5] l'emplacement courant de l'API l'emporte sur la parcelle du semis
+  assert.equal(
+    emplacementLot({ parcelle: 'Serre', type_pepiniere: 'chaude', emplacement: { nom: 'Châssis froid', type_pepiniere: 'froide', origine: 'mise_en_godet' } }),
+    'Châssis froid · pépinière froide',
+  )
+  assert.equal(emplacementLot({ parcelle: null, emplacement: { nom: null, type_pepiniere: null, origine: 'non_renseigne' } }), 'Emplacement non renseigné')
+})
+
+test('[US-209 / CA10] le numéro de lot s\'écrit #N, le lot sans semis n\'en a pas', () => {
+  assert.equal(libelleNumeroLot({ numero_lot: 128 }), '#128')
+  assert.equal(libelleNumeroLot({ numero_lot: null, sans_semis_rattache: true }), null)
+})
+
+test('[US-209 / CA11] « Aller au lot n° » lit un numéro sous toutes ses formes', () => {
+  for (const saisie of ['128', ' 128 ', '#128', 'n° 128', 'lot 128', 'Lot n°128']) {
+    assert.equal(lireNumeroLot(saisie), 128, saisie)
+  }
+  for (const saisie of ['', 'abc', '12 lots', '1.5', '-3']) {
+    assert.equal(lireNumeroLot(saisie), null, saisie)
+  }
+  assert.equal(messageLotInconnu(128), 'Aucun lot n° 128 dans ce potager')
 })

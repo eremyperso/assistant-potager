@@ -65,9 +65,13 @@ Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun gest
 ## Déclarer une serre ou une pépinière
 
 **Intention :** procédure
-**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant
+**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant ; pépinière chaude ; pépinière froide ; pépinière chauffée ; mini-serre chauffante ; châssis froid ; type de pépinière
 
 Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y rattache reste alors un semis à couvert, en attente de repiquage, et n'est jamais compté comme une culture en place au jardin, même si le lieu est nommé. Sans cette déclaration, semer dans sa serre en la nommant reviendrait à dire qu'on a semé en pleine terre, et le stock s'en trouverait faussé dès la première barquette. La déclaration se fait aussi en une phrase — « la serre est une pépinière » — sans connaître la syntaxe attendue.
+
+Une pépinière peut en plus dire son **type** : **pépinière chaude** ou **pépinière froide**. Une pépinière chaude est chauffée ou à l'intérieur : la mini-serre chauffante de la véranda, l'étagère sous lampe du garage, où l'on démarre tôt tomates, poivrons et aubergines. Une pépinière froide ne l'est pas : le châssis au fond du jardin, où lèvent choux, poireaux et laitues, et où les plants s'endurcissent avant la mise en terre. « Chaude » veut dire chauffée, pas exposée au soleil : une serre non chauffée plein sud reste une pépinière froide la nuit. Le type se dit en une phrase — « la serre est une pépinière chaude », « le châssis est une pépinière froide », « ma mini-serre est chauffée » — ou par la commande de modification de parcelle : `pepiniere=chaude`, `pepiniere=froide`, `pepiniere=oui` pour une pépinière sans type, `pepiniere=non` pour qu'elle n'en soit plus une, ce qui retire aussi son type. Une pépinière dont le type n'a jamais été dit affiche « type non renseigné » : elle n'est jamais supposée chaude ou froide. Le type s'affiche dans la liste des parcelles, sur la carte de la pépinière dans la Vue plan et à côté de l'emplacement de chaque lot ; l'application web ne permet pas de le corriger, cela se fait au compagnon.
+
+Le type de pépinière n'est pas l'**abri** de la section suivante : l'abri module la confiance des cultures en place, le type de pépinière parle des semis sous abri. Une serre de production n'est pas une pépinière, et une pépinière chaude peut être une simple étagère d'intérieur. Pour l'instant, le type ne change aucun calcul — ni le stock, ni l'occupation, ni la confiance avant de semer ; il servira à l'endurcissement des plants, à l'onglet des emplacements de la Pépinière et à la confiance d'un semis sous abri.
 
 ## Dire qu'une parcelle est sous serre, sous tunnel, sous châssis ou paillée
 

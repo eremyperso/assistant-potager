@@ -63,8 +63,9 @@ async def test_mise_en_godet_avec_variete_route_vers_creer_evenement_godet(test_
     """[fix bug id=351] Même quand la variété est déjà connue (donc pas
     d'interception _GODET_PENDING en amont), _do_save_items doit sauvegarder via
     creer_evenement_godet — jamais via creer_evenement_confirme — pour garantir
-    parcelle_id=None et le lien origine_graines_id, quel que soit le chemin qui a
-    mené jusqu'à la confirmation."""
+    le lien origine_graines_id, quel que soit le chemin qui a mené jusqu'à la
+    confirmation. [US-210 / CA1] La pépinière dite est désormais conservée : ici
+    « serre » est une pépinière, la mise en godet lui est rattachée."""
     from app import bot as bot_module
 
     serre = Parcelle(nom="serre", nom_normalise="serre", ordre=1, actif=True, est_pepiniere=True)
@@ -72,6 +73,7 @@ async def test_mise_en_godet_avec_variete_route_vers_creer_evenement_godet(test_
     test_db.add(Evenement(type_action="semis", culture="pois", variete="gourmand",
                            quantite=3, unite="graines", parcelle_id=serre.id))
     test_db.commit()
+    serre_id = serre.id
 
     items = [{
         "action": "mise_en_godet", "culture": "pois", "variete": "gourmand",
@@ -87,7 +89,7 @@ async def test_mise_en_godet_avec_variete_route_vers_creer_evenement_godet(test_
         await bot_module._do_save_items(update, items, "mise en godet de 3 pois gourmand sur 3 graines")
 
     event = test_db.query(Evenement).filter(Evenement.type_action == "mise_en_godet").one()
-    assert event.parcelle_id is None
+    assert event.parcelle_id == serre_id   # [US-210 / CA1]
     assert event.origine_graines_id is not None
     assert event.culture == "pois"
 

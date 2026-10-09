@@ -10,6 +10,7 @@ from utils.tts import send_voice_reply
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import stock as svc_stock
+from app.services import lots_pepiniere as svc_lots  # [US-209]
 from .noyau import AFTER_RECORD_KEYBOARD, log
 from .etat import (
     _GODET_GRAINES_PENDING,
@@ -378,3 +379,39 @@ async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     await _save_godet_item(update, parsed, texte)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-209 / CA7] Commande /lot <numéro> — un lot de pépinière, zéro jeton
+# ──────────────────────────────────────────────────────────────────────────────
+async def cmd_lot(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /lot — la liste des lots (les 15 plus récents), /lot tomate pour filtrer.
+    /lot 128 — culture, variété, date de semis, emplacement, graines semées, plants
+    obtenus et restants. Aucun appel au modèle, aucun effet de bord ; le numéro est
+    cherché dans le potager courant seulement (un lot d'un autre potager n'existe pas).
+    """
+    brut = " ".join(ctx.args or []).strip().lstrip("#")
+    if not brut.isdigit():
+        # [US-209] Sans numéro : la liste des lots, filtrée par culture si on en cite une.
+        db = SessionLocal()
+        try:
+            lots = svc_stock.calcul_lots_pepiniere(db, current_context())
+        finally:
+            db.close()
+        log.info("[US-209] /lot — liste (%s)", brut or "toutes cultures")
+        await update.message.reply_text(
+            svc_lots.formater_liste_lots_telegram(lots, brut or None), parse_mode="Markdown",
+        )
+        return
+    numero = int(brut)
+    db = SessionLocal()
+    try:
+        lot = svc_stock.lot_pepiniere_par_numero(db, current_context(), numero)
+    finally:
+        db.close()
+    if lot is None:
+        await update.message.reply_text(f"Aucun lot n° {numero} dans ce potager.")
+        return
+    log.info("[US-209 / CA7] /lot %s consulté", numero)
+    await update.message.reply_text(svc_lots.formater_lot_telegram(lot), parse_mode="Markdown")

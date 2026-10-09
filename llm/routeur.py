@@ -397,6 +397,16 @@ def _regle_par_geste(texte: str) -> Optional[str]:
     return NATURE_ACTION if tete and _MOTIF_GESTE.search(tete) else None
 
 
+def annonce_un_geste(texte: str) -> bool:
+    """Vrai si la phrase s'ouvre sur un geste de jardinage (« plantation 9 plants
+    de tomate le 15/05 ») et n'est pas une question. Sert à l'interpréteur de
+    commandes (US-172) pour NE PAS soumettre une saisie au modèle comme une
+    commande : relevé du 07/10/2026, une plantation dictée partait en
+    /confiance, quantité, variété et date perdues."""
+    t = (texte or "").strip()
+    return not t.endswith("?") and _regle_par_geste(t) == NATURE_ACTION
+
+
 def _regle_par_mots_cles(texte: str) -> Optional[str]:
     """[CA2] Retourne la nature si un motif fréquent et non ambigu matche,
     sinon `None` (la demande passe alors au cache puis au modèle)."""

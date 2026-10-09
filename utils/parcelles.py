@@ -474,6 +474,49 @@ def _longueur_m(valeur: str) -> Optional[float]:
     return nombre
 
 
+#: [US-208 / CA1] Les deux types d'une pépinière. « chaude » veut dire chauffée
+#: ou à l'intérieur — pas « exposée au soleil » : une serre non chauffée plein
+#: sud reste froide la nuit. Doublé du CHECK `ck_parcelles_type_pepiniere`.
+TYPES_PEPINIERE: tuple[str, ...] = ("chaude", "froide")
+_ALIAS_TYPE_PEPINIERE: dict[str, str] = {
+    "chauffee": "chaude", "chauffe": "chaude", "chaud": "chaude",
+    "non chauffee": "froide", "froid": "froide",
+}
+
+
+def libelle_pepiniere(est_pepiniere: bool, type_pepiniere: Optional[str]) -> Optional[str]:
+    """[US-208 / CA4] « pépinière chaude », « pépinière froide »,
+    « pépinière (type non renseigné) » — ou None hors pépinière. Le type absent
+    est écrit, jamais supposé (RT2)."""
+    if not est_pepiniere:
+        return None
+    if type_pepiniere in TYPES_PEPINIERE:
+        return f"pépinière {type_pepiniere}"
+    return "pépinière (type non renseigné)"
+
+
+def _pepiniere(valeur: str) -> Tuple[bool, Optional[str], bool]:
+    """[US-208 / CA2] Lit la valeur de `pepiniere=` : `(est_pepiniere, type, garder_type)`.
+
+    - « chaude » / « froide » (et alias « chauffée ») → pépinière typée ;
+    - « oui » → pépinière SANS type (comportement d'avant US-208) ;
+    - « non » / « false » → plus pépinière, type retiré ;
+    - « true » (forme machine de la fiche web, US-230) → pépinière, type
+      conservé : la fiche ne sait pas dire le type et ne doit pas l'effacer.
+    """
+    v = unidecode(str(valeur or "")).strip().lower()
+    v = _ALIAS_TYPE_PEPINIERE.get(v, v)
+    if v in TYPES_PEPINIERE:
+        return True, v, False
+    if v == "true":
+        return True, None, True
+    if v in ("oui", "1"):
+        return True, None, False
+    if v in ("false", "non", "0"):
+        return False, None, False
+    raise ValueError("pepiniere doit être : chaude, froide, oui ou non")
+
+
 def _booleen(valeur: str, champ: str) -> bool:
     """oui/non/true/false → bool ; ValueError sinon."""
     v = unidecode(str(valeur or "")).strip().lower()
@@ -514,7 +557,7 @@ def valider_champs(**kwargs) -> None:
         ("rangs", _nb_rangs), ("longueur", _longueur_m),
         ("abri", normaliser_abri), ("type_sol", normaliser_type_sol),
         ("paillage", lambda v: _booleen(v, "paillage")),
-        ("pepiniere", lambda v: _booleen(v, "pepiniere")),
+        ("pepiniere", _pepiniere),
         ("actif", lambda v: _booleen(v, "actif")),
         ("superficie", float),
     ]
@@ -543,7 +586,7 @@ def update_parcelle(
     longueur ([US-225] décimale 0,5-200 m ou "aucune" — base de calcul des
     places de TOUS les rangs de la planche ; la largeur, elle, ne se déclare
     pas : elle se déduit, voir `largeur_deduite`),
-    pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
+    pepiniere ([US-208] chaude/froide/oui/non, voir `_pepiniere` — [migration_v15] exclut la parcelle du calcul
     "semis pleine terre", voir utils.stock._cond_semis_pleine_terre),
     type_sol ([US-230] vocabulaire fermé, voir `normaliser_type_sol`),
     actif ([US-230 / CA2] bool "true"/"false" — passer à false reprend le retrait
@@ -602,12 +645,16 @@ def update_parcelle(
         parcelle.ordre = val_ord
         modifs.append(f"Ordre : {val_ord}")
     if "pepiniere" in kwargs:
-        val_str = kwargs["pepiniere"].strip().lower()
-        if val_str not in ("true", "false"):
-            raise ValueError("pepiniere doit être true ou false")
-        val_bool = val_str == "true"
-        parcelle.est_pepiniere = val_bool
-        modifs.append(f"Pépinière : {'oui' if val_bool else 'non'}")
+        # [US-208 / CA1, CA2] Le type suit le statut : « non » retire les deux,
+        # et aucun type ne survit hors pépinière (CHECK en base).
+        est, type_p, garder = _pepiniere(kwargs["pepiniere"])
+        if garder and parcelle.est_pepiniere:
+            type_p = parcelle.type_pepiniere
+        parcelle.est_pepiniere = est
+        parcelle.type_pepiniere = type_p
+        modifs.append(
+            f"Pépinière : {libelle_pepiniere(est, type_p)}" if est else "Pépinière : non"
+        )
     if "abri" in kwargs:
         # [US-230 / CA6, US-181] Trois états distincts, jamais confondus :
         # « serre », « aucun » (= le jardinier déclare le plein air) et NULL

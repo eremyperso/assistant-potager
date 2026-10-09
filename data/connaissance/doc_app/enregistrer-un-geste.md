@@ -95,3 +95,10 @@ Préparer un geste n'est pas le programmer : la file sert à confirmer plus tard
 **On parle aussi de :** poquet ; mètre de rang ; mètres linéaires ; ml ; mètre carré ; unité d'une quantité ; trou ; touffe
 
 L'unité se lit dans la phrase, sans conversion. « Semé 5 poquets de courge » s'enregistre **5 poquets** ; « semé 3 mètres de carottes » ou « 3 mètres de rang » s'enregistre **3 mètres de rang** (noté « ml »), alors que « semé 2 mètres carrés de carottes » reste une **surface** de 2 m². La différence tient au seul mot « carrés » : sans lui, un mètre est un mètre de rang. « Trou » et « touffe » valent poquet dans une phrase de semis ou de plantation uniquement. Un poquet et un mètre de rang se disent pour un semis en pleine terre, une plantation, une perte ou une récolte ; ils sont refusés pour une mise en godet et pour un semis en pépinière, qui se comptent en plants ou en graines — l'assistant le rappelle dans sa réponse. Le récapitulatif écrit l'unité en toutes lettres : « 5 poquets », « 3 m de rang ».
+
+## Dire le numéro d'un lot de pépinière dans une phrase
+
+**Intention :** procédure
+**On parle aussi de :** lot 128 ; numéro de lot dans la phrase ; #128 ; commande lot ; où en est le lot
+
+Pour les gestes de pépinière (mise en godet, perte, vente de plants, plantation), vous pouvez nommer le lot par le numéro écrit sur son étiquette : « repiqué 40 plants du lot 128 en godet ». La phrase se lit sans appel à l'intelligence artificielle, et le récapitulatif avant enregistrement rappelle le numéro du lot. Un semis en pépinière annonce de son côté le numéro qu'il vient de recevoir. Pour consulter un lot sans rien enregistrer, la commande `/lot 128` — ou la phrase « où en est le lot 128 ? » — répond immédiatement.

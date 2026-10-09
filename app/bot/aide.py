@@ -35,12 +35,14 @@ _HELP_PARCELLE = (
     "  → /parcelle modifier nord exposition=sud\n"
     "  → /parcelle modifier nord superficie=8.5\n"
     "  → /parcelle modifier nord exposition=sud superficie=8.5\n"
-    "  → /parcelle modifier serre pepiniere=true\n"
+    "  → /parcelle modifier serre pepiniere=chaude\n"
+    "  → \"le châssis est une pépinière froide\"\n"
     "  → /parcelle modifier serre abri=serre paillage=oui\n"
     "  → \"la parcelle 2 est sous serre\" · \"rang 3 paillé\"\n"
     "  _Paramètres : exposition · superficie · ordre · pepiniere · abri · paillage_\n"
     "  _abri : aucun · voile · châssis · tunnel · serre — il pèse sur la confiance_\n"
-    "  _pepiniere=true : une serre/pépinière ne compte jamais comme_\n"
+    "  _pepiniere : chaude (chauffée ou intérieur) · froide · oui · non_\n"
+    "  _Une pépinière ne compte jamais comme_\n"
     "  _pleine terre — un semis qui y est rattaché reste en pépinière_\n"
     "  _tant qu'aucune plantation réelle n'a eu lieu ailleurs._\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
@@ -78,6 +80,9 @@ _HELP_GODET = (
     "  → _\"mise en godet 20 tomates Saint-Pierre\"_\n"
     "  → _\"mis en godet 24 tomates sur 30 graines\"_ (taux calculé)\n"
     "  → _\"repiquer 15 plants de poivron en godet le 10 mars\"_\n"
+    "• Préciser la pépinière ou le lot\n"
+    "  → _\"mise en godet 40 choux sous le châssis froid\"_\n"
+    "  → _\"mise en godet de 40 plants du lot 128\"_ (voir /help lot)\n"
     "• Consulter les godets en attente\n"
     "  → _\"liste des godets\"_\n"
     "  → _\"quels plants sont en godet ?\"_\n"
@@ -209,6 +214,25 @@ _HELP_CALENDRIER = (
 )
 
 
+_HELP_LOT = (
+    "🔖 *Aide — Numéro de lot*\n"
+    "Chaque semis en pépinière reçoit un numéro court : écrivez-le sur l'étiquette.\n\n"
+    "*Actions disponibles :*\n"
+    "• Retrouver un numéro oublié\n"
+    "  → /lot  (les 15 lots les plus récents, 🟢 en cours · ⚪ épuisés)\n"
+    "  → /lot tomate  (seulement les lots de tomate)\n"
+    "  → _\"mes lots\"_ · _\"lots de tomate\"_\n"
+    "• Retrouver un lot\n"
+    "  → /lot 128\n"
+    "  → _\"où en est le lot 128 ?\"_\n"
+    "• Citer un lot dans un geste\n"
+    "  → _\"mise en godet de 40 plants du lot 128\"_\n"
+    "  → _\"perdu 5 plants du lot 128\"_ · _\"vendu 6 plants du lot 128\"_\n"
+    "  → _\"planté 10 plants du lot 128\"_\n\n"
+    "💡 _Un numéro inconnu, ou d'une autre culture que celle dite, est signalé : rien n'est rattaché._"
+)
+
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -217,7 +241,7 @@ _HELP_CALENDRIER = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
-    "calendrier",
+    "calendrier", "lot",
 )
 
 
@@ -233,6 +257,8 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "semis":     _HELP_SEMIS,
     "godet":     _HELP_GODET,
     "godets":    _HELP_GODET,
+    "lot":       _HELP_LOT,    # [US-209] synonyme de saisie, pas un domaine du sommaire
+    "lots":      _HELP_LOT,
     "recolte":   _HELP_RECOLTE,
     "recoltes":  _HELP_RECOLTE,
     "stock":     _HELP_STOCK,
@@ -310,6 +336,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/parcelle ajouter [nom] — Créer une parcelle\n"
         "/culture famille [culture] [famille] — Corriger une famille botanique\n"
         "/fiche [culture] — Fiche courte agronomique, zéro jeton\n"
+        "/lot [numéro ou culture] — La liste des lots, ou un lot par son numéro, zéro jeton\n"
         "/calendrier [culture] — Quand semer et récolter, selon votre zone\n"
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"

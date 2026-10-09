@@ -408,7 +408,7 @@ Les parcelles se créent aussi depuis l'application web, mais uniquement pendant
 /parcelle modifier nord exposition=sud
 /parcelle modifier nord superficie=8.5
 /parcelle modifier nord exposition=sud superficie=8.5
-/parcelle modifier serre pepiniere=true
+/parcelle modifier serre pepiniere=chaude
 ```
 
 | Paramètre | Valeurs | Effet |
@@ -689,6 +689,8 @@ Quels plants sont en godet ?
 ```
 
 Ou, bien plus lisible, l'écran **Pépinière** du tableau de bord, qui montre chaque lot avec sa frise Germination → Godet → Terre.
+
+**Le numéro de lot.** Chaque semis en pépinière reçoit un numéro court (1, 2, 3… dans votre potager, jamais réutilisé) que vous pouvez écrire au crayon sur l'étiquette de la barquette. Vous le dites dans une phrase — « repiqué 40 plants du lot 128 en godet », « perdu 5 plants du lot 128 » — et l'assistant rattache le geste à ce lot sans vous demander de quelles graines viennent les plants. Un numéro inconnu, ou d'une autre culture que celle dite, est signalé au récapitulatif : rien n'est corrigé à votre place. `/lot 128` (ou « où en est le lot 128 ? ») donne la fiche du lot, et `/lot` seul (ou « mes lots ») liste vos lots pour retrouver un numéro oublié ; dans l'écran Pépinière, le champ **« Aller au lot n° »** l'ouvre.
 
 ---
 
@@ -1418,6 +1420,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 
 | Commande | Ce qu'elle fait |
 |---|---|
+| `/lot [numéro ou culture]` | Sans numéro, la liste des lots (15 plus récents, épuisés marqués ⚪, filtre par culture) ; avec un numéro, le lot : culture, variété, date de semis, emplacement, graines semées, plants obtenus et restants |
 | `/fiche <culture>` | Fiche courte : famille, délai de retour, exposition, eau, profondeur, rusticité |
 | `/culture attributs <culture>` | Les quatre caractéristiques de conduite et leur source |
 | `/culture exposition <culture> <plein soleil\|mi-ombre\|ombre>` | Corriger l'exposition |
@@ -1436,7 +1439,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 |---|---|
 | `/parcelle lister` · `/parcelles` | Lister les parcelles |
 | `/parcelle ajouter <nom> [exposition] [m²]` | Créer une parcelle |
-| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere`, `abri`, `paillage`, `rangs` (1 à 99, ou `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m — la longueur utile de la planche, base du calcul des places de tous ses rangs ; `longueur=aucune` pour revenir à « non renseignée ». La largeur ne se déclare pas : elle se déduit de la superficie) |
+| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere` (`chaude` = chauffée ou à l'intérieur, `froide`, `oui` = pépinière sans type, `non` qui retire aussi le type — ex. `pepiniere=chaude`, ou « la serre est une pépinière chaude »), `abri`, `paillage`, `rangs` (1 à 99, ou `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m — la longueur utile de la planche, base du calcul des places de tous ses rangs ; `longueur=aucune` pour revenir à « non renseignée ». La largeur ne se déclare pas : elle se déduit de la superficie) |
 | `/parcelle renommer <ancien> <nouveau>` | Renommer, avec propagation sur tout l'historique |
 | `/parcelle supprimer <nom>` | Retirer une parcelle — les événements passent en « Non localisé » |
 
@@ -1546,7 +1549,7 @@ Certaines phrases sont comprises comme une **navigation** plutôt que comme un g
 | « Vous n'êtes membre d'aucun potager » | Compte relié mais sans potager | Créer ou rejoindre un potager depuis l'application web |
 | Le bot dit que le rôle ne permet pas d'enregistrer | Vous êtes en lecture seule sur ce potager | Demander le rôle éditeur au propriétaire |
 | Mon stock de tomates ne baisse pas quand je récolte | La tomate est une culture reproductrice | Normal : le pied reste. Le rendement, lui, augmente (section 12.2) |
-| Mon semis n'apparaît pas dans la pépinière | Il a été rattaché à une parcelle de plein champ | Corriger la parcelle du geste, ou déclarer cette parcelle `pepiniere=true` |
+| Mon semis n'apparaît pas dans la pépinière | Il a été rattaché à une parcelle de plein champ | Corriger la parcelle du geste, ou déclarer cette parcelle `pepiniere=oui` (ou `chaude` / `froide`) |
 | Un total paraît faux ou incomplet | Deux unités mélangées sur la même culture | Ramener les gestes concernés à une même unité (section 15.6) |
 | Une culture arrachée reste affichée sur le plan | L'arrachage n'a jamais été dicté | Enregistrer la perte / l'arrachage (section 13.2) |
 | Un lot affiche « germination indéterminée » | Le nombre de graines d'origine n'a jamais été donné | Le préciser à la prochaine mise en godet, ou corriger le semis |

@@ -637,7 +637,9 @@ def _construire_parcelle_supprimer(groupes):
     "parcelle_pepiniere",
     r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
     r"(?:est|devient|sert de|sert d|passe en|passe comme)\s+"
-    + _ARTICLE + r"(?:nouvelle\s+)?pepiniere\b",
+    + _ARTICLE + r"(?:nouvelle\s+)?pepiniere\b"
+    # [US-208 / CA3] « … est une pépinière chaude / froide / chauffée ».
+    r"(?:\s+(?P<type>chaude|froide|chauffee|non\s+chauffee)\b)?",
     "parcelle",
     "modifier",
     declarative=True,
@@ -646,7 +648,36 @@ def _construire_parcelle_pepiniere(groupes):
     nom = _nettoyer_nom(groupes["nom"])
     if not _nom_plausible(nom):
         return None
-    return {"nom": nom, "modification": "pepiniere=true"}
+    # [US-208 / CA2] Sans type dit, « pepiniere=oui » : une pépinière sans type,
+    # jamais supposée chaude ou froide.
+    return {"nom": nom, "modification": f"pepiniere={_type_dicte(groupes) or 'oui'}"}
+
+
+def _type_dicte(groupes) -> Optional[str]:
+    """[US-208 / CA3] « chauffée » → chaude, « non chauffée » → froide."""
+    brut = (groupes.get("type") or "").strip()
+    if not brut:
+        return None
+    if brut.startswith("non"):
+        return "froide"
+    return "chaude" if brut.startswith("chau") else brut
+
+
+@_regle(
+    "parcelle_pepiniere_chauffee",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:est|devient)\s+(?P<type>chauffee|non\s+chauffee)\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_pepiniere_chauffee(groupes):
+    # [US-208 / CA3] « ma mini-serre est chauffée » — dite d'une pépinière déjà
+    # déclarée ; le récapitulatif nomme le type avant toute écriture.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom):
+        return None
+    return {"nom": nom, "modification": f"pepiniere={_type_dicte(groupes)}"}
 
 
 @_regle(
@@ -972,6 +1003,37 @@ def _construire_historique(groupes):
 )
 def _construire_meteo(groupes):
     return {}
+
+
+@_regle(
+    "lot_pepiniere",
+    # [US-209 / CA7] « où en est le lot 128 ? », « montre le lot n 128 », « lot 128 ».
+    # Le « # » est effacé par la normalisation : « #128 » arrive ici comme « 128 ».
+    r"\A(?:(?:ou en est|ou en sont|que devient)\s+)?" + _INTENTION + _MONTRER + _ARTICLE
+    + r"lot\s+(?:n(?:deg)?\s*|no\s+|numero\s+)?(?P<numero>\d{1,6})\s*\??\s*\Z",
+    "lot",
+    None,
+)
+def _construire_lot_pepiniere(groupes):
+    return {"numero": groupes["numero"]}
+
+
+@_regle(
+    "liste_lots",
+    # « mes lots », « liste des lots », « quels sont mes lots de tomate ». Ancré en
+    # tête de phrase : « 12 lots de godets » reste une quantité.
+    r"\A(?:quels sont\s+|quelle est\s+)?" + _INTENTION + _MONTRER + _ARTICLE
+    + r"(?:liste\s+(?:de\s+|des\s+)?)?lots\b(?P<tail>.*)",
+    "lot",
+    None,
+)
+def _construire_liste_lots(groupes):
+    tail = re.sub(
+        r"\b(?:de|des|du|d|la|le|les|pepiniere|pepinieres|semis|en|cours)\b", " ",
+        groupes.get("tail") or "",
+    )
+    cible = _cible_ou_rien(tail)
+    return {"culture": cible} if cible else {}
 
 
 @_regle(
@@ -2330,6 +2392,12 @@ def interpreter(
     normalise, _ = normaliser(brut)
     if not normalise or _est_demande_de_savoir(normalise):
         return None
+    # Une saisie de geste n'est jamais une commande à deviner : aucune règle de
+    # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
+    # quantité, variété et date. Import local : le routeur importe la base.
+    from llm.routeur import annonce_un_geste
+    if annonce_un_geste(brut):
+        return None
 
     candidate = _appeler_modele(brut, ctx)
     if candidate is None:
@@ -2463,6 +2531,9 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
             cle, _, brute = valeur.partition("=")
             cle = cle.strip().lower()
             lisible = {"true": "oui", "false": "non"}.get(brute.strip().lower(), brute.strip())
+            if cle == "pepiniere" and lisible in ("chaude", "froide"):
+                # [US-208 / Gherkin] « serre : pépinière chaude ».
+                lisible = f"pépinière {lisible}"
             lignes.append(_ligne_valeur(
                 _LIBELLES_MODIFICATION.get(cle, cle),
                 lisible,

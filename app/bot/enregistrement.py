@@ -287,9 +287,14 @@ def _build_action_summary(items: list[dict]) -> str:
         elif p.get("_parcelle_demandee") is not True:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("_lot_numero"): lines.append(f"🔖 Lot : *n° {p['_lot_numero']}*")   # [US-209 / CA8]
         ligne_contexte = _ligne_contexte_semis(p)
         if ligne_contexte:     lines.append(ligne_contexte)
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        if p.get("_alerte_lot"):   # [US-209 / CA6]
+            lines.append(f"\n{p['_alerte_lot']}")
+        if p.get("_alerte_emplacement"):   # [US-210 / CA2]
+            lines.append(f"\n{p['_alerte_emplacement']}")
         if p.get("_avertissement_coherence"):
             lines.append(f"\n{p['_avertissement_coherence']}")
         lines.append("\nC'est correct ?")
@@ -302,6 +307,12 @@ def _build_action_summary(items: list[dict]) -> str:
             culture = p.get("culture") or "?"
             qte_str = f" — {p['quantite']} {libelle_unite(p.get('unite'), p['quantite'])}".strip() if p.get("quantite") is not None else ""
             lines.append(f"{i}. *{action}* {culture}{qte_str}")
+            if p.get("_lot_numero"):   # [US-209 / CA8]
+                lines[-1] += f" (lot n° {p['_lot_numero']})"
+            if p.get("_alerte_lot"):   # [US-209 / CA6]
+                avertissements.append(f"{i}. {p['_alerte_lot']}")
+            if p.get("_alerte_emplacement"):   # [US-210 / CA2]
+                avertissements.append(f"{i}. {p['_alerte_emplacement']}")
             if p.get("_avertissement_coherence"):
                 avertissements.append(f"{i}. {p['_avertissement_coherence']}")
         if avertissements:
@@ -391,6 +402,8 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 return
             # [US-069] Le récapitulatif affiche le contexte RÉELLEMENT enregistré.
             parsed["contexte_semis"] = event.contexte_semis
+            if event.numero_lot is not None:   # [US-209 / CA1, CA8] le semis annonce son lot
+                parsed["_lot_numero"] = event.numero_lot
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
@@ -664,6 +677,7 @@ def _build_recap(p: dict, event_id: int) -> str:
         if p.get("variete"):      lines.append(f"🏷 Variété : *{p['variete']}*")
         if nb_p:                  lines.append(f"🌱 Plants repiqués en godet : *{nb_p}*{taux_str}")
         if nb_g:                  lines.append(f"🌾 Graines en barquette d'origine : *{nb_g}*")
+        if p.get("_lot_numero"):  lines.append(f"🔖 Lot : *n° {p['_lot_numero']}*")   # [US-209 / CA8]
         if p.get("parcelle"):     lines.append(f"📍 Parcelle : *{p['parcelle']}*")
         if p.get("date"):         lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"):  lines.append(f"📝 Note : *{p['commentaire']}*")
@@ -694,6 +708,7 @@ def _build_recap(p: dict, event_id: int) -> str:
         ("📅 Date",        p.get("date")),
         # [US-069] Filière du semis, seulement si elle est connue.
         ("🧭 Filière",     svc_contexte_semis.libelle_contexte(p["contexte_semis"]) if p.get("contexte_semis") else None),
+        ("🔖 Lot",         f"n° {p['_lot_numero']}" if p.get("_lot_numero") else None),   # [US-209 / CA8]
         ("📝 Note",        p.get("commentaire")),
     ]
 

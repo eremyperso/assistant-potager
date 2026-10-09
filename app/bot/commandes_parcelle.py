@@ -5,7 +5,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
-from utils.parcelles import normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle, format_longueur
+from utils.parcelles import normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle, format_longueur, libelle_pepiniere
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
@@ -31,7 +31,7 @@ async def cmd_parcelle(update, ctx) -> None:
         "Exemples :\n"
         "  /parcelle ajouter nord sud 12.5\n"
         "  /parcelle modifier nord exposition=sud superficie=8.5\n"
-        "  /parcelle modifier serre pepiniere=true\n"
+        "  /parcelle modifier serre pepiniere=chaude   (froide, oui, non)\n"
         "  /parcelle modifier nord rangs=5   (ou rangs=aucun)\n"
         "  /parcelle modifier nord longueur=12   (ou longueur=aucune)\n"
         "  /parcelle renommer sud carré-sud\n\n"
@@ -64,7 +64,8 @@ async def cmd_parcelle(update, ctx) -> None:
                 if p.superficie_m2 is not None:
                     details.append(f"{p.superficie_m2} m²")
                 if p.est_pepiniere:
-                    details.append("🌱 pépinière")
+                    # [US-208 / CA4] Le type absent est écrit, jamais supposé.
+                    details.append(f"🌱 {libelle_pepiniere(True, p.type_pepiniere)}")
                 if p.abri and p.abri != "aucun":
                     details.append(f"abri : {p.abri}")
                 if p.paillage:

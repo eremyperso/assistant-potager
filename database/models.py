@@ -29,13 +29,13 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
 [US-224] GesteIntention devient une file (etat, traite_le, motif_refus,
          avertissement_le) et ajout du modèle FileGestesReglage (relance)
 """
-from sqlalchemy import Column, Integer, BigInteger, SmallInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, JSON
+from sqlalchemy import Column, Integer, BigInteger, SmallInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, CheckConstraint, JSON
 # [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
 # aucun pilote (psycopg2 n'est sollicité qu'à la création du moteur). Le
 # `with_variant(Text(), "sqlite")` posé sur la colonne laisse les tests tourner
 # en SQLite en mémoire, sans branchement dans le modèle.
 from sqlalchemy.dialects.postgresql import TSVECTOR
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
 from database.db import Base
 
@@ -127,6 +127,10 @@ class Potager(Base):
     # déduction, `app.services.calendrier_cultural.zone_depuis_localisation`,
     # et un potager relocalisé suit sa nouvelle localisation sans rejeu.
     zone_climatique  = Column(String(20), nullable=True)
+    # [US-209 / CA1, CA2 / migration_v55] Dernier numéro de lot de pépinière
+    # attribué dans CE potager. Incrémenté dans la transaction du semis, jamais
+    # abaissé : un numéro n'est pas réutilisé, même après suppression.
+    compteur_lots    = Column(Integer, nullable=False, default=0, server_default="0")
 
 
 class PotagerMembre(Base):
@@ -223,6 +227,12 @@ class Evenement(Base):
     # app/services/contexte_semis.py (statistiques, fenêtre conseillée).
     contexte_semis = Column(String(16), nullable=True)
 
+    # [US-209 / CA1 / migration_v55] Numéro court du LOT de pépinière que forme ce
+    # semis : unique par potager, attribué à l'enregistrement par
+    # database/numerotation_lots.py, jamais réutilisé. Distinct de `id` (global,
+    # il changerait de sens à chaque import). NULL = semis hors pépinière.
+    numero_lot = Column(Integer, nullable=True)
+
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
     # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests
@@ -242,6 +252,12 @@ class Evenement(Base):
         # [US-163/CA12] Historique d'une parcelle par campagne — requête posée
         # par app.services.rotation.evaluer_rotation.
         Index("idx_evenements_parcelle_date", "parcelle_id", "date"),
+        # [US-209 / CA1] Un numéro de lot est unique dans son potager.
+        Index(
+            "ux_evenements_potager_numero_lot", "potager_id", "numero_lot", unique=True,
+            postgresql_where=text("numero_lot IS NOT NULL"),
+            sqlite_where=text("numero_lot IS NOT NULL"),
+        ),
     )
 
     @property
@@ -872,6 +888,13 @@ class Parcelle(Base):
                       lecture (`utils.parcelles.largeur_deduite`) et ne sert
                       qu'à l'affichage. N'entre dans aucun calcul de stock,
                       d'occupation en surface, de rendement ni de confiance.
+    - type_pepiniere : [migration_v54 / US-208] « chaude » (chauffée ou à
+                      l'intérieur) ou « froide », NULL = type non renseigné.
+                      N'existe que sur une pépinière (CHECK
+                      `ck_parcelles_type_pepiniere`). Ce n'est PAS `abri`, qui
+                      module la confiance des cultures EN PLACE. Ne change aucun
+                      calcul dans US-208 : ses effets viennent avec US-214,
+                      US-219 et US-220.
     """
     __tablename__ = "parcelles"
 
@@ -896,6 +919,9 @@ class Parcelle(Base):
     # pour que la valeur circule en flottant jusqu'à `GET /plan` sans passer
     # par un Decimal que le JSON ne saurait pas sérialiser.
     longueur_m    = Column(Float, nullable=True)
+    # [US-208 / migration_v54] Vocabulaire et cohérence avec `est_pepiniere`
+    # garantis par le CHECK SQL, revalidés au point d'écriture Python.
+    type_pepiniere = Column(String(8), nullable=True)
 
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent
@@ -906,6 +932,12 @@ class Parcelle(Base):
         # [migration_v23] Unicité par potager, pas globale — remplace l'ancienne
         # contrainte UNIQUE(nom_normalise) seule (parcelles_nom_normalise_key).
         UniqueConstraint("potager_id", "nom_normalise", name="uq_parcelles_potager_nom_normalise"),
+        # [US-208 / CA1] Pas de type hors pépinière, et deux valeurs seulement.
+        CheckConstraint(
+            "type_pepiniere IS NULL OR "
+            "(est_pepiniere AND type_pepiniere IN ('chaude', 'froide'))",
+            name="ck_parcelles_type_pepiniere",
+        ),
     )
 
 
@@ -1295,3 +1327,4 @@ class FileGestesReglage(Base):
     derniere_invitation_le = Column(DateTime, nullable=True)
     derniere_relance_le    = Column(DateTime, nullable=True)
     message_relance_id     = Column(Integer, nullable=True)
+from database import numerotation_lots  # noqa: E402,F401  [US-209] enregistre l'écouteur

@@ -1333,32 +1333,13 @@ def calcul_godets(
     plant_rows = _q_plant.all()
     plantations: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in plant_rows}
 
-    # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique par culture
-    varietes_par_culture: Dict[str, list] = {}
-    for culture, variete, *_ in rows:
-        if variete is not None:
-            varietes_par_culture.setdefault(culture, []).append(variete)
-
-    for culture in [c for (c, v) in list(plantations) if v is None]:
-        nb_sans_var = plantations.pop((culture, None), 0)
-        if nb_sans_var > 0:
-            varietes = varietes_par_culture.get(culture, [])
-            if len(varietes) == 1:
-                plantations[(culture, varietes[0])] = plantations.get((culture, varietes[0]), 0) + nb_sans_var
-            elif len(varietes) == 0:
-                plantations[(culture, None)] = nb_sans_var
-            else:
-                _logger.warning("[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée", culture, len(varietes))
-
-    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    for culture in {c for c, v, *_ in rows if v is None}:
-        varietes_plantees = [(c, v) for (c, v) in list(plantations) if c == culture and v is not None]
-        if len(varietes_plantees) == 1:
-            c_key, v_key = varietes_plantees[0]
-            nb = plantations.pop((c_key, v_key), 0)
-            if nb > 0:
-                plantations[(culture, None)] = plantations.get((culture, None), 0) + nb
-                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_key)
+    # Seule une plantation de même culture ET de même variété (renseignée) sort
+    # des godets. Décision PO du 07/10/2026, qui remplace les rattachements
+    # d'US-022 CA6 et CA6-reverse : une plantation sans variété — même face à un
+    # godet sans variété — est un évènement à part, jamais pris à la pépinière.
+    plantations = {
+        (c, v): q for (c, v), q in plantations.items() if (v or "").strip()
+    }
 
     # [vendu + perte_godet] Sorties de la pépinière hors plantation
     _q_sorties = (
@@ -1582,34 +1563,9 @@ def calcul_godets_par_culture(
     plant_rows = _q_plant_var.all()
     plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
 
-    # [US-022 / CA6] Plantation sans variété → rattacher selon le contexte godet
-    nb_plantes_sans_variete = plantations.pop(None, 0)
-    ca6_applied = False
-    if nb_plantes_sans_variete > 0:
-        varietes_avec_godet = [r[0] for r in rows if r[0] is not None]
-        if len(varietes_avec_godet) == 0:
-            # Godet aussi sans variété → match direct (cas le plus courant)
-            plantations[None] = nb_plantes_sans_variete
-        elif len(varietes_avec_godet) == 1:
-            v_unique = varietes_avec_godet[0]
-            plantations[v_unique] = plantations.get(v_unique, 0) + nb_plantes_sans_variete
-            ca6_applied = True  # [US-029 CA10] marque pour bloquer CA6-reverse
-        else:
-            _logger.warning(
-                "[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée du calcul",
-                culture, len(varietes_avec_godet),
-            )
-
-    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    # [US-029 CA10] Ne s'applique PAS si CA6 vient d'attribuer les plants (évite l'annulation mutuelle)
-    if not ca6_applied and any(r[0] is None for r in rows):
-        varietes_dans_plantations = [v for v in plantations if v is not None]
-        if len(varietes_dans_plantations) == 1:
-            v_unique = varietes_dans_plantations[0]
-            nb = plantations.pop(v_unique, 0)
-            if nb > 0:
-                plantations[None] = plantations.get(None, 0) + nb
-                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_unique)
+    # Décision PO du 07/10/2026 (remplace US-022 CA6, CA6-reverse et US-029
+    # CA10) : seule une plantation de même variété, renseignée, sort des godets.
+    plantations = {v: q for v, q in plantations.items() if (v or "").strip()}
 
     # [vendu + perte_godet] Sorties hors plantation
     _q_sorties_var = (
@@ -1734,19 +1690,12 @@ def _find_plantation_sources(
         for g in godet_events
     }
 
-    # Résolution variété si None (CA5)
-    if variete is None:
-        varietes_actives = {
-            g.variete for g in godet_events
-            if g.variete is not None and residuel.get(g.id, 0.0) > 0
-        }
-        if len(varietes_actives) == 1:
-            variete = next(iter(varietes_actives))
-            _logger.info("[US-029 CA5] Variété unique déduite depuis godet : '%s' pour '%s'", variete, culture)
-        elif len(varietes_actives) == 0:
-            return (None, None)
-        else:
-            return (None, None)  # Ambiguïté : menu inline requis en amont
+    # Plantation sans variété : évènement à part, jamais rattaché aux godets et
+    # jamais dotée d'une variété déduite (décision PO du 07/10/2026, qui
+    # remplace l'héritage silencieux d'US-029 CA5). Seuls culture ET variété
+    # identiques relient une plantation à la pépinière.
+    if not (variete or "").strip():
+        return (None, None)
 
     # Allocation FIFO sur les godets de la variété (CA8)
     godets_variete = [
@@ -1835,7 +1784,12 @@ def calcul_lots_pepiniere(
       unite, graines_soldees, graines_en_germination, plants_obtenus,
       nb_mises_en_godet, date_derniere_mise_en_godet, nb_plantes, nb_vendus,
       nb_pertes_godet, stock_residuel_godet, etat_germination, taux_germination,
-      incoherence_saisie, sans_semis_rattache
+      incoherence_saisie, sans_semis_rattache, emplacement
+
+    [US-210 / CA5, CA6, CA7] `emplacement` = emplacement COURANT du lot à `date_ref` :
+    {parcelle_id, nom, type_pepiniere, origine}, `origine` valant "mise_en_godet"
+    (dernière mise en godet localisée), "semis" ou "non_renseigne". Un lot a un seul
+    emplacement. N'entre dans aucun total : les stocks restent agrégés par culture.
     """
     from sqlalchemy import or_ as _sa_or
 
@@ -1856,6 +1810,9 @@ def calcul_lots_pepiniere(
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
         .filter(_sa_or(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
+        # [US-209 / CA4] Un semis dont la filière est corrigée en pleine terre
+        # (US-069) quitte la liste des lots — il garde pourtant son numéro.
+        .filter(_sa_or(Evenement.contexte_semis.is_(None), Evenement.contexte_semis != "pleine_terre"))
     )
     if potager_id is not None:
         _q_semis = _q_semis.filter(Evenement.potager_id == potager_id)
@@ -1867,10 +1824,16 @@ def calcul_lots_pepiniere(
         base = {
             "lot_id":                     "",
             "semis_id":                   None,
+            # [US-209 / CA1] Numéro court du lot, unique dans le potager ; None
+            # pour le lot « godets sans semis rattaché », qui n'en a pas.
+            "numero_lot":                 None,
             "culture":                    None,
             "variete":                    None,
             "date_semis":                 None,
             "parcelle":                   None,
+            # [US-208 / CA5] Type de la pépinière du lot : chaude, froide, ou
+            # None (type non renseigné, ou lot sans emplacement).
+            "type_pepiniere":             None,
             "graines_semees":             0,
             "unite":                      "graines",
             "graines_soldees":            0,
@@ -1881,6 +1844,7 @@ def calcul_lots_pepiniere(
             "nb_vendus":                  0,
             "nb_pertes_godet":            0,
             "sans_semis_rattache":        False,
+            "_parcelle_godet_id":         None,
             "_declaration_incomplete":    False,
             "_sorties":                   0,
         }
@@ -1892,10 +1856,12 @@ def calcul_lots_pepiniere(
         lots[("semis", s.id)] = _nouveau_lot(
             lot_id         = f"semis-{s.id}",
             semis_id       = s.id,
+            numero_lot     = s.numero_lot,
             culture        = s.culture,
             variete        = s.variete,
             date_semis     = s.date,
             parcelle       = s.parcelle_rel.nom if s.parcelle_rel else None,
+            type_pepiniere = s.parcelle_rel.type_pepiniere if s.parcelle_rel else None,
             graines_semees = int(s.quantite or 0),
             unite          = s.unite or "graines",
         )
@@ -1910,6 +1876,7 @@ def calcul_lots_pepiniere(
             Evenement.nb_plants_godets,
             Evenement.origine_graines_id,
             Evenement.date,
+            Evenement.parcelle_id,
         )
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
@@ -1959,6 +1926,10 @@ def calcul_lots_pepiniere(
             or g.date > lot["date_derniere_mise_en_godet"]
         ):
             lot["date_derniere_mise_en_godet"] = g.date
+        # [US-210 / CA5, CA7] Les mises en godet arrivent par ordre chronologique :
+        # la dernière LOCALISÉE donne l'emplacement courant du lot (un seul par lot).
+        if g.parcelle_id is not None:
+            lot["_parcelle_godet_id"] = g.parcelle_id
         godet_lot[g.id] = cle
 
     if not lots:
@@ -2041,10 +2012,17 @@ def calcul_lots_pepiniere(
             restant = _allouer(cle, restant, "nb_plantes")
             if restant <= 0:
                 break
-        if restant > 0:
-            _allouer_fifo(culture_p, variete_p, restant, "nb_plantes")
+        # Repli FIFO STRICT : même culture ET même variété, variété renseignée.
+        # Une plantation sans variété — ou d'une variété sans lot — est un
+        # évènement à part, jamais rattaché à la pépinière (décision PO du
+        # 07/10/2026 : un plant de « tomate » n'est pas pris au lot « jaune »).
+        if restant > 0 and (variete_p or "").strip():
+            for cle in lots_par_cv.get(_cle_cv(culture_p, variete_p), []):
+                if restant <= 0:
+                    break
+                restant = _allouer(cle, restant, "nb_plantes")
 
-    # 3b. Ventes et pertes en godet — jamais chaînées à un lot précis, imputées FIFO.
+    # 3b. Ventes et pertes en godet — imputées FIFO, sauf si elles citent leur lot (US-209).
     _q_sorties = (
         db.query(
             Evenement.culture,
@@ -2052,6 +2030,7 @@ def calcul_lots_pepiniere(
             Evenement.type_action,
             Evenement.quantite,
             Evenement.date,
+            Evenement.origine_graines_id,
         )
         .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
         .filter(Evenement.culture.isnot(None))
@@ -2060,11 +2039,47 @@ def calcul_lots_pepiniere(
         _q_sorties = _q_sorties.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_sorties = _q_sorties.filter(Evenement.date <= cutoff)
-    for culture_s, variete_s, action_s, qte_s, _date_s in _q_sorties.order_by(
+    for culture_s, variete_s, action_s, qte_s, _date_s, lot_cite_s in _q_sorties.order_by(
         Evenement.date.asc(), Evenement.id.asc()
     ).all():
         champ = "nb_vendus" if action_s == "vendu" else "nb_pertes_godet"
-        _allouer_fifo(culture_s, variete_s, int(qte_s or 0), champ)
+        restant_s = int(qte_s or 0)
+        # [US-209 / CA5] Une sortie qui cite son lot ("perdu 5 plants du lot 128")
+        # s'impute D'ABORD sur ce lot ; le reste éventuel retombe sur le FIFO.
+        if lot_cite_s is not None and ("semis", lot_cite_s) in lots:
+            restant_s = _allouer(("semis", lot_cite_s), restant_s, champ)
+        if restant_s > 0:
+            _allouer_fifo(culture_s, variete_s, restant_s, champ)
+
+    # ── 3c. Emplacement courant [US-210 / CA5, CA6] ─────────────────────────
+    # Règle écrite une seule fois : le dernier déplacement (US-211, pas encore livrée),
+    # sinon la dernière mise en godet localisée, sinon la parcelle du semis, sinon
+    # « non renseigné ». Un lot sans semis rattaché n'a pas de semis où se replier.
+    ids_pepinieres = {l["_parcelle_godet_id"] for l in lots.values() if l["_parcelle_godet_id"]}
+    parcelles_godets: Dict[int, Parcelle] = {}
+    if ids_pepinieres:
+        _q_pg = db.query(Parcelle).filter(Parcelle.id.in_(ids_pepinieres))
+        if potager_id is not None:
+            _q_pg = _q_pg.filter(Parcelle.potager_id == potager_id)
+        parcelles_godets = {p.id: p for p in _q_pg.all()}
+
+    def _emplacement(lot: dict) -> dict:
+        p_godet = parcelles_godets.get(lot["_parcelle_godet_id"]) if lot["_parcelle_godet_id"] else None
+        if p_godet is not None:
+            return {
+                "parcelle_id": p_godet.id, "nom": p_godet.nom,
+                "type_pepiniere": p_godet.type_pepiniere, "origine": "mise_en_godet",
+            }
+        if lot["parcelle"]:
+            return {
+                "parcelle_id": lot.get("_parcelle_semis_id"), "nom": lot["parcelle"],
+                "type_pepiniere": lot["type_pepiniere"], "origine": "semis",
+            }
+        return {"parcelle_id": None, "nom": None, "type_pepiniere": None, "origine": "non_renseigne"}
+
+    for s in semis_events:
+        if s.parcelle_id is not None:
+            lots[("semis", s.id)]["_parcelle_semis_id"] = s.parcelle_id
 
     # ── 4. État de germination, incohérences, stock résiduel ────────────────
     resultat: List[dict] = []
@@ -2118,8 +2133,11 @@ def calcul_lots_pepiniere(
         lot["stock_residuel_godet"]   = max(
             0, plants - lot["nb_plantes"] - lot["nb_vendus"] - lot["nb_pertes_godet"]
         )
+        lot["emplacement"] = _emplacement(lot)
         lot.pop("_declaration_incomplete", None)
         lot.pop("_sorties", None)
+        lot.pop("_parcelle_godet_id", None)
+        lot.pop("_parcelle_semis_id", None)
         resultat.append(lot)
 
     return resultat
@@ -2226,6 +2244,37 @@ def lot_pepiniere_par_semis(
         if lot["semis_id"] == semis_id:
             return lot
     return None
+
+
+def lot_pepiniere_par_numero(
+    db: Session,
+    numero: int,
+    date_ref: Optional[_date] = None,
+    potager_id: Optional[int] = None,
+) -> Optional[dict]:
+    """
+    [US-209 / CA7, CA9] Lot de pépinière désigné par son numéro court, dans CE
+    potager : le lot 5 d'un autre potager n'est jamais trouvé. None si inconnu.
+    """
+    for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id):
+        if lot.get("numero_lot") is not None and lot["numero_lot"] == numero:
+            return lot
+    return None
+
+
+def ids_godets_du_lot(
+    db: Session, semis_id: int, potager_id: Optional[int] = None
+) -> List[int]:
+    """[US-209 / CA5] Identifiants des mises en godet rattachées à un lot (son semis) —
+    de quoi chaîner une plantation à CE lot (`source_evenement_ids`, US-029)."""
+    q = (
+        db.query(Evenement.id)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.origine_graines_id == semis_id)
+    )
+    if potager_id is not None:
+        q = q.filter(Evenement.potager_id == potager_id)
+    return [row[0] for row in q.order_by(Evenement.date.asc(), Evenement.id.asc()).all()]
 
 
 _MOIS_FR = [

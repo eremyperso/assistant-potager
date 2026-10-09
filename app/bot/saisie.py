@@ -14,6 +14,7 @@ from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.culture_resolve import resolve_culture, resolve_variete
 from app.services.context import current_context
 from app.services import parcelles as svc_parcelles
+from app.services import lots_pepiniere as svc_lots  # [US-209]
 from app.services.permissions import require_role, PermissionInsuffisanteError
 from .noyau import MENU_KEYBOARD, _md, log
 from .etat import (
@@ -280,6 +281,15 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
 
     log.info(f"🤖 PARSING        : {json.dumps(items, ensure_ascii=False)}")
     items = _normalize_items(items, texte)
+    # [US-209 / CA5, CA6] « lot 128 » : rattache le geste au lot cité, ou signale
+    # un numéro inconnu / contradictoire au récapitulatif (jamais corrigé en silence).
+    _db_lot = SessionLocal()
+    try:
+        svc_lots.resoudre_references(_db_lot, current_context(), items, texte)
+        # [US-210 / CA1, CA2] La pépinière dite pour des godets : pépinière, ou signalée.
+        svc_lots.controler_emplacements_godets(_db_lot, current_context(), items)
+    finally:
+        _db_lot.close()
     if len(items) > 1:
         log.info(f"📦 ITEMS NORMALISÉS: {len(items)} événements à sauvegarder")
 
@@ -477,6 +487,23 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 culture_semis_ca7, user_id,
             )
             return
+
+    # [US-209 / CA6] Mise en godet dont le lot cité est inconnu ou contredit la culture :
+    # les menus qui suivent (variété, lot, graines) ne montrent jamais le récapitulatif
+    # et choisiraient un autre lot à la place du jardinier. On s'arrête ici, on le dit.
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "mise_en_godet"
+        and items[0].get("_alerte_lot")
+    ):
+        alerte = items[0]["_alerte_lot"].replace(
+            "Confirmez pour enregistrer sans lot, ou annulez.",
+            "Rien n'est enregistré : redites la phrase avec le bon numéro, ou sans numéro de lot.",
+        )
+        log.info("[US-209 / CA6] Mise en godet interrompue : %s", alerte)
+        if msg: await msg.edit_text(alerte, parse_mode="Markdown")
+        else:   await message.reply_text(alerte, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+        return
 
     # [US-019 / CA1-CA3] Interception mise_en_godet sans variété — sélection assistée
     import time as _time
@@ -891,11 +918,11 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         "geste_file": geste_file,
     }
 
-    # Actions pépinière → jamais de parcelle (godets non localisés dans une parcelle)
-    # [fix bug id=351] mise_en_godet ajouté — un godet n'est jamais rattaché à une
-    # parcelle, cette liste doit rester alignée avec `parcelle_id=None` forcé par
-    # creer_evenement_godet (sinon CA8 propose une parcelle réelle, ex. "serre",
-    # qui finit par être assignée à un événement qui ne devrait jamais en avoir).
+    # Actions pépinière → jamais de proposition de parcelle ordinaire (CA8).
+    # [fix bug id=351] mise_en_godet ajouté — le menu CA8 proposerait une parcelle
+    # réelle, ex. "planche nord", qui finirait assignée à un godet.
+    # [US-210 / CA1] La pépinière d'un godet n'est jamais devinée : seule la phrase
+    # (ou le Journal) la renseigne ; celle qui est dite est contrôlée plus haut.
     _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
 
     # [US-172 / CA19, CA20] Le geste cite une parcelle qui n'existe pas ?

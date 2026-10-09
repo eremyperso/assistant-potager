@@ -1064,6 +1064,7 @@ def modifier_parcelle(
             "nb_rangs": parcelle.nb_rangs, "exposition": parcelle.exposition,
             "type_sol": parcelle.type_sol, "abri": parcelle.abri,
             "paillage": parcelle.paillage, "est_pepiniere": parcelle.est_pepiniere,
+            "type_pepiniere": parcelle.type_pepiniere,
             "actif": parcelle.actif,
             "modifications": modifs,
         }
@@ -2581,6 +2582,9 @@ def get_plan(
                 "largeur_incoherente": largeur_incoherente,
                 "ordre":         p.ordre,
                 "est_pepiniere": bool(p.est_pepiniere),
+                # [US-208 / CA5] « chaude », « froide », ou None = type non
+                # renseigné (toujours None hors pépinière).
+                "type_pepiniere": p.type_pepiniere,
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
                 "has_observations": nb_obs_parcelle > 0,
@@ -2707,6 +2711,42 @@ def get_godets(
 
 
 
+def _lot_pepiniere_json(lot: dict, familles: dict) -> dict:
+    """[US-065, US-209] Un lot de pépinière tel que l'API le rend (dates en ISO court, famille)."""
+    return {
+        **lot,
+        "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
+        "date_derniere_mise_en_godet": (
+            str(lot["date_derniere_mise_en_godet"])[:10]
+            if lot["date_derniere_mise_en_godet"] else None
+        ),
+        "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
+    }
+
+
+@app.get("/pepiniere/lots/{numero}")
+def get_pepiniere_lot_par_numero(
+    numero: int,
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """
+    [US-209 / CA9] Un lot de pépinière désigné par son numéro court, dans le potager
+    consulté. Un numéro inconnu — ou celui d'un autre potager — répond 404
+    « Aucun lot n° N dans ce potager ».
+    """
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        lot = svc_stock.lot_pepiniere_par_numero(db, use_ctx, numero)
+        if lot is None:
+            raise HTTPException(status_code=404, detail=f"Aucun lot n° {numero} dans ce potager")
+        familles = svc_familles.familles_par_culture(db, use_ctx)
+        return _lot_pepiniere_json(lot, familles)
+    finally:
+        db.close()
+
+
 @app.get("/pepiniere/lots")
 def get_pepiniere_lots(
     date_ref: date = Query(default=None),
@@ -2744,18 +2784,7 @@ def get_pepiniere_lots(
         # suivant, sans copie mémorisée nulle part.
         familles = svc_familles.familles_par_culture(db, use_ctx)
         return {
-            "lots": [
-                {
-                    **lot,
-                    "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
-                    "date_derniere_mise_en_godet": (
-                        str(lot["date_derniere_mise_en_godet"])[:10]
-                        if lot["date_derniere_mise_en_godet"] else None
-                    ),
-                    "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
-                }
-                for lot in lots
-            ],
+            "lots": [_lot_pepiniere_json(lot, familles) for lot in lots],
             "total": len(lots),
             "date_ref_effective": date_ref_effective.isoformat(),
         }

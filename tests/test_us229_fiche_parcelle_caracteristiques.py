@@ -159,11 +159,13 @@ def test_us229_ca3_la_largeur_n_est_pas_une_colonne() -> None:
 
 def test_us229_ca3_aucune_migration_livree() -> None:
     """CA3 — La dernière migration du dépôt reste celle d'avant l'US."""
-    migrations = sorted(
-        int(m.stem.split("_v")[1])
-        for m in (RACINE / "migrations").glob("migration_v*.sql")
-    )
-    assert migrations[-1] == 53, (
+    # Les migrations postérieures (v54, US-208…) ne sont pas de son fait : ce
+    # qui compte, c'est qu'aucune ne soit livrée AU NOM d'US-229.
+    fautives = [
+        m.name for m in (RACINE / "migrations").glob("migration_v*.sql")
+        if "US-229" in m.read_text(encoding="utf-8")
+    ]
+    assert not fautives, (
         "US-229 ne livre aucune migration : les champs de la carte existent tous."
     )
 

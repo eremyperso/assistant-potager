@@ -120,3 +120,39 @@ export function joursDepuis(dateISO, aujourdhui = new Date()) {
   if (Number.isNaN(d.getTime())) return null
   return Math.max(0, Math.floor((aujourdhui - d) / 86400000))
 }
+
+/**
+ * [US-208 / CA6] L'emplacement d'un lot et le type de sa pépinière.
+ * « Serre · pépinière chaude », « Châssis · type non renseigné » — le type
+ * absent est écrit, jamais supposé (RT2). Un lot sans emplacement connu reste
+ * « Pépinière » : il n'a pas de pépinière dont on puisse dire le type.
+ */
+export function emplacementLot(lot) {
+  // [US-210 / CA5] L'emplacement COURANT, calculé par l'API (godets localisés, sinon semis).
+  const emp = lot?.emplacement
+  const nom = emp ? emp.nom : lot?.parcelle
+  const typePep = emp ? emp.type_pepiniere : lot?.type_pepiniere
+  if (!nom) return emp ? 'Emplacement non renseigné' : 'Pépinière'
+  const type = typePep ? `pépinière ${typePep}` : 'type non renseigné'
+  return `${nom} · ${type}`
+}
+
+/**
+ * [US-209 / CA10, CA11] Le numéro court d'un lot, tel qu'on l'écrit sur l'étiquette :
+ * « #128 ». Le lot « godets sans semis rattaché » n'en a pas — il n'affiche rien.
+ */
+export function libelleNumeroLot(lot) {
+  return lot?.numero_lot != null ? `#${lot.numero_lot}` : null
+}
+
+/**
+ * [US-209 / CA11] Lit ce que le jardinier tape dans « Aller au lot n° » : « 128 »,
+ * « #128 », « n° 128 », « lot 128 ». Retourne l'entier, ou null si ce n'est pas un numéro.
+ */
+export function lireNumeroLot(saisie) {
+  const m = /^\s*(?:lot\s*)?(?:n\s*[°º.]?\s*)?#?\s*(\d{1,6})\s*$/i.exec(String(saisie ?? ''))
+  return m ? Number(m[1]) : null
+}
+
+/** [US-209 / CA11] Le message d'un numéro inconnu — identique pour le champ et l'adresse. */
+export const messageLotInconnu = (numero) => `Aucun lot n° ${numero} dans ce potager`

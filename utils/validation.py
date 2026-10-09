@@ -149,6 +149,10 @@ def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     Ne bloque jamais l'action entière : seule la culture non fondée est retirée.
     """
     culture = parsed.get("culture")
+    # [US-209] Culture reprise du lot cité ("repiqué 5 plants du lot 4") : elle vient
+    # de la base, pas du modèle, et n'a pas à figurer dans la phrase.
+    if parsed.get("_lot_numero") is not None:
+        return parsed
     if culture and not culture_grounded_dans_texte(culture, texte_original):
         parsed = dict(parsed)
         parsed["culture"] = None

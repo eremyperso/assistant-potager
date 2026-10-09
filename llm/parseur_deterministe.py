@@ -154,7 +154,7 @@ _UNITES: dict[str, str] = {
 # Liste CLOSE — c'est elle qui rend la règle « tout expliquer » tenable.
 _MOTS_VIDES: frozenset[str] = frozenset({
     "de", "du", "des", "d", "l", "la", "le", "les", "a", "au", "aux", "en",
-    "et", "sur", "dans", "pour", "avec", "mes", "mon", "ma", "ce", "cet",
+    "et", "sur", "dans", "sous", "pour", "avec", "mes", "mon", "ma", "ce", "cet",
     "cette", "ces", "j", "ai", "je", "on", "nous", "il", "y", "s",
     "que", "qui", "effectue", "effectuee", "effectues", "effectuees",
     "fait", "faite", "faits", "faites", "total", "totale", "environ",
@@ -168,7 +168,7 @@ _MOTS_VIDES: frozenset[str] = frozenset({
 
 # Marqueurs de parcelle : le nom qui suit est résolu contre les parcelles
 # réelles du potager, jamais créé (CA4).
-_MARQUEURS_PARCELLE: frozenset[str] = frozenset({"parcelle", "parcelles", "carre", "planche", "serre"})
+_MARQUEURS_PARCELLE: frozenset[str] = frozenset({"parcelle", "parcelles", "carre", "planche", "serre", "chassis"})
 
 # Vocabulaire de rangs : le partage quantité/rang est justement l'ambiguïté que
 # le modèle signale par `action="AMBIGUE"`. La grammaire ne tranche pas.
@@ -332,7 +332,9 @@ def _extraire_parcelle(mots: list[str], cultures: dict[str, str]) -> tuple[Optio
     for i, mot in enumerate(mots):
         if mot not in _MARQUEURS_PARCELLE:
             continue
-        libelle: list[str] = []
+        # [US-210 / CA1] « châssis » est déjà une partie du nom (« châssis froid ») :
+        # « sous le châssis froid » désigne la pépinière, pas un marqueur muet.
+        libelle: list[str] = ["chassis"] if mot == "chassis" else []
         j = i + 1
         while j < len(mots):
             suivant = mots[j]
@@ -429,6 +431,13 @@ def parser_saisie(
     if not texte or not texte.strip():
         return _repli("texte vide", texte)
 
+    # [US-209 / CA5] « lot 128 », « #128 » : la référence à un lot de pépinière se
+    # lit ICI, avant la normalisation qui effacerait le « # » et laisserait le
+    # numéro passer pour une seconde quantité. Elle n'a de sens que pour un geste
+    # de pépinière (vérifié plus bas) ; ailleurs la phrase part au modèle.
+    from app.services.lots_pepiniere import ACTIONS_AVEC_LOT, extraire_reference_lot
+    texte, numero_lot_cite = extraire_reference_lot(texte)
+
     normalise = _normaliser(texte)
     if not normalise:
         return _repli("texte sans contenu exploitable", texte)
@@ -455,6 +464,19 @@ def parser_saisie(
     geste, mots = _extraire_geste(mots)
     if geste is None:
         return _repli("aucun geste reconnu en tête de phrase", texte)
+
+    # [US-209 / CA5] « repiqué 40 plants du lot 128 en godet » : la grammaire lit
+    # « repiqué » comme une plantation ; c'est « en godet » qui en fait une mise en
+    # godet. La tournure part avec le geste qu'elle a requalifié.
+    if numero_lot_cite is not None and geste == "plantation":
+        for i in range(len(mots) - 1):
+            if mots[i] == "en" and mots[i + 1] in ("godet", "godets"):
+                geste = "mise_en_godet"
+                mots = mots[:i] + mots[i + 2:]
+                break
+
+    if numero_lot_cite is not None and geste not in ACTIONS_AVEC_LOT:
+        return _repli("référence de lot hors geste de pépinière", texte)
 
     mots = _regrouper_unites_implantation(mots, geste)
 
@@ -523,9 +545,11 @@ def parser_saisie(
         culture, mots, nb_cultures = _extraire_culture(mots, cultures)
         if culture is None and nb_cultures > 1:
             return _repli("plusieurs cultures dans la phrase", texte)
-        if culture is None and geste in GESTES_EXIGEANT_CULTURE:
+        # [US-209 / CA5] Un lot cité porte sa culture : « repiqué 40 plants du lot 128 »
+        # ne la redit pas, c'est la résolution du lot (au récapitulatif) qui la fournit.
+        if culture is None and geste in GESTES_EXIGEANT_CULTURE and numero_lot_cite is None:
             return _repli("culture absente ou inconnue du potager", texte)
-        if culture is None and parcelle_nom is None:
+        if culture is None and parcelle_nom is None and numero_lot_cite is None:
             return _repli("ni culture ni parcelle identifiées", texte)
 
         variete: Optional[str] = None
@@ -566,6 +590,9 @@ def parser_saisie(
 
     if contexte_semis is not None:
         item["contexte_semis"] = contexte_semis
+
+    if numero_lot_cite is not None:
+        item["numero_lot_cite"] = numero_lot_cite   # [US-209 / CA5] résolu au récapitulatif
 
     if geste == "mise_en_godet":
         # Une mise en godet compte des plants repiqués, jamais une quantité

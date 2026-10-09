@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis } from '../lib/pepiniere.js'
+import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
@@ -176,7 +176,11 @@ function LotCard({ lot, onOpen }) {
         <Badge tint={PEP_STADES[stade].tint} solid>{stade === 0 ? 'Germination' : PEP_STADES[stade].l}</Badge>
         <div className="flex items-center gap-2.5 mt-2.5">
           <div className="flex-1 min-w-0">
-            <div className="font-serif text-[16px] font-semibold text-txt truncate capitalize">{lot.culture}</div>
+            <div className="font-serif text-[16px] font-semibold text-txt truncate capitalize">
+              {/* [US-209 / CA10] Le numéro écrit au crayon sur l'étiquette. */}
+              {libelleNumeroLot(lot) && <span className="text-txt3 font-sans text-[13px] mr-1.5">{libelleNumeroLot(lot)}</span>}
+              {lot.culture}
+            </div>
             <div className="font-serif italic text-[12.5px] text-txt2 truncate">
               {lot.variete || 'Variété non spécifiée'}
             </div>
@@ -227,7 +231,7 @@ function LotCard({ lot, onOpen }) {
           {lot.incoherence_saisie && (
             <Badge tint="red">⚠️ {st.P} plants pour {st.S} {lot.unite || 'graines'}</Badge>
           )}
-          <span className="ml-auto text-[11.5px] text-txt3 truncate">{lot.parcelle || 'Pépinière'}</span>
+          <span className="ml-auto text-[11.5px] text-txt3 truncate">{emplacementLot(lot)}</span>
         </div>
       </div>
     </button>
@@ -287,7 +291,8 @@ function DetailModal({ lot, onClose }) {
       .finally(() => setLoading(false))
   }, [lot.lot_id])
 
-  const titre = lot.variete ? `${lot.culture} · ${lot.variete}` : lot.culture
+  const base = lot.variete ? `${lot.culture} · ${lot.variete}` : lot.culture
+  const titre = libelleNumeroLot(lot) ? `${libelleNumeroLot(lot)} · ${base}` : base   // [US-209 / CA10]
   const sousTitre = lot.sans_semis_rattache
     ? 'Cycle de vie — godets sans semis rattaché'
     : `Cycle de vie — semis du ${fmt(lot.date_semis)}`
@@ -463,16 +468,36 @@ export default function Pepiniere({ refresh }) {
   // chargés : sa fiche s'ouvre et son arrivée est annoncée. Lot inconnu — sorti
   // de pépinière, supprimé, d'un autre potager — l'écran s'ouvre quand même, et
   // le dit. L'intention ne déclenche aucune écriture : elle ne fait qu'ouvrir.
+  // [US-209 / CA11] `lot=128` désigne le NUMÉRO court écrit sur l'étiquette ; un
+  // identifiant technique (`semis-12`) reste reconnu pour les liens déjà partagés.
   useEffect(() => {
     if (!intention?.lot || loading) return
-    const cible = tousLots.find((l) => String(l.lot_id) === String(intention.lot))
+    const numero = lireNumeroLot(intention.lot)
+    const cible = tousLots.find((l) =>
+      (numero != null && l.numero_lot === numero) || String(l.lot_id) === String(intention.lot))
     if (cible) {
       setLotOuvert(cible)
       annoncer(`Lot ${cible.culture}${cible.variete ? ` · ${cible.variete}` : ''} ouvert.`)
     } else {
-      signaler("Ce lot de semis n'existe plus.")
+      signaler(numero != null ? messageLotInconnu(numero) : "Ce lot de semis n'existe plus.")
     }
   }, [loading, data, intention])
+
+  // [US-209 / CA11] « Aller au lot n° » — le lot est demandé au serveur par son
+  // numéro, dans le potager consulté : un numéro d'un autre potager n'existe pas.
+  const [numeroSaisi, setNumeroSaisi] = useState('')
+  async function allerAuLot(e) {
+    e.preventDefault()
+    const numero = lireNumeroLot(numeroSaisi)
+    if (numero == null) { signaler("Tapez le numéro écrit sur l'étiquette, par exemple 128."); return }
+    try {
+      const lot = await api.pepiniereLot(numero, potagerId)
+      setLotOuvert(lot)
+      setNumeroSaisi('')
+    } catch (err) {
+      signaler(err.statut === 404 || /404/.test(err.message) ? messageLotInconnu(numero) : err.message)
+    }
+  }
 
   // [CA13] Le filtre porte à la fois sur la culture et sur la variété ; la date
   // de référence, absente de la maquette, est conservée dans la barre de filtres.
@@ -537,6 +562,18 @@ export default function Pepiniere({ refresh }) {
         aria-label="Filtrer par culture"
       />
       <Select value={tri} options={TRIS} onChange={setTri} aria-label="Trier les lots" />
+      {/* [US-209 / CA11] Le numéro écrit au crayon sur l'étiquette ouvre la fiche du lot. */}
+      <form onSubmit={allerAuLot} className="flex items-center gap-1.5">
+        <label htmlFor="aller-au-lot" className="text-[12.5px] text-txt2 whitespace-nowrap">Aller au lot n°</label>
+        <input
+          id="aller-au-lot"
+          inputMode="numeric"
+          value={numeroSaisi}
+          onChange={(e) => setNumeroSaisi(e.target.value)}
+          className="w-[72px] h-9 px-2 rounded-lg border border-border bg-card text-sm text-txt"
+          placeholder="128"
+        />
+      </form>
     </div>
   )
 

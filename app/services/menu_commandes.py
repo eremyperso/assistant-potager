@@ -59,6 +59,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "stats",
     "historique",
     "plan",
+    "lot",
     "ask",
     "fiche",
     "calendrier",
@@ -92,6 +93,7 @@ DESCRIPTIONS: dict[str, str] = {
     "stats":       "Bilan chiffré de la saison",
     "historique":  "Vos 10 derniers événements",
     "plan":        "Plan d'occupation de vos parcelles",
+    "lot":         "Un lot de pépinière, ou la liste des lots",  # [US-209]
     "ask":         "Poser une question sur votre potager",
     "fiche":       "Fiche agronomique courte d'une culture",
     "calendrier":  "Quand semer et récolter, selon votre zone",
@@ -287,7 +289,9 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
                      # [US-197 / CA9] Les clés acceptées sont celles de
                      # `utils.parcelles._CHAMPS_MODIFIER`, seul point d'écriture qui
                      # les valide : exposition, superficie, ordre, pepiniere, abri,
-                     # paillage, rangs, longueur ([US-225]). La question n'en cite
+                     # paillage, rangs, longueur ([US-225]). [US-208 / CA8]
+                     # `pepiniere` a un vocabulaire fermé : chaude, froide, oui,
+                     # non (`utils.parcelles.TYPES_PEPINIERE`). La question n'en cite
                      # qu'une — la liste complète est dans /parcelle, pas dans une
                      # relance vocale.
                      "Que faut-il modifier ? (par exemple : exposition=sud, "
@@ -323,6 +327,14 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     ),
     FormeCommande("historique", None, "Afficher vos derniers événements", confirmation=False),
     FormeCommande("meteo", None, "Afficher la météo du jour", confirmation=False),
+    FormeCommande(
+        "lot", None, "Afficher un lot de pépinière, ou la liste des lots",
+        (
+            Argument("numero", TYPE_NOMBRE, "Quel numéro de lot ?", obligatoire=False, unite="n°"),
+            Argument("culture", TYPE_CULTURE, "Quelle culture ?", obligatoire=False),
+        ),
+        confirmation=False,
+    ),
     FormeCommande(
         "fiche", None, "Afficher la fiche d'une culture",
         (Argument("culture", TYPE_CULTURE, "Quelle culture ?"),),

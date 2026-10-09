@@ -1,17 +1,38 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v53),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v55),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v53.sql
+psql -d potager -f migrations/migration_v55.sql
 ```
 
 ## Ce que portent les dernières migrations
 
+- **v55 [US-209]** — ajoute `evenements.numero_lot` (INTEGER nullable, CHECK
+  semis seul, index unique partiel `(potager_id, numero_lot)`) et
+  `potagers.compteur_lots` (INTEGER NOT NULL DEFAULT 0). Le numéro est posé par
+  l'écouteur `before_flush` de `database/numerotation_lots.py` : le compteur se
+  prend par `UPDATE … compteur_lots + 1` dans la transaction du semis (la ligne du
+  potager est verrouillée → pas de collision) et ne recule jamais (jamais
+  réutilisé). Ensemble numéroté = celui de `GET /pepiniere/lots` (parcelle absente
+  ou pépinière, filière non `pleine_terre`). **Reprise** entre marqueurs
+  `REPRISE` (modèle v47), exécutée telle quelle par
+  `tests/test_us209_numero_lot.py` : potager par potager, dans l'ordre des dates
+  puis des identifiants, À LA SUITE du plus grand numéro existant ; ne touche que
+  les NULL (idempotente) ; aligne le compteur sans jamais l'abaisser. Le numéro
+  n'est jamais `evenements.id`. Rollback : `rollback_v55.sql` (perd les numéros
+  attribués).
+- **v54 [US-208]** — ajoute `parcelles.type_pepiniere` (VARCHAR(8) nullable) :
+  `chaude` (chauffée ou à l'intérieur) ou `froide`. NULL = type non renseigné,
+  état à part entière ; AUCUN backfill. CHECK `ck_parcelles_type_pepiniere` :
+  aucun type hors pépinière (`est_pepiniere`), deux valeurs seulement — revalidé
+  au point d'écriture (`utils.parcelles._pepiniere`). Ce n'est PAS `abri` (v49).
+  Ne pilote encore aucun calcul (US-214, US-219, US-220 le consommeront).
+  Rollback : `rollback_v54.sql`.
 - **v53 [US-225]** — ajoute `parcelles.longueur_m` (NUMERIC(5,1) nullable,
   CHECK 0,5–200) : la longueur UTILE de la planche dans le sens où l'on plante,
   base de calcul des places de TOUS ses rangs (US-227). NULL = jamais

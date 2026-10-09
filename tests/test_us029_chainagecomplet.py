@@ -83,13 +83,14 @@ def test_us029_ca1_colonne_source_evenement_ids_presente(db):
 # ── CA5 : héritage variété unique ─────────────────────────────────────────────
 
 def test_us029_ca5_variete_heritee_godet_unique(db):
-    """CA5 — Une seule variété en godet → variété héritée automatiquement."""
-    g = _godet(db, "butternut", "récolte de 2025", 20)
+    """Règle PO du 07/10/2026 (remplace CA5) — une plantation sans variété n'hérite
+    plus de la variété unique en godet et n'est rattachée à aucun godet."""
+    _godet(db, "butternut", "récolte de 2025", 20)
 
     variete_resolue, source_ids = _find_plantation_sources(db, "butternut", None, 10.0)
 
-    assert variete_resolue == "récolte de 2025"
-    assert source_ids == str(g.id)
+    assert variete_resolue is None
+    assert source_ids is None
 
 
 def test_us029_ca5_variete_deja_precisee_conservee(db):
@@ -172,20 +173,13 @@ def test_us029_ca8_fifo_lot_ancien_epuise_prend_suivant(db):
 # ── CA9/CA10 : calcul_godets_par_culture sans conflit CA6/CA6-reverse ─────────
 
 def test_us029_ca10_ca6_et_reverse_ne_s_annulent_plus(db):
-    """CA10 — Un godet sans variété ET une plantation sans variété ne doivent plus se bloquer mutuellement."""
-    # Godet AVEC variété et godet SANS variété pour la même culture
-    g_avec = _godet(db, "courge", "musqué de Provence", 18)
+    """Règle PO du 07/10/2026 : seules culture ET variété identiques (renseignée) relient une plantation aux godets. Une plantation sans variété ne touche ni le godet typé ni le godet sans variété."""
+    _godet(db, "courge", "musqué de Provence", 18)
     _godet(db, "courge", None, 5)
-
-    # Plantation sans variété (ancienne, non liée)
-    _plantation(db, "courge", None, 10.0)
-
-    godets = calcul_godets_par_culture(db, "courge")
-
-    # Le godet avec variété doit avoir son stock réduit de 10
-    musque = next((g for g in godets if g["variete"] == "musqué de Provence"), None)
-    assert musque is not None
-    assert musque["stock_residuel_godet"] == 8   # 18 - 10 déduits via CA6
+    _plantation(db, "courge", None, 4.0)
+    par_variete = {g["variete"]: g for g in calcul_godets_par_culture(db, "courge")}
+    assert par_variete["musqué de Provence"]["nb_plantes"] == 0
+    assert par_variete[None]["nb_plantes"] == 0
 
 
 def test_us029_ca9_plantation_avec_variete_heritee_deduit_godet(db):
@@ -211,12 +205,9 @@ def test_us029_ca9_stock_zero_exclu_de_la_liste(db):
 
 
 def test_us029_retrocompatibilite_sans_source_ids(db):
-    """Rétrocompatibilité — Plantations sans source_evenement_ids : calcul heuristique CA6."""
+    """Règle PO du 07/10/2026 : seules culture ET variété identiques (renseignée) relient une plantation aux godets. Une ancienne plantation sans lien ni variété n'est plus imputée au godet."""
     _godet(db, "courgette", "jaune", 10)
-    _plantation(db, "courgette", None, 4.0)  # ancienne saisie sans lien ni variété
-
-    godets = calcul_godets_par_culture(db, "courgette")
-
-    courgette = next((g for g in godets if g["variete"] == "jaune"), None)
-    assert courgette is not None
-    assert courgette["stock_residuel_godet"] == 6  # CA6 attribue les 4 plants
+    _plantation(db, "courgette", None, 4.0)
+    g = calcul_godets_par_culture(db, "courgette")[0]
+    assert g["nb_plantes"] == 0
+    assert g["stock_residuel_godet"] == 10
