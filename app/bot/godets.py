@@ -87,7 +87,7 @@ async def _demander_graines_godet_si_manquant(update: Update, parsed: dict, text
     await update.effective_message.reply_text(
         f"🌾 Sur combien de graines avez-vous repiqué ces "
         f"*{parsed['nb_plants_godets']}* plants de {label} ?\n\n"
-        f"_Lot semé le {date_lot} : il reste {lot['graines_en_germination']} "
+        f"_Lot {_etiquette_lot(lot)} : il reste {lot['graines_en_germination']} "
         f"graine(s) non soldée(s)._",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(buttons),
@@ -192,6 +192,13 @@ def _fmt_date_lot(dt) -> str:
     return dt.strftime("%d/%m/%Y") if dt else "date inconnue"
 
 
+def _etiquette_lot(lot: dict) -> str:
+    """[US-209] « n° 4 · 21/09/2026 » : le numéro écrit sur l'étiquette, puis la date,
+    seule façon de distinguer deux lots de la même variété sur les boutons de choix."""
+    date_lot = _fmt_date_lot(lot.get("date_semis"))
+    return f"n° {lot['numero_lot']} · {date_lot}" if lot.get("numero_lot") is not None else date_lot
+
+
 async def _demander_lot_godet_si_ambigu(update: Update, parsed: dict, texte: str) -> bool:
     """
     [fix rattachement lot godet] Demande sur quel lot de semis porte le repiquage
@@ -236,12 +243,12 @@ async def _demander_lot_godet_si_ambigu(update: Update, parsed: dict, texte: str
         "parsed": parsed,
         "texte":  texte,
         "ts":     _time_lot.time(),
-        "labels": {lot["semis_id"]: _fmt_date_lot(lot["date_semis"]) for lot in candidats},
+        "labels": {lot["semis_id"]: _etiquette_lot(lot) for lot in candidats},
     }
 
     buttons = [
         [InlineKeyboardButton(
-            f"{_fmt_date_lot(lot['date_semis'])} — {lot['graines_en_germination']} graines restantes",
+            f"{_etiquette_lot(lot)} — {lot['graines_en_germination']} graines restantes",
             callback_data=f"godetlot:{lot['semis_id']}",
         )]
         for lot in candidats
@@ -373,7 +380,7 @@ async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     parsed["_lot_choisi"] = True
     log.info("[fix rattachement lot godet] Lot id=%s choisi — user_id=%s", semis_id, user_id)
     await query.edit_message_text(
-        f"✅ Lot de semis du *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
+        f"✅ Lot de semis *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
         parse_mode="Markdown",
         reply_markup=None,
     )

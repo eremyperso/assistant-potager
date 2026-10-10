@@ -698,3 +698,10 @@ class TestListeDesLots:
                 await cmd_lot(update, ctx)
             envoye = update.message.reply_text.await_args.args[0]
             assert present in envoye and (absent is None or absent not in envoye)
+
+
+def test_us209_les_boutons_de_choix_de_lot_portent_le_numero():
+    """Deux lots de la même variété ne se distinguent plus par leur seule date."""
+    from app.bot.godets import _etiquette_lot
+    assert _etiquette_lot({"numero_lot": 4, "date_semis": datetime(2026, 9, 21)}) == "n° 4 · 21/09/2026"
+    assert _etiquette_lot({"numero_lot": None, "date_semis": datetime(2026, 9, 21)}) == "21/09/2026"
