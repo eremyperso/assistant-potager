@@ -62,6 +62,9 @@ Usage
     # Créer le ticket Jira à partir du fichier rédigé par Persona PO
     python tools/jira_tracker.py create-issue backlog/US-066_titre-court.md
 
+    # Créer plusieurs issues : identifiants, plage ou motif (comme update-issue)
+    python tools/jira_tracker.py create-issue US-233 US-234 235-238
+
     # Lister les sprints actifs
     python tools/jira_tracker.py list-sprints
 
@@ -637,7 +640,12 @@ def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
     return cle
 
 
-def _resoudre_cibles_backlog(cible: str, backlog_dir: str = "backlog") -> list[Path]:
+# Dossier backlog ancré sur la racine du dépôt : indépendant du répertoire courant
+# (lancer le script depuis tools/ ne doit pas casser la recherche par identifiant).
+_DOSSIER_BACKLOG = Path(__file__).resolve().parent.parent / "backlog"
+
+
+def _resoudre_cibles_backlog(cible: str, backlog_dir: "str | Path" = _DOSSIER_BACKLOG) -> list[Path]:
     """Transforme une cible CLI en fichiers backlog : chemin, motif glob
     (PowerShell n'expanse pas les jokers), plage `197-202`, ou identifiant (`US-197`, `197`)."""
     plage = re.fullmatch(r"(?:US-?)?(\d+)-(\d+)", cible.strip(), flags=re.IGNORECASE)
@@ -658,7 +666,7 @@ def _resoudre_cibles_backlog(cible: str, backlog_dir: str = "backlog") -> list[P
 
 
 def sync_backlog(
-    backlog_dir: "str | Path" = "backlog", mettre_a_jour: bool = False,
+    backlog_dir: "str | Path" = _DOSSIER_BACKLOG, mettre_a_jour: bool = False,
 ) -> list[tuple[str, Optional[str], str]]:
     """
     Synchronise TOUT le dossier `backlog/` vers Jira : crée dans Jira chaque US
@@ -767,8 +775,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Usage : python tools/jira_tracker.py <commande>\n\n"
             "Commandes:\n"
             "  <issue_key> <statut>        Mettre à jour le statut d'une issue\n"
-            "  create-issue <backlog.md>   Créer l'issue Jira depuis un fichier backlog\n"
-            "  update-issue <backlog.md>   Repousser résumé/description/épic d'une issue existante\n"
+            "  create-issue <cible>...     Créer l'issue Jira depuis un fichier backlog (cible : chemin, US-197, 197-202, motif glob)\n"
+            "  update-issue <cible>...     Repousser résumé/description/épic d'une issue existante (mêmes cibles)\n"
             "  sync-backlog [dossier] [--update]  Créer les US manquantes (--update : mettre aussi à jour les existantes)\n"
             "  list-sprints                Lister les sprints actifs\n"
             "  list-sprint <sprint_id>     Lister les issues d'un sprint\n\n"
@@ -779,22 +787,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     cfg = _config()
 
-    if args[0] == "create-issue" and len(args) > 1:
-        try:
-            cle = create_issue_from_backlog(args[1])
-        except JiraTrackerError as err:
-            print(f"❌ {err}", file=sys.stderr)
-            return 2
-        if cle:
-            print(f"✅ Issue créée/existante : {cle}")
-        return 0
-
-    if args[0] == "update-issue" and len(args) > 1:
+    # create-issue et update-issue acceptent les mêmes cibles : chemin, identifiant
+    # (US-197), plage (197-202) ou motif glob, répétables sur une même ligne.
+    if args[0] in ("create-issue", "update-issue") and len(args) > 1:
+        action = create_issue_from_backlog if args[0] == "create-issue" else update_issue_from_backlog
         code = 0
         for cible in args[1:]:
             for chemin in _resoudre_cibles_backlog(cible):
                 try:
-                    cle = update_issue_from_backlog(chemin)
+                    cle = action(chemin)
                 except JiraTrackerError as err:
                     print(f"❌ {err}", file=sys.stderr)
                     code = 2
@@ -805,7 +806,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args[0] == "sync-backlog":
         options = [a for a in args[1:] if a.startswith("--")]
         positionnels = [a for a in args[1:] if not a.startswith("--")]
-        dossier = positionnels[0] if positionnels else "backlog"
+        dossier = positionnels[0] if positionnels else _DOSSIER_BACKLOG
         resultats = sync_backlog(dossier, mettre_a_jour="--update" in options)
         if not resultats:
             print(f"Aucun fichier .md trouvé dans {dossier}/")
