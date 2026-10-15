@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,600;0,700;1,600;1,700&display=swap">
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --bg: #f5f7f1;
+        --card: #ffffff;
+        --border: #e2e7da;
+        --brand: #4a7c22;
+        --brand-deep: #2f5416;
+        --brand-soft: #eaf3de;
+        --brand-text: #3b6a1b;
+        --txt: #16210c;
+        --txt2: #44553a;
+        --amber: #9a650c;
+        --amber-soft: #fbf1dc;
+        --tg: #2f6694;
+        --tg-out: #e6f7cf;
+        --tg-wall: #dfe9d3;
+        --serif: "Lora", Georgia, serif;
+        --sans: "Inter", "Helvetica Neue", sans-serif;
+        --mono: "JetBrains Mono", monospace;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { margin: 0; width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root { width: 100%; height: 100%; position: relative; overflow: hidden; font-family: var(--sans); color: var(--txt); }
+      #stage { position: absolute; inset: 0; background: var(--bg); }
+
+      /* ---------- fond ---------- */
+      .glow { position: absolute; border-radius: 50%; will-change: transform; }
+      #glow-a { width: 1100px; height: 1100px; left: 380px; top: -360px;
+        background: radial-gradient(circle, rgba(74,124,34,.26) 0%, rgba(74,124,34,0) 65%); }
+      #glow-b { width: 1000px; height: 1000px; left: -420px; top: 1140px;
+        background: radial-gradient(circle, rgba(176,116,15,.20) 0%, rgba(176,116,15,0) 65%); }
+      #dots { position: absolute; inset: 0; opacity: .5;
+        background-image: radial-gradient(rgba(47,84,22,.22) 2px, transparent 2.5px);
+        background-size: 44px 44px; }
+      #grain { position: absolute; inset: 0; opacity: .16; mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 .2 0 0 0 0 .25 0 0 0 0 .1 0 0 0 .55 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+      .deco-leaf { position: absolute; color: var(--brand); opacity: .28; will-change: transform; }
+      .deco-leaf svg { width: 100%; height: 100%; display: block; }
+      #leaf-1 { width: 230px; height: 230px; left: -40px; top: 760px; }
+      #leaf-2 { width: 190px; height: 190px; left: 900px; top: 1180px; }
+      #leaf-3 { width: 150px; height: 150px; left: 880px; top: 560px; }
+
+      /* ---------- marque + titres ---------- */
+      #brand-chip { position: absolute; left: 80px; top: 104px; display: flex; align-items: center; gap: 16px;
+        font-size: 30px; font-weight: 700; color: var(--brand-deep); }
+      #brand-chip .mark { width: 60px; height: 60px; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, #2f5416, #4e8226); color: #fff; }
+      #brand-chip .mark svg { width: 34px; height: 34px; }
+      .headline { position: absolute; left: 80px; right: 80px; top: 214px; height: 330px; }
+      .kicker { display: inline-block; opacity: 0; font-size: 28px; font-weight: 700; letter-spacing: .14em;
+        text-transform: uppercase; color: var(--amber); margin-bottom: 14px; }
+      .hl-line { font-family: var(--serif); font-weight: 700; font-size: 96px; line-height: 1.06; letter-spacing: -.02em; color: var(--txt); }
+      .w { display: inline-block; opacity: 0; margin-right: .22em; will-change: transform; }
+      .w.acc { font-style: italic; color: var(--brand); }
+
+      /* ---------- téléphone ---------- */
+      #phone-wrap { position: absolute; left: 240px; top: 584px; width: 600px; height: 1210px; will-change: transform; }
+      #phone-float { width: 100%; height: 100%; will-change: transform; }
+      #phone { width: 100%; height: 100%; border-radius: 88px; background: #16210c; padding: 18px;
+        box-shadow: 0 70px 140px rgba(22,33,12,.30), 0 18px 40px rgba(22,33,12,.18), inset 0 0 0 4px #33402a; }
+      #screen { position: relative; width: 100%; height: 100%; border-radius: 70px; overflow: hidden; background: var(--bg); }
+      #island { position: absolute; left: 207px; top: 14px; width: 150px; height: 42px; border-radius: 22px; background: #0b1006; z-index: 50; }
+      #status { position: absolute; left: 0; right: 0; top: 0; height: 64px; padding: 20px 46px 0; z-index: 49;
+        display: flex; justify-content: space-between; font-size: 24px; font-weight: 700; color: #fff; }
+      #status .ic { display: flex; gap: 8px; align-items: center; }
+      #status .bat { width: 40px; height: 20px; border: 2.5px solid #fff; border-radius: 6px; padding: 2px; }
+      #status .bat i { display: block; width: 80%; height: 100%; background: #fff; border-radius: 2px; }
+      .scr { position: absolute; inset: 0; background: var(--bg); will-change: transform; overflow: hidden; visibility: hidden; }
+      #scr-splash { visibility: visible; }
+      .hdr { background: linear-gradient(135deg, #2f5416, #4e8226); color: #fff; padding: 84px 34px 30px; }
+      .hdr .sub { font-size: 22px; color: rgba(255,255,255,.88); font-weight: 400; }
+      .hdr .ttl { font-family: var(--serif); font-size: 42px; font-weight: 700; margin-top: 4px; }
+      .body { padding: 26px 28px; display: flex; flex-direction: column; gap: 16px; }
+      .card { background: var(--card); border: 2px solid var(--border); border-radius: 24px; will-change: transform; }
+      .lbl { font-size: 21px; color: var(--txt2); }
+      .sec { font-size: 21px; font-weight: 700; color: var(--txt2); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+
+      /* splash */
+      #scr-splash { background: linear-gradient(160deg, #2f5416, #4e8226); display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 26px; color: #fff; }
+      #sp-logo { width: 170px; height: 170px; border-radius: 48px; background: rgba(255,255,255,.18);
+        display: flex; align-items: center; justify-content: center; will-change: transform; }
+      #sp-logo svg { width: 96px; height: 96px; }
+      #sp-name { font-family: var(--serif); font-size: 50px; font-weight: 700; will-change: transform; }
+      #sp-tag { font-size: 25px; color: rgba(255,255,255,.9); will-change: transform; }
+
+      /* assistant de création */
+      .steps { display: flex; gap: 8px; margin-top: 18px; }
+      .steps span { flex: 1; height: 8px; border-radius: 4px; background: rgba(255,255,255,.3); position: relative; overflow: hidden; }
+      .steps span i { position: absolute; inset: 0; background: #fff; transform-origin: 0 50%; display: block; }
+      .field { padding: 16px 22px; height: 102px; }
+      .field .val { font-size: 29px; font-weight: 700; margin-top: 6px; min-height: 36px; }
+      .caret { display: inline-block; width: 3px; height: 30px; background: var(--brand); vertical-align: -4px; margin-left: 3px; }
+      .parcel { display: flex; align-items: center; gap: 18px; padding: 18px 22px; }
+      .pic { width: 64px; height: 64px; border-radius: 18px; background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; }
+      .pic svg { width: 36px; height: 36px; }
+      .parcel b { font-size: 28px; display: block; }
+      .chips { display: flex; flex-wrap: wrap; gap: 12px; }
+      .chip { display: inline-block; padding: 12px 22px; border-radius: 30px; background: var(--brand-soft); color: var(--brand-text);
+        font-size: 23px; font-weight: 700; border: 2px solid #c9dfae; will-change: transform; }
+      .btn { position: absolute; left: 28px; right: 28px; bottom: 40px; height: 94px; border-radius: 26px; background: var(--brand-deep);
+        color: #fff; font-size: 29px; font-weight: 700; display: flex; align-items: center; justify-content: center; will-change: transform; }
+      .tap { position: absolute; width: 74px; height: 74px; border-radius: 50%; background: rgba(22,33,12,.28);
+        border: 3px solid rgba(255,255,255,.85); left: calc(50% - 37px); top: calc(50% - 37px); opacity: 0; will-change: transform; }
+      #toast { position: absolute; left: 28px; right: 28px; bottom: 40px; height: 94px; border-radius: 26px; background: var(--brand);
+        color: #fff; display: flex; align-items: center; justify-content: center; gap: 16px; will-change: transform; }
+      #toast .ok { width: 52px; height: 52px; border-radius: 50%; background: #fff; color: var(--brand); display: flex; align-items: center; justify-content: center; }
+      #toast .ok svg { width: 32px; height: 32px; }
+      #toast b { font-size: 29px; }
+
+      /* invitation */
+      #code-card { padding: 26px; text-align: center; }
+      #code-card .code { font-family: var(--mono); font-size: 58px; font-weight: 700; color: var(--brand-deep); letter-spacing: .06em; margin: 8px 0 6px; }
+      .seg { display: flex; gap: 10px; margin-top: 18px; }
+      .seg span { flex: 1; height: 62px; border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; background: var(--brand-soft); color: var(--brand-text); }
+      .seg span.on { background: var(--brand-deep); color: #fff; }
+      #share { position: relative; height: 80px; border-radius: 22px; background: var(--brand); color: #fff; font-size: 26px; font-weight: 700;
+        display: flex; align-items: center; justify-content: center; gap: 12px; will-change: transform; }
+      #share svg { width: 30px; height: 30px; }
+      .member { display: flex; align-items: center; gap: 18px; padding: 14px 18px; height: 98px; }
+      .av { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 26px; flex: none; }
+      .member b { font-size: 26px; display: block; }
+      .member .lbl { font-size: 20px; }
+      .badge { margin-left: auto; padding: 8px 16px; border-radius: 20px; background: var(--amber-soft); color: var(--amber); font-size: 19px; font-weight: 700; will-change: transform; }
+
+      /* Telegram */
+      #scr-tg { background: var(--tg-wall); }
+      #scr-tg .wall { position: absolute; inset: 0; opacity: .5;
+        background-image: radial-gradient(rgba(47,84,22,.16) 3px, transparent 3.5px), radial-gradient(rgba(47,84,22,.10) 2px, transparent 2.5px);
+        background-size: 60px 60px, 60px 60px; background-position: 0 0, 30px 30px; }
+      .tg-hdr { position: absolute; left: 0; right: 0; top: 0; height: 160px; background: var(--tg); color: #fff; padding: 72px 26px 0;
+        display: flex; align-items: center; gap: 16px; z-index: 5; }
+      .tg-hdr .back svg { width: 34px; height: 34px; }
+      .tg-av { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #2f5416, #5b9a2c); display: flex; align-items: center; justify-content: center; }
+      .tg-av svg { width: 34px; height: 34px; }
+      .tg-hdr b { font-size: 26px; display: block; }
+      .tg-hdr .s { font-size: 20px; color: rgba(255,255,255,.88); }
+      #tg-view { position: absolute; left: 0; right: 0; top: 160px; bottom: 112px; overflow: hidden; }
+      #tg-list { position: absolute; left: 0; right: 0; top: 0; height: 1600px; will-change: transform; }
+      .msg { position: absolute; border-radius: 26px; padding: 16px 20px; font-size: 22px; line-height: 1.32;
+        box-shadow: 0 2px 3px rgba(22,33,12,.12); will-change: transform; }
+      .msg.out { right: 22px; background: var(--tg-out); border-bottom-right-radius: 8px; transform-origin: 100% 100%; }
+      .msg.in { left: 22px; background: #fff; border-bottom-left-radius: 8px; transform-origin: 0% 100%; }
+      .voice { display: flex; align-items: center; gap: 14px; }
+      .play { width: 58px; height: 58px; border-radius: 50%; background: #4f9a3a; color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+      .play svg { width: 26px; height: 26px; }
+      .wave { display: flex; align-items: center; gap: 4px; height: 50px; }
+      .wave i { display: block; width: 6px; border-radius: 3px; background: #4f9a3a; transform-origin: 50% 50%; }
+      .dur { font-size: 19px; color: #3f6b2f; font-weight: 700; }
+      .trans { font-style: italic; color: var(--txt2); margin-top: 10px; font-size: 21px; }
+      .rc-t { display: flex; align-items: center; gap: 12px; font-size: 24px; font-weight: 700; margin-bottom: 10px; }
+      .rc-ic { width: 44px; height: 44px; border-radius: 12px; background: var(--brand-soft); color: var(--brand); display: flex; align-items: center; justify-content: center; flex: none; }
+      .rc-ic svg { width: 26px; height: 26px; }
+      .row { display: flex; justify-content: space-between; height: 38px; align-items: center; border-bottom: 2px solid #eef1e9; font-size: 22px; }
+      .row span { color: var(--txt2); }
+      .ask { font-size: 21px; color: var(--txt2); margin-top: 10px; }
+      .kb { display: flex; gap: 10px; margin-top: 12px; }
+      .kb span { position: relative; flex: 1; height: 58px; border-radius: 16px; background: var(--brand-soft); color: var(--brand-text);
+        display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 21px; font-weight: 700; will-change: transform; }
+      .kb span svg { width: 24px; height: 24px; }
+      .kb span.go { background: var(--brand); color: #fff; }
+      .done { display: flex; align-items: center; gap: 12px; }
+      .done .ck { width: 36px; height: 36px; border-radius: 50%; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+      .done .ck svg { width: 22px; height: 22px; }
+      .tg-in { position: absolute; left: 0; right: 0; bottom: 0; height: 112px; background: #fff; display: flex; align-items: center; gap: 14px; padding: 0 20px 14px; z-index: 5; }
+      .tg-field { position: relative; flex: 1; height: 66px; border-radius: 33px; background: #f1f3ee; display: flex; align-items: center; padding: 0 24px; font-size: 22px; overflow: hidden; }
+      #tg-text { color: var(--txt); white-space: nowrap; }
+      #tg-text.ph { color: #5a6650; }
+      #rec { position: absolute; inset: 0; background: #f1f3ee; display: flex; align-items: center; gap: 12px; padding: 0 24px; opacity: 0; color: #a3352b; font-weight: 700; }
+      #rec i { width: 18px; height: 18px; border-radius: 50%; background: #c0392b; display: block; }
+      #rec span { color: var(--txt2); font-weight: 400; margin-left: auto; }
+      #mic { position: relative; width: 74px; height: 74px; border-radius: 50%; background: var(--tg); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; will-change: transform; }
+      #mic svg { width: 34px; height: 34px; position: absolute; }
+      #mic-ring { position: absolute; width: 74px; height: 74px; border-radius: 50%; border: 4px solid #c0392b; opacity: 0; left: 0; top: 0; }
+
+      /* statistiques */
+      #st-card { padding: 26px 28px; }
+      #st-card .t { font-size: 25px; font-weight: 700; }
+      .big { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; }
+      #count { font-size: 104px; font-weight: 900; color: var(--brand-deep); letter-spacing: -.03em; font-variant-numeric: tabular-nums; transform-origin: 0 80%; display: inline-block; }
+      .big .u { font-size: 40px; font-weight: 700; color: var(--brand-deep); }
+      #delta { display: inline-block; padding: 8px 18px; border-radius: 20px; background: var(--amber-soft); color: var(--amber); font-size: 21px; font-weight: 700; will-change: transform; }
+      .bars { display: flex; justify-content: space-between; align-items: flex-end; height: 360px; margin-top: 22px; padding: 0 6px; border-bottom: 3px solid var(--border); }
+      .col { width: 62px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; }
+      .col .v { font-size: 19px; font-weight: 700; color: var(--brand-text); will-change: transform; }
+      .col .b { width: 54px; border-radius: 12px 12px 4px 4px; background: var(--brand); transform-origin: 50% 100%; will-change: transform; }
+      .col.hot .b { background: var(--amber); }
+      .col.hot .v { color: var(--amber); }
+      .months { display: flex; justify-content: space-between; padding: 10px 6px 0; }
+      .months span { width: 62px; text-align: center; font-size: 19px; color: var(--txt2); font-weight: 700; }
+      .mini { display: flex; gap: 10px; }
+      .mini .card { flex: 1; padding: 14px 16px; }
+      .mini b { font-size: 25px; display: block; }
+
+      /* fin */
+      #end { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 30px; padding: 0 80px; text-align: center; }
+      #end-logo { width: 230px; height: 230px; border-radius: 66px; background: linear-gradient(135deg, #2f5416, #4e8226);
+        display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 40px 90px rgba(47,84,22,.35); will-change: transform; }
+      #end-logo svg { width: 130px; height: 130px; }
+      .end-title { font-family: var(--serif); font-weight: 700; font-size: 150px; line-height: .98; letter-spacing: -.03em; }
+      .end-title .w { margin-right: 0; display: block; }
+      #end-tag { font-size: 42px; color: var(--txt2); will-change: transform; }
+      .pills { display: flex; gap: 18px; }
+      .pill { display: flex; align-items: center; gap: 14px; padding: 20px 30px; border-radius: 40px; background: #fff; border: 3px solid var(--border);
+        font-size: 30px; font-weight: 700; color: var(--brand-deep); will-change: transform; }
+      .pill svg { width: 36px; height: 36px; }
+      .pill.tg { background: var(--tg); border-color: var(--tg); color: #fff; }
+      #end-verbs { font-size: 30px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--amber); will-change: transform; }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-qv3y" id="root" data-composition-id="main" data-start="0" data-duration="15.5" data-width="1080" data-height="1920">
+      <div data-hf-id="hf-0fdg" id="stage" class="clip" data-start="0.5" data-duration="15" data-track-index="0">
+        <!-- fond -->
+        <div data-hf-id="hf-eg44" class="glow" id="glow-a"></div>
+        <div data-hf-id="hf-pblr" class="glow" id="glow-b"></div>
+        <div data-hf-id="hf-wvbl" id="dots"></div>
+        <div data-hf-id="hf-938o" class="deco-leaf" id="leaf-1"><svg data-hf-id="hf-dy21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-v1un" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-4sib" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></div>
+        <div data-hf-id="hf-hr4j" class="deco-leaf" id="leaf-2"><svg data-hf-id="hf-h3tp" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-80rr" d="M7 20h10" /><path data-hf-id="hf-iz7l" d="M10 20c5.5-2.5.8-6.4 3-10" /><path data-hf-id="hf-oz75" d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z" /><path data-hf-id="hf-e09c" d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z" /></svg></div>
+        <div data-hf-id="hf-dt0i" class="deco-leaf" id="leaf-3"><svg data-hf-id="hf-rw9o" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-g7tr" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-5i9f" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></div>
+        <div data-hf-id="hf-f6d6" id="grain"></div>
+
+        <div data-hf-id="hf-1rjr" id="brand-chip">
+          <span data-hf-id="hf-zeo6" class="mark"><svg data-hf-id="hf-n58i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ftiq" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-53ye" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></span>
+          <span data-hf-id="hf-qtwx" id="brand-name">Assistant Potager</span>
+        </div>
+
+        <!-- titres : générés au montage depuis HEADLINES -->
+        <div data-hf-id="hf-5cqs" id="headlines"></div>
+
+        <!-- téléphone -->
+        <div data-hf-id="hf-5qno" id="phone-wrap"><div data-hf-id="hf-4yzy" id="phone-float"><div data-hf-id="hf-5iuv" id="phone"><div data-hf-id="hf-ccvt" id="screen">
+          <div data-hf-id="hf-i9du" id="island"></div>
+          <div data-hf-id="hf-odm3" id="status"><span data-hf-id="hf-zwmt">9:41</span><span data-hf-id="hf-8dw9" class="ic"><svg data-hf-id="hf-v0lt" width="30" height="20" viewBox="0 0 30 20" fill="#fff"><rect data-hf-id="hf-adsc" x="0" y="12" width="5" height="8" rx="1" /><rect data-hf-id="hf-2qu0" x="8" y="8" width="5" height="12" rx="1" /><rect data-hf-id="hf-7sqh" x="16" y="4" width="5" height="16" rx="1" /><rect data-hf-id="hf-qyhl" x="24" y="0" width="5" height="20" rx="1" /></svg><span data-hf-id="hf-7ply" class="bat"><i data-hf-id="hf-wt6k"></i></span></span></div>
+
+          <!-- 0 · écran d'accueil -->
+          <div data-hf-id="hf-quo2" class="scr" id="scr-splash">
+            <div data-hf-id="hf-9boc" id="sp-logo"><svg data-hf-id="hf-zop5" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ff7p" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-4pnd" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></div>
+            <div data-hf-id="hf-fee8" id="sp-name">Assistant Potager</div>
+            <div data-hf-id="hf-o5iv" id="sp-tag">Ton carnet de potager, à la voix</div>
+          </div>
+
+          <!-- 1 · créer -->
+          <div data-hf-id="hf-2i97" class="scr" id="scr-web">
+            <div data-hf-id="hf-tyyu" class="hdr">
+              <div data-hf-id="hf-12bc" class="sub">Étape 1 sur 4</div>
+              <div data-hf-id="hf-7fad" class="ttl">Nouveau potager</div>
+              <div data-hf-id="hf-70xd" class="steps"><span data-hf-id="hf-uckh"><i data-hf-id="hf-iz4x" class="st"></i></span><span data-hf-id="hf-l73p"><i data-hf-id="hf-qlpx" class="st"></i></span><span data-hf-id="hf-me0s"><i data-hf-id="hf-rsn0" class="st"></i></span><span data-hf-id="hf-lzpr"><i data-hf-id="hf-rebz" class="st"></i></span></div>
+            </div>
+            <div data-hf-id="hf-2t3w" class="body">
+              <div data-hf-id="hf-69ut" class="card field wz"><div data-hf-id="hf-txer" class="lbl">Nom du potager</div><div data-hf-id="hf-eyst" class="val"><span data-hf-id="hf-p60g" id="v-name"></span><span data-hf-id="hf-mmrr" class="caret" id="caret-1"></span></div></div>
+              <div data-hf-id="hf-x7ll" class="card field wz"><div data-hf-id="hf-era0" class="lbl">Commune</div><div data-hf-id="hf-qjj5" class="val"><span data-hf-id="hf-1sok" id="v-city"></span></div></div>
+              <div data-hf-id="hf-qp4v" class="sec">Première parcelle</div>
+              <div data-hf-id="hf-in3o" class="card parcel" id="parcel">
+                <div data-hf-id="hf-m79s" class="pic"><svg data-hf-id="hf-h0hq" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect data-hf-id="hf-jbys" x="3" y="3" width="7" height="7" rx="1" /><rect data-hf-id="hf-4pxk" x="14" y="3" width="7" height="7" rx="1" /><rect data-hf-id="hf-0oia" x="14" y="14" width="7" height="7" rx="1" /><rect data-hf-id="hf-uzwe" x="3" y="14" width="7" height="7" rx="1" /></svg></div>
+                <div data-hf-id="hf-yeow"><b data-hf-id="hf-laz4">Parcelle Nord</b><span data-hf-id="hf-gp3w" class="lbl">12 m² · plein soleil</span></div>
+              </div>
+              <div data-hf-id="hf-k34a" class="sec">Cultures courantes</div>
+              <div data-hf-id="hf-exrd" class="chips"><span data-hf-id="hf-djb3" class="chip">Tomate</span><span data-hf-id="hf-73pj" class="chip">Carotte</span><span data-hf-id="hf-jry9" class="chip">Courgette</span><span data-hf-id="hf-bn1n" class="chip">Salade</span><span data-hf-id="hf-rzj1" class="chip">Haricot</span></div>
+            </div>
+            <div data-hf-id="hf-iwk3" class="btn" id="btn-create"><span data-hf-id="hf-9m55" id="btn-lbl">Créer le potager</span><span data-hf-id="hf-6gdv" class="tap" id="tap-1"></span></div>
+            <div data-hf-id="hf-n5ua" id="toast"><div data-hf-id="hf-6kvy" class="ok"><svg data-hf-id="hf-085v" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-2q26" d="M20 6 9 17l-5-5" /></svg></div><b data-hf-id="hf-j3ti">Potager créé</b></div>
+          </div>
+
+          <!-- 2 · inviter -->
+          <div data-hf-studio-original-display="" data-hf-studio-original-box-sizing="" data-hf-studio-original-flex-shrink="" data-hf-studio-original-flex-grow="" data-hf-studio-original-flex-basis="" data-hf-studio-original-max-height="" data-hf-studio-original-max-width="" data-hf-studio-original-min-height="" data-hf-studio-original-min-width="" data-hf-studio-original-box-height="1174" data-hf-studio-original-box-width="564" data-hf-studio-original-height="" data-hf-studio-original-width="" data-hf-studio-box-size="true" style="--hf-studio-width: 688px; --hf-studio-height: 1433px; width: 688px; height: 1433px; min-width: 0px; min-height: 0px; max-width: none; max-height: none; box-sizing: border-box" data-hf-id="hf-sp4w" class="scr" id="scr-invite">
+            <div data-hf-id="hf-q9my" class="hdr"><div data-hf-id="hf-9ue3" class="sub">Jardin de Bretagne</div><div data-hf-id="hf-6dkx" class="ttl">Partager le potager</div></div>
+            <div data-hf-id="hf-6g9g" class="body">
+              <div data-hf-id="hf-h8wi" class="card" id="code-card">
+                <div data-hf-id="hf-3aof" class="lbl">Code d'invitation</div>
+                <div data-hf-id="hf-dh4q" class="code">K7M·24Q</div>
+                <div data-hf-id="hf-w7fu" class="lbl">Valable 7 jours · usage unique</div>
+                <div data-hf-id="hf-ta0z" class="seg"><span data-hf-id="hf-6tfe" class="on">Éditeur</span><span data-hf-id="hf-8kl1">Lecture seule</span></div>
+              </div>
+              <div data-hf-id="hf-8rrq" id="share">
+                <svg data-hf-id="hf-pmle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ywch" d="m22 2-7 20-4-9-9-4Z" /><path data-hf-id="hf-nzn7" d="M22 2 11 13" /></svg>Envoyer le code<span data-hf-id="hf-xsi0" class="tap" id="tap-2"></span>
+              </div>
+              <div data-hf-id="hf-f810" class="sec">Membres</div>
+              <div data-hf-id="hf-y9es" class="card member"><div data-hf-id="hf-ny3w" class="av" style="background:#2f5416">JB</div><div data-hf-id="hf-y7yw"><b data-hf-id="hf-emuv">Toi</b><span data-hf-id="hf-1p3n" class="lbl">Propriétaire</span></div></div>
+              <div data-hf-id="hf-8eft" class="card member mb"><div data-hf-id="hf-xmgt" class="av" style="background:#9a650c">C</div><div data-hf-id="hf-x11t"><b data-hf-id="hf-wige">Camille</b><span data-hf-id="hf-johb" class="lbl">Éditeur</span></div><span data-hf-id="hf-jqqu" class="badge">a rejoint</span></div>
+              <div data-hf-id="hf-n46l" class="card member mb"><div data-hf-id="hf-u2d8" class="av" style="background:#3a72a1">S</div><div data-hf-id="hf-xfcu"><b data-hf-id="hf-6fvg">Sam</b><span data-hf-id="hf-dp9l" class="lbl">Lecture seule</span></div><span data-hf-id="hf-l2ne" class="badge">a rejoint</span></div>
+            </div>
+          </div>
+
+          <!-- 3 · compagnon Telegram -->
+          <div data-hf-id="hf-75ks" class="scr" id="scr-tg">
+            <div data-hf-id="hf-a9vw" class="wall"></div>
+            <div data-hf-id="hf-pmii" class="tg-hdr">
+              <span data-hf-id="hf-p2fc" class="back"><svg data-hf-id="hf-12oc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-1acn" d="m12 19-7-7 7-7" /><path data-hf-id="hf-nsp3" d="M19 12H5" /></svg></span>
+              <div data-hf-id="hf-tmix" class="tg-av"><svg data-hf-id="hf-gmtl" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-i7cw" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-4bcc" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></div>
+              <div data-hf-id="hf-w8fr"><b data-hf-id="hf-02yx">Compagnon Potager</b><span data-hf-id="hf-fmrp" class="s">bot · Jardin de Bretagne</span></div>
+            </div>
+            <div data-hf-id="hf-jj34" id="tg-view"><div data-hf-id="hf-ve4j" id="tg-list">
+              <!-- échange 1 : semis à la voix -->
+              <div data-hf-id="hf-z4fn" class="msg out" id="m1" style="top:22px;width:440px;height:150px">
+                <div data-hf-id="hf-pj8e" class="voice"><span data-hf-id="hf-mgmf" class="play"><svg data-hf-id="hf-gegz" viewBox="0 0 24 24" fill="currentColor"><path data-hf-id="hf-42t2" d="M7 4v16l13-8z" /></svg></span><span data-hf-id="hf-12cl" class="wave" id="wave-1"></span><span data-hf-id="hf-mdzo" class="dur">0:04</span></div>
+                <div data-hf-id="hf-a6pv" class="trans">« Semé une ligne de carottes en parcelle Nord »</div>
+              </div>
+              <div data-hf-id="hf-i0m1" class="msg in" id="m2" style="top:192px;width:460px;height:334px">
+                <div data-hf-id="hf-ee3l" class="rc-t"><span data-hf-id="hf-0ual" class="rc-ic"><svg data-hf-id="hf-q0wf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ghaf" d="M7 20h10" /><path data-hf-id="hf-w6hh" d="M10 20c5.5-2.5.8-6.4 3-10" /><path data-hf-id="hf-3orp" d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z" /><path data-hf-id="hf-sa7c" d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z" /></svg></span>Semis en pleine terre</div>
+                <div data-hf-id="hf-if9k" class="row r2"><span data-hf-id="hf-3edp">Culture</span><b data-hf-id="hf-2eql">Carotte</b></div>
+                <div data-hf-id="hf-pqo0" class="row r2"><span data-hf-id="hf-gt78">Quantité</span><b data-hf-id="hf-i0o6">1 rang</b></div>
+                <div data-hf-id="hf-ojqx" class="row r2"><span data-hf-id="hf-4efj">Parcelle</span><b data-hf-id="hf-7k8k">Nord</b></div>
+                <div data-hf-id="hf-abjq" class="ask">Je l'enregistre ?</div>
+                <div data-hf-id="hf-h0jf" class="kb"><span data-hf-id="hf-dydc" class="go" id="ok-1"><svg data-hf-id="hf-s9f7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-l5ki" d="M20 6 9 17l-5-5" /></svg>Confirmer<i data-hf-id="hf-wycc" class="tap" id="tap-3"></i></span><span data-hf-id="hf-jgk0"><svg data-hf-id="hf-tmee" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-rt15" d="M12 20h9" /><path data-hf-id="hf-3qv4" d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Corriger</span></div>
+              </div>
+              <div data-hf-id="hf-8ncx" class="msg in done" id="m3" style="top:546px;width:420px;height:68px"><span data-hf-id="hf-ga0f" class="ck"><svg data-hf-id="hf-ky1v" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ljvj" d="M20 6 9 17l-5-5" /></svg></span><b data-hf-id="hf-i1us">Semis enregistré</b></div>
+
+              <!-- échange 2 : plantation au clavier -->
+              <div data-hf-id="hf-0y8y" class="msg out" id="m4" style="top:640px;width:420px;height:100px">Planté 12 tomates cœur de bœuf en parcelle Sud</div>
+              <div data-hf-id="hf-nihy" class="msg in" id="m5" style="top:762px;width:460px;height:290px">
+                <div data-hf-id="hf-qdpw" class="rc-t"><span data-hf-id="hf-mm41" class="rc-ic"><svg data-hf-id="hf-qf7g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ht1v" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-3x1b" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></span>Plantation</div>
+                <div data-hf-id="hf-eh5j" class="row r5"><span data-hf-id="hf-61tt">Culture</span><b data-hf-id="hf-omcj">Tomate cœur de bœuf</b></div>
+                <div data-hf-id="hf-8bx3" class="row r5"><span data-hf-id="hf-u50s">Quantité</span><b data-hf-id="hf-p95l">12 pieds</b></div>
+                <div data-hf-id="hf-7xm2" class="row r5"><span data-hf-id="hf-xw6n">Parcelle</span><b data-hf-id="hf-6wtf">Sud</b></div>
+                <div data-hf-id="hf-av97" class="kb"><span data-hf-id="hf-ypa5" class="go" id="ok-2"><svg data-hf-id="hf-rv46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-ly6k" d="M20 6 9 17l-5-5" /></svg>Confirmer<i data-hf-id="hf-kftv" class="tap" id="tap-4"></i></span><span data-hf-id="hf-koko"><svg data-hf-id="hf-u0pf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-dbil" d="M12 20h9" /><path data-hf-id="hf-kzi0" d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>Corriger</span></div>
+              </div>
+              <div data-hf-id="hf-1as7" class="msg in done" id="m6" style="top:1074px;width:440px;height:68px"><span data-hf-id="hf-h7m7" class="ck"><svg data-hf-id="hf-8wv7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-mchl" d="M20 6 9 17l-5-5" /></svg></span><b data-hf-id="hf-gyko">Plantation enregistrée</b></div>
+
+              <!-- échange 3 : récolte à la voix -->
+              <div data-hf-id="hf-l64n" class="msg out" id="m7" style="top:1166px;width:440px;height:150px">
+                <div data-hf-id="hf-1sw2" class="voice"><span data-hf-id="hf-dwlj" class="play"><svg data-hf-id="hf-qldv" viewBox="0 0 24 24" fill="currentColor"><path data-hf-id="hf-4hi2" d="M7 4v16l13-8z" /></svg></span><span data-hf-id="hf-50gm" class="wave" id="wave-2"></span><span data-hf-id="hf-msap" class="dur">0:03</span></div>
+                <div data-hf-id="hf-8c64" class="trans">« Récolté 2 kilos de tomates »</div>
+              </div>
+              <div data-hf-id="hf-omhs" class="msg in" id="m8" style="top:1338px;width:460px;height:150px">
+                <div data-hf-id="hf-ckcz" class="rc-t"><span data-hf-id="hf-jxw2" class="rc-ic" style="background:var(--amber-soft);color:var(--amber)"><svg data-hf-id="hf-qtih" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-582f" d="M4 10h16l-2 10H6z" /><path data-hf-id="hf-6olj" d="m8 10 4-6 4 6" /></svg></span>Récolte enregistrée</div>
+                <div data-hf-id="hf-efn8" class="row" style="border:0"><span data-hf-id="hf-xnbb">Tomate · aujourd'hui</span><b data-hf-id="hf-tukx">2 kg</b></div>
+              </div>
+            </div></div>
+            <div data-hf-id="hf-bhzd" class="tg-in">
+              <svg data-hf-id="hf-t9wq" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#6b7a5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-wgai" d="m21.4 11-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
+              <div data-hf-id="hf-77ls" class="tg-field"><span data-hf-id="hf-z72r" id="tg-text" class="ph">Message</span><div data-hf-id="hf-mwq5" id="rec"><i data-hf-id="hf-zeb8"></i><b data-hf-id="hf-zr3y" id="rec-t">0:01</b><span data-hf-id="hf-pgf1">enregistrement…</span></div></div>
+              <div data-hf-id="hf-zjrq" id="mic"><span data-hf-id="hf-sg2m" id="mic-ring"></span>
+                <svg data-hf-id="hf-phau" id="ic-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-qgfi" d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" /><path data-hf-id="hf-9g83" d="M19 10v2a7 7 0 0 1-14 0v-2" /><path data-hf-id="hf-mag1" d="M12 19v3" /></svg>
+                <svg data-hf-id="hf-jic2" id="ic-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0"><path data-hf-id="hf-m3bp" d="m22 2-7 20-4-9-9-4Z" /><path data-hf-id="hf-knmb" d="M22 2 11 13" /></svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4 · statistiques -->
+          <div data-hf-id="hf-puk4" class="scr" id="scr-stats">
+            <div data-hf-id="hf-qnxz" class="hdr"><div data-hf-id="hf-2lb7" class="sub">Jardin de Bretagne · saison 2026</div><div data-hf-id="hf-34x3" class="ttl">Statistiques</div></div>
+            <div data-hf-id="hf-59cd" class="body">
+              <div data-hf-id="hf-im1g" class="card" id="st-card">
+                <div data-hf-id="hf-0gfu" class="t">Récoltes de la saison</div>
+                <div data-hf-id="hf-vf1u" class="big"><span data-hf-id="hf-w12l" id="count">0,0</span><span data-hf-id="hf-hnp0" class="u">kg</span></div>
+                <span data-hf-id="hf-anxi" id="delta">+2 kg aujourd'hui</span>
+                <div data-hf-id="hf-6idu" class="bars" id="bars"></div>
+                <div data-hf-id="hf-e53x" class="months"><span data-hf-id="hf-pcf6">Mai</span><span data-hf-id="hf-37nn">Juin</span><span data-hf-id="hf-4dqd">Juil.</span><span data-hf-id="hf-y47m">Août</span><span data-hf-id="hf-5fvt">Sept.</span><span data-hf-id="hf-ql7d">Oct.</span></div>
+              </div>
+              <div data-hf-id="hf-x34l" class="mini">
+                <div data-hf-id="hf-vn2y" class="card"><span data-hf-id="hf-xq8h" class="lbl">Tomate</span><b data-hf-id="hf-0tdc">21,6 kg</b></div>
+                <div data-hf-id="hf-i08u" class="card"><span data-hf-id="hf-fhib" class="lbl">Courgette</span><b data-hf-id="hf-h25y">9,4 kg</b></div>
+                <div data-hf-id="hf-iejv" class="card"><span data-hf-id="hf-1gvn" class="lbl">Haricot</span><b data-hf-id="hf-gpek">7,4 kg</b></div>
+              </div>
+            </div>
+          </div>
+        </div></div></div></div>
+
+        <!-- signature -->
+        <div data-hf-id="hf-37xg" id="end">
+          <div data-hf-id="hf-0dsc" id="end-logo"><svg data-hf-id="hf-jkmu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-hequ" d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /><path data-hf-id="hf-3iqa" d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></svg></div>
+          <div data-hf-id="hf-o6mi" class="end-title"><span data-hf-id="hf-q43c" class="w ew">Assistant</span><span data-hf-id="hf-2y71" class="w ew acc">Potager</span></div>
+          <div data-hf-id="hf-d6pl" id="end-tag">Ton carnet de potager, tenu à la voix.</div>
+          <div data-hf-id="hf-c9cw" class="pills">
+            <span data-hf-id="hf-n2w2" class="pill tg"><svg data-hf-id="hf-uf0g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path data-hf-id="hf-na8s" d="m22 2-7 20-4-9-9-4Z" /><path data-hf-id="hf-k9ba" d="M22 2 11 13" /></svg>Sur Telegram</span>
+            <span data-hf-id="hf-t3uk" class="pill"><svg data-hf-id="hf-rmv9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect data-hf-id="hf-vbl8" x="3" y="3" width="7" height="7" rx="1" /><rect data-hf-id="hf-llfk" x="14" y="3" width="7" height="7" rx="1" /><rect data-hf-id="hf-fgba" x="14" y="14" width="7" height="7" rx="1" /><rect data-hf-id="hf-jj8i" x="3" y="14" width="7" height="7" rx="1" /></svg>Et sur le web</span>
+          </div>
+          <div data-hf-id="hf-opcd" id="end-verbs">Crée · Partage · Sème · Plante · Récolte</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ---------- contenu ----------
+      const HEADLINES = [
+        { id: "h1", t0: 0.35, t1: 2.0, kicker: "", lines: [["Ton", "potager,"], ["dans", "ta", "*poche."]] },
+        { id: "h2", t0: 2.15, t1: 4.2, kicker: "01 · Créer", lines: [["Crée", "ton", "potager"], ["en", "*4 étapes."]] },
+        { id: "h3", t0: 4.35, t1: 6.2, kicker: "02 · Partager", lines: [["Invite", "ta", "famille"], ["au", "*jardin."]] },
+        { id: "h4", t0: 6.35, t1: 8.5, kicker: "03 · Semer, sur Telegram", lines: [["Tu", "le", "dis."], ["*Il", "*le", "*note."]] },
+        { id: "h5", t0: 8.6, t1: 10.2, kicker: "04 · Planter", lines: [["Planté ?"], ["*C'est", "*noté."]] },
+        { id: "h6", t0: 10.3, t1: 12.75, kicker: "05 · Récolter", lines: [["Ta", "récolte,"], ["*mois", "*après", "*mois."]] },
+      ];
+      const BARS = [0.8, 3.2, 9.6, 12.4, 8.2, 4.2]; // somme = 38,4 kg
+
+      const hlRoot = document.getElementById("headlines");
+      HEADLINES.forEach((h) => {
+        const box = document.createElement("div");
+        box.className = "headline";
+        box.id = h.id;
+        if (h.kicker) {
+          const k = document.createElement("div");
+          k.className = "kicker";
+          k.textContent = h.kicker;
+          box.appendChild(k);
+        }
+        h.lines.forEach((ln) => {
+          const line = document.createElement("div");
+          line.className = "hl-line";
+          ln.forEach((word) => {
+            const s = document.createElement("span");
+            const acc = word.startsWith("*");
+            s.className = "w" + (acc ? " acc" : "");
+            s.textContent = acc ? word.slice(1) : word;
+            line.appendChild(s);
+          });
+          box.appendChild(line);
+        });
+        hlRoot.appendChild(box);
+      });
+
+      // ondes des messages vocaux : hauteurs dérivées de l'index (déterministe)
+      ["wave-1", "wave-2"].forEach((id, k) => {
+        const w = document.getElementById(id);
+        for (let i = 0; i < 26; i++) {
+          const b = document.createElement("i");
+          const h = 12 + Math.round(Math.abs(Math.sin(i * 1.7 + k) * 26 + Math.sin(i * 0.6) * 10));
+          b.style.height = Math.min(48, h) + "px";
+          w.appendChild(b);
+        }
+      });
+
+      const barsEl = document.getElementById("bars");
+      const MAXB = Math.max(...BARS);
+      BARS.forEach((v, i) => {
+        const c = document.createElement("div");
+        c.className = "col" + (i === BARS.length - 1 ? " hot" : "");
+        const lab = document.createElement("span");
+        lab.className = "v";
+        lab.textContent = v.toFixed(1).replace(".", ",");
+        const b = document.createElement("span");
+        b.className = "b";
+        b.style.height = Math.round((v / MAXB) * 290) + "px";
+        c.appendChild(lab);
+        c.appendChild(b);
+        barsEl.appendChild(c);
+      });
+
+      // ---------- timeline ----------
+      const tl = gsap.timeline({ paused: true });
+      const F = 1 / 30;
+      const q = (s) => Array.from(document.querySelectorAll(s));
+
+      // fond : respiration et dérive (sine-wave-loop, répétitions finies)
+      tl.fromTo("#glow-a", { scale: 1, x: 0 }, { scale: 1.14, x: -60, duration: 2.5, ease: "sine.inOut", yoyo: true, repeat: 5 }, 0.5);
+      tl.fromTo("#glow-b", { scale: 1.1, y: 0 }, { scale: 0.94, y: -80, duration: 3, ease: "sine.inOut", yoyo: true, repeat: 4 }, 0.5);
+      tl.fromTo("#leaf-1", { rotation: -8, y: 0 }, { rotation: 10, y: -60, duration: 15, ease: "none" }, 0.5);
+      tl.fromTo("#leaf-2", { rotation: 12, y: 0 }, { rotation: -14, y: -90, duration: 15, ease: "none" }, 0.5);
+      tl.fromTo("#leaf-3", { rotation: 0, y: 0 }, { rotation: 24, y: 70, duration: 15, ease: "none" }, 0.5);
+      tl.fromTo("#dots", { y: 0 }, { y: -44, duration: 15, ease: "none" }, 0.5);
+      tl.fromTo("#brand-chip", { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 0.6);
+
+      // titres : waterfall-entry, sortie brève vers le haut
+      HEADLINES.forEach((h) => {
+        const els = q("#" + h.id + " .kicker, #" + h.id + " .w");
+        let t = h.t0;
+        els.forEach((el, i) => {
+          const heavy = el.classList.contains("acc");
+          const dy = el.classList.contains("kicker") ? 34 : heavy ? 78 : 48;
+          const d = heavy ? 0.19 : 0.15;
+          tl.set(el, { opacity: 1, y: dy }, t);
+          tl.to(el, { y: 0, duration: d, ease: "power4.out" }, t);
+          t += d - F;
+        });
+        tl.to(els, { y: -40, opacity: 0, duration: 0.22, ease: "power2.in", stagger: 0.015 }, h.t1 - 0.28);
+      });
+
+      // téléphone : entrée, flottement, sortie
+      tl.fromTo("#phone-wrap", { y: 760, rotation: 7, scale: 0.9 }, { y: 0, rotation: 0, scale: 1, duration: 0.9, ease: "power3.out" }, 0.6);
+      tl.fromTo("#phone-float", { y: 0 }, { y: -14, duration: 1.4, ease: "sine.inOut", yoyo: true, repeat: 7 }, 1.5);
+
+      // écran d'accueil
+      tl.fromTo("#sp-logo", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "power3.out" }, 1.1);
+      tl.fromTo("#sp-name", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 1.3);
+      tl.fromTo("#sp-tag", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 1.45);
+
+      // transitions d'écran : le suivant glisse depuis la droite, le précédent recule
+      function swap(from, to, at) {
+        tl.fromTo(to, { x: 564 }, { x: 0, duration: 0.55, ease: "power3.inOut" }, at);
+        tl.to(from, { x: -170, duration: 0.55, ease: "power3.inOut" }, at);
+        tl.set(to, { visibility: "visible" }, at);
+        tl.set(from, { visibility: "hidden" }, at + 0.56);
+      }
+      swap("#scr-splash", "#scr-web", 2.0);
+      swap("#scr-web", "#scr-invite", 4.2);
+      swap("#scr-invite", "#scr-tg", 6.2);
+      swap("#scr-tg", "#scr-stats", 11.25);
+
+      // pression tactile (physics-press-reaction) + point de contact
+      function press(target, tap, at) {
+        tl.fromTo(tap, { scale: 0.4, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.14, ease: "power2.out" }, at - 0.08);
+        tl.to(target, { scale: 0.92, duration: 0.09, ease: "power2.in" }, at);
+        tl.to(target, { scale: 1, duration: 0.3, ease: "back.out(2)" }, at + 0.09);
+        tl.to(tap, { scale: 1.7, opacity: 0, duration: 0.3, ease: "power2.out" }, at + 0.1);
+      }
+
+      // 1 · créer
+      q(".wz").forEach((el, i) => tl.fromTo(el, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 2.25 + i * 0.08));
+      tl.fromTo("#parcel", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 3.55);
+      q(".chip").forEach((el, i) => tl.fromTo(el, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out" }, 3.2 + i * 0.06));
+      q(".st").forEach((el, i) => tl.fromTo(el, { scaleX: 0 }, { scaleX: 1, duration: 0.3, ease: "power2.out" }, 2.4 + i * 0.35));
+      press("#btn-create", "#tap-1", 3.68);
+      tl.to("#btn-lbl", { opacity: 0, duration: 0.1 }, 4.32);
+      tl.fromTo("#toast", { scale: 0.9, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out" }, 4.35);
+      tl.fromTo("#toast .ok", { scale: 0, rotation: -40 }, { scale: 1, rotation: 0, duration: 0.4, ease: "power3.out" }, 4.4);
+
+      // 2 · inviter
+      tl.fromTo("#code-card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 4.95);
+      tl.fromTo("#share", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 5.05);
+      press("#share", "#tap-2", 4.95);
+      q(".mb").forEach((el, i) => {
+        tl.fromTo(el, { x: 120, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45, ease: "expo.out" }, 5.15 + i * 0.3);
+        tl.fromTo(el.querySelector(".badge"), { scale: 0 }, { scale: 1, duration: 0.35, ease: "power3.out" }, 5.85);
+      });
+
+      // 3 · Telegram — échange 1 : vocal
+      function rec(at, end) {
+        tl.to("#mic", { backgroundColor: "#c0392b", scale: 1.12, duration: 0.15, ease: "power2.out" }, at);
+        tl.fromTo("#mic-ring", { scale: 1, opacity: 0.9 }, { scale: 1.9, opacity: 0, duration: 0.5, ease: "power2.out", immediateRender: false }, at + 0.05);
+        tl.fromTo("#rec", { opacity: 0 }, { opacity: 1, duration: 0.12, immediateRender: false }, at);
+        tl.to("#rec", { opacity: 0, duration: 0.12 }, end);
+        tl.to("#mic", { backgroundColor: "#2f6694", scale: 1, duration: 0.2, ease: "power2.out" }, end);
+      }
+      function pop(sel, at) {
+        tl.fromTo(sel, { scale: 0.3, y: 20 }, { scale: 1, y: 0, duration: 0.42, ease: "power3.out" }, at);
+        tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.1, ease: "none" }, at);
+      }
+      rec(6.5, 6.95);
+      pop("#m1", 6.98);
+      q("#wave-1 i").forEach((b, i) => tl.fromTo(b, { scaleY: 0.1 }, { scaleY: 1, duration: 0.25, ease: "power3.out" }, 7.05 + i * 0.012));
+      tl.fromTo("#m1 .trans", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 7.75);
+      pop("#m2", 7.36);
+      q(".r2").forEach((el, i) => tl.fromTo(el, { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 7.6 + i * 0.07));
+      press("#ok-1", "#tap-3", 8.0);
+      pop("#m3", 8.2);
+
+      // échange 2 : saisie au clavier
+      tl.to("#ic-mic", { opacity: 0, duration: 0.1 }, 9);
+      tl.fromTo("#ic-send", { opacity: 0 }, { opacity: 1, duration: 0.1, immediateRender: false }, 9);
+      press("#mic", "#mic-ring", 9.05);
+      tl.to("#ic-send", { opacity: 0, duration: 0.1 }, 9.65);
+      tl.to("#ic-mic", { opacity: 1, duration: 0.1 }, 9.65);
+      pop("#m4", 9.1);
+      tl.fromTo("#tg-list", { y: 0 }, { y: -250, duration: 0.45, ease: "power3.inOut" }, 9.65);
+      pop("#m5", 9.4);
+      q(".r5").forEach((el, i) => tl.fromTo(el, { x: -24, opacity: 0 }, { x: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 9.5 + i * 0.07));
+      press("#ok-2", "#tap-4", 9.85);
+      pop("#m6", 10.02);
+
+      // échange 3 : récolte à la voix
+      tl.to(["#m1", "#m2", "#m3"], { opacity: 0, duration: 0.3, ease: "power2.in" }, 10.7);
+      tl.to("#tg-list", { y: -620, duration: 0.5, ease: "power3.inOut" }, 10.7);
+      rec(10.3, 10.6);
+      pop("#m7", 10.62);
+      q("#wave-2 i").forEach((b, i) => tl.fromTo(b, { scaleY: 0.1 }, { scaleY: 1, duration: 0.25, ease: "power3.out" }, 10.66 + i * 0.012));
+      tl.fromTo("#m7 .trans", { opacity: 0 }, { opacity: 1, duration: 0.25 }, 11.3);
+      pop("#m8", 10.92);
+
+      // 4 · statistiques (stat-bars-and-fills + counting-dynamic-scale)
+      tl.fromTo("#st-card", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 12);
+      q(".col .b").forEach((b, i) => tl.fromTo(b, { scaleY: 0 }, { scaleY: 1, duration: 0.5, ease: "power3.out" }, 11.65 + i * 0.07));
+      q(".col .v").forEach((v, i) => tl.fromTo(v, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, 11.85 + i * 0.07));
+      tl.fromTo("#count", { scale: 0.8 }, { scale: 1, duration: 0.9, ease: "power2.out" }, 12.1);
+      tl.fromTo("#delta", { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "power3.out" }, 12.8);
+      q(".mini .card").forEach((el, i) => tl.fromTo(el, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power3.out" }, 12.2 + i * 0.07));
+
+      // sortie du téléphone + signature
+      tl.to("#phone-wrap", { y: 260, scale: 0.84, opacity: 0, duration: 0.55, ease: "power3.in" }, 13.25);
+      tl.to("#brand-chip", { y: -30, opacity: 0, duration: 0.3, ease: "power2.in" }, 13.25);
+      tl.fromTo("#end-logo", { scale: 0, opacity: 0, rotation: -12 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.6, ease: "power3.out" }, 13.65);
+      let te = 13.35;
+      q(".ew").forEach((el) => {
+        tl.set(el, { opacity: 1, y: 90 }, te);
+        tl.to(el, { y: 0, duration: 0.2, ease: "power4.out" }, te);
+        te += 0.2 - F;
+      });
+      tl.fromTo("#end-tag", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 14.3);
+      q(".pill").forEach((el, i) => tl.fromTo(el, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "power3.out" }, 14.0 + i * 0.08));
+      tl.fromTo("#end-verbs", { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 14.75);
+      tl.fromTo("#end-logo", { y: 0 }, { y: -10, duration: 0.6, ease: "sine.inOut", yoyo: true, repeat: 1, immediateRender: false }, 14.3);
+
+      // états textuels pilotés par le temps (discrete-text-sequence) — sûrs au seek
+      const vName = document.getElementById("v-name");
+      const vCity = document.getElementById("v-city");
+      const tgText = document.getElementById("tg-text");
+      const recT = document.getElementById("rec-t");
+      const count = document.getElementById("count");
+      const caret = document.getElementById("caret-1");
+      const typed = (s, t, a, b) => (t <= a ? "" : t >= b ? s : s.slice(0, Math.round((s.length * (t - a)) / (b - a))));
+      const NAME = "Jardin de Bretagne";
+      const CITY = "Saint-Malo";
+      const MSG = "Planté 12 tomates cœur de bœuf…";
+      function textState() {
+        const t = tl.time();
+        vName.textContent = typed(NAME, t, 2.4, 2.95);
+        vCity.textContent = typed(CITY, t, 3.0, 3.3);
+        caret.style.opacity = t < 3.0 && Math.floor(t * 4) % 2 === 0 ? "1" : t < 3.0 && t > 2.4 ? "1" : "0";
+        const m = t >= 8.5 && t < 9.08 ? typed(MSG, t, 8.5, 9.0) : "";
+        tgText.textContent = m || "Message";
+        tgText.className = m ? "" : "ph";
+        const recStart = t < 10 ? 6.5 : 10.3;
+        recT.textContent = "0:0" + Math.min(4, 1 + Math.floor(Math.max(0, t - recStart) * 6));
+        const p = Math.min(1, Math.max(0, (t - 11.6) / 0.9));
+        const v = 38.4 * (1 - Math.pow(1 - p, 3));
+        count.textContent = v.toFixed(1).replace(".", ",");
+      }
+      tl.eventCallback("onUpdate", textState);
+      textState();
+
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

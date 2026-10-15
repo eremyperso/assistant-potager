@@ -1,0 +1,5 @@
+# Rendus et caches générés par HyperFrames (régénérables)
+renders/
+.hyperframes/
+.thumbnails/
+node_modules/
