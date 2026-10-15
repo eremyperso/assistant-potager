@@ -484,11 +484,11 @@ L'assistant reconnaît de nombreux synonymes pour chaque geste : *récolter, cue
 | **Traitement / produit** | non | savon noir, bouillie bordelaise, purin d'ortie, paille |
 | **Commentaire** | non | tout complément libre |
 
-### 6.3 Les dix-huit gestes reconnus
+### 6.3 Les dix-neuf gestes reconnus
 
 | Famille | Gestes |
 |---|---|
-| **Multiplication** | semis · mise en godet · plantation |
+| **Multiplication** | semis · mise en godet · plantation · déplacement d'un lot |
 | **Entretien** | arrosage · paillage · désherbage · binage · éclaircissage · taille · tuteurage · traitement · protection · amendement |
 | **Sorties** | récolte · perte au jardin · perte en pépinière · vente de plants |
 | **Constat** | observation |
@@ -626,6 +626,12 @@ Repiquer 15 plants de poivron en godet le 10 mars
 
 **Ce que le repiquage retire au semis d'origine.** Repiquer solde les **graines** du lot, pas seulement les plants obtenus : vingt plants repiqués depuis une barquette de trente graines soldent les trente graines, les dix qui n'ont pas levé quittant la pépinière avec elles. Un repiquage en plusieurs fois ne solde à chaque passage que ce qui a été déclaré.
 
+### 8.2 bis Sortir ses plants pour les endurcir : déplacer un lot
+
+Quand les godets passent de la serre au châssis froid, dites-le : *« passé le lot 119 au châssis froid »*, *« déplacé les godets de tomate cerise sous le châssis »*. L'assistant déplace le lot **entier** et le lit désormais à sa nouvelle pépinière, à la date du geste ; il ne touche à aucun stock.
+
+La destination doit être une **pépinière** : vers une planche ordinaire, le déplacement est refusé (mettre des plants en terre est une plantation). Plusieurs lots de la même culture : l'assistant vous propose les lots par boutons. Un déplacement se corrige et se supprime au Journal. Déplacer une partie seulement des godets n'est pas géré.
+
 ### 8.3 Les questions que le bot peut vous poser
 
 Trois cas où l'assistant préfère demander plutôt que deviner :
@@ -691,6 +697,23 @@ Quels plants sont en godet ?
 Ou, bien plus lisible, l'écran **Pépinière** du tableau de bord, qui montre chaque lot avec sa frise Germination → Godet → Terre.
 
 **Le numéro de lot.** Chaque semis en pépinière reçoit un numéro court (1, 2, 3… dans votre potager, jamais réutilisé) que vous pouvez écrire au crayon sur l'étiquette de la barquette. Vous le dites dans une phrase — « repiqué 40 plants du lot 128 en godet », « perdu 5 plants du lot 128 » — et l'assistant rattache le geste à ce lot sans vous demander de quelles graines viennent les plants. Un numéro inconnu, ou d'une autre culture que celle dite, est signalé au récapitulatif : rien n'est corrigé à votre place. `/lot 128` (ou « où en est le lot 128 ? ») donne la fiche du lot, et `/lot` seul (ou « mes lots ») liste vos lots pour retrouver un numéro oublié ; dans l'écran Pépinière, le champ **« Aller au lot n° »** l'ouvre.
+
+### 8.9 Le délai avant le repiquage en godet
+
+Pour les cultures que l'on sème en pépinière, le calendrier peut porter un délai de plus : **le temps entre le semis et le repiquage en godet** — le moment où l'on passe de la barquette au godet. Il ne faut pas le confondre avec le délai avant plantation (« repiquage » tout court), qui est le moment où l'on met en terre.
+
+```
+/calendrier chou
+/calendrier duree chou semis-godet 10-15
+/calendrier duree chou semis-godet aucune
+Délai de repiquage en godet des choux : 10 à 15 jours
+Les tomates se mettent en godet 15 à 20 jours après le semis
+```
+
+- Le mot **godet** est ce qui distingue ce délai de l'autre : *« délai de repiquage des tomates : 42 à 56 jours »* reste le délai avant plantation.
+- Votre correction ne vaut que pour **votre potager** ; une mise à jour du calendrier général ne l'efface jamais.
+- Rien n'est deviné : tant que le délai n'est pas renseigné, `/calendrier` affiche **« non renseigné »**, et l'application n'annonce aucune échéance de repiquage — elle ne le déduit ni de la levée, ni du délai avant plantation.
+- Il n'existe que pour une culture qui se sème en pépinière : sur une culture semée en place, la commande est refusée.
 
 ---
 
@@ -1475,6 +1498,7 @@ Vous n'avez rien à apprendre par cœur : cette table sert à lever un doute, pa
 | **Semis** | semé · semer · semis · semis direct · pleine terre · à la volée |
 | **Mise en godet** | mise en godet · mis en godet · repiqué en godet · rempotage godet |
 | **Plantation** | planté · planter · repiqué · repiquage · mis en terre · transplanté |
+| **Déplacement d'un lot** | passé le lot 119 au châssis · déplacé les godets sous le châssis · sorti les poireaux de la serre pour le châssis |
 | **Arrosage** | arrosé · arroser · irrigué · donné de l'eau |
 | **Désherbage** | désherbé · désherber · sarclé · sarclage · enlevé les mauvaises herbes |
 | **Binage** | biné · biner · binage |

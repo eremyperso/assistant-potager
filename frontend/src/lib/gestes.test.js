@@ -185,6 +185,13 @@ test('[US-224 / CA21] sans compagnon, l’application invite à l’activer APR�
   assert.match(src, /if \(!res\?\.compagnon_actif\)/)
 })
 
+test('[US-224] le dépôt n’ouvre jamais Telegram : aucune redirection depuis la PWA', () => {
+  const src = lire('../components/BoutonGeste.jsx')
+  assert.doesNotMatch(src, /window\.open\(/)
+  assert.doesNotMatch(src, /location\.(href|assign)/)
+  assert.doesNotMatch(src, /res\??\.lien/)
+})
+
 test('[US-224 / CA21] l’activation réutilise le parcours d’US-091, elle n’en crée pas un second', () => {
   const src = lire('../components/BoutonGeste.jsx')
   assert.match(src, /import \{ PanneauActivation, useCodeLiaison \} from '\.\/LierTelegram\.jsx'/)

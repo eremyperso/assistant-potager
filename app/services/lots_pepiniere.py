@@ -32,10 +32,12 @@ from utils.parcelles import get_all_parcelles, resolve_parcelle
 
 log = logging.getLogger("potager")
 
-#: Gestes de pépinière qui reconnaissent un lot cité (CA5). Les gestes de
-#: déplacement (US-211) et de levée (US-212) s'ajoutent ici quand ils existent.
+#: Gestes de pépinière qui reconnaissent un lot cité (CA5). Le geste de levée
+#: (US-212) s'ajoutera ici quand il existera.
 ACTIONS_AVEC_LOT: frozenset[str] = frozenset({
     "mise_en_godet", "perte_godet", "perte", "vendu", "plantation",
+    "deplacement",   # [US-211]
+    "cloture_lot",   # [US-216]
 })
 
 # « lot 128 », « le lot 128 », « lot n° 128 », « lot numéro 128 », « #128 ».
@@ -129,6 +131,17 @@ def resoudre_references(db: Session, ctx: TenantContext, items: list[dict], text
             if action == "perte":
                 item["action"] = "perte_godet"   # un lot ne vit qu'en pépinière
             item["origine_graines_id"] = lot["semis_id"]
+            if action == "cloture_lot":
+                # [US-216] Ce que la clôture solde, lu au récapitulatif : le jardinier
+                # confirme en connaissant les nombres. La confirmation les relit (elle
+                # fait foi : le lot a pu bouger entre-temps).
+                item["quantite"] = lot["stock_residuel_godet"]
+                item["unite"] = "plants"
+                item["nb_graines_semees"] = lot["graines_en_germination"]
+                item["_lot_cloture"] = {
+                    "godets": lot["stock_residuel_godet"],
+                    "graines": lot["graines_en_germination"],
+                }
         log.info("[US-209 / CA5] Geste %s rattaché au lot n° %s (semis %s)", action, numero, lot["semis_id"])
 
 
@@ -168,6 +181,20 @@ def controler_emplacements_godets(db: Session, ctx: TenantContext, items: list[d
             f"{propositions}Confirmez pour enregistrer sans emplacement, ou annulez et redites-le."
         )
         log.info("[US-210 / CA2] Mise en godet sur %r refusée : parcelle ordinaire", parcelle.nom)
+
+
+def pepinieres_du_potager(db: Session, ctx: TenantContext) -> list[dict]:
+    """[US-216 / CA8] Les pépinières du potager : `{id, nom}`.
+
+    La fiche d'un lot ne propose « Déplacer » que si le potager en compte au moins
+    deux — il n'y a sinon nulle part où aller. Le type de pépinière n'est pas lu ici :
+    seul le calcul des échéances le lit (US-208 / CA7).
+    """
+    return [
+        {"id": p.id, "nom": p.nom}
+        for p in get_all_parcelles(db, potager_id=ctx.potager_id)
+        if p.est_pepiniere
+    ]
 
 
 #: Nombre de lots listés par `/lot` : les plus récents, le filtre par culture fait le reste.
@@ -218,6 +245,23 @@ def formater_liste_lots_telegram(lots: list[dict], culture: Optional[str] = None
     return "\n".join(lignes)
 
 
+def repartition_lot(lot: dict) -> list[str]:
+    """[US-211] Lignes « graines à X » / « N godets à Y » — seulement quand le lot n'est
+    pas tout entier au même endroit. Un emplacement non dit est écrit « non précisé »,
+    jamais supposé."""
+    graines = lot.get("graines_emplacement")
+    godets = lot.get("godets_par_emplacement") or []
+    noms = {g["nom"] for g in godets} | ({graines} if graines and lot.get("graines_en_germination") else set())
+    if len(noms) < 2:
+        return []
+    lignes = []
+    if graines and lot.get("graines_en_germination"):
+        lignes.append(f"🫘 Graines pas encore levées : à *{graines}*")
+    for g in godets:
+        lignes.append(f"🪴 {g['plants']} godet(s) : à *{g['nom'] or 'non précisé'}*")
+    return lignes
+
+
 def formater_lot_telegram(lot: dict) -> str:
     """[US-209 / CA7] Fiche d'un lot en Markdown Telegram — zéro jeton."""
     nom = lot["culture"] + (f" {lot['variete']}" if lot.get("variete") else "")
@@ -231,6 +275,9 @@ def formater_lot_telegram(lot: dict) -> str:
         lignes.append(f"📍 Emplacement : *{lot['parcelle']}*")
     else:
         lignes.append("📍 Emplacement : non précisé")
+    repartition = repartition_lot(lot)   # [US-211] graines ici, godets là
+    if repartition:
+        lignes.extend(repartition)
     lignes.append(f"🫘 Graines semées : *{lot['graines_semees']}*")
     lignes.append(f"🪴 Plants obtenus : *{lot['plants_obtenus']}*")
     lignes.append(f"📦 Plants restants : *{lot['stock_residuel_godet']}*")

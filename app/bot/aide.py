@@ -209,6 +209,7 @@ _HELP_CALENDRIER = (
     "*Corriger une durée (en jours, ou une fourchette) :*\n"
     "  → /calendrier duree courgette recolte 50-60\n"
     "  → /calendrier duree tomate plantation-recolte 60-80\n"
+    "  → /calendrier duree chou semis-godet 10-15\n"
     "_Vos corrections ne valent que pour votre potager. Sans donnée, "
     "rien n'est inventé : la frise reste vide et la durée s'affiche en tiret._"
 )

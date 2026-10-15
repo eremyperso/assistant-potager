@@ -1,4 +1,4 @@
-# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183
+# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183, US-213
 
 ## Calendrier cultural et zone climatique [US-068]
 
@@ -182,6 +182,42 @@ se sème pas) — JAMAIS par soustraction de `repiquage` à `recolte`.
 la dictée d'US-177 exige les DEUX bornes, plantation ET récolte.
 
 ⚠️ Aucune écriture, aucun calcul de stock touché (CA13) — un test le vérifie.
+
+## Délai semis → repiquage en godet [US-213]
+
+Cinquième étape de `duree_culturale` (`semis_godet`), aucune migration
+(VARCHAR(20) sans CHECK, comme US-177). C'est le passage de la barquette au
+godet — PAS la mise en place, qui reste `repiquage`. Consommateur : US-214
+(échéance de repiquage d'un lot) ; la fiche culture (US-206) la lira ensuite.
+
+```
+/calendrier duree <culture> [itinéraire] semis-godet 10-15      (aucune la retire)
+« délai de repiquage en godet des choux : 10 à 15 jours »
+« les tomates se mettent en godet 15 à 20 jours après le semis »
+GET /cultures/{culture}/calendrier   étape `semis_godet` dans `durees`
+GET /plan/calendriers                champ AJOUTÉ `duree_semis_godet` (bornes, mention)
+```
+
+⚠️ Quatre décisions à ne pas rouvrir sans rouvrir l'US :
+
+- **LE MOT « GODET » SÉPARE LES DEUX DÉLAIS.** « délai de repiquage des tomates :
+  42 à 56 jours » garde son sens (semis → mise en place, US-068 / CA29). Deux
+  règles de dictée (`calendrier_duree_semis_godet`, `…_verbe`) exigent le mot, et
+  la règle générique `calendrier_duree` porte un `(?!… godet)` : la phrase ne
+  dépend pas de l'ordre de déclaration. Le corpus `us172_commandes.csv` porte
+  les deux formes côte à côte.
+- **JAMAIS DÉDUITE** (CA5) : ni de la levée, ni de `repiquage`, ni d'une
+  moyenne. Sans valeur, `lire_calendrier` rend « non renseigné »
+  (`affichage_absent`) — les autres étapes gardent le tiret — et rien n'est
+  projeté. Wind River ne porte aucune colonne pour ce délai : l'étape n'est
+  pré-remplie par aucun adaptateur (`SOURCE.md`), le gabarit interne la livre
+  vide.
+- **PORTÉE** : servie pour un itinéraire qui passe par la pépinière
+  (`_passe_par_pepiniere`), ou qui porte déjà sa valeur ; refusée à la
+  correction sur un itinéraire qui a des fenêtres et aucune de semis en
+  pépinière, comme `repiquage`.
+- **AUCUN CALCUL TOUCHÉ** (CA7) : frise, projections (`recalage_calendrier`),
+  confiance et stock ne la lisent pas. Un test le vérifie.
 
 ## Moteur de confiance semis / plantation [US-178]
 

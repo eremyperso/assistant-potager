@@ -269,6 +269,7 @@ export default function PlanVue({ refresh }) {
           nomParcelle={ouvert.nomParcelle || null}
           rang={ouvert.rang}
           ecran="plan-vue"
+          onOuvrirLot={(numero) => { setOuvert(null); aller('pepiniere', { lot: String(numero) }) }}   // [US-216 / CA1]
           onClose={() => setOuvert(null)}
         />
       )}

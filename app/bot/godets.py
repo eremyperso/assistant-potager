@@ -13,7 +13,10 @@ from app.services import stock as svc_stock
 from app.services import lots_pepiniere as svc_lots  # [US-209]
 from .noyau import AFTER_RECORD_KEYBOARD, log
 from .etat import (
+    _DEPLACEMENT_LOT_PENDING,
+    _DEPLACEMENT_LOT_TIMEOUT,
     _GODET_GRAINES_PENDING,
+    _QUANTITE_PENDING,
     _GODET_GRAINES_TIMEOUT,
     _GODET_LOT_PENDING,
     _GODET_LOT_TIMEOUT,
@@ -99,7 +102,7 @@ async def _demander_graines_godet_si_manquant(update: Update, parsed: dict, text
     return True
 
 
-async def _godet_graines_reponse(update: Update, texte_reponse: str) -> None:
+async def _godet_graines_reponse(update: Update, texte_reponse: str, ctx=None) -> None:
     """
     [US-066 / CA5] Traite la réponse chiffrée du jardinier. Toute valeur incohérente
     est signalée et redemandée, jamais enregistrée : moins de graines que de plants
@@ -155,7 +158,7 @@ async def _godet_graines_reponse(update: Update, texte_reponse: str) -> None:
     parsed["nb_graines_semees"] = nb_graines
     parsed["_graines_demandees"] = True
     log.info("[US-066] Nombre de graines saisi : %d — user_id=%s", nb_graines, user_id)
-    await _save_godet_item(update, parsed, pending["texte"])
+    await _save_godet_item(update, parsed, pending["texte"], ctx)
 
 
 async def _godet_graines_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -184,7 +187,7 @@ async def _godet_graines_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
         parse_mode="Markdown",
         reply_markup=None,
     )
-    await _save_godet_item(update, parsed, pending["texte"])
+    await _save_godet_item(update, parsed, pending["texte"], ctx)
 
 
 def _fmt_date_lot(dt) -> str:
@@ -274,8 +277,12 @@ async def _demander_lot_godet_si_ambigu(update: Update, parsed: dict, texte: str
     return True
 
 
-async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
-    """Sauvegarde un item mise_en_godet et affiche le récapitulatif."""
+async def _save_godet_item(update: Update, parsed: dict, texte: str, ctx=None) -> None:
+    """Sauvegarde un item mise_en_godet et affiche le récapitulatif.
+
+    [US-224] Un geste venu de la file porte `_geste_file` : il quitte la file
+    APRÈS l'écriture réussie, comme au récapitulatif d'US-021, jamais avant.
+    """
     # [fix rattachement lot godet] Point de passage obligé des chemins de saisie
     # godet (US-019 et confirmation directe) : le lot parent se choisit ici.
     if await _demander_lot_godet_si_ambigu(update, parsed, texte):
@@ -305,6 +312,15 @@ async def _save_godet_item(update: Update, parsed: dict, texte: str) -> None:
     recap = _build_recap(parsed, event.id)
     await update.effective_message.reply_text(recap, parse_mode="Markdown", reply_markup=AFTER_RECORD_KEYBOARD)
     await send_voice_reply(update, _build_recap_tts(parsed))
+
+    geste_file = parsed.get("_geste_file")
+    if geste_file:
+        from app.services import file_gestes as svc_file
+        from .enregistrement import _GesteDeLaFile
+        from .file_gestes import proposer_suivant
+        svc_file.confirmer(_GesteDeLaFile(geste_file))
+        if ctx is not None:
+            await proposer_suivant(update, ctx, geste_file["user_id"])
 
 
 async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -344,7 +360,7 @@ async def _godet_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
         parse_mode="Markdown",
         reply_markup=None,
     )
-    await _save_godet_item(update, parsed, texte)
+    await _save_godet_item(update, parsed, texte, ctx)
 
 
 async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -385,7 +401,339 @@ async def _godet_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         reply_markup=None,
     )
 
-    await _save_godet_item(update, parsed, texte)
+    await _save_godet_item(update, parsed, texte, ctx)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-224] La porte unique de la quantité de pépinière
+# ──────────────────────────────────────────────────────────────────────────────
+# Mise en godet, perte de godet, vente, mise en terre d'un lot : le NOMBRE de plants
+# est ce qui fait bouger le stock (`int(qte or 0)` dans `calcul_lots_pepiniere`). Un
+# événement écrit sans lui ne décrémente rien et laisse son lot « indéterminé » —
+# constaté le 14/10/2026 (mise en godet #593, perte de godet #596). Chaque chemin
+# qui y mène — dictée, voix, geste de la file — passe donc ICI avant le
+# récapitulatif, et la question propose ce que la base sait déjà du lot.
+_VERBE_QUANTITE = {
+    "mise_en_godet": "repiqués en godet",
+    "perte_godet": "perdus",
+    "perte": "perdus",
+    "vendu": "vendus",
+    "plantation": "mis en terre",
+}
+_MOTS_PEPINIERE_PERTE = ("pepiniere", "pépinière", "godet", "semis")
+
+
+def _quantite_pepiniere_manquante(item: dict, texte: str = "") -> bool:
+    """[US-224] L'item est-il un geste de pépinière dont le nombre de plants manque ?
+
+    `perte` (sans « godet ») n'est concernée que si la phrase dit la pépinière ou cite
+    un lot — au potager, la question existante (US-021 / CA9) fait déjà foi. Une
+    plantation n'est interrogée ici que quand elle cite son lot : sans lot, le
+    CA9 générique la demande, sans proposition de stock à faire.
+    """
+    from utils.actions import normalize_action
+    action = normalize_action(item.get("action"))
+    if action == "mise_en_godet":
+        return not item.get("nb_plants_godets") and not item.get("_plants_demandes")
+    if action not in ("perte_godet", "perte", "vendu", "plantation") or item.get("quantite"):
+        return False
+    lot_cite = bool(item.get("numero_lot_cite")) or item.get("origine_graines_id") is not None
+    if not (item.get("culture") or lot_cite):
+        return False                       # la culture est demandée avant, plus loin
+    if action in ("perte_godet", "vendu"):
+        return True
+    if action == "plantation":
+        return lot_cite
+    from unidecode import unidecode
+    texte_n = unidecode((texte or "").lower())
+    return lot_cite or any(m in texte_n for m in _MOTS_PEPINIERE_PERTE)
+
+
+def _lot_pressenti_pour_sortie(parsed: dict) -> "dict | None":
+    """[US-224] Le lot d'où des godets vont sortir (perte, vente, mise en terre) : le lot
+    cité, sinon l'unique lot de la culture (et variété dite) qui a encore des godets.
+    None dès que c'est incertain — aucun stock précis à annoncer, donc aucune
+    proposition à faire.
+    """
+    db = SessionLocal()
+    try:
+        semis_id = parsed.get("origine_graines_id")
+        if semis_id is not None:
+            return svc_stock.lot_pepiniere_par_semis(db, current_context(), int(semis_id))
+        culture = (parsed.get("culture") or "").lower()
+        if not culture:
+            return None
+        variete = (parsed.get("variete") or "").lower() or None
+        candidats = [
+            lot for lot in svc_stock.calcul_lots_pepiniere(db, current_context())
+            if not lot.get("sans_semis_rattache")
+            and (lot.get("culture") or "").lower() == culture
+            and (variete is None or (lot.get("variete") or "").lower() == variete)
+            and (lot.get("stock_residuel_godet") or 0) > 0
+        ]
+        return candidats[0] if len(candidats) == 1 else None
+    finally:
+        db.close()
+
+
+async def _poser_question_quantite_pepiniere(
+    update: Update, items: list, texte: str, geste_file, message,
+) -> None:
+    """[US-224] Pose « combien de plants ? » avec, quand le lot est connu, ce qui reste
+    en base — « Tout le lot : N » —, plutôt que de le révéler après la réponse.
+
+    « Je ne sais pas » n'est offert qu'à la mise en godet (enregistrement sans nombre,
+    explicite et signalé). Une perte ou une vente sans nombre ne ferait bouger aucun
+    stock : le nombre y est obligatoire, « Annuler » seul permet d'en sortir.
+
+    La réponse arrive par `_godet_plants_cb` (bouton) ou par le texte
+    (`messages._repondre_quantite_en_attente`) ; dans les deux cas le geste reprend
+    `_parse_and_save` avec son `geste_file`.
+    """
+    from utils.actions import normalize_action
+    import time as _time_q
+
+    item = items[0]
+    action = normalize_action(item.get("action"))
+    est_godet = action == "mise_en_godet"
+    user_id = update.effective_user.id
+    de_la_file = geste_file is not None
+
+    lot = _lot_pressenti_pour_godet(item) if est_godet else _lot_pressenti_pour_sortie(item)
+    cle = "graines_en_germination" if est_godet else "stock_residuel_godet"
+    reste = int(lot.get(cle) or 0) if lot else 0
+
+    attente = {
+        "items": items, "texte": texte, "ts": _time_q.time(), "geste_file": geste_file,
+        # Marqueur : seul un clavier de CETTE question peut y répondre
+        # (`_godet_plants_cb`), jamais celui d'une autre quantité.
+        "godet_plants": True,
+    }
+    boutons = []
+    if lot and reste > 0:
+        attente["lot_propose"] = {"semis_id": lot["semis_id"], "reste": reste}
+        boutons.append([InlineKeyboardButton(f"✅ Tout le lot : {reste}", callback_data="godetplants_all")])
+    if est_godet:
+        boutons.append([InlineKeyboardButton("🤷 Je ne sais pas", callback_data="godetplants_skip")])
+    boutons.append([InlineKeyboardButton(
+        "❌ Laisser dans ma file" if de_la_file else "❌ Annuler", callback_data="godetplants_cancel",
+    )])
+
+    verbe = _VERBE_QUANTITE.get(action, "concernés")
+    lot_cite = item.get("numero_lot_cite")
+    de_lot = f" du lot n° {lot_cite}" if lot_cite else ""
+    if lot and reste > 0:
+        nature = "graine(s) non soldée(s)" if est_godet else "plant(s) en godet"
+        question = (
+            f"🪴 Combien de plants avez-vous {verbe} ?\n\n"
+            f"_Lot {_etiquette_lot(lot)} : il reste {reste} {nature}._\n"
+            "Appuyez sur « Tout le lot », ou tapez un autre nombre."
+        )
+    else:
+        question = f"🪴 Combien de plants{de_lot} avez-vous {verbe} ? (ex: 3)\n"
+        if not est_godet:
+            question += "_Le nombre est nécessaire pour mettre le stock à jour._"
+
+    _QUANTITE_PENDING[user_id] = attente
+    log.info("[US-224] Nombre de plants manquant pour '%s' — user_id=%s", action, user_id)
+    await message.reply_text(
+        question, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(boutons),
+    )
+
+
+async def _godet_plants_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-224] « Tout le lot » : le nombre de plants d'une mise en godet de la file,
+    lu en base (les graines non soldées du lot) plutôt que redicté.
+
+    Le lot est alors entièrement soldé : plants et graines valent le reste du lot,
+    ce qui rend inutile la question « sur combien de graines ? ». Taper un autre
+    nombre garde le parcours habituel (réponse texte, puis question des graines).
+    """
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _QUANTITE_PENDING.get(user_id)
+    items = (pending or {}).get("items") or [{}]
+    # Un clavier périmé ne doit jamais répondre à une AUTRE question de quantité.
+    est_la_question = bool(pending) and bool(
+        pending.get("godet_plants") or pending.get("lot_propose")
+    )
+    if not est_la_question:
+        await query.edit_message_text(
+            "⏱ Ce choix n'est plus actif. Redonnez votre mise en godet, ou /gestes "
+            "pour rouvrir vos gestes en attente."
+        )
+        return
+    _QUANTITE_PENDING.pop(user_id, None)
+    de_la_file = pending.get("geste_file") is not None
+
+    if query.data == "godetplants_cancel":
+        await query.edit_message_text(
+            "👌 Le geste reste dans votre file — reprenez-le avec /gestes."
+            if de_la_file else "❌ Mise en godet annulée.",
+            reply_markup=None,
+        )
+        return
+
+    if query.data == "godetplants_skip" and items[0].get("action") != "mise_en_godet":
+        # Jamais offert pour une perte ou une vente : le nombre y est obligatoire.
+        _QUANTITE_PENDING[user_id] = pending
+        await query.answer("Le nombre de plants est nécessaire.", show_alert=False)
+        return
+
+    if query.data == "godetplants_skip":
+        # Choix explicite, comme « Je ne sais pas » d'US-066 : le godet est écrit sans
+        # nombre, et on dit ce que ça coûte au lieu de le laisser se produire en silence.
+        items[0]["_plants_demandes"] = True
+        log.info("[US-224] Nombre de plants non renseigné (choix explicite) — user_id=%s", user_id)
+        await query.edit_message_text(
+            "✅ Enregistrement *sans* nombre de plants.\n"
+            "_Aucun plant n'entrera en stock et l'avancement du lot restera indéterminé._",
+            parse_mode="Markdown", reply_markup=None,
+        )
+        from .saisie import _parse_and_save   # import tardif : saisie importe ce module
+        await _parse_and_save(
+            update, pending["texte"], pre_parsed_items=items, geste_file=pending.get("geste_file"),
+        )
+        return
+
+    lot = pending.get("lot_propose")
+    if not lot:
+        await query.edit_message_text("⏱ Ce choix n'est plus actif. Redonnez votre mise en godet.")
+        return
+    item = items[0]
+    if item.get("action") == "mise_en_godet":
+        item["nb_plants_godets"] = lot["reste"]
+        item["nb_graines_semees"] = lot["reste"]   # lot soldé : rien à redemander (US-066)
+    else:
+        # Perte, vente, mise en terre : le nombre de plants est la quantité de l'acte.
+        item["quantite"] = lot["reste"]
+        item["unite"] = "plants"
+    item["origine_graines_id"] = lot["semis_id"]
+    log.info(
+        "[US-224] Tout le lot proposé : %d plants, lot id=%s — user_id=%s",
+        lot["reste"], lot["semis_id"], user_id,
+    )
+    await query.edit_message_text(
+        f"✅ *{lot['reste']}* plants — tout le lot.", parse_mode="Markdown",
+        reply_markup=None,
+    )
+
+    from .saisie import _parse_and_save   # import tardif : saisie importe ce module
+    await _parse_and_save(
+        update, pending["texte"], pre_parsed_items=items, geste_file=pending.get("geste_file"),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-211] Déplacer un lot d'une pépinière à l'autre
+# ──────────────────────────────────────────────────────────────────────────────
+async def _preparer_deplacement(update: Update, parsed: dict, texte: str, geste_file=None) -> bool:
+    """[US-211 / CA3, CA4] Désigne le lot d'un déplacement et contrôle sa destination
+    AVANT le récapitulatif : rien n'est confirmé qui serait refusé à l'écriture.
+
+    Retourne True si le flux s'arrête ici (refus dit au jardinier, ou question posée
+    sur le lot — l'appelant ne doit plus rien faire), False si le geste est prêt :
+    `parsed` porte alors le lot (`origine_graines_id`, `_lot_numero`) et la destination
+    canonique, et le récapitulatif peut suivre.
+    """
+    message = update.effective_message
+    db = SessionLocal()
+    candidats: list[dict] = []
+    try:
+        try:
+            svc_evenements.resoudre_lot_deplacement(db, current_context(), parsed)
+            return False
+        except svc_evenements.LotIndetermineError:
+            # Plusieurs lots en cours pour cette culture : le jardinier est le seul à
+            # savoir lequel il déplace (modèle d'US-019). Seuls les lots issus d'un
+            # semis sont proposés : ce sont les seuls que le bouton peut désigner.
+            candidats = [
+                lot for lot in svc_evenements.lots_deplacables(
+                    db, current_context(), parsed.get("culture") or "", parsed.get("variete"),
+                )
+                if lot.get("semis_id") is not None
+            ]
+        except svc_evenements.EvenementInvalideError as e:
+            log.info("[US-211] Déplacement refusé : %s | texte=%r", e, texte)
+            await message.reply_text(f"❌ {e}")
+            return True
+    finally:
+        db.close()
+
+    if len(candidats) < 2:
+        await message.reply_text(
+            "❌ Plusieurs lots correspondent : citez le numéro du lot à déplacer (« le lot 119 »)."
+        )
+        return True
+
+    import time as _time_dep
+    user_id = update.effective_user.id
+    _DEPLACEMENT_LOT_PENDING[user_id] = {
+        "parsed": parsed,
+        "texte": texte,
+        "ts": _time_dep.time(),
+        "geste_file": geste_file,
+        "labels": {lot["semis_id"]: _etiquette_lot(lot) for lot in candidats},
+    }
+    buttons = [
+        [InlineKeyboardButton(
+            f"{_etiquette_lot(lot)} — {lot.get('stock_residuel_godet', 0)} godets",
+            callback_data=f"deplot:{lot['semis_id']}",
+        )]
+        for lot in candidats
+    ]
+    buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="deplot_cancel")])
+    culture = parsed.get("culture") or "cette culture"
+    variete = parsed.get("variete")
+    label = f"{culture} *{variete}*" if variete else f"*{culture}*"
+    await message.reply_text(
+        f"🚚 Plusieurs lots de {label} sont en pépinière.\n\nQuel lot déplacez-vous ?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info("[US-211] %d lots candidats proposés pour '%s' — user_id=%s", len(candidats), culture, user_id)
+    return True
+
+
+async def _deplacement_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-211 / CA3] Callback inline — choix du lot à déplacer quand plusieurs lots de
+    la culture sont en pépinière. Le geste reprend ensuite son parcours normal :
+    récapitulatif, confirmation, écriture."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _DEPLACEMENT_LOT_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez redire votre déplacement.")
+        return
+
+    import time
+    if time.time() - pending["ts"] > _DEPLACEMENT_LOT_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 2 min). Veuillez redire.", parse_mode="Markdown")
+        return
+
+    data = query.data  # deplot:{semis_id} | deplot_cancel
+    if data == "deplot_cancel":
+        await query.edit_message_text("❌ Déplacement annulé.", reply_markup=None)
+        return
+
+    parsed = pending["parsed"]
+    semis_id = int(data[len("deplot:"):])
+    parsed["origine_graines_id"] = semis_id
+    log.info("[US-211] Lot de semis id=%s choisi pour le déplacement — user_id=%s", semis_id, user_id)
+    await query.edit_message_text(
+        f"✅ Lot *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+
+    from .saisie import _parse_and_save   # import tardif : saisie importe ce module
+    await _parse_and_save(
+        update, pending["texte"], pre_parsed_items=[parsed], geste_file=pending.get("geste_file"),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

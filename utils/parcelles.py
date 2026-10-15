@@ -867,6 +867,25 @@ def supprimer_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) 
 # [US_Plan_occupation_parcelles / CA4] Liste des parcelles
 # ──────────────────────────────────────────────────────────────────────────────
 
+def resolve_pepiniere_par_type(db, libelle: str, potager_id: Optional[int] = None):
+    """[US-211] « la pépinière froide », « le châssis froid » : une destination dite par
+    son TYPE (US-208) quand aucune parcelle ne porte ce nom. Retourne la pépinière
+    unique de ce type dans le potager, sinon None — jamais un choix parmi plusieurs."""
+    import re
+    from unidecode import unidecode
+    t = re.sub(r"[^a-z ]", " ", unidecode((libelle or "").lower()))
+    t = re.sub(r"\s+", " ", t).strip()
+    m = re.fullmatch(r"(?:pepiniere (chaude|froide)|chassis (froid))", t)
+    if not m:
+        return None
+    type_pep = "chaude" if m.group(1) == "chaude" else "froide"
+    q = db.query(Parcelle).filter(Parcelle.est_pepiniere.is_(True), Parcelle.type_pepiniere == type_pep)
+    if potager_id is not None:
+        q = q.filter(Parcelle.potager_id == potager_id)
+    trouvees = q.all()
+    return trouvees[0] if len(trouvees) == 1 else None
+
+
 def get_all_parcelles(db: Session, potager_id: Optional[int] = None) -> List[Parcelle]:
     """
     [CA4] Retourne toutes les parcelles actives triées par ordre croissant.

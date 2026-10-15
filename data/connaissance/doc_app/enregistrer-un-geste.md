@@ -23,7 +23,7 @@ Un message vocal envoyé au compagnon de terrain suffit à enregistrer un geste 
 **Intention :** comprendre
 **On parle aussi de :** ce qui est compris ; champs reconnus ; quantité ; variété ; unité ; parcelle
 
-D'une phrase dictée, l'assistant tire le geste accompli, la culture concernée, la variété si elle est nommée, la quantité et son unité, la parcelle et la date. Dix-huit gestes courants sont reconnus : récolte, semis, plantation, mise en godet, arrosage, paillage, désherbage, binage, éclaircissage, taille, tuteurage, traitement, amendement, protection, observation, perte au jardin, perte en pépinière et vente de plants. Ce qui n'est pas dit n'est jamais inventé : une phrase sans quantité produit un geste sans quantité, pas un chiffre deviné.
+D'une phrase dictée, l'assistant tire le geste accompli, la culture concernée, la variété si elle est nommée, la quantité et son unité, la parcelle et la date. Dix-neuf gestes courants sont reconnus : récolte, semis, plantation, mise en godet, déplacement d'un lot de pépinière, arrosage, paillage, désherbage, binage, éclaircissage, taille, tuteurage, traitement, amendement, protection, observation, perte au jardin, perte en pépinière et vente de plants. Le déplacement (« passé le lot 119 au châssis froid ») ne se reconnaît que devant une pépinière nommée : « sorti les tomates » seul n'est pas un déplacement. Ce qui n'est pas dit n'est jamais inventé : une phrase sans quantité produit un geste sans quantité, pas un chiffre deviné.
 
 ## Rien n'est enregistré sans votre accord
 

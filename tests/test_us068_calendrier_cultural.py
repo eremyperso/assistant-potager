@@ -227,7 +227,10 @@ class TestCA3CA4Durees:
         _culture(db, "tomate")
         _importer(db, {"culture": "tomate", "fenetres": {"oceanique": {"semis_pepiniere": "mars-avril"}}})
         it = cal.lire_calendrier(db, "tomate", 1).itineraires[0]
-        assert [d.etape for d in it.durees] == [cal.ETAPE_LEVEE, cal.ETAPE_RECOLTE, cal.ETAPE_REPIQUAGE]
+        # [US-213 / CA4] Un itinéraire de pépinière porte aussi le délai semis → godet.
+        assert [d.etape for d in it.durees] == [
+            cal.ETAPE_LEVEE, cal.ETAPE_RECOLTE, cal.ETAPE_REPIQUAGE, cal.ETAPE_SEMIS_GODET,
+        ]
 
     def test_us068_ca3_repiquage_refuse_sans_pepiniere(self, db):
         _culture(db, "carotte")

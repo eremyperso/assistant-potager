@@ -69,3 +69,27 @@ Au repiquage, les plants changent souvent de lieu : la barquette lève au chaud,
 Si vous ne dites rien, la mise en godet reste sans emplacement, exactement comme avant : l'assistant ne devine jamais où vous avez posé vos godets, même si vous n'avez qu'une seule pépinière. Seule une pépinière peut recevoir des godets. Si vous nommez une planche ordinaire (« en godet dans la planche nord »), le récapitulatif vous signale que ce n'est pas une pépinière, vous rappelle les pépinières de votre potager et vous laisse enregistrer sans emplacement ou annuler et redire la phrase : rien n'est enregistré sur une planche.
 
 L'emplacement d'une mise en godet se corrige depuis le Journal, comme les autres champs : vers une autre pépinière, ou en le retirant. Une mise en godet posée dans une pépinière ne compte jamais comme une culture en place : elle n'apparaît ni sur le Plan ni dans l'occupation d'une planche. Vos stocks, vos statistiques et `/stats` ne changent pas non plus : ils comptent toujours vos plants en pépinière par culture et par variété, toutes pépinières confondues. Les mises en godet enregistrées avant cette possibilité restent sans emplacement.
+
+## Sortir ses plants pour les endurcir : déplacer un lot d'une pépinière à l'autre
+
+**Intention :** procédure
+**On parle aussi de :** passer les godets au châssis froid ; sortir les plants de la serre ; endurcir ; déplacer un lot ; changer de pépinière ; rentrer les godets ; mettre les plants dehors
+
+Les godets levés au chaud en mars passent souvent au châssis froid avant d'être plantés, pour s'endurcir. Dites-le : « passé le lot 119 au châssis froid », « sorti les poireaux de la serre pour le châssis », « déplacé les godets de tomate cerise sous le châssis ». L'assistant déplace le lot **entier** et note la date : le lot est désormais lu au châssis froid, et le compte à rebours d'endurcissement part du jour où vous l'avez sorti.
+
+Le lot se désigne par son numéro (« le lot 119 ») ou par sa culture, et sa variété si elle est dite. S'il n'y a qu'un lot en cours de cette culture, il est retenu ; s'il y en a plusieurs, l'assistant vous propose les lots par boutons, avec leur numéro et leur date de semis. Un lot dont tous les plants sont déjà sortis (plantés, vendus, perdus) n'est plus déplaçable.
+
+La destination doit être une **pépinière** de votre potager. Si vous nommez une planche ordinaire (« passé le lot 119 dans la planche nord »), le déplacement est refusé et l'assistant vous rappelle que mettre des plants en terre s'enregistre comme une plantation. Déplacer un lot là où il est déjà est signalé et n'enregistre rien. Sans pépinière de destination nommée, « sorti les tomates » n'est pas un déplacement : la phrase suit le chemin habituel et l'assistant vous demande ce que vous avez fait.
+
+Un déplacement ne touche à aucun stock : vos godets, vos plants, le Plan et les statistiques restent exactement les mêmes, seul l'emplacement du lot change. Il se lit au Journal, se corrige (une autre pépinière) et se supprime comme les autres gestes ; supprimé, le lot retrouve son emplacement précédent. Déplacer une partie seulement des godets n'est pas géré : un lot a un seul emplacement.
+
+## Le nombre de plants est toujours demandé : mise en godet, perte, vente
+
+**Intention :** procédure
+**On parle aussi de :** combien de plants ; nombre de plants manquant ; tout le lot ; perte sans nombre ; repiqué sans quantité ; je ne sais pas combien
+
+Une mise en godet, une perte de godet ou une vente de plants ne s'enregistre pas sans le nombre de plants : sans lui, le stock ne bougerait pas et le lot resterait « indéterminé ». Si la phrase (« perte godet du lot 8 », « repiquer en godet des choux ») ou le geste préparé depuis un écran ne dit pas le nombre, l'assistant le demande avant le récapitulatif, y compris à la voix.
+
+Quand le lot est connu — cité par son numéro, ou seul lot de la culture —, la question annonce ce que la base en sait (« il reste 50 plants en godet ») et propose **Tout le lot : 50** : un appui solde le lot sans autre question. On peut aussi taper un autre nombre ; pour une mise en godet, l'assistant demande ensuite sur combien de graines, ce qui donne le taux de réussite. Une perte ou une vente ne peut pas dépasser ce qu'il reste dans le lot cité.
+
+Pour une mise en godet seulement, « Je ne sais pas » enregistre sans nombre : c'est un choix explicite, annoncé comme tel (aucun plant n'entre en stock, l'avancement du lot reste indéterminé). Pour une perte ou une vente, le nombre est nécessaire.

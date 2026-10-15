@@ -64,6 +64,10 @@ _NATURES_PAR_ACTION: dict[str, tuple[str, ...]] = {
     "semis": (NATURE_SEMIS, NATURE_PEPINIERE, NATURE_STOCK),
     "mise_en_godet": (NATURE_PEPINIERE, NATURE_SEMIS),
     "perte_godet": (NATURE_PEPINIERE, NATURE_SEMIS),
+    # [US-211] Un déplacement ne change que l'emplacement d'un lot : ni stock, ni plan.
+    "deplacement": (NATURE_PEPINIERE,),
+    # [US-216] Une clôture solde les godets (stock) et les graines non levées (semis).
+    "cloture_lot": (NATURE_PEPINIERE, NATURE_SEMIS, NATURE_STOCK),
     # Gestes d'entretien : ils ne déplacent ni stock ni plan. Seul le journal
     # bouge — et c'est bien assez pour périmer « quand ai-je arrosé ? ».
     "arrosage": (),

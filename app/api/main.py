@@ -114,6 +114,7 @@ from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
+from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
 from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
@@ -126,6 +127,7 @@ from app.services import recalage_calendrier as svc_recalage  # [US-070]
 from app.services import repartition_rangs as svc_rangs  # [US-198]
 from app.services import rotation as svc_rotation  # [US-163, US-231]
 from app.services import confiance_semis as svc_confiance  # [US-178]
+from app.services import echeances_lots as svc_echeances  # [US-214]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164, US-206]
 from app.services import vue_cultures as svc_vue_cultures  # [US-204]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
@@ -2720,6 +2722,11 @@ def _lot_pepiniere_json(lot: dict, familles: dict) -> dict:
             str(lot["date_derniere_mise_en_godet"])[:10]
             if lot["date_derniere_mise_en_godet"] else None
         ),
+        # [US-214] Les deux dates dont le calcul des échéances a besoin, en ISO court.
+        "date_dernier_geste": str(lot["date_dernier_geste"])[:10] if lot.get("date_dernier_geste") else None,
+        "date_deplacement": str(lot["date_deplacement"])[:10] if lot.get("date_deplacement") else None,
+        # [US-216] Le jour où le lot a été clôturé (None s'il ne l'est pas).
+        "date_cloture": str(lot["date_cloture"])[:10] if lot.get("date_cloture") else None,
         "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
     }
 
@@ -2742,7 +2749,10 @@ def get_pepiniere_lot_par_numero(
         if lot is None:
             raise HTTPException(status_code=404, detail=f"Aucun lot n° {numero} dans ce potager")
         familles = svc_familles.familles_par_culture(db, use_ctx)
-        return _lot_pepiniere_json(lot, familles)
+        # [US-216 / CA2] La fiche du lot s'ouvre sur CE seul appel : échéances et
+        # action suggérée (US-214) y sont jointes, comme dans la liste.
+        suite = svc_echeances.echeances_d_un_lot(db, use_ctx, lot, date.today())
+        return {**_lot_pepiniere_json(lot, familles), **suite}
     finally:
         db.close()
 
@@ -2769,6 +2779,11 @@ def get_pepiniere_lots(
 
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
     [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
+
+    [US-214 / CA7, CA8] Chaque lot gagne `echeances`, `action_suggeree` et
+    `rang_urgence` ; la réponse gagne `resume` (à repiquer, à endurcir, prêts pour
+    le plan, à semer). Champs AJOUTÉS : aucun n'est retiré ni renommé. Le calcul
+    vit dans `app/services/echeances_lots.py` ; l'API recopie.
     """
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
@@ -2777,6 +2792,7 @@ def get_pepiniere_lots(
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
+        echeances = svc_echeances.lire_echeances(db, use_ctx, lots, date_ref_effective)
         # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
         # table figée frontend/src/lib/familles.js (supprimée) qui alimentait le
         # regroupement de cet écran (US-061). Relue à chaque appel : une
@@ -2784,9 +2800,16 @@ def get_pepiniere_lots(
         # suivant, sans copie mémorisée nulle part.
         familles = svc_familles.familles_par_culture(db, use_ctx)
         return {
-            "lots": [_lot_pepiniere_json(lot, familles) for lot in lots],
+            "lots": [
+                {**_lot_pepiniere_json(lot, familles), **echeances["par_lot"][lot["lot_id"]]}
+                for lot in lots
+            ],
             "total": len(lots),
             "date_ref_effective": date_ref_effective.isoformat(),
+            "resume": echeances["resume"],
+            # [US-216 / CA8] Les pépinières du potager : la fiche d'un lot ne propose
+            # « Déplacer » qu'à partir de deux. Champ AJOUTÉ, aucun n'est retiré.
+            "pepinieres": svc_lots_pepiniere.pepinieres_du_potager(db, use_ctx),
         }
     finally:
         db.close()
@@ -2844,6 +2867,7 @@ def get_godet_detail(
                     "nb_plants":       int(g.nb_plants_godets or 0),
                     "nb_graines_lot":  int(g.nb_graines_semees) if g.nb_graines_semees else None,
                     "origine_semis_id": g.origine_graines_id,
+                    "parcelle":        g.parcelle_rel.nom if g.parcelle_rel else None,   # [US-211]
                 }
                 for g in godet_events
             ],
@@ -2872,6 +2896,16 @@ def get_godet_detail(
                     "quantite": int(p.quantite or 0),
                 }
                 for p in perte_events
+            ],
+            # [US-211 / CA8] Déplacements du lot, avec origine et destination.
+            "deplacements": [
+                {
+                    "id":          d["id"],
+                    "date":        str(d["date"])[:10],
+                    "origine":     d["origine"],
+                    "destination": d["destination"],
+                }
+                for d in cycle.get("deplacements", [])
             ],
             "taux_germination": taux,
         }

@@ -12,6 +12,7 @@ import { Filter as FilterIcon, HelpCircle, ChevronRight, RefreshCw, AlertTriangl
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useNavigation } from '../context/NavigationContext.jsx'
 import { Card, SearchField, Select, InfoBanner } from '../components/ui'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import { CarteCulture, CarteCultureSquelette } from '../components/CarteCulture.jsx'
@@ -96,6 +97,7 @@ function Grille({ children }) {
 export default function Cultures({ refresh }) {
   const { dateRef } = useDateRef()
   const { potagerId } = usePotager()
+  const { aller } = useNavigation()
 
   const [vue, setVue] = useState(null)
   const [chargement, setChargement] = useState(true)
@@ -297,6 +299,7 @@ export default function Cultures({ refresh }) {
         <FicheCulture
           culture={cultureOuverte} dateRef={dateRef} potagerId={potagerId}
           ecran="cultures" onClose={() => setCultureOuverte(null)}
+          onOuvrirLot={(numero) => { setCultureOuverte(null); aller('pepiniere', { lot: String(numero) }) }}   // [US-216 / CA1]
         />
       )}
     </div>

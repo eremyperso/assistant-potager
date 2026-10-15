@@ -23,7 +23,9 @@ from .liaison import (
 )
 from .enregistrement import _action_confirm_cb
 from .file_gestes import cmd_gestes, file_cb, job_file_gestes  # [US-224]
-from .godets import _godet_graines_cb, _godet_lot_cb, _godet_variete_cb, cmd_lot
+from .godets import (
+    _deplacement_lot_cb, _godet_graines_cb, _godet_lot_cb, _godet_plants_cb, _godet_variete_cb, cmd_lot,
+)
 from .pertes import _handle_perte_callback, _vendu_variete_cb
 from .notes import _note_confirm_cb, _note_start
 from .interpretation import _interp_cb
@@ -209,8 +211,11 @@ def _construire_application() -> "Application":
     # [fix rattachement lot godet] Motif distinct de "^godet_" (pas d'underscore
     # après "godet") — les deux handlers ne se recouvrent jamais.
     app.add_handler(CallbackQueryHandler(_godet_lot_cb, pattern=r"^godetlot"))
+    app.add_handler(CallbackQueryHandler(_deplacement_lot_cb, pattern=r"^deplot"))   # [US-211]
     # [US-066] Motif également disjoint de "^godet_" et de "^godetlot".
     app.add_handler(CallbackQueryHandler(_godet_graines_cb, pattern=r"^godetgraines"))
+    # [US-224] « Tout le lot » d'une mise en godet de la file — disjoint des trois autres.
+    app.add_handler(CallbackQueryHandler(_godet_plants_cb, pattern=r"^godetplants"))
 
     # Sélection variété récolte — boutons inline
     app.add_handler(CallbackQueryHandler(_recolte_variete_cb, pattern=r"^recolte_"))

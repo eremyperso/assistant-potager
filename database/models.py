@@ -502,6 +502,11 @@ class DureeCulturale(Base):
     CHECK de vocabulaire (arbitrage de migration_v46), ce module en est le seul
     garant via `calendrier_cultural.normaliser_etape`.
 
+    [US-213 / CA1] Une cinquième, `semis_godet` : semis → repiquage EN GODET, le
+    passage de la barquette au godet, distinct de `repiquage` (mise en place).
+    Portée par un itinéraire qui passe par la pépinière, jamais déduite d'une
+    autre durée (CA5), sans migration : « semis_godet » tient dans VARCHAR(20).
+
     En jours, fourchette possible (`jours_min` ≤ `jours_max`, égaux pour une
     valeur unique), ou mention libre (« vivace ») pour ce qui n'en relève pas —
     jamais les deux. Une durée absente se lit « — » : l'application n'invente
@@ -511,7 +516,7 @@ class DureeCulturale(Base):
 
     id            = Column(Integer, primary_key=True, index=True)
     itineraire_id = Column(Integer, ForeignKey("itineraire_cultural.id", ondelete="CASCADE"), nullable=False, index=True)
-    # 'levee' | 'recolte' | 'repiquage' | 'plantation_recolte' [US-177]
+    # 'levee' | 'recolte' | 'repiquage' | 'plantation_recolte' [US-177] | 'semis_godet' [US-213]
     etape         = Column(String(20), nullable=False)
     jours_min     = Column(Integer, nullable=True)
     jours_max     = Column(Integer, nullable=True)

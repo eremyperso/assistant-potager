@@ -3,7 +3,7 @@
 // (US-065). La mise en forme suit la maquette ; les fonctions qu'elle ne connaît
 // pas (date de référence, panneau de traçabilité, états de germination) sont
 // conservées et logées dans ses composants plutôt que réinventées.
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu } from '../lib/pepiniere.js'
@@ -11,6 +11,9 @@ import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
+import FicheLot, { FicheLotInconnu } from '../components/FicheLot.jsx'   // [US-216]
+import FicheCulture from '../components/FicheCulture.jsx'
+import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import {
@@ -35,6 +38,55 @@ const PEP_STADES = [
 ]
 
 const TRIS = ['Récent → Ancien', 'Ancien → Récent', 'Culture A → Z']
+
+/** [US-216 / CA2] En dessous, la fiche du lot est une fenêtre ; au-dessus, un panneau. */
+const LARGEUR_PANNEAU = 900
+
+/**
+ * Largeur du CONTENEUR de l'écran, pas de la fenêtre : la fiche est un composant
+ * destiné à plus d'un contexte de layout. Un composant React ne change pas d'arbre
+ * sur une container query CSS — d'où cette mesure.
+ */
+function useLargeur(el) {
+  const [largeur, setLargeur] = useState(0)
+  useEffect(() => {
+    if (!el || typeof ResizeObserver === 'undefined') return undefined
+    setLargeur(Math.round(el.getBoundingClientRect().width))
+    const obs = new ResizeObserver(([e]) => setLargeur(Math.round(e.contentRect.width)))
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [el])
+  return largeur
+}
+
+/**
+ * [US-216] Hauteur utile de la zone qui défile autour de `el` (le `<main>` de l'application,
+ * sous la barre du haut). Un panneau collant ne doit jamais dépasser cette zone : sa
+ * fin, « Détail du lot » comprise, serait sinon coupée par le bas de la fenêtre sans que
+ * rien ne permette d'y accéder. Mesuré plutôt que supposé : la barre du haut, la barre
+ * du bas mobile et la hauteur de la fenêtre changent d'une résolution à l'autre.
+ */
+function useHauteurZone(el) {
+  const [hauteur, setHauteur] = useState(null)
+  useEffect(() => {
+    if (!el) return undefined
+    let zone = el.parentElement
+    while (zone && zone !== document.body) {
+      const o = getComputedStyle(zone).overflowY
+      if (o === 'auto' || o === 'scroll') break
+      zone = zone.parentElement
+    }
+    const cible = zone && zone !== document.body ? zone : null
+    const lire = () => setHauteur(cible ? cible.clientHeight : window.innerHeight)
+    lire()
+    if (typeof ResizeObserver === 'undefined') return undefined
+    const obs = new ResizeObserver(lire)
+    if (cible) obs.observe(cible)
+    window.addEventListener('resize', lire)
+    return () => { obs.disconnect(); window.removeEventListener('resize', lire) }
+  }, [el])
+  return hauteur
+}
 
 // ── Frise des trois stades ────────────────────────────────────────────────────
 
@@ -268,6 +320,8 @@ function buildRows(detail) {
   if (detail.plantations.length > 0) detail.plantations.forEach(p => rows.push({ type: 'plantation', data: p }))
   else rows.push({ type: 'plantation_absent' })
 
+  // [US-211 / CA8] Les déplacements du lot, à leur date, avec origine et destination.
+  ;(detail.deplacements ?? []).forEach(d => rows.push({ type: 'deplacement', data: d }))
   ;(detail.ventes ?? []).forEach(v => rows.push({ type: 'vente', data: v }))
   ;(detail.pertes_godet ?? []).forEach(p => rows.push({ type: 'perte_godet', data: p }))
   return rows
@@ -334,6 +388,7 @@ function DetailModal({ lot, onClose }) {
                 <p className="text-sm text-txt3">
                   {pluriel(row.data.nb_plants, 'plant')}
                   {row.data.nb_graines_lot != null && <span> sur {row.data.nb_graines_lot} graines</span>}
+                  <span className="text-brand-text"> · {row.data.parcelle ?? 'emplacement non précisé'}</span>
                 </p>
                 <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>
               </TimelineRow>
@@ -367,6 +422,20 @@ function DetailModal({ lot, onClose }) {
             if (row.type === 'plantation_absent') return (
               <TimelineRow key="plant-absent" icon="🌿" tint="neutre" isLast={isLast}>
                 <p className="text-sm italic text-txt3">Pas encore planté</p>
+              </TimelineRow>
+            )
+
+            if (row.type === 'deplacement') return (
+              <TimelineRow key={`deplacement-${row.data.id}`} icon="🚚" tint="brand" isLast={isLast}>
+                <p className="text-sm font-semibold text-txt">
+                  Déplacement <span className="font-normal text-txt3">#{row.data.id}</span>
+                </p>
+                <p className="text-sm text-txt3">
+                  <span>{row.data.origine ?? 'emplacement non renseigné'}</span>
+                  {' → '}
+                  <span className="font-medium text-txt">{row.data.destination ?? '—'}</span>
+                </p>
+                <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>
               </TimelineRow>
             )
 
@@ -440,7 +509,17 @@ export default function Pepiniere({ refresh }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [lotOuvert, setLotOuvert] = useState(null)
+  const [lotOuvert, setLotOuvert] = useState(null)        // le cycle de vie (DetailModal)
+  // [US-216] La fiche du lot : un lot, ou le numéro d'un lot inconnu (CA13).
+  const [fiche, setFiche] = useState(null)
+  const [numeroInconnu, setNumeroInconnu] = useState(null)
+  const [cultureOuverte, setCultureOuverte] = useState(null)
+  // Callback ref : le conteneur n'existe pas pendant le chargement de la liste.
+  const [racine, setRacine] = useState(null)
+  const largeur = useLargeur(racine)
+  const forme = largeur >= LARGEUR_PANNEAU ? 'panneau' : 'modale'
+  const [collant, setCollant] = useState(null)
+  const hauteurZone = useHauteurZone(collant)
   // [US-195 / CA2] Une étiquette scannée ou un lien partagé ouvrent CE lot
   // (`/?vue=pepiniere&lot=128`). `onglet` et `emplacement` sont reconnus par la
   // lib mais n'ont pas encore d'écran à piloter : ils arriveront avec US-215 et
@@ -462,6 +541,19 @@ export default function Pepiniere({ refresh }) {
 
   useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
+  // [US-216 / CA14] Au retour d'un geste envoyé au compagnon, UNE relecture : la
+  // liste et le lot ouvert. Silencieuse — pas de squelette, la fiche reste ouverte.
+  const relire = useCallback(async () => {
+    try {
+      const [liste, lotFrais] = await Promise.all([
+        api.pepiniereLots(dateRef, potagerId),
+        fiche?.numero_lot != null ? api.pepiniereLot(fiche.numero_lot, potagerId) : Promise.resolve(null),
+      ])
+      setData(liste)
+      if (lotFrais) setFiche(lotFrais)
+    } catch { /* la fiche garde ce qu'elle montre : rien ne disparaît en silence */ }
+  }, [dateRef, potagerId, fiche?.numero_lot])
+
   const tousLots = data?.lots ?? []
 
   // [US-195 / CA3, CA4] Le lot désigné par l'intention, une fois les lots
@@ -476,9 +568,13 @@ export default function Pepiniere({ refresh }) {
     const cible = tousLots.find((l) =>
       (numero != null && l.numero_lot === numero) || String(l.lot_id) === String(intention.lot))
     if (cible) {
-      setLotOuvert(cible)
+      // [US-216 / CA2] Ouverte par l'adresse : UNE lecture, celle du lot par son
+      // numéro — c'est elle qui porte échéances et action suggérée à jour.
+      if (cible.numero_lot != null) ouvrirParNumero(cible.numero_lot)
+      else setFiche(cible)
       annoncer(`Lot ${cible.culture}${cible.variete ? ` · ${cible.variete}` : ''} ouvert.`)
     } else {
+      if (numero != null) setNumeroInconnu(numero)   // [US-216 / CA13] la fiche s'ouvre et le dit
       signaler(numero != null ? messageLotInconnu(numero) : "Ce lot de semis n'existe plus.")
     }
   }, [loading, data, intention])
@@ -486,17 +582,31 @@ export default function Pepiniere({ refresh }) {
   // [US-209 / CA11] « Aller au lot n° » — le lot est demandé au serveur par son
   // numéro, dans le potager consulté : un numéro d'un autre potager n'existe pas.
   const [numeroSaisi, setNumeroSaisi] = useState('')
+
+  /** [US-216 / CA2, CA13] Une seule lecture ; un numéro inconnu ouvre quand même la fiche, qui le dit. */
+  async function ouvrirParNumero(numero) {
+    try {
+      const lot = await api.pepiniereLot(numero, potagerId)
+      setNumeroInconnu(null)
+      setFiche(lot)
+      return true
+    } catch (err) {
+      if (err.statut === 404 || /404/.test(err.message)) {
+        setFiche(null)
+        setNumeroInconnu(numero)
+        signaler(messageLotInconnu(numero))
+      } else {
+        signaler(err.message)
+      }
+      return false
+    }
+  }
+
   async function allerAuLot(e) {
     e.preventDefault()
     const numero = lireNumeroLot(numeroSaisi)
     if (numero == null) { signaler("Tapez le numéro écrit sur l'étiquette, par exemple 128."); return }
-    try {
-      const lot = await api.pepiniereLot(numero, potagerId)
-      setLotOuvert(lot)
-      setNumeroSaisi('')
-    } catch (err) {
-      signaler(err.statut === 404 || /404/.test(err.message) ? messageLotInconnu(numero) : err.message)
-    }
+    if (await ouvrirParNumero(numero)) setNumeroSaisi('')
   }
 
   // [CA13] Le filtre porte à la fois sur la culture et sur la variété ; la date
@@ -590,8 +700,17 @@ export default function Pepiniere({ refresh }) {
     </div>
   )
 
+  const nbPepinieres = Array.isArray(data?.pepinieres) ? data.pepinieres.length : null
+  const panneauOuvert = forme === 'panneau' && fiche != null
+
   return (
-    <div className="flex flex-col gap-3.5">
+    <RelectureAuRetourProvider relire={relire}>
+    <div ref={setRacine} className="flex flex-col gap-3.5">
+      {/* [US-216 / CA2] Panneau ouvert : la liste (filtres compris) à gauche, le panneau « Lot
+          sélectionné » à droite, DEPUIS LE HAUT de l'écran — collé, il ne dépasse jamais la zone
+          qui défile. Sans panneau, le wrapper disparaît (`contents`). */}
+      <div className={panneauOuvert ? 'grid gap-4 [grid-template-columns:minmax(0,1fr)_420px] items-start' : 'contents'}>
+      <div className="flex flex-col gap-3.5 min-w-0">
       {filtres}
 
       <Reperes items={[
@@ -619,7 +738,7 @@ export default function Pepiniere({ refresh }) {
               // incomplète plutôt que d'élargir les cartes présentes.
               <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(230px,1fr))]">
                 {g.items.map(lot => (
-                  <LotCard key={lot.lot_id} lot={lot} onOpen={() => setLotOuvert(lot)} />
+                  <LotCard key={lot.lot_id} lot={lot} onOpen={() => { setNumeroInconnu(null); setFiche(lot) }} />
                 ))}
               </div>
             )}
@@ -650,7 +769,40 @@ export default function Pepiniere({ refresh }) {
         </div>
       )}
 
+      </div>
+      {/* [US-216 / CA2] Panneau « Lot sélectionné », à côté de la liste. */}
+      {panneauOuvert && (
+        // Collant sous le haut de la zone qui défile, et jamais plus haut qu'elle (16 px de
+        // marge en haut et en bas) : la fin de la fiche reste atteignable à toute résolution.
+        <div ref={setCollant} className="sticky top-4 self-start flex flex-col" style={hauteurZone ? { maxHeight: hauteurZone - 32 } : undefined}>
+          <FicheLot
+            lot={fiche} forme="panneau" nbPepinieres={nbPepinieres} dateRef={dateRef}
+            onClose={() => setFiche(null)}
+            onOuvrirDetail={() => setLotOuvert(fiche)}
+            onOuvrirCulture={setCultureOuverte}
+          />
+        </div>
+      )}
+      </div>
+
+      {/* [US-216 / CA2] En dessous de 900 px : fenêtre adaptative, plein écran à 375 px. */}
+      {fiche && forme === 'modale' && (
+        <FicheLot
+          lot={fiche} forme="modale" nbPepinieres={nbPepinieres} dateRef={dateRef}
+          onClose={() => setFiche(null)}
+          onOuvrirDetail={() => setLotOuvert(fiche)}
+          onOuvrirCulture={setCultureOuverte}
+        />
+      )}
+      {numeroInconnu != null && <FicheLotInconnu numero={numeroInconnu} onClose={() => setNumeroInconnu(null)} />}
       {lotOuvert && <DetailModal lot={lotOuvert} onClose={() => setLotOuvert(null)} />}
+      {cultureOuverte && (
+        <FicheCulture
+          culture={cultureOuverte} dateRef={dateRef} potagerId={potagerId}
+          ecran="pepiniere" onClose={() => setCultureOuverte(null)}
+        />
+      )}
     </div>
+    </RelectureAuRetourProvider>
   )
 }

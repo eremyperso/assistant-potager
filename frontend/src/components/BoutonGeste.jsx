@@ -28,6 +28,8 @@ import { PanneauActivation, useCodeLiaison } from './LierTelegram.jsx'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useFileGestes } from '../context/FileGestesContext.jsx'
+import { useNotifier } from '../context/NotificationsContext.jsx'
+import { notificationDepot, notificationEchec } from '../lib/notificationsGeste.js'
 import { useArmerRelecture } from '../hooks/useRelectureAuRetour.jsx'
 import {
   corpsIntention, dateDuGeste, MENTION_DATE_RAMENEE, peutEnregistrer, phraseADicter,
@@ -97,10 +99,23 @@ function PhraseADicter({ phrase }) {
 export default function BoutonGeste({
   geste, dateRef = null, ecran = null, libelle = 'Enregistrer',
   potagerId = null, onLance, kind = 'primary', small = false, className = '',
+  // [US-216 / CA11] `plein` : le bouton prend la largeur de son conteneur et une
+  // cible d'appui de 48 px — l'écran de terrain, « gants, terre, écran mouillé ».
+  // `afficherPhrase` : la phrase à dicter sous CHAQUE bouton ferait défiler une
+  // fiche à quatre gestes ; l'écran choisit où la montrer.
+  plein = false, afficherPhrase = true,
+  // [US-216] L'icône du geste (la maquette en donne une par geste) et la classe du
+  // bouton lui-même, pour la taille du geste principal.
+  icone = Send, btnClassName = '',
+  // [US-216] Le compteur de levée grise l'envoi tant que rien n'est compté.
+  desactive = false,
 }) {
   const { potagerActif } = usePotager()
   const { recharger } = useFileGestes()
   const armerRelecture = useArmerRelecture()
+  // Le retour d'action : une carte au-dessus de tout, qui dit « préparé » ou
+  // « échec ». Sans fournisseur (`actif` faux), les messages en ligne restent.
+  const { notifier, actif: notifie } = useNotifier()
   const [enCours, setEnCours] = useState(false)
   const [erreur, setErreur] = useState(null)
   const [activation, setActivation] = useState(null)
@@ -117,6 +132,7 @@ export default function BoutonGeste({
   const phrase = phraseServeur ?? phraseADicter({
     action: geste?.action, culture: geste?.culture,
     contexteSemis: geste?.contexteSemis, parcelle: geste?.parcelleNom,
+    numeroLot: geste?.numeroLot, quantite: geste?.quantite,   // [US-216]
   })
 
   async function lancer() {
@@ -131,6 +147,8 @@ export default function BoutonGeste({
       }))
       if (res?.phrase) setPhraseServeur(res.phrase)
       setDepose(res)
+      // Le dépôt est confirmé À L'ÉCRAN : le jardinier sait que c'est parti.
+      notifier(notificationDepot(res, geste))
       // [CA22] Le compte affiché partout change à l'instant même.
       recharger()
       // [CA22] L'écran apprend qu'un geste est parti : il se relira au retour
@@ -138,42 +156,42 @@ export default function BoutonGeste({
       armerRelecture()
       onLance?.(res)
 
+      // Aucune redirection vers Telegram : le geste reste dans la file de la PWA
+      // et le compagnon le propose de son côté. Le lien profond renvoyé par
+      // le serveur n'est volontairement pas utilisé.
       if (!res?.compagnon_actif) {
         // [CA21] Le geste est en file ; l'application invite à activer, elle ne
         // bloque pas. Le compagnon proposera ensuite de le traiter.
         setActivation(res?.en_attente ?? 1)
-        return
       }
-      if (!res?.lien) {
-        // Identifiant public du bot introuvable (même repli que GET /auth/me) :
-        // la phrase reste, elle, parfaitement utilisable — et le geste attend.
-        setErreur("Le compagnon n'a pas pu être ouvert. Votre geste attend dans la file.")
-        return
-      }
-      window.open(res.lien, '_blank', 'noopener')
     } catch (e) {
       setErreur(e.message)
+      // L'échec ne disparaît pas seul, et propose de relancer le dépôt.
+      notifier(notificationEchec(e, lancer))
     } finally {
       setEnCours(false)
     }
   }
 
   return (
-    <div className={`flex flex-col items-end gap-1.5 ${className}`}>
-      <Btn kind={kind} small={small} icon={Send} onClick={lancer} disabled={enCours}>
+    <div className={`flex flex-col ${plein ? 'items-stretch w-full' : 'items-end'} gap-1.5 ${className}`}>
+      <Btn
+        kind={kind} small={small} icon={icone} onClick={lancer} disabled={enCours || desactive}
+        className={`${plein ? 'min-h-[48px] w-full' : ''} ${btnClassName}`}
+      >
         {enCours ? 'Préparation…' : libelle}
       </Btn>
       {/* [CA26] La règle se dit avant d'appuyer, jamais après coup. */}
       {ramenee && <span className="text-[11px] text-txt3">{MENTION_DATE_RAMENEE}</span>}
       {/* [CA4] Signalé, pas interdit : le geste est bien en file, et on le dit. */}
-      {depose?.doublon && (
+      {!notifie && depose?.doublon && (
         <span className="inline-flex items-center gap-1 text-[11.5px] text-amber text-right">
           <Clock size={12} aria-hidden="true" />
           Un geste identique attend déjà — celui-ci a été ajouté aussi.
         </span>
       )}
-      <PhraseADicter phrase={phrase} />
-      {erreur && <span className="text-[11.5px] text-red text-right">{erreur}</span>}
+      {afficherPhrase && <PhraseADicter phrase={phrase} />}
+      {!notifie && erreur && <span className="text-[11.5px] text-red text-right">{erreur}</span>}
       {activation !== null && (
         <ModalActivationApresDepot
           nbEnAttente={activation}

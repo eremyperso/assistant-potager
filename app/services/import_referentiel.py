@@ -186,7 +186,7 @@ Fenêtres par zone et durées communes, rattachées à un itinéraire cultural :
     "cultures_calendriers": [{
         "culture": "courgette", "itineraire": "standard",
         "durees":   {"levee": "7-10", "recolte": "50-55", "repiquage": null,
-                     "plantation_recolte": null},
+                     "plantation_recolte": null, "semis_godet": null},
         "fenetres": {"continental": {"semis_pepiniere": null,
                                      "semis_pleine_terre": "mai-juin",
                                      "recolte": "juillet-octobre"}}
@@ -196,7 +196,8 @@ Fenêtres par zone et durées communes, rattachées à un itinéraire cultural :
 récolte. Elle traverse l'import par le même chemin que les trois autres
 (`normaliser_etape`, `parser_duree`, non-écrasement valeur par valeur) : aucune
 branche ne lui est propre, et c'est ce qui garantit qu'elle hérite des mêmes
-règles.
+règles. [US-213] `semis_godet` — semis → repiquage en godet — en est la
+cinquième : même chemin, même non-écrasement.
 
 Trois règles, toutes héritées :
 - **Aucune culture créée (CA9, CA7 ci-dessus).** Une culture absente de

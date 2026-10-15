@@ -78,7 +78,20 @@ export const MENTION_DATE_RAMENEE = 'enregistré à la date d’aujourd’hui'
  */
 const LIBELLE_FILIERE = Object.freeze({ pepiniere: 'pépinière', pleine_terre: 'pleine terre' })
 
-export function phraseADicter({ action, culture, contexteSemis: filiere, parcelle } = {}) {
+/**
+ * [US-216] Comment un geste de LOT se dit — miroir de `file_gestes._LIBELLE_DICTEE_LOT`.
+ * Les noms d'action du serveur (`mise_en_godet`) ne sont pas des mots de jardinier.
+ */
+const LIBELLE_DICTEE_LOT = Object.freeze({
+  plantation: 'plantation', mise_en_godet: 'mise en godet', perte_godet: 'perte godet', cloture_lot: 'cloture',
+})
+
+export function phraseADicter({ action, culture, contexteSemis: filiere, parcelle, numeroLot, quantite } = {}) {
+  // [US-216] « mise en godet 30 plants du lot 128 » — le lot cité porte sa culture.
+  if (numeroLot != null && LIBELLE_DICTEE_LOT[action]) {
+    const nb = action !== 'cloture_lot' && quantite != null ? ` ${Math.trunc(quantite)} plants` : ''
+    return `${LIBELLE_DICTEE_LOT[action]}${nb} du lot ${numeroLot}`
+  }
   const morceaux = [action]
   if (culture) morceaux.push(`de ${String(culture).toLowerCase()}`)
   if (action === 'semis' && LIBELLE_FILIERE[filiere]) morceaux.push(`en ${LIBELLE_FILIERE[filiere]}`)

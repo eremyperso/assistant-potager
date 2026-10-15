@@ -17,13 +17,17 @@
     "      organe de multiplication (caïeu, bulbe, tubercule, griffe). Jamais déduite du semis",
     "      en pépinière + délai de repiquage. Une culture semée en place la garde à null.",
     "  durees.<etape> : '10', '70-90', ou une mention libre courte ('vivace')",
-    "      etapes : levee | recolte | repiquage | plantation_recolte",
+    "      etapes : levee | recolte | repiquage | plantation_recolte | semis_godet",
     "      repiquage (semis → mise en place) : itinéraire en pépinière seulement.",
     "      plantation_recolte (US-177) : délai entre la mise en place d'un PLANT et sa",
     "      première récolte — la seule durée qui ne parte pas du semis, et donc la seule",
     "      qui serve à un plant acheté. À remplir pour ce qui se plante, jamais calculée",
     "      en retranchant repiquage à recolte : ces deux durées ne comptent pas depuis le",
     "      même geste.",
+    "      semis_godet (US-213) : délai entre le semis et le repiquage EN GODET — le passage",
+    "      de la barquette au godet, pas la mise en terre (repiquage). Pour ce qui se sème",
+    "      en pépinière seulement ; jamais déduite de la levée ni de repiquage. Livrée",
+    "      vide : une valeur est écrite par un humain, jamais par un modèle de langage.",
     "      Les durées sont COMMUNES à toutes les zones : on ne les répète pas par zone.",
     "  itineraire : 'standard' par défaut. Pour une conduite de plus ('culture d'hiver'),",
     "      dupliquer le bloc de la culture et changer ce nom.",
@@ -64,7 +68,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -100,7 +105,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -136,7 +142,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -172,7 +179,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -208,7 +216,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -244,7 +253,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -280,7 +290,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -316,7 +327,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -352,7 +364,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -388,7 +401,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -424,7 +438,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -460,7 +475,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -496,7 +512,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -532,7 +549,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -568,7 +586,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -604,7 +623,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -640,7 +660,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -676,7 +697,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -712,7 +734,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -748,7 +771,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -784,7 +808,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -820,7 +845,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -856,7 +882,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -892,7 +919,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -928,7 +956,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -964,7 +993,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1000,7 +1030,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1036,7 +1067,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1072,7 +1104,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1108,7 +1141,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1144,7 +1178,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1180,7 +1215,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1216,7 +1252,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1252,7 +1289,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1288,7 +1326,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1324,7 +1363,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1360,7 +1400,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1396,7 +1437,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1432,7 +1474,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1468,7 +1511,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1504,7 +1548,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1540,7 +1585,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1576,7 +1622,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1612,7 +1659,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1648,7 +1696,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1684,7 +1733,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1720,7 +1770,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1756,7 +1807,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1792,7 +1844,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1828,7 +1881,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1864,7 +1918,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1900,7 +1955,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1936,7 +1992,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -1972,7 +2029,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2008,7 +2066,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2044,7 +2103,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2080,7 +2140,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2116,7 +2177,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2152,7 +2214,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2188,7 +2251,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2224,7 +2288,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2260,7 +2325,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2296,7 +2362,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2332,7 +2399,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2368,7 +2436,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2404,7 +2473,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2440,7 +2510,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2476,7 +2547,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2512,7 +2584,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2548,7 +2621,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2584,7 +2658,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2620,7 +2695,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2656,7 +2732,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2692,7 +2769,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2728,7 +2806,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2764,7 +2843,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2800,7 +2880,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2836,7 +2917,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2872,7 +2954,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2908,7 +2991,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2944,7 +3028,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -2980,7 +3065,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3016,7 +3102,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3052,7 +3139,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3088,7 +3176,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3124,7 +3213,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3160,7 +3250,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3196,7 +3287,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3232,7 +3324,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3268,7 +3361,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3304,7 +3398,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3340,7 +3435,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3376,7 +3472,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3412,7 +3509,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3448,7 +3546,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3484,7 +3583,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3520,7 +3620,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3556,7 +3657,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3592,7 +3694,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3628,7 +3731,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3664,7 +3768,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3700,7 +3805,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3736,7 +3842,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3772,7 +3879,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3808,7 +3916,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {
@@ -3844,7 +3953,8 @@
         "levee": null,
         "recolte": null,
         "repiquage": null,
-        "plantation_recolte": null
+        "plantation_recolte": null,
+        "semis_godet": null
       },
       "fenetres": {
         "oceanique": {

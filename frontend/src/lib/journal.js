@@ -35,6 +35,7 @@ export const ACTION_LABEL = {
   tuteurage: 'Tuteurage',
   perte: 'Perte',
   perte_godet: 'Perte de godets',
+  deplacement: 'Déplacement de lot',   // [US-211]
   vendu: 'Vente',
   observation: 'Note',
 }

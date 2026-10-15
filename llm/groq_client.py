@@ -250,7 +250,7 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
@@ -282,6 +282,8 @@ RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne �
 - un avec quantite=nombre de pieds et unite="plants"
 - un avec quantite=poids et unite="kg" ou "g"
 Si seul un nombre de pieds OU seul un poids est mentionné (cas normal), un seul objet recolte suffit comme d'habitude.
+
+RÈGLE deplacement : changer de pépinière un lot de godets déjà en pépinière ("passé le lot 119 au châssis froid", "déplacé les godets de tomate sous le châssis") → action="deplacement", culture du lot, parcelle=la pépinière de DESTINATION (jamais celle d'origine). Sans pépinière de destination nommée ("sorti les tomates"), ce n'est PAS un déplacement. Mettre des plants en terre reste "plantation".
 
 RÈGLE binage / éclaircie / désherbage : ce sont TROIS gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :
 - "binage"/"biner" (ameublir la terre en surface, casser la croûte) → action="binage"

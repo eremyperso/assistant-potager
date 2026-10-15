@@ -1,3 +1,39 @@
+## [v3.87.0] — 2026-10-15
+
+**ÉPIC 12 — US-211, US-213, US-214, US-216, US-224** : la Pépinière **dit ce qu'il y a à faire, lot par lot**.
+On déplace un lot d'une pépinière à l'autre, le référentiel connaît le délai semis → godet, chaque lot
+annonce ses échéances du jour, et sa fiche permet de repiquer, déclarer une perte ou clore le lot.
+
+### 🚀 Nouveautés
+- Ajoute le geste **« déplacer un lot »** d'une pépinière à l'autre, dicté sans appel au modèle, avec récapitulatif, correction et suppression depuis le Journal (US-211).
+- Désigne le lot déplacé par son numéro, par sa culture (si elle est unique) ou par un choix, et refuse une destination qui n'est pas une pépinière ou qui est l'emplacement courant (US-211).
+- Affiche le déplacement, avec origine et destination, dans le cycle de vie du lot ; le déplacement devient la première source de l'emplacement courant, sans toucher aux stocks (US-211).
+- Ajoute une cinquième étape de durée culturale, **semis → repiquage en godet**, dictable (« le mot godet est exigé ») et lue par `/calendrier` (US-213).
+- Affiche « non renseigné » plutôt qu'un tiret quand ce délai est absent : il n'est jamais déduit d'une autre durée (US-213).
+- Calcule les **échéances de chaque lot** : repiquage attendu, endurcissement (compte à rebours, ou sur place en pépinière froide) et dormance, avec retard compté depuis la fin d'une fourchette (US-214).
+- Trie les lots par urgence et ajoute le résumé du bandeau de la Pépinière ; sans donnée requise, aucune échéance n'est inventée et la raison est rendue (US-214).
+- Ajoute la **fiche du lot** : gestes selon l'état du lot (repiquer, perte, clôture), quantités proposées, taux et comparaison, échéances et action suggérée (US-216).
+- Ajoute le geste de **clôture de lot** qui solde le lot entier — godets et graines — définitivement et le sort du stock agrégé (US-216).
+- Ajoute des notifications dans la PWA : un geste déposé est annoncé « préparé, en file, rien n'est encore enregistré » (US-216).
+- Demande la quantité de plants quand elle manque, en proposant « Tout le lot : N » avec ce que la base sait du lot (US-224).
+
+### 🐛 Corrections
+- Corrige les mises en godet et pertes de godet enregistrées sans nombre de plants, qui laissaient le lot « indéterminé » et le stock immobile (US-224).
+- Corrige le plafond d'une sortie, désormais celui du lot cité et non celui de la culture entière (US-224).
+- Corrige la perte du geste en cas de refus d'écriture : il reste dans la file, et la réponse (texte ou voix) n'avale plus une nouvelle saisie (US-224).
+
+### 🔧 Améliorations techniques
+- Ajoute le module en lecture seule `app/services/echeances_lots.py`, avec une seule lecture et au plus une météo, sans requête par lot (US-214).
+- Ajoute à `GET /pepiniere/lots` les échéances, et à `GET /pepiniere/lots/{numero}` les échéances et l'action suggérée, sans rien retirer (US-214, US-216).
+- Ajoute `duree_semis_godet` à `GET /cultures/{c}/calendrier` et `GET /plan/calendriers` (US-213).
+- Ouvre les gestes de la fiche de lot à la PWA ; un membre en lecture seule ne dépose rien (US-216).
+- Ajoute l'option `entete` au composant `Modal` et les composants `FicheLot`, `Toast`, `CompteurNumerique` (US-216).
+- Ajoute `tools/audit_quantites_manquantes.py` pour repérer les gestes de pépinière déjà écrits sans quantité (US-224).
+- Ajoute la fiche de domaine `docs/domaines/pepiniere.md` et met à jour les fiches du corpus (`pepiniere-par-lot`, `semis-godet-plantation`, calendrier) et le guide (US-213, US-214, US-216).
+
+### 💾 Base de données
+- Ne nécessite aucune migration : `semis_godet` tient dans la colonne existante de type VARCHAR(20) (US-213).
+
 ## [v3.86.0] — 2026-10-09
 
 **ÉPIC 9 — US-208, US-209, US-210** : la pépinière **a un type, un numéro de lot et une adresse**.

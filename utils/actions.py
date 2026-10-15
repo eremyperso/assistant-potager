@@ -6,7 +6,7 @@ from unidecode import unidecode
 
 log = logging.getLogger("potager")
 
-# 18 actions canoniques — référentiel unique [US-168 CA1] : c'est
+# 19 actions canoniques — référentiel unique [US-168 CA1] : c'est
 # la seule liste tenue à la main. utils.validation.ACTIONS_VALIDES (vocabulaire
 # d'ENTRÉE, ce que Groq peut renvoyer brut dans `action`) en DÉRIVE par
 # construction plutôt que de la dupliquer à la main — voir le commentaire de
@@ -100,6 +100,22 @@ ACTION_MAP: dict[str, list[str]] = {
     # normalisation.
     "binage": [
         "binage", "biner", "bine", "binee",
+    ],
+    # [US-211] Un lot de pépinière change d'emplacement (serre → châssis froid). Les
+    # tournures familières (« passé », « sorti ») ne sont PAS des variantes : trop
+    # ambiguës au jardin, elles ne valent déplacement que devant une pépinière
+    # nommée — c'est la grammaire déterministe qui en décide, pas cette table.
+    "deplacement": [
+        "deplacement", "deplacer", "deplace", "deplacee", "deplaces", "deplacees",
+        "transferer", "transfere", "transferee", "transferes", "transferees",
+    ],
+    # [US-216] Clôturer un lot : tout ce qui reste de lui — godets et graines non
+    # levées — est soldé d'un coup, définitivement. Deux mots seulement : « cloture »
+    # n'a pas d'autre sens au jardin dans une phrase de geste, et la grammaire
+    # exige de toute façon un lot cité (« clôturé le lot 128 »).
+    "cloture_lot": [
+        "cloture lot", "cloturer lot", "cloturer le lot", "cloture du lot",
+        "cloture", "cloturer", "cloture de lot",
     ],
     "eclaircie": [
         # La forme réellement stockée en base est "eclaircie", pas

@@ -2,7 +2,7 @@
 app/services/interpreteur_commandes.py — Piloter le bot par une phrase [US-172]
 ================================================================================
 Le compagnon de terrain savait interpréter **un geste de jardin** dicté en
-langage naturel — les dix-huit gestes du référentiel — et rien d'autre. Tout le
+langage naturel — les dix-neuf gestes du référentiel — et rien d'autre. Tout le
 reste, les vingt-quatre commandes du bot et leurs sous-commandes, n'était
 atteignable qu'en tapant la commande exacte, avec ses arguments dans le bon
 ordre. US-171 a rendu ces commandes **visibles** dans le menu natif ; elle ne
@@ -1518,6 +1518,55 @@ _ETAPES_DITES: dict[str, str] = {
 }
 
 
+# [US-213 / CA3] Le délai semis → repiquage EN GODET : le passage de la barquette
+# au godet, pas la mise en place. Le mot « godet » est EXIGÉ — c'est lui, et lui
+# seul, qui sépare cette règle de `calendrier_duree`, où « repiquage » reste le
+# délai avant plantation (CA29 d'US-068). Déclarée avant `calendrier_duree` ET
+# gardée par un `(?!…godet)` dans celle-ci : la phrase ne dépend pas de l'ordre.
+_EN_GODET = r"(?:en|au|dans(?:\s+(?:le|un|des))?)\s+godets?"
+
+
+@_regle(
+    "calendrier_duree_semis_godet",
+    r"\A" + _INTENTION + _CORRIGER + _ARTICLE
+    + r"(?:delai|duree|temps)\s+"
+    r"(?:entre\s+(?:le\s+|la\s+)?semis\s+et\s+(?:le\s+|la\s+)?|"
+    r"avant\s+(?:le\s+|la\s+)?|de\s+(?:la\s+|le\s+)?|d\s+)?"
+    r"(?:repiquage|mise|passage)\s+" + _EN_GODET + r"\s+"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_semis_godet(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    if not culture:
+        return None
+    valeurs = {"culture": culture, "etape": "semis_godet", "jours_min": groupes["jours_min"]}
+    if groupes.get("jours_max"):
+        valeurs["jours_max"] = groupes["jours_max"]
+    return valeurs
+
+
+@_regle(
+    "calendrier_duree_semis_godet_verbe",
+    r"\A" + _ARTICLE + r"(?P<culture>.+?)\s+"
+    r"(?:se\s+(?:mettent|met|repiquent|repique|rempotent|rempote)|"
+    r"sont\s+(?:mis|mises|repiques|repiquees|rempotes|rempotees))\s+"
+    + _EN_GODET + r"\s+(?:(?:environ|a peu pres)\s+)?(?:(?:apres|au bout de)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_semis_godet_verbe(groupes):
+    return _construire_calendrier_duree_semis_godet(groupes)
+
+
 # [US-177 / CA5] Déclarée AVANT `calendrier_duree` : les deux visent la même
 # forme (`calendrier`/`duree`), et la première reconnue l'emporte (`cibles`).
 # Elle exige les DEUX bornes du trajet — « plantation … récolte » — là où la
@@ -1560,6 +1609,8 @@ def _construire_calendrier_duree_plantation_recolte(groupes):
     r"\A" + _INTENTION + _CORRIGER + _ARTICLE
     + r"(?:delai|duree|temps)\s+(?:de\s+|d\s+|avant\s+(?:la\s+|le\s+)?|jusqu a\s+(?:la\s+|le\s+)?)?"
     r"(?P<etape>levee|germination|premiere recolte|recolte|repiquage|plantation|mise en place)\s+"
+    # [US-213 / CA3] « … repiquage EN GODET » n'est pas le délai avant plantation.
+    r"(?!" + _EN_GODET + r"\b)"
     r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
     + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
     + _NOMBRE.format("jours_min")

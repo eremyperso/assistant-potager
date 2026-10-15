@@ -66,7 +66,7 @@ _VENDU_TIMEOUT  = 60  # secondes
 _QUANTITE_PENDING: dict[int, dict] = {}
 
 
-_QUANTITE_TIMEOUT = 60  # secondes
+_QUANTITE_TIMEOUT = 180  # secondes — lu par messages._repondre_quantite_en_attente
 
 
 # [US-201 / I3] Geste de la file sans culture (« ajouter une culture » sur un
@@ -97,6 +97,13 @@ _GODET_LOT_PENDING: dict[int, dict] = {}
 
 
 _GODET_LOT_TIMEOUT = 120  # secondes
+
+
+# [US-211] Déplacement dont le lot est ambigu (plusieurs lots de la culture) → choix du lot
+_DEPLACEMENT_LOT_PENDING: dict[int, dict] = {}
+
+
+_DEPLACEMENT_LOT_TIMEOUT = 120  # secondes
 
 
 # [US-066] Mise en godet sans « sur N graines » → réclamation du nombre d'origine

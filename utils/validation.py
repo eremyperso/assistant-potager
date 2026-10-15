@@ -62,6 +62,11 @@ def _variantes_pluriel(mot: str) -> set[str]:
         candidats.add(mot[:-2])
     elif mot.endswith("s"):
         candidats.add(mot[:-1])
+    # Pluriel en « x » : chou / choux, haricot vert… (« choux » n'est pas « chous »).
+    if mot.endswith("x") and len(mot) > 3:
+        candidats.add(mot[:-1])
+    else:
+        candidats.add(mot + "x")
     return candidats
 
 

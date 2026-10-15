@@ -62,6 +62,88 @@ from .commandes_plan import cmd_plan
 from .commandes_stats import cmd_historique, cmd_stats
 
 
+async def _repondre_quantite_en_attente(update: Update, texte_raw: str) -> bool:
+    """[US-021 / CA9, US-224] Traite la réponse à une question de quantité en attente.
+
+    Retourne True si le message a été consommé (réponse, annulation, nombre à
+    redemander), False s'il n'était PAS une réponse : question périmée
+    (`_QUANTITE_TIMEOUT`) ou vraie nouvelle saisie (« récolté 2 kg de tomates »),
+    que l'appelant traite alors normalement. Avant, la dictée suivante était avalée
+    comme quantité (le « 2 » de « 2 kg de tomates » devenait un nombre de plants).
+
+    Même chemin pour le texte et pour la voix (`handle_voice`).
+    """
+    import re
+    import time as _t
+    from .etat import _QUANTITE_TIMEOUT
+
+    user_id = update.effective_user.id
+    pending = _QUANTITE_PENDING.get(user_id)
+    if pending is None:
+        return False
+    if _t.time() - pending.get("ts", 0) > _QUANTITE_TIMEOUT:
+        _QUANTITE_PENDING.pop(user_id, None)
+        log.info(f"[US-021 CA9] Question de quantité périmée — user_id={user_id}")
+        return False
+
+    items = pending["items"]
+    geste_file = pending.get("geste_file")
+    brut = (texte_raw or "").strip()
+    async def reply(*args, **kwargs):
+        return await update.message.reply_text(*args, **kwargs)
+
+    if brut.lower().rstrip(" .!") in ("annuler", "abandonner", "stop"):
+        _QUANTITE_PENDING.pop(user_id, None)
+        await reply(
+            "👌 Le geste reste dans votre file — reprenez-le avec /gestes."
+            if geste_file else "❌ Saisie annulée."
+        )
+        return True
+
+    # Un nombre, éventuellement entouré de quelques mots (« 30 plants », « environ 20 ») :
+    # une phrase plus longue est une nouvelle saisie, pas une réponse.
+    mots = brut.split()
+    nombre = re.search(r"(\d+(?:[.,]\d+)?)", brut)
+    if len(mots) > 4:
+        _QUANTITE_PENDING.pop(user_id, None)
+        return False
+    est_pepiniere = bool(pending.get("godet_plants")) or items[0].get("action") == "mise_en_godet"
+    if not nombre or (est_pepiniere and float(nombre.group(1).replace(",", ".")) <= 0):
+        if len(mots) > 2:
+            _QUANTITE_PENDING.pop(user_id, None)
+            return False
+        await reply(
+            "❌ Nombre de plants non reconnu. Précisez un nombre (ex: _30_)."
+            if est_pepiniere else
+            "❌ Quantité non reconnue. Précisez un nombre (ex: _2 kg_, _15 plants_)",
+            parse_mode="Markdown",
+        )
+        return True                       # la question reste posée
+
+    _QUANTITE_PENDING.pop(user_id, None)
+    valeur = nombre.group(1).replace(",", ".")
+    if est_pepiniere:
+        n = int(float(valeur))
+        if items[0].get("action") == "mise_en_godet":
+            items[0]["nb_plants_godets"] = n
+        else:
+            items[0]["quantite"] = n
+            items[0]["unite"] = "plants"
+        log.info(f"[US-224] Nombre de plants reçu: {n} — user_id={user_id}")
+    else:
+        items[0]["quantite"] = valeur
+        reste = brut[nombre.end():].strip()
+        unite = reste.split()[0] if reste else ""
+        if unite:
+            items[0]["unite"] = unite
+        log.info(f"[US-021 CA9] Quantité détectée: {valeur} {unite} — user_id={user_id}")
+
+    # [INC-003] `geste_file` reprend ici la valeur mise de côté par la question —
+    # sans quoi le geste de la file est enregistré sans jamais être retiré.
+    await _parse_and_save(update, pending["texte"], pre_parsed_items=items, geste_file=geste_file)
+    return True
+
+
 async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message vocal → transcription Groq Whisper → parsing → PostgreSQL."""
     # [US-045 / CA6, CA7] Priorité 0 — aucun appel Groq (Whisper) tant que le
@@ -119,8 +201,16 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # existante, hors périmètre d'US-066.)
     if update.effective_user.id in _GODET_GRAINES_PENDING:
         await msg.delete()
-        await _godet_graines_reponse(update, texte)
+        await _godet_graines_reponse(update, texte, ctx)
         return
+
+    # ── 2c. [US-224] Quantité de pépinière / CA9 en attente ? Même chemin qu'au
+    # clavier : une réponse dite (« trente plants ») ne doit pas repartir en analyse
+    # comme une nouvelle action. Ce qui n'est pas une réponse est traité normalement.
+    if update.effective_user.id in _QUANTITE_PENDING:
+        if await _repondre_quantite_en_attente(update, texte):
+            await msg.delete()
+            return
 
     # ── 3. Modes correction actifs : bypass intent classification ──────────────
     # Quand on est en pleine conversation de correction, on ne reclassifie pas —
@@ -340,7 +430,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # parsing : la réponse est un nombre, pas une nouvelle action à analyser.
     user_id = update.effective_user.id
     if user_id in _GODET_GRAINES_PENDING:
-        await _godet_graines_reponse(update, texte_raw)
+        await _godet_graines_reponse(update, texte_raw, ctx)
         return
 
     # [US-036 CA10] Nombre de pieds en attente (récolte végétative pesée) ?
@@ -394,35 +484,7 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # [US-021 CA9] Quantité en attente ? Traiter comme quantité
     if user_id in _QUANTITE_PENDING:
-        pending = _QUANTITE_PENDING.pop(user_id)
-        items = pending["items"]
-
-        # Parser la quantité du texte (simple regex)
-        import re
-        match = re.search(r"([\d.]+)\s*(\w+)?", texte_raw)
-        if match:
-            qty = match.group(1)
-            unite = match.group(2) or ""
-            items[0]["quantite"] = qty
-            if unite:
-                items[0]["unite"] = unite
-            log.info(f"[US-021 CA9] Quantité détectée: {qty} {unite} — user_id={user_id}")
-
-            # Continuer avec confirmation
-            # [INC-003] `geste_file` reprend ici la valeur mise de côté par
-            # `_QUANTITE_PENDING` — sans quoi le geste de la file est enregistré
-            # sans jamais être retiré de la file.
-            await _parse_and_save(
-                update, pending["texte"], pre_parsed_items=items,
-                geste_file=pending.get("geste_file"),
-            )
-            return
-        else:
-            await update.message.reply_text(
-                "❌ Quantité non reconnue. Précisez un nombre (ex: _2 kg_, _15 plants_)",
-                parse_mode="Markdown"
-            )
-            _QUANTITE_PENDING[user_id] = pending  # remettre en attente
+        if await _repondre_quantite_en_attente(update, texte_raw):
             return
 
     # Réinitialiser le mode SAUF si on est en plein flux de correction, déplacement ou en attente de question

@@ -550,7 +550,19 @@ class TestCA9:
         from fastapi.testclient import TestClient
         from app.api.main import app, get_current_user_ctx
         app.dependency_overrides[get_current_user_ctx] = lambda: CTX
-        with patch("app.api.main.SessionLocal", return_value=MagicMock()):
+        from collections import defaultdict
+
+        # [US-214] Les échéances ont leur propre suite : ici, le numéro seul.
+        sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}}
+        with (
+            patch("app.api.main.SessionLocal", return_value=MagicMock()),
+            patch("app.services.echeances_lots.lire_echeances", return_value=sans_echeances),
+            # [US-216] La lecture par numéro joint aussi les échéances : leur suite est à part.
+            patch(
+                "app.services.echeances_lots.echeances_d_un_lot",
+                return_value={"echeances": {}, "action_suggeree": None},
+            ),
+        ):
             yield TestClient(app)
         app.dependency_overrides.clear()
 
@@ -705,3 +717,23 @@ def test_us209_les_boutons_de_choix_de_lot_portent_le_numero():
     from app.bot.godets import _etiquette_lot
     assert _etiquette_lot({"numero_lot": 4, "date_semis": datetime(2026, 9, 21)}) == "n° 4 · 21/09/2026"
     assert _etiquette_lot({"numero_lot": None, "date_semis": datetime(2026, 9, 21)}) == "21/09/2026"
+
+
+def test_us210_choux_au_pluriel_en_x_n_est_pas_une_culture_hallucinee():
+    """« repiqué 10 choux frisé… » : le modèle rend « chou », le texte dit « choux »."""
+    from utils.validation import culture_grounded_dans_texte, strip_culture_hallucinee
+    texte = "repiqué 10 choux frisé en godet sous le chassis froid"
+    assert culture_grounded_dans_texte("chou", texte)
+    assert strip_culture_hallucinee({"culture": "chou", "variete": "frisé"}, texte)["culture"] == "chou"
+    assert not culture_grounded_dans_texte("chou", "paillage de la planche")
+
+
+def test_us210_chou_plus_frise_rejoint_la_culture_chou_frise(db):
+    """Le modèle coupe « choux frisé » en chou + frisé : le godet doit rejoindre le semis de « chou frisé »."""
+    from utils.culture_resolve import fusionner_culture_variete
+    db.add(Evenement(type_action="semis", culture="chou frisé", quantite=48, unite="graines",
+                     date=datetime(2026, 10, 9), potager_id=1))
+    db.commit()
+    assert fusionner_culture_variete(db, 1, "chou", "frisé") == ("chou frisé", None)
+    assert fusionner_culture_variete(db, 1, "tomate", "cerise") == ("tomate", "cerise")
+    assert fusionner_culture_variete(db, 2, "chou", "frisé") == ("chou", "frisé")   # autre potager

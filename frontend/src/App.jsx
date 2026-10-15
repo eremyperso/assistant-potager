@@ -15,6 +15,7 @@ import BasculePotagerIntention from './components/BasculePotagerIntention.jsx'
 import MessageIntention from './components/MessageIntention.jsx'
 import BandeauFile from './components/BandeauFile.jsx'  // [US-224]
 import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224]
+import { NotificationsProvider } from './context/NotificationsContext.jsx'  // retour d'action
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import PlanVue   from './views/PlanVue.jsx'  // [US-200]
@@ -161,6 +162,7 @@ function AppInner({ intentionAdresse }) {
     >
       <BasculePotagerIntention intentionAdresse={intentionAdresse} />
       <FileGestesProvider>
+      <NotificationsProvider>
       <div className="flex flex-col h-dvh bg-bg">
         <TopBar view={view} onGo={changerSection} onRefresh={handleRefresh} loading={loading} />
 
@@ -177,6 +179,7 @@ function AppInner({ intentionAdresse }) {
 
         <BottomNav view={view} onGo={changerSection} />
       </div>
+      </NotificationsProvider>
       </FileGestesProvider>
     </NavigationProvider>
   )

@@ -43,6 +43,7 @@ from utils.stock import (
     lots_candidats_mise_en_godet,
     lots_pepiniere_du_couple,
     lot_pepiniere_par_semis,
+    calcul_lots_pepiniere,
     calcul_godets_par_culture,
     calcul_stock_par_variete,
     stock_actif_variete,
@@ -93,6 +94,60 @@ class ParcelleNonPepiniereError(EvenementInvalideError):
         super().__init__(
             f"« {nom_parcelle} » n'est pas une pépinière : seule une pépinière peut recevoir des godets."
         )
+
+
+class DeplacementRefuseError(EvenementInvalideError):
+    """[US-211 / CA3, CA4] Un déplacement de lot que le potager ne peut pas porter :
+    lot introuvable, destination absente / ordinaire / identique à l'emplacement
+    courant, ou déplacement partiel (hors périmètre V1). Le message dit pourquoi."""
+
+
+class QuantiteManquanteError(EvenementInvalideError):
+    """[US-224] Perte de godet, vente ou mise en terre écrite sans nombre de plants.
+
+    Un tel événement ne fait bouger aucun stock (les sorties se calculent avec
+    `int(quantite or 0)`) et ne rafraîchit pas le lot : le godet « perdu » reste en
+    stock, le lot reste candidat à l'alerte « oublié ». Constaté le 14/10/2026 sur la
+    perte de godet #596 déposée depuis la file. Refusé à la CRÉATION seulement :
+    corriger la date d'un ancien événement sans quantité reste possible."""
+
+    def __init__(self, action: str, culture: Optional[str] = None):
+        self.action = action
+        self.culture = culture
+        verbe = {
+            "perte_godet": "perdus", "vendu": "vendus", "plantation": "mis en terre",
+            "mise_en_godet": "repiqués en godet",
+        }.get(
+            action, "concernés",
+        )
+        super().__init__(
+            f"Combien de plants ont été {verbe} ? Sans nombre, le stock ne peut pas être "
+            "mis à jour — redites la phrase avec le nombre de plants."
+        )
+
+
+class StockLotInsuffisantError(EvenementInvalideError):
+    """[US-224] Une perte, une vente ou une mise en terre réclame plus de godets que ce
+    qu'il en reste dans LE lot cité. Le contrôle agrégé par culture
+    (`StockInsuffisantError`) ne le voit pas : deux lots de la même culture se
+    masquent mutuellement, et l'excédent était alors imputé silencieusement à un
+    autre lot (`_allouer` retombe en FIFO)."""
+
+    def __init__(self, action: str, numero_lot: Optional[int], quantite: float, stock: float):
+        self.action = action
+        self.numero_lot = numero_lot
+        self.quantite = quantite
+        self.stock = stock
+        lot = f"Le lot n° {numero_lot}" if numero_lot is not None else "Ce lot"
+        super().__init__(
+            f"{lot} n'a plus que {int(stock)} godet(s) : {int(quantite)} est impossible. "
+            "Corrigez le nombre."
+        )
+
+
+class ClotureRefuseeError(EvenementInvalideError):
+    """[US-216 / CA8] Une clôture de lot que le potager ne peut pas porter : lot
+    introuvable ou déjà soldé. Le message dit pourquoi — rien n'est enregistré."""
 
 
 class ParcelleIncoherenteError(EvenementInvalideError):
@@ -317,7 +372,7 @@ def _stock_disponible_perte(
 # [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
 # (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
 # c'est justement leur rôle de faire exister la culture pour la première fois.
-_ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet"}
+_ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet", "deplacement", "cloture_lot"}
 
 # [fix bug id=351] Actions pour lesquelles une culture est structurellement
 # obligatoire — sans elle l'événement ne décrit rien d'exploitable. Sur-ensemble
@@ -326,6 +381,12 @@ _ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "per
 # lieu d'un simple retour anticipé, mais doivent tout autant être rejetées si
 # culture est vide plutôt que silencieusement laissées passer.
 _ACTIONS_CULTURE_OBLIGATOIRE = _ACTIONS_SOURCE_CULTURE | {"recolte", "perte"}
+
+# [US-224] Actions de pépinière qui retirent des plants du stock : leur nombre est
+# obligatoire à la création (règle 9 de `valider_evenement`). `mise_en_godet` a le
+# sien (`nb_plants_godets`, contrôlé dans `creer_evenement_godet`) ; `deplacement` et
+# `cloture_lot` portent sur le lot entier, sans quantité par construction.
+_ACTIONS_QUANTITE_OBLIGATOIRE = {"perte_godet", "vendu", "plantation"}
 
 
 def refuser_unite_implantation_en_pepiniere(
@@ -354,6 +415,210 @@ def refuser_unite_implantation_en_pepiniere(
         raise UniteImplantationRefuseeError(action_norm, detectee)
 
 
+def _lot_deplacement_epuise(lot: dict) -> bool:
+    return lot.get("stock_residuel_godet", 0) <= 0 and lot.get("graines_en_germination", 0) <= 0
+
+
+def evenements_pepiniere_sans_quantite(db: Session, ctx: TenantContext) -> list[Evenement]:
+    """[US-224] Événements de pépinière écrits sans nombre de plants, du plus récent au
+    plus ancien — LECTURE SEULE, pour qu'ils soient corrigés à la main (`/corriger`).
+
+    Ce sont les événements d'avant la règle 9 : une perte de godet, une vente ou une
+    mise en terre sans `quantite`, une mise en godet sans `nb_plants_godets`. Rien
+    n'est corrigé automatiquement : le nombre réel n'est connu que du jardinier, et
+    aucune valeur n'est inventée.
+    """
+    sans_nombre = or_(
+        and_(
+            Evenement.type_action.in_(sorted(_ACTIONS_QUANTITE_OBLIGATOIRE)),
+            Evenement.quantite.is_(None),
+        ),
+        and_(Evenement.type_action == "mise_en_godet", Evenement.nb_plants_godets.is_(None)),
+    )
+    return (
+        db.query(Evenement)
+        .filter(Evenement.potager_id == ctx.potager_id, sans_nombre)
+        .order_by(Evenement.date.desc(), Evenement.id.desc())
+        .all()
+    )
+
+
+def lots_deplacables(db: Session, ctx: TenantContext, culture: str, variete: Optional[str] = None) -> list[dict]:
+    """[US-211 / CA3] Lots de pépinière EN COURS d'une culture (et variété si dite) —
+    ceux qu'un déplacement peut viser. Un lot dont tous les plants sont sortis (plantés,
+    vendus, perdus) n'a plus rien à déplacer."""
+    from utils.culture_resolve import normaliser_culture
+    cible = normaliser_culture(culture or "")
+    retenus = []
+    for lot in calcul_lots_pepiniere(db, None, potager_id=ctx.potager_id):
+        if normaliser_culture(lot.get("culture") or "") != cible:
+            continue
+        if variete and (lot.get("variete") or "").strip().lower() != variete.strip().lower():
+            continue
+        if _lot_deplacement_epuise(lot):
+            continue
+        retenus.append(lot)
+    return retenus
+
+
+def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parcelle: Optional[Parcelle] = None) -> dict:
+    """[US-211 / CA3, CA4] Désigne le lot d'un déplacement et contrôle sa destination.
+
+    Mute `parsed` : `origine_graines_id` (semis du lot), culture, variété et
+    `_lot_numero` sont posés d'après le lot retenu. Retourne le lot.
+
+    Le lot est désigné par son numéro (déjà résolu en `origine_graines_id` par
+    `lots_pepiniere.resoudre_references`) ou par sa culture et sa variété ; plusieurs
+    lots possibles lèvent `LotIndetermineError` (le bot pose la question avant), aucun
+    lève `DeplacementRefuseError`. La destination doit être une pépinière différente
+    de l'emplacement courant du lot.
+    """
+    if parsed.get("_alerte_lot"):
+        raise DeplacementRefuseError(
+            parsed["_alerte_lot"].replace(
+                "Confirmez pour enregistrer sans lot, ou annulez.",
+                "Rien n'est enregistré : redites la phrase avec le bon numéro.",
+            ).replace("*", "")
+        )
+
+    lot: Optional[dict] = None
+    semis_id = _to_int(parsed.get("origine_graines_id"))
+    culture = (parsed.get("culture") or "").strip()
+    variete = (parsed.get("variete") or "").strip() or None
+    if semis_id is not None:
+        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
+        if lot is None:
+            raise LotSemisInconnuError(semis_id)
+    else:
+        if not culture:
+            raise DeplacementRefuseError(
+                "Quel lot déplacer ? Citez son numéro (« le lot 119 ») ou sa culture."
+            )
+        candidats = lots_deplacables(db, ctx, culture, variete)
+        if not candidats:
+            label = f"{culture} {variete}" if variete else culture
+            raise DeplacementRefuseError(
+                f"Aucun lot de « {label} » en cours en pépinière : rien à déplacer."
+            )
+        if len(candidats) > 1:
+            raise LotIndetermineError(culture, variete, len(candidats))
+        lot = candidats[0]
+
+    numero = lot.get("numero_lot")
+    nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
+    ref = f"Le lot {numero} ({nom_lot})" if numero is not None else f"Le lot de {nom_lot}"
+    if _lot_deplacement_epuise(lot):
+        raise DeplacementRefuseError(f"{ref} n'a plus de plants en pépinière : rien à déplacer.")
+
+    nom_destination = parsed.get("parcelle")
+    if parcelle is None and nom_destination:
+        parcelle = resolve_parcelle(db, nom_destination, potager_id=ctx.potager_id)
+        if parcelle is None:
+            from utils.parcelles import resolve_pepiniere_par_type
+            parcelle = resolve_pepiniere_par_type(db, nom_destination, ctx.potager_id)
+        if parcelle is None:
+            from utils.parcelles import get_all_parcelles
+            pepinieres = [p.nom for p in get_all_parcelles(db, potager_id=ctx.potager_id) if p.est_pepiniere]
+            suite = (
+                "Pépinières de votre potager : " + ", ".join(f"« {n} »" for n in pepinieres) + "."
+                if pepinieres else
+                "Ce potager n'a encore déclaré aucune pépinière : une parcelle doit être marquée "
+                "pépinière pour recevoir un lot."
+            )
+            raise DeplacementRefuseError(
+                f"La parcelle « {nom_destination} » n'existe pas dans votre potager. {suite}"
+            )
+    if parcelle is None:
+        raise DeplacementRefuseError(
+            f"{ref} va où ? Nommez la pépinière de destination (« au châssis froid »)."
+        )
+    if not parcelle.est_pepiniere:
+        raise DeplacementRefuseError(
+            f"« {parcelle.nom} » n'est pas une pépinière : un déplacement ne va que vers une "
+            "pépinière. Mettre des plants en terre s'enregistre comme une plantation."
+        )
+    courant = lot.get("emplacement") or {}
+    if courant.get("parcelle_id") is not None and courant["parcelle_id"] == parcelle.id:
+        raise DeplacementRefuseError(
+            f"{ref} est déjà dans « {parcelle.nom} » : rien n'est enregistré."
+        )
+
+    parsed["origine_graines_id"] = lot["semis_id"]
+    parsed["culture"] = lot["culture"]
+    parsed["variete"] = lot.get("variete")
+    parsed["parcelle"] = parcelle.nom
+    if numero is not None:
+        parsed["_lot_numero"] = numero
+    parsed["_emplacement_origine"] = courant.get("nom")
+    log.info(
+        "[US-211] Déplacement du lot %s (%s) : %s → %s",
+        numero if numero is not None else lot.get("lot_id"), nom_lot, courant.get("nom"), parcelle.nom,
+    )
+    return lot
+
+
+def resoudre_lot_cloture(db: Session, ctx: TenantContext, parsed: dict) -> dict:
+    """[US-216 / CA8] Désigne le lot d'une clôture et fige ce qu'elle solde.
+
+    Mute `parsed` : `origine_graines_id` (semis du lot), culture, variété, `quantite`
+    (godets restants), `nb_graines_semees` (graines non levées) et `_lot_numero`.
+    Retourne le lot.
+
+    Clôturer, c'est solder DÉFINITIVEMENT le lot entier — godets et graines, levées
+    ou non. Les nombres sont relus ICI, à la confirmation : le lot a pu bouger depuis
+    le dépôt du geste, et c'est ce qu'il reste à cet instant qui est soldé. Un lot
+    déjà soldé est refusé : une clôture qui ne solde rien n'a pas de sens.
+    """
+    if parsed.get("_alerte_lot"):
+        raise ClotureRefuseeError(
+            parsed["_alerte_lot"].replace(
+                "Confirmez pour enregistrer sans lot, ou annulez.",
+                "Rien n'est enregistré : redites la phrase avec le bon numéro.",
+            ).replace("*", "")
+        )
+
+    semis_id = _to_int(parsed.get("origine_graines_id"))
+    culture = (parsed.get("culture") or "").strip()
+    variete = (parsed.get("variete") or "").strip() or None
+    if semis_id is not None:
+        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
+        if lot is None:
+            raise LotSemisInconnuError(semis_id)
+    else:
+        if not culture:
+            raise ClotureRefuseeError("Quel lot clôturer ? Citez son numéro (« le lot 119 »).")
+        candidats = lots_deplacables(db, ctx, culture, variete)
+        if not candidats:
+            label = f"{culture} {variete}" if variete else culture
+            raise ClotureRefuseeError(f"Aucun lot de « {label} » en cours en pépinière : rien à clôturer.")
+        if len(candidats) > 1:
+            raise LotIndetermineError(culture, variete, len(candidats))
+        lot = candidats[0]
+
+    numero = lot.get("numero_lot")
+    nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
+    ref = f"Le lot {numero} ({nom_lot})" if numero is not None else f"Le lot de {nom_lot}"
+    if lot.get("cloture"):
+        raise ClotureRefuseeError(f"{ref} est déjà clôturé : rien n'est enregistré.")
+    if _lot_deplacement_epuise(lot):
+        raise ClotureRefuseeError(f"{ref} n'a plus rien en pépinière : rien à clôturer.")
+
+    parsed["origine_graines_id"] = lot["semis_id"]
+    parsed["culture"] = lot["culture"]
+    parsed["variete"] = lot.get("variete")
+    parsed["quantite"] = lot["stock_residuel_godet"]
+    parsed["unite"] = "plants"
+    parsed["nb_graines_semees"] = lot["graines_en_germination"]
+    if numero is not None:
+        parsed["_lot_numero"] = numero
+    log.info(
+        "[US-216] Clôture du lot %s (%s) : %s godet(s) et %s graine(s) soldés",
+        numero if numero is not None else lot.get("lot_id"), nom_lot,
+        lot["stock_residuel_godet"], lot["graines_en_germination"],
+    )
+    return lot
+
+
 def valider_evenement(
     db: Session,
     ctx: TenantContext,
@@ -367,6 +632,8 @@ def valider_evenement(
     unite: Optional[str] = None,
     texte: Optional[str] = None,
     contexte_semis: Optional[str] = None,
+    a_la_creation: bool = False,
+    origine_graines_id: Optional[int] = None,
 ) -> None:
     """
     [US-049] Garde-fou unique et non contournable — appelé par TOUTE fonction de ce
@@ -413,6 +680,8 @@ def valider_evenement(
        unité (la mise en godet range sa quantité dans `nb_plants_godets`).
     7. [US-210 / CA2] Une mise en godet ne peut porter qu'une parcelle pépinière —
        `ParcelleNonPepiniereError`.
+    8. [US-211 / CA4] Un déplacement ne vise qu'une pépinière et porte sur le lot
+       entier — `DeplacementRefuseError`.
     """
     if nom_parcelle_brut and parcelle is None:
         raise ParcelleInconnueError(nom_parcelle_brut)
@@ -425,10 +694,31 @@ def valider_evenement(
     # parcelle ordinaire — à la création comme à la correction du Journal.
     if action_norm == "mise_en_godet" and parcelle is not None and not parcelle.est_pepiniere:
         raise ParcelleNonPepiniereError(parcelle.nom)
+    # [US-211 / CA4] Règle 8 : un déplacement ne va que vers une pépinière — pas en
+    # terre, qui est une plantation — et porte sur le lot entier (V1).
+    if action_norm == "deplacement":
+        if parcelle is not None and not parcelle.est_pepiniere:
+            raise DeplacementRefuseError(
+                f"« {parcelle.nom} » n'est pas une pépinière : un déplacement ne va que vers une "
+                "pépinière. Mettre des plants en terre s'enregistre comme une plantation."
+            )
+        if quantite is not None:
+            raise DeplacementRefuseError(
+                "Un déplacement porte sur le lot entier : déplacer une partie des godets "
+                "seulement n'est pas géré. Redites la phrase sans quantité."
+            )
     if not culture:
         if action_norm in _ACTIONS_CULTURE_OBLIGATOIRE:
             raise CultureManquanteError(action_norm)
         return
+
+    # [US-224] Règle 9 : le nombre de plants est obligatoire à la création d'une perte
+    # de godet, d'une vente ou d'une mise en terre. Sans lui l'événement ne fait bouger
+    # aucun stock. Jamais à la correction (`a_la_creation` faux) : renommer la date
+    # d'un ancien événement sans quantité doit rester possible.
+    if a_la_creation and action_norm in _ACTIONS_QUANTITE_OBLIGATOIRE:
+        if quantite is None or quantite <= 0:
+            raise QuantiteManquanteError(action_norm, culture)
 
     # [fix contrôle quantité perte] perte_godet quitte la fonction juste après
     # (via _ACTIONS_SOURCE_CULTURE, il n'est jamais soumis à culture_deja_plantee)
@@ -437,6 +727,21 @@ def valider_evenement(
         stock_disponible = _stock_disponible_perte(db, ctx, action_norm, culture, variete)
         if quantite > stock_disponible:
             raise StockInsuffisantError(action_norm, culture, variete, quantite, stock_disponible)
+
+    # [US-224] Plafond PAR LOT : quand le lot est cité, c'est SON stock qui borne la
+    # sortie, pas celui de la culture entière (qui laissait un lot en sur-sortie
+    # compensé par le voisin, puis imputé en FIFO sur un autre lot).
+    if (
+        a_la_creation and origine_graines_id is not None and quantite is not None
+        and action_norm in ("perte_godet", "vendu")
+    ):
+        lot_source = lot_pepiniere_par_semis(db, int(origine_graines_id), potager_id=ctx.potager_id)
+        if lot_source is not None:
+            stock_lot = lot_source.get("stock_residuel_godet") or 0
+            if quantite > stock_lot:
+                raise StockLotInsuffisantError(
+                    action_norm, lot_source.get("numero_lot"), quantite, stock_lot,
+                )
 
     if action_norm in _ACTIONS_SOURCE_CULTURE:
         return
@@ -617,7 +922,13 @@ def _cond_localisation_culture(potager_id: int):
 # ── Compteurs simples ────────────────────────────────────────────────────────
 def compter_evenements(db: Session, ctx: TenantContext, jusqua=None) -> int:
     """Nombre total d'événements (cmd_start, /health, /stats avec date_ref optionnelle)."""
-    q = db.query(func.count(Evenement.id)).filter(Evenement.potager_id == ctx.potager_id)
+    # [US-211 / CA7] Un déplacement dit seulement où est un lot : il ne compte dans
+    # aucune statistique, `total_evenements` de /stats compris.
+    q = (
+        db.query(func.count(Evenement.id))
+        .filter(Evenement.potager_id == ctx.potager_id)
+        .filter(or_(Evenement.type_action.is_(None), Evenement.type_action != "deplacement"))
+    )
     if jusqua is not None:
         from datetime import datetime as _dt
         q = q.filter(Evenement.date <= _dt(jusqua.year, jusqua.month, jusqua.day, 23, 59, 59))
@@ -1020,12 +1331,21 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
 
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
+    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
+        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
+    if normalize_action(parsed.get("action")) == "cloture_lot":
+        resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
+        # [US-224] La quantité est transmise pour toutes les actions : la règle 9
+        # (nombre de plants obligatoire) et les plafonds de stock la lisent. Avant,
+        # seul `deplacement` la recevait — `POST /parse` écrivait donc sans contrôle.
+        quantite=_to_float(parsed.get("quantite")),
         unite=parsed.get("unite"), texte=texte_original,
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
+        a_la_creation=True,
     )
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
@@ -1043,6 +1363,10 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        origine_graines_id=(   # [US-211] le lot déplacé ; [US-216] le lot clôturé
+            _to_int(parsed.get("origine_graines_id"))
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None
+        ),   # [US-224] perte et vente imputées au lot cité, comme `creer_evenement_confirme`
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
@@ -1073,12 +1397,19 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
     require_potager_non_archive(db, ctx, "enregistrer d'action")
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
+    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
+        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
+    if normalize_action(parsed.get("action")) == "cloture_lot":
+        resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
         variete=parsed.get("variete"), parcelle=parcelle_obj,
+        quantite=_to_float(parsed.get("quantite")),   # [US-224] toutes actions (cf. depuis_parse)
         unite=parsed.get("unite"), texte=texte_original,
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
+        a_la_creation=True,
+        origine_graines_id=_to_int(parsed.get("origine_graines_id")),
     )
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
@@ -1096,6 +1427,10 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         date=parse_date(parsed.get("date")),
         nb_graines_semees=_to_int(parsed.get("nb_graines_semees")),
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
+        origine_graines_id=(   # [US-211] le lot déplacé ; [US-216] le lot clôturé
+            _to_int(parsed.get("origine_graines_id"))
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None
+        ),   # [US-224] perte et vente imputées au lot cité, comme `creer_evenement_confirme`
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
@@ -1143,6 +1478,16 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
             source_evenement_ids = src_ids
             log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
 
+    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
+        # [US-211] Le lot visé et la destination sont contrôlés avant l'écriture ;
+        # `parsed` reçoit le semis du lot (`origine_graines_id`) et sa culture. Avec une
+        # quantité, c'est `valider_evenement` qui refuse le déplacement partiel.
+        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)
+
+    if normalize_action(parsed.get("action")) == "cloture_lot":
+        # [US-216] Le lot et ce qu'il solde sont relus à l'instant de la confirmation.
+        resoudre_lot_cloture(db, ctx, parsed)
+
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
@@ -1152,6 +1497,8 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         unite=parsed.get("unite"),
         texte=texte,
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
+        a_la_creation=True,                                           # [US-224]
+        origine_graines_id=_to_int(parsed.get("origine_graines_id")),   # [US-224] plafond par lot
     )
 
     action_norm = normalize_action(parsed.get("action"))
@@ -1174,7 +1521,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         # [US-209 / CA5] Perte ou vente de plants imputée au lot cité.
         origine_graines_id=(
             _to_int(parsed.get("origine_graines_id"))
-            if action_norm in ("perte_godet", "vendu") else None
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None   # [US-211] lot déplacé ; [US-216] clôturé
         ),
         type_organe_recolte=type_organe_semis,
         origine_parsing=_origine_parsing(parsed),
@@ -1209,6 +1556,13 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     nb_graines_val = _to_int(parsed.get("nb_graines_semees"))
     nb_plants_val = _to_int(parsed.get("nb_plants_godets"))
     graines_demandees = nb_graines_val or nb_plants_val or 0
+
+    # [US-224] Règle 9 pour la mise en godet : sans nombre de plants, le godet n'entre
+    # pas en stock et son lot reste « indéterminé » (constaté sur #588, #589, #593).
+    # Le seul passe-droit est le choix EXPLICITE du jardinier (« Je ne sais pas »,
+    # marqueur `_plants_demandes` posé par le bot) — jamais l'omission.
+    if not nb_plants_val and not parsed.get("_plants_demandes"):
+        raise QuantiteManquanteError("mise_en_godet", culture_str)
 
     # [fix rattachement lot godet] Trois chemins, dans cet ordre de priorité :
     #   1. lot explicitement désigné par le jardinier (menu inline du bot) ;
@@ -1404,6 +1758,9 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         action=item.get("action"), culture=item.get("culture"),
         variete=item.get("variete"), parcelle=None,   # cette fonction ne localise jamais (parcelle_id toujours None)
         quantite=_to_float(item.get("quantite")),
+        unite=item.get("unite"), texte=texte,   # [US-224] règle US-199 rejouée comme ailleurs
+        a_la_creation=True,
+        origine_graines_id=_to_int(item.get("origine_graines_id")),
     )
     event = Evenement(
         type_action=item.get("action"),
@@ -1414,6 +1771,11 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
         parcelle_id=None,
         commentaire=item.get("commentaire"),
         texte_original=texte,
+        # [US-224] La perte citant son lot lui est imputée — comme `creer_evenement_confirme`.
+        origine_graines_id=(
+            _to_int(item.get("origine_graines_id"))
+            if normalize_action(item.get("action")) in ("perte_godet", "vendu") else None
+        ),
         date=parse_date(item.get("date")),
         origine_parsing=_origine_parsing(item),
         date_source=_date_source(item),
@@ -1575,6 +1937,7 @@ def cycle_vie_culture(
 
     godet_q = (
         db.query(Evenement)
+        .options(joinedload(Evenement.parcelle_rel))   # [US-211] où est posé chaque godet
         .filter(Evenement.type_action == "mise_en_godet", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
@@ -1650,8 +2013,64 @@ def cycle_vie_culture(
         "plantations": linked_plantations,
         "ventes": vendu_events,
         "pertes_godet": perte_events,
+        "deplacements": _deplacements_du_lot(
+            db, pid, culture_lower, variete, semis_id, sans_semis_rattache, semis_events, godet_events,
+        ),
         "taux_germination": taux,
     }
+
+
+def _deplacements_du_lot(
+    db: Session, pid: int, culture_lower: str, variete: Optional[str],
+    semis_id: Optional[int], sans_semis_rattache: bool,
+    semis_events: list, godet_events: list,
+) -> list[dict]:
+    """[US-211 / CA8] Déplacements d'un lot, chronologiques, avec origine et destination.
+
+    L'origine d'un déplacement est l'emplacement du lot juste avant lui : la
+    destination du déplacement précédent, sinon la dernière mise en godet localisée
+    antérieure, sinon la parcelle du semis, sinon None (« emplacement non renseigné »).
+    """
+    q = (
+        db.query(Evenement)
+        .filter(Evenement.type_action == "deplacement", Evenement.potager_id == pid)
+        .filter(func.lower(Evenement.culture) == culture_lower)
+    )
+    if semis_id is not None:
+        q = q.filter(Evenement.origine_graines_id == semis_id)
+    elif sans_semis_rattache:
+        q = q.filter(Evenement.origine_graines_id.is_(None))
+    q = q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else q.filter(Evenement.variete.is_(None))
+    evenements = q.order_by(Evenement.date.asc(), Evenement.id.asc()).all()
+    if not evenements:
+        return []
+
+    noms: dict[int, str] = {}
+    ids = {e.parcelle_id for e in evenements if e.parcelle_id} | {g.parcelle_id for g in godet_events if g.parcelle_id}
+    if ids:
+        noms = {
+            p.id: p.nom
+            for p in db.query(Parcelle).filter(Parcelle.id.in_(ids), Parcelle.potager_id == pid).all()
+        }
+    nom_semis = next((s.parcelle_rel.nom for s in semis_events if s.parcelle_rel), None)
+
+    resultat: list[dict] = []
+    precedent: Optional[str] = None
+    for e in evenements:
+        if precedent is None:
+            localises = [g for g in godet_events if g.parcelle_id and g.date and e.date and g.date <= e.date]
+            origine = noms.get(localises[-1].parcelle_id) if localises else nom_semis
+        else:
+            origine = precedent
+        destination = noms.get(e.parcelle_id)
+        resultat.append({
+            "id": e.id,
+            "date": e.date,
+            "origine": origine,
+            "destination": destination,
+        })
+        precedent = destination
+    return resultat
 
 
 def deplacer_evenements(

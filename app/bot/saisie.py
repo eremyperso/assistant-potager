@@ -11,7 +11,7 @@ from utils.actions import normalize_action
 from utils.parcelles import create_parcelle, get_all_parcelles, resolve_parcelle
 from llm.parseur_deterministe import ORIGINE_LLM
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
-from utils.culture_resolve import resolve_culture, resolve_variete
+from utils.culture_resolve import fusionner_culture_variete, resolve_culture, resolve_variete
 from app.services.context import current_context
 from app.services import parcelles as svc_parcelles
 from app.services import lots_pepiniere as svc_lots  # [US-209]
@@ -38,7 +38,10 @@ from .enregistrement import (
     _get_parcelles_avec_culture,
     _preparer_contexte_semis,
 )
-from .godets import _demander_graines_godet_si_manquant, _demander_lot_godet_si_ambigu
+from .godets import (
+    _demander_graines_godet_si_manquant, _demander_lot_godet_si_ambigu, _poser_question_quantite_pepiniere,
+    _preparer_deplacement, _quantite_pepiniere_manquante,
+)
 from .pertes import _save_perte_item, _stock_variete_jardin, _variete_reelle
 from .interpretation import _UpdateCommande, _message_de
 from .questions import _ask_question
@@ -219,7 +222,11 @@ async def _semis_organe_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> No
         parse_mode="Markdown",
         reply_markup=None,
     )
-    await _parse_and_save(update, pending["texte"], pre_parsed_items=items)
+    # [INC-003 bis] Le geste de la file survit à cette clarification, sinon il est
+    # enregistré hors du contrat de la file (jamais retiré, réapparaît à /gestes).
+    await _parse_and_save(
+        update, pending["texte"], pre_parsed_items=items, geste_file=pending.get("geste_file"),
+    )
 
 
 # ── PARSING + SAUVEGARDE ────────────────────────────────────────────────────────
@@ -312,6 +319,14 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
             for item in items:
                 if not item.get("culture"):
                     continue
+                # « choux frisé » coupé en chou + frisé par le modèle : la culture du
+                # potager est « chou frisé » (même lot que le semis).
+                _c, _v = fusionner_culture_variete(
+                    db_resolve, current_context().potager_id, item["culture"], item.get("variete"),
+                )
+                if (_c, _v) != (item["culture"], item.get("variete")):
+                    log.info(f"[resolve] Culture+variété '{item['culture']} {item.get('variete')}' → culture '{_c}'")
+                    item["culture"], item["variete"] = _c, _v
                 culture_resolue = resolve_culture(db_resolve, current_context().potager_id, item["culture"])
                 if culture_resolue != item["culture"]:
                     log.info(f"[resolve] Culture '{item['culture']}' → '{culture_resolue}'")
@@ -469,7 +484,9 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         if type_organe_connu is None:
             import time as _time_ca7
             user_id = update.effective_user.id
-            _SEMIS_CULTURE_PENDING[user_id] = {"items": items, "texte": texte, "ts": _time_ca7.time()}
+            _SEMIS_CULTURE_PENDING[user_id] = {
+                "items": items, "texte": texte, "ts": _time_ca7.time(), "geste_file": geste_file,
+            }
             buttons = [
                 [InlineKeyboardButton("🌱 Végétative (récolte = plante entière)", callback_data="semis_organe:végétatif")],
                 [InlineKeyboardButton("🔁 Reproductive (récoltes multiples)", callback_data="semis_organe:reproducteur")],
@@ -505,6 +522,41 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         else:   await message.reply_text(alerte, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
         return
 
+    # [US-211 / CA3, CA4] Déplacement d'un lot : le lot et la destination sont désignés
+    # et contrôlés ICI, avant le récapitulatif — refus motivé, ou choix du lot par boutons.
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "deplacement"
+        and await _preparer_deplacement(update, items[0], texte, geste_file)
+    ):
+        return  # refus dit, ou attente du choix du lot
+
+    # [US-224] Quantité de pépinière : la PWA ne porte pas le nombre de plants (le
+    # bouton « Repiquer en godet » comme « Déclarer une perte » n'ont pas de
+    # compteur), et la dictée peut l'omettre (« perte godet du lot 8 », « repiquer
+    # en godet des choux du lot 5 »). Écrit sans nombre, l'événement ne fait bouger
+    # aucun stock et laisse son lot « indéterminé » (constaté le 14/10/2026 sur la
+    # mise en godet #593 et la perte de godet #596). La question est posée ICI,
+    # avant les questions de variété et de lot (qui ont besoin du nombre pour
+    # filtrer les lots capables) et avant le récapitulatif, avec ce que la base
+    # sait déjà du lot : « Tout le lot : N ».
+    if len(items) == 1 and normalize_action(items[0].get("action")) == "mise_en_godet":
+        # Le rattachement à la file doit survivre aux flux de godet (variété, lot,
+        # graines), qui enregistrent par `_save_godet_item` sans repasser par le
+        # récapitulatif : sans cette clé, le geste n'est jamais retiré de la file
+        # et réapparaît à chaque /gestes (même défaut qu'INC-003).
+        if geste_file is not None:
+            items[0]["_geste_file"] = geste_file
+    if (
+        len(items) == 1
+        # Sans culture ni lot, la question de culture (US-019 / US-201) passe d'abord.
+        and (items[0].get("culture") or items[0].get("origine_graines_id") is not None
+             or items[0].get("numero_lot_cite"))
+        and _quantite_pepiniere_manquante(items[0], texte)
+    ):
+        await _poser_question_quantite_pepiniere(update, items, texte, geste_file, message)
+        return
+
     # [US-019 / CA1-CA3] Interception mise_en_godet sans variété — sélection assistée
     import time as _time
     if (
@@ -513,8 +565,17 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         and not items[0].get("variete")
     ):
         parsed_godet = items[0]
-        culture      = parsed_godet.get("culture", "")
+        culture      = parsed_godet.get("culture") or ""
         user_id      = update.effective_user.id
+
+        if not culture:
+            # Culture absente (ou retirée comme non fondée dans le texte) : rien à
+            # chercher en pépinière — on le dit au lieu de planter sur `None.lower()`.
+            msg_culture = "🪴 Quelle culture mettez-vous en godet ? Redites la phrase en la précisant."
+            log.warning("[mise_en_godet] Culture manquante — texte=%r", texte)
+            if msg: await msg.edit_text(msg_culture)
+            else:   await message.reply_text(msg_culture, reply_markup=MENU_KEYBOARD)
+            return
 
         from utils.stock import calcul_semis_par_culture
         db_tmp = SessionLocal()
@@ -860,7 +921,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 "ts":             _time.time(),
             }
             culture_md    = _md(culture)
-            qte           = item.get("quantite", "?")
+            qte           = item.get("quantite") or "?"   # None → « ? », jamais « None »
             nb_godets     = len(godets_pertinents)
             nb_jardin     = len(jardin_actif)
             lbl_jardin    = f"🌿 Au potager ({nb_jardin} variété{'s' if nb_jardin > 1 else ''} active{'s' if nb_jardin > 1 else ''})" if nb_jardin > 1 else "🌿 Au potager"
@@ -908,6 +969,30 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                 log.info("[perte] %d variétés jardin pour '%s', aucun godet — menu inline user_id=%s",
                          len(jardin_actif), culture, update.effective_user.id)
                 return
+
+    # [US-224] CA9 AVANT la question de parcelle (CA8) : CA8 fait `return` quand la
+    # parcelle manque, et le callback `action_parcelle:` réaffiche le récapitulatif
+    # sans repasser par ici — un semis ou une plantation sans quantité s'écrivait
+    # donc après « Confirmer ».
+    # [US-021 CA9] Quantité manquante pour actions clés → demander avant confirmation
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) in ["recolte", "semis", "plantation"]
+        and not items[0].get("quantite")
+    ):
+        user_id = update.effective_user.id
+        # [INC-003] Idem : sans `geste_file` ici, un semis/récolte/plantation de
+        # la file dont la quantité manque perd son rattachement à la file dès
+        # cette question — la confirmation qui suivra n'appellera jamais
+        # `svc_file.confirmer`, et le geste reste indéfiniment `en_attente`.
+        _QUANTITE_PENDING[user_id] = {
+            "items": items, "texte": texte, "ts": _time.time(), "geste_file": geste_file,
+        }
+        log.info(f"[US-021 CA9] Quantité manquante pour '{items[0].get('action')}' — user_id={user_id}")
+        await message.reply_text(
+            "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"
+        )
+        return
 
     # [US-021] Confirmation avant enregistrement
     import time as _time
@@ -1038,26 +1123,6 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
                         return
             finally:
                 db_tmp.close()
-
-    # [US-021 CA9] Quantité manquante pour actions clés → demander avant confirmation
-    if (
-        len(items) == 1
-        and normalize_action(items[0].get("action")) in ["recolte", "semis", "plantation"]
-        and not items[0].get("quantite")
-    ):
-        user_id = update.effective_user.id
-        # [INC-003] Idem : sans `geste_file` ici, un semis/récolte/plantation de
-        # la file dont la quantité manque perd son rattachement à la file dès
-        # cette question — la confirmation qui suivra n'appellera jamais
-        # `svc_file.confirmer`, et le geste reste indéfiniment `en_attente`.
-        _QUANTITE_PENDING[user_id] = {
-            "items": items, "texte": texte, "ts": _time.time(), "geste_file": geste_file,
-        }
-        log.info(f"[US-021 CA9] Quantité manquante pour '{items[0].get('action')}' — user_id={user_id}")
-        await message.reply_text(
-            "Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...)"
-        )
-        return
 
     # Parcelle déjà renseignée ou aucune parcelle active → confirmation directe
     # [US-069 / CA2, CA3] Contexte des semis : dit, proposé, ou laissé vide.

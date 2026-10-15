@@ -303,6 +303,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         Path("app/bot/commandes_parcelle.py"), Path("app/api/main.py"),
         # Le lot COPIE le type pour l'exposer (CA5) ; aucun calcul ne le lit.
         Path("utils/stock.py"),
+        # [US-214] Le seul consommateur prévu par CA7 de cette US : l'endurcissement
+        # d'un lot dépend du type de sa pépinière (arbitrage A11).
+        Path("app/services/echeances_lots.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):
@@ -316,8 +319,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
     code = [l for l in stock.splitlines() if "type_pepiniere" in l and not l.strip().startswith("#")]
     # valeur par défaut + copie (US-208) ; + l'emplacement courant du lot (US-210 / CA5) :
     # sa docstring, la copie depuis la pépinière des godets, depuis celle du semis, et
-    # la valeur vide. Toujours des copies : aucune condition ne porte sur le type.
-    assert len(code) == 6, code
+    # la valeur vide ; + la copie depuis la pépinière d'un déplacement (US-211 / CA6).
+    # Toujours des copies : aucune condition ne porte sur le type.
+    assert len(code) == 7, code
 
 
 def test_us208_ca7_lots_identiques_quel_que_soit_le_type(db) -> None:

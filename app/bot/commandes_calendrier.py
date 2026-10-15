@@ -107,7 +107,7 @@ async def cmd_calendrier(update, ctx) -> None:
       zone [oceanique|continental|mediterraneen|montagnard|auto]
                                                            — lire ou choisir la zone (CA7)
       fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
-      duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte> <jours|70-90|mention|aucune>
+      duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte|semis-godet> <jours|70-90|mention|aucune>
                                                            — corriger (CA10)
 
     Aucune logique métier ici : lecture, validation et écriture vivent dans
@@ -119,7 +119,7 @@ async def cmd_calendrier(update, ctx) -> None:
         "  /calendrier <culture>\n"
         "  /calendrier zone [océanique|continental|méditerranéen|montagnard|auto]\n"
         "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|plantation|recolte> <mois-mois|aucune>\n"
-        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte> <jours|aucune>\n\n"
+        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte|semis-godet> <jours|aucune>\n\n"
         "Exemples :\n"
         "  /calendrier tomate\n"
         "  /calendrier zone méditerranéen\n"
@@ -127,7 +127,8 @@ async def cmd_calendrier(update, ctx) -> None:
         "  /calendrier fenetre tomate plantation mai-juin\n"
         "  /calendrier fenetre chou-fleur culture d'hiver recolte novembre-février\n"
         "  /calendrier duree courgette recolte 50-60\n"
-        "  /calendrier duree tomate plantation-recolte 60-80\n\n"
+        "  /calendrier duree tomate plantation-recolte 60-80\n"
+        "  /calendrier duree chou semis-godet 10-15\n\n"
         "_Vos corrections ne valent que pour votre potager._"
     )
 

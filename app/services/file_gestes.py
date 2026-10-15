@@ -120,7 +120,33 @@ ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRME, ETAT_ABANDONNE, ETAT_PERIME)
 #: (« paillage parcelle planche_centrale »), et ils n'ont ni texte libre ni
 #: produit à identifier. La liste reste celle du DOMAINE : elle est importée de
 #: `evenements.GESTES_SOL`, jamais recopiée.
-GESTES_OUVERTS_PWA: tuple[str, ...] = ("semis", "plantation") + GESTES_SOL
+#:
+#: [US-211 / CA9] Le déplacement d'un lot rejoint la liste : la grammaire le reconnaît
+#: (« deplacement de poireau parcelle châssis froid », et « passé le lot 119 au châssis
+#: froid » pour la dictée) et il n'a ni texte libre ni produit à identifier. Le lot
+#: déplacé voyage dans `_lot_id` (son semis) et n'entre dans le flux qu'à la
+#: frontière d'`item_du_geste`, sous le nom que le service connaît.
+#:
+#: [US-216 / CA8, CA9] Les gestes de la fiche d'un lot rejoignent la liste : repiquer
+#: (`mise_en_godet`), déclarer une perte (`perte_godet`) et clôturer le lot
+#: (`cloture_lot`). Tous se disent avec « du lot N » et n'ont ni texte libre ni produit
+#: à identifier. Le geste de levée (US-212) s'ajoutera ici dans sa propre US.
+GESTES_OUVERTS_PWA: tuple[str, ...] = (
+    "semis", "plantation", "deplacement", "mise_en_godet", "perte_godet", "cloture_lot",
+) + GESTES_SOL
+
+#: [US-216] Gestes qui portent sur UN lot : le lot voyage dans l'item sous la forme que
+#: la grammaire du bot lit déjà (`numero_lot_cite`, US-209), résolue au récapitulatif.
+#: Le déplacement garde son chemin propre (`_lot_id`, US-211).
+GESTES_DE_LOT: tuple[str, ...] = ("plantation", "mise_en_godet", "perte_godet", "cloture_lot")
+
+#: [US-216] Comment un geste de lot se DIT — le début de la phrase à dicter.
+_LIBELLE_DICTEE_LOT: dict[str, str] = {
+    "plantation": "plantation",
+    "mise_en_godet": "mise en godet",
+    "perte_godet": "perte godet",
+    "cloture_lot": "cloture",
+}
 
 #: Écrans reconnus comme origine — champ de MESURE, jamais lu par le flux
 #: d'enregistrement. Une valeur inconnue est simplement ignorée, pas refusée :
@@ -294,7 +320,7 @@ def _valider_parcelle(db: Session, ctx: TenantContext, parcelle_id: Optional[int
     return parcelle.nom
 
 
-def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Optional[int]:
+def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Optional[Evenement]:
     """[CA2] Un lot de pépinière est un événement de semis du potager consulté.
 
     Rien n'en est fait ici : aucun geste ouvert à la PWA à ce stade ne porte sur
@@ -314,7 +340,7 @@ def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Opti
             "[US-224 / CA2] Lot refusé : id=%s hors du potager %s", lot_id, ctx.potager_id,
         )
         raise LotHorsPotagerError(lot_id)
-    return lot.id
+    return lot
 
 
 def construire_item(
@@ -415,7 +441,8 @@ def deposer_geste(
         raise ActionNonOuverteError(action)
 
     parcelle_nom = _valider_parcelle(db, ctx, parcelle_id)
-    lot = _valider_lot(db, ctx, lot_id)
+    lot_evt = _valider_lot(db, ctx, lot_id)
+    lot = lot_evt.id if lot_evt is not None else None
     filiere = svc_contexte_semis.normaliser_contexte(contexte_semis) if geste == "semis" else None
 
     item = construire_item(
@@ -427,6 +454,21 @@ def deposer_geste(
         # Hors contrat du parseur : rangé à part pour que `_parse_and_save` ne
         # reçoive jamais un champ qu'il ne connaît pas (cf. `item_du_geste`).
         item["_lot_id"] = lot
+        if geste in GESTES_DE_LOT:
+            # [US-216 / CA9] Le geste cite son lot comme le jardinier le dirait.
+            if lot_evt.numero_lot is not None:
+                item["numero_lot_cite"] = int(lot_evt.numero_lot)
+            if geste == "mise_en_godet":
+                # Une mise en godet compte des plants repiqués (même contrat que le parseur).
+                item["nb_plants_godets"] = int(quantite) if quantite is not None else None
+                item["quantite"] = None
+                item["unite"] = None
+            elif geste in ("plantation", "perte_godet") and quantite is not None:
+                item["unite"] = item.get("unite") or "plants"
+            elif geste == "cloture_lot":
+                # Ce que la clôture solde est relu à la confirmation, jamais proposé ici.
+                item["quantite"] = None
+                item["unite"] = None
 
     instant = maintenant or datetime.utcnow()
 
@@ -671,7 +713,11 @@ def item_du_geste(geste: GesteIntention) -> dict:
     parseur : il est retiré ici, à l'unique frontière où l'item repasse dans le
     flux d'enregistrement.
     """
-    return {k: v for k, v in (geste.geste or {}).items() if not k.startswith("_")}
+    brut = geste.geste or {}
+    item = {k: v for k, v in brut.items() if not k.startswith("_")}
+    if item.get("action") == "deplacement" and brut.get("_lot_id") is not None:
+        item["origine_graines_id"] = int(brut["_lot_id"])   # [US-211 / CA9] le lot à déplacer
+    return item
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -911,7 +957,16 @@ def phrase_a_dicter(item: dict) -> str:
     C'est un repli, pas un double du geste : le bouton reste le chemin normal.
     """
     geste = item.get("action") or ""
-    morceaux: list[str] = [geste]
+    morceaux: list[str] = [_LIBELLE_DICTEE_LOT.get(geste, geste)]
+    # [US-216] « mise en godet 40 plants du lot 128 » : la grammaire déterministe lit
+    # le lot cité, et la culture qu'il porte n'a pas à être redite.
+    numero = item.get("numero_lot_cite")
+    if geste in GESTES_DE_LOT and numero is not None:
+        nb = item.get("nb_plants_godets") if geste == "mise_en_godet" else item.get("quantite")
+        if nb is not None and geste != "cloture_lot":
+            morceaux.append(f"{int(nb)} plants")
+        morceaux.append(f"du lot {int(numero)}")
+        return " ".join(morceaux)
     culture = (item.get("culture") or "").strip()
     if culture:
         morceaux.append(f"de {culture.lower()}")
