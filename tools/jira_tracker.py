@@ -34,6 +34,38 @@ ce qui bascule le type d'issue créé sur `JIRA_ISSUE_TYPE_INCIDENT` (Bug) au
 lieu de `JIRA_ISSUE_TYPE` (Story), et joint les captures d'écran listées dans
 un éventuel champ `**Captures :**` après création.
 
+Déclarer un ticket Bug (incident)
+---------------------------------
+Rien à passer en option : le type Bug se déduit du préfixe `INC-` de
+`**ID :**`. Un fichier `backlog/INC-NNN_titre-court.md` minimal :
+
+    **ID :** INC-013
+    **Titre :** Perte de godet non rattachée au lot
+    **Type :** Incident
+    **Priorité :** Majeur
+    **Captures :** C:/chemin/capture-1.png, C:/chemin/capture-2.png
+
+    **Reproduction (jeu de test réalisé) :** ...
+    **Résultat obtenu :** ...
+    **Résultat attendu :** ...
+
+puis `python tools/jira_tracker.py create-issue backlog/INC-013_titre-court.md`.
+
+  - `**ID :**` et `**Titre :**` sont obligatoires (sinon `JiraTrackerError`) ;
+    le résumé Jira devient `INC-013 : <Titre>`.
+  - `**Priorité :**` (gravité) pilote le champ Priorité de Jira, pour les INC
+    uniquement — une US garde la priorité par défaut du projet :
+
+        Bloquant   → Highest        Mineur      → Medium
+        Majeur     → High           Cosmétique  → Low
+
+    Gravité absente, inconnue ou laissée en gabarit (« Bloquant / Majeur / … ») :
+    priorité par défaut de Jira (Medium) et avertissement dans les logs.
+  - `**Captures :**` est facultatif : chemins locaux existants, séparés par des
+    virgules, joints à l'issue (un chemin introuvable est ignoré, jamais bloquant).
+  - Le statut est forcé à « À faire » après création ; relancer la commande ne
+    crée pas de doublon (idempotence sur le préfixe `INC-013`).
+
 Mode dégradé
 ------------
 Sans `JIRA_API_TOKEN`, ou si l'API Jira est indisponible, l'outil **logue ce
@@ -82,6 +114,7 @@ import logging
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -347,6 +380,32 @@ def update_issue_status(issue_key: str, status: str) -> bool:
 
 # ── Création d'issue depuis un fichier backlog (Persona PO) ─────────────────
 
+# Gravité d'une fiche INC (`**Priorité :**`, voir Analyste-Incident.agent.md) →
+# priorité Jira du projet PIA (Highest/High/Medium/Low/Lowest).
+_PRIORITE_JIRA_PAR_GRAVITE = {
+    "bloquant": "Highest",
+    "majeur": "High",
+    "mineur": "Medium",
+    "cosmetique": "Low",
+}
+
+
+def _priorite_jira(gravite: Optional[str]) -> Optional[str]:
+    """Nom de priorité Jira pour une gravité de fiche, `None` si absente ou inconnue
+    (Jira applique alors sa priorité par défaut)."""
+    if not gravite:
+        return None
+    # « Bloquant / Majeur / Mineur / Cosmétique » recopié tel quel dans un gabarit
+    # non rempli : plusieurs valeurs = pas de choix, donc pas de priorité.
+    if "/" in gravite:
+        return None
+    sans_accent = "".join(
+        c for c in unicodedata.normalize("NFD", gravite) if unicodedata.category(c) != "Mn"
+    )
+    cle = sans_accent.strip().lower()
+    return _PRIORITE_JIRA_PAR_GRAVITE.get(cle)
+
+
 def _parse_backlog_md(content: str) -> dict:
     """Extrait ID, titre, épic et captures d'un fichier `backlog/US-NNN_*.md`
     ou `backlog/INC-NNN_*.md`.
@@ -367,6 +426,7 @@ def _parse_backlog_md(content: str) -> dict:
         "titre": _champ(r"\*\*Titre\s*:\*\*\s*(.+)"),
         "epic": _champ(r"\*\*Épic\s*:\*\*\s*(.+)"),
         "captures": _champ(r"\*\*Captures?\s*:\*\*\s*(.+)"),
+        "priorite": _champ(r"\*\*Priorit[ée]\s*:\*\*\s*(.+)"),
     }
 
 
@@ -509,6 +569,17 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
         }
     }
 
+    # La gravité d'un incident pilote la priorité Jira ; une US garde la priorité
+    # par défaut du projet (sa fiche ne porte pas de gravité).
+    priorite = _priorite_jira(champs["priorite"]) if identifiant.startswith("INC-") else None
+    if priorite:
+        payload["fields"]["priority"] = {"name": priorite}
+    elif identifiant.startswith("INC-"):
+        log.warning(
+            "[jira_tracker] %s : gravité « %s » non reconnue — priorité Jira par défaut",
+            identifiant, champs["priorite"] or "absente",
+        )
+
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:
@@ -610,6 +681,9 @@ def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
         return create_issue_from_backlog(chemin)
 
     fields: dict = {"summary": resume, "description": _markdown_to_adf(contenu)}
+    priorite = _priorite_jira(champs["priorite"]) if identifiant.startswith("INC-") else None
+    if priorite:
+        fields["priority"] = {"name": priorite}
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:

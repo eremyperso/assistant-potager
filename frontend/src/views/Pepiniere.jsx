@@ -6,13 +6,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu } from '../lib/pepiniere.js'
+import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu, ongletsPepiniere, ongletInitial, pastillePepiniere } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import FicheLot, { FicheLotInconnu } from '../components/FicheLot.jsx'   // [US-216]
 import FicheCulture from '../components/FicheCulture.jsx'
+import OngletAujourdhui from '../components/OngletAujourdhui.jsx'   // [US-215]
 import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -521,12 +522,19 @@ export default function Pepiniere({ refresh }) {
   const [collant, setCollant] = useState(null)
   const hauteurZone = useHauteurZone(collant)
   // [US-195 / CA2] Une étiquette scannée ou un lien partagé ouvrent CE lot
-  // (`/?vue=pepiniere&lot=128`). `onglet` et `emplacement` sont reconnus par la
-  // lib mais n'ont pas encore d'écran à piloter : ils arriveront avec US-215 et
-  // US-216, sans nouvelle clé à déclarer.
-  // [CA9] Recherche et tri font l'état exact de l'écran, rendu tel quel au retour.
-  const intention = useIntention('pepiniere', () => {})
-  const [etat, setEtat] = useEtatEcran('pepiniere', { q: '', tri: TRIS[0] })
+  // (`/?vue=pepiniere&lot=128`). [US-215 / CA9] `onglet` et `emplacement` viennent
+  // du Plan (US-201 / I5) : l'onglet demandé s'il est livré, « Aujourd'hui » sinon,
+  // filtré sur l'emplacement.
+  // [CA9] Onglet, recherche, tri et filtre du bandeau font l'état exact de l'écran,
+  // rendu tel quel au retour.
+  const [etat, setEtat] = useEtatEcran('pepiniere', {
+    q: '', tri: TRIS[0], onglet: 'aujourdhui', qJour: '', bandeau: null, emplacement: null,
+  })
+  const intention = useIntention('pepiniere', (i) => {
+    if (i?.onglet || i?.emplacement) {
+      setEtat({ onglet: i.onglet ?? 'aujourdhui', emplacement: i.emplacement ?? null, bandeau: null })
+    }
+  })
   const { q, tri } = etat
   const setQ = (v) => setEtat({ q: v })
   const setTri = (v) => setEtat({ tri: v })
@@ -687,11 +695,66 @@ export default function Pepiniere({ refresh }) {
     </div>
   )
 
+  // [US-215 / CA2, CA9] La barre de l'onglet « Aujourd'hui » : date de référence,
+  // recherche (culture, variété, numéro) et « Aller au lot n° ». Pas de tri : l'ordre
+  // est celui de l'urgence (CA5).
+  const filtresJour = (
+    <div className="@container/filtres flex items-center gap-2 flex-wrap">
+      <DateRefPicker />
+      <SearchField
+        value={etat.qJour}
+        onChange={(v) => setEtat({ qJour: v })}
+        placeholder="Culture, variété, n° de lot…"
+        className="relative basis-full order-last min-w-0 @[30rem]/filtres:basis-0 @[30rem]/filtres:flex-1 @[30rem]/filtres:order-none"
+        aria-label="Rechercher un lot"
+      />
+      <form onSubmit={allerAuLot} className="flex items-center gap-1.5">
+        <label htmlFor="aller-au-lot-jour" className="text-[12.5px] text-txt2 whitespace-nowrap">Aller au lot n°</label>
+        <input
+          id="aller-au-lot-jour"
+          inputMode="numeric"
+          value={numeroSaisi}
+          onChange={(e) => setNumeroSaisi(e.target.value)}
+          className="w-[72px] h-9 px-2 rounded-lg border border-border bg-card text-sm text-txt"
+          placeholder="128"
+        />
+      </form>
+    </div>
+  )
+
   if (loading) return <LoadingSkeleton lines={4} />
   if (error) return <ApiError message={error} onRetry={load} />
 
-  if (!tousLots.length) return (
+  const nbPepinieres = Array.isArray(data?.pepinieres) ? data.pepinieres.length : null
+  // [US-215 / CA1] La barre d'onglets ; « Calendrier » et « Emplacements » n'apparaissent que livrés.
+  const onglets = ongletsPepiniere({ nbPepinieres })
+  const onglet = ongletInitial(etat.onglet, onglets)
+  const pastille = pastillePepiniere(data?.pepinieres)
+  const barreOnglets = (
+    <div className="flex items-center gap-3 flex-wrap">
+      <div role="tablist" aria-label="Pépinière" className="flex gap-1 bg-card-alt rounded-[10px] p-[3px]">
+        {onglets.map((o) => (
+          <button
+            key={o.cle} type="button" role="tab" aria-selected={onglet === o.cle}
+            onClick={() => setEtat({ onglet: o.cle })}
+            className={`min-h-[40px] px-3.5 rounded-lg text-[13px] ${onglet === o.cle ? 'bg-card text-txt font-bold shadow-card' : 'text-txt2 font-medium'}`}
+          >
+            {o.libelle}
+          </button>
+        ))}
+      </div>
+      {/* [US-215 / CA2] Une seule pépinière : sa pastille, type non renseigné dit tel quel. */}
+      {pastille && (
+        <span className="inline-flex items-center min-h-[28px] px-2.5 rounded-full border border-border bg-card text-[11.5px] font-semibold tracking-[.03em] text-txt2">
+          {pastille}
+        </span>
+      )}
+    </div>
+  )
+
+  if (onglet === 'lots' && !tousLots.length) return (
     <div className="flex flex-col gap-3.5">
+      {barreOnglets}
       {filtres}
       <div className="flex flex-col items-center gap-2 mt-12 text-txt3">
         <Sprout size={36} />
@@ -700,7 +763,6 @@ export default function Pepiniere({ refresh }) {
     </div>
   )
 
-  const nbPepinieres = Array.isArray(data?.pepinieres) ? data.pepinieres.length : null
   const panneauOuvert = forme === 'panneau' && fiche != null
 
   return (
@@ -711,6 +773,21 @@ export default function Pepiniere({ refresh }) {
           qui défile. Sans panneau, le wrapper disparaît (`contents`). */}
       <div className={panneauOuvert ? 'grid gap-4 [grid-template-columns:minmax(0,1fr)_420px] items-start' : 'contents'}>
       <div className="flex flex-col gap-3.5 min-w-0">
+      {barreOnglets}
+      {onglet === 'aujourdhui' ? (
+        <>
+          {filtresJour}
+          <OngletAujourdhui
+            data={data} etat={{ q: etat.qJour, bandeau: etat.bandeau }}
+            setEtat={(e) => setEtat(e)}
+            emplacement={etat.emplacement} onRetirerEmplacement={() => setEtat({ emplacement: null })}
+            lotSelectionne={fiche?.lot_id} nbPepinieres={nbPepinieres} dateRef={dateRef}
+            onOuvrirLot={(lot) => { setNumeroInconnu(null); setFiche(lot) }}
+            onOuvrirCulture={setCultureOuverte}
+          />
+        </>
+      ) : (
+      <>
       {filtres}
 
       <Reperes items={[
@@ -767,6 +844,8 @@ export default function Pepiniere({ refresh }) {
             />
           )}
         </div>
+      )}
+      </>
       )}
 
       </div>

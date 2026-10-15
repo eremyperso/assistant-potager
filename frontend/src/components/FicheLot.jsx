@@ -29,7 +29,7 @@ import { peutEnregistrer } from '../lib/gestes.js'
 import { emplacementLot } from '../lib/pepiniere.js'
 import {
   LEVEE_DISPONIBLE, badgeEtat, dateEnClair, echeanceEnClair, gesteDeLevee, gestePrepare,
-  gestesDuLot, incoherenceEnClair, joursDepuisSemis, phraseComparaison, phraseLotSansGeste, phraseSolde,
+  gesteMiseEnTerreIci, gestesDuLot, incoherenceEnClair, NB_SUGGESTIONS_VISIBLES, placeEnClair, suggestionsVisibles, joursDepuisSemis, phraseComparaison, phraseLotSansGeste, phraseSolde,
   tauxLevee, teinteTaux, tracabilite, valeurInitialeCompteur,
 } from '../lib/ficheLot.js'
 
@@ -293,6 +293,73 @@ function Tracabilite({ lot }) {
   )
 }
 
+// ── Où les mettre (US-217) ───────────────────────────────────────────────────
+
+/**
+ * Les parcelles où il reste de la place, d'après la répartition du Plan (US-198,
+ * US-227) calculée par le serveur. Lecture pure : rien n'est réservé. Le bouton
+ * PRÉPARE la plantation, le compagnon la confirme — la rotation y est vérifiée.
+ */
+function OuLesMettre({ lot, dateRef, lecture }) {
+  const [toutes, setToutes] = useState(false)
+  const om = lot.ou_mettre
+  if (!om) return null
+  const visibles = suggestionsVisibles(om, toutes)
+  const reste = (om.suggestions?.length ?? 0) - NB_SUGGESTIONS_VISIBLES
+  return (
+    <section aria-label="Où les mettre">
+      <div className="text-[11px] font-bold text-txt3 uppercase tracking-[.06em] mb-2">Où les mettre</div>
+      {om.aucun_rang_libre && (
+        <div className="text-[13px] text-txt2 bg-card-alt rounded-[12px] px-[13px] py-[11px] leading-[1.45] mb-[7px]">
+          Aucun rang libre n’est déclaré dans tes parcelles.
+          {!lecture && ' Tu peux quand même mettre en terre : le compagnon te demandera la parcelle.'}
+        </div>
+      )}
+      {om.aucun_rang_libre && !lecture && (
+        <BoutonGeste
+          geste={gesteMiseEnTerreIci(lot, null)} dateRef={dateRef} ecran="pepiniere"
+          libelle="Mettre en terre" kind="ghost" icone={Leaf} plein btnClassName="min-h-[48px] text-[13.5px] font-bold"
+        />
+      )}
+      <ul className="flex flex-col gap-[7px]">
+        {visibles.filter((s) => !om.aucun_rang_libre || s.rangs_libres == null).map((s) => (
+          <li key={s.parcelle_id} className="border border-border rounded-[12px] px-3 py-2.5 flex flex-col gap-2">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="font-bold text-[13.5px] text-txt">{s.parcelle}</span>
+              <span className="text-[12px] text-txt2">{placeEnClair(s, lot.culture)}</span>
+            </div>
+            {/* [CA2, CA6] L'exposition écrite en mots, jamais une coche seule. */}
+            <div className={`text-[12px] leading-[1.45] ${s.exposition?.deconseille ? 'text-red' : s.exposition?.comparaison === 'differe' ? 'text-amber' : 'text-txt3'}`}>
+              {s.exposition?.libelle}
+            </div>
+            {/* [US-239 / CA8] L'ensoleillement non renseigné invite à le déclarer :
+                la phrase à dire au compagnon, jamais une valeur supposée. */}
+            {s.exposition?.invitation && (
+              <div className="text-[12px] leading-[1.45] text-txt3">{s.exposition.invitation}</div>
+            )}
+            {/* [CA9] Lecture seule : les suggestions, sans bouton. Rangs inconnus : la parcelle
+                reste une destination possible (CA3). */}
+            {!lecture && (
+              <BoutonGeste
+                geste={gesteMiseEnTerreIci(lot, s)} dateRef={dateRef} ecran="pepiniere"
+                libelle="Mettre en terre ici" kind="ghost" icone={Leaf} plein afficherPhrase={false}
+                btnClassName="min-h-[44px] text-[13px] font-bold"
+              />
+            )}
+          </li>
+        ))}
+      </ul>
+      {!toutes && reste > 0 && (
+        <button type="button" onClick={() => setToutes(true)} className="min-h-[44px] mt-1 text-[13px] font-semibold text-brand">
+          Voir toutes les parcelles ({reste} de plus)
+        </button>
+      )}
+      {/* [CA4] Dit une fois : aucune estimation de ce qui tiendra. */}
+      {om.plants_non_calcules && <div className="text-[11.5px] text-txt3 mt-[7px]">{om.plants_non_calcules}</div>}
+    </section>
+  )
+}
+
 // ── Le contenu, commun aux deux formes ───────────────────────────────────────
 
 function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, levee, compteurInitial, lecture }) {
@@ -320,6 +387,8 @@ function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, 
       )}
 
       <Tracabilite lot={lot} />
+
+      <OuLesMettre lot={lot} dateRef={dateRef} lecture={lecture} />
 
       {/* [CA7] Le cycle de vie existant du lot (US-061), déplacements compris (US-211). */}
       {onOuvrirDetail && (

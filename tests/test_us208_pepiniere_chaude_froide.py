@@ -306,6 +306,8 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         # [US-214] Le seul consommateur prévu par CA7 de cette US : l'endurcissement
         # d'un lot dépend du type de sa pépinière (arbitrage A11).
         Path("app/services/echeances_lots.py"),
+        # [US-215 / CA2] Copie pour la pastille de l'onglet « Aujourd'hui » ; aucun calcul.
+        Path("app/services/lots_pepiniere.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

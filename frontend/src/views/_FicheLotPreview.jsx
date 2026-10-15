@@ -58,6 +58,28 @@ const EN_GODET = {
   date_derniere_mise_en_godet: '2026-09-14',
 }
 
+// [US-217] « Où les mettre » tel que le serveur le rend.
+const EXPO = (comparaison, libelle) => ({ comparaison, libelle })
+const OU_METTRE = {
+  aucun_rang_libre: false,
+  plants_non_calcules: null,
+  suggestions: [
+    { parcelle_id: 11, parcelle: 'planche-nord', rangs_libres: 2, places_par_rang: 10, places_libres: 20, premier_rang_libre: null,
+      exposition: EXPO('concorde', 'plein soleil, comme la culture le demande') },
+    { parcelle_id: 12, parcelle: 'planche-ombre', rangs_libres: 2, places_par_rang: null, places_libres: null, premier_rang_libre: null,
+      exposition: EXPO('differe', 'mi-ombre, pour une culture de plein soleil') },
+    { parcelle_id: 13, parcelle: 'carré potager', rangs_libres: 1, places_par_rang: null, places_libres: null, premier_rang_libre: null,
+      exposition: EXPO('non_comparable', "exposition non comparable : celle de la parcelle n'est pas renseignée") },
+    { parcelle_id: 14, parcelle: 'planche-est', rangs_libres: null, places_par_rang: null, places_libres: null, premier_rang_libre: null,
+      exposition: EXPO('concorde', 'plein soleil, comme la culture le demande') },
+  ],
+}
+const OU_METTRE_PLEIN = {
+  aucun_rang_libre: true,
+  plants_non_calcules: "Le nombre de plants qui tiendront n'est pas calculé : il faut la longueur de la parcelle et l'espacement de la culture.",
+  suggestions: [],
+}
+
 const ETATS = {
   germination: {
     titre: 'En germination',
@@ -84,6 +106,7 @@ const ETATS = {
     lot: {
       ...BASE, ...EN_GODET,
       action_suggeree: { code: 'mettre_en_terre', libelle: 'Mettre en terre' },
+      ou_mettre: OU_METTRE,
       echeances: ECH('2026-09-19', {
         mise_en_terre: { ...ECH_VIDE, etat: 'a_venir', du: '2026-09-26', au: '2026-10-03', dans_jours: 7 },
         endurcissement: { etat: 'en_cours', jour: 3, sur: 7, termine: false, libelle: 'Endurcissement J+3/7', raison: null },
@@ -96,6 +119,7 @@ const ETATS = {
       ...BASE, ...EN_GODET,
       emplacement: { parcelle_id: 3, nom: 'Châssis froid', type_pepiniere: 'froide', origine: 'deplacement' },
       action_suggeree: null,
+      ou_mettre: OU_METTRE_PLEIN,
       echeances: ECH('2026-09-19', {
         mise_en_terre: { ...ECH_VIDE, etat: 'a_venir', du: '2026-10-05', au: '2026-10-12', dans_jours: 16 },
         endurcissement: { etat: 'froide', jour: null, sur: null, termine: false, libelle: 'en pépinière froide', raison: null },

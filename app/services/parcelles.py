@@ -65,6 +65,7 @@ CHAMPS_FICHE: dict[str, str] = {
     "longueur_m": "longueur",
     "nb_rangs": "rangs",
     "exposition": "exposition",
+    "ensoleillement": "ensoleillement",
     "type_sol": "type_sol",
     "abri": "abri",
     "paillage": "paillage",
@@ -89,7 +90,7 @@ def vocabulaires_fiche() -> dict:
     lu par le jardinier (`libelle`). `ferme` dit si la liste est une règle
     (abri, type de sol) ou une proposition (exposition).
     """
-    from utils.parcelles import ABRIS, LIBELLES_ABRI, TYPES_SOL
+    from utils.parcelles import ABRIS, DEFINITIONS_ENSOLEILLEMENT, LIBELLES_ABRI, TYPES_SOL
 
     return {
         "abri": {
@@ -103,6 +104,16 @@ def vocabulaires_fiche() -> dict:
             "ferme": True,
             "options": [
                 {"valeur": libelle, "libelle": libelle} for libelle in TYPES_SOL.values()
+            ],
+        },
+        # [US-239 / CA1 bis, CA5] L'ensoleillement : liste fermée, chaque valeur
+        # porte sa définition en heures de soleil direct, que l'écran affiche
+        # sous le libellé. Distinct de l'orientation ci-dessous.
+        "ensoleillement": {
+            "ferme": True,
+            "options": [
+                {"valeur": v, "libelle": v.capitalize(), "definition": d}
+                for v, d in DEFINITIONS_ENSOLEILLEMENT.items()
             ],
         },
         "exposition": {

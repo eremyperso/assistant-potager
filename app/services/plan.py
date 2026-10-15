@@ -57,6 +57,9 @@ def attributs_par_culture(db: Session, ctx: TenantContext) -> dict[str, dict]:
                 journal=journal,
             ),
             "personnalisee": config.potager_id is not None,
+            # [US-217 / CA2] L'exposition conseillée (US-161), lue dans la même
+            # passe : « Où les mettre » la compare à celle de la parcelle.
+            "exposition": getattr(config, "exposition", None),
         }
     return index
 

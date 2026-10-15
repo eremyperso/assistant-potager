@@ -907,6 +907,13 @@ class Parcelle(Base):
     nom           = Column(String, nullable=False)
     nom_normalise = Column(String, nullable=False, index=True)
     exposition    = Column(String, nullable=True)
+    # [US-239 / migration_v56] Ensoleillement : « plein soleil », « mi-ombre » ou
+    # « ombre » (vocabulaire d'US-161), NULL = non renseigné. Distinct de
+    # `exposition`, qui reste l'orientation en texte libre : aucune des deux
+    # valeurs n'est déduite de l'autre. Validé au point d'écriture Python
+    # (`utils.parcelles.normaliser_ensoleillement`), sans CHECK SQL — même
+    # arbitrage que `culture_config.exposition`.
+    ensoleillement = Column(String(16), nullable=True)
     superficie_m2 = Column(Float, nullable=True)
     ordre         = Column(Integer, default=0)
     actif         = Column(Boolean, default=True, nullable=False)

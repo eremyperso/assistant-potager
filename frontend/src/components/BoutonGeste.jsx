@@ -109,6 +109,8 @@ export default function BoutonGeste({
   icone = Send, btnClassName = '',
   // [US-216] Le compteur de levée grise l'envoi tant que rien n'est compté.
   desactive = false,
+  // [US-215 / CA14] Le nom accessible du bouton, qui nomme son lot (« Repiquer le lot 128 »).
+  ariaLabel = undefined,
 }) {
   const { potagerActif } = usePotager()
   const { recharger } = useFileGestes()
@@ -177,6 +179,7 @@ export default function BoutonGeste({
     <div className={`flex flex-col ${plein ? 'items-stretch w-full' : 'items-end'} gap-1.5 ${className}`}>
       <Btn
         kind={kind} small={small} icon={icone} onClick={lancer} disabled={enCours || desactive}
+        aria-label={ariaLabel}
         className={`${plein ? 'min-h-[48px] w-full' : ''} ${btnClassName}`}
       >
         {enCours ? 'Préparation…' : libelle}

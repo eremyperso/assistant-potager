@@ -442,3 +442,41 @@ export function gestePrepare(g) {
     quantite: g.quantite, unite: g.unite, lotId: g.lotId, numeroLot: g.numeroLot ?? null,
   }
 }
+
+// ── [US-217] Où les mettre ───────────────────────────────────────────────────
+
+/** [CA6] Trois suggestions, puis « voir toutes les parcelles ». */
+export const NB_SUGGESTIONS_VISIBLES = 3
+
+/** Les suggestions à afficher : les trois premières, ou toutes une fois dépliées. */
+export function suggestionsVisibles(ouMettre, toutes = false) {
+  const s = ouMettre?.suggestions ?? []
+  return toutes ? s : s.slice(0, NB_SUGGESTIONS_VISIBLES)
+}
+
+/**
+ * Ce qui reste dans la parcelle : en places quand US-227 les connaît, en rangs libres
+ * sinon — jamais les deux côte à côte. Des rangs inconnus sont dits tels (CA3).
+ */
+export function placeEnClair(s, culture) {
+  if (s?.places_libres) {
+    const nom = culture ? ` de ${String(culture).toLowerCase()}` : ''
+    return `${s.places_libres} place${s.places_libres > 1 ? 's' : ''}${nom}`
+  }
+  if (s?.rangs_libres == null) return 'rangs libres inconnus'
+  return `${s.rangs_libres} rang${s.rangs_libres > 1 ? 's libres' : ' libre'}`
+}
+
+/**
+ * [CA7] « Mettre en terre ici » : la plantation du lot, parcelle connue, godets
+ * proposés. Le rang n'est pré-rempli que si sa position est connue (US-203).
+ */
+export function gesteMiseEnTerreIci(lot, s) {
+  const g = gestesDuLot(lot, {}).find((x) => x.code === 'mettre_en_terre')
+  if (!g) return null
+  return {
+    ...gestePrepare(g),
+    parcelleId: s?.parcelle_id ?? null, parcelleNom: s?.parcelle ?? null,
+    rang: s?.premier_rang_libre ?? null,
+  }
+}

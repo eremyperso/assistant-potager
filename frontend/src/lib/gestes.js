@@ -90,7 +90,9 @@ export function phraseADicter({ action, culture, contexteSemis: filiere, parcell
   // [US-216] « mise en godet 30 plants du lot 128 » — le lot cité porte sa culture.
   if (numeroLot != null && LIBELLE_DICTEE_LOT[action]) {
     const nb = action !== 'cloture_lot' && quantite != null ? ` ${Math.trunc(quantite)} plants` : ''
-    return `${LIBELLE_DICTEE_LOT[action]}${nb} du lot ${numeroLot}`
+    // [US-217 / CA7] « Mettre en terre ici » nomme la parcelle choisie.
+    const ici = action === 'plantation' && parcelle ? ` parcelle ${String(parcelle).toLowerCase()}` : ''
+    return `${LIBELLE_DICTEE_LOT[action]}${nb} du lot ${numeroLot}${ici}`
   }
   const morceaux = [action]
   if (culture) morceaux.push(`de ${String(culture).toLowerCase()}`)

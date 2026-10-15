@@ -6,7 +6,9 @@ import {
   estDormant, etatDuLot, bandeauEtat, echeanceEnClair, gestesDuLot, gestePrincipal, phraseSolde,
   tracabilite, incoherenceEnClair, tauxLevee, phraseComparaison, teinteTaux, valeurInitialeCompteur,
   borner, lireNombre, gesteDeLevee, gestePrepare, badgeEtat, phraseLotSansGeste, deLaCulture,
+  suggestionsVisibles, placeEnClair, gesteMiseEnTerreIci,
 } from './ficheLot.js'
+import { phraseADicter } from './gestes.js'
 
 /** Le lot 128 du scénario : 48 graines semées le 1er septembre, rien repiqué. */
 const lot = (champs = {}) => ({
@@ -322,4 +324,36 @@ test('la traçabilité reprend les libellés de la maquette, la moyenne en sous-
     'Graines semées', 'Levés', 'Taux de levée', 'Repiqués en godet', 'Pertes déclarées',
     'Vendus', 'Mis en terre', 'Godets restants', 'Encore en germination',
   ])
+})
+
+// ── [US-217] Où les mettre ──────────────────────────────────────────────────
+
+const sugg = (n) => ({ suggestions: Array.from({ length: n }, (_, i) => ({ parcelle_id: i + 1, parcelle: `P${i}`, rangs_libres: 1 })) })
+
+test('[US-217 / CA6] trois suggestions, puis toutes', () => {
+  assert.equal(suggestionsVisibles(sugg(5)).length, 3)
+  assert.equal(suggestionsVisibles(sugg(5), true).length, 5)
+  assert.deepEqual(suggestionsVisibles(null), [])
+})
+
+test('[US-217] places quand connues, rangs libres sinon, jamais les deux', () => {
+  assert.equal(placeEnClair({ rangs_libres: 2, places_libres: 48 }, 'Chou'), '48 places de chou')
+  assert.equal(placeEnClair({ rangs_libres: 2, places_libres: null }), '2 rangs libres')
+  assert.equal(placeEnClair({ rangs_libres: 1 }), '1 rang libre')
+  assert.equal(placeEnClair({ rangs_libres: null }), 'rangs libres inconnus')
+})
+
+test('[US-217 / CA7] mettre en terre ici : parcelle, godets, rang seulement si position connue', () => {
+  const l = lot({ stock_residuel_godet: 40, graines_en_germination: 0 })
+  const g = gesteMiseEnTerreIci(l, { parcelle_id: 3, parcelle: 'Nord', premier_rang_libre: null })
+  assert.equal(g.action, 'plantation')
+  assert.equal(g.quantite, 40)
+  assert.equal(g.parcelleId, 3)
+  assert.equal(g.rang, null)
+  assert.equal(gesteMiseEnTerreIci(l, { parcelle_id: 3, parcelle: 'Nord', premier_rang_libre: 4 }).rang, 4)
+  // [CA8] Sans parcelle : le compagnon la demandera.
+  assert.equal(gesteMiseEnTerreIci(l, null).parcelleId, null)
+  assert.equal(phraseADicter({ ...g, parcelle: g.parcelleNom }), 'plantation 40 plants du lot 128 parcelle nord')
+  // Lot sans godet : aucun geste.
+  assert.equal(gesteMiseEnTerreIci(lot(), null), null)
 })

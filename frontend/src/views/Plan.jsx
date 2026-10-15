@@ -283,7 +283,9 @@ function ChampSaisie({ saisie, valeur, onChange, invalide }) {
           <option value={CHOIX_NON_RENSEIGNE}>{LIBELLE_NON_RENSEIGNE}</option>
         )}
         {saisie.options.map((o) => (
-          <option key={o.valeur} value={o.valeur}>{o.libelle}</option>
+          <option key={o.valeur} value={o.valeur}>
+            {o.definition ? `${o.libelle} — ${o.definition}` : o.libelle}
+          </option>
         ))}
       </select>
     )

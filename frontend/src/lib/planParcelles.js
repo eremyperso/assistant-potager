@@ -291,6 +291,9 @@ export function caracteristiquesDeParcelle(parcelle) {
       parcelle?.nb_rangs == null ? null : String(parcelle.nb_rangs))
   }
 
+  // [US-239 / CA5, CA6] L'ensoleillement (plein soleil, mi-ombre, ombre) avec sa
+  // définition en heures, à côté de l'orientation : deux informations distinctes.
+  ajouter('ensoleillement', 'Ensoleillement', ensoleillementTexte(parcelle?.ensoleillement))
   ajouter('exposition', 'Exposition',
     capitaliser(expositionAffichable(parcelle?.exposition) || '') || null)
   ajouter('type_sol', 'Type de sol', capitaliser((parcelle?.type_sol || '').trim()) || null)
@@ -337,6 +340,21 @@ export const SAISIE_DEDUITE = 'deduite'
 export const CHOIX_NON_RENSEIGNE = ''
 export const LIBELLE_NON_RENSEIGNE = 'Non renseigné'
 
+/** [US-239 / CA1 bis] La définition de chaque ensoleillement, en heures de soleil direct. */
+export const DEFINITIONS_ENSOLEILLEMENT = {
+  'plein soleil': '6 h et plus de soleil direct',
+  'mi-ombre': '3 à 6 h',
+  ombre: 'moins de 3 h',
+}
+
+/** « Plein soleil (6 h et plus de soleil direct) », ou null si non renseigné. */
+export function ensoleillementTexte(valeur) {
+  const v = (valeur || '').trim().toLowerCase()
+  if (!v) return null
+  const definition = DEFINITIONS_ENSOLEILLEMENT[v]
+  return definition ? `${capitaliser(v)} (${definition})` : capitaliser(v)
+}
+
 /** [E3] Ce que la case de la largeur dit à la place d'un champ. */
 export const TEXTE_LARGEUR_CALCULEE = 'Calculée : superficie ÷ longueur'
 
@@ -350,6 +368,7 @@ export const CHAMP_API = {
   longueur: 'longueur_m',
   nb_rangs: 'nb_rangs',
   exposition: 'exposition',
+  ensoleillement: 'ensoleillement',
   type_sol: 'type_sol',
   abri: 'abri',
   paillage: 'paillage',
@@ -416,6 +435,11 @@ export function saisieDeParcelle(parcelle, vocabulaires = {}) {
     // [E2, CA3] Les propositions viennent du serveur. La valeur déjà
     // enregistrée y est ajoutée si elle n'y figure pas : une liste d'aide ne
     // doit pas faire disparaître ce que le jardinier avait déclaré.
+    // [US-239 / CA5] Liste fermée, définition en heures sous chaque choix ; le
+    // facultatif « Non renseigné » remet la valeur à NULL (la valeur supposée
+    // n'existe pas : l'orientation n'est jamais convertie).
+    champListe('ensoleillement', (parcelle?.ensoleillement || '').trim() || null,
+               options(vocabulaires, 'ensoleillement')),
     champListe('exposition', expositionAffichable(parcelle?.exposition),
                options(vocabulaires, 'exposition')),
     champListe('type_sol', (parcelle?.type_sol || '').trim() || null,

@@ -1007,6 +1007,7 @@ class ModifierParcelleRequest(BaseModel):
     longueur_m: Optional[float] = None
     nb_rangs: Optional[int] = None
     exposition: Optional[str] = None
+    ensoleillement: Optional[str] = None
     type_sol: Optional[str] = None
     abri: Optional[str] = None
     paillage: Optional[bool] = None
@@ -1064,6 +1065,7 @@ def modifier_parcelle(
             "superficie_m2": parcelle.superficie_m2, "longueur_m": parcelle.longueur_m,
             "largeur_m": largeur, "largeur_incoherente": incoherente,
             "nb_rangs": parcelle.nb_rangs, "exposition": parcelle.exposition,
+            "ensoleillement": parcelle.ensoleillement,
             "type_sol": parcelle.type_sol, "abri": parcelle.abri,
             "paillage": parcelle.paillage, "est_pepiniere": parcelle.est_pepiniere,
             "type_pepiniere": parcelle.type_pepiniere,
@@ -2554,6 +2556,8 @@ def get_plan(
                 "id":            p.id,
                 "nom":           p.nom,
                 "exposition":    p.exposition,
+                # [US-239 / CA6] L'ensoleillement voyage à côté de l'orientation.
+                "ensoleillement": p.ensoleillement,
                 "superficie_m2": p.superficie_m2,
                 # [US-229 / CA1] Le type de sol (US-058) et le statut actif
                 # (US-009) rejoignent la réponse : la carte « Caractéristiques »

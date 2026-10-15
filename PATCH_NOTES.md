@@ -1,3 +1,31 @@
+## [v3.88.0] — 2026-10-15
+
+**ÉPIC 12 — US-215, US-217, US-239** : la Pépinière **s'ouvre sur ce qu'il y a à faire aujourd'hui** et sait
+**où mettre les plants en terre**. Un lot se lit d'un coup d'œil, et l'ensoleillement d'une parcelle devient
+une donnée à part entière.
+
+### 🚀 Nouveautés
+- Ajoute l'onglet **« Aujourd'hui »** de la Pépinière : lots classés par urgence, bandeau de synthèse et filtres, recherche, pastille de la pépinière (US-215).
+- Dépose le geste de chaque ligne (repiquer, mettre en terre, clôturer) dans la file, nommé par son lot, sans quitter l'écran (US-215).
+- Ajoute **« Où les mettre »** dans la fiche d'un lot : les parcelles qui ont un rang libre, la meilleure d'abord, et le geste « Mettre en terre ici » pré-rempli (US-217).
+- Compare l'ensoleillement de la parcelle à celui de la culture, sans rien réserver ni inventer quand une des deux valeurs manque (US-217, US-239).
+- Ajoute l'**ensoleillement d'une parcelle** (plein soleil, mi-ombre, ombre), distinct de son orientation, avec sa définition en heures de soleil direct (US-239).
+- Permet de le déclarer au bot (« ensoleillement planche racines plein soleil ») sans appel au modèle, et depuis l'édition de la parcelle dans le Plan (US-239).
+- Invite à renseigner l'ensoleillement depuis la fiche du lot quand il manque (US-239).
+
+### 🐛 Corrections
+- Corrige la perte ou la vente de godets d'un lot, qui s'affichait dans le cycle de vie de tous les lots de la même culture et variété (INC-013).
+
+### 🔧 Améliorations techniques
+- Étend `app/services/echeances_lots.py` avec la lecture du Plan faite une seule fois par lecture de la pépinière (US-217).
+- Ajoute la superficie et le type de pépinière à la liste des pépinières du potager, copiés pour l'affichage (US-215).
+- Fait transmettre à Jira la gravité d'un incident comme priorité du ticket (Bloquant → Highest, Majeur → High, Mineur → Medium, Cosmétique → Low) et documente la déclaration d'un Bug dans `tools/jira_tracker.py`.
+- Met à jour la fiche de domaine `docs/domaines/pepiniere.md` et les fiches du corpus (`pepiniere-par-lot`, `parcelles-et-plan`) (US-215, US-217, US-239).
+
+### 💾 Base de données
+- Ajoute la colonne `parcelles.ensoleillement` (VARCHAR(16), nullable) : migration `migration_v56.sql`, rollback `rollback_v56.sql` (US-239).
+- Ne convertit aucune donnée : l'orientation existante n'est pas traduite en ensoleillement (US-239).
+
 ## [v3.87.0] — 2026-10-15
 
 **ÉPIC 12 — US-211, US-213, US-214, US-216, US-224** : la Pépinière **dit ce qu'il y a à faire, lot par lot**.

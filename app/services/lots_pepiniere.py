@@ -184,14 +184,16 @@ def controler_emplacements_godets(db: Session, ctx: TenantContext, items: list[d
 
 
 def pepinieres_du_potager(db: Session, ctx: TenantContext) -> list[dict]:
-    """[US-216 / CA8] Les pépinières du potager : `{id, nom}`.
+    """[US-216 / CA8] Les pépinières du potager : `{id, nom, superficie_m2, type_pepiniere}`.
 
     La fiche d'un lot ne propose « Déplacer » que si le potager en compte au moins
-    deux — il n'y a sinon nulle part où aller. Le type de pépinière n'est pas lu ici :
-    seul le calcul des échéances le lit (US-208 / CA7).
+    deux — il n'y a sinon nulle part où aller. [US-215 / CA2] Avec une seule
+    pépinière, l'onglet « Aujourd'hui » affiche sa pastille « Serre · 2,5 m² ·
+    pépinière chaude » : superficie et type sont **copiés** pour l'affichage, aucun
+    calcul ne les lit ici (US-208 / CA7).
     """
     return [
-        {"id": p.id, "nom": p.nom}
+        {"id": p.id, "nom": p.nom, "superficie_m2": p.superficie_m2, "type_pepiniere": p.type_pepiniere}
         for p in get_all_parcelles(db, potager_id=ctx.potager_id)
         if p.est_pepiniere
     ]

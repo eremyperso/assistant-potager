@@ -152,7 +152,63 @@ confirmation par `evenements.resoudre_lot_cloture`).
 Le geste préparé attend dans la file de gestes en attente (US-224), dont les relances
 le rappellent au jardinier : aucune relance propre à la clôture.
 
+## L'onglet « Aujourd'hui » (US-215)
+
+`frontend/src/components/OngletAujourdhui.jsx` (`CarteReponsePepiniere`, `LigneLot`),
+monté par `views/Pepiniere.jsx` derrière une barre d'onglets ; l'onglet **Lots** est
+l'écran d'US-061 **inchangé**. Mise en forme dans `lib/pepiniere.js` (section US-215,
+`npm test` : `pepiniere.aujourdhui.test.js`) — rien n'y est recalculé.
+
+- **Onglets** : `ONGLETS_LIVRES` ; US-218 et US-219 y passent leur drapeau à `true`.
+  Un onglet demandé mais non livré (intention `onglet=emplacements` du Plan) ouvre
+  « Aujourd'hui ».
+- **Une lecture** : `GET /pepiniere/lots`, dont `pepinieres` porte maintenant
+  `superficie_m2` et `type_pepiniere` (copie pour la pastille d'une pépinière unique ;
+  `lots_pepiniere.py` est ajouté à la liste d'US-208 / CA7, aucun calcul n'y lit le type).
+- **Bandeau** : `cartesReponses(resume, lots)` ; les filtres (`FILTRES_BANDEAU`) reprennent
+  les règles du résumé d'US-214 sur les échéances déjà calculées.
+- **Boutons** : `boutonDeLigne` = le geste de l'action suggérée (`gestesDuLot`, US-216),
+  déposé par `BoutonGeste` dans la file (US-224) : **aucune redirection vers Telegram**,
+  une notification confirme le dépôt. La relecture au retour d'onglet est celle d'US-216.
+- **État d'écran** (US-195) : `onglet`, `qJour`, `bandeau`, `emplacement` dans
+  `useEtatEcran('pepiniere')`.
+- Page de contrôle visuel : `/pepiniere-aujourdhui?etat=nominal|une_pepiniere|vide|lecture_seule|echec`.
+
+## Où les mettre (US-217)
+
+- `ou_mettre` est joint à chaque lot **qui a des godets** par `lire_echeances` (liste) et
+  `echeances_d_un_lot` (fiche par numéro) ; `None` sinon.
+- `_lire_le_plan` lit parcelles, occupation, fiches culture (`plan.attributs_par_culture`,
+  qui porte désormais `exposition`) et la répartition **une fois** par lecture — jamais
+  par lot (CA1). Le résumé « Prêts pour le plan » en dérive (`_rangs_libres(lecture)`),
+  d'où des rangs libres identiques des deux côtés (CA10).
+- Places : `repartition_rangs._places_du_rang(longueur parcelle, espacement culture du lot)`
+  — la règle d'US-227, jamais un calcul parallèle. Places connues → la suggestion se dit
+  en places, sinon en rangs libres (jamais les deux).
+- Exposition [US-239] : `comparer_exposition(ensoleillement_parcelle, exposition_culture,
+  nom_parcelle)` compare `Parcelle.ensoleillement` (migration_v56 ; l'orientation
+  `Parcelle.exposition` n'entre plus dans la comparaison, jamais convertie) à celle de la
+  culture, normalisées par `attributs_culture.normaliser_valeur`. L'écart se mesure en crans
+  sur plein soleil → mi-ombre → ombre : `ecart` 0/1/2, `rang` 0/1/2, `deconseille` à 2 ;
+  absente d'un côté → `non_comparable` (rang 3, `invitation` = la phrase à dire au
+  compagnon). `utils.parcelles.normaliser_ensoleillement` est le point d'écriture unique
+  (bot `/parcelle modifier … ensoleillement=`, règle `parcelle_ensoleillement`, PWA
+  `PATCH /parcelles/{id}`) et porte les définitions en heures.
+- Ordre : rang d'écart (concordante, 1 cran, 2 crans, non comparable), places libres
+  décroissantes, rangs libres décroissants, ordre des parcelles ; rangs inconnus
+  (`nb_rangs` nul) à la fin. `premier_rang_libre` reste `None` tant qu'US-203 ne donne
+  pas de position.
+- Front : section `OuLesMettre` de `FicheLot.jsx`, règles `suggestionsVisibles`,
+  `placeEnClair`, `gesteMiseEnTerreIci` dans `lib/ficheLot.js`. La rotation est vérifiée
+  par le compagnon à la confirmation (US-167), pas ici.
+
 ## Tests
+
+`tests/test_us217_ou_mettre_plants.py` — suggestions, exclusions, exposition, ordre,
+rangs inconnus, places, date passée, lecture unique du Plan.
+
+`tests/test_us215_pepiniere_aujourdhui.py` — pépinières exposées, corpus, garde-fous
+du front (aucune redirection, onglet Lots intact).
 
 `tests/test_us214_echeances_lots.py` — chaque ligne de la table, chaque action,
 les fourchettes et leurs bornes, l'absence de chaque donnée, les trois cas

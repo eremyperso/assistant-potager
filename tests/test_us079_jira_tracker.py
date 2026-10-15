@@ -173,6 +173,64 @@ def test_incident_create_issue_from_backlog_type_bug(jira_env, tmp_path, monkeyp
     payload = creation_call.kwargs["json"]
     assert payload["fields"]["issuetype"]["name"] == "Bug"
     assert payload["fields"]["summary"] == "INC-001 : Erreur 500 sur /culture attributs tomate"
+    assert "priority" not in payload["fields"]   # fiche sans gravité : priorité Jira par défaut
+
+
+@pytest.mark.parametrize("gravite, attendu", [
+    ("Bloquant", "Highest"),
+    ("Majeur", "High"),
+    ("Mineur", "Medium"),
+    ("Cosmétique", "Low"),
+    ("cosmetique", "Low"),
+    ("Bloquant / Majeur / Mineur / Cosmétique", None),
+    ("Urgentissime", None),
+    (None, None),
+])
+def test_incident_priorite_jira_depuis_gravite(gravite, attendu):
+    """La gravité d'une fiche INC se traduit en priorité Jira (Highest/High/Medium/Low)."""
+    assert jt._priorite_jira(gravite) == attendu
+
+
+def test_incident_create_issue_transmet_la_priorite(jira_env, tmp_path):
+    """`**Priorité :** Majeur` d'une fiche INC part dans le champ `priority` à la création."""
+    md = tmp_path / "INC-001_test.md"
+    md.write_text(
+        "**ID :** INC-001\n**Titre :** Perte rattachée au mauvais lot\n"
+        "**Type :** Incident\n**Priorité :** Majeur\n",
+        encoding="utf-8",
+    )
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": []}),
+            _mock_response({"transitions": []}),
+        ]
+        mock_requests.post.side_effect = [_mock_response({"key": "PIA-1000"}, status_code=201)]
+
+        jt.create_issue_from_backlog(md)
+
+    payload = mock_requests.post.call_args_list[0].kwargs["json"]
+    assert payload["fields"]["priority"] == {"name": "High"}
+
+
+def test_us_ne_transmet_pas_de_priorite(jira_env, tmp_path):
+    """Une US reste à la priorité par défaut, même si sa fiche cite une « Priorité »."""
+    md = tmp_path / "US-900_test.md"
+    md.write_text(
+        "**ID :** US-900\n**Titre :** Une US\n**Priorité :** Majeur\n", encoding="utf-8",
+    )
+
+    with patch.object(jt, "requests") as mock_requests:
+        mock_requests.get.side_effect = [
+            _mock_response({"issues": []}),
+            _mock_response({"transitions": []}),
+        ]
+        mock_requests.post.side_effect = [_mock_response({"key": "PIA-1001"}, status_code=201)]
+
+        jt.create_issue_from_backlog(md)
+
+    payload = mock_requests.post.call_args_list[0].kwargs["json"]
+    assert "priority" not in payload["fields"]
 
 
 def test_incident_create_issue_from_backlog_joint_capture_existante(jira_env, tmp_path):

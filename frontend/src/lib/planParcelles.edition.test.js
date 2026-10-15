@@ -62,7 +62,7 @@ const par = (champs) => Object.fromEntries(champs.map((c) => [c.cle, c]))
 test('[E1] la carte en édition porte les mêmes champs, dans le même ordre', () => {
   const p = planche()
   const lecture = ['nom', 'superficie', 'longueur', 'largeur', 'nb_rangs',
-                   'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut']
+                   'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut']
   assert.deepEqual(saisieDeParcelle(p, VOCABULAIRES).map((c) => c.cle), lecture)
 })
 

@@ -189,7 +189,7 @@ function plancheComplete() {
   return {
     id: 9, nom: 'planche_complete', superficie_m2: 12, longueur_m: 6,
     largeur_m: 2, largeur_deduite: true, largeur_incoherente: false,
-    nb_rangs: 7, exposition: 'sud', type_sol: 'limoneux',
+    nb_rangs: 7, exposition: 'sud', ensoleillement: 'plein soleil', type_sol: 'limoneux',
     abri: 'aucun', paillage: true, est_pepiniere: false, actif: true,
     cultures: [], disposition: { rangs_declares: 7, rangs_occupes: 0, rangs: [] },
   }
@@ -198,7 +198,7 @@ function plancheComplete() {
 test('[US-229 / C2] les champs se rendent dans l’ordre de la maquette', () => {
   assert.deepEqual(cles(plancheComplete()), [
     'nom', 'superficie', 'longueur', 'largeur', 'nb_rangs',
-    'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
+    'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
   ])
 })
 
@@ -273,7 +273,7 @@ test('[US-229 / C9] une pépinière retire rangs, longueur et largeur de la gril
     longueur_m: null, largeur_m: null, nb_rangs: null,
   }
   assert.deepEqual(cles(p), [
-    'nom', 'superficie', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
+    'nom', 'superficie', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
   ])
   assert.equal(champ(p, 'pepiniere').valeur, 'Oui')
   // [C9] Leur absence ne doit PAS produire la pastille de l'index.
@@ -284,7 +284,7 @@ test('[US-229 / C9] une pépinière retire rangs, longueur et largeur de la gril
 test('[US-229 / C10] une parcelle inactive garde sa carte entière', () => {
   const p = { ...plancheComplete(), actif: false }
   assert.equal(champ(p, 'statut').valeur, 'Inactive')
-  assert.equal(cles(p).length, 11)
+  assert.equal(cles(p).length, 12)
   assert.equal(parcelleACompleter(p), false)
 })
 
@@ -296,11 +296,11 @@ test('[US-229 / CA6] une parcelle dont tout manque reste lisible', () => {
     cultures: [], disposition: {},
   }
   const champs = caracteristiquesDeParcelle(p)
-  assert.equal(champs.length, 11)
+  assert.equal(champs.length, 12)
   // Le nom reste connu ; tout le reste se dit manquant, sauf les deux booléens.
   assert.deepEqual(
     champs.filter((c) => c.manquant).map((c) => c.cle),
-    ['superficie', 'longueur', 'largeur', 'nb_rangs', 'exposition', 'type_sol', 'abri', 'paillage'],
+    ['superficie', 'longueur', 'largeur', 'nb_rangs', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage'],
   )
   assert.equal(champ(p, 'nom').valeur, 'planche_est')
   assert.equal(parcelleACompleter(p), true)
@@ -339,7 +339,7 @@ test('[US-229 / CA2] aucune division n’est refaite : la largeur vient du serve
 
 test('[US-229 / CA1] le détail porte la carte, sans lecture supplémentaire', () => {
   const d = detailDeParcelle(plancheComplete())
-  assert.equal(d.caracteristiques.length, 11)
+  assert.equal(d.caracteristiques.length, 12)
   assert.equal(d.aideCompagnon.phrase.includes('planche_complete'), true)
 })
 
@@ -347,4 +347,12 @@ test('[US-229] la pastille d’en-tête dit le paillage en toutes lettres', () =
   assert.equal(enteteDetail({ ...plancheComplete(), paillage: true }).paillage, 'oui')
   assert.equal(enteteDetail({ ...plancheComplete(), paillage: false }).paillage, 'non')
   assert.equal(enteteDetail({ ...plancheComplete(), paillage: null }).paillage, null)
+})
+
+test('[US-239 / CA5, CA6] l’ensoleillement se dit avec sa définition en heures', () => {
+  const p = { ...plancheComplete(), ensoleillement: 'mi-ombre' }
+  assert.equal(champ(p, 'ensoleillement').valeur, 'Mi-ombre (3 à 6 h)')
+  assert.equal(champ(p, 'exposition').valeur, 'Sud')
+  const absent = { ...plancheComplete(), ensoleillement: null }
+  assert.equal(champ(absent, 'ensoleillement').manquant, true)
 })

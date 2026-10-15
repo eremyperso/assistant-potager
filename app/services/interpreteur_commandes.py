@@ -806,6 +806,30 @@ def _construire_parcelle_exposition(groupes):
     return {"nom": nom, "modification": f"exposition={groupes['valeur'].replace(' ', '-')}"}
 
 
+@_regle(
+    "parcelle_ensoleillement",
+    r"\A" + _INTENTION + r"(?:l\s+)?ensoleillement\s+(?:de\s+)?" + _ARTICLE
+    + r"(?:parcelle\s+)?(?P<nom>.+?)\s+(?:(?:est|passe a|devient|:|=)\s*)?(?:en\s+|au\s+)?"
+    + r"(?P<valeur>plein soleil|plein|mi ombre|ombre|soleil|nord est|nord ouest|sud est|"
+    r"sud ouest|nord|sud|est|ouest)\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_ensoleillement(groupes):
+    # [US-239 / CA4] « ensoleillement planche racines plein soleil » : sans appel
+    # au modèle. Une orientation (« sud ») est RECONNUE puis refusée au point
+    # d'écriture, avec la liste des valeurs admises — plutôt que renvoyée au
+    # modèle, qui pourrait la traduire en ensoleillement (donnée supposée).
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    valeur = groupes["valeur"]
+    if valeur in ("plein", "soleil"):
+        valeur = "plein soleil"
+    return {"nom": nom, "modification": f"ensoleillement={valeur.replace(' ', '-')}"}
+
+
 def _est_question_fermee(nom: str) -> bool:
     """« est-ce que la parcelle 2 est sous serre ? » interroge, elle ne déclare pas."""
     normalise, _ = normaliser(nom)
@@ -1216,6 +1240,10 @@ def _construire_culture_exposition(groupes):
     culture = _nettoyer_nom(groupes["culture"])
     valeur = _VALEURS_EXPOSITION.get((groupes["valeur"] or "").strip())
     if not _nom_plausible(culture) or valeur is None:
+        return None
+    # [US-239] « l'ensoleillement de la planche nord est mi-ombre » déclare la
+    # PARCELLE (règle parcelle_ensoleillement) : ce n'est pas une culture.
+    if culture.split()[0] == "ensoleillement":
         return None
     return {"culture": culture, "valeur": valeur}
 
@@ -2532,6 +2560,8 @@ def nombre_en_lettres(valeur: str) -> str:
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
     "abri": None, "paillage": None, "rangs": None,
+    # [US-239] Ni unité ni chiffre : un vocabulaire fermé, défini en heures.
+    "ensoleillement": None,
     # [US-225 / CA5] Des mètres, jamais des mètres carrés : c'est précisément la
     # confusion que le récapitulatif doit lever avant d'écrire.
     "longueur": "m",
@@ -2542,6 +2572,7 @@ _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
     "pepiniere": "pépinière", "ordre": "ordre d'affichage",
     "abri": "abri", "paillage": "paillage",
+    "ensoleillement": "ensoleillement",
     # [US-197] « rangs » et non « rangs de la parcelle » : le récapitulatif est
     # déjà titré « Modifier une parcelle », et c'est la planche qu'il nomme.
     "rangs": "nombre de rangs",

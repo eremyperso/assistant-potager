@@ -29,6 +29,7 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.services import attributs_culture as svc_attributs
 from app.services import calendrier_cultural as cal
 from app.services import confiance_semis as conf
 from app.services import plan as svc_plan
@@ -446,17 +447,183 @@ def _cultures_a_semer(
     return a_semer
 
 
-def _rangs_libres(db: Session, ctx: TenantContext, date_ref: Optional[date]) -> list[dict]:
-    """[CA8] Rangs libres du Plan par parcelle (US-198) — la même répartition que
-    l'écran Plan, jamais recomptée ici. Les pépinières n'ont pas de rangs."""
+@dataclass
+class _LecturePlan:
+    """[US-217 / CA1] Ce que la Pépinière lit du Plan, UNE fois par lecture."""
+
+    parcelles: list
+    repartition: dict
+    attributs: dict[str, dict]
+
+
+def _lire_le_plan(db: Session, ctx: TenantContext, date_ref: Optional[date]) -> _LecturePlan:
+    """[US-214 / CA8, US-217 / CA1] La répartition du Plan (US-198), places
+    comprises (US-227) — la même que l'écran Plan, jamais recomptée ici. Les
+    fiches culture sont lues une fois, pour l'espacement ET l'exposition."""
     parcelles = svc_plan.get_parcelles(db, ctx)
     occupation = svc_plan.get_occupation(db, ctx, date_ref)
-    repartition = svc_rangs.repartition_du_plan(db, parcelles, occupation, ctx.potager_id, date_ref)
-    ordinaires = {p.id for p in parcelles if not p.est_pepiniere}
+    attributs = svc_plan.attributs_par_culture(db, ctx)
+    repartition = svc_rangs.repartition_du_plan(
+        db, parcelles, occupation, ctx.potager_id, date_ref, attributs_culture=attributs,
+    )
+    return _LecturePlan(parcelles=parcelles, repartition=repartition, attributs=attributs)
+
+
+def _rangs_libres(lecture: _LecturePlan) -> list[dict]:
+    """[CA8] Rangs libres du Plan par parcelle. Les pépinières n'ont pas de rangs."""
+    ordinaires = {p.id for p in lecture.parcelles if not p.est_pepiniere}
     return [
-        entree for entree in repartition["totaux"]["rangs_libres_par_parcelle"]
+        entree for entree in lecture.repartition["totaux"]["rangs_libres_par_parcelle"]
         if entree["parcelle_id"] in ordinaires
     ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-217] Où mettre en terre les plants d'un lot
+# ═════════════════════════════════════════════════════════════════════════════
+EXPO_CONCORDE = "concorde"
+EXPO_DIFFERE = "differe"
+EXPO_NON_COMPARABLE = "non_comparable"
+
+#: [CA6] Trois suggestions dans la fiche, puis « voir toutes les parcelles ».
+NB_SUGGESTIONS_VISIBLES = 3
+
+#: [CA4] Dit une fois par la section, jamais remplacé par une estimation.
+MENTION_PLANTS_NON_CALCULES = (
+    "Le nombre de plants qui tiendront n'est pas calculé : il faut la longueur de "
+    "la parcelle et l'espacement de la culture."
+)
+
+
+def _exposition_canonique(valeur: Optional[str]) -> Optional[str]:
+    """Plein soleil, mi-ombre ou ombre (US-161) ; toute autre valeur → None."""
+    try:
+        return svc_attributs.normaliser_valeur("exposition", valeur)
+    except svc_attributs.ValeurHorsVocabulaireError:
+        return None
+
+
+#: [US-239 / CA7 bis] L'échelle sur laquelle l'écart se mesure, en crans.
+_ECHELLE_ENSOLEILLEMENT: tuple[str, ...] = ("plein soleil", "mi-ombre", "ombre")
+
+
+def comparer_exposition(
+    parcelle: Optional[str], culture: Optional[str], nom_parcelle: Optional[str] = None,
+) -> dict:
+    """[US-239 / CA7, CA7 bis, CA7 ter, CA8] Compare l'ENSOLEILLEMENT de la
+    parcelle à l'exposition de la fiche de la culture (US-161) — l'orientation
+    de la parcelle n'entre plus ici.
+
+    Trois issues, jamais supposées : concordante (écart 0), différente (un cran
+    d'écart, ou deux : « déconseillé »), non comparable (l'une des deux valeurs
+    n'est pas renseignée). `ecart` mesure les crans sur l'échelle plein soleil →
+    mi-ombre → ombre ; `rang` en tire l'ordre de la suggestion (0 = la meilleure,
+    3 = non comparable). Le libellé dit toujours l'écart en mots.
+    """
+    p, c = _exposition_canonique(parcelle), _exposition_canonique(culture)
+    if p is None or c is None:
+        if p is None:
+            raison = "ensoleillement de la parcelle non renseigné"
+            # [CA8] La phrase à dire au compagnon, pour le déclarer.
+            invitation = (
+                f"Dites au compagnon : « ensoleillement {nom_parcelle} plein soleil »"
+                if nom_parcelle else "Dites au compagnon : « ensoleillement <parcelle> plein soleil »"
+            )
+        else:
+            raison = "exposition de la culture non renseignée"
+            invitation = None
+        return {
+            "comparaison": EXPO_NON_COMPARABLE, "parcelle": p, "culture": c,
+            "ecart": None, "deconseille": False, "rang": 3,
+            "libelle": raison, "invitation": invitation,
+        }
+    ecart = abs(_ECHELLE_ENSOLEILLEMENT.index(p) - _ECHELLE_ENSOLEILLEMENT.index(c))
+    if ecart == 0:
+        return {
+            "comparaison": EXPO_CONCORDE, "parcelle": p, "culture": c,
+            "ecart": 0, "deconseille": False, "rang": 0, "invitation": None,
+            "libelle": f"{p}, comme la culture le demande",
+        }
+    culture_dite = "d'ombre" if c == "ombre" else f"de {c}"
+    phrase = f"{p}, pour une culture {culture_dite}"
+    deconseille = ecart >= 2
+    return {
+        "comparaison": EXPO_DIFFERE, "parcelle": p, "culture": c,
+        "ecart": ecart, "deconseille": deconseille, "rang": ecart, "invitation": None,
+        "libelle": f"déconseillé : {phrase}" if deconseille else phrase,
+    }
+
+
+def _suggestions_du_lot(lot: dict, lecture: _LecturePlan) -> list[dict]:
+    """[CA1-CA3] Les parcelles où mettre ce lot, dans l'ordre de la fiche.
+
+    Lecture pure (CA5) : aucune réservation. Les places (US-227) d'un rang libre
+    se calculent par `_places_du_rang`, la règle même de la Vue plan, avec
+    l'espacement de la culture DU LOT — jamais un calcul parallèle. Inconnues,
+    la suggestion se dit en rangs libres.
+    """
+    culture = (lot.get("culture") or "").lower()
+    attributs = lecture.attributs.get(culture) or {}
+    espacement = attributs.get("espacement_rang_cm")
+    dispositions = lecture.repartition["dispositions"]
+
+    connues, inconnues = [], []
+    for ordre, parcelle in enumerate(lecture.parcelles):
+        if parcelle.est_pepiniere:
+            continue
+        disposition = dispositions.get(parcelle.nom, {})
+        libres = disposition.get("rangs_libres")
+        if libres == 0:
+            continue
+        numeros = [r["numero"] for r in disposition.get("rangs", []) if r.get("libre")]
+        places_par_rang = svc_rangs._places_du_rang(getattr(parcelle, "longueur_m", None), espacement)
+        suggestion = {
+            "parcelle_id": parcelle.id,
+            "parcelle": parcelle.nom,
+            "rangs_libres": libres,
+            "numeros_rangs_libres": numeros,
+            # [CA7] Un rang n'est pré-rempli que si sa POSITION est connue (US-203,
+            # non livrée) : la numérotation d'installation n'en est pas une.
+            "premier_rang_libre": (
+                numeros[0] if numeros and disposition.get("mode_numerotation")
+                != svc_rangs.NUMEROTATION_ORDRE_INSTALLATION else None
+            ),
+            "places_par_rang": places_par_rang if libres else None,
+            "places_libres": places_par_rang * libres if (places_par_rang and libres) else None,
+            # [US-239 / CA7] L'ensoleillement, plus l'orientation (`exposition`) :
+            # celle-ci reste affichée telle quelle, elle ne se compare plus.
+            "exposition": comparer_exposition(
+                parcelle.ensoleillement, attributs.get("exposition"), parcelle.nom,
+            ),
+            "orientation": parcelle.exposition,
+            "_ordre": ordre,
+        }
+        (connues if libres is not None else inconnues).append(suggestion)
+
+    # [US-239 / CA7 bis] La meilleure parcelle d'abord : concordante, puis un
+    # cran, puis deux, puis non comparable. À rang égal, le plus de places libres
+    # (US-227), sinon le plus de rangs libres, puis l'ordre des parcelles.
+    connues.sort(key=lambda s: (
+        s["exposition"]["rang"], -(s["places_libres"] or 0), -s["rangs_libres"], s["_ordre"],
+    ))
+    # [CA3] Rangs inconnus : après, dans l'ordre des parcelles, jamais exclus.
+    for s in connues + inconnues:
+        s.pop("_ordre")
+    return connues + inconnues
+
+
+def ou_mettre(lot: dict, lecture: Optional[_LecturePlan]) -> Optional[dict]:
+    """[CA1, CA4, CA8] La section « Où les mettre » d'un lot ; None sans godet."""
+    if lecture is None or not _a_des_godets(lot):
+        return None
+    suggestions = _suggestions_du_lot(lot, lecture)
+    return {
+        "suggestions": suggestions,
+        "aucun_rang_libre": not any((s["rangs_libres"] or 0) > 0 for s in suggestions),
+        "plants_non_calcules": (
+            None if any(s["places_libres"] for s in suggestions) else MENTION_PLANTS_NON_CALCULES
+        ),
+    }
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -493,10 +660,15 @@ def lire_echeances(
     # Rang : 1 = le plus pressant. Un seul tri, sur la clé calculée plus haut.
     ordre = sorted(calculs, key=lambda lot_id: calculs[lot_id]["_cle"])
     rangs = {lot_id: i + 1 for i, lot_id in enumerate(ordre)}
+    # [US-217 / CA1] Le Plan est lu UNE fois pour toute la lecture, et seulement si
+    # un lot a des godets : jamais une répartition par lot.
+    lecture = _lire_le_plan(db, ctx, date_ref) if any(_a_des_godets(l) for l in lots) else None
+    par_id = {lot["lot_id"]: lot for lot in lots}
     par_lot = {
         lot_id: {
             "echeances": c["echeances"], "action_suggeree": c["action_suggeree"],
             "rang_urgence": rangs[lot_id],
+            "ou_mettre": ou_mettre(par_id[lot_id], lecture),
         }
         for lot_id, c in calculs.items()
     }
@@ -541,7 +713,8 @@ def lire_echeances(
         "prets_pour_le_plan": {
             "lots": len(prets),
             "plants": plants_prets,
-            "rangs_libres_par_parcelle": _rangs_libres(db, ctx, date_ref) if prets else [],
+            # [US-217 / CA10] Les mêmes rangs libres que « Où les mettre ».
+            "rangs_libres_par_parcelle": _rangs_libres(lecture) if (prets and lecture) else [],
         },
         "a_semer": {"cultures": a_semer, "total": len(a_semer)},
     }
@@ -567,4 +740,9 @@ def echeances_d_un_lot(
     ref = date_ref or date.today()
     delais = _delais_de(db, lot.get("culture") or "", ctx.potager_id, {})
     calcul = _echeances_du_lot(lot, delais, ref)
-    return {"echeances": calcul["echeances"], "action_suggeree": calcul["action_suggeree"]}
+    lecture = _lire_le_plan(db, ctx, date_ref) if _a_des_godets(lot) else None
+    return {
+        "echeances": calcul["echeances"], "action_suggeree": calcul["action_suggeree"],
+        # [US-217 / CA6] La fiche ouverte par son numéro porte aussi « Où les mettre ».
+        "ou_mettre": ou_mettre(lot, lecture),
+    }

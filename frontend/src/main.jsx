@@ -17,6 +17,7 @@ const PREVIEWS = {
   '/vue-plan': () => import('./views/_PlanVuePreview.jsx'),  // [US-200]
   '/vue-parcelles': () => import('./views/_PlanParcellesPreview.jsx'),  // [US-222]
   '/fiche-lot': () => import('./views/_FicheLotPreview.jsx'),  // [US-216]
+  '/pepiniere-aujourdhui': () => import('./views/_PepiniereAujourdhuiPreview.jsx'),  // [US-215]
 }
 
 const chargeur = PREVIEWS[window.location.pathname]

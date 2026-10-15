@@ -1984,16 +1984,24 @@ def cycle_vie_culture(
         p for p in plantation_candidates if godet_ids & set(p.source_evenement_ids.split(";"))
     ]
 
-    # [US-065 CA6] Ventes et pertes en godet ne portent aucun chaînage vers un lot
-    # (ni origine_graines_id, ni source_evenement_ids) : elles restent donc listées
-    # au niveau (culture, variété), même quand un lot précis est demandé.
+    # [INC-013] Depuis US-209, une vente ou une perte en godet porte le lot qu'elle
+    # impute dans `origine_graines_id`. Pour un lot précis, seules celles de CE lot
+    # remontent — sinon la perte du lot n° 7 s'affichait dans le cycle de vie de tous
+    # les lots de la même culture. Sans paramètre de lot : lecture agrégée inchangée.
+    def _restreindre_au_lot(q):
+        if semis_id is not None:
+            return q.filter(Evenement.origine_graines_id == semis_id)
+        if sans_semis_rattache:
+            return q.filter(Evenement.origine_graines_id.is_(None))
+        return q
+
     vendu_q = (
         db.query(Evenement)
         .filter(Evenement.type_action == "vendu", Evenement.potager_id == pid)
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     vendu_q = vendu_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else vendu_q.filter(Evenement.variete.is_(None))
-    vendu_events = vendu_q.order_by(Evenement.date.asc()).all()
+    vendu_events = _restreindre_au_lot(vendu_q).order_by(Evenement.date.asc()).all()
 
     perte_q = (
         db.query(Evenement)
@@ -2001,7 +2009,7 @@ def cycle_vie_culture(
         .filter(func.lower(Evenement.culture) == culture_lower)
     )
     perte_q = perte_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else perte_q.filter(Evenement.variete.is_(None))
-    perte_events = perte_q.order_by(Evenement.date.asc()).all()
+    perte_events = _restreindre_au_lot(perte_q).order_by(Evenement.date.asc()).all()
 
     total_plants = sum(g.nb_plants_godets or 0 for g in godet_events)
     total_graines = sum(int(s.quantite or 0) for s in semis_events)

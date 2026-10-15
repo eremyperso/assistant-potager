@@ -261,7 +261,8 @@ class TestCasLimites:
             svc_evenements.creer_evenement_confirme(db, CTX, item, "cloture chou", None)
 
     def test_us216_la_liste_porte_les_pepinieres_du_potager(self, db):
-        assert lots.pepinieres_du_potager(db, CTX) == [{"id": 2, "nom": "serre"}]
+        assert lots.pepinieres_du_potager(db, CTX) == [
+            {"id": 2, "nom": "serre", "superficie_m2": None, "type_pepiniere": None}]
 
 
 # ═════════════════════════════════════════════════════════════════════════════

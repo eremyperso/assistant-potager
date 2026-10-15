@@ -282,7 +282,47 @@ _CHAMPS_MODIFIER = {
     # existant plutôt que de vivre dans un handler : les bornes du domaine
     # n'ont qu'un seul endroit où se tenir.
     "type_sol", "actif",
+    # [US-239 / CA1] L'ensoleillement, distinct de l'orientation (`exposition`).
+    "ensoleillement",
 }
+
+#: [US-239 / CA1 bis] Ce que chaque valeur d'ensoleillement VEUT DIRE, en heures
+#: de soleil direct par jour. Dite partout où l'on choisit (PWA, bot, /help,
+#: corpus) : c'est ce que reçoit la parcelle qu'on déclare, pas où elle regarde.
+DEFINITIONS_ENSOLEILLEMENT: dict[str, str] = {
+    "plein soleil": "6 h et plus de soleil direct",
+    "mi-ombre": "3 à 6 h",
+    "ombre": "moins de 3 h",
+}
+
+
+def liste_ensoleillements() -> str:
+    """[US-239 / CA1 bis] « plein soleil (6 h et plus de soleil direct), mi-ombre
+    (3 à 6 h), ombre (moins de 3 h) » — la liste dite au refus et dans l'aide."""
+    return ", ".join(f"{v} ({d})" for v, d in DEFINITIONS_ENSOLEILLEMENT.items())
+
+
+def normaliser_ensoleillement(valeur: str) -> str:
+    """[US-239 / CA1] Ramène « Plein Soleil », « mi ombre » … au vocabulaire
+    d'US-161 — le MÊME que l'exposition des cultures, mêmes règles de
+    normalisation (casse, accents, tirets). `None` ne passe pas par ici : il veut
+    dire « non renseigné » (CA2).
+
+    Lève ValueError, en listant les valeurs admises et leur définition. Une
+    orientation (« sud ») est refusée : elle n'est pas un ensoleillement.
+    """
+    from app.services import attributs_culture as svc_attributs  # import tardif : évite un cycle
+
+    try:
+        canonique = svc_attributs.normaliser_valeur("exposition", valeur)
+    except svc_attributs.ValeurHorsVocabulaireError:
+        canonique = None
+    if canonique is None:
+        raise ValueError(
+            f"« {str(valeur or '').strip()} » n'est pas un ensoleillement. "
+            f"Valeurs possibles : {liste_ensoleillements()}."
+        )
+    return canonique
 
 #: [US-197 / CA1, CA2] Le nombre de rangs DÉCLARÉS d'une planche. Bornes du
 #: domaine, doublées du CHECK `ck_parcelles_nb_rangs` (migration_v52) : la base
@@ -556,6 +596,7 @@ def valider_champs(**kwargs) -> None:
     controles = [
         ("rangs", _nb_rangs), ("longueur", _longueur_m),
         ("abri", normaliser_abri), ("type_sol", normaliser_type_sol),
+        ("ensoleillement", normaliser_ensoleillement),
         ("paillage", lambda v: _booleen(v, "paillage")),
         ("pepiniere", _pepiniere),
         ("actif", lambda v: _booleen(v, "actif")),
@@ -606,7 +647,7 @@ def update_parcelle(
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
             f"Acceptés : exposition, superficie, ordre, pepiniere, abri, "
-            f"paillage, rangs, longueur, type_sol, actif"
+            f"paillage, rangs, longueur, type_sol, ensoleillement, actif"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -680,6 +721,18 @@ def update_parcelle(
         else:
             parcelle.type_sol = normaliser_type_sol(kwargs["type_sol"])
             modifs.append(f"Type de sol : {parcelle.type_sol.lower()}")
+    if "ensoleillement" in kwargs:
+        # [US-239 / CA1, CA2] N'écrit que l'ensoleillement : l'orientation
+        # (`exposition`) n'est ni lue ni convertie ici.
+        if kwargs["ensoleillement"] is None:
+            parcelle.ensoleillement = None
+            modifs.append("Ensoleillement : non renseigné")
+        else:
+            parcelle.ensoleillement = normaliser_ensoleillement(kwargs["ensoleillement"])
+            modifs.append(
+                f"Ensoleillement : {parcelle.ensoleillement} "
+                f"({DEFINITIONS_ENSOLEILLEMENT[parcelle.ensoleillement]})"
+            )
     if "rangs" in kwargs:
         # [US-197 / CA2] Validé AVANT affectation : une valeur refusée laisse la
         # parcelle exactement dans l'état où le jardinier l'avait laissée.
