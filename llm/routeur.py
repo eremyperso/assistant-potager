@@ -399,6 +399,23 @@ def _est_deplacement_familier(texte: str) -> bool:
     return bool(_VERBES_DEPLACEMENT_TETE.search(tete) and _INDICE_DEPLACEMENT.search(normalise))
 
 
+# [US-212 / CA2] « les tomates cerise ont levé, 12 plants » : le verbe de la levée tombe
+# au-delà des quatre mots de tête. Il n'annonce un geste que sous deux formes — l'auxiliaire
+# + le participe (« ont levé »), ou le mot « levée / levé » accompagné d'un nombre ou d'un
+# lot cité. « Quand lèvent les carottes ? » est une question (garde-fou en aval), et
+# « j'ai levé les paillis » n'a ni auxiliaire de levée ni nombre.
+_LEVEE_AVEC_AUXILIAIRE = re.compile(r"\b(?:ont|sont|a|est)\s+leve(?:e|s|es)?\b")
+_LEVEE_AVEC_NOMBRE = re.compile(r"\blevee?s?\b")
+_INDICE_LEVEE = re.compile(r"\d|\blot\b")
+
+
+def _est_levee_dictee(texte: str) -> bool:
+    normalise = _ESPACES_ROUTEUR.sub(" ", _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode((texte or "").strip().lower()))).strip()
+    if _LEVEE_AVEC_AUXILIAIRE.search(normalise):
+        return True
+    return bool(_LEVEE_AVEC_NOMBRE.search(normalise) and _INDICE_LEVEE.search(normalise))
+
+
 def _regle_par_geste(texte: str) -> Optional[str]:
     """[Action 0] ACTION si l'un des premiers mots nomme un geste de jardinage.
 
@@ -416,7 +433,9 @@ def _regle_par_geste(texte: str) -> Optional[str]:
     tete = " ".join(unidecode((texte or "").strip().lower()).split()[:_FENETRE_GESTE_MOTS])
     if tete and _MOTIF_GESTE.search(tete):
         return NATURE_ACTION
-    return NATURE_ACTION if _est_deplacement_familier(texte) else None
+    if _est_deplacement_familier(texte):
+        return NATURE_ACTION
+    return NATURE_ACTION if _est_levee_dictee(texte) else None   # [US-212]
 
 
 def annonce_un_geste(texte: str) -> bool:

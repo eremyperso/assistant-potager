@@ -62,6 +62,47 @@ from .commandes_plan import cmd_plan
 from .commandes_stats import cmd_historique, cmd_stats
 
 
+async def _repondre_nombre_de_leves(update: Update, pending: dict, brut: str, reply) -> bool:
+    """[US-212 / CA11] Réponse texte à « Combien de plants ont levé ? ». True si consommée.
+
+    Un nombre entier, éventuellement entouré de quelques mots (« 40 », « 40 plants ») ; « rien »,
+    « aucun » ou « zéro » valent 0. Une phrase plus longue est une nouvelle saisie : la question
+    est abandonnée et l'appelant traite le message normalement."""
+    import re
+    from unidecode import unidecode
+
+    user_id = update.effective_user.id
+    mots = brut.split()
+    if len(mots) > 4:
+        _QUANTITE_PENDING.pop(user_id, None)
+        return False
+    nombre = re.search(r"(\d+)", brut)
+    if nombre:
+        valeur = int(nombre.group(1))
+    elif any(m in ("rien", "aucun", "aucune", "zero") for m in unidecode(brut.lower()).split()):
+        valeur = 0
+    else:
+        if len(mots) > 2:
+            _QUANTITE_PENDING.pop(user_id, None)
+            return False
+        await reply("❌ Nombre de plants levés non reconnu. Précisez un nombre (ex: _40_, ou _0_ si rien n'a levé).",
+                    parse_mode="Markdown")
+        return True                       # la question reste posée
+
+    _QUANTITE_PENDING.pop(user_id, None)
+    items = pending["items"]
+    # [US-212 / CA11] La question portait sur les graines restantes d'un lot déjà en partie
+    # repiqué : le comptage enregistré est le total du lot, repiqués compris.
+    repiques = int(items[0].get("_leves_deja_repiques") or 0)
+    items[0]["quantite"] = valeur + repiques
+    items[0]["unite"] = "plants"
+    if repiques:
+        items[0]["_leves_parmi_restantes"] = valeur
+    log.info(f"[US-212 / CA11] Nombre de levés reçu: {valeur} (+{repiques} repiqués) — user_id={user_id}")
+    await _parse_and_save(update, pending["texte"], pre_parsed_items=items, geste_file=pending.get("geste_file"))
+    return True
+
+
 async def _repondre_quantite_en_attente(update: Update, texte_raw: str) -> bool:
     """[US-021 / CA9, US-224] Traite la réponse à une question de quantité en attente.
 
@@ -99,6 +140,12 @@ async def _repondre_quantite_en_attente(update: Update, texte_raw: str) -> bool:
             if geste_file else "❌ Saisie annulée."
         )
         return True
+
+    # [US-212 / CA11] Le nombre de levés d'un lot : zéro est un vrai comptage (« rien n'a encore
+    # levé »), à la différence d'une quantité de plants. Le geste reprend `_parse_and_save`,
+    # qui pose ensuite « la levée est-elle terminée ? ».
+    if pending.get("levee"):
+        return await _repondre_nombre_de_leves(update, pending, brut, reply)
 
     # Un nombre, éventuellement entouré de quelques mots (« 30 plants », « environ 20 ») :
     # une phrase plus longue est une nouvelle saisie, pas une réponse.

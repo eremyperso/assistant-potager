@@ -233,6 +233,11 @@ class Evenement(Base):
     # il changerait de sens à chaque import). NULL = semis hors pépinière.
     numero_lot = Column(Integer, nullable=True)
 
+    # [US-212 / migration_v57] Une LEVÉE (comptage des graines levées d'un lot) peut être
+    # déclarée terminée : la germination du lot est alors close, les graines non levées
+    # sont soldées. NULL pour tout autre geste ; FALSE/NULL pour une levée encore en cours.
+    levee_terminee = Column(Boolean, nullable=True)
+
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
     # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests

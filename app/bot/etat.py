@@ -106,6 +106,22 @@ _DEPLACEMENT_LOT_PENDING: dict[int, dict] = {}
 _DEPLACEMENT_LOT_TIMEOUT = 120  # secondes
 
 
+# [US-212] Levée dont le lot est ambigu (plusieurs lots de la culture) → choix du lot,
+# ou semis en pleine terre → proposition de noter en observation.
+_LEVEE_LOT_PENDING: dict[int, dict] = {}
+
+
+_LEVEE_LOT_TIMEOUT = 120  # secondes
+
+
+# [US-212] « La levée est-elle terminée ? » — deuxième question du bot, après le nombre de
+# levés (la PWA ne dépose que le geste : le bot demande tout le détail).
+_LEVEE_TERMINEE_PENDING: dict[int, dict] = {}
+
+
+_LEVEE_TERMINEE_TIMEOUT = 180  # secondes
+
+
 # [US-066] Mise en godet sans « sur N graines » → réclamation du nombre d'origine
 _GODET_GRAINES_PENDING: dict[int, dict] = {}
 

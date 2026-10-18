@@ -167,6 +167,20 @@ class TestCloture:
         lots.resoudre_references(db, CTX, [item])
         assert item["_lot_cloture"] == {"godets": 20, "graines": 24}
 
+    def test_us216_la_cloture_figure_dans_le_cycle_de_vie_du_lot(self, db):
+        semis = _semis(db)
+        _godet(db, semis, plants=20, graines=24)
+        evt = _cloturer(db, semis.numero_lot)
+        cycle = svc_evenements.cycle_vie_culture(db, CTX, "chou", None, semis_id=semis.id)
+        assert [c.id for c in cycle["clotures"]] == [evt.id]
+        assert (cycle["clotures"][0].quantite, cycle["clotures"][0].nb_graines_semees) == (20, 24)
+
+    def test_us216_la_cloture_d_un_lot_ne_remonte_pas_dans_un_autre(self, db):
+        clos, ouvert = _semis(db), _semis(db, quand=datetime(2026, 4, 5))
+        _cloturer(db, clos.numero_lot)
+        cycle = svc_evenements.cycle_vie_culture(db, CTX, "chou", None, semis_id=ouvert.id)
+        assert cycle["clotures"] == []
+
     def test_us216_le_vocabulaire_et_les_natures(self):
         assert normalize_action("cloture_lot") == "cloture_lot"
         assert normalize_action("clôturer le lot 128") == "cloture_lot"
@@ -215,6 +229,7 @@ class TestGestesDeLaFiche:
 
     def test_us216_ca9_la_perte_propose_la_quantite_connue(self, db):
         semis = _semis(db)
+        _godet(db, semis)   # [INC-014] une perte suppose des godets dans le lot
         depot = svc_gestes.deposer_geste(
             db, CTX, action="perte_godet", culture="chou", lot_id=semis.id, quantite=5,
         )

@@ -84,9 +84,13 @@ const LIBELLE_FILIERE = Object.freeze({ pepiniere: 'pépinière', pleine_terre: 
  */
 const LIBELLE_DICTEE_LOT = Object.freeze({
   plantation: 'plantation', mise_en_godet: 'mise en godet', perte_godet: 'perte godet', cloture_lot: 'cloture',
+  levee: 'levée',   // [US-212]
 })
 
 export function phraseADicter({ action, culture, contexteSemis: filiere, parcelle, numeroLot, quantite } = {}) {
+  // [US-212 / CA11] « levée du lot 128 » — le seul lot : la PWA ne dit ni le nombre de levés ni
+  // « terminée », le bot les demande (miroir de `phrase_a_dicter`).
+  if (action === 'levee' && numeroLot != null) return `levée du lot ${numeroLot}`
   // [US-216] « mise en godet 30 plants du lot 128 » — le lot cité porte sa culture.
   if (numeroLot != null && LIBELLE_DICTEE_LOT[action]) {
     const nb = action !== 'cloture_lot' && quantite != null ? ` ${Math.trunc(quantite)} plants` : ''
@@ -131,5 +135,50 @@ export function corpsIntention({ action, culture, variete, quantite, unite, parc
     contexte_semis: contexteSemis ?? null,
     ecran: ecran ?? null,
     potager_id: potagerId ?? null,
+  }
+}
+
+// [INC-014] Aucun bouton de geste de lot n'empile sans limite. Miroir de
+// `file_gestes._RESERVOIR_DU_GESTE` : la plantation et la perte piochent dans les mêmes
+// godets, le repiquage dans les graines en germination ; déplacer et clôturer ne portent
+// aucun nombre.
+const RESERVOIR = Object.freeze({ plantation: 'godets', perte_godet: 'godets', mise_en_godet: 'graines' })
+const DE_LOT = Object.freeze(['plantation', 'perte_godet', 'mise_en_godet', 'deplacement', 'cloture_lot', 'levee'])
+
+const duLot = (enAttente, lotId) => (enAttente ?? []).filter((g) => g.lot_id === lotId)
+
+/** Plants (ou graines) d'un lot déjà promis par les gestes en attente qui piochent dans `action`. */
+export function plantsReserves(enAttente, lotId, action = 'plantation') {
+  const reservoir = RESERVOIR[action]
+  if (lotId == null || !reservoir) return 0
+  return duLot(enAttente, lotId)
+    .filter((g) => RESERVOIR[g.action] === reservoir)
+    .reduce((somme, g) => somme + (Number(g.quantite) || 0), 0)
+}
+
+/**
+ * [INC-014] Ce qu'un bouton de geste de lot peut déposer, ou `null` pour tout autre geste.
+ *
+ *  - `epuise` : le lot ne peut plus rien fournir, ou un geste identique SANS nombre attend
+ *    déjà pour ce lot (le serveur refuserait le dépôt dans les deux cas) ;
+ *  - `disponibles`, `reserves` : de quoi dire ce qu'il reste à répartir ;
+ *  - `quantite` : le nombre à envoyer, jamais au-delà. Seule la plantation propose le reste
+ *    d'elle-même ; une perte ou un repiquage sans nombre laisse le compagnon le demander.
+ */
+export function plafondGesteDeLot(geste, enAttente) {
+  if (geste?.lotId == null || !DE_LOT.includes(geste.action)) return null
+  const memes = duLot(enAttente, geste.lotId).filter((g) => g.action === geste.action)
+  const sansNombre = memes.some((g) => g.quantite == null)
+  const reserves = plantsReserves(enAttente, geste.lotId, geste.action)
+  const borne = geste.disponibleDuLot != null ? Math.trunc(geste.disponibleDuLot) : null
+  const disponibles = borne == null ? null : Math.max(0, borne - reserves)
+  const voulue = geste.quantite != null ? Math.trunc(geste.quantite) : null
+  const quantite = voulue != null
+    ? (disponibles == null ? voulue : Math.min(voulue, disponibles))
+    : (geste.action === 'plantation' ? disponibles : null)
+  const doublon = memes.length > 0 && (geste.quantite == null || sansNombre)
+  return {
+    reserves, disponibles, quantite, doublon,
+    epuise: doublon || (voulue != null && disponibles != null && disponibles <= 0),
   }
 }

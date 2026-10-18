@@ -1772,6 +1772,19 @@ def _cle_cv(culture: Optional[str], variete: Optional[str]) -> tuple:
     return ((culture or "").lower(), ((variete or "").lower() or None))
 
 
+def graines_restantes(lot: dict) -> int:
+    """[US-212] Graines qu'un lot peut encore fournir à un repiquage : celles que ni une mise
+    en godet ni une clôture n'a soldées (`graines_non_soldees`).
+
+    À ne pas confondre avec `graines_en_germination`, qui dit ce qui est encore « en train de
+    lever » et tombe à 0 quand la levée est déclarée terminée — alors que les plants levés
+    restent à repiquer. Tout garde-fou de repiquage, tout test « le lot a-t-il encore quelque
+    chose » passe par ici. Un lot construit avant US-212 (sans `graines_non_soldees`) retombe
+    sur `graines_en_germination`, qui valait alors exactement la même chose."""
+    valeur = lot.get("graines_non_soldees")
+    return int(valeur if valeur is not None else (lot.get("graines_en_germination") or 0))
+
+
 def calcul_lots_pepiniere(
     db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
 ) -> List[dict]:
@@ -1822,6 +1835,15 @@ def calcul_lots_pepiniere(
     [US-214 / CA1, CA4] `date_dernier_geste` (le geste le plus récent imputé au lot)
     et `date_deplacement` (son dernier déplacement) sont les deux dates dont le
     calcul des échéances a besoin ; None quand le lot n'en a pas.
+
+    [US-212 / CA6-CA9] Levée : `nb_leves` / `date_derniere_levee` (le dernier comptage fait
+    foi, jamais cumulé ; None tant qu'aucune levée n'est notée), `taux_levee` (levés ÷
+    graines semées, None sans graines connues — ≠ `taux_germination`), `levee_terminee`
+    (collant : ferme la germination), `graines_non_levees_soldees`, `incoherence_levee`,
+    `incoherence_repiquage_levee` (drapeaux, jamais de bornage) et `moyenne_levee_culture`
+    (autres lots de la culture, à partir de deux). `graines_en_germination` tombe à 0 quand la
+    levée est terminée ; `graines_non_soldees` (lue par `graines_restantes`) dit ce que le lot
+    peut encore fournir à un repiquage. Aucun stock n'est touché.
     """
     from sqlalchemy import or_ as _sa_or
 
@@ -1885,6 +1907,11 @@ def calcul_lots_pepiniere(
             # soldé, définitivement. `date_cloture` est le jour du geste.
             "cloture":                    False,
             "date_cloture":               None,
+            # [US-212] Levée : le dernier comptage fait foi (instantané, jamais cumulé).
+            # `nb_leves` vaut None tant qu'aucune levée n'est notée — jamais 0.
+            "nb_leves":                   None,
+            "date_derniere_levee":        None,
+            "levee_terminee":             False,
             "_parcelle_godet_id":         None,
             "_parcelle_deplacement_id":   None,
             "_godets_par_parcelle":       None,
@@ -2162,6 +2189,38 @@ def calcul_lots_pepiniere(
             lots[cle_c]["date_cloture"] = date_c
             _toucher(lots[cle_c], date_c)
 
+    # ── 3b-ter. Levées [US-212 / CA6, CA7] ──────────────────────────────────
+    # Un comptage est un INSTANTANÉ : le plus récent à la date de référence fait foi,
+    # les comptages ne s'additionnent jamais. « Levée terminée » est en revanche un
+    # état du lot : une fois déclarée, un comptage ultérieur met le nombre à jour sans
+    # rouvrir une germination que le jardinier a close. Aucun stock n'est touché : un
+    # plant levé n'est pas un godet.
+    _q_levee = (
+        db.query(
+            Evenement.origine_graines_id,
+            Evenement.quantite,
+            Evenement.levee_terminee,
+            Evenement.date,
+        )
+        .filter(Evenement.type_action == "levee")
+        .filter(Evenement.origine_graines_id.isnot(None))
+    )
+    if potager_id is not None:
+        _q_levee = _q_levee.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_levee = _q_levee.filter(Evenement.date <= cutoff)
+    for semis_l, qte_l, terminee_l, date_l in _q_levee.order_by(
+        Evenement.date.asc(), Evenement.id.asc()
+    ).all():
+        cle_l = ("semis", semis_l)
+        if cle_l not in lots:
+            continue
+        lots[cle_l]["nb_leves"] = int(qte_l or 0)
+        lots[cle_l]["date_derniere_levee"] = date_l
+        if terminee_l:
+            lots[cle_l]["levee_terminee"] = True
+        _toucher(lots[cle_l], date_l)
+
     # ── 3c. Emplacement courant [US-210 / CA5, CA6 ; US-211 / CA6] ──────────
     # Règle écrite une seule fois : le dernier déplacement, sinon la dernière mise
     # en godet localisée, sinon la parcelle du semis, sinon « non renseigné ». Un lot
@@ -2270,6 +2329,11 @@ def calcul_lots_pepiniere(
         # [US-216] Une clôture ferme la germination : plus aucune graine à lever.
         if lot["cloture"] and graines > 0:
             etat = ETAT_GERMINATION_CLOSE
+        # [US-212 / CA7] Une levée déclarée terminée la ferme aussi : ce qui n'a pas levé
+        # ne lèvera plus. Une levée non terminée laisse l'état tel que les mises en godet
+        # l'ont fait (CA7) — le comptage est une information, pas une conclusion.
+        if lot["levee_terminee"] and graines > 0:
+            etat = ETAT_GERMINATION_CLOSE
 
         incoherence = graines > 0 and plants > graines
         if incoherence:
@@ -2280,8 +2344,42 @@ def calcul_lots_pepiniere(
                 plants, graines,
             )
 
-        lot["graines_en_germination"] = 0 if lot["cloture"] else max(0, graines - soldees)
+        # [US-212] `graines_non_soldees` = graines semées que ni un repiquage ni une clôture
+        # n'a soldées : ce que le lot peut encore fournir à une mise en godet. C'était
+        # le sens de `graines_en_germination` ; celle-ci devient strictement « ce qui
+        # est encore en train de lever » et tombe à 0 quand la levée est terminée, alors
+        # que les plants levés restent à repiquer. Les garde-fous de repiquage lisent donc
+        # `graines_non_soldees`, jamais `graines_en_germination`.
+        lot["graines_non_soldees"]    = 0 if lot["cloture"] else max(0, graines - soldees)
+        lot["graines_en_germination"] = 0 if (lot["cloture"] or lot["levee_terminee"]) else max(0, graines - soldees)
         lot["etat_germination"]       = etat
+
+        # [US-212 / CA6, CA7, CA3, CA9] Lecture de la levée. Le taux n'existe que si les
+        # graines semées sont connues. Les valeurs saisies sont exposées telles quelles ;
+        # une incohérence est un drapeau, jamais un bornage.
+        leves = lot["nb_leves"]
+        lot["taux_levee"] = (
+            round(leves / graines * 100) if leves is not None and graines > 0 else None
+        )
+        lot["graines_non_levees_soldees"] = (
+            max(0, graines - leves) if lot["levee_terminee"] and leves is not None and graines > 0 else 0
+        )
+        lot["incoherence_levee"] = leves is not None and graines > 0 and leves > graines
+        lot["incoherence_repiquage_levee"] = leves is not None and plants > leves
+        if lot["incoherence_levee"]:
+            _log_stock.warning(
+                "[US-212 / CA3] Incohérence de saisie sur le lot %s (%s) : %d levés pour %d graines "
+                "semées — valeurs exposées telles quelles, sans bornage",
+                lot["lot_id"], lot["culture"], leves, graines,
+            )
+        if lot["incoherence_repiquage_levee"]:
+            _log_stock.warning(
+                "[US-212 / CA9] Incohérence de saisie sur le lot %s (%s) : %d plants repiqués pour "
+                "%d levés — valeurs exposées telles quelles, sans bornage",
+                lot["lot_id"], lot["culture"], plants, leves,
+            )
+        lot["moyenne_levee_culture"] = None
+        lot["nb_lots_moyenne_levee"] = 0
         lot["incoherence_saisie"]     = incoherence
         # Barre « Germination » de la maquette : un lot semé mais pas encore levé
         # vaut bien 0 %, pas « inconnu » — seul un lot sans graines connues est None.
@@ -2298,6 +2396,26 @@ def calcul_lots_pepiniere(
         lot.pop("_parcelle_deplacement_id", None)
         lot.pop("_parcelle_semis_id", None)
         resultat.append(lot)
+
+    # ── 5. Moyenne de levée de la culture [US-212 / CA8] ────────────────────
+    # Calculée sur les AUTRES lots de la même culture dont la levée est notée, dans CE
+    # potager (la requête ci-dessus est déjà scopée), et seulement à partir de deux :
+    # une comparaison à un seul point n'en est pas une. Chaque lot pèse autant, quelle
+    # que soit sa taille. Un lot sans graines semées connues n'a pas de taux.
+    taux_par_culture: Dict[str, List[tuple]] = {}
+    for lot in resultat:
+        if lot["nb_leves"] is not None and lot["graines_semees"] > 0:
+            taux_par_culture.setdefault((lot["culture"] or "").lower(), []).append(
+                (lot["lot_id"], lot["nb_leves"] / lot["graines_semees"] * 100)
+            )
+    for lot in resultat:
+        autres = [
+            taux for lot_id, taux in taux_par_culture.get((lot["culture"] or "").lower(), [])
+            if lot_id != lot["lot_id"]
+        ]
+        if len(autres) >= 2:
+            lot["moyenne_levee_culture"] = round(sum(autres) / len(autres))
+            lot["nb_lots_moyenne_levee"] = len(autres)
 
     return resultat
 
@@ -2339,7 +2457,7 @@ def lots_candidats_mise_en_godet(
         lot for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id)
         if not lot["sans_semis_rattache"]
         and (lot["culture"] or "").lower() == culture_l
-        and lot["graines_en_germination"] >= seuil
+        and graines_restantes(lot) >= seuil   # [US-212] capacité de repiquage, pas « ce qui lève »
         # Filtre STRICT : une variété absente désigne les lots SANS variété, jamais
         # « toutes variétés confondues ». Un lot « bruxelle » n'est pas un lot sans
         # variété — le proposer à un repiquage explicitement déclaré sans variété

@@ -117,6 +117,13 @@ ACTION_MAP: dict[str, list[str]] = {
         "cloture lot", "cloturer lot", "cloturer le lot", "cloture du lot",
         "cloture", "cloturer", "cloture de lot",
     ],
+    # [US-212] Noter la levée d'un lot de semis : un CONSTAT (X graines ont levé), pas un
+    # geste de culture. « levé » / « levée » ne désignent que ça dans une phrase de
+    # geste ; la grammaire exige de toute façon un lot de pépinière (cité par son numéro
+    # ou par sa culture) et ne lit « ont levé » qu'avec un nombre de plants.
+    "levee": [
+        "levee", "levees", "leve", "leves", "lever", "levent",
+    ],
     "eclaircie": [
         # La forme réellement stockée en base est "eclaircie", pas
         # "eclaircissage" — c'est donc elle la clé canonique ; "eclaircissage"

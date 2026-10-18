@@ -32,7 +32,7 @@ import { useNotifier } from '../context/NotificationsContext.jsx'
 import { notificationDepot, notificationEchec } from '../lib/notificationsGeste.js'
 import { useArmerRelecture } from '../hooks/useRelectureAuRetour.jsx'
 import {
-  corpsIntention, dateDuGeste, MENTION_DATE_RAMENEE, peutEnregistrer, phraseADicter,
+  corpsIntention, dateDuGeste, MENTION_DATE_RAMENEE, peutEnregistrer, phraseADicter, plafondGesteDeLot,
 } from '../lib/gestes.js'
 
 /**
@@ -107,13 +107,11 @@ export default function BoutonGeste({
   // [US-216] L'icône du geste (la maquette en donne une par geste) et la classe du
   // bouton lui-même, pour la taille du geste principal.
   icone = Send, btnClassName = '',
-  // [US-216] Le compteur de levée grise l'envoi tant que rien n'est compté.
-  desactive = false,
   // [US-215 / CA14] Le nom accessible du bouton, qui nomme son lot (« Repiquer le lot 128 »).
   ariaLabel = undefined,
 }) {
   const { potagerActif } = usePotager()
-  const { recharger } = useFileGestes()
+  const { recharger, enAttente } = useFileGestes()
   const armerRelecture = useArmerRelecture()
   // Le retour d'action : une carte au-dessus de tout, qui dit « préparé » ou
   // « échec ». Sans fournisseur (`actif` faux), les messages en ligne restent.
@@ -129,6 +127,11 @@ export default function BoutonGeste({
   if (!peutEnregistrer(potagerActif?.role)) return null
 
   const { date, ramenee } = dateDuGeste(dateRef)
+  // [INC-014] Un geste de lot (mise en terre, perte, repiquage, déplacement, clôture) ne
+  // dépasse jamais ce que le lot peut encore fournir, gestes en attente compris : le bouton
+  // se grise au lieu d'empiler.
+  const plafond = plafondGesteDeLot(geste, enAttente)
+  const epuise = plafond?.epuise === true
   // La phrase locale s'affiche tout de suite ; celle du serveur, qui fait foi,
   // la remplace dès le premier dépôt.
   const phrase = phraseServeur ?? phraseADicter({
@@ -145,7 +148,7 @@ export default function BoutonGeste({
       // [CA21] Le dépôt D'ABORD, sans condition : la file se remplit même sans
       // compagnon activé. Plus de contrôle préalable, plus de geste à refaire.
       const res = await api.preparerGeste(corpsIntention({
-        ...geste, date, ecran, potagerId: potagerId ?? potagerActif?.id,
+        ...geste, ...(plafond && plafond.quantite != null ? { quantite: plafond.quantite } : {}), date, ecran, potagerId: potagerId ?? potagerActif?.id,
       }))
       if (res?.phrase) setPhraseServeur(res.phrase)
       setDepose(res)
@@ -178,12 +181,25 @@ export default function BoutonGeste({
   return (
     <div className={`flex flex-col ${plein ? 'items-stretch w-full' : 'items-end'} gap-1.5 ${className}`}>
       <Btn
-        kind={kind} small={small} icon={icone} onClick={lancer} disabled={enCours || desactive}
+        kind={kind} small={small} icon={icone} onClick={lancer} disabled={enCours || epuise}
         aria-label={ariaLabel}
         className={`${plein ? 'min-h-[48px] w-full' : ''} ${btnClassName}`}
       >
-        {enCours ? 'Préparation…' : libelle}
+        {enCours ? 'Préparation…' : epuise ? 'Geste en attente' : libelle}
       </Btn>
+      {/* [INC-014] Dit pourquoi le bouton est grisé, et ce qu'il reste à répartir. */}
+      {epuise && (
+        <span className="text-[11.5px] text-txt3 text-right">
+          {plafond.doublon
+            ? 'Ce geste attend déjà dans votre file pour ce lot.'
+            : 'Tout le lot est déjà en attente dans votre file.'}
+        </span>
+      )}
+      {!epuise && plafond && plafond.reserves > 0 && plafond.disponibles != null && (
+        <span className="text-[11.5px] text-txt3 text-right">
+          {plafond.reserves} plant{plafond.reserves > 1 ? 's' : ''} déjà en attente — il en reste {plafond.disponibles}.
+        </span>
+      )}
       {/* [CA26] La règle se dit avant d'appuyer, jamais après coup. */}
       {ramenee && <span className="text-[11px] text-txt3">{MENTION_DATE_RAMENEE}</span>}
       {/* [CA4] Signalé, pas interdit : le geste est bien en file, et on le dit. */}

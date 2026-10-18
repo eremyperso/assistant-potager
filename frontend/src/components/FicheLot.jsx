@@ -13,24 +13,25 @@
 // ne fait que remplacer la navigation ; il n'ajoute aucun chemin d'écriture. »
 //
 // ⚠️ La fiche n'écrit rien. Chaque bouton PRÉPARE un geste pré-rempli que le
-// compagnon confirme (`BoutonGeste`, US-196/US-224) ; le compteur de levée est une
-// aide à la saisie, pas un formulaire. Les règles — quels gestes, quelles
+// compagnon confirme (`BoutonGeste`, US-196/US-224). La fiche ne saisit AUCUN détail :
+// « Noter la levée » dépose le geste avec son seul lot, et le bot demande le nombre de
+// levés et si la levée est terminée (US-212). Les règles — quels gestes, quelles
 // quantités, quel taux — vivent dans `lib/ficheLot.js`.
 import { useState } from 'react'
 import {
   AlertTriangle, ArrowLeftRight, Check, ChevronRight, CircleHelp, Clock, Flower2, Leaf,
   MapPin, BookOpen, Sprout, X,
 } from 'lucide-react'
-import { Badge, Btn, Modal } from './ui'
+import { Badge, Modal } from './ui'
 import BoutonGeste from './BoutonGeste.jsx'
-import CompteurNumerique from './CompteurNumerique.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
-import { peutEnregistrer } from '../lib/gestes.js'
+import { peutEnregistrer, plafondGesteDeLot } from '../lib/gestes.js'
+import { useFileGestes } from '../context/FileGestesContext.jsx'
 import { emplacementLot } from '../lib/pepiniere.js'
 import {
-  LEVEE_DISPONIBLE, badgeEtat, dateEnClair, echeanceEnClair, gesteDeLevee, gestePrepare,
-  gesteMiseEnTerreIci, gestesDuLot, incoherenceEnClair, NB_SUGGESTIONS_VISIBLES, placeEnClair, suggestionsVisibles, joursDepuisSemis, phraseComparaison, phraseLotSansGeste, phraseSolde,
-  tauxLevee, teinteTaux, tracabilite, valeurInitialeCompteur,
+  LEVEE_DISPONIBLE, badgeEtat, dateEnClair, echeanceEnClair, gestePrepare,
+  gesteMiseEnTerreIci, gestesDuLot, incoherenceEnClair, NB_SUGGESTIONS_VISIBLES, placeEnClair, suggestionsVisibles, joursDepuisSemis, phraseLotSansGeste, phraseSolde,
+  tracabilite,
 } from '../lib/ficheLot.js'
 
 /** Une icône par geste — celles de la maquette. */
@@ -144,78 +145,10 @@ function Echeance({ lot }) {
   )
 }
 
-// ── Compteur de levée (CA10) ─────────────────────────────────────────────────
-
-/**
- * « Noter la levée » en feuille basse : graines semées rappelées, nombre de levés
- * (clavier numérique ET − / +), taux à mesure avec la comparaison à la moyenne de la
- * culture, case « Levée terminée ». « Envoyer au compagnon » prépare le geste ; le
- * compteur n'écrit rien.
- */
-function CompteurLevee({ lot, dateRef, onFermer }) {
-  const semees = lot.graines_semees > 0 ? lot.graines_semees : null
-  const [leves, setLeves] = useState(() => valeurInitialeCompteur(lot))
-  const [termine, setTermine] = useState(false)
-  const taux = tauxLevee(leves, semees)
-  const phrase = phraseComparaison({ taux, moyenne: lot.moyenne_levee_culture ?? null, culture: lot.culture })
-
-  return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center" style={{ background: 'rgba(12,18,6,.45)' }} onClick={onFermer}>
-      <div
-        role="dialog" aria-label="Noter la levée"
-        className="w-full max-w-[520px] bg-card rounded-t-[18px] shadow-[0_-10px_40px_rgba(0,0,0,.25)] px-4 pt-3.5 pb-4 flex flex-col gap-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2.5">
-          <div className="flex-1 min-w-0">
-            <div className="font-serif text-[18px] font-semibold text-txt">Noter la levée</div>
-            <div className="text-[12px] text-txt3 mt-px">
-              Lot #{lot.numero_lot} · <span className="capitalize">{lot.culture}</span>{semees != null ? ` · ${semees} graines semées` : ''}
-            </div>
-          </div>
-          <button
-            type="button" onClick={onFermer} aria-label="Fermer"
-            className="w-12 h-12 flex items-center justify-center rounded-[12px] bg-card-alt text-txt2"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <CompteurNumerique
-          valeur={leves} onChange={setLeves} max={semees} libelle="Nombre de levés"
-          legende={semees != null ? `levés sur ${semees}` : 'levés'}
-        />
-
-        <div className="min-h-10 text-[13.5px] font-semibold text-txt leading-[1.4]">
-          {phrase
-            ? <span className={teinteTaux(taux) === 'red' ? 'text-red' : ''}>{phrase}</span>
-            : <span className="text-txt3 font-medium">Le taux s’affiche à mesure du comptage.</span>}
-        </div>
-
-        <label className="flex items-center gap-[11px] min-h-12 px-3 rounded-[12px] bg-card-alt cursor-pointer">
-          <input type="checkbox" checked={termine} onChange={(e) => setTermine(e.target.checked)} className="w-6 h-6 accent-brand" />
-          <span className="text-[13.5px] font-semibold text-txt">Levée terminée</span>
-        </label>
-
-        <BoutonGeste
-          geste={gesteDeLevee(lot, { leves: leves ?? 0, termine })}
-          dateRef={dateRef} ecran="pepiniere" libelle="Envoyer au compagnon" plein desactive={leves == null}
-          afficherPhrase={false}   // la phrase de levée sera définie par US-212
-          btnClassName="min-h-[52px] text-[15px] font-bold"
-        />
-        <div className="text-[11.5px] text-txt3 text-center -mt-1">
-          Rien n’est enregistré avant ta confirmation dans le compagnon.
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Le geste, en un appui (CA8, CA9, CA11) ───────────────────────────────────
 
-function Gestes({ lot, dateRef, nbPepinieres, levee, compteurInitial }) {
+function Gestes({ lot, dateRef, nbPepinieres, levee }) {
   const gestes = gestesDuLot(lot, { nbPepinieres, levee })
-  const [compteurOuvert, setCompteurOuvert] = useState(compteurInitial)
   if (gestes.length === 0) return null
 
   const principal = gestes.find((g) => g.principal)
@@ -233,27 +166,18 @@ function Gestes({ lot, dateRef, nbPepinieres, levee, compteurInitial }) {
             : 'min-h-[48px] text-[13.5px] font-bold !justify-start text-left'
           return (
             <div key={g.code} className={`flex flex-col gap-1 ${p ? 'col-span-2' : ''}`}>
-              {g.code === 'noter_levee' ? (
-                <Btn
-                  kind={p ? 'primary' : 'ghost'} icon={Icone} onClick={() => setCompteurOuvert(true)}
-                  className={`w-full ${taille}`} aria-haspopup="dialog"
-                >
-                  {libelle}
-                </Btn>
-              ) : (
-                <BoutonGeste
-                  geste={gestePrepare(g)} dateRef={dateRef} ecran="pepiniere"
-                  libelle={libelle} kind={p ? 'primary' : 'ghost'} icone={Icone}
-                  plein afficherPhrase={g === principal} btnClassName={taille}
-                />
-              )}
+              {/* [US-212] « Noter la levée » comme tous les gestes : un appui, le lot seul. */}
+              <BoutonGeste
+                geste={gestePrepare(g)} dateRef={dateRef} ecran="pepiniere"
+                libelle={libelle} kind={p ? 'primary' : 'ghost'} icone={Icone}
+                plein afficherPhrase={g === principal} btnClassName={taille}
+              />
               {/* Une clôture est définitive : elle dit ce qu'elle solde AVANT d'appuyer. */}
               {g.code === 'cloturer' && <p className="text-[11.5px] text-txt3 leading-snug">{phraseSolde(g.solde)}</p>}
             </div>
           )
         })}
       </div>
-      {compteurOuvert && <CompteurLevee lot={lot} dateRef={dateRef} onFermer={() => setCompteurOuvert(false)} />}
     </section>
   )
 }
@@ -302,8 +226,19 @@ function Tracabilite({ lot }) {
  */
 function OuLesMettre({ lot, dateRef, lecture }) {
   const [toutes, setToutes] = useState(false)
+  // [INC-014] Combien de plants partent sur CETTE parcelle : vide = tout ce qui reste. Plusieurs
+  // parcelles = plusieurs gestes, chacun plafonné par ce que le lot et la file laissent.
+  const [nb, setNb] = useState('')
+  const { enAttente } = useFileGestes()
   const om = lot.ou_mettre
   if (!om) return null
+  const base = gesteMiseEnTerreIci(lot, null)
+  const plafond = plafondGesteDeLot(base, enAttente)
+  const voulu = nb === '' ? null : Math.max(1, Math.min(Number(nb) || 1, plafond?.disponibles ?? Infinity))
+  const gesteIci = (s) => {
+    const g = gesteMiseEnTerreIci(lot, s)
+    return g && voulu != null ? { ...g, quantite: voulu } : g
+  }
   const visibles = suggestionsVisibles(om, toutes)
   const reste = (om.suggestions?.length ?? 0) - NB_SUGGESTIONS_VISIBLES
   return (
@@ -317,9 +252,21 @@ function OuLesMettre({ lot, dateRef, lecture }) {
       )}
       {om.aucun_rang_libre && !lecture && (
         <BoutonGeste
-          geste={gesteMiseEnTerreIci(lot, null)} dateRef={dateRef} ecran="pepiniere"
+          geste={gesteIci(null)} dateRef={dateRef} ecran="pepiniere"
           libelle="Mettre en terre" kind="ghost" icone={Leaf} plein btnClassName="min-h-[48px] text-[13.5px] font-bold"
         />
+      )}
+      {!lecture && plafond && !plafond.epuise && (
+        <label className="flex items-center gap-2 text-[12.5px] text-txt2 mb-[7px]">
+          Plants à mettre en terre
+          <input
+            type="number" inputMode="numeric" min={1} max={plafond.disponibles} value={nb}
+            placeholder={String(plafond.disponibles)} onChange={(e) => setNb(e.target.value)}
+            aria-label="Nombre de plants à mettre en terre"
+            className="w-20 min-h-[44px] rounded-[10px] border border-border bg-card px-2 text-[14px] text-txt"
+          />
+          <span className="text-txt3">sur {plafond.disponibles} disponible{plafond.disponibles > 1 ? 's' : ''}</span>
+        </label>
       )}
       <ul className="flex flex-col gap-[7px]">
         {visibles.filter((s) => !om.aucun_rang_libre || s.rangs_libres == null).map((s) => (
@@ -341,7 +288,7 @@ function OuLesMettre({ lot, dateRef, lecture }) {
                 reste une destination possible (CA3). */}
             {!lecture && (
               <BoutonGeste
-                geste={gesteMiseEnTerreIci(lot, s)} dateRef={dateRef} ecran="pepiniere"
+                geste={gesteIci(s)} dateRef={dateRef} ecran="pepiniere"
                 libelle="Mettre en terre ici" kind="ghost" icone={Leaf} plein afficherPhrase={false}
                 btnClassName="min-h-[44px] text-[13px] font-bold"
               />
@@ -362,7 +309,7 @@ function OuLesMettre({ lot, dateRef, lecture }) {
 
 // ── Le contenu, commun aux deux formes ───────────────────────────────────────
 
-function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, levee, compteurInitial, lecture }) {
+function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, levee, lecture }) {
   const sansGeste = phraseLotSansGeste(lot)
   return (
     <div className="@container/fiche flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 min-[480px]:px-[18px] min-[480px]:pt-4 flex flex-col gap-3.5">
@@ -376,9 +323,9 @@ function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, 
         <Echeance lot={lot} />
       )}
 
-      {/* [CA12] Un membre en lecture seule voit tout, sans gestes ni compteur. */}
+      {/* [CA12] Un membre en lecture seule voit tout, sans geste. */}
       {!lecture && (
-        <Gestes lot={lot} dateRef={dateRef} nbPepinieres={nbPepinieres} levee={levee} compteurInitial={compteurInitial} />
+        <Gestes lot={lot} dateRef={dateRef} nbPepinieres={nbPepinieres} levee={levee} />
       )}
       {lecture && (
         <div className="text-[12.5px] text-txt3 leading-[1.5]">
@@ -436,12 +383,11 @@ export function FicheLotInconnu({ numero, onClose }) {
  * @param onOuvrirDetail Ouvre le cycle de vie du lot (CA7).
  * @param onOuvrirCulture Ouvre la fiche culture (CA3).
  * @param leveeDisponible Le geste de levée est-il livré (US-212) ? Défaut : la constante de
- *                       la lib ; la page de contrôle visuel le force pour montrer le compteur.
- * @param compteurInitial Ouvre le compteur de levée dès l'affichage (page de contrôle visuel).
+ *                       la lib ; la page de contrôle visuel le force pour montrer « Noter la levée ».
  */
 export default function FicheLot({
   lot, forme = 'modale', nbPepinieres = null, dateRef = null, onClose, onOuvrirDetail, onOuvrirCulture,
-  leveeDisponible = LEVEE_DISPONIBLE, compteurInitial = false,
+  leveeDisponible = LEVEE_DISPONIBLE,
 }) {
   const { potagerActif } = usePotager()
   const lecture = !peutEnregistrer(potagerActif?.role)
@@ -452,7 +398,7 @@ export default function FicheLot({
       <BarreHaut forme={forme} titre={titre} badge={badge} onClose={onClose} />
       <Contenu
         lot={lot} dateRef={dateRef} nbPepinieres={nbPepinieres} onOuvrirDetail={onOuvrirDetail}
-        onOuvrirCulture={onOuvrirCulture} levee={leveeDisponible} compteurInitial={compteurInitial}
+        onOuvrirCulture={onOuvrirCulture} levee={leveeDisponible}
         lecture={lecture}
       />
     </>

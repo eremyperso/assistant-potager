@@ -250,7 +250,7 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement | levee
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
@@ -284,6 +284,8 @@ RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne �
 Si seul un nombre de pieds OU seul un poids est mentionné (cas normal), un seul objet recolte suffit comme d'habitude.
 
 RÈGLE deplacement : changer de pépinière un lot de godets déjà en pépinière ("passé le lot 119 au châssis froid", "déplacé les godets de tomate sous le châssis") → action="deplacement", culture du lot, parcelle=la pépinière de DESTINATION (jamais celle d'origine). Sans pépinière de destination nommée ("sorti les tomates"), ce n'est PAS un déplacement. Mettre des plants en terre reste "plantation".
+
+RÈGLE levee : compter combien de graines d'une barquette ont LEVÉ ("levée du lot 128 : 40", "les tomates cerise ont levé, 12 plants", "40 choux levés sur 48", "levée terminée pour le lot 128 : 40") → action="levee", quantite=nombre de plants LEVÉS, unite="plants", nb_graines_semees=le nombre après "sur" s'il est dit. Si la levée est déclarée terminée, ajouter "levee_terminee":true. Ce n'est PAS un semis ni une mise_en_godet (aucun repiquage).
 
 RÈGLE binage / éclaircie / désherbage : ce sont TROIS gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :
 - "binage"/"biner" (ameublir la terre en surface, casser la croûte) → action="binage"

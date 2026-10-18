@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Sprout, Leaf, BarChart3 } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { etatDuLot } from '../lib/ficheLot.js'
 import { stades, phaseGermination, tauxTint, stadeCourant, stadeAvancement, joursDepuis, emplacementLot, libelleNumeroLot, lireNumeroLot, messageLotInconnu, ongletsPepiniere, ongletInitial, pastillePepiniere } from '../lib/pepiniere.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
@@ -310,10 +311,12 @@ function TimelineRow({ icon, tint, isLast, children }) {
   )
 }
 
-function buildRows(detail) {
+function buildRows(detail, lot) {
   const rows = []
   if (detail.semis.length > 0) detail.semis.forEach(s => rows.push({ type: 'semis', data: s }))
   else rows.push({ type: 'semis_absent' })
+  // [US-212] Les comptages de levée suivent le semis, avant le repiquage.
+  ;(detail.levees ?? []).forEach(l => rows.push({ type: 'levee', data: l }))
 
   detail.godets.forEach((g, i) => rows.push({ type: 'godet', data: g, idx: i, total: detail.godets.length }))
   if (detail.taux_germination != null) rows.push({ type: 'taux', val: detail.taux_germination })
@@ -325,6 +328,12 @@ function buildRows(detail) {
   ;(detail.deplacements ?? []).forEach(d => rows.push({ type: 'deplacement', data: d }))
   ;(detail.ventes ?? []).forEach(v => rows.push({ type: 'vente', data: v }))
   ;(detail.pertes_godet ?? []).forEach(p => rows.push({ type: 'perte_godet', data: p }))
+  // [US-216] La clôture ferme le fil : plus rien ne se passe sur le lot après elle.
+  ;(detail.clotures ?? []).forEach(c => rows.push({ type: 'cloture', data: c }))
+  // [US-216 / CA13] Un lot terminé (tout mis en terre, vendu ou perdu) n'a pas
+  // d'événement propre : c'est un état. Le fil le dit en dernière ligne, à la date
+  // du dernier geste — la même que la fiche (« Lot terminé le 17 octobre »).
+  if (lot && etatDuLot(lot) === 'termine') rows.push({ type: 'termine', data: { date: lot.date_dernier_geste } })
   return rows
 }
 
@@ -358,7 +367,7 @@ function DetailModal({ lot, onClose }) {
       {error && <p className="text-sm text-red">{error}</p>}
       {detail && (
         <div>
-          {buildRows(detail).map((row, i, tous) => {
+          {buildRows(detail, lot).map((row, i, tous) => {
             const isLast = i === tous.length - 1
 
             if (row.type === 'semis') return (
@@ -463,6 +472,46 @@ function DetailModal({ lot, onClose }) {
                 <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>
               </TimelineRow>
             )
+
+            if (row.type === 'levee') return (
+              <TimelineRow key={`levee-${row.data.id}`} icon="🌾" tint="brand" isLast={isLast}>
+                <p className="text-sm font-semibold text-txt">
+                  Levée <span className="font-normal text-txt3">#{row.data.id}</span>
+                  {row.data.terminee && <span className="ml-1.5 text-[12px] font-medium text-brand-text">· terminée</span>}
+                </p>
+                <p className="text-sm text-txt3">
+                  {row.data.nb_leves} levé{row.data.nb_leves > 1 ? 's' : ''}
+                  {row.data.sur != null && <span> sur {row.data.sur}</span>}
+                </p>
+                <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>
+              </TimelineRow>
+            )
+
+            if (row.type === 'termine') return (
+              <TimelineRow key="termine" icon="✅" tint="brand" isLast={isLast}>
+                <p className="text-sm font-semibold text-txt">Lot terminé</p>
+                <p className="text-sm text-txt3">Tout est mis en terre, vendu ou perdu.</p>
+                {row.data.date && <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>}
+              </TimelineRow>
+            )
+
+            if (row.type === 'cloture') {
+              const soldes = [
+                row.data.godets_soldes > 0 && pluriel(row.data.godets_soldes, 'godet'),
+                row.data.graines_soldees > 0 && `${pluriel(row.data.graines_soldees, 'graine')} non levée${row.data.graines_soldees > 1 ? 's' : ''}`,
+              ].filter(Boolean)
+              return (
+                <TimelineRow key={`cloture-${row.data.id}`} icon="🔒" tint="neutre" isLast={isLast}>
+                  <p className="text-sm font-semibold text-txt">
+                    Clôture du lot <span className="font-normal text-txt3">#{row.data.id}</span>
+                  </p>
+                  <p className="text-sm text-txt3">
+                    {soldes.length ? `Soldé : ${soldes.join(' et ')}` : 'Lot soldé'}
+                  </p>
+                  <p className="text-[12px] mt-0.5 text-txt3">{fmt(row.data.date)}</p>
+                </TimelineRow>
+              )
+            }
 
             return null
           })}
@@ -656,7 +705,7 @@ export default function Pepiniere({ refresh }) {
 
   // [CA12] Une culture n'est « entièrement plantée » que si tous ses lots le sont.
   const termine = (l) =>
-    (l.stock_residuel_godet ?? 0) === 0 && (l.graines_en_germination ?? 0) === 0 && (l.plants_obtenus ?? 0) > 0
+    (l.stock_residuel_godet ?? 0) === 0 && (l.graines_non_soldees ?? l.graines_en_germination ?? 0) === 0 && (l.plants_obtenus ?? 0) > 0
   const parCulture = new Map()
   lots.forEach(l => {
     const k = `${(l.culture || '').toLowerCase()}|${(l.variete || '').toLowerCase()}`

@@ -32,7 +32,7 @@ Un semis n'entre en pépinière que s'il a été fait à couvert : sans parcelle
 **Intention :** comprendre
 **On parle aussi de :** repiquage en godet ; graines soldées ; plants obtenus ; taux de réussite ; barquette vidée
 
-Repiquer solde les graines du semis d'origine, et non les seuls plants obtenus. Vingt plants repiqués depuis une barquette de trente graines soldent les trente graines : les dix qui n'ont pas levé sont perdues, elles quittent quand même la pépinière. Annoncer le nombre de graines de départ en même temps que le nombre de plants permet à l'assistant d'en déduire le taux de réussite du semis. Un repiquage en plusieurs fois ne solde à chaque passage que ce qui a été déclaré, jamais le lot entier d'un coup.
+Repiquer solde les graines du semis d'origine, et non les seuls plants obtenus. Vingt plants repiqués depuis une barquette de trente graines soldent les trente graines : les dix qui n'ont pas levé sont perdues, elles quittent quand même la pépinière. Annoncer le nombre de graines de départ en même temps que le nombre de plants permet à l'assistant d'en déduire le taux de réussite du semis. Un repiquage en plusieurs fois ne solde à chaque passage que ce qui a été déclaré, jamais le lot entier d'un coup. La **levée** d'un lot (« levée du lot 128 : 40 ») se note avant le repiquage : c'est un constat, qui ne crée aucun godet et ne touche à aucun stock. Déclarée terminée, elle solde les graines qui n'ont pas levé, mais les plants levés restent à repiquer ; un repiquage de plus de plants qu'il n'en a levé est signalé, jamais refusé.
 
 ## Ce que la plantation retire aux godets
 

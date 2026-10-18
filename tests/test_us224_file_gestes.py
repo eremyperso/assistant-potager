@@ -1239,6 +1239,60 @@ async def test_save_godet_item_retire_le_geste_de_la_file(monkeypatch):
     assert suivants == [1]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["perte", "perte_godet"])
+async def test_save_perte_item_retire_le_geste_de_la_file(monkeypatch, action):
+    """Une perte déclarée depuis la PWA, enregistrée par le chemin direct, doit
+    quitter la file : sinon l'application la réaffiche après chaque refresh."""
+    from app.bot import pertes
+
+    confirmes, suivants = [], []
+    monkeypatch.setattr(pertes, "send_voice_reply", AsyncMock())
+    monkeypatch.setattr(pertes, "_build_recap", lambda p, i: "recap")
+    monkeypatch.setattr(pertes, "_build_recap_tts", lambda p: "recap")
+    monkeypatch.setattr(pertes, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(pertes.svc_evenements, "creer_evenement_perte",
+                        lambda db, ctx, item, texte: SimpleNamespace(id=1))
+    monkeypatch.setattr(pertes, "current_context", lambda: SimpleNamespace(potager_id=1))
+    from app.services import file_gestes as svc_file
+    monkeypatch.setattr(svc_file, "confirmer", lambda g: confirmes.append(g.id))
+    from app.bot import file_gestes as bot_file
+    monkeypatch.setattr(bot_file, "proposer_suivant",
+                        AsyncMock(side_effect=lambda u, c, uid: suivants.append(uid)))
+
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(effective_message=message, effective_user=SimpleNamespace(id=1))
+    geste_file = {"id": 41, "potager_id": 1, "user_id": 1, "position": 1, "total": 1}
+    item = {"action": action, "culture": "tomate", "quantite": 2, "_geste_file": geste_file}
+
+    await pertes._save_perte_item(update, item, "perte tomate", SimpleNamespace(user_data={}))
+
+    assert confirmes == [41]
+    assert suivants == [1]
+
+
+@pytest.mark.asyncio
+async def test_save_perte_item_sans_geste_de_file_ne_confirme_rien(monkeypatch):
+    from app.bot import pertes
+
+    confirmes = []
+    monkeypatch.setattr(pertes, "send_voice_reply", AsyncMock())
+    monkeypatch.setattr(pertes, "_build_recap", lambda p, i: "recap")
+    monkeypatch.setattr(pertes, "_build_recap_tts", lambda p: "recap")
+    monkeypatch.setattr(pertes, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(pertes.svc_evenements, "creer_evenement_perte",
+                        lambda db, ctx, item, texte: SimpleNamespace(id=1))
+    monkeypatch.setattr(pertes, "current_context", lambda: SimpleNamespace(potager_id=1))
+    from app.services import file_gestes as svc_file
+    monkeypatch.setattr(svc_file, "confirmer", lambda g: confirmes.append(g.id))
+
+    update = SimpleNamespace(effective_message=SimpleNamespace(reply_text=AsyncMock()),
+                             effective_user=SimpleNamespace(id=1))
+    await pertes._save_perte_item(update, {"action": "perte", "culture": "tomate"}, "perte")
+
+    assert confirmes == []
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Mise en godet de la file — le reste du lot est proposé AVEC la question
 # ══════════════════════════════════════════════════════════════════════════════

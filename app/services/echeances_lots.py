@@ -29,6 +29,8 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from utils.stock import graines_restantes   # [US-212]
+
 from app.services import attributs_culture as svc_attributs
 from app.services import calendrier_cultural as cal
 from app.services import confiance_semis as conf
@@ -184,7 +186,7 @@ def _a_des_godets(lot: dict) -> bool:
 
 
 def _a_des_graines(lot: dict) -> bool:
-    return (lot.get("graines_en_germination") or 0) > 0
+    return graines_restantes(lot) > 0   # [US-212] des levés à repiquer comptent
 
 
 def _est_epuise(lot: dict) -> bool:
@@ -193,8 +195,8 @@ def _est_epuise(lot: dict) -> bool:
 
 
 def _levee_notee(lot: dict) -> bool:
-    """Une levée a-t-elle été notée sur ce lot ? Le geste est celui d'US-212 ; tant
-    qu'il n'existe pas, aucun lot n'en porte, et « Noter la levée » reste proposée."""
+    """Une levée a-t-elle été notée sur ce lot ? (US-212 : `nb_leves` n'est pas None —
+    un comptage à zéro est un comptage.) Tant qu'aucune ne l'est, « Noter la levée » reste proposée."""
     return lot.get("nb_leves") is not None
 
 
@@ -706,8 +708,11 @@ def lire_echeances(
     resume = {
         "a_repiquer": {
             "lots": len(a_repiquer),
-            # Les graines semées, tant que la levée n'est pas notée (US-212).
-            "plants": sum(int(lot.get("graines_semees") or 0) for lot in a_repiquer),
+            # [US-212] Les plants LEVÉS quand la levée est notée, sinon les graines semées.
+            "plants": sum(
+                int(lot["nb_leves"] if lot.get("nb_leves") is not None else (lot.get("graines_semees") or 0))
+                for lot in a_repiquer
+            ),
         },
         "a_endurcir": {"lots": len(a_endurcir)},
         "prets_pour_le_plan": {

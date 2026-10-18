@@ -484,14 +484,16 @@ L'assistant reconnaît de nombreux synonymes pour chaque geste : *récolter, cue
 | **Traitement / produit** | non | savon noir, bouillie bordelaise, purin d'ortie, paille |
 | **Commentaire** | non | tout complément libre |
 
-### 6.3 Les dix-neuf gestes reconnus
+### 6.3 Les vingt gestes reconnus
 
 | Famille | Gestes |
 |---|---|
-| **Multiplication** | semis · mise en godet · plantation · déplacement d'un lot |
+| **Multiplication** | semis · mise en godet · plantation · déplacement d'un lot · levée d'un lot |
 | **Entretien** | arrosage · paillage · désherbage · binage · éclaircissage · taille · tuteurage · traitement · protection · amendement |
 | **Sorties** | récolte · perte au jardin · perte en pépinière · vente de plants |
 | **Constat** | observation |
+
+La **levée** compte les plants levés d'un lot de pépinière (« levée du lot 128 : 40 ») : c'est un constat, qui ne change aucun stock. Elle donne le taux de levée du lot et, à partir de deux autres lots de la même culture, la moyenne de votre potager ; « levée terminée » ferme la germination du lot.
 
 Un geste qui ne figure pas dans cette liste n'est pas enregistré : l'assistant préfère vous le dire plutôt que d'inventer une catégorie. Si vous avez fait quelque chose qui n'entre dans aucune case, consignez-le en **observation** (chapitre 11).
 

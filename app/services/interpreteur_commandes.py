@@ -2,7 +2,7 @@
 app/services/interpreteur_commandes.py — Piloter le bot par une phrase [US-172]
 ================================================================================
 Le compagnon de terrain savait interpréter **un geste de jardin** dicté en
-langage naturel — les dix-neuf gestes du référentiel — et rien d'autre. Tout le
+langage naturel — les vingt gestes du référentiel — et rien d'autre. Tout le
 reste, les vingt-quatre commandes du bot et leurs sous-commandes, n'était
 atteignable qu'en tapant la commande exacte, avec ses arguments dans le bon
 ordre. US-171 a rendu ces commandes **visibles** dans le menu natif ; elle ne

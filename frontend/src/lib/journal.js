@@ -36,6 +36,7 @@ export const ACTION_LABEL = {
   perte: 'Perte',
   perte_godet: 'Perte de godets',
   deplacement: 'Déplacement de lot',   // [US-211]
+  levee: 'Levée',                      // [US-212]
   vendu: 'Vente',
   observation: 'Note',
 }

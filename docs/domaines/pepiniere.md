@@ -40,7 +40,8 @@ barème de la confiance (US-178 / CA3). Un test les fige.
 | `SEUIL_DORMANCE_JOURS` | 60 jours | hypothèse — à confirmer par le PO |
 
 Un « geste » du lot, pour la dormance : son semis, une mise en godet, un
-déplacement, une plantation ou une sortie (vente, perte) qui lui est imputée.
+déplacement, une **levée notée** (US-212 : le jardinier qui compte ses levés ne
+l'a pas oublié), une plantation ou une sortie (vente, perte) qui lui est imputée.
 L'observation libre sur la parcelle n'en est pas un.
 
 ## Action suggérée — une par lot
@@ -51,9 +52,9 @@ L'observation libre sur la parcelle n'en est pas un.
 2. **Repiquer** — repiquage *à repiquer* ou *en retard* ;
 3. **Mettre en terre** — endurcissement en cours ou terminé, ou mise en terre
    prévue atteinte ou dépassée ;
-4. **Noter la levée** — des graines en germination, avant la fourchette de
-   repiquage, aucune levée notée (le geste est US-212 : tant qu'il n'existe pas,
-   `_levee_notee` rend faux et l'action reste proposée) ;
+4. **Noter la levée** — des graines à repiquer, avant la fourchette de repiquage,
+   aucune levée notée (`_levee_notee` : `nb_leves` n'est pas `None`, le geste est
+   celui d'US-212) ;
 5. aucune.
 
 ## Ordre d'urgence
@@ -93,7 +94,7 @@ accepte une mise en terre « inconnue ».
 
 | Clé | Contenu |
 |---|---|
-| `a_repiquer` | `lots`, `plants` — lots *à repiquer* ou *en retard* ; `plants` = graines semées tant que la levée n'est pas notée (US-212) |
+| `a_repiquer` | `lots`, `plants` — lots *à repiquer* ou *en retard* ; `plants` = plants **levés** quand la levée est notée (US-212), sinon graines semées |
 | `a_endurcir` | `lots` — endurcissement en cours |
 | `prets_pour_le_plan` | `lots`, `plants` (godets disponibles des lots dont la mise en terre prévue est atteinte, dépassée ou inconnue), `rangs_libres_par_parcelle` (US-198, lu par `repartition_rangs`, planches ordinaires seulement ; calculé seulement s'il y a des plants prêts). Aucune surface : la géométrie est reportée |
 | `a_semer` | `cultures` (`culture`, `fenetre`), `total` — fenêtre de semis en pépinière de la zone ouverte à la date de référence (**R1 à son maximum**, évaluation d'US-178 : le mois adjacent ne suffit pas) et aucun lot de la culture en cours |
@@ -130,10 +131,12 @@ selon l'état du lot, quantités proposées, taux, comparaison à la moyenne —
 - **Gestes.** `GESTES_OUVERTS_PWA` gagne `mise_en_godet`, `perte_godet`, `cloture_lot`.
   Un geste de lot cite son lot comme le jardinier le dirait (`numero_lot_cite`,
   US-209), résolu au récapitulatif ; aucun chemin d'écriture n'est ajouté à la PWA.
-- **Levée (US-212).** Pas livrée : `LEVEE_DISPONIBLE = false` dans `ficheLot.js`, ni
-  « Noter la levée » ni compteur dans l'application. La page de contrôle visuel
-  (`/fiche-lot`) force le geste pour montrer le compteur. US-212 passe la constante à
-  `true` et ouvre le geste côté serveur dans la même livraison.
+- **Levée (US-212).** Livrée : `LEVEE_DISPONIBLE = true` dans `ficheLot.js` (le drapeau
+  reste, il coupe « Noter la levée » d'un coup), `levee` fait partie de `GESTES_OUVERTS_PWA` et
+  de `GESTES_DE_LOT`. **La fiche ne saisit rien** : « Noter la levée » est un `BoutonGeste` comme
+  les autres, qui dépose le geste avec son seul lot — ni compteur, ni case « terminée » ; le
+  serveur ignore un nombre qu'un ancien client enverrait (`deposer_geste`). Le bot demande le
+  détail. Voir la section « La levée d'un lot ».
 
 ### Clôturer un lot (`cloture_lot`)
 
@@ -147,10 +150,82 @@ confirmation par `evenements.resoudre_lot_cloture`).
 | `calcul_lots_pepiniere` | `cloture`, `date_cloture` ; `stock_residuel_godet` et `graines_en_germination` à 0 ; germination « close » ; l'historique (plants obtenus, plantés, vendus) n'est jamais réécrit |
 | `calcul_godets`, `calcul_stock_par_variete` | les godets soldés sortent du stock comme une perte ; le semis clôturé n'est plus « en germination » |
 | échéances | un lot clôturé n'a plus d'action suggérée et n'est plus dormant (rien ne reste) |
+| cycle de vie | `cycle_vie_culture` → `clotures`, `GET /godets/detail` → `clotures` (`godets_soldes`, `graines_soldees`) : une ligne 🔒 du fil « Détail du lot », filtrée sur le lot affiché |
 | bot | récapitulatif en une phrase, dit ce qui est soldé ; lot inconnu, déjà clôturé ou épuisé : `ClotureRefuseeError`, rien d'écrit |
 
 Le geste préparé attend dans la file de gestes en attente (US-224), dont les relances
 le rappellent au jardinier : aucune relance propre à la clôture.
+
+## La levée d'un lot (US-212)
+
+Un **constat**, pas un mouvement de stock : « combien de graines de cette barquette ont
+levé ». Événement `levee` (`origine_graines_id` = semis du lot, `quantite` = levés,
+`nb_graines_semees` = le « sur N » dicté, `levee_terminee`). Colonne ajoutée par
+`migration_v57.sql` (booléen, CHECK : seul un geste `levee` la porte) ; rien d'autre.
+
+| Où | Règle |
+|---|---|
+| `calcul_lots_pepiniere` | le **dernier comptage** à la date de référence fait foi (`nb_leves`, `date_derniere_levee`) ; les comptages ne s'additionnent jamais. `taux_levee` = levés ÷ graines semées, `None` sans graines connues (≠ `taux_germination`, qui compte les plants repiqués) |
+| levée **terminée** | état du lot, collant : un comptage ultérieur met le nombre à jour sans rouvrir la germination. `etat_germination` = « close », `graines_en_germination` = 0, `graines_non_levees_soldees` = semées − levés |
+| levée non terminée | l'état de germination, `graines_en_germination` et tout ce qui touche au repiquage restent exactement ce qu'ils étaient (CA7) |
+| moyenne (CA8) | `moyenne_levee_culture` = moyenne des taux des **autres** lots de la même culture dont la levée est notée, dans ce potager, **à partir de deux** lots (`nb_lots_moyenne_levee`) ; chaque lot pèse autant |
+| incohérences | `incoherence_levee` (levés > semés), `incoherence_repiquage_levee` (plants repiqués > levés) : drapeaux, jamais de bornage ; le « sur N » discordant est signalé au récapitulatif (`_alertes_levee`) |
+| cycle de vie (CA14) | `cycle_vie_culture` → `levees`, `GET /godets/detail` → `levees` (`nb_leves`, `sur`, `terminee`) : **chaque** comptage, à sa date, dans le fil « Détail du lot » |
+| stocks (CA10) | **aucun** : `calcul_godets`, `calcul_stock_par_variete`, `/godets`, `/stats` sont lus tels quels ; `natures_impactees("levee")` = pépinière + semis, jamais stock |
+
+### `graines_en_germination` contre `graines_non_soldees`
+
+Deux notions que le code confondait avant US-212. `graines_en_germination` dit ce qui est
+**encore en train de lever** : elle tombe à 0 pour un lot clôturé *ou dont la levée est
+terminée*. `graines_non_soldees` (= semées − soldées par un repiquage, 0 si clôturé) dit ce que
+le lot peut **encore fournir à un repiquage** : les plants levés restent à repiquer quand la
+germination est close. Tout garde-fou de repiquage, tout « le lot a-t-il encore quelque
+chose » lit `utils.stock.graines_restantes(lot)` — jamais `graines_en_germination` — et
+cette fonction retombe sur l'ancienne clé pour un lot construit à la main (tests, mocks). Un
+repiquage de plus de plants qu'il n'en a levé n'est jamais refusé (CA9) : c'est un drapeau.
+
+### Désigner le lot, une seule fois
+
+`evenements.designer_lot` est la règle unique du déplacement (US-211), de la clôture (US-216)
+et de la levée : numéro cité (`origine_graines_id`), sinon la culture quand **un seul** lot en
+cours correspond, sinon `LotIndetermineError` (le bot pose le choix par boutons, numéro et date
+de semis — `godets._preparer_levee`, callback `levlot`). `resoudre_lot_levee` ajoute les refus
+propres à la levée : lot sans semis rattaché, lot clôturé (`LeveeRefuseeError`), et aucun lot de
+pépinière pour la culture (`LeveeHorsPepiniereError` — « les carottes ont levé » en pleine
+terre : le bot le dit et propose de la noter en observation, `levlot_obs`, sans modèle).
+
+### La PWA dépose le geste, le bot demande le détail (CA11)
+
+Décision produit : depuis la PWA la saisie est limitée, **seul le geste** est possible
+(« levée du lot 128 »). Mêmes principes que la mise en godet et la perte (US-224), avec deux
+questions propres à la levée, posées par `godets._preparer_levee` avant le récapitulatif :
+
+1. **Le nombre de levés** (`_poser_question_levee`) — quand `quantite` manque, que le geste vienne
+   de la file ou d'une phrase dictée sans nombre. La question rappelle le lot (culture, variété,
+   date de semis, graines semées, dernier comptage). La réponse est un texte
+   (`messages._repondre_nombre_de_leves`, état `_QUANTITE_PENDING` marqué `levee`) : un nombre,
+   zéro compris, « rien » et « aucun » valent 0 ; une phrase longue est une nouvelle saisie.
+   **Lot déjà en partie repiqué** (`plants_obtenus` > 0 et graines restantes > 0) : la question
+   porte sur les **graines restantes** (« parmi les 5 graines restantes »), car un plant repiqué a
+   forcément levé. Le bot pose `_leves_deja_repiques` ; la réponse est convertie en total
+   (repiqués + réponse, `_leves_parmi_restantes` gardé pour le récapitulatif). Le comptage
+   enregistré reste donc un **total du lot** : taux, moyenne, solde et incohérences inchangés.
+2. **La levée est-elle terminée ?** (`_poser_question_levee_terminee`, callbacks `levdet_oui` /
+   `levdet_non`, état `_LEVEE_TERMINEE_PENDING`) — seulement quand le bot vient de demander le
+   nombre (`_levee_a_preciser`) ; elle dit ce que « oui » solde (graines non levées, germination
+   close) avant de demander. Une phrase dictée **avec** son nombre ne pose aucune des deux :
+   sans « terminée », la levée est en cours.
+
+Chaque réponse relance `_parse_and_save` avec le `geste_file` d'origine (INC-003) ; `levdet_cancel`
+laisse le geste dans la file (« Laisser dans ma file ») ou l'annule.
+
+### Grammaire
+
+`llm/parseur_deterministe.py` lit « levée du lot 128 : 40 », « 40 choux frisés levés sur 48 »,
+« les tomates cerise ont levé, 12 plants », « levée terminée pour le lot 128 : 40 ». Le verbe de
+la levée est cherché dans **toute** la phrase quand aucun geste n'est en tête
+(`_extraire_geste_levee`), avec son auxiliaire ; `llm/routeur._est_levee_dictee` fait de même
+pour le routage. « terminée » n'est un drapeau qu'avec une levée.
 
 ## L'onglet « Aujourd'hui » (US-215)
 
@@ -203,6 +278,10 @@ l'écran d'US-061 **inchangé**. Mise en forme dans `lib/pepiniere.js` (section 
   par le compagnon à la confirmation (US-167), pas ici.
 
 ## Tests
+
+`tests/test_us212_noter_levee.py` — les formes dictées, l'instantané, la levée terminée, la
+moyenne (0, 1, 2 lots, isolation entre potagers), les incohérences, les refus, l'absence de
+stock, la PWA ; `frontend/src/lib/gestes.test.js` pour la phrase à dicter.
 
 `tests/test_us217_ou_mettre_plants.py` — suggestions, exclusions, exposition, ordre,
 rangs inconnus, places, date passée, lecture unique du Plan.

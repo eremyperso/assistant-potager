@@ -130,15 +130,18 @@ ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRME, ETAT_ABANDONNE, ETAT_PERIME)
 #: [US-216 / CA8, CA9] Les gestes de la fiche d'un lot rejoignent la liste : repiquer
 #: (`mise_en_godet`), déclarer une perte (`perte_godet`) et clôturer le lot
 #: (`cloture_lot`). Tous se disent avec « du lot N » et n'ont ni texte libre ni produit
-#: à identifier. Le geste de levée (US-212) s'ajoutera ici dans sa propre US.
+#: à identifier.
+#:
+#: [US-212 / CA11] La levée d'un lot rejoint la liste : « levée du lot 128 : 40 » est lue par
+#: la grammaire déterministe, et le compteur de la fiche du lot (US-216) préremplit le nombre.
 GESTES_OUVERTS_PWA: tuple[str, ...] = (
-    "semis", "plantation", "deplacement", "mise_en_godet", "perte_godet", "cloture_lot",
+    "semis", "plantation", "deplacement", "mise_en_godet", "perte_godet", "cloture_lot", "levee",
 ) + GESTES_SOL
 
 #: [US-216] Gestes qui portent sur UN lot : le lot voyage dans l'item sous la forme que
 #: la grammaire du bot lit déjà (`numero_lot_cite`, US-209), résolue au récapitulatif.
 #: Le déplacement garde son chemin propre (`_lot_id`, US-211).
-GESTES_DE_LOT: tuple[str, ...] = ("plantation", "mise_en_godet", "perte_godet", "cloture_lot")
+GESTES_DE_LOT: tuple[str, ...] = ("plantation", "mise_en_godet", "perte_godet", "cloture_lot", "levee")
 
 #: [US-216] Comment un geste de lot se DIT — le début de la phrase à dicter.
 _LIBELLE_DICTEE_LOT: dict[str, str] = {
@@ -146,6 +149,7 @@ _LIBELLE_DICTEE_LOT: dict[str, str] = {
     "mise_en_godet": "mise en godet",
     "perte_godet": "perte godet",
     "cloture_lot": "cloture",
+    "levee": "levée",   # [US-212]
 }
 
 #: Écrans reconnus comme origine — champ de MESURE, jamais lu par le flux
@@ -180,6 +184,40 @@ class LotHorsPotagerError(Exception):
     def __init__(self, lot_id: Optional[int]):
         self.lot_id = lot_id
         super().__init__("Ce lot n'appartient pas au potager consulté.")
+
+
+class QuantiteSuperieureAuLotError(Exception):
+    """[INC-014] Le geste demandé dépasse ce que le lot peut encore fournir.
+
+    `disponibles` = stock restant du lot MOINS ce que d'autres gestes en attente ont déjà
+    réservé : deux dépôts de « tout le lot » ne tiennent pas dans un seul lot.
+    """
+
+    def __init__(self, disponibles: int, demandes: Optional[int] = None, reserves: int = 0,
+                 nom: str = "plant"):
+        self.disponibles = disponibles
+        self.demandes = demandes
+        self.reserves = reserves
+        pluriel = "s" if disponibles > 1 else ""
+        if disponibles <= 0:
+            reste = f" ({reserves} déjà réservé{'s' if reserves > 1 else ''} par des gestes en attente)" if reserves else ""
+            super().__init__(f"Il ne reste aucun {nom} disponible dans ce lot{reste}.")
+        else:
+            super().__init__(
+                f"Il ne reste que {disponibles} {nom}{pluriel} disponible{pluriel} dans ce lot "
+                f"({demandes} demandé{'s' if (demandes or 0) > 1 else ''})."
+            )
+
+
+class GesteDeLotDejaEnAttenteError(Exception):
+    """[INC-014] Un geste du même type attend déjà pour ce lot, et aucun nombre ne les départage."""
+
+    def __init__(self, action: Optional[str]):
+        self.action = action
+        super().__init__(
+            "Un geste identique attend déjà pour ce lot dans votre file : "
+            "confirmez-le ou retirez-le avant d'en préparer un autre."
+        )
 
 
 class CodeIntrouvableError(Exception):
@@ -400,6 +438,95 @@ def _meme_geste(item_a: dict, item_b: dict) -> bool:
     return _cle(item_a) == _cle(item_b)
 
 
+#: [INC-014] Ce que chaque geste de lot prélève, et sur quel stock. Une plantation et une perte
+#: de godet piochent dans les MÊMES godets : leurs réservations se cumulent. Un repiquage
+#: pioche dans les graines en germination. Un déplacement et une clôture ne portent aucun
+#: nombre : un seul à la fois par lot suffit.
+_RESERVOIR_DU_GESTE: dict[str, str] = {
+    "plantation": "godets", "perte_godet": "godets", "mise_en_godet": "graines",
+}
+_CHAMP_RESERVOIR: dict[str, str] = {"godets": "stock_residuel_godet", "graines": "graines_non_soldees"}   # [US-212]
+_NOM_RESERVOIR: dict[str, str] = {"godets": "plant", "graines": "graine"}
+
+
+def _quantite_du_geste(item: dict) -> Optional[int]:
+    """Le nombre que porte un geste de lot en file (`nb_plants_godets` pour un repiquage)."""
+    brut = item.get("nb_plants_godets") if item.get("action") == "mise_en_godet" else item.get("quantite")
+    return int(brut) if brut is not None else None
+
+
+def restant_du_lot(db: Session, potager_id: int, lot_id: int, reservoir: str = "godets") -> Optional[int]:
+    """[INC-014] Godets (ou graines en germination) encore disponibles d'un lot, `None` si inconnu.
+
+    Même calcul que la pépinière (`calcul_lots_pepiniere`) : ce que l'écran affiche
+    (« 50 godets disponibles ») et ce que la file contrôle ne peuvent pas diverger.
+    """
+    from utils.stock import calcul_lots_pepiniere, graines_restantes
+
+    for lot in calcul_lots_pepiniere(db, potager_id=potager_id):
+        if lot.get("semis_id") is not None and int(lot["semis_id"]) == int(lot_id):
+            if reservoir == "graines":
+                return graines_restantes(lot)   # [US-212] jamais « en germination »
+            return int(lot.get(_CHAMP_RESERVOIR[reservoir]) or 0)
+    return None
+
+
+def plants_restants_du_lot(db: Session, potager_id: int, lot_id: int) -> Optional[int]:
+    """Godets restants d'un lot — raccourci de `restant_du_lot` pour la mise en terre."""
+    return restant_du_lot(db, potager_id, lot_id, "godets")
+
+
+def _gestes_de_lot_en_attente(
+    db: Session, user_id: int, potager_id: int, lot_id: int, maintenant: Optional[datetime] = None,
+) -> list[dict]:
+    return [
+        g.geste or {}
+        for g in lister_en_attente(db, user_id, potager_id=potager_id, maintenant=maintenant)
+        if (g.geste or {}).get("_lot_id") == int(lot_id)
+    ]
+
+
+def _controler_geste_de_lot(
+    db: Session, ctx: TenantContext, lot_id: int, geste: str, quantite: Optional[float],
+    maintenant: Optional[datetime] = None,
+) -> None:
+    """[INC-014] Refuse un geste de lot que la file ou le stock ne permettent pas.
+
+    Deux règles, valables pour la plantation, la perte, le repiquage, le déplacement et la
+    clôture — jamais « autant de gestes que de clics » :
+
+    1. **Un geste sans nombre** (déplacement, clôture, ou perte / repiquage dont le nombre
+       sera demandé par le compagnon) ne se dépose qu'une fois par lot : un second prendrait
+       le même stock que le premier, sans que personne ne sache combien.
+    2. **Un geste avec nombre** ne dépasse pas le restant du stock qu'il prélève, moins ce
+       que les gestes déjà en attente ont réservé.
+    """
+    en_attente = _gestes_de_lot_en_attente(db, ctx.user_id, ctx.potager_id, lot_id, maintenant)
+    memes = [it for it in en_attente if it.get("action") == geste]
+    if memes and (quantite is None or any(_quantite_du_geste(it) is None for it in memes)):
+        log.warning("[INC-014] Geste de lot déjà en attente : lot=%s geste=%s", lot_id, geste)
+        raise GesteDeLotDejaEnAttenteError(geste)
+
+    reservoir = _RESERVOIR_DU_GESTE.get(geste)
+    if reservoir is None or quantite is None:
+        return
+    restant = restant_du_lot(db, ctx.potager_id, lot_id, reservoir)
+    if restant is None:
+        return   # lot sans stock calculable (ex. sans semis rattaché) : rien à plafonner
+    reserves = sum(
+        _quantite_du_geste(it) or 0 for it in en_attente
+        if _RESERVOIR_DU_GESTE.get(it.get("action")) == reservoir
+    )
+    disponibles = restant - reserves
+    demandes = int(quantite)
+    if disponibles <= 0 or demandes > disponibles:
+        log.warning(
+            "[INC-014] %s refusé : lot=%s restant=%s réservés=%s demandés=%s",
+            geste, lot_id, restant, reserves, demandes,
+        )
+        raise QuantiteSuperieureAuLotError(disponibles, demandes, reserves, _NOM_RESERVOIR[reservoir])
+
+
 def deposer_geste(
     db: Session,
     ctx: TenantContext,
@@ -443,6 +570,11 @@ def deposer_geste(
     parcelle_nom = _valider_parcelle(db, ctx, parcelle_id)
     lot_evt = _valider_lot(db, ctx, lot_id)
     lot = lot_evt.id if lot_evt is not None else None
+    if lot is not None and geste in GESTES_DE_LOT + ("deplacement",):
+        # [INC-014] Un lot ne donne pas plus qu'il ne contient, gestes en attente
+        # compris : aucun bouton de geste ne peut empiler sans limite.
+        # [US-212] Une levée se dépose sans nombre, quoi que dise le client : le bot le demande.
+        _controler_geste_de_lot(db, ctx, lot, geste, None if geste == "levee" else quantite, maintenant=maintenant)
     filiere = svc_contexte_semis.normaliser_contexte(contexte_semis) if geste == "semis" else None
 
     item = construire_item(
@@ -467,6 +599,13 @@ def deposer_geste(
                 item["unite"] = item.get("unite") or "plants"
             elif geste == "cloture_lot":
                 # Ce que la clôture solde est relu à la confirmation, jamais proposé ici.
+                item["quantite"] = None
+                item["unite"] = None
+            elif geste == "levee":
+                # [US-212 / CA11] La PWA ne dépose que le GESTE : ni le nombre de levés ni
+                # « levée terminée » ne se saisissent à l'écran — le bot les demande, avec ce
+                # que la base sait du lot. Même règle que la clôture ; un nombre reçu d'un
+                # ancien client est ignoré.
                 item["quantite"] = None
                 item["unite"] = None
 
@@ -829,6 +968,22 @@ def verifier_contexte(db: Session, geste: GesteIntention, user_id: int) -> Optio
         )
         if lot is None:
             return "le lot de pépinière de ce geste n'existe plus"
+        # [INC-014] Au moment de confirmer, le lot a pu être vidé par un geste précédent de la
+        # même file : on refuse en clair plutôt que de planter, perdre ou repiquer plus qu'il
+        # n'y a.
+        reservoir = _RESERVOIR_DU_GESTE.get(item.get("action"))
+        demandes = _quantite_du_geste(item)
+        if reservoir is not None and demandes is not None:
+            restant = restant_du_lot(db, geste.potager_id, int(lot_id), reservoir)
+            if restant is not None:
+                nom = _NOM_RESERVOIR[reservoir]
+                if restant <= 0:
+                    return f"ce lot n'a plus aucun {nom} disponible"
+                if demandes > restant:
+                    return (
+                        f"ce lot ne compte plus que {restant} {nom}(s) disponible(s) "
+                        f"({demandes} demandés)"
+                    )
 
     return None
 
@@ -958,9 +1113,14 @@ def phrase_a_dicter(item: dict) -> str:
     """
     geste = item.get("action") or ""
     morceaux: list[str] = [_LIBELLE_DICTEE_LOT.get(geste, geste)]
+    numero = item.get("numero_lot_cite")
+    if geste == "levee" and numero is not None:
+        # [US-212 / CA11] « levée du lot 128 » : le seul lot, que la grammaire lit sans appel au
+        # modèle. Le nombre de levés et « terminée » ne se disent pas depuis l'écran : le bot les
+        # demande.
+        return f"levée du lot {int(numero)}"
     # [US-216] « mise en godet 40 plants du lot 128 » : la grammaire déterministe lit
     # le lot cité, et la culture qu'il porte n'a pas à être redite.
-    numero = item.get("numero_lot_cite")
     if geste in GESTES_DE_LOT and numero is not None:
         nb = item.get("nb_plants_godets") if geste == "mise_en_godet" else item.get("quantite")
         if nb is not None and geste != "cloture_lot":

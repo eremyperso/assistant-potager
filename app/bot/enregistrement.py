@@ -327,8 +327,67 @@ def _phrase_cloture(p: dict) -> str:
     return f"clôture {nom} — {' et '.join(morceaux)} soldé{'s' if pluriel else ''}"
 
 
+def _phrase_levee(p: dict) -> str:
+    """[US-212 / CA5] « levée du lot 128 (chou frisé) : 40 plants » — une phrase, comme le
+    jardinier la dicterait. Une levée déclarée terminée le dit."""
+    lot = f"du lot {p['_lot_numero']}" if p.get("_lot_numero") else "du lot"
+    culture = p.get("culture") or ""
+    if culture and p.get("variete"):
+        culture = f"{culture} {p['variete']}"
+    nom = f"{lot} ({culture})" if culture else lot
+    debut = "levée terminée" if p.get("levee_terminee") else "levée"
+    nb = p.get("quantite")
+    if nb is None:
+        return f"{debut} {nom}"
+    nb = int(float(nb))
+    return f"{debut} {nom} : {nb} plant{'s' if nb > 1 else ''}"
+
+
+def _lignes_levee_recap(p: dict) -> list[str]:
+    """[US-212 / CA3, CA6, CA7] Ce que le récapitulatif d'une levée ajoute à sa phrase : le
+    taux (et la moyenne de la culture quand elle existe), ce qu'une levée terminée solde,
+    et les incohérences — signalées, jamais corrigées en silence."""
+    from app.services.lots_pepiniere import phrase_taux_levee
+
+    lignes: list[str] = []
+    lot = p.get("_lot_levee") or {}
+    if p.get("_leves_deja_repiques"):
+        # [US-212 / CA11] D'où vient le total : les repiqués, plus la réponse du jardinier.
+        rep, dits = int(p["_leves_deja_repiques"]), int(p.get("_leves_parmi_restantes") or 0)
+        lignes.append(
+            f"\U0001F331 Dont {rep} déjà repiqué{'s' if rep > 1 else ''} en godet "
+            f"et {dits} levé{'s' if dits > 1 else ''} parmi les graines restantes."
+        )
+    taux = phrase_taux_levee(lot.get("taux"), lot.get("moyenne"), lot.get("culture"))
+    if taux:
+        lignes.append(f"\U0001F4C8 Taux de levée : *{taux}*")
+    if p.get("levee_terminee"):
+        graines = int(lot.get("graines_semees") or 0)
+        leves = int(float(p.get("quantite") or 0))
+        soldees = max(0, graines - leves)
+        suite = (
+            f" : {soldees} graine{'s' if soldees > 1 else ''} non levée{'s' if soldees > 1 else ''} "
+            f"{'seront soldées' if soldees > 1 else 'sera soldée'}"
+            if soldees else ""
+        )
+        lignes.append(f"\u2705 La levée est déclarée terminée{suite}.")
+    lignes.extend(p.get("_alertes_levee") or [])
+    return lignes
+
+
 def _build_action_summary(items: list[dict]) -> str:
     """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
+    if len(items) == 1 and normalize_action(items[0].get("action")) == "levee":
+        # [US-212 / CA5] Une levée se lit en une phrase, puis son taux et ses alertes.
+        p = items[0]
+        lines = ["\U0001F4DD *Je vais enregistrer :*\n", f"\U0001F331 *{_phrase_levee(p)}*"]
+        if p.get("date"):
+            lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.extend(_lignes_levee_recap(p))
+        if p.get("_alerte_lot"):
+            lines.append(f"\n{p['_alerte_lot']}")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
     if len(items) == 1 and normalize_action(items[0].get("action")) == "deplacement":
         # [US-211 / CA5] Un déplacement se lit en une phrase : le lot, d'où, vers où.
         p = items[0]
@@ -729,6 +788,8 @@ def _build_recap_tts(p: dict) -> str:
         return f"{_phrase_deplacement(p).capitalize()} enregistré."   # [US-211]
     if normalize_action(p.get("action")) == "cloture_lot":
         return f"{_phrase_cloture(p).capitalize()} enregistrée."   # [US-216]
+    if normalize_action(p.get("action")) == "levee":
+        return f"{_phrase_levee(p).capitalize()} enregistrée."   # [US-212]
     parties = []
     action = p.get("action") or "action"
     parties.append(f"{action.capitalize()} enregistrée.")
@@ -785,6 +846,14 @@ def _build_recap(p: dict, event_id: int) -> str:
         if p.get("parcelle"):     lines.append(f"📍 Parcelle : *{p['parcelle']}*")
         if p.get("date"):         lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"):  lines.append(f"📝 Note : *{p['commentaire']}*")
+        lines.append("\n_Que voulez-vous faire ensuite ?_")
+        return "\n".join(lines)
+
+    # [US-212] Levée de lot : une phrase, son taux, ses alertes.
+    if action_norm == "levee":
+        lines.append(f"\U0001F331 *{_phrase_levee(p)}*")
+        if p.get("date"):         lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.extend(_lignes_levee_recap(p))
         lines.append("\n_Que voulez-vous faire ensuite ?_")
         return "\n".join(lines)
 

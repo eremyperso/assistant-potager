@@ -10,11 +10,16 @@ from utils.tts import send_voice_reply
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import stock as svc_stock
+from utils.stock import graines_restantes   # [US-212]
 from app.services import lots_pepiniere as svc_lots  # [US-209]
-from .noyau import AFTER_RECORD_KEYBOARD, log
+from .noyau import AFTER_RECORD_KEYBOARD, _md, log
 from .etat import (
     _DEPLACEMENT_LOT_PENDING,
     _DEPLACEMENT_LOT_TIMEOUT,
+    _LEVEE_LOT_PENDING,
+    _LEVEE_LOT_TIMEOUT,
+    _LEVEE_TERMINEE_PENDING,
+    _LEVEE_TERMINEE_TIMEOUT,
     _GODET_GRAINES_PENDING,
     _QUANTITE_PENDING,
     _GODET_GRAINES_TIMEOUT,
@@ -69,7 +74,7 @@ async def _demander_graines_godet_si_manquant(update: Update, parsed: dict, text
 
     lot = _lot_pressenti_pour_godet(parsed)
     # [CA4] Aucun semis rattachable, ou lot déjà entièrement soldé → pas de question
-    if not lot or lot.get("graines_en_germination", 0) <= 0:
+    if not lot or graines_restantes(lot) <= 0:   # [US-212] capacité de repiquage
         return False
 
     import time as _time_gr
@@ -90,14 +95,14 @@ async def _demander_graines_godet_si_manquant(update: Update, parsed: dict, text
     await update.effective_message.reply_text(
         f"🌾 Sur combien de graines avez-vous repiqué ces "
         f"*{parsed['nb_plants_godets']}* plants de {label} ?\n\n"
-        f"_Lot {_etiquette_lot(lot)} : il reste {lot['graines_en_germination']} "
+        f"_Lot {_etiquette_lot(lot)} : il reste {graines_restantes(lot)} "
         f"graine(s) non soldée(s)._",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
     log.info(
         "[US-066] Nombre de graines réclamé pour le lot #%s (%d restantes) — user_id=%s",
-        lot["semis_id"], lot["graines_en_germination"], user_id,
+        lot["semis_id"], graines_restantes(lot), user_id,
     )
     return True
 
@@ -146,7 +151,7 @@ async def _godet_graines_reponse(update: Update, texte_reponse: str, ctx=None) -
         )
         return
 
-    restantes = lot["graines_en_germination"]
+    restantes = graines_restantes(lot)
     if nb_graines > restantes:
         await _redemander(
             f"❌ Ce lot n'a plus que *{restantes}* graine(s) en germination : "
@@ -251,7 +256,7 @@ async def _demander_lot_godet_si_ambigu(update: Update, parsed: dict, texte: str
 
     buttons = [
         [InlineKeyboardButton(
-            f"{_etiquette_lot(lot)} — {lot['graines_en_germination']} graines restantes",
+            f"{_etiquette_lot(lot)} — {graines_restantes(lot)} graines restantes",
             callback_data=f"godetlot:{lot['semis_id']}",
         )]
         for lot in candidats
@@ -500,8 +505,7 @@ async def _poser_question_quantite_pepiniere(
     de_la_file = geste_file is not None
 
     lot = _lot_pressenti_pour_godet(item) if est_godet else _lot_pressenti_pour_sortie(item)
-    cle = "graines_en_germination" if est_godet else "stock_residuel_godet"
-    reste = int(lot.get(cle) or 0) if lot else 0
+    reste = (graines_restantes(lot) if est_godet else int(lot.get("stock_residuel_godet") or 0)) if lot else 0
 
     attente = {
         "items": items, "texte": texte, "ts": _time_q.time(), "geste_file": geste_file,
@@ -733,6 +737,306 @@ async def _deplacement_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) ->
     from .saisie import _parse_and_save   # import tardif : saisie importe ce module
     await _parse_and_save(
         update, pending["texte"], pre_parsed_items=[parsed], geste_file=pending.get("geste_file"),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-212] Noter la levée d'un lot de semis
+# ──────────────────────────────────────────────────────────────────────────────
+async def _preparer_levee(update: Update, parsed: dict, texte: str, geste_file=None) -> bool:
+    """[US-212 / CA2, CA3, CA4] Désigne le lot d'une levée AVANT le récapitulatif.
+
+    Même parcours que le déplacement (`_preparer_deplacement`) et même règle de
+    désignation (`svc_evenements.designer_lot`) : le numéro cité, sinon la culture quand
+    un seul lot en cours correspond, sinon un choix par boutons (numéro et date de semis).
+
+    Retourne True si le flux s'arrête ici (refus dit, question posée, choix demandé),
+    False si le geste est prêt : `parsed` porte alors le lot et ses alertes
+    (`_alertes_levee`, jamais corrigées en silence) et le récapitulatif peut suivre.
+
+    [CA11] La PWA ne dépose que le GESTE (le lot) : le nombre de levés, puis « la levée
+    est-elle terminée ? », sont demandés ICI, précisément, avec ce que la base sait du lot.
+    Une phrase dictée avec son nombre (« levée du lot 128 : 40 ») ne pose aucune des deux :
+    sans « terminée », la levée est en cours.
+    """
+    message = update.effective_message
+    db = SessionLocal()
+    candidats: list[dict] = []
+    hors_pepiniere = False
+    try:
+        try:
+            lot = svc_evenements.resoudre_lot_levee(db, current_context(), parsed)
+            if parsed.get("quantite") is None:
+                await _poser_question_levee(update, parsed, texte, geste_file, lot)
+                return True
+            if parsed.get("_levee_a_preciser") and not parsed.get("_levee_terminee_repondue"):
+                await _poser_question_levee_terminee(update, parsed, texte, geste_file, lot)
+                return True
+            return False
+        except svc_evenements.LotIndetermineError:
+            candidats = [
+                lot for lot in svc_evenements.lots_deplacables(
+                    db, current_context(), parsed.get("culture") or "", parsed.get("variete"),
+                )
+                if lot.get("semis_id") is not None
+            ]
+        except svc_evenements.LeveeHorsPepiniereError as e:
+            log.info("[US-212 / CA4] Levée hors pépinière : %s | texte=%r", e, texte)
+            hors_pepiniere = True
+        except svc_evenements.EvenementInvalideError as e:
+            log.info("[US-212] Levée refusée : %s | texte=%r", e, texte)
+            await message.reply_text(f"❌ {e}")
+            return True
+    finally:
+        db.close()
+
+    user_id = update.effective_user.id
+    if hors_pepiniere:
+        # « les carottes ont levé » : un semis en pleine terre n'a pas de lot. Ce n'est pas
+        # une levée de lot — on le dit, et on propose de la noter en observation.
+        culture = parsed.get("culture") or "cette culture"
+        _LEVEE_LOT_PENDING[user_id] = {
+            "parsed": parsed, "texte": texte, "ts": time.time(), "geste_file": geste_file,
+        }
+        await message.reply_text(
+            f"🌱 La levée se note sur un *lot de pépinière* — je n'en trouve aucun pour *{culture}*. "
+            "S'il s'agit d'un semis en pleine terre, je peux le noter en observation.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("📝 Noter en observation", callback_data="levlot_obs"),
+                InlineKeyboardButton("❌ Non merci", callback_data="levlot_cancel"),
+            ]]),
+        )
+        return True
+
+    if len(candidats) < 2:
+        await message.reply_text(
+            "❌ Plusieurs lots correspondent : citez le numéro du lot (« levée du lot 128 : 40 »)."
+        )
+        return True
+
+    _LEVEE_LOT_PENDING[user_id] = {
+        "parsed": parsed, "texte": texte, "ts": time.time(), "geste_file": geste_file,
+        "labels": {lot["semis_id"]: _etiquette_lot(lot) for lot in candidats},
+    }
+    buttons = [
+        [InlineKeyboardButton(
+            f"{_etiquette_lot(lot)} — {lot.get('graines_semees', 0)} graines semées",
+            callback_data=f"levlot:{lot['semis_id']}",
+        )]
+        for lot in candidats
+    ]
+    buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="levlot_cancel")])
+    culture = parsed.get("culture") or "cette culture"
+    variete = parsed.get("variete")
+    label = f"{culture} *{variete}*" if variete else f"*{culture}*"
+    await message.reply_text(
+        f"🌱 Plusieurs lots de {label} sont en pépinière.\n\nSur quel lot comptez-vous la levée ?",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info("[US-212] %d lots candidats proposés pour '%s' — user_id=%s", len(candidats), culture, user_id)
+    return True
+
+
+def _nom_du_lot_levee(lot: dict) -> str:
+    """« Chou frisé » : la culture et la variété du lot, pour les questions du bot."""
+    nom = (lot.get("culture") or "").capitalize()
+    if lot.get("variete"):
+        nom += f" {lot['variete']}"
+    return _md(nom)
+
+
+async def _poser_question_levee(update: Update, parsed: dict, texte: str, geste_file, lot: dict) -> None:
+    """[US-212 / CA11] « Combien de plants ont levé ? » — avec le lot, ses graines semées et
+    son dernier comptage, plutôt que de les révéler après la réponse.
+
+    La réponse arrive par le texte (`messages._repondre_quantite_en_attente`) : un nombre,
+    zéro compris (« rien n'a encore levé »). Le geste reprend ensuite `_parse_and_save`
+    avec son `geste_file`, et `_preparer_levee` pose la question suivante.
+    """
+    user_id = update.effective_user.id
+    parsed["_levee_a_preciser"] = True
+    _QUANTITE_PENDING[user_id] = {
+        "items": [parsed], "texte": texte, "ts": time.time(), "geste_file": geste_file, "levee": True,
+    }
+    numero = lot.get("numero_lot")
+    cible = f"le lot n° {numero}" if numero is not None else "ce lot"
+    # [US-212 / CA11] Un lot déjà en partie repiqué : ses plants repiqués ont forcément levé.
+    # On ne demande que ce qui a levé parmi les graines RESTANTES, et le total (repiqués +
+    # réponse) est déduit à la réponse — le comptage reste un total du lot.
+    repiques = int(lot.get("plants_obtenus") or 0)
+    restantes = graines_restantes(lot)
+    if repiques > 0 and restantes > 0:
+        parsed["_leves_deja_repiques"] = repiques
+        lignes = [f"🌱 Combien de plants ont levé parmi les {restantes} graines restantes du {cible[3:]} ?\n"]
+    else:
+        lignes = [f"🌱 Combien de plants ont levé dans {cible} ?\n"]
+    detail = f"_{_nom_du_lot_levee(lot)} · semé le {_fmt_date_lot(lot.get('date_semis'))}"
+    if lot.get("graines_semees"):
+        detail += f" · {lot['graines_semees']} graines semées"
+    if "_leves_deja_repiques" in parsed:
+        detail += f", dont {repiques} déjà repiqué{'s' if repiques > 1 else ''} en godet"
+    lignes.append(detail + "._")
+    if lot.get("nb_leves") is not None:
+        jour = str(lot["date_derniere_levee"])[:10] if lot.get("date_derniere_levee") else None
+        quand = f" le {jour[8:10]}/{jour[5:7]}" if jour else ""
+        lignes.append(f"_Dernier comptage : {lot['nb_leves']} levés{quand} — le nouveau le remplace._")
+    lignes.append("\nTapez le nombre de plants levés (0 si rien n'a encore levé).")
+    await update.effective_message.reply_text(
+        "\n".join(lignes), parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+            "❌ Laisser dans ma file" if geste_file is not None else "❌ Annuler", callback_data="levdet_cancel",
+        )]]),
+    )
+    log.info("[US-212 / CA11] Nombre de levés demandé pour le lot %s — user_id=%s", numero, user_id)
+
+
+async def _poser_question_levee_terminee(update: Update, parsed: dict, texte: str, geste_file, lot: dict) -> None:
+    """[US-212 / CA7, CA11] « La levée est-elle terminée ? » — dit ce que « oui » solde AVANT
+    de demander : les graines non levées, et la germination du lot qui se clôt."""
+    user_id = update.effective_user.id
+    _LEVEE_TERMINEE_PENDING[user_id] = {
+        "items": [parsed], "texte": texte, "ts": time.time(), "geste_file": geste_file,
+    }
+    numero = lot.get("numero_lot")
+    cible = f"du lot n° {numero}" if numero is not None else "du lot"
+    leves = int(float(parsed.get("quantite") or 0))
+    graines = int(lot.get("graines_semees") or 0)
+    lignes = [f"✅ La levée {cible} est-elle terminée ?\n"]
+    if graines > 0:
+        lignes.append(f"_{leves} levés sur {graines} graines semées ({round(leves / graines * 100)} %)._")
+    soldees = max(0, graines - leves)
+    oui = "la germination du lot est close"
+    if soldees == 1:
+        oui += " et la graine non levée est soldée"
+    elif soldees > 1:
+        oui += f" et les {soldees} graines non levées sont soldées"
+    lignes.append(f"• *Terminée* : {oui}.")
+    lignes.append("• *Pas encore* : le lot reste « en cours », vous pourrez recompter.")
+    await update.effective_message.reply_text(
+        "\n".join(lignes), parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Oui, terminée", callback_data="levdet_oui"),
+             InlineKeyboardButton("⏳ Pas encore", callback_data="levdet_non")],
+            [InlineKeyboardButton(
+                "❌ Laisser dans ma file" if geste_file is not None else "❌ Annuler", callback_data="levdet_cancel",
+            )],
+        ]),
+    )
+    log.info("[US-212 / CA7] « Levée terminée ? » demandé pour le lot %s — user_id=%s", numero, user_id)
+
+
+async def _levee_detail_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-212 / CA11] Boutons des questions de la levée : « Oui, terminée » / « Pas encore » /
+    annuler. Le geste reprend ensuite son parcours normal : récapitulatif, confirmation,
+    écriture."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    data = query.data  # levdet_oui | levdet_non | levdet_cancel
+
+    if data == "levdet_cancel":
+        question = _QUANTITE_PENDING.get(user_id)
+        nombre = question if question and question.get("levee") else None
+        if nombre is not None:
+            _QUANTITE_PENDING.pop(user_id, None)
+        terminee = _LEVEE_TERMINEE_PENDING.pop(user_id, None)
+        geste_file = (terminee or nombre or {}).get("geste_file")
+        await query.edit_message_text(
+            "👌 Le geste reste dans votre file — /gestes le rouvre." if geste_file is not None else "❌ Levée annulée.",
+            reply_markup=None,
+        )
+        return
+
+    pending = _LEVEE_TERMINEE_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez redire la levée.")
+        return
+    if time.time() - pending["ts"] > _LEVEE_TERMINEE_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 3 min). Veuillez redire.", parse_mode="Markdown")
+        return
+
+    parsed = pending["items"][0]
+    terminee = data == "levdet_oui"
+    if terminee:
+        parsed["levee_terminee"] = True
+    parsed["_levee_terminee_repondue"] = True
+    log.info("[US-212 / CA7] Levée terminée=%s — user_id=%s", terminee, user_id)
+    await query.edit_message_text(
+        "✅ Levée *terminée*." if terminee else "⏳ Levée *pas encore terminée*.",
+        parse_mode="Markdown", reply_markup=None,
+    )
+
+    from .saisie import _parse_and_save   # import tardif : saisie importe ce module
+    await _parse_and_save(
+        update, pending["texte"], pre_parsed_items=pending["items"], geste_file=pending.get("geste_file"),
+    )
+
+
+async def _levee_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US-212 / CA2, CA4] Callback inline — choix du lot d'une levée, ou observation d'un
+    semis en pleine terre. Le geste reprend ensuite son parcours normal : récapitulatif,
+    confirmation, écriture."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = update.effective_user.id
+    pending = _LEVEE_LOT_PENDING.pop(user_id, None)
+    if pending is None:
+        await query.edit_message_text("⏱ Action expirée. Veuillez redire la levée.")
+        return
+    if time.time() - pending["ts"] > _LEVEE_LOT_TIMEOUT:
+        await query.edit_message_text("⏱ *Action annulée* (timeout 2 min). Veuillez redire.", parse_mode="Markdown")
+        return
+
+    data = query.data  # levlot:{semis_id} | levlot_obs | levlot_cancel
+    if data == "levlot_cancel":
+        await query.edit_message_text("❌ Levée annulée.", reply_markup=None)
+        return
+
+    parsed = pending["parsed"]
+    if data == "levlot_obs":
+        await _noter_levee_en_observation(query, parsed, pending["texte"])
+        return
+
+    semis_id = int(data[len("levlot:"):])
+    parsed["origine_graines_id"] = semis_id
+    log.info("[US-212] Lot de semis id=%s choisi pour la levée — user_id=%s", semis_id, user_id)
+    await query.edit_message_text(
+        f"✅ Lot *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
+        parse_mode="Markdown",
+        reply_markup=None,
+    )
+
+    from .saisie import _parse_and_save   # import tardif : saisie importe ce module
+    await _parse_and_save(
+        update, pending["texte"], pre_parsed_items=[parsed], geste_file=pending.get("geste_file"),
+    )
+
+
+async def _noter_levee_en_observation(query, parsed: dict, texte: str) -> None:
+    """[US-212 / CA4] Le semis est en pleine terre : la phrase du jardinier est gardée
+    telle quelle en observation (US-038), sans appel au modèle ni stock touché."""
+    champs = {
+        "culture": parsed.get("culture"),
+        "variete": parsed.get("variete"),
+        "constat": (texte or "").strip(),
+        "date": parsed.get("date"),
+    }
+    db = SessionLocal()
+    try:
+        svc_evenements.creer_evenement_observation(db, current_context(), champs, texte, "Levée")
+    except svc_evenements.EvenementInvalideError as e:
+        db.rollback()
+        await query.edit_message_text(f"❌ {e}", reply_markup=None)
+        return
+    finally:
+        db.close()
+    await query.edit_message_text(
+        "✅ *Observation enregistrée* — levée d'un semis en pleine terre.",
+        parse_mode="Markdown", reply_markup=None,
     )
 
 

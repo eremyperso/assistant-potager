@@ -1,3 +1,50 @@
+## [v3.89.0] — 2026-10-18
+
+**ÉPIC 12 — US-212, US-216, INC-014** : on peut **noter la levée d'un lot de semis** devant la barquette — « levée du lot 128 : 40 » —
+et la Pépinière en tire un vrai taux de levée, lot par lot, comparé à la moyenne de la culture.
+Le fil « Détail du lot » raconte désormais aussi les levées et la clôture, et un lot ne peut plus être mis en terre au-delà de ses plants.
+
+**Impact sur l'épic 9-12 (refonte Plan / Cultures / Pépinière)** :
+- **US-212** (Noter la levée) : livrée, avec la décision du 18/10/2026 « la PWA limite la saisie » (CA11 révisé, CA14 ajouté) ; migration v57.
+- **US-216** (Fiche du lot de terrain) : reprise — CA10 révisé (plus de compteur dans la fiche), CA7 complété (clôture et fin de lot dans le fil du lot).
+- **US-224** (File de gestes) : reprise — la levée devient un geste de lot, et la file contrôle le restant du lot.
+- **US-211** (Déplacer), **US-217** (Où mettre les plants), **US-215** (Aujourd'hui) : touchées sans changement de règle — désignation du lot partagée, bouton de mise en terre plafonné, « À repiquer » compte les plants levés.
+- **INC-014** : incident de l'épic 12 corrigé (mise en terre répétée au-delà des godets du lot).
+
+### 🚀 Nouveautés
+- Ajoute le geste **« levée »** : un lot, un nombre de plants levés, une date, et l'indication facultative que la levée est terminée (US-212).
+- Lit sans appel au modèle « levée du lot 128 : 40 », « 40 choux frisés levés sur 48 », « les tomates cerise ont levé, 12 plants » et « levée terminée pour le lot 128 : 40 » (US-212).
+- Désigne le lot par son numéro, par sa culture quand un seul lot est en cours, ou par des boutons (numéro et date de semis) ; la règle est la même que pour le déplacement (US-212, US-211).
+- Garde le dernier comptage comme seul valable (30 puis 40 levés font 40, pas 70) et calcule le **taux de levée** : levés ÷ graines semées, distinct du taux de germination (US-212).
+- Compare ce taux à la **moyenne de levée de la culture** dans le potager, dès qu'au moins deux autres lots en ont une, et n'affiche aucune moyenne en dessous (US-212).
+- Clôt la germination du lot quand la levée est déclarée terminée : les graines non levées sont soldées, les plants levés restent à repiquer (US-212).
+- Signale sans jamais corriger un « sur 48 » qui ne correspond pas au lot, plus de levés que de graines semées, et un repiquage de plus de plants qu'il n'en a levé (US-212).
+- Refuse la levée d'un lot sans semis rattaché ou clôturé, et propose de noter « les carottes ont levé » en observation quand le semis est en pleine terre (US-212).
+- Ouvre « Noter la levée » dans la fiche du lot : le bouton **dépose le geste avec son seul lot**, sans compteur ni « terminée » — la PWA limite la saisie (US-212).
+- Fait demander le détail par le bot, précisément : combien de plants ont levé (lot, graines semées et dernier comptage rappelés, zéro accepté), puis si la levée est terminée, en disant ce que « oui » solde (US-212).
+- Expose `nb_leves`, `date_derniere_levee`, `taux_levee`, `levee_terminee` et `moyenne_levee_culture` dans `GET /pepiniere/lots`, et compte les plants levés dans « À repiquer » (US-212).
+- Ajoute à « Détail du lot » (US-061) **chaque comptage de levée** à sa date — levés, « sur N », mention « terminée » — et la **clôture** du lot avec ce qu'elle a soldé ; un lot terminé finit son fil par « Lot terminé » (US-212 CA14, US-216 CA7).
+- Pose, quand le lot est déjà en partie repiqué, la question de levée sur les graines **restantes** : un plant repiqué a forcément levé, le total enregistré reste celui du lot (US-212).
+- Ne demande plus de parcelle au récapitulatif d'une levée ni d'une clôture de lot : le geste porte sur un lot (US-212, US-216).
+
+### 🐛 Corrections
+- Corrige la **mise en terre répétée sans limite** : le bouton se grise (« Geste en attente ») dès que tout le lot est dans la file, et indique les plants déjà réservés (INC-014).
+- Refuse au dépôt comme à la confirmation un geste de lot (mise en terre, perte, repiquage) qui dépasse les godets ou graines restants, gestes en attente compris ; `/stats` ne dépasse plus la pépinière (INC-014).
+- Refuse en 409 un second geste de lot sans nombre (déplacement, clôture) déjà en attente pour le même lot (INC-014).
+- Propose par défaut le restant du lot à la mise en terre, répartissable sur plusieurs parcelles (INC-014).
+
+### 🔧 Améliorations techniques
+- Ajoute `graines_non_soldees` et `utils.stock.graines_restantes` : les garde-fous de repiquage ne lisent plus `graines_en_germination`, qui tombe à 0 quand la levée est terminée (US-212).
+- Factorise la désignation du lot dans `evenements.designer_lot`, partagée par le déplacement, la clôture et la levée (US-212).
+- Aucun stock ne change : `/godets`, `/stats` et l'écran Stocks rendent les mêmes valeurs avant et après une levée (US-212).
+- Retire le compteur de levée de la fiche du lot (`CompteurNumerique`) : le serveur ignore un nombre de levés envoyé depuis l'écran (US-212).
+- Ajoute `restant_du_lot`, `QuantiteSuperieureAuLotError` et `GesteDeLotDejaEnAttenteError` dans `file_gestes`, et `plafondGesteDeLot` côté PWA (INC-014).
+- Met à jour la fiche de domaine `docs/domaines/pepiniere.md`, les fiches du corpus (`pepiniere-par-lot`, `semis-godet-plantation`, `enregistrer-un-geste`, `journal-et-corrections`) et le guide utilisateur (§ 6.3, vingt gestes) (US-212).
+
+### 💾 Base de données
+- Ajoute la colonne `evenements.levee_terminee` (BOOLEAN, nullable, réservée au geste `levee`) : migration `migration_v57.sql`, rollback `rollback_v57.sql` (US-212).
+- Ne reprend aucune donnée : aucune levée n'existait avant cette migration (US-212).
+
 ## [v3.88.0] — 2026-10-15
 
 **ÉPIC 12 — US-215, US-217, US-239** : la Pépinière **s'ouvre sur ce qu'il y a à faire aujourd'hui** et sait

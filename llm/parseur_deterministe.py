@@ -120,6 +120,7 @@ GESTES_EXIGEANT_CULTURE: frozenset[str] = frozenset({
 # c'est le défaut posé par `_normalize_unite_semis`.
 GESTES_DENOMBREMENT_IMPLICITE: frozenset[str] = frozenset({
     "plantation", "recolte", "perte", "perte_godet", "vendu",
+    "levee",   # [US-212] « levée du lot 128 : 40 » compte des plants levés
 })
 
 # Fenêtre de tête où le geste est cherché — même raison et même valeur que
@@ -185,6 +186,18 @@ _MOTS_OBJET_DEPLACEMENT: frozenset[str] = frozenset({
     "godet", "godets", "plant", "plants", "plantule", "plantules",
 })
 _INTRODUCTEURS_ORIGINE: frozenset[str] = frozenset({"de", "du", "d"})
+
+# [US-212 / CA2] La levée se dit aussi avec le verbe, loin de la tête de phrase : « les
+# tomates cerise ont levé, 12 plants ». Le verbe est cherché dans TOUTE la phrase quand
+# aucun geste n'est apparu en tête, avec son auxiliaire (« ont », « sont »), qui part avec
+# lui. « Terminée » en fait une levée close. Une phrase où le verbe est suivi de mots que
+# la grammaire n'explique pas (« j'ai levé les paillis ») part au modèle comme les autres.
+_FORMES_LEVEE: frozenset[str] = frozenset({"leve", "leves", "levee", "levees", "levent"})
+_AUXILIAIRES_LEVEE: frozenset[str] = frozenset({"ont", "sont", "est", "a"})
+_MOTS_LEVEE_TERMINEE: frozenset[str] = frozenset({
+    "terminee", "termine", "terminees", "termines", "finie", "fini", "finies", "finis",
+    "achevee", "acheve",
+})
 
 # Vocabulaire de rangs : le partage quantité/rang est justement l'ambiguïté que
 # le modèle signale par `action="AMBIGUE"`. La grammaire ne tranche pas.
@@ -271,6 +284,17 @@ def _extraire_geste(mots: list[str]) -> tuple[Optional[str], list[str]]:
             if tete[debut:debut + len(cible)] == cible:
                 return canonique, mots[:debut] + mots[debut + len(cible):]
     return None, mots
+
+
+def _extraire_geste_levee(mots: list[str]) -> tuple[bool, list[str]]:
+    """[US-212 / CA2] Cherche « levé / levée / ont levé » n'importe où dans la phrase.
+    Retourne (trouvé, mots sans le verbe ni son auxiliaire)."""
+    for i, mot in enumerate(mots):
+        if mot not in _FORMES_LEVEE:
+            continue
+        debut = i - 1 if i >= 1 and mots[i - 1] in _AUXILIAIRES_LEVEE else i
+        return True, mots[:debut] + mots[i + 1:]
+    return False, mots
 
 
 def _extraire_geste_deplacement_familier(mots: list[str]) -> tuple[bool, list[str]]:
@@ -519,7 +543,21 @@ def parser_saisie(
         if deplacement_familier:
             geste = "deplacement"
     if geste is None:
+        # [US-212 / CA2] « les tomates cerise ont levé, 12 plants » : le verbe n'est pas en tête.
+        levee_trouvee, mots = _extraire_geste_levee(mots)
+        if levee_trouvee:
+            geste = "levee"
+    if geste is None:
         return _repli("aucun geste reconnu en tête de phrase", texte)
+    # [US-212] « levée terminée » : la levée est close. Le mot ne compte qu'avec une levée.
+    levee_terminee = False
+    if geste == "levee":
+        levee_terminee = any(m in _MOTS_LEVEE_TERMINEE for m in mots)
+        mots = [m for m in mots if m not in _MOTS_LEVEE_TERMINEE]
+        # « les carottes ont levé » : l'auxiliaire reste quand le verbe était en tête de fenêtre.
+        # « est » ne part qu'avec « terminée » (« la levée est terminée ») : sinon c'est un point cardinal.
+        retirables = {"ont", "sont"} | ({"est"} if levee_terminee else set())
+        mots = [m for m in mots if m not in retirables]
     if geste == "deplacement":
         mots = [m for m in mots if m not in _MOTS_OBJET_DEPLACEMENT]
 
@@ -588,7 +626,8 @@ def parser_saisie(
 
         # ── 4. Quantités et unités ───────────────────────────────────────────
         nb_graines_semees: Optional[int] = None
-        if geste == "mise_en_godet":
+        if geste in ("mise_en_godet", "levee"):
+            # « 40 choux levés sur 48 » : le nombre derrière « sur » est ce qui a été semé.
             mots, nb_graines_semees = _detacher_graines_semees(mots)
 
         nombres, mots = _extraire_nombres(mots)
@@ -625,6 +664,8 @@ def parser_saisie(
             return _repli("culture absente ou inconnue du potager", texte)
         if culture is None and geste == "deplacement" and numero_lot_cite is None:
             return _repli("déplacement sans lot ni culture identifiés", texte)
+        if culture is None and geste == "levee" and numero_lot_cite is None:
+            return _repli("levée sans lot ni culture identifiés", texte)   # [US-212]
         if culture is None and parcelle_nom is None and numero_lot_cite is None:
             return _repli("ni culture ni parcelle identifiées", texte)
 
@@ -669,6 +710,9 @@ def parser_saisie(
 
     if numero_lot_cite is not None:
         item["numero_lot_cite"] = numero_lot_cite   # [US-209 / CA5] résolu au récapitulatif
+
+    if geste == "levee" and levee_terminee:
+        item["levee_terminee"] = True   # [US-212] la levée est déclarée terminée
 
     if geste == "mise_en_godet":
         # Une mise en godet compte des plants repiqués, jamais une quantité

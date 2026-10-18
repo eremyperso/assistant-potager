@@ -262,6 +262,36 @@ async def test_us021_ca8_menu_parcelle_affiche():
     _ACTION_PENDING.pop(user_id, None)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("item", [
+    {"action": "levee", "culture": "tomate", "quantite": 5, "unite": "plants",
+     "origine_graines_id": 4, "_lot_numero": 4, "levee_terminee": True},
+    {"action": "cloture_lot", "culture": "tomate", "origine_graines_id": 4, "_lot_numero": 4},
+])
+async def test_us021_ca8_geste_de_lot_sans_menu_parcelle(item):
+    """[US-212, US-216] Une levée ou une clôture porte sur un lot : jamais « Quelle parcelle ? »."""
+    user_id = 81
+    fake_parcelle = MagicMock()
+    fake_parcelle.nom = "planche_centrale"
+
+    with (
+        patch("app.bot.parse_commande", return_value=[dict(item)]),
+        patch("utils.validation.validate_parsed_action", return_value=(True, "")),
+        patch("app.bot._normalize_items", side_effect=lambda items, *a, **k: items),
+        patch("app.bot._preparer_levee", new_callable=AsyncMock, return_value=False),
+        patch("app.bot.get_all_parcelles", return_value=[fake_parcelle]),
+        patch("app.bot.SessionLocal"),
+    ):
+        _ACTION_PENDING.pop(user_id, None)
+        update = _make_update(user_id=user_id)
+        await bot_module._parse_and_save(update, "geste de lot", pre_parsed_items=[dict(item)])
+
+    textes = " ".join(c[0][0] for c in update.message.reply_text.call_args_list if c[0])
+    assert "parcelle ?" not in textes
+    assert not (_ACTION_PENDING.get(user_id) or {"items": [{}]})["items"][0].get("_parcelle_demandee")
+    _ACTION_PENDING.pop(user_id, None)
+
+
 # ── CA9 — Sélection parcelle → résumé + boutons Confirmer/Annuler ────────────
 
 @pytest.mark.asyncio

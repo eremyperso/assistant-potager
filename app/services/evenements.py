@@ -47,6 +47,7 @@ from utils.stock import (
     calcul_godets_par_culture,
     calcul_stock_par_variete,
     stock_actif_variete,
+    graines_restantes,   # [US-212]
     UNITES_POIDS_EN_G,
 )
 
@@ -116,10 +117,16 @@ class QuantiteManquanteError(EvenementInvalideError):
         self.culture = culture
         verbe = {
             "perte_godet": "perdus", "vendu": "vendus", "plantation": "mis en terre",
-            "mise_en_godet": "repiqués en godet",
+            "mise_en_godet": "repiqués en godet", "levee": "levés",
         }.get(
             action, "concernés",
         )
+        if action == "levee":   # [US-212] un comptage, pas un mouvement de stock
+            super().__init__(
+                "Combien de plants ont levé ? Une levée sans nombre ne dit rien — "
+                "redites la phrase avec le nombre de plants levés."
+            )
+            return
         super().__init__(
             f"Combien de plants ont été {verbe} ? Sans nombre, le stock ne peut pas être "
             "mis à jour — redites la phrase avec le nombre de plants."
@@ -148,6 +155,17 @@ class StockLotInsuffisantError(EvenementInvalideError):
 class ClotureRefuseeError(EvenementInvalideError):
     """[US-216 / CA8] Une clôture de lot que le potager ne peut pas porter : lot
     introuvable ou déjà soldé. Le message dit pourquoi — rien n'est enregistré."""
+
+
+class LeveeRefuseeError(EvenementInvalideError):
+    """[US-212 / CA4] Une levée que le potager ne peut pas porter : lot introuvable,
+    clôturé, ou sans semis rattaché. Le message dit pourquoi — rien n'est enregistré."""
+
+
+class LeveeHorsPepiniereError(LeveeRefuseeError):
+    """[US-212 / CA4] « Les carottes ont levé » : aucun lot de pépinière ne correspond,
+    c'est un semis en pleine terre. Ce n'est pas une levée de lot — le bot propose de la
+    noter en observation (hors périmètre de la levée)."""
 
 
 class ParcelleIncoherenteError(EvenementInvalideError):
@@ -372,7 +390,7 @@ def _stock_disponible_perte(
 # [US-049] Actions qui introduisent légitimement une nouvelle culture dans le potager
 # (identique à _ACTIONS_SOURCE historique de bot.py) — exemptées de la validation,
 # c'est justement leur rôle de faire exister la culture pour la première fois.
-_ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet", "deplacement", "cloture_lot"}
+_ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "perte_godet", "deplacement", "cloture_lot", "levee"}
 
 # [fix bug id=351] Actions pour lesquelles une culture est structurellement
 # obligatoire — sans elle l'événement ne décrit rien d'exploitable. Sur-ensemble
@@ -416,7 +434,7 @@ def refuser_unite_implantation_en_pepiniere(
 
 
 def _lot_deplacement_epuise(lot: dict) -> bool:
-    return lot.get("stock_residuel_godet", 0) <= 0 and lot.get("graines_en_germination", 0) <= 0
+    return lot.get("stock_residuel_godet", 0) <= 0 and graines_restantes(lot) <= 0   # [US-212] des levés à repiquer restent un lot
 
 
 def evenements_pepiniere_sans_quantite(db: Session, ctx: TenantContext) -> list[Evenement]:
@@ -461,6 +479,51 @@ def lots_deplacables(db: Session, ctx: TenantContext, culture: str, variete: Opt
     return retenus
 
 
+def designer_lot(
+    db: Session, ctx: TenantContext, parsed: dict, refus: type,
+    *, quel_lot: str, rien_a_faire: str, refus_sans_lot: Optional[type] = None,
+) -> dict:
+    """[US-211 / CA3 ; US-212 / CA2] Désigne LE lot qu'un geste de pépinière vise — une
+    seule règle, partagée par le déplacement, la clôture et la levée.
+
+    Dans l'ordre : le numéro cité (déjà résolu en `origine_graines_id` par
+    `lots_pepiniere.resoudre_references`), sinon la culture (et la variété si dite) quand
+    UN SEUL lot en cours correspond. Plusieurs lots lèvent `LotIndetermineError` : le bot
+    pose la question par boutons avant de revenir ici. Un numéro inconnu ou contredit
+    (`_alerte_lot`) est un refus, jamais un rattachement deviné.
+
+    `refus` est la classe d'erreur du geste ; `quel_lot` la question quand ni lot ni
+    culture ne sont dits ; `rien_a_faire` la fin de « Aucun lot de X en cours… : » ;
+    `refus_sans_lot`, si fournie, remplace `refus` quand AUCUN lot de la culture n'est en
+    pépinière (la levée y distingue le semis en pleine terre).
+    """
+    if parsed.get("_alerte_lot"):
+        raise refus(
+            parsed["_alerte_lot"].replace(
+                "Confirmez pour enregistrer sans lot, ou annulez.",
+                "Rien n'est enregistré : redites la phrase avec le bon numéro.",
+            ).replace("*", "")
+        )
+
+    semis_id = _to_int(parsed.get("origine_graines_id"))
+    culture = (parsed.get("culture") or "").strip()
+    variete = (parsed.get("variete") or "").strip() or None
+    if semis_id is not None:
+        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
+        if lot is None:
+            raise LotSemisInconnuError(semis_id)
+        return lot
+    if not culture:
+        raise refus(quel_lot)
+    candidats = lots_deplacables(db, ctx, culture, variete)
+    if not candidats:
+        label = f"{culture} {variete}" if variete else culture
+        raise (refus_sans_lot or refus)(f"Aucun lot de « {label} » en cours en pépinière : {rien_a_faire}.")
+    if len(candidats) > 1:
+        raise LotIndetermineError(culture, variete, len(candidats))
+    return candidats[0]
+
+
 def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parcelle: Optional[Parcelle] = None) -> dict:
     """[US-211 / CA3, CA4] Désigne le lot d'un déplacement et contrôle sa destination.
 
@@ -473,36 +536,11 @@ def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parc
     lève `DeplacementRefuseError`. La destination doit être une pépinière différente
     de l'emplacement courant du lot.
     """
-    if parsed.get("_alerte_lot"):
-        raise DeplacementRefuseError(
-            parsed["_alerte_lot"].replace(
-                "Confirmez pour enregistrer sans lot, ou annulez.",
-                "Rien n'est enregistré : redites la phrase avec le bon numéro.",
-            ).replace("*", "")
-        )
-
-    lot: Optional[dict] = None
-    semis_id = _to_int(parsed.get("origine_graines_id"))
-    culture = (parsed.get("culture") or "").strip()
-    variete = (parsed.get("variete") or "").strip() or None
-    if semis_id is not None:
-        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
-        if lot is None:
-            raise LotSemisInconnuError(semis_id)
-    else:
-        if not culture:
-            raise DeplacementRefuseError(
-                "Quel lot déplacer ? Citez son numéro (« le lot 119 ») ou sa culture."
-            )
-        candidats = lots_deplacables(db, ctx, culture, variete)
-        if not candidats:
-            label = f"{culture} {variete}" if variete else culture
-            raise DeplacementRefuseError(
-                f"Aucun lot de « {label} » en cours en pépinière : rien à déplacer."
-            )
-        if len(candidats) > 1:
-            raise LotIndetermineError(culture, variete, len(candidats))
-        lot = candidats[0]
+    lot = designer_lot(
+        db, ctx, parsed, DeplacementRefuseError,
+        quel_lot="Quel lot déplacer ? Citez son numéro (« le lot 119 ») ou sa culture.",
+        rien_a_faire="rien à déplacer",
+    )
 
     numero = lot.get("numero_lot")
     nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
@@ -569,31 +607,11 @@ def resoudre_lot_cloture(db: Session, ctx: TenantContext, parsed: dict) -> dict:
     le dépôt du geste, et c'est ce qu'il reste à cet instant qui est soldé. Un lot
     déjà soldé est refusé : une clôture qui ne solde rien n'a pas de sens.
     """
-    if parsed.get("_alerte_lot"):
-        raise ClotureRefuseeError(
-            parsed["_alerte_lot"].replace(
-                "Confirmez pour enregistrer sans lot, ou annulez.",
-                "Rien n'est enregistré : redites la phrase avec le bon numéro.",
-            ).replace("*", "")
-        )
-
-    semis_id = _to_int(parsed.get("origine_graines_id"))
-    culture = (parsed.get("culture") or "").strip()
-    variete = (parsed.get("variete") or "").strip() or None
-    if semis_id is not None:
-        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
-        if lot is None:
-            raise LotSemisInconnuError(semis_id)
-    else:
-        if not culture:
-            raise ClotureRefuseeError("Quel lot clôturer ? Citez son numéro (« le lot 119 »).")
-        candidats = lots_deplacables(db, ctx, culture, variete)
-        if not candidats:
-            label = f"{culture} {variete}" if variete else culture
-            raise ClotureRefuseeError(f"Aucun lot de « {label} » en cours en pépinière : rien à clôturer.")
-        if len(candidats) > 1:
-            raise LotIndetermineError(culture, variete, len(candidats))
-        lot = candidats[0]
+    lot = designer_lot(
+        db, ctx, parsed, ClotureRefuseeError,
+        quel_lot="Quel lot clôturer ? Citez son numéro (« le lot 119 »).",
+        rien_a_faire="rien à clôturer",
+    )
 
     numero = lot.get("numero_lot")
     nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
@@ -608,15 +626,92 @@ def resoudre_lot_cloture(db: Session, ctx: TenantContext, parsed: dict) -> dict:
     parsed["variete"] = lot.get("variete")
     parsed["quantite"] = lot["stock_residuel_godet"]
     parsed["unite"] = "plants"
-    parsed["nb_graines_semees"] = lot["graines_en_germination"]
+    parsed["nb_graines_semees"] = graines_restantes(lot)
     if numero is not None:
         parsed["_lot_numero"] = numero
     log.info(
         "[US-216] Clôture du lot %s (%s) : %s godet(s) et %s graine(s) soldés",
         numero if numero is not None else lot.get("lot_id"), nom_lot,
-        lot["stock_residuel_godet"], lot["graines_en_germination"],
+        lot["stock_residuel_godet"], graines_restantes(lot),
     )
     return lot
+
+
+def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
+    """[US-212 / CA2, CA3, CA4] Désigne le lot d'une levée et relit ce qu'elle dit de lui.
+
+    Mute `parsed` : `origine_graines_id` (semis du lot), culture, variété, unité
+    (« plants »), `_lot_numero`, `_alertes_levee` (liste de phrases pour le
+    récapitulatif) et `_lot_levee` (graines semées, comptage précédent, taux, moyenne de
+    la culture). Retourne le lot.
+
+    Les incohérences sont SIGNALÉES, jamais corrigées : un « sur 48 » qui ne correspond
+    pas aux graines semées du lot, ou plus de levés que de graines, laissent le nombre
+    dicté tel quel (comme l'incohérence de lot d'US-065).
+
+    Lève `LeveeHorsPepiniereError` quand aucun lot de pépinière ne correspond à la
+    culture dite (semis en pleine terre), `LeveeRefuseeError` pour un lot clôturé ou sans
+    semis rattaché, `LotIndetermineError` quand plusieurs lots correspondent.
+    """
+    lot = designer_lot(
+        db, ctx, parsed, LeveeRefuseeError,
+        quel_lot="Quel lot compter ? Citez son numéro (« levée du lot 128 : 40 ») ou sa culture.",
+        rien_a_faire="rien à compter",
+        refus_sans_lot=LeveeHorsPepiniereError,
+    )
+
+    numero = lot.get("numero_lot")
+    nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
+    ref = f"Le lot {numero} ({nom_lot})" if numero is not None else f"Le lot de {nom_lot}"
+    if lot.get("sans_semis_rattache") or lot.get("semis_id") is None:
+        raise LeveeRefuseeError(
+            f"{ref} n'a pas de semis rattaché : une levée se note sur un lot issu d'un semis."
+        )
+    if lot.get("cloture"):
+        raise LeveeRefuseeError(f"{ref} est clôturé : on ne compte plus sa levée.")
+
+    leves = _to_int(parsed.get("quantite"))
+    graines = int(lot.get("graines_semees") or 0)
+    sur = _to_int(parsed.get("nb_graines_semees"))
+    alertes: list[str] = []
+    if sur is not None and graines > 0 and sur != graines:
+        alertes.append(
+            f"⚠️ Vous dites « sur {sur} », mais ce lot compte {graines} graines semées. "
+            "Je garde votre nombre de levés tel quel : vérifiez."
+        )
+    if leves is not None and graines > 0 and leves > graines:
+        alertes.append(
+            f"⚠️ {leves} levés pour {graines} graines semées : c'est impossible. "
+            "Je le garde tel quel, à vérifier."
+        )
+
+    parsed["origine_graines_id"] = lot["semis_id"]
+    parsed["culture"] = lot["culture"]
+    parsed["variete"] = lot.get("variete")
+    parsed["unite"] = "plants"
+    parsed["_alertes_levee"] = alertes
+    parsed["_lot_levee"] = {
+        "graines_semees": graines,
+        "nb_leves_avant": lot.get("nb_leves"),
+        "taux": round(leves / graines * 100) if leves is not None and graines > 0 else None,
+        "moyenne": lot.get("moyenne_levee_culture"),
+        "culture": lot["culture"],
+    }
+    if numero is not None:
+        parsed["_lot_numero"] = numero
+    log.info(
+        "[US-212] Levée du lot %s (%s) : %s levé(s) sur %s semée(s)%s",
+        numero if numero is not None else lot.get("lot_id"), nom_lot, leves, graines,
+        " — terminée" if parsed.get("levee_terminee") else "",
+    )
+    return lot
+
+
+def _levee_terminee(parsed: dict, action_norm: Optional[str]) -> Optional[bool]:
+    """[US-212] L'indication « levée terminée » d'un geste de levée ; None pour tout autre geste."""
+    if action_norm != "levee":
+        return None
+    return bool(parsed.get("levee_terminee"))
 
 
 def valider_evenement(
@@ -719,6 +814,11 @@ def valider_evenement(
     if a_la_creation and action_norm in _ACTIONS_QUANTITE_OBLIGATOIRE:
         if quantite is None or quantite <= 0:
             raise QuantiteManquanteError(action_norm, culture)
+
+    # [US-212] Une levée sans nombre ne dit rien : le comptage EST le geste. Zéro est un
+    # vrai résultat (« rien n'a levé »), à la différence d'une perte ou d'une vente.
+    if a_la_creation and action_norm == "levee" and quantite is None:
+        raise QuantiteManquanteError(action_norm, culture)
 
     # [fix contrôle quantité perte] perte_godet quitte la fonction juste après
     # (via _ACTIONS_SOURCE_CULTURE, il n'est jamais soumis à culture_deja_plantee)
@@ -1335,6 +1435,8 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
     if normalize_action(parsed.get("action")) == "cloture_lot":
         resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
+    if normalize_action(parsed.get("action")) == "levee":
+        resoudre_lot_levee(db, ctx, parsed)   # [US-212]
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
@@ -1365,11 +1467,12 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_graines_id=(   # [US-211] le lot déplacé ; [US-216] le lot clôturé
             _to_int(parsed.get("origine_graines_id"))
-            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot", "levee") else None
         ),   # [US-224] perte et vente imputées au lot cité, comme `creer_evenement_confirme`
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
+        levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
         potager_id=ctx.potager_id,
     )
     if event.culture:
@@ -1401,6 +1504,8 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
     if normalize_action(parsed.get("action")) == "cloture_lot":
         resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
+    if normalize_action(parsed.get("action")) == "levee":
+        resoudre_lot_levee(db, ctx, parsed)   # [US-212]
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
@@ -1429,11 +1534,12 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         nb_plants_godets=_to_int(parsed.get("nb_plants_godets")),
         origine_graines_id=(   # [US-211] le lot déplacé ; [US-216] le lot clôturé
             _to_int(parsed.get("origine_graines_id"))
-            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot", "levee") else None
         ),   # [US-224] perte et vente imputées au lot cité, comme `creer_evenement_confirme`
         origine_parsing=_origine_parsing(parsed),
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
+        levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -1488,6 +1594,10 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         # [US-216] Le lot et ce qu'il solde sont relus à l'instant de la confirmation.
         resoudre_lot_cloture(db, ctx, parsed)
 
+    if normalize_action(parsed.get("action")) == "levee":
+        # [US-212] Le lot est relu à l'instant de la confirmation (il a pu être clôturé).
+        resoudre_lot_levee(db, ctx, parsed)
+
     valider_evenement(
         db, ctx,
         action=parsed.get("action"), culture=parsed.get("culture"),
@@ -1521,7 +1631,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         # [US-209 / CA5] Perte ou vente de plants imputée au lot cité.
         origine_graines_id=(
             _to_int(parsed.get("origine_graines_id"))
-            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot") else None   # [US-211] lot déplacé ; [US-216] clôturé
+            if action_norm in ("perte_godet", "vendu", "deplacement", "cloture_lot", "levee") else None   # [US-211] lot déplacé ; [US-216] clôturé
         ),
         type_organe_recolte=type_organe_semis,
         origine_parsing=_origine_parsing(parsed),
@@ -1529,6 +1639,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         # [US-069 / CA1-CA3] Dit dans la phrase, ou confirmé au bot — jamais
         # une proposition restée sans réponse (`_contexte_propose`).
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
+        levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -1617,7 +1728,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
                 db, culture_str, variete_str, potager_id=ctx.potager_id
             )
             if tous_les_lots:
-                meilleur_reste = max(lot["graines_en_germination"] for lot in tous_les_lots)
+                meilleur_reste = max(graines_restantes(lot) for lot in tous_les_lots)
                 log.warning(
                     "[fix garde-fou graines du lot] Refus : %d plant(s) de '%s/%s' demandés alors "
                     "qu'aucun des %d lot(s) de semis ne peut les fournir (meilleur reste : %d)",
@@ -1665,7 +1776,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     if origine_graines_id is not None:
         lot_parent = lot_pepiniere_par_semis(db, origine_graines_id, potager_id=ctx.potager_id)
         if lot_parent and lot_parent["graines_semees"] > 0 and graines_demandees > 0:
-            restantes = lot_parent["graines_en_germination"]
+            restantes = graines_restantes(lot_parent)   # [US-212] jamais « en germination » : une levée terminée la ramène à 0
             if graines_demandees > restantes:
                 log.warning(
                     "[fix garde-fou graines du lot] Refus : %d graines demandées sur le lot #%s "
@@ -2011,6 +2122,29 @@ def cycle_vie_culture(
     perte_q = perte_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else perte_q.filter(Evenement.variete.is_(None))
     perte_events = _restreindre_au_lot(perte_q).order_by(Evenement.date.asc()).all()
 
+    # [US-216] La clôture du lot prend sa place dans le fil, comme une perte. Elle
+    # désigne son lot par `origine_graines_id` : pour un lot précis, c'est lui qui
+    # fait foi, la variété ne filtre qu'en lecture agrégée.
+    cloture_q = (
+        db.query(Evenement)
+        .filter(Evenement.type_action == "cloture_lot", Evenement.potager_id == pid)
+        .filter(func.lower(Evenement.culture) == culture_lower)
+    )
+    if semis_id is None and not sans_semis_rattache:
+        cloture_q = cloture_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else cloture_q.filter(Evenement.variete.is_(None))
+    cloture_events = _restreindre_au_lot(cloture_q).order_by(Evenement.date.asc()).all()
+
+    # [US-212] Chaque comptage de levée, à sa date : un constat, pas un mouvement de
+    # stock. Même règle de lot que la clôture — un lot sans semis n'a pas de levée.
+    levee_q = (
+        db.query(Evenement)
+        .filter(Evenement.type_action == "levee", Evenement.potager_id == pid)
+        .filter(func.lower(Evenement.culture) == culture_lower)
+    )
+    if semis_id is None and not sans_semis_rattache:
+        levee_q = levee_q.filter(func.lower(Evenement.variete) == variete.lower()) if variete else levee_q.filter(Evenement.variete.is_(None))
+    levee_events = _restreindre_au_lot(levee_q).order_by(Evenement.date.asc()).all()
+
     total_plants = sum(g.nb_plants_godets or 0 for g in godet_events)
     total_graines = sum(int(s.quantite or 0) for s in semis_events)
     taux = round(total_plants / total_graines * 100) if total_graines and total_plants else None
@@ -2021,6 +2155,8 @@ def cycle_vie_culture(
         "plantations": linked_plantations,
         "ventes": vendu_events,
         "pertes_godet": perte_events,
+        "clotures": cloture_events,   # [US-216]
+        "levees": levee_events,       # [US-212]
         "deplacements": _deplacements_du_lot(
             db, pid, culture_lower, variete, semis_id, sans_semis_rattache, semis_events, godet_events,
         ),

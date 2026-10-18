@@ -1647,6 +1647,10 @@ def deposer_geste_en_file(
             raise HTTPException(status_code=403, detail=str(e))
         except svc_file_gestes.ActionNonOuverteError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        except (svc_file_gestes.QuantiteSuperieureAuLotError,
+                svc_file_gestes.GesteDeLotDejaEnAttenteError) as e:
+            # [INC-014] Plus assez de plants dans le lot : conflit d'état, pas une erreur de saisie.
+            raise HTTPException(status_code=409, detail=str(e))
         except (svc_file_gestes.ParcelleHorsPotagerError,
                 svc_file_gestes.LotHorsPotagerError) as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -1719,6 +1723,11 @@ def _geste_pour_pwa(geste) -> dict:
         "parcelle": item.get("parcelle"),
         "date": item.get("date"),
         "contexte_semis": item.get("contexte_semis"),
+        # [INC-014] Le lot et la quantité réservée : l'écran en déduit les plants
+        # déjà promis à la terre et grise le bouton quand il n'en reste plus.
+        "lot_id": item.get("_lot_id"),
+        # Un repiquage porte son nombre dans `nb_plants_godets`, les autres dans `quantite`.
+        "quantite": item.get("nb_plants_godets") if item.get("action") == "mise_en_godet" else item.get("quantite"),
         "ecran": geste.ecran,
         "depose_le": geste.cree_le.isoformat() + "Z" if geste.cree_le else None,
         "expire_le": geste.expire_le.isoformat() + "Z" if geste.expire_le else None,
@@ -2731,6 +2740,8 @@ def _lot_pepiniere_json(lot: dict, familles: dict) -> dict:
         "date_deplacement": str(lot["date_deplacement"])[:10] if lot.get("date_deplacement") else None,
         # [US-216] Le jour où le lot a été clôturé (None s'il ne l'est pas).
         "date_cloture": str(lot["date_cloture"])[:10] if lot.get("date_cloture") else None,
+        # [US-212 / CA6] Le jour du dernier comptage de levée (None si aucune levée notée).
+        "date_derniere_levee": str(lot["date_derniere_levee"])[:10] if lot.get("date_derniere_levee") else None,
         "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
     }
 
@@ -2900,6 +2911,27 @@ def get_godet_detail(
                     "quantite": int(p.quantite or 0),
                 }
                 for p in perte_events
+            ],
+            # [US-216] La clôture du lot et ce qu'elle a soldé, figé à la confirmation.
+            "clotures": [
+                {
+                    "id":              c.id,
+                    "date":            str(c.date)[:10],
+                    "godets_soldes":   int(c.quantite or 0),
+                    "graines_soldees": int(c.nb_graines_semees or 0),
+                }
+                for c in cycle.get("clotures", [])
+            ],
+            # [US-212] Les comptages de levée : levés, « sur N » dicté, levée terminée.
+            "levees": [
+                {
+                    "id":       l.id,
+                    "date":     str(l.date)[:10],
+                    "nb_leves": int(l.quantite or 0),
+                    "sur":      int(l.nb_graines_semees) if l.nb_graines_semees else None,
+                    "terminee": bool(l.levee_terminee),
+                }
+                for l in cycle.get("levees", [])
             ],
             # [US-211 / CA8] Déplacements du lot, avec origine et destination.
             "deplacements": [

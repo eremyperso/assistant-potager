@@ -18,7 +18,7 @@ import { Btn } from '../components/ui'
  * déposé est simplement noté dans la console.
  *
  * `?etat=germination|retard|endurcissement|froide|dormant|termine|cloture|sans_semis|
- *  lecture_seule|compteur` · `&forme=panneau|modale` · `&theme=sombre`
+ *  lecture_seule|levee` · `&forme=panneau|modale` · `&theme=sombre`
  *
  * `?vue=ecran` monte le VRAI écran Pépinière (liste + panneau « Lot sélectionné ») dans la
  * coquille de l'application — barre du haut, zone qui défile — avec des lots simulés : de
@@ -173,9 +173,8 @@ const ETATS = {
       }),
     },
   },
-  compteur: {
-    titre: 'Compteur ouvert',
-    compteur: true,
+  levee: {
+    titre: 'Noter la levée',
     lot: {
       ...BASE, nb_leves: 40, moyenne_levee_culture: 75,
       action_suggeree: { code: 'noter_levee', libelle: 'Noter la levée' },
@@ -284,8 +283,8 @@ function Etats() {
                       <FicheLot
                         key={`${cle}-${forme}`}
                         lot={e.lot} forme={forme} nbPepinieres={2} dateRef="2026-09-19"
-                        // La page montre le compteur : le geste de levée y est forcé (US-212 pas livrée).
-                        leveeDisponible compteurInitial={Boolean(e.compteur)}
+                        // « Noter la levée » (US-212) est proposé quel que soit l'état du lot présenté.
+                        leveeDisponible
                         onClose={() => setOuverte(false)}
                         onOuvrirDetail={() => console.info('[US-216] Détail du lot')}
                         onOuvrirCulture={(c) => console.info('[US-216] Fiche culture', c)}

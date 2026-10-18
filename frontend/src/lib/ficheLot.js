@@ -7,19 +7,19 @@
 //
 // Trois règles tiennent tout l'écran :
 //   * **Aucune écriture.** Un geste est PRÉPARÉ (`BoutonGeste`, US-196/US-224) et
-//     confirmé au compagnon. Le compteur de levée est une aide à la saisie.
+//     confirmé au compagnon. Elle ne saisit aucun détail : le bot les demande (US-212).
 //   * **Sans donnée, pas de valeur** (RT2) : un tiret veut dire « aucun geste de
 //     ce type », jamais zéro ; une échéance incalculable dit pourquoi.
 //   * **Rien n'est recalculé** : échéances, action suggérée et dormance viennent
 //     de l'API (US-214), recopiées telles quelles.
 
 /**
- * [CA8, CA10] Le geste de levée (US-212) n'existe pas encore côté serveur : tant
- * qu'il n'est pas livré, la fiche ne propose ni « Noter la levée » ni le compteur.
- * US-212 passe cette constante à `true` — et ajoute `levee` aux gestes ouverts
- * (`file_gestes.GESTES_OUVERTS_PWA`) dans la même livraison.
+ * [CA8, CA11] Le geste de levée (US-212) est livré : la fiche propose « Noter la levée », qui
+ * dépose le geste avec son seul lot — ni nombre, ni « terminée » : le bot les demande.
+ * `levee` fait partie des gestes ouverts côté serveur (`file_gestes.GESTES_OUVERTS_PWA`).
+ * Le drapeau reste : il coupe le geste d'un coup si besoin.
  */
-export const LEVEE_DISPONIBLE = false
+export const LEVEE_DISPONIBLE = true
 
 const MOIS = [
   'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
@@ -65,7 +65,11 @@ export function joursDepuisSemis(lot, aujourdhui = null) {
 // ── État du lot ──────────────────────────────────────────────────────────────
 
 export const aDesGodets = (lot) => (lot?.stock_residuel_godet ?? 0) > 0
-export const aDesGraines = (lot) => (lot?.graines_en_germination ?? 0) > 0
+// [US-212] Ce que le lot peut encore fournir à un repiquage : les graines que ni un repiquage ni une
+// clôture n'a soldées. Distinct de `graines_en_germination`, qui tombe à 0 quand la levée est déclarée
+// terminée alors que les plants levés restent à repiquer.
+export const grainesRestantes = (lot) => lot?.graines_non_soldees ?? lot?.graines_en_germination ?? 0
+export const aDesGraines = (lot) => grainesRestantes(lot) > 0
 
 /** [CA13] Clôturé par un geste : plus rien n'y est à faire, définitivement. */
 export const estCloture = (lot) => Boolean(lot?.cloture)
@@ -261,7 +265,7 @@ export function gestesDuLot(lot, { nbPepinieres = null, levee = LEVEE_DISPONIBLE
 
   const sansSemis = Boolean(lot.sans_semis_rattache)
   const godets = lot.stock_residuel_godet ?? 0
-  const graines = lot.graines_en_germination ?? 0
+  const graines = grainesRestantes(lot)
   const reste = godets > 0 || graines > 0
   const base = {
     lotId: sansSemis ? null : (lot.semis_id ?? null),
@@ -276,7 +280,7 @@ export function gestesDuLot(lot, { nbPepinieres = null, levee = LEVEE_DISPONIBLE
     gestes.push({
       ...base, code: 'repiquer', libelle: 'Repiquer en godet', action: 'mise_en_godet',
       // Les levés sont proposés quand US-212 les a comptés ; sinon le compagnon demande.
-      quantite: lot.nb_leves ?? null, unite: 'plants',
+      quantite: lot.nb_leves ?? null, unite: 'plants', disponibleDuLot: graines,
     })
     if (levee && lot.levee_terminee !== true) {
       gestes.push({ ...base, code: 'noter_levee', libelle: 'Noter la levée', action: 'levee', quantite: null, unite: null })
@@ -286,12 +290,15 @@ export function gestesDuLot(lot, { nbPepinieres = null, levee = LEVEE_DISPONIBLE
     gestes.push({
       ...base, code: 'mettre_en_terre', libelle: 'Mettre en terre', action: 'plantation',
       quantite: godets, unite: 'plants',
+      // [INC-014] Ce que le lot peut encore fournir : le bouton en déduit ce que la file a
+      // déjà réservé, et ne propose jamais plus.
+      disponibleDuLot: godets,
     })
   }
   if (reste) {
     gestes.push({
       ...base, code: 'declarer_perte', libelle: 'Déclarer une perte', action: 'perte_godet',
-      quantite: null, unite: 'plants',
+      quantite: null, unite: 'plants', disponibleDuLot: godets,
     })
   }
   // [CA8] Déplacer : au moins deux pépinières, sinon il n'y a nulle part où aller.
@@ -368,7 +375,9 @@ export function incoherenceEnClair(lot) {
   return `${lot.plants_obtenus} plants pour ${lot.graines_semees} ${lot.unite || 'graines'} semées — à vérifier`
 }
 
-// ── Le compteur de levée ─────────────────────────────────────────────────────
+// ── Le taux de levée ─────────────────────────────────────────────────────────
+// La fiche ne compte rien : « Noter la levée » dépose le geste avec son seul lot, le bot
+// demande le nombre de levés et si la levée est terminée (US-212). Elle ne fait que LIRE.
 
 /** [CA10] Le taux de levée, arrondi, ou `null` quand il ne se calcule pas. */
 export function tauxLevee(leves, graines) {
@@ -376,70 +385,12 @@ export function tauxLevee(leves, graines) {
   return Math.round((leves / graines) * 100)
 }
 
-/**
- * [CA10] La comparaison à la moyenne de la culture — celle d'US-212, quand elle en
- * rend une. Sans moyenne, la phrase se réduit au taux : rien n'est inventé.
- */
-export function phraseComparaison({ taux, moyenne = null, culture = null } = {}) {
-  if (taux == null) return null
-  if (moyenne == null) return `${taux} %`
-  const nom = culture ? ` ${deLaCulture(culture)}` : ''
-  // Deux points d'écart ne font pas une différence : la moyenne d'un petit nombre de lots bouge.
-  const position = taux > moyenne + 2 ? 'au-dessus de' : taux < moyenne - 2 ? 'en dessous de' : 'dans'
-  return `${taux} % — ${position} la moyenne${nom} dans ce potager, ${moyenne} %`
-}
-
-/** Teinte du taux, comme celle du badge de germination de la liste (US-061 / CA11). */
-export function teinteTaux(taux) {
-  if (taux == null) return 'blue'
-  if (taux >= 80) return 'brand'
-  if (taux >= 50) return 'amber'
-  return 'red'
-}
-
-/**
- * [CA10] Le nombre de départ du compteur : le dernier comptage s'il existe, sinon
- * `null` — le champ est vide et « Envoyer » grisé, aucun zéro n'est supposé. Jamais
- * plus que les graines semées : on ne lève pas plus qu'on n'a semé.
- */
-export function valeurInitialeCompteur(lot) {
-  if (lot?.nb_leves == null) return null
-  const max = lot?.graines_semees > 0 ? lot.graines_semees : null
-  return max == null ? lot.nb_leves : Math.min(lot.nb_leves, max)
-}
-
-/** Borne la saisie d'un compteur : entier, entre 0 et `max` (illimité si `max` est nul). */
-export function borner(valeur, max = null) {
-  const n = Math.trunc(Number(valeur))
-  if (!Number.isFinite(n) || n < 0) return 0
-  return max != null && n > max ? max : n
-}
-
-/** Lit ce que le jardinier tape : « 40 », « 40 plants » → 40 ; autre chose → `null`. */
-export function lireNombre(saisie) {
-  const m = /^\s*(\d{1,6})\s*(?:plants?|graines?|levés?)?\s*$/i.exec(String(saisie ?? ''))
-  return m ? Number(m[1]) : null
-}
-
-/** Le geste de levée à préparer à partir du compteur — jamais d'écriture ici. */
-export function gesteDeLevee(lot, { leves, termine = false }) {
-  return {
-    action: 'levee',
-    culture: lot.culture,
-    variete: lot.variete ?? null,
-    quantite: leves,
-    unite: 'plants',
-    lotId: lot.sans_semis_rattache ? null : (lot.semis_id ?? null),
-    numeroLot: lot.numero_lot ?? null,
-    terminee: termine,
-  }
-}
-
 /** Le geste, au format de `BoutonGeste`, d'un des gestes de `gestesDuLot`. */
 export function gestePrepare(g) {
   return {
     action: g.action, culture: g.culture, variete: g.variete,
     quantite: g.quantite, unite: g.unite, lotId: g.lotId, numeroLot: g.numeroLot ?? null,
+    ...(g.disponibleDuLot != null ? { disponibleDuLot: g.disponibleDuLot } : {}),
   }
 }
 

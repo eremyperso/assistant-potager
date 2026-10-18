@@ -4,8 +4,7 @@ import assert from 'node:assert/strict'
 import {
   LEVEE_DISPONIBLE, dateEnClair, periodeEnClair, joursDepuisSemis, estTermine, estCloture,
   estDormant, etatDuLot, bandeauEtat, echeanceEnClair, gestesDuLot, gestePrincipal, phraseSolde,
-  tracabilite, incoherenceEnClair, tauxLevee, phraseComparaison, teinteTaux, valeurInitialeCompteur,
-  borner, lireNombre, gesteDeLevee, gestePrepare, badgeEtat, phraseLotSansGeste, deLaCulture,
+  tracabilite, incoherenceEnClair, tauxLevee, gestePrepare, badgeEtat, phraseLotSansGeste, deLaCulture,
   suggestionsVisibles, placeEnClair, gesteMiseEnTerreIci,
 } from './ficheLot.js'
 import { phraseADicter } from './gestes.js'
@@ -112,13 +111,13 @@ test('devant la barquette : le bouton principal est « Repiquer en godet » (Ghe
 
 test('les gestes pertinents pour l\'état du lot (CA8)', () => {
   // des graines en germination : repiquer, perte
-  assert.deepEqual(codes(lot()), ['repiquer', 'declarer_perte'])
+  assert.deepEqual(codes(lot()), ['repiquer', 'noter_levee', 'declarer_perte'])   // [US-212] la levée se note aussi
   // des godets seulement : mettre en terre, perte
   const godets = lot({ graines_en_germination: 0, plants_obtenus: 12, nb_mises_en_godet: 1, stock_residuel_godet: 12 })
   assert.deepEqual(codes(godets), ['mettre_en_terre', 'declarer_perte'])
   // les deux
   const mixte = lot({ plants_obtenus: 12, nb_mises_en_godet: 1, stock_residuel_godet: 12, graines_en_germination: 20 })
-  assert.deepEqual(codes(mixte), ['repiquer', 'mettre_en_terre', 'declarer_perte'])
+  assert.deepEqual(codes(mixte), ['repiquer', 'noter_levee', 'mettre_en_terre', 'declarer_perte'])
 })
 
 test('l\'action suggérée passe devant les autres', () => {
@@ -143,11 +142,11 @@ test('lot sans semis rattaché : ni Repiquer ni Noter la levée (Gherkin)', () =
   assert.equal(gestesDuLot(l)[0].lotId, null)
 })
 
-test('Noter la levée n\'existe qu\'une fois US-212 livrée (CA8)', () => {
-  assert.equal(LEVEE_DISPONIBLE, false)
-  assert.ok(!codes(lot()).includes('noter_levee'))
-  assert.ok(codes(lot(), { levee: true }).includes('noter_levee'))
-  assert.ok(!codes(lot({ levee_terminee: true }), { levee: true }).includes('noter_levee'))
+test('Noter la levée est proposée depuis la livraison d\'US-212 (CA8)', () => {
+  assert.equal(LEVEE_DISPONIBLE, true)
+  assert.ok(codes(lot()).includes('noter_levee'))
+  assert.ok(!codes(lot(), { levee: false }).includes('noter_levee'))   // le drapeau coupe le geste
+  assert.ok(!codes(lot({ levee_terminee: true })).includes('noter_levee'))   // levée close : plus rien à compter
 })
 
 test('Déplacer demande au moins deux pépinières (CA8)', () => {
@@ -179,7 +178,10 @@ test('quantités proposées : godets pour une mise en terre, levés pour un repi
 
 test('gestePrepare garde le contrat de BoutonGeste', () => {
   const g = gestesDuLot(lot())[0]
-  assert.deepEqual(Object.keys(gestePrepare(g)).sort(), ['action', 'culture', 'lotId', 'numeroLot', 'quantite', 'unite', 'variete'])
+  assert.deepEqual(Object.keys(gestePrepare(g)).sort(), ['action', 'culture', 'disponibleDuLot', 'lotId', 'numeroLot', 'quantite', 'unite', 'variete'])
+  // [INC-014] Un geste qui prélève sur le lot porte en plus ce que le lot peut fournir.
+  const terre = gestesDuLot(lot({ stock_residuel_godet: 40, graines_en_germination: 0 })).find((x) => x.code === 'mettre_en_terre')
+  assert.equal(gestePrepare(terre).disponibleDuLot, 40)
 })
 
 // ── Traçabilité ──────────────────────────────────────────────────────────────
@@ -208,57 +210,21 @@ test('une incohérence de saisie reste visible (CA5)', () => {
   assert.match(incoherenceEnClair(lot({ incoherence_saisie: true, plants_obtenus: 60, unite: 'graines' })), /60 plants pour 48 graines/)
 })
 
-// ── Compteur ─────────────────────────────────────────────────────────────────
-test('taux et comparaison à la moyenne (Gherkin)', () => {
+// ── Le taux de levée (la fiche ne compte rien : le bot demande le nombre et « terminée ») ──
+test('taux de levée : levés ÷ graines semées, absent sans graines connues (US-212)', () => {
   assert.equal(tauxLevee(40, 48), 83)
-  assert.equal(
-    phraseComparaison({ taux: 83, moyenne: 75, culture: 'Chou' }),
-    '83 % — au-dessus de la moyenne du chou dans ce potager, 75 %',
-  )
-  assert.equal(
-    phraseComparaison({ taux: 60, moyenne: 75, culture: 'Chou' }),
-    '60 % — en dessous de la moyenne du chou dans ce potager, 75 %',
-  )
-  assert.equal(phraseComparaison({ taux: 75, moyenne: 75, culture: 'Chou' }), '75 % — dans la moyenne du chou dans ce potager, 75 %')
-})
-
-test('sans moyenne rendue, la phrase se réduit au taux', () => {
-  assert.equal(phraseComparaison({ taux: 83, moyenne: null, culture: 'Chou' }), '83 %')
-  assert.equal(phraseComparaison({ taux: null }), null)
   assert.equal(tauxLevee(null, 48), null)
   assert.equal(tauxLevee(10, 0), null)
 })
 
-test('teinte du taux : celle du badge de la liste', () => {
-  assert.equal(teinteTaux(83), 'brand')
-  assert.equal(teinteTaux(60), 'amber')
-  assert.equal(teinteTaux(30), 'red')
-  assert.equal(teinteTaux(null), 'blue')
-})
-
-test('le compteur démarre au dernier comptage, borné aux graines semées (CA10)', () => {
-  // Aucun comptage : le champ est vide, aucun zéro n'est supposé.
-  assert.equal(valeurInitialeCompteur(lot()), null)
-  assert.equal(valeurInitialeCompteur(lot({ nb_leves: 30 })), 30)
-  assert.equal(valeurInitialeCompteur(lot({ nb_leves: 90 })), 48)
-})
-
-test('saisie du compteur : entier, jamais négatif, jamais au-delà des graines', () => {
-  assert.equal(borner(-3, 48), 0)
-  assert.equal(borner('40', 48), 40)
-  assert.equal(borner(99, 48), 48)
-  assert.equal(borner('abc', 48), 0)
-  assert.equal(lireNombre('40'), 40)
-  assert.equal(lireNombre(' 40 plants '), 40)
-  assert.equal(lireNombre('quarante'), null)
-})
-
-test('le geste de levée porte le nombre et le lot — rien n\'est écrit (CA10)', () => {
-  const g = gesteDeLevee(lot(), { leves: 40, termine: true })
+test('« Noter la levée » ne porte que le lot : ni nombre, ni « terminée » (US-212 / CA11)', () => {
+  const g = gestesDuLot(lot({ nb_leves: 30 })).find((x) => x.code === 'noter_levee')
   assert.equal(g.action, 'levee')
-  assert.equal(g.quantite, 40)
   assert.equal(g.lotId, 7)
-  assert.equal(g.terminee, true)
+  assert.equal(g.quantite, null)    // même avec un comptage précédent : le bot le demande
+  assert.equal(g.unite, null)
+  assert.equal('terminee' in gestePrepare(g), false)
+  assert.equal(phraseADicter(gestePrepare(g)), 'levée du lot 128')
 })
 
 test("la phrase à dicter d'un geste de lot dit le lot, pas le nom d'action du serveur (CA9)", async () => {
@@ -306,12 +272,6 @@ test("« la moyenne du chou / de la tomate / de l'ail » : genre et élision", (
   assert.equal(deLaCulture('Chou'), 'du chou')
   assert.equal(deLaCulture('tomate'), 'de la tomate')
   assert.equal(deLaCulture('Ail'), "de l'ail")
-  assert.equal(phraseComparaison({ taux: 60, moyenne: 82, culture: 'Tomate' }), '60 % — en dessous de la moyenne de la tomate dans ce potager, 82 %')
-})
-
-test("deux points d'écart à la moyenne : « dans la moyenne »", () => {
-  assert.equal(phraseComparaison({ taux: 77, moyenne: 75, culture: 'Chou' }), '77 % — dans la moyenne du chou dans ce potager, 75 %')
-  assert.equal(phraseComparaison({ taux: 78, moyenne: 75, culture: 'Chou' }), '78 % — au-dessus de la moyenne du chou dans ce potager, 75 %')
 })
 
 test('la traçabilité reprend les libellés de la maquette, la moyenne en sous-libellé', () => {

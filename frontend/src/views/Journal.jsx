@@ -52,7 +52,7 @@ const TINTS = {
 const CATEGORIES = [
   { label: 'Récoltes',    valeurs: ['recolte'],                 tint: 'amber',  icon: ShoppingBasket },
   { label: 'Semis',       valeurs: ['semis'],                   tint: 'blue',   icon: Sprout },
-  { label: 'Lots godet',  valeurs: ['mise_en_godet', 'deplacement'], tint: 'amber',  icon: Package },
+  { label: 'Lots godet',  valeurs: ['mise_en_godet', 'deplacement', 'levee'], tint: 'amber',  icon: Package },
   { label: 'Plantations', valeurs: ['plantation', 'repiquage'], tint: 'brand',  icon: Leaf },
   { label: 'Arrosages',   valeurs: ['arrosage'],                tint: 'blue',   icon: Droplet },
   { label: 'Ventes',      valeurs: ['vendu'],                   tint: 'violet', icon: Euro },

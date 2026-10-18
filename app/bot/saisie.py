@@ -40,7 +40,7 @@ from .enregistrement import (
 )
 from .godets import (
     _demander_graines_godet_si_manquant, _demander_lot_godet_si_ambigu, _poser_question_quantite_pepiniere,
-    _preparer_deplacement, _quantite_pepiniere_manquante,
+    _preparer_deplacement, _preparer_levee, _quantite_pepiniere_manquante,
 )
 from .pertes import _save_perte_item, _stock_variete_jardin, _variete_reelle
 from .interpretation import _UpdateCommande, _message_de
@@ -531,6 +531,16 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     ):
         return  # refus dit, ou attente du choix du lot
 
+    # [US-212 / CA2, CA3, CA4] Levée d'un lot : le lot est désigné ICI, avant le
+    # récapitulatif — numéro cité, culture à un seul lot, choix par boutons, ou refus
+    # motivé (lot clôturé, semis en pleine terre → proposition d'observation).
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) == "levee"
+        and await _preparer_levee(update, items[0], texte, geste_file)
+    ):
+        return  # refus dit, question posée ou attente du choix du lot
+
     # [US-224] Quantité de pépinière : la PWA ne porte pas le nombre de plants (le
     # bouton « Repiquer en godet » comme « Déclarer une perte » n'ont pas de
     # compteur), et la dictée peut l'omettre (« perte godet du lot 8 », « repiquer
@@ -540,7 +550,7 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # avant les questions de variété et de lot (qui ont besoin du nombre pour
     # filtrer les lots capables) et avant le récapitulatif, avec ce que la base
     # sait déjà du lot : « Tout le lot : N ».
-    if len(items) == 1 and normalize_action(items[0].get("action")) == "mise_en_godet":
+    if len(items) == 1 and normalize_action(items[0].get("action")) in ("mise_en_godet", "perte", "perte_godet"):
         # Le rattachement à la file doit survivre aux flux de godet (variété, lot,
         # graines), qui enregistrent par `_save_godet_item` sans repasser par le
         # récapitulatif : sans cette clé, le geste n'est jamais retiré de la file
@@ -1008,7 +1018,9 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
     # réelle, ex. "planche nord", qui finirait assignée à un godet.
     # [US-210 / CA1] La pépinière d'un godet n'est jamais devinée : seule la phrase
     # (ou le Journal) la renseigne ; celle qui est dite est contrôlée plus haut.
-    _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet"}
+    # [US-212, US-216] La levée et la clôture portent sur un LOT, désigné par son numéro :
+    # aucune parcelle n'a de sens — « Quelle parcelle ? » bloquait leur récapitulatif.
+    _ACTIONS_PEPINIERE = {"vendu", "perte_godet", "mise_en_godet", "levee", "cloture_lot"}
 
     # [US-172 / CA19, CA20] Le geste cite une parcelle qui n'existe pas ?
     # Jusqu'ici, le jardinier devait quitter sa phrase, taper une commande de

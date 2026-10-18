@@ -1,16 +1,24 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v55),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v57),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
 `.github/workflows/deploy*.yml` font de même.
 
 ```bash
-psql -d potager -f migrations/migration_v55.sql
+psql -d potager -f migrations/migration_v57.sql
 ```
 
 ## Ce que portent les dernières migrations
+
+- **v57 [US-212]** — ajoute `evenements.levee_terminee` (BOOLEAN nullable) : la levée d'un
+  lot de semis déclarée **terminée**, qui clôt la germination du lot. CHECK
+  `ck_evenements_levee_terminee_levee_seule` : seul un événement `levee` la porte. NULL pour
+  tout autre geste ; une levée en cours porte FALSE ou NULL (les deux se lisent « pas
+  terminée »). **Aucun backfill** : aucune levée n'existait. Le nombre de levés tient dans
+  `quantite`, le lot dans `origine_graines_id` — aucune autre colonne. Rollback :
+  `rollback_v57.sql` (perd l'indication « terminée » ; les comptages restent).
 
 - **v55 [US-209]** — ajoute `evenements.numero_lot` (INTEGER nullable, CHECK
   semis seul, index unique partiel `(potager_id, numero_lot)`) et

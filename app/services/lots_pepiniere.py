@@ -27,17 +27,18 @@ from sqlalchemy.orm import Session
 from app.services import stock as svc_stock
 from app.services.context import TenantContext
 from utils.actions import normalize_action
+from utils.stock import graines_restantes   # [US-212]
 from utils.culture_resolve import normaliser_culture
 from utils.parcelles import get_all_parcelles, resolve_parcelle
 
 log = logging.getLogger("potager")
 
-#: Gestes de pépinière qui reconnaissent un lot cité (CA5). Le geste de levée
-#: (US-212) s'ajoutera ici quand il existera.
+#: Gestes de pépinière qui reconnaissent un lot cité (CA5).
 ACTIONS_AVEC_LOT: frozenset[str] = frozenset({
     "mise_en_godet", "perte_godet", "perte", "vendu", "plantation",
     "deplacement",   # [US-211]
     "cloture_lot",   # [US-216]
+    "levee",         # [US-212]
 })
 
 # « lot 128 », « le lot 128 », « lot n° 128 », « lot numéro 128 », « #128 ».
@@ -137,10 +138,10 @@ def resoudre_references(db: Session, ctx: TenantContext, items: list[dict], text
                 # fait foi : le lot a pu bouger entre-temps).
                 item["quantite"] = lot["stock_residuel_godet"]
                 item["unite"] = "plants"
-                item["nb_graines_semees"] = lot["graines_en_germination"]
+                item["nb_graines_semees"] = graines_restantes(lot)
                 item["_lot_cloture"] = {
                     "godets": lot["stock_residuel_godet"],
-                    "graines": lot["graines_en_germination"],
+                    "graines": graines_restantes(lot),
                 }
         log.info("[US-209 / CA5] Geste %s rattaché au lot n° %s (semis %s)", action, numero, lot["semis_id"])
 
@@ -204,7 +205,7 @@ LIMITE_LISTE_LOTS = 15
 
 
 def _lot_epuise(lot: dict) -> bool:
-    return lot.get("stock_residuel_godet", 0) <= 0 and lot.get("graines_en_germination", 0) <= 0
+    return lot.get("stock_residuel_godet", 0) <= 0 and graines_restantes(lot) <= 0
 
 
 def formater_liste_lots_telegram(lots: list[dict], culture: Optional[str] = None) -> str:
@@ -264,6 +265,61 @@ def repartition_lot(lot: dict) -> list[str]:
     return lignes
 
 
+#: Écart (en points) sous lequel un taux est dit « dans la moyenne » : la moyenne d'un petit
+#: nombre de lots bouge, deux points ne font pas une différence (même seuil que la fiche du lot).
+TOLERANCE_MOYENNE_LEVEE = 2
+
+
+def phrase_taux_levee(taux: Optional[int], moyenne: Optional[int], culture: Optional[str] = None) -> Optional[str]:
+    """[US-212 / CA6, CA8] « 83 % — au-dessus de la moyenne des lots de chou ici (75 %) ».
+
+    Sans taux, rien (le taux n'existe que si les graines semées sont connues). Sans
+    moyenne — moins de deux autres lots de la culture —, la phrase se réduit au taux : une
+    comparaison à un seul point n'en est pas une."""
+    if taux is None:
+        return None
+    if moyenne is None:
+        return f"{taux} %"
+    if taux > moyenne + TOLERANCE_MOYENNE_LEVEE:
+        position = "au-dessus de"
+    elif taux < moyenne - TOLERANCE_MOYENNE_LEVEE:
+        position = "en dessous de"
+    else:
+        position = "dans"
+    cible = f"des lots de {culture} ici" if culture else "des lots de cette culture ici"
+    return f"{taux} % — {position} la moyenne {cible} ({moyenne} %)"
+
+
+def lignes_levee(lot: dict) -> list[str]:
+    """[US-212 / CA6, CA8] Ce que le lot sait de sa levée : levés, taux, moyenne, état.
+
+    Le taux de levée (levés ÷ graines semées) n'est PAS le taux de germination (plants
+    obtenus au repiquage ÷ graines semées) : les deux sont nommés différemment. Sans
+    levée notée, aucune ligne : le lot se lit comme avant."""
+    if lot.get("nb_leves") is None:
+        return []
+    jour = str(lot["date_derniere_levee"])[:10] if lot.get("date_derniere_levee") else None
+    quand = f" (compté le {jour[8:10]}/{jour[5:7]})" if jour else ""
+    lignes = [f"🌱 Levés : *{lot['nb_leves']}*{quand}"]
+    if lot.get("taux_levee") is not None:
+        lignes.append(
+            "📈 Taux de levée : "
+            + phrase_taux_levee(lot["taux_levee"], lot.get("moyenne_levee_culture"), lot.get("culture"))
+        )
+    if lot.get("levee_terminee"):
+        soldees = lot.get("graines_non_levees_soldees") or 0
+        pluriel = "s" if soldees > 1 else ""
+        lignes.append(
+            "✅ Levée terminée"
+            + (f" — {soldees} graine{pluriel} non levée{pluriel} soldée{pluriel}" if soldees else "")
+        )
+    if lot.get("incoherence_levee"):
+        lignes.append("⚠️ Plus de levés que de graines semées : à vérifier.")
+    if lot.get("incoherence_repiquage_levee"):
+        lignes.append("⚠️ Plus de plants repiqués que de levés : à vérifier.")
+    return lignes
+
+
 def formater_lot_telegram(lot: dict) -> str:
     """[US-209 / CA7] Fiche d'un lot en Markdown Telegram — zéro jeton."""
     nom = lot["culture"] + (f" {lot['variete']}" if lot.get("variete") else "")
@@ -285,6 +341,7 @@ def formater_lot_telegram(lot: dict) -> str:
     lignes.append(f"📦 Plants restants : *{lot['stock_residuel_godet']}*")
     if lot.get("graines_en_germination"):
         lignes.append(f"⏳ Graines pas encore levées : *{lot['graines_en_germination']}*")
+    lignes.extend(lignes_levee(lot))   # [US-212]
     if lot.get("incoherence_saisie"):
         lignes.append("⚠️ Plus de plants que de graines semées : à vérifier.")
     return "\n".join(lignes)
