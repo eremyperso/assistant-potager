@@ -238,6 +238,11 @@ class Evenement(Base):
     # sont soldées. NULL pour tout autre geste ; FALSE/NULL pour une levée encore en cours.
     levee_terminee = Column(Boolean, nullable=True)
 
+    # [US-241 / migration_v58] Pépinière d'ORIGINE d'un déplacement chiffré (d'où partent
+    # les godets ; NULL = emplacement jamais renseigné), ou d'une plantation, perte ou vente
+    # qui retire des godets d'un lot réparti (NULL = non dite). NULL pour tout autre geste.
+    parcelle_origine_id = Column(Integer, ForeignKey("parcelles.id", ondelete="SET NULL"), nullable=True)
+
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — laissé nullable=True ici
     # (comme Evenement.parcelle_id, cf. CLAUDE.md) pour que les fixtures de tests

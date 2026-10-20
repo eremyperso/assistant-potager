@@ -33,6 +33,9 @@ import {
   gesteMiseEnTerreIci, gestesDuLot, incoherenceEnClair, NB_SUGGESTIONS_VISIBLES, placeEnClair, suggestionsVisibles, joursDepuisSemis, phraseLotSansGeste, phraseSolde,
   tracabilite,
 } from '../lib/ficheLot.js'
+import {
+  bilanLot, datesEtiquette, enteteEtiquette, grandChiffre, indexColonne, ligneFragment, metaBandeau,
+} from '../lib/parcours.js'   // [US-218] le bandeau
 
 /** Une icône par geste — celles de la maquette. */
 const ICONE = {
@@ -309,11 +312,21 @@ function OuLesMettre({ lot, dateRef, lecture }) {
 
 // ── Le contenu, commun aux deux formes ───────────────────────────────────────
 
-function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, levee, lecture }) {
+function Contenu({ lot, dateRef, nbPepinieres, onOuvrirDetail, onOuvrirCulture, levee, lecture, fragments = [] }) {
   const sansGeste = phraseLotSansGeste(lot)
   return (
     <div className="@container/fiche flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-6 min-[480px]:px-[18px] min-[480px]:pt-4 flex flex-col gap-3.5">
       <Identite lot={lot} onOuvrirCulture={onOuvrirCulture} />
+
+      {/* [CA19, amendement du 19/10/2026] Un lot coupé dit où se trouve chaque partie. */}
+      {fragments.length > 1 && (
+        <section aria-label="Où se trouve ce lot" className="rounded-[12px] bg-card-alt px-[13px] py-[10px] flex flex-col gap-1">
+          <span className="text-[11.5px] font-bold text-txt3">Ce lot est en {fragments.length} parties</span>
+          <ul className="flex flex-col gap-0.5 text-[13px] text-txt">
+            {fragments.map((f) => <li key={f}>{f}</li>)}
+          </ul>
+        </section>
+      )}
 
       {sansGeste ? (
         <div className="text-[13px] text-txt2 bg-card-alt rounded-[12px] px-[13px] py-[11px] leading-[1.45]">
@@ -388,6 +401,8 @@ export function FicheLotInconnu({ numero, onClose }) {
 export default function FicheLot({
   lot, forme = 'modale', nbPepinieres = null, dateRef = null, onClose, onOuvrirDetail, onOuvrirCulture,
   leveeDisponible = LEVEE_DISPONIBLE,
+  // [CA19] Les parties d'un lot coupé, d'après les étiquettes du parcours (US-240).
+  fragments = [],
 }) {
   const { potagerActif } = usePotager()
   const lecture = !peutEnregistrer(potagerActif?.role)
@@ -399,7 +414,7 @@ export default function FicheLot({
       <Contenu
         lot={lot} dateRef={dateRef} nbPepinieres={nbPepinieres} onOuvrirDetail={onOuvrirDetail}
         onOuvrirCulture={onOuvrirCulture} levee={leveeDisponible}
-        lecture={lecture}
+        lecture={lecture} fragments={fragments}
       />
     </>
   )
@@ -418,5 +433,188 @@ export default function FicheLot({
     <Modal title={titre} onClose={onClose} disposition="adaptative" width={460} entete={false} bodyClassName="flex flex-col flex-1 min-h-0">
       {contenu}
     </Modal>
+  )
+}
+
+// ── [US-218, maquette HF option B] La fiche en bandeau sous la rangée ────────
+
+const MOTIF_STADE = { levee: 'sem', godet: 'god', endurcissement: 'end', pret: 'frk' }
+
+/**
+ * La fiche du lot ouverte depuis une étiquette du kanban, sur un écran large : un
+ * bandeau pleine largeur glissé sous la rangée de la pépinière, découpé sur les
+ * colonnes du tableau (maquette « Ma pepiniere - HF », option B retenue). Le kanban
+ * reste en place au-dessus et en dessous ; la pointe désigne l'étiquette ouverte.
+ *
+ * Mêmes règles que la fiche (gestes de `gestesDuLot`, échéance de l'étiquette, rien
+ * d'écrit ici) ; seule la mise en page change. Au téléphone, la fiche reste plein écran.
+ */
+export function FicheLotBandeau({
+  lot, etiquette, fragments = [], pepinieres = [], dateRef = null, nbPepinieres = null,
+  onClose, onChoisirFragment, onOuvrirDetail, onOuvrirCulture,
+}) {
+  const { potagerActif } = usePotager()
+  const lecture = !peutEnregistrer(potagerActif?.role)
+  const meta = metaBandeau(lot, etiquette, pepinieres, dateRef)
+  const chiffre = grandChiffre(etiquette, dateRef)
+  const tete = enteteEtiquette(etiquette, lot)
+  const dates = datesEtiquette(etiquette)
+  const gestes = gestesDuLot(lot, { nbPepinieres })
+  const principal = gestes.find((g) => g.principal) ?? null
+  const autres = gestes.filter((g) => g !== principal)
+  const bilan = bilanLot(lot)
+  const suggestions = (etiquette?.quantites?.godets ? lot?.ou_mettre?.suggestions ?? [] : []).slice(0, 2)
+  const pointe = (indexColonne(etiquette) + 0.5) / 4
+  const alerte = ['retard', 'bientot', 'pret'].includes(tete.ton)
+  const parties = fragments.length ? fragments : [etiquette]
+  return (
+    <section
+      aria-label={`Lot ${lot.numero_lot ?? ''} ${lot.culture ?? ''}, fiche ouverte`.replace(/\s+/g, ' ')}
+      className="relative border-t border-border bg-[linear-gradient(var(--brand-soft),var(--surface)_64px)]"
+    >
+      {/* La pointe : elle désigne la colonne de l'étiquette ouverte. */}
+      <span
+        aria-hidden="true"
+        className="absolute -top-[9px] w-4 h-4 rotate-45 bg-brand-soft border-l border-t border-border"
+        style={{ left: `calc(170px + (100% - 170px) * ${pointe} - 8px)` }}
+      />
+      <header className="flex items-center gap-2.5 pt-3.5 pb-1 pr-4 pl-[186px]">
+        <span className="font-hand text-[25px] font-bold leading-none whitespace-nowrap">
+          {lot.numero_lot != null ? `#${lot.numero_lot} · ` : ''}
+          {onOuvrirCulture && lot.culture ? (
+            <button type="button" onClick={() => onOuvrirCulture(lot.culture)} title="Ouvrir la fiche culture" className="capitalize hover:text-brand">
+              {lot.culture}
+            </button>
+          ) : <span className="capitalize">{lot.culture}</span>}
+          {lot.variete && <small className="text-[18px] font-normal text-txt2"> {lot.variete}</small>}
+        </span>
+        {parties.length > 1 && (
+          <span className="inline-flex items-center h-[22px] px-2 rounded-full text-[11px] font-bold bg-sem-s text-sem-d">
+            {parties.length} parties
+          </span>
+        )}
+        <button
+          type="button" onClick={onClose} aria-label="Fermer la fiche du lot"
+          className="ml-auto w-9 h-9 rounded-[10px] bg-card-alt text-txt2 flex items-center justify-center"
+        >
+          <X size={16} aria-hidden="true" />
+        </button>
+      </header>
+
+      <div className="grid grid-cols-[170px_repeat(4,minmax(0,1fr))] pt-1.5 pb-[18px]">
+        {/* Où est le lot, partie par partie. */}
+        <div className="col-start-2 px-3.5 flex flex-col gap-2.5 min-w-0">
+          <p className="text-[12px] text-txt2">
+            {meta.semis}
+            {meta.jour && <> · <span className="font-hand text-[16px] text-txt">{meta.jour}</span></>}
+            {' '}· {meta.lieu}
+          </p>
+          <ul className="flex flex-col gap-1" aria-label="Les parties du lot">
+            {parties.map((f) => {
+              const l = ligneFragment(f, lot)
+              const on = f.id === etiquette.id
+              return (
+                <li key={f.id}>
+                  <button
+                    type="button" aria-pressed={on} onClick={() => onChoisirFragment?.(f)}
+                    className={`w-full flex items-center gap-2 min-h-[36px] px-2.5 rounded-[10px] text-[12.5px] text-left ${on ? 'bg-brand-soft shadow-[inset_0_0_0_1.5px_var(--brand)]' : 'bg-card-alt'}`}
+                  >
+                    <i aria-hidden="true" className={`w-3.5 h-3.5 rounded-[4px] shrink-0 motif-${MOTIF_STADE[l.stade]}`} />
+                    <b className="font-hand text-[20px] leading-none">{l.nombre}</b>
+                    <span className="min-w-0">{l.texte}</span>
+                    {l.rang && <span className="ml-auto font-hand text-[15px] text-txt3">{l.rang}</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+
+        {/* L'échéance de la partie ouverte, et où mettre ses godets. */}
+        <div className="px-3.5 border-l border-border-soft flex flex-col gap-2.5 min-w-0">
+          <div className={`flex items-center gap-3 px-3 py-2.5 rounded-[12px] ${alerte ? 'bg-amber-soft' : 'bg-card-alt'}`}>
+            {chiffre && (
+              <span className={`font-hand text-[32px] font-bold leading-none whitespace-nowrap ${tete.ton === 'retard' ? 'text-red' : alerte ? 'text-amber' : 'text-txt2'}`}>
+                {chiffre.avant && <small className="text-[16px] font-normal mr-0.5">{chiffre.avant}</small>}
+                {chiffre.texte}
+                {chiffre.apres && <small className="text-[16px] font-normal">{chiffre.apres}</small>}
+              </span>
+            )}
+            <p className="text-[12px] text-txt2 min-w-0">
+              <b className="block text-[13px] text-txt">{tete.libelle}</b>
+              {dates}
+            </p>
+          </div>
+          {suggestions.length > 0 && (
+            <div className="rounded-[10px] bg-card-alt px-2.5 py-[7px] flex flex-col gap-0.5 text-[11.5px] text-txt2">
+              <span className="text-[10.5px] font-bold text-txt3">Où les mettre</span>
+              {suggestions.map((s) => (
+                <div key={s.parcelle_id}>
+                  <b className="text-txt">{s.parcelle}</b> · {placeEnClair(s, null)}{s.exposition?.parcelle ? ` · ${s.exposition.parcelle}` : ''}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Le geste : le suggéré en grand, les autres en tuiles. */}
+        <div className="px-3.5 border-l border-border-soft flex flex-col gap-2.5 min-w-0">
+          <span className="text-[10.5px] font-bold text-txt3">Le geste</span>
+          {lecture ? (
+            <p className="text-[12px] text-txt3">Membre en lecture seule : les gestes sont réservés aux éditeurs du potager.</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {principal && (
+                <BoutonGeste
+                  geste={gestePrepare(principal)} dateRef={dateRef} ecran="pepiniere"
+                  libelle={`${principal.libelle}${principal.quantite ? ` · ${principal.quantite}` : ''}`}
+                  kind="primary" icone={ICONE[principal.code] ?? Check} plein afficherPhrase={false}
+                  btnClassName="!min-h-[42px] text-[13px]"
+                />
+              )}
+              {autres.length > 0 && (
+                <div className="grid grid-cols-2 @[90rem]/parcours:grid-cols-4 gap-1.5">
+                  {autres.map((g) => (
+                    <BoutonGeste
+                      key={g.code} geste={gestePrepare(g)} dateRef={dateRef} ecran="pepiniere"
+                      libelle={g.code === 'declarer_perte' ? 'Perte' : g.libelle}
+                      ariaLabel={`${g.libelle} le lot ${lot.numero_lot ?? ''}`.trim()}
+                      kind="ghost" icone={ICONE[g.code] ?? Check} plein afficherPhrase={false}
+                      btnClassName="!min-h-[54px] !flex-col !gap-1 !whitespace-normal !px-1 text-[11px] text-center leading-tight"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Le bilan du lot et son journal complet. */}
+        <div className="px-3.5 border-l border-border-soft flex flex-col gap-2.5 min-w-0">
+          <span className="text-[10.5px] font-bold text-txt3">Bilan</span>
+          <div
+            className="flex h-2.5 rounded-[5px] overflow-hidden bg-card-alt" role="img"
+            aria-label={`${bilan.barre.godet} % en godet ou en terre, ${bilan.barre.levee} % encore en levée`}
+          >
+            <i className="block h-full bg-god" style={{ width: `${bilan.barre.godet}%` }} />
+            <i className="block h-full motif-sem" style={{ width: `${bilan.barre.levee}%` }} />
+          </div>
+          <p className="flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-txt2 items-baseline">
+            {bilan.nombres.map((n) => (
+              <span key={n.cle}><b className="font-hand text-[20px] text-txt mr-[3px]">{n.valeur ?? '—'}</b>{n.libelle}</span>
+            ))}
+          </p>
+          {onOuvrirDetail && (
+            <button
+              type="button" onClick={onOuvrirDetail}
+              className="flex items-center justify-between min-h-[42px] px-3 rounded-[12px] border border-border text-[12.5px] text-txt hover:border-brand"
+            >
+              <span className="flex items-center gap-2"><BookOpen size={16} aria-hidden="true" />Journal complet du lot</span>
+              <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
   )
 }

@@ -659,7 +659,7 @@ def client_lots():
     from collections import defaultdict
 
     # [US-214] Les échéances ont leur propre suite : ici, la lecture par lot seule.
-    sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}}
+    sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}, "parcours": {}}
     with (
         patch("app.api.main.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.calcul_lots_pepiniere", return_value=[_LOT_MOCK]),

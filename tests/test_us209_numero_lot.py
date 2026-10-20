@@ -553,7 +553,7 @@ class TestCA9:
         from collections import defaultdict
 
         # [US-214] Les échéances ont leur propre suite : ici, le numéro seul.
-        sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}}
+        sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}, "parcours": {}}
         with (
             patch("app.api.main.SessionLocal", return_value=MagicMock()),
             patch("app.services.echeances_lots.lire_echeances", return_value=sans_echeances),
@@ -599,7 +599,9 @@ class TestPwa:
     def test_us209_ca10_ca11_l_ecran_porte_le_numero_et_le_champ(self):
         source = (RACINE / "frontend" / "src" / "views" / "Pepiniere.jsx").read_text(encoding="utf-8")
         assert "libelleNumeroLot(lot)" in source
-        assert "Aller au lot n°" in source
+        # [US-242] « Aller au lot n° » vit dans l'onglet Lots (journal de saison).
+        onglet = (RACINE / "frontend" / "src" / "components" / "OngletLots.jsx").read_text(encoding="utf-8")
+        assert "Aller au lot n°" in onglet and "lireNumeroLot(numeroSaisi)" in onglet
         assert "api.pepiniereLot(" in source
 
     def test_us209_ca11_l_adresse_ouvre_le_lot_par_son_numero(self):

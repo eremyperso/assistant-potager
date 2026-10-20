@@ -285,11 +285,14 @@ def test_us211_ca4_destination_inconnue(db):
         )
 
 
-def test_us211_v1_un_deplacement_partiel_est_refuse(db):
+def test_us211_v1_le_deplacement_partiel_est_rouvert_par_l_us241(db):
+    """La limite V1 « lot entier » est levée par US-241 (A32) : 20 godets sur 41 partent,
+    le lot est coupé par l'emplacement (tests/test_us241_deplacement_partiel.py)."""
     s = _semis(db)
-    with pytest.raises(svc_evenements.DeplacementRefuseError, match="lot entier"):
-        _deplacer(db, s, quantite=20)
-    assert db.query(Evenement).filter(Evenement.type_action == "deplacement").count() == 0
+    _deplacer(db, s, quantite=20)
+    lot = _lot(db, s.id)
+    assert lot["reparti"]
+    assert [(r["nom"], r["godets"]) for r in lot["repartition_godets"]] == [("Serre", 21), ("Châssis froid", 20)]
 
 
 # ── CA5 — récapitulatif, Journal ─────────────────────────────────────────────
@@ -315,7 +318,8 @@ def test_us211_ca5_l_origine_inconnue_n_est_pas_devinee(db):
     parsed = _item(culture="poireau", origine_graines_id=s.id)
     svc_evenements.resoudre_lot_deplacement(db, CTX, parsed)
     resume = _build_action_summary([parsed])
-    assert "déplacement du lot 119 (poireau) au châssis froid" in resume
+    # [US-241 / CA13] L'origine inconnue est dite comme telle, jamais devinée.
+    assert "déplacement du lot 119 (poireau), emplacement non renseigné, au châssis froid" in resume
 
 
 def test_us211_ca5_correction_de_la_destination_au_journal(db):

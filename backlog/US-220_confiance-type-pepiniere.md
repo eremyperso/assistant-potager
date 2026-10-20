@@ -49,6 +49,12 @@ La ligne *froide* reprend exactement celle du **châssis** d'US-181 / CA4 (R3 ac
 - Point de vigilance : la ligne « type non renseigné » **conserve** le comportement actuel pour ne pas faire chuter d'un coup la confiance de tous les potagers le jour de la livraison ; c'est une décision produit, à revoir quand les pépinières auront été typées. L'avertissement rend l'hypothèse visible
 - Point de vigilance : la table est une **décision produit**, pas une mesure (même statut que la table des abris d'US-181)
 
+**Mesure CA9 (19/10/2026, base de dev `potager_dev`, lecture seule) :**
+5 potagers, 55 cultures au référentiel, semis en pépinière évalué au 19/10/2026, 15/02, 15/03 et 15/04/2027, avant (pépinière tenue pour chauffée) et après US-220.
+- **Niveau principal : aucun changement**, sur aucun potager ni aucune date (0 score modifié). La meilleure pépinière de chaque potager est chaude ou sans type : 1 potager sans pépinière, 2 avec deux pépinières sans type, 1 avec une chaude et une sans type, 1 avec une chaude et une froide.
+- **Niveau « pépinière froide »** (potager chaude + froide, 14 cultures notées, affiché à côté du niveau chaud) : toujours en baisse ou égal, jamais en hausse. Au 15/02 : 8 cultures de 3 à 2 étoiles, 3 de 2 à 1, 3 inchangées. Au 15/03 : 11 de 3 à 2, 3 inchangées. Au 15/04 : 1 de 3 à 2, 5 de 2 à 1, 8 inchangées.
+- Conséquence : la livraison ne fait chuter aucun niveau affiché seul. La baisse n'apparaît qu'une fois une pépinière typée « froide », comme voulu. Script de mesure non versionné (scratchpad de session).
+
 **Estimation :** 3 points
 
 **Scénario Gherkin :**

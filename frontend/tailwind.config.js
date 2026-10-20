@@ -37,6 +37,11 @@ export default {
         'red-soft':    'var(--red-soft)',
         blue:          'var(--blue)',
         'blue-soft':   'var(--blue-soft)',
+        // [US-218] Stades du parcours du plant.
+        sem: 'var(--sem)', 'sem-d': 'var(--sem-d)', 'sem-s': 'var(--sem-s)',
+        god: 'var(--god)', 'god-d': 'var(--god-d)', 'god-s': 'var(--god-s)',
+        end: 'var(--end)', 'end-d': 'var(--end-d)', 'end-s': 'var(--end-s)',
+        frk: 'var(--frk)', 'frk-d': 'var(--frk-d)', 'frk-s': 'var(--frk-s)',
         violet:        'var(--violet)',
         'violet-soft': 'var(--violet-soft)',
 
@@ -69,6 +74,8 @@ export default {
       },
       fontFamily: {
         serif: ['Lora', 'Georgia', '"Times New Roman"', 'serif'],
+        // [US-218] L'écriture des jalons de la pépinière (« J34 », « +6 j », « 105 j »).
+        hand:  ['Kalam', 'cursive'],
         sans:  ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'system-ui', 'sans-serif'],
       },
     },

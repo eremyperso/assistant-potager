@@ -307,6 +307,20 @@ def _extraire_geste_deplacement_familier(mots: list[str]) -> tuple[bool, list[st
     return False, mots
 
 
+def _godets_deplaces(mots: list[str]) -> bool:
+    """[US-241 / CA2] « passé 6 godets du lot 21 au châssis » : un verbe familier de
+    déplacement EN TÊTE, suivi de « godet(s) » qui n'est pas « en godet ». Sans ce
+    contrôle, « godets » est lu comme le geste « mise en godet » et le verbe reste sans
+    rôle. « passé 20 poireaux en godet » reste une mise en godet."""
+    if not mots or mots[0] not in _VERBES_DEPLACEMENT_FAMILIERS:
+        return False
+    tete = mots[:_FENETRE_GESTE_MOTS + 1]
+    return any(
+        m in ("godet", "godets") and (i == 0 or tete[i - 1] != "en")
+        for i, m in enumerate(tete)
+    )
+
+
 def _origine_citee(mots: list[str]) -> bool:
     """Le premier marqueur de parcelle est-il introduit par « de / du / de la » ?
     « sorti les poireaux de la serre pour le châssis » : la serre est l'ORIGINE."""
@@ -535,9 +549,14 @@ def parser_saisie(
     mots = normalise.split()
 
     # ── 2. Geste (CA1) ───────────────────────────────────────────────────────
-    geste, mots = _extraire_geste(mots)
+    # [US-241 / CA2] « passé 6 godets du lot 21 au châssis » : le verbe en tête prime
+    # sur « godets », qui serait sinon lu comme une mise en godet.
+    deplacement_familier = _godets_deplaces(mots)
+    if deplacement_familier:
+        geste, mots = "deplacement", mots[1:]
+    else:
+        geste, mots = _extraire_geste(mots)
     # [US-211 / CA2] « passé / sorti / rentré » : déplacement candidat, jamais sûr.
-    deplacement_familier = False
     if geste is None:
         deplacement_familier, mots = _extraire_geste_deplacement_familier(mots)
         if deplacement_familier:
@@ -598,12 +617,23 @@ def parser_saisie(
         cultures = _index_cultures(cultures_connues(db, ctx.potager_id))
 
         # ── 3. Parcelle (CA3, CA4) ───────────────────────────────────────────
-        # [US-211] Une origine dite (« de la serre ») n'est pas la destination : elle
-        # est lue puis écartée, c'est le lot qui sait d'où il vient.
+        # [US-211] Une origine dite (« de la serre ») n'est pas la destination.
+        # [US-241 / CA3] Elle est gardée (`parcelle_origine`) : d'un lot réparti entre
+        # plusieurs pépinières, c'est elle qui dit d'où partent les godets.
         marqueurs = _MARQUEURS_PARCELLE_DEPLACEMENT if geste == "deplacement" else _MARQUEURS_PARCELLE
         dans_nom = _MARQUEURS_DANS_LE_NOM_DEPLACEMENT if geste == "deplacement" else _MARQUEURS_DANS_LE_NOM
+        origine_nom: Optional[str] = None
         if geste == "deplacement" and _origine_citee(mots):
-            _origine, mots, _ = _extraire_parcelle(mots, cultures, marqueurs, dans_nom)
+            libelle_origine, mots, _ = _extraire_parcelle(mots, cultures, marqueurs, dans_nom)
+            if libelle_origine:
+                from utils.parcelles import resolve_pepiniere_par_type
+                p_origine = (
+                    resolve_parcelle(db, libelle_origine, potager_id=ctx.potager_id)
+                    or resolve_pepiniere_par_type(db, libelle_origine, ctx.potager_id)
+                )
+                if p_origine is None:
+                    return _repli(f"pépinière d'origine inconnue du potager : {libelle_origine!r}", texte)
+                origine_nom = p_origine.nom
         libelle_parcelle, mots, parcelle_citee = _extraire_parcelle(mots, cultures, marqueurs, dans_nom)
         parcelle_nom: Optional[str] = None
         if parcelle_citee:
@@ -621,7 +651,10 @@ def parser_saisie(
                 # sans pépinière de destination, ce n'est pas un déplacement.
                 return _repli("« sorti / passé » sans pépinière de destination", texte)
 
-        if geste == "deplacement" and parcelle_nom is None:
+        if geste == "deplacement" and parcelle_nom is None and (deplacement_familier or numero_lot_cite is None):
+            # [US-241 / CA12, CA14] « déplacement du lot 26 » : le verbe explicite et le lot
+            # cité suffisent, le compagnon demande la destination. Un verbe familier sans
+            # pépinière (« sorti les tomates ») reste ambigu : il part au modèle.
             return _repli("déplacement sans pépinière de destination nommée", texte)
 
         # ── 4. Quantités et unités ───────────────────────────────────────────
@@ -710,6 +743,9 @@ def parser_saisie(
 
     if numero_lot_cite is not None:
         item["numero_lot_cite"] = numero_lot_cite   # [US-209 / CA5] résolu au récapitulatif
+
+    if geste == "deplacement" and origine_nom is not None:
+        item["parcelle_origine"] = origine_nom   # [US-241 / CA3] d'où partent les godets
 
     if geste == "levee" and levee_terminee:
         item["levee_terminee"] = True   # [US-212] la levée est déclarée terminée

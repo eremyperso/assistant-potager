@@ -280,7 +280,8 @@ def test_us208_ca5_lots_exposent_le_type(db) -> None:
 
 def test_us208_ca6_pwa_affiche_sans_corriger() -> None:
     src = RACINE / "frontend" / "src"
-    assert "emplacementLot(lot)" in (src / "views" / "Pepiniere.jsx").read_text(encoding="utf-8")
+    # [US-242] L'onglet Lots dit l'emplacement par la fiche du journal de saison.
+    assert "emplacementLot(lot)" in (src / "lib" / "lotsJournal.js").read_text(encoding="utf-8")
     assert "typePepiniere" in (src / "components" / "ui" / "CartePlanParcelle.jsx").read_text(encoding="utf-8")
     ECRITURE = ("<input", "onChange", "JSON.stringify", "body:", "value=")
     fautifs = [
@@ -308,6 +309,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         Path("app/services/echeances_lots.py"),
         # [US-215 / CA2] Copie pour la pastille de l'onglet « Aujourd'hui » ; aucun calcul.
         Path("app/services/lots_pepiniere.py"),
+        # [US-220 / CA1] Le moteur de confiance module un semis en pépinière selon
+        # le type — table `REGLES_ACQUISES_PAR_TYPE_PEPINIERE`, seul endroit.
+        Path("app/services/confiance_semis.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):
@@ -321,9 +325,11 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
     code = [l for l in stock.splitlines() if "type_pepiniere" in l and not l.strip().startswith("#")]
     # valeur par défaut + copie (US-208) ; + l'emplacement courant du lot (US-210 / CA5) :
     # sa docstring, la copie depuis la pépinière des godets, depuis celle du semis, et
-    # la valeur vide ; + la copie depuis la pépinière d'un déplacement (US-211 / CA6).
+    # la valeur vide ; + la copie depuis la pépinière d'un déplacement (US-211 / CA6) ;
+    # + la répartition d'un lot entre pépinières (US-241 / CA7) : sa docstring, la copie
+    # depuis l'emplacement courant, la copie depuis chaque pépinière du rejeu.
     # Toujours des copies : aucune condition ne porte sur le type.
-    assert len(code) == 7, code
+    assert len(code) == 10, code
 
 
 def test_us208_ca7_lots_identiques_quel_que_soit_le_type(db) -> None:

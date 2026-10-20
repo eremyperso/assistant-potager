@@ -283,7 +283,10 @@ export function gestesDuLot(lot, { nbPepinieres = null, levee = LEVEE_DISPONIBLE
       quantite: lot.nb_leves ?? null, unite: 'plants', disponibleDuLot: graines,
     })
     if (levee && lot.levee_terminee !== true) {
-      gestes.push({ ...base, code: 'noter_levee', libelle: 'Noter la levée', action: 'levee', quantite: null, unite: null })
+      // [US-216 / CA15 précisé, A33] Les graines restantes d'un lot déjà en partie
+      // repiqué n'attendent plus rien : la levée à noter est celle qui les solde.
+      const solde = (lot.nb_mises_en_godet ?? 0) > 0
+      gestes.push({ ...base, code: 'noter_levee', libelle: solde ? 'Noter la levée (terminée)' : 'Noter la levée', action: 'levee', quantite: null, unite: null })
     }
   }
   if (godets > 0) {

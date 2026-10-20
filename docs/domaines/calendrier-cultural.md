@@ -285,8 +285,26 @@ rendus ici sont donc ceux du gabarit, à la lettre, et un test les fige.
 
 ⚠️ Une parcelle déclarée pépinière IMPOSE le semis en pépinière quand la filière
 n'est pas dite (CA8) ; une plantation qu'on y demande n'est pas corrigée en
-douce — elle porte un avertissement. Un semis en pépinière tient R2, R3 et R4
-pour acquises. [US-181] L'abri et le paillage DÉCLARÉS sur la parcelle acquièrent
+douce — elle porte un avertissement. [US-220] Un semis en pépinière lit le TYPE
+de la pépinière (US-208), table `REGLES_ACQUISES_PAR_TYPE_PEPINIERE` :
+
+| Type de pépinière | R2 dernière gelée | R3 gel annoncé | R4 nuits douces | Motif |
+|---|---|---|---|---|
+| chaude | acquise | acquise | acquise | « pépinière chauffée » |
+| froide | évaluée | acquise | évaluée | « pépinière froide : à l'abri du gel annoncé, pas des nuits fraîches » |
+| non renseigné | acquise | acquise | acquise | motifs d'avant US-220 + avertissement « la confiance suppose une pépinière chauffée » |
+
+Quelle pépinière : celle de la parcelle dite si c'en est une ; sinon la MEILLEURE
+du potager (chaude, puis non renseigné, puis froide), nommée dans
+`pepiniere.evaluation`. Aucune pépinière : comportement d'avant, avec
+l'avertissement « Aucune pépinière déclarée ». Un potager qui a des pépinières
+froides ET d'autres reçoit aussi `par_pepiniere`, une évaluation par type — même
+fonction, donc même niveau sur le bot, le Plan, la fiche calendrier et la carte
+« À semer » (`resume.a_semer.cultures[].confiance`). La ligne « non renseigné »
+conserve le niveau d'avant pour ne pas faire chuter tous les potagers d'un coup :
+décision produit à revoir quand les pépinières seront typées. Les règles R2 à R4
+s'évaluent toujours « exposées » ; la pépinière, puis l'abri, acquièrent ensuite
+ce qu'ils couvrent. [US-181] L'abri et le paillage DÉCLARÉS sur la parcelle acquièrent
 d'office R2/R3/R4 (serre, tunnel), R3 (châssis, voile) ou R4 (paillage) : la table
 `REGLES_ACQUISES_PAR_ABRI` de `confiance_semis.py` est une décision produit, à
 corriger là. R1 et R5 ne sont jamais modulées ; « non renseigné » ≠ « aucun ».

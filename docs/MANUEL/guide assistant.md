@@ -614,6 +614,8 @@ Chaque semis fait à couvert forme un **lot** à lui seul, identifié par sa dat
 
 La pépinière se lit ainsi lot par lot, avec pour chacun sa date, sa culture, sa variété, le nombre de graines de départ et ce qu'il en reste.
 
+**À l'écran, l'onglet « Ma pépinière ».** La Pépinière de l'application s'ouvre sur un tableau : une ligne par pépinière (serre, châssis…), quatre colonnes pour le chemin du plant — **En levée**, **En godet**, **Endurcissement**, **Prêt à sortir**. Chaque lot y pose une étiquette par stade où il se trouve : un lot à moitié repiqué en a deux, « 1/2 » et « 2/2 ». L'étiquette dit ce qui presse (« Repiquer — retard », « Sortir bientôt »…), l'échéance en grand (« +6 j », « 14 j », « J3/7 ») et propose ses gestes, que le compagnon vous fera confirmer. En haut, les compteurs « à repiquer », « à sortir », « endurcit » mettent leurs étiquettes en évidence ; la bande **Le bon moment pour semer** liste ce que vous pouvez semer maintenant avec vos graines, ou, s'il n'y a rien, quand la prochaine fenêtre s'ouvre. Les lots oubliés depuis plus de 60 jours sont rangés à part, dans le tiroir des lots dormants. Sur téléphone, les colonnes deviennent quatre onglets. L'onglet **Lots** garde la vue carte par carte.
+
 ### 8.2 La mise en godet
 
 Quand vos semis ont levé et sont assez forts, vous les repiquez en godets individuels. C'est l'étape charnière entre le plateau et la pleine terre.
@@ -630,9 +632,11 @@ Repiquer 15 plants de poivron en godet le 10 mars
 
 ### 8.2 bis Sortir ses plants pour les endurcir : déplacer un lot
 
-Quand les godets passent de la serre au châssis froid, dites-le : *« passé le lot 119 au châssis froid »*, *« déplacé les godets de tomate cerise sous le châssis »*. L'assistant déplace le lot **entier** et le lit désormais à sa nouvelle pépinière, à la date du geste ; il ne touche à aucun stock.
+Quand les godets passent de la serre au châssis froid, dites-le : *« passé le lot 119 au châssis froid »*, *« déplacé les godets de tomate cerise sous le châssis »*. Sans nombre, l'assistant déplace le lot **entier** et le lit désormais à sa nouvelle pépinière, à la date du geste ; il ne touche à aucun stock.
 
-La destination doit être une **pépinière** : vers une planche ordinaire, le déplacement est refusé (mettre des plants en terre est une plantation). Plusieurs lots de la même culture : l'assistant vous propose les lots par boutons. Un déplacement se corrige et se supprime au Journal. Déplacer une partie seulement des godets n'est pas géré.
+Pour n'en sortir qu'une partie, dites combien : *« passé 6 godets du lot 21 au châssis froid »*. Les 6 godets partent, les autres restent en place : le lot est alors **réparti** (« 6 godets du lot 21 · serre chaude → châssis froid »), et l'endurcissement de la partie sortie au froid commence le jour du geste. Un nombre supérieur aux godets présents est refusé avec le nombre disponible ; les graines encore en barquette ne suivent que le lot entier. D'un lot réparti, si vous ne dites pas d'où partent les godets — pour un déplacement, une plantation, une perte ou une vente — l'assistant vous propose les pépinières par boutons, avec le nombre de godets de chacune.
+
+La destination doit être une **pépinière** : vers une planche ordinaire, le déplacement est refusé (mettre des plants en terre est une plantation). Plusieurs lots de la même culture : l'assistant vous propose les lots par boutons. Un déplacement se corrige et se supprime au Journal ; la répartition du lot est recalculée. « Déplacement du lot 26 », ou le bouton « Déplacer » d'un lot à l'écran, sans destination : l'assistant vous propose les pépinières par boutons, même pour un lot dont l'emplacement n'a jamais été dit.
 
 ### 8.3 Les questions que le bot peut vous poser
 
@@ -1500,7 +1504,7 @@ Vous n'avez rien à apprendre par cœur : cette table sert à lever un doute, pa
 | **Semis** | semé · semer · semis · semis direct · pleine terre · à la volée |
 | **Mise en godet** | mise en godet · mis en godet · repiqué en godet · rempotage godet |
 | **Plantation** | planté · planter · repiqué · repiquage · mis en terre · transplanté |
-| **Déplacement d'un lot** | passé le lot 119 au châssis · déplacé les godets sous le châssis · sorti les poireaux de la serre pour le châssis |
+| **Déplacement d'un lot** | passé le lot 119 au châssis · déplacé les godets sous le châssis · sorti les poireaux de la serre pour le châssis · passé 6 godets du lot 21 au châssis froid |
 | **Arrosage** | arrosé · arroser · irrigué · donné de l'eau |
 | **Désherbage** | désherbé · désherber · sarclé · sarclage · enlevé les mauvaises herbes |
 | **Binage** | biné · biner · binage |

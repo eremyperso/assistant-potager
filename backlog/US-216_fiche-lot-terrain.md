@@ -89,3 +89,36 @@ Scénario: Lecture seule
 ```
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `pepiniere`, `mobile`
+
+---
+
+## ⚠️ AMENDEMENT du 19/10/2026 — la fiche du lot, porte commune des deux onglets
+
+Origine : réorganisation de la Pépinière en deux onglets, « Parcours » (US-218 réécrite) et « Lots »
+(`docs/EPIC 9-12 - PLAN CULTURES PEPINIERE/pepiniere/`, arbitrages A30 à A40). Les onglets
+« Aujourd'hui » (US-215), « Calendrier » (première version d'US-218) et « Emplacements » (US-219)
+disparaissent ; la fiche du lot devient la **seule porte des gestes** d'un lot, partagée par les deux
+onglets. Cette US reste livrée : l'amendement est **livré et testé avec US-218** (US-218 / CA28).
+
+**CA1 réécrit :**
+- [ ] CA1 : La fiche s'ouvre depuis une **étiquette** de l'onglet « Parcours » ou un lot de son **tiroir
+  des dormants** (US-218), une carte de l'onglet « Lots » (US-061), le champ « Aller au lot n° » et
+  l'adresse `/?vue=pepiniere&lot=128` (US-209, US-195), un lot de la fiche culture (US-207) et, en
+  option, le scan d'une étiquette (US-221)
+
+**CA2 précisé :** « à côté de la liste » se lit « à côté du kanban » sur l'onglet Parcours ; le seuil de
+900 px et la règle de lecture sont inchangés.
+
+**CA19 ajouté :**
+- [ ] CA19 : Quand le lot est **coupé** — graines encore en levée et godets, ou godets répartis entre
+  plusieurs pépinières (US-241) — la fiche dit, en tête, où se trouve chaque partie et à quel stade
+  (« 4 graines en levée · serre chaude », « 10 godets · serre chaude », « 6 godets · châssis froid,
+  s'endurcit sur place »), d'après les étiquettes d'US-240, sans nouvelle lecture. Un lot d'un seul
+  tenant n'affiche pas ce bloc
+
+**CA15 précisé :** la règle de choix des gestes est **aussi** celle des étiquettes de l'onglet Parcours
+(US-218 / CA14) : une seule règle, deux consommateurs. Elle gagne le cas du fragment de graines
+restantes d'un lot en partie repiqué, qui propose « Noter la levée (terminée) » (A33).
+
+Les autres CA sont **inchangés**. Dépendances ajoutées : US-218, US-240 ; US-241 pour la répartition par
+pépinière.

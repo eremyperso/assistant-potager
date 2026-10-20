@@ -40,7 +40,7 @@ from .enregistrement import (
 )
 from .godets import (
     _demander_graines_godet_si_manquant, _demander_lot_godet_si_ambigu, _poser_question_quantite_pepiniere,
-    _preparer_deplacement, _preparer_levee, _quantite_pepiniere_manquante,
+    _preparer_deplacement, _preparer_levee, _preparer_origine_sortie, _quantite_pepiniere_manquante,
 )
 from .pertes import _save_perte_item, _stock_variete_jardin, _variete_reelle
 from .interpretation import _UpdateCommande, _message_de
@@ -530,6 +530,15 @@ async def _parse_and_save(update: Update, texte: str, msg=None, pre_parsed_items
         and await _preparer_deplacement(update, items[0], texte, geste_file)
     ):
         return  # refus dit, ou attente du choix du lot
+
+    # [US-241 / CA9] Plantation, perte ou vente d'un lot réparti entre plusieurs
+    # pépinières, sans dire d'où viennent les godets : l'origine est demandée ICI.
+    if (
+        len(items) == 1
+        and normalize_action(items[0].get("action")) in ("plantation", "perte_godet", "vendu")
+        and await _preparer_origine_sortie(update, items[0], texte, geste_file)
+    ):
+        return  # attente du choix de l'origine
 
     # [US-212 / CA2, CA3, CA4] Levée d'un lot : le lot est désigné ICI, avant le
     # récapitulatif — numéro cité, culture à un seul lot, choix par boutons, ou refus

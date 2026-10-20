@@ -544,6 +544,7 @@ def deposer_geste(
     ecran: Optional[str] = None,
     aujourd_hui: Optional[_date] = None,
     maintenant: Optional[datetime] = None,
+    emplacement_id: Optional[int] = None,
 ) -> Depot:
     """[CA1, CA2, CA3, CA4] Dépose un geste dans la file, sans rien écrire d'autre.
 
@@ -554,6 +555,12 @@ def deposer_geste(
     Lève `PermissionInsuffisanteError` (lecteur), `ActionNonOuverteError`,
     `ParcelleHorsPotagerError` ou `LotHorsPotagerError` — aucune de ces erreurs
     ne laisse la moindre trace en base.
+
+    [US-241 / CA9, CA12, CA14] `emplacement_id` : la pépinière de l'étiquette d'où part
+    un geste de lot (déplacement, plantation, perte) — d'où viennent les godets d'un lot
+    réparti ; le compagnon n'a pas à la redemander. Un déplacement se dépose avec une
+    quantité et une destination (`parcelle_id`) facultatives : sans destination, le
+    compagnon la demande par boutons.
     """
     # [CA24] Garde de rôle d'abord : un lecteur ne dépose rien, pas même un
     # geste en attente. Même garde et même message que le bot (US-047). Un
@@ -568,6 +575,7 @@ def deposer_geste(
         raise ActionNonOuverteError(action)
 
     parcelle_nom = _valider_parcelle(db, ctx, parcelle_id)
+    _valider_parcelle(db, ctx, emplacement_id)   # [US-241] même contrôle d'appartenance
     lot_evt = _valider_lot(db, ctx, lot_id)
     lot = lot_evt.id if lot_evt is not None else None
     if lot is not None and geste in GESTES_DE_LOT + ("deplacement",):
@@ -586,6 +594,16 @@ def deposer_geste(
         # Hors contrat du parseur : rangé à part pour que `_parse_and_save` ne
         # reçoive jamais un champ qu'il ne connaît pas (cf. `item_du_geste`).
         item["_lot_id"] = lot
+        if geste == "deplacement":
+            # [US-241 / CA14] « déplacement de 6 godets du lot 21 » : le lot cité comme le
+            # jardinier le dirait ; quantité et destination restent facultatives.
+            if lot_evt.numero_lot is not None:
+                item["numero_lot_cite"] = int(lot_evt.numero_lot)
+            if quantite is not None:
+                item["quantite"] = int(quantite)
+                item["unite"] = "godets"
+        if emplacement_id is not None and geste in ("deplacement", "plantation", "perte_godet"):
+            item["parcelle_origine_id"] = int(emplacement_id)   # [US-241 / CA9]
         if geste in GESTES_DE_LOT:
             # [US-216 / CA9] Le geste cite son lot comme le jardinier le dirait.
             if lot_evt.numero_lot is not None:
@@ -1114,6 +1132,17 @@ def phrase_a_dicter(item: dict) -> str:
     geste = item.get("action") or ""
     morceaux: list[str] = [_LIBELLE_DICTEE_LOT.get(geste, geste)]
     numero = item.get("numero_lot_cite")
+    if geste == "deplacement" and numero is not None:
+        # [US-241 / CA14] « déplacement de 6 godets du lot 21 parcelle châssis froid » : lue
+        # sans modèle, quantité et destination facultatives (le compagnon demande ce qui manque).
+        morceaux = ["déplacement"]
+        if item.get("quantite") is not None:
+            morceaux.append(f"de {int(item['quantite'])} godets")
+        morceaux.append(f"du lot {int(numero)}")
+        parcelle = (item.get("parcelle") or "").strip()
+        if parcelle:
+            morceaux.append(f"parcelle {parcelle.lower()}")
+        return " ".join(morceaux)
     if geste == "levee" and numero is not None:
         # [US-212 / CA11] « levée du lot 128 » : le seul lot, que la grammaire lit sans appel au
         # modèle. Le nombre de levés et « terminée » ne se disent pas depuis l'écran : le bot les

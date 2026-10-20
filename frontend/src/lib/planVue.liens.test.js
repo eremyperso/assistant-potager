@@ -47,18 +47,18 @@ test('[CA4, I4] « Fiche parcelle → » ouvre l’onglet Parcelles sur cette pa
   assert.deepEqual(destinationFicheParcelle(carte), { type: 'aller', vue: 'plan', intention: { parcelle: 7 } })
 })
 
-test('[CA4, I5] une seule pépinière : l’onglet « Aujourd’hui »', () => {
+test('[CA4, I5 amendée] une seule pépinière : « Ma pépinière », sans filtre', () => {
   const serre = { id: 1, nom: 'serre', pepiniere: true }
   assert.deepEqual(destinationPepiniere(serre, [carte, serre]), {
-    type: 'aller', vue: 'pepiniere', intention: { onglet: 'aujourdhui', emplacement: 'serre' },
+    type: 'aller', vue: 'pepiniere', intention: { onglet: 'parcours', emplacement: null },
   })
 })
 
-test('[CA4, I5] plusieurs pépinières : l’onglet « Emplacements », sur celle appuyée', () => {
+test('[CA4, I5 amendée] plusieurs pépinières : « Ma pépinière », filtré sur celle appuyée', () => {
   const serre = { id: 1, nom: 'serre', pepiniere: true }
   const chassis = { id: 2, nom: 'châssis froid', pepiniere: true }
   assert.deepEqual(destinationPepiniere(serre, [carte, serre, chassis]), {
-    type: 'aller', vue: 'pepiniere', intention: { onglet: 'emplacements', emplacement: 'serre' },
+    type: 'aller', vue: 'pepiniere', intention: { onglet: 'parcours', emplacement: 'serre' },
   })
 })
 

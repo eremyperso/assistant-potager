@@ -8,8 +8,8 @@ avant de toucher `app/services/echeances_lots.py`, au calcul des lots
 
 Les échéances, l'action suggérée et le rang d'urgence sont calculés **à un seul
 endroit** — `app/services/echeances_lots.py` — en **lecture seule**, à une date de
-référence, sans appel au modèle. L'API recopie ; les écrans (US-215 Aujourd'hui,
-US-216 fiche du lot, US-218 Calendrier) affichent. Aucun d'eux ne recalcule
+référence, sans appel au modèle. L'API recopie ; les écrans (US-218 Ma pépinière,
+US-216 fiche du lot) affichent. Aucun d'eux ne recalcule
 quoi que ce soit : une règle écrite deux fois finit par se contredire.
 
 Entrées : la sortie de `calcul_lots_pepiniere` à la même date, les durées du
@@ -227,27 +227,234 @@ la levée est cherché dans **toute** la phrase quand aucun geste n'est en tête
 (`_extraire_geste_levee`), avec son auxiliaire ; `llm/routeur._est_levee_dictee` fait de même
 pour le routage. « terminée » n'est un drapeau qu'avec une levée.
 
-## L'onglet « Aujourd'hui » (US-215)
+## L'onglet « Ma pépinière » (US-218)
 
-`frontend/src/components/OngletAujourdhui.jsx` (`CarteReponsePepiniere`, `LigneLot`),
-monté par `views/Pepiniere.jsx` derrière une barre d'onglets ; l'onglet **Lots** est
-l'écran d'US-061 **inchangé**. Mise en forme dans `lib/pepiniere.js` (section US-215,
-`npm test` : `pepiniere.aujourdhui.test.js`) — rien n'y est recalculé.
+Deux onglets (`ONGLETS_PEPINIERE` de `lib/parcours.js`) : **Ma pépinière**, ouvert par
+défaut, et **Lots** (journal de saison, US-242 — voir plus bas). Les onglets « Aujourd'hui » (US-215),
+« Calendrier » (frise, première version d'US-218) et « Emplacements » (US-219) sont
+**supprimés** ; `ongletInitial` envoie toute autre valeur (adresse, intention du Plan)
+vers le parcours. Maquette de référence : « Ma pepiniere - HF » (Claude Design, projet
+potager 2026). Le libellé « Ma pépinière » vient de la maquette HF ; la clé reste `parcours`.
 
-- **Onglets** : `ONGLETS_LIVRES` ; US-218 et US-219 y passent leur drapeau à `true`.
-  Un onglet demandé mais non livré (intention `onglet=emplacements` du Plan) ouvre
-  « Aujourd'hui ».
-- **Une lecture** : `GET /pepiniere/lots`, dont `pepinieres` porte maintenant
-  `superficie_m2` et `type_pepiniere` (copie pour la pastille d'une pépinière unique ;
-  `lots_pepiniere.py` est ajouté à la liste d'US-208 / CA7, aucun calcul n'y lit le type).
-- **Bandeau** : `cartesReponses(resume, lots)` ; les filtres (`FILTRES_BANDEAU`) reprennent
-  les règles du résumé d'US-214 sur les échéances déjà calculées.
-- **Boutons** : `boutonDeLigne` = le geste de l'action suggérée (`gestesDuLot`, US-216),
-  déposé par `BoutonGeste` dans la file (US-224) : **aucune redirection vers Telegram**,
-  une notification confirme le dépôt. La relecture au retour d'onglet est celle d'US-216.
-- **État d'écran** (US-195) : `onglet`, `qJour`, `bandeau`, `emplacement` dans
-  `useEtatEcran('pepiniere')`.
-- Page de contrôle visuel : `/pepiniere-aujourdhui?etat=nominal|une_pepiniere|vide|lecture_seule|echec`.
+`frontend/src/components/OngletParcours.jsx`, monté par `views/Pepiniere.jsx`. Mise en
+forme dans `lib/parcours.js` (sans React, `npm test` : `parcours.test.js`) — rien n'y est
+recalculé : colonnes, états, échéances, ordre dans une case et compteurs viennent du bloc
+`parcours` (US-240, section suivante).
+
+- **Une lecture** : `GET /pepiniere/lots`. Seule la pastille météo de la barre lit
+  `GET /meteo`, et seulement sans date de référence passée ; illisible, elle se tait.
+- **Kanban** : `kanban(parcours, { filtre })` → une ligne par pépinière (vides comprises),
+  puis « Sans emplacement » si `parcours.sans_emplacement` ; un `<table>` sémantique au-dessus
+  de 48rem de conteneur, quatre onglets de stade en dessous (`ongletStadeParDefaut` : le
+  premier en alerte, sinon le premier non vide). Container queries, aucun breakpoint.
+- **Étiquette** : `enteteEtiquette` (mot + teinte `tete-*`), `grandChiffre`, `quantitesEtiquette`,
+  `datesEtiquette`, `regleEtiquette` (piste du `debut_regle` à la fin de fourchette ou au jour
+  de référence ; sept cases en endurcissement ; rien sans fourchette). Fragments : repère
+  `rang/total`, `fragmentsLies` éclairés au survol / focus, liens réciproques.
+- **Gestes** : `gestesEtiquette` filtre `gestesDuLot` (la règle de la fiche, US-216) selon le
+  fragment — levée : Repiquer, Noter la levée (« (terminée) » si `soldable_par_levee_terminee`) ;
+  godets : Mettre en terre (quantité du fragment) ; sans emplacement : « Ranger dans… »
+  (`deplacement` sans destination, US-241 / CA12). Deux au plus, déposés par `BoutonGeste`.
+  « Durée ? » : la commande `/calendrier duree <culture> semis-godet|repiquage 10-15`, copiable.
+- **Bande « Le bon moment pour semer »** : `bandeSemer` — tuiles de `parcours.a_semer`,
+  repliées de `a_semer_sans_graines`, et, quand les deux sont vides, `parcours.calendrier_semis`
+  (six mois, cultures qui s'ouvrent, prochaine ouverture ; calculé par
+  `echeances_lots._calendrier_semis`, seulement dans ce cas).
+- **Tiroir** : `parcours.dormants`, gestes `gestesDormant` (Mettre en terre s'il a des godets,
+  Clôturer). Ouvert au large, bouton « Ouvrir › » au téléphone.
+- **Compteurs** : `compteursBarre` ; à zéro ils restent, éteints (maquette HF). « à repiquer »,
+  « à sortir », « endurcit » atténuent les autres étiquettes (`miseEnEvidence`).
+- **État d'écran** (US-195, RT12) : `onglet`, `filtre`, `compteur`, `stade`, `tiroir` dans
+  `useEtatEcran('pepiniere')` ; l'intention I5 du Plan pose `filtre` (nom de pépinière).
+- **Tokens** : couleurs de stade `--sem`, `--god`, `--end`, `--frk` (+ `-d`, `-s`), police
+  Kalam (`font-hand`) pour les jalons ; motifs `motif-*` et en-têtes `tete-*` hors `@layer`
+  dans `index.css` (classes composées à l'exécution, à l'abri de la purge).
+- **Fin de règle** : `echeances.sortie_prevue` (conservé de la première version, A39).
+- **Fiche en bandeau** (maquette HF, option B retenue) : au-delà de 768 px de conteneur
+  (`LARGEUR_BANDEAU`, le kanban en tableau), l'appui sur une étiquette ouvre `FicheLotBandeau`
+  (`FicheLot.jsx`) dans une ligne `<tr>` glissée sous la rangée de sa pépinière (sous la
+  dernière si la rangée est filtrée), découpée sur les colonnes : parties du lot (cliquables,
+  elles changent l'étiquette ouverte), échéance de l'étiquette et « Où les mettre », gestes
+  (`gestesDuLot`), bilan (`bilanLot`) et journal. L'étiquette ouverte porte un contour vert et
+  la pastille « #n · ouvert » ; un second appui ferme. Un lot sans étiquette (dormant) et le
+  téléphone gardent la fiche en fenêtre ; l'onglet Lots n'a plus de panneau (US-242).
+- Page de contrôle visuel : `/pepiniere-parcours?etat=nominal|hf|une_pepiniere|pepiniere_vide|aucun_lot|sans_semer|lecture_seule|chargement|echec`.
+
+## L'onglet « Lots » en journal de saison (US-242)
+
+Registre **sans geste** (A40) remplaçant la grille de cartes d'US-061 ; maquette « Lots -
+Journal de saison HF » (Claude Design, 19/10/2026). Règles dans `lib/lotsJournal.js`
+(testées par `lotsJournal.test.js`), dessin dans `components/OngletLots.jsx`.
+
+- **Statut** (`statutLot`) : `termine` = `estTermine` de la fiche ; `a_regler` = quantité
+  semée non dite, ou `echeances.raisons` non vide sans échéance (délai non renseigné) ;
+  `en_cours` sinon. Filtre En cours / À régler / Terminés / Tous, « Tous » par défaut.
+- **Gestes datés** (`gestesDates`) : semis, dernière mise en godet, déplacement, levée,
+  clôture, chaque mise en terre (avec sa parcelle), vente et perte en godet, et
+  `date_dernier_geste` (« type non transmis ») s'il ne coïncide avec aucun. Mises en terre,
+  ventes et pertes viennent de `sorties_datees` : `calcul_lots_pepiniere` garde, pour chaque
+  sortie imputée à un lot (`_allouer`, paramètre `trace`), sa date, sa quantité et la parcelle
+  de la plantation ; une plantation répartie sur deux lots donne à chacun sa part. Le reste
+  non couvert (API sans le détail, geste sans date) est compté « date non transmise »
+  (`gestesNonDates`), jamais posé sur la frise.
+- **Fenêtre** (`fenetre`) : `saison` 1er mars → 30 nov., étendue au jour de référence ;
+  `recent` du 1er du mois M-2 à la fin du mois M+1 (libellé calculé). Le téléphone (conteneur
+  < 768 px) prend toujours la récente. Un semis antérieur est accroché au bord gauche, pâle.
+- **Parts** (`partsDuLot`) : en levée = levés à repiquer si la levée est terminée, sinon
+  graines non soldées ; non levées = semées − obtenues − en levée.
+- **Fiche** : dépliée sous la ligne (conteneur ≥ 768 px), plein écran sinon ; « Agir dans Ma
+  pépinière » bascule d'onglet et y ouvre `FicheLot`. « Aller au lot n° » remet « Tous » et
+  déplie ; une adresse `lot=` sur l'onglet Lots déplie aussi.
+- État d'écran : `filtreLots`, `zoom`, `lotDeplie`. Page de contrôle : `/pepiniere-lots`.
+
+## Le parcours du plant (US-240)
+
+Bloc `parcours` de `GET /pepiniere/lots`, calculé par `echeances_lots._parcours` dans la
+même lecture que les échéances : l'onglet Ma pépinière (US-218) l'affiche sans rien recalculer
+(RT7). Aucun geste, aucune lecture de plus. Conception : `docs/EPIC 9-12 - PLAN CULTURES
+PEPINIERE/pepiniere/01_VUE_PARCOURS.md` (P4 à P23).
+
+**Étiquettes, fragments (A31, CA2-CA4).** Un lot en cours, non dormant, donne une étiquette
+par couple (stade, emplacement) : une « en levée » s'il a des graines non soldées
+(`_graines_en_levee` = `graines_restantes` − `graines_non_levees_soldees`, donc ni repiquées,
+ni soldées par une levée terminée ou une clôture ; un semis sans quantité est en levée, sans
+nombre), une par emplacement où il a des godets disponibles (`_godets_par_emplacement`). Elles
+sont numérotées `fragment.rang` sur `fragment.total`, levée d'abord ; `total` = 1 : pas de
+repère. Les graines sont à `graines_emplacement` (parcelle du semis, ou destination d'un
+déplacement **entier**) ; les godets là où les place `repartition_godets` (US-241, section
+suivante) — une étiquette par pépinière d'un lot réparti. Une pépinière inconnue du potager
+tombe dans « Sans emplacement » (`emplacement_id` nul).
+
+**Table des colonnes (P9, CA5)**, à la date de référence :
+
+| Colonne (`stade`) | Une étiquette y va quand… |
+|---|---|
+| **En levée** (`levee`) | graines non soldées |
+| **En godet** (`godet`) | godets en pépinière chaude, de type inconnu ou sans emplacement, avant le compte à rebours d'endurcissement, mise en terre non atteinte ou non calculable |
+| **Endurcissement** (`endurcissement`) | compte à rebours de 7 jours commencé (chaude ou inconnue, ou déplacé vers le froid depuis moins de 7 jours), **ou** godets en pépinière froide : ils s'endurcissent sur place (A35) |
+| **Prêt à sortir** (`pret`) | fourchette de mise en terre prévue atteinte ou dépassée, quel que soit le type de pépinière — prime sur le reste |
+
+**États (P15, CA6)** :
+
+| `etat` | Colonne | Quand | Échéance |
+|---|---|---|---|
+| `repiquer_retard` | levée | repiquage après la fin de sa fourchette | jours de retard, `en_retard` |
+| `a_repiquer` | levée | dans la fourchette de repiquage | 0 |
+| `levee_en_cours` | levée | avant la fourchette ; **ou** graines restantes d'un lot en partie repiqué (A33) | jours avant la fourchette ; aucune pour A33 |
+| `sortir_retard` | prêt | mise en terre après la fin de sa fourchette | jours de retard, `en_retard` |
+| `a_sortir` | prêt | dans la fourchette de mise en terre | 0 |
+| `sortir_bientot` | godet | mise en terre dans **15 jours** ou moins (`SEUIL_SORTIR_BIENTOT_JOURS`) | jours avant la fourchette |
+| `en_cours` | godet | mise en terre à plus de 15 jours | jours avant la fourchette |
+| `endurcir` | endurcissement | compte à rebours en cours, `echeance.endurcissement` = `{jour, sur}` | jours avant la mise en terre |
+| `endurcit_sur_place` | endurcissement | godets en pépinière froide, sans compte à rebours | jours avant la mise en terre, si connue |
+| `duree_inconnue` | levée ou godet | délai non renseigné, ou date de semis inconnue | aucune ; `echeance.raison` |
+
+`a_repiquer` et `a_sortir` sont les deux états « dans la fourchette » que la liste de CA6 ne
+nommait pas. Le seuil de 15 jours est une décision produit du bloc de tête, à côté de 7 et 60
+jours, figée par un test.
+
+**A33 — graines restantes.** Les graines d'un lot qui a déjà des plants en godet n'ont plus
+d'échéance de repiquage (US-214 ne l'attend que sans aucun godet) : `levee_en_cours`, aucune
+échéance, `soldable_par_levee_terminee` vrai — le geste « Noter la levée (terminée) » les
+solde (US-212 / CA7). Faute de geste, la dormance d'US-214 ramasse le lot.
+
+**Échéance d'une étiquette** : `jours`, `en_retard`, `du`/`au` (fourchette de repiquage pour
+la levée, `echeances.sortie_prevue` pour les godets, A39), `debut_regle` (date de semis ; début
+du compte à rebours en endurcissement), `raison`, `libelle` (celui d'US-214), `endurcissement`.
+**Ordre** (`_cle_etiquette`, P22) : retards du plus grand au plus petit, échéances de la plus
+proche à la plus lointaine, puis sans échéance ; à égalité numéro de lot, identifiant, rang.
+La liste est triée une fois : chaque case l'est donc aussi.
+
+**Lignes, compteurs, dormants.** `pepinieres` : toutes celles du potager, dans l'ordre des
+parcelles, vides comprises, avec `nb_lots`, `nb_etiquettes`, `nb_alertes` (retards) et
+`prochaine_sortie` (P10) ; `sans_emplacement` : la même chose, `None` quand vide (P12).
+`compteurs` (`{total, retard}`) : `a_repiquer` (`repiquer_retard`, `a_repiquer`), `a_sortir`
+(`sortir_retard`, `a_sortir`, `sortir_bientot`), `endurcit` (`endurcir`, `endurcit_sur_place`)
+comptent des **étiquettes** ; `a_semer` des cultures, `dormants` des lots. Les lots dormants
+d'US-214 n'ont aucune étiquette : `dormants` porte leurs jours sans geste, date de semis, reste
+(graines, godets) et `a_des_godets` (A37), du plus ancien geste au plus récent.
+
+**A34 — à semer.** `parcours.a_semer` = les cultures de `resume.a_semer` (règle d'US-214
+inchangée, champs `du`, `au`, `periode`, `jours_restants`, `part_ecoulee` **ajoutés** par
+`_bornes_fenetre`) dont des graines sont « en stock », avec `varietes_en_stock`. Les autres
+vont dans `a_semer_sans_graines`, par nom. La fenêtre, connue au mois, finit le dernier jour
+de son dernier mois ; à cheval sur l'année, elle s'ouvre l'année de la date de référence en
+automne, l'année d'avant en hiver ; la part écoulée compte le jour de référence.
+**Décision du 19/10/2026** : aucun inventaire de sachets n'existe — il est reporté à un épic
+dédié. En attendant, « en stock » se lit dans les **cultures en cours** : une ligne de l'écran
+Stocks (`calcul_stock_varietes`, la règle existante) dont le stock est supérieur à zéro ; une
+variété à zéro n'est pas en stock, « Variété non précisée » rend la culture disponible sans
+variété citée. `source_stock_graines` = `cultures_en_cours` le dit au front. Le stock est lu
+**une fois**, et pas du tout sans culture candidate.
+
+## Le déplacement partiel (US-241)
+
+Le geste `deplacement` (US-211) accepte une **quantité de godets** facultative. Sans
+quantité : le lot entier, graines comprises, comme avant. Avec : seuls des godets partent,
+d'une **origine** vers une destination, et le lot est **coupé par l'emplacement**. Aucun
+stock ne bouge (CA10) : `compter_evenements` exclut toujours le déplacement, et aucune
+lecture de stock ne lit sa quantité.
+
+**Donnée** (`migration_v58.sql`). `evenements.parcelle_origine_id`, nullable : la pépinière
+d'où partent les godets d'un déplacement chiffré (NULL = emplacement jamais renseigné), ou
+d'où une plantation, une perte, une vente retire ceux d'un lot réparti (NULL = non dite).
+Écrite par `evenements._parcelle_origine`, jamais pour un déplacement entier.
+
+**Répartition** (`utils/stock._rejouer_mouvements`, `_repartir_godets`). Un lot sans
+déplacement chiffré garde la règle d'US-210 : tous ses godets à son emplacement courant.
+Un lot qui en a un (`_partiel`) est **rejoué dans l'ordre des dates** (puis des
+identifiants) à partir de la parcelle du semis : mises en godet, sorties imputées
+(`_allouer` les note avec leur origine), déplacements, clôture. Tant que le lot est d'un
+seul tenant il suit US-210 ; le premier déplacement chiffré le coupe ; un retour qui réunit
+tous les godets au même endroit le rend d'un seul tenant ; un déplacement entier regroupe
+tout, graines comprises. Une mise en godet faite après la coupe pose ses godets où elle le
+dit, sinon là où sont les graines. Sortie : `repartition_godets` = [{`parcelle_id`, `nom`,
+`type_pepiniere`, `godets`, `depuis`}] (godets **disponibles**, dans l'ordre d'arrivée),
+`reparti`, `repartition_a_verifier`. Le stock du lot fait foi : un écart entre le rejeu et
+`stock_residuel_godet` est ajusté sur l'emplacement courant et marque le lot « à vérifier ».
+`graines_emplacement` ne suit que le dernier déplacement **entier**. `godets_par_emplacement`
+(fiche Telegram) reprend la répartition nette d'un lot réparti. `emplacement` reste la
+destination du dernier déplacement, chiffré ou non (contrat US-210 inchangé).
+
+**Endurcissement par emplacement (CA8).** `depuis` = date de la dernière arrivée de godets
+à cet endroit par un déplacement. `echeances_lots._godets_par_emplacement` la passe à
+`_endurcissement` : la partie posée au froid compte « J+n/7 » depuis son déplacement, celle
+restée au chaud garde son compte à rebours de mise en terre. Deux arrivées au même endroit :
+la plus récente fait foi (prudence, on ne sort pas des godets non endurcis).
+
+**Désigner l'origine** (`evenements.origine_des_godets`). L'origine choisie ou déposée
+(`parcelle_origine_id` présent dans le geste, None = non renseigné), sinon dite
+(`parcelle_origine`, lue par le parseur dans « de la serre »), sinon l'unique pépinière où
+le lot a des godets. Un lot réparti sans origine : `OrigineAmbigueError`, le bot propose
+« Serre (10) », « Châssis froid (6) » (`godets._demander_origine_godets`, callback
+`deplorig:`).
+
+**Refus** (`resoudre_lot_deplacement`) : quantité nulle, négative ou non entière ; lot sans
+godet (« les graines suivent le lot entier », CA5) ; quantité supérieure aux godets de
+l'origine (« n'a que 10 godets en « Serre » ») ; destination = origine. Tous les godets d'un
+lot d'un seul tenant : la quantité est retirée, c'est un déplacement entier (CA1). Un lot
+réparti peut être regroupé entier là où est déjà une partie.
+
+**Sans destination (CA12).** « déplacement du lot 26 » (verbe explicite et lot cité ; un
+verbe familier sans pépinière reste un repli), le bouton « Déplacer » de la fiche du lot ou
+« Ranger dans… » : `DestinationManquanteError` porte les pépinières du potager hors
+l'origine, le bot les propose (`_demander_destination`, callback `depldest:`). La file
+(`deposer_geste`) accepte quantité, destination et `emplacement_id` (l'étiquette d'origine)
+facultatifs ; `phrase_a_dicter` rend « déplacement de 6 godets du lot 21 parcelle châssis
+froid ».
+
+**A41 — consommation d'un lot réparti, EN SUSPENS** (PO, 19/10/2026 : à trancher après des
+tests terrain). Aucune règle d'attribution n'est proposée au jardinier : une plantation, une
+perte ou une vente d'un lot réparti sans origine fait demander l'origine par boutons
+(`controler_origine_sortie`, crochet `saisie._parse_and_save`), un geste déposé depuis une
+étiquette la porte. **Repli du calcul** (décision du 19/10/2026), pour l'historique, une
+imputation FIFO ou une correction au Journal : retirer d'abord de l'emplacement courant, puis
+des autres dans l'ordre d'arrivée, et marquer `repartition_a_verifier`. La piste « d'abord
+la partie la plus avancée » n'est pas retenue.
+
+**Récapitulatif** : « déplacement de 6 godets du lot 21 (poivron) · serre chaude → châssis
+froid » ; origine inconnue : « emplacement non renseigné » (CA13), au récapitulatif comme au
+cycle de vie (`_deplacements_du_lot` → `quantite`, origine stockée).
 
 ## Où les mettre (US-217)
 
@@ -293,6 +500,20 @@ du front (aucune redirection, onglet Lots intact).
 les fourchettes et leurs bornes, l'absence de chaque donnée, les trois cas
 d'endurcissement et la borne J+7, la dormance et son exclusion, l'ordre
 d'urgence, le résumé, la date de référence passée, l'isolation entre potagers.
+
+`tests/test_us218_pepiniere_calendrier.py` — `sortie_prevue` à chaque stade, son absence
+motivée, l'API, le corpus, les garde-fous du front ; `frontend/src/lib/calendrierPepiniere.test.js`
+pour le placement.
+
+`tests/test_us240_parcours_plant.py` — chaque ligne de la table des colonnes, chaque état, la
+coupure par le stade, A33, A35, la date passée, les lignes (vide, sans emplacement), les
+dormants, chaque compteur, à semer avec et sans culture en cours, la variété à zéro, les bornes
+de fenêtre, une seule lecture du stock, la lecture seule, l'isolation, l'API.
+
+`tests/test_us241_deplacement_partiel.py` — entier inchangé, partiel, quantité égale au
+disponible, excessive, nulle, graines, origine ambiguë, sans emplacement, sans destination,
+retour à l'origine, endurcissement par emplacement, sorties d'un lot réparti (origine dite,
+demandée, repli), correction et suppression, date passée, stocks inchangés, isolation.
 
 `tests/test_us216_fiche_lot.py` — la clôture (lot, stock agrégé, refus), les gestes de la fiche
 et leurs phrases à dicter, la lecture par numéro, le corpus ; `frontend/src/lib/ficheLot.test.js`

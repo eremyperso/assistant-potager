@@ -1602,6 +1602,9 @@ class PreparerGesteRequest(BaseModel):
     parcelle_id: Optional[int] = None
     rang: Optional[str] = None
     lot_id: Optional[int] = None
+    # [US-241 / CA9] La pépinière de l'étiquette d'où part le geste (écran Parcours) :
+    # d'où viennent les godets d'un lot réparti.
+    emplacement_id: Optional[int] = None
     date: Optional[str] = None
     contexte_semis: Optional[str] = None
     ecran: Optional[str] = None
@@ -1637,6 +1640,7 @@ def deposer_geste_en_file(
                 quantite=req.quantite, unite=req.unite, parcelle_id=req.parcelle_id,
                 rang=req.rang, lot_id=req.lot_id, date=req.date,
                 contexte_semis=req.contexte_semis, ecran=req.ecran,
+                emplacement_id=req.emplacement_id,
             )
         except PermissionInsuffisanteError as e:
             # [CA24] Un membre en lecture seule est refusé ici aussi, et pas
@@ -2742,6 +2746,17 @@ def _lot_pepiniere_json(lot: dict, familles: dict) -> dict:
         "date_cloture": str(lot["date_cloture"])[:10] if lot.get("date_cloture") else None,
         # [US-212 / CA6] Le jour du dernier comptage de levée (None si aucune levée notée).
         "date_derniere_levee": str(lot["date_derniere_levee"])[:10] if lot.get("date_derniere_levee") else None,
+        # [US-241 / CA7] Godets par pépinière, dates d'arrivée en ISO court.
+        "repartition_godets": [
+            {**r, "depuis": str(r["depuis"])[:10] if r.get("depuis") else None}
+            for r in lot.get("repartition_godets") or []
+        ],
+        # [US-242] Mises en terre (avec parcelle), ventes et pertes du lot, à leur date :
+        # le journal du lot les place sur sa frise. Champ AJOUTÉ.
+        "sorties_datees": [
+            {**x, "date": str(x["date"])[:10] if x.get("date") else None}
+            for x in lot.get("sorties_datees") or []
+        ],
         "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
     }
 
@@ -2799,6 +2814,8 @@ def get_pepiniere_lots(
     `rang_urgence` ; la réponse gagne `resume` (à repiquer, à endurcir, prêts pour
     le plan, à semer). Champs AJOUTÉS : aucun n'est retiré ni renommé. Le calcul
     vit dans `app/services/echeances_lots.py` ; l'API recopie.
+
+    [US-240 / CA1] La réponse gagne `parcours` (onglet Parcours, US-218).
     """
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
@@ -2807,7 +2824,10 @@ def get_pepiniere_lots(
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
-        echeances = svc_echeances.lire_echeances(db, use_ctx, lots, date_ref_effective)
+        pepinieres = svc_lots_pepiniere.pepinieres_du_potager(db, use_ctx)
+        echeances = svc_echeances.lire_echeances(
+            db, use_ctx, lots, date_ref_effective, pepinieres=pepinieres,
+        )
         # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
         # table figée frontend/src/lib/familles.js (supprimée) qui alimentait le
         # regroupement de cet écran (US-061). Relue à chaque appel : une
@@ -2824,7 +2844,10 @@ def get_pepiniere_lots(
             "resume": echeances["resume"],
             # [US-216 / CA8] Les pépinières du potager : la fiche d'un lot ne propose
             # « Déplacer » qu'à partir de deux. Champ AJOUTÉ, aucun n'est retiré.
-            "pepinieres": svc_lots_pepiniere.pepinieres_du_potager(db, use_ctx),
+            "pepinieres": pepinieres,
+            # [US-240 / CA1] Le parcours du plant : étiquettes par (lot, stade,
+            # emplacement), compteurs, dormants, à semer. Bloc AJOUTÉ.
+            "parcours": echeances["parcours"],
         }
     finally:
         db.close()
@@ -2933,13 +2956,15 @@ def get_godet_detail(
                 }
                 for l in cycle.get("levees", [])
             ],
-            # [US-211 / CA8] Déplacements du lot, avec origine et destination.
+            # [US-211 / CA8] Déplacements du lot, avec origine et destination ;
+            # [US-241 / CA11] et la quantité de godets (None : le lot entier).
             "deplacements": [
                 {
                     "id":          d["id"],
                     "date":        str(d["date"])[:10],
                     "origine":     d["origine"],
                     "destination": d["destination"],
+                    "quantite":    d.get("quantite"),
                 }
                 for d in cycle.get("deplacements", [])
             ],

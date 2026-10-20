@@ -43,6 +43,7 @@ from utils.stock import (
     lots_candidats_mise_en_godet,
     lots_pepiniere_du_couple,
     lot_pepiniere_par_semis,
+    lot_pepiniere_par_numero,   # [US-241]
     calcul_lots_pepiniere,
     calcul_godets_par_culture,
     calcul_stock_par_variete,
@@ -98,9 +99,34 @@ class ParcelleNonPepiniereError(EvenementInvalideError):
 
 
 class DeplacementRefuseError(EvenementInvalideError):
-    """[US-211 / CA3, CA4] Un déplacement de lot que le potager ne peut pas porter :
-    lot introuvable, destination absente / ordinaire / identique à l'emplacement
-    courant, ou déplacement partiel (hors périmètre V1). Le message dit pourquoi."""
+    """[US-211 / CA3, CA4 ; US-241 / CA4, CA5] Un déplacement de lot que le potager ne
+    peut pas porter : lot introuvable, destination absente / ordinaire / identique à
+    l'origine, quantité nulle, négative ou supérieure aux godets de l'origine, graines
+    déplacées en nombre. Le message dit pourquoi."""
+
+
+class DestinationManquanteError(DeplacementRefuseError):
+    """[US-241 / CA12] Déplacement déposé sans destination (« Ranger dans… ») : le bot la
+    demande par boutons. Partout ailleurs, c'est un refus comme un autre.
+
+    `pepinieres` : les pépinières proposables (id, nom), hors l'origine."""
+
+    def __init__(self, message: str, pepinieres: list[dict]):
+        self.pepinieres = pepinieres
+        super().__init__(message)
+
+
+class OrigineAmbigueError(EvenementInvalideError):
+    """[US-241 / CA3, CA9] Le lot est réparti entre plusieurs pépinières et le geste ne dit
+    pas d'où viennent les godets. Le bot propose les origines par boutons, avec le nombre
+    de godets de chacune ; aucune n'est choisie à la place du jardinier (A41 en suspens).
+
+    `origines` : la répartition du lot (`repartition_godets`)."""
+
+    def __init__(self, ref: str, origines: list[dict]):
+        self.origines = origines
+        detail = ", ".join(f"{o.get('nom') or 'emplacement non renseigné'} ({o['godets']})" for o in origines)
+        super().__init__(f"{ref} est réparti ({detail}) : d'où viennent les godets ?")
 
 
 class QuantiteManquanteError(EvenementInvalideError):
@@ -535,6 +561,16 @@ def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parc
     lots possibles lèvent `LotIndetermineError` (le bot pose la question avant), aucun
     lève `DeplacementRefuseError`. La destination doit être une pépinière différente
     de l'emplacement courant du lot.
+
+    [US-241] Avec une `quantite`, seule une partie des godets part (CA1) : depuis
+    l'origine dite (`parcelle_origine_id`, ou `parcelle_origine` par son nom), sinon
+    depuis l'unique pépinière où le lot a des godets ; un lot déjà réparti sans origine
+    dite lève `OrigineAmbigueError` (CA3). La quantité ne dépasse pas les godets de
+    l'origine (CA4) et ne porte jamais sur des graines (CA5). Tous les godets d'un lot
+    d'un seul tenant : c'est un déplacement entier, la quantité est retirée (CA1). Sans
+    destination, `DestinationManquanteError` porte les pépinières proposables (CA12).
+    Mute aussi `parcelle_origine_id`, `quantite`, `unite`, `_emplacement_origine` et
+    `_origine_non_renseignee` (CA13).
     """
     lot = designer_lot(
         db, ctx, parsed, DeplacementRefuseError,
@@ -547,6 +583,37 @@ def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parc
     ref = f"Le lot {numero} ({nom_lot})" if numero is not None else f"Le lot de {nom_lot}"
     if _lot_deplacement_epuise(lot):
         raise DeplacementRefuseError(f"{ref} n'a plus de plants en pépinière : rien à déplacer.")
+
+    courant = lot.get("emplacement") or {}
+    origine = courant   # le lot entier part de son emplacement courant (US-210)
+    quantite = _to_float(parsed.get("quantite"))
+    if quantite is not None:
+        if quantite <= 0 or quantite != int(quantite):
+            raise DeplacementRefuseError(
+                f"{ref} : un déplacement chiffré compte des godets, au moins 1. Rien n'est enregistré."
+            )
+        if not lot.get("repartition_godets"):
+            raise DeplacementRefuseError(
+                f"{ref} n'a encore aucun godet : un déplacement chiffré ne porte que sur des godets. "
+                "Les graines suivent le lot entier — redites la phrase sans nombre."
+            )
+        origine = origine_des_godets(db, ctx, parsed, lot, ref)
+        dispo = int(origine["godets"])
+        if int(quantite) > dispo:
+            raise DeplacementRefuseError(
+                f"{ref} n'a que {dispo} godet{'s' if dispo > 1 else ''} {_a_l_emplacement(origine)} : "
+                "rien n'est enregistré."
+            )
+        if not lot.get("reparti") and int(quantite) == dispo:
+            # [CA1] Tous les godets d'un lot d'un seul tenant : c'est le lot entier.
+            log.info("[US-241 / CA1] %s : %d godets = tout le lot, déplacement entier", ref, dispo)
+            parsed["quantite"] = None
+            parsed["unite"] = None
+            quantite = None
+            origine = courant
+        else:
+            parsed["quantite"] = int(quantite)
+            parsed["unite"] = "godets"
 
     nom_destination = parsed.get("parcelle")
     if parcelle is None and nom_destination:
@@ -566,32 +633,146 @@ def resoudre_lot_deplacement(db: Session, ctx: TenantContext, parsed: dict, parc
             raise DeplacementRefuseError(
                 f"La parcelle « {nom_destination} » n'existe pas dans votre potager. {suite}"
             )
+    parsed["origine_graines_id"] = lot["semis_id"]
+    parsed["culture"] = lot["culture"]
+    parsed["variete"] = lot.get("variete")
+    if numero is not None:
+        parsed["_lot_numero"] = numero
+    parsed["_emplacement_origine"] = origine.get("nom")
+    # [US-241 / CA13] Un lot dont l'emplacement n'a jamais été dit se déplace quand même ;
+    # le récapitulatif le dit, sans deviner d'où il vient.
+    parsed["_origine_non_renseignee"] = origine.get("parcelle_id") is None and not origine.get("nom")
+    if quantite is not None:
+        parsed["parcelle_origine_id"] = origine.get("parcelle_id")
+
     if parcelle is None:
-        raise DeplacementRefuseError(
-            f"{ref} va où ? Nommez la pépinière de destination (« au châssis froid »)."
+        from utils.parcelles import get_all_parcelles
+        exclue = origine.get("parcelle_id") if (quantite is not None or not lot.get("reparti")) else None
+        proposables = [
+            {"id": p.id, "nom": p.nom}
+            for p in get_all_parcelles(db, potager_id=ctx.potager_id)
+            if p.est_pepiniere and p.id != exclue
+        ]
+        raise DestinationManquanteError(
+            f"{ref} va où ? Nommez la pépinière de destination (« au châssis froid »).", proposables,
         )
     if not parcelle.est_pepiniere:
         raise DeplacementRefuseError(
             f"« {parcelle.nom} » n'est pas une pépinière : un déplacement ne va que vers une "
             "pépinière. Mettre des plants en terre s'enregistre comme une plantation."
         )
-    courant = lot.get("emplacement") or {}
-    if courant.get("parcelle_id") is not None and courant["parcelle_id"] == parcelle.id:
+    if quantite is not None:
+        if origine.get("parcelle_id") is not None and origine["parcelle_id"] == parcelle.id:
+            raise DeplacementRefuseError(
+                f"Ces godets du {ref[3:]} sont déjà dans « {parcelle.nom} » : rien n'est enregistré."
+            )
+    elif (
+        not lot.get("reparti")
+        and courant.get("parcelle_id") is not None and courant["parcelle_id"] == parcelle.id
+    ):
+        # Un lot réparti peut, lui, être regroupé entier là où est déjà une partie.
         raise DeplacementRefuseError(
             f"{ref} est déjà dans « {parcelle.nom} » : rien n'est enregistré."
         )
 
-    parsed["origine_graines_id"] = lot["semis_id"]
-    parsed["culture"] = lot["culture"]
-    parsed["variete"] = lot.get("variete")
     parsed["parcelle"] = parcelle.nom
-    if numero is not None:
-        parsed["_lot_numero"] = numero
-    parsed["_emplacement_origine"] = courant.get("nom")
     log.info(
-        "[US-211] Déplacement du lot %s (%s) : %s → %s",
-        numero if numero is not None else lot.get("lot_id"), nom_lot, courant.get("nom"), parcelle.nom,
+        "[US-211 / US-241] Déplacement du lot %s (%s) : %s %s → %s",
+        numero if numero is not None else lot.get("lot_id"), nom_lot,
+        f"{int(quantite)} godets de" if quantite is not None else "lot entier,",
+        origine.get("nom"), parcelle.nom,
     )
+    return lot
+
+
+def _a_l_emplacement(origine: dict) -> str:
+    """« en « Serre » », ou « sans emplacement renseigné » — pour les messages de refus."""
+    return f"en « {origine['nom']} »" if origine.get("nom") else "sans emplacement renseigné"
+
+
+def _resoudre_pepiniere_dite(db: Session, ctx: TenantContext, nom: str) -> Optional[Parcelle]:
+    """Une pépinière dite par son nom ou par son type (« le châssis »), comme la destination."""
+    parcelle = resolve_parcelle(db, nom, potager_id=ctx.potager_id)
+    if parcelle is None:
+        from utils.parcelles import resolve_pepiniere_par_type
+        parcelle = resolve_pepiniere_par_type(db, nom, ctx.potager_id)
+    return parcelle
+
+
+def origine_des_godets(db: Session, ctx: TenantContext, parsed: dict, lot: dict, ref: str) -> dict:
+    """[US-241 / CA3, CA9] L'entrée de `lot["repartition_godets"]` d'où partent les godets
+    d'un geste : déplacement chiffré, plantation, perte ou vente.
+
+    Dans l'ordre : l'origine choisie ou déposée (`parcelle_origine_id` présent dans
+    `parsed`, None valant « emplacement non renseigné »), sinon l'origine dite par son nom
+    (`parcelle_origine`), sinon l'unique pépinière où le lot a des godets. Un lot réparti
+    sans origine dite lève `OrigineAmbigueError` : le jardinier choisit, rien n'est deviné
+    (A41 en suspens). Une origine où le lot n'a aucun godet est un refus motivé.
+    """
+    repartition = lot.get("repartition_godets") or []
+    if "parcelle_origine_id" in parsed:
+        voulu = _to_int(parsed.get("parcelle_origine_id"))
+    elif parsed.get("parcelle_origine"):
+        dite = _resoudre_pepiniere_dite(db, ctx, parsed["parcelle_origine"])
+        if dite is None:
+            raise DeplacementRefuseError(
+                f"La pépinière « {parsed['parcelle_origine']} » n'existe pas dans votre potager."
+            )
+        voulu = dite.id
+    elif len(repartition) == 1:
+        return repartition[0]
+    else:
+        log.info("[US-241 / CA3] %s réparti : origine demandée (%d pépinières)", ref, len(repartition))
+        raise OrigineAmbigueError(ref, repartition)
+
+    for entree in repartition:
+        if entree.get("parcelle_id") == voulu:
+            return entree
+    ou = " ; ".join(
+        f"{e['godets']} {_a_l_emplacement(e)}" for e in repartition
+    ) or "aucun godet"
+    raise DeplacementRefuseError(
+        f"{ref} n'a aucun godet à cet endroit : ses godets sont {ou}. Rien n'est enregistré."
+    )
+
+
+#: [US-241 / CA9] Gestes qui RETIRENT des godets d'un lot.
+_SORTIES_DE_GODETS = ("plantation", "perte_godet", "vendu")
+
+
+def controler_origine_sortie(db: Session, ctx: TenantContext, parsed: dict) -> Optional[dict]:
+    """[US-241 / CA9] Une plantation, une perte ou une vente qui puise dans un lot RÉPARTI
+    entre plusieurs pépinières doit dire d'où viennent ses godets. Arbitrage A41 en
+    suspens : aucune règle d'attribution n'est appliquée à la place du jardinier.
+
+    Le lot est celui que le geste cite (numéro, ou semis pour une perte ou une vente),
+    sinon l'unique lot de la culture (et variété) qui a des godets. Lève
+    `OrigineAmbigueError` (le bot propose les origines par boutons) quand ce lot est
+    réparti et que `parcelle_origine_id` manque — un geste déposé depuis une étiquette
+    de l'écran Parcours la porte déjà. Retourne le lot réparti, ou None si rien n'est à
+    demander. Lecture seule.
+    """
+    if normalize_action(parsed.get("action")) not in _SORTIES_DE_GODETS or "parcelle_origine_id" in parsed:
+        return None
+    lot = None
+    numero = _to_int(parsed.get("_lot_numero"))
+    semis_id = _to_int(parsed.get("origine_graines_id"))
+    if numero is not None:
+        lot = lot_pepiniere_par_numero(db, numero, potager_id=ctx.potager_id)
+    elif semis_id is not None:
+        lot = lot_pepiniere_par_semis(db, semis_id, potager_id=ctx.potager_id)
+    elif parsed.get("culture"):
+        candidats = [
+            l for l in lots_deplacables(db, ctx, parsed["culture"], parsed.get("variete"))
+            if (l.get("stock_residuel_godet") or 0) > 0
+        ]
+        lot = candidats[0] if len(candidats) == 1 else None
+    if lot is None or not lot.get("reparti"):
+        return None
+    numero = lot.get("numero_lot")
+    nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
+    ref = f"Le lot {numero} ({nom_lot})" if numero is not None else f"Le lot de {nom_lot}"
+    origine_des_godets(db, ctx, parsed, lot, ref)   # lève OrigineAmbigueError
     return lot
 
 
@@ -707,6 +888,21 @@ def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
     return lot
 
 
+#: [US-241 / CA3, CA9] Gestes qui portent la pépinière d'où partent leurs godets.
+_ACTIONS_AVEC_ORIGINE = ("deplacement", "plantation", "perte_godet", "vendu")
+
+
+def _parcelle_origine(parsed: dict, action_norm: Optional[str]) -> Optional[int]:
+    """[US-241] `parcelle_origine_id` à écrire : la pépinière d'où partent les godets d'un
+    déplacement chiffré, ou d'où une sortie retire ceux d'un lot réparti. None sinon —
+    un déplacement du lot entier n'en a pas besoin, il emmène tout."""
+    if action_norm not in _ACTIONS_AVEC_ORIGINE:
+        return None
+    if action_norm == "deplacement" and _to_float(parsed.get("quantite")) is None:
+        return None
+    return _to_int(parsed.get("parcelle_origine_id"))
+
+
 def _levee_terminee(parsed: dict, action_norm: Optional[str]) -> Optional[bool]:
     """[US-212] L'indication « levée terminée » d'un geste de levée ; None pour tout autre geste."""
     if action_norm != "levee":
@@ -790,17 +986,19 @@ def valider_evenement(
     if action_norm == "mise_en_godet" and parcelle is not None and not parcelle.est_pepiniere:
         raise ParcelleNonPepiniereError(parcelle.nom)
     # [US-211 / CA4] Règle 8 : un déplacement ne va que vers une pépinière — pas en
-    # terre, qui est une plantation — et porte sur le lot entier (V1).
+    # terre, qui est une plantation. [US-241 / CA1, CA4] Il peut porter une quantité de
+    # godets : un nombre entier strictement positif (le plafond par origine est contrôlé
+    # par `resoudre_lot_deplacement`, qui connaît la répartition du lot).
     if action_norm == "deplacement":
         if parcelle is not None and not parcelle.est_pepiniere:
             raise DeplacementRefuseError(
                 f"« {parcelle.nom} » n'est pas une pépinière : un déplacement ne va que vers une "
                 "pépinière. Mettre des plants en terre s'enregistre comme une plantation."
             )
-        if quantite is not None:
+        if quantite is not None and (quantite <= 0 or quantite != int(quantite)):
             raise DeplacementRefuseError(
-                "Un déplacement porte sur le lot entier : déplacer une partie des godets "
-                "seulement n'est pas géré. Redites la phrase sans quantité."
+                "Un déplacement chiffré compte des godets : un nombre entier, au moins 1. "
+                "Rien n'est enregistré."
             )
     if not culture:
         if action_norm in _ACTIONS_CULTURE_OBLIGATOIRE:
@@ -1431,8 +1629,8 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
 
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
-    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
-        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
+    if normalize_action(parsed.get("action")) == "deplacement":
+        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211, US-241]
     if normalize_action(parsed.get("action")) == "cloture_lot":
         resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
     if normalize_action(parsed.get("action")) == "levee":
@@ -1473,6 +1671,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
+        parcelle_origine_id=_parcelle_origine(parsed, action_norm),   # [US-241]
         potager_id=ctx.potager_id,
     )
     if event.culture:
@@ -1500,8 +1699,8 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
     require_potager_non_archive(db, ctx, "enregistrer d'action")
     nom_parcelle = parsed.get("parcelle")
     parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id) if nom_parcelle else None
-    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
-        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211]
+    if normalize_action(parsed.get("action")) == "deplacement":
+        resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)   # [US-211, US-241]
     if normalize_action(parsed.get("action")) == "cloture_lot":
         resoudre_lot_cloture(db, ctx, parsed)   # [US-216]
     if normalize_action(parsed.get("action")) == "levee":
@@ -1540,6 +1739,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         date_source=_date_source(parsed),
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
+        parcelle_origine_id=_parcelle_origine(parsed, action_norm),   # [US-241]
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -1584,10 +1784,10 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
             source_evenement_ids = src_ids
             log.info(f"[US-029 CA7] source_evenement_ids='{src_ids}' pour plantation '{parsed.get('culture')}'")
 
-    if normalize_action(parsed.get("action")) == "deplacement" and _to_float(parsed.get("quantite")) is None:
+    if normalize_action(parsed.get("action")) == "deplacement":
         # [US-211] Le lot visé et la destination sont contrôlés avant l'écriture ;
-        # `parsed` reçoit le semis du lot (`origine_graines_id`) et sa culture. Avec une
-        # quantité, c'est `valider_evenement` qui refuse le déplacement partiel.
+        # `parsed` reçoit le semis du lot (`origine_graines_id`) et sa culture.
+        # [US-241] Avec une quantité : l'origine, le plafond et la coupe du lot.
         resoudre_lot_deplacement(db, ctx, parsed, parcelle_obj)
 
     if normalize_action(parsed.get("action")) == "cloture_lot":
@@ -1640,6 +1840,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         # une proposition restée sans réponse (`_contexte_propose`).
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte),
         levee_terminee=_levee_terminee(parsed, action_norm),   # [US-212]
+        parcelle_origine_id=_parcelle_origine(parsed, action_norm),   # [US-241]
         potager_id=ctx.potager_id,
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
@@ -2169,7 +2370,8 @@ def _deplacements_du_lot(
     semis_id: Optional[int], sans_semis_rattache: bool,
     semis_events: list, godet_events: list,
 ) -> list[dict]:
-    """[US-211 / CA8] Déplacements d'un lot, chronologiques, avec origine et destination.
+    """[US-211 / CA8 ; US-241 / CA11] Déplacements d'un lot, chronologiques, avec origine,
+    destination et quantité (None : le lot entier).
 
     L'origine d'un déplacement est l'emplacement du lot juste avant lui : la
     destination du déplacement précédent, sinon la dernière mise en godet localisée
@@ -2190,7 +2392,11 @@ def _deplacements_du_lot(
         return []
 
     noms: dict[int, str] = {}
-    ids = {e.parcelle_id for e in evenements if e.parcelle_id} | {g.parcelle_id for g in godet_events if g.parcelle_id}
+    ids = (
+        {e.parcelle_id for e in evenements if e.parcelle_id}
+        | {e.parcelle_origine_id for e in evenements if e.parcelle_origine_id}   # [US-241]
+        | {g.parcelle_id for g in godet_events if g.parcelle_id}
+    )
     if ids:
         noms = {
             p.id: p.nom
@@ -2201,7 +2407,10 @@ def _deplacements_du_lot(
     resultat: list[dict] = []
     precedent: Optional[str] = None
     for e in evenements:
-        if precedent is None:
+        if e.quantite is not None:
+            # [US-241 / CA11] Un déplacement chiffré dit d'où partent SES godets.
+            origine = noms.get(e.parcelle_origine_id)
+        elif precedent is None:
             localises = [g for g in godet_events if g.parcelle_id and g.date and e.date and g.date <= e.date]
             origine = noms.get(localises[-1].parcelle_id) if localises else nom_semis
         else:
@@ -2212,6 +2421,7 @@ def _deplacements_du_lot(
             "date": e.date,
             "origine": origine,
             "destination": destination,
+            "quantite": int(e.quantite) if e.quantite is not None else None,   # [US-241] None = lot entier
         })
         precedent = destination
     return resultat

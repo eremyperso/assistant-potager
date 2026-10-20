@@ -748,15 +748,16 @@ export function destinationFicheParcelle(carte) {
 }
 
 /**
- * [I5] Carte d'une pépinière : la Pépinière sur cet emplacement — « Emplacements »
- * si le potager compte plusieurs pépinières, « Aujourd'hui » sinon.
+ * [I5, amendée le 19/10/2026 avec US-218] Carte d'une pépinière : la Pépinière, onglet
+ * « Ma pépinière » (le parcours), filtré sur cette pépinière quand le potager en compte
+ * plusieurs ; avec une seule, aucun filtre n'est posé.
  */
 export function destinationPepiniere(carte, cartes = []) {
   const plusieurs = cartes.filter((c) => c.pepiniere).length > 1
   return {
     type: 'aller',
     vue: 'pepiniere',
-    intention: { onglet: plusieurs ? 'emplacements' : 'aujourdhui', emplacement: carte?.nom },
+    intention: { onglet: 'parcours', emplacement: plusieurs ? (carte?.nom ?? null) : null },
   }
 }
 

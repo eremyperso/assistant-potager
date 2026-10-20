@@ -17,7 +17,8 @@ const PREVIEWS = {
   '/vue-plan': () => import('./views/_PlanVuePreview.jsx'),  // [US-200]
   '/vue-parcelles': () => import('./views/_PlanParcellesPreview.jsx'),  // [US-222]
   '/fiche-lot': () => import('./views/_FicheLotPreview.jsx'),  // [US-216]
-  '/pepiniere-aujourdhui': () => import('./views/_PepiniereAujourdhuiPreview.jsx'),  // [US-215]
+  '/pepiniere-parcours': () => import('./views/_PepiniereParcoursPreview.jsx'),  // [US-218]
+  '/pepiniere-lots': () => import('./views/_PepiniereLotsPreview.jsx'),  // [US-242]
 }
 
 const chargeur = PREVIEWS[window.location.pathname]

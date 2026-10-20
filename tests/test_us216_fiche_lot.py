@@ -325,15 +325,17 @@ class TestPanneauAtteignable:
     def _source(self):
         return (RACINE / "frontend" / "src" / "views" / "Pepiniere.jsx").read_text(encoding="utf-8")
 
-    def test_us216_le_panneau_est_borne_par_la_zone_qui_defile(self):
+    # [US-242] Le panneau « Lot sélectionné » de l'onglet Lots est remplacé par la fiche
+    # dépliée sous la ligne du journal de saison (plein écran sur un conteneur étroit).
+    def test_us242_plus_de_panneau_sur_l_onglet_lots(self):
         source = self._source()
-        assert "useHauteurZone(" in source
-        assert "maxHeight: hauteurZone - 32" in source
+        assert "forme=\"panneau\"" not in source
+        assert "[grid-template-columns:minmax(0,1fr)_420px]" not in source
 
-    def test_us216_le_panneau_part_du_haut_de_l_ecran_avec_les_filtres_a_gauche(self):
-        source = self._source()
-        # La colonne de gauche porte les filtres ; le panneau est son voisin dans le même grid.
-        assert source.index("[grid-template-columns:minmax(0,1fr)_420px]") < source.rindex("{filtres}")
+    def test_us242_la_fiche_se_deplie_sous_la_ligne(self):
+        onglet = (RACINE / "frontend" / "src" / "components" / "OngletLots.jsx").read_text(encoding="utf-8")
+        assert "<FicheDepliee" in onglet and "<FichePleinEcran" in onglet
+        assert "aria-expanded={estOuvert}" in onglet
 
 
 # ═════════════════════════════════════════════════════════════════════════════

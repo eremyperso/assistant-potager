@@ -649,6 +649,12 @@ async def _preparer_deplacement(update: Update, parsed: dict, texte: str, geste_
         try:
             svc_evenements.resoudre_lot_deplacement(db, current_context(), parsed)
             return False
+        except svc_evenements.OrigineAmbigueError as e:
+            # [US-241 / CA3] Lot réparti, origine non dite : le jardinier choisit.
+            return await _demander_origine_godets(update, parsed, texte, geste_file, e)
+        except svc_evenements.DestinationManquanteError as e:
+            # [US-241 / CA12] « Ranger dans… » : déposé sans destination, on la demande.
+            return await _demander_destination(update, parsed, texte, geste_file, e)
         except svc_evenements.LotIndetermineError:
             # Plusieurs lots en cours pour cette culture : le jardinier est le seul à
             # savoir lequel il déplace (modèle d'US-019). Seuls les lots issus d'un
@@ -675,6 +681,7 @@ async def _preparer_deplacement(update: Update, parsed: dict, texte: str, geste_
     import time as _time_dep
     user_id = update.effective_user.id
     _DEPLACEMENT_LOT_PENDING[user_id] = {
+        "question": "lot",
         "parsed": parsed,
         "texte": texte,
         "ts": _time_dep.time(),
@@ -701,10 +708,114 @@ async def _preparer_deplacement(update: Update, parsed: dict, texte: str, geste_
     return True
 
 
+#: [US-241] Valeur de bouton pour l'origine « emplacement non renseigné » (US-210 / CA5).
+_SANS_EMPLACEMENT = "x"
+
+
+def _nom_origine(entree: dict) -> str:
+    return entree.get("nom") or "Emplacement non renseigné"
+
+
+def _valeur_origine(entree: dict) -> str:
+    pid = entree.get("parcelle_id")
+    return str(pid) if pid is not None else _SANS_EMPLACEMENT
+
+
+async def _demander_origine_godets(
+    update: Update, parsed: dict, texte: str, geste_file, erreur: "svc_evenements.OrigineAmbigueError",
+) -> bool:
+    """[US-241 / CA3, CA9] Un lot réparti entre plusieurs pépinières, et un geste qui ne dit
+    pas d'où viennent les godets : une question, un bouton par pépinière avec son nombre de
+    godets (« Serre (10) »). Aucune origine n'est choisie à la place du jardinier (A41).
+    Sert au déplacement chiffré comme à la plantation, la perte et la vente."""
+    import time as _time_orig
+    user_id = update.effective_user.id
+    origines = list(erreur.origines)
+    _DEPLACEMENT_LOT_PENDING[user_id] = {
+        "question": "origine",
+        "parsed": parsed,
+        "texte": texte,
+        "ts": _time_orig.time(),
+        "geste_file": geste_file,
+        "labels": {_valeur_origine(o): _nom_origine(o) for o in origines},
+    }
+    buttons = [
+        [InlineKeyboardButton(f"{_nom_origine(o)} ({o['godets']})", callback_data=f"deplorig:{_valeur_origine(o)}")]
+        for o in origines
+    ]
+    buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="deplot_cancel")])
+    await update.effective_message.reply_text(
+        f"📍 {erreur}",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info(
+        "[US-241 / CA3] Origine demandée (%s, %d pépinières) — user_id=%s",
+        parsed.get("action"), len(origines), user_id,
+    )
+    return True
+
+
+async def _demander_destination(
+    update: Update, parsed: dict, texte: str, geste_file, erreur: "svc_evenements.DestinationManquanteError",
+) -> bool:
+    """[US-241 / CA12] Déplacement déposé sans destination (« Ranger dans… », « Déplacer »
+    de la fiche du lot) : les pépinières du potager par boutons, hors l'origine."""
+    message = update.effective_message
+    if not erreur.pepinieres:
+        await message.reply_text(
+            "❌ Aucune autre pépinière dans ce potager : déclarez-en une (« le châssis est une "
+            "pépinière froide ») pour y ranger ce lot."
+        )
+        return True
+    import time as _time_dest
+    user_id = update.effective_user.id
+    _DEPLACEMENT_LOT_PENDING[user_id] = {
+        "question": "destination",
+        "parsed": parsed,
+        "texte": texte,
+        "ts": _time_dest.time(),
+        "geste_file": geste_file,
+        "labels": {str(p["id"]): p["nom"] for p in erreur.pepinieres},
+    }
+    buttons = [
+        [InlineKeyboardButton(p["nom"], callback_data=f"depldest:{p['id']}")]
+        for p in erreur.pepinieres
+    ]
+    buttons.append([InlineKeyboardButton("❌ Annuler", callback_data="deplot_cancel")])
+    quoi = f"{int(parsed['quantite'])} godets du lot" if parsed.get("quantite") else "le lot"
+    numero = parsed.get("_lot_numero")
+    suffixe = f" {numero}" if numero is not None else ""
+    await message.reply_text(
+        f"🚚 Où rangez-vous {quoi}{suffixe} ?",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+    log.info("[US-241 / CA12] Destination demandée (%d pépinières) — user_id=%s", len(erreur.pepinieres), user_id)
+    return True
+
+
+async def _preparer_origine_sortie(update: Update, parsed: dict, texte: str, geste_file=None) -> bool:
+    """[US-241 / CA9] Plantation, perte ou vente qui puise dans un lot réparti sans dire
+    d'où : l'origine est demandée par boutons AVANT le récapitulatif. Retourne True si une
+    question est posée (l'appelant s'arrête), False sinon."""
+    db = SessionLocal()
+    erreur = None
+    try:
+        svc_evenements.controler_origine_sortie(db, current_context(), parsed)
+    except svc_evenements.OrigineAmbigueError as e:
+        erreur = e
+    finally:
+        db.close()
+    if erreur is None:
+        return False
+    return await _demander_origine_godets(update, parsed, texte, geste_file, erreur)
+
+
 async def _deplacement_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """[US-211 / CA3] Callback inline — choix du lot à déplacer quand plusieurs lots de
-    la culture sont en pépinière. Le geste reprend ensuite son parcours normal :
-    récapitulatif, confirmation, écriture."""
+    la culture sont en pépinière. [US-241] Aussi : choix de l'origine des godets d'un lot
+    réparti (`deplorig:`), et de la destination d'un déplacement déposé sans elle
+    (`depldest:`). Le geste reprend ensuite son parcours normal : récapitulatif,
+    confirmation, écriture."""
     query = update.callback_query
     await query.answer()
 
@@ -719,20 +830,44 @@ async def _deplacement_lot_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) ->
         await query.edit_message_text("⏱ *Action annulée* (timeout 2 min). Veuillez redire.", parse_mode="Markdown")
         return
 
-    data = query.data  # deplot:{semis_id} | deplot_cancel
+    data = query.data  # deplot:{semis_id} | deplorig:{parcelle|x} | depldest:{parcelle} | deplot_cancel
     if data == "deplot_cancel":
-        await query.edit_message_text("❌ Déplacement annulé.", reply_markup=None)
+        await query.edit_message_text(
+            "👌 Le geste reste dans votre file — reprenez-le avec /gestes."
+            if pending.get("geste_file") is not None else "❌ Geste annulé.",
+            reply_markup=None,
+        )
         return
 
     parsed = pending["parsed"]
-    semis_id = int(data[len("deplot:"):])
-    parsed["origine_graines_id"] = semis_id
-    log.info("[US-211] Lot de semis id=%s choisi pour le déplacement — user_id=%s", semis_id, user_id)
-    await query.edit_message_text(
-        f"✅ Lot *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
-        parse_mode="Markdown",
-        reply_markup=None,
-    )
+    question = pending.get("question", "lot")
+    prefixe = {"lot": "deplot:", "origine": "deplorig:", "destination": "depldest:"}[question]
+    if not data.startswith(prefixe):
+        # Un clavier périmé ne répond jamais à une AUTRE question.
+        await query.edit_message_text("⏱ Ce choix n'est plus actif. Veuillez redire votre geste.")
+        return
+    valeur = data[len(prefixe):]
+    if question == "origine":
+        parsed["parcelle_origine_id"] = None if valeur == _SANS_EMPLACEMENT else int(valeur)
+        log.info("[US-241 / CA3] Origine %s choisie — user_id=%s", valeur, user_id)
+        await query.edit_message_text(
+            f"✅ Depuis *{pending['labels'].get(valeur, valeur)}*.", parse_mode="Markdown", reply_markup=None,
+        )
+    elif question == "destination":
+        parsed["parcelle"] = pending["labels"].get(valeur)
+        log.info("[US-241 / CA12] Destination %s choisie — user_id=%s", valeur, user_id)
+        await query.edit_message_text(
+            f"✅ Vers *{pending['labels'].get(valeur, valeur)}*.", parse_mode="Markdown", reply_markup=None,
+        )
+    else:
+        semis_id = int(valeur)
+        parsed["origine_graines_id"] = semis_id
+        log.info("[US-211] Lot de semis id=%s choisi pour le déplacement — user_id=%s", semis_id, user_id)
+        await query.edit_message_text(
+            f"✅ Lot *{pending['labels'].get(semis_id, semis_id)}* sélectionné.",
+            parse_mode="Markdown",
+            reply_markup=None,
+        )
 
     from .saisie import _parse_and_save   # import tardif : saisie importe ce module
     await _parse_and_save(

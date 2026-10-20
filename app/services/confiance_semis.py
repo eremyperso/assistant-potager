@@ -39,6 +39,7 @@ from app.services import calendrier_cultural as cal
 from app.services import previsions_meteo as svc_previsions
 from database.models import CultureConfig, Parcelle, Potager
 from utils.meteo import METEO_HORIZON_PREVISION_JOURS
+from utils.parcelles import TYPES_PEPINIERE, get_all_parcelles, libelle_pepiniere
 
 log = logging.getLogger("potager")
 
@@ -85,7 +86,8 @@ PHASE_PAR_ACTION: dict[str, str] = {
 }
 
 #: Une action en pleine terre expose la plante au gel et aux nuits fraîches ;
-#: un semis en pépinière est à l'abri (R2, R3, R4 acquises d'office).
+#: un semis en pépinière est à l'abri — de quoi, c'est le TYPE de la pépinière
+#: qui le dit (US-220, `REGLES_ACQUISES_PAR_TYPE_PEPINIERE`).
 ACTIONS_PLEINE_TERRE: frozenset[str] = frozenset({ACTION_SEMIS_PLEINE_TERRE, ACTION_PLANTATION})
 
 
@@ -148,6 +150,42 @@ _MOTIF_ABRI: dict[str, str] = {
     "chassis": "parcelle sous châssis", "voile": "parcelle sous voile",
 }
 MOTIF_PAILLEE = "parcelle paillée"
+
+#: [US-220 / CA1] 🧪 Modulateurs d'un SEMIS EN PÉPINIÈRE selon le type de la
+#: pépinière (US-208) — même principe et même statut que la table des abris
+#: ci-dessus : une décision produit, pas une mesure. Une règle acquise l'est
+#: d'office, avec son motif ; les autres s'évaluent comme en pleine terre.
+#: La ligne « froide » est celle du châssis (R3 seule). La ligne « type non
+#: renseigné » (None) CONSERVE le comportement d'avant US-220, pour ne pas faire
+#: chuter la confiance de tous les potagers le jour de la livraison — à revoir
+#: quand les pépinières auront été typées ; un avertissement rend l'hypothèse
+#: visible. R1 et R5 ne sont jamais modulées (US-181 / CA6).
+REGLES_ACQUISES_PAR_TYPE_PEPINIERE: dict[Optional[str], frozenset[str]] = {
+    "chaude": frozenset({R2_DERNIERE_GELEE, R3_GEL_ANNONCE, R4_NUITS_DOUCES}),
+    "froide": frozenset({R3_GEL_ANNONCE}),
+    None: frozenset({R2_DERNIERE_GELEE, R3_GEL_ANNONCE, R4_NUITS_DOUCES}),
+}
+MOTIF_PEPINIERE_CHAUDE = "pépinière chauffée"
+MOTIF_PEPINIERE_FROIDE = "pépinière froide : à l'abri du gel annoncé, pas des nuits fraîches"
+_MOTIF_TYPE_PEPINIERE: dict[Optional[str], Optional[str]] = {
+    "chaude": MOTIF_PEPINIERE_CHAUDE, "froide": MOTIF_PEPINIERE_FROIDE, None: None,
+}
+#: Motifs d'une règle acquise SANS type connu : ceux d'avant US-220, inchangés.
+MOTIFS_SANS_OBJET_EN_PEPINIERE: dict[str, str] = {
+    R2_DERNIERE_GELEE: "Semis en pépinière : gelée sans objet",
+    R3_GEL_ANNONCE: "Semis en pépinière : gel annoncé sans objet",
+    R4_NUITS_DOUCES: "Semis en pépinière : nuits sans objet",
+}
+AVERTISSEMENT_TYPE_NON_RENSEIGNE = (
+    "Type de pépinière non renseigné : la confiance suppose une pépinière chauffée"
+)
+AVERTISSEMENT_SANS_PEPINIERE = (
+    "Aucune pépinière déclarée : la confiance suppose une pépinière chauffée"
+)
+#: [US-220 / CA2] Sans parcelle dite, la MEILLEURE pépinière du potager sert :
+#: chaude, puis type non renseigné, puis froide.
+ORDRE_PREFERENCE_PEPINIERE: tuple[Optional[str], ...] = ("chaude", None, "froide")
+MOTIF_EVALUE_POUR = "Évalué pour {nom}, {type}"
 
 LIBELLES_REGLES: dict[str, str] = {
     R1_FENETRE: "Fenêtre conseillée",
@@ -233,6 +271,26 @@ class Motif:
 
 
 @dataclass(frozen=True)
+class PepiniereRetenue:
+    """[US-220 / CA2] La pépinière dont le type a modulé un semis en pépinière."""
+    id: int
+    nom: str
+    #: « chaude », « froide », ou None (type non renseigné).
+    type: Optional[str]
+    #: Vrai quand aucune parcelle n'était dite : le moteur l'a choisie.
+    choisie: bool
+
+    @property
+    def libelle_type(self) -> str:
+        return libelle_pepiniere(True, self.type)
+
+    @property
+    def evaluation(self) -> str:
+        """« Évalué pour serre, pépinière chaude »."""
+        return MOTIF_EVALUE_POUR.format(nom=self.nom, type=self.libelle_type)
+
+
+@dataclass(frozen=True)
 class Confiance:
     """Confiance d'une action sur une culture à une date — sans score si R1 est muette."""
     culture: str
@@ -255,6 +313,13 @@ class Confiance:
     #: (gabarit de réponse du bot, § 5) ; `None` si la durée est inconnue.
     recolte_min: Optional[date] = None
     recolte_max: Optional[date] = None
+    #: [US-220 / CA2] Semis en pépinière : la pépinière qui a servi — None hors
+    #: pépinière, ou quand le potager n'en déclare aucune.
+    pepiniere: Optional[PepiniereRetenue] = None
+    #: [US-220 / CA3] Une évaluation par type quand le potager a des pépinières
+    #: froides ET d'autres : « pépinière chaude ★★★ · pépinière froide ★★☆ ».
+    #: Vide sinon — une seule évaluation suffit à tout dire.
+    par_pepiniere: tuple["Confiance", ...] = ()
 
     @property
     def sans_score(self) -> bool:
@@ -308,6 +373,41 @@ def _action_effective(action: str, parcelle: Optional[Parcelle]) -> tuple[str, l
     # ⚠️ Une parcelle ORDINAIRE n'est pas un indice de pleine terre (US-069) :
     # un semis en pépinière qu'on y demande s'évalue comme demandé, sans réserve.
     return action, avertissements
+
+
+def _pepinieres(db: Session, potager_id: Optional[int]) -> list[Parcelle]:
+    """[US-220 / CA2] Les pépinières actives du potager — aucune sans potager."""
+    if potager_id is None:
+        return []
+    return [p for p in get_all_parcelles(db, potager_id=potager_id) if p.est_pepiniere]
+
+
+def _rang_preference(parcelle: Parcelle) -> tuple[int, int]:
+    type_p = parcelle.type_pepiniere if parcelle.type_pepiniere in TYPES_PEPINIERE else None
+    return (ORDRE_PREFERENCE_PEPINIERE.index(type_p), parcelle.id)
+
+
+def _retenue(parcelle: Parcelle, choisie: bool) -> PepiniereRetenue:
+    type_p = parcelle.type_pepiniere if parcelle.type_pepiniere in TYPES_PEPINIERE else None
+    return PepiniereRetenue(id=parcelle.id, nom=parcelle.nom, type=type_p, choisie=choisie)
+
+
+def meilleure_pepiniere(pepinieres: list[Parcelle]) -> Optional[Parcelle]:
+    """[US-220 / CA2] Chaude, puis type non renseigné, puis froide ; à type égal,
+    la plus ancienne (identifiant le plus petit) — un choix stable."""
+    return min(pepinieres, key=_rang_preference) if pepinieres else None
+
+
+def representants_par_type(pepinieres: list[Parcelle]) -> list[Parcelle]:
+    """[US-220 / CA3] Une pépinière par type, dans l'ordre de préférence — vide
+    quand une seule évaluation dit tout : un seul type, ou des pépinières qui
+    toutes tiennent le gel et les nuits (chaude et type non renseigné)."""
+    par_type: dict[Optional[str], Parcelle] = {}
+    for p in sorted(pepinieres, key=_rang_preference):
+        par_type.setdefault(_retenue(p, True).type, p)
+    if len(par_type) < 2 or "froide" not in par_type:
+        return []
+    return list(par_type.values())
 
 
 def _itineraire_retenu(
@@ -436,14 +536,12 @@ def _regle_fenetre(fenetre: Optional[cal.FenetreLue], date_cible: date) -> Motif
                   f"Hors fenêtre conseillée ({fenetre.affichage} pour ta zone)", 0)
 
 
-def _regle_derniere_gelee(
-    action: str, zone: str, rusticite: Optional[float], date_cible: date
-) -> Motif:
-    """R2 — climatologie de la ZONE : la dernière gelée moyenne est-elle passée ?"""
+def _regle_derniere_gelee(zone: str, rusticite: Optional[float], date_cible: date) -> Motif:
+    """R2 — climatologie de la ZONE : la dernière gelée moyenne est-elle passée ?
+
+    Évaluée pour une plante EXPOSÉE ; ce dont un semis en pépinière est à l'abri
+    est acquis ensuite par `_moduler_par_pepiniere` (US-220)."""
     plein = POINTS_MAX[R2_DERNIERE_GELEE]
-    if action not in ACTIONS_PLEINE_TERRE:
-        return _motif(R2_DERNIERE_GELEE, ETAT_GAGNE,
-                      "Semis en pépinière : gelée sans objet", plein)
     if rusticite is None:
         return _motif(R2_DERNIERE_GELEE, ETAT_INDETERMINE,
                       "Sensibilité au gel inconnue pour cette culture", 0)
@@ -464,13 +562,9 @@ def _regle_derniere_gelee(
                   "Trop tôt : gelées encore possibles dans ta zone", 0)
 
 
-def _regle_gel_annonce(
-    action: str, lecture: svc_previsions.LecturePrevision, date_cible: date
-) -> Motif:
+def _regle_gel_annonce(lecture: svc_previsions.LecturePrevision, date_cible: date) -> Motif:
     """R3 — météo de la QUINZAINE : un gel est-il annoncé ? (distincte de R2)"""
     plein = POINTS_MAX[R3_GEL_ANNONCE]
-    if action not in ACTIONS_PLEINE_TERRE:
-        return _motif(R3_GEL_ANNONCE, ETAT_GAGNE, "Semis en pépinière : gel annoncé sans objet", plein)
     if lecture.statut == svc_previsions.STATUT_LOCALISATION_MANQUANTE:
         return _motif(R3_GEL_ANNONCE, ETAT_INDETERMINE, MOTIF_LOCALISER, 0)
     jours = [(j, t) for j, t in _jours_prevus(lecture) if j >= date_cible]
@@ -484,14 +578,9 @@ def _regle_gel_annonce(
     return _motif(R3_GEL_ANNONCE, ETAT_GAGNE, f"Aucun gel annoncé sur {METEO_HORIZON_PREVISION_JOURS} jours", plein)
 
 
-def _regle_nuits_douces(
-    action: str, lecture: svc_previsions.LecturePrevision, date_cible: date
-) -> Motif:
+def _regle_nuits_douces(lecture: svc_previsions.LecturePrevision, date_cible: date) -> Motif:
     """R4 — les nuits de la semaine qui suit sont-elles assez douces pour lever ?"""
     plein = POINTS_MAX[R4_NUITS_DOUCES]
-    if action not in ACTIONS_PLEINE_TERRE:
-        return _motif(R4_NUITS_DOUCES, ETAT_GAGNE,
-                      "Semis en pépinière : nuits sans objet", plein)
     if lecture.statut == svc_previsions.STATUT_LOCALISATION_MANQUANTE:
         return _motif(R4_NUITS_DOUCES, ETAT_INDETERMINE, MOTIF_METEO_INDISPONIBLE, 0)
     fin = date_cible + timedelta(days=FENETRE_NUITS_DOUCES_JOURS)
@@ -506,6 +595,26 @@ def _regle_nuits_douces(
                       "Nuits douces annoncées", plein)
     return _motif(R4_NUITS_DOUCES, ETAT_PERDU,
                   "Nuits fraîches : levée lente probable", 0)
+
+
+def _moduler_par_pepiniere(motifs: list[Motif], type_pepiniere: Optional[str]) -> list[Motif]:
+    """
+    [US-220 / CA1] SEUL endroit où le type de pépinière pèse sur un semis en
+    pépinière : une règle de la table est acquise d'office, et son motif dit que
+    la pépinière a compté (« Gel annoncé — pépinière chauffée »). Sans type
+    connu, les motifs d'avant US-220 sont rendus tels quels.
+    """
+    cle = type_pepiniere if type_pepiniere in TYPES_PEPINIERE else None
+    acquises = REGLES_ACQUISES_PAR_TYPE_PEPINIERE[cle]
+    raison = _MOTIF_TYPE_PEPINIERE[cle]
+    return [
+        replace(
+            m, etat=ETAT_GAGNE, points=m.points_max,
+            libelle=(MOTIFS_SANS_OBJET_EN_PEPINIERE[m.regle] if raison is None
+                     else f"{m.libelle_regle} — {raison}"),
+        ) if m.regle in acquises else m
+        for m in motifs
+    ]
 
 
 def _moduler_par_parcelle(
@@ -535,7 +644,8 @@ def _moduler_par_parcelle(
             resultat.append(m)
             continue
         # Un motif déjà « sans objet » (semis en pépinière) ou indéterminé ne se
-        # cite pas : on repart du nom de la règle.
+        # cite pas : on repart du nom de la règle. [US-220] Un semis en pépinière
+        # froide repart lui aussi du nom de la règle : l'abri l'emporte.
         base = m.libelle if action in ACTIONS_PLEINE_TERRE and not m.indetermine else m.libelle_regle
         resultat.append(replace(
             m, etat=ETAT_GAGNE, points=m.points_max,
@@ -639,14 +749,33 @@ def evaluer(
     parcelle_id: Optional[int] = None,
     itineraire: Optional[str] = None,
     lecture_meteo: Optional[svc_previsions.LecturePrevision] = None,
+    pepinieres: Optional[list[Parcelle]] = None,
 ) -> Confiance:
     """
     [CA1-CA8] Confiance d'une action sur une culture, à une date, pour un potager.
 
     Lecture seule, sans appel LLM (CA2) et sans écriture (CA11). `lecture_meteo`
     est la prévision déjà lue par l'appelant — c'est ce qui permet à la lecture
-    groupée de n'en faire qu'une pour tout l'écran Plan (CA9, CA10).
+    groupée de n'en faire qu'une pour tout l'écran Plan (CA9, CA10). Même chose
+    pour `pepinieres` (US-220), lues une fois pour tout l'écran.
     """
+    return _evaluer(db, culture, action, date_cible, potager_id, parcelle_id,
+                    itineraire, lecture_meteo, pepinieres, pepiniere_forcee=None)
+
+
+def _evaluer(
+    db: Session,
+    culture: str,
+    action: Optional[str],
+    date_cible: date,
+    potager_id: Optional[int],
+    parcelle_id: Optional[int],
+    itineraire: Optional[str],
+    lecture_meteo: Optional[svc_previsions.LecturePrevision],
+    pepinieres: Optional[list[Parcelle]],
+    pepiniere_forcee: Optional[Parcelle],
+) -> Confiance:
+    """`evaluer`, avec `pepiniere_forcee` pour les évaluations par type (US-220 / CA3)."""
     action_demandee = normaliser_action(action)
     parcelle = _parcelle(db, potager_id, parcelle_id)
     action_retenue, avertissements = _action_effective(action_demandee, parcelle)
@@ -668,11 +797,32 @@ def evaluer(
 
     motifs = [
         _regle_fenetre(fenetre, date_cible),
-        _regle_derniere_gelee(action_retenue, calendrier.zone, rusticite, date_cible),
-        _regle_gel_annonce(action_retenue, lecture_meteo, date_cible),
-        _regle_nuits_douces(action_retenue, lecture_meteo, date_cible),
+        _regle_derniere_gelee(calendrier.zone, rusticite, date_cible),
+        _regle_gel_annonce(lecture_meteo, date_cible),
+        _regle_nuits_douces(lecture_meteo, date_cible),
         _regle_saison_restante(itineraire_lu, action_retenue, date_cible),
     ]
+    retenue: Optional[PepiniereRetenue] = None
+    representants: list[Parcelle] = []
+    if action_retenue == ACTION_SEMIS_PEPINIERE:
+        # [US-220 / CA2] Quelle pépinière : celle de la parcelle dite, sinon la
+        # meilleure du potager ; aucune → comportement d'avant, et on le dit.
+        if pepiniere_forcee is not None:
+            retenue = _retenue(pepiniere_forcee, choisie=True)
+        elif parcelle is not None and parcelle.est_pepiniere:
+            retenue = _retenue(parcelle, choisie=False)
+        else:
+            if pepinieres is None:
+                pepinieres = _pepinieres(db, potager_id)
+            meilleure = meilleure_pepiniere(pepinieres)
+            if meilleure is None:
+                avertissements.append(AVERTISSEMENT_SANS_PEPINIERE)
+            else:
+                retenue = _retenue(meilleure, choisie=True)
+                representants = representants_par_type(pepinieres)
+        if retenue is not None and retenue.type is None:
+            avertissements.append(AVERTISSEMENT_TYPE_NON_RENSEIGNE)
+        motifs = _moduler_par_pepiniere(motifs, retenue.type if retenue else None)
     motifs = _moduler_par_parcelle(motifs, parcelle, action_retenue)
 
     score = sum(m.points for m in motifs)
@@ -683,18 +833,29 @@ def evaluer(
         avertissements.append(MOTIF_PLAFOND_SANS_METEO.format(maximum=maximum))
 
     recolte_min, recolte_max = recolte_attendue(itineraire_lu, action_retenue, date_cible)
+    # [US-220 / CA3] Une évaluation par type, chacune sur SA pépinière — la même
+    # fonction, donc aucun écran ne peut en afficher une troisième version.
+    par_pepiniere = tuple(
+        _evaluer(db, culture, action_retenue, date_cible, potager_id, None, itineraire,
+                 lecture_meteo, pepinieres, pepiniere_forcee=p)
+        for p in representants
+    )
     confiance = Confiance(
         culture=culture, culture_connue=calendrier.culture_connue, action=action_retenue,
         date_cible=date_cible, zone=calendrier.zone, itineraire=itineraire_lu.nom,
         etoiles=etoiles_depuis_score(score), score=score, motifs=motifs,
         score_max_atteignable=maximum, avertissements=avertissements,
         recolte_min=recolte_min, recolte_max=recolte_max,
+        pepiniere=retenue, par_pepiniere=par_pepiniere,
     )
     log.info(
         "[US-178] Confiance %s / %s le %s : %d/100 (%s) — potager=%s zone=%s",
         culture, action_retenue, date_cible, score, confiance.affichage,
         potager_id, calendrier.zone,
     )
+    if retenue is not None:
+        log.info("[US-220] Semis en pépinière %s évalué pour %s (%s)",
+                 culture, retenue.nom, retenue.type or "type non renseigné")
     return confiance
 
 
@@ -719,9 +880,21 @@ def evaluer_cultures(
     requête. La clé est le nom tel que demandé.
     """
     lecture = _lire_meteo(db, potager_id)
+    pepinieres = _pepinieres(db, potager_id)
     return {
-        nom: evaluer(db, nom, action, date_cible, potager_id, parcelle_id, itineraire, lecture)
+        nom: evaluer(db, nom, action, date_cible, potager_id, parcelle_id, itineraire,
+                     lecture, pepinieres)
         for nom in dict.fromkeys(c for c in cultures if c and c.strip())
+    }
+
+
+def _pepiniere_en_dict(pepiniere: Optional[PepiniereRetenue]) -> Optional[dict]:
+    if pepiniere is None:
+        return None
+    return {
+        "id": pepiniere.id, "nom": pepiniere.nom, "type": pepiniere.type,
+        "libelle": pepiniere.libelle_type, "choisie": pepiniere.choisie,
+        "evaluation": pepiniere.evaluation,
     }
 
 
@@ -751,6 +924,14 @@ def confiance_en_dict(confiance: Confiance) -> dict:
             "min": confiance.recolte_min.isoformat() if confiance.recolte_min else None,
             "max": confiance.recolte_max.isoformat() if confiance.recolte_max else None,
         },
+        # [US-220 / CA2, CA3] La pépinière qui a servi, et un niveau par type
+        # quand le potager en a de froides et d'autres.
+        "pepiniere": _pepiniere_en_dict(confiance.pepiniere),
+        "par_pepiniere": [
+            {"pepiniere": _pepiniere_en_dict(c.pepiniere), "etoiles": c.etoiles,
+             "affichage": c.affichage, "score": c.score}
+            for c in confiance.par_pepiniere
+        ],
     }
 
 
@@ -796,6 +977,7 @@ def confiances_de_culture(
     date_cible: date,
     potager_id: Optional[int],
     lecture_meteo: Optional[svc_previsions.LecturePrevision] = None,
+    pepinieres: Optional[list[Parcelle]] = None,
 ) -> ConfiancesCulture:
     """
     [US-180 / CA1, CA3] Les actions PERTINENTES pour cette culture à cette date.
@@ -808,8 +990,11 @@ def confiances_de_culture(
     une planche. Les trois actions sont demandées NOMMÉMENT, donc aucune n'est
     tranchée en douce par `est_pepiniere` (US-178 / CA8).
     """
+    if pepinieres is None:
+        pepinieres = _pepinieres(db, potager_id)
     evaluations = [
-        evaluer(db, culture, action, date_cible, potager_id, lecture_meteo=lecture_meteo)
+        evaluer(db, culture, action, date_cible, potager_id,
+                lecture_meteo=lecture_meteo, pepinieres=pepinieres)
         for action in ACTIONS_DE_TUILE
     ]
     candidates = [
@@ -839,8 +1024,9 @@ def confiances_du_plan(
     par tuile ni par action.
     """
     lecture = _lire_meteo(db, potager_id)
+    pepinieres = _pepinieres(db, potager_id)
     return {
-        nom: confiances_de_culture(db, nom, date_cible, potager_id, lecture)
+        nom: confiances_de_culture(db, nom, date_cible, potager_id, lecture, pepinieres)
         for nom in dict.fromkeys(c for c in cultures if c and c.strip())
     }
 

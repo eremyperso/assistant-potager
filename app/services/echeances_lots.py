@@ -29,9 +29,10 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from utils.stock import graines_restantes   # [US-212]
+from utils.stock import LABEL_VARIETE_NON_PRECISEE, graines_restantes   # [US-212]
 
 from app.services import attributs_culture as svc_attributs
+from app.services import stock as svc_stock
 from app.services import calendrier_cultural as cal
 from app.services import confiance_semis as conf
 from app.services import plan as svc_plan
@@ -53,6 +54,10 @@ DUREE_ENDURCISSEMENT_JOURS = 7
 #: 🧪 Jours sans aucun geste au-delà desquels un lot qui a encore des graines ou
 #: des godets est dit « dormant » — oublié. Même statut que la durée ci-dessus.
 SEUIL_DORMANCE_JOURS = 60
+
+#: 🧪 [US-240 / CA6, P15] Une mise en terre prévue dans ce nombre de jours (ou
+#: moins) met l'étiquette « Sortir bientôt ». Même statut que les deux ci-dessus.
+SEUIL_SORTIR_BIENTOT_JOURS = 15
 
 # ── Vocabulaire des états ────────────────────────────────────────────────────
 ETAT_A_VENIR = "a_venir"            # repiquage / mise en terre : avant la fourchette
@@ -283,7 +288,9 @@ def _endurcissement(
         return sortie
 
     if emplacement.get("type_pepiniere") == "froide":
-        depl = _jour(lot.get("date_deplacement")) if emplacement.get("origine") == "deplacement" else None
+        # [US-241 / CA8] Une partie d'un lot réparti porte sa propre date d'arrivée.
+        depuis = emplacement["depuis"] if "depuis" in emplacement else lot.get("date_deplacement")
+        depl = _jour(depuis) if emplacement.get("origine") == "deplacement" else None
         ecoule = (ref - depl).days if depl is not None else None
         if ecoule is not None and ecoule < sur:
             return _compte(max(0, ecoule), depl)
@@ -382,6 +389,14 @@ def _echeances_du_lot(lot: dict, delais: _Delais, ref: date) -> dict:
             "mise_en_terre": mise_en_terre,
             "endurcissement": endurcissement,
             "dormance": dormance,
+            # [US-218 / CA3] La fourchette de mise en terre prévue, quel que soit le
+            # stade du lot : la frise du Calendrier y arrête la barre d'un lot encore
+            # en graines, dont `mise_en_terre` reste vide tant qu'il n'a pas de godet.
+            "sortie_prevue": {
+                "du": f_terre.debut.isoformat() if f_terre else None,
+                "au": f_terre.fin.isoformat() if f_terre else None,
+                "raison": raison_terre,
+            },
             # Chaque raison une fois : de quoi dire pourquoi une échéance manque.
             "raisons": list(dict.fromkeys(raisons)),
         },
@@ -408,6 +423,20 @@ def _cultures_a_semer(
     jamais — elle ne fait que limiter le nombre d'évaluations, et la météo n'est
     lue qu'une fois, pour toutes (CA9).
     """
+    candidates: dict[str, tuple[int, int]] = {}
+    for nom, debut, fin in _fenetres_semis_pepiniere(db, potager_id)[1]:
+        if ref.month in cal.mois_couverts(debut, fin) and _cle_culture(nom) not in cultures_en_cours:
+            candidates.setdefault(nom, (debut, fin))
+    if not candidates:
+        return []
+    return _evaluer_a_semer(db, potager_id, ref, candidates)
+
+
+def _fenetres_semis_pepiniere(
+    db: Session, potager_id: Optional[int],
+) -> tuple[str, list[tuple[str, int, int]]]:
+    """La zone du potager et ses fenêtres de semis en pépinière `(culture, mois_debut,
+    mois_fin)`, par ordre de culture — référentiel commun et cultures du potager."""
     zone, _ = cal.zone_du_potager(db, potager_id)
     requete = (
         db.query(CultureConfig.nom, FenetreCulturale.mois_debut, FenetreCulturale.mois_fin)
@@ -425,13 +454,60 @@ def _cultures_a_semer(
         requete = requete.filter(
             CultureConfig.potager_id.is_(None), ItineraireCultural.potager_id.is_(None),
         )
-    candidates: dict[str, tuple[int, int]] = {}
-    for nom, debut, fin in requete.order_by(CultureConfig.nom).all():
-        if ref.month in cal.mois_couverts(debut, fin) and _cle_culture(nom) not in cultures_en_cours:
-            candidates.setdefault(nom, (debut, fin))
-    if not candidates:
-        return []
+    fenetres = [
+        (nom, debut, fin) for nom, debut, fin in requete.order_by(CultureConfig.nom).all()
+        if debut and fin
+    ]
+    return zone, fenetres
 
+
+#: [US-218 / maquette HF] Le calendrier de la bande « Le bon moment pour semer » :
+#: le mois de référence et les cinq suivants.
+NB_MOIS_CALENDRIER_SEMIS = 6
+
+
+def _calendrier_semis(db: Session, potager_id: Optional[int], ref: date) -> dict:
+    """[US-218 / maquette HF] Quand rien n'est à semer, la bande dit quand ça rouvre :
+    pour chaque mois, les cultures dont la fenêtre de semis en pépinière **s'ouvre** ce
+    mois-là, et combien de celles déjà citées sont **encore ouvertes** ; puis la
+    prochaine ouverture. Calculé ici pour que l'écran ne lise aucun calendrier (RT6).
+    Une fenêtre est connue au mois : elle s'ouvre le 1er (RT2)."""
+    zone, fenetres = _fenetres_semis_pepiniere(db, potager_id)
+    par_culture: dict[str, tuple[str, int, int]] = {}
+    for nom, debut, fin in fenetres:
+        par_culture.setdefault(_cle_culture(nom), (nom, debut, fin))
+    mois: list[dict] = []
+    citees: set[str] = set()
+    prochaine = None
+    for decalage in range(NB_MOIS_CALENDRIER_SEMIS):
+        annee, numero = ref.year + (ref.month - 1 + decalage) // 12, (ref.month - 1 + decalage) % 12 + 1
+        ouvrent = sorted(
+            nom for nom, debut, _ in par_culture.values() if debut == numero
+        ) if decalage else []
+        encore = sum(
+            1 for cle, (nom, debut, fin) in par_culture.items()
+            if cle in citees and numero in cal.mois_couverts(debut, fin) and debut != numero
+        )
+        premier = date(annee, numero, 1)
+        if ouvrent and prochaine is None:
+            prochaine = {"date": premier.isoformat(), "jours": (premier - ref).days}
+        mois.append({
+            "mois": f"{annee:04d}-{numero:02d}", "libelle": _MOIS_COURTS[numero - 1],
+            "dans_jours": (premier - ref).days if decalage else 0,
+            "s_ouvrent": ouvrent, "encore_ouvertes": encore,
+        })
+        citees.update(_cle_culture(n) for n in ouvrent)
+    return {
+        "zone": cal.LIBELLES_ZONES.get(zone, zone),
+        "mois": mois,
+        "prochaine_ouverture": prochaine,
+    }
+
+
+def _evaluer_a_semer(
+    db: Session, potager_id: Optional[int], ref: date, candidates: dict[str, tuple[int, int]],
+) -> list[dict]:
+    """[CA8] Les candidates dont la fenêtre est ouverte au sens de la confiance (R1 au maximum)."""
     evaluations = conf.evaluer_cultures(
         db, list(candidates), conf.ACTION_SEMIS_PEPINIERE, ref, potager_id,
     )
@@ -445,8 +521,57 @@ def _cultures_a_semer(
         if evaluation.sans_score or not r1_au_maximum:
             continue
         debut, fin = candidates[nom]
-        a_semer.append({"culture": nom, "fenetre": cal.formater_fenetre(debut, fin)})
+        # [US-240 / CA13] Champs AJOUTÉS : `culture` et `fenetre` restent tels quels.
+        a_semer.append({
+            "culture": nom, "fenetre": cal.formater_fenetre(debut, fin),
+            **_bornes_fenetre(debut, fin, ref),
+            # [US-220 / CA7, CA8] L'évaluation du moteur, copiée : même niveau que
+            # le Plan, la fiche calendrier et le bot, et un niveau par type de
+            # pépinière quand le potager en a de froides et d'autres.
+            "confiance": _confiance_a_semer(evaluation),
+        })
     return a_semer
+
+
+def _confiance_a_semer(evaluation: conf.Confiance) -> dict:
+    """[US-220 / CA7, CA8] Ce que la carte « À semer » affiche du moteur — rien de recalculé."""
+    complete = conf.confiance_en_dict(evaluation)
+    return {cle: complete[cle] for cle in ("etoiles", "affichage", "score", "pepiniere", "par_pepiniere")}
+
+
+def _fin_de_mois(annee: int, mois: int) -> date:
+    suivant = date(annee + 1, 1, 1) if mois == 12 else date(annee, mois + 1, 1)
+    return suivant - timedelta(days=1)
+
+
+def _bornes_fenetre(mois_debut: int, mois_fin: int, ref: date) -> dict:
+    """[US-240 / CA13, P6] Bornes de la fenêtre qui contient `ref`, ses jours restants
+    et sa part écoulée.
+
+    La fenêtre est connue au mois : elle s'ouvre le 1er de son premier mois et se
+    ferme le dernier jour de son dernier mois — une borne du référentiel, pas une
+    estimation (RT2). Une fenêtre à cheval sur l'année (novembre → février) s'ouvre
+    l'année de `ref` si `ref` est dans sa partie d'automne, l'année d'avant sinon.
+    La part écoulée compte le jour de référence : 1er sept.–31 oct. lu le 19 oct.
+    donne 49 / 61 = 0,8.
+    """
+    annee_debut = ref.year
+    if mois_debut > mois_fin and ref.month <= mois_fin:
+        annee_debut -= 1
+    annee_fin = annee_debut + (1 if mois_debut > mois_fin else 0)
+    du, au = date(annee_debut, mois_debut, 1), _fin_de_mois(annee_fin, mois_fin)
+    duree = (au - du).days + 1
+    return {
+        "du": du.isoformat(), "au": au.isoformat(),
+        "periode": f"{_fmt_jour_long(du)}–{_fmt_jour_long(au)}",
+        "jours_restants": (au - ref).days,
+        "part_ecoulee": round(((ref - du).days + 1) / duree, 2),
+    }
+
+
+def _fmt_jour_long(jour: date) -> str:
+    """« 1er sept. », « 31 oct. » — le premier du mois s'écrit « 1er »."""
+    return f"{'1er' if jour.day == 1 else jour.day} {_MOIS_COURTS[jour.month - 1]}"
 
 
 @dataclass
@@ -629,10 +754,403 @@ def ou_mettre(lot: dict, lecture: Optional[_LecturePlan]) -> Optional[dict]:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# [US-240] Le parcours du plant — étiquettes, compteurs, dormants, à semer
+# ═════════════════════════════════════════════════════════════════════════════
+# Les colonnes du kanban (P9), dans l'ordre du parcours.
+STADE_LEVEE = "levee"
+STADE_GODET = "godet"
+STADE_ENDURCISSEMENT = "endurcissement"
+STADE_PRET = "pret"
+STADES = (STADE_LEVEE, STADE_GODET, STADE_ENDURCISSEMENT, STADE_PRET)
+
+# États d'une étiquette (CA6, P15). `a_repiquer` et `a_sortir` sont les deux
+# états « dans la fourchette » que la liste de CA6 ne nommait pas : ils comptent
+# dans « à repiquer » et « à sortir » sans être des retards.
+ETIQ_REPIQUER_RETARD = "repiquer_retard"
+ETIQ_A_REPIQUER = "a_repiquer"
+ETIQ_SORTIR_RETARD = "sortir_retard"
+ETIQ_A_SORTIR = "a_sortir"
+ETIQ_SORTIR_BIENTOT = "sortir_bientot"
+ETIQ_ENDURCIR = "endurcir"
+ETIQ_ENDURCIT_SUR_PLACE = "endurcit_sur_place"
+ETIQ_LEVEE_EN_COURS = "levee_en_cours"
+ETIQ_EN_COURS = "en_cours"
+ETIQ_DUREE_INCONNUE = "duree_inconnue"
+
+ETATS_A_REPIQUER = (ETIQ_REPIQUER_RETARD, ETIQ_A_REPIQUER)
+ETATS_A_SORTIR = (ETIQ_SORTIR_RETARD, ETIQ_A_SORTIR, ETIQ_SORTIR_BIENTOT)
+ETATS_ENDURCIT = (ETIQ_ENDURCIR, ETIQ_ENDURCIT_SUR_PLACE)
+
+#: [CA13-CA15, provisoire] Il n'existe pas d'inventaire de sachets (reporté à un
+#: épic dédié, décision du 19/10/2026) : « des graines en stock » se lit dans les
+#: cultures en cours du potager — une variété dont le stock de l'écran Stocks
+#: (`calcul_stock_varietes`) est supérieur à zéro. Le front dit cette source.
+SOURCE_STOCK_GRAINES = "cultures_en_cours"
+
+
+def _graines_en_levee(lot: dict) -> int:
+    """[CA2] Graines non soldées : ni repiquées, ni soldées par une clôture (déjà hors
+    de `graines_restantes`), ni par une levée terminée — les non-levées d'une levée
+    terminée ne lèveront plus, seuls les levés restent à repiquer."""
+    return max(0, graines_restantes(lot) - int(lot.get("graines_non_levees_soldees") or 0))
+
+
+def _semis_sans_quantite(lot: dict) -> bool:
+    """Un semis dont on ne connaît pas le nombre de graines, jamais repiqué ni soldé :
+    il est en levée, sans quantité (on ne l'invente pas)."""
+    return (
+        (lot.get("graines_semees") or 0) <= 0 and (lot.get("nb_mises_en_godet") or 0) == 0
+        and not lot.get("sans_semis_rattache") and not lot.get("cloture")
+        and not lot.get("levee_terminee")
+    )
+
+
+def _godets_par_emplacement(lot: dict) -> list[tuple[dict, int, Optional[str]]]:
+    """[CA3] Les godets disponibles d'un lot, emplacement par emplacement, avec leur
+    mention. [US-241 / CA7, CA8] La répartition vient de `repartition_godets`, calculée
+    par `calcul_lots_pepiniere` : un lot coupé par un déplacement chiffré y a une entrée
+    par pépinière, chacune avec la date d'arrivée de ses godets (`depuis`), d'où part son
+    endurcissement. Un lot construit sans ce champ (tests, mocks) a tous ses godets à son
+    emplacement courant (US-210)."""
+    godets = int(lot.get("stock_residuel_godet") or 0)
+    if godets <= 0:
+        return []
+    if "repartition_godets" not in lot:
+        emplacement = lot.get("emplacement") or {}
+        deplace = _jour(lot.get("date_deplacement"))
+        mention = (
+            f"déplacés le {_fmt_jour_long(deplace)}"
+            if emplacement.get("origine") == "deplacement" and deplace is not None else None
+        )
+        return [(emplacement, godets, mention)]
+    resultat = []
+    for entree in lot["repartition_godets"]:
+        depuis = _jour(entree.get("depuis"))
+        emplacement = {
+            "parcelle_id": entree.get("parcelle_id"), "nom": entree.get("nom"),
+            "type_pepiniere": entree.get("type_pepiniere"),
+            # `_endurcissement` lit le départ du compte à rebours au froid ici :
+            "origine": "deplacement" if depuis is not None else None,
+            "depuis": depuis,
+        }
+        mention = f"déplacés le {_fmt_jour_long(depuis)}" if depuis is not None else None
+        resultat.append((emplacement, int(entree["godets"]), mention))
+    return resultat
+
+
+def _echeance(
+    jours: Optional[int] = None, en_retard: bool = False, du: Optional[str] = None,
+    au: Optional[str] = None, debut_regle: Optional[str] = None, raison: Optional[str] = None,
+    libelle: Optional[str] = None, endurcissement: Optional[dict] = None,
+) -> dict:
+    return {
+        "jours": jours, "en_retard": en_retard, "du": du, "au": au,
+        "debut_regle": debut_regle, "raison": raison, "libelle": libelle,
+        "endurcissement": endurcissement,
+    }
+
+
+def _etiquette_levee(lot: dict, echeances: dict, semis: Optional[str]) -> dict:
+    """[CA5-CA8] L'étiquette « en levée » d'un lot qui a des graines non soldées."""
+    graines = _graines_en_levee(lot)
+    deja = int(lot.get("stock_residuel_godet") or 0)
+    repiques = int(lot.get("plants_obtenus") or 0)
+    partiel = (lot.get("nb_mises_en_godet") or 0) > 0
+    # [P17] Les levés de CE fragment : le dernier comptage fait foi pour tout le lot ;
+    # un plant repiqué a forcément levé, on ne garde donc que les levés restés en
+    # barquette (« 5 levées parmi les 10 graines restantes »), comme le fait le bot.
+    nb_leves = lot.get("nb_leves")
+    leves = None if nb_leves is None else (max(0, int(nb_leves) - repiques) if partiel else nb_leves)
+    quantites = {
+        "graines": graines if graines > 0 else None,
+        "leves": leves,
+        "godets": None, "unite": lot.get("unite") or "graines",
+    }
+    mention = None
+    if partiel:
+        mention = f"{deja} déjà en godet" if deja > 0 else (f"{repiques} déjà repiqués" if repiques else None)
+        # [A33, CA7] Les graines restantes d'un lot en partie repiqué n'ont plus
+        # d'échéance : rien à attendre d'elles, « Noter la levée (terminée) » les solde.
+        return {
+            "stade": STADE_LEVEE, "etat": ETIQ_LEVEE_EN_COURS, "quantites": quantites,
+            "echeance": _echeance(), "mention": mention, "soldable_par_levee_terminee": True,
+        }
+    rp = echeances["repiquage"]
+    if rp["etat"] == ETAT_EN_RETARD:
+        etat, ech = ETIQ_REPIQUER_RETARD, _echeance(jours=rp["retard_jours"], en_retard=True)
+    elif rp["etat"] == ETAT_A_REPIQUER:
+        etat, ech = ETIQ_A_REPIQUER, _echeance(jours=0)
+    elif rp["etat"] == ETAT_A_VENIR:
+        etat, ech = ETIQ_LEVEE_EN_COURS, _echeance(jours=rp["dans_jours"])
+    else:   # [CA8] sans donnée, pas d'échéance : la raison est rendue
+        etat, ech = ETIQ_DUREE_INCONNUE, _echeance(raison=rp["raison"])
+    if rp["du"]:
+        ech.update(du=rp["du"], au=rp["au"], debut_regle=semis, libelle=rp["libelle"])
+    return {
+        "stade": STADE_LEVEE, "etat": etat, "quantites": quantites, "echeance": ech,
+        "mention": mention, "soldable_par_levee_terminee": False,
+    }
+
+
+def _etiquette_godets(
+    lot: dict, echeances: dict, endurcissement: dict, godets: int, mention: Optional[str],
+    semis: Optional[str],
+) -> dict:
+    """[CA5, CA6] L'étiquette des godets d'un lot à UN emplacement : la colonne suit la
+    table P9 — la mise en terre atteinte prime sur le type de pépinière."""
+    mt, sortie = echeances["mise_en_terre"], echeances["sortie_prevue"]
+    fourchette = {"du": sortie["du"], "au": sortie["au"]} if sortie["du"] else {}
+    regle = {"debut_regle": semis, **fourchette} if fourchette else {}
+    jours_avant = mt.get("dans_jours") if mt["etat"] == ETAT_A_VENIR else None
+    if mt["etat"] == ETAT_DEPASSEE:
+        stade, etat = STADE_PRET, ETIQ_SORTIR_RETARD
+        ech = _echeance(jours=mt["retard_jours"], en_retard=True, **regle)
+    elif mt["etat"] == ETAT_ATTEINTE:
+        stade, etat, ech = STADE_PRET, ETIQ_A_SORTIR, _echeance(jours=0, **regle)
+    elif endurcissement["etat"] == ETAT_FROIDE:
+        # [A35] En pépinière froide on s'endurcit sur place, sans compte à rebours.
+        stade, etat = STADE_ENDURCISSEMENT, ETIQ_ENDURCIT_SUR_PLACE
+        ech = _echeance(jours=jours_avant, raison=sortie["raison"], **regle)
+    elif endurcissement["etat"] in (ETAT_EN_COURS, ETAT_TERMINE):
+        stade, etat = STADE_ENDURCISSEMENT, ETIQ_ENDURCIR
+        ech = _echeance(
+            jours=jours_avant, du=fourchette.get("du"), au=fourchette.get("au"),
+            debut_regle=endurcissement["depuis"], raison=sortie["raison"],
+            endurcissement={"jour": endurcissement["jour"], "sur": endurcissement["sur"]},
+        )
+    elif mt["etat"] is None:
+        stade, etat = STADE_GODET, ETIQ_DUREE_INCONNUE
+        ech = _echeance(raison=mt["raison"] or sortie["raison"])
+    else:
+        stade = STADE_GODET
+        etat = ETIQ_SORTIR_BIENTOT if jours_avant <= SEUIL_SORTIR_BIENTOT_JOURS else ETIQ_EN_COURS
+        ech = _echeance(jours=jours_avant, **regle)
+    ech["libelle"] = mt.get("libelle") if stade != STADE_ENDURCISSEMENT else (
+        endurcissement.get("libelle") or mt.get("libelle")
+    )
+    return {
+        "stade": stade, "etat": etat,
+        "quantites": {"graines": None, "leves": None, "godets": godets, "unite": "godets"},
+        "echeance": ech, "mention": mention, "soldable_par_levee_terminee": False,
+    }
+
+
+def _ou_sont_les_graines(lot: dict, pepinieres: dict[str, int]) -> Optional[int]:
+    """[US-211] Les graines restent à la parcelle du semis ; un déplacement (qui porte
+    sur le lot entier) les emmène. `graines_emplacement` le dit déjà, par son nom ; un
+    lot construit sans ce champ (tests, mocks) retombe sur son emplacement courant."""
+    if "graines_emplacement" not in lot:
+        return (lot.get("emplacement") or {}).get("parcelle_id")
+    return pepinieres.get(lot.get("graines_emplacement"))
+
+
+def _etiquettes_du_lot(
+    lot: dict, calcul: dict, delais: _Delais, ref: date, pepinieres: dict[str, int],
+) -> list[dict]:
+    """[CA2-CA4] Une étiquette par couple (stade, emplacement) qu'occupe le lot, dans
+    l'ordre du parcours (levée d'abord), numérotées « rang sur total ».
+
+    `pepinieres` : identifiant par nom, pour les pépinières du potager."""
+    echeances = calcul["echeances"]
+    semis_jour = _jour(lot.get("date_semis"))
+    semis = semis_jour.isoformat() if semis_jour else None
+    ids = set(pepinieres.values())
+
+    def _ou(pid: Optional[int]) -> Optional[int]:
+        # [P12] Une pépinière inconnue du potager (non dite, archivée) : « Sans emplacement ».
+        return pid if pid in ids else None
+
+    etiquettes: list[dict] = []
+    if _graines_en_levee(lot) > 0 or _semis_sans_quantite(lot):
+        etiquettes.append({
+            **_etiquette_levee(lot, echeances, semis),
+            "emplacement_id": _ou(_ou_sont_les_graines(lot, pepinieres)),
+        })
+    f_terre = _fourchette_mise_en_terre(lot, semis_jour, delais)
+    raison_terre = _raison_mise_en_terre(lot, semis_jour, delais)
+    for emplacement, godets, mention in _godets_par_emplacement(lot):
+        # L'endurcissement dépend du type de LA pépinière où sont ces godets.
+        endurcissement = _endurcissement({**lot, "emplacement": emplacement}, f_terre, ref, raison_terre)
+        etiquettes.append({
+            **_etiquette_godets(lot, echeances, endurcissement, godets, mention, semis),
+            "emplacement_id": _ou(emplacement.get("parcelle_id")),
+        })
+
+    identite = {
+        "id": lot.get("lot_id"), "numero": lot.get("numero_lot"),
+        "culture": lot.get("culture"), "variete": lot.get("variete"), "date_semis": semis,
+    }
+    for rang, etiquette in enumerate(etiquettes, start=1):
+        etiquette.update(
+            id=f"{lot.get('lot_id')}:{etiquette['stade']}:{etiquette['emplacement_id']}",
+            lot=identite, fragment={"rang": rang, "total": len(etiquettes)},
+        )
+    return etiquettes
+
+
+def _cle_etiquette(etiquette: dict) -> tuple:
+    """[CA9, P22] Ordre d'urgence d'US-214 / CA6, appliqué aux étiquettes : retards du
+    plus grand au plus petit, échéances de la plus proche à la plus lointaine, puis
+    sans échéance. À égalité : numéro de lot, identifiant, rang du fragment."""
+    ech = etiquette["echeance"]
+    if ech["en_retard"]:
+        groupe = (GROUPE_RETARD, -ech["jours"])
+    elif ech["jours"] is not None:
+        groupe = (GROUPE_A_VENIR, ech["jours"])
+    else:
+        groupe = (GROUPE_SANS_ECHEANCE, 0)
+    numero = etiquette["lot"]["numero"]
+    return (*groupe, numero if numero is not None else 10**9, str(etiquette["lot"]["id"] or ""),
+            etiquette["fragment"]["rang"])
+
+
+def _dormant(lot: dict, dormance: dict, pepinieres: set) -> dict:
+    """[CA12, P23-P24] Un lot dormant, hors du kanban : ce qui lui reste et depuis quand."""
+    graines = _graines_en_levee(lot)
+    godets = int(lot.get("stock_residuel_godet") or 0)
+    semis = _jour(lot.get("date_semis"))
+    pid = (lot.get("emplacement") or {}).get("parcelle_id")
+    return {
+        "lot": {
+            "id": lot.get("lot_id"), "numero": lot.get("numero_lot"), "culture": lot.get("culture"),
+            "variete": lot.get("variete"), "date_semis": semis.isoformat() if semis else None,
+        },
+        "emplacement_id": pid if pid in pepinieres else None,
+        "jours_sans_geste": dormance["jours_sans_geste"],
+        "dernier_geste": dormance["dernier_geste"],
+        "reste": {
+            "graines": graines or None, "godets": godets or None,
+            "unite": lot.get("unite") or "graines",
+        },
+        # [A37] « Mettre en terre » n'est proposé au tiroir que si le lot a des godets.
+        "a_des_godets": godets > 0,
+    }
+
+
+def _varietes_en_stock(db: Session, ctx: TenantContext, date_ref: Optional[date]) -> dict[str, list[str]]:
+    """[CA15] Variétés « en stock » par culture : lignes de l'écran Stocks dont le stock
+    est supérieur à zéro — UNE lecture groupée, la règle existante, rien de recalculé.
+    Une culture présente avec une variété non précisée est en stock, sans variété citée."""
+    par_culture: dict[str, list[str]] = {}
+    for ligne in svc_stock.calcul_stock_varietes(db, ctx, date_ref):
+        if (ligne.get("stock_actuel") or 0) <= 0:
+            continue
+        varietes = par_culture.setdefault(_cle_culture(ligne.get("culture")), [])
+        variete = ligne.get("variete")
+        if variete and variete != LABEL_VARIETE_NON_PRECISEE and variete not in varietes:
+            varietes.append(variete)
+    return par_culture
+
+
+def _parcours(
+    db: Session, ctx: TenantContext, lots: list[dict], calculs: dict[str, dict],
+    delais_par_lot: dict[str, _Delais], a_semer: list[dict], ref: date, date_ref: Optional[date],
+    pepinieres: list[dict],
+) -> dict:
+    """[US-240] Le bloc `parcours` de `GET /pepiniere/lots` : de quoi dessiner le kanban
+    emplacement × stade sans rien recalculer côté écran (RT7)."""
+    par_nom = {p["nom"]: p["id"] for p in pepinieres}
+    ids_pepinieres = set(par_nom.values())
+    etiquettes: list[dict] = []
+    dormants: list[dict] = []
+    for lot in lots:
+        calcul = calculs[lot["lot_id"]]
+        dormance = calcul["echeances"]["dormance"]
+        if dormance["est_dormant"]:
+            dormants.append(_dormant(lot, dormance, ids_pepinieres))
+            continue
+        etiquettes.extend(_etiquettes_du_lot(lot, calcul, delais_par_lot[lot["lot_id"]], ref, par_nom))
+    etiquettes.sort(key=_cle_etiquette)
+    # [P24] Du plus ancien geste au plus récent.
+    dormants.sort(key=lambda d: (
+        -(d["jours_sans_geste"] or 0),
+        d["lot"]["numero"] if d["lot"]["numero"] is not None else 10**9,
+    ))
+
+    # ── Lignes du kanban (CA10, P10-P12) ────────────────────────────────────
+    def _ligne(emplacement_id: Optional[int]) -> dict:
+        siennes = [e for e in etiquettes if e["emplacement_id"] == emplacement_id]
+        a_venir = [
+            e for e in siennes
+            if e["quantites"]["godets"] and e["stade"] != STADE_PRET and e["echeance"]["du"]
+        ]
+        prochaine = min(a_venir, key=lambda e: (e["echeance"]["du"], _cle_etiquette(e)), default=None)
+        return {
+            "nb_lots": len({e["lot"]["id"] for e in siennes}),
+            "nb_etiquettes": len(siennes),
+            "nb_alertes": sum(1 for e in siennes if e["echeance"]["en_retard"]),
+            # [P10] « Rien à sortir aujourd'hui. Prochain : Poireau #24, le 23 oct. »
+            "prochaine_sortie": {
+                "lot_numero": prochaine["lot"]["numero"], "culture": prochaine["lot"]["culture"],
+                "du": prochaine["echeance"]["du"],
+            } if prochaine else None,
+        }
+
+    lignes = [
+        {"id": p["id"], "nom": p["nom"], "type_pepiniere": p.get("type_pepiniere"),
+         "superficie_m2": p.get("superficie_m2"), **_ligne(p["id"])}
+        for p in pepinieres
+    ]
+    sans = _ligne(None)
+
+    # ── À semer, limité aux graines dont on dispose (CA13-CA15, A34) ────────
+    varietes = _varietes_en_stock(db, ctx, date_ref) if a_semer else {}
+    a_semer_stock, sans_graines = [], []
+    for culture in a_semer:
+        cle = _cle_culture(culture["culture"])
+        if cle in varietes:
+            a_semer_stock.append({**culture, "varietes_en_stock": varietes[cle]})
+        else:
+            sans_graines.append({"culture": culture["culture"]})
+
+    def _compteur(etats: tuple) -> dict:
+        sel = [e for e in etiquettes if e["etat"] in etats]
+        return {"total": len(sel), "retard": any(e["echeance"]["en_retard"] for e in sel)}
+
+    compteurs = {
+        "a_repiquer": _compteur(ETATS_A_REPIQUER),
+        "a_sortir": _compteur(ETATS_A_SORTIR),
+        "endurcit": _compteur(ETATS_ENDURCIT),
+        "a_semer": {"total": len(a_semer_stock), "retard": False},
+        "dormants": {"total": len(dormants), "retard": False},
+    }
+    log.info(
+        "[US-240] Parcours : potager=%s date=%s étiquettes=%d dormants=%d à semer=%d "
+        "(sans graines=%d) pépinières=%d sans emplacement=%d",
+        ctx.potager_id, ref, len(etiquettes), len(dormants), len(a_semer_stock),
+        len(sans_graines), len(lignes), sans["nb_etiquettes"],
+    )
+    return {
+        "stades": list(STADES),
+        "pepinieres": lignes,
+        "sans_emplacement": sans if sans["nb_etiquettes"] else None,
+        "etiquettes": etiquettes,
+        "compteurs": compteurs,
+        "a_semer": a_semer_stock,
+        "a_semer_sans_graines": sans_graines,
+        "source_stock_graines": SOURCE_STOCK_GRAINES,
+        "dormants": dormants,
+        # [US-218] Quand ça rouvre — lu seulement quand rien n'est à semer ni replié.
+        "calendrier_semis": (
+            _calendrier_semis(db, ctx.potager_id, ref) if not (a_semer_stock or sans_graines) else None
+        ),
+    }
+
+
+def _pepinieres_du_potager(db: Session, ctx: TenantContext) -> list[dict]:
+    """Les pépinières du potager, dans l'ordre des parcelles, vides comprises (CA10)."""
+    return [
+        {"id": p.id, "nom": p.nom, "superficie_m2": p.superficie_m2, "type_pepiniere": p.type_pepiniere}
+        for p in svc_plan.get_parcelles(db, ctx) if p.est_pepiniere
+    ]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Point d'entrée
 # ═════════════════════════════════════════════════════════════════════════════
 def lire_echeances(
     db: Session, ctx: TenantContext, lots: list[dict], date_ref: Optional[date] = None,
+    pepinieres: Optional[list[dict]] = None,
 ) -> dict:
     """
     [CA1-CA10] Échéances, action suggérée et rang d'urgence de chaque lot, plus le
@@ -649,14 +1167,20 @@ def lire_echeances(
                            "rang_urgence": 1}},
       "resume":  {"a_repiquer": {...}, "a_endurcir": {...},
                   "prets_pour_le_plan": {...}, "a_semer": {...}},
+      "parcours": {...},   # [US-240] le kanban emplacement × stade (`_parcours`)
     }
     ```
+
+    `pepinieres` : celles du potager (`{id, nom, superficie_m2, type_pepiniere}`),
+    quand l'appelant les a déjà lues ; sinon elles le sont ici, une fois.
     """
     ref = date_ref or date.today()
     cache: dict = {}
     calculs: dict[str, dict] = {}
+    delais_par_lot: dict[str, _Delais] = {}
     for lot in lots:
         delais = _delais_de(db, lot.get("culture") or "", ctx.potager_id, cache)
+        delais_par_lot[lot["lot_id"]] = delais
         calculs[lot["lot_id"]] = _echeances_du_lot(lot, delais, ref)
 
     # Rang : 1 = le plus pressant. Un seul tri, sur la clé calculée plus haut.
@@ -729,7 +1253,11 @@ def lire_echeances(
         ctx.potager_id, ref, len(lots), len(a_repiquer), len(a_endurcir),
         len(prets), plants_prets, len(a_semer),
     )
-    return {"date_reference": ref.isoformat(), "par_lot": par_lot, "resume": resume}
+    parcours = _parcours(
+        db, ctx, lots, calculs, delais_par_lot, a_semer, ref, date_ref,
+        pepinieres if pepinieres is not None else _pepinieres_du_potager(db, ctx),
+    )
+    return {"date_reference": ref.isoformat(), "par_lot": par_lot, "resume": resume, "parcours": parcours}
 
 
 def echeances_d_un_lot(

@@ -2,6 +2,15 @@
 **Titre :** Afficher l'onglet « Aujourd'hui » de la Pépinière — ce qu'il y a à faire, lot par lot, du plus urgent au plus calme
 **Épic :** ÉPIC 12 — Pépinière : le poste de travail sous abri *(numéro à valider, voir le plan des épics 9 à 12)*
 
+> 🔁 **Remplacée le 19/10/2026 par US-218 (onglet « Parcours »).** Cette US est livrée (v3.88.0) et le
+> reste : rien n'est rouvert. Mais l'onglet « Aujourd'hui » disparaît à la livraison d'US-218, dont le
+> kanban emplacement × stade porte l'urgence, l'emplacement et le geste. Ce qui est **réutilisé** par
+> US-218 : CA2 (pastille de la pépinière unique), CA7 et CA7 bis (dépôt du geste dans la file,
+> notification, aucune redirection), CA11 (lecture seule), CA13 (une lecture, relue au retour),
+> CA14 (boutons nommés par leur lot). Ce qui **disparaît** : la liste par urgence, les quatre cartes du
+> bandeau (remplacées par les compteurs d'US-218 / CA4), la barre d'onglets à quatre places (CA1).
+> Voir `docs/EPIC 9-12 - PLAN CULTURES PEPINIERE/pepiniere/02_IMPACTS_BACKLOG.md`.
+
 **Story :**
 En tant que jardinier
 Je veux ouvrir la Pépinière sur ce que j'ai à faire aujourd'hui — repiquer, endurcir, mettre en terre, semer — avec les lots en retard en premier

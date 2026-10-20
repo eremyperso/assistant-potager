@@ -156,7 +156,7 @@ La Vue plan ne répète rien de ce que d'autres écrans disent mieux : elle **re
 - **Un rang occupé** ouvre la **fiche de sa culture**, par-dessus la Vue plan, avec la parcelle (et le rang) en contexte. Si on ouvre ensuite la fiche calendrier depuis cette fiche, c'est la série de cette parcelle qui est mise en avant. En fermant la fiche, la Vue plan se retrouve telle qu'on l'a laissée, au même endroit de la page, et le focus revient sur le rang. La zone d'appui couvre toute la ligne du rang, au moins 44 px de haut.
 - **Un rang libre** porte la mention « ajouter une culture » et propose **Semer en place** ou **Planter**. Rien n'est enregistré par la page : le choix prépare l'action, déjà rattachée à la parcelle, dans la file du compagnon de terrain, qui demande la culture, relit et attend la confirmation. Un membre du potager en **lecture seule** ne voit pas la mention et ne peut pas appuyer sur un rang libre.
 - **« Fiche parcelle → »**, dans l'en-tête de chaque carte, ouvre l'onglet Parcelles sur cette parcelle — c'est le seul accès à la parcelle elle-même depuis la Vue plan.
-- **La carte d'une pépinière** (« Voir Pépinière → ») ouvre la Pépinière sur cet emplacement : l'onglet Emplacements si le potager compte plusieurs pépinières, Aujourd'hui s'il n'en compte qu'une.
+- **La carte d'une pépinière** (« Voir Pépinière → ») ouvre la Pépinière sur son onglet Ma pépinière, réduit à la ligne de cette pépinière ; la croix de la pastille rend toutes les pépinières.
 - **Les cultures non localisées** ouvrent elles aussi leur fiche, sans parcelle en contexte.
 - **« Journal du jour »**, dans la barre de l'activité Plan, à côté du sélecteur de date, ouvre le Journal filtré sur le jour affiché ; il ne dépend d'aucune sélection.
 

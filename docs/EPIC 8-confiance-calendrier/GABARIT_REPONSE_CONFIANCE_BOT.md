@@ -74,6 +74,38 @@ Clavier : `[ Enregistrer le semis ]` `[ Redemander dans 10 jours ]`
 ```
 Clavier : `[ Enregistrer le semis ]` `[ Redemander dans 10 jours ]`
 
+**Semis en pépinière modulé par le type de pépinière (US-220)**
+
+Un semis en pépinière lit le TYPE de la pépinière (US-208). Les motifs des règles
+acquises, à la lettre :
+
+| Type | Règles acquises | Motif d'une règle acquise |
+|---|---|---|
+| chaude | R2, R3, R4 | `{Règle} — pépinière chauffée` (ex. `Gel annoncé — pépinière chauffée`) |
+| froide | R3 | `Gel annoncé — pépinière froide : à l'abri du gel annoncé, pas des nuits fraîches` |
+| non renseigné | R2, R3, R4 | motifs d'avant US-220 : `Semis en pépinière : gelée sans objet`, `Semis en pépinière : gel annoncé sans objet`, `Semis en pépinière : nuits sans objet` |
+
+Lignes ajoutées après la récolte attendue, en italique comme les avertissements :
+
+- `Évalué pour {pépinière}, {type}` — quand aucune parcelle n'est dite et que le moteur a choisi la pépinière (ex. `Évalué pour serre, pépinière chaude`) ;
+- `{type} {étoiles} · {type} {étoiles}` — quand le potager a des pépinières froides et d'autres (ex. `pépinière chaude ★★★ · pépinière froide ★★`) ;
+- avertissement `Type de pépinière non renseigné : la confiance suppose une pépinière chauffée` ;
+- avertissement `Aucune pépinière déclarée : la confiance suppose une pépinière chauffée`.
+
+```
+*Tomate · semis en pépinière · zone continental*
+★★☆  Confiance moyenne
+
+✅ Dans la fenêtre conseillée pour ta zone
+✅ Gel annoncé — pépinière froide : à l'abri du gel annoncé, pas des nuits fraîches
+✅ La récolte arriverait avant la fin de saison
+⚠️ Trop tôt : gelées encore possibles dans ta zone
+⚠️ Nuits fraîches : levée lente probable
+
+🌾 Récolte attendue entre le 20 juillet et le 9 août si tu sèmes aujourd'hui
+_Évalué pour châssis, pépinière froide_
+```
+
 **Potager non localisé — plafond à deux étoiles**
 ```
 *Courgette · semis en pleine terre · zone océanique*

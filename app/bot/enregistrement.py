@@ -287,16 +287,29 @@ def _phrase_deplacement(p: dict) -> str:
     """[US-211 / CA5] « déplacement du lot 119 (poireau) de la serre au châssis froid ».
 
     Le lot cité par son numéro, sa culture entre parenthèses, l'origine si elle est
-    connue (sinon omise, jamais devinée) puis la destination."""
+    connue puis la destination.
+
+    [US-241 / CA6] Un déplacement chiffré se lit « déplacement de 6 godets du lot 21
+    (poivron) · serre chaude → châssis froid ». [CA13] Une origine jamais renseignée est
+    dite « emplacement non renseigné », jamais devinée."""
     lot = f"du lot {p['_lot_numero']}" if p.get("_lot_numero") else "du lot"
     culture = p.get("culture") or ""
     if culture and p.get("variete"):
         culture = f"{culture} {p['variete']}"
     nom = f"{lot} ({culture})" if culture else lot
     origine = p.get("_emplacement_origine")
+    inconnue = "emplacement non renseigné"
+    if p.get("quantite"):
+        n = int(p["quantite"])
+        de = (origine or inconnue).lower() if (origine or p.get("_origine_non_renseignee")) else None
+        vers = (p.get("parcelle") or "?").lower()
+        trajet = f" · {de} → {vers}" if de else f" → {vers}"
+        return f"déplacement de {n} godet{'s' if n > 1 else ''} {nom}{trajet}"
     morceaux = [f"déplacement {nom}"]
     if origine:
         morceaux.append(_preposer(origine)[0])
+    elif p.get("_origine_non_renseignee"):
+        morceaux[0] += f", {inconnue},"
     if p.get("parcelle"):
         morceaux.append(_preposer(p["parcelle"])[1])
     return " ".join(morceaux)

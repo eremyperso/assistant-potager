@@ -15,6 +15,20 @@
 > **Branche de référence lue :** `epic-9-12-refonte-plan-cultures-pepiniere`, HEAD `f1f63db`, v3.74.0
 > (US-181 « abri et paillage » et US-085/086/087 « rôles » sont livrées depuis le cadrage du 19/09)
 
+> ### 🆕 Ce que la piste C du calendrier de pépinière a changé, le 19/10
+> Le wireframe `Wireframes - Calendrier pepiniere - C v2.html` (kanban **emplacement × stade**)
+> ramène la Pépinière de quatre onglets à **deux** : **Parcours**, ouvert par défaut, et **Lots**,
+> devenu registre. La conception vit désormais dans le sous-dossier [`pepiniere/`](pepiniere/README.md),
+> pour que ce plan ne grossisse plus. Conséquences :
+> - douze arbitrages de plus, **A30** à **A41**, portés par `pepiniere/README.md` ;
+> - **US-218 réécrite** (« Afficher l'onglet Parcours », 5 → 8 points), **US-219 absorbée**,
+>   **US-215 remplacée** (livrée, ses CA réutilisés), **US-216** et **US-201** amendées ;
+> - deux US nouvelles : **US-240** (lire le parcours du plant) et **US-241** (déplacement partiel,
+>   qui rouvre le § 9) ;
+> - le travail US-218 « frise annuelle » non commité est mis de côté, sauf le champ serveur
+>   `sortie_prevue` (A39) ;
+> - la vue Lots sera conçue **ensuite**, dans `pepiniere/03_VUE_LOTS.md`.
+
 > ### 🆕 Ce que la v4 a changé, le 21/09
 > Le wireframe v4 traite l'onglet **Parcelles**, laissé de côté par la v3, et en fait le **niveau 2 d'un zoom d'information** à quatre niveaux. Conséquences sur ce plan :
 > - un **§ 3.1** (les quatre niveaux) et un **§ 3.2** (qui porte quoi) ;
@@ -78,6 +92,7 @@ traite**, pas au-delà.
 | `Wireframes v3 - Plan simplifie.html` (v3) | 19/09 | **Vue plan V1** : une carte par parcelle, un trait par rang, trois formes, dix-sept règles de rendu et d'interaction | Fait foi pour la **Vue plan** |
 | `Wireframes v4 - Parcelles et zoom.html` (v4) | 21/09 | Le **zoom d'information** en quatre niveaux, l'onglet **Parcelles** refondu sur la Vue plan, la matrice « qui porte quoi », neuf règles de plus (18 à 26) | Fait foi pour l'**onglet Parcelles**, l'ordre des sous-onglets et la circulation entre niveaux. Il ne rouvre ni la Vue plan (v3), ni Cultures (v1), ni la Pépinière (v1 + v2) |
 | `Cultures - Ecran et fiche.html` | 25/09 | Le **rendu et le responsive** de l'écran Cultures et de la fiche culture : grille 1/2/3 colonnes, deux formes de barre d'outils, cinq états d'écran, fiche en feuille / modale / panneau de 560 px, sept états de fiche | **Maquette gelée (RT9)** pour l'ÉPIC 11. Elle ne rouvre ni la Vue plan (v3, 23/09), ni le zoom (v4), ni la Pépinière |
+| `Wireframes - Calendrier pepiniere - C v2.html` (Claude Design) | 19/10 | La Pépinière en **deux onglets** : Parcours (kanban emplacement × stade, bande « le bon moment pour semer », tiroir des dormants) et Lots (registre) | Fait foi pour la **Pépinière** à la place de la v1 (calendrier) et de la v2 (onglets Aujourd'hui · Calendrier · Emplacements). Conception : `pepiniere/01_VUE_PARCOURS.md` |
 | `haute-fidelite/Plan - Rangs et places.html` | 23/09 | Le **rendu** de la Vue plan : carte, en-tête, ligne de rang, légende, pied de vue, encarts d'absence — et la **piste de places** qui remplace le trait relatif | **Maquette gelée (RT9)**, elle fait foi sur le rendu du niveau 1 et, par héritage, sur la tuile du niveau 2. Elle ne rouvre ni la répartition des écrans (v1), ni le zoom (v4), ni la Pépinière |
 
 ## 2. La règle de répartition (v1, conservée)
@@ -249,6 +264,8 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | **A29** ✅ | Comment porter le panneau de 560 px de la fiche culture, alors que le `Modal` partagé plafonne à 460 ? (maquette 25/09) | **Tranché par le PO le 25/09/2026 : largeur paramétrable** sur la variante `adaptative`, valeur par défaut inchangée à 460 px | Une variante de plus dupliquerait la gestion de la pile (Échap sur la plus haute, retour du focus), déjà livrée et déjà partagée par la fiche calendrier et la fiche parcelle. ⚠️ **À confirmer : c'est une modification d'un composant partagé en production** | US-207 |
 | **A28** | Faut-il attendre longueur, espacement et places pour livrer la Vue plan ? | **Non.** US-200 part avec le trait relatif, que la maquette conserve elle-même comme **mode dégradé** pour toute parcelle sans longueur. US-225, US-226 et US-227 suivent, puis US-228 remplace la piste | Au premier jour, **aucune** parcelle n'a de longueur et la plupart des cultures n'ont pas d'espacement : un écran qui attendrait ces données n'aurait rien à afficher pendant des semaines. Le mode dégradé n'est pas un pis-aller, c'est l'état initial de tout potager | US-200, US-228 |
 
+> **A30 à A41** (Pépinière en deux onglets, 19/10/2026) : voir [`pepiniere/README.md`](pepiniere/README.md) § 3.
+
 ## 7. Découpage
 
 ### ÉPIC 9 — Socle commun Plan, Cultures, Pépinière (16 points)
@@ -300,20 +317,26 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 
 | US | Titre | Pts | Dépend de |
 |---|---|---|---|
-| US-208 | Déclarer une pépinière chaude ou froide | 3 | — |
-| US-209 | Numéroter les lots de semis et les retrouver par leur numéro | 5 | — |
-| US-210 | Rattacher les godets à leur pépinière et savoir où se trouve chaque lot | 3 | — (US-208 conseillée) |
-| US-211 | Déplacer un lot d'une pépinière à l'autre | 3 | US-209, US-210 |
-| US-212 | Noter la levée d'un lot | 5 | US-209 |
-| US-213 | Ajouter au calendrier le délai entre semis et repiquage en godet | 3 | — |
-| US-214 | Calculer les échéances d'un lot | 5 | US-208, US-210, US-213 |
-| US-215 | Afficher l'onglet « Aujourd'hui » de la Pépinière | 5 | US-214, US-216, US-196 |
-| US-216 | Ouvrir la fiche d'un lot et y faire ses gestes | 5 | US-214, US-196, US-209 |
-| US-217 | Proposer où mettre en terre les plants d'un lot | 3 | US-198, US-216 |
-| US-218 | Afficher l'onglet « Calendrier » de la Pépinière | 5 | US-214, US-215 |
-| US-219 | Afficher l'onglet « Emplacements » de la Pépinière | 3 | US-208, US-210, US-215 (US-211 conseillée) |
+| US-208 | Déclarer une pépinière chaude ou froide ✅ | 3 | — |
+| US-209 | Numéroter les lots de semis et les retrouver par leur numéro ✅ | 5 | — |
+| US-210 | Rattacher les godets à leur pépinière et savoir où se trouve chaque lot ✅ | 3 | — (US-208 conseillée) |
+| US-211 | Déplacer un lot d'une pépinière à l'autre ✅ | 3 | US-209, US-210 |
+| US-212 | Noter la levée d'un lot ✅ | 5 | US-209 |
+| US-213 | Ajouter au calendrier le délai entre semis et repiquage en godet ✅ | 3 | — |
+| US-214 | Calculer les échéances d'un lot ✅ | 5 | US-208, US-210, US-213 |
+| US-215 | Afficher l'onglet « Aujourd'hui » de la Pépinière ✅ — **remplacée par US-218 le 19/10** | 5 | US-214, US-216, US-196 |
+| US-216 | Ouvrir la fiche d'un lot et y faire ses gestes ✅ — **amendée le 19/10** (porte commune, CA1, CA19) | 5 | US-214, US-196, US-209 |
+| US-217 | Proposer où mettre en terre les plants d'un lot ✅ | 3 | US-198, US-216 |
+| **US-218** | **Afficher l'onglet Parcours de la Pépinière — le kanban emplacement × stade** *(réécrite le 19/10)* | **8** | **US-240** (US-241 conseillée) |
+| ~~US-219~~ | ~~Afficher l'onglet « Emplacements » de la Pépinière~~ — **absorbée par US-218** | ~~3~~ | — |
 | US-220 | Tenir compte du type de pépinière dans la confiance d'un semis | 3 | US-208 |
 | US-221 | Imprimer des étiquettes de lot à QR code *(option)* | 5 | US-209, US-216, US-195 |
+| **US-240** | **Lire le parcours du plant : étiquettes par lot, stade et emplacement, et le bon moment pour semer** | **5** | **US-214, US-212, US-210** |
+| **US-241** | **Déplacer une partie des godets d'un lot, et ranger un lot sans emplacement** | **8** | **US-211, US-224** |
+
+> Réorganisation du 19/10/2026 : détail, livraisons regroupées et modèle conseillé dans
+> [`pepiniere/02_IMPACTS_BACKLOG.md`](pepiniere/02_IMPACTS_BACKLOG.md). La vue Lots (registre) sera
+> chiffrée après sa conception.
 
 ## 8. Ordre de livraison proposé
 
@@ -322,7 +345,7 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 | **A — Données** | US-194 ✅, US-197 ✅, US-199, **US-225**, **US-226**, US-206, US-208, US-209, US-213 | Aucun écran ; chacune est livrable seule et débloque les suivantes. US-225 et US-226 sont le prix d'entrée de la piste de places : sans longueur ni espacement, aucune place n'est calculable |
 | **B — Socle et Plan** | US-195, US-198 ✅, US-200, US-223, **US-227**, **US-228**, US-207, US-196, US-201, **US-222**, US-202 | La Vue plan est la plus attendue : elle part **avec le trait relatif** (A28), c'est-à-dire l'état réel de tout potager au premier jour. Les places arrivent ensuite — US-227 les calcule, US-228 les dessine — et le niveau 2 en hérite quand il se recoud. La barre se range avec l'écran, la fiche culture et le geste pré-rempli en sont les sorties |
 | **C — Cultures** | US-204, US-205 | Réutilise la fiche culture déjà livrée en B. La maquette du 25/09 est gelée : rien ne bloque plus le démarrage |
-| **D — Pépinière** | US-210, US-211, US-212, US-214, US-216, US-215, US-217, US-218, US-219, US-220 | Les données du lot d'abord (emplacement, levée, échéances), l'écran ensuite |
+| **D — Pépinière** | US-210 ✅, US-211 ✅, US-212 ✅, US-214 ✅, US-216 ✅, US-215 ✅, US-217 ✅ ; puis **L1** : US-240 + US-241 (+ US-220) ; **L2** : US-218 réécrite ; **L3** : vue Lots | Les données du lot d'abord (emplacement, levée, échéances), l'écran ensuite. Depuis le 19/10, livraisons regroupées (`pepiniere/02_IMPACTS_BACKLOG.md` § 3) |
 | **Options** | US-203, US-221 | À déclencher sur usage |
 
 ## 9. Hors périmètre
@@ -345,7 +368,8 @@ n'est irréversible : les changer, c'est amender l'US avant son démarrage.
 - Une **saisie web directe** d'un geste (A16).
 - Un geste d'**arrachage** ou de clôture d'une culture en terre (A9).
 - Le suivi de **levée en pleine terre** : US-212 ne couvre que les lots de pépinière.
-- Le **déplacement partiel** d'un lot (une partie des godets seulement).
+- ~~Le **déplacement partiel** d'un lot (une partie des godets seulement).~~ **Rouvert le 19/10/2026**
+  par l'arbitrage A32 : US-241.
 - Les **étiquettes de parcelle** et de **bocal de graines** évoquées par la v2 § 3d.
 - Les observations (US-039) sur la Vue plan : elles restent au niveau 2 (v4 règle 24).
 

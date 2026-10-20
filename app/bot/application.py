@@ -211,7 +211,7 @@ def _construire_application() -> "Application":
     # [fix rattachement lot godet] Motif distinct de "^godet_" (pas d'underscore
     # après "godet") — les deux handlers ne se recouvrent jamais.
     app.add_handler(CallbackQueryHandler(_godet_lot_cb, pattern=r"^godetlot"))
-    app.add_handler(CallbackQueryHandler(_deplacement_lot_cb, pattern=r"^deplot"))   # [US-211]
+    app.add_handler(CallbackQueryHandler(_deplacement_lot_cb, pattern=r"^depl(ot|orig|dest)"))   # [US-211, US-241]
     app.add_handler(CallbackQueryHandler(_levee_lot_cb, pattern=r"^levlot"))   # [US-212]
     app.add_handler(CallbackQueryHandler(_levee_detail_cb, pattern=r"^levdet"))   # [US-212]
     # [US-066] Motif également disjoint de "^godet_" et de "^godetlot".
