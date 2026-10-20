@@ -47,6 +47,8 @@ Le lien entre une conversation et un compte peut être défait à tout moment. L
 
 Les écrans de l'application web proposent, là où ils montrent une culture ou une parcelle, un bouton qui lance le geste correspondant. Ce bouton n'enregistre rien lui-même : il **dépose le geste dans une file d'attente**, avec ce que l'écran savait — la culture, la parcelle, la date. C'est la conversation qui le présente ensuite sur un récapitulatif déjà rempli, qu'il ne reste qu'à confirmer. C'est exactement le parcours d'un geste dicté, sauf qu'on n'a rien eu à dire. À côté du bouton, la phrase équivalente est proposée pour qui préfère la dicter.
 
+Quand l'écran ne connaissait pas la culture — c'est le cas d'un semis ou d'une plantation lancé depuis un rang libre de la Vue plan —, la conversation **demande la culture en premier** (« Quelle culture voulez-vous semer ? »), puis la quantité si elle manque, puis le récapitulatif à confirmer. Répondre « annuler » laisse le geste dans la file.
+
 Un geste ainsi déposé attend **trois jours**, et il attend vraiment : le lien qui le désigne reste valable tout ce temps, et le rouvrir redonne le même geste. On peut donc en préparer plusieurs devant l'écran, au calme, et les confirmer plus tard, quand on a les mains libres. Un lien ouvert dans une conversation reliée à un autre compte est refusé, et le geste reste chez celui qui l'a préparé.
 
 ## Reprendre ses gestes en attente quand on veut

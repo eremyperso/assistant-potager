@@ -2,6 +2,15 @@
 **Titre :** Afficher l'onglet « Aujourd'hui » de la Pépinière — ce qu'il y a à faire, lot par lot, du plus urgent au plus calme
 **Épic :** ÉPIC 12 — Pépinière : le poste de travail sous abri *(numéro à valider, voir le plan des épics 9 à 12)*
 
+> 🔁 **Remplacée le 19/10/2026 par US-218 (onglet « Parcours »).** Cette US est livrée (v3.88.0) et le
+> reste : rien n'est rouvert. Mais l'onglet « Aujourd'hui » disparaît à la livraison d'US-218, dont le
+> kanban emplacement × stade porte l'urgence, l'emplacement et le geste. Ce qui est **réutilisé** par
+> US-218 : CA2 (pastille de la pépinière unique), CA7 et CA7 bis (dépôt du geste dans la file,
+> notification, aucune redirection), CA11 (lecture seule), CA13 (une lecture, relue au retour),
+> CA14 (boutons nommés par leur lot). Ce qui **disparaît** : la liste par urgence, les quatre cartes du
+> bandeau (remplacées par les compteurs d'US-218 / CA4), la barre d'onglets à quatre places (CA1).
+> Voir `docs/EPIC 9-12 - PLAN CULTURES PEPINIERE/pepiniere/02_IMPACTS_BACKLOG.md`.
+
 **Story :**
 En tant que jardinier
 Je veux ouvrir la Pépinière sur ce que j'ai à faire aujourd'hui — repiquer, endurcir, mettre en terre, semer — avec les lots en retard en premier
@@ -27,7 +36,8 @@ Cette US crée l'onglet « Aujourd'hui » et la barre d'onglets, sur les échéa
 *La liste des lots*
 - [ ] CA5 : Les lots en cours sont listés dans **l'ordre d'urgence** d'US-214. Chaque ligne porte : numéro, culture, variété, « semé le … · N j · emplacement » ; « N semés → N levés » avec le taux de levée (US-212), ou les godets disponibles ; l'échéance en clair (« Repiquage +6 j », « Repiquage dans 3 j », « Endurcissement J+3 sur 7 », « En pépinière froide », « Dormant ») ; le bouton de l'**action suggérée**
 - [ ] CA6 : Une ligne en retard est mise en évidence et son bouton est principal ; les lots **dormants** sont en fin de liste, atténués, avec « Clôturer »
-- [ ] CA7 : Les boutons préparent le geste pré-rempli (US-196) — lot, culture, variété, date : *Repiquer* (mise en godet, nombre de levés proposé s'il est connu), *Mettre en terre* (plantation, godets disponibles proposés, parcelle demandée), *Clôturer* (le geste qui solde le lot : perte en pépinière de ses godets restants, ou levée terminée s'il n'a que des graines en germination). *Noter la levée* ouvre la fiche du lot sur son compteur (US-216). Aucune écriture dans la PWA
+- [ ] CA7 : Les boutons **déposent** le geste pré-rempli dans la file des gestes en attente (US-224, `BoutonGeste`) — lot, culture, variété, date : *Repiquer* (mise en godet, nombre de levés proposé s'il est connu), *Mettre en terre* (plantation, godets disponibles proposés, parcelle demandée), *Clôturer* (`cloture_lot`, qui solde le lot entier, US-216). *Noter la levée* ouvre la fiche du lot (US-216) ; tant qu'US-212 n'est pas livrée, le bouton n'existe pas. Aucune écriture dans la PWA : le dépôt n'enregistre aucun événement
+- [ ] CA7 bis : **Aucune redirection vers Telegram.** L'appui reste sur l'écran : le geste attend dans la file, et le compagnon le propose de son côté. Le dépôt est confirmé par une **notification** de l'application (« Geste préparé — à confirmer dans votre compagnon, rien n'est encore enregistré », nombre de gestes en attente), un doublon est signalé en teinte d'avertissement, un échec reste affiché avec « Réessayer ». Sans compagnon activé, le geste est quand même déposé et l'application invite à l'activer (US-224 / CA21)
 - [ ] CA8 : Un appui sur une ligne ouvre la **fiche du lot** (US-216) : en panneau à côté de la liste quand le conteneur fait au moins 900 px, en plein écran en dessous. La fermer rend la liste intacte (US-195 / CA8)
 - [ ] CA9 : Recherche sur la culture, la variété et le numéro ; filtre d'emplacement, posé notamment par une intention venue du Plan (US-201 / I5), affiché en pastille retirable
 
@@ -35,7 +45,7 @@ Cette US crée l'onglet « Aujourd'hui » et la barre d'onglets, sur les échéa
 - [ ] CA10 : Aucun lot en cours : « Aucun lot en cours » et le bandeau, « À semer » compris. Échéance incalculable : la ligne dit pourquoi (« délai non renseigné »), sans ordre inventé. Chargement : squelette ; échec : message et relance
 - [ ] CA11 : Un membre en lecture seule voit tout, sans aucun bouton d'action (RT11)
 - [ ] CA12 : À 375 px, chaque ligne devient une carte de deux ou trois lignes, bouton d'action compris, cibles de 44 px ; aucune colonne n'est perdue, aucun défilement horizontal. Container queries (règle « Responsive »)
-- [ ] CA13 : Une seule lecture (`GET /pepiniere/lots`, US-214) ; au retour sur l'application après un geste confirmé au compagnon, la liste est relue une fois (US-196 / CA12)
+- [ ] CA13 : Une seule lecture (`GET /pepiniere/lots`, US-214) ; après un dépôt de geste, la liste est relue une fois au retour sur l'onglet (US-224 / CA22), silencieusement, sans squelette ni perte du filtre
 - [ ] CA14 : Accessibilité : la liste est une liste ou un tableau sémantique ; chaque bouton nomme son lot (« Repiquer le lot 128 ») ; l'échéance est écrite, jamais portée par la seule couleur
 
 *Définition de terminé*
@@ -47,12 +57,14 @@ Cette US crée l'onglet « Aujourd'hui » et la barre d'onglets, sur les échéa
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : consultation (PWA, écran Pépinière)
 - Migration BDD requise : **non**
-- Dépendances : **US-214** (échéances et résumé), **US-216** (fiche du lot), **US-196** (gestes pré-remplis) ; US-209 (numéro), US-212 (levée), US-207 (fiche culture) ; US-198 pour les rangs libres de « Prêts pour le plan »
+- Dépendances : **US-214** (échéances et résumé), **US-216** (fiche du lot), **US-196** puis **US-224** (gestes déposés en file, notifications) ; US-209 (numéro), US-212 (levée), US-207 (fiche culture) ; US-198 pour les rangs libres de « Prêts pour le plan »
 - Impact tokens : zéro
 - Impact design system : réutilise `Badge`, `Btn`, `SearchField`, `InfoBanner`, `DateRefPicker` ; nouveaux composants `CarteReponsePepiniere` et `LigneLot`
 - Point de vigilance : l'onglet « Lots » est **strictement inchangé** hormis le numéro de lot ; c'est une condition de la v1
 - Point de vigilance : la vignette de QR code dessinée en tête de ligne par la v2 n'apparaît qu'avec US-221 (option)
 - Wireframe : `maquette front/wireframes/Wireframes v2 - Plan Cultures Pepiniere.html`, § 3 et ses notes
+- Maquette figée : `Maquette figée/US-216 - Fiche lot terrain - FIGE 2026-10-14.html` (Claude Design) — barre d'onglets segmentée, ligne de lot (trois colonnes en desktop, carte à 375 px), panneau de 420 px à côté de la liste
+- Amendement du 15/10/2026 : depuis US-224 et US-216, un geste préparé dans la PWA n'ouvre plus Telegram ; il est déposé dans la file et confirmé par une notification (CA7, CA7 bis, CA13, Gherkin)
 
 **Estimation :** 5 points (hors conception)
 
@@ -74,12 +86,15 @@ Scénario: L'onglet Lots est inchangé
 Scénario: Lancer un repiquage
   Given le lot 128 a 40 levés notés
   When j'appuie sur "Repiquer" sur la ligne du lot 128
-  Then mon compagnon s'ouvre sur une mise en godet du lot 128, 40 plants proposés
+  Then une mise en godet du lot 128, 40 plants proposés, est déposée dans la file des gestes
+  And une notification confirme « Geste préparé », à confirmer dans le compagnon
+  And je reste sur l'onglet "Aujourd'hui"
 
 Scénario: Clôturer un lot dormant
   Given le lot 103, basilic, dormant, 6 godets restants
   When j'appuie sur "Clôturer"
-  Then mon compagnon s'ouvre sur une perte en pépinière de 6 plants du lot 103
+  Then une clôture du lot 103 (6 godets soldés) est déposée dans la file des gestes
+  And une notification confirme le dépôt, sans redirection vers Telegram
 
 Scénario: Filtrer depuis le bandeau
   When j'appuie sur la carte "À endurcir"

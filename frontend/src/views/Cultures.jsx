@@ -12,6 +12,7 @@ import { Filter as FilterIcon, HelpCircle, ChevronRight, RefreshCw, AlertTriangl
 import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useNavigation } from '../context/NavigationContext.jsx'
 import { Card, SearchField, Select, InfoBanner } from '../components/ui'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import { CarteCulture, CarteCultureSquelette } from '../components/CarteCulture.jsx'
@@ -20,7 +21,7 @@ import { MOIS_NOMS } from '../lib/calendrier.js'
 import {
   TRI_CONFIANCE, TRI_ALPHA, TRI_FAMILLE, TRI_PAR_DEFAUT,
   famillesDisponibles, listeFiltree, grouperParFamille, autresDansToutes,
-  nombreFiltresActifs, visibleDansOnglet,
+  nombreFiltresActifs, visibleDansOnglet, messageConfianceIndisponible,
 } from '../lib/cultures.js'
 
 const capitale = (s) => s.charAt(0).toUpperCase() + s.slice(1)
@@ -96,6 +97,7 @@ function Grille({ children }) {
 export default function Cultures({ refresh }) {
   const { dateRef } = useDateRef()
   const { potagerId } = usePotager()
+  const { aller } = useNavigation()
 
   const [vue, setVue] = useState(null)
   const [chargement, setChargement] = useState(true)
@@ -278,7 +280,7 @@ export default function Cultures({ refresh }) {
       {!meteoDisponible && !chargement && !erreur && (
         <InfoBanner
           tint="amber" icon={Cloud} title="Confiance indisponible"
-          body="La météo du potager n’a pas pu être lue : aucune étoile n’est affichée. Frises et présence au potager restent à jour."
+          body={messageConfianceIndisponible(vue?.confiance_indisponible)}
         />
       )}
 
@@ -297,6 +299,7 @@ export default function Cultures({ refresh }) {
         <FicheCulture
           culture={cultureOuverte} dateRef={dateRef} potagerId={potagerId}
           ecran="cultures" onClose={() => setCultureOuverte(null)}
+          onOuvrirLot={(numero) => { setCultureOuverte(null); aller('pepiniere', { lot: String(numero) }) }}   // [US-216 / CA1]
         />
       )}
     </div>

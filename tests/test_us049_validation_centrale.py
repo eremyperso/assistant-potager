@@ -137,7 +137,9 @@ def test_ca5_corriger_evenement_rejette_culture_inconnue(test_db, ctx):
 def test_ca5_creer_evenement_godet_action_source_jamais_bloquee(test_db, ctx):
     """mise_en_godet est une action source (introduit une nouvelle culture) —
     jamais bloquée, même sur une culture inédite dans le potager."""
-    parsed = {"action": "mise_en_godet", "culture": CULTURE_INCONNUE, "quantite": 5, "unite": "graines"}
+    # [US-224] Le nombre de plants vit dans `nb_plants_godets` (champ principal de la
+    # mise en godet) ; sans lui la création est refusée, quelle que soit la culture.
+    parsed = {"action": "mise_en_godet", "culture": CULTURE_INCONNUE, "nb_plants_godets": 5}
     event = svc_evenements.creer_evenement_godet(test_db, ctx, parsed, "texte")
     assert event.id is not None
     assert event.culture == CULTURE_INCONNUE

@@ -66,7 +66,16 @@ _VENDU_TIMEOUT  = 60  # secondes
 _QUANTITE_PENDING: dict[int, dict] = {}
 
 
-_QUANTITE_TIMEOUT = 60  # secondes
+_QUANTITE_TIMEOUT = 180  # secondes — lu par messages._repondre_quantite_en_attente
+
+
+# [US-201 / I3] Geste de la file sans culture (« ajouter une culture » sur un
+# rang libre de la Vue plan) : le compagnon la demande avant tout le reste.
+# {user_id: {items, texte, ts, geste_file}}
+_CULTURE_PENDING: dict[int, dict] = {}
+
+
+_CULTURE_TIMEOUT = 300  # secondes
 
 
 # [US-036 CA10] Récolte végétative pesée sans nombre de pieds → clarification {user_id: {items, texte, ts}}
@@ -88,6 +97,29 @@ _GODET_LOT_PENDING: dict[int, dict] = {}
 
 
 _GODET_LOT_TIMEOUT = 120  # secondes
+
+
+# [US-211] Déplacement dont le lot est ambigu (plusieurs lots de la culture) → choix du lot
+_DEPLACEMENT_LOT_PENDING: dict[int, dict] = {}
+
+
+_DEPLACEMENT_LOT_TIMEOUT = 120  # secondes
+
+
+# [US-212] Levée dont le lot est ambigu (plusieurs lots de la culture) → choix du lot,
+# ou semis en pleine terre → proposition de noter en observation.
+_LEVEE_LOT_PENDING: dict[int, dict] = {}
+
+
+_LEVEE_LOT_TIMEOUT = 120  # secondes
+
+
+# [US-212] « La levée est-elle terminée ? » — deuxième question du bot, après le nombre de
+# levés (la PWA ne dépose que le geste : le bot demande tout le détail).
+_LEVEE_TERMINEE_PENDING: dict[int, dict] = {}
+
+
+_LEVEE_TERMINEE_TIMEOUT = 180  # secondes
 
 
 # [US-066] Mise en godet sans « sur N graines » → réclamation du nombre d'origine

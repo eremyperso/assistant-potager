@@ -28,6 +28,9 @@ export default function FicheCulture({
   culture, dateRef, potagerId, parcelleId = null, nomParcelle = null, rang = null,
   calendriers: calendriersFournis, confiances: confiancesFournies,
   ecran = null, onClose,
+  // [US-216 / CA1] Un lot de pépinière listé ici ouvre SA fiche : l'écran d'origine
+  // décide comment y aller (navigation vers la Pépinière avec le numéro du lot).
+  onOuvrirLot = null,
 }) {
   const [fiche, setFiche] = useState(null)
   const [ficheEchouee, setFicheEchouee] = useState(false)
@@ -102,6 +105,7 @@ export default function FicheCulture({
             fiche={fiche} ficheEchouee={ficheEchouee}
             calendriers={calendriers} confiances={confiances}
             onReessayer={() => setEssai((n) => n + 1)}
+            onOuvrirLot={onOuvrirLot}
             onOuvrirCalendrier={() => setCalendrierOuvert(true)}
           />
         )}
@@ -139,7 +143,7 @@ function Absence({ children }) {
   )
 }
 
-function CorpsFiche({ culture, dateRef, parcelleId, fiche, ficheEchouee, calendriers, confiances, onReessayer, onOuvrirCalendrier }) {
+function CorpsFiche({ culture, dateRef, parcelleId, fiche, ficheEchouee, calendriers, confiances, onReessayer, onOuvrirCalendrier, onOuvrirLot }) {
   if (fiche?.fiche_absente) {
     return (
       <div className="flex flex-col gap-[22px]">
@@ -148,7 +152,7 @@ function CorpsFiche({ culture, dateRef, parcelleId, fiche, ficheEchouee, calendr
           title="Fiche absente du référentiel"
           body={`${culture} n’est pas connue du référentiel : ni calendrier, ni caractéristiques, ni voisinages. Ce que tu cultives reste listé ci-dessous.`}
         />
-        <SectionVarietes fiche={fiche} />
+        <SectionVarietes fiche={fiche} onOuvrirLot={onOuvrirLot} />
       </div>
     )
   }
@@ -184,7 +188,7 @@ function CorpsFiche({ culture, dateRef, parcelleId, fiche, ficheEchouee, calendr
       ) : (
         <>
           <SectionReferentiel fiche={fiche} />
-          <SectionVarietes fiche={fiche} />
+          <SectionVarietes fiche={fiche} onOuvrirLot={onOuvrirLot} />
           <SectionVoisinages fiche={fiche} />
           <SectionBioagresseurs fiche={fiche} />
         </>
@@ -287,7 +291,7 @@ function SectionReferentiel({ fiche }) {
 }
 
 /** [CA7] Une variété seulement en pépinière n'est jamais masquée. */
-function SectionVarietes({ fiche }) {
+function SectionVarietes({ fiche, onOuvrirLot = null }) {
   const varietes = fiche?.varietes_cultivees || []
   return (
     <section>
@@ -308,7 +312,16 @@ function SectionVarietes({ fiche }) {
                 ))}
                 {(v.lots_pepiniere || []).map((lot) => (
                   <div key={lot.numero} className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-[12.5px] font-semibold text-brand-text">lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}</span>
+                    {onOuvrirLot ? (
+                      <button
+                        type="button" onClick={() => onOuvrirLot(lot.numero)}
+                        className="text-[12.5px] font-semibold text-brand-text underline decoration-dotted underline-offset-4 min-h-[32px] text-left"
+                      >
+                        lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}
+                      </button>
+                    ) : (
+                      <span className="text-[12.5px] font-semibold text-brand-text">lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}</span>
+                    )}
                     {lot.stade && <span className="text-[11.5px] text-txt2">{lot.stade}</span>}
                   </div>
                 ))}

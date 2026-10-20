@@ -790,7 +790,7 @@ def _agreger_pepiniere(db: Session, ctx: TenantContext) -> dict:
     (US-065), la même lecture que l'écran pépinière du web [CA4]."""
     lots = _stock.calcul_lots_pepiniere(db, potager_id=ctx.potager_id)
     actifs = [lot for lot in lots if (lot.get("stock_residuel_godet") or 0) > 0
-              or (lot.get("graines_en_germination") or 0) > 0]
+              or _stock.graines_restantes(lot) > 0]
     return {"present": bool(actifs), "lots": actifs[:MAX_LIGNES_AFFICHEES], "nb": len(actifs)}
 
 

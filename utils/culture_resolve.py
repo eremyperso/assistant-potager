@@ -86,6 +86,36 @@ def _meilleure_correspondance(brut: str, connus: list[str]) -> str | None:
     return None
 
 
+def fusionner_culture_variete(db, potager_id: int, culture: str, variete: str | None) -> tuple[str, str | None]:
+    """
+    Le modèle coupe parfois un NOM de culture en culture + variété : « choux frisé »
+    devient culture « chou », variété « frisé », alors que le potager connaît la
+    culture « chou frisé ». Les godets partaient alors dans un lot à part, sans lien
+    avec le semis de « chou frisé ».
+
+    Si « culture variété » est une culture DÉJÀ introduite dans ce potager, c'est elle
+    qui est retenue (et la variété tombe). Sinon, rien ne change.
+    """
+    if not culture or not variete or not variete.strip():
+        return culture, variete
+    candidat = f"{culture.strip()} {variete.strip()}"
+    cible = normaliser_culture(candidat)
+    rows = (
+        db.query(Evenement.culture)
+        .filter(
+            Evenement.type_action.in_(["semis", "plantation", "mise_en_godet"]),
+            Evenement.culture.isnot(None),
+            Evenement.potager_id == potager_id,
+        )
+        .distinct()
+        .all()
+    )
+    for (nom,) in rows:
+        if nom and normaliser_culture(nom) == cible:
+            return nom, None
+    return culture, variete
+
+
 def culture_deja_plantee(db, potager_id: int, culture: str) -> bool:
     """
     Vrai si `culture` a déjà été introduite dans CE potager via un semis, une

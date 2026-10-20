@@ -379,6 +379,43 @@ _NON_ALPHANUM_ROUTEUR = re.compile(r"[^a-z0-9]+")
 _ESPACES_ROUTEUR = re.compile(r"\s+")
 
 
+# [US-211 / CA2] « passé le lot 5 à la pépinière froide », « sorti les poireaux de la
+# serre pour le châssis » : les verbes familiers du déplacement ne sont pas dans
+# ACTION_MAP (« sorti les tomates » peut vouloir dire les planter). Ils annoncent un
+# geste seulement avec un lot cité par son numéro ou une destination nommée — sans
+# quoi « pépinière » fait de la phrase une question sur la pépinière.
+_VERBES_DEPLACEMENT_TETE = re.compile(
+    r"\b(?:passe|passes|passee|passees|sorti|sortis|sortie|sorties|rentre|rentres|rentree|rentrees)\b"
+)
+_INDICE_DEPLACEMENT = re.compile(
+    r"\blot\s*(?:n|no|numero)?\s*#?\s*\d|"
+    r"\b(?:au|sous|dans|vers|pour le|pour la|a la|a le)\s+(?:le\s+|la\s+|l\s+)?(?:chassis|serre|pepiniere)\b"
+)
+
+
+def _est_deplacement_familier(texte: str) -> bool:
+    normalise = _ESPACES_ROUTEUR.sub(" ", _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode((texte or "").strip().lower()))).strip()
+    tete = " ".join(normalise.split()[:_FENETRE_GESTE_MOTS])
+    return bool(_VERBES_DEPLACEMENT_TETE.search(tete) and _INDICE_DEPLACEMENT.search(normalise))
+
+
+# [US-212 / CA2] « les tomates cerise ont levé, 12 plants » : le verbe de la levée tombe
+# au-delà des quatre mots de tête. Il n'annonce un geste que sous deux formes — l'auxiliaire
+# + le participe (« ont levé »), ou le mot « levée / levé » accompagné d'un nombre ou d'un
+# lot cité. « Quand lèvent les carottes ? » est une question (garde-fou en aval), et
+# « j'ai levé les paillis » n'a ni auxiliaire de levée ni nombre.
+_LEVEE_AVEC_AUXILIAIRE = re.compile(r"\b(?:ont|sont|a|est)\s+leve(?:e|s|es)?\b")
+_LEVEE_AVEC_NOMBRE = re.compile(r"\blevee?s?\b")
+_INDICE_LEVEE = re.compile(r"\d|\blot\b")
+
+
+def _est_levee_dictee(texte: str) -> bool:
+    normalise = _ESPACES_ROUTEUR.sub(" ", _NON_ALPHANUM_ROUTEUR.sub(" ", unidecode((texte or "").strip().lower()))).strip()
+    if _LEVEE_AVEC_AUXILIAIRE.search(normalise):
+        return True
+    return bool(_LEVEE_AVEC_NOMBRE.search(normalise) and _INDICE_LEVEE.search(normalise))
+
+
 def _regle_par_geste(texte: str) -> Optional[str]:
     """[Action 0] ACTION si l'un des premiers mots nomme un geste de jardinage.
 
@@ -394,7 +431,21 @@ def _regle_par_geste(texte: str) -> Optional[str]:
     gardent la priorité, mais AVANT les marqueurs DATA et le catalogue.
     """
     tete = " ".join(unidecode((texte or "").strip().lower()).split()[:_FENETRE_GESTE_MOTS])
-    return NATURE_ACTION if tete and _MOTIF_GESTE.search(tete) else None
+    if tete and _MOTIF_GESTE.search(tete):
+        return NATURE_ACTION
+    if _est_deplacement_familier(texte):
+        return NATURE_ACTION
+    return NATURE_ACTION if _est_levee_dictee(texte) else None   # [US-212]
+
+
+def annonce_un_geste(texte: str) -> bool:
+    """Vrai si la phrase s'ouvre sur un geste de jardinage (« plantation 9 plants
+    de tomate le 15/05 ») et n'est pas une question. Sert à l'interpréteur de
+    commandes (US-172) pour NE PAS soumettre une saisie au modèle comme une
+    commande : relevé du 07/10/2026, une plantation dictée partait en
+    /confiance, quantité, variété et date perdues."""
+    t = (texte or "").strip()
+    return not t.endswith("?") and _regle_par_geste(t) == NATURE_ACTION
 
 
 def _regle_par_mots_cles(texte: str) -> Optional[str]:

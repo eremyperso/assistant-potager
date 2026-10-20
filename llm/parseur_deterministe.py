@@ -49,6 +49,7 @@ from unidecode import unidecode
 
 from app.services.context import TenantContext
 from utils.actions import ACTION_MAP
+from utils.unites_implantation import GESTES_IMPLANTATION
 from utils.date_utils import (
     ANCRAGE_INCONNU,
     ANCRAGE_RESOLU,
@@ -119,6 +120,7 @@ GESTES_EXIGEANT_CULTURE: frozenset[str] = frozenset({
 # c'est le défaut posé par `_normalize_unite_semis`.
 GESTES_DENOMBREMENT_IMPLICITE: frozenset[str] = frozenset({
     "plantation", "recolte", "perte", "perte_godet", "vendu",
+    "levee",   # [US-212] « levée du lot 128 : 40 » compte des plants levés
 })
 
 # Fenêtre de tête où le geste est cherché — même raison et même valeur que
@@ -142,13 +144,18 @@ _UNITES: dict[str, str] = {
     "plant": "plants", "plants": "plants", "plante": "plants", "plantes": "plants",
     "pied": "plants", "pieds": "plants",
     "m2": "m²",
+    # [US-199 / CA1] Unités d'implantation. Les formes à plusieurs mots (« mètres
+    # de rang », « mètres carrés ») et celles qui dépendent du geste (« touffe »,
+    # « mètre » seul) sont ramenées à ces jetons par `_regrouper_unites_implantation`.
+    "poquet": "poquets", "poquets": "poquets",
+    "ml": "ml",
 }
 
 # Mots vides : présents dans la phrase, porteurs d'aucune information de champ.
 # Liste CLOSE — c'est elle qui rend la règle « tout expliquer » tenable.
 _MOTS_VIDES: frozenset[str] = frozenset({
     "de", "du", "des", "d", "l", "la", "le", "les", "a", "au", "aux", "en",
-    "et", "sur", "dans", "pour", "avec", "mes", "mon", "ma", "ce", "cet",
+    "et", "sur", "dans", "sous", "pour", "avec", "mes", "mon", "ma", "ce", "cet",
     "cette", "ces", "j", "ai", "je", "on", "nous", "il", "y", "s",
     "que", "qui", "effectue", "effectuee", "effectues", "effectuees",
     "fait", "faite", "faits", "faites", "total", "totale", "environ",
@@ -162,14 +169,43 @@ _MOTS_VIDES: frozenset[str] = frozenset({
 
 # Marqueurs de parcelle : le nom qui suit est résolu contre les parcelles
 # réelles du potager, jamais créé (CA4).
-_MARQUEURS_PARCELLE: frozenset[str] = frozenset({"parcelle", "parcelles", "carre", "planche", "serre"})
+_MARQUEURS_PARCELLE: frozenset[str] = frozenset({"parcelle", "parcelles", "carre", "planche", "serre", "chassis"})
+
+# [US-211 / CA2] Tournures familières du déplacement d'un lot (« passé le lot 119 au
+# châssis », « sorti les poireaux de la serre pour le châssis »). Trop ambiguës pour
+# être des variantes d'ACTION_MAP (« sorti les tomates » peut vouloir dire les planter) :
+# elles ne valent déplacement que devant une pépinière de destination.
+_VERBES_DEPLACEMENT_FAMILIERS: frozenset[str] = frozenset({
+    "passe", "passes", "passee", "passees", "passer",
+    "sorti", "sortis", "sortie", "sorties", "sortir",
+    "rentre", "rentres", "rentree", "rentrees", "rentrer",
+})
+# Mots qui nomment ce qu'on déplace sans rien ajouter : le lot est désigné par son
+# numéro ou sa culture, jamais par ces mots.
+_MOTS_OBJET_DEPLACEMENT: frozenset[str] = frozenset({
+    "godet", "godets", "plant", "plants", "plantule", "plantules",
+})
+_INTRODUCTEURS_ORIGINE: frozenset[str] = frozenset({"de", "du", "d"})
+
+# [US-212 / CA2] La levée se dit aussi avec le verbe, loin de la tête de phrase : « les
+# tomates cerise ont levé, 12 plants ». Le verbe est cherché dans TOUTE la phrase quand
+# aucun geste n'est apparu en tête, avec son auxiliaire (« ont », « sont »), qui part avec
+# lui. « Terminée » en fait une levée close. Une phrase où le verbe est suivi de mots que
+# la grammaire n'explique pas (« j'ai levé les paillis ») part au modèle comme les autres.
+_FORMES_LEVEE: frozenset[str] = frozenset({"leve", "leves", "levee", "levees", "levent"})
+_AUXILIAIRES_LEVEE: frozenset[str] = frozenset({"ont", "sont", "est", "a"})
+_MOTS_LEVEE_TERMINEE: frozenset[str] = frozenset({
+    "terminee", "termine", "terminees", "termines", "finie", "fini", "finies", "finis",
+    "achevee", "acheve",
+})
 
 # Vocabulaire de rangs : le partage quantité/rang est justement l'ambiguïté que
 # le modèle signale par `action="AMBIGUE"`. La grammaire ne tranche pas.
 _MOTS_RANG: frozenset[str] = frozenset({
     "rang", "rangs", "rangee", "rangees", "range", "ranges", "ranger", "rangers",
-    "ilot", "ilots", "poquet", "poquets", "barquette", "barquettes",
+    "ilot", "ilots", "barquette", "barquettes",
 })
+# [US-199] « poquet(s) » n'est plus du vocabulaire de rangs : c'est une unité.
 
 # Articles indéfinis : nombres en toutes lettres, mais bien plus souvent de
 # simples déterminants. Ils ne valent « 1 » que collés à une unité (« un kilo »).
@@ -250,6 +286,99 @@ def _extraire_geste(mots: list[str]) -> tuple[Optional[str], list[str]]:
     return None, mots
 
 
+def _extraire_geste_levee(mots: list[str]) -> tuple[bool, list[str]]:
+    """[US-212 / CA2] Cherche « levé / levée / ont levé » n'importe où dans la phrase.
+    Retourne (trouvé, mots sans le verbe ni son auxiliaire)."""
+    for i, mot in enumerate(mots):
+        if mot not in _FORMES_LEVEE:
+            continue
+        debut = i - 1 if i >= 1 and mots[i - 1] in _AUXILIAIRES_LEVEE else i
+        return True, mots[:debut] + mots[i + 1:]
+    return False, mots
+
+
+def _extraire_geste_deplacement_familier(mots: list[str]) -> tuple[bool, list[str]]:
+    """[US-211 / CA2] « passé », « sorti », « rentré » en tête de phrase : le verbe est
+    retiré et la phrase est lue comme un déplacement candidat. Retourne (trouvé, mots)."""
+    tete = mots[:_FENETRE_GESTE_MOTS]
+    for i, mot in enumerate(tete):
+        if mot in _VERBES_DEPLACEMENT_FAMILIERS:
+            return True, mots[:i] + mots[i + 1:]
+    return False, mots
+
+
+def _godets_deplaces(mots: list[str]) -> bool:
+    """[US-241 / CA2] « passé 6 godets du lot 21 au châssis » : un verbe familier de
+    déplacement EN TÊTE, suivi de « godet(s) » qui n'est pas « en godet ». Sans ce
+    contrôle, « godets » est lu comme le geste « mise en godet » et le verbe reste sans
+    rôle. « passé 20 poireaux en godet » reste une mise en godet."""
+    if not mots or mots[0] not in _VERBES_DEPLACEMENT_FAMILIERS:
+        return False
+    tete = mots[:_FENETRE_GESTE_MOTS + 1]
+    return any(
+        m in ("godet", "godets") and (i == 0 or tete[i - 1] != "en")
+        for i, m in enumerate(tete)
+    )
+
+
+def _origine_citee(mots: list[str]) -> bool:
+    """Le premier marqueur de parcelle est-il introduit par « de / du / de la » ?
+    « sorti les poireaux de la serre pour le châssis » : la serre est l'ORIGINE."""
+    for i, mot in enumerate(mots):
+        if mot not in _MARQUEURS_PARCELLE_DEPLACEMENT:
+            continue
+        if i >= 1 and mots[i - 1] in _INTRODUCTEURS_ORIGINE:
+            return True
+        return i >= 2 and mots[i - 1] in ("la", "le", "l") and mots[i - 2] in _INTRODUCTEURS_ORIGINE
+    return False
+
+
+_METRES = frozenset({"metre", "metres"})
+_CARRES = frozenset({"carre", "carres"})
+
+
+def _regrouper_unites_implantation(mots: list[str], geste: str) -> list[str]:
+    """[US-199 / CA1, CA3] Ramène à un seul jeton les unités dites en plusieurs
+    mots, avant que « rang » ne déclenche le repli et que « carré » ne soit lu
+    comme un marqueur de parcelle :
+
+    * « mètres carrés » → ``m2`` (une surface, quel que soit le geste) ;
+    * « mètres de rang / de ligne / linéaires » → ``ml`` ;
+    * « mètre » seul, derrière un nombre, dans un semis ou une plantation → ``ml`` ;
+    * « touffe » / « trou », derrière un nombre, dans un semis ou une plantation
+      → ``poquet`` (« une touffe de mauvaises herbes » n'est pas un geste).
+    """
+    sortie: list[str] = []
+    i = 0
+    en_implantation = geste in GESTES_IMPLANTATION
+    while i < len(mots):
+        mot = mots[i]
+        suite = mots[i + 1:i + 3]
+        apres_nombre = bool(sortie) and (
+            re.fullmatch(r"\d+(?:\.\d+)?", sortie[-1]) is not None or sortie[-1] in NOMBRES_LETTRES
+        )
+        if mot in _METRES or (mot == "m" and apres_nombre):
+            if suite[:1] and suite[0] in _CARRES:
+                sortie.append("m2")
+                i += 2
+                continue
+            if suite[:2] in (["de", "rang"], ["de", "ligne"]) or (suite[:1] and suite[0] in {"lineaire", "lineaires"}):
+                sortie.append("ml")
+                i += 3 if suite[:1] == ["de"] else 2
+                continue
+            if en_implantation and apres_nombre:
+                sortie.append("ml")
+                i += 1
+                continue
+        elif mot in {"trou", "trous", "touffe", "touffes"} and en_implantation and apres_nombre:
+            sortie.append("poquet")
+            i += 1
+            continue
+        sortie.append(mot)
+        i += 1
+    return sortie
+
+
 def _extraire_nombres(mots: list[str]) -> tuple[list[tuple[int, float]], list[str]]:
     """Repère les nombres exploitables. Retourne [(position, valeur)] et les mots.
 
@@ -269,7 +398,19 @@ def _extraire_nombres(mots: list[str]) -> tuple[list[tuple[int, float]], list[st
     return trouves, mots
 
 
-def _extraire_parcelle(mots: list[str], cultures: dict[str, str]) -> tuple[Optional[str], list[str], bool]:
+# [US-211] Un déplacement nomme sa destination « à la pépinière froide » : le mot
+# « pépinière » est alors un marqueur, et fait partie du nom comme « châssis ».
+_MARQUEURS_PARCELLE_DEPLACEMENT: frozenset[str] = _MARQUEURS_PARCELLE | {"pepiniere", "pepinieres"}
+_MARQUEURS_DANS_LE_NOM: frozenset[str] = frozenset({"chassis", "pepiniere", "pepinieres"})
+# Un déplacement dit aussi « à la serre extérieure » : « serre » fait alors partie du nom.
+_MARQUEURS_DANS_LE_NOM_DEPLACEMENT: frozenset[str] = _MARQUEURS_DANS_LE_NOM | {"serre"}
+
+
+def _extraire_parcelle(
+    mots: list[str], cultures: dict[str, str],
+    marqueurs: frozenset[str] = _MARQUEURS_PARCELLE,
+    dans_le_nom: frozenset[str] = _MARQUEURS_DANS_LE_NOM,
+) -> tuple[Optional[str], list[str], bool]:
     """Extrait le libellé de parcelle cité. Retourne (libellé, restants, cité).
 
     `cité` distingue « aucune parcelle dans la phrase » (le potager en déduira
@@ -277,9 +418,11 @@ def _extraire_parcelle(mots: list[str], cultures: dict[str, str]) -> tuple[Optio
     elle DOIT résoudre, sinon la phrase part au repli (CA4).
     """
     for i, mot in enumerate(mots):
-        if mot not in _MARQUEURS_PARCELLE:
+        if mot not in marqueurs:
             continue
-        libelle: list[str] = []
+        # [US-210 / CA1] « châssis » est déjà une partie du nom (« châssis froid ») :
+        # « sous le châssis froid » désigne la pépinière, pas un marqueur muet.
+        libelle: list[str] = [mot] if mot in dans_le_nom else []
         j = i + 1
         while j < len(mots):
             suivant = mots[j]
@@ -288,7 +431,7 @@ def _extraire_parcelle(mots: list[str], cultures: dict[str, str]) -> tuple[Optio
             # « parcelle planche ombre » : le second marqueur fait partie du
             # nom, il ne le termine pas — il ne l'interrompt qu'une fois le
             # libellé commencé (« planche ombre parcelle … »).
-            if suivant in _MARQUEURS_PARCELLE and libelle:
+            if suivant in marqueurs and libelle:
                 break
             if _singulier(suivant) in cultures or suivant in cultures:
                 break
@@ -376,6 +519,13 @@ def parser_saisie(
     if not texte or not texte.strip():
         return _repli("texte vide", texte)
 
+    # [US-209 / CA5] « lot 128 », « #128 » : la référence à un lot de pépinière se
+    # lit ICI, avant la normalisation qui effacerait le « # » et laisserait le
+    # numéro passer pour une seconde quantité. Elle n'a de sens que pour un geste
+    # de pépinière (vérifié plus bas) ; ailleurs la phrase part au modèle.
+    from app.services.lots_pepiniere import ACTIONS_AVEC_LOT, extraire_reference_lot
+    texte, numero_lot_cite = extraire_reference_lot(texte)
+
     normalise = _normaliser(texte)
     if not normalise:
         return _repli("texte sans contenu exploitable", texte)
@@ -399,9 +549,51 @@ def parser_saisie(
     mots = normalise.split()
 
     # ── 2. Geste (CA1) ───────────────────────────────────────────────────────
-    geste, mots = _extraire_geste(mots)
+    # [US-241 / CA2] « passé 6 godets du lot 21 au châssis » : le verbe en tête prime
+    # sur « godets », qui serait sinon lu comme une mise en godet.
+    deplacement_familier = _godets_deplaces(mots)
+    if deplacement_familier:
+        geste, mots = "deplacement", mots[1:]
+    else:
+        geste, mots = _extraire_geste(mots)
+    # [US-211 / CA2] « passé / sorti / rentré » : déplacement candidat, jamais sûr.
+    if geste is None:
+        deplacement_familier, mots = _extraire_geste_deplacement_familier(mots)
+        if deplacement_familier:
+            geste = "deplacement"
+    if geste is None:
+        # [US-212 / CA2] « les tomates cerise ont levé, 12 plants » : le verbe n'est pas en tête.
+        levee_trouvee, mots = _extraire_geste_levee(mots)
+        if levee_trouvee:
+            geste = "levee"
     if geste is None:
         return _repli("aucun geste reconnu en tête de phrase", texte)
+    # [US-212] « levée terminée » : la levée est close. Le mot ne compte qu'avec une levée.
+    levee_terminee = False
+    if geste == "levee":
+        levee_terminee = any(m in _MOTS_LEVEE_TERMINEE for m in mots)
+        mots = [m for m in mots if m not in _MOTS_LEVEE_TERMINEE]
+        # « les carottes ont levé » : l'auxiliaire reste quand le verbe était en tête de fenêtre.
+        # « est » ne part qu'avec « terminée » (« la levée est terminée ») : sinon c'est un point cardinal.
+        retirables = {"ont", "sont"} | ({"est"} if levee_terminee else set())
+        mots = [m for m in mots if m not in retirables]
+    if geste == "deplacement":
+        mots = [m for m in mots if m not in _MOTS_OBJET_DEPLACEMENT]
+
+    # [US-209 / CA5] « repiqué 40 plants du lot 128 en godet » : la grammaire lit
+    # « repiqué » comme une plantation ; c'est « en godet » qui en fait une mise en
+    # godet. La tournure part avec le geste qu'elle a requalifié.
+    if numero_lot_cite is not None and geste == "plantation":
+        for i in range(len(mots) - 1):
+            if mots[i] == "en" and mots[i + 1] in ("godet", "godets"):
+                geste = "mise_en_godet"
+                mots = mots[:i] + mots[i + 2:]
+                break
+
+    if numero_lot_cite is not None and geste not in ACTIONS_AVEC_LOT:
+        return _repli("référence de lot hors geste de pépinière", texte)
+
+    mots = _regrouper_unites_implantation(mots, geste)
 
     if any(m in _MOTS_RANG for m in mots):
         return _repli("vocabulaire de rangs — partage quantité/rang ambigu", texte)
@@ -425,19 +617,50 @@ def parser_saisie(
         cultures = _index_cultures(cultures_connues(db, ctx.potager_id))
 
         # ── 3. Parcelle (CA3, CA4) ───────────────────────────────────────────
-        libelle_parcelle, mots, parcelle_citee = _extraire_parcelle(mots, cultures)
+        # [US-211] Une origine dite (« de la serre ») n'est pas la destination.
+        # [US-241 / CA3] Elle est gardée (`parcelle_origine`) : d'un lot réparti entre
+        # plusieurs pépinières, c'est elle qui dit d'où partent les godets.
+        marqueurs = _MARQUEURS_PARCELLE_DEPLACEMENT if geste == "deplacement" else _MARQUEURS_PARCELLE
+        dans_nom = _MARQUEURS_DANS_LE_NOM_DEPLACEMENT if geste == "deplacement" else _MARQUEURS_DANS_LE_NOM
+        origine_nom: Optional[str] = None
+        if geste == "deplacement" and _origine_citee(mots):
+            libelle_origine, mots, _ = _extraire_parcelle(mots, cultures, marqueurs, dans_nom)
+            if libelle_origine:
+                from utils.parcelles import resolve_pepiniere_par_type
+                p_origine = (
+                    resolve_parcelle(db, libelle_origine, potager_id=ctx.potager_id)
+                    or resolve_pepiniere_par_type(db, libelle_origine, ctx.potager_id)
+                )
+                if p_origine is None:
+                    return _repli(f"pépinière d'origine inconnue du potager : {libelle_origine!r}", texte)
+                origine_nom = p_origine.nom
+        libelle_parcelle, mots, parcelle_citee = _extraire_parcelle(mots, cultures, marqueurs, dans_nom)
         parcelle_nom: Optional[str] = None
         if parcelle_citee:
             if not libelle_parcelle:
                 return _repli("parcelle citée sans nom exploitable", texte)
             parcelle = resolve_parcelle(db, libelle_parcelle, potager_id=ctx.potager_id)
+            if parcelle is None and geste == "deplacement":
+                from utils.parcelles import resolve_pepiniere_par_type
+                parcelle = resolve_pepiniere_par_type(db, libelle_parcelle, ctx.potager_id)   # [US-211]
             if parcelle is None:
                 return _repli(f"parcelle inconnue du potager : {libelle_parcelle!r}", texte)
             parcelle_nom = parcelle.nom
+            if geste == "deplacement" and deplacement_familier and not parcelle.est_pepiniere                     and numero_lot_cite is None:
+                # [US-211 / vigilance] « sorti les tomates dans la planche nord » :
+                # sans pépinière de destination, ce n'est pas un déplacement.
+                return _repli("« sorti / passé » sans pépinière de destination", texte)
+
+        if geste == "deplacement" and parcelle_nom is None and (deplacement_familier or numero_lot_cite is None):
+            # [US-241 / CA12, CA14] « déplacement du lot 26 » : le verbe explicite et le lot
+            # cité suffisent, le compagnon demande la destination. Un verbe familier sans
+            # pépinière (« sorti les tomates ») reste ambigu : il part au modèle.
+            return _repli("déplacement sans pépinière de destination nommée", texte)
 
         # ── 4. Quantités et unités ───────────────────────────────────────────
         nb_graines_semees: Optional[int] = None
-        if geste == "mise_en_godet":
+        if geste in ("mise_en_godet", "levee"):
+            # « 40 choux levés sur 48 » : le nombre derrière « sur » est ce qui a été semé.
             mots, nb_graines_semees = _detacher_graines_semees(mots)
 
         nombres, mots = _extraire_nombres(mots)
@@ -468,9 +691,15 @@ def parser_saisie(
         culture, mots, nb_cultures = _extraire_culture(mots, cultures)
         if culture is None and nb_cultures > 1:
             return _repli("plusieurs cultures dans la phrase", texte)
-        if culture is None and geste in GESTES_EXIGEANT_CULTURE:
+        # [US-209 / CA5] Un lot cité porte sa culture : « repiqué 40 plants du lot 128 »
+        # ne la redit pas, c'est la résolution du lot (au récapitulatif) qui la fournit.
+        if culture is None and geste in GESTES_EXIGEANT_CULTURE and numero_lot_cite is None:
             return _repli("culture absente ou inconnue du potager", texte)
-        if culture is None and parcelle_nom is None:
+        if culture is None and geste == "deplacement" and numero_lot_cite is None:
+            return _repli("déplacement sans lot ni culture identifiés", texte)
+        if culture is None and geste == "levee" and numero_lot_cite is None:
+            return _repli("levée sans lot ni culture identifiés", texte)   # [US-212]
+        if culture is None and parcelle_nom is None and numero_lot_cite is None:
             return _repli("ni culture ni parcelle identifiées", texte)
 
         variete: Optional[str] = None
@@ -511,6 +740,15 @@ def parser_saisie(
 
     if contexte_semis is not None:
         item["contexte_semis"] = contexte_semis
+
+    if numero_lot_cite is not None:
+        item["numero_lot_cite"] = numero_lot_cite   # [US-209 / CA5] résolu au récapitulatif
+
+    if geste == "deplacement" and origine_nom is not None:
+        item["parcelle_origine"] = origine_nom   # [US-241 / CA3] d'où partent les godets
+
+    if geste == "levee" and levee_terminee:
+        item["levee_terminee"] = True   # [US-212] la levée est déclarée terminée
 
     if geste == "mise_en_godet":
         # Une mise en godet compte des plants repiqués, jamais une quantité

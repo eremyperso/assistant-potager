@@ -62,6 +62,11 @@ def _variantes_pluriel(mot: str) -> set[str]:
         candidats.add(mot[:-2])
     elif mot.endswith("s"):
         candidats.add(mot[:-1])
+    # Pluriel en « x » : chou / choux, haricot vert… (« choux » n'est pas « chous »).
+    if mot.endswith("x") and len(mot) > 3:
+        candidats.add(mot[:-1])
+    else:
+        candidats.add(mot + "x")
     return candidats
 
 
@@ -102,7 +107,10 @@ _ANCRES_UNITE_SEMIS: dict[str, tuple[str, ...]] = {
         "pied", "pieds", "plant", "plants", "plante", "plantes",
         "plantule", "plantules", "poquet", "poquets",
     ),
-    "m²": ("metre", "metres", "carre", "carres"),
+    # [US-199 / CA3] « mètre » seul n'ancre plus une surface : c'est un mètre de rang.
+    "m²": ("carre", "carres"),
+    "poquets": ("poquet", "poquets", "trou", "trous", "touffe", "touffes"),
+    "ml": ("ml", "metre", "metres", "m", "lineaire", "lineaires"),
 }
 
 
@@ -131,6 +139,9 @@ def unite_semis_ancree_dans_texte(unite_canonique: str, texte_original: str) -> 
         return True
 
     mots_texte = {_normalise_mot(m) for m in re.findall(r"[^\W\d_]+", texte_norm, flags=re.UNICODE)}
+    # [US-199 / CA3] « 2 mètres carrés » est une surface, jamais un mètre de rang.
+    if unite_canonique == "ml" and mots_texte & {"carre", "carres"}:
+        return False
     return bool(set(_ANCRES_UNITE_SEMIS.get(unite_canonique, ())) & mots_texte)
 
 
@@ -143,6 +154,10 @@ def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     Ne bloque jamais l'action entière : seule la culture non fondée est retirée.
     """
     culture = parsed.get("culture")
+    # [US-209] Culture reprise du lot cité ("repiqué 5 plants du lot 4") : elle vient
+    # de la base, pas du modèle, et n'a pas à figurer dans la phrase.
+    if parsed.get("_lot_numero") is not None:
+        return parsed
     if culture and not culture_grounded_dans_texte(culture, texte_original):
         parsed = dict(parsed)
         parsed["culture"] = None

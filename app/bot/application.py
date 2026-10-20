@@ -23,7 +23,9 @@ from .liaison import (
 )
 from .enregistrement import _action_confirm_cb
 from .file_gestes import cmd_gestes, file_cb, job_file_gestes  # [US-224]
-from .godets import _godet_graines_cb, _godet_lot_cb, _godet_variete_cb
+from .godets import (
+    _deplacement_lot_cb, _levee_detail_cb, _levee_lot_cb, _godet_graines_cb, _godet_lot_cb, _godet_plants_cb, _godet_variete_cb, cmd_lot,
+)
 from .pertes import _handle_perte_callback, _vendu_variete_cb
 from .notes import _note_confirm_cb, _note_start
 from .interpretation import _interp_cb
@@ -176,6 +178,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
     _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
     _enregistrer_commande(app, "gestes",     cmd_gestes)  # [US-224]
+    _enregistrer_commande(app, "lot",        cmd_lot)  # [US-209]
     _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
     _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
@@ -208,8 +211,13 @@ def _construire_application() -> "Application":
     # [fix rattachement lot godet] Motif distinct de "^godet_" (pas d'underscore
     # après "godet") — les deux handlers ne se recouvrent jamais.
     app.add_handler(CallbackQueryHandler(_godet_lot_cb, pattern=r"^godetlot"))
+    app.add_handler(CallbackQueryHandler(_deplacement_lot_cb, pattern=r"^depl(ot|orig|dest)"))   # [US-211, US-241]
+    app.add_handler(CallbackQueryHandler(_levee_lot_cb, pattern=r"^levlot"))   # [US-212]
+    app.add_handler(CallbackQueryHandler(_levee_detail_cb, pattern=r"^levdet"))   # [US-212]
     # [US-066] Motif également disjoint de "^godet_" et de "^godetlot".
     app.add_handler(CallbackQueryHandler(_godet_graines_cb, pattern=r"^godetgraines"))
+    # [US-224] « Tout le lot » d'une mise en godet de la file — disjoint des trois autres.
+    app.add_handler(CallbackQueryHandler(_godet_plants_cb, pattern=r"^godetplants"))
 
     # Sélection variété récolte — boutons inline
     app.add_handler(CallbackQueryHandler(_recolte_variete_cb, pattern=r"^recolte_"))

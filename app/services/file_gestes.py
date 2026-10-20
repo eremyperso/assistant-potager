@@ -120,7 +120,37 @@ ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRME, ETAT_ABANDONNE, ETAT_PERIME)
 #: (« paillage parcelle planche_centrale »), et ils n'ont ni texte libre ni
 #: produit à identifier. La liste reste celle du DOMAINE : elle est importée de
 #: `evenements.GESTES_SOL`, jamais recopiée.
-GESTES_OUVERTS_PWA: tuple[str, ...] = ("semis", "plantation") + GESTES_SOL
+#:
+#: [US-211 / CA9] Le déplacement d'un lot rejoint la liste : la grammaire le reconnaît
+#: (« deplacement de poireau parcelle châssis froid », et « passé le lot 119 au châssis
+#: froid » pour la dictée) et il n'a ni texte libre ni produit à identifier. Le lot
+#: déplacé voyage dans `_lot_id` (son semis) et n'entre dans le flux qu'à la
+#: frontière d'`item_du_geste`, sous le nom que le service connaît.
+#:
+#: [US-216 / CA8, CA9] Les gestes de la fiche d'un lot rejoignent la liste : repiquer
+#: (`mise_en_godet`), déclarer une perte (`perte_godet`) et clôturer le lot
+#: (`cloture_lot`). Tous se disent avec « du lot N » et n'ont ni texte libre ni produit
+#: à identifier.
+#:
+#: [US-212 / CA11] La levée d'un lot rejoint la liste : « levée du lot 128 : 40 » est lue par
+#: la grammaire déterministe, et le compteur de la fiche du lot (US-216) préremplit le nombre.
+GESTES_OUVERTS_PWA: tuple[str, ...] = (
+    "semis", "plantation", "deplacement", "mise_en_godet", "perte_godet", "cloture_lot", "levee",
+) + GESTES_SOL
+
+#: [US-216] Gestes qui portent sur UN lot : le lot voyage dans l'item sous la forme que
+#: la grammaire du bot lit déjà (`numero_lot_cite`, US-209), résolue au récapitulatif.
+#: Le déplacement garde son chemin propre (`_lot_id`, US-211).
+GESTES_DE_LOT: tuple[str, ...] = ("plantation", "mise_en_godet", "perte_godet", "cloture_lot", "levee")
+
+#: [US-216] Comment un geste de lot se DIT — le début de la phrase à dicter.
+_LIBELLE_DICTEE_LOT: dict[str, str] = {
+    "plantation": "plantation",
+    "mise_en_godet": "mise en godet",
+    "perte_godet": "perte godet",
+    "cloture_lot": "cloture",
+    "levee": "levée",   # [US-212]
+}
 
 #: Écrans reconnus comme origine — champ de MESURE, jamais lu par le flux
 #: d'enregistrement. Une valeur inconnue est simplement ignorée, pas refusée :
@@ -154,6 +184,40 @@ class LotHorsPotagerError(Exception):
     def __init__(self, lot_id: Optional[int]):
         self.lot_id = lot_id
         super().__init__("Ce lot n'appartient pas au potager consulté.")
+
+
+class QuantiteSuperieureAuLotError(Exception):
+    """[INC-014] Le geste demandé dépasse ce que le lot peut encore fournir.
+
+    `disponibles` = stock restant du lot MOINS ce que d'autres gestes en attente ont déjà
+    réservé : deux dépôts de « tout le lot » ne tiennent pas dans un seul lot.
+    """
+
+    def __init__(self, disponibles: int, demandes: Optional[int] = None, reserves: int = 0,
+                 nom: str = "plant"):
+        self.disponibles = disponibles
+        self.demandes = demandes
+        self.reserves = reserves
+        pluriel = "s" if disponibles > 1 else ""
+        if disponibles <= 0:
+            reste = f" ({reserves} déjà réservé{'s' if reserves > 1 else ''} par des gestes en attente)" if reserves else ""
+            super().__init__(f"Il ne reste aucun {nom} disponible dans ce lot{reste}.")
+        else:
+            super().__init__(
+                f"Il ne reste que {disponibles} {nom}{pluriel} disponible{pluriel} dans ce lot "
+                f"({demandes} demandé{'s' if (demandes or 0) > 1 else ''})."
+            )
+
+
+class GesteDeLotDejaEnAttenteError(Exception):
+    """[INC-014] Un geste du même type attend déjà pour ce lot, et aucun nombre ne les départage."""
+
+    def __init__(self, action: Optional[str]):
+        self.action = action
+        super().__init__(
+            "Un geste identique attend déjà pour ce lot dans votre file : "
+            "confirmez-le ou retirez-le avant d'en préparer un autre."
+        )
 
 
 class CodeIntrouvableError(Exception):
@@ -294,7 +358,7 @@ def _valider_parcelle(db: Session, ctx: TenantContext, parcelle_id: Optional[int
     return parcelle.nom
 
 
-def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Optional[int]:
+def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Optional[Evenement]:
     """[CA2] Un lot de pépinière est un événement de semis du potager consulté.
 
     Rien n'en est fait ici : aucun geste ouvert à la PWA à ce stade ne porte sur
@@ -314,7 +378,7 @@ def _valider_lot(db: Session, ctx: TenantContext, lot_id: Optional[int]) -> Opti
             "[US-224 / CA2] Lot refusé : id=%s hors du potager %s", lot_id, ctx.potager_id,
         )
         raise LotHorsPotagerError(lot_id)
-    return lot.id
+    return lot
 
 
 def construire_item(
@@ -374,6 +438,95 @@ def _meme_geste(item_a: dict, item_b: dict) -> bool:
     return _cle(item_a) == _cle(item_b)
 
 
+#: [INC-014] Ce que chaque geste de lot prélève, et sur quel stock. Une plantation et une perte
+#: de godet piochent dans les MÊMES godets : leurs réservations se cumulent. Un repiquage
+#: pioche dans les graines en germination. Un déplacement et une clôture ne portent aucun
+#: nombre : un seul à la fois par lot suffit.
+_RESERVOIR_DU_GESTE: dict[str, str] = {
+    "plantation": "godets", "perte_godet": "godets", "mise_en_godet": "graines",
+}
+_CHAMP_RESERVOIR: dict[str, str] = {"godets": "stock_residuel_godet", "graines": "graines_non_soldees"}   # [US-212]
+_NOM_RESERVOIR: dict[str, str] = {"godets": "plant", "graines": "graine"}
+
+
+def _quantite_du_geste(item: dict) -> Optional[int]:
+    """Le nombre que porte un geste de lot en file (`nb_plants_godets` pour un repiquage)."""
+    brut = item.get("nb_plants_godets") if item.get("action") == "mise_en_godet" else item.get("quantite")
+    return int(brut) if brut is not None else None
+
+
+def restant_du_lot(db: Session, potager_id: int, lot_id: int, reservoir: str = "godets") -> Optional[int]:
+    """[INC-014] Godets (ou graines en germination) encore disponibles d'un lot, `None` si inconnu.
+
+    Même calcul que la pépinière (`calcul_lots_pepiniere`) : ce que l'écran affiche
+    (« 50 godets disponibles ») et ce que la file contrôle ne peuvent pas diverger.
+    """
+    from utils.stock import calcul_lots_pepiniere, graines_restantes
+
+    for lot in calcul_lots_pepiniere(db, potager_id=potager_id):
+        if lot.get("semis_id") is not None and int(lot["semis_id"]) == int(lot_id):
+            if reservoir == "graines":
+                return graines_restantes(lot)   # [US-212] jamais « en germination »
+            return int(lot.get(_CHAMP_RESERVOIR[reservoir]) or 0)
+    return None
+
+
+def plants_restants_du_lot(db: Session, potager_id: int, lot_id: int) -> Optional[int]:
+    """Godets restants d'un lot — raccourci de `restant_du_lot` pour la mise en terre."""
+    return restant_du_lot(db, potager_id, lot_id, "godets")
+
+
+def _gestes_de_lot_en_attente(
+    db: Session, user_id: int, potager_id: int, lot_id: int, maintenant: Optional[datetime] = None,
+) -> list[dict]:
+    return [
+        g.geste or {}
+        for g in lister_en_attente(db, user_id, potager_id=potager_id, maintenant=maintenant)
+        if (g.geste or {}).get("_lot_id") == int(lot_id)
+    ]
+
+
+def _controler_geste_de_lot(
+    db: Session, ctx: TenantContext, lot_id: int, geste: str, quantite: Optional[float],
+    maintenant: Optional[datetime] = None,
+) -> None:
+    """[INC-014] Refuse un geste de lot que la file ou le stock ne permettent pas.
+
+    Deux règles, valables pour la plantation, la perte, le repiquage, le déplacement et la
+    clôture — jamais « autant de gestes que de clics » :
+
+    1. **Un geste sans nombre** (déplacement, clôture, ou perte / repiquage dont le nombre
+       sera demandé par le compagnon) ne se dépose qu'une fois par lot : un second prendrait
+       le même stock que le premier, sans que personne ne sache combien.
+    2. **Un geste avec nombre** ne dépasse pas le restant du stock qu'il prélève, moins ce
+       que les gestes déjà en attente ont réservé.
+    """
+    en_attente = _gestes_de_lot_en_attente(db, ctx.user_id, ctx.potager_id, lot_id, maintenant)
+    memes = [it for it in en_attente if it.get("action") == geste]
+    if memes and (quantite is None or any(_quantite_du_geste(it) is None for it in memes)):
+        log.warning("[INC-014] Geste de lot déjà en attente : lot=%s geste=%s", lot_id, geste)
+        raise GesteDeLotDejaEnAttenteError(geste)
+
+    reservoir = _RESERVOIR_DU_GESTE.get(geste)
+    if reservoir is None or quantite is None:
+        return
+    restant = restant_du_lot(db, ctx.potager_id, lot_id, reservoir)
+    if restant is None:
+        return   # lot sans stock calculable (ex. sans semis rattaché) : rien à plafonner
+    reserves = sum(
+        _quantite_du_geste(it) or 0 for it in en_attente
+        if _RESERVOIR_DU_GESTE.get(it.get("action")) == reservoir
+    )
+    disponibles = restant - reserves
+    demandes = int(quantite)
+    if disponibles <= 0 or demandes > disponibles:
+        log.warning(
+            "[INC-014] %s refusé : lot=%s restant=%s réservés=%s demandés=%s",
+            geste, lot_id, restant, reserves, demandes,
+        )
+        raise QuantiteSuperieureAuLotError(disponibles, demandes, reserves, _NOM_RESERVOIR[reservoir])
+
+
 def deposer_geste(
     db: Session,
     ctx: TenantContext,
@@ -391,6 +544,7 @@ def deposer_geste(
     ecran: Optional[str] = None,
     aujourd_hui: Optional[_date] = None,
     maintenant: Optional[datetime] = None,
+    emplacement_id: Optional[int] = None,
 ) -> Depot:
     """[CA1, CA2, CA3, CA4] Dépose un geste dans la file, sans rien écrire d'autre.
 
@@ -401,6 +555,12 @@ def deposer_geste(
     Lève `PermissionInsuffisanteError` (lecteur), `ActionNonOuverteError`,
     `ParcelleHorsPotagerError` ou `LotHorsPotagerError` — aucune de ces erreurs
     ne laisse la moindre trace en base.
+
+    [US-241 / CA9, CA12, CA14] `emplacement_id` : la pépinière de l'étiquette d'où part
+    un geste de lot (déplacement, plantation, perte) — d'où viennent les godets d'un lot
+    réparti ; le compagnon n'a pas à la redemander. Un déplacement se dépose avec une
+    quantité et une destination (`parcelle_id`) facultatives : sans destination, le
+    compagnon la demande par boutons.
     """
     # [CA24] Garde de rôle d'abord : un lecteur ne dépose rien, pas même un
     # geste en attente. Même garde et même message que le bot (US-047). Un
@@ -415,7 +575,14 @@ def deposer_geste(
         raise ActionNonOuverteError(action)
 
     parcelle_nom = _valider_parcelle(db, ctx, parcelle_id)
-    lot = _valider_lot(db, ctx, lot_id)
+    _valider_parcelle(db, ctx, emplacement_id)   # [US-241] même contrôle d'appartenance
+    lot_evt = _valider_lot(db, ctx, lot_id)
+    lot = lot_evt.id if lot_evt is not None else None
+    if lot is not None and geste in GESTES_DE_LOT + ("deplacement",):
+        # [INC-014] Un lot ne donne pas plus qu'il ne contient, gestes en attente
+        # compris : aucun bouton de geste ne peut empiler sans limite.
+        # [US-212] Une levée se dépose sans nombre, quoi que dise le client : le bot le demande.
+        _controler_geste_de_lot(db, ctx, lot, geste, None if geste == "levee" else quantite, maintenant=maintenant)
     filiere = svc_contexte_semis.normaliser_contexte(contexte_semis) if geste == "semis" else None
 
     item = construire_item(
@@ -427,6 +594,38 @@ def deposer_geste(
         # Hors contrat du parseur : rangé à part pour que `_parse_and_save` ne
         # reçoive jamais un champ qu'il ne connaît pas (cf. `item_du_geste`).
         item["_lot_id"] = lot
+        if geste == "deplacement":
+            # [US-241 / CA14] « déplacement de 6 godets du lot 21 » : le lot cité comme le
+            # jardinier le dirait ; quantité et destination restent facultatives.
+            if lot_evt.numero_lot is not None:
+                item["numero_lot_cite"] = int(lot_evt.numero_lot)
+            if quantite is not None:
+                item["quantite"] = int(quantite)
+                item["unite"] = "godets"
+        if emplacement_id is not None and geste in ("deplacement", "plantation", "perte_godet"):
+            item["parcelle_origine_id"] = int(emplacement_id)   # [US-241 / CA9]
+        if geste in GESTES_DE_LOT:
+            # [US-216 / CA9] Le geste cite son lot comme le jardinier le dirait.
+            if lot_evt.numero_lot is not None:
+                item["numero_lot_cite"] = int(lot_evt.numero_lot)
+            if geste == "mise_en_godet":
+                # Une mise en godet compte des plants repiqués (même contrat que le parseur).
+                item["nb_plants_godets"] = int(quantite) if quantite is not None else None
+                item["quantite"] = None
+                item["unite"] = None
+            elif geste in ("plantation", "perte_godet") and quantite is not None:
+                item["unite"] = item.get("unite") or "plants"
+            elif geste == "cloture_lot":
+                # Ce que la clôture solde est relu à la confirmation, jamais proposé ici.
+                item["quantite"] = None
+                item["unite"] = None
+            elif geste == "levee":
+                # [US-212 / CA11] La PWA ne dépose que le GESTE : ni le nombre de levés ni
+                # « levée terminée » ne se saisissent à l'écran — le bot les demande, avec ce
+                # que la base sait du lot. Même règle que la clôture ; un nombre reçu d'un
+                # ancien client est ignoré.
+                item["quantite"] = None
+                item["unite"] = None
 
     instant = maintenant or datetime.utcnow()
 
@@ -671,7 +870,11 @@ def item_du_geste(geste: GesteIntention) -> dict:
     parseur : il est retiré ici, à l'unique frontière où l'item repasse dans le
     flux d'enregistrement.
     """
-    return {k: v for k, v in (geste.geste or {}).items() if not k.startswith("_")}
+    brut = geste.geste or {}
+    item = {k: v for k, v in brut.items() if not k.startswith("_")}
+    if item.get("action") == "deplacement" and brut.get("_lot_id") is not None:
+        item["origine_graines_id"] = int(brut["_lot_id"])   # [US-211 / CA9] le lot à déplacer
+    return item
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -783,6 +986,22 @@ def verifier_contexte(db: Session, geste: GesteIntention, user_id: int) -> Optio
         )
         if lot is None:
             return "le lot de pépinière de ce geste n'existe plus"
+        # [INC-014] Au moment de confirmer, le lot a pu être vidé par un geste précédent de la
+        # même file : on refuse en clair plutôt que de planter, perdre ou repiquer plus qu'il
+        # n'y a.
+        reservoir = _RESERVOIR_DU_GESTE.get(item.get("action"))
+        demandes = _quantite_du_geste(item)
+        if reservoir is not None and demandes is not None:
+            restant = restant_du_lot(db, geste.potager_id, int(lot_id), reservoir)
+            if restant is not None:
+                nom = _NOM_RESERVOIR[reservoir]
+                if restant <= 0:
+                    return f"ce lot n'a plus aucun {nom} disponible"
+                if demandes > restant:
+                    return (
+                        f"ce lot ne compte plus que {restant} {nom}(s) disponible(s) "
+                        f"({demandes} demandés)"
+                    )
 
     return None
 
@@ -911,7 +1130,32 @@ def phrase_a_dicter(item: dict) -> str:
     C'est un repli, pas un double du geste : le bouton reste le chemin normal.
     """
     geste = item.get("action") or ""
-    morceaux: list[str] = [geste]
+    morceaux: list[str] = [_LIBELLE_DICTEE_LOT.get(geste, geste)]
+    numero = item.get("numero_lot_cite")
+    if geste == "deplacement" and numero is not None:
+        # [US-241 / CA14] « déplacement de 6 godets du lot 21 parcelle châssis froid » : lue
+        # sans modèle, quantité et destination facultatives (le compagnon demande ce qui manque).
+        morceaux = ["déplacement"]
+        if item.get("quantite") is not None:
+            morceaux.append(f"de {int(item['quantite'])} godets")
+        morceaux.append(f"du lot {int(numero)}")
+        parcelle = (item.get("parcelle") or "").strip()
+        if parcelle:
+            morceaux.append(f"parcelle {parcelle.lower()}")
+        return " ".join(morceaux)
+    if geste == "levee" and numero is not None:
+        # [US-212 / CA11] « levée du lot 128 » : le seul lot, que la grammaire lit sans appel au
+        # modèle. Le nombre de levés et « terminée » ne se disent pas depuis l'écran : le bot les
+        # demande.
+        return f"levée du lot {int(numero)}"
+    # [US-216] « mise en godet 40 plants du lot 128 » : la grammaire déterministe lit
+    # le lot cité, et la culture qu'il porte n'a pas à être redite.
+    if geste in GESTES_DE_LOT and numero is not None:
+        nb = item.get("nb_plants_godets") if geste == "mise_en_godet" else item.get("quantite")
+        if nb is not None and geste != "cloture_lot":
+            morceaux.append(f"{int(nb)} plants")
+        morceaux.append(f"du lot {int(numero)}")
+        return " ".join(morceaux)
     culture = (item.get("culture") or "").strip()
     if culture:
         morceaux.append(f"de {culture.lower()}")
@@ -924,18 +1168,33 @@ def phrase_a_dicter(item: dict) -> str:
     return " ".join(morceaux)
 
 
+def echapper_markdown(texte: str) -> str:
+    """Neutralise les caractères du Markdown Telegram dans un nom saisi par l'utilisateur.
+
+    `planche_centrale` ouvre une mise en italique que rien ne referme : Telegram
+    refuse alors tout le message (« Can't parse entities ») et `/gestes` plante.
+    Les noms de parcelle, de culture et de potager sont libres — ils sont
+    échappés avant d'entrer dans un texte posté en `parse_mode="Markdown"`.
+    """
+    for car in ("_", "*", "`", "["):
+        texte = texte.replace(car, "\\" + car)
+    return texte
+
+
 def libelle_court(geste: GesteIntention) -> str:
     """[CA5] Une ligne de file : geste, culture, parcelle, date.
 
     Quatre champs, ceux que le CA5 nomme — assez pour reconnaître son geste
     dans une liste, pas assez pour croire l'avoir déjà enregistré.
+
+    Le résultat est destiné à un message Markdown : les noms y sont échappés.
     """
     item = geste.geste or {}
-    morceaux = [str(item.get("action") or "geste")]
+    morceaux = [echapper_markdown(str(item.get("action") or "geste"))]
     if item.get("culture"):
-        morceaux.append(str(item["culture"]))
+        morceaux.append(echapper_markdown(str(item["culture"])))
     if item.get("parcelle"):
-        morceaux.append(f"— {item['parcelle']}")
+        morceaux.append(f"— {echapper_markdown(str(item['parcelle']))}")
     if item.get("date"):
         morceaux.append(f"({item['date']})")
     return " ".join(morceaux)

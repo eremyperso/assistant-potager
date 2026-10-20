@@ -33,6 +33,7 @@ from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import time
 import pytest
 
 from app.services import file_gestes as svc
@@ -1085,7 +1086,7 @@ async def test_inc003_quantite_manquante_garde_le_geste_file(monkeypatch):
     geste_file = {"id": 5, "potager_id": 1, "user_id": 1, "position": 1, "total": 2}
     saisie._QUANTITE_PENDING[555] = {
         "items": [{"action": "semis", "culture": "tomate"}],
-        "texte": "semis tomate", "ts": 0, "geste_file": geste_file,
+        "texte": "semis tomate", "ts": time.time(), "geste_file": geste_file,
     }
     update = SimpleNamespace(
         message=SimpleNamespace(text="10 graines"),
@@ -1128,3 +1129,377 @@ async def test_inc003_nb_pieds_manquant_garde_le_geste_file(monkeypatch):
 
     espion.assert_awaited_once()
     assert espion.await_args.kwargs["geste_file"] == geste_file
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Mise en godet de la file — nombre de plants demandé, geste retiré de la file
+# ══════════════════════════════════════════════════════════════════════════════
+# Reproduction observée le 14/10/2026 : « Repiquer en godet » depuis la fiche d'un
+# lot dépose un geste sans nombre de plants. Le bot enregistrait le godet à
+# `nb_plants_godets = NULL` (donc sans la question « sur combien de graines ? »,
+# qui exige un nombre de plants — US-066 / CA4, et donc sans taux de germination),
+# puis le geste restait en file : il était représenté et enregistré une 2e fois.
+@pytest.mark.asyncio
+async def test_godet_de_la_file_sans_plants_demande_le_nombre():
+    from unittest.mock import patch
+    from app import bot as bot_module
+    from app.bot import saisie
+
+    uid = 777
+    saisie._QUANTITE_PENDING.pop(uid, None)
+    update = MagicMock()
+    update.effective_user.id = uid
+    update.message = AsyncMock()
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+    geste_file = {"id": 33, "potager_id": 1, "user_id": uid, "position": 1, "total": 1}
+    item = {"action": "mise_en_godet", "culture": "poireau", "date": "2026-10-14"}
+
+    try:
+        with (
+            patch("app.bot._normalize_items", side_effect=lambda items, texte: items),
+            patch("app.bot.require_role"),
+            patch("app.bot.current_context",
+                  return_value=SimpleNamespace(potager_id=1, user_id=uid)),
+        ):
+            await bot_module._parse_and_save(
+                update, "mise en godet poireau", pre_parsed_items=[item], geste_file=geste_file,
+            )
+
+        attente = saisie._QUANTITE_PENDING.get(uid)
+        assert attente is not None, (
+            "le nombre de plants doit être demandé avant tout : "
+            f"{update.message.reply_text.call_args_list}"
+        )
+        assert attente["geste_file"] == geste_file
+        assert attente["items"][0]["_geste_file"] == geste_file
+        assert "repiqués" in update.message.reply_text.call_args[0][0]
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+
+@pytest.mark.asyncio
+async def test_reponse_plants_godet_rejoint_nb_plants_godets(monkeypatch):
+    from app.bot import messages, saisie
+
+    espion = AsyncMock()
+    monkeypatch.setattr(messages, "_parse_and_save", espion)
+    monkeypatch.setattr(messages, "_verifier_liaison_ou_onboarding", AsyncMock(return_value=True))
+
+    geste_file = {"id": 33, "potager_id": 1, "user_id": 1, "position": 1, "total": 1}
+    saisie._QUANTITE_PENDING[555] = {
+        "items": [{"action": "mise_en_godet", "culture": "poireau"}],
+        "texte": "mise en godet poireau", "ts": time.time(), "geste_file": geste_file,
+    }
+    update = SimpleNamespace(
+        message=SimpleNamespace(text="30 plants", reply_text=AsyncMock()),
+        effective_user=SimpleNamespace(id=555),
+    )
+    try:
+        await messages.handle_text(update, SimpleNamespace(user_data={}))
+    finally:
+        saisie._QUANTITE_PENDING.pop(555, None)
+
+    espion.assert_awaited_once()
+    item = espion.await_args.kwargs["pre_parsed_items"][0]
+    assert item["nb_plants_godets"] == 30
+    assert "quantite" not in item
+    assert espion.await_args.kwargs["geste_file"] == geste_file
+
+
+@pytest.mark.asyncio
+async def test_save_godet_item_retire_le_geste_de_la_file(monkeypatch):
+    from app.bot import godets
+
+    confirmes, suivants = [], []
+    monkeypatch.setattr(godets, "_demander_lot_godet_si_ambigu", AsyncMock(return_value=False))
+    monkeypatch.setattr(godets, "_demander_graines_godet_si_manquant", AsyncMock(return_value=False))
+    monkeypatch.setattr(godets, "send_voice_reply", AsyncMock())
+    monkeypatch.setattr(godets, "_build_recap", lambda p, i: "recap")
+    monkeypatch.setattr(godets, "_build_recap_tts", lambda p: "recap")
+    monkeypatch.setattr(godets, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(godets.svc_evenements, "creer_evenement_godet",
+                        lambda db, ctx, parsed, texte: SimpleNamespace(id=1))
+    monkeypatch.setattr(godets, "current_context", lambda: SimpleNamespace(potager_id=1))
+    from app.services import file_gestes as svc_file
+    monkeypatch.setattr(svc_file, "confirmer", lambda g: confirmes.append(g.id))
+    from app.bot import file_gestes as bot_file
+    monkeypatch.setattr(bot_file, "proposer_suivant",
+                        AsyncMock(side_effect=lambda u, c, uid: suivants.append(uid)))
+
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(effective_message=message, effective_user=SimpleNamespace(id=1))
+    geste_file = {"id": 33, "potager_id": 1, "user_id": 1, "position": 1, "total": 1}
+    parsed = {"action": "mise_en_godet", "culture": "poireau", "nb_plants_godets": 30,
+              "_geste_file": geste_file}
+
+    await godets._save_godet_item(update, parsed, "mise en godet", SimpleNamespace(user_data={}))
+
+    assert confirmes == [33]
+    assert suivants == [1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["perte", "perte_godet"])
+async def test_save_perte_item_retire_le_geste_de_la_file(monkeypatch, action):
+    """Une perte déclarée depuis la PWA, enregistrée par le chemin direct, doit
+    quitter la file : sinon l'application la réaffiche après chaque refresh."""
+    from app.bot import pertes
+
+    confirmes, suivants = [], []
+    monkeypatch.setattr(pertes, "send_voice_reply", AsyncMock())
+    monkeypatch.setattr(pertes, "_build_recap", lambda p, i: "recap")
+    monkeypatch.setattr(pertes, "_build_recap_tts", lambda p: "recap")
+    monkeypatch.setattr(pertes, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(pertes.svc_evenements, "creer_evenement_perte",
+                        lambda db, ctx, item, texte: SimpleNamespace(id=1))
+    monkeypatch.setattr(pertes, "current_context", lambda: SimpleNamespace(potager_id=1))
+    from app.services import file_gestes as svc_file
+    monkeypatch.setattr(svc_file, "confirmer", lambda g: confirmes.append(g.id))
+    from app.bot import file_gestes as bot_file
+    monkeypatch.setattr(bot_file, "proposer_suivant",
+                        AsyncMock(side_effect=lambda u, c, uid: suivants.append(uid)))
+
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(effective_message=message, effective_user=SimpleNamespace(id=1))
+    geste_file = {"id": 41, "potager_id": 1, "user_id": 1, "position": 1, "total": 1}
+    item = {"action": action, "culture": "tomate", "quantite": 2, "_geste_file": geste_file}
+
+    await pertes._save_perte_item(update, item, "perte tomate", SimpleNamespace(user_data={}))
+
+    assert confirmes == [41]
+    assert suivants == [1]
+
+
+@pytest.mark.asyncio
+async def test_save_perte_item_sans_geste_de_file_ne_confirme_rien(monkeypatch):
+    from app.bot import pertes
+
+    confirmes = []
+    monkeypatch.setattr(pertes, "send_voice_reply", AsyncMock())
+    monkeypatch.setattr(pertes, "_build_recap", lambda p, i: "recap")
+    monkeypatch.setattr(pertes, "_build_recap_tts", lambda p: "recap")
+    monkeypatch.setattr(pertes, "SessionLocal", lambda: MagicMock())
+    monkeypatch.setattr(pertes.svc_evenements, "creer_evenement_perte",
+                        lambda db, ctx, item, texte: SimpleNamespace(id=1))
+    monkeypatch.setattr(pertes, "current_context", lambda: SimpleNamespace(potager_id=1))
+    from app.services import file_gestes as svc_file
+    monkeypatch.setattr(svc_file, "confirmer", lambda g: confirmes.append(g.id))
+
+    update = SimpleNamespace(effective_message=SimpleNamespace(reply_text=AsyncMock()),
+                             effective_user=SimpleNamespace(id=1))
+    await pertes._save_perte_item(update, {"action": "perte", "culture": "tomate"}, "perte")
+
+    assert confirmes == []
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Mise en godet de la file — le reste du lot est proposé AVEC la question
+# ══════════════════════════════════════════════════════════════════════════════
+# Constaté le 14/10/2026 : le compagnon demandait « combien de plants ? », puis,
+# la réponse donnée, révélait « il reste 50 graines non soldées » dans la question
+# suivante. Le reste est lu en base : il se propose d'emblée, et « Tout le lot »
+# solde le lot sans seconde question.
+@pytest.mark.asyncio
+async def test_godet_de_la_file_propose_le_reste_du_lot_avec_la_question(monkeypatch):
+    from datetime import datetime
+    from unittest.mock import patch
+    from app import bot as bot_module
+    from app.bot import godets, saisie
+
+    uid = 778
+    saisie._QUANTITE_PENDING.pop(uid, None)
+    lot = {"semis_id": 581, "numero_lot": 8, "date_semis": datetime(2026, 8, 15),
+           "graines_en_germination": 50, "culture": "poireau", "variete": None}
+    monkeypatch.setattr(godets, "_lot_pressenti_pour_godet", lambda parsed: lot)
+
+    update = MagicMock()
+    update.effective_user.id = uid
+    update.message = AsyncMock()
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+    geste_file = {"id": 33, "potager_id": 1, "user_id": uid, "position": 1, "total": 1}
+    item = {"action": "mise_en_godet", "culture": "poireau", "date": "2026-10-14"}
+
+    try:
+        with (
+            patch("app.bot._normalize_items", side_effect=lambda items, texte: items),
+            patch("app.bot.require_role"),
+            patch("app.bot.current_context",
+                  return_value=SimpleNamespace(potager_id=1, user_id=uid)),
+        ):
+            await bot_module._parse_and_save(
+                update, "mise en godet poireau", pre_parsed_items=[item], geste_file=geste_file,
+            )
+
+        texte = update.message.reply_text.call_args[0][0]
+        boutons = update.message.reply_text.call_args.kwargs["reply_markup"]
+        assert "il reste 50 graine(s)" in texte and "n° 8" in texte
+        assert boutons.inline_keyboard[0][0].callback_data == "godetplants_all"
+        assert "50" in boutons.inline_keyboard[0][0].text
+        assert saisie._QUANTITE_PENDING[uid]["lot_propose"] == {"semis_id": 581, "reste": 50}
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+
+@pytest.mark.asyncio
+async def test_tout_le_lot_solde_le_lot_sans_seconde_question(monkeypatch):
+    from app.bot import godets, saisie
+
+    espion = AsyncMock()
+    import app.bot.saisie as saisie_mod
+    monkeypatch.setattr(saisie_mod, "_parse_and_save", espion)
+
+    uid = 779
+    geste_file = {"id": 33, "potager_id": 1, "user_id": uid, "position": 1, "total": 1}
+    saisie._QUANTITE_PENDING[uid] = {
+        "items": [{"action": "mise_en_godet", "culture": "poireau", "_geste_file": geste_file}],
+        "texte": "mise en godet poireau", "ts": 0, "geste_file": geste_file,
+        "lot_propose": {"semis_id": 581, "reste": 50},
+    }
+    query = MagicMock(data="godetplants_all")
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=uid))
+
+    try:
+        await godets._godet_plants_cb(update, SimpleNamespace(user_data={}))
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+    item = espion.await_args.kwargs["pre_parsed_items"][0]
+    assert item["nb_plants_godets"] == 50
+    assert item["nb_graines_semees"] == 50          # lot soldé : plus de question graines
+    assert item["origine_graines_id"] == 581
+    assert espion.await_args.kwargs["geste_file"] == geste_file
+
+
+@pytest.mark.asyncio
+async def test_clavier_perime_ne_repond_pas_a_une_autre_quantite():
+    """Le bouton d'un ancien récapitulatif ne doit pas fixer la quantité d'un semis."""
+    from app.bot import godets, saisie
+
+    uid = 780
+    saisie._QUANTITE_PENDING[uid] = {
+        "items": [{"action": "semis", "culture": "tomate"}], "texte": "semis tomate", "ts": 0,
+    }
+    query = MagicMock(data="godetplants_all")
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=uid))
+    try:
+        await godets._godet_plants_cb(update, SimpleNamespace(user_data={}))
+        assert uid in saisie._QUANTITE_PENDING          # la question du semis reste posée
+        assert "plus actif" in query.edit_message_text.await_args.args[0]
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Mise en godet DICTÉE sans nombre — même exigence que pour la file
+# ══════════════════════════════════════════════════════════════════════════════
+# Constaté le 14/10/2026 : « repiquer en godet des choux du lot 5 » demandait
+# « C'est correct ? » puis écrivait un godet sans plants — lot indéterminé, rien
+# en stock. La question (avec le reste du lot en proposition) vaut aussi à la voix
+# et au clavier ; « Je ne sais pas » reste possible, mais explicite.
+@pytest.mark.asyncio
+async def test_godet_dicte_sans_plants_demande_le_nombre_et_propose_le_lot(monkeypatch):
+    from datetime import datetime
+    from unittest.mock import patch
+    from app import bot as bot_module
+    from app.bot import godets, saisie
+
+    uid = 781
+    saisie._QUANTITE_PENDING.pop(uid, None)
+    lot = {"semis_id": 558, "numero_lot": 5, "date_semis": datetime(2026, 10, 9),
+           "graines_en_germination": 40, "culture": "chou", "variete": "frisé"}
+    monkeypatch.setattr(godets, "_lot_pressenti_pour_godet", lambda parsed: lot)
+
+    update = MagicMock()
+    update.effective_user.id = uid
+    update.message = AsyncMock()
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+    item = {"action": "mise_en_godet", "culture": "chou", "variete": "frisé"}
+
+    try:
+        with (
+            patch("app.bot._normalize_items", side_effect=lambda items, texte: items),
+            patch("app.bot.require_role"),
+            patch("app.bot.current_context",
+                  return_value=SimpleNamespace(potager_id=1, user_id=uid)),
+        ):
+            await bot_module._parse_and_save(
+                update, "repiquer en godet des choux", pre_parsed_items=[item],
+            )
+
+        attente = saisie._QUANTITE_PENDING.get(uid)
+        assert attente is not None, update.message.reply_text.call_args_list
+        assert attente["godet_plants"] is True
+        assert attente["geste_file"] is None
+        assert "_geste_file" not in attente["items"][0]      # rien à retirer d'une file
+        boutons = update.message.reply_text.call_args.kwargs["reply_markup"].inline_keyboard
+        donnees = [rangee[0].callback_data for rangee in boutons]
+        assert donnees == ["godetplants_all", "godetplants_skip", "godetplants_cancel"]
+        assert boutons[2][0].text == "❌ Annuler"             # pas « dans ma file »
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+
+@pytest.mark.asyncio
+async def test_godet_dicte_avec_plants_n_est_pas_interroge():
+    from unittest.mock import patch
+    from app import bot as bot_module
+    from app.bot import saisie
+
+    uid = 782
+    saisie._QUANTITE_PENDING.pop(uid, None)
+    update = MagicMock()
+    update.effective_user.id = uid
+    update.message = AsyncMock()
+    update.message.reply_text = AsyncMock()
+    update.effective_message = update.message
+    item = {"action": "mise_en_godet", "culture": "chou", "variete": "frisé",
+            "nb_plants_godets": 30}
+    try:
+        with (
+            patch("app.bot._normalize_items", side_effect=lambda items, texte: items),
+            patch("app.bot.require_role"),
+            patch("app.bot.current_context",
+                  return_value=SimpleNamespace(potager_id=1, user_id=uid)),
+        ):
+            await bot_module._parse_and_save(
+                update, "repiquer 30 choux en godet", pre_parsed_items=[item],
+            )
+        assert uid not in saisie._QUANTITE_PENDING
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+
+@pytest.mark.asyncio
+async def test_je_ne_sais_pas_enregistre_sans_nombre_mais_ne_redemande_pas(monkeypatch):
+    from app.bot import godets, saisie
+    import app.bot.saisie as saisie_mod
+
+    espion = AsyncMock()
+    monkeypatch.setattr(saisie_mod, "_parse_and_save", espion)
+
+    uid = 783
+    saisie._QUANTITE_PENDING[uid] = {
+        "items": [{"action": "mise_en_godet", "culture": "chou"}],
+        "texte": "repiquer en godet des choux", "ts": 0, "geste_file": None,
+        "godet_plants": True,
+    }
+    query = MagicMock(data="godetplants_skip")
+    query.answer = AsyncMock()
+    query.edit_message_text = AsyncMock()
+    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=uid))
+    try:
+        await godets._godet_plants_cb(update, SimpleNamespace(user_data={}))
+    finally:
+        saisie._QUANTITE_PENDING.pop(uid, None)
+
+    item = espion.await_args.kwargs["pre_parsed_items"][0]
+    assert item["_plants_demandes"] is True       # le bloc ne se redéclenche pas
+    assert "nb_plants_godets" not in item
+    assert "sans" in query.edit_message_text.await_args.args[0]

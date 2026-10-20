@@ -15,6 +15,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import { Leaf, Sprout, Scale, AlertTriangle, FileDown, FileJson, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { formatUnite } from '../lib/plan.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import DateRefPicker from '../components/DateRefPicker.jsx'
@@ -119,7 +120,7 @@ function toExportRow(d) {
     etat:      ETAT_CONFIG[d.etat]?.l ?? d.etat,
     origine:   ORIGINE_LABELS[d.origine] ?? d.origine,
     parcelles: d.parcelles.join(' | '),
-    unites:    `${d.total_entre} ${d.unite}`,
+    unites:    `${d.total_entre} ${formatUnite(d.unite)}`,
     en_place:  d.stock_actuel,
     vendu:     d.vendu ?? '',
     perdu:     d.plants_perdus,
@@ -240,7 +241,7 @@ function ModalRecoltes({ d, onClose }) {
           </span>
           <span className="font-serif text-[15px] font-bold text-txt text-right">
             {cumuleKg > 0 && <div>{fmtKg(cumuleKg)}<em className="not-italic text-[12px] text-txt3 ml-1">kg</em></div>}
-            {cumulePieces > 0 && <div>{cumulePieces}<em className="not-italic text-[12px] text-txt3 ml-1">{enPieces[0]?.unite}</em></div>}
+            {cumulePieces > 0 && <div>{cumulePieces}<em className="not-italic text-[12px] text-txt3 ml-1">{formatUnite(enPieces[0]?.unite)}</em></div>}
           </span>
         </div>
       )}
@@ -275,7 +276,7 @@ function ModalRecoltes({ d, onClose }) {
                       <span className="absolute inset-y-0 left-0 rounded bg-amber" style={{ width: `${(e.quantite / max) * 100}%` }} />
                     </span>
                     <span className="text-right text-[13.5px] font-bold tabular-nums text-txt">
-                      {String(e.quantite).replace('.', ',')}<em className="not-italic text-[10.5px] text-txt3 ml-0.5">{e.unite}</em>
+                      {String(e.quantite).replace('.', ',')}<em className="not-italic text-[10.5px] text-txt3 ml-0.5">{formatUnite(e.unite)}</em>
                     </span>
                   </div>
                 )
@@ -351,7 +352,7 @@ function StockTableRow({ d, onOpenRec, confiances, onOpenFiche }) {
         <div className="text-[12px] text-txt2 leading-relaxed">
           {d.parcelles.length > 0 ? d.parcelles.map((p) => <div key={p}>{p}</div>) : <span className="text-txt3">—</span>}
         </div>
-        <Metric value={d.total_entre} sub={d.unite} />
+        <Metric value={d.total_entre} sub={formatUnite(d.unite)} />
         <Metric value={d.stock_actuel} />
         {d.vendu != null ? <Metric value={d.vendu} tint="violet" /> : <div />}
         <Metric value={d.plants_perdus} tint="red" />

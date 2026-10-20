@@ -22,6 +22,21 @@ export const TRI_PAR_DEFAUT = TRI_CONFIANCE
 
 export const HORS_REFERENTIEL_LIBELLE = 'Hors référentiel'
 
+export const CAUSE_HORS_HORIZON = 'hors_horizon'
+
+/**
+ * Texte du bandeau « Confiance indisponible ». Deux causes que le serveur
+ * distingue : une date de référence hors des 14 jours de prévision (la météo
+ * est lisible, ce n'est pas une panne) et une météo réellement illisible.
+ */
+export function messageConfianceIndisponible(cause) {
+  const reste = 'Frises et présence au potager restent à jour.'
+  if (cause === CAUSE_HORS_HORIZON) {
+    return `La confiance se calcule sur les 14 prochains jours à partir d’aujourd’hui : elle n’est pas évaluée pour cette date de référence, donc aucune étoile n’est affichée. ${reste}`
+  }
+  return `La météo du potager n’a pas pu être lue : aucune étoile n’est affichée. ${reste}`
+}
+
 /** [CA5 ter] `mois_zone` (1..12, clés serveur) → 0-based, dans l'ordre de `MonthStrip`. */
 const SERVEUR_VERS_FRISE = Object.freeze({
   semis_pepiniere: 'pepiniere', semis_pleine_terre: 'pleineTerre', plantation: 'plantation', recolte: 'rec',

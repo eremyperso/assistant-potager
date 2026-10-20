@@ -32,7 +32,7 @@ from sqlalchemy import case as sa_case
 from sqlalchemy.orm import Session
 
 from database.models import Evenement, Parcelle
-from utils.stock import _cutoff_dt, calcul_lots_pepiniere
+from utils.stock import _cutoff_dt, calcul_lots_pepiniere, graines_restantes
 
 log = logging.getLogger("potager")
 
@@ -418,7 +418,7 @@ def _lots_en_cours_par_parcelle(
         nom = lot.get("parcelle")
         if not nom:
             continue
-        occupe = (lot.get("graines_en_germination") or 0) > 0 or (
+        occupe = graines_restantes(lot) > 0 or (   # [US-212]
             lot.get("stock_residuel_godet") or 0
         ) > 0
         if occupe:

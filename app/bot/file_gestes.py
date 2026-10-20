@@ -176,7 +176,7 @@ async def _armer_potager(update: Update, ctx: ContextTypes.DEFAULT_TYPE, geste, 
                 "user_id=%s → potager_id=%s", user_id, geste.potager_id,
             )
             await message.reply_text(
-                f"🌻 Ce geste concerne votre potager *{nom}* — je bascule dessus.",
+                f"🌻 Ce geste concerne votre potager *{svc_file.echapper_markdown(nom)}* — je bascule dessus.",
                 parse_mode="Markdown",
             )
     except (svc_potager_actif.AucunPotagerError,

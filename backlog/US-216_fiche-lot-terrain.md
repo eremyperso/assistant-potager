@@ -25,12 +25,12 @@ Cette US crée cette **fiche du lot**, un seul composant pour les deux formes. L
 - [ ] CA4 : **Échéance** (US-214), en clair et datée, en teinte d'alerte si le lot est en retard : « En retard de 6 jours — repiquage attendu entre le 11 et le 13 septembre ». Échéance incalculable : la raison. Aucun conseil agronomique rédigé (RT2)
 - [ ] CA5 : **Traçabilité** : graines semées (prélevées au stock), levés et taux de levée (US-212), plants repiqués en godet, pertes déclarées, plants vendus, plants mis en terre, godets restants, graines encore en germination. Un tiret signifie « aucun geste de ce type », jamais zéro ; une incohérence de saisie reste visible (US-065)
 - [ ] CA6 : « **Où les mettre** » quand le lot a des godets disponibles (US-217)
-- [ ] CA7 : « **Détail du lot** » ouvre le cycle de vie existant du lot (modale d'US-061), déplacements compris (US-211)
+- [ ] CA7 : « **Détail du lot** » ouvre le cycle de vie existant du lot (modale d'US-061), déplacements compris (US-211). La **clôture** du lot y figure à sa date, au même titre qu'une mise en godet, une plantation ou une perte, avec ce qu'elle a soldé (godets, graines non levées) ; les comptages de levée aussi (US-212 / CA14). Seule la clôture du lot affiché remonte (`GET /godets/detail` → `clotures`). Un lot **terminé** (CA13), qui n'a pas d'événement propre, finit son fil par « Lot terminé » à la date de son dernier geste, la même que la fiche *(Complété le 18/10/2026 : retour PO, la clôture et la fin du lot n'apparaissaient nulle part dans le fil.)*
 
 *Les gestes*
 - [ ] CA8 : « Le geste, en un appui » : les boutons pertinents pour l'état du lot, l'**action suggérée** (US-214) en premier et en principal — *Repiquer en godet* (s'il reste des graines en germination), *Noter la levée* (si la levée n'est pas terminée ; présent une fois US-212 livrée), *Mettre en terre* (s'il reste des godets), *Déclarer une perte* (s'il reste quelque chose), *Déplacer* (si le potager compte au moins deux pépinières ; présent une fois US-211 livrée), *Clôturer* (si le lot est dormant). Le lot « godets sans semis rattaché » n'a ni *Repiquer* ni *Noter la levée*
 - [ ] CA9 : Chaque bouton prépare le geste pré-rempli (US-196) avec le lot, la culture, la variété et la date, et les quantités connues proposées (levés pour un repiquage, godets disponibles pour une mise en terre ou une clôture) ; aucune écriture dans la PWA. *Déplacer* propose les autres pépinières du potager ; *Mettre en terre* propose les suggestions d'US-217
-- [ ] CA10 : **Noter la levée** ouvre un compteur : graines semées rappelées, nombre de levés saisissable au clavier numérique **et** par boutons « − / + », prérempli au dernier comptage s'il existe, case « levée terminée ». Le taux s'affiche à mesure, avec la comparaison à la moyenne de la culture quand US-212 en rend une (« 83 % — au-dessus de la moyenne du chou dans ce potager, 75 % »). « Envoyer au compagnon » prépare le geste de levée ; le compteur n'écrit rien
+- [ ] CA10 : **Noter la levée** ouvre un compteur : graines semées rappelées, nombre de levés saisissable au clavier numérique **et** par boutons « − / + », prérempli au dernier comptage s'il existe, case « levée terminée ». Le taux s'affiche à mesure, avec la comparaison à la moyenne de la culture quand US-212 en rend une (« 83 % — au-dessus de la moyenne du chou dans ce potager, 75 % »). « Envoyer au compagnon » prépare le geste de levée ; le compteur n'écrit rien *(Révisé le 18/10/2026 par US-212 : la PWA limite la saisie. « Noter la levée » ne dépose plus que le geste avec son lot ; le compteur et la case « levée terminée » sont retirés de la fiche, et c'est le bot qui demande le nombre de levés puis « terminée ». Le scénario « compteur ouvert » de la page de contrôle devient « Noter la levée ».)*
 - [ ] CA11 : Cibles d'appui de **48 px** sur l'écran de terrain — « gants, terre, écran mouillé » (v2) ; les gestes restent atteignables sans défilement à 375 px sur un écran de 667 px de haut
 - [ ] CA12 : Un membre en lecture seule voit la fiche entière, sans gestes ni compteur (RT11)
 
@@ -89,3 +89,36 @@ Scénario: Lecture seule
 ```
 
 **Labels GitHub :** `us`, `frontend`, `pwa`, `pepiniere`, `mobile`
+
+---
+
+## ⚠️ AMENDEMENT du 19/10/2026 — la fiche du lot, porte commune des deux onglets
+
+Origine : réorganisation de la Pépinière en deux onglets, « Parcours » (US-218 réécrite) et « Lots »
+(`docs/EPIC 9-12 - PLAN CULTURES PEPINIERE/pepiniere/`, arbitrages A30 à A40). Les onglets
+« Aujourd'hui » (US-215), « Calendrier » (première version d'US-218) et « Emplacements » (US-219)
+disparaissent ; la fiche du lot devient la **seule porte des gestes** d'un lot, partagée par les deux
+onglets. Cette US reste livrée : l'amendement est **livré et testé avec US-218** (US-218 / CA28).
+
+**CA1 réécrit :**
+- [ ] CA1 : La fiche s'ouvre depuis une **étiquette** de l'onglet « Parcours » ou un lot de son **tiroir
+  des dormants** (US-218), une carte de l'onglet « Lots » (US-061), le champ « Aller au lot n° » et
+  l'adresse `/?vue=pepiniere&lot=128` (US-209, US-195), un lot de la fiche culture (US-207) et, en
+  option, le scan d'une étiquette (US-221)
+
+**CA2 précisé :** « à côté de la liste » se lit « à côté du kanban » sur l'onglet Parcours ; le seuil de
+900 px et la règle de lecture sont inchangés.
+
+**CA19 ajouté :**
+- [ ] CA19 : Quand le lot est **coupé** — graines encore en levée et godets, ou godets répartis entre
+  plusieurs pépinières (US-241) — la fiche dit, en tête, où se trouve chaque partie et à quel stade
+  (« 4 graines en levée · serre chaude », « 10 godets · serre chaude », « 6 godets · châssis froid,
+  s'endurcit sur place »), d'après les étiquettes d'US-240, sans nouvelle lecture. Un lot d'un seul
+  tenant n'affiche pas ce bloc
+
+**CA15 précisé :** la règle de choix des gestes est **aussi** celle des étiquettes de l'onglet Parcours
+(US-218 / CA14) : une seule règle, deux consommateurs. Elle gagne le cas du fragment de graines
+restantes d'un lot en partie repiqué, qui propose « Noter la levée (terminée) » (A33).
+
+Les autres CA sont **inchangés**. Dépendances ajoutées : US-218, US-240 ; US-241 pour la répartition par
+pépinière.

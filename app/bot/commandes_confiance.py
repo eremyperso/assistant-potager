@@ -136,6 +136,16 @@ def _formater_reponse(confiance: svc_confiance.Confiance, parcelle_nom: "str | N
     else:
         lignes.append(f"🌾 Récolte attendue : {svc_confiance.TIRET}")
 
+    # [US-220 / CA2, CA6] La pépinière que le moteur a choisie se nomme ; quand
+    # le potager en a de froides et d'autres, un niveau par type, en mots.
+    if confiance.pepiniere is not None and confiance.pepiniere.choisie:
+        lignes.append(f"_{_md(confiance.pepiniere.evaluation)}_")
+    if confiance.par_pepiniere:
+        lignes.append(" · ".join(
+            f"{_md(c.pepiniere.libelle_type)} {c.affichage}"
+            for c in confiance.par_pepiniere if c.pepiniere is not None
+        ))
+
     for avertissement in confiance.avertissements:
         lignes.append(f"_{_md(avertissement)}_")
     return "\n".join(lignes)

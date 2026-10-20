@@ -656,9 +656,14 @@ def client_lots():
     from app.services.context import default_context
 
     app.dependency_overrides[get_current_user_ctx] = default_context
+    from collections import defaultdict
+
+    # [US-214] Les échéances ont leur propre suite : ici, la lecture par lot seule.
+    sans_echeances = {"date_reference": None, "par_lot": defaultdict(dict), "resume": {}, "parcours": {}}
     with (
         patch("app.api.main.SessionLocal", return_value=MagicMock()),
         patch("app.services.stock.calcul_lots_pepiniere", return_value=[_LOT_MOCK]),
+        patch("app.services.echeances_lots.lire_echeances", return_value=sans_echeances),
     ):
         yield TestClient(app)
     app.dependency_overrides.clear()

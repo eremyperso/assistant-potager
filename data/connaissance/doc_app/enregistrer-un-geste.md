@@ -23,7 +23,7 @@ Un message vocal envoyé au compagnon de terrain suffit à enregistrer un geste 
 **Intention :** comprendre
 **On parle aussi de :** ce qui est compris ; champs reconnus ; quantité ; variété ; unité ; parcelle
 
-D'une phrase dictée, l'assistant tire le geste accompli, la culture concernée, la variété si elle est nommée, la quantité et son unité, la parcelle et la date. Dix-huit gestes courants sont reconnus : récolte, semis, plantation, mise en godet, arrosage, paillage, désherbage, binage, éclaircissage, taille, tuteurage, traitement, amendement, protection, observation, perte au jardin, perte en pépinière et vente de plants. Ce qui n'est pas dit n'est jamais inventé : une phrase sans quantité produit un geste sans quantité, pas un chiffre deviné.
+D'une phrase dictée, l'assistant tire le geste accompli, la culture concernée, la variété si elle est nommée, la quantité et son unité, la parcelle et la date. Vingt gestes courants sont reconnus : récolte, semis, plantation, mise en godet, déplacement d'un lot de pépinière, levée d'un lot de semis, arrosage, paillage, désherbage, binage, éclaircissage, taille, tuteurage, traitement, amendement, protection, observation, perte au jardin, perte en pépinière et vente de plants. Le déplacement (« passé le lot 119 au châssis froid », ou une partie des godets : « passé 6 godets du lot 21 au châssis froid ») ne se reconnaît que devant une pépinière nommée : « sorti les tomates » seul n'est pas un déplacement ; « déplacement du lot 26 », sans destination, l'est, et le compagnon demande où ranger le lot. La levée (« levée du lot 128 : 40 », « les tomates cerise ont levé, 12 plants », « levée terminée pour le lot 128 : 40 ») compte les plants levés d'un lot de pépinière ; elle se lit sans réfléchir longuement, ne se note que sur un lot issu d'un semis, et ne change aucun stock. Ce qui n'est pas dit n'est jamais inventé : une phrase sans quantité produit un geste sans quantité, pas un chiffre deviné.
 
 ## Rien n'est enregistré sans votre accord
 
@@ -88,3 +88,17 @@ Un écran se consulte volontiers en avant : on regarde où en sera le jardin dan
 Cette date est fixée **au moment où le geste est préparé**, et elle ne bouge plus. Un geste confirmé trois jours après avoir été préparé porte donc la date de sa préparation, pas celle de sa confirmation : c'est le jour où l'on était au potager qui compte. Le récapitulatif l'affiche en clair avant qu'on valide.
 
 Préparer un geste n'est pas le programmer : la file sert à confirmer plus tard ce qui a déjà été fait, elle ne sert pas à planifier un semis pour samedi prochain.
+
+## Dire une quantité : poquets, mètres de rang et autres unités
+
+**Intention :** comprendre
+**On parle aussi de :** poquet ; mètre de rang ; mètres linéaires ; ml ; mètre carré ; unité d'une quantité ; trou ; touffe
+
+L'unité se lit dans la phrase, sans conversion. « Semé 5 poquets de courge » s'enregistre **5 poquets** ; « semé 3 mètres de carottes » ou « 3 mètres de rang » s'enregistre **3 mètres de rang** (noté « ml »), alors que « semé 2 mètres carrés de carottes » reste une **surface** de 2 m². La différence tient au seul mot « carrés » : sans lui, un mètre est un mètre de rang. « Trou » et « touffe » valent poquet dans une phrase de semis ou de plantation uniquement. Un poquet et un mètre de rang se disent pour un semis en pleine terre, une plantation, une perte ou une récolte ; ils sont refusés pour une mise en godet et pour un semis en pépinière, qui se comptent en plants ou en graines — l'assistant le rappelle dans sa réponse. Le récapitulatif écrit l'unité en toutes lettres : « 5 poquets », « 3 m de rang ».
+
+## Dire le numéro d'un lot de pépinière dans une phrase
+
+**Intention :** procédure
+**On parle aussi de :** lot 128 ; numéro de lot dans la phrase ; #128 ; commande lot ; où en est le lot
+
+Pour les gestes de pépinière (mise en godet, perte, vente de plants, plantation), vous pouvez nommer le lot par le numéro écrit sur son étiquette : « repiqué 40 plants du lot 128 en godet ». La phrase se lit sans appel à l'intelligence artificielle, et le récapitulatif avant enregistrement rappelle le numéro du lot. Un semis en pépinière annonce de son côté le numéro qu'il vient de recevoir. Pour consulter un lot sans rien enregistrer, la commande `/lot 128` — ou la phrase « où en est le lot 128 ? » — répond immédiatement.

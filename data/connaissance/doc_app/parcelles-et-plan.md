@@ -48,6 +48,8 @@ Le plan d'occupation montre, parcelle par parcelle, les cultures encore en place
 
 Chaque culture en place porte en plus un mot qui dit où elle en est à la date consultée : **semée**, **en place** ou **en récolte**. Une culture est *semée* depuis le jour du semis et jusqu'à sa levée ; elle passe *en place* à la date de levée attendue par le calendrier, ou dès le jour de la plantation quand c'est un plant qui a été mis en terre ; elle devient *en récolte* à la première récolte notée, et le reste ensuite, même après plusieurs cueillettes. Une culture dont le calendrier ne donne aucun délai de levée reste *semée* jusqu'à sa première récolte : c'est le dernier geste réellement connu, et rien n'est supposé à sa place. La date affichée à côté du mot est celle de ce geste ; quand elle vient d'une levée attendue, elle est annoncée comme attendue, jamais comme constatée. Un semis en pépinière ou en serre n'a pas de mot : il n'est pas une culture en place au jardin. Enfin, quand plusieurs semis échelonnés se succèdent sur la même ligne, le mot est celui du plus ancien encore en place, et le nombre de séries est affiché à côté plutôt que mélangé.
 
+Ces rangs libres servent aussi à la **pépinière** : la section « Où les mettre » de la fiche d'un lot propose les parcelles qui en ont, à partir du même calcul que le plan. Les deux écrans ne peuvent donc pas dire deux choses différentes de la place qui reste.
+
 ## Renommer une parcelle sans perdre son historique
 
 **Intention :** procédure
@@ -65,9 +67,13 @@ Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun gest
 ## Déclarer une serre ou une pépinière
 
 **Intention :** procédure
-**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant
+**On parle aussi de :** serre ; châssis ; abri ; parcelle de semis ; couvert ; déclarer en le disant ; pépinière chaude ; pépinière froide ; pépinière chauffée ; mini-serre chauffante ; châssis froid ; type de pépinière
 
 Une parcelle peut être déclarée comme serre ou pépinière. Un semis qui s'y rattache reste alors un semis à couvert, en attente de repiquage, et n'est jamais compté comme une culture en place au jardin, même si le lieu est nommé. Sans cette déclaration, semer dans sa serre en la nommant reviendrait à dire qu'on a semé en pleine terre, et le stock s'en trouverait faussé dès la première barquette. La déclaration se fait aussi en une phrase — « la serre est une pépinière » — sans connaître la syntaxe attendue.
+
+Une pépinière peut en plus dire son **type** : **pépinière chaude** ou **pépinière froide**. Une pépinière chaude est chauffée ou à l'intérieur : la mini-serre chauffante de la véranda, l'étagère sous lampe du garage, où l'on démarre tôt tomates, poivrons et aubergines. Une pépinière froide ne l'est pas : le châssis au fond du jardin, où lèvent choux, poireaux et laitues, et où les plants s'endurcissent avant la mise en terre. « Chaude » veut dire chauffée, pas exposée au soleil : une serre non chauffée plein sud reste une pépinière froide la nuit. Le type se dit en une phrase — « la serre est une pépinière chaude », « le châssis est une pépinière froide », « ma mini-serre est chauffée » — ou par la commande de modification de parcelle : `pepiniere=chaude`, `pepiniere=froide`, `pepiniere=oui` pour une pépinière sans type, `pepiniere=non` pour qu'elle n'en soit plus une, ce qui retire aussi son type. Une pépinière dont le type n'a jamais été dit affiche « type non renseigné » : elle n'est jamais supposée chaude ou froide. Le type s'affiche dans la liste des parcelles, sur la carte de la pépinière dans la Vue plan et à côté de l'emplacement de chaque lot ; l'application web ne permet pas de le corriger, cela se fait au compagnon.
+
+Le type de pépinière n'est pas l'**abri** de la section suivante : l'abri module la confiance des cultures en place, le type de pépinière parle des semis sous abri. Une serre de production n'est pas une pépinière, et une pépinière chaude peut être une simple étagère d'intérieur. Pour l'instant, le type ne change aucun calcul — ni le stock, ni l'occupation, ni la confiance avant de semer ; il servira à l'endurcissement des plants, à l'onglet des emplacements de la Pépinière et à la confiance d'un semis sous abri.
 
 ## Dire qu'une parcelle est sous serre, sous tunnel, sous châssis ou paillée
 
@@ -140,6 +146,22 @@ Une parcelle pépinière ne se dessine pas en rangs de semis : sa carte est hach
 
 En haut de l'écran, la date de référence rappelle que les phases affichées sont celles de ce jour-là, jamais une projection. En bas, trois chiffres, pas un tableau de bord : la surface totale, les rangs occupés sur les rangs déclarés avec leur pourcentage, et les rangs libres parcelle par parcelle. Aucun pourcentage d'occupation en surface n'est affiché nulle part dans le Plan : l'occupation s'y dit en rangs, d'un bout à l'autre.
 
+## Ouvrir une culture, une parcelle ou la pépinière depuis la Vue plan
+
+**Intention :** agir
+**On parle aussi de :** appuyer sur un rang ; que se passe-t-il quand j'appuie sur un rang du plan ; toucher un rang ; ajouter une culture sur un rang libre ; semer en place ; planter ; fiche parcelle depuis le plan ; Journal du jour ; carte de la pépinière ; ouvrir la fiche d'une culture depuis le plan
+
+La Vue plan ne répète rien de ce que d'autres écrans disent mieux : elle **renvoie**. Il n'y a ni panneau de détail ni parcelle « sélectionnée » ; chaque appui ouvre directement sa destination.
+
+- **Un rang occupé** ouvre la **fiche de sa culture**, par-dessus la Vue plan, avec la parcelle (et le rang) en contexte. Si on ouvre ensuite la fiche calendrier depuis cette fiche, c'est la série de cette parcelle qui est mise en avant. En fermant la fiche, la Vue plan se retrouve telle qu'on l'a laissée, au même endroit de la page, et le focus revient sur le rang. La zone d'appui couvre toute la ligne du rang, au moins 44 px de haut.
+- **Un rang libre** porte la mention « ajouter une culture » et propose **Semer en place** ou **Planter**. Rien n'est enregistré par la page : le choix prépare l'action, déjà rattachée à la parcelle, dans la file du compagnon de terrain, qui demande la culture, relit et attend la confirmation. Un membre du potager en **lecture seule** ne voit pas la mention et ne peut pas appuyer sur un rang libre.
+- **« Fiche parcelle → »**, dans l'en-tête de chaque carte, ouvre l'onglet Parcelles sur cette parcelle — c'est le seul accès à la parcelle elle-même depuis la Vue plan.
+- **La carte d'une pépinière** (« Voir Pépinière → ») ouvre la Pépinière sur son onglet Ma pépinière, réduit à la ligne de cette pépinière ; la croix de la pastille rend toutes les pépinières.
+- **Les cultures non localisées** ouvrent elles aussi leur fiche, sans parcelle en contexte.
+- **« Journal du jour »**, dans la barre de l'activité Plan, à côté du sélecteur de date, ouvre le Journal filtré sur le jour affiché ; il ne dépend d'aucune sélection.
+
+La Vue plan n'est pas un éditeur : aucun zoom, aucun déplacement de la vue, aucun glisser-déposer de culture, aucun redimensionnement.
+
 ## Ouvrir une parcelle : l'onglet Parcelles
 
 **Intention :** comprendre
@@ -158,7 +180,9 @@ Les **rangs libres actionnables** ont quitté cette fiche avec les tuiles : *Sem
 **Intention :** comprendre
 **On parle aussi de :** caractéristiques d'une parcelle ; fiche d'une parcelle ; carte Caractéristiques ; non renseigné ; champ vide ; information manquante ; à compléter ; type de sol ; largeur déduite ; statut d'une parcelle ; pourquoi mon plan est incomplet
 
-Sous l'en-tête, une carte **« Caractéristiques »** rassemble tout ce que l'application sait de la parcelle elle-même : son nom, sa superficie, sa longueur, sa largeur déduite, son nombre de rangs, son exposition, son type de sol, son abri, son paillage, si elle est une pépinière et si elle est active. C'est le seul endroit où ces champs se lisent ensemble, et surtout où **ce qui manque est nommé** : un champ jamais renseigné n'est ni masqué, ni remplacé par un tiret, ni rempli d'une valeur de repli — il s'affiche en pointillés avec la mention « Non renseigné ». C'est ce qui permet enfin de comprendre pourquoi un autre écran se dégrade : « nombre de rangs non renseigné » sur la Vue plan, une confiance abaissée avant un semis, un compte de places impossible viennent tous d'un champ vide, et la fiche montre lequel.
+Sous l'en-tête, une carte **« Caractéristiques »** rassemble tout ce que l'application sait de la parcelle elle-même : son nom, sa superficie, sa longueur, sa largeur déduite, son nombre de rangs, son ensoleillement, son exposition, son type de sol, son abri, son paillage, si elle est une pépinière et si elle est active. C'est le seul endroit où ces champs se lisent ensemble, et surtout où **ce qui manque est nommé** : un champ jamais renseigné n'est ni masqué, ni remplacé par un tiret, ni rempli d'une valeur de repli — il s'affiche en pointillés avec la mention « Non renseigné ». C'est ce qui permet enfin de comprendre pourquoi un autre écran se dégrade : « nombre de rangs non renseigné » sur la Vue plan, une confiance abaissée avant un semis, un compte de places impossible viennent tous d'un champ vide, et la fiche montre lequel.
+
+**Ensoleillement et exposition sont deux informations.** L'**ensoleillement** dit combien de soleil direct la parcelle reçoit : « plein soleil » (6 h et plus de soleil direct par jour), « mi-ombre » (de 3 à 6 h) ou « ombre » (moins de 3 h). L'**exposition** est son orientation (« Sud », « Nord »…). Une planche plein sud peut être à l'ombre d'un mur ou d'une haie : l'application ne déduit donc jamais l'un de l'autre, et une parcelle existante a un ensoleillement « non renseigné » tant que vous ne l'avez pas dit. Pour le déclarer : « ensoleillement planche racines plein soleil » au compagnon, ou `/parcelle modifier racines ensoleillement=plein-soleil`, ou le champ **Ensoleillement** de la carte « Caractéristiques » (liste à trois choix, chacun avec sa définition en heures, plus « Non renseigné »). Une valeur hors liste, comme « sud », est refusée avec les trois valeurs admises. La liste de vos parcelles affiche l'ensoleillement quand il est renseigné ; propriétaire et éditeur peuvent le modifier, pas le lecteur.
 
 « Non renseigné » n'est jamais « Non ». Un jardinier qui déclare ne pas pailler dit quelque chose ; une parcelle dont la question n'a jamais été posée ne dit rien, et les deux ne se confondent pas — pour le paillage comme pour l'abri, où « Aucun » est une déclaration de plein air. La largeur, elle, n'est jamais présentée comme une valeur déclarée : elle porte la mention « déduite », et faute de superficie ou de longueur, elle dit d'où elle serait venue. Deux champs ne manquent jamais, parce qu'ils ont toujours une valeur : « Pépinière » et « Statut ». Une parcelle pépinière, enfin, n'affiche ni longueur, ni largeur, ni nombre de rangs : ces trois champs n'ont pas de sens pour elle et sont retirés de la carte, pas signalés comme manquants.
 
@@ -217,3 +241,14 @@ Une ligne porte sa date à gauche — le jour et le mois, l'année seulement si 
 La carte montre les **huit dernières** interventions ; au-delà, un lien « Tout voir » ouvre le Journal filtré sur cette parcelle et sur ces mêmes gestes. Une planche dont le sol n'a jamais rien reçu n'a pas de carte vide : elle dit « Rien d'enregistré sur le sol de cette parcelle ». Le bouton **« Ajouter »** prépare un geste avec la parcelle déjà en contexte — il n'écrit rien, c'est le compagnon qui relit et confirme —, et la phrase à dicter est proposée à côté, prête à copier : « paillage parcelle planche du nord ». Un membre en lecture seule voit la liste entière, sans le bouton.
 
 Deux catégories que l'on pourrait attendre ici **n'existent pas encore** dans l'application : l'**engrais vert** et le **travail du sol** (bêchage, grelinette). Aucun geste ne les porte aujourd'hui, et la carte n'invente pas ce qu'elle ne sait pas enregistrer.
+
+## Les trois onglets de l'activité Plan
+
+**Intention :** comprendre
+**On parle aussi de :** sous-onglets du Plan ; par quel écran s'ouvre le Plan ; Rotation à venir ; rotation grisée ; revenir au dernier écran vu
+
+L'activité Plan compte trois sous-onglets, rangés du plus large au plus détaillé : **Vue plan**, puis **Parcelles**, puis **Rotation**. Le Plan s'ouvre sur la Vue plan. Rotation reste visible mais grisée, sous le libellé « Rotation · à venir » : elle n'est pas disponible, un appui n'ouvre rien, et les lecteurs d'écran l'annoncent comme indisponible. En attendant, la rotation d'une planche se lit dans sa fiche.
+
+Quand on quitte le Plan pour une autre activité puis qu'on y revient, l'écran quitté se rouvre tel qu'on l'avait laissé, avec la planche choisie. Cette mémoire dure le temps de la session : en rouvrant l'application, le Plan repart de la Vue plan.
+
+Sous ces sous-onglets, la barre porte deux éléments identiques sur les deux écrans actifs : le **sélecteur de date de référence** et le bouton **« Journal du jour »**, qui ouvre le Journal filtré sur ce jour sans qu'aucune planche ait besoin d'être choisie. Sur un petit écran, le bouton s'abrège en « Journal ».

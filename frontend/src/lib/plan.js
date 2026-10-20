@@ -28,9 +28,16 @@ export function estEnPlants(unite) {
  * enregistrent la surface en `m2` (saisie vocale, clavier téléphone) ; la tuile
  * de culture affiche le symbole correct. C'est une **mise en forme**, pas une
  * conversion : la valeur et l'unité de saisie restent les mêmes.
+ *
+ * [US-199 / CA8] Même principe pour le mètre de rang : `ml` s'écrit « m de rang »
+ * (jamais « m² »), et le poquet garde son mot. Pour COMPARER deux unités, on
+ * n'utilise pas cette forme d'affichage mais `cleUnite` (`planVue.js`).
  */
 export function formatUnite(unite) {
-  return (unite || '').trim().toLowerCase() === 'm2' ? 'm²' : unite
+  const u = (unite || '').trim().toLowerCase()
+  if (u === 'm2') return 'm²'
+  if (u === 'ml') return 'm de rang'
+  return unite
 }
 
 /**

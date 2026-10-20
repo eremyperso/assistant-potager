@@ -95,6 +95,23 @@ test('[V6] la quantité est toujours écrite avec son unité', () => {
   assert.equal(quantiteTexte(2, 'm2'), '2 m²')
 })
 
+test('[US-199 / CA8] poquets et mètres de rang s’écrivent en toutes lettres', () => {
+  assert.equal(quantiteTexte(5, 'poquets'), '5 poquets')
+  assert.equal(quantiteTexte(1, 'poquets'), '1 poquet')
+  assert.equal(quantiteTexte(3, 'ml'), '3 m de rang')
+  assert.equal(quantiteTexte(2.5, 'ml'), '2,5 m de rang')
+  assert.equal(quantiteTexte(2, 'm2'), '2 m²')
+})
+
+test('[US-199 / CA8] à l’étroit, le mètre de rang s’abrège en « m »', () => {
+  assert.equal(quantiteTexteCourt(3, 'ml'), '3 m')
+})
+
+test('[US-199] « ml » et « m² » restent deux unités distinctes pour la comparaison', () => {
+  assert.equal(cleUnite('ml'), 'ml')
+  assert.notEqual(cleUnite('ml'), cleUnite('m²'))
+})
+
 test('[CA6] à l’étroit, l’unité s’abrège — le mot complet reste ailleurs', () => {
   assert.equal(quantiteTexteCourt(8, 'plants'), '8 pl.')
   assert.equal(quantiteTexteCourt(5, 'poquets'), '5 poq.')

@@ -180,17 +180,13 @@ def test_us022_ca5_pas_de_confusion_inter_cultures(db):
 # ── CA6 — Plantation sans variété → rattachement variété unique ──────────────
 
 def test_us022_ca6_plantation_sans_variete_rattachee_variete_unique(db):
-    """CA6 — Plantation sans variété rattachée à la seule variété en godet."""
+    """Règle PO du 07/10/2026 : seules culture ET variété identiques (renseignée) relient une plantation aux godets. Une plantation sans variété ne vide plus le godet « charentais »."""
     session, pid = db
     _godet(session, pid, "melon", "charentais", nb_plants=8)
-    _plantation(session, pid, "melon", variete=None, quantite=3)  # sans variété
-
-    result = calcul_godets_par_culture(session, "melon")
-
-    assert len(result) == 1
-    assert result[0]["variete"] == "charentais"
-    assert result[0]["nb_plantes"] == 3
-    assert result[0]["stock_residuel_godet"] == 5
+    _plantation(session, pid, "melon", variete=None, quantite=3)
+    g = calcul_godets_par_culture(session, "melon")[0]
+    assert g["nb_plantes"] == 0
+    assert g["stock_residuel_godet"] == 8
 
 
 def test_us022_ca6_plantation_sans_variete_ignoree_si_plusieurs_varietes(db):
@@ -211,37 +207,23 @@ def test_us022_ca6_plantation_sans_variete_ignoree_si_plusieurs_varietes(db):
 # ── CA6 — Godet ET plantation sans variété → match direct (régression cornichon) ──
 
 def test_us022_ca6_godet_et_plantation_sans_variete(db):
-    """CA6 — Quand godet et plantation ont variete=None, la déduction doit être appliquée.
-
-    Régression : avant le fix, les plantations sans variété étaient ignorées
-    quand le godet était aussi sans variété (varietes_avec_godet vide → else → WARNING).
-    """
+    """Règle PO du 07/10/2026 : seules culture ET variété identiques (renseignée) relient une plantation aux godets. Sans variété des deux côtés : la plantation est un évènement à part."""
     session, pid = db
-    _godet(session, pid, "cornichon", variete=None, nb_plants=10, nb_graines=30)
-    _plantation(session, pid, "cornichon", variete=None, quantite=6)
-
-    result = calcul_godets_par_culture(session, "cornichon")
-
-    assert len(result) == 1
-    g = result[0]
-    assert g["variete"] is None
-    assert g["nb_plants_godets"] == 10
-    assert g["nb_plantes"] == 6
-    assert g["stock_residuel_godet"] == 4
+    _godet(session, pid, "cornichon", variete=None, nb_plants=6, nb_graines=18)
+    _plantation(session, pid, "cornichon", variete=None, quantite=4)
+    g = calcul_godets_par_culture(session, "cornichon")[0]
+    assert g["nb_plantes"] == 0
+    assert g["stock_residuel_godet"] == 6
 
 
 def test_us022_ca6_godet_et_plantation_sans_variete_entierement_plante(db):
-    """CA6 — Godet et plantation sans variété, stock = 0 → absent de la liste (CA4)."""
+    """Règle PO du 07/10/2026 : seules culture ET variété identiques (renseignée) relient une plantation aux godets. Le godet sans variété garde ses 6 plants : il reste listé."""
     session, pid = db
     _godet(session, pid, "cornichon", variete=None, nb_plants=6, nb_graines=18)
     _plantation(session, pid, "cornichon", variete=None, quantite=6)
-
     result = calcul_godets_par_culture(session, "cornichon")
+    assert len(result) == 1 and result[0]["stock_residuel_godet"] == 6
 
-    assert result == []
-
-
-# ── Stocke jamais négatif ─────────────────────────────────────────────────────
 
 def test_us022_stock_residuel_jamais_negatif(db):
     """Stock résiduel ne peut pas être négatif même si plantation > godets."""
@@ -258,33 +240,24 @@ def test_us022_stock_residuel_jamais_negatif(db):
 # ── CA6-reverse — Godet sans variété + plantation avec variété ────────────────
 
 def test_us022_ca6_reverse_godet_sans_variete_plantation_avec_variete(db):
-    """CA6-reverse — Godet sans variété + plantation avec variété unique → stock correct.
-
-    Cas réel cornichon :
-      mise_en_godet(variete=None, 10 plants)
-      plantation(variete='petit Paris', 8 plants)
-      → stock résiduel = 2 (pas 10)
+    """Règle PO du 07/10/2026 (remplace CA6-reverse) — une plantation n'est prise
+    aux godets que si culture ET variété sont identiques : un godet sans variété
+    ne fournit pas une plantation « petit Paris », son stock reste entier.
     """
     from utils.stock import calcul_godets
     session, pid = db
     _godet(session, pid, "cornichon", variete=None, nb_plants=10, nb_graines=30)
     _plantation(session, pid, "cornichon", variete="petit Paris", quantite=8)
 
-    # calcul_godets_par_culture
     result = calcul_godets_par_culture(session, "cornichon")
     assert len(result) == 1
-    g = result[0]
-    assert g["variete"] is None
-    assert g["nb_plants_godets"] == 10
-    assert g["nb_plantes"] == 8         # plantation 'petit Paris' rattachée
-    assert g["stock_residuel_godet"] == 2
+    assert result[0]["nb_plantes"] == 0
+    assert result[0]["stock_residuel_godet"] == 10
 
-    # calcul_godets (cohérence)
     godets = calcul_godets(session, include_epuises=False)
-    assert len(godets) == 1
     v = list(godets.values())[0]
-    assert v["nb_plantes"] == 8
-    assert v["stock_residuel_godet"] == 2
+    assert v["nb_plantes"] == 0
+    assert v["stock_residuel_godet"] == 10
 
 
 def test_us022_ca6_reverse_pas_rattachement_si_plusieurs_varietes(db):

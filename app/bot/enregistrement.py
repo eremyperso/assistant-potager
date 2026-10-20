@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from database.db import SessionLocal
 from utils.actions import normalize_action
 from utils.parcelles import resolve_parcelle
+from utils.unites_implantation import libelle_unite
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from utils.tts import send_voice_reply
 from app.services.context import current_context
@@ -264,8 +265,163 @@ def _boutons_confirmation(items: list[dict], geste_file: Optional[dict] = None) 
     return InlineKeyboardMarkup(rangees)
 
 
+_NOMS_FEMININS_PEPINIERE = ("serre", "pepiniere", "planche", "parcelle", "veranda", "terrasse")
+_NOMS_MASCULINS_PEPINIERE = ("chassis", "tunnel", "carre", "abri", "balcon", "garage")
+
+
+def _preposer(nom: str) -> tuple[str, str]:
+    """[US-211] (« de la serre », « à la serre ») — (« du châssis », « au châssis ») —
+    selon le genre du premier mot du nom ; (« de X », « vers X ») quand il est inconnu.
+    Jamais de supposition sur un nom que la grammaire ne reconnaît pas."""
+    from unidecode import unidecode
+    bas = nom.strip().lower()
+    premier = unidecode(bas).split(" ")[0] if bas else ""
+    if premier in _NOMS_FEMININS_PEPINIERE:
+        return f"de la {bas}", f"à la {bas}"
+    if premier in _NOMS_MASCULINS_PEPINIERE:
+        return f"du {bas}", f"au {bas}"
+    return f"de {bas}", f"vers {bas}"
+
+
+def _phrase_deplacement(p: dict) -> str:
+    """[US-211 / CA5] « déplacement du lot 119 (poireau) de la serre au châssis froid ».
+
+    Le lot cité par son numéro, sa culture entre parenthèses, l'origine si elle est
+    connue puis la destination.
+
+    [US-241 / CA6] Un déplacement chiffré se lit « déplacement de 6 godets du lot 21
+    (poivron) · serre chaude → châssis froid ». [CA13] Une origine jamais renseignée est
+    dite « emplacement non renseigné », jamais devinée."""
+    lot = f"du lot {p['_lot_numero']}" if p.get("_lot_numero") else "du lot"
+    culture = p.get("culture") or ""
+    if culture and p.get("variete"):
+        culture = f"{culture} {p['variete']}"
+    nom = f"{lot} ({culture})" if culture else lot
+    origine = p.get("_emplacement_origine")
+    inconnue = "emplacement non renseigné"
+    if p.get("quantite"):
+        n = int(p["quantite"])
+        de = (origine or inconnue).lower() if (origine or p.get("_origine_non_renseignee")) else None
+        vers = (p.get("parcelle") or "?").lower()
+        trajet = f" · {de} → {vers}" if de else f" → {vers}"
+        return f"déplacement de {n} godet{'s' if n > 1 else ''} {nom}{trajet}"
+    morceaux = [f"déplacement {nom}"]
+    if origine:
+        morceaux.append(_preposer(origine)[0])
+    elif p.get("_origine_non_renseignee"):
+        morceaux[0] += f", {inconnue},"
+    if p.get("parcelle"):
+        morceaux.append(_preposer(p["parcelle"])[1])
+    return " ".join(morceaux)
+
+
+def _phrase_cloture(p: dict) -> str:
+    """[US-216] « clôture du lot 128 (chou) — 12 godets et 36 graines soldés ».
+
+    Ce que la clôture solde est dit AVANT la confirmation : elle est définitive, le
+    jardinier doit savoir ce qu'il clôt. Les nombres viennent du lot (jamais devinés) ;
+    sans nombre connu, la phrase ne les invente pas."""
+    lot = f"du lot {p['_lot_numero']}" if p.get("_lot_numero") else "du lot"
+    culture = p.get("culture") or ""
+    if culture and p.get("variete"):
+        culture = f"{culture} {p['variete']}"
+    nom = f"{lot} ({culture})" if culture else lot
+    reste = p.get("_lot_cloture") or {}
+    godets = int(reste.get("godets", p.get("quantite")) or 0)
+    graines = int(reste.get("graines", p.get("nb_graines_semees")) or 0)
+    morceaux = []
+    if godets:
+        morceaux.append(f"{godets} godet{'s' if godets > 1 else ''}")
+    if graines:
+        morceaux.append(f"{graines} graine{'s' if graines > 1 else ''}")
+    if not morceaux:
+        return f"clôture {nom}"
+    pluriel = len(morceaux) > 1 or godets > 1 or graines > 1
+    return f"clôture {nom} — {' et '.join(morceaux)} soldé{'s' if pluriel else ''}"
+
+
+def _phrase_levee(p: dict) -> str:
+    """[US-212 / CA5] « levée du lot 128 (chou frisé) : 40 plants » — une phrase, comme le
+    jardinier la dicterait. Une levée déclarée terminée le dit."""
+    lot = f"du lot {p['_lot_numero']}" if p.get("_lot_numero") else "du lot"
+    culture = p.get("culture") or ""
+    if culture and p.get("variete"):
+        culture = f"{culture} {p['variete']}"
+    nom = f"{lot} ({culture})" if culture else lot
+    debut = "levée terminée" if p.get("levee_terminee") else "levée"
+    nb = p.get("quantite")
+    if nb is None:
+        return f"{debut} {nom}"
+    nb = int(float(nb))
+    return f"{debut} {nom} : {nb} plant{'s' if nb > 1 else ''}"
+
+
+def _lignes_levee_recap(p: dict) -> list[str]:
+    """[US-212 / CA3, CA6, CA7] Ce que le récapitulatif d'une levée ajoute à sa phrase : le
+    taux (et la moyenne de la culture quand elle existe), ce qu'une levée terminée solde,
+    et les incohérences — signalées, jamais corrigées en silence."""
+    from app.services.lots_pepiniere import phrase_taux_levee
+
+    lignes: list[str] = []
+    lot = p.get("_lot_levee") or {}
+    if p.get("_leves_deja_repiques"):
+        # [US-212 / CA11] D'où vient le total : les repiqués, plus la réponse du jardinier.
+        rep, dits = int(p["_leves_deja_repiques"]), int(p.get("_leves_parmi_restantes") or 0)
+        lignes.append(
+            f"\U0001F331 Dont {rep} déjà repiqué{'s' if rep > 1 else ''} en godet "
+            f"et {dits} levé{'s' if dits > 1 else ''} parmi les graines restantes."
+        )
+    taux = phrase_taux_levee(lot.get("taux"), lot.get("moyenne"), lot.get("culture"))
+    if taux:
+        lignes.append(f"\U0001F4C8 Taux de levée : *{taux}*")
+    if p.get("levee_terminee"):
+        graines = int(lot.get("graines_semees") or 0)
+        leves = int(float(p.get("quantite") or 0))
+        soldees = max(0, graines - leves)
+        suite = (
+            f" : {soldees} graine{'s' if soldees > 1 else ''} non levée{'s' if soldees > 1 else ''} "
+            f"{'seront soldées' if soldees > 1 else 'sera soldée'}"
+            if soldees else ""
+        )
+        lignes.append(f"\u2705 La levée est déclarée terminée{suite}.")
+    lignes.extend(p.get("_alertes_levee") or [])
+    return lignes
+
+
 def _build_action_summary(items: list[dict]) -> str:
     """Construit le résumé lisible d'une ou plusieurs actions avant confirmation."""
+    if len(items) == 1 and normalize_action(items[0].get("action")) == "levee":
+        # [US-212 / CA5] Une levée se lit en une phrase, puis son taux et ses alertes.
+        p = items[0]
+        lines = ["\U0001F4DD *Je vais enregistrer :*\n", f"\U0001F331 *{_phrase_levee(p)}*"]
+        if p.get("date"):
+            lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.extend(_lignes_levee_recap(p))
+        if p.get("_alerte_lot"):
+            lines.append(f"\n{p['_alerte_lot']}")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
+    if len(items) == 1 and normalize_action(items[0].get("action")) == "deplacement":
+        # [US-211 / CA5] Un déplacement se lit en une phrase : le lot, d'où, vers où.
+        p = items[0]
+        lines = ["📝 *Je vais enregistrer :*\n", f"🚚 *{_phrase_deplacement(p)}*"]
+        if p.get("date"):
+            lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("_alerte_lot"):
+            lines.append(f"\n{p['_alerte_lot']}")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
+    if len(items) == 1 and normalize_action(items[0].get("action")) == "cloture_lot":
+        # [US-216] Une clôture se lit en une phrase, et dit qu'elle est définitive.
+        p = items[0]
+        lines = ["\U0001F4DD *Je vais enregistrer :*\n", f"\U0001F512 *{_phrase_cloture(p)}*"]
+        if p.get("date"):
+            lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.append("\u26A0\uFE0F Le lot est soldé définitivement : plus rien n'y sera à faire.")
+        if p.get("_alerte_lot"):
+            lines.append(f"\n{p['_alerte_lot']}")
+        lines.append("\nC'est correct ?")
+        return "\n".join(lines)
     if len(items) == 1:
         p = items[0]
         lines = ["📝 *Je vais enregistrer :*\n"]
@@ -280,15 +436,24 @@ def _build_action_summary(items: list[dict]) -> str:
             if rang:
                 lines.append(f"⚖️ Quantité : *{int(qte)} {unite}/rang × {rang} rangs*")
             else:
-                lines.append(f"⚖️ Quantité : *{qte} {unite}*".strip())
+                lines.append(f"⚖️ Quantité : *{qte} {libelle_unite(unite, qte)}*".strip())
+        elif normalize_action(action) in ("perte_godet", "vendu", "plantation"):
+            # [US-224] Jamais un récapitulatif muet sur un nombre de plants absent :
+            # le stock ne bougerait pas, et le jardinier doit le voir avant de confirmer.
+            lines.append("⚠️ Quantité : *non précisée* — le stock ne sera pas mis à jour")
         if p.get("parcelle"):
             lines.append(f"📍 Parcelle : *{p['parcelle']}*")
         elif p.get("_parcelle_demandee") is not True:
             lines.append("📍 Parcelle : ❓ non détectée")
         if p.get("date"):      lines.append(f"📅 Date : *{p['date']}*")
+        if p.get("_lot_numero"): lines.append(f"🔖 Lot : *n° {p['_lot_numero']}*")   # [US-209 / CA8]
         ligne_contexte = _ligne_contexte_semis(p)
         if ligne_contexte:     lines.append(ligne_contexte)
         if p.get("commentaire"): lines.append(f"📝 Note : *{p['commentaire']}*")
+        if p.get("_alerte_lot"):   # [US-209 / CA6]
+            lines.append(f"\n{p['_alerte_lot']}")
+        if p.get("_alerte_emplacement"):   # [US-210 / CA2]
+            lines.append(f"\n{p['_alerte_emplacement']}")
         if p.get("_avertissement_coherence"):
             lines.append(f"\n{p['_avertissement_coherence']}")
         lines.append("\nC'est correct ?")
@@ -299,8 +464,14 @@ def _build_action_summary(items: list[dict]) -> str:
         for i, p in enumerate(items, 1):
             action  = p.get("action") or "action"
             culture = p.get("culture") or "?"
-            qte_str = f" — {p['quantite']} {p.get('unite') or ''}".strip() if p.get("quantite") is not None else ""
+            qte_str = f" — {p['quantite']} {libelle_unite(p.get('unite'), p['quantite'])}".strip() if p.get("quantite") is not None else ""
             lines.append(f"{i}. *{action}* {culture}{qte_str}")
+            if p.get("_lot_numero"):   # [US-209 / CA8]
+                lines[-1] += f" (lot n° {p['_lot_numero']})"
+            if p.get("_alerte_lot"):   # [US-209 / CA6]
+                avertissements.append(f"{i}. {p['_alerte_lot']}")
+            if p.get("_alerte_emplacement"):   # [US-210 / CA2]
+                avertissements.append(f"{i}. {p['_alerte_emplacement']}")
             if p.get("_avertissement_coherence"):
                 avertissements.append(f"{i}. {p['_avertissement_coherence']}")
         if avertissements:
@@ -339,8 +510,12 @@ def _evaluer_avertissements_avant_ecriture(db, tenant_ctx, items: list[dict]) ->
     return messages
 
 
-async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> None:
-    """[US-021] Sauvegarde effective en base après confirmation utilisateur."""
+async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> bool:
+    """[US-021] Sauvegarde effective en base après confirmation utilisateur.
+
+    Retourne False dès qu'un item a été refusé ou n'a pas pu être écrit : un geste
+    de la file ne doit alors PAS en sortir (US-224 / CA7, « jamais avant l'écriture »).
+    """
     db = SessionLocal()
     saved_items = []
     try:
@@ -375,7 +550,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 err_msg = f"❌ {e}\n\nCréez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
                 if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                 else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                return
+                return False
             except svc_evenements.EvenementInvalideError as e:
                 # [US-049] Filet de sécurité final — la validation centrale a rejeté
                 # l'événement au moment même de l'écriture. Les contrôles amont dans
@@ -387,14 +562,16 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 err_msg = f"❌ {e}"
                 if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                 else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                return
+                return False
             # [US-069] Le récapitulatif affiche le contexte RÉELLEMENT enregistré.
             parsed["contexte_semis"] = event.contexte_semis
+            if event.numero_lot is not None:   # [US-209 / CA1, CA8] le semis annonce son lot
+                parsed["_lot_numero"] = event.numero_lot
             saved_items.append((parsed, event.id))
     except Exception as e:
         db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
-        return
+        return False
     finally:
         db.close()
 
@@ -407,7 +584,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
         lines_out = [f"✅ *{len(saved_items)} actions enregistrées !*\n"]
         for parsed, event_id in saved_items:
             cult  = parsed.get("culture") or "?"
-            qte   = str(parsed["quantite"]) + " " + (parsed.get("unite") or "") if parsed.get("quantite") else ""
+            qte   = str(parsed["quantite"]) + " " + libelle_unite(parsed.get("unite"), parsed["quantite"]) if parsed.get("quantite") else ""
             d     = parsed.get("date") or str(date.today())
             lines_out.append(f"• *{cult}* {qte} — _{d}_ ✔")
         recap_multi = "\n".join(lines_out)
@@ -430,6 +607,7 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     if len(saved_items) == 1:
         parsed, _ = saved_items[0]
         await send_voice_reply(update, _build_recap_tts(parsed))
+    return True
 
 
 async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -537,7 +715,7 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     _ACTION_PENDING.pop(user_id, None)
     await query.edit_message_text("⏳ Enregistrement en cours...", reply_markup=None)
     log.info(f"[US-021] Confirmation reçue — user_id={user_id}, {len(pending['items'])} item(s)")
-    await _do_save_items(update, pending["items"], pending["texte"])
+    ecrit = await _do_save_items(update, pending["items"], pending["texte"])
 
     # [US-224 / CA7, CA9] Le geste ne quitte la file qu'APRÈS l'écriture, jamais
     # avant : un enregistrement qui échoue doit laisser le geste en attente
@@ -545,8 +723,16 @@ async def _action_confirm_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
     # compagnon annonce ce qui reste et propose le suivant.
     geste_file = pending.get("geste_file")
     if geste_file:
-        from app.services import file_gestes as svc_file
         from .file_gestes import proposer_suivant
+        if ecrit is False:
+            # Le refus a déjà été dit par `_do_save_items` ; on dit ce que devient
+            # le geste. (Avant ce correctif il quittait la file malgré le refus.)
+            await update.effective_message.reply_text(
+                "⏳ Ce geste n'a pas été enregistré : il reste dans votre file, "
+                "/gestes le rouvre quand vous voulez."
+            )
+            return
+        from app.services import file_gestes as svc_file
         svc_file.confirmer(_GesteDeLaFile(geste_file))
         await proposer_suivant(update, ctx, geste_file["user_id"])
 
@@ -611,6 +797,12 @@ def _build_recap_tts(p: dict) -> str:
     Version vocale du récapitulatif — phrase naturelle sans Markdown ni émoji.
     Ex : "Récolte enregistrée. 3 kg de tomates cerise, parcelle nord, le 2026-03-11."
     """
+    if normalize_action(p.get("action")) == "deplacement":
+        return f"{_phrase_deplacement(p).capitalize()} enregistré."   # [US-211]
+    if normalize_action(p.get("action")) == "cloture_lot":
+        return f"{_phrase_cloture(p).capitalize()} enregistrée."   # [US-216]
+    if normalize_action(p.get("action")) == "levee":
+        return f"{_phrase_levee(p).capitalize()} enregistrée."   # [US-212]
     parties = []
     action = p.get("action") or "action"
     parties.append(f"{action.capitalize()} enregistrée.")
@@ -627,7 +819,7 @@ def _build_recap_tts(p: dict) -> str:
                 total = int(qte) * int(rang)
                 parties.append(f"{total} {unite} de {label} sur {rang} rangs.")
             else:
-                parties.append(f"{qte} {unite} de {label}.".strip())
+                parties.append(f"{qte} {libelle_unite(unite, qte)} de {label}.".strip())
         else:
             parties.append(f"Culture : {label}.")
 
@@ -663,9 +855,32 @@ def _build_recap(p: dict, event_id: int) -> str:
         if p.get("variete"):      lines.append(f"🏷 Variété : *{p['variete']}*")
         if nb_p:                  lines.append(f"🌱 Plants repiqués en godet : *{nb_p}*{taux_str}")
         if nb_g:                  lines.append(f"🌾 Graines en barquette d'origine : *{nb_g}*")
+        if p.get("_lot_numero"):  lines.append(f"🔖 Lot : *n° {p['_lot_numero']}*")   # [US-209 / CA8]
         if p.get("parcelle"):     lines.append(f"📍 Parcelle : *{p['parcelle']}*")
         if p.get("date"):         lines.append(f"📅 Date : *{p['date']}*")
         if p.get("commentaire"):  lines.append(f"📝 Note : *{p['commentaire']}*")
+        lines.append("\n_Que voulez-vous faire ensuite ?_")
+        return "\n".join(lines)
+
+    # [US-212] Levée de lot : une phrase, son taux, ses alertes.
+    if action_norm == "levee":
+        lines.append(f"\U0001F331 *{_phrase_levee(p)}*")
+        if p.get("date"):         lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.extend(_lignes_levee_recap(p))
+        lines.append("\n_Que voulez-vous faire ensuite ?_")
+        return "\n".join(lines)
+
+    # [US-216] Clôture de lot : une phrase, pas une fiche de champs.
+    if action_norm == "cloture_lot":
+        lines.append(f"\U0001F512 *{_phrase_cloture(p)}*")
+        if p.get("date"):         lines.append(f"\U0001F4C5 Date : *{p['date']}*")
+        lines.append("\n_Que voulez-vous faire ensuite ?_")
+        return "\n".join(lines)
+
+    # [US-211 / CA5] Déplacement de lot : une phrase, pas une fiche de champs.
+    if action_norm == "deplacement":
+        lines.append(f"🚚 *{_phrase_deplacement(p)}*")
+        if p.get("date"):         lines.append(f"📅 Date : *{p['date']}*")
         lines.append("\n_Que voulez-vous faire ensuite ?_")
         return "\n".join(lines)
 
@@ -679,7 +894,7 @@ def _build_recap(p: dict, event_id: int) -> str:
             total   = int(qte_val) * int(rang)
             qte_str = f"{int(qte_val)} {unite}/rang × {rang} rangs = *{total} {unite} total*"
         else:
-            qte_str = f"{qte_val} {unite}".strip()
+            qte_str = f"{qte_val} {libelle_unite(unite, qte_val)}".strip()
 
     fields = [
         ("🌱 Action",      p.get("action")),
@@ -693,6 +908,7 @@ def _build_recap(p: dict, event_id: int) -> str:
         ("📅 Date",        p.get("date")),
         # [US-069] Filière du semis, seulement si elle est connue.
         ("🧭 Filière",     svc_contexte_semis.libelle_contexte(p["contexte_semis"]) if p.get("contexte_semis") else None),
+        ("🔖 Lot",         f"n° {p['_lot_numero']}" if p.get("_lot_numero") else None),   # [US-209 / CA8]
         ("📝 Note",        p.get("commentaire")),
     ]
 

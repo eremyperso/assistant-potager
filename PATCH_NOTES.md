@@ -1,3 +1,339 @@
+## [v3.93.0] — 2026-10-20
+
+**ÉPIC 9-12 — bilan depuis la dernière version commitée (v3.89.0)** : la Pépinière passe de quatre onglets à deux, **« Ma pépinière »** (kanban emplacement × stade) et **« Lots »** (journal de saison), sur des données de lot désormais réparties par pépinière. Les entrées v3.90.0 à v3.92.1 ci-dessous donnent le détail ; celle-ci ajoute **US-220 et US-240**, qui n'y figuraient pas, et récapitule le périmètre.
+
+**US de l'épic 9-12 depuis v3.89.0**
+
+| US | Statut | Version | Résumé |
+|---|---|---|---|
+| US-240 | Nouvelle, livrée | v3.93.0 | Lire le parcours du plant : étiquettes par lot, stade et emplacement, compteurs, dormants, « à semer » limité aux graines en stock |
+| US-220 | Nouvelle, livrée | v3.93.0 | La confiance d'un semis en pépinière tient compte du type de la pépinière (chaude / froide) |
+| US-241 | Nouvelle, livrée | v3.90.0 | Déplacer une partie des godets d'un lot, ranger un lot sans emplacement (migration v58) |
+| US-218 | Réécrite, livrée | v3.91.0, v3.91.1 | Onglet « Ma pépinière » (ex-« Calendrier »), fiche du lot en bandeau sous sa rangée |
+| US-242 | Nouvelle, livrée | v3.92.0, v3.92.1 | Onglet « Lots » en journal de saison, dates des mises en terre, ventes et pertes |
+| US-216 | Reprise (amendement du 19/10) | v3.91.0 | La fiche du lot dit où se trouve chaque partie d'un lot coupé, « Noter la levée (terminée) » |
+| US-211 | Reprise | v3.90.0 | Déplacement avec quantité facultative, limite « lot entier » levée |
+| US-201 | Reprise (amendement du 19/10) | v3.91.0 | La carte d'une pépinière du Plan ouvre « Ma pépinière » filtrée |
+| US-215 | Remplacée par US-218 | v3.91.0 | L'onglet « Aujourd'hui » disparaît, ses critères utiles sont repris |
+| US-219 | Absorbée par US-218 | v3.91.0 | L'onglet « Emplacements » ne sera jamais créé |
+
+### 🚀 Nouveautés
+- Évalue la confiance d'un semis en pépinière selon la pépinière : une pépinière chaude tient le gel et les nuits fraîches, une pépinière froide (châssis) seulement le gel annoncé (US-220).
+- Nomme dans `/confiance` la pépinière retenue (« Évalué pour serre, pépinière chaude ») quand aucune n'est dite, et affiche un niveau par type — « pépinière chaude ★★★ · pépinière froide ★★☆ » — quand le potager a des pépinières froides et d'autres (US-220).
+- Garde l'évaluation d'avant pour une pépinière sans type renseigné, avec un avertissement qui dit qu'elle suppose une pépinière chauffée, pour ne faire chuter la confiance d'aucun potager à la livraison (US-220).
+- Découpe chaque lot en étiquettes, une par stade et par emplacement, avec état, échéance et mention (« 12 déjà en godet »), et fournit à l'écran les compteurs, les lots dormants et les cultures à semer avec leurs graines en stock (US-240).
+
+### 🔧 Améliorations techniques
+- Ajoute le bloc `parcours` à `GET /pepiniere/lots` sans retirer ni renommer aucun champ existant : l'onglet Lots et la fiche du lot fonctionnent sans changement (US-240).
+- Ajoute `REGLES_ACQUISES_PAR_TYPE_PEPINIERE` à `confiance_semis.py`, seul endroit où le type de pépinière pèse sur la confiance, ainsi que `meilleure_pepiniere` et `representants_par_type` (US-220).
+- Supprime `OngletAujourdhui.jsx`, `_PepiniereAujourdhuiPreview.jsx` et leurs tests, et adapte les tests US-065, US-208, US-209, US-211, US-215 et US-216 à la nouvelle Pépinière (US-218, US-242).
+- Ajoute `tests/test_us220_confiance_type_pepiniere.py`, `tests/test_us240_parcours_plant.py` et `frontend/src/lib/pepiniere.confiance.test.js` (US-220, US-240).
+- Mesure US-220 sur la base de dev (5 potagers, 55 cultures, 4 dates) : aucun score principal ne change ; le niveau « pépinière froide » ne fait que baisser ou rester égal.
+- Met à jour le plan de l'épic (arbitrages A30 à A41, statuts ✅), les fiches `pepiniere.md` et `calendrier-cultural.md`, le gabarit de réponse de confiance et le corpus `data/connaissance/doc_app/` (US-220, US-240).
+
+### 📋 Incidents consignés, non corrigés
+- **INC-015** : une question de semis datée dans le passé (« … le 10/02/2026 ? ») part dans le flux d'enregistrement d'un geste au lieu de `/confiance`, et « le 10 février » sans année reste sans réponse.
+- **INC-016** : la mise en godet d'un lot est plafonnée par les graines semées et non par les plants levés restants (20 plants repiqués pour 18 levés), voisin d'INC-014.
+
+## [v3.92.1] — 2026-10-20
+
+**ÉPIC 12 — US-242, correction** : le journal d'un lot retrouve **la date et la parcelle de chaque mise en terre**, ainsi que la date de ses ventes et pertes en godet. Une plantation du 15 juin sur « planche_centrale » apparaissait « date non transmise » alors que le journal global la montrait.
+
+### 🐛 Corrections
+- Corrige le journal d'un lot, qui n'affichait que le nombre de plants mis en terre : chaque plantation y garde maintenant sa date, sa quantité et sa parcelle (US-242).
+- Place les mises en terre, ventes et pertes en godet sur la frise du lot, à leur date, avec trois nouvelles pastilles dans la légende (US-242).
+
+### 🔧 Améliorations techniques
+- Ajoute `sorties_datees` aux lots de `GET /pepiniere/lots` et `GET /pepiniere/lots/{numero}` : `calcul_lots_pepiniere` garde la date, la quantité et la parcelle de chaque sortie imputée au lot, une plantation répartie sur deux lots donnant à chacun sa part ; champ ajouté, rien n'est retiré (US-242).
+- Garde « date non transmise » pour le seul reste que ce détail ne couvre pas, sans jamais inventer de date (US-242).
+- Ajoute `tests/test_us242_sorties_datees.py`, complète `lotsJournal.test.js` et met à jour l'US-242, la fiche `pepiniere.md` et la fiche du corpus `pepiniere-par-lot.md` (US-242).
+
+## [v3.92.0] — 2026-10-20
+
+**ÉPIC 12 — US-242** : l'onglet **« Lots »** de la Pépinière devient le **journal de la saison** : chaque lot tient sur une ligne, ses gestes posés à leur date sur une frise, et sa fiche se déplie juste en dessous.
+On y relit sa saison sans rien y faire : les gestes restent dans « Ma pépinière ». Rendu conforme à la maquette « Lots - Journal de saison HF » (Claude Design).
+
+### 🚀 Nouveautés
+- Affiche chaque lot sur une frise, groupé par mois de semis : semé, levée notée, mise en godet, déplacé, clôturé, dernier geste, période de mise en terre prévue hachurée et repère du jour (US-242).
+- Ajoute le filtre En cours / À régler / Terminés / Tous, « À régler » réunissant les lots sans quantité semée ou sans délai connu pour leur culture (US-242).
+- Ajoute un bilan des lots affichés : part des graines devenues des plants, plants en godet, lot à mettre en terre et barre mis en terre · en godet · en levée · pertes · non levées (US-242).
+- Permet de choisir la fenêtre de la frise, toute la saison ou les derniers mois (« Août → nov. ») ; le téléphone montre les derniers mois (US-242).
+- Déplie la fiche d'un lot sous sa ligne — identité, échéance, où les mettre, bilan, journal en J+n depuis le semis — ou l'ouvre en plein écran au téléphone (US-242).
+- Ajoute « Agir dans Ma pépinière », qui bascule d'onglet et ouvre la fiche à gestes du lot (US-242).
+
+### 🔧 Améliorations techniques
+- Ajoute `lib/lotsJournal.js` (statut, gestes datés, fenêtre, frise, bilan) testé par `npm test`, et `components/OngletLots.jsx` en container queries (US-242).
+- Supprime de `Pepiniere.jsx` la grille de cartes par famille, les repères, le tri et le panneau latéral de l'onglet Lots (US-061, US-216).
+- Ajoute la page de contrôle visuel `/pepiniere-lots` et `tests/test_us242_onglet_lots_journal.py` ; adapte les tests US-208, US-209, US-216 et US-218 qui lisaient l'ancien onglet (US-242).
+- Met à jour la fiche de domaine `pepiniere.md` et la fiche du corpus `pepiniere-par-lot.md`, avec une section « Relire sa saison dans l'onglet Lots » (US-242).
+
+## [v3.91.1] — 2026-10-20
+
+**ÉPIC 12 — US-218, ajustement de la maquette HF** : sur ordinateur, ouvrir un lot depuis « Ma pépinière » glisse sa fiche **en bandeau juste sous la rangée de sa pépinière** (option B retenue), au lieu d'un panneau à côté du tableau.
+Le tableau reste visible au-dessus et en dessous ; une flèche désigne l'étiquette ouverte.
+
+### 🚀 Nouveautés
+- Ouvre la fiche d'un lot en bandeau sous sa rangée, découpé sur les colonnes du tableau : parties du lot, échéance et « Où les mettre », gestes, bilan et journal complet (US-218).
+- Marque l'étiquette ouverte d'un contour vert et d'une pastille « #4 · ouvert » ; un second appui sur elle, ou la croix, referme la fiche (US-218).
+- Permet de passer d'une partie à l'autre d'un lot coupé depuis le bandeau, qui suit alors la colonne de la partie choisie (US-218).
+
+### 🔧 Améliorations techniques
+- Ajoute `FicheLotBandeau` à `FicheLot.jsx`, qui reprend la règle des gestes de la fiche, et les fonctions `etiquetteOuverte`, `ligneFragment`, `metaBandeau` et `bilanLot` à `lib/parcours.js`, testées par `npm test` (US-218).
+- Garde la fiche en plein écran au téléphone et pour un lot sans étiquette (dormant), et le panneau à côté de la liste sur l'onglet Lots (US-216).
+- Met à jour la fiche de domaine `pepiniere.md` et la fiche du corpus `pepiniere-par-lot.md` (US-218).
+
+## [v3.91.0] — 2026-10-20
+
+**ÉPIC 12 — US-218** : la Pépinière s'ouvre sur **« Ma pépinière »**, un tableau qui montre d'un seul regard où se trouve chaque lot, à quel stade il en est, ce qui presse et ce qu'il est encore temps de semer.
+Les lignes sont les pépinières, les colonnes les quatre stades du plant ; chaque lot y pose une étiquette par stade et par emplacement, avec son échéance et ses gestes. Rendu conforme à la maquette haute fidélité « Ma pepiniere - HF » (Claude Design).
+
+**Régression visible, annoncée** : l'onglet **« Aujourd'hui »** (v3.88.0) disparaît, ainsi que la frise « Calendrier » et l'onglet « Emplacements » prévus. Les urgences sont passées dans les compteurs de la barre et dans l'en-tête de chaque étiquette ; les emplacements sont devenus les lignes du tableau ; « À semer » est devenu la bande « Le bon moment pour semer ». L'onglet **Lots** est inchangé.
+
+**Impact sur l'épic 9-12 (refonte Plan / Cultures / Pépinière)** :
+- **US-218** (réécrite le 19/10) : livrée ; elle absorbe **US-219** (Emplacements) et remplace l'écran d'**US-215** (Aujourd'hui).
+- **US-216** (Fiche du lot) : amendement du 19/10 livré — la fiche s'ouvre depuis une étiquette ou le tiroir, et dit où se trouve chaque partie d'un lot coupé (CA19).
+- **US-201** (Vue plan) : amendement du 19/10 livré — la carte d'une pépinière ouvre « Ma pépinière » filtrée sur elle (I5).
+- **US-240** (Parcours du plant) : son bloc gagne `calendrier_semis`, demandé par la maquette HF.
+- **A30** : la maquette HF nomme l'onglet « Ma pépinière » au lieu de « Parcours » ; la clé technique reste `parcours`.
+
+### 🚀 Nouveautés
+- Ajoute l'onglet **« Ma pépinière »**, ouvert par défaut : une ligne par pépinière (vides comprises, plus « Sans emplacement » au besoin) et quatre colonnes, En levée, En godet, Endurcissement et Prêt à sortir (US-218).
+- Ajoute l'**étiquette** de lot : état en mot (« Repiquer — retard », « Sortir bientôt », « S'endurcit sur place », « Durée ? »…), grand chiffre de l'échéance, quantités, règle des jours avec la fourchette hachurée et le jour de référence en rouge, ligne de dates et deux gestes au plus (US-218).
+- Éclaire ensemble les étiquettes d'un même lot coupé au survol ou au focus, chacune portant un lien vers l'autre (« #4 · voir 2/2 › ») (US-218).
+- Ajoute à la barre la date de référence, la météo du jour, le choix « Toutes les pépinières » (ou la pastille d'une pépinière unique) et les compteurs à repiquer, à sortir, endurcit, à semer et dormants, qui mettent leurs étiquettes en évidence (US-218).
+- Ajoute la bande **« Le bon moment pour semer »** : une tuile par culture à semer avec les jours restants, la part de fenêtre écoulée, les variétés en stock et « + Semer », et, quand rien n'est à semer, les ouvertures des six prochains mois (US-218).
+- Ajoute le **tiroir des lots dormants**, hors du tableau, avec Clôturer et, si le lot a des godets, Mettre en terre (US-218).
+- Affiche sur une étiquette « Durée ? » la commande à dicter pour renseigner le délai manquant, copiable (US-218).
+- Propose « Ranger dans… » sur une étiquette sans emplacement : le compagnon demande la pépinière (US-218, US-241).
+- Transforme le tableau, au téléphone, en quatre onglets de stade avec compteur et point d'alerte, ouverts sur le premier en retard (US-218).
+- Indique dans la fiche du lot où se trouve chaque partie d'un lot coupé (« 4 graines en levée · serre chaude ») (US-216).
+- Propose « Noter la levée (terminée) » sur les graines restantes d'un lot déjà en partie repiqué, dans la fiche comme sur l'étiquette (US-216, A33).
+- Ouvre « Ma pépinière » filtrée sur la pépinière touchée depuis la carte du Plan, sans filtre quand le potager n'en a qu'une (US-201).
+
+### 🔧 Améliorations techniques
+- Ajoute `parcours.calendrier_semis` à `GET /pepiniere/lots` (six mois, cultures qui s'ouvrent, prochaine ouverture), calculé seulement quand rien n'est à semer, pour que l'écran ne lise aucun calendrier (US-218).
+- Ajoute la lib sans React `lib/parcours.js` et ses tests `npm test`, qui réutilisent la règle des gestes de la fiche du lot sans la copier (US-218).
+- Ajoute les couleurs de stade (`--sem`, `--god`, `--end`, `--frk`), la police Kalam (`font-hand`) et les motifs de stade au design system (US-218).
+- Ajoute la page de contrôle visuel `/pepiniere-parcours` (nominal, maquette HF, une pépinière, pépinière vide, aucun lot, rien à semer, lecture seule, chargement, échec) (US-218).
+- Supprime le code et les pages de contrôle des onglets « Aujourd'hui » et « Calendrier » ; le travail de la frise est mis de côté hors du dépôt (A39) (US-218).
+- Met à jour la fiche de domaine `pepiniere.md`, les fiches du corpus `pepiniere-par-lot.md` et `parcelles-et-plan.md`, le corpus de questions et le guide utilisateur (US-218).
+
+## [v3.90.0] — 2026-10-19
+
+**ÉPIC 12 — US-241** : on peut **sortir une partie des godets d'un lot** au châssis froid et garder le reste au chaud — « passé 6 godets du lot 21 au châssis froid ».
+L'application sait désormais combien de godets de chaque lot sont dans chaque pépinière, et la partie sortie au froid commence son endurcissement le jour où elle a été sortie.
+
+**Impact sur l'épic 9-12 (refonte Plan / Cultures / Pépinière)** :
+- **US-241** (Déplacement partiel, A32) : livrée ; migration v58. L'arbitrage **A41** (d'où une plantation retire les godets d'un lot réparti) reste en suspens : le compagnon demande l'origine.
+- **US-211** (Déplacer un lot) : étendue sans changer son comportement sans quantité ; la limite « lot entier » (plan § 9) est levée.
+- **US-240** (Parcours du plant) : son contrat « une étiquette par emplacement » est maintenant alimenté par la vraie répartition.
+- **US-218** (écran Parcours) : le « Ranger dans… » peut désormais déposer un déplacement sans destination, que le compagnon complète.
+
+### 🚀 Nouveautés
+- Ajoute une **quantité de godets facultative** au déplacement d'un lot : sans nombre, le lot entier part comme avant ; tous les godets d'un lot d'un seul tenant valent un déplacement entier (US-241).
+- Lit sans appel au modèle « passé 6 godets du lot 21 au châssis froid », « sorti 6 poivrons de la serre au châssis », « déplacé 10 godets de tomate sous le châssis » et « déplacement du lot 26 » (US-241).
+- Tient la **répartition des godets par pépinière** de chaque lot, rejouée dans l'ordre des dates et lue à la date de référence ; un retour de la partie sortie rend le lot d'un seul tenant (US-241).
+- Fait démarrer l'**endurcissement de la partie sortie au froid** le jour de son déplacement, la partie restée au chaud gardant le sien (US-241).
+- Propose par boutons, avec le nombre de godets de chacune (« Serre chaude (10) », « Châssis froid (6) »), l'origine d'un déplacement, d'une plantation, d'une perte ou d'une vente d'un lot réparti qui ne la dit pas (US-241).
+- Refuse avec le nombre disponible une quantité supérieure aux godets de l'origine (« n'a que 10 godets en « Serre chaude » »), ainsi qu'une quantité nulle, négative ou portant sur des graines (US-241).
+- Propose par boutons les pépinières du potager, sauf celle d'origine, quand un déplacement arrive sans destination — « Déplacer » de la fiche du lot, « Ranger dans… », « déplacement du lot 26 » (US-241).
+- Dit « emplacement non renseigné » comme origine d'un lot dont la pépinière n'a jamais été dite, au récapitulatif comme dans le détail du lot (US-241).
+- Récapitule un déplacement partiel en une ligne : « déplacement de 6 godets du lot 21 (poivron) · serre chaude → châssis froid » (US-241).
+- Affiche dans « Détail du lot » le nombre de godets de chaque déplacement partiel, avec son origine et sa destination (US-241).
+- Ajoute le déplacement, entier ou partiel, à l'aide `/help godet` (US-241).
+
+### 🔧 Améliorations techniques
+- Ajoute `repartition_godets`, `reparti` et `repartition_a_verifier` à chaque lot de `calcul_lots_pepiniere` et à `GET /pepiniere/lots` (US-241).
+- Retire d'abord de l'emplacement courant, puis marque le lot « à vérifier », une sortie enregistrée sans origine sur un lot réparti : repli du calcul en attendant A41, décision du PO du 19/10/2026 (US-241).
+- Accepte `emplacement_id` (l'étiquette d'origine) au dépôt d'un geste dans la file, et une quantité et une destination facultatives pour le déplacement (US-241).
+- Met à jour la fiche de domaine `pepiniere.md`, les fiches du corpus `pepiniere-par-lot.md`, `semis-godet-plantation.md`, `enregistrer-un-geste.md` et le guide utilisateur (US-241).
+
+### 💾 Base de données
+- Ajoute la colonne nullable `evenements.parcelle_origine_id` (pépinière d'origine des godets), migration `migration_v58.sql` et son `rollback_v58.sql` (US-241).
+
+## [v3.89.0] — 2026-10-18
+
+**ÉPIC 12 — US-212, US-216, INC-014** : on peut **noter la levée d'un lot de semis** devant la barquette — « levée du lot 128 : 40 » —
+et la Pépinière en tire un vrai taux de levée, lot par lot, comparé à la moyenne de la culture.
+Le fil « Détail du lot » raconte désormais aussi les levées et la clôture, et un lot ne peut plus être mis en terre au-delà de ses plants.
+
+**Impact sur l'épic 9-12 (refonte Plan / Cultures / Pépinière)** :
+- **US-212** (Noter la levée) : livrée, avec la décision du 18/10/2026 « la PWA limite la saisie » (CA11 révisé, CA14 ajouté) ; migration v57.
+- **US-216** (Fiche du lot de terrain) : reprise — CA10 révisé (plus de compteur dans la fiche), CA7 complété (clôture et fin de lot dans le fil du lot).
+- **US-224** (File de gestes) : reprise — la levée devient un geste de lot, et la file contrôle le restant du lot.
+- **US-211** (Déplacer), **US-217** (Où mettre les plants), **US-215** (Aujourd'hui) : touchées sans changement de règle — désignation du lot partagée, bouton de mise en terre plafonné, « À repiquer » compte les plants levés.
+- **INC-014** : incident de l'épic 12 corrigé (mise en terre répétée au-delà des godets du lot).
+
+### 🚀 Nouveautés
+- Ajoute le geste **« levée »** : un lot, un nombre de plants levés, une date, et l'indication facultative que la levée est terminée (US-212).
+- Lit sans appel au modèle « levée du lot 128 : 40 », « 40 choux frisés levés sur 48 », « les tomates cerise ont levé, 12 plants » et « levée terminée pour le lot 128 : 40 » (US-212).
+- Désigne le lot par son numéro, par sa culture quand un seul lot est en cours, ou par des boutons (numéro et date de semis) ; la règle est la même que pour le déplacement (US-212, US-211).
+- Garde le dernier comptage comme seul valable (30 puis 40 levés font 40, pas 70) et calcule le **taux de levée** : levés ÷ graines semées, distinct du taux de germination (US-212).
+- Compare ce taux à la **moyenne de levée de la culture** dans le potager, dès qu'au moins deux autres lots en ont une, et n'affiche aucune moyenne en dessous (US-212).
+- Clôt la germination du lot quand la levée est déclarée terminée : les graines non levées sont soldées, les plants levés restent à repiquer (US-212).
+- Signale sans jamais corriger un « sur 48 » qui ne correspond pas au lot, plus de levés que de graines semées, et un repiquage de plus de plants qu'il n'en a levé (US-212).
+- Refuse la levée d'un lot sans semis rattaché ou clôturé, et propose de noter « les carottes ont levé » en observation quand le semis est en pleine terre (US-212).
+- Ouvre « Noter la levée » dans la fiche du lot : le bouton **dépose le geste avec son seul lot**, sans compteur ni « terminée » — la PWA limite la saisie (US-212).
+- Fait demander le détail par le bot, précisément : combien de plants ont levé (lot, graines semées et dernier comptage rappelés, zéro accepté), puis si la levée est terminée, en disant ce que « oui » solde (US-212).
+- Expose `nb_leves`, `date_derniere_levee`, `taux_levee`, `levee_terminee` et `moyenne_levee_culture` dans `GET /pepiniere/lots`, et compte les plants levés dans « À repiquer » (US-212).
+- Ajoute à « Détail du lot » (US-061) **chaque comptage de levée** à sa date — levés, « sur N », mention « terminée » — et la **clôture** du lot avec ce qu'elle a soldé ; un lot terminé finit son fil par « Lot terminé » (US-212 CA14, US-216 CA7).
+- Pose, quand le lot est déjà en partie repiqué, la question de levée sur les graines **restantes** : un plant repiqué a forcément levé, le total enregistré reste celui du lot (US-212).
+- Ne demande plus de parcelle au récapitulatif d'une levée ni d'une clôture de lot : le geste porte sur un lot (US-212, US-216).
+
+### 🐛 Corrections
+- Corrige la **mise en terre répétée sans limite** : le bouton se grise (« Geste en attente ») dès que tout le lot est dans la file, et indique les plants déjà réservés (INC-014).
+- Refuse au dépôt comme à la confirmation un geste de lot (mise en terre, perte, repiquage) qui dépasse les godets ou graines restants, gestes en attente compris ; `/stats` ne dépasse plus la pépinière (INC-014).
+- Refuse en 409 un second geste de lot sans nombre (déplacement, clôture) déjà en attente pour le même lot (INC-014).
+- Propose par défaut le restant du lot à la mise en terre, répartissable sur plusieurs parcelles (INC-014).
+
+### 🔧 Améliorations techniques
+- Ajoute `graines_non_soldees` et `utils.stock.graines_restantes` : les garde-fous de repiquage ne lisent plus `graines_en_germination`, qui tombe à 0 quand la levée est terminée (US-212).
+- Factorise la désignation du lot dans `evenements.designer_lot`, partagée par le déplacement, la clôture et la levée (US-212).
+- Aucun stock ne change : `/godets`, `/stats` et l'écran Stocks rendent les mêmes valeurs avant et après une levée (US-212).
+- Retire le compteur de levée de la fiche du lot (`CompteurNumerique`) : le serveur ignore un nombre de levés envoyé depuis l'écran (US-212).
+- Ajoute `restant_du_lot`, `QuantiteSuperieureAuLotError` et `GesteDeLotDejaEnAttenteError` dans `file_gestes`, et `plafondGesteDeLot` côté PWA (INC-014).
+- Met à jour la fiche de domaine `docs/domaines/pepiniere.md`, les fiches du corpus (`pepiniere-par-lot`, `semis-godet-plantation`, `enregistrer-un-geste`, `journal-et-corrections`) et le guide utilisateur (§ 6.3, vingt gestes) (US-212).
+
+### 💾 Base de données
+- Ajoute la colonne `evenements.levee_terminee` (BOOLEAN, nullable, réservée au geste `levee`) : migration `migration_v57.sql`, rollback `rollback_v57.sql` (US-212).
+- Ne reprend aucune donnée : aucune levée n'existait avant cette migration (US-212).
+
+## [v3.88.0] — 2026-10-15
+
+**ÉPIC 12 — US-215, US-217, US-239** : la Pépinière **s'ouvre sur ce qu'il y a à faire aujourd'hui** et sait
+**où mettre les plants en terre**. Un lot se lit d'un coup d'œil, et l'ensoleillement d'une parcelle devient
+une donnée à part entière.
+
+### 🚀 Nouveautés
+- Ajoute l'onglet **« Aujourd'hui »** de la Pépinière : lots classés par urgence, bandeau de synthèse et filtres, recherche, pastille de la pépinière (US-215).
+- Dépose le geste de chaque ligne (repiquer, mettre en terre, clôturer) dans la file, nommé par son lot, sans quitter l'écran (US-215).
+- Ajoute **« Où les mettre »** dans la fiche d'un lot : les parcelles qui ont un rang libre, la meilleure d'abord, et le geste « Mettre en terre ici » pré-rempli (US-217).
+- Compare l'ensoleillement de la parcelle à celui de la culture, sans rien réserver ni inventer quand une des deux valeurs manque (US-217, US-239).
+- Ajoute l'**ensoleillement d'une parcelle** (plein soleil, mi-ombre, ombre), distinct de son orientation, avec sa définition en heures de soleil direct (US-239).
+- Permet de le déclarer au bot (« ensoleillement planche racines plein soleil ») sans appel au modèle, et depuis l'édition de la parcelle dans le Plan (US-239).
+- Invite à renseigner l'ensoleillement depuis la fiche du lot quand il manque (US-239).
+
+### 🐛 Corrections
+- Corrige la perte ou la vente de godets d'un lot, qui s'affichait dans le cycle de vie de tous les lots de la même culture et variété (INC-013).
+
+### 🔧 Améliorations techniques
+- Étend `app/services/echeances_lots.py` avec la lecture du Plan faite une seule fois par lecture de la pépinière (US-217).
+- Ajoute la superficie et le type de pépinière à la liste des pépinières du potager, copiés pour l'affichage (US-215).
+- Fait transmettre à Jira la gravité d'un incident comme priorité du ticket (Bloquant → Highest, Majeur → High, Mineur → Medium, Cosmétique → Low) et documente la déclaration d'un Bug dans `tools/jira_tracker.py`.
+- Met à jour la fiche de domaine `docs/domaines/pepiniere.md` et les fiches du corpus (`pepiniere-par-lot`, `parcelles-et-plan`) (US-215, US-217, US-239).
+
+### 💾 Base de données
+- Ajoute la colonne `parcelles.ensoleillement` (VARCHAR(16), nullable) : migration `migration_v56.sql`, rollback `rollback_v56.sql` (US-239).
+- Ne convertit aucune donnée : l'orientation existante n'est pas traduite en ensoleillement (US-239).
+
+## [v3.87.0] — 2026-10-15
+
+**ÉPIC 12 — US-211, US-213, US-214, US-216, US-224** : la Pépinière **dit ce qu'il y a à faire, lot par lot**.
+On déplace un lot d'une pépinière à l'autre, le référentiel connaît le délai semis → godet, chaque lot
+annonce ses échéances du jour, et sa fiche permet de repiquer, déclarer une perte ou clore le lot.
+
+### 🚀 Nouveautés
+- Ajoute le geste **« déplacer un lot »** d'une pépinière à l'autre, dicté sans appel au modèle, avec récapitulatif, correction et suppression depuis le Journal (US-211).
+- Désigne le lot déplacé par son numéro, par sa culture (si elle est unique) ou par un choix, et refuse une destination qui n'est pas une pépinière ou qui est l'emplacement courant (US-211).
+- Affiche le déplacement, avec origine et destination, dans le cycle de vie du lot ; le déplacement devient la première source de l'emplacement courant, sans toucher aux stocks (US-211).
+- Ajoute une cinquième étape de durée culturale, **semis → repiquage en godet**, dictable (« le mot godet est exigé ») et lue par `/calendrier` (US-213).
+- Affiche « non renseigné » plutôt qu'un tiret quand ce délai est absent : il n'est jamais déduit d'une autre durée (US-213).
+- Calcule les **échéances de chaque lot** : repiquage attendu, endurcissement (compte à rebours, ou sur place en pépinière froide) et dormance, avec retard compté depuis la fin d'une fourchette (US-214).
+- Trie les lots par urgence et ajoute le résumé du bandeau de la Pépinière ; sans donnée requise, aucune échéance n'est inventée et la raison est rendue (US-214).
+- Ajoute la **fiche du lot** : gestes selon l'état du lot (repiquer, perte, clôture), quantités proposées, taux et comparaison, échéances et action suggérée (US-216).
+- Ajoute le geste de **clôture de lot** qui solde le lot entier — godets et graines — définitivement et le sort du stock agrégé (US-216).
+- Ajoute des notifications dans la PWA : un geste déposé est annoncé « préparé, en file, rien n'est encore enregistré » (US-216).
+- Demande la quantité de plants quand elle manque, en proposant « Tout le lot : N » avec ce que la base sait du lot (US-224).
+
+### 🐛 Corrections
+- Corrige les mises en godet et pertes de godet enregistrées sans nombre de plants, qui laissaient le lot « indéterminé » et le stock immobile (US-224).
+- Corrige le plafond d'une sortie, désormais celui du lot cité et non celui de la culture entière (US-224).
+- Corrige la perte du geste en cas de refus d'écriture : il reste dans la file, et la réponse (texte ou voix) n'avale plus une nouvelle saisie (US-224).
+
+### 🔧 Améliorations techniques
+- Ajoute le module en lecture seule `app/services/echeances_lots.py`, avec une seule lecture et au plus une météo, sans requête par lot (US-214).
+- Ajoute à `GET /pepiniere/lots` les échéances, et à `GET /pepiniere/lots/{numero}` les échéances et l'action suggérée, sans rien retirer (US-214, US-216).
+- Ajoute `duree_semis_godet` à `GET /cultures/{c}/calendrier` et `GET /plan/calendriers` (US-213).
+- Ouvre les gestes de la fiche de lot à la PWA ; un membre en lecture seule ne dépose rien (US-216).
+- Ajoute l'option `entete` au composant `Modal` et les composants `FicheLot`, `Toast`, `CompteurNumerique` (US-216).
+- Ajoute `tools/audit_quantites_manquantes.py` pour repérer les gestes de pépinière déjà écrits sans quantité (US-224).
+- Ajoute la fiche de domaine `docs/domaines/pepiniere.md` et met à jour les fiches du corpus (`pepiniere-par-lot`, `semis-godet-plantation`, calendrier) et le guide (US-213, US-214, US-216).
+
+### 💾 Base de données
+- Ne nécessite aucune migration : `semis_godet` tient dans la colonne existante de type VARCHAR(20) (US-213).
+
+## [v3.86.0] — 2026-10-09
+
+**ÉPIC 9 — US-208, US-209, US-210** : la pépinière **a un type, un numéro de lot et une adresse**.
+On déclare une pépinière chaude ou froide, on écrit « lot 128 » sur l'étiquette de la barquette
+et on le retrouve d'un mot, et chaque godet sait dans quelle pépinière il se trouve.
+
+### 🚀 Nouveautés
+- Déclare une pépinière **chaude** (chauffée ou à l'intérieur) ou **froide** : « le châssis est une pépinière froide », « ma mini-serre est chauffée », `/parcelle modifier serre pepiniere=chaude` (US-208).
+- Laisse le type **non renseigné** quand le jardinier ne le dit pas : une pépinière n'est jamais supposée chaude ou froide, et le type est écrit tel quel sur la fiche parcelle et la carte du lot (US-208).
+- Numérote chaque semis de pépinière d'un **numéro court** (« lot 128 »), unique dans le potager, attribué dans l'ordre et jamais réutilisé (US-209).
+- Ajoute `/lot` : la liste des 15 lots les plus récents (`/lot tomate` pour filtrer) et `/lot 128` pour la fiche d'un lot, sans appel au modèle (US-209).
+- Reconnaît un lot cité dans un geste : « mise en godet de 40 plants du lot 128 », « perdu 5 plants du lot 128 », « vendu 6 plants du lot 128 », « planté 10 plants du lot 128 » (US-209).
+- Signale un numéro inconnu ou d'une autre culture que celle dite, sans rien rattacher en silence (US-209).
+- Affiche le numéro `#128` sur les cartes et la fiche des lots de la Pépinière, avec un champ « Aller au lot n° » et le lien `lot=128` (US-209).
+- Ajoute `/help lot` et complète `/help` parcelle avec le type de pépinière (US-208, US-209).
+- Rattache une mise en godet à sa **pépinière** quand elle est dite (« mise en godet 40 choux sous le châssis froid ») ; non dite, le godet reste sans parcelle et rien n'est déduit (US-210).
+- Refuse une parcelle ordinaire pour une mise en godet en proposant les pépinières existantes, sans rien enregistrer (US-210).
+- Permet de corriger l'emplacement d'un godet depuis le Journal (pépinière acceptée, parcelle ordinaire refusée) (US-210).
+- Affiche l'**emplacement courant** d'un lot — celui des godets s'il y en a, sinon celui du semis, sinon « Emplacement non renseigné » — et isole les « godets sans semis rattaché » dans un lot à part (US-210).
+
+### 🔧 Améliorations techniques
+- Expose `type_pepiniere` sur les parcelles et sur les lots de l'API (US-208).
+- Ajoute `GET /pepiniere/lots/{numero}` : 404 « Aucun lot n° N dans ce potager » pour un numéro inconnu ou d'un autre potager (US-209).
+- Ajoute `app/services/lots_pepiniere.py` (lecture et résolution d'une référence de lot, fiche Telegram) et `database/numerotation_lots.py` (écouteur `before_flush` : tous les chemins d'écriture sont numérotés dans la transaction du semis) (US-209).
+- Étend le routeur et le parseur déterministes : « pépinière chaude/froide/chauffée » et `annonce_un_geste`, qui évite qu'une plantation dictée parte en `/confiance` (US-208, INC-011).
+- Calcule l'emplacement courant des lots dans `utils/stock.py`, sans changer les totaux de stocks, de godets ni de statistiques (US-210).
+
+### 💾 Base de données
+- Ajoute `parcelles.type_pepiniere` (`chaude` | `froide` | NULL) et sa contrainte `ck_parcelles_type_pepiniere`, sans reprise de l'existant — migration v54 (US-208).
+- Ajoute `evenements.numero_lot`, son index unique partiel par potager, la contrainte `ck_evenements_numero_lot_semis_seul` et `potagers.compteur_lots` ; numérote les semis de pépinière existants à la suite — migration v55 (US-209).
+- Fournit `rollback_v54.sql` et `rollback_v55.sql` (US-208, US-209).
+
+### 📚 Documentation
+- Met à jour les fiches `pepiniere-par-lot.md`, `semis-godet-plantation.md`, `enregistrer-un-geste.md`, `parcelles-et-plan.md`, le guide utilisateur et `docs/domaines/` (commandes-bot, migrations) dans la même livraison (US-099 / CA9).
+
+## [v3.85.0] — 2026-10-07
+
+**ÉPIC 10 — US-199, US-201, US-223** : le Plan **s'ouvre sur le reste de l'application**
+et parle enfin la langue du jardinier. On peut dire « 5 poquets de courge » ou
+« 3 mètres de carottes » et être compris tel quel ; un appui sur un rang du Plan
+mène à la culture, à la parcelle ou au Journal ; la barre de l'activité Plan range
+ses sous-onglets du plus large au plus détaillé.
+
+### 🚀 Nouveautés
+- Reconnaît le **poquet** (« 5 poquets », « 2 touffes », « 3 trous ») et le **mètre de rang** (« 3 mètres de rang », « 3 ml », « 3 mètres » en semis) comme unités d'un semis, d'une plantation, d'une perte ou d'une récolte (US-199).
+- Distingue « 3 mètres de carottes » (mètre de rang) de « 2 mètres carrés de carottes » (surface), à la dictée comme à la commande (US-199).
+- Écrit l'unité en toutes lettres au récapitulatif du bot et dans la PWA : « 5 poquets », « 1 poquet », « 3 m de rang » (US-199).
+- Refuse un poquet ou un mètre de rang pour une mise en godet, une perte de godet ou un semis en pépinière, en rappelant les plants ou les graines attendus (US-199).
+- Ouvre la **fiche de la culture** d'un appui sur un rang occupé de la Vue plan, y compris sur la carte « non localisé » (US-201).
+- Propose *Semer en place* ou *Planter* sur un rang libre et dépose le geste dans la file du compagnon — rien n'est écrit depuis la PWA, et un membre en lecture seule n'y est pas invité (US-201).
+- Relie « Fiche parcelle → », la carte d'une pépinière et « Journal du jour » à leurs écrans, sans aucun état de sélection sur le Plan (US-201).
+- Demande la culture au compagnon quand un geste déposé depuis un rang libre n'en a pas : « Quelle culture ? » avant toute quantité, « annuler » laisse le geste dans la file (US-201).
+- Range les sous-onglets du Plan dans l'ordre **Vue plan → Parcelles → Rotation** et ouvre l'activité sur la Vue plan (US-223).
+- Garde **Rotation · à venir** visible mais désactivée : elle ne se focalise pas, s'annonce « indisponible » aux lecteurs d'écran et n'ouvre rien (US-223).
+- Restitue le **dernier sous-onglet visité** quand on revient au Plan pendant la session ; une nouvelle session repart de la Vue plan (US-223).
+- Porte la **date de référence** et « Journal du jour » dans une barre commune aux deux sous-onglets actifs, avec des cibles de 44 px et un libellé qui s'abrège à l'étroit (US-223).
+
+### 🐛 Corrections
+- Corrige une unité corrigée à la main (« corriger » puis « 4 m ») : elle s'enregistre `ml`, et le résumé de correction comme la trace d'audit écrivent la forme normalisée (US-199).
+- Corrige le plantage de `/gestes` quand un nom de parcelle ou de culture contient un `_` (`planche_centrale`) : les noms sont échappés avant d'entrer dans un message Markdown (US-201).
+- Corrige le bandeau « Confiance indisponible » de l'écran Cultures : une date de référence hors des 14 jours de prévision n'est plus présentée comme une météo illisible (US-204).
+
+### 🔧 Améliorations techniques
+- Ajoute `utils/unites_implantation.py`, table unique lue par le parseur déterministe, la normalisation à l'écriture, la correction et le garde-fou de pépinière : les deux chemins donnent la même unité (US-199).
+- Étend `valider_evenement` d'une règle 6 (unité d'implantation en pépinière), appliquée aussi aux corrections (US-199).
+- Fait porter par `GET /cultures/vue` un champ `confiance_indisponible` (`meteo` | `hors_horizon` | `null`) à côté de `meteo_disponible` (US-204).
+- Isole dans la lib de la Vue plan la table « élément appuyé → destination et intention », couverte par `npm test` (US-201).
+- Déclare dans la navigation l'entrée de l'activité Plan et la mémorisation du dernier sous-onglet, en un seul endroit (US-223).
+
+### 📚 Documentation
+- Met à jour les fiches `enregistrer-un-geste.md`, `stock-plants-calcul.md`, `parcelles-et-plan.md`, `compagnon-telegram.md` et le guide utilisateur (§ 6.2, § 6.5) dans la même livraison (US-099 / CA9).
+
 ## [v3.84.1] — 2026-09-24
 
 **Correctif déploiement DEV** : découpe huit chapitres trop longs du guide

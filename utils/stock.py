@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date as _date, datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 
@@ -353,7 +353,7 @@ def _fmt_qte_unite(valeur: float, unite: str) -> float | int:
     """[US-037 / CA9] Une surface m² est fractionnable (1.5 m²) — ne jamais tronquer
     en entier comme pour un nombre de plants/graines/pieds. Un m² entier (2.0) s'affiche
     "2", pas "2.0"."""
-    if unite == "m²":
+    if unite in ("m²", "ml"):   # [US-199] un mètre de rang se fractionne aussi (2,5 m)
         arrondi = round(valeur, 2)
         return int(arrondi) if arrondi == int(arrondi) else arrondi
     return int(valeur)
@@ -1315,6 +1315,32 @@ def calcul_godets(
             _seen_cv.setdefault(key, set()).add(r.origine_graines_id)
             graines_par_cv[key] = graines_par_cv.get(key, 0) + _semis_qtites_all.get(r.origine_graines_id, 0)
 
+    # [US-216] Un lot clôturé n'a plus de graines à lever : le semis est consommé,
+    # sans entrer dans le dénominateur du taux (aucune graine n'a donné de plant).
+    graines_cloturees: Dict[tuple, int] = {}
+    _q_clot = (
+        db.query(Evenement.culture, Evenement.variete, Evenement.origine_graines_id)
+        .filter(Evenement.type_action == "cloture_lot")
+        .filter(Evenement.culture.isnot(None))
+        .filter(Evenement.origine_graines_id.isnot(None))
+    )
+    if potager_id is not None:
+        _q_clot = _q_clot.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_clot = _q_clot.filter(Evenement.date <= cutoff)
+    _clot_vues: set = set()
+    for c_cl, v_cl, sid_cl in _q_clot.all():
+        if sid_cl in _clot_vues or sid_cl in _seen_cv.get((c_cl, v_cl), set()):
+            continue   # déjà compté : lot clôturé deux fois, ou semis déjà consommé par un godet
+        _clot_vues.add(sid_cl)
+        q_sem = db.query(Evenement.quantite).filter(Evenement.id == sid_cl)
+        if potager_id is not None:
+            q_sem = q_sem.filter(Evenement.potager_id == potager_id)
+        ligne_sem = q_sem.first()
+        graines_cloturees[(c_cl, v_cl)] = (
+            graines_cloturees.get((c_cl, v_cl), 0) + int((ligne_sem[0] if ligne_sem else 0) or 0)
+        )
+
     # [US-022] Plantations par (culture, variété)
     _q_plant = (
         db.query(
@@ -1333,37 +1359,18 @@ def calcul_godets(
     plant_rows = _q_plant.all()
     plantations: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in plant_rows}
 
-    # [US-022 / CA6] Plantation sans variété → rattacher à la variété unique par culture
-    varietes_par_culture: Dict[str, list] = {}
-    for culture, variete, *_ in rows:
-        if variete is not None:
-            varietes_par_culture.setdefault(culture, []).append(variete)
-
-    for culture in [c for (c, v) in list(plantations) if v is None]:
-        nb_sans_var = plantations.pop((culture, None), 0)
-        if nb_sans_var > 0:
-            varietes = varietes_par_culture.get(culture, [])
-            if len(varietes) == 1:
-                plantations[(culture, varietes[0])] = plantations.get((culture, varietes[0]), 0) + nb_sans_var
-            elif len(varietes) == 0:
-                plantations[(culture, None)] = nb_sans_var
-            else:
-                _logger.warning("[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée", culture, len(varietes))
-
-    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    for culture in {c for c, v, *_ in rows if v is None}:
-        varietes_plantees = [(c, v) for (c, v) in list(plantations) if c == culture and v is not None]
-        if len(varietes_plantees) == 1:
-            c_key, v_key = varietes_plantees[0]
-            nb = plantations.pop((c_key, v_key), 0)
-            if nb > 0:
-                plantations[(culture, None)] = plantations.get((culture, None), 0) + nb
-                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_key)
+    # Seule une plantation de même culture ET de même variété (renseignée) sort
+    # des godets. Décision PO du 07/10/2026, qui remplace les rattachements
+    # d'US-022 CA6 et CA6-reverse : une plantation sans variété — même face à un
+    # godet sans variété — est un évènement à part, jamais pris à la pépinière.
+    plantations = {
+        (c, v): q for (c, v), q in plantations.items() if (v or "").strip()
+    }
 
     # [vendu + perte_godet] Sorties de la pépinière hors plantation
     _q_sorties = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
-        .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
+        .filter(Evenement.type_action.in_(["vendu", "perte_godet", "cloture_lot"]))   # [US-216]
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
@@ -1399,7 +1406,8 @@ def calcul_godets(
 
     _q_pertes_g = (
         db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
-        .filter(Evenement.type_action == "perte_godet")
+        # [US-216] Les godets soldés par une clôture sortent du stock comme une perte.
+        .filter(Evenement.type_action.in_(["perte_godet", "cloture_lot"]))
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture, Evenement.variete)
     )
@@ -1467,7 +1475,7 @@ def calcul_godets(
     for (culture, variete), par_unite in semis_par_cv.items():
         unite_dom = max(par_unite, key=par_unite.get)
         total_seme = par_unite[unite_dom]
-        consommees = graines_par_cv.get((culture, variete), 0)
+        consommees = graines_par_cv.get((culture, variete), 0) + graines_cloturees.get((culture, variete), 0)
         reste = max(0, total_seme - consommees)
         if reste <= 0:
             continue
@@ -1582,39 +1590,14 @@ def calcul_godets_par_culture(
     plant_rows = _q_plant_var.all()
     plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
 
-    # [US-022 / CA6] Plantation sans variété → rattacher selon le contexte godet
-    nb_plantes_sans_variete = plantations.pop(None, 0)
-    ca6_applied = False
-    if nb_plantes_sans_variete > 0:
-        varietes_avec_godet = [r[0] for r in rows if r[0] is not None]
-        if len(varietes_avec_godet) == 0:
-            # Godet aussi sans variété → match direct (cas le plus courant)
-            plantations[None] = nb_plantes_sans_variete
-        elif len(varietes_avec_godet) == 1:
-            v_unique = varietes_avec_godet[0]
-            plantations[v_unique] = plantations.get(v_unique, 0) + nb_plantes_sans_variete
-            ca6_applied = True  # [US-029 CA10] marque pour bloquer CA6-reverse
-        else:
-            _logger.warning(
-                "[US-022] Plantation sans variété pour '%s' avec %d variétés en godet — ignorée du calcul",
-                culture, len(varietes_avec_godet),
-            )
-
-    # [CA6-reverse] Godet sans variété + plantation avec variété unique → rattacher
-    # [US-029 CA10] Ne s'applique PAS si CA6 vient d'attribuer les plants (évite l'annulation mutuelle)
-    if not ca6_applied and any(r[0] is None for r in rows):
-        varietes_dans_plantations = [v for v in plantations if v is not None]
-        if len(varietes_dans_plantations) == 1:
-            v_unique = varietes_dans_plantations[0]
-            nb = plantations.pop(v_unique, 0)
-            if nb > 0:
-                plantations[None] = plantations.get(None, 0) + nb
-                _logger.info("[US-022 CA6-reverse] Plantation '%s/%s' rattachée au godet sans variété", culture, v_unique)
+    # Décision PO du 07/10/2026 (remplace US-022 CA6, CA6-reverse et US-029
+    # CA10) : seule une plantation de même variété, renseignée, sort des godets.
+    plantations = {v: q for v, q in plantations.items() if (v or "").strip()}
 
     # [vendu + perte_godet] Sorties hors plantation
     _q_sorties_var = (
         db.query(Evenement.variete, Evenement.type_action, func.sum(Evenement.quantite))
-        .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
+        .filter(Evenement.type_action.in_(["vendu", "perte_godet", "cloture_lot"]))   # [US-216]
         .filter(func.lower(Evenement.culture) == culture_lower)
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.variete, Evenement.type_action)
@@ -1734,19 +1717,12 @@ def _find_plantation_sources(
         for g in godet_events
     }
 
-    # Résolution variété si None (CA5)
-    if variete is None:
-        varietes_actives = {
-            g.variete for g in godet_events
-            if g.variete is not None and residuel.get(g.id, 0.0) > 0
-        }
-        if len(varietes_actives) == 1:
-            variete = next(iter(varietes_actives))
-            _logger.info("[US-029 CA5] Variété unique déduite depuis godet : '%s' pour '%s'", variete, culture)
-        elif len(varietes_actives) == 0:
-            return (None, None)
-        else:
-            return (None, None)  # Ambiguïté : menu inline requis en amont
+    # Plantation sans variété : évènement à part, jamais rattaché aux godets et
+    # jamais dotée d'une variété déduite (décision PO du 07/10/2026, qui
+    # remplace l'héritage silencieux d'US-029 CA5). Seuls culture ET variété
+    # identiques relient une plantation à la pépinière.
+    if not (variete or "").strip():
+        return (None, None)
 
     # Allocation FIFO sur les godets de la variété (CA8)
     godets_variete = [
@@ -1796,6 +1772,193 @@ def _cle_cv(culture: Optional[str], variete: Optional[str]) -> tuple:
     return ((culture or "").lower(), ((variete or "").lower() or None))
 
 
+def graines_restantes(lot: dict) -> int:
+    """[US-212] Graines qu'un lot peut encore fournir à un repiquage : celles que ni une mise
+    en godet ni une clôture n'a soldées (`graines_non_soldees`).
+
+    À ne pas confondre avec `graines_en_germination`, qui dit ce qui est encore « en train de
+    lever » et tombe à 0 quand la levée est déclarée terminée — alors que les plants levés
+    restent à repiquer. Tout garde-fou de repiquage, tout test « le lot a-t-il encore quelque
+    chose » passe par ici. Un lot construit avant US-212 (sans `graines_non_soldees`) retombe
+    sur `graines_en_germination`, qui valait alors exactement la même chose."""
+    valeur = lot.get("graines_non_soldees")
+    return int(valeur if valeur is not None else (lot.get("graines_en_germination") or 0))
+
+
+def _rejouer_mouvements(mouvements: list, depart: Optional[int]) -> tuple:
+    """[US-241 / CA7] Rejoue, dans l'ordre des dates, les gestes qui placent les godets d'un
+    lot coupé par un déplacement chiffré. Retourne (répartition {pépinière: godets},
+    arrivées {pépinière: date}, rang d'arrivée {pépinière: n}, emplacement courant,
+    à vérifier).
+
+    Tant que le lot est d'un seul tenant, il suit la règle d'US-210 / US-211 : le dernier
+    déplacement, sinon la dernière mise en godet localisée, sinon la parcelle du semis
+    (`depart`). Le premier déplacement chiffré le coupe ; un retour qui réunit tous les
+    godets au même endroit le rend d'un seul tenant. Un déplacement sans quantité porte
+    sur le lot entier, graines comprises. Une mise en godet faite après la coupe pose ses
+    godets où elle le dit, sinon où sont les graines.
+
+    Une sortie qui dit sa pépinière (`parcelle_origine_id`) y retire ses godets. Celle qui
+    ne la dit pas (historique, imputation FIFO, correction au Journal) les retire d'abord
+    de l'emplacement courant (destination du dernier déplacement), puis des autres dans
+    l'ordre d'arrivée, et le lot est marqué « à vérifier ». C'est un REPLI DU CALCUL, pas
+    une règle proposée au jardinier : l'arbitrage A41 reste en suspens et le bot demande
+    l'origine (CA9). Décision du PO du 19/10/2026.
+    """
+    loc = loc_graines = courant = depart
+    deplace = False
+    rep: Optional[Dict[Optional[int], int]] = None
+    total = 0
+    arrivees: Dict[Optional[int], Any] = {}
+    ordre: Dict[Optional[int], int] = {depart: 0}
+    a_verifier = False
+
+    def _arrive(pid: Optional[int]) -> None:
+        ordre.setdefault(pid, len(ordre))
+
+    def _replier() -> None:
+        nonlocal rep, loc
+        vivants = {k: v for k, v in (rep or {}).items() if v > 0}
+        if len(vivants) <= 1:
+            if vivants:
+                loc = next(iter(vivants))
+            rep = None
+        else:
+            rep = vivants
+
+    def _ordre_de_repli(pid: Optional[int]) -> tuple:
+        return (pid != courant, ordre.get(pid, 10**6))
+
+    def _retirer(n: int, origine: Optional[int], dite: bool) -> int:
+        nonlocal a_verifier
+        reste = n
+        if dite and origine in rep:
+            pris = min(reste, rep[origine])
+            rep[origine] -= pris
+            reste -= pris
+        if reste > 0:
+            a_verifier = True
+            for pid in sorted(rep, key=_ordre_de_repli):
+                pris = min(reste, rep[pid])
+                rep[pid] -= pris
+                reste -= pris
+                if reste <= 0:
+                    break
+        return n - reste
+
+    def _cle(m: tuple) -> tuple:
+        return (m[0] or datetime.min, m[1] if m[1] is not None else 10**12)
+
+    for quand, _id, nature, n, info in sorted(mouvements, key=_cle):
+        if nature == "godet":
+            total += n
+            if rep is None:
+                if info is not None and not deplace:
+                    loc = info
+            else:
+                cible = info if info is not None else loc_graines
+                rep[cible] = rep.get(cible, 0) + n
+                _arrive(cible)
+        elif nature == "sortie":
+            if rep is None:
+                total = max(0, total - n)
+            else:
+                total -= _retirer(n, info, info is not None)
+                _replier()
+        elif nature == "cloture":
+            rep, total = None, 0
+        elif nature == "deplacement":
+            origine, dest = info
+            deplace = True
+            if n is None:
+                rep = None
+                loc = loc_graines = courant = dest
+                arrivees = {dest: quand}
+                _arrive(dest)
+                continue
+            if rep is None:
+                if total <= 0:
+                    continue
+                rep = {loc: total}
+            if origine not in rep and len(rep) == 1:
+                # Lot d'un seul tenant : ses godets ne partent que d'un endroit (un
+                # déplacement entier rendu chiffré au Journal n'a pas d'origine écrite).
+                origine = next(iter(rep))
+            pris = min(n, rep.get(origine, 0))
+            if pris < n:
+                a_verifier = True   # corrigé au Journal au-delà de ce que l'origine avait
+            if pris:
+                rep[origine] -= pris
+                rep[dest] = rep.get(dest, 0) + pris
+                arrivees[dest] = quand
+                _arrive(dest)
+            courant = dest
+            _replier()
+
+    final = dict(rep) if rep is not None else ({loc: total} if total > 0 else {})
+    return final, arrivees, ordre, courant, a_verifier
+
+
+def _repartir_godets(lot: dict, parcelles: Dict[int, Any]) -> None:
+    """[US-241 / CA7, CA8] Godets DISPONIBLES d'un lot, pépinière par pépinière, à la date
+    de référence : `repartition_godets` = [{parcelle_id, nom, type_pepiniere, godets,
+    depuis}], `reparti` (plus d'une pépinière), `repartition_a_verifier` (une sortie sans
+    origine a dû être retirée par le repli, voir `_rejouer_mouvements`).
+
+    `depuis` : date de la dernière arrivée de godets à cet endroit par un déplacement —
+    c'est d'elle que part l'endurcissement de la partie posée au froid (CA8). Un lot qui
+    n'a jamais été coupé a tous ses godets à son emplacement courant (US-210), comme
+    avant US-241. Informatif : n'entre dans aucun stock (CA10)."""
+    stock = int(lot.get("stock_residuel_godet") or 0)
+    lot["reparti"] = False
+    lot["repartition_a_verifier"] = False
+    if not lot.get("_partiel"):
+        emp = lot.get("emplacement") or {}
+        depuis = lot.get("date_deplacement") if emp.get("origine") == "deplacement" else None
+        lot["repartition_godets"] = [{
+            "parcelle_id": emp.get("parcelle_id"), "nom": emp.get("nom"),
+            "type_pepiniere": emp.get("type_pepiniere"), "godets": stock, "depuis": depuis,
+        }] if stock > 0 else []
+        return
+
+    rep, arrivees, ordre, courant, a_verifier = _rejouer_mouvements(
+        lot["_mouvements"], lot.get("_parcelle_semis_id"),
+    )
+    ecart = sum(rep.values()) - stock
+    if ecart:
+        # Le rejeu et le stock du lot divergent (imputation hors date, correction) : le
+        # stock fait foi, l'écart est porté par l'emplacement courant puis les autres.
+        a_verifier = True
+        _log_stock.warning(
+            "[US-241] Répartition du lot %s ajustée au stock : écart de %d godet(s)", lot["lot_id"], ecart,
+        )
+        if ecart < 0:
+            cible = courant if courant in rep or not rep else next(iter(rep))
+            rep[cible] = rep.get(cible, 0) - ecart
+        else:
+            for pid in sorted(rep, key=lambda p: (p != courant, ordre.get(p, 10**6))):
+                pris = min(ecart, rep[pid])
+                rep[pid] -= pris
+                ecart -= pris
+                if ecart <= 0:
+                    break
+
+    def _lieu(pid: Optional[int]) -> dict:
+        p = parcelles.get(pid) if pid is not None else None
+        return {
+            "parcelle_id": pid, "nom": p.nom if p is not None else None,
+            "type_pepiniere": p.type_pepiniere if p is not None else None,
+        }
+
+    lot["repartition_godets"] = [
+        {**_lieu(pid), "godets": godets, "depuis": arrivees.get(pid)}
+        for pid, godets in sorted(rep.items(), key=lambda kv: ordre.get(kv[0], 10**6))
+        if godets > 0
+    ]
+    lot["reparti"] = len(lot["repartition_godets"]) > 1
+    lot["repartition_a_verifier"] = a_verifier and lot["reparti"]
+
+
 def calcul_lots_pepiniere(
     db: Session, date_ref: Optional[_date] = None, potager_id: Optional[int] = None
 ) -> List[dict]:
@@ -1835,7 +1998,26 @@ def calcul_lots_pepiniere(
       unite, graines_soldees, graines_en_germination, plants_obtenus,
       nb_mises_en_godet, date_derniere_mise_en_godet, nb_plantes, nb_vendus,
       nb_pertes_godet, stock_residuel_godet, etat_germination, taux_germination,
-      incoherence_saisie, sans_semis_rattache
+      incoherence_saisie, sans_semis_rattache, emplacement
+
+    [US-210 / CA5, CA6, CA7] `emplacement` = emplacement COURANT du lot à `date_ref` :
+    {parcelle_id, nom, type_pepiniere, origine}, `origine` valant "mise_en_godet"
+    (dernière mise en godet localisée), "deplacement" [US-211] (dernier déplacement,
+    qui prime), "semis" ou "non_renseigne". Un lot a un seul
+    emplacement. N'entre dans aucun total : les stocks restent agrégés par culture.
+
+    [US-214 / CA1, CA4] `date_dernier_geste` (le geste le plus récent imputé au lot)
+    et `date_deplacement` (son dernier déplacement) sont les deux dates dont le
+    calcul des échéances a besoin ; None quand le lot n'en a pas.
+
+    [US-212 / CA6-CA9] Levée : `nb_leves` / `date_derniere_levee` (le dernier comptage fait
+    foi, jamais cumulé ; None tant qu'aucune levée n'est notée), `taux_levee` (levés ÷
+    graines semées, None sans graines connues — ≠ `taux_germination`), `levee_terminee`
+    (collant : ferme la germination), `graines_non_levees_soldees`, `incoherence_levee`,
+    `incoherence_repiquage_levee` (drapeaux, jamais de bornage) et `moyenne_levee_culture`
+    (autres lots de la culture, à partir de deux). `graines_en_germination` tombe à 0 quand la
+    levée est terminée ; `graines_non_soldees` (lue par `graines_restantes`) dit ce que le lot
+    peut encore fournir à un repiquage. Aucun stock n'est touché.
     """
     from sqlalchemy import or_ as _sa_or
 
@@ -1856,6 +2038,9 @@ def calcul_lots_pepiniere(
         .filter(Evenement.type_action == "semis")
         .filter(Evenement.culture.isnot(None))
         .filter(_sa_or(Evenement.parcelle_id.is_(None), Parcelle.est_pepiniere.is_(True)))
+        # [US-209 / CA4] Un semis dont la filière est corrigée en pleine terre
+        # (US-069) quitte la liste des lots — il garde pourtant son numéro.
+        .filter(_sa_or(Evenement.contexte_semis.is_(None), Evenement.contexte_semis != "pleine_terre"))
     )
     if potager_id is not None:
         _q_semis = _q_semis.filter(Evenement.potager_id == potager_id)
@@ -1867,10 +2052,16 @@ def calcul_lots_pepiniere(
         base = {
             "lot_id":                     "",
             "semis_id":                   None,
+            # [US-209 / CA1] Numéro court du lot, unique dans le potager ; None
+            # pour le lot « godets sans semis rattaché », qui n'en a pas.
+            "numero_lot":                 None,
             "culture":                    None,
             "variete":                    None,
             "date_semis":                 None,
             "parcelle":                   None,
+            # [US-208 / CA5] Type de la pépinière du lot : chaude, froide, ou
+            # None (type non renseigné, ou lot sans emplacement).
+            "type_pepiniere":             None,
             "graines_semees":             0,
             "unite":                      "graines",
             "graines_soldees":            0,
@@ -1880,22 +2071,57 @@ def calcul_lots_pepiniere(
             "nb_plantes":                 0,
             "nb_vendus":                  0,
             "nb_pertes_godet":            0,
+            # [US-214 / CA1, CA4] Dernier geste du lot (semis, mise en godet,
+            # déplacement, plantation, vente, perte) et dernier déplacement :
+            # de quoi dire « oublié depuis N jours » et « endurci depuis le… ».
+            "date_dernier_geste":         None,
+            "date_deplacement":           None,
             "sans_semis_rattache":        False,
+            # [US-216] Lot clôturé : tout ce qu'il restait — godets et graines — est
+            # soldé, définitivement. `date_cloture` est le jour du geste.
+            "cloture":                    False,
+            "date_cloture":               None,
+            # [US-212] Levée : le dernier comptage fait foi (instantané, jamais cumulé).
+            # `nb_leves` vaut None tant qu'aucune levée n'est notée — jamais 0.
+            "nb_leves":                   None,
+            "date_derniere_levee":        None,
+            "levee_terminee":             False,
+            "_parcelle_godet_id":         None,
+            "_parcelle_deplacement_id":   None,
+            # [US-241] Destination du dernier déplacement du lot ENTIER (sans quantité) :
+            # seul lui emmène les graines ; un déplacement chiffré ne déplace que des godets.
+            "_parcelle_deplacement_entier_id": None,
+            "_godets_par_parcelle":       None,
+            # [US-241] Gestes qui répartissent les godets entre pépinières, rejoués dans
+            # l'ordre des dates quand le lot a connu un déplacement chiffré (`_partiel`).
+            "_mouvements":                [],
+            # [US-242] Chaque sortie imputée au lot, avec sa date : mises en terre (et leur
+            # parcelle), ventes, pertes en godet — de quoi dater le journal du lot.
+            "sorties_datees":             [],
+            "_partiel":                   False,
             "_declaration_incomplete":    False,
             "_sorties":                   0,
         }
         base.update(champs)
         return base
 
+    def _toucher(lot: dict, quand) -> None:
+        """[US-214] Retient le geste le plus récent du lot."""
+        if quand is not None and (lot["date_dernier_geste"] is None or quand > lot["date_dernier_geste"]):
+            lot["date_dernier_geste"] = quand
+
     lots: Dict[tuple, dict] = {}
     for s in semis_events:
         lots[("semis", s.id)] = _nouveau_lot(
+            date_dernier_geste = s.date,
             lot_id         = f"semis-{s.id}",
             semis_id       = s.id,
+            numero_lot     = s.numero_lot,
             culture        = s.culture,
             variete        = s.variete,
             date_semis     = s.date,
             parcelle       = s.parcelle_rel.nom if s.parcelle_rel else None,
+            type_pepiniere = s.parcelle_rel.type_pepiniere if s.parcelle_rel else None,
             graines_semees = int(s.quantite or 0),
             unite          = s.unite or "graines",
         )
@@ -1910,6 +2136,7 @@ def calcul_lots_pepiniere(
             Evenement.nb_plants_godets,
             Evenement.origine_graines_id,
             Evenement.date,
+            Evenement.parcelle_id,
         )
         .filter(Evenement.type_action == "mise_en_godet")
         .filter(Evenement.culture.isnot(None))
@@ -1948,6 +2175,7 @@ def calcul_lots_pepiniere(
         lot["graines_soldees"]   += soldees
         lot["plants_obtenus"]    += plants
         lot["nb_mises_en_godet"] += 1
+        _toucher(lot, g.date)
         if not declare:
             lot["_declaration_incomplete"] = True
         if lot["sans_semis_rattache"]:
@@ -1959,6 +2187,15 @@ def calcul_lots_pepiniere(
             or g.date > lot["date_derniere_mise_en_godet"]
         ):
             lot["date_derniere_mise_en_godet"] = g.date
+        # [US-210 / CA5, CA7] Les mises en godet arrivent par ordre chronologique :
+        # la dernière LOCALISÉE donne l'emplacement courant du lot (un seul par lot).
+        if g.parcelle_id is not None:
+            lot["_parcelle_godet_id"] = g.parcelle_id
+        # [US-211] Où sont posés les godets du lot, plants par emplacement (None = non dit).
+        if lot["_godets_par_parcelle"] is None:
+            lot["_godets_par_parcelle"] = {}
+        lot["_godets_par_parcelle"][g.parcelle_id] = lot["_godets_par_parcelle"].get(g.parcelle_id, 0) + plants
+        lot["_mouvements"].append((g.date, g.id, "godet", plants, g.parcelle_id))   # [US-241]
         godet_lot[g.id] = cle
 
     if not lots:
@@ -1989,23 +2226,30 @@ def calcul_lots_pepiniere(
             return exacts
         return lots_par_culture.get((culture or "").lower(), [])
 
-    def _allouer(cle: tuple, quantite: int, champ: str) -> int:
+    def _allouer(cle: tuple, quantite: int, champ: str, quand=None, ev_id=None, origine=None, trace=None) -> int:
         """Impute au plus `quantite` sorties au lot, dans la limite de ses plants
-        encore disponibles. Retourne le reliquat non imputé."""
+        encore disponibles. Retourne le reliquat non imputé. `quand` : date du
+        geste, retenue comme dernier geste du lot [US-214] quand il lui est imputé.
+        [US-241] `origine` : la pépinière d'où la sortie retire ses godets, si elle
+        est dite (`parcelle_origine_id`) — gardée pour la répartition du lot."""
         lot   = lots[cle]
         dispo = lot["plants_obtenus"] - lot["_sorties"]
         pris  = max(0, min(quantite, dispo))
         if pris:
             lot[champ]      += pris
             lot["_sorties"] += pris
+            _toucher(lot, quand)
+            lot["_mouvements"].append((quand, ev_id, "sortie", pris, origine))
+            if trace is not None:
+                lot["sorties_datees"].append({**trace, "date": quand, "id": ev_id, "quantite": pris})
         return quantite - pris
 
-    def _allouer_fifo(culture, variete, quantite: int, champ: str) -> int:
+    def _allouer_fifo(culture, variete, quantite: int, champ: str, quand=None, ev_id=None, origine=None, trace=None) -> int:
         restant = quantite
         for cle in _candidats(culture, variete):
             if restant <= 0:
                 break
-            restant = _allouer(cle, restant, champ)
+            restant = _allouer(cle, restant, champ, quand, ev_id, origine, trace)
         return restant
 
     # 3a. Plantations — rattachement explicite via source_evenement_ids (US-029),
@@ -2017,6 +2261,9 @@ def calcul_lots_pepiniere(
             Evenement.quantite,
             Evenement.source_evenement_ids,
             Evenement.date,
+            Evenement.id,
+            Evenement.parcelle_origine_id,
+            Evenement.parcelle_id,
         )
         .filter(Evenement.type_action == "plantation")
         .filter(Evenement.culture.isnot(None))
@@ -2027,8 +2274,16 @@ def calcul_lots_pepiniere(
         _q_plant = _q_plant.filter(Evenement.date <= cutoff)
     plantations = _q_plant.order_by(Evenement.date.asc(), Evenement.id.asc()).all()
 
-    for culture_p, variete_p, qte_p, src_ids, _date_p in plantations:
+    # [US-242] Le nom de la parcelle de chaque mise en terre, lu une fois.
+    _ids_parcelles = {pl[7] for pl in plantations if pl[7] is not None}
+    _q_noms = db.query(Parcelle.id, Parcelle.nom).filter(Parcelle.id.in_(_ids_parcelles)) if _ids_parcelles else None
+    if _q_noms is not None and potager_id is not None:
+        _q_noms = _q_noms.filter(Parcelle.potager_id == potager_id)
+    _noms_parcelles = {pid_: nom_ for pid_, nom_ in _q_noms.all()} if _q_noms is not None else {}
+
+    for culture_p, variete_p, qte_p, src_ids, _date_p, id_p, origine_p, parcelle_p in plantations:
         restant   = int(qte_p or 0)
+        trace_p   = {"nature": "plantation", "parcelle": _noms_parcelles.get(parcelle_p)}
         cles_vues: List[tuple] = []
         for part in (src_ids or "").split(";"):
             part = part.strip()
@@ -2038,13 +2293,20 @@ def calcul_lots_pepiniere(
             if cle is None or cle in cles_vues:
                 continue
             cles_vues.append(cle)
-            restant = _allouer(cle, restant, "nb_plantes")
+            restant = _allouer(cle, restant, "nb_plantes", _date_p, id_p, origine_p, trace_p)
             if restant <= 0:
                 break
-        if restant > 0:
-            _allouer_fifo(culture_p, variete_p, restant, "nb_plantes")
+        # Repli FIFO STRICT : même culture ET même variété, variété renseignée.
+        # Une plantation sans variété — ou d'une variété sans lot — est un
+        # évènement à part, jamais rattaché à la pépinière (décision PO du
+        # 07/10/2026 : un plant de « tomate » n'est pas pris au lot « jaune »).
+        if restant > 0 and (variete_p or "").strip():
+            for cle in lots_par_cv.get(_cle_cv(culture_p, variete_p), []):
+                if restant <= 0:
+                    break
+                restant = _allouer(cle, restant, "nb_plantes", _date_p, id_p, origine_p, trace_p)
 
-    # 3b. Ventes et pertes en godet — jamais chaînées à un lot précis, imputées FIFO.
+    # 3b. Ventes et pertes en godet — imputées FIFO, sauf si elles citent leur lot (US-209).
     _q_sorties = (
         db.query(
             Evenement.culture,
@@ -2052,6 +2314,9 @@ def calcul_lots_pepiniere(
             Evenement.type_action,
             Evenement.quantite,
             Evenement.date,
+            Evenement.origine_graines_id,
+            Evenement.id,
+            Evenement.parcelle_origine_id,
         )
         .filter(Evenement.type_action.in_(["vendu", "perte_godet"]))
         .filter(Evenement.culture.isnot(None))
@@ -2060,11 +2325,205 @@ def calcul_lots_pepiniere(
         _q_sorties = _q_sorties.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_sorties = _q_sorties.filter(Evenement.date <= cutoff)
-    for culture_s, variete_s, action_s, qte_s, _date_s in _q_sorties.order_by(
+    for culture_s, variete_s, action_s, qte_s, _date_s, lot_cite_s, id_s, origine_s in _q_sorties.order_by(
         Evenement.date.asc(), Evenement.id.asc()
     ).all():
         champ = "nb_vendus" if action_s == "vendu" else "nb_pertes_godet"
-        _allouer_fifo(culture_s, variete_s, int(qte_s or 0), champ)
+        trace_s = {"nature": "vente" if action_s == "vendu" else "perte", "parcelle": None}   # [US-242]
+        restant_s = int(qte_s or 0)
+        # [US-209 / CA5] Une sortie qui cite son lot ("perdu 5 plants du lot 128")
+        # s'impute D'ABORD sur ce lot ; le reste éventuel retombe sur le FIFO.
+        if lot_cite_s is not None and ("semis", lot_cite_s) in lots:
+            restant_s = _allouer(("semis", lot_cite_s), restant_s, champ, _date_s, id_s, origine_s, trace_s)
+        if restant_s > 0:
+            _allouer_fifo(culture_s, variete_s, restant_s, champ, _date_s, id_s, origine_s, trace_s)
+
+    # ── 3b'. Déplacements [US-211 / CA6] ────────────────────────────────────
+    # Un déplacement ne touche à aucun stock : il ne fait que dire où est le lot. Il
+    # vise un lot par son semis (`origine_graines_id`) ou, pour un lot de godets sans
+    # semis rattaché, par sa culture et sa variété. Chronologique : le dernier gagne.
+    # [US-241] Un déplacement CHIFFRÉ (`quantite`) ne déplace qu'une partie des godets,
+    # depuis `parcelle_origine_id` : il coupe le lot par l'emplacement (`_partiel`).
+    _q_depl = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            Evenement.origine_graines_id,
+            Evenement.parcelle_id,
+            Evenement.date,
+            Evenement.id,
+            Evenement.quantite,
+            Evenement.parcelle_origine_id,
+        )
+        .filter(Evenement.type_action == "deplacement")
+        .filter(Evenement.parcelle_id.isnot(None))
+    )
+    if potager_id is not None:
+        _q_depl = _q_depl.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_depl = _q_depl.filter(Evenement.date <= cutoff)
+    for culture_d, variete_d, semis_d, parcelle_d, date_d, id_d, qte_d, origine_d in _q_depl.order_by(
+        Evenement.date.asc(), Evenement.id.asc()
+    ).all():
+        cle_d = ("semis", semis_d) if semis_d is not None else ("sans_semis", _cle_cv(culture_d, variete_d))
+        if cle_d in lots:
+            lots[cle_d]["_parcelle_deplacement_id"] = parcelle_d
+            qte_d = int(qte_d) if qte_d is not None else None
+            if qte_d is None:
+                lots[cle_d]["_parcelle_deplacement_entier_id"] = parcelle_d
+            else:
+                lots[cle_d]["_partiel"] = True
+            lots[cle_d]["_mouvements"].append((date_d, id_d, "deplacement", qte_d, (origine_d, parcelle_d)))
+            # [US-214 / CA4] Le dernier déplacement fait foi : c'est de sa date
+            # que part l'endurcissement d'un lot posé en pépinière froide.
+            lots[cle_d]["date_deplacement"] = date_d
+            _toucher(lots[cle_d], date_d)
+
+    # ── 3b-bis. Clôtures [US-216] ───────────────────────────────────────────
+    # Une clôture solde le lot ENTIER, une fois pour toutes : elle ne touche à aucun
+    # compteur d'historique (plants obtenus, plantés, vendus), seulement au reste.
+    _q_clot_lot = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            Evenement.origine_graines_id,
+            Evenement.date,
+        )
+        .filter(Evenement.type_action == "cloture_lot")
+    )
+    if potager_id is not None:
+        _q_clot_lot = _q_clot_lot.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_clot_lot = _q_clot_lot.filter(Evenement.date <= cutoff)
+    for culture_c, variete_c, semis_c, date_c in _q_clot_lot.order_by(
+        Evenement.date.asc(), Evenement.id.asc()
+    ).all():
+        cle_c = ("semis", semis_c) if semis_c is not None else ("sans_semis", _cle_cv(culture_c, variete_c))
+        if cle_c in lots and not lots[cle_c]["cloture"]:
+            lots[cle_c]["cloture"] = True
+            lots[cle_c]["date_cloture"] = date_c
+            lots[cle_c]["_mouvements"].append((date_c, None, "cloture", 0, None))   # [US-241]
+            _toucher(lots[cle_c], date_c)
+
+    # ── 3b-ter. Levées [US-212 / CA6, CA7] ──────────────────────────────────
+    # Un comptage est un INSTANTANÉ : le plus récent à la date de référence fait foi,
+    # les comptages ne s'additionnent jamais. « Levée terminée » est en revanche un
+    # état du lot : une fois déclarée, un comptage ultérieur met le nombre à jour sans
+    # rouvrir une germination que le jardinier a close. Aucun stock n'est touché : un
+    # plant levé n'est pas un godet.
+    _q_levee = (
+        db.query(
+            Evenement.origine_graines_id,
+            Evenement.quantite,
+            Evenement.levee_terminee,
+            Evenement.date,
+        )
+        .filter(Evenement.type_action == "levee")
+        .filter(Evenement.origine_graines_id.isnot(None))
+    )
+    if potager_id is not None:
+        _q_levee = _q_levee.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_levee = _q_levee.filter(Evenement.date <= cutoff)
+    for semis_l, qte_l, terminee_l, date_l in _q_levee.order_by(
+        Evenement.date.asc(), Evenement.id.asc()
+    ).all():
+        cle_l = ("semis", semis_l)
+        if cle_l not in lots:
+            continue
+        lots[cle_l]["nb_leves"] = int(qte_l or 0)
+        lots[cle_l]["date_derniere_levee"] = date_l
+        if terminee_l:
+            lots[cle_l]["levee_terminee"] = True
+        _toucher(lots[cle_l], date_l)
+
+    # ── 3c. Emplacement courant [US-210 / CA5, CA6 ; US-211 / CA6] ──────────
+    # Règle écrite une seule fois : le dernier déplacement, sinon la dernière mise
+    # en godet localisée, sinon la parcelle du semis, sinon « non renseigné ». Un lot
+    # sans semis rattaché n'a pas de semis où se replier.
+    for s in semis_events:
+        if s.parcelle_id is not None:
+            lots[("semis", s.id)]["_parcelle_semis_id"] = s.parcelle_id
+
+    ids_pepinieres = {
+        pid
+        for l in lots.values()
+        for pid in (l["_parcelle_godet_id"], l["_parcelle_deplacement_id"], *(l["_godets_par_parcelle"] or {}))
+        if pid
+    }
+    # [US-241] Les pépinières que traverse un lot réparti : origines et destinations.
+    for l in lots.values():
+        if not l["_partiel"]:
+            continue
+        ids_pepinieres.update(pid for pid in (l.get("_parcelle_semis_id"),) if pid)
+        for _q, _i, nature, _n, info in l["_mouvements"]:
+            if nature == "deplacement":
+                ids_pepinieres.update(pid for pid in info if pid)
+            elif info and nature in ("godet", "sortie"):
+                ids_pepinieres.add(info)
+    parcelles_godets: Dict[int, Parcelle] = {}
+    if ids_pepinieres:
+        _q_pg = db.query(Parcelle).filter(Parcelle.id.in_(ids_pepinieres))
+        if potager_id is not None:
+            _q_pg = _q_pg.filter(Parcelle.potager_id == potager_id)
+        parcelles_godets = {p.id: p for p in _q_pg.all()}
+
+    def _emplacement(lot: dict) -> dict:
+        p_depl = (
+            parcelles_godets.get(lot["_parcelle_deplacement_id"])
+            if lot["_parcelle_deplacement_id"] else None
+        )
+        if p_depl is not None:
+            return {
+                "parcelle_id": p_depl.id, "nom": p_depl.nom,
+                "type_pepiniere": p_depl.type_pepiniere, "origine": "deplacement",
+            }
+        p_godet = parcelles_godets.get(lot["_parcelle_godet_id"]) if lot["_parcelle_godet_id"] else None
+        if p_godet is not None:
+            return {
+                "parcelle_id": p_godet.id, "nom": p_godet.nom,
+                "type_pepiniere": p_godet.type_pepiniere, "origine": "mise_en_godet",
+            }
+        if lot["parcelle"]:
+            return {
+                "parcelle_id": lot.get("_parcelle_semis_id"), "nom": lot["parcelle"],
+                "type_pepiniere": lot["type_pepiniere"], "origine": "semis",
+            }
+        return {"parcelle_id": None, "nom": None, "type_pepiniere": None, "origine": "non_renseigne"}
+
+    def _nom_parcelle(pid) -> Optional[str]:
+        return parcelles_godets[pid].nom if pid in parcelles_godets else None
+
+    def _repartition(lot: dict) -> None:
+        """[US-211] Où sont les graines (semis) et où sont les godets du lot.
+
+        Un déplacement porte sur le lot ENTIER : il ramène graines et godets à sa
+        destination. Sans déplacement, les graines restent à la parcelle du semis et
+        chaque mise en godet garde l'emplacement dit (ou « non dit »). Informatif :
+        n'entre dans aucun total.
+        """
+        depl = _nom_parcelle(lot["_parcelle_deplacement_entier_id"]) if lot["_parcelle_deplacement_entier_id"] else None
+        lot["graines_emplacement"] = depl or (None if lot["sans_semis_rattache"] else lot["parcelle"])
+        if lot["_partiel"]:
+            # [US-241] Lot coupé par un déplacement chiffré : ses godets sont où la
+            # répartition les a rejoués, nets des sorties.
+            lot["godets_par_emplacement"] = [
+                {"nom": r["nom"], "plants": r["godets"]} for r in lot["repartition_godets"]
+            ]
+            return
+        par = lot["_godets_par_parcelle"] or {}
+        if depl:
+            total = sum(par.values())
+            lot["godets_par_emplacement"] = [{"nom": depl, "plants": total}] if total else []
+            return
+        groupes: Dict[Optional[str], int] = {}
+        for pid, plants in par.items():
+            nom = _nom_parcelle(pid) if pid else None
+            groupes[nom] = groupes.get(nom, 0) + plants
+        lot["godets_par_emplacement"] = [
+            {"nom": nom, "plants": plants}
+            for nom, plants in sorted(groupes.items(), key=lambda kv: (kv[0] is None, kv[0] or ""))
+        ]
 
     # ── 4. État de germination, incohérences, stock résiduel ────────────────
     resultat: List[dict] = []
@@ -2100,6 +2559,15 @@ def calcul_lots_pepiniere(
         else:
             etat = ETAT_GERMINATION_EN_COURS
 
+        # [US-216] Une clôture ferme la germination : plus aucune graine à lever.
+        if lot["cloture"] and graines > 0:
+            etat = ETAT_GERMINATION_CLOSE
+        # [US-212 / CA7] Une levée déclarée terminée la ferme aussi : ce qui n'a pas levé
+        # ne lèvera plus. Une levée non terminée laisse l'état tel que les mises en godet
+        # l'ont fait (CA7) — le comptage est une information, pas une conclusion.
+        if lot["levee_terminee"] and graines > 0:
+            etat = ETAT_GERMINATION_CLOSE
+
         incoherence = graines > 0 and plants > graines
         if incoherence:
             _log_stock.warning(
@@ -2109,18 +2577,82 @@ def calcul_lots_pepiniere(
                 plants, graines,
             )
 
-        lot["graines_en_germination"] = max(0, graines - soldees)
+        # [US-212] `graines_non_soldees` = graines semées que ni un repiquage ni une clôture
+        # n'a soldées : ce que le lot peut encore fournir à une mise en godet. C'était
+        # le sens de `graines_en_germination` ; celle-ci devient strictement « ce qui
+        # est encore en train de lever » et tombe à 0 quand la levée est terminée, alors
+        # que les plants levés restent à repiquer. Les garde-fous de repiquage lisent donc
+        # `graines_non_soldees`, jamais `graines_en_germination`.
+        lot["graines_non_soldees"]    = 0 if lot["cloture"] else max(0, graines - soldees)
+        lot["graines_en_germination"] = 0 if (lot["cloture"] or lot["levee_terminee"]) else max(0, graines - soldees)
         lot["etat_germination"]       = etat
+
+        # [US-212 / CA6, CA7, CA3, CA9] Lecture de la levée. Le taux n'existe que si les
+        # graines semées sont connues. Les valeurs saisies sont exposées telles quelles ;
+        # une incohérence est un drapeau, jamais un bornage.
+        leves = lot["nb_leves"]
+        lot["taux_levee"] = (
+            round(leves / graines * 100) if leves is not None and graines > 0 else None
+        )
+        lot["graines_non_levees_soldees"] = (
+            max(0, graines - leves) if lot["levee_terminee"] and leves is not None and graines > 0 else 0
+        )
+        lot["incoherence_levee"] = leves is not None and graines > 0 and leves > graines
+        lot["incoherence_repiquage_levee"] = leves is not None and plants > leves
+        if lot["incoherence_levee"]:
+            _log_stock.warning(
+                "[US-212 / CA3] Incohérence de saisie sur le lot %s (%s) : %d levés pour %d graines "
+                "semées — valeurs exposées telles quelles, sans bornage",
+                lot["lot_id"], lot["culture"], leves, graines,
+            )
+        if lot["incoherence_repiquage_levee"]:
+            _log_stock.warning(
+                "[US-212 / CA9] Incohérence de saisie sur le lot %s (%s) : %d plants repiqués pour "
+                "%d levés — valeurs exposées telles quelles, sans bornage",
+                lot["lot_id"], lot["culture"], plants, leves,
+            )
+        lot["moyenne_levee_culture"] = None
+        lot["nb_lots_moyenne_levee"] = 0
         lot["incoherence_saisie"]     = incoherence
         # Barre « Germination » de la maquette : un lot semé mais pas encore levé
         # vaut bien 0 %, pas « inconnu » — seul un lot sans graines connues est None.
         lot["taux_germination"]       = round(plants / graines * 100) if graines else None
-        lot["stock_residuel_godet"]   = max(
+        lot["stock_residuel_godet"]   = 0 if lot["cloture"] else max(
             0, plants - lot["nb_plantes"] - lot["nb_vendus"] - lot["nb_pertes_godet"]
         )
+        lot["emplacement"] = _emplacement(lot)
+        _repartir_godets(lot, parcelles_godets)
+        _repartition(lot)
+        lot.pop("_godets_par_parcelle", None)
+        lot.pop("_mouvements", None)
+        lot.pop("_partiel", None)
+        lot.pop("_parcelle_deplacement_entier_id", None)
         lot.pop("_declaration_incomplete", None)
         lot.pop("_sorties", None)
+        lot.pop("_parcelle_godet_id", None)
+        lot.pop("_parcelle_deplacement_id", None)
+        lot.pop("_parcelle_semis_id", None)
         resultat.append(lot)
+
+    # ── 5. Moyenne de levée de la culture [US-212 / CA8] ────────────────────
+    # Calculée sur les AUTRES lots de la même culture dont la levée est notée, dans CE
+    # potager (la requête ci-dessus est déjà scopée), et seulement à partir de deux :
+    # une comparaison à un seul point n'en est pas une. Chaque lot pèse autant, quelle
+    # que soit sa taille. Un lot sans graines semées connues n'a pas de taux.
+    taux_par_culture: Dict[str, List[tuple]] = {}
+    for lot in resultat:
+        if lot["nb_leves"] is not None and lot["graines_semees"] > 0:
+            taux_par_culture.setdefault((lot["culture"] or "").lower(), []).append(
+                (lot["lot_id"], lot["nb_leves"] / lot["graines_semees"] * 100)
+            )
+    for lot in resultat:
+        autres = [
+            taux for lot_id, taux in taux_par_culture.get((lot["culture"] or "").lower(), [])
+            if lot_id != lot["lot_id"]
+        ]
+        if len(autres) >= 2:
+            lot["moyenne_levee_culture"] = round(sum(autres) / len(autres))
+            lot["nb_lots_moyenne_levee"] = len(autres)
 
     return resultat
 
@@ -2162,7 +2694,7 @@ def lots_candidats_mise_en_godet(
         lot for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id)
         if not lot["sans_semis_rattache"]
         and (lot["culture"] or "").lower() == culture_l
-        and lot["graines_en_germination"] >= seuil
+        and graines_restantes(lot) >= seuil   # [US-212] capacité de repiquage, pas « ce qui lève »
         # Filtre STRICT : une variété absente désigne les lots SANS variété, jamais
         # « toutes variétés confondues ». Un lot « bruxelle » n'est pas un lot sans
         # variété — le proposer à un repiquage explicitement déclaré sans variété
@@ -2226,6 +2758,37 @@ def lot_pepiniere_par_semis(
         if lot["semis_id"] == semis_id:
             return lot
     return None
+
+
+def lot_pepiniere_par_numero(
+    db: Session,
+    numero: int,
+    date_ref: Optional[_date] = None,
+    potager_id: Optional[int] = None,
+) -> Optional[dict]:
+    """
+    [US-209 / CA7, CA9] Lot de pépinière désigné par son numéro court, dans CE
+    potager : le lot 5 d'un autre potager n'est jamais trouvé. None si inconnu.
+    """
+    for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id):
+        if lot.get("numero_lot") is not None and lot["numero_lot"] == numero:
+            return lot
+    return None
+
+
+def ids_godets_du_lot(
+    db: Session, semis_id: int, potager_id: Optional[int] = None
+) -> List[int]:
+    """[US-209 / CA5] Identifiants des mises en godet rattachées à un lot (son semis) —
+    de quoi chaîner une plantation à CE lot (`source_evenement_ids`, US-029)."""
+    q = (
+        db.query(Evenement.id)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.origine_graines_id == semis_id)
+    )
+    if potager_id is not None:
+        q = q.filter(Evenement.potager_id == potager_id)
+    return [row[0] for row in q.order_by(Evenement.date.asc(), Evenement.id.asc()).all()]
 
 
 _MOIS_FR = [

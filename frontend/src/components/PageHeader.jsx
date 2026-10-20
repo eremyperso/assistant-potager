@@ -4,6 +4,7 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
 import { Btn, TileNav, InfoBanner } from './ui'
 import { navEntry } from '../navigation.js'
+import BarreActivitePlan from './BarreActivitePlan.jsx'
 import ModalPersonnaliserDashboard from './ModalPersonnaliserDashboard.jsx'
 import ParametresPotager from '../views/ParametresPotager.jsx'
 
@@ -92,6 +93,9 @@ export default function PageHeader({ view, onGo }) {
             <TileNav items={nav.subnav} active={view} onPick={onGo} />
           </div>
         )}
+        {/* [US-223 / CA5] Date de référence et Journal du jour : les mêmes, au
+            même endroit, sur les deux sous-onglets actifs du Plan. */}
+        {nav.id === 'plan' && view !== 'plan-rot' && <BarreActivitePlan />}
       </div>
 
       {personnaliser && <ModalPersonnaliserDashboard onClose={() => setPersonnaliser(false)} />}

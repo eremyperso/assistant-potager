@@ -74,6 +74,25 @@ test('[CA18] la quantité est affichée avec son unité de saisie', async (t) =>
   })
 })
 
+test('[US-199 / CA8] le poquet et le mètre de rang s’écrivent lisiblement', async (t) => {
+  await t.test('« ml » s’écrit « m de rang », jamais « m² »', () => {
+    assert.equal(formatUnite('ml'), 'm de rang')
+    assert.equal(formatUnite('ML'), 'm de rang')
+  })
+
+  await t.test('« poquets » garde son mot', () => {
+    assert.equal(formatUnite('poquets'), 'poquets')
+  })
+})
+
+test('[US-199 / CA5] un poquet ou un mètre de rang n’est jamais compté en plants', () => {
+  assert.equal(estEnPlants('poquets'), false)
+  assert.equal(estEnPlants('ml'), false)
+  assert.equal(totalPlants([culture({ nb_plants: 5, unite: 'poquets' }), culture({ nb_plants: 3, unite: 'ml' })]), 0)
+  // Mélangés à des plants, ils n'y entrent pas non plus : aucune conversion.
+  assert.equal(totalPlants([culture({ nb_plants: 4, unite: 'plants' }), culture({ nb_plants: 5, unite: 'poquets' })]), 4)
+})
+
 // ── CA4 — pastilles de caractéristiques ──────────────────────────────────────
 
 test('[CA4] une exposition inexploitable est omise, pas affichée telle quelle', async (t) => {

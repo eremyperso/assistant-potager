@@ -53,10 +53,18 @@ export const NAV = [
     Icon: LayoutGrid,
     title: 'Plan des parcelles',
     sub: 'Vos espaces de culture, leur occupation et leur contenu',
+    // [US-223 / CA1, CA3] Les sous-onglets suivent le zoom, du plus large au plus
+    // détaillé (règle 19). Les identifiants ne bougent pas : seul l'ordre change.
+    // `entree` : sous-onglet d'ouverture de l'activité (A18) — la seule place où
+    // il est dit. `memoriser` : revenir dans l'activité rouvre le dernier visité.
+    entree: 'plan-vue',
+    memoriser: true,
     subnav: [
-      { id: 'plan', label: 'Parcelles', icon: MapPin },
       { id: 'plan-vue', label: 'Vue plan', icon: Layers },
-      { id: 'plan-rot', label: 'Rotation', icon: Calendar },
+      { id: 'plan', label: 'Parcelles', icon: MapPin },
+      // [US-223 / CA2] Rotation garde sa place, désactivée (règle 26) : hors
+      // périmètre des épics 9 à 12, elle reviendra sans que la barre bouge.
+      { id: 'plan-rot', label: 'Rotation · à venir', icon: Calendar, disabled: true },
     ],
   },
   {
@@ -115,4 +123,24 @@ export const NAV_MOBILE_VISIBLE = 4
 
 export function navEntry(view) {
   return NAV.find((n) => n.id === NAV_OF[view]) ?? NAV[0]
+}
+
+/** Sous-onglets que l'on peut réellement ouvrir [US-223 / CA2]. */
+export const sousOngletsActifs = (navId) =>
+  (NAV.find((n) => n.id === navId)?.subnav ?? []).filter((t) => !t.disabled).map((t) => t.id)
+
+/**
+ * [US-223 / CA3, CA4] La vue qu'ouvre un appui sur une section de la navigation
+ * principale : le dernier sous-onglet visité pendant la session s'il y en a un,
+ * sinon l'entrée déclarée par la section, sinon son identifiant.
+ *
+ * `dernieres` : `{ [idSection]: idVue }`, tenu en mémoire de page par la coquille
+ * — une nouvelle session repart donc toujours de l'entrée.
+ */
+export function vueDeSection(navId, dernieres = {}) {
+  const section = NAV.find((n) => n.id === navId)
+  if (!section) return VUE_PAR_DEFAUT
+  const derniere = dernieres[navId]
+  if (section.memoriser && derniere && sousOngletsActifs(navId).includes(derniere)) return derniere
+  return section.entree ?? section.id
 }

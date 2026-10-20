@@ -53,4 +53,4 @@ Deux comptes coexistent sans jamais se mêler. Le premier additionne les poids r
 **Intention :** procédure
 **On parle aussi de :** vendu ; donné ; cédé ; plants vendus ; sortie sans récolte
 
-Un plant vendu ou donné quitte le potager sans avoir été récolté : il s'annonce comme tel, et sort du compte des godets disponibles. Cette distinction évite de gonfler la production d'une saison avec des plants qui ont fini dans le jardin de quelqu'un d'autre.
+Un plant vendu ou donné quitte le potager sans avoir été récolté : il s'annonce comme tel, avec son nombre — une vente comme une perte de godet sans nombre est demandée avant d'être enregistrée —, et sort du compte des godets disponibles. Cette distinction évite de gonfler la production d'une saison avec des plants qui ont fini dans le jardin de quelqu'un d'autre.

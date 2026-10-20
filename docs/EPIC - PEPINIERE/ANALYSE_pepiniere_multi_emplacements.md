@@ -79,6 +79,10 @@ le modèle n'a tout simplement pas la notion de "quelle pépinière".
 3. Dans tous les cas : décider si l'agrégat "toutes pépinières confondues" doit rester affiché par
    défaut (utile pour une vue rapide) avec un détail par emplacement en option, ou l'inverse.
 
+> **Piste 2 retenue par US-210, agrégation inchangée** : la parcelle est renseignable (jamais
+> devinée) sur la mise en godet et l'emplacement courant d'un lot est exposé par
+> `GET /pepiniere/lots` ; `calcul_godets()` et les stocks gardent leur total par culture et variété.
+
 ## Composants techniques concernés (pour la future US)
 
 | Fichier | Rôle actuel |

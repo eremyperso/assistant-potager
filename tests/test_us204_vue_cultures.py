@@ -349,6 +349,27 @@ def test_us204_meteo_indisponible_le_dit_sans_rien_masquer(db):
     ligne = _ligne(vue, "tomate")
     assert ligne.famille is None or isinstance(ligne.famille, str)  # inchangé, jamais levé
     assert ligne.fenetre_etat == vc.ETAT_MAINTENANT  # la fenêtre ne dépend pas de la météo
+    assert vue.confiance_indisponible == vc.CAUSE_METEO
+
+
+def test_us204_date_hors_horizon_n_est_pas_une_panne_meteo(db):
+    """Date de référence passée : la météo est lisible, mais ses 14 jours de prévision
+    ne couvrent pas cette date — la cause dite n'est PAS « météo illisible »."""
+    _tomate(db)
+    date_ref = date(2027, 4, 15)
+    meteo_future = _meteo(date(2027, 10, 7), 11.0)   # prévisions d'« aujourd'hui », 6 mois plus tard
+    vue = _vue(db, date_ref, meteo=meteo_future)
+    assert vue.meteo_disponible is False             # aucune étoile n'est affichée
+    assert vue.confiance_indisponible == vc.CAUSE_HORS_HORIZON
+    assert _ligne(vue, "tomate").fenetre_etat == vc.ETAT_MAINTENANT   # le reste est intact
+
+
+def test_us204_confiance_evaluee_ne_porte_aucune_cause(db):
+    """Date couverte par la prévision : aucune cause, les étoiles sont évaluées."""
+    _tomate(db)
+    vue = _vue(db, date(2027, 4, 15))
+    assert vue.meteo_disponible is True
+    assert vue.confiance_indisponible is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

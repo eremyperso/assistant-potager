@@ -55,15 +55,20 @@ async def _vendu_variete_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> N
         )
         # _parse_and_save utilise update.message (None dans un callback) → utiliser _save_perte_item
         # qui utilise update.effective_message, compatible callback ET message
-        await _save_perte_item(update, item, texte)
+        await _save_perte_item(update, item, texte, ctx)
 
 
-async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
+async def _save_perte_item(update: Update, item: dict, texte: str, ctx=None) -> None:
     """
     Sauvegarde directe d'un item perte ou perte_godet depuis un callback inline.
 
     N'utilise PAS _parse_and_save (qui nécessite update.message).
     Utilise update.effective_message qui fonctionne dans les contextes callback ET message.
+
+    [US-224] Un geste venu de la file porte `_geste_file` : il quitte la file
+    APRÈS l'écriture réussie, comme au récapitulatif d'US-021 — sans quoi la
+    perte est enregistrée mais le geste reste « en attente » et l'application
+    le réaffiche après chaque rafraîchissement (même défaut qu'INC-003).
     """
     db = SessionLocal()
     try:
@@ -83,6 +88,15 @@ async def _save_perte_item(update: Update, item: dict, texte: str) -> None:
     recap = _build_recap(item, event.id)
     await update.effective_message.reply_text(recap, parse_mode="Markdown", reply_markup=AFTER_RECORD_KEYBOARD)
     await send_voice_reply(update, _build_recap_tts(item))
+
+    geste_file = item.get("_geste_file")
+    if geste_file:
+        from app.services import file_gestes as svc_file
+        from .enregistrement import _GesteDeLaFile
+        from .file_gestes import proposer_suivant
+        svc_file.confirmer(_GesteDeLaFile(geste_file))
+        if ctx is not None:
+            await proposer_suivant(update, ctx, geste_file["user_id"])
 
 
 # ── [vendu/perte_godet] CALLBACK DISAMBIGUATION PERTE ────────────────────────────
@@ -154,7 +168,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             _PERTE_PENDING.pop(user_id, None)
             item["action"] = "perte"
             await query.edit_message_text("🌿 Enregistrement perte au potager...", reply_markup=None)
-            await _save_perte_item(update, item, texte)
+            await _save_perte_item(update, item, texte, ctx)
 
         elif len(jardin_varietes) == 1:
             _PERTE_PENDING.pop(user_id, None)
@@ -162,7 +176,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item["variete"] = _variete_reelle(jardin_varietes[0])
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
-            await _save_perte_item(update, item, texte)
+            await _save_perte_item(update, item, texte, ctx)
 
         else:
             # Plusieurs variétés actives au jardin → demander laquelle
@@ -188,7 +202,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item["action"] = "perte_godet"
             item.pop("parcelle", None)
             await query.edit_message_text("🪴 Enregistrement perte pépinière...", reply_markup=None)
-            await _save_perte_item(update, item, texte)
+            await _save_perte_item(update, item, texte, ctx)
 
         elif len(godets_actifs) == 1:
             _PERTE_PENDING.pop(user_id, None)
@@ -197,7 +211,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
             item.pop("parcelle", None)
             var_lbl = item["variete"] or "non précisée"
             await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement...", parse_mode="Markdown", reply_markup=None)
-            await _save_perte_item(update, item, texte)
+            await _save_perte_item(update, item, texte, ctx)
 
         else:
             # Plusieurs variétés en godet → demander laquelle
@@ -225,7 +239,7 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         var_lbl         = variete or "non précisée"
         log.info(f"[perte] Jardin variété={var_lbl}")
         await query.edit_message_text(f"🌿 *{culture} {var_lbl}* — enregistrement perte potager...", parse_mode="Markdown", reply_markup=None)
-        await _save_perte_item(update, item, texte)
+        await _save_perte_item(update, item, texte, ctx)
         return
 
     if data.startswith("perte_var_p:"):
@@ -238,5 +252,5 @@ async def _handle_perte_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE)
         var_lbl         = variete or "non précisée"
         log.info(f"[perte] Pépinière variété={var_lbl}")
         await query.edit_message_text(f"🪴 *{culture} {var_lbl}* — enregistrement perte pépinière...", parse_mode="Markdown", reply_markup=None)
-        await _save_perte_item(update, item, texte)
+        await _save_perte_item(update, item, texte, ctx)
         return

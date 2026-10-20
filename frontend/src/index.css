@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Lora:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -33,6 +33,13 @@
     --blue-soft:   #E3EFF4;
     --violet:      #6B4FA0;
     --violet-soft: #EDE8F7;
+
+    /* [US-218] Couleurs de stade du parcours du plant (maquette HF « Ma pépinière ») :
+       chacune a sa trame, lisible en niveaux de gris (RT4). */
+    --sem:   #E2C49F;  --sem-d: #8A5A30;  --sem-s: #F6ECDF;
+    --god:   #8DBA5E;  --god-d: #3F6E1E;  --god-s: #EAF3DE;
+    --end:   #9FCDEA;  --end-d: #2A6E8F;  --end-s: #E3EFF4;
+    --frk:   #F3D35A;  --frk-d: #7A5C00;  --frk-s: #FBF3D1;  --frk-t: #F7E9A6;
 
     --header-from:  #2F5416;
     --header-to:    #4E8226;
@@ -127,6 +134,11 @@
     --violet:      #A48BD8;
     --violet-soft: #1E1830;
 
+    --sem:   #8A6A45;  --sem-d: #E2C49F;  --sem-s: #2A2016;
+    --god:   #5E8A36;  --god-d: #A9D47A;  --god-s: #1C2A12;
+    --end:   #3F7E9E;  --end-d: #9FCDEA;  --end-s: #12242C;
+    --frk:   #A88A1E;  --frk-d: #F3D35A;  --frk-s: #2A2408;  --frk-t: #3A3110;
+
     --header-from:  #111A0A;
     --header-to:    #243A17;
     --header-txt:   #E4EDD3;
@@ -202,3 +214,74 @@
     );
   }
 }
+
+/* [US-218] Hors @layer : ces classes sont composées à l'exécution (`motif-${…}`,
+   `tete-${…}`) ; la purge de Tailwind ne doit pas les retirer. */
+  /* Les motifs de stade du parcours : pointillé (levée), uni (godet),
+     rayé (endurcissement), hachuré (prêt à sortir). */
+  .motif-sem { background: radial-gradient(var(--sem-d) 1px, transparent 1.4px) 0 0 / 5px 5px, var(--sem); }
+  .motif-god { background: var(--god); }
+  .motif-end { background: repeating-linear-gradient(0deg, var(--end) 0 3px, var(--end-d) 3px 4.5px); }
+  .motif-frk { background: repeating-linear-gradient(45deg, var(--frk) 0 4px, var(--frk-d) 4px 5.5px); }
+
+  /* En-têtes d'étiquette : la teinte de l'état, doublée de sa trame. */
+  .tete-levee   { background: radial-gradient(color-mix(in srgb, var(--sem-d) 30%, transparent) 1px, transparent 1.5px) 0 0 / 6px 6px, var(--sem-s); color: var(--sem-d); }
+  .tete-godet   { background: var(--god-s); color: var(--god-d); }
+  .tete-bientot { background: var(--amber-soft); color: var(--amber); }
+  .tete-endurcir { background: repeating-linear-gradient(0deg, transparent 0 4px, color-mix(in srgb, var(--end-d) 14%, transparent) 4px 5px), var(--end-s); color: var(--end-d); }
+  .tete-pret    { background: repeating-linear-gradient(45deg, var(--frk-s) 0 6px, var(--frk-t) 6px 8px); color: var(--frk-d); }
+  .tete-retard  { background: var(--red); color: #fff; }
+  .tete-inconnu { background: var(--card-alt); color: var(--txt2); }
+  .tete-dormant { background: repeating-linear-gradient(45deg, transparent 0 5px, color-mix(in srgb, var(--violet) 14%, transparent) 5px 6px), var(--violet-soft); color: var(--violet); }
+
+  /* La règle de l'étiquette : fourchette attendue hachurée. */
+  .regle-fourchette { background: repeating-linear-gradient(45deg, transparent 0 3px, color-mix(in srgb, var(--txt) 28%, transparent) 3px 4px); outline: 1px solid color-mix(in srgb, var(--txt) 35%, transparent); }
+  .trame-sans-emplacement { background: repeating-linear-gradient(-45deg, var(--card-alt) 0 7px, var(--border-soft) 7px 14px); }
+  .fenetre-semis { background: radial-gradient(color-mix(in srgb, var(--sem-d) 22%, transparent) 1px, transparent 1.5px) 0 0 / 7px 7px, var(--sem-s); }
+  .fond-chaude { background: linear-gradient(160deg, color-mix(in srgb, var(--amber-soft) 70%, var(--sem-s)), var(--sem-s)); }
+  .fond-froide { background: linear-gradient(160deg, var(--blue-soft), color-mix(in srgb, var(--end) 30%, var(--blue-soft))); }
+
+/* [US-242] Le journal de saison de l'onglet Lots : pastilles de geste, parts de la
+   barre de bilan, fenêtre de mise en terre. Hors @layer : classes composées à
+   l'exécution (`geste-${code}`, `part-${cle}`). */
+  .geste { position: absolute; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--card);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--txt) 25%, transparent); z-index: 4; }
+  .geste svg { width: 13px; height: 13px; pointer-events: none; }
+  .geste.haut { margin-top: -34px; }
+  .geste.bas { margin-top: 12px; }
+  .geste.statique { position: relative; top: auto; margin: 0; flex-shrink: 0; }
+  .geste-S { background: var(--sem); color: var(--sem-d); }
+  .geste-L { background: var(--card); color: var(--sem-d); box-shadow: 0 0 0 1.5px var(--sem-d); }
+  .geste-G { background: var(--god); color: #fff; }
+  .geste-D { background: var(--blue-soft); color: var(--blue); box-shadow: 0 0 0 1.5px var(--blue); }
+  .geste-C { background: var(--txt2); color: var(--card); }
+  .geste-X { background: var(--card); color: var(--txt2); box-shadow: 0 0 0 1.5px var(--txt3); }
+  .geste-T { background: var(--brand-deep); color: #fff; }
+  .geste-V { background: var(--blue); color: #fff; }
+  .geste-P { background: var(--red); color: #fff; }
+  .geste-N { width: 12px; height: 12px; background: var(--red); border: 0; box-shadow: none; }
+  .geste[data-info]:hover::after { content: attr(data-info); position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%); background: var(--txt); color: var(--card); font-size: 11.5px; font-weight: 500;
+    padding: 4px 8px; border-radius: 7px; white-space: nowrap; z-index: 9; pointer-events: none; }
+  .frise-etroite .geste { width: 18px; height: 18px; margin: -9px 0 0 -9px; }
+  .frise-etroite .geste svg { width: 11px; height: 11px; }
+  .frise-etroite .geste.haut { margin-top: -28px; }
+  .frise-etroite .geste.bas { margin-top: 10px; }
+  .fenetre-terre { background: repeating-linear-gradient(45deg, var(--frk-s) 0 4px, color-mix(in srgb, var(--frk) 55%, var(--frk-s)) 4px 5.5px);
+    outline: 1px solid color-mix(in srgb, var(--frk) 80%, var(--frk-d)); }
+  .part-pl { background: var(--brand-deep); }
+  .part-go { background: var(--god); }
+  .part-le { background: radial-gradient(var(--sem-d) 1px, transparent 1.4px) 0 0 / 5px 5px, var(--sem); }
+  .part-vd { background: var(--blue); }
+  .part-pe { background: var(--red); }
+  .part-nl { background: repeating-linear-gradient(45deg, var(--border) 0 3px, var(--txt3) 3px 4.5px); }
+  .tuile-S { background: var(--sem-s); color: var(--sem-d); }
+  .tuile-L { background: var(--frk-s); color: var(--frk-d); }
+  .tuile-G { background: var(--god-s); color: var(--god-d); }
+  .tuile-T { background: var(--brand-soft); color: var(--brand-deep); }
+  .echeance-pret { background: repeating-linear-gradient(45deg, var(--frk-s) 0 6px, var(--frk-t) 6px 8px); }
+  .journal-trait::before { content: ""; position: absolute; left: 59px; top: 10px; bottom: 10px; width: 2px; background: var(--border); }
+  @keyframes deplier-fiche { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  .deplier { animation: deplier-fiche .25s ease; }
+  @media (prefers-reduced-motion: reduce) { .deplier { animation: none; } }

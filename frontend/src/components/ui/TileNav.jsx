@@ -14,11 +14,15 @@ export function TileNav({ items = [], active, onPick, className = '' }) {
             key={it.id}
             role="tab"
             aria-selected={on}
-            onClick={() => onPick?.(it.id)}
+            // [US-223 / CA2] Un onglet désactivé reste dans la barre mais ne se
+            // focalise pas, s'annonce « indisponible » et n'ouvre rien.
+            disabled={it.disabled}
+            aria-disabled={it.disabled || undefined}
+            onClick={() => { if (!it.disabled) onPick?.(it.id) }}
             title={it.help}
             className={`relative flex flex-col items-center justify-center gap-1.5 w-[84px] h-[72px] rounded-[13px] shrink-0 border transition-colors ${
               on ? 'bg-brand-soft border-brand text-brand-text' : 'bg-card border-border text-txt2'
-            }`}
+            } ${it.disabled ? 'opacity-55 cursor-not-allowed' : ''}`}
           >
             {Icon && <Icon size={20} className={on ? 'text-brand' : 'text-txt3'} />}
             <span className={`text-[11.5px] text-center leading-tight ${on ? 'font-bold' : 'font-medium'}`}>

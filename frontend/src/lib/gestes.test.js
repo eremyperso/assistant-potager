@@ -185,6 +185,13 @@ test('[US-224 / CA21] sans compagnon, l’application invite à l’activer APR�
   assert.match(src, /if \(!res\?\.compagnon_actif\)/)
 })
 
+test('[US-224] le dépôt n’ouvre jamais Telegram : aucune redirection depuis la PWA', () => {
+  const src = lire('../components/BoutonGeste.jsx')
+  assert.doesNotMatch(src, /window\.open\(/)
+  assert.doesNotMatch(src, /location\.(href|assign)/)
+  assert.doesNotMatch(src, /res\??\.lien/)
+})
+
 test('[US-224 / CA21] l’activation réutilise le parcours d’US-091, elle n’en crée pas un second', () => {
   const src = lire('../components/BoutonGeste.jsx')
   assert.match(src, /import \{ PanneauActivation, useCodeLiaison \} from '\.\/LierTelegram\.jsx'/)
@@ -246,4 +253,93 @@ test('[CA15] le bouton reste actif hors fenêtre — la confiance conseille, ell
   const ligne = src.split('\n').find((l) => l.includes('onEnregistrer && gesteDeActionConfiance'))
   assert.ok(ligne, 'le garde du bouton doit rester lisible sur une seule ligne')
   assert.doesNotMatch(ligne, /etoiles|dans_fenetre|sans_score|confiance/)
+})
+
+// ── [INC-014] Les gestes de lot ne s'empilent pas ────────────────────────────
+import { plafondGesteDeLot, plantsReserves } from './gestes.js'
+
+const plantation = { action: 'plantation', lotId: 8, quantite: 50, disponibleDuLot: 50 }
+const perte = { action: 'perte_godet', lotId: 8, quantite: null, disponibleDuLot: 50 }
+const repiquer = { action: 'mise_en_godet', lotId: 8, quantite: null, disponibleDuLot: 30 }
+const sans = (action) => ({ action, lotId: 8, quantite: null })
+
+test('[INC-014] rien en file : tout le lot reste disponible', () => {
+  assert.deepEqual(plafondGesteDeLot(plantation, []), { reserves: 0, disponibles: 50, quantite: 50, doublon: false, epuise: false })
+})
+
+test('[INC-014] un geste de 50 en file épuise le lot : le bouton se grise', () => {
+  const file = [{ action: 'plantation', lot_id: 8, quantite: 50 }]
+  assert.equal(plantsReserves(file, 8), 50)
+  assert.equal(plafondGesteDeLot(plantation, file).epuise, true)
+})
+
+test('[INC-014] mise en terre partielle : le reste est proposé, jamais plus', () => {
+  const file = [{ action: 'plantation', lot_id: 8, quantite: 20 }, { action: 'plantation', lot_id: 9, quantite: 99 }]
+  const p = plafondGesteDeLot(plantation, file)
+  assert.equal(p.disponibles, 30)
+  assert.equal(p.quantite, 30)
+  assert.equal(plafondGesteDeLot({ ...plantation, quantite: 10 }, file).quantite, 10)
+  assert.equal(plafondGesteDeLot({ ...plantation, quantite: 45 }, file).quantite, 30)
+})
+
+test('[INC-014] la perte et la plantation se partagent les mêmes godets', () => {
+  const file = [{ action: 'plantation', lot_id: 8, quantite: 40 }]
+  assert.equal(plantsReserves(file, 8, 'perte_godet'), 40)
+  assert.equal(plafondGesteDeLot({ ...plantation, quantite: 20 }, file).quantite, 10)
+})
+
+test('[INC-014] le repiquage puise dans les graines, pas dans les godets', () => {
+  const file = [{ action: 'plantation', lot_id: 8, quantite: 50 }]
+  assert.equal(plafondGesteDeLot(repiquer, file).disponibles, 30)
+  assert.equal(plafondGesteDeLot(repiquer, file).epuise, false)
+})
+
+test('[INC-014] perte, repiquage, déplacement, clôture sans nombre : un seul en attente par lot', () => {
+  for (const action of ['perte_godet', 'mise_en_godet', 'deplacement', 'cloture_lot']) {
+    const geste = { ...(action === 'perte_godet' ? perte : action === 'mise_en_godet' ? repiquer : sans(action)) }
+    assert.equal(plafondGesteDeLot(geste, []).epuise, false, action)
+    const p = plafondGesteDeLot(geste, [{ action, lot_id: 8, quantite: null }])
+    assert.equal(p.epuise, true, action)
+    assert.equal(p.doublon, true, action)
+  }
+})
+
+test('[INC-014] une perte sans nombre ne pré-remplit rien et ne grise pas pour des godets réservés', () => {
+  const file = [{ action: 'plantation', lot_id: 8, quantite: 50 }]
+  const p = plafondGesteDeLot(perte, file)
+  assert.equal(p.quantite, null)
+  assert.equal(p.epuise, false)
+})
+
+test('[INC-014] un autre geste, un autre lot ou un lot inconnu ne sont pas plafonnés', () => {
+  assert.equal(plafondGesteDeLot({ action: 'semis', lotId: 8 }, []), null)
+  assert.equal(plafondGesteDeLot({ action: 'plantation', lotId: null, disponibleDuLot: 5 }, []), null)
+  assert.equal(plafondGesteDeLot(perte, [{ action: 'perte_godet', lot_id: 9, quantite: null }]).epuise, false)
+})
+
+// ── [US-212] La levée d'un lot ───────────────────────────────────────────────
+
+test('[US-212 / CA11] la phrase à dicter d\'une levée ne dit que le lot : le bot demande le reste', () => {
+  assert.equal(phraseADicter({ action: 'levee', numeroLot: 128 }), 'levée du lot 128')
+  // Même si un nombre traîne dans le geste, la PWA ne le dit pas.
+  assert.equal(phraseADicter({ action: 'levee', numeroLot: 128, quantite: 40 }), 'levée du lot 128')
+})
+
+test('[US-212 / CA11] le corps déposé par une levée ne porte aucun détail de levée', () => {
+  const corps = corpsIntention({ action: 'levee', lotId: 7, culture: 'chou' })
+  assert.equal(corps.action, 'levee')
+  assert.equal(corps.lot_id, 7)
+  assert.equal(corps.quantite, null)
+  assert.equal('levee_terminee' in corps, false)
+})
+
+test('[US-212 / CA11] la levée n\'est pas plafonnée par un réservoir', () => {
+  const p = plafondGesteDeLot({ action: 'levee', lotId: 7, quantite: null }, [])
+  assert.equal(p.quantite, null)
+  assert.equal(p.epuise, false)
+})
+
+test('[US-212 / CA11] une levée sans nombre déjà en attente pour le lot grise le bouton', () => {
+  const p = plafondGesteDeLot({ action: 'levee', lotId: 7, quantite: null }, [{ action: 'levee', lot_id: 7, quantite: null }])
+  assert.equal(p.doublon, true)
 })

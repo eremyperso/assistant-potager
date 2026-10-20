@@ -159,9 +159,16 @@ ETAPE_REPIQUAGE = "repiquage"
 #: ne sont pas comptées sur la même convention, et leur différence serait un
 #: chiffre que personne n'a mesuré.
 ETAPE_PLANTATION_RECOLTE = "plantation_recolte"
+#: [US-213 / CA1] Cinquième étape : semis → repiquage EN GODET, le moment où l'on
+#: passe de la barquette au godet — pas celui où l'on met en terre, qui reste
+#: `repiquage`. Jamais déduite de la levée, du délai avant plantation ni d'une
+#: moyenne (CA5) : une valeur absente reste absente, et la Pépinière (US-214) se
+#: tait plutôt que d'annoncer une échéance inventée.
+ETAPE_SEMIS_GODET = "semis_godet"
 
 ETAPES: tuple[str, ...] = (
     ETAPE_LEVEE, ETAPE_RECOLTE, ETAPE_REPIQUAGE, ETAPE_PLANTATION_RECOLTE,
+    ETAPE_SEMIS_GODET,
 )
 
 LIBELLES_ETAPES: dict[str, str] = {
@@ -169,7 +176,14 @@ LIBELLES_ETAPES: dict[str, str] = {
     ETAPE_RECOLTE: "Semis → première récolte",
     ETAPE_REPIQUAGE: "Semis → repiquage",
     ETAPE_PLANTATION_RECOLTE: "Plantation → première récolte",
+    ETAPE_SEMIS_GODET: "Semis → repiquage en godet",
 }
+
+#: [US-213 / CA4] Ce que dit l'écran d'une étape de pépinière sans valeur : les
+#: autres durées gardent le tiret, celle-ci le dit en toutes lettres — c'est
+#: elle qui conditionne l'échéance d'une barquette, et un tiret se lirait comme
+#: « aucun délai » plutôt que « pas encore renseigné ».
+NON_RENSEIGNE = "non renseigné"
 
 #: ⚠️ « plantation » seul reste l'alias de `repiquage` (semis → plantation en
 #: place) : c'est le mot qu'un jardinier emploie pour « dans combien de temps
@@ -183,6 +197,11 @@ _ALIAS_ETAPES: dict[str, str] = {
     "plantation_premiere_recolte": ETAPE_PLANTATION_RECOLTE,
     "plantation_maturite": ETAPE_PLANTATION_RECOLTE,
     "plant_recolte": ETAPE_PLANTATION_RECOLTE,
+    # [US-213 / CA2] Le mot « godet » est ce qui sépare cette étape de
+    # `repiquage` : « repiquage » ou « plantation » SEULS gardent leur sens.
+    "semis_godet": ETAPE_SEMIS_GODET, "godet": ETAPE_SEMIS_GODET,
+    "semis_repiquage_godet": ETAPE_SEMIS_GODET, "repiquage_godet": ETAPE_SEMIS_GODET,
+    "repiquage_en_godet": ETAPE_SEMIS_GODET, "mise_en_godet": ETAPE_SEMIS_GODET,
 }
 
 #: [CA1] Nom de l'itinéraire implicite — celui d'une culture sans itinéraire
@@ -728,6 +747,17 @@ def _passe_par_pepiniere(fenetres: list[FenetreCulturale], durees: list[DureeCul
     )
 
 
+def _renseignee(duree: Optional[DureeCulturale]) -> bool:
+    """Une durée porte une valeur : des jours, ou une mention libre."""
+    return duree is not None and (duree.jours_min is not None or bool(duree.mention))
+
+
+def affichage_absent(etape: str) -> str:
+    """[US-213 / CA4] Ce que l'écran dit d'une étape sans valeur : « non
+    renseigné » pour le délai de godet, le tiret pour toutes les autres."""
+    return NON_RENSEIGNE if etape == ETAPE_SEMIS_GODET else TIRET
+
+
 def _se_plante(fenetres: list[FenetreCulturale], durees: list[DureeCulturale]) -> bool:
     """
     [US-177 / CA3] Un itinéraire se plante s'il a une fenêtre de plantation (dans
@@ -794,6 +824,11 @@ def lire_calendrier(db: Session, culture: str, potager_id: Optional[int]) -> Cal
         # jamais affichée vide, pour une culture semée en place.
         if _se_plante(fenetres, list(durees.values())):
             etapes.append(ETAPE_PLANTATION_RECOLTE)
+        # [US-213 / CA4] Servie pour ce qui passe par la pépinière — même
+        # condition que `repiquage`, plus sa propre valeur si elle existe : une
+        # correction déjà posée ne disparaît jamais de l'écran.
+        if _passe_par_pepiniere(fenetres, list(durees.values())) or _renseignee(durees.get(ETAPE_SEMIS_GODET)):
+            etapes.append(ETAPE_SEMIS_GODET)
         lus.append(ItineraireLu(
             nom=it.nom,
             personnalise=it.potager_id is not None,
@@ -818,7 +853,7 @@ def lire_calendrier(db: Session, culture: str, potager_id: Optional[int]) -> Cal
                     mention=durees[etape].mention if etape in durees else None,
                     affichage=(
                         formater_duree(durees[etape].jours_min, durees[etape].jours_max, durees[etape].mention)
-                        if etape in durees else TIRET
+                        if etape in durees else affichage_absent(etape)
                     ),
                     attribution=attributions.get(durees[etape].source_id) if etape in durees else None,
                 )
@@ -885,6 +920,16 @@ def calendrier_en_dict(calendrier: Calendrier) -> dict:
     }
 
 
+def _duree_en_dict(duree: Optional[DureeLue]) -> Optional[dict]:
+    """[US-213 / CA4] Forme de lecture d'une durée : bornes, mention, affichage."""
+    if duree is None:
+        return None
+    return {
+        "etape": duree.etape, "jours_min": duree.jours_min, "jours_max": duree.jours_max,
+        "mention": duree.mention, "affichage": duree.affichage,
+    }
+
+
 def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Optional[int]) -> dict:
     """
     [US-176 / CA1-CA9, CA11] Calendrier conseillé de TOUTES les cultures d'un
@@ -914,10 +959,12 @@ def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Option
                 "culture_connue": calendrier.culture_connue, "renseigne": False,
                 "itineraire": None, "itineraire_standard": True,
                 "mois": {phase: [] for phase in PHASES}, "duree_recolte": TIRET,
+                "duree_semis_godet": None,
             }
             continue
         duree = it.duree(ETAPE_RECOLTE)
-        for valeur in (*it.fenetres, duree):
+        godet = it.duree(ETAPE_SEMIS_GODET)
+        for valeur in (*it.fenetres, duree, godet):
             if valeur is not None and valeur.attribution and valeur.attribution not in attributions:
                 attributions.append(valeur.attribution)
         resultat[nom] = {
@@ -928,6 +975,11 @@ def calendriers_du_plan(db: Session, cultures: Iterable[str], potager_id: Option
             # Mois 1..12 par phase, fenêtre à cheval sur l'année comprise.
             "mois": {phase: (it.fenetre(phase).mois if it.fenetre(phase) else []) for phase in PHASES},
             "duree_recolte": duree.affichage if duree else TIRET,
+            # [US-213 / CA4] Champ AJOUTÉ, aucun autre ne bouge. `None` : cette
+            # culture ne passe pas par la pépinière, l'étape n'existe pas pour
+            # elle. Sinon les bornes en jours — jamais déduites (CA5) — et, sans
+            # valeur, « non renseigné » : US-214 n'annonce alors aucune échéance.
+            "duree_semis_godet": _duree_en_dict(godet),
         }
     log.info("[US-176] Calendriers du plan : potager_id=%s zone=%s (%s) cultures=%d",
              potager_id, zone, origine, len(resultat))
@@ -1131,23 +1183,30 @@ def corriger_duree(
     cle = normaliser_itineraire(itineraire)
     it_avant = next((it for it in avant.itineraires if normaliser_itineraire(it.nom) == cle and not it.implicite), None)
     duree_avant = it_avant.duree(etape) if it_avant is not None else None
-    affichage_avant = duree_avant.affichage if duree_avant is not None else TIRET
+    affichage_avant = duree_avant.affichage if duree_avant is not None else affichage_absent(etape)
 
     local = _itineraire_personnalise(db, ctx.potager_id, culture, itineraire)
-    if etape in (ETAPE_REPIQUAGE, ETAPE_PLANTATION_RECOLTE) and valeurs is not None:
+    if etape in (ETAPE_REPIQUAGE, ETAPE_PLANTATION_RECOLTE, ETAPE_SEMIS_GODET) and valeurs is not None:
         fenetres = db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == local.id).all()
         # [US-177 / CA3] Même garde que le repiquage, sur l'autre phase : une
         # culture semée en place ne se plante pas, et un itinéraire SANS aucune
         # fenêtre ne préjuge de rien — le jardinier saisit ce qu'il connaît.
-        phase_requise, message = (
-            (PHASE_SEMIS_PEPINIERE,
-             "Cet itinéraire ne passe pas par la pépinière : il n'a pas de délai de "
-             "repiquage. Renseignez d'abord une fenêtre de semis en pépinière.")
-            if etape == ETAPE_REPIQUAGE else
-            (PHASE_PLANTATION,
-             "Cet itinéraire ne se plante pas : il n'a pas de délai entre la plantation "
-             "et la récolte. Renseignez d'abord une fenêtre de plantation.")
-        )
+        # [US-213 / CA1] Le délai de godet suit la règle du repiquage : une
+        # culture semée en place ne passe pas de la barquette au godet.
+        phase_requise, message = {
+            ETAPE_REPIQUAGE: (
+                PHASE_SEMIS_PEPINIERE,
+                "Cet itinéraire ne passe pas par la pépinière : il n'a pas de délai de "
+                "repiquage. Renseignez d'abord une fenêtre de semis en pépinière."),
+            ETAPE_SEMIS_GODET: (
+                PHASE_SEMIS_PEPINIERE,
+                "Cet itinéraire ne passe pas par la pépinière : il n'a pas de délai de "
+                "repiquage en godet. Renseignez d'abord une fenêtre de semis en pépinière."),
+            ETAPE_PLANTATION_RECOLTE: (
+                PHASE_PLANTATION,
+                "Cet itinéraire ne se plante pas : il n'a pas de délai entre la plantation "
+                "et la récolte. Renseignez d'abord une fenêtre de plantation."),
+        }[etape]
         if fenetres and not any(f.phase == phase_requise for f in fenetres):
             db.rollback()
             raise ValeurCalendrierInvalideError(message)
@@ -1169,7 +1228,7 @@ def corriger_duree(
         ligne.source_id = origine
     db.commit()
 
-    affichage_apres = formater_duree(*valeurs) if valeurs else TIRET
+    affichage_apres = formater_duree(*valeurs) if valeurs else affichage_absent(etape)
     log.info(
         "[US-068] Durée corrigée : '%s' / '%s' %s : %s → %s (potager_id=%s)",
         culture, local.nom, etape, affichage_avant, affichage_apres, ctx.potager_id,

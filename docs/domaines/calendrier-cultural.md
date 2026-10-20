@@ -1,4 +1,4 @@
-# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183
+# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183, US-213
 
 ## Calendrier cultural et zone climatique [US-068]
 
@@ -183,6 +183,42 @@ la dictée d'US-177 exige les DEUX bornes, plantation ET récolte.
 
 ⚠️ Aucune écriture, aucun calcul de stock touché (CA13) — un test le vérifie.
 
+## Délai semis → repiquage en godet [US-213]
+
+Cinquième étape de `duree_culturale` (`semis_godet`), aucune migration
+(VARCHAR(20) sans CHECK, comme US-177). C'est le passage de la barquette au
+godet — PAS la mise en place, qui reste `repiquage`. Consommateur : US-214
+(échéance de repiquage d'un lot) ; la fiche culture (US-206) la lira ensuite.
+
+```
+/calendrier duree <culture> [itinéraire] semis-godet 10-15      (aucune la retire)
+« délai de repiquage en godet des choux : 10 à 15 jours »
+« les tomates se mettent en godet 15 à 20 jours après le semis »
+GET /cultures/{culture}/calendrier   étape `semis_godet` dans `durees`
+GET /plan/calendriers                champ AJOUTÉ `duree_semis_godet` (bornes, mention)
+```
+
+⚠️ Quatre décisions à ne pas rouvrir sans rouvrir l'US :
+
+- **LE MOT « GODET » SÉPARE LES DEUX DÉLAIS.** « délai de repiquage des tomates :
+  42 à 56 jours » garde son sens (semis → mise en place, US-068 / CA29). Deux
+  règles de dictée (`calendrier_duree_semis_godet`, `…_verbe`) exigent le mot, et
+  la règle générique `calendrier_duree` porte un `(?!… godet)` : la phrase ne
+  dépend pas de l'ordre de déclaration. Le corpus `us172_commandes.csv` porte
+  les deux formes côte à côte.
+- **JAMAIS DÉDUITE** (CA5) : ni de la levée, ni de `repiquage`, ni d'une
+  moyenne. Sans valeur, `lire_calendrier` rend « non renseigné »
+  (`affichage_absent`) — les autres étapes gardent le tiret — et rien n'est
+  projeté. Wind River ne porte aucune colonne pour ce délai : l'étape n'est
+  pré-remplie par aucun adaptateur (`SOURCE.md`), le gabarit interne la livre
+  vide.
+- **PORTÉE** : servie pour un itinéraire qui passe par la pépinière
+  (`_passe_par_pepiniere`), ou qui porte déjà sa valeur ; refusée à la
+  correction sur un itinéraire qui a des fenêtres et aucune de semis en
+  pépinière, comme `repiquage`.
+- **AUCUN CALCUL TOUCHÉ** (CA7) : frise, projections (`recalage_calendrier`),
+  confiance et stock ne la lisent pas. Un test le vérifie.
+
 ## Moteur de confiance semis / plantation [US-178]
 
 « Est-ce raisonnable de semer ça, ici, maintenant ? » — 1 à 3 étoiles et les
@@ -249,8 +285,26 @@ rendus ici sont donc ceux du gabarit, à la lettre, et un test les fige.
 
 ⚠️ Une parcelle déclarée pépinière IMPOSE le semis en pépinière quand la filière
 n'est pas dite (CA8) ; une plantation qu'on y demande n'est pas corrigée en
-douce — elle porte un avertissement. Un semis en pépinière tient R2, R3 et R4
-pour acquises. [US-181] L'abri et le paillage DÉCLARÉS sur la parcelle acquièrent
+douce — elle porte un avertissement. [US-220] Un semis en pépinière lit le TYPE
+de la pépinière (US-208), table `REGLES_ACQUISES_PAR_TYPE_PEPINIERE` :
+
+| Type de pépinière | R2 dernière gelée | R3 gel annoncé | R4 nuits douces | Motif |
+|---|---|---|---|---|
+| chaude | acquise | acquise | acquise | « pépinière chauffée » |
+| froide | évaluée | acquise | évaluée | « pépinière froide : à l'abri du gel annoncé, pas des nuits fraîches » |
+| non renseigné | acquise | acquise | acquise | motifs d'avant US-220 + avertissement « la confiance suppose une pépinière chauffée » |
+
+Quelle pépinière : celle de la parcelle dite si c'en est une ; sinon la MEILLEURE
+du potager (chaude, puis non renseigné, puis froide), nommée dans
+`pepiniere.evaluation`. Aucune pépinière : comportement d'avant, avec
+l'avertissement « Aucune pépinière déclarée ». Un potager qui a des pépinières
+froides ET d'autres reçoit aussi `par_pepiniere`, une évaluation par type — même
+fonction, donc même niveau sur le bot, le Plan, la fiche calendrier et la carte
+« À semer » (`resume.a_semer.cultures[].confiance`). La ligne « non renseigné »
+conserve le niveau d'avant pour ne pas faire chuter tous les potagers d'un coup :
+décision produit à revoir quand les pépinières seront typées. Les règles R2 à R4
+s'évaluent toujours « exposées » ; la pépinière, puis l'abri, acquièrent ensuite
+ce qu'ils couvrent. [US-181] L'abri et le paillage DÉCLARÉS sur la parcelle acquièrent
 d'office R2/R3/R4 (serre, tunnel), R3 (châssis, voile) ou R4 (paillage) : la table
 `REGLES_ACQUISES_PAR_ABRI` de `confiance_semis.py` est une décision produit, à
 corriger là. R1 et R5 ne sont jamais modulées ; « non renseigné » ≠ « aucun ».

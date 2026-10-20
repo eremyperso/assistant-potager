@@ -134,20 +134,83 @@ pourquoi certains traits du plan sont hachurés ou en segments ?,parcelles-et-pl
 combien de pieds tiennent sur un rang ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
 que se passe-t-il quand un rang est surchargé de pieds ?,parcelles-et-plan.md#07-compter-les-rangs-occupes-et-les-rangs-restants
 existe-t-il un pourcentage de remplissage des rangs ?,parcelles-et-plan.md#08-compter-les-places-disponibles-sur-un-rang
-comment modifier les caractéristiques d'une parcelle depuis le site ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
-puis-je corriger le type de sol d'une parcelle sans passer par le bot ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
-que se passe-t-il si je passe une parcelle en inactive ?,parcelles-et-plan.md#12-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
-que veut dire un pictogramme sur un rang du plan ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
-pourquoi mon rang affiche-t-il +4 en rouge ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
-comment lire la piste d'un rang ?,parcelles-et-plan.md#13-lire-un-rang-sur-le-plan
-à quoi sert l'onglet Parcelles ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
-pourquoi l'onglet Parcelles n'affiche-t-il plus de pourcentage d'occupation ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
-où est-ce que je vois les caractéristiques d'une parcelle ?,parcelles-et-plan.md#11-voir-et-completer-les-caracteristiques-d-une-parcelle
-pourquoi une parcelle affiche-t-elle non renseigné ?,parcelles-et-plan.md#11-voir-et-completer-les-caracteristiques-d-une-parcelle
-ou sont passees les tuiles de culture de l'onglet parcelles ?,parcelles-et-plan.md#10-ouvrir-une-parcelle-l-onglet-parcelles
-ou voir ce qui a pousse sur une parcelle les annees precedentes ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
-que planter l'an prochain sur cette planche ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
-comment savoir si une famille revient deux ans de suite au meme endroit ?,parcelles-et-plan.md#14-lire-la-rotation-d-une-parcelle-annee-par-annee
-ou voir ce que j'ai apporte au sol d'une parcelle ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
-ai-je deja paille cette planche cette annee ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
-ou est l'historique des amendements d'une parcelle ?,parcelles-et-plan.md#15-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+comment modifier les caractéristiques d'une parcelle depuis le site ?,parcelles-et-plan.md#13-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+puis-je corriger le type de sol d'une parcelle sans passer par le bot ?,parcelles-et-plan.md#13-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+que se passe-t-il si je passe une parcelle en inactive ?,parcelles-et-plan.md#13-corriger-les-caracteristiques-d-une-parcelle-depuis-le-web
+que veut dire un pictogramme sur un rang du plan ?,parcelles-et-plan.md#14-lire-un-rang-sur-le-plan
+pourquoi mon rang affiche-t-il +4 en rouge ?,parcelles-et-plan.md#14-lire-un-rang-sur-le-plan
+comment lire la piste d'un rang ?,parcelles-et-plan.md#14-lire-un-rang-sur-le-plan
+à quoi sert l'onglet Parcelles ?,parcelles-et-plan.md#11-ouvrir-une-parcelle-l-onglet-parcelles
+pourquoi l'onglet Parcelles n'affiche-t-il plus de pourcentage d'occupation ?,parcelles-et-plan.md#11-ouvrir-une-parcelle-l-onglet-parcelles
+où est-ce que je vois les caractéristiques d'une parcelle ?,parcelles-et-plan.md#12-voir-et-completer-les-caracteristiques-d-une-parcelle
+pourquoi une parcelle affiche-t-elle non renseigné ?,parcelles-et-plan.md#12-voir-et-completer-les-caracteristiques-d-une-parcelle
+ou sont passees les tuiles de culture de l'onglet parcelles ?,parcelles-et-plan.md#11-ouvrir-une-parcelle-l-onglet-parcelles
+ou voir ce qui a pousse sur une parcelle les annees precedentes ?,parcelles-et-plan.md#15-lire-la-rotation-d-une-parcelle-annee-par-annee
+que planter l'an prochain sur cette planche ?,parcelles-et-plan.md#15-lire-la-rotation-d-une-parcelle-annee-par-annee
+comment savoir si une famille revient deux ans de suite au meme endroit ?,parcelles-et-plan.md#15-lire-la-rotation-d-une-parcelle-annee-par-annee
+ou voir ce que j'ai apporte au sol d'une parcelle ?,parcelles-et-plan.md#16-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+ai-je deja paille cette planche cette annee ?,parcelles-et-plan.md#16-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+ou est l'historique des amendements d'une parcelle ?,parcelles-et-plan.md#16-retrouver-ce-qu-on-a-apporte-au-sol-d-une-parcelle
+que se passe-t-il quand j'appuie sur un rang du plan ?,parcelles-et-plan.md#10-ouvrir-une-culture-une-parcelle-ou-la-pepiniere-depuis-la-vu
+comment ajouter une culture sur un rang libre du plan ?,parcelles-et-plan.md#10-ouvrir-une-culture-une-parcelle-ou-la-pepiniere-depuis-la-vu
+pourquoi je ne peux pas appuyer sur un rang libre du plan ?,parcelles-et-plan.md#10-ouvrir-une-culture-une-parcelle-ou-la-pepiniere-depuis-la-vu
+que fait le bouton journal du jour sur la vue plan ?,parcelles-et-plan.md#10-ouvrir-une-culture-une-parcelle-ou-la-pepiniere-depuis-la-vu
+par quel onglet s'ouvre le plan ?,parcelles-et-plan.md#17-les-trois-onglets-de-l-activite-plan
+pourquoi je ne peux pas ouvrir l'onglet rotation ?,parcelles-et-plan.md#17-les-trois-onglets-de-l-activite-plan
+quels sont les onglets de l'activité plan ?,parcelles-et-plan.md#17-les-trois-onglets-de-l-activite-plan
+
+le poquet est-il une unité reconnue pour une quantité ?,enregistrer-un-geste.md#10-dire-une-quantite-poquets-metres-de-rang-et-autres-unites
+comment dicter une quantité en mètres de rang ?,enregistrer-un-geste.md#10-dire-une-quantite-poquets-metres-de-rang-et-autres-unites
+quelle différence entre un mètre de rang et un mètre carré quand je dicte ?,enregistrer-un-geste.md#10-dire-une-quantite-poquets-metres-de-rang-et-autres-unites
+le poquet est-il accepté en pépinière ?,enregistrer-un-geste.md#10-dire-une-quantite-poquets-metres-de-rang-et-autres-unites
+comment retrouver un lot de pepiniere par son numero ?,pepiniere-par-lot.md#04-retrouver-un-lot-par-son-numero-l-ecrire-sur-l-etiquette
+quel numero ecrire sur l'etiquette de ma barquette ?,pepiniere-par-lot.md#04-retrouver-un-lot-par-son-numero-l-ecrire-sur-l-etiquette
+comment dire de quel lot viennent mes plants en godet ?,semis-godet-plantation.md#05-citer-un-lot-par-son-numero-a-la-mise-en-godet-a-la-perte-a-
+comment citer le numero d'un lot dans une phrase ?,enregistrer-un-geste.md#11-dire-le-numero-d-un-lot-de-pepiniere-dans-une-phrase
+dans quelle pepiniere sont mes godets de chou ?,pepiniere-par-lot.md#05-savoir-ou-se-trouve-un-lot
+mon lot est reparti entre la serre et le chassis froid que dit l'application ?,pepiniere-par-lot.md#05-savoir-ou-se-trouve-un-lot
+comment dire que je mets mes godets sous le chassis froid ?,semis-godet-plantation.md#06-dire-dans-quelle-pepiniere-on-pose-ses-godets
+une mise en godet posee dans la serre compte-t-elle comme une culture en place ?,semis-godet-plantation.md#06-dire-dans-quelle-pepiniere-on-pose-ses-godets
+comment retrouver le numero d un lot que j ai oublie ?,pepiniere-par-lot.md#04-retrouver-un-lot-par-son-numero-l-ecrire-sur-l-etiquette
+comment dire que j ai passe mes godets de la serre au chassis froid ?,semis-godet-plantation.md#07-sortir-ses-plants-pour-les-endurcir-deplacer-un-lot-d-une-pe
+comment deplacer un lot de godets d une pepiniere a l autre ?,semis-godet-plantation.md#07-sortir-ses-plants-pour-les-endurcir-deplacer-un-lot-d-une-pe
+puis-je deplacer seulement une partie des godets d un lot ?,semis-godet-plantation.md#07-sortir-ses-plants-pour-les-endurcir-deplacer-un-lot-d-une-pe
+comment connaître le délai de repiquage dans le calendrier ?,calendrier-et-zone-climatique.md#14-connaitre-et-corriger-le-delai-de-repiquage-d-une-culture
+au bout de combien de jours repique-t-on en godet ?,calendrier-et-zone-climatique.md#14-connaitre-et-corriger-le-delai-de-repiquage-d-une-culture
+comment définir le délai avant le repiquage en godet d'une culture ?,calendrier-et-zone-climatique.md#14-connaitre-et-corriger-le-delai-de-repiquage-d-une-culture
+faut-il prendre en compte un délai entre le semis et la plantation d'une culture ?,calendrier-et-zone-climatique.md#14-connaitre-et-corriger-le-delai-de-repiquage-d-une-culture
+pourquoi le délai avant le godet affiche non renseigné ?,calendrier-et-zone-climatique.md#14-connaitre-et-corriger-le-delai-de-repiquage-d-une-culture
+que dois-je faire aujourd'hui dans ma pepiniere ?,pepiniere-par-lot.md#06-savoir-ce-qu-il-y-a-a-faire-aujourd-hui-dans-la-pepiniere
+dans quel ordre l'application classe mes lots du plus urgent au plus calme ?,pepiniere-par-lot.md#06-savoir-ce-qu-il-y-a-a-faire-aujourd-hui-dans-la-pepiniere
+que veut dire un lot a repiquer ou en retard de repiquage ?,pepiniere-par-lot.md#07-ce-que-veulent-dire-a-repiquer-en-retard-a-endurcir-et-pret-
+que veut dire endurcissement J+3 sur 7 pour un lot ?,pepiniere-par-lot.md#07-ce-que-veulent-dire-a-repiquer-en-retard-a-endurcir-et-pret-
+qu'est-ce qu'un lot dormant et pourquoi propose-t-on de le cloturer ?,pepiniere-par-lot.md#08-un-lot-dormant-oublie-depuis-des-semaines
+pourquoi mon lot n'a-t-il aucune echeance de repiquage ?,pepiniere-par-lot.md#11-pourquoi-un-lot-n-a-pas-d-echeance
+comment ouvrir la fiche d'un lot et y faire un geste depuis mon telephone ?,pepiniere-par-lot.md#09-ouvrir-la-fiche-d-un-lot-et-y-faire-ses-gestes
+que fait le bouton repiquer en godet de la fiche d'un lot ?,pepiniere-par-lot.md#09-ouvrir-la-fiche-d-un-lot-et-y-faire-ses-gestes
+que veut dire cloturer un lot et qu'est-ce que la cloture solde ?,pepiniere-par-lot.md#10-comment-cloturer-un-lot-definitivement
+comment cloturer definitivement un lot dormant ?,pepiniere-par-lot.md#10-comment-cloturer-un-lot-definitivement
+pourquoi l'assistant me demande combien de plants pour une perte de godet ?,semis-godet-plantation.md#08-le-nombre-de-plants-est-toujours-demande-mise-en-godet-perte
+que fait le bouton tout le lot quand l'assistant demande combien de plants ?,semis-godet-plantation.md#08-le-nombre-de-plants-est-toujours-demande-mise-en-godet-perte
+mise en godet sans nombre de plants je ne sais pas combien que se passe-t-il ?,semis-godet-plantation.md#08-le-nombre-de-plants-est-toujours-demande-mise-en-godet-perte
+pourquoi ma vente de plants est refusee sans quantite ?,semis-godet-plantation.md#08-le-nombre-de-plants-est-toujours-demande-mise-en-godet-perte
+que se passe-t-il si je ne sais pas combien de plants j'ai repiques ?,semis-godet-plantation.md#08-le-nombre-de-plants-est-toujours-demande-mise-en-godet-perte
+ou mettre en terre les godets d'un lot pret ?,pepiniere-par-lot.md#12-savoir-ou-mettre-en-terre-les-plants-d-un-lot
+que fait le bouton mettre en terre ici de la fiche d'un lot ?,pepiniere-par-lot.md#12-savoir-ou-mettre-en-terre-les-plants-d-un-lot
+comment noter la levee d'un lot de semis ?,pepiniere-par-lot.md#13-noter-la-levee-d-un-lot
+comment calculer mon taux de levee et le comparer a la moyenne de ma culture ?,pepiniere-par-lot.md#13-noter-la-levee-d-un-lot
+que veut dire levee terminee et que devient la germination du lot ?,pepiniere-par-lot.md#13-noter-la-levee-d-un-lot
+combien de graines de ma barquette ont leve et ou le noter ?,pepiniere-par-lot.md#13-noter-la-levee-d-un-lot
+comment lire le tableau de l'onglet ma pepiniere par emplacement et par stade ?,pepiniere-par-lot.md#06-savoir-ce-qu-il-y-a-a-faire-aujourd-hui-dans-la-pepiniere
+que veulent dire les colonnes en levee en godet endurcissement et pret a sortir ?,pepiniere-par-lot.md#06-savoir-ce-qu-il-y-a-a-faire-aujourd-hui-dans-la-pepiniere
+a quoi sert la bande le bon moment pour semer de la pepiniere ?,pepiniere-par-lot.md#06-savoir-ce-qu-il-y-a-a-faire-aujourd-hui-dans-la-pepiniere
+pourquoi mon lot de semis a deux etiquettes 1/2 et 2/2 ?,pepiniere-par-lot.md#14-le-parcours-d-un-plant-pourquoi-un-lot-peut-avoir-deux-etiqu
+pourquoi les graines restantes d'un lot en partie repique n'ont plus d'echeance ?,pepiniere-par-lot.md#14-le-parcours-d-un-plant-pourquoi-un-lot-peut-avoir-deux-etiqu
+pourquoi un legume dans sa fenetre n'est pas propose a semer ?,pepiniere-par-lot.md#14-le-parcours-d-un-plant-pourquoi-un-lot-peut-avoir-deux-etiqu
+pourquoi mes tomates ont moins d'étoiles au châssis froid qu'en serre chauffée ?,calendrier-et-zone-climatique.md#15-pourquoi-le-type-de-pepiniere-change-le-niveau-d-un-semis-a-
+que veut dire la confiance suppose une pépinière chauffée ?,calendrier-et-zone-climatique.md#15-pourquoi-le-type-de-pepiniere-change-le-niveau-d-un-semis-a-
+pourquoi la carte à semer affiche deux niveaux pour la même culture ?,calendrier-et-zone-climatique.md#15-pourquoi-le-type-de-pepiniere-change-le-niveau-d-un-semis-a-
+comment sortir seulement 6 godets d'un lot au châssis froid ?,semis-godet-plantation.md#07-sortir-ses-plants-pour-les-endurcir-deplacer-un-lot-d-une-pe
+une partie de mon lot est en serre et l'autre au châssis : l'application le sait ?,pepiniere-par-lot.md#05-savoir-ou-se-trouve-un-lot
+ou relire la frise de tous mes lots de la saison ?,pepiniere-par-lot.md#15-relire-sa-saison-dans-l-onglet-lots
+que veut dire un lot a regler dans l'onglet lots ?,pepiniere-par-lot.md#15-relire-sa-saison-dans-l-onglet-lots

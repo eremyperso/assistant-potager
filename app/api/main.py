@@ -114,6 +114,7 @@ from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
+from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
 from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
@@ -126,6 +127,7 @@ from app.services import recalage_calendrier as svc_recalage  # [US-070]
 from app.services import repartition_rangs as svc_rangs  # [US-198]
 from app.services import rotation as svc_rotation  # [US-163, US-231]
 from app.services import confiance_semis as svc_confiance  # [US-178]
+from app.services import echeances_lots as svc_echeances  # [US-214]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164, US-206]
 from app.services import vue_cultures as svc_vue_cultures  # [US-204]
 from app.services import avertissements_plantation as svc_avertissements  # [US-167]
@@ -1005,6 +1007,7 @@ class ModifierParcelleRequest(BaseModel):
     longueur_m: Optional[float] = None
     nb_rangs: Optional[int] = None
     exposition: Optional[str] = None
+    ensoleillement: Optional[str] = None
     type_sol: Optional[str] = None
     abri: Optional[str] = None
     paillage: Optional[bool] = None
@@ -1062,8 +1065,10 @@ def modifier_parcelle(
             "superficie_m2": parcelle.superficie_m2, "longueur_m": parcelle.longueur_m,
             "largeur_m": largeur, "largeur_incoherente": incoherente,
             "nb_rangs": parcelle.nb_rangs, "exposition": parcelle.exposition,
+            "ensoleillement": parcelle.ensoleillement,
             "type_sol": parcelle.type_sol, "abri": parcelle.abri,
             "paillage": parcelle.paillage, "est_pepiniere": parcelle.est_pepiniere,
+            "type_pepiniere": parcelle.type_pepiniere,
             "actif": parcelle.actif,
             "modifications": modifs,
         }
@@ -1597,6 +1602,9 @@ class PreparerGesteRequest(BaseModel):
     parcelle_id: Optional[int] = None
     rang: Optional[str] = None
     lot_id: Optional[int] = None
+    # [US-241 / CA9] La pépinière de l'étiquette d'où part le geste (écran Parcours) :
+    # d'où viennent les godets d'un lot réparti.
+    emplacement_id: Optional[int] = None
     date: Optional[str] = None
     contexte_semis: Optional[str] = None
     ecran: Optional[str] = None
@@ -1632,6 +1640,7 @@ def deposer_geste_en_file(
                 quantite=req.quantite, unite=req.unite, parcelle_id=req.parcelle_id,
                 rang=req.rang, lot_id=req.lot_id, date=req.date,
                 contexte_semis=req.contexte_semis, ecran=req.ecran,
+                emplacement_id=req.emplacement_id,
             )
         except PermissionInsuffisanteError as e:
             # [CA24] Un membre en lecture seule est refusé ici aussi, et pas
@@ -1642,6 +1651,10 @@ def deposer_geste_en_file(
             raise HTTPException(status_code=403, detail=str(e))
         except svc_file_gestes.ActionNonOuverteError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        except (svc_file_gestes.QuantiteSuperieureAuLotError,
+                svc_file_gestes.GesteDeLotDejaEnAttenteError) as e:
+            # [INC-014] Plus assez de plants dans le lot : conflit d'état, pas une erreur de saisie.
+            raise HTTPException(status_code=409, detail=str(e))
         except (svc_file_gestes.ParcelleHorsPotagerError,
                 svc_file_gestes.LotHorsPotagerError) as e:
             raise HTTPException(status_code=404, detail=str(e))
@@ -1714,6 +1727,11 @@ def _geste_pour_pwa(geste) -> dict:
         "parcelle": item.get("parcelle"),
         "date": item.get("date"),
         "contexte_semis": item.get("contexte_semis"),
+        # [INC-014] Le lot et la quantité réservée : l'écran en déduit les plants
+        # déjà promis à la terre et grise le bouton quand il n'en reste plus.
+        "lot_id": item.get("_lot_id"),
+        # Un repiquage porte son nombre dans `nb_plants_godets`, les autres dans `quantite`.
+        "quantite": item.get("nb_plants_godets") if item.get("action") == "mise_en_godet" else item.get("quantite"),
         "ecran": geste.ecran,
         "depose_le": geste.cree_le.isoformat() + "Z" if geste.cree_le else None,
         "expire_le": geste.expire_le.isoformat() + "Z" if geste.expire_le else None,
@@ -2474,7 +2492,7 @@ def get_plan(
                     "variete":    c.get("variete"),
                     # [US-037 / CA10] Une surface m² est fractionnable (ex: 1.5 m²) —
                     # ne jamais tronquer en int comme pour un nombre de plants/graines.
-                    "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") == "m²" else int(c.get("nb_plants") or 0),
+                    "nb_plants":  (c.get("nb_plants") or 0) if c.get("unite") in ("m²", "ml") else int(c.get("nb_plants") or 0),
                     "unite":      c.get("unite") or "plants",
                     "type_organe": c.get("type_organe") or "végétatif",
                     "surface_m2_par_plant": (
@@ -2551,6 +2569,8 @@ def get_plan(
                 "id":            p.id,
                 "nom":           p.nom,
                 "exposition":    p.exposition,
+                # [US-239 / CA6] L'ensoleillement voyage à côté de l'orientation.
+                "ensoleillement": p.ensoleillement,
                 "superficie_m2": p.superficie_m2,
                 # [US-229 / CA1] Le type de sol (US-058) et le statut actif
                 # (US-009) rejoignent la réponse : la carte « Caractéristiques »
@@ -2581,6 +2601,9 @@ def get_plan(
                 "largeur_incoherente": largeur_incoherente,
                 "ordre":         p.ordre,
                 "est_pepiniere": bool(p.est_pepiniere),
+                # [US-208 / CA5] « chaude », « froide », ou None = type non
+                # renseigné (toujours None hors pépinière).
+                "type_pepiniere": p.type_pepiniere,
                 "cultures":      cultures,
                 "occupation_pct": occupation_pct,
                 "has_observations": nb_obs_parcelle > 0,
@@ -2610,7 +2633,7 @@ def get_plan(
                 "culture": brut.get("culture", ""),
                 "variete": brut.get("variete"),
                 "nb_plants": (
-                    (brut.get("nb_plants") or 0) if unite == "m²"
+                    (brut.get("nb_plants") or 0) if unite in ("m²", "ml")
                     else int(brut.get("nb_plants") or 0)
                 ),
                 "unite": unite,
@@ -2707,6 +2730,63 @@ def get_godets(
 
 
 
+def _lot_pepiniere_json(lot: dict, familles: dict) -> dict:
+    """[US-065, US-209] Un lot de pépinière tel que l'API le rend (dates en ISO court, famille)."""
+    return {
+        **lot,
+        "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
+        "date_derniere_mise_en_godet": (
+            str(lot["date_derniere_mise_en_godet"])[:10]
+            if lot["date_derniere_mise_en_godet"] else None
+        ),
+        # [US-214] Les deux dates dont le calcul des échéances a besoin, en ISO court.
+        "date_dernier_geste": str(lot["date_dernier_geste"])[:10] if lot.get("date_dernier_geste") else None,
+        "date_deplacement": str(lot["date_deplacement"])[:10] if lot.get("date_deplacement") else None,
+        # [US-216] Le jour où le lot a été clôturé (None s'il ne l'est pas).
+        "date_cloture": str(lot["date_cloture"])[:10] if lot.get("date_cloture") else None,
+        # [US-212 / CA6] Le jour du dernier comptage de levée (None si aucune levée notée).
+        "date_derniere_levee": str(lot["date_derniere_levee"])[:10] if lot.get("date_derniere_levee") else None,
+        # [US-241 / CA7] Godets par pépinière, dates d'arrivée en ISO court.
+        "repartition_godets": [
+            {**r, "depuis": str(r["depuis"])[:10] if r.get("depuis") else None}
+            for r in lot.get("repartition_godets") or []
+        ],
+        # [US-242] Mises en terre (avec parcelle), ventes et pertes du lot, à leur date :
+        # le journal du lot les place sur sa frise. Champ AJOUTÉ.
+        "sorties_datees": [
+            {**x, "date": str(x["date"])[:10] if x.get("date") else None}
+            for x in lot.get("sorties_datees") or []
+        ],
+        "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
+    }
+
+
+@app.get("/pepiniere/lots/{numero}")
+def get_pepiniere_lot_par_numero(
+    numero: int,
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """
+    [US-209 / CA9] Un lot de pépinière désigné par son numéro court, dans le potager
+    consulté. Un numéro inconnu — ou celui d'un autre potager — répond 404
+    « Aucun lot n° N dans ce potager ».
+    """
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        lot = svc_stock.lot_pepiniere_par_numero(db, use_ctx, numero)
+        if lot is None:
+            raise HTTPException(status_code=404, detail=f"Aucun lot n° {numero} dans ce potager")
+        familles = svc_familles.familles_par_culture(db, use_ctx)
+        # [US-216 / CA2] La fiche du lot s'ouvre sur CE seul appel : échéances et
+        # action suggérée (US-214) y sont jointes, comme dans la liste.
+        suite = svc_echeances.echeances_d_un_lot(db, use_ctx, lot, date.today())
+        return {**_lot_pepiniere_json(lot, familles), **suite}
+    finally:
+        db.close()
+
+
 @app.get("/pepiniere/lots")
 def get_pepiniere_lots(
     date_ref: date = Query(default=None),
@@ -2729,6 +2809,13 @@ def get_pepiniere_lots(
 
     [US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.
     [US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).
+
+    [US-214 / CA7, CA8] Chaque lot gagne `echeances`, `action_suggeree` et
+    `rang_urgence` ; la réponse gagne `resume` (à repiquer, à endurcir, prêts pour
+    le plan, à semer). Champs AJOUTÉS : aucun n'est retiré ni renommé. Le calcul
+    vit dans `app/services/echeances_lots.py` ; l'API recopie.
+
+    [US-240 / CA1] La réponse gagne `parcours` (onglet Parcours, US-218).
     """
     today = date.today()
     dr = min(date_ref, today) if date_ref else None
@@ -2737,6 +2824,10 @@ def get_pepiniere_lots(
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         lots = svc_stock.calcul_lots_pepiniere(db, use_ctx, date_ref=dr)
+        pepinieres = svc_lots_pepiniere.pepinieres_du_potager(db, use_ctx)
+        echeances = svc_echeances.lire_echeances(
+            db, use_ctx, lots, date_ref_effective, pepinieres=pepinieres,
+        )
         # [US-067 / CA5, CA6, CA8] Famille botanique par culture — remplace la
         # table figée frontend/src/lib/familles.js (supprimée) qui alimentait le
         # regroupement de cet écran (US-061). Relue à chaque appel : une
@@ -2745,19 +2836,18 @@ def get_pepiniere_lots(
         familles = svc_familles.familles_par_culture(db, use_ctx)
         return {
             "lots": [
-                {
-                    **lot,
-                    "date_semis": str(lot["date_semis"])[:10] if lot["date_semis"] else None,
-                    "date_derniere_mise_en_godet": (
-                        str(lot["date_derniere_mise_en_godet"])[:10]
-                        if lot["date_derniere_mise_en_godet"] else None
-                    ),
-                    "famille": familles.get(normaliser_culture(lot.get("culture") or ""), None),
-                }
+                {**_lot_pepiniere_json(lot, familles), **echeances["par_lot"][lot["lot_id"]]}
                 for lot in lots
             ],
             "total": len(lots),
             "date_ref_effective": date_ref_effective.isoformat(),
+            "resume": echeances["resume"],
+            # [US-216 / CA8] Les pépinières du potager : la fiche d'un lot ne propose
+            # « Déplacer » qu'à partir de deux. Champ AJOUTÉ, aucun n'est retiré.
+            "pepinieres": pepinieres,
+            # [US-240 / CA1] Le parcours du plant : étiquettes par (lot, stade,
+            # emplacement), compteurs, dormants, à semer. Bloc AJOUTÉ.
+            "parcours": echeances["parcours"],
         }
     finally:
         db.close()
@@ -2815,6 +2905,7 @@ def get_godet_detail(
                     "nb_plants":       int(g.nb_plants_godets or 0),
                     "nb_graines_lot":  int(g.nb_graines_semees) if g.nb_graines_semees else None,
                     "origine_semis_id": g.origine_graines_id,
+                    "parcelle":        g.parcelle_rel.nom if g.parcelle_rel else None,   # [US-211]
                 }
                 for g in godet_events
             ],
@@ -2843,6 +2934,39 @@ def get_godet_detail(
                     "quantite": int(p.quantite or 0),
                 }
                 for p in perte_events
+            ],
+            # [US-216] La clôture du lot et ce qu'elle a soldé, figé à la confirmation.
+            "clotures": [
+                {
+                    "id":              c.id,
+                    "date":            str(c.date)[:10],
+                    "godets_soldes":   int(c.quantite or 0),
+                    "graines_soldees": int(c.nb_graines_semees or 0),
+                }
+                for c in cycle.get("clotures", [])
+            ],
+            # [US-212] Les comptages de levée : levés, « sur N » dicté, levée terminée.
+            "levees": [
+                {
+                    "id":       l.id,
+                    "date":     str(l.date)[:10],
+                    "nb_leves": int(l.quantite or 0),
+                    "sur":      int(l.nb_graines_semees) if l.nb_graines_semees else None,
+                    "terminee": bool(l.levee_terminee),
+                }
+                for l in cycle.get("levees", [])
+            ],
+            # [US-211 / CA8] Déplacements du lot, avec origine et destination ;
+            # [US-241 / CA11] et la quantité de godets (None : le lot entier).
+            "deplacements": [
+                {
+                    "id":          d["id"],
+                    "date":        str(d["date"])[:10],
+                    "origine":     d["origine"],
+                    "destination": d["destination"],
+                    "quantite":    d.get("quantite"),
+                }
+                for d in cycle.get("deplacements", [])
             ],
             "taux_germination": taux,
         }

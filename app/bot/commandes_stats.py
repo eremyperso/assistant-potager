@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
 from utils.tts import send_voice_reply, set_tts_enabled, is_tts_enabled
+from utils.unites_implantation import libelle_unite
 from utils.stock import calcul_stock_cultures, format_stock_ligne_telegram
 from utils.cultures_icons import get_emoji_culture
 from app.services.context import current_context
@@ -272,7 +273,7 @@ async def cmd_historique(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             d      = str(e.date)[:10] if e.date else "?"
             action = (e.type_action or "?").upper()
             cult   = " ".join(filter(None, [e.culture, e.variete]))
-            qte    = f"{e.quantite} {e.unite or ''}" if e.quantite else ""
+            qte    = f"{e.quantite} {libelle_unite(e.unite, e.quantite)}" if e.quantite else ""
             parc   = f"· {e.parcelle}" if e.parcelle else "· Non localisé"
             rang   = f" x{e.rang}rangs" if e.rang else ""
             trt    = f" ({e.traitement})" if e.traitement else ""

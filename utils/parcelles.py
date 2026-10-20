@@ -282,7 +282,47 @@ _CHAMPS_MODIFIER = {
     # existant plutôt que de vivre dans un handler : les bornes du domaine
     # n'ont qu'un seul endroit où se tenir.
     "type_sol", "actif",
+    # [US-239 / CA1] L'ensoleillement, distinct de l'orientation (`exposition`).
+    "ensoleillement",
 }
+
+#: [US-239 / CA1 bis] Ce que chaque valeur d'ensoleillement VEUT DIRE, en heures
+#: de soleil direct par jour. Dite partout où l'on choisit (PWA, bot, /help,
+#: corpus) : c'est ce que reçoit la parcelle qu'on déclare, pas où elle regarde.
+DEFINITIONS_ENSOLEILLEMENT: dict[str, str] = {
+    "plein soleil": "6 h et plus de soleil direct",
+    "mi-ombre": "3 à 6 h",
+    "ombre": "moins de 3 h",
+}
+
+
+def liste_ensoleillements() -> str:
+    """[US-239 / CA1 bis] « plein soleil (6 h et plus de soleil direct), mi-ombre
+    (3 à 6 h), ombre (moins de 3 h) » — la liste dite au refus et dans l'aide."""
+    return ", ".join(f"{v} ({d})" for v, d in DEFINITIONS_ENSOLEILLEMENT.items())
+
+
+def normaliser_ensoleillement(valeur: str) -> str:
+    """[US-239 / CA1] Ramène « Plein Soleil », « mi ombre » … au vocabulaire
+    d'US-161 — le MÊME que l'exposition des cultures, mêmes règles de
+    normalisation (casse, accents, tirets). `None` ne passe pas par ici : il veut
+    dire « non renseigné » (CA2).
+
+    Lève ValueError, en listant les valeurs admises et leur définition. Une
+    orientation (« sud ») est refusée : elle n'est pas un ensoleillement.
+    """
+    from app.services import attributs_culture as svc_attributs  # import tardif : évite un cycle
+
+    try:
+        canonique = svc_attributs.normaliser_valeur("exposition", valeur)
+    except svc_attributs.ValeurHorsVocabulaireError:
+        canonique = None
+    if canonique is None:
+        raise ValueError(
+            f"« {str(valeur or '').strip()} » n'est pas un ensoleillement. "
+            f"Valeurs possibles : {liste_ensoleillements()}."
+        )
+    return canonique
 
 #: [US-197 / CA1, CA2] Le nombre de rangs DÉCLARÉS d'une planche. Bornes du
 #: domaine, doublées du CHECK `ck_parcelles_nb_rangs` (migration_v52) : la base
@@ -474,6 +514,49 @@ def _longueur_m(valeur: str) -> Optional[float]:
     return nombre
 
 
+#: [US-208 / CA1] Les deux types d'une pépinière. « chaude » veut dire chauffée
+#: ou à l'intérieur — pas « exposée au soleil » : une serre non chauffée plein
+#: sud reste froide la nuit. Doublé du CHECK `ck_parcelles_type_pepiniere`.
+TYPES_PEPINIERE: tuple[str, ...] = ("chaude", "froide")
+_ALIAS_TYPE_PEPINIERE: dict[str, str] = {
+    "chauffee": "chaude", "chauffe": "chaude", "chaud": "chaude",
+    "non chauffee": "froide", "froid": "froide",
+}
+
+
+def libelle_pepiniere(est_pepiniere: bool, type_pepiniere: Optional[str]) -> Optional[str]:
+    """[US-208 / CA4] « pépinière chaude », « pépinière froide »,
+    « pépinière (type non renseigné) » — ou None hors pépinière. Le type absent
+    est écrit, jamais supposé (RT2)."""
+    if not est_pepiniere:
+        return None
+    if type_pepiniere in TYPES_PEPINIERE:
+        return f"pépinière {type_pepiniere}"
+    return "pépinière (type non renseigné)"
+
+
+def _pepiniere(valeur: str) -> Tuple[bool, Optional[str], bool]:
+    """[US-208 / CA2] Lit la valeur de `pepiniere=` : `(est_pepiniere, type, garder_type)`.
+
+    - « chaude » / « froide » (et alias « chauffée ») → pépinière typée ;
+    - « oui » → pépinière SANS type (comportement d'avant US-208) ;
+    - « non » / « false » → plus pépinière, type retiré ;
+    - « true » (forme machine de la fiche web, US-230) → pépinière, type
+      conservé : la fiche ne sait pas dire le type et ne doit pas l'effacer.
+    """
+    v = unidecode(str(valeur or "")).strip().lower()
+    v = _ALIAS_TYPE_PEPINIERE.get(v, v)
+    if v in TYPES_PEPINIERE:
+        return True, v, False
+    if v == "true":
+        return True, None, True
+    if v in ("oui", "1"):
+        return True, None, False
+    if v in ("false", "non", "0"):
+        return False, None, False
+    raise ValueError("pepiniere doit être : chaude, froide, oui ou non")
+
+
 def _booleen(valeur: str, champ: str) -> bool:
     """oui/non/true/false → bool ; ValueError sinon."""
     v = unidecode(str(valeur or "")).strip().lower()
@@ -513,8 +596,9 @@ def valider_champs(**kwargs) -> None:
     controles = [
         ("rangs", _nb_rangs), ("longueur", _longueur_m),
         ("abri", normaliser_abri), ("type_sol", normaliser_type_sol),
+        ("ensoleillement", normaliser_ensoleillement),
         ("paillage", lambda v: _booleen(v, "paillage")),
-        ("pepiniere", lambda v: _booleen(v, "pepiniere")),
+        ("pepiniere", _pepiniere),
         ("actif", lambda v: _booleen(v, "actif")),
         ("superficie", float),
     ]
@@ -543,7 +627,7 @@ def update_parcelle(
     longueur ([US-225] décimale 0,5-200 m ou "aucune" — base de calcul des
     places de TOUS les rangs de la planche ; la largeur, elle, ne se déclare
     pas : elle se déduit, voir `largeur_deduite`),
-    pepiniere (bool "true"/"false" — [migration_v15] exclut la parcelle du calcul
+    pepiniere ([US-208] chaude/froide/oui/non, voir `_pepiniere` — [migration_v15] exclut la parcelle du calcul
     "semis pleine terre", voir utils.stock._cond_semis_pleine_terre),
     type_sol ([US-230] vocabulaire fermé, voir `normaliser_type_sol`),
     actif ([US-230 / CA2] bool "true"/"false" — passer à false reprend le retrait
@@ -563,7 +647,7 @@ def update_parcelle(
         raise ValueError(
             f"Paramètre(s) inconnu(s) : {', '.join(sorted(inconnus))}. "
             f"Acceptés : exposition, superficie, ordre, pepiniere, abri, "
-            f"paillage, rangs, longueur, type_sol, actif"
+            f"paillage, rangs, longueur, type_sol, ensoleillement, actif"
         )
 
     nom_normalise = normalize_parcelle_name(nom)
@@ -602,12 +686,16 @@ def update_parcelle(
         parcelle.ordre = val_ord
         modifs.append(f"Ordre : {val_ord}")
     if "pepiniere" in kwargs:
-        val_str = kwargs["pepiniere"].strip().lower()
-        if val_str not in ("true", "false"):
-            raise ValueError("pepiniere doit être true ou false")
-        val_bool = val_str == "true"
-        parcelle.est_pepiniere = val_bool
-        modifs.append(f"Pépinière : {'oui' if val_bool else 'non'}")
+        # [US-208 / CA1, CA2] Le type suit le statut : « non » retire les deux,
+        # et aucun type ne survit hors pépinière (CHECK en base).
+        est, type_p, garder = _pepiniere(kwargs["pepiniere"])
+        if garder and parcelle.est_pepiniere:
+            type_p = parcelle.type_pepiniere
+        parcelle.est_pepiniere = est
+        parcelle.type_pepiniere = type_p
+        modifs.append(
+            f"Pépinière : {libelle_pepiniere(est, type_p)}" if est else "Pépinière : non"
+        )
     if "abri" in kwargs:
         # [US-230 / CA6, US-181] Trois états distincts, jamais confondus :
         # « serre », « aucun » (= le jardinier déclare le plein air) et NULL
@@ -633,6 +721,18 @@ def update_parcelle(
         else:
             parcelle.type_sol = normaliser_type_sol(kwargs["type_sol"])
             modifs.append(f"Type de sol : {parcelle.type_sol.lower()}")
+    if "ensoleillement" in kwargs:
+        # [US-239 / CA1, CA2] N'écrit que l'ensoleillement : l'orientation
+        # (`exposition`) n'est ni lue ni convertie ici.
+        if kwargs["ensoleillement"] is None:
+            parcelle.ensoleillement = None
+            modifs.append("Ensoleillement : non renseigné")
+        else:
+            parcelle.ensoleillement = normaliser_ensoleillement(kwargs["ensoleillement"])
+            modifs.append(
+                f"Ensoleillement : {parcelle.ensoleillement} "
+                f"({DEFINITIONS_ENSOLEILLEMENT[parcelle.ensoleillement]})"
+            )
     if "rangs" in kwargs:
         # [US-197 / CA2] Validé AVANT affectation : une valeur refusée laisse la
         # parcelle exactement dans l'état où le jardinier l'avait laissée.
@@ -819,6 +919,25 @@ def supprimer_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) 
 # ──────────────────────────────────────────────────────────────────────────────
 # [US_Plan_occupation_parcelles / CA4] Liste des parcelles
 # ──────────────────────────────────────────────────────────────────────────────
+
+def resolve_pepiniere_par_type(db, libelle: str, potager_id: Optional[int] = None):
+    """[US-211] « la pépinière froide », « le châssis froid » : une destination dite par
+    son TYPE (US-208) quand aucune parcelle ne porte ce nom. Retourne la pépinière
+    unique de ce type dans le potager, sinon None — jamais un choix parmi plusieurs."""
+    import re
+    from unidecode import unidecode
+    t = re.sub(r"[^a-z ]", " ", unidecode((libelle or "").lower()))
+    t = re.sub(r"\s+", " ", t).strip()
+    m = re.fullmatch(r"(?:pepiniere (chaude|froide)|chassis (froid))", t)
+    if not m:
+        return None
+    type_pep = "chaude" if m.group(1) == "chaude" else "froide"
+    q = db.query(Parcelle).filter(Parcelle.est_pepiniere.is_(True), Parcelle.type_pepiniere == type_pep)
+    if potager_id is not None:
+        q = q.filter(Parcelle.potager_id == potager_id)
+    trouvees = q.all()
+    return trouvees[0] if len(trouvees) == 1 else None
+
 
 def get_all_parcelles(db: Session, potager_id: Optional[int] = None) -> List[Parcelle]:
     """

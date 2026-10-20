@@ -109,3 +109,24 @@ plus aucun rang libre actionnable.
 - Le point tranché « la tuile de l'onglet Parcelles garde sa frise et sa puce de
   confiance » (A7 puis A21) est **caduc** : la tuile disparaît. La frise et la
   confiance deviennent portées par la fiche culture (US-206, US-207) seule.
+
+---
+
+## ⚠️ AMENDEMENT du 19/10/2026 — la carte d'une pépinière ouvre l'onglet Parcours
+
+Origine : réorganisation de la Pépinière en deux onglets, « Parcours » et « Lots »
+(`docs/EPIC 9-12 - PLAN CULTURES PEPINIERE/pepiniere/`, arbitrage A38). Les onglets « Aujourd'hui »
+et « Emplacements », cibles de I5, n'existent plus.
+
+**I5 réécrite :**
+
+| # | Règle |
+|---|---|
+| I5 | **Carte d'une pépinière** → la Pépinière, onglet **« Parcours »**, filtré sur cette pépinière (sélecteur « Toutes les pépinières ▾ » posé, affiché en pastille retirable). Avec une seule pépinière, aucun filtre n'est posé : Parcours s'ouvre tel quel (règle 17) |
+
+**CA4 :** « la carte d'une pépinière ouvre la Pépinière selon I5 » est inchangé dans sa lettre ; il suit
+I5 réécrite. Une intention déjà émise vers « aujourdhui » ou « emplacements » (adresse gardée, retour
+d'écran) ouvre « Parcours » sans erreur.
+
+Cette US reste livrée : l'amendement est **livré et testé avec US-218** (US-218 / CA28). I1 à I4, I6,
+I7 et les autres CA sont inchangés.

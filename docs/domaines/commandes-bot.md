@@ -229,3 +229,39 @@ sans en être une. `_est_question_d_opportunite` est assemblé des mêmes brique
 que les règles, pour que le garde et elles ne puissent pas diverger.
 
 Détail et décisions : `docs/domaines/calendrier-cultural.md`, § « Je peux semer ? ».
+
+## `/lot <numéro>` — consulter un lot de pépinière [US-209]
+
+Commande de pure consultation (zéro jeton, `confirmation=False`), **dictable** :
+« où en est le lot 128 ? », « montre-moi le lot 128 », « lot 128 » — règle
+`lot_pepiniere` de l'interpréteur (`n°` y arrive sous la forme `ndeg`, c'est
+`unidecode`). Le numéro est cherché dans le potager courant seulement
+(`stock.lot_pepiniere_par_numero`) ; la fiche est rendue par
+`app/services/lots_pepiniere.formater_lot_telegram`. Le handler (`cmd_lot`,
+dans `app/bot/godets.py`) n'a aucune logique métier.
+
+**Liste des lots** : `/lot` sans numéro (ou `/lot tomate`, « mes lots », « lots de tomate » — règle `liste_lots`) rend `lots_pepiniere.formater_liste_lots_telegram` : lots numérotés seulement, les 15 plus récents (`LIMITE_LISTE_LOTS`), épuisés marqués ⚪, filtre par culture. Même forme `lot` au catalogue (numéro et culture facultatifs) ; `cmd_lot` distingue un numéro d'une culture.
+
+La **référence** à un lot dans une phrase de geste (« repiqué 40 plants du lot
+128 en godet », « #128 ») est lue par le parseur déterministe
+(`extraire_reference_lot`, avant la normalisation qui effacerait le `#`) puis
+résolue au récapitulatif (`resoudre_references`, appelé par `saisie.py`) : lot
+connu et cohérent → rattachement (`origine_graines_id` pour godet / perte / vente,
+`source_evenement_ids` pour une plantation) ; inconnu ou contradictoire →
+`_alerte_lot` au récapitulatif, aucun rattachement. « lot » n'est une référence
+que pour `ACTIONS_AVEC_LOT` : US-211 (déplacement) et US-212 (levée) y ajoutent
+leur geste.
+
+**Pépinière d'une mise en godet** (US-210). Un godet se pose dans une pépinière
+DITE (« mise en godet de 40 choux sous le châssis froid » : `châssis` est un
+marqueur de parcelle du parseur déterministe et fait partie du nom). Le contrôle
+est `lots_pepiniere.controler_emplacements_godets`, appelé par `saisie.py` après
+`resoudre_references` : pépinière → nom canonique retenu ; parcelle ordinaire →
+parcelle retirée et `_alerte_emplacement` (pépinières proposées, « sans
+emplacement ») ; non dite → rien n'est déduit. Le refus d'écriture est la règle 7
+de `valider_evenement` (`ParcelleNonPepiniereError`), donc aussi pour la
+correction du Journal. `creer_evenement_godet` écrit `parcelle_id`. L'emplacement
+courant d'un lot (`calcul_lots_pepiniere#emplacement`) : dernier déplacement
+(US-211, à venir), sinon dernière mise en godet localisée, sinon parcelle du
+semis, sinon non renseigné — il n'entre dans aucun total (`calcul_godets`, stocks
+et `/stats` agrègent toujours par culture et variété).

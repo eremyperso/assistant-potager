@@ -21,7 +21,19 @@ _MOTS_GENERIQUES = {
 def is_deplacer_request(texte: str) -> bool:
     """[US-007 / CA1, CA10] Retourne True si la phrase correspond à une demande de réassociation culture→parcelle."""
     t = texte.lower().strip()
+    if est_deplacement_de_lot(t):
+        return False
     return any(kw in t for kw in _DEPLACER_KEYWORDS)
+
+
+def est_deplacement_de_lot(texte: str) -> bool:
+    """[US-211] « déplacer les godets du lot 5 à la pépinière froide » n'est pas la
+    réassociation d'une culture à une parcelle (US-007) : c'est le déplacement d'un
+    lot de pépinière. Un numéro de lot, des godets ou une pépinière / un châssis de
+    destination suffisent à le dire."""
+    from unidecode import unidecode
+    t = unidecode(texte.lower())
+    return bool(re.search(r"\blot\s*(?:n|no|numero)?\s*#?\s*\d|\bgodets?\b|\bpepinieres?\b|\bchassis\b", t))
 
 
 def extract_culture_deplacer(texte: str) -> str | None:

@@ -34,6 +34,38 @@ ce qui bascule le type d'issue créé sur `JIRA_ISSUE_TYPE_INCIDENT` (Bug) au
 lieu de `JIRA_ISSUE_TYPE` (Story), et joint les captures d'écran listées dans
 un éventuel champ `**Captures :**` après création.
 
+Déclarer un ticket Bug (incident)
+---------------------------------
+Rien à passer en option : le type Bug se déduit du préfixe `INC-` de
+`**ID :**`. Un fichier `backlog/INC-NNN_titre-court.md` minimal :
+
+    **ID :** INC-013
+    **Titre :** Perte de godet non rattachée au lot
+    **Type :** Incident
+    **Priorité :** Majeur
+    **Captures :** C:/chemin/capture-1.png, C:/chemin/capture-2.png
+
+    **Reproduction (jeu de test réalisé) :** ...
+    **Résultat obtenu :** ...
+    **Résultat attendu :** ...
+
+puis `python tools/jira_tracker.py create-issue backlog/INC-013_titre-court.md`.
+
+  - `**ID :**` et `**Titre :**` sont obligatoires (sinon `JiraTrackerError`) ;
+    le résumé Jira devient `INC-013 : <Titre>`.
+  - `**Priorité :**` (gravité) pilote le champ Priorité de Jira, pour les INC
+    uniquement — une US garde la priorité par défaut du projet :
+
+        Bloquant   → Highest        Mineur      → Medium
+        Majeur     → High           Cosmétique  → Low
+
+    Gravité absente, inconnue ou laissée en gabarit (« Bloquant / Majeur / … ») :
+    priorité par défaut de Jira (Medium) et avertissement dans les logs.
+  - `**Captures :**` est facultatif : chemins locaux existants, séparés par des
+    virgules, joints à l'issue (un chemin introuvable est ignoré, jamais bloquant).
+  - Le statut est forcé à « À faire » après création ; relancer la commande ne
+    crée pas de doublon (idempotence sur le préfixe `INC-013`).
+
 Mode dégradé
 ------------
 Sans `JIRA_API_TOKEN`, ou si l'API Jira est indisponible, l'outil **logue ce
@@ -62,6 +94,9 @@ Usage
     # Créer le ticket Jira à partir du fichier rédigé par Persona PO
     python tools/jira_tracker.py create-issue backlog/US-066_titre-court.md
 
+    # Créer plusieurs issues : identifiants, plage ou motif (comme update-issue)
+    python tools/jira_tracker.py create-issue US-233 US-234 235-238
+
     # Lister les sprints actifs
     python tools/jira_tracker.py list-sprints
 
@@ -79,6 +114,7 @@ import logging
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Optional
 
@@ -344,6 +380,32 @@ def update_issue_status(issue_key: str, status: str) -> bool:
 
 # ── Création d'issue depuis un fichier backlog (Persona PO) ─────────────────
 
+# Gravité d'une fiche INC (`**Priorité :**`, voir Analyste-Incident.agent.md) →
+# priorité Jira du projet PIA (Highest/High/Medium/Low/Lowest).
+_PRIORITE_JIRA_PAR_GRAVITE = {
+    "bloquant": "Highest",
+    "majeur": "High",
+    "mineur": "Medium",
+    "cosmetique": "Low",
+}
+
+
+def _priorite_jira(gravite: Optional[str]) -> Optional[str]:
+    """Nom de priorité Jira pour une gravité de fiche, `None` si absente ou inconnue
+    (Jira applique alors sa priorité par défaut)."""
+    if not gravite:
+        return None
+    # « Bloquant / Majeur / Mineur / Cosmétique » recopié tel quel dans un gabarit
+    # non rempli : plusieurs valeurs = pas de choix, donc pas de priorité.
+    if "/" in gravite:
+        return None
+    sans_accent = "".join(
+        c for c in unicodedata.normalize("NFD", gravite) if unicodedata.category(c) != "Mn"
+    )
+    cle = sans_accent.strip().lower()
+    return _PRIORITE_JIRA_PAR_GRAVITE.get(cle)
+
+
 def _parse_backlog_md(content: str) -> dict:
     """Extrait ID, titre, épic et captures d'un fichier `backlog/US-NNN_*.md`
     ou `backlog/INC-NNN_*.md`.
@@ -364,6 +426,7 @@ def _parse_backlog_md(content: str) -> dict:
         "titre": _champ(r"\*\*Titre\s*:\*\*\s*(.+)"),
         "epic": _champ(r"\*\*Épic\s*:\*\*\s*(.+)"),
         "captures": _champ(r"\*\*Captures?\s*:\*\*\s*(.+)"),
+        "priorite": _champ(r"\*\*Priorit[ée]\s*:\*\*\s*(.+)"),
     }
 
 
@@ -506,6 +569,17 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
         }
     }
 
+    # La gravité d'un incident pilote la priorité Jira ; une US garde la priorité
+    # par défaut du projet (sa fiche ne porte pas de gravité).
+    priorite = _priorite_jira(champs["priorite"]) if identifiant.startswith("INC-") else None
+    if priorite:
+        payload["fields"]["priority"] = {"name": priorite}
+    elif identifiant.startswith("INC-"):
+        log.warning(
+            "[jira_tracker] %s : gravité « %s » non reconnue — priorité Jira par défaut",
+            identifiant, champs["priorite"] or "absente",
+        )
+
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:
@@ -607,6 +681,9 @@ def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
         return create_issue_from_backlog(chemin)
 
     fields: dict = {"summary": resume, "description": _markdown_to_adf(contenu)}
+    priorite = _priorite_jira(champs["priorite"]) if identifiant.startswith("INC-") else None
+    if priorite:
+        fields["priority"] = {"name": priorite}
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:
@@ -637,7 +714,12 @@ def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
     return cle
 
 
-def _resoudre_cibles_backlog(cible: str, backlog_dir: str = "backlog") -> list[Path]:
+# Dossier backlog ancré sur la racine du dépôt : indépendant du répertoire courant
+# (lancer le script depuis tools/ ne doit pas casser la recherche par identifiant).
+_DOSSIER_BACKLOG = Path(__file__).resolve().parent.parent / "backlog"
+
+
+def _resoudre_cibles_backlog(cible: str, backlog_dir: "str | Path" = _DOSSIER_BACKLOG) -> list[Path]:
     """Transforme une cible CLI en fichiers backlog : chemin, motif glob
     (PowerShell n'expanse pas les jokers), plage `197-202`, ou identifiant (`US-197`, `197`)."""
     plage = re.fullmatch(r"(?:US-?)?(\d+)-(\d+)", cible.strip(), flags=re.IGNORECASE)
@@ -658,7 +740,7 @@ def _resoudre_cibles_backlog(cible: str, backlog_dir: str = "backlog") -> list[P
 
 
 def sync_backlog(
-    backlog_dir: "str | Path" = "backlog", mettre_a_jour: bool = False,
+    backlog_dir: "str | Path" = _DOSSIER_BACKLOG, mettre_a_jour: bool = False,
 ) -> list[tuple[str, Optional[str], str]]:
     """
     Synchronise TOUT le dossier `backlog/` vers Jira : crée dans Jira chaque US
@@ -767,8 +849,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             "Usage : python tools/jira_tracker.py <commande>\n\n"
             "Commandes:\n"
             "  <issue_key> <statut>        Mettre à jour le statut d'une issue\n"
-            "  create-issue <backlog.md>   Créer l'issue Jira depuis un fichier backlog\n"
-            "  update-issue <backlog.md>   Repousser résumé/description/épic d'une issue existante\n"
+            "  create-issue <cible>...     Créer l'issue Jira depuis un fichier backlog (cible : chemin, US-197, 197-202, motif glob)\n"
+            "  update-issue <cible>...     Repousser résumé/description/épic d'une issue existante (mêmes cibles)\n"
             "  sync-backlog [dossier] [--update]  Créer les US manquantes (--update : mettre aussi à jour les existantes)\n"
             "  list-sprints                Lister les sprints actifs\n"
             "  list-sprint <sprint_id>     Lister les issues d'un sprint\n\n"
@@ -779,22 +861,15 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     cfg = _config()
 
-    if args[0] == "create-issue" and len(args) > 1:
-        try:
-            cle = create_issue_from_backlog(args[1])
-        except JiraTrackerError as err:
-            print(f"❌ {err}", file=sys.stderr)
-            return 2
-        if cle:
-            print(f"✅ Issue créée/existante : {cle}")
-        return 0
-
-    if args[0] == "update-issue" and len(args) > 1:
+    # create-issue et update-issue acceptent les mêmes cibles : chemin, identifiant
+    # (US-197), plage (197-202) ou motif glob, répétables sur une même ligne.
+    if args[0] in ("create-issue", "update-issue") and len(args) > 1:
+        action = create_issue_from_backlog if args[0] == "create-issue" else update_issue_from_backlog
         code = 0
         for cible in args[1:]:
             for chemin in _resoudre_cibles_backlog(cible):
                 try:
-                    cle = update_issue_from_backlog(chemin)
+                    cle = action(chemin)
                 except JiraTrackerError as err:
                     print(f"❌ {err}", file=sys.stderr)
                     code = 2
@@ -805,7 +880,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if args[0] == "sync-backlog":
         options = [a for a in args[1:] if a.startswith("--")]
         positionnels = [a for a in args[1:] if not a.startswith("--")]
-        dossier = positionnels[0] if positionnels else "backlog"
+        dossier = positionnels[0] if positionnels else _DOSSIER_BACKLOG
         resultats = sync_backlog(dossier, mettre_a_jour="--update" in options)
         if not resultats:
             print(f"Aucun fichier .md trouvé dans {dossier}/")

@@ -176,17 +176,19 @@ def test_us030_godets_plantation_posterieure_ignoree(db_session):
     past  = date.today() - timedelta(days=10)
     today = date.today()
 
-    _ev(db_session, "mise_en_godet", "poivron", nb_plants_godets=6, date_=past)
-    _ev(db_session, "plantation",    "poivron", quantite=6,          date_=today)
+    # Variété renseignée des deux côtés : depuis la règle PO du 07/10/2026, seule
+    # une plantation de même variété sort des godets.
+    _ev(db_session, "mise_en_godet", "poivron", nb_plants_godets=6, date_=past, variete="doux")
+    _ev(db_session, "plantation",    "poivron", quantite=6,          date_=today, variete="doux")
     db_session.commit()
 
     godets_ref = calcul_godets(db_session, include_epuises=True, date_ref=ref)
     godets_now = calcul_godets(db_session, include_epuises=True)
 
     # Au ref : plantation pas encore comptée → stock = 6
-    assert godets_ref["poivron"]["stock_residuel_godet"] == 6
+    assert godets_ref["poivron (doux)"]["stock_residuel_godet"] == 6
     # Maintenant : tout planté → stock = 0
-    assert godets_now["poivron"]["stock_residuel_godet"] == 0
+    assert godets_now["poivron (doux)"]["stock_residuel_godet"] == 0
 
 
 # ── calcul_semis avec date_ref ────────────────────────────────────────────────

@@ -250,11 +250,11 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement | levee
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
-  "unite"            : string,   // kg | g | l | plants | graines | pieds | m²
+  "unite"            : string,   // kg | g | l | plants | graines | pieds | m² | poquets | ml
   "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
   "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
   "duree_minutes"    : number,   // durée en minutes
@@ -273,12 +273,19 @@ RÈGLE unité de semis (action="semis" UNIQUEMENT) : trois unités possibles, à
 - "X m²" ou "X mètres carrés" ou "à la volée" (sans nombre de graines/pieds précisé, juste une surface) → unite="m²", quantite=X. NE JAMAIS convertir cette surface en nombre de graines ou de pieds : la valeur numérique reste telle quelle.
 - "X graines" ou semis en barquette/godet destiné à germer avant repiquage → unite="graines"
 - "X pieds" ou "X plants" semés directement en terre (pas en godet) → unite="pieds"
+- "X poquets" (ou "X trous", "X touffes" dans une phrase de semis/plantation) → unite="poquets", quantite=X. Jamais converti en graines ni en plants.
+- "X mètres de rang", "X mètres linéaires", "X mètres de ligne", "X ml", ou "X mètres" SANS le mot "carrés" → unite="ml", quantite=X. Jamais converti en m². "X mètres carrés" reste unite="m²".
+Les unités "poquets" et "ml" valent aussi pour une plantation, une perte ou une récolte ("perdu 2 poquets de courge"). Elles ne valent JAMAIS pour une mise en godet ni un semis en pépinière.
 Si aucune unité n'est mentionnée et qu'aucun indice de surface n'est présent → unite=null (ne pas inventer).
 
 RÈGLE récolte double quantité (pièces + poids) : si une récolte mentionne À LA FOIS un NOMBRE DE PIEDS/PLANTS ET un POIDS (ex : "2 betteraves pour 250 grammes", "récolté 3 salades, 600g au total"), NE JAMAIS additionner ces deux valeurs. Retourner DEUX objets recolte distincts dans un tableau :
 - un avec quantite=nombre de pieds et unite="plants"
 - un avec quantite=poids et unite="kg" ou "g"
 Si seul un nombre de pieds OU seul un poids est mentionné (cas normal), un seul objet recolte suffit comme d'habitude.
+
+RÈGLE deplacement : changer de pépinière un lot de godets déjà en pépinière ("passé le lot 119 au châssis froid", "déplacé les godets de tomate sous le châssis") → action="deplacement", culture du lot, parcelle=la pépinière de DESTINATION (jamais celle d'origine). Une PARTIE des godets seulement ("passé 6 godets du lot 21 au châssis froid", "sorti 6 poivrons de la serre au châssis") → quantite=nombre de godets, unite="godets" ; sans nombre, quantite=null (le lot entier). Sans pépinière de destination nommée ("sorti les tomates"), ce n'est PAS un déplacement. Mettre des plants en terre reste "plantation".
+
+RÈGLE levee : compter combien de graines d'une barquette ont LEVÉ ("levée du lot 128 : 40", "les tomates cerise ont levé, 12 plants", "40 choux levés sur 48", "levée terminée pour le lot 128 : 40") → action="levee", quantite=nombre de plants LEVÉS, unite="plants", nb_graines_semees=le nombre après "sur" s'il est dit. Si la levée est déclarée terminée, ajouter "levee_terminee":true. Ce n'est PAS un semis ni une mise_en_godet (aucun repiquage).
 
 RÈGLE binage / éclaircie / désherbage : ce sont TROIS gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :
 - "binage"/"biner" (ameublir la terre en surface, casser la croûte) → action="binage"
@@ -537,7 +544,7 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
       "culture": string|null,
       "variete": string|null,
       "quantite": number|null,
-      "unite": "kg|g|l|plants|graines|pieds|m²"|null,
+      "unite": "kg|g|l|plants|graines|pieds|m²|poquets|ml"|null,
       "parcelle": string|null,
       "rang": number|null,
       "duree_minutes": number|null,
@@ -554,6 +561,9 @@ Si intent == "ACTION", remplace "items" par une liste de dicts (un par culture/a
 - "X m²" / "X mètres carrés" / "à la volée" → unite="m²", quantite=X (JAMAIS converti en graines ou pieds)
 - "X graines" ou semis en barquette destiné à germer avant repiquage → unite="graines"
 - "X pieds" / "X plants" semés directement en terre → unite="pieds"
+- "X poquets" / "X trous" / "X touffes" → unite="poquets" (JAMAIS converti en graines ni en plants)
+- "X mètres de rang" / "X mètres linéaires" / "X ml" / "X mètres" sans « carrés » → unite="ml" (JAMAIS converti en m²)
+- poquets et ml ne valent jamais pour une mise en godet ni un semis en pépinière
 
 === RÈGLE binage / éclaircie / désherbage ===
 Trois gestes distincts, ne jamais les confondre entre eux même s'ils se ressemblent :

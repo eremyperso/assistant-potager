@@ -206,6 +206,8 @@ export const api = {
   // [US-065/US-061] Pépinière lot de semis par lot de semis — lecture distincte de
   // `/godets`, qui reste agrégée par culture + variété pour Stocks, Stats et le bot.
   // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
+  // [US-209 / CA9, CA11] Un lot par son numéro court, dans le potager consulté (404 si inconnu).
+  pepiniereLot: (numero, potagerId) => get(`/pepiniere/lots/${numero}${qs({ ...(potagerId && { potager_id: potagerId }) })}`),
   pepiniereLots: (dateRef, potagerId) => get(`/pepiniere/lots${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-061 CA10] `semisId` / `sansSemisRattache` ciblent le lot ouvert ; sans eux
   // l'endpoint conserve son comportement agrégé (culture + variété).

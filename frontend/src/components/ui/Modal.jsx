@@ -59,6 +59,9 @@ export function Modal({
   foot,
   bodyClassName = 'p-4 overflow-y-auto min-h-0',
   disposition = 'centree',
+  // [US-216] `entete={false}` : l'appelant fournit sa propre barre du haut (la fiche du
+  // lot a la sienne, avec son badge d'état) ; la fenêtre garde pile, Échap et focus.
+  entete = true,
 }) {
   const jeton = useRef({})
 
@@ -107,6 +110,7 @@ export function Modal({
         style={styleLargeur}
         onClick={(e) => e.stopPropagation()}
       >
+        {entete && (
         <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-border bg-brand-soft">
           {Icon && (
             <div className="w-8 h-8 rounded-[9px] bg-card flex items-center justify-center shrink-0">
@@ -121,6 +125,7 @@ export function Modal({
             <X size={18} />
           </button>
         </div>
+        )}
 
         <div className={bodyClassName}>{children}</div>
 

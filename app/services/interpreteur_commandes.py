@@ -2,7 +2,7 @@
 app/services/interpreteur_commandes.py — Piloter le bot par une phrase [US-172]
 ================================================================================
 Le compagnon de terrain savait interpréter **un geste de jardin** dicté en
-langage naturel — les dix-huit gestes du référentiel — et rien d'autre. Tout le
+langage naturel — les vingt gestes du référentiel — et rien d'autre. Tout le
 reste, les vingt-quatre commandes du bot et leurs sous-commandes, n'était
 atteignable qu'en tapant la commande exacte, avec ses arguments dans le bon
 ordre. US-171 a rendu ces commandes **visibles** dans le menu natif ; elle ne
@@ -637,7 +637,9 @@ def _construire_parcelle_supprimer(groupes):
     "parcelle_pepiniere",
     r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
     r"(?:est|devient|sert de|sert d|passe en|passe comme)\s+"
-    + _ARTICLE + r"(?:nouvelle\s+)?pepiniere\b",
+    + _ARTICLE + r"(?:nouvelle\s+)?pepiniere\b"
+    # [US-208 / CA3] « … est une pépinière chaude / froide / chauffée ».
+    r"(?:\s+(?P<type>chaude|froide|chauffee|non\s+chauffee)\b)?",
     "parcelle",
     "modifier",
     declarative=True,
@@ -646,7 +648,36 @@ def _construire_parcelle_pepiniere(groupes):
     nom = _nettoyer_nom(groupes["nom"])
     if not _nom_plausible(nom):
         return None
-    return {"nom": nom, "modification": "pepiniere=true"}
+    # [US-208 / CA2] Sans type dit, « pepiniere=oui » : une pépinière sans type,
+    # jamais supposée chaude ou froide.
+    return {"nom": nom, "modification": f"pepiniere={_type_dicte(groupes) or 'oui'}"}
+
+
+def _type_dicte(groupes) -> Optional[str]:
+    """[US-208 / CA3] « chauffée » → chaude, « non chauffée » → froide."""
+    brut = (groupes.get("type") or "").strip()
+    if not brut:
+        return None
+    if brut.startswith("non"):
+        return "froide"
+    return "chaude" if brut.startswith("chau") else brut
+
+
+@_regle(
+    "parcelle_pepiniere_chauffee",
+    r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"
+    r"(?:est|devient)\s+(?P<type>chauffee|non\s+chauffee)\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_pepiniere_chauffee(groupes):
+    # [US-208 / CA3] « ma mini-serre est chauffée » — dite d'une pépinière déjà
+    # déclarée ; le récapitulatif nomme le type avant toute écriture.
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom):
+        return None
+    return {"nom": nom, "modification": f"pepiniere={_type_dicte(groupes)}"}
 
 
 @_regle(
@@ -773,6 +804,30 @@ def _construire_parcelle_exposition(groupes):
     if not _nom_plausible(nom):
         return None
     return {"nom": nom, "modification": f"exposition={groupes['valeur'].replace(' ', '-')}"}
+
+
+@_regle(
+    "parcelle_ensoleillement",
+    r"\A" + _INTENTION + r"(?:l\s+)?ensoleillement\s+(?:de\s+)?" + _ARTICLE
+    + r"(?:parcelle\s+)?(?P<nom>.+?)\s+(?:(?:est|passe a|devient|:|=)\s*)?(?:en\s+|au\s+)?"
+    + r"(?P<valeur>plein soleil|plein|mi ombre|ombre|soleil|nord est|nord ouest|sud est|"
+    r"sud ouest|nord|sud|est|ouest)\s*\Z",
+    "parcelle",
+    "modifier",
+    declarative=True,
+)
+def _construire_parcelle_ensoleillement(groupes):
+    # [US-239 / CA4] « ensoleillement planche racines plein soleil » : sans appel
+    # au modèle. Une orientation (« sud ») est RECONNUE puis refusée au point
+    # d'écriture, avec la liste des valeurs admises — plutôt que renvoyée au
+    # modèle, qui pourrait la traduire en ensoleillement (donnée supposée).
+    nom = _nettoyer_nom(groupes["nom"])
+    if not _nom_plausible(nom) or _est_question_fermee(nom):
+        return None
+    valeur = groupes["valeur"]
+    if valeur in ("plein", "soleil"):
+        valeur = "plein soleil"
+    return {"nom": nom, "modification": f"ensoleillement={valeur.replace(' ', '-')}"}
 
 
 def _est_question_fermee(nom: str) -> bool:
@@ -975,6 +1030,37 @@ def _construire_meteo(groupes):
 
 
 @_regle(
+    "lot_pepiniere",
+    # [US-209 / CA7] « où en est le lot 128 ? », « montre le lot n 128 », « lot 128 ».
+    # Le « # » est effacé par la normalisation : « #128 » arrive ici comme « 128 ».
+    r"\A(?:(?:ou en est|ou en sont|que devient)\s+)?" + _INTENTION + _MONTRER + _ARTICLE
+    + r"lot\s+(?:n(?:deg)?\s*|no\s+|numero\s+)?(?P<numero>\d{1,6})\s*\??\s*\Z",
+    "lot",
+    None,
+)
+def _construire_lot_pepiniere(groupes):
+    return {"numero": groupes["numero"]}
+
+
+@_regle(
+    "liste_lots",
+    # « mes lots », « liste des lots », « quels sont mes lots de tomate ». Ancré en
+    # tête de phrase : « 12 lots de godets » reste une quantité.
+    r"\A(?:quels sont\s+|quelle est\s+)?" + _INTENTION + _MONTRER + _ARTICLE
+    + r"(?:liste\s+(?:de\s+|des\s+)?)?lots\b(?P<tail>.*)",
+    "lot",
+    None,
+)
+def _construire_liste_lots(groupes):
+    tail = re.sub(
+        r"\b(?:de|des|du|d|la|le|les|pepiniere|pepinieres|semis|en|cours)\b", " ",
+        groupes.get("tail") or "",
+    )
+    cible = _cible_ou_rien(tail)
+    return {"culture": cible} if cible else {}
+
+
+@_regle(
     "fiche",
     r"\A" + _INTENTION + _MONTRER + _ARTICLE + r"fiche\s+"
     r"(?:(?:de|du|de la|des|sur|pour)\s+)?" + _ARTICLE + r"(?P<culture>.+)",
@@ -1154,6 +1240,10 @@ def _construire_culture_exposition(groupes):
     culture = _nettoyer_nom(groupes["culture"])
     valeur = _VALEURS_EXPOSITION.get((groupes["valeur"] or "").strip())
     if not _nom_plausible(culture) or valeur is None:
+        return None
+    # [US-239] « l'ensoleillement de la planche nord est mi-ombre » déclare la
+    # PARCELLE (règle parcelle_ensoleillement) : ce n'est pas une culture.
+    if culture.split()[0] == "ensoleillement":
         return None
     return {"culture": culture, "valeur": valeur}
 
@@ -1456,6 +1546,55 @@ _ETAPES_DITES: dict[str, str] = {
 }
 
 
+# [US-213 / CA3] Le délai semis → repiquage EN GODET : le passage de la barquette
+# au godet, pas la mise en place. Le mot « godet » est EXIGÉ — c'est lui, et lui
+# seul, qui sépare cette règle de `calendrier_duree`, où « repiquage » reste le
+# délai avant plantation (CA29 d'US-068). Déclarée avant `calendrier_duree` ET
+# gardée par un `(?!…godet)` dans celle-ci : la phrase ne dépend pas de l'ordre.
+_EN_GODET = r"(?:en|au|dans(?:\s+(?:le|un|des))?)\s+godets?"
+
+
+@_regle(
+    "calendrier_duree_semis_godet",
+    r"\A" + _INTENTION + _CORRIGER + _ARTICLE
+    + r"(?:delai|duree|temps)\s+"
+    r"(?:entre\s+(?:le\s+|la\s+)?semis\s+et\s+(?:le\s+|la\s+)?|"
+    r"avant\s+(?:le\s+|la\s+)?|de\s+(?:la\s+|le\s+)?|d\s+)?"
+    r"(?:repiquage|mise|passage)\s+" + _EN_GODET + r"\s+"
+    r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_semis_godet(groupes):
+    culture = _culture_calendrier(groupes["culture"])
+    if not culture:
+        return None
+    valeurs = {"culture": culture, "etape": "semis_godet", "jours_min": groupes["jours_min"]}
+    if groupes.get("jours_max"):
+        valeurs["jours_max"] = groupes["jours_max"]
+    return valeurs
+
+
+@_regle(
+    "calendrier_duree_semis_godet_verbe",
+    r"\A" + _ARTICLE + r"(?P<culture>.+?)\s+"
+    r"(?:se\s+(?:mettent|met|repiquent|repique|rempotent|rempote)|"
+    r"sont\s+(?:mis|mises|repiques|repiquees|rempotes|rempotees))\s+"
+    + _EN_GODET + r"\s+(?:(?:environ|a peu pres)\s+)?(?:(?:apres|au bout de)\s+)?"
+    + _NOMBRE.format("jours_min")
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    "calendrier",
+    "duree",
+    declarative=True,
+)
+def _construire_calendrier_duree_semis_godet_verbe(groupes):
+    return _construire_calendrier_duree_semis_godet(groupes)
+
+
 # [US-177 / CA5] Déclarée AVANT `calendrier_duree` : les deux visent la même
 # forme (`calendrier`/`duree`), et la première reconnue l'emporte (`cibles`).
 # Elle exige les DEUX bornes du trajet — « plantation … récolte » — là où la
@@ -1498,6 +1637,8 @@ def _construire_calendrier_duree_plantation_recolte(groupes):
     r"\A" + _INTENTION + _CORRIGER + _ARTICLE
     + r"(?:delai|duree|temps)\s+(?:de\s+|d\s+|avant\s+(?:la\s+|le\s+)?|jusqu a\s+(?:la\s+|le\s+)?)?"
     r"(?P<etape>levee|germination|premiere recolte|recolte|repiquage|plantation|mise en place)\s+"
+    # [US-213 / CA3] « … repiquage EN GODET » n'est pas le délai avant plantation.
+    r"(?!" + _EN_GODET + r"\b)"
     r"(?:(?:de|du|de la|des|d|pour)\s+)?" + _ARTICLE
     + r"(?P<culture>.+?)\s*(?:(?:est|soit|:|=|a|de|en)\s+)?(?:(?:de|a|en)\s+)?"
     + _NOMBRE.format("jours_min")
@@ -2330,6 +2471,12 @@ def interpreter(
     normalise, _ = normaliser(brut)
     if not normalise or _est_demande_de_savoir(normalise):
         return None
+    # Une saisie de geste n'est jamais une commande à deviner : aucune règle de
+    # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
+    # quantité, variété et date. Import local : le routeur importe la base.
+    from llm.routeur import annonce_un_geste
+    if annonce_un_geste(brut):
+        return None
 
     candidate = _appeler_modele(brut, ctx)
     if candidate is None:
@@ -2413,6 +2560,8 @@ def nombre_en_lettres(valeur: str) -> str:
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
     "abri": None, "paillage": None, "rangs": None,
+    # [US-239] Ni unité ni chiffre : un vocabulaire fermé, défini en heures.
+    "ensoleillement": None,
     # [US-225 / CA5] Des mètres, jamais des mètres carrés : c'est précisément la
     # confusion que le récapitulatif doit lever avant d'écrire.
     "longueur": "m",
@@ -2423,6 +2572,7 @@ _LIBELLES_MODIFICATION: dict[str, str] = {
     "superficie": "superficie", "exposition": "exposition",
     "pepiniere": "pépinière", "ordre": "ordre d'affichage",
     "abri": "abri", "paillage": "paillage",
+    "ensoleillement": "ensoleillement",
     # [US-197] « rangs » et non « rangs de la parcelle » : le récapitulatif est
     # déjà titré « Modifier une parcelle », et c'est la planche qu'il nomme.
     "rangs": "nombre de rangs",
@@ -2463,6 +2613,9 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
             cle, _, brute = valeur.partition("=")
             cle = cle.strip().lower()
             lisible = {"true": "oui", "false": "non"}.get(brute.strip().lower(), brute.strip())
+            if cle == "pepiniere" and lisible in ("chaude", "froide"):
+                # [US-208 / Gherkin] « serre : pépinière chaude ».
+                lisible = f"pépinière {lisible}"
             lignes.append(_ligne_valeur(
                 _LIBELLES_MODIFICATION.get(cle, cle),
                 lisible,

@@ -2,6 +2,14 @@
 **Titre :** Afficher l'onglet « Emplacements » de la Pépinière — ce que contient chaque pépinière, chaude ou froide
 **Épic :** ÉPIC 12 — Pépinière : le poste de travail sous abri *(numéro à valider, voir le plan des épics 9 à 12)*
 
+> ⛔ **Absorbée le 19/10/2026 par US-218 (onglet « Parcours ») — ne pas développer.** Les lignes du
+> kanban emplacement × stade d'US-218 **sont** les pépinières : une ligne par pépinière, vide comprise,
+> type écrit, lots rangés par stade, ligne « Sans emplacement ». L'onglet « Emplacements » ne sera donc
+> jamais créé. Ce qui **survit** de cette US : CA5 (aucune mesure de place — US-218 / CA11), CA7 (la
+> lecture rend les pépinières vides — US-240 / CA10), CA4 (lots sans emplacement — US-218 / CA10).
+> L'intention I5 venue du Plan ouvre « Parcours » filtré sur la pépinière (US-201, amendement du 19/10).
+> Le fichier est conservé pour la traçabilité ; le ticket Jira est clos sans développement.
+
 **Story :**
 En tant que jardinier qui a plusieurs pépinières — une serre chauffée, un châssis froid, une étagère dans la véranda
 Je veux voir ce que contient chacune d'elles
