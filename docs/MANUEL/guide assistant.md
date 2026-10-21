@@ -1449,7 +1449,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 
 | Commande | Ce qu'elle fait |
 |---|---|
-| `/lot [numéro ou culture]` | Sans numéro, la liste des lots (15 plus récents, épuisés marqués ⚪, filtre par culture) ; avec un numéro, le lot : culture, variété, date de semis, emplacement, graines semées, plants obtenus et restants |
+| `/lot [numéro ou culture]` | Sans numéro, la liste des lots (15 plus récents, filtre par culture) ; avec un numéro, le détail du lot |
 | `/fiche <culture>` | Fiche courte : famille, délai de retour, exposition, eau, profondeur, rusticité |
 | `/culture attributs <culture>` | Les quatre caractéristiques de conduite et leur source |
 | `/culture exposition <culture> <plein soleil\|mi-ombre\|ombre>` | Corriger l'exposition |
@@ -1468,7 +1468,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 |---|---|
 | `/parcelle lister` · `/parcelles` | Lister les parcelles |
 | `/parcelle ajouter <nom> [exposition] [m²]` | Créer une parcelle |
-| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere` (`chaude` = chauffée ou à l'intérieur, `froide`, `oui` = pépinière sans type, `non` qui retire aussi le type — ex. `pepiniere=chaude`, ou « la serre est une pépinière chaude »), `abri`, `paillage`, `rangs` (1 à 99, ou `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m — la longueur utile de la planche, base du calcul des places de tous ses rangs ; `longueur=aucune` pour revenir à « non renseignée ». La largeur ne se déclare pas : elle se déduit de la superficie) |
+| `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere` (`chaude` = chauffée ou à l'intérieur, `froide`, `oui` = pépinière sans type, `non` retire aussi le type ; ex. `pepiniere=chaude`), `abri`, `paillage`, `rangs` (1 à 99 ; `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m, longueur utile de la planche ; `longueur=aucune` pour revenir à « non renseignée ») |
 | `/parcelle renommer <ancien> <nouveau>` | Renommer, avec propagation sur tout l'historique |
 | `/parcelle supprimer <nom>` | Retirer une parcelle — les événements passent en « Non localisé » |
 
