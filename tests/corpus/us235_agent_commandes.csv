@@ -1,0 +1,28 @@
+phrase,attendu,modification,registre
+Ma serre extérieure n'est plus une pépinière,parcelle modifier,pepiniere=non,negation
+la serre extérieure ne fait plus office de pépinière,parcelle modifier,pepiniere=non,negation
+arrête la pépinière dans la serre extérieure,parcelle modifier,pepiniere=non,negation
+la planche nord n'est plus une pépinière froide,parcelle modifier,pepiniere=non,negation
+retire le paillage de la planche sud,parcelle modifier,paillage=non,negation
+la planche sud n'est plus paillée,parcelle modifier,paillage=non,negation
+enlève l'abri de la planche nord,parcelle modifier,abri=aucun,negation
+la planche nord n'est plus sous tunnel,parcelle modifier,abri=aucun,negation
+le tunnel n'est plus utilisé,parcelle modifier,actif=non,negation
+ma serre extérieure redevient une pépinière,parcelle modifier,pepiniere=oui,declaration
+la planche nord a maintenant 6 rangs,parcelle modifier,rangs=6,declaration
+passe la planche nord à 8 rangs,parcelle modifier,rangs=8,declaration
+la planche nord fait maintenant douze mètres de long,parcelle modifier,longueur=12,declaration
+le sol de la planche sud est argileux,parcelle modifier,type_sol=Argileux,declaration
+la planche sud est à l'ombre toute la journée,parcelle modifier,ensoleillement=ombre,declaration
+paille la planche nord,parcelle modifier,paillage=oui,declaration
+la serre extérieure est-elle une pépinière ?,,,question
+est-ce que la planche sud est paillée ?,,,question
+combien de rangs a la planche nord ?,,,question
+quelles sont mes pépinières ?,,,question
+modifie ma serre,,,incomplet
+supprime la parcelle près des tomates,,,incomplet
+renomme la planche nord,parcelle renommer,,incomplet
+efface complètement la planche centrale,parcelle supprimer,,destructrice
+"je n'utilise plus la planche sud, supprime-la",parcelle supprimer,,destructrice
+exporte-moi tout l'historique en Excel,,,hors_perimetre
+envoie un mail à mon voisin,,,hors_perimetre

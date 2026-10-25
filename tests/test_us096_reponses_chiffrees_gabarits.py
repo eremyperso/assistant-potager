@@ -130,6 +130,13 @@ FAMILLES_ATTENDUES = {
     # vide ? » est une question chiffrée qui partait au modèle pour recevoir
     # une réponse inventée.
     "parcelles_libres",
+    # Ajoutée après le relevé du 21/10/2026 : « combien de parcelle ? » ne
+    # trouvait aucune famille et recevait une généralité sur l'organisation.
+    "liste_parcelles", "attributs_parcelle", "parcelles_filtrees", "cultures_en_place", "varietes_culture",
+    # [US-246 / US-247] Compter un geste, relire un type de geste, journal d'une période.
+    "nombre_occurrences", "historique_action", "journal_periode",
+    # [US-248 / US-249] Classement des récoltes et total de la saison ; potager actif.
+    "classement_recoltes", "potager_actif",
     # Ajoutée après l'essai du 02/09/2026 : « quelles parcelles contiennent des
     # solanacées ? » repartait à l'agent SQL, qui servait un « Top cultures »
     # hors sujet — couverte par tests/test_parcelles_par_famille_botanique.py.
@@ -783,6 +790,24 @@ def test_us096_parcelles_libres_listees(parcelles_nommees):
     # NORD porte des cultures en place : elle n'est pas libre. Le test vise la
     # ligne de liste, pas le nom contenu dans « test-planche-nord ».
     assert "  • NORD" not in reponse.texte
+
+
+@pytest.mark.parametrize("question", [
+    "combien de parcelle ?",
+    "sur ce potager je dispose de combien de parcelles ?",
+    "affiche moi mes parcelles",
+    "quelles sont mes parcelles ?",
+])
+def test_us096_liste_des_parcelles(parcelles_nommees, question):
+    reponse = rc.repondre_chiffre(CTX, question, db=parcelles_nommees)
+    assert reponse is not None and reponse.famille == "liste_parcelles"
+    assert "4 parcelle(s)" in reponse.texte
+    assert "test-planche-sud" in reponse.texte
+
+
+def test_us096_liste_des_parcelles_ne_vole_pas_les_familles_voisines(parcelles_nommees):
+    reponse = rc.repondre_chiffre(CTX, "j'ai combien de parcelle vide ?", db=parcelles_nommees)
+    assert reponse.famille == "parcelles_libres"
 
 
 def test_us096_aucune_parcelle_libre_est_une_reponse(potager):

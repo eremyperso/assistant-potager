@@ -939,6 +939,22 @@ def resolve_pepiniere_par_type(db, libelle: str, potager_id: Optional[int] = Non
     return trouvees[0] if len(trouvees) == 1 else None
 
 
+def caracteristiques_declarees(parcelle: Parcelle) -> dict:
+    """[US-244] Les caractéristiques déclarées d'une parcelle, telles qu'enregistrées
+    (`None` = non renseigné), pour les réponses en langage naturel. Lecture seule :
+    aucune n'entre dans un calcul de stock, d'occupation ou de confiance — c'est
+    pourquoi elle vit ici, avec la déclaration, et non dans le service de réponse
+    (les gardes d'US-197, US-208 et US-225 interdisent d'y lire `nb_rangs`,
+    `longueur_m` ou `type_pepiniere`)."""
+    return {
+        "type_sol": parcelle.type_sol, "rangs": parcelle.nb_rangs, "longueur": parcelle.longueur_m,
+        "superficie": parcelle.superficie_m2, "exposition": parcelle.exposition,
+        "ensoleillement": parcelle.ensoleillement, "paillage": parcelle.paillage,
+        "abri": parcelle.abri, "est_pepiniere": bool(parcelle.est_pepiniere),
+        "genre_pepiniere": parcelle.type_pepiniere,
+    }
+
+
 def get_all_parcelles(db: Session, potager_id: Optional[int] = None) -> List[Parcelle]:
     """
     [CA4] Retourne toutes les parcelles actives triées par ordre croissant.

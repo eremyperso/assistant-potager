@@ -312,6 +312,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         # [US-220 / CA1] Le moteur de confiance module un semis en pépinière selon
         # le type — table `REGLES_ACQUISES_PAR_TYPE_PEPINIERE`, seul endroit.
         Path("app/services/confiance_semis.py"),
+        # [US-235 / CA2] Un point de DÉCLARATION de plus : le champ typé de l'outil
+        # `parcelle_modifier`, par lequel l'agent fait dire le type au jardinier.
+        Path("app/services/agent/catalogue_outils.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

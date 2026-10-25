@@ -21,8 +21,13 @@ export function AppContextProvider({ children }) {
     } catch {}
   }
 
+  // Règle des temps : la réglette de date est un mode d'affichage, pas une
+  // donnée — elle s'ouvre depuis le sélecteur de n'importe quelle vue et reste
+  // ouverte quand on change de vue. Jamais persistée : elle se rouvre fermée.
+  const [regleOuverte, setRegleOuverte] = useState(false)
+
   return (
-    <AppContext.Provider value={{ dateRef, setDateRef }}>
+    <AppContext.Provider value={{ dateRef, setDateRef, regleOuverte, setRegleOuverte }}>
       {children}
     </AppContext.Provider>
   )

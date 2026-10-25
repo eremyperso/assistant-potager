@@ -214,3 +214,18 @@ comment sortir seulement 6 godets d'un lot au châssis froid ?,semis-godet-plant
 une partie de mon lot est en serre et l'autre au châssis : l'application le sait ?,pepiniere-par-lot.md#05-savoir-ou-se-trouve-un-lot
 ou relire la frise de tous mes lots de la saison ?,pepiniere-par-lot.md#15-relire-sa-saison-dans-l-onglet-lots
 que veut dire un lot a regler dans l'onglet lots ?,pepiniere-par-lot.md#15-relire-sa-saison-dans-l-onglet-lots
+pourquoi le bouton Confirmer d'un ancien message ne fait-il plus rien ?,enregistrer-un-geste.md#12-un-ancien-bouton-confirmer-ne-valide-jamais-une-autre-demand
+que se passe-t-il si je change de potager avant de confirmer une demande ?,enregistrer-un-geste.md#12-un-ancien-bouton-confirmer-ne-valide-jamais-une-autre-demand
+le bot comprend-il une commande dite avec mes mots ?,compagnon-telegram.md#09-dire-une-commande-avec-ses-mots-negations-comprises
+faut-il dire la tournure exacte pour que le bot comprenne une commande ?,compagnon-telegram.md#09-dire-une-commande-avec-ses-mots-negations-comprises
+pourquoi le bot me dit qu'il ne sait pas encore faire ça ?,compagnon-telegram.md#10-le-compagnon-demande-une-precision-ou-ne-sait-pas-faire
+que se passe-t-il si ma demande au bot est trop vague ?,compagnon-telegram.md#10-le-compagnon-demande-une-precision-ou-ne-sait-pas-faire
+peut-on demander plusieurs choses au bot dans une seule phrase ?,compagnon-telegram.md#11-dire-plusieurs-demandes-en-une-seule-phrase
+que se passe-t-il quand une étape du plan est refusée ?,compagnon-telegram.md#11-dire-plusieurs-demandes-en-une-seule-phrase
+comment corriger la proposition du bot sans tout redire ?,compagnon-telegram.md#12-corriger-ou-prolonger-sa-derniere-demande
+puis-je ajouter une parcelle à ma demande après la proposition du bot ?,compagnon-telegram.md#12-corriger-ou-prolonger-sa-derniere-demande
+peut-on demander au bot combien j'ai de parcelles ?,parcelles-et-plan.md#18-interroger-ses-parcelles-et-ses-cultures-en-une-phrase
+comment demander quelles variétés j'ai d'une culture ?,parcelles-et-plan.md#18-interroger-ses-parcelles-et-ses-cultures-en-une-phrase
+que répond le bot si une caractéristique de parcelle n'est pas renseignée ?,parcelles-et-plan.md#18-interroger-ses-parcelles-et-ses-cultures-en-une-phrase
+à quoi sert la règle à côté de la date dans l'application ?,stock-plants-calcul.md#05-faire-defiler-les-dates-avec-la-reglette
+comment faire défiler les semaines pour voir mon potager d'avant ?,stock-plants-calcul.md#05-faire-defiler-les-dates-avec-la-reglette

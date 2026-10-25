@@ -19,6 +19,7 @@ const PREVIEWS = {
   '/fiche-lot': () => import('./views/_FicheLotPreview.jsx'),  // [US-216]
   '/pepiniere-parcours': () => import('./views/_PepiniereParcoursPreview.jsx'),  // [US-218]
   '/pepiniere-lots': () => import('./views/_PepiniereLotsPreview.jsx'),  // [US-242]
+  '/regle-temps': () => import('./views/_RegleTempsPreview.jsx'),  // règle des temps
 }
 
 const chargeur = PREVIEWS[window.location.pathname]

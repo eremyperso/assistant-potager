@@ -482,13 +482,30 @@ En général, le choix de la variété d'oignon dépend du climat et de la duré
 2026-09-15 09:51:26 │ INFO │ 💬 MESSAGE TEXTE  : 10
 2026-09-15 09:51:26 │ INFO │ [US-066] Nombre de graines saisi : 10 — user_id=8063902186
 2026-09-15 09:51:26 │ INFO │ [US-029 CA3] Godet lié au semis id=485 pour 'poivron/None'
-2026-09-15 09:51:26 │ INFO │ 💾 GODET SAVE : id=486 culture=poivron variete=None origine=485`;
+2026-09-15 09:51:26 │ INFO │ 💾 GODET SAVE : id=486 culture=poivron variete=None origine=485
+2026-10-21 18:07:19 │ INFO │ 💬 MESSAGE TEXTE  : quel est mon potager actif ?
+2026-10-21 18:07:19 │ INFO │ 🔌 LLM agent          │ modele=openai/gpt-oss-120b │ potager=2 │ in=3176 out=35 cache=0 │ 431 ms │ issue=ok
+2026-10-21 18:07:19 │ INFO │ 🤖 AGENT          : poser_question → aiguillage question [QUESTION_DATA] (452 ms, 3211 jetons)
+2026-10-21 18:07:19 │ INFO │ 🤖 AGENT (ombre)  │ outils=poser_question │ aurait proposé : aiguillage │ 'quel est mon potager actif ?'
+2026-10-21 18:07:19 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=2 │ in=1389 out=75 cache=0 │ 477 ms │ issue=ok
+2026-10-21 18:07:20 │ INFO │ 🔌 LLM classification │ modele=openai/gpt-oss-120b │ potager=2 │ in=518 out=65 cache=0 │ 331 ms │ issue=ok
+2026-10-21 18:07:20 │ INFO │ 🧭 ROUTEUR         │ origine=modele │ nature=QUESTION_DATA     │ confiance=0.96 │ 353 ms │ 'quel est mon potager actif ?'
+2026-10-21 18:07:20 │ INFO │ ❓ QUESTION AUTO   : nature=QUESTION_DATA → reroutage vers _ask_question
+2026-10-21 18:07:20 │ INFO │ 🔍 QUESTION       : quel est mon potager actif ?
+2026-10-21 18:07:20 │ INFO │ 🧭 ROUTEUR         │ origine=cache  │ nature=QUESTION_DATA     │ confiance=0.96 │ 5 ms │ 'quel est mon potager actif ?'
+2026-10-21 18:07:20 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=2 │ in=573 out=82 cache=0 │ 255 ms │ issue=ok
+2026-10-21 18:07:20 │ INFO │ 🚫 AGENT SQL       │ geste 'null' absent de la question : ni classement ni historique de geste │ 'quel est mon potager actif ?'
+2026-10-21 18:07:20 │ INFO │ [US-042 CA7] repondre_question potager_id=2 tokens_groq=655 (cible <1500)
+2026-10-21 18:07:20 │ INFO │ ↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : 'quel est mon potager actif ?'
+2026-10-21 18:07:21 │ INFO │ 🔌 LLM question       │ modele=openai/gpt-oss-120b │ potager=2 │ in=444 out=35 cache=0 │ 1309 ms │ issue=ok
+2026-10-21 18:07:21 │ INFO │ 💡 RÉPONSE        : Je ne trouve rien d'enregistré à ce sujet.`;
 
 /* ════════════════════════════════════════════════════════════
    2. TOPOLOGIE DE LA CASCADE
    ════════════════════════════════════════════════════════════ */
 const NOEUDS = {
   entree:      {x:  80, y:340, emo:"💬", nom:"Entrée",            sub:"Telegram",       ton:"neutre"},
+  agent:       {x: 250, y:110, emo:"🤖", nom:"Agent",             sub:"Epic 13 · outils", ton:"jeton"},
   intent:      {x: 250, y:340, emo:"🔌", nom:"Amont",              sub:"site indéterminé", ton:"hors", hors:true},
   interpreteur:{x: 430, y:200, emo:"🎛️", nom:"Interpréteur",       sub:"US-172",         ton:"gratuit"},
   commande:    {x: 810, y:200, emo:"⚙️", nom:"Commande exécutée",  sub:"handler natif",  ton:"neutre"},
@@ -508,6 +525,7 @@ const NOEUDS = {
 const ARETES = [
   ["entree","intent","h"], ["entree","routeur","sous"], ["intent","routeur","h"],
   ["entree","interpreteur","h"], ["intent","interpreteur","h"],
+  ["entree","agent","h"], ["agent","commande","h"], ["agent","routeur","auto"],
   ["interpreteur","commande","h"], ["commande","reponse","h"],
   ["routeur","cache_lec","h"], ["routeur","gabarit","h"], ["routeur","savoir","h"],
   ["routeur","parseur","h"], ["routeur","llm","hl",15],
@@ -538,6 +556,17 @@ function typerLigne(msg){
   // peut contenir n'importe quel mot-clé plus bas (« PARSING », « RÉPONSE »…)
   // et serait mal typé s'il n'était pas intercepté avant les tests par mot-clé
   if (/^❌/.test(msg))         return "refus";
+  // [Epic 13] agent interpréteur — testé avant les mots-clés génériques :
+  // « 🤖 AGENT : … aiguillage question [QUESTION_SAVOIR] » contient « SAVOIR »,
+  // « 🚫 AGENT SQL » contient « QUESTION »… et seraient mal typées plus bas
+  if (t("LLM agent"))         return "agent_llm";
+  if (t("AGENT SQL"))         return "agent_sql";
+  if (t("AGENT (ombre)"))     return "agent_ombre";
+  if (/^🤖\s*AGENT/.test(msg)){
+    if (/│\s*(precision|hors_perimetre)\s*│/.test(msg)) return "agent_sortie";
+    return "agent";
+  }
+  if (t("QUESTION AGENT"))    return "reroutage";
   if (t("MESSAGE TEXTE"))     return "entree_texte";
   if (t("TRANSCRIPTION"))     return "entree_voix";
   if (t("LLM DEBIT"))         return "debit";
@@ -572,6 +601,7 @@ function typerLigne(msg){
   if (t("Confirmation reçue"))                   return "confirm_rec";
   if (/^🔍/.test(msg)||t("QUESTION       :"))    return "question";
   if (t("INTERPRETEUR")){
+    if (!t("origine=")) return "interp_info";   // « 🎛️ INTERPRETEUR : … » (rejet, arbitrage, repli)
     return t("issue=confirmee") ? "interp_conf" : "interp_prop";
   }
   if (t("Exécution de la commande interprétée")) return "commande";
@@ -624,6 +654,13 @@ const NOMS = {
   interp_prop:["🎛️","Commande proposée","Interpréteur · US-172"],
   interp_conf:["🎛️","Commande confirmée","Interpréteur · US-172"],
   commande:["⚙️","Commande exécutée","Sortie"],
+  interp_info:["🎛️","Décision de l'interpréteur","Interpréteur · US-172"],
+  agent_llm:["🔌","Appel de l'agent","Agent · Epic 13"],
+  agent:["🤖","Décision de l'agent","Agent · Epic 13"],
+  agent_ombre:["👻","Agent en mode ombre","Agent · observation"],
+  agent_sortie:["🤖","Précision / hors périmètre","Sortie"],
+  agent_sql:["🚫","Garde-fou SQL agent","Étage 1"],
+  llm_sql:["🔌","Requête écrite par le modèle","Étage 1 · agent SQL"],
   routeur:["🧭","Aiguillage","Routeur"], parseur:["🔤","Parseur déterministe","Étage 0"],
   parseur_json:["🤖","Résultat du parsing","Étage 0"],
   enrichissement:["✨","Enrichissement","Étage 0"],
@@ -645,9 +682,12 @@ const NOMS = {
 function construireTrace(src){
   const L = src.lignes, pas = [];
   let jetonsCascade = 0, jetonsHors = 0, msMesure = 0, restant = null, limite = null;
+  // [Epic 13] en mode ombre l'agent tourne en parallèle : ses jetons ne servent
+  // pas la réponse, et ses étapes ne font pas partie du chemin dessiné
+  const ombre = L.some(l => l.type === "agent_ombre");
 
   L.forEach((l, i) => {
-    let type = l.type, noeud = null, champs = [], apport = "", extra = null, cout = 0, bucket = null;
+    let type = l.type, noeud = null, champs = [], apport = "", extra = null, cout = 0, bucket = null, parallele = false;
     const m = l.msg;
 
     switch (type){
@@ -693,6 +733,88 @@ function construireTrace(src){
           : `Proposition retenue : <code>${cmd}</code> part vers son handler. Tout ce qui suit s'exécute en Python et en SQL, <strong>sans un jeton de plus</strong>.`;
         break;
       }
+
+      case "agent_llm": {
+        noeud = "agent"; parallele = ombre;
+        const refuse = m.indexOf("outils refusés") !== -1;
+        cout = refuse ? 0 : (nb(m,"in")||0) + (nb(m,"out")||0);
+        bucket = ombre ? "hors" : "cascade";
+        champs = [["modèle",mot(m,"modele")],["potager",mot(m,"potager")],
+                  ["in",nb(m,"in")],["out",nb(m,"out")],["cache",nb(m,"cache")],
+                  ["durée",duree(m) ? duree(m)+" ms" : null],["issue",mot(m,"issue")]];
+        apport = refuse
+          ? "Le modèle a déjà refusé l'appel d'outils (mémorisé) : <strong>aucun appel réseau</strong>, l'agent rend la main à l'ancien chemin."
+          : ombre
+          ? `Appel de l'agent en <strong>mode ombre</strong> : il est consulté à côté de la cascade, sa proposition est seulement journalisée. <strong>${cout} jetons payés sans servir la réponse</strong> (comptés hors cascade).`
+          : `Un seul appel modèle avec le catalogue d'outils : l'agent choisit la commande, le plan ou l'aiguillage. <strong>${cout} jetons</strong> — le prompt d'outils est lourd, c'est le prix d'une compréhension unique.`;
+        break;
+      }
+
+      case "agent": {
+        noeud = "agent"; parallele = ombre;
+        const corps = m.replace(/^🤖\s*AGENT\s*[:│]\s*/, "");
+        const fl = corps.split(" → ");
+        const outils = fl.length > 1 ? fl[0].trim() : null;
+        const suite = fl.slice(1).join(" → ");
+        const mesure = suite.match(/\((\d+) ms, (\d+) jetons\)\s*$/);
+        const decision = suite.replace(/\s*\(\d+ ms, \d+ jetons\)\s*$/, "").trim();
+        champs = [["outils",outils],["décision",decision || corps],
+                  ["durée",mesure ? mesure[1]+" ms" : null],["jetons",mesure ? mesure[2] : null]];
+        extra = {decision};
+        const ai = decision.match(/^aiguillage (\w+)(?: \[(.*)\])?/);
+        apport = ai
+          ? `L'agent ne propose pas de commande : il <strong>aiguille</strong> la phrase vers <code>${esc(ai[1])}</code>${ai[2] ? ` (${esc(ai[2])})` : ""}. ${ai[1] === "question" ? "La question repart vers la cascade de réponse." : "Le jardinier reçoit un message, rien n'est exécuté."}`
+          : /^plan de/.test(decision)
+          ? "Phrase à plusieurs demandes : l'agent propose un <strong>plan</strong> d'étapes, chacune une commande native validée."
+          : /ancien chemin/.test(corps)
+          ? "L'agent rend la main : la phrase suit l'ancien chemin (interpréteur à règles puis cascade)."
+          : /aucune commande/.test(corps)
+          ? "L'agent n'a fait que des lectures : aucune commande n'en sort."
+          : /^lire /.test(corps)
+          ? "Outil de lecture (scopé au potager) : l'agent vérifie un nom avant de proposer. <strong>0 jeton</strong> côté SQL."
+          : /contexte court/.test(corps)
+          ? "Les derniers échanges sont joints à l'appel : l'agent peut comprendre « non, l'autre »."
+          : /rejet|retiré|écarté|hors plan|existe déjà|boucle close|indisponible/.test(corps)
+          ? "Garde-fou de l'agent : la sortie du modèle est confrontée à la phrase et au catalogue, ce qui n'y est pas est retiré."
+          : outils
+          ? `L'agent propose <code>${esc(decision)}</code> : une commande native, montrée au jardinier pour confirmation.`
+          : "Ligne de l'agent.";
+        if (ombre) apport += " <em>Mode ombre : sans effet sur le chemin.</em>";
+        break;
+      }
+
+      case "agent_ombre": {
+        noeud = "agent"; parallele = true;
+        const prop = (m.match(/aurait proposé\s*:\s*([\s\S]*?)\s*│/)||[])[1];
+        champs = [["outils",mot(m,"outils")],["aurait proposé",prop]];
+        apport = "Bilan du <strong>mode ombre</strong> : ce que l'agent aurait fait, écrit dans <code>routage_logs</code> (<code>issue=ombre</code>) pour comparer à la cascade. Le jardinier n'en voit rien.";
+        break;
+      }
+
+      case "agent_sortie": {
+        noeud = "reponse";
+        const parts = m.split("│").map(x => x.trim());
+        extra = {texte: parts[2] && parts[2] !== "-" ? parts[2] : parts[1]};
+        champs = [["issue",parts[1]]];
+        apport = parts[1] === "hors_perimetre"
+          ? "Demande hors catalogue : l'agent le dit au jardinier au lieu d'inventer. La phrase est journalisée comme <strong>demande de fonctionnalité</strong>."
+          : "L'agent doute : il <strong>demande une précision</strong> plutôt que de proposer au hasard.";
+        break;
+      }
+
+      case "agent_sql": {
+        noeud = "gabarit";
+        const motif = (m.match(/AGENT SQL\s*│\s*([\s\S]*?)\s*│/)||[])[1];
+        champs = [["motif",motif]];
+        apport = "Garde-fou de l'agent SQL : la requête générée vise un geste absent de la question, elle est <strong>écartée</strong>. La cascade remontera d'un étage.";
+        break;
+      }
+
+      case "interp_info":
+        noeud = "interpreteur";
+        champs = [["décision", m.replace(/^🎛️\s*INTERPRETEUR\s*:\s*/, "")]];
+        apport = "Décision intermédiaire de l'interpréteur à règles (arbitrage, rejet d'une sortie, repli).";
+        break;
 
       case "commande": {
         noeud = "commande";
@@ -802,12 +924,20 @@ function construireTrace(src){
         break;
       }
 
-      case "llm":
-        noeud = "llm";
+      case "llm": {
         cout = (nb(m,"in")||0) + (nb(m,"out")||0); bucket = "cascade";
         champs = [["modèle",mot(m,"modele")],["in",nb(m,"in")],["out",nb(m,"out")],["durée",duree(m)+" ms"]];
+        // un « LLM question » suivi d'un 🚫 AGENT SQL est la génération de requête de l'agent SQL
+        const suivante = L.slice(i + 1).find(x => x.type !== "debit");
+        if (suivante && suivante.type === "agent_sql"){
+          noeud = "gabarit"; type = "llm_sql";
+          apport = `Aucun gabarit ne couvre la question : le modèle <strong>écrit la requête SQL</strong> (agent SQL). <strong>${cout} jetons</strong>.`;
+          break;
+        }
+        noeud = "llm";
         apport = `Rédaction à partir du contexte déjà rassemblé. <strong>${cout} jetons</strong> — le seul étage qui coûte, atteint en dernier recours.`;
         break;
+      }
 
       case "cache_ecr": {
         noeud = "cache_ecr";
@@ -898,11 +1028,11 @@ function construireTrace(src){
     const n = NOMS[type] || NOMS.meta;
     pas.push({type, noeud, emo:n[0], nom:n[1], etage:n[2], ts:l.ts, brut:l.brut,
               champs:champs.filter(c => c && c[1] !== null && c[1] !== undefined && c[1] !== "null"),
-              apport, extra, cout, bucket});
+              apport, extra, cout, bucket, parallele});
   });
 
   const ouvre = pas[0];
-  const rep   = pas.filter(p => p.type === "reponse" || p.type === "refus").pop();
+  const rep   = pas.filter(p => p.type === "reponse" || p.type === "refus" || p.type === "agent_sortie").pop();
   const q     = (ouvre.extra && ouvre.extra.texte) || "—";
   const complete = pas.some(p => p.noeud === "reponse" || p.noeud === "db" || p.noeud === "commande");
   const inconnues = pas.filter(p => p.type === "meta" || p.type === "cache_autre")
@@ -1014,6 +1144,7 @@ function tonDuPas(p){
     const o = p.extra && p.extra.origine;
     return (o === "modele" || p.type === "classif_rout") ? "jeton" : "gratuit";
   }
+  if (p.parallele) return "hors";
   if (p.noeud === "interpreteur"){
     const o = p.extra && p.extra.origine;
     return (o === "modele" || p.type === "classif_interp") ? "jeton" : "gratuit";
@@ -1031,6 +1162,7 @@ function dessinerGraphe(){
   tr.pas.forEach((p, k) => {
     if (k > iPas || !p.noeud) return;
     vus.set(p.noeud, tonDuPas(p));
+    if (p.parallele){ courant = p.noeud; return; }   // mode ombre : nœud allumé, chemin intact
     if (precedent && precedent !== p.noeud) arcs.add(precedent + ">" + p.noeud);
     if (precedent !== p.noeud) precedent = p.noeud;
     courant = p.noeud;
@@ -1111,7 +1243,7 @@ function dessinerPanneau(){
         <div class="s">${esc(x.section)}</div></div>`).join("");
   }
   if (p.extra && p.extra.texte && p.type !== "entree_texte" && p.type !== "entree_voix"){
-    h += `<div class="titrillon">${p.type === "reponse" || p.type === "refus" ? "Réponse envoyée" : "Texte"}</div>
+    h += `<div class="titrillon">${p.type === "reponse" || p.type === "refus" || p.type === "agent_sortie" ? "Réponse envoyée" : "Texte"}</div>
       <div class="brut" style="margin-bottom:0">${esc(p.extra.texte)}</div>`;
   }
   if (p.type === "cache_lec"){
@@ -1151,8 +1283,8 @@ function dessinerEco(){
       <span class="l">temps mesuré · étapes instrumentées</span></div>
     ${pc !== null ? `<div class="jauge"><span class="l">quota jetons Groq restant — ${tr.restant} / ${tr.limite}</span>
       <div class="bar"><i style="width:${pc}%"></i></div></div>` : ""}
-    <div class="note">Le compteur « hors cascade » couvre le classifieur d'intention et le parsing
-      de repli : ils précèdent l'aiguillage et sont payés quel que soit l'étage qui répond.</div>`;
+    <div class="note">Le compteur « hors cascade » couvre le classifieur d'intention, le parsing
+      de repli et l'agent en mode ombre : ils précèdent l'aiguillage et sont payés quel que soit l'étage qui répond.</div>`;
 }
 
 function dessinerScenarios(){
@@ -1266,7 +1398,7 @@ function texteRapport(traces){
     L.push("Aucune ligne non reconnue.");
   }
   L.push("");
-  L.push("Marqueurs actuellement reconnus comme sortie : 💡 RÉPONSE, 💾 ...SAVE (DB/GODET/PERTE), ❌ ...INVALIDE (refus de garde-fou).");
+  L.push("Marqueurs actuellement reconnus comme sortie : 💡 RÉPONSE, 💾 ...SAVE (DB/GODET/PERTE), ❌ ...INVALIDE (refus de garde-fou), 🤖 AGENT │ precision|hors_perimetre.");
   return L.join("\n");
 }
 

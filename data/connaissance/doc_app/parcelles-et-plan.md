@@ -252,3 +252,14 @@ L'activité Plan compte trois sous-onglets, rangés du plus large au plus détai
 Quand on quitte le Plan pour une autre activité puis qu'on y revient, l'écran quitté se rouvre tel qu'on l'avait laissé, avec la planche choisie. Cette mémoire dure le temps de la session : en rouvrant l'application, le Plan repart de la Vue plan.
 
 Sous ces sous-onglets, la barre porte deux éléments identiques sur les deux écrans actifs : le **sélecteur de date de référence** et le bouton **« Journal du jour »**, qui ouvre le Journal filtré sur ce jour sans qu'aucune planche ait besoin d'être choisie. Sur un petit écran, le bouton s'abrège en « Journal ».
+
+## Interroger ses parcelles et ses cultures en une phrase
+
+**Intention :** comprendre
+**On parle aussi de :** combien de parcelles ; mes pépinières ; quel sol a cette parcelle ; combien de rangs ; parcelles paillées ; parcelles sous abri ; qu'est-ce que je cultive ; quelles cultures en place ; quelles variétés j'ai ; combien de variétés
+
+Le compagnon répond sans réfléchir, depuis les données enregistrées, à ces questions : **« combien de parcelles ? »** (le nombre et la liste, les pépinières signalées), **« quelles sont mes pépinières ? »** (avec leur type, chaude ou froide, quand il est renseigné), **« quelles parcelles sont paillées / sous abri / à l'ombre ? »**, et la caractéristique d'une parcelle nommée : type de sol, nombre de rangs, longueur, superficie, exposition, ensoleillement, paillage, abri, pépinière.
+
+Une caractéristique que l'on n'a jamais renseignée est dite telle (« non renseigné ») avec la commande pour la renseigner : le compagnon n'invente ni valeur par défaut ni estimation. Dans une liste, les parcelles sans information sont comptées à part. Une question de conseil (« quel paillage choisir pour la parcelle nord ? ») n'est pas une lecture de données : elle reçoit une réponse du guide.
+
+**« Qu'est-ce que je cultive en ce moment ? »** donne les cultures qui ont au moins un pied en place, avec le nombre de pieds et la ou les parcelles ; ce qui est encore en pépinière est présenté à part. Une culture dont tous les pieds sont récoltés (carotte, salade) disparaît de la liste ; une culture cueillie plusieurs fois (haricot, tomate) y reste, car la cueillette ne retire pas le pied. **« Quelles variétés de tomate j'ai ? »** liste les variétés avec leurs pieds en place, la saisie sans variété apparaissant en « Variété non précisée » ; **« combien de variétés de tomate ? »** en donne le nombre. Demander quelles variétés *planter* est une question de conseil, pas un inventaire.

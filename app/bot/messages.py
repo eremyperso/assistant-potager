@@ -27,7 +27,9 @@ from .liaison import _delier_confirm, _verifier_liaison_ou_onboarding, cmd_start
 from .enregistrement import _parse_multi
 from .godets import _godet_graines_reponse
 from .notes import _note_category_selected, _note_details_received, _note_start
-from .interpretation import _INTERP_MODE_COMPLETION, _interp_completion_texte, _traiter_commande_interpretee
+from .interpretation import (
+    _INTERP_MODE_COMPLETION, _interp_completion_texte, _traiter_commande_interpretee, contexte_court_de,
+)
 from .questions import (
     NAV_CORRIGER,
     NAV_HISTORIQUE,
@@ -311,8 +313,26 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # après toutes les gardes de conversation ci-dessus, avant le parsing de
     # geste. Sans cela, « supprime la parcelle nord » dicté serait parti au
     # parseur d'événement, qui n'a aucune façon d'en faire quoi que ce soit.
-    resultat_commande = svc_interpreteur.interpreter(texte, current_context())
+    resultat_commande = svc_interpreteur.interpreter(
+        texte, current_context(), contexte_court=contexte_court_de(update),
+    )
     if await _traiter_commande_interpretee(update, ctx, resultat_commande, msg=msg):
+        return
+    # [US-236 / CA2, CA3] L'agent a dit où va la phrase : une question part à la
+    # cascade avec sa nature ; un geste saute les étapes de classification
+    # ci-dessous (5bis, 5ter) et va droit au parseur.
+    aiguillage = resultat_commande if isinstance(resultat_commande, svc_interpreteur.Aiguillage) else None
+    if aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_QUESTION:
+        log.info(f"❓ QUESTION AGENT  : nature={aiguillage.nature_question} → _ask_question")
+        await msg.edit_text("🔍 *Analyse en cours...*", parse_mode="Markdown")
+        await _ask_question(update, texte, nature=aiguillage.nature_question)
+        return
+    if aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_GESTE:
+        resultat_deterministe = parser_saisie(texte, current_context())
+        await _parse_and_save(
+            update, texte, msg,
+            pre_parsed_items=resultat_deterministe.items if resultat_deterministe.reconnu else None,
+        )
         return
 
     # ── 5. [US-094 / CA1] Étage 0 — la grammaire déterministe d'abord ────────
@@ -748,10 +768,21 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
     # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
     resultat_commande = commande_reglee or svc_interpreteur.interpreter(
-        texte_raw, current_context()
+        texte_raw, current_context(), contexte_court=contexte_court_de(update),
     )
     if await _traiter_commande_interpretee(update, ctx, resultat_commande):
         return
+
+    # ── PRIORITÉ 3f : [US-236 / CA2, CA3] l'agent a dit où va la phrase
+    # Une question part à la cascade avec la nature qu'il a donnée, un geste au
+    # parseur : ni l'un ni l'autre ne repasse par les mots-clés du routeur, qui
+    # ne servent plus qu'aux phrases que l'agent n'a pas prises en charge (CA8).
+    aiguillage = resultat_commande if isinstance(resultat_commande, svc_interpreteur.Aiguillage) else None
+    if aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_QUESTION:
+        log.info(f"❓ QUESTION AGENT  : nature={aiguillage.nature_question} → _ask_question")
+        await _ask_question(update, texte_raw, nature=aiguillage.nature_question)
+        return
+    geste_aiguille = aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_GESTE
 
     # ── PRIORITÉ 4 : nature de la demande décidée par le routeur [US-170 CA6, CA7]
     # Remplace _is_question(), dont la moitié du critère (le point d'interrogation
@@ -760,11 +791,12 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # règles, la règle de geste, le catalogue, le cache de classification et le
     # modèle en dernier recours (US-093) ; le filet US-011 plus bas reste le
     # rattrapage des cas résiduels (CA10), inchangé.
-    decision_routage = routeur.classer_demande(texte_raw, current_context())
-    if decision_routage.nature != routeur.NATURE_ACTION:
-        log.info(f"❓ QUESTION AUTO   : nature={decision_routage.nature} → reroutage vers _ask_question")
-        await _ask_question(update, texte_raw)
-        return
+    if not geste_aiguille:
+        decision_routage = routeur.classer_demande(texte_raw, current_context())
+        if decision_routage.nature != routeur.NATURE_ACTION:
+            log.info(f"❓ QUESTION AUTO   : nature={decision_routage.nature} → reroutage vers _ask_question")
+            await _ask_question(update, texte_raw)
+            return
 
     # Sinon : parser comme action(s) potager
     # Si multi-lignes → traiter chaque ligne séparément

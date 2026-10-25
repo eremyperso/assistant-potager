@@ -1,3 +1,207 @@
+## [v3.102.0] — 2026-10-25
+
+### 🚀 Nouveautés
+- Ajoute la **règle des temps** : un bouton en forme de règle, à côté du sélecteur de date, ouvre une réglette au bas de l'écran pour faire défiler les jours (glisser au doigt ou à la souris, molette, clic sur un jour, flèches du clavier, Maj pour une semaine, T pour revenir).
+- Applique la règle des temps à toutes les vues qui portent le sélecteur de date (Plan, Cultures, Pépinière, Stocks, Stats) : la date reste commune, la réglette et le calendrier se suivent.
+- Écrit la date de référence seulement quand la réglette s'arrête sur un jour, et non pendant le glissé : les écrans ne se rechargent pas à chaque jour traversé.
+- Borne la réglette aux 24 derniers mois et à aujourd'hui, comme le calendrier : aucun jour à venir n'est consultable.
+
+### 🔧 Améliorations techniques
+- Isole la logique de la réglette dans `frontend/src/lib/regleTemps.js` (10 tests) et monte le composant une seule fois dans la coquille de l'app, au-dessus de la barre basse.
+- Ajoute la page de contrôle visuel `/regle-temps`, sans backend.
+- Documente la réglette dans le corpus de connaissance (fiche `stock-plants-calcul.md`, deux questions de mesure, table de relecture).
+
+## [v3.101.0] — 2026-10-22
+
+**ÉPIC 3 — US-243 à US-249** : le compagnon répond **sans modèle** aux questions courantes sur les données du potager. Relevé du 21/10/2026 : « combien de parcelle ? », « quel est le type de sol de la parcelle nord ? », « combien d'arrosages ce mois-ci ? » ou « quel est mon potager actif ? » ne trouvaient aucun gabarit (ou le mauvais) et finissaient en réponse générique ou au modèle, environ 3 800 jetons pour une réponse fausse. Cette version regroupe les sept US de l'épic ; la couverture mesurée du corpus passe à **100 %, 0 question mal servie**.
+
+### 🚀 Nouveautés
+- Répond à « combien de parcelles ? », « affiche mes parcelles » : le nombre et la liste, les pépinières signalées (US-244).
+- Répond à « quelles sont mes pépinières ? » avec leur type chaude ou froide, et à « quelles parcelles sont paillées / sous abri / à l'ombre ? » en comptant à part celles dont l'information manque (US-244).
+- Répond à la caractéristique d'une parcelle nommée — sol, rangs, longueur, superficie, exposition, ensoleillement, paillage, abri, pépinière — par la seule valeur demandée, ou « non renseigné » avec la commande pour la renseigner (US-244).
+- Répond à « qu'est-ce que je cultive en ce moment ? » : cultures en place avec pieds et parcelles, pépinière à part, culture récoltée en entier absente, culture cueillie toujours présente (US-245).
+- Répond à « quelles variétés de tomate j'ai ? » et « combien de variétés de tomate ? », la saisie sans variété apparaissant en « Variété non précisée » (US-245).
+- Répond à « combien de fois j'ai arrosé les tomates ce mois-ci ? » et « combien d'arrosages ? » : le nombre de saisies du geste, filtré par culture et par période, « cette saison » à défaut de période citée, et zéro dit comme une réponse ; pour une perte, le total de pieds perdus s'ajoute (US-246).
+- Répond à « quels traitements ai-je faits sur les tomates ? » : les occurrences de la plus récente à la plus ancienne avec date, produit, variété, quantité et parcelle, plafonnées à dix avec le reste annoncé (US-246).
+- Répond à « qu'ai-je fait hier ? », « cette semaine », « la semaine dernière », « aujourd'hui », « le 4 mars » : les gestes regroupés par jour, ou « Rien d'enregistré hier » ; sans période, les 7 derniers jours, et le dit ; au-delà de quinze gestes, un résumé par type renvoie vers l'historique de l'application (US-247).
+- Répond à « quelle culture a le plus produit ? » et « quelle est ma meilleure récolte ? » : les cultures classées par poids récolté, de la plus à la moins productive, sur la saison en cours par défaut, et le dit (US-248).
+- Répond à « combien de kg ai-je récoltés cette année ? » : le poids total toutes cultures confondues ; les récoltes comptées en pièces ou en bottes sont présentées à part, avec leur unité, jamais additionnées aux kilos ; « aucune récolte » est une réponse (US-248).
+- Répond à « quel est mon potager actif ? », « sur quel potager je suis ? », « comment s'appelle mon potager ? » : le nom du potager actif et, avec plusieurs potagers, les autres avec la commande /potager pour changer (US-249).
+- Répond à « combien de potagers j'ai ? » : le nombre et les noms des seuls potagers auxquels le jardinier a accès, jamais ceux d'un autre compte (US-249).
+
+### 🐛 Corrections
+- Corrige « quel est le type de sol / les rangs / l'exposition de la parcelle nord ? » qui listait les cultures de la parcelle au lieu de la caractéristique demandée (US-244).
+- Corrige « le tunnel chauffé n'est plus une pépinière » qui n'atteignait jamais l'agent : « tunnel », mot de geste, était lu dans le nom de la parcelle ; les noms de parcelles du potager sont retirés avant le test de saisie de geste.
+- Corrige « quel est mon potager actif ? » qui partait à la requête écrite par le modèle puis répondait « Je ne trouve rien d'enregistré à ce sujet » (US-249).
+
+### 🔧 Améliorations techniques
+- Ajoute `tools/couverture_gabarits.py` et `tests/corpus/us243_couverture_gabarits.csv` (93 questions, familles attendues, pièges de savoir) : taux de questions bien, non et mal servies, en une commande, sans modèle ni PostgreSQL ; le seuil de questions bien servies est relevé à 100 % (US-243).
+- Ajoute les familles `liste_parcelles`, `attributs_parcelle`, `parcelles_filtrees`, `cultures_en_place`, `varietes_culture`, `nombre_occurrences`, `historique_action`, `journal_periode`, `classement_recoltes` et `potager_actif` à `app/services/reponses_chiffrees.py` (US-244 à US-249).
+- Ajoute `Famille.incompatible` : « combien de rangs de carottes sur la parcelle nord » nomme une culture et n'est pas une caractéristique de parcelle (US-244).
+- Ajoute à `_detecter_periode` « hier », « avant-hier », « aujourd'hui », « cette semaine », « la semaine dernière » et « le 4 mars » ; les autres familles les prennent aussi (US-247).
+- Ajoute les agrégations correspondantes au catalogue fermé, en lecture seule et limitées au potager actif ; le total des récoltes suit les mêmes règles que la courbe de rendement du web, vérifié par un test (US-248).
+- Ajoute au potager de référence de la mesure un compte, trois potagers et leurs appartenances, dont un potager d'un autre compte pour vérifier qu'il n'est jamais cité (US-249).
+- Ajoute `tests/test_us243_couverture_gabarits.py` à `tests/test_us249_questions_potager_actif.py`, un fichier par US (US-243 à US-249).
+- Met à jour les fiches `parcelles-et-plan.md`, `journal-et-corrections.md`, `statistiques-et-bilans.md` et `potager-cycle-de-vie.md` du corpus de fonctionnement, et la table du README (US-244, US-247, US-248, US-249).
+
+### 📋 Constats consignés, non corrigés
+- **« Combien d'arrosages sur la parcelle nord ? » n'est pas comptée** : le comptage par parcelle n'est pas prévu, la question descend à l'étage suivant plutôt que de rendre un total tous gestes confondus.
+- **Une culture nommée avec une parcelle reste servie par l'occupation de la parcelle** : « combien de rangs de carottes sur la parcelle nord » liste les cultures de NORD ; comportement d'avant, non modifié.
+- **Une culture nommée dans un classement rend la main** : « quelle culture a le plus produit, tomates ou haricots ? » n'est pas servie par le classement et descend à l'étage suivant (US-248).
+
+## [v3.98.0] — 2026-10-21
+
+**ÉPIC 13 — US-238** : avec `AGENT_MODE=actif`, une proposition du compagnon se **corrige ou se prolonge** en répondant, sans redire la demande. « Non, l'autre » après un choix entre deux parcelles voisines propose l'autre ; « et la planche sud aussi » après « passe la planche nord à 6 rangs » donne un plan de deux étapes, confirmé en une fois. La nouvelle proposition remplace l'ancienne, et rien n'est écrit avant la nouvelle confirmation.
+
+### 🚀 Nouveautés
+- Propose l'autre parcelle voisine après « non, l'autre », à valider d'un bouton, sans jamais reproposer un nom que le jardinier vient de laisser de côté (US-238).
+- Demande « Laquelle ? » quand « l'autre » peut désigner plusieurs parcelles, ou quand l'agent ne ferait que reproposer un nom déjà refusé (US-238).
+- Prolonge une proposition en plan : « et la planche sud aussi » reprend la valeur déjà dite (« 6 rangs ») pour la nouvelle étape, et un plan en attente se prolonge encore (US-238).
+- Oublie la proposition au bout de cinq minutes : la phrase suivante est alors une demande nouvelle (US-238).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/agent/contexte_court.py` : la proposition en attente et trois échanges au plus, résumés en JSON dans la partie variable du message système, jamais l'historique complet (US-238).
+- Garde le message système d'avant quand aucune proposition n'est en attente : les consignes de correction ne sont pas dans `PROMPT_FIXE` (US-238).
+- Ancre le validateur sur la phrase d'origine de la proposition suivie de la nouvelle : un nombre déjà dit se reprend, un nombre dit nulle part reste refusé (US-238).
+- Range le contexte par jardinier et par potager : la proposition vient de `_INTERP_PENDING[user_id]`, refusée si faite dans un autre potager, et les échanges sont rangés par `(user_id, potager_id)` (US-238).
+- Passe `contexte_court` de `handle_text` et `handle_voice` à `interpreter()`, que seul l'agent en mode `actif` lit (US-238).
+- Conserve les noms voisins écartés d'une proposition à l'autre (`pending["ecartes"]`) et note chaque phrase interprétée comme un échange (US-238).
+- Ajoute `tests/test_us238_contexte_court.py` (43 tests, couverture de `app/services/agent/` à 97 %) (US-238).
+- Ajoute au corpus la section « Corriger ou prolonger sa dernière demande » (`compagnon-telegram.md`) et décrit le contexte court dans `docs/domaines/commandes-bot.md` (US-238).
+
+### 💾 Base de données
+- Écrit la phrase combinée (origine puis suite) dans `routage_logs.question_normalisee` d'une proposition corrigée ou prolongée, sans migration (US-238).
+
+### 📋 Constats consignés, non corrigés
+- **US optionnelle engagée sans mesure** : le backlog la conditionnait aux reformulations fréquentes du journal de production d'US-235 à US-237 ; elle a été demandée avant cette mesure, et `issue_interpretation` dira si elle sert.
+- **Pas de corpus de suites de conversation** : la phase 5 de l'architecture le prévoit comme critère de sortie ; le comportement n'est vérifié qu'avec un modèle simulé, pas avec le vrai modèle.
+- **Les gardes d'avant l'agent s'appliquent aussi aux suites** : une suite lue comme une question de savoir ou comme un geste annoncé (« mets 6 rangs aussi… ») n'atteint pas l'agent ; « et la planche sud aussi » et « non, l'autre » l'atteignent.
+- **Une proposition qui demande un argument manquant garde la main** : tant que le compagnon attend la valeur, la phrase suivante est lue comme cette valeur (CA13 d'US-172), pas comme une prolongation.
+
+## [v3.97.0] — 2026-10-21
+
+**ÉPIC 13 — US-237** : avec `AGENT_MODE=actif`, une phrase peut porter plusieurs commandes sur les parcelles. « Crée la planche nord, 8 mètres de long avec 4 rangs, et mets la serre en pépinière froide » donne un **plan** de trois étapes numérotées, confirmé par un seul « Tout confirmer ». Rien n'est écrit avant cette confirmation. Les étapes s'exécutent ensuite dans l'ordre et la première refusée arrête la suite.
+
+### 🚀 Nouveautés
+- Propose un plan d'étapes numérotées, chacune avec sa commande équivalente, et une seule paire « Tout confirmer » / « Annuler » liée à sa proposition (US-237).
+- Rend un compte rendu par étape après exécution : ✅ faite, ❌ refusée avec la raison du service, ⏭ non exécutée ; sans reprise ni retour en arrière (US-237).
+- Signale une planche à créer qui existe déjà (« elle existe déjà, je passe à l'étape suivante ? ») et saute cette étape au lieu de créer un double (US-237).
+- Refuse dans un plan toute forme autre que `/parcelle ajouter` et `/parcelle modifier` avec « je ne sais faire celle-ci que seule » ; une suppression reste une commande seule (US-237).
+
+### 🔧 Améliorations techniques
+- Transforme l'appel de l'agent en boucle bornée par `AGENT_MAX_TOURS` : l'outil de lecture `lire` (parcelle, parcelles, lot, culture, potager du contexte, résultat traité comme donnée) est exécuté, les écritures sont notées et jamais exécutées (US-237).
+- Ajoute le paramètre `historique` à `passerelle.appeler_chat_outils` pour renvoyer au modèle ses appels et les résultats des lectures (US-237).
+- Ajoute le type `Plan` et `validation.valider_plan`, qui valide les étapes dans l'ordre contre un état simulé : une parcelle créée à l'étape *n* existe pour les suivantes (US-237).
+- Ajoute `app/services/agent/executeurs.py` : un exécuteur de service par forme admise, revalidé en base juste avant chaque étape, appelant le même service que le handler (test de parité) (US-237).
+- Garde la proposition simple d'US-235 pour une phrase qui ne porte qu'une commande (US-237).
+- Complète le message système de l'agent par deux consignes (plusieurs actions dans l'ordre, lecture = donnée) et assouplit la consigne 6, qui ne demande plus de précision pour « plusieurs actions » (US-237).
+- Ajoute `tests/test_us237_plan_agent.py` (55 tests, couverture de `app/services/agent/` à 97 %) et aligne deux tests d'US-235 sur le nouveau contrat (US-237).
+- Ajoute au corpus la section « Dire plusieurs demandes en une seule phrase » (`compagnon-telegram.md`) et décrit le plan dans `docs/domaines/commandes-bot.md` (US-237).
+
+### 💾 Base de données
+- Écrit une ligne `routage_logs` par plan, avec `commande_interpretee = "plan parcelle ajouter,modifier,…"`, sans migration (US-237).
+
+### 📋 Constats consignés, non corrigés
+- **Prompt modifié depuis la mesure d'US-233** : les consignes 6, 9 et 10 changent ce que le modèle a reçu lors de l'évaluation d'US-235 ; relancer `tools/evaluer_interpreteur_agent.py` avant de passer `AGENT_MODE` à `actif`.
+- **Aucune phrase à plusieurs étapes dans le corpus d'évaluation** : le CA de la phase 4b (« phrases multi-étapes du corpus proposées correctement ») n'est vérifié qu'avec un modèle simulé.
+
+## [v3.96.0] — 2026-10-21
+
+**ÉPIC 13 — US-236** : avec `AGENT_MODE=actif`, l'agent interpréteur dit **où va** une phrase qui n'est pas une commande : une question part à la cascade avec sa nature, un geste au parseur, une demande incomplète reçoit une question ciblée, une demande hors catalogue reçoit « Je ne sais pas encore faire ça ». C'est la construction de la phrase qui décide, plus un mot du domaine.
+
+### 🚀 Nouveautés
+- Répond « Je ne sais pas encore faire ça (raison) » à une demande hors catalogue (« exporte l'historique en Excel ») au lieu d'une liste obtenue par mot-clé (US-236).
+- Demande la précision qui manque (« Modifie ma serre » → « que veux-tu modifier ? ») sans rien proposer ni exécuter (US-236).
+- Répond à une question qui ressemble à une commande (« la serre est-elle une pépinière ? ») au lieu de proposer une modification (US-236).
+
+### 🐛 Corrections
+- Ne lit plus une désignation relative comme un nom de parcelle : « supprime la parcelle près des tomates » n'est plus reconnu `/parcelle supprimer près des tomates` par la règle et passe à l'agent (US-236).
+
+### 🔧 Améliorations techniques
+- Ajoute le type `Aiguillage` (question, geste, précision, hors périmètre) rendu par `interpreter()`, construit depuis les outils terminaux de l'agent (US-236).
+- Transmet la nature donnée par l'agent à la cascade (`repondre_avec_cascade(decision=…)`, origine `agent`) sans rejouer `classer_demande` ; un geste va droit au parseur, texte et voix (US-236).
+- Garde les mots-clés du routeur pour toute phrase que l'agent n'a pas prise (`off`, `ombre`, indisponible, rejet du validateur) (US-236).
+- Ajoute `tests/test_us236_aiguillage_agent.py` (45 tests, un par critère plus l'ordre des étages) et aligne deux tests d'US-235 sur le nouveau contrat (US-236).
+- Ajoute au corpus la section « Le compagnon demande une précision ou ne sait pas faire » (`compagnon-telegram.md`) et met à jour `docs/domaines/commandes-bot.md` (US-236).
+
+### 💾 Base de données
+- Ajoute les valeurs d'issue `precision` et `hors_perimetre` à `routage_logs.issue_interpretation` : la liste des demandes de fonctionnalité, sans migration (colonne existante) (US-236).
+
+### 📋 Constats consignés, non corrigés
+- **Filtre « geste annoncé » toujours avant l'agent** : le CA9 d'US-236 confirme cet ordre ; « retire le paillage de la planche sud » reste lu comme un geste.
+- **Raccourci « modifier » du canal texte** : une phrase qui commence par « modifier » (infinitif) ouvre toujours la correction de la dernière saisie avant l'agent ; « modifie ma serre » n'est pas concerné.
+
+## [v3.95.0] — 2026-10-21
+
+**ÉPIC 13 — US-235** : l'**agent interpréteur** prend la place du repli modèle de l'interpréteur de commandes. « Ma serre extérieure n'est plus une pépinière » donne la proposition « Je retire le statut pépinière de Serre extérieure », avec la commande équivalente, à confirmer comme toute commande dictée. **L'agent propose, il n'exécute jamais.** Le comportement dépend de `AGENT_MODE` : `off` reste la valeur par défaut du code, et le rapport recommande de régler d'abord `ombre`, puis `actif` après observation du journal.
+
+**Évaluation réelle** (`docs/EPIC - AGENT INTERPRETEUR/RAPPORT_US235_EVALUATION.md`, `openai/gpt-oss-120b`, 260 phrases du corpus US-172 enrichi, quatre passages) : **0 exécution destructrice erronée**, **0 régression** sur les 173 phrases reconnues par les règles, et 31 propositions justes sur 31 pour l'agent à chaque passage. Coût : 3 067 jetons par appel pour 13 outils.
+
+### 🚀 Nouveautés
+- Comprend une commande dite avec ses mots, négations et retraits compris (« n'est plus une pépinière », « enlève l'abri », « a maintenant 6 rangs »), quand `AGENT_MODE=actif` (US-235).
+- Récapitule une modification de parcelle proposée par l'agent champ par champ, avec son sens (« Je *retire* le paillage… », « Je *passe* le nombre de rangs… à *6* (six) ») (US-235).
+- Journalise en `AGENT_MODE=ombre` ce que l'agent aurait proposé, sans rien montrer au jardinier ni ajouter de latence (US-235).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/agent/` : 13 outils générés depuis `FORMES_DICTABLES` et les caractéristiques de parcelle, avec contrôle de parité ; adaptateur des champs typés vers `clé=valeur` ; validateur ; appel par la passerelle (US-235).
+- Révise CA4 d'US-172 : une parcelle doit être dite et exister à l'identique (sinon un voisin est proposé, jamais substitué), un nombre doit être dit, une valeur fermée peut être déduite si son champ est évoqué, et un argument qui recopie un autre est retiré (US-235).
+- N'applique pas le seuil de confiance au chemin de l'agent ; il reste sur l'ancien repli (US-235).
+- Revient sans message à l'ancien repli quand l'agent est indisponible (429, panne, modèle sans outils, appel malformé) (US-235).
+- Passe plusieurs `clé=valeur` d'une même modification au handler comme autant d'arguments, comme pour une commande tapée (US-235).
+- Considère incomplète une proposition dont le nom de parcelle a été retiré sans voisin (US-235).
+- Ajoute `tools/evaluer_interpreteur_agent.py` et le corpus `tests/corpus/us235_agent_commandes.csv` (27 phrases : négations, déclarations, questions piégeuses, demandes incomplètes, destructrices, hors catalogue) (US-235).
+- Ajoute `tests/test_us235_agent_interpreteur.py` (125 tests, 94 à 100 % de couverture sur `app/services/agent/`) ; fait évoluer le test d'US-233 sur les lecteurs d'`AGENT_MODE` et la liste des fichiers autorisés à nommer `type_pepiniere` d'US-208 (US-235).
+- Ajoute au corpus de connaissance la section « Dire une commande avec ses mots, négations comprises » (`compagnon-telegram.md`), et met à jour `docs/domaines/commandes-bot.md`, `.env.example` et l'architecture de l'épic (US-235).
+
+### 💾 Base de données
+- Ajoute la colonne `routage_logs.outils_agent` (outils appelés par l'agent) et la valeur d'issue `ombre` ; migration `migration_v59.sql`, rollback `rollback_v59.sql` (US-235).
+
+### 📋 Constats consignés, non corrigés
+- **Filtre « geste annoncé » avant l'agent** : « retire le paillage de la planche sud », « paille la planche nord » et « le tunnel n'est plus utilisé » s'ouvrent sur un mot de geste et n'atteignent jamais l'agent ; c'est l'objet d'US-236.
+- **Deux lectures fausses des règles d'US-172**, antérieures à cette US : « la planche sud n'est plus paillée » est lu `paillage=oui`, et « la planche sud est à l'ombre toute la journée » devient l'exposition d'une culture. Le récapitulatif les montre avant toute écriture.
+- **Mesure en base** : les quatre passages ont écrit au moins 124 lignes `conso_tokens` (`appel_type = 'agent'`) dans la base de `.env.dev`.
+
+## [v3.94.0] — 2026-10-21
+
+**ÉPIC 13 — US-233** : la passerelle LLM accepte les **appels d'outils typés**, et le modèle de l'agent interpréteur a été **mesuré** sur 51 phrases. Rien ne change pour le jardinier : `AGENT_MODE` vaut `off` et aucun agent n'est branché.
+
+**Résultat de la mesure** (`docs/EPIC - AGENT INTERPRETEUR/RAPPORT_US233_MESURE_MODELE.md`) : **NO-GO au sens strict du protocole** pour `openai/gpt-oss-120b`, seul modèle mesurable avec la clé actuelle. Bons paramètres 88,9 % (seuil 90 %) et aiguillage 78,6 % (seuil 85 %), identiques sur deux passages. Mais les 9 négations sont toutes réussies, dont « Ma serre extérieure n'est plus une pépinière » (`est_pepiniere=false`), aucun champ n'est ajouté sans avoir été évoqué, aucun appel destructeur n'est erroné et la latence p95 reste sous 1,3 s. Recommandation du rapport : poursuivre avec US-235 en `AGENT_MODE=ombre` uniquement ; la décision revient au responsable du produit.
+
+### 🚀 Nouveautés
+- Ajoute `appeler_chat_outils` à la passerelle : appel avec outils typés et `tool_choice="required"` par défaut, qui rend le texte et les appels d'outils sans rien exécuter (US-233).
+- Ajoute le type d'appel `agent`, au modèle réglable par `GROQ_MODEL_AGENT` et distinct de celui de la classification ; journal, jetons (dont le cache), consommation et repli 429 sont ceux des autres types (US-233).
+- Ajoute `AGENT_MODE` (`off` par défaut, `ombre`, `actif` ; toute autre valeur retombe sur `off`) et `AGENT_MAX_TOURS` (3), documentés dans `.env.example` et lus par la configuration (US-233).
+- Ajoute `tools/evaluer_agent.py` : joue un échantillon de 51 phrases sur le modèle réel, par la passerelle, et rédige le rapport (bon outil, bons paramètres, précision demandée, latence p50 / p95, jetons, part en cache, go / no-go) (US-233).
+
+### 🔧 Améliorations techniques
+- Détecte au premier appel un modèle qui refuse les outils, mémorise le refus par client et par modèle, et rend un statut (`outils_non_supportes`, `appel_invalide`) au lieu d'une exception du SDK (US-233).
+- Extrait de `appeler_chat` ses étapes communes (`_construire_messages`, `_clore_appel`) sans changer son comportement (US-233).
+- Ajoute `tests/test_us233_passerelle_outils.py` (106 tests) et le corpus `tests/corpus/us233_agent_echantillon.csv` (51 phrases : 19 du corpus US-172, enrichies de négations, de paires déclaration / question et de demandes ambiguës) ; adapte le test des types d'appel d'US-092, qui en compte désormais six (US-233).
+- Met à jour le statut et l'estimation de jetons (§3.8, mesurée à 977 jetons pour 10 outils) de l'architecture de l'épic (US-233).
+
+### 📋 Constats consignés, non corrigés
+- **Mesure limitée à un modèle** : `openai/gpt-oss-20b` et `qwen/qwen3.8-27b` sont bloqués au niveau de l'organisation Groq, `llama-3.3-70b-versatile` est inaccessible à cette clé. Les débloquer dans la console Groq permettrait de comparer avec la même commande.
+- **Cas à couvrir dans US-235** : « renomme la planche nord » produit un renommage de « Planche Nord » vers « Planche Nord » (le modèle recopie l'ancien nom pour l'argument manquant) ; le validateur devra le refuser comme argument manquant.
+- **Hors de cette US** : `tools/mesurer_modeles_llm.py` appelle encore le SDK Groq directement, ce qui fait échouer `test_us092_ca1_aucun_appel_direct_hors_passerelle` avant comme après cette US.
+
+## [v3.93.1] — 2026-10-21
+
+**ÉPIC 13 — US-234** : le bouton « Confirmer » d'une commande dictée n'exécute plus que **la demande qu'il accompagne**, dans **le potager où elle a été dite**. Avant, appuyer sur « Confirmer » sous un ancien message validait la demande la plus récente (« supprime la parcelle test » puis « crée la parcelle carré nord » : l'ancien bouton créait la parcelle), et une commande confirmée après un changement de potager s'exécutait dans le nouveau.
+
+### 🐛 Corrections
+- Corrige « Confirmer », « Annuler » et le choix d'un nom voisin ou d'une valeur sous un ancien message : ils répondent « Demande expirée, rien n'a été fait » et laissent la demande en cours intacte (US-234).
+- Corrige la confirmation d'une commande dictée après un changement de potager : rien n'est exécuté et le message dit que le potager actif a changé ; « Annuler » reste possible (US-234).
+- Refuse aussi, faute de pouvoir le vérifier, une confirmation dont le potager actif est illisible au moment du clic (US-234).
+
+### 🔧 Améliorations techniques
+- Ajoute un identifiant court à chaque proposition, repris par tous ses boutons (`interp:ok:<id>`, `interp:non:<id>`, `interp:cand:<rang>:<id>`, `interp:val:<rang>:<id>`), et le potager actif au moment de la proposition (US-234).
+- Journalise `abandonnee` une proposition remplacée par une nouvelle demande ou refusée pour changement de potager, au lieu de la laisser « proposée » (US-234).
+- Ajoute `tests/test_us234_confirmation_liee_proposition.py` (31 tests) et adapte le test de confirmation d'US-172 à la nouvelle forme des boutons (US-234).
+- Ajoute la fiche « Un ancien bouton Confirmer ne valide jamais une autre demande » au corpus `data/connaissance/doc_app/` et à la note `docs/domaines/commandes-bot.md` (US-234).
+
+### ⚠️ Breaking changes
+- Les boutons des propositions affichées avant la mise à jour répondent « Demande expirée » : ils ne portent pas d'identifiant. Il suffit de redire la demande (US-234).
+
 ## [v3.93.0] — 2026-10-20
 
 **ÉPIC 9-12 — bilan depuis la dernière version commitée (v3.89.0)** : la Pépinière passe de quatre onglets à deux, **« Ma pépinière »** (kanban emplacement × stade) et **« Lots »** (journal de saison), sur des données de lot désormais réparties par pépinière. Les entrées v3.90.0 à v3.92.1 ci-dessous donnent le détail ; celle-ci ajoute **US-220 et US-240**, qui n'y figuraient pas, et récapitule le périmètre.

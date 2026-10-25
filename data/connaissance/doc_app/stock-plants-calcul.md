@@ -46,3 +46,10 @@ Deux unités différentes pour une même culture ne s'additionnent jamais : cent
 **On parle aussi de :** date de référence ; remonter le temps ; état au premier mai ; comparer deux moments de la saison
 
 Une date de référence peut être donnée pour arrêter le calcul à ce jour-là. Le stock, la pépinière et les bilans ne tiennent alors compte que des gestes enregistrés jusqu'à cette date, celle du geste et non celle de la saisie. C'est ce qui permet de comparer deux moments de la saison sans rien effacer, et de retrouver l'état exact du jardin le jour d'une plantation ancienne.
+
+## Faire défiler les dates avec la réglette
+
+**Intention :** procédure
+**On parle aussi de :** réglette ; règle des temps ; curseur de date ; faire défiler les semaines ; voir mon potager d'avant ; parcourir l'historique du potager ; la règle à côté de la date
+
+Dans l'application web, un bouton en forme de règle, à côté du sélecteur de date, ouvre une réglette au bas de l'écran. On la glisse au doigt ou à la souris, on touche un jour pour y sauter, ou on avance d'un jour avec les flèches du clavier, d'une semaine avec Maj. L'écran ne se recalcule que lorsque la réglette s'arrête, jamais pendant le glissé. Elle couvre les vingt-quatre derniers mois et ne va pas au-delà du jour même : un jour à venir ne se consulte pas. Le bouton « Aujourd'hui » de la réglette ramène au présent, et la réglette se retrouve sur tous les écrans qui portent le sélecteur de date.

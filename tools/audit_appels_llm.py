@@ -154,7 +154,7 @@ def main() -> int:
     for fichier, ligne, libelle, extrait in infractions:
         print(f"  {fichier}:{ligne} — {libelle}\n      {extrait}")
     print("\nCes appels doivent passer par llm/passerelle.py "
-          "(appeler_chat / transcrire) pour être typés, imputés et mesurés.")
+          "(appeler_chat / appeler_chat_outils / transcrire) pour être typés, imputés et mesurés.")
     return 1
 
 

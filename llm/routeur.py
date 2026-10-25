@@ -98,6 +98,9 @@ NATURES: frozenset[str] = frozenset({
 ORIGINE_REGLE  = "regle"
 ORIGINE_CACHE  = "cache"
 ORIGINE_MODELE = "modele"
+#: [US-236 / CA2] Nature donnée par l'agent interpréteur (`poser_question`) :
+#: la cascade la reçoit telle quelle, sans reclasser.
+ORIGINE_AGENT  = "agent"
 
 # [CA5] En dessous de ce seuil, la confiance du petit modèle est jugée trop
 # faible : on préfère une réponse un peu plus chère (étage hybride) à une
@@ -978,10 +981,15 @@ def _consulter_savoir(ctx: TenantContext, question: str, famille: "str | None" =
 # ─────────────────────────────────────────────────────────────────────────────
 # API publique — cascade complète [CA6, CA7, CA8]
 # ─────────────────────────────────────────────────────────────────────────────
-def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
+def repondre_avec_cascade(
+    ctx: TenantContext, question: str, decision: Optional[DecisionRoutage] = None
+) -> ReponseCascade:
     """Classe la demande puis produit une réponse, avec au plus une remontée
     de cascade (CA7). Ne renvoie jamais de message intermédiaire — seule la
     réponse finale est visible du jardinier (CA8).
+
+    [US-236 / CA2] `decision` : la nature est déjà connue (l'agent interpréteur
+    l'a donnée) — la classification n'est pas rejouée.
 
     [US-097 / CA1] Journalise la cascade dans `routage_logs` une fois la
     réponse produite (succès uniquement — une cascade qui lève une exception,
@@ -1030,7 +1038,8 @@ def repondre_avec_cascade(ctx: TenantContext, question: str) -> ReponseCascade:
             texte=depuis_cache.texte, etage_resolveur=ETAGE_CACHE, routage_log_id=routage_log_id,
         )
 
-    decision = classer_demande(question, ctx)
+    if decision is None:
+        decision = classer_demande(question, ctx)
     cascade_remontee = False
     etage_resolveur = ETAGE_RAISONNEMENT
     chiffree = None
