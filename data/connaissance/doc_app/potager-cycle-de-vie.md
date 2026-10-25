@@ -16,7 +16,7 @@ index_terms:
 **Intention :** procédure
 **On parle aussi de :** deuxième jardin ; changer de potager ; jardin familial ; potager actif ; basculer
 
-Plusieurs potagers peuvent coexister sur un même compte : le jardin de la maison et celui des parents, par exemple. À tout moment, un seul est actif, et c'est lui que visent les gestes enregistrés comme les questions posées. Basculer de l'un à l'autre est un geste explicite, jamais automatique : rien ne se mélange entre deux jardins, ni les parcelles, ni les cultures, ni l'historique.
+Plusieurs potagers peuvent coexister sur un même compte : le jardin de la maison et celui des parents, par exemple. À tout moment, un seul est actif, et c'est lui que visent les gestes enregistrés comme les questions posées. Basculer de l'un à l'autre est un geste explicite, jamais automatique : rien ne se mélange entre deux jardins, ni les parcelles, ni les cultures, ni l'historique. On peut demander au compagnon « quel est mon potager actif ? » ou « sur quel potager je suis ? » : il répond par le nom du potager actif et, si l'on en a plusieurs, cite les autres avec la commande /potager pour changer. « Combien de potagers j'ai ? » donne leur nombre et leurs noms. Seuls les potagers auxquels on a accès sont cités.
 
 ## À quoi sert l'archivage d'un potager
 

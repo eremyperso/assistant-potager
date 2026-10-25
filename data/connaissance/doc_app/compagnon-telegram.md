@@ -92,3 +92,53 @@ Chaque geste a sa propre échéance : confirmer un geste ne prolonge pas les aut
 Tout enregistrement passe aujourd'hui par la conversation : c'est elle qui relit le geste et demande la confirmation. Un jardinier qui n'a pas activé son compagnon de terrain peut donc tout consulter depuis l'application web — plan, stocks, pépinière, calendriers — mais rien y inscrire.
 
 Les boutons d'action fonctionnent quand même : le geste est **déposé dans la file**, et l'application invite alors à activer le compagnon pour pouvoir le confirmer. On prépare sa journée d'abord, on active une fois — rien n'est perdu entre les deux. La file se consulte aussi depuis l'application, qui montre en permanence combien de gestes attendent et permet d'en retirer un ; c'est le seul endroit où l'on ne peut pas les confirmer.
+
+## Dire une commande avec ses mots, négations comprises
+
+**Intention :** comprendre
+**On parle aussi de :** le bot ne comprend pas ma phrase ; tournure exacte ; dire autrement ; n'est plus une pépinière ; retirer un réglage
+
+Une commande de gestion n'exige plus la tournure exacte que le bot attendait. « Ma serre extérieure n'est plus une pépinière », « enlève l'abri de la planche nord » ou « la planche nord a maintenant 6 rangs » sont comprises comme les commandes qu'elles désignent, y compris quand la phrase dit un retrait ou une négation. Cette compréhension est mise en service progressivement : tant qu'elle ne l'est pas sur votre potager, le compagnon se comporte comme avant.
+
+Rien ne change dans la façon de valider. Le compagnon propose ce qu'il a compris, en clair et champ par champ (« Je retire le statut pépinière de Serre extérieure »), avec la commande tapée équivalente, et n'écrit rien avant votre confirmation. Il ne devine jamais une parcelle : un nom approchant (« la serre ») vous est proposé, à vous de le choisir. Il ne devine jamais un nombre non plus : une longueur ou un nombre de rangs doit avoir été dit, en chiffres ou en lettres. Et il ne modifie que ce dont la phrase parle : dire « mets la serre en pépinière » ne la déclare ni chaude ni froide.
+
+Une phrase qui commence comme un geste au jardin (« paille la planche nord », « retire le paillage… ») est encore lue comme un geste à enregistrer, pas comme un réglage de la parcelle : pour changer ce réglage, dites plutôt « la planche nord n'est pas paillée », ou tapez la commande /parcelle modifier.
+
+## Le compagnon demande une précision ou ne sait pas faire
+
+**Intention :** comprendre
+**On parle aussi de :** je ne sais pas encore faire ça ; il me pose une question ; demande trop vague ; export Excel ; fonction qui n'existe pas ; le bot répond à côté ; je n'ai pas réussi à traiter cette demande ; il m'a montré mes lots de pépinière au lieu de créer ma planche
+
+Là où la compréhension des phrases est en service, le compagnon commence par décider ce qu'est votre phrase, d'après sa construction et non d'après un mot isolé : une commande, une question, un geste au jardin, une demande incomplète, ou une demande qu'il ne sait pas traiter. « La serre est une pépinière » est une commande ; « la serre est-elle une pépinière ? » est une question, qui reçoit une réponse et jamais une proposition de modification.
+
+Quand il manque une information, il vous la demande au lieu de la deviner. « Modifie ma serre » reçoit « que veux-tu modifier ? » ; « passe la planche près des tomates sous abri » reçoit « laquelle ? ». Rien n'est proposé ni enregistré tant que la demande reste incomplète : redites-la en entier, avec ce qui manquait.
+
+Quand la demande dépasse ce que l'application sait faire — « exporte l'historique en Excel », par exemple — le compagnon répond « Je ne sais pas encore faire ça », avec ce qu'il a compris de la demande, plutôt que de montrer une liste sans rapport. La demande est notée pour orienter les prochaines évolutions.
+
+Quand une demande qui commence par un verbe d'action (« crée… », « supprime… », « mets… ») n'a pas pu être traitée — le compagnon ne l'a pas comprise, ou il est momentanément indisponible —, il vous le dit : « Je n'ai pas réussi à traiter cette demande », rien n'a été fait, avec la commande à taper à la place (par exemple /parcelle ajouter). Il ne répond plus par une liste sans rapport, comme celle des lots en pépinière à qui demandait de créer une planche.
+
+Une question sur la façon de faire reste servie directement par ce guide, sans détour.
+
+## Dire plusieurs demandes en une seule phrase
+
+**Intention :** comprendre
+**On parle aussi de :** plusieurs commandes d'un coup ; créer une planche et la régler ; tout confirmer ; une étape a échoué ; étape non exécutée ; compte rendu
+
+Là où la compréhension des phrases est en service, une seule phrase peut porter plusieurs demandes sur les parcelles : « crée la planche nord, 8 mètres de long avec 4 rangs, et mets la serre en pépinière froide ». Le compagnon présente alors un plan : les étapes numérotées, dans l'ordre où vous les avez dites, chacune avec la commande tapée équivalente, et un seul bouton « Tout confirmer » à côté d'« Annuler ». Rien n'est écrit avant votre confirmation. Une étape peut porter sur une planche créée plus tôt dans la même phrase, à condition de la nommer.
+
+Seules la création d'une parcelle et la modification de ses caractéristiques entrent dans un plan. Une suppression, un renommage, un semis ou un lot restent des demandes à dire seules : si la phrase en contient une, le compagnon répond « je ne sais faire celle-ci que seule » et n'exécute rien. Si une planche à créer existe déjà, le plan le signale (« elle existe déjà, je passe à l'étape suivante ? ») : la confirmer saute cette étape au lieu de créer un double.
+
+Après « Tout confirmer », les étapes s'exécutent une par une, chacune revérifiée juste avant, car le potager a pu changer entre-temps. La première étape refusée arrête la suite. Le compte rendu marque chaque étape : ✅ faite, ❌ refusée avec la raison donnée, ⏭ non exécutée. Ce qui a été fait reste fait, sans retour en arrière : redites seulement la suite, une fois la cause corrigée.
+
+## Corriger ou prolonger sa dernière demande
+
+**Intention :** comprendre
+**On parle aussi de :** non, l'autre ; et la planche sud aussi ; corriger la proposition du bot ; compléter ma demande ; répondre sans tout redire ; changer de parcelle après la proposition
+
+Là où la compréhension des phrases est en service, une proposition du compagnon se corrige ou se prolonge en répondant, sans redire toute la demande. Il lit pour cela la proposition en attente et vos trois derniers échanges, résumés, jamais toute la conversation.
+
+« Non, l'autre » après un choix entre deux parcelles voisines propose l'autre. S'il y en a plusieurs, le compagnon demande laquelle ; il ne repropose jamais un nom que vous venez de laisser de côté. Il ne choisit pas à votre place : l'autre parcelle vous est proposée, à vous de la valider d'un bouton.
+
+« Et la planche sud aussi », après « passe la planche nord à 6 rangs », donne un plan de deux étapes, la planche nord puis la planche sud à 6 rangs, à confirmer en une fois par « Tout confirmer ». Les valeurs que vous avez déjà dites sont reprises ; une valeur que vous n'avez dite nulle part ne l'est jamais.
+
+La nouvelle proposition remplace l'ancienne : les boutons de l'ancien message ne valident plus rien, et rien n'est enregistré avant votre nouvelle confirmation. Passé cinq minutes sans réponse, la proposition expire et votre phrase suivante est une demande nouvelle. Ce contexte est propre à vous et à votre potager : un autre membre du potager ne le voit pas, et il ne suit pas un changement de potager.

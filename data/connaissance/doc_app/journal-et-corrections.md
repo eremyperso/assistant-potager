@@ -18,6 +18,8 @@ index_terms:
 
 Le journal liste tout ce qui a été enregistré, du plus récent au plus ancien, groupé par journée. Il se parcourt page par page, vingt gestes à la fois, et se filtre par type de geste, par culture ou par date. Depuis le compagnon de terrain, une demande directe — « quand ai-je planté les courgettes ? » — évite d'avoir à faire défiler quoi que ce soit.
 
+Le compagnon répond aussi, en une phrase et sans appel au modèle, aux questions de compte et de période posées au carnet : combien de fois un geste a été fait (« combien de fois j'ai arrosé les tomates ce mois-ci »), la liste des occurrences d'un type de geste (« quels traitements ai-je faits sur les tomates »), ou ce qui s'est fait sur une période (« qu'ai-je fait hier », « cette semaine », « le 4 mars »). Sans période citée, le compte porte sur la saison en cours et le récapitulatif sur les sept derniers jours : la réponse le dit. Une période sans geste reçoit la réponse « rien d'enregistré ». Au-delà de quinze gestes, la réponse résume par type de geste et renvoie vers l'historique de l'application.
+
 Le journal s'ouvre aussi **déjà filtré** depuis un autre écran : le lien « Tout voir » de la carte « Sol et entretien » d'une parcelle l'ouvre sur cette planche et sur ses seuls gestes de sol. Le filtre posé par un lien est alors **nommé en haut de la liste** — « Filtré sur la parcelle planche du nord et les gestes de sol et d'entretien » — et se retire d'un appui : une liste plus courte ne reste jamais inexpliquée.
 
 ## Corriger un geste mal compris

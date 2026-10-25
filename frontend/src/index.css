@@ -273,6 +273,7 @@
   .part-pl { background: var(--brand-deep); }
   .part-go { background: var(--god); }
   .part-le { background: radial-gradient(var(--sem-d) 1px, transparent 1.4px) 0 0 / 5px 5px, var(--sem); }
+  .part-ge { background: radial-gradient(var(--sem) 1px, transparent 1.4px) 0 0 / 5px 5px, var(--sem-s); }
   .part-vd { background: var(--blue); }
   .part-pe { background: var(--red); }
   .part-nl { background: repeating-linear-gradient(45deg, var(--border) 0 3px, var(--txt3) 3px 4.5px); }

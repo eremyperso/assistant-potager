@@ -1,0 +1,94 @@
+question,attendu,statut
+combien de haricots ai-je récoltés ?,total_recolte,couvert
+combien de courgettes récoltées cet été ?,total_recolte,couvert
+combien de kg de haricots récoltés cette année,total_recolte,couvert
+quand ai-je semé les carottes ?,derniere_occurrence,couvert
+quand ai-je planté les tomates ?,derniere_occurrence,couvert
+quand ai-je arrosé les tomates pour la dernière fois ?,derniere_occurrence,couvert
+il me reste combien de carottes ?,stock_courant,couvert
+combien de graines de fraise il me reste ?,stock_courant,couvert
+combien de pieds de haricot ?,pieds_actifs,couvert
+combien de plants de tomate j'ai ?,pieds_actifs,couvert
+où en sont mes haricots ?,rendement_saison,couvert
+quel est le rendement de la saison ?,rendement_global,couvert
+quel est mon stock ?,stock_global,couvert
+qu'est-ce qu'il y a en pépinière ?,pepiniere,couvert
+combien de godets de fraise ?,godets_produits,couvert
+quelles parcelles sont libres ?,parcelles_libres,couvert
+j'ai combien de parcelle vide ?,parcelles_libres,couvert
+où sont mes haricots ?,parcelles_par_culture,couvert
+sur quelles parcelles je trouve des haricots ?,parcelles_par_culture,couvert
+qu'y a-t-il sur la parcelle NORD ?,occupation_parcelle,couvert
+qu'est-ce qu'il y a dans la parcelle nord,occupation_parcelle,couvert
+qu'avais-je noté sur les haricots ?,notes_culture,couvert
+combien de parcelle ?,liste_parcelles,couvert
+sur ce potager je dispose de combien de parcelles ?,liste_parcelles,couvert
+affiche moi mes parcelles,liste_parcelles,couvert
+quelles sont mes parcelles ?,liste_parcelles,couvert
+nombre de parcelles,liste_parcelles,couvert
+quel est le type de sol de la parcelle NORD ?,attributs_parcelle,couvert
+quel sol a la parcelle sud,attributs_parcelle,couvert
+combien de rangs a la parcelle NORD ?,attributs_parcelle,couvert
+quelle est l'exposition de la parcelle NORD ?,attributs_parcelle,couvert
+quelle est la longueur de la parcelle nord,attributs_parcelle,couvert
+quel ensoleillement pour la parcelle nord,attributs_parcelle,couvert
+la parcelle nord est-elle paillée ?,attributs_parcelle,couvert
+la parcelle sud est-elle sous abri ?,attributs_parcelle,couvert
+la serre est-elle une pépinière ?,attributs_parcelle,couvert
+quelles sont mes pépinières ?,parcelles_filtrees,couvert
+liste mes pépinières,parcelles_filtrees,couvert
+quelles parcelles sont paillées ?,parcelles_filtrees,couvert
+quelles parcelles sont à l'ombre ?,parcelles_filtrees,couvert
+quelles parcelles sont sous abri ?,parcelles_filtrees,couvert
+quelles cultures j'ai en place ?,cultures_en_place,couvert
+qu'est-ce que je cultive en ce moment ?,cultures_en_place,couvert
+liste mes cultures,cultures_en_place,couvert
+quelles sont mes cultures,cultures_en_place,couvert
+quelles variétés de tomate j'ai ?,varietes_culture,couvert
+combien de variétés de tomates ?,varietes_culture,couvert
+mes variétés de haricot,varietes_culture,couvert
+quelles variétés de tomate ai-je en place ?,varietes_culture,couvert
+combien d'arrosages ce mois-ci ?,nombre_occurrences,couvert
+combien de fois j'ai arrosé les tomates ?,nombre_occurrences,couvert
+quels traitements ai-je faits sur les haricots ?,historique_action,couvert
+combien de pertes de carottes ?,nombre_occurrences,couvert
+qu'ai-je fait hier ?,journal_periode,couvert
+qu'est-ce que j'ai fait cette semaine ?,journal_periode,couvert
+quelle culture a le plus produit ?,classement_recoltes,couvert
+quelle est ma meilleure récolte ?,classement_recoltes,couvert
+quel est mon potager actif ?,potager_actif,couvert
+comment s'appelle mon potager ?,potager_actif,couvert
+combien de potagers j'ai ?,potager_actif,couvert
+comment amender le sol de la parcelle nord ?,aucune,couvert
+comment cultiver les tomates ?,aucune,couvert
+quelles variétés de tomate planter ?,aucune,couvert
+quelles variétés de tomate résistent au mildiou ?,aucune,couvert
+pourquoi mes haricots jaunissent ?,aucune,couvert
+comment arroser les tomates ?,aucune,couvert
+comment organiser mes parcelles ?,aucune,couvert
+quelles plantes aiment l'ombre ?,aucune,couvert
+qu'est-ce que le paillage ?,aucune,couvert
+comment pailler la parcelle nord ?,aucune,couvert
+quand récolter mes carottes ?,aucune,couvert
+quels semis sont prêts à repiquer ?,aucune,couvert
+exporte-moi tout l'historique en Excel,aucune,couvert
+combien de fois j'ai arrosé les haricots ?,nombre_occurrences,couvert
+combien de fois j'ai arrosé cette semaine,nombre_occurrences,couvert
+combien d'arrosages de tomate cette saison ?,nombre_occurrences,couvert
+nombre de désherbages ce mois-ci,nombre_occurrences,couvert
+quels arrosages j'ai faits sur les tomates ?,historique_action,couvert
+liste mes traitements,historique_action,couvert
+quels traitements j'ai faits ce mois-ci ?,historique_action,couvert
+qu'est-ce que j'ai fait aujourd'hui ?,journal_periode,couvert
+qu'est-ce que j'ai fait la semaine dernière ?,journal_periode,couvert
+qu'est-ce que j'ai fait ?,journal_periode,couvert
+qu'ai-je fait sur les tomates cette semaine ?,journal_periode,couvert
+comment traiter le mildiou de la tomate ?,aucune,couvert
+quand faut-il arroser les tomates ?,aucune,couvert
+quelle culture a le plus produit cette année ?,classement_recoltes,couvert
+combien de kg ai-je récoltés cette année ?,classement_recoltes,couvert
+combien de kilos j'ai récoltés cette saison ?,classement_recoltes,couvert
+c'est quoi ma meilleure récolte ?,classement_recoltes,couvert
+sur quel potager je suis ?,potager_actif,couvert
+quel est mon potager ?,potager_actif,couvert
+quels conseils pour mon potager actif ?,aucune,couvert

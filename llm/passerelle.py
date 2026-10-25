@@ -38,6 +38,15 @@ Ce que la passerelle garantit
 * **CA13** — les journaux de la passerelle ne portent que des métadonnées de
   consommation : jamais de clé, jamais de secret, jamais le contenu d'un prompt
   ou d'un `texte_original`.
+* **US-233** — `appeler_chat_outils()` : même passerelle, même type d'appel
+  imputé (`agent`), même journal, même consommation, même repli 429, mais avec
+  des outils typés (*function calling*) et le retour des appels d'outils. Un
+  modèle qui ne gère pas les outils est détecté au premier appel et mémorisé : il
+  rend un statut, jamais une exception brute du SDK.
+* **Mistral** — un modèle préfixé `mistral/` dans `GROQ_MODEL_<TYPE>` est servi
+  par l'API Mistral (compatible OpenAI, clé `MISTRAL_API_KEY`) avec le même SDK :
+  mêmes exceptions, même mesure, même repli. Basculer un type d'appel reste une
+  opération de configuration.
 
 Ce que la passerelle ne fait PAS
 --------------------------------
@@ -48,8 +57,8 @@ Ce que la passerelle ne fait PAS
   sans quoi la saturation que cette US existe pour rendre visible resterait
   invisible.
 * Aucun BYOK : `_resoudre_client()` est le point d'extension prévu pour
-  « quel client pour ce potager ? » (US-143) ; il retourne aujourd'hui toujours
-  le client plateforme.
+  « quel client pour ce potager ? » (US-143) ; il retourne aujourd'hui le client
+  plateforme du fournisseur qui sert le modèle (Groq ou Mistral).
 
 Ordre de grandeur de consommation avant / après (CA7)
 ------------------------------------------------------
@@ -61,6 +70,7 @@ mesurable vient du cache de prompt (CA6), désormais visible appel par appel.
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -77,6 +87,8 @@ from app.config import (
     GROQ_REASONING_EFFORT,
     GROQ_RETRY_MAX_S,
     GROQ_TIMEOUT_S,
+    MISTRAL_API_KEY,
+    MISTRAL_BASE_URL,
 )
 from database.db import SessionLocal
 from database.models import ConsoTokens
@@ -92,9 +104,11 @@ TYPE_PARSING        = "parsing"
 TYPE_QUESTION       = "question"
 TYPE_SYNTHESE       = "synthese"
 TYPE_TRANSCRIPTION  = "transcription"
+TYPE_AGENT          = "agent"            # [US-233 / CA2] interprétation par appel d'outils
 
 TYPES_APPEL: frozenset[str] = frozenset({
     TYPE_CLASSIFICATION, TYPE_PARSING, TYPE_QUESTION, TYPE_SYNTHESE, TYPE_TRANSCRIPTION,
+    TYPE_AGENT,
 })
 
 # Valeurs de la colonne `conso_tokens.issue` [CA5]
@@ -173,6 +187,36 @@ class ReponseLLM:
         return self.tokens_in + self.tokens_out
 
 
+# [US-233 / CA1, CA4] Issue d'un appel avec outils. Seul `ok` porte des appels.
+STATUT_OK            = "ok"
+STATUT_SANS_OUTILS   = "outils_non_supportes"   # le modèle (ou son tool_choice) refuse les outils
+STATUT_APPEL_INVALIDE = "appel_invalide"        # le modèle a produit un appel d'outil malformé
+
+
+@dataclass(frozen=True)
+class AppelOutil:
+    """Un appel d'outil demandé par le modèle — une PROPOSITION, rien n'est exécuté."""
+
+    nom: str
+    arguments: dict
+    #: False si les arguments renvoyés ne sont pas un objet JSON lisible ; `arguments`
+    #: vaut alors `{}`. L'appelant ne doit jamais traiter ce cas comme « aucun argument ».
+    arguments_valides: bool = True
+    id: str = ""
+
+
+@dataclass(frozen=True)
+class ReponseOutils(ReponseLLM):
+    """[US-233 / CA1] Réponse d'un appel avec outils : le texte, plus les appels."""
+
+    appels: tuple[AppelOutil, ...] = ()
+    statut: str = STATUT_OK
+
+    @property
+    def ok(self) -> bool:
+        return self.statut == STATUT_OK
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # [CA11] En-têtes de limitation de débit — lus au niveau transport
 # -----------------------------------------------------------------------------
@@ -243,13 +287,94 @@ def _creer_client_plateforme() -> Groq:
 _client = _creer_client_plateforme()
 
 
-def _resoudre_client(ctx: TenantContext) -> Groq:
+# ─────────────────────────────────────────────────────────────────────────────
+# Fournisseur Mistral — même SDK, même mesure, même repli
+# -----------------------------------------------------------------------------
+# L'API Mistral est compatible OpenAI : le client Groq lui parle tel quel, à un
+# détail près — le SDK préfixe ses routes de `/openai` (`/openai/v1/chat/...`),
+# Mistral les sert sous `/v1`. Un hook httpx réécrit le chemin. Les erreurs
+# restent donc des `groq.*Error` (429, 5xx, délai) : quota, nouvelle tentative et
+# mesure sont ceux de tous les types d'appel, sans second jeu d'exceptions.
+# Le modèle est mesuré et journalisé AVEC son préfixe : `conso_tokens` dit qui l'a servi.
+# ─────────────────────────────────────────────────────────────────────────────
+PREFIXE_MISTRAL = "mistral/"
+
+_client_mistral: Optional[Groq] = None
+
+
+def _est_mistral(modele: str) -> bool:
+    return modele.startswith(PREFIXE_MISTRAL)
+
+
+def _modele_envoye(modele: str) -> str:
+    """Identifiant attendu par le fournisseur : sans le préfixe de routage."""
+    return modele[len(PREFIXE_MISTRAL):] if _est_mistral(modele) else modele
+
+
+def _reecrire_chemin_mistral(requete) -> None:
+    """Hook httpx — `/openai/v1/...` (route du SDK Groq) → `/v1/...` (route Mistral)."""
+    chemin = requete.url.path
+    if chemin.startswith("/openai/v1/"):
+        requete.url = requete.url.copy_with(path=chemin[len("/openai"):])
+
+
+def _client_pour_mistral() -> Groq:
+    """Client Mistral, créé au premier appel. Sans clé : indisponibilité typée,
+    que l'appelant rattrape comme un 429 — jamais un repli muet sur Groq."""
+    global _client_mistral
+    if not MISTRAL_API_KEY:
+        raise FournisseurLLMIndisponibleError("MISTRAL_API_KEY absente : modèle mistral/ inutilisable")
+    if _client_mistral is None:
+        import httpx
+
+        _client_mistral = Groq(
+            api_key=MISTRAL_API_KEY,
+            base_url=MISTRAL_BASE_URL,
+            max_retries=0,
+            timeout=GROQ_TIMEOUT_S,
+            http_client=httpx.Client(
+                timeout=GROQ_TIMEOUT_S,
+                event_hooks={
+                    "request": [_reecrire_chemin_mistral],
+                    "response": [_capturer_entetes_debit],
+                },
+            ),
+        )
+    return _client_mistral
+
+
+def _adapter_pour_mistral(kwargs: dict) -> dict:
+    """Écarts de l'API Mistral avec Groq, corrigés à la sortie :
+    * `tool_choice="required"` s'y écrit `"any"` ;
+    * une conversation ne peut pas finir sur un message `system` (prompt seul) ;
+    * un message assistant porteur d'appels d'outils veut un contenu texte, pas `None`."""
+    adapte = dict(kwargs)
+    if adapte.get("tool_choice") == "required":
+        adapte["tool_choice"] = "any"
+    messages = [dict(m) for m in adapte.get("messages", [])]
+    if messages and messages[-1].get("role") == "system":
+        messages[-1]["role"] = "user"
+    for message in messages:
+        if message.get("role") == "assistant" and message.get("content") is None:
+            message["content"] = ""
+    adapte["messages"] = messages
+    return adapte
+
+
+def _preparer_requete(kwargs: dict, modele: str) -> dict:
+    """Paramètres envoyés au fournisseur qui sert `modele`."""
+    kwargs = dict(kwargs, model=_modele_envoye(modele))
+    return _adapter_pour_mistral(kwargs) if _est_mistral(modele) else kwargs
+
+
+def _resoudre_client(ctx: TenantContext, modele: str = "") -> Groq:
     """Point d'extension « quel client pour ce potager ? » (US-143 — BYOK).
 
-    Retourne aujourd'hui **toujours** le client plateforme : la clé propre à un
-    potager n'existe pas encore. La fonction est déjà là pour que le branchement
-    d'un modèle tiers reste un changement local à la passerelle.
+    Le fournisseur se lit sur le modèle : `mistral/…` → client Mistral, sinon le
+    client plateforme Groq. La clé propre à un potager n'existe pas encore.
     """
+    if _est_mistral(modele):
+        return _client_pour_mistral()
     return _client
 
 
@@ -327,14 +452,17 @@ def _enregistrer_conso(
 def _journaliser(
     ctx: TenantContext, appel_type: str, modele: str,
     tokens_in: int, tokens_out: int, tokens_cache: int,
-    latence_ms: int, issue: str,
+    latence_ms: int, issue: str, detail: str = "",
 ) -> None:
     """[CA7, CA11, CA13] Journal de consommation — métadonnées uniquement.
-    Aucun prompt, aucun contenu utilisateur, aucune clé n'y transite."""
+    Aucun prompt, aucun contenu utilisateur, aucune clé n'y transite.
+
+    `detail` : précision d'une issue en échec (US-233 — statut d'un appel d'outils),
+    jamais un contenu."""
     log.info(
-        "🔌 LLM %-14s │ modele=%s │ potager=%s │ in=%d out=%d cache=%d │ %d ms │ issue=%s",
+        "🔌 LLM %-14s │ modele=%s │ potager=%s │ in=%d out=%d cache=%d │ %d ms │ issue=%s%s",
         appel_type, modele, ctx.potager_id, tokens_in, tokens_out,
-        tokens_cache, latence_ms, issue,
+        tokens_cache, latence_ms, issue, f" ({detail})" if detail else "",
     )
     if _derniers_entetes_debit:
         log.info("📉 LLM DEBIT       │ %s", _derniers_entetes_debit)
@@ -447,10 +575,46 @@ def _executer_avec_repli(appel, ctx: TenantContext, appel_type: str, modele: str
 # raisonnement : passer `reasoning_effort` leur fait renvoyer une erreur 400
 # "reasoning_effort is not supported". Comme `reasoning=True` est le défaut de
 # la plupart des appels (voir `appeler_chat`), basculer un type d'appel dessus
-# via `GROQ_MODEL_<TYPE>` casserait sans cette exemption.
+# via `GROQ_MODEL_<TYPE>` casserait sans cette exemption. Même exemption pour
+# les modèles `mistral/` : l'API Mistral ne connaît pas ce paramètre.
 # ─────────────────────────────────────────────────────────────────────────────
 def _accepte_reasoning_effort(modele: str) -> bool:
-    return not modele.startswith("groq/compound")
+    return not (modele.startswith("groq/compound") or _est_mistral(modele))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Étapes communes aux appels de chat (avec ou sans outils)
+# ─────────────────────────────────────────────────────────────────────────────
+def _construire_messages(
+    prompt_fixe: str, prompt_variable: str,
+    message_utilisateur: Optional[str], role_prompt: str = "system",
+) -> list[dict]:
+    """[CA6] Partie fixe en tête, variables ensuite, message utilisateur à part."""
+    contenu_prompt = prompt_fixe + prompt_variable
+    if message_utilisateur is None:
+        return [{"role": role_prompt, "content": contenu_prompt}]
+    return [
+        {"role": "system", "content": contenu_prompt},
+        {"role": "user",   "content": message_utilisateur},
+    ]
+
+
+def _clore_appel(
+    ctx: TenantContext, appel_type: str, modele: str, chat, latence_ms: int,
+) -> tuple[int, int, int]:
+    """Mesure, journalise et impute un appel de chat RÉUSSI (CA5, CA7), puis
+    alimente l'accumulateur de cascade. Retourne (tokens_in, tokens_out, tokens_cache)."""
+    tokens_in, tokens_out, tokens_cache = _mesurer(getattr(chat, "usage", None))
+    _journaliser(ctx, appel_type, modele, tokens_in, tokens_out, tokens_cache, latence_ms, ISSUE_OK)
+    _enregistrer_conso(ctx, appel_type, modele, tokens_in, tokens_out, tokens_cache,
+                       latence_ms, ISSUE_OK)
+
+    # [US-097 / CA5] Alimente l'accumulateur de cascade s'il est armé — voir
+    # demarrer_mesure_cascade(). N'a aucun effet hors d'une cascade en cours.
+    accumulateur = _accumulateur_cascade.get()
+    if accumulateur is not None:
+        accumulateur[0] += tokens_in + tokens_out
+    return tokens_in, tokens_out, tokens_cache
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -482,16 +646,9 @@ def appeler_chat(
     """
     ctx = _valider_appel(appel_type, ctx)
     modele = modele_pour(appel_type)
-    client = _resoudre_client(ctx)
+    client = _resoudre_client(ctx, modele)
 
-    contenu_prompt = prompt_fixe + prompt_variable
-    if message_utilisateur is None:
-        messages = [{"role": role_prompt, "content": contenu_prompt}]
-    else:
-        messages = [
-            {"role": "system", "content": contenu_prompt},
-            {"role": "user",   "content": message_utilisateur},
-        ]
+    messages = _construire_messages(prompt_fixe, prompt_variable, message_utilisateur, role_prompt)
 
     kwargs = {
         "model": modele,
@@ -504,19 +661,10 @@ def appeler_chat(
         kwargs["reasoning_effort"] = GROQ_REASONING_EFFORT
 
     chat, latence_ms = _executer_avec_repli(
-        lambda: client.chat.completions.create(**kwargs), ctx, appel_type, modele
+        lambda: client.chat.completions.create(**_preparer_requete(kwargs, modele)), ctx, appel_type, modele
     )
 
-    tokens_in, tokens_out, tokens_cache = _mesurer(getattr(chat, "usage", None))
-    _journaliser(ctx, appel_type, modele, tokens_in, tokens_out, tokens_cache, latence_ms, ISSUE_OK)
-    _enregistrer_conso(ctx, appel_type, modele, tokens_in, tokens_out, tokens_cache,
-                       latence_ms, ISSUE_OK)
-
-    # [US-097 / CA5] Alimente l'accumulateur de cascade s'il est armé — voir
-    # demarrer_mesure_cascade(). N'a aucun effet hors d'une cascade en cours.
-    accumulateur = _accumulateur_cascade.get()
-    if accumulateur is not None:
-        accumulateur[0] += tokens_in + tokens_out
+    tokens_in, tokens_out, tokens_cache = _clore_appel(ctx, appel_type, modele, chat, latence_ms)
 
     contenu = chat.choices[0].message.content
     return ReponseLLM(
@@ -527,6 +675,202 @@ def appeler_chat(
         tokens_out   = tokens_out,
         tokens_cache = tokens_cache,
         latence_ms   = latence_ms,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API publique — chat avec outils [US-233 / CA1, CA4]
+# -----------------------------------------------------------------------------
+# Le modèle PROPOSE des appels d'outils typés ; la passerelle les rend tels
+# quels et n'en exécute aucun. Deux échecs propres à cette famille d'appels ne
+# sont pas des indisponibilités et ne lèvent donc pas d'exception :
+#   * le modèle ne gère pas les outils (ou refuse `tool_choice`) — détecté au
+#     premier appel, MÉMORISÉ : les appels suivants ne coûtent plus un aller-retour ;
+#   * le modèle a produit un appel malformé (`tool_use_failed`) — un résultat de
+#     mesure, pas une panne.
+# Quota, délai et panne fournisseur restent ceux de tous les types d'appel.
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class _EchecOutils:
+    """Marqueur interne : un 400 propre aux outils, sorti de la boucle de repli."""
+
+    statut: str
+
+
+#: (clé du client, modèle) → False quand ce modèle a refusé les outils. Seuls les
+#: refus sont mémorisés : un modèle qui les gère n'a rien à retenir.
+_CAPACITE_OUTILS: dict[tuple[str, str], bool] = {}
+
+
+def reinitialiser_capacites_outils() -> None:
+    """Oublie les modèles mémorisés comme « sans outils » (changement de clé, tests)."""
+    _CAPACITE_OUTILS.clear()
+
+
+def _cle_capacite(client: Groq, ctx: TenantContext, modele: str) -> tuple[str, str]:
+    """Un client propre à un potager (BYOK, US-143) a sa propre capacité : le même
+    modèle peut être gelé chez l'un et pas chez l'autre."""
+    return ("plateforme" if client in (_client, _client_mistral) else f"potager:{ctx.potager_id}", modele)
+
+
+def _statut_echec_outils(erreur: Exception) -> Optional[str]:
+    """Reconnaît les deux 400 propres aux outils ; None pour toute autre erreur.
+
+    Le SDK range le détail dans `body` (parfois sous la clé `error`). On lit le
+    code d'abord, le texte ensuite, car les fournisseurs ne disent pas « outils
+    non supportés » d'une seule façon.
+    """
+    corps = getattr(erreur, "body", None)
+    detail = corps.get("error", corps) if isinstance(corps, dict) else {}
+    if not isinstance(detail, dict):
+        detail = {}
+    if str(detail.get("code", "")).lower() == "tool_use_failed":
+        return STATUT_APPEL_INVALIDE
+    message = (str(detail.get("message", "")) or str(erreur)).lower()
+    if ("tool" in message or "function" in message) and any(
+        marque in message
+        for marque in ("not support", "unsupported", "does not support", "not available")
+    ):
+        return STATUT_SANS_OUTILS
+    return None
+
+
+#: [INC-018] Longueur gardée de la génération rejetée dans le journal.
+_LONGUEUR_GENERATION_REJETEE = 600
+
+
+def _generation_rejetee(erreur: Exception) -> str:
+    """[INC-018] Ce que le modèle a tenté d'appeler quand le serveur a refusé l'appel
+    (`failed_generation` du 400 `tool_use_failed`), tronqué. Vide si absent."""
+    corps = getattr(erreur, "body", None)
+    detail = corps.get("error", corps) if isinstance(corps, dict) else {}
+    generation = detail.get("failed_generation") if isinstance(detail, dict) else None
+    texte = " ".join(str(generation or "").split())
+    if len(texte) > _LONGUEUR_GENERATION_REJETEE:
+        texte = texte[:_LONGUEUR_GENERATION_REJETEE] + "…"
+    return texte
+
+
+def _extraire_appels(message) -> tuple[AppelOutil, ...]:
+    """Appels d'outils du message du modèle. Un argument illisible n'est jamais
+    pris pour « aucun argument » : il est signalé (`arguments_valides=False`)."""
+    appels = []
+    for brut in getattr(message, "tool_calls", None) or []:
+        fonction = getattr(brut, "function", None)
+        texte = getattr(fonction, "arguments", None)
+        arguments: dict = {}
+        valides = True
+        if isinstance(texte, dict):
+            arguments = texte
+        elif isinstance(texte, str) and texte.strip():
+            try:
+                lu = json.loads(texte)
+            except ValueError:
+                lu = None
+            if isinstance(lu, dict):
+                arguments = lu
+            else:
+                valides = False
+        elif texte not in (None, ""):
+            valides = False
+        appels.append(AppelOutil(
+            nom=str(getattr(fonction, "name", "") or ""),
+            arguments=arguments,
+            arguments_valides=valides,
+            id=str(getattr(brut, "id", "") or ""),
+        ))
+    return tuple(appels)
+
+
+def appeler_chat_outils(
+    *,
+    ctx: Optional[TenantContext],
+    outils: list[dict],
+    prompt_fixe: str,
+    prompt_variable: str = "",
+    message_utilisateur: Optional[str] = None,
+    historique: Optional[list[dict]] = None,
+    tool_choice: "str | dict" = "required",
+    appel_type: str = TYPE_AGENT,
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+    reasoning: bool = True,
+) -> ReponseOutils:
+    """Appel de chat avec outils typés (*function calling*) — le modèle propose.
+
+    `outils` : schémas au format OpenAI (`{"type": "function", "function": {...}}`).
+    `tool_choice` : `"required"` par défaut — à cet étage le modèle choisit
+    TOUJOURS un outil, il ne répond jamais en texte libre (architecture §3.3).
+    `historique` [US-237] : les tours précédents de la boucle bornée (appels de
+    l'assistant, résultats des outils de lecture), ajoutés après la phrase ; le
+    préfixe (système, phrase) reste identique d'un tour à l'autre.
+
+    Retourne une `ReponseOutils`. `statut` vaut `ok`, ou `outils_non_supportes` /
+    `appel_invalide` (alors sans appels, jamais d'exception brute du SDK). Lève
+    `ContexteAppelManquantError` pour un appel non imputable (CA2) et
+    `LLMIndisponibleError` pour quota / délai / panne, comme `appeler_chat`.
+    """
+    if not outils:
+        raise ValueError("appeler_chat_outils exige au moins un outil")
+    ctx = _valider_appel(appel_type, ctx)
+    modele = modele_pour(appel_type)
+    client = _resoudre_client(ctx, modele)
+
+    cle = _cle_capacite(client, ctx, modele)
+    if _CAPACITE_OUTILS.get(cle) is False:
+        log.info("🔌 LLM %-14s │ modele=%s │ outils refusés (mémorisé) → aucun appel réseau",
+                 appel_type, modele)
+        return ReponseOutils(texte="", modele=modele, appel_type=appel_type,
+                             statut=STATUT_SANS_OUTILS)
+
+    kwargs = {
+        "model": modele,
+        "messages": _construire_messages(prompt_fixe, prompt_variable, message_utilisateur)
+                    + list(historique or []),
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+        "tools": outils,
+        "tool_choice": tool_choice,
+    }
+    if reasoning and GROQ_REASONING_EFFORT and _accepte_reasoning_effort(modele):
+        kwargs["reasoning_effort"] = GROQ_REASONING_EFFORT
+
+    def _appel():
+        try:
+            return client.chat.completions.create(**_preparer_requete(kwargs, modele))
+        except groq.BadRequestError as e:
+            statut = _statut_echec_outils(e)
+            if statut is None:
+                raise
+            if statut == STATUT_APPEL_INVALIDE:
+                # Sans cette trace, un schéma trop strict est indiscernable d'un modèle
+                # qui comprend mal : l'appel disparaît et la phrase part ailleurs.
+                log.warning("🔌 LLM %-14s │ modele=%s │ appel d'outil rejeté │ generation=%s",
+                            appel_type, modele, _generation_rejetee(e) or "(absente)")
+            return _EchecOutils(statut)
+
+    brut, latence_ms = _executer_avec_repli(_appel, ctx, appel_type, modele)
+
+    if isinstance(brut, _EchecOutils):
+        if brut.statut == STATUT_SANS_OUTILS:
+            _CAPACITE_OUTILS[cle] = False
+        _journaliser(ctx, appel_type, modele, 0, 0, 0, latence_ms, ISSUE_ERREUR, brut.statut)
+        _enregistrer_conso(ctx, appel_type, modele, 0, 0, 0, latence_ms, ISSUE_ERREUR)
+        return ReponseOutils(texte="", modele=modele, appel_type=appel_type,
+                             latence_ms=latence_ms, statut=brut.statut)
+
+    tokens_in, tokens_out, tokens_cache = _clore_appel(ctx, appel_type, modele, brut, latence_ms)
+    message = brut.choices[0].message
+    return ReponseOutils(
+        texte        = (getattr(message, "content", None) or "").strip(),
+        modele       = modele,
+        appel_type   = appel_type,
+        tokens_in    = tokens_in,
+        tokens_out   = tokens_out,
+        tokens_cache = tokens_cache,
+        latence_ms   = latence_ms,
+        appels       = _extraire_appels(message),
     )
 
 
@@ -550,13 +894,13 @@ def transcrire(
     """
     ctx = _valider_appel(TYPE_TRANSCRIPTION, ctx)
     modele = modele_pour(TYPE_TRANSCRIPTION)
-    client = _resoudre_client(ctx)
+    client = _resoudre_client(ctx, modele)
 
     def _appel():
         with open(chemin_fichier, "rb") as audio:
             return client.audio.transcriptions.create(
                 file=(nom_fichier, audio),
-                model=modele,
+                model=_modele_envoye(modele),
                 language=langue,
                 response_format="text",
             )

@@ -4,7 +4,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, TypeHandler
-from app.config import TELEGRAM_BOT_TOKEN
+from app.config import TELEGRAM_BOT_TOKEN, etat_configuration
 from database.db import current_potager_id
 from utils.tts import is_tts_enabled
 from app.services.context import default_context
@@ -302,6 +302,10 @@ def main():
     print(f"   Token : {TELEGRAM_BOT_TOKEN[:10]}...")
     print(f"   TTS   : {'🔊 activé' if is_tts_enabled() else '🔇 désactivé'} (commande /tts pour changer)")
     print(f"   Météo : 🌤️ job planifié à 05h00 Europe/Paris · /meteo pour déclencher manuellement")
+    # Ce que le système retient, réglage par réglage — sans jamais afficher un secret.
+    print("   Configuration retenue :")
+    for ligne in etat_configuration():
+        print(ligne)
 
     app = _construire_application()
 

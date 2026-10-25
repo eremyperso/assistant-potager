@@ -526,18 +526,24 @@ class TestCA10CA11ConfirmationEtRelecture:
         ctx = _ctx({0: [CommandHandler("parcelle", handler)]})
         commande = interp.reconnaitre_par_regles("supprime la parcelle nord")
 
-        bot_module._INTERP_PENDING[42] = {
-            "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
-        }
-        await bot_module._interp_cb(_update_callback(42, "interp:non"), ctx)
-        handler.assert_not_awaited()
-        assert 42 not in bot_module._INTERP_PENDING
+        # [US-234] Les boutons portent l'identifiant de leur proposition, et la
+        # proposition le potager où elle a été faite : le contrat de ce test est
+        # inchangé, seule la forme de ses boutons a évolué.
+        with patch.object(bot_module, "_potager_actif_au_clic", return_value=1):
+            bot_module._INTERP_PENDING[42] = {
+                "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
+                "id": "a1b2c3", "potager_id": 1,
+            }
+            await bot_module._interp_cb(_update_callback(42, "interp:non:a1b2c3"), ctx)
+            handler.assert_not_awaited()
+            assert 42 not in bot_module._INTERP_PENDING
 
-        bot_module._INTERP_PENDING[42] = {
-            "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
-        }
-        await bot_module._interp_cb(_update_callback(42, "interp:ok"), ctx)
-        handler.assert_awaited_once()
+            bot_module._INTERP_PENDING[42] = {
+                "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
+                "id": "a1b2c3", "potager_id": 1,
+            }
+            await bot_module._interp_cb(_update_callback(42, "interp:ok:a1b2c3"), ctx)
+            handler.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_us172_ca10_une_consultation_s_execute_directement(self, sans_journal):

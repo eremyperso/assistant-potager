@@ -81,6 +81,7 @@ Configuration (variables d'environnement)
     JIRA_PROJECT     clé du projet Jira (défaut : SCRUM)
     JIRA_ISSUE_TYPE  type d'issue créé par create-issue pour une US (défaut : Story)
     JIRA_ISSUE_TYPE_INCIDENT  type d'issue créé pour un incident INC-NNN (défaut : Bug)
+    JIRA_STORY_POINTS_FIELD  champ Story points (`customfield_NNNNN`) ; auto-découvert si absent
     JIRA_ENABLED     active/désactive l'intégration (défaut : true si token présent)
     JIRA_STATUS_A_FAIRE   libellé Jira du statut "a_faire"   (défaut : À faire)
     JIRA_STATUS_EN_COURS  libellé Jira du statut "en_cours"  (défaut : En cours)
@@ -427,7 +428,61 @@ def _parse_backlog_md(content: str) -> dict:
         "epic": _champ(r"\*\*Épic\s*:\*\*\s*(.+)"),
         "captures": _champ(r"\*\*Captures?\s*:\*\*\s*(.+)"),
         "priorite": _champ(r"\*\*Priorit[ée]\s*:\*\*\s*(.+)"),
+        "estimation": _champ(r"\*\*Estimation\s*:\*\*\s*(\d+(?:[.,]\d+)?)"),
     }
+
+
+_cache_champ_story_points: dict[str, Optional[str]] = {}
+
+
+def _champ_story_points(cfg: dict) -> Optional[str]:
+    """Identifiant du champ Jira « Story point estimate » (`customfield_NNNNN`).
+
+    Surchargeable par `JIRA_STORY_POINTS_FIELD` ; sinon découvert une fois par
+    `GET /rest/api/3/field` (l'identifiant varie d'une instance à l'autre) puis
+    mis en cache. Best-effort : `None` si introuvable.
+    """
+    force = os.environ.get("JIRA_STORY_POINTS_FIELD", "").strip()
+    if force:
+        return force
+    if cfg["host"] in _cache_champ_story_points:
+        return _cache_champ_story_points[cfg["host"]]
+    cle: Optional[str] = None
+    try:
+        response = requests.get(
+            f"{cfg['host']}/rest/api/3/field",
+            auth=HTTPBasicAuth(cfg["email"], cfg["token"]),
+            timeout=15,
+        )
+        response.raise_for_status()
+        for champ in response.json():
+            if (champ.get("name") or "").strip().lower() in ("story point estimate", "story points"):
+                cle = champ["id"]
+                break
+    except requests.RequestException as err:
+        log.warning("[jira_tracker] Recherche du champ Story points impossible : %s", err)
+        return None
+    _cache_champ_story_points[cfg["host"]] = cle
+    return cle
+
+
+def _ajouter_story_points(fields: dict, champs: dict, cfg: dict) -> None:
+    """Renseigne les story points dans `fields` d'après `**Estimation :**` de la fiche.
+
+    Sans estimation dans la fiche, ne touche à rien (une valeur saisie dans Jira
+    n'est pas écrasée). Champ introuvable : avertissement, jamais d'échec.
+    """
+    if not champs.get("estimation"):
+        return
+    cle_champ = _champ_story_points(cfg)
+    if not cle_champ:
+        log.warning(
+            "[jira_tracker] Champ Story points introuvable — estimation %s ignorée "
+            "(définir JIRA_STORY_POINTS_FIELD)", champs["estimation"],
+        )
+        return
+    points = float(champs["estimation"].replace(",", "."))
+    fields[cle_champ] = int(points) if points.is_integer() else points
 
 
 def _markdown_to_adf(text: str) -> dict:
@@ -580,6 +635,8 @@ def create_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
             identifiant, champs["priorite"] or "absente",
         )
 
+    _ajouter_story_points(payload["fields"], champs, cfg)
+
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:
@@ -684,6 +741,7 @@ def update_issue_from_backlog(md_path: "str | Path") -> Optional[str]:
     priorite = _priorite_jira(champs["priorite"]) if identifiant.startswith("INC-") else None
     if priorite:
         fields["priority"] = {"name": priorite}
+    _ajouter_story_points(fields, champs, cfg)
     if champs["epic"]:
         epic_key = _resolve_epic_key(champs["epic"], cfg)
         if epic_key:

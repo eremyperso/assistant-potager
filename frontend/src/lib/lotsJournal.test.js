@@ -97,9 +97,9 @@ test('CA3 — groupes par mois de semis', () => {
 })
 
 test('Parts et barre : levés à repiquer, non levées soldées', () => {
-  assert.deepEqual(partsDuLot(lot4), { parts: { pl: 0, go: 15, le: 3, vd: 0, pe: 0, nl: 2 }, base: 20 })
-  assert.deepEqual(partsDuLot(lot7).parts, { pl: 0, go: 90, le: 0, vd: 0, pe: 10, nl: 0 })
-  assert.deepEqual(partsDuLot(lot6).parts, { pl: 0, go: 0, le: 0, vd: 0, pe: 0, nl: 5 })
+  assert.deepEqual(partsDuLot(lot4), { parts: { pl: 0, go: 15, le: 3, ge: 0, vd: 0, pe: 0, nl: 2 }, base: 20 })
+  assert.deepEqual(partsDuLot(lot7).parts, { pl: 0, go: 90, le: 0, ge: 0, vd: 0, pe: 10, nl: 0 })
+  assert.deepEqual(partsDuLot(lot6).parts, { pl: 0, go: 0, le: 0, ge: 0, vd: 0, pe: 0, nl: 5 })
   assert.deepEqual(partsDuLot(lot3).parts.le, 1)
   assert.equal(partsDuLot(lot3).parts.nl, 49)
   assert.deepEqual(barreDuLot(lot4).map((s) => [s.cle, s.largeur]), [['go', 75], ['le', 15], ['nl', 10]])
@@ -205,6 +205,17 @@ test('CA2 — bilan des lots visibles', () => {
   assert.equal(bilanDesLots([]).pourcent, null)
   assert.equal(bilanDesLots([lot1]).phrase, '10 plants mis en terre sur 1 lot.')
   assert.equal(bilanDesLots([lot9]).phrase, "Aucun plant obtenu pour l'instant.")
+})
+
+test('Bilan — levés à repiquer et graines en germination ne se confondent pas', () => {
+  // Courgette : 20 semées, levée terminée à 16 ; tomate : 20 semées, aucune levée notée.
+  const courgette = lot(21, { graines_semees: 20, graines_non_soldees: 20, nb_leves: 16, levee_terminee: true })
+  const tomate = lot(22, { graines_semees: 20, graines_non_soldees: 20 })
+  assert.deepEqual(partsDuLot(tomate).parts, { pl: 0, go: 0, le: 0, ge: 20, vd: 0, pe: 0, nl: 0 })
+  const b = bilanDesLots([courgette, tomate])
+  assert.deepEqual(b.barre.map((s) => [s.cle, s.valeur, s.libelle]),
+    [['le', 16, 'levés à repiquer'], ['ge', 20, 'en germination'], ['nl', 4, 'non levées']])
+  assert.equal(b.phrase, "16 plants levés attendent d'être repiqués.")
 })
 
 test('CA6 — échéance de la fiche : ton et texte', () => {

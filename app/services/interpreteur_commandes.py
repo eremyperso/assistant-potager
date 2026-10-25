@@ -100,6 +100,8 @@ log = logging.getLogger("potager")
 # ─────────────────────────────────────────────────────────────────────────────
 ORIGINE_REGLE = "regle"
 ORIGINE_MODELE = "modele"
+#: [US-235 / CA14] Proposition de l'agent interpréteur (`app.services.agent`).
+ORIGINE_AGENT = "agent"
 
 #: Nature écrite au journal (CA18). Le routeur en connaît quatre (ACTION,
 #: QUESTION_*) ; celle-ci est la cinquième, et elle se décide avant lui.
@@ -115,6 +117,22 @@ ISSUE_PROPOSEE = "proposee"      # récapitulatif affiché, en attente du jardin
 ISSUE_CONFIRMEE = "confirmee"
 ISSUE_REFUSEE = "refusee"
 ISSUE_ABANDONNEE = "abandonnee"  # précision demandée, jamais donnée
+#: [US-235 / CA12] AGENT_MODE=ombre : ce que l'agent AURAIT proposé, jamais montré.
+ISSUE_OMBRE = "ombre"
+#: [US-236 / CA4] L'agent a demandé une précision : rien n'a été proposé.
+ISSUE_PRECISION = "precision"
+#: [US-236 / CA5] Demande hors catalogue — une demande de fonctionnalité.
+ISSUE_HORS_PERIMETRE = "hors_perimetre"
+
+#: [US-236] Où l'agent envoie une phrase qui n'est pas une commande.
+VERS_QUESTION = "question"
+VERS_GESTE = "geste"
+VERS_PRECISION = "precision"
+VERS_HORS_PERIMETRE = "hors_perimetre"
+#: [INC-018] L'agent n'a pas pu répondre (panne, appel rejeté, proposition refusée par
+#: le validateur) à une phrase qui DEMANDE d'agir : `message` est la commande à taper.
+#: Rien n'est proposé, et la phrase ne repart jamais aux mots-clés du routeur.
+VERS_NON_COMPRIS = "non_compris"
 
 #: [CA4, CA12] En dessous de cette confiance, la sortie du modèle n'est pas
 #: retenue : le doute rend la main à la cascade normale plutôt que d'exécuter la
@@ -153,20 +171,32 @@ class CommandeInterpretee:
     candidats: tuple[str, ...] = ()
     #: L'argument sur lequel porte la proposition de candidats (CA12).
     argument_candidat: Optional[str] = None
+    #: [US-235 / CA14] Outils appelés par l'agent — vide hors `origine=agent`.
+    outils: tuple[str, ...] = ()
+    #: [US-235] Jetons consommés pour produire la proposition (0 pour une règle).
+    tokens_consommes: int = 0
 
     @property
     def args(self) -> tuple[str, ...]:
         valeurs = [self.sous_commande] if self.sous_commande else []
-        valeurs += [
-            self.valeurs[argument.nom]
-            for argument in self.forme.arguments
-            if self.valeurs.get(argument.nom)
-        ]
+        for argument in self.forme.arguments:
+            valeur = self.valeurs.get(argument.nom)
+            if not valeur:
+                continue
+            morceaux = valeur.split()
+            if argument.nom == "modification" and len(morceaux) > 1 and all("=" in m for m in morceaux):
+                # [US-235 / CA2] Plusieurs `clé=valeur` : un argument chacun, comme
+                # le handler les reçoit d'une commande tapée.
+                valeurs += morceaux
+            else:
+                valeurs.append(valeur)
         return tuple(valeurs)
 
     @property
     def complete(self) -> bool:
-        return not self.manquants and not self.candidats
+        # [US-235] Un nom retiré faute de voisin (`candidats` vide) n'est pas plus
+        # complet qu'un nom à choisir : la précision reste due.
+        return not self.manquants and not self.candidats and self.argument_candidat is None
 
     def commande_equivalente(self) -> str:
         """[CA10] La commande tapée qui produirait le même effet — rappelée au
@@ -211,6 +241,61 @@ class Ambiguite:
     candidats: tuple[CommandeInterpretee, ...]
     texte_origine: str = ""
     latence_ms: int = 0
+
+
+@dataclass(frozen=True)
+class Aiguillage:
+    """[US-236] La phrase n'est pas une commande : l'agent dit où elle va.
+
+    - `question`       → la cascade des questions, avec `nature_question`
+                         (QUESTION_DATA, QUESTION_SAVOIR, QUESTION_HYBRIDE) ;
+                         sans nature lisible, la cascade la classe elle-même ;
+    - `geste`          → le parseur de gestes, inchangé ;
+    - `precision`      → `message` est la question à poser au jardinier ;
+    - `hors_perimetre` → `message` est la raison du « je ne sais pas encore ».
+    - `non_compris`    → [INC-018] l'agent n'a pas pu traiter une phrase qui demande
+                         d'agir ; `message` est la commande à taper à la place.
+
+    Rien n'est jamais proposé ni exécuté sur un aiguillage.
+    """
+
+    vers: str
+    nature_question: Optional[str] = None
+    message: Optional[str] = None
+    texte_origine: str = ""
+    latence_ms: int = 0
+
+
+@dataclass(frozen=True)
+class Plan:
+    """[US-237] Plusieurs commandes comprises d'une phrase, confirmées en une fois.
+
+    Chaque étape est une `CommandeInterpretee` ordinaire, complète et validée
+    contre un état SIMULÉ : une parcelle créée à l'étape *n* existe pour les
+    suivantes. `deja_faites` porte les rangs (à partir de 0) des créations dont
+    le nom était déjà pris : elles sont montrées, signalées, et sautées à
+    l'exécution (« elle existe déjà, je passe à l'étape suivante ? »).
+
+    Rien n'est écrit tant que le jardinier n'a pas tout confirmé ; chaque étape
+    est revalidée contre la base juste avant son exécution.
+    """
+
+    etapes: tuple[CommandeInterpretee, ...]
+    texte_origine: str = ""
+    latence_ms: int = 0
+    deja_faites: tuple[int, ...] = ()
+    outils: tuple[str, ...] = ()
+    tokens_consommes: int = 0
+
+    def commande_journal(self) -> str:
+        """`routage_logs.commande_interpretee` (64 car.) : « plan parcelle ajouter,modifier »."""
+        morceaux: list[str] = []
+        precedente = None
+        for etape in self.etapes:
+            commande = "" if etape.commande == precedente else etape.commande
+            precedente = etape.commande
+            morceaux.append(" ".join(filter(None, (commande, etape.sous_commande or ""))))
+        return ("plan " + ",".join(morceaux))[:64]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -412,9 +497,22 @@ def _nettoyer_nom(fragment: str) -> str:
     return re.sub(r"\s+", " ", propre).strip()
 
 
+#: [US-236 / CA4] Une désignation RELATIVE (« la parcelle près des tomates »,
+#: « celle du fond ») décrit une parcelle sans la nommer : la retenir comme nom
+#: compléterait la commande par supposition. La phrase passe alors à l'agent,
+#: qui demande laquelle.
+_DESIGNATION_RELATIVE = re.compile(
+    r"\A(?:pres\s+d|a\s+cote\s+d|derriere|devant|en\s+face|au\s+fond|"
+    r"celle|celui|qui|ou\s)"
+)
+
+
 def _nom_plausible(fragment: str) -> bool:
     normalise, _ = normaliser(fragment or "")
-    return bool(normalise) and normalise not in _MOTS_NON_NOM and len(normalise) <= 60
+    return (
+        bool(normalise) and normalise not in _MOTS_NON_NOM and len(normalise) <= 60
+        and not _DESIGNATION_RELATIVE.match(normalise)
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -602,9 +700,12 @@ def _construire_parcelle_ajouter(groupes):
 @_regle(
     "parcelle_renommer",
     _INTENTION
-    + r"(?:renomme|renommer|rebaptise|rebaptiser|change le nom de|changer le nom de|"
-    + r"changement de nom de|changement de nom d)\s+"
-    + _ARTICLE + r"(?:parcelle\s+)?(?P<ancien>.+?)\s+en\s+" + _ARTICLE
+    + r"(?:(?:renomme|renommer|rebaptise|rebaptiser|change le nom de|changer le nom de|"
+    + r"changement de nom de|changement de nom d)\s+" + _ARTICLE + r"(?:parcelle\s+)?"
+    # « modifier la parcelle X en Y » : le mot « parcelle » est exigé, sinon
+    # « modifier la plantation de tomates en … » serait pris pour un renommage.
+    + r"|(?:modifie|modifier|change|changer)\s+" + _ARTICLE + r"parcelle\s+)"
+    + r"(?P<ancien>.+?)\s+en\s+(?!pepiniere\b)" + _ARTICLE
     + r"(?:parcelle\s+)?(?P<nouveau>.+)",
     "parcelle",
     "renommer",
@@ -2440,16 +2541,121 @@ def _appeler_modele(texte: str, ctx: Optional[TenantContext]) -> Optional[Comman
 # ─────────────────────────────────────────────────────────────────────────────
 # API publique
 # ─────────────────────────────────────────────────────────────────────────────
+def _sans_noms_de_parcelle(texte: str, ctx: Optional[TenantContext]) -> str:
+    """La phrase privée des noms de parcelle du potager. Un nom peut contenir un
+    mot de geste : « le tunnel chauffé n'est plus une pépinière » (relevé du
+    21/10/2026) passait pour une saisie de geste par « tunnel », n'arrivait
+    jamais à l'agent et finissait en réponse de culture."""
+    if ctx is None:
+        return texte
+    from app.services.agent.interpreteur_agent import noms_parcelles_du_potager
+
+    reste = unidecode((texte or "").lower())
+    for nom in sorted(noms_parcelles_du_potager(ctx), key=len, reverse=True):
+        forme = unidecode((nom or "").lower()).strip()
+        if forme:
+            reste = re.sub(rf"\b{re.escape(forme)}\b", " ", reste)
+    return " ".join(reste.split())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [INC-018] Une phrase qui DEMANDE d'agir n'est pas une question à classer
+# -----------------------------------------------------------------------------
+# Quand l'agent échoue, la phrase retombait sur le routeur par mots-clés, qui
+# l'a prise pour une question de données (« crée la planche Nord… » → la liste
+# des lots en pépinière, avec une confiance de 1,00). Pour une phrase qui
+# s'ouvre sur un verbe d'action, le silence du repli est le pire des deux :
+# le jardinier lit une réponse qui n'a aucun rapport avec ce qu'il a demandé.
+# Il lit donc que la demande n'a pas été traitée, et la commande qui l'attend.
+# ─────────────────────────────────────────────────────────────────────────────
+_OUVERTURE_DE_DEMANDE = (
+    r"^(?:(?:s il (?:te|vous) plait|stp|svp|alors|bon|ok|ensuite|puis)\s*,?\s+)*"
+    r"(?P<modalite>(?:peux tu|pourrais tu|pouvez vous|pourriez vous)\s+|"
+    r"(?:je veux|je voudrais|j aimerais|il faut que je)\s+)?"
+)
+#: (commande à taper, verbes à l'impératif ou à l'infinitif) — le premier qui s'ouvre gagne.
+_VERBES_D_ACTION: tuple[tuple[str, str], ...] = (
+    ("/parcelle ajouter <nom>", r"cree|creez|creer|ajoute|ajoutez|ajouter|rajoute|rajoutez|rajouter"),
+    ("/parcelle supprimer <nom>", r"supprime|supprimez|supprimer|efface|effacez|effacer"),
+    ("/parcelle renommer <ancien nom> <nouveau nom>", r"renomme|renommez|renommer"),
+    ("/parcelle modifier <nom> <caractéristique>=<valeur>",
+     r"modifie|modifiez|modifier|change|changez|changer|mets|mettez|mettre|met|passe|passez|"
+     r"passer|retire|retirez|retirer|enleve|enlevez|enlever|desactive|desactivez|place|placez"),
+    ("/menu", r"montre|montrez|montrer|affiche|affichez|afficher|voir"),
+)
+_MOTIFS_D_ACTION: tuple[tuple[str, "re.Pattern[str]"], ...] = tuple(
+    (commande, re.compile(_OUVERTURE_DE_DEMANDE + rf"(?:{verbes})\b"))
+    for commande, verbes in _VERBES_D_ACTION
+)
+
+
+def demande_d_agir(normalise: str) -> Optional[str]:
+    """[INC-018] La commande à taper si la phrase DEMANDE d'agir, sinon None.
+
+    Une phrase demande d'agir quand elle s'ouvre sur un verbe d'action, à
+    l'impératif ou précédé d'une formule de demande (« peux-tu », « je veux »).
+    Une phrase qui finit par « ? » sans cette formule est une question, même avec
+    un verbe d'action (« mets-tu de l'engrais ? »). La déclaration (« la planche
+    nord a 5 rangs ») n'en est pas une : elle garde son chemin habituel.
+
+    Ce n'est pas une règle de commande : elle ne reconnaît ni la cible ni les
+    valeurs, et n'exécute rien. Elle ne sert qu'à choisir le message d'un échec.
+    """
+    texte = (normalise or "").strip()
+    for commande, motif in _MOTIFS_D_ACTION:
+        trouve = motif.match(texte)
+        if trouve is None:
+            continue
+        if texte.endswith("?") and not trouve.group("modalite"):
+            return None
+        return commande
+    return None
+
+
+def _mode_agent() -> str:
+    """[US-235 / CA12] `AGENT_MODE` lu à chaque phrase : changer de mode est un
+    réglage (CA15), pas une livraison, et les tests le surchargent sans recharger."""
+    from app import config
+
+    mode = getattr(config, "AGENT_MODE", "off")
+    return mode if mode in getattr(config, "AGENT_MODES", ("off",)) else "off"
+
+
+def _non_compris(brut: str, normalise: str, debut: float) -> Optional[Aiguillage]:
+    """[INC-018] L'agent (puis l'ancien repli) n'a rien proposé : le jardinier le lit si sa
+    phrase demandait d'agir ; sinon None, et elle poursuit son chemin habituel."""
+    commande = demande_d_agir(normalise)
+    if commande is None:
+        return None
+    log.warning(
+        "🎛️  INTERPRETEUR   : demande d'agir non traitée → message explicite (%s) │ %r",
+        commande, brut[:80],
+    )
+    return Aiguillage(
+        vers=VERS_NON_COMPRIS, message=commande, texte_origine=brut,
+        latence_ms=int((time.monotonic() - debut) * 1000),
+    )
+
+
 def interpreter(
     texte: str,
     ctx: Optional[TenantContext] = None,
     autoriser_modele: bool = True,
-) -> "CommandeInterpretee | Ambiguite | None":
+    contexte_court=None,
+) -> "CommandeInterpretee | Ambiguite | Aiguillage | Plan | None":
     """[CA1 → CA5] Traduit une phrase en une commande du catalogue, ou rien.
 
-    Ordre strict : garde de savoir (CA2) → règles (CA3) → modèle sous contrainte
-    fermée (CA4). `None` signifie « ce n'est pas une commande » et rend la main à
-    la cascade normale — jamais « je n'ai pas compris ».
+    Ordre strict : règles (CA3) → garde de savoir (CA2) et geste annoncé →
+    agent ou modèle sous contrainte fermée (CA4). `None` signifie « ce n'est
+    pas une commande » et rend la main à la cascade normale — jamais « je n'ai
+    pas compris ». [US-236] Avec `AGENT_MODE=actif`, l'agent peut aussi dire
+    où va la phrase : un `Aiguillage`, que le bot suit sans reclasser.
+    [US-237] Plusieurs commandes dans la phrase donnent un `Plan`, confirmé en
+    une fois ; une seule donne la proposition simple (CA9).
+    [US-238] `contexte_court` (`app.services.agent.contexte_court.ContexteCourt`) :
+    la proposition en attente du jardinier, que l'agent peut corriger ou prolonger
+    (« non, l'autre », « et la planche sud aussi »). Il n'est lu que par l'agent
+    en mode `actif` ; None, c'est une demande nouvelle.
 
     La dictée vocale ne change rien (CA5) : ce module ne voit qu'un texte, et
     `bot.handle_voice` lui passe la transcription au même point du flux que
@@ -2475,12 +2681,46 @@ def interpreter(
     # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
     # quantité, variété et date. Import local : le routeur importe la base.
     from llm.routeur import annonce_un_geste
-    if annonce_un_geste(brut):
+    if annonce_un_geste(brut) and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx)):
         return None
+
+    # [US-235 / CA12] L'agent prend la place de l'ancien repli selon AGENT_MODE.
+    # Sans contexte de potager, il n'a ni parcelles à lire ni compte à imputer :
+    # l'ancien chemin reste le seul.
+    mode = _mode_agent() if ctx is not None else "off"
+    if mode == "actif":
+        from app.services.agent import interpreteur_agent
+
+        resultat = interpreteur_agent.proposer(brut, ctx, contexte_court)
+        if resultat.disponible:
+            latence = int((time.monotonic() - debut) * 1000)
+            # [CA9] Aucun seuil de confiance sur ce chemin : le validateur et le
+            # récapitulatif en tiennent lieu.
+            if resultat.commande is not None:
+                return replace(resultat.commande, latence_ms=latence)
+            if resultat.plan is not None:
+                return replace(resultat.plan, latence_ms=latence)
+            if resultat.aiguillage is not None:
+                # [US-236] L'agent dit où va la phrase : le bot le suit sans
+                # repasser par la classification par mots-clés.
+                aiguillage = replace(resultat.aiguillage, latence_ms=latence)
+                if aiguillage.vers in (VERS_PRECISION, VERS_HORS_PERIMETRE):
+                    interpreteur_agent.persister_aiguillage(ctx, brut, resultat)
+                return aiguillage
+            # Commande rejetée par le validateur : la phrase poursuit son chemin
+            # habituel (routeur, cascade) — sauf si elle demandait d'agir [INC-018].
+            return _non_compris(brut, normalise, debut)
+        # [CA13] Modèle indisponible : l'ancien repli ci-dessous reste tenté.
+    elif mode == "ombre":
+        from app.services.agent import interpreteur_agent
+
+        interpreteur_agent.lancer_en_arriere_plan(
+            lambda: interpreteur_agent.observer(brut, ctx)
+        )
 
     candidate = _appeler_modele(brut, ctx)
     if candidate is None:
-        return None
+        return _non_compris(brut, normalise, debut) if mode == "actif" else None
     if candidate.confiance < SEUIL_CONFIANCE_MODELE:
         # [CA12] Le doute ne fait jamais agir : sous le seuil, la phrase repart
         # à la cascade normale plutôt que d'exécuter la plus probable.
@@ -2488,7 +2728,7 @@ def interpreter(
             "🎛️  INTERPRETEUR   : confiance %.2f < %.2f → rendu à la cascade",
             candidate.confiance, SEUIL_CONFIANCE_MODELE,
         )
-        return None
+        return _non_compris(brut, normalise, debut) if mode == "actif" else None
     return replace(candidate, latence_ms=int((time.monotonic() - debut) * 1000))
 
 
@@ -2603,6 +2843,8 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
     1 » et « profondeur 10 » ne s'entendent pas, et la seconde écrirait une
     donnée fausse dans un référentiel partagé.
     """
+    if commande.origine == ORIGINE_AGENT and commande.forme.cle == ("parcelle", "modifier"):
+        return _recapitulatif_modification(commande)
     lignes = [f"*{commande.forme.libelle}*"]
     for argument in commande.forme.arguments:
         valeur = commande.valeurs.get(argument.nom)
@@ -2635,9 +2877,104 @@ def _est_chiffre(valeur: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:[.,]\d+)?", (valeur or "").strip()))
 
 
+#: [US-235 / CA11] Le récapitulatif d'une modification proposée par l'agent dit
+#: le SENS de chaque champ : une valeur fermée y a pu être DÉDUITE de la phrase
+#: (« n'est plus une pépinière » → `pepiniere=non`), et c'est ici qu'une
+#: déduction fausse se voit avant d'être écrite.
+_ARTICLES_MODIFICATION: dict[str, str] = {
+    "superficie": "la superficie", "exposition": "l'exposition",
+    "ensoleillement": "l'ensoleillement", "rangs": "le nombre de rangs",
+    "longueur": "la longueur", "type_sol": "le type de sol", "abri": "l'abri",
+    "ordre": "l'ordre d'affichage",
+}
+_STATUTS_MODIFICATION: dict[str, str] = {
+    "pepiniere": "le statut pépinière", "paillage": "le paillage",
+}
+
+
+def _phrase_modification(nom: str, cle: str, brute: str) -> str:
+    """« Je *retire* le statut pépinière de *Serre extérieure*. » (CA10, CA11)"""
+    valeur = brute.strip()
+    v = unidecode(valeur).lower()
+    non = v in ("non", "false")
+    if cle == "actif":
+        return f"Je *mets hors service* *{nom}*." if non else f"Je *remets en service* *{nom}*."
+    if cle in _STATUTS_MODIFICATION:
+        statut = _STATUTS_MODIFICATION[cle]
+        if non:
+            return f"Je *retire* {statut} de *{nom}*."
+        if cle == "pepiniere" and v in ("chaude", "froide"):
+            return f"Je *déclare* *{nom}* comme pépinière {v}."
+        return f"J'*ajoute* {statut} à *{nom}*."
+    if cle == "abri" and v == "aucun":
+        return f"Je *retire* l'abri de *{nom}*."
+    lisible = valeur.replace("plein-soleil", "plein soleil")
+    unite = _UNITES_MODIFICATION.get(cle)
+    suffixe = f" {unite}" if unite else ""
+    texte = f"*{lisible}{suffixe}*"
+    if _est_chiffre(lisible):
+        texte += f" ({nombre_en_lettres(lisible)}{suffixe})"
+    article = _ARTICLES_MODIFICATION.get(cle, f"« {cle} »")
+    return f"Je *passe* {article} de *{nom}* à {texte}."
+
+
+def _recapitulatif_modification(commande: CommandeInterpretee) -> str:
+    nom = commande.valeurs.get("nom", "")
+    lignes = [f"*{commande.forme.libelle}*"]
+    for morceau in (commande.valeurs.get("modification") or "").split():
+        cle, _, brute = morceau.partition("=")
+        lignes.append(_phrase_modification(nom, cle.strip().lower(), brute))
+    lignes.append("")
+    lignes.append(f"Équivalent tapé : `{commande.commande_equivalente()}`")
+    return "\n".join(lignes)
+
+
+def _resume_etape(commande: CommandeInterpretee) -> str:
+    """Une étape de plan en une ligne : ce qui sera fait, en clair."""
+    nom = commande.valeurs.get("nom", "")
+    if commande.forme.cle == ("parcelle", "ajouter"):
+        details = []
+        if commande.valeurs.get("exposition"):
+            details.append(f"exposition {commande.valeurs['exposition']}")
+        if commande.valeurs.get("superficie"):
+            superficie = commande.valeurs["superficie"]
+            details.append(f"{superficie} m² ({nombre_en_lettres(superficie)} m²)")
+        suffixe = f" ({', '.join(details)})" if details else ""
+        return f"Je *crée* la parcelle *{nom}*{suffixe}."
+    if commande.forme.cle == ("parcelle", "modifier"):
+        return " ".join(
+            _phrase_modification(nom, cle.strip().lower(), brute)
+            for cle, _, brute in (
+                morceau.partition("=") for morceau in (commande.valeurs.get("modification") or "").split()
+            )
+        )
+    return commande.forme.libelle
+
+
+def recapitulatif_plan(plan: "Plan") -> str:
+    """[US-237 / CA5] Les étapes numérotées, chacune avec sa commande équivalente.
+
+    Une création dont le nom est déjà pris est montrée et signalée (CA3) : elle
+    sera sautée, et le jardinier le sait avant de confirmer.
+    """
+    lignes = [f"*Plan en {len(plan.etapes)} étapes*", ""]
+    for rang, etape in enumerate(plan.etapes):
+        if rang in plan.deja_faites:
+            lignes.append(
+                f"⚠️ {rang + 1}. La parcelle *{etape.valeurs.get('nom', '')}* existe déjà : "
+                "je passe à l'étape suivante ?"
+            )
+        else:
+            lignes.append(f"{rang + 1}. {_resume_etape(etape)}")
+        lignes.append(f"    `{etape.commande_equivalente()}`")
+    lignes.append("")
+    lignes.append("_Rien n'est écrit avant « Tout confirmer » ; une étape refusée arrête la suite._")
+    return "\n".join(lignes)
+
+
 def persister_journal(
     ctx: TenantContext,
-    commande: CommandeInterpretee,
+    commande: "CommandeInterpretee | Plan",
     issue: str,
     log_id: Optional[int] = None,
 ) -> Optional[int]:
@@ -2657,7 +2994,12 @@ def persister_journal(
     from database.models import RoutageLog
     from llm.routeur import normaliser_question
 
-    nom_commande = f"{commande.commande} {commande.sous_commande or ''}".strip()
+    if isinstance(commande, Plan):
+        # [US-237] Un plan est UNE proposition : une ligne, toutes étapes dites.
+        nom_commande, origine, confiance = commande.commande_journal(), ORIGINE_AGENT, None
+    else:
+        nom_commande = f"{commande.commande} {commande.sous_commande or ''}".strip()
+        origine, confiance = commande.origine, commande.confiance
     db = None
     try:
         db = SessionLocal()
@@ -2674,15 +3016,18 @@ def persister_journal(
             # seconde implémentation divergerait au premier ajustement.
             question_normalisee=normaliser_question(commande.texte_origine or ""),
             nature=NATURE_COMMANDE,
-            origine_classification=commande.origine,
+            origine_classification=origine,
             etage_resolveur=ETAGE_COMMANDE,
             cascade_remontee=False,
-            confiance=commande.confiance,
+            confiance=confiance,
             latence_ms=commande.latence_ms,
-            # Une commande reconnue par règle ne consomme aucun jeton (CA3, CA17).
-            tokens_consommes=0,
+            # Une commande reconnue par règle ne consomme aucun jeton (CA3, CA17) ;
+            # celle de l'agent porte les siens [US-235].
+            tokens_consommes=commande.tokens_consommes,
             commande_interpretee=nom_commande,
             issue_interpretation=issue,
+            # [US-235 / CA14] Les outils appelés — NULL hors `origine=agent`.
+            outils_agent=",".join(commande.outils)[:128] or None,
         )
         db.add(entree)
         db.commit()
@@ -2703,10 +3048,17 @@ def persister_journal(
             db.close()
 
 
-def journaliser(commande: CommandeInterpretee, issue: str) -> None:
+def journaliser(commande: "CommandeInterpretee | Plan", issue: str) -> None:
     """[CA18] Une ligne par interprétation — nature, commande, sous-commande,
     origine, confiance, latence, issue. C'est la seule façon de savoir quelles
     formulations enrichir ensuite."""
+    if isinstance(commande, Plan):
+        log.info(
+            "🎛️  INTERPRETEUR   │ nature=%s │ origine=%-6s │ %s │ %d ms │ issue=%-10s │ '%s'",
+            NATURE_COMMANDE, ORIGINE_AGENT, commande.commande_journal(),
+            commande.latence_ms, issue, (commande.texte_origine or "")[:80],
+        )
+        return
     log.info(
         "🎛️  INTERPRETEUR   │ nature=%s │ origine=%-6s │ /%-12s %-12s │ "
         "confiance=%.2f │ %d ms │ issue=%-10s │ regle=%-24s │ '%s'",
@@ -2717,6 +3069,7 @@ def journaliser(commande: CommandeInterpretee, issue: str) -> None:
         commande.confiance,
         commande.latence_ms,
         issue,
-        commande.regle or "-",
+        # [US-235 / CA14] Pour l'agent, la « règle » est l'outil appelé.
+        commande.regle or ",".join(commande.outils) or "-",
         (commande.texte_origine or "")[:80],
     )

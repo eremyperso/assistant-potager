@@ -974,7 +974,7 @@ class ConsoTokens(Base):
     d'US-123 pour ne pas créer une table concurrente.
 
     - date         : jour d'imputation (agrégation quotidienne par potager)
-    - appel_type   : classification | parsing | question | synthese | transcription
+    - appel_type   : classification | parsing | question | synthese | transcription | agent
     - modele       : modèle réellement appelé (les quotas Groq sont par modèle)
     - tokens_cache : [CA6] jetons servis depuis le cache de prompt du fournisseur,
                      distingués des jetons facturés plein tarif — 0 tant que le
@@ -1014,7 +1014,7 @@ class RoutageLog(Base):
 
     - question_normalisee    : [CA2] question NORMALISÉE, jamais le message brut
     - nature                 : ACTION | QUESTION_DATA | QUESTION_SAVOIR | QUESTION_HYBRIDE
-    - origine_classification : regle | cache | modele — origine de la DÉCISION
+    - origine_classification : regle | cache | modele | agent — origine de la DÉCISION
                                 de classification (llm.routeur.DecisionRoutage.origine)
     - etage_resolveur        : donnee | savoir | raisonnement — étage ayant
                                 produit la réponse FINALE (distinct de la
@@ -1058,6 +1058,15 @@ class RoutageLog(Base):
     # règles enrichir ensuite ? ».
     commande_interpretee   = Column(String(64), nullable=True)
     issue_interpretation   = Column(String(16), nullable=True)
+
+    # [US-235 / CA14, migration_v59] Outils appelés par l'agent interpréteur,
+    # séparés par des virgules (`parcelle_modifier`, `poser_question`…). NULL hors
+    # `origine_classification = 'agent'`. Avec `issue_interpretation = 'ombre'`,
+    # c'est ce que l'agent AURAIT proposé : la matière du passage en `actif`.
+    # [US-236] `issue_interpretation` = 'precision' ou 'hors_perimetre' : l'agent
+    # a demandé une précision, ou la demande n'existe pas au catalogue — la
+    # liste des demandes de fonctionnalité.
+    outils_agent           = Column(String(128), nullable=True)
 
     __table_args__ = (
         Index("idx_routage_logs_potager_date", "potager_id", "cree_le"),

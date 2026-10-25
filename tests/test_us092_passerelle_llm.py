@@ -220,10 +220,12 @@ class TestCA2AucunAppelAnonyme:
             )
         client_ok.chat.completions.create.assert_not_called()
 
-    def test_us092_ca2_les_cinq_types_sont_declares(self):
-        """CA2 : la nomenclature couvre les cinq usages réels du produit."""
+    def test_us092_ca2_les_six_types_sont_declares(self):
+        """CA2 : la nomenclature couvre les usages réels du produit — les cinq
+        d'origine, plus `agent` (US-233, appel d'outils typés)."""
         assert TYPES_APPEL == {
             "classification", "parsing", "question", "synthese", "transcription",
+            "agent",
         }
 
     def test_us092_ca2_erreur_de_contexte_nest_pas_une_indisponibilite(self):

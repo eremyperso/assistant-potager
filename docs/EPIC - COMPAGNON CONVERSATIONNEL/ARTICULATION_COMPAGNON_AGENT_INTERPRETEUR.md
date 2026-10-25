@@ -1,6 +1,7 @@
 # Compagnon conversationnel : s'appuyer sur l'agent interpréteur sans créer un second moteur
 
 > **Statut** : étude d'architecture du 21/10/2026. Aucun code n'a été modifié.
+> Complétée le 24/10/2026 par le §16 (reprendre une action menée).
 > **Vérifiée sur** : la branche `epic-13-agent-interpreteur`, arbre de travail du
 > 21/10/2026 (v3.98.0). US-233 à US-238 y sont livrées, mais pas encore commitées.
 > US-244 et US-245 sont en cours (`app/services/reponses_chiffrees.py` modifié).
@@ -35,7 +36,9 @@ Il manque quatre choses, toutes **en dehors** de l'agent :
    commande seule s'exécute par l'introspection du handler Telegram ;
 3. une **mémoire de conversation** : le contexte court d'US-238 n'existe que
    pendant qu'une proposition attend une réponse, et seulement dans le processus
-   du bot ;
+   du bot. Elle doit retenir les échanges **et les actions menées**, avec leur
+   référence en base, pour qu'une phrase puisse corriger ou annuler ce qui vient
+   d'être fait (« j'ai oublié de dire que le semis datait du 5 mai », §16) ;
 4. une **analyse approfondie** en lecture seule : la cascade répond à une
    question par un seul appel de raisonnement (400 jetons) qui reçoit au plus un
    texte de données.
@@ -206,6 +209,7 @@ flowchart LR
 | **Traiter une commande** | Agent N1 et N2, validateur, récapitulatif, confirmation liée à sa proposition, plans | Confirmation et exécution d'une commande seule liées à Telegram. Plans limités à `/parcelle ajouter` et `/parcelle modifier`. Suppression hors plan | **À adapter** : exécuteurs pour toutes les formes d'écriture, proposition gardée hors du processus |
 | **Questions analytiques** | Cascade, étage 1 (21 gabarits et agent SQL) | Une question donne une réponse. Une seule famille par question, aucune composition (« compare mon rendement de tomates à l'an dernier, en tenant compte de la météo »). Couverture de 17 sur 40, en cours de correction | **Réutiliser**. La composition relève de l'analyse |
 | **Dialogue sur plusieurs échanges** | Contexte court de l'agent : corriger ou prolonger une proposition, 300 s. Complétion CA13. Mode `ask` du bot | Aucune mémoire pour les questions (« et l'an dernier ? »). Mémoire du processus. Aucune conversation à rouvrir (l'historique de la référence) | **À créer** : conversations persistantes. Le format d'US-238 se réutilise, pas son stockage |
+| **Reprendre une action menée** | `/corriger` (parcours guidé), `evenements.corriger_evenement` | Une action exécutée ne laisse aucune trace lisible par l'agent ; aucun outil de correction ; une correction dictée devient un nouveau geste (cas du 24/10/2026) | **À créer** : mémoire des actions menées, en base, et outils `corriger_action` / `annuler_action` (§16) |
 | **Conseil horticole** | Savoir (corpus `agronomie`, mémoire du potager), raisonnement (`_PROMPT_FIXE_RAISONNEMENT` : jamais de dose ni de produit), pré-diagnostic déterministe | Personnalisation limitée à un texte de données (étage hybride) | **Réutiliser** tel quel pour une réponse en un échange |
 | **Analyse approfondie** | Rien. Les services de lecture existent : météo, rotation, calendrier, confiance de semis, échéances de lots, vue des cultures, statistiques, stock | Aucun traitement ne croise plusieurs sources en plusieurs lectures | **À créer**, en lecture seule |
 | **Actions métier** | 17 formes d'écriture, gestes (parseur, file), écrans PWA (`PATCH /parcelles`…) | Les gestes ne sont confirmés que dans le bot (A16). `/voice` contourne cette règle | **À adapter** (commandes) ; **arbitrage** pour les gestes (§14.4, C1) |
@@ -228,6 +232,7 @@ réécrit pas.
 | T7 | Support (aide à l'application) | Mode Support, ou phrase de savoir sur l'application | `connaissance.rechercher(famille=FAMILLE_DOC_APP)` puis raisonnement | Non | `question` si le passage ne suffit pas | **Petite adaptation** : imposer la famille dans la cascade |
 | T8 | Analyse approfondie | Mode Extra | Boucle d'outils de **lecture** sur les services | **Jamais** | nouveau type `analyse` | **À créer** |
 | T9 | Demander une précision, dire « hors périmètre » | `Aiguillage(precision \| hors_perimetre)` | Message, journal (`issue = precision \| hors_perimetre`) | Non | — | **Réutilisé** |
+| T11 | Corriger ou annuler une action menée | L'agent appelle `corriger_action` ou `annuler_action` sur une référence de la mémoire des actions (§16) | Validateur, récapitulatif avant / après, `evenements.corriger_evenement` | **Oui**, après confirmation | `agent` | **À créer** |
 | T10 | Ouvrir un écran ou un parcours | Forme propre à un canal (`note`, `vendre`…), action suggérée | PWA : intention de navigation (US-195). Telegram : handler | Non | — | **Petite adaptation** côté PWA |
 
 ---
@@ -420,6 +425,7 @@ avant la phase 4 ») est levé, puisque la phase 4 est livrée.
 | Cloisonnement en base | RLS (`current_potager_id`), `_requete_base` du socle | Les nouvelles tables (conversations, propositions) portent `potager_id` et une politique RLS, vérifiées par `tests/test_us043_rls_isolation.py` |
 | Un résultat d'outil est une donnée | Consigne 10 de l'agent | Même consigne dans le prompt d'analyse. Les notes du jardinier sont balisées comme des données |
 | Conversation propre à chacun | US-238 / CA6 : rangée par `(user_id, potager_id)` | Une conversation n'est jamais partagée entre deux membres du même potager |
+| Une action se désigne, elle ne se devine pas | Rien aujourd'hui | Le modèle ne reçoit que des références opaques (`A1`…) de la mémoire des actions ; une référence absente du contexte est un rejet ; l'identifiant en base ne lui est jamais montré (§16.4, §16.5) |
 | Identité du canal | Garde de liaison Telegram (US-045), JWT dans l'API | Inchangé. L'orchestrateur reçoit un `TenantContext`, jamais un identifiant de canal |
 | Journal | `routage_logs` (`issue_interpretation`, `outils_agent`) | Même journal, avec une colonne `canal`. Le taux de propositions refusées se lit par canal |
 
@@ -608,7 +614,8 @@ app/services/compagnon/
   orchestrateur.py   le mode et l'aiguillage → un traitement ; aucun appel modèle (R4)
   propositions.py    la proposition en attente, en base : identifiant, potager, expiration,
                      consommation atomique ; reprend les règles d'US-234
-  conversations.py   les échanges récents, en base ; résumé borné au format d'US-238
+  conversations.py   les échanges récents et les actions menées, en base ; résumé borné
+                     au format d'US-238, références opaques des actions (§16)
   analyse.py         la boucle de lecture du mode Extra ; type d'appel « analyse »
 app/services/agent/
   outils_lecture.py  le registre des lectures, partagé par l'agent et l'analyse
@@ -628,7 +635,7 @@ arbitrage.
 |---|---|---|
 | **E0** | `/ask` passe par `repondre_avec_cascade` | La PWA reçoit les réponses de savoir et de raisonnement, avec le journal et 👍/👎 |
 | **E1** | Extraire la distribution (priorités 3e à 4) dans `orchestrateur.py` ; le bot l'appelle | Rien. Le CA9 d'US-236 (ordre des étages) reste vert |
-| **E2** | Propositions en base ; exécuteurs pour les 17 formes d'écriture ; récapitulatif structuré | Bot : une proposition survit à un redémarrage, les plans s'élargissent |
+| **E2** | Propositions en base ; exécuteurs pour les 17 formes d'écriture ; récapitulatif structuré ; **mémoire des actions menées, `corriger_action` / `annuler_action`** (§16) | Bot : une proposition survit à un redémarrage, les plans s'élargissent ; « j'ai oublié de dire que c'était le 5 mai » corrige le geste qui vient d'être enregistré |
 | **E3** | `POST /compagnon/messages` et panneau PWA en modes Normal et Support. Formes propres à Telegram rendues en intentions de navigation | Le compagnon apparaît dans la PWA |
 | **E4** | Conversations en base, corpus de suites, contexte étendu aux questions | « Et l'an dernier ? » est compris dans les deux canaux. L'historique des conversations devient consultable |
 | **E5** | Registre des lectures, analyse du mode Extra, type d'appel `analyse`, rapport de mesure dédié | Le mode Extra |
@@ -661,3 +668,130 @@ arbitrage.
 | Une proposition confirmée deux fois (deux onglets, double clic) | Consommation atomique en base, retrait avant exécution |
 | Un modèle BYOK sans outils | Capacité mémorisée par la passerelle ; les traitements tombent un par un ; message explicite, sans repli sur la plateforme |
 | `/voice` continue d'écrire sans confirmation pendant la transition | E6, et d'ici là aucun nouveau client ne s'y branche |
+| Une phrase de correction crée un second geste (cas du 24/10/2026) | Mémoire des actions menées ; l'agent passe avant le filtre « geste annoncé » quand une action est récente ; un geste sans culture n'est jamais enregistré d'office (§16.6) |
+| L'agent corrige la mauvaise action | Références opaques limitées au contexte, récapitulatif avant / après, confirmation au bouton ; deux candidates donnent une précision |
+
+---
+
+## 16. Reprendre une action menée : la mémoire des actions
+
+> Ajout du 24/10/2026, à la suite d'un cas vécu en dev (Telegram, potager 33,
+> `AGENT_MODE=actif`). Les constats ci-dessous ont été vérifiés dans le code.
+
+### 16.1 Le cas
+
+| Heure | Jardinier | Ce que fait le système |
+|---|---|---|
+| 22:16:43 | « semer en pleine terre du persil sur 2 m2 sur planche nord » | Parseur déterministe, récapitulatif, confirmation ; événement n° 645 écrit, daté du jour |
+| 22:17:18 | « j'ai oublié d'indiquer que le semis datait du 5 mai dernier » | L'agent appelle `saisir_geste` ; le parseur en fait un **nouveau** semis, sans culture, daté du 5 mai, puis demande une quantité et une parcelle |
+
+Le jardinier voulait **corriger** le n° 645. Le système a ouvert un second semis,
+incomplet, qui aurait été enregistré au bout du dialogue.
+
+### 16.2 Pourquoi
+
+1. **Une action exécutée ne laisse aucune trace lisible par l'agent.** Le contexte
+   court d'US-238 retient les résultats d'`interpreter()` (propositions,
+   aiguillages), jamais un geste confirmé par le parcours d'US-021. Et
+   `contexte_court.construire()` rend `None` dès qu'aucune proposition n'attend :
+   une fois le n° 645 confirmé, l'agent ne voit plus rien.
+2. **La mémoire prévue (§3, §8, E4) retient des échanges, pas des actions.** Un
+   texte (« semis de persil enregistré ») suffit pour répondre à « et l'an
+   dernier ? ». Il ne suffit pas pour **désigner** l'événement à modifier : il n'en
+   porte pas l'identifiant, et le déduire du texte reviendrait à deviner une entité
+   (règle 9).
+3. **L'agent n'a aucun outil pour modifier ce qui est fait.** La seule forme
+   dictable, `corriger`, ouvre le parcours guidé de `/corriger` sans argument. Face
+   à « le semis », l'agent ne peut que choisir `saisir_geste`.
+4. **Le filtre « geste annoncé » passe avant l'agent.** « En fait j'ai semé le 5
+   mai » n'atteindrait jamais l'agent : la phrase s'ouvre sur un verbe de geste.
+5. **Un geste sans culture s'enregistre quand même.** Le parcours d'US-021 complète
+   la quantité, puis la parcelle, sans jamais s'arrêter sur l'absence de culture.
+
+### 16.3 Le principe : deux mémoires, dont une de références
+
+La mémoire de conversation (`conversations.py`, §14.3) porte **deux** listes
+distinctes, toutes deux en base, rangées par `(user_id, potager_id)` :
+
+| Mémoire | Contenu | Sert à | Source |
+|---|---|---|---|
+| **Échanges** | Texte du jardinier, texte de l'assistant, outils appelés | Comprendre une suite (« et l'an dernier ? », « et la planche sud aussi ») | Ce qui a été dit |
+| **Actions menées** | Une entrée par écriture **exécutée** : nature (geste, commande), référence de la cible (`evenements.id`, `parcelles.id`…), résumé, champs écrits, canal, instant, proposition d'origine, statut (`executee`, `corrigee`, `annulee`) | **Désigner** ce qui a été fait, pour le corriger ou l'annuler | Le chemin d'écriture, **jamais** le modèle |
+
+L'entrée d'action est écrite par le code qui exécute (`_do_save_items` pour un
+geste, les exécuteurs de service pour une commande), après le succès de
+l'écriture, dans la même transaction quand c'est possible. Le modèle ne crée ni ne
+modifie jamais une entrée.
+
+Une table est nécessaire. `evenements` ne porte ni l'auteur ni l'instant
+d'écriture, seulement la date du geste. `routage_logs` ne voit pas les gestes
+du parseur. Comme les autres tables de la conversation (§9), la nouvelle table
+porte `potager_id` et une politique RLS.
+
+### 16.4 Ce que l'agent reçoit
+
+- Dans la **partie variable** du prompt (R6 : rien dans `PROMPT_FIXE` qui soit
+  propre au compagnon), les **5 dernières actions** du jour, chacune sous une
+  **référence opaque** (`A1`…`A5`) et un résumé : `A1 — semis de persil, 2 m²,
+  planche nord, daté du 24/10 (il y a 1 min)`. L'identifiant en base n'est jamais
+  montré au modèle.
+- Au-delà de cette fenêtre, une lecture `lire(quoi="actions")` (journal des
+  actions du jardinier sur ce potager), sur le modèle de `lire` d'US-237.
+- Le contexte n'est plus conditionné à une proposition en attente : il existe dès
+  qu'il y a une action récente ou un échange récent.
+
+### 16.5 Les outils et leur validation
+
+| Outil | Arguments | Validation |
+|---|---|---|
+| `corriger_action(ref, …champs)` | La référence, et les champs typés selon la nature de l'action. Pour un geste : date, quantité, unité, parcelle, culture, variété, rang. Une commande de parcelle se corrige par `parcelle_modifier`, qui existe déjà | La référence doit être l'une de celles du contexte, sinon l'appel est rejeté. Chaque valeur est ancrée selon sa nature (`validation.py`) : une date ou un nombre doit avoir été dit. Un champ non dit est retiré |
+| `annuler_action(ref)` | La référence | Comme ci-dessus. **Destructrice** : jamais dans un plan, confirmée au bouton seulement |
+
+Le reste ne change pas, et c'est voulu :
+
+- **Proposer, puis confirmer.** Le récapitulatif montre l'avant et l'après :
+  « Je corrige le semis de persil (planche nord) : date 24/10 → 5 mai 2026 ». Rien
+  n'est écrit sans le clic, lié à sa proposition et à son potager (US-234).
+- **Un seul chemin d'écriture (R2).** L'exécution passe par
+  `evenements.corriger_evenement`, celui de `/corriger`. Cette fonction revalide
+  les invariants (US-049), trace la correction dans `texte_original` et invalide
+  les caches (US-095). L'entrée d'action passe à `corrigee`.
+- **Une référence ambiguë se demande.** S'il y a deux semis récents de persil, l'agent appelle
+  `demander_precision` (« celui de la planche nord ou de la planche sud ? »).
+
+### 16.6 L'ordre des étages
+
+Tant qu'une action récente existe, la phrase passe par l'agent **avant** le
+filtre « geste annoncé ». La fenêtre est à mesurer ; on part de 10 minutes.
+C'est l'agent, avec la mémoire des actions sous les yeux, qui distingue « j'ai
+semé des radis » (nouveau geste) de « en fait j'ai semé le 5 mai » (correction).
+Ajouter des mots-clés de correction au filtre en ferait un second classifieur
+(R1). Le coût est d'un appel à l'agent par phrase dans cette fenêtre.
+
+Garde-fou indépendant de l'agent : un geste **sans culture** n'est jamais
+enregistré d'office. Si une action récente existe, le compagnon demande « Tu veux
+corriger le semis de persil de tout à l'heure ? », avec deux boutons : Oui ouvre
+la proposition de correction, Non reprend la saisie d'un nouveau geste.
+
+### 16.7 Où cela se place
+
+| Élément | Emplacement | Étape |
+|---|---|---|
+| Table des actions menées, écrite par les chemins d'exécution | `app/services/compagnon/conversations.py`, migration | E2 (en même temps que les propositions en base) |
+| Références dans la partie variable, `lire(quoi="actions")` | `app/services/agent/contexte_court.py` (puis `conversations.py`), `agent/lecture.py` | E2, pour Telegram, sans attendre la PWA |
+| `corriger_action`, `annuler_action`, exécuteurs | `catalogue_outils`, `validation`, `executeurs` | E2 |
+| Ordre des étages, garde-fou du geste sans culture | `interpreteur_commandes.interpreter`, `app/bot/enregistrement.py` | E2 |
+| Corpus de suites « action puis correction » | `tests/corpus/` | Avant E2 : c'est la mesure qui dira si la fenêtre et l'ordre tiennent |
+
+La reprise d'une action n'attend donc ni la PWA (E3) ni les conversations
+complètes (E4). C'est la suite de conversation la plus fréquente au jardin, et
+elle touche déjà Telegram.
+
+### 16.8 Arbitrages
+
+| # | Question | Recommandation |
+|---|---|---|
+| C8 | Combien de temps une action reste-t-elle désignable par une phrase ? | Les actions du jour dans le prompt (5 au plus), le journal au-delà par `lire`. Au-delà de 24 h, passer par `/corriger` |
+| C9 | Une action faite dans la PWA est-elle désignable depuis Telegram ? | **Oui.** La mémoire des actions est rangée par jardinier et par potager, pas par canal. C'est ce qui justifie le stockage en base |
+| C10 | Un autre membre du potager peut-il corriger mon action par une phrase ? | **Non.** Chacun ne voit que ses propres actions dans le contexte. Le parcours `/corriger` reste ouvert, avec le contrôle de rôle |
+| C11 | Que se passe-t-il quand on corrige un geste déjà pris en compte (stock, lot de pépinière) ? | La correction repasse par les mêmes contrôles que `/corriger` (US-049). Une correction refusée est dite au jardinier, avec la raison donnée par le service |

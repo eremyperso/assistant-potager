@@ -102,3 +102,10 @@ L'unité se lit dans la phrase, sans conversion. « Semé 5 poquets de courge »
 **On parle aussi de :** lot 128 ; numéro de lot dans la phrase ; #128 ; commande lot ; où en est le lot
 
 Pour les gestes de pépinière (mise en godet, perte, vente de plants, plantation), vous pouvez nommer le lot par le numéro écrit sur son étiquette : « repiqué 40 plants du lot 128 en godet ». La phrase se lit sans appel à l'intelligence artificielle, et le récapitulatif avant enregistrement rappelle le numéro du lot. Un semis en pépinière annonce de son côté le numéro qu'il vient de recevoir. Pour consulter un lot sans rien enregistrer, la commande `/lot 128` — ou la phrase « où en est le lot 128 ? » — répond immédiatement.
+
+## Un ancien bouton « Confirmer » ne valide jamais une autre demande
+
+**Intention :** comprendre
+**On parle aussi de :** demande expirée ; ancien message ; bouton qui ne marche plus ; confirmer la mauvaise demande ; changer de potager avant de confirmer ; rien n'a été fait
+
+Chaque bouton ne vaut que pour la demande qu'il accompagne. Si l'on formule une nouvelle demande avant d'avoir tranché la précédente, la nouvelle remplace l'ancienne : appuyer sur « Confirmer » sous l'ancien message répond « Demande expirée, rien n'a été fait » et laisse la demande en cours intacte. De même, une demande se confirme dans le potager où elle a été dite : si le potager actif a changé entre-temps, rien n'est exécuté et il suffit de la redire dans le bon potager.

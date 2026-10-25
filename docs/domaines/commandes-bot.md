@@ -175,11 +175,196 @@ pas pour une consultation — « voulez-vous vraiment afficher le plan ? »
 doublerait chaque lecture. La commande équivalente est rappelée dans les DEUX
 cas : c'est ainsi que le jardinier apprend la syntaxe sans l'apprendre.
 
+### Un bouton ne parle que de sa proposition [US-234]
+
+`_INTERP_PENDING[user_id]` ne garde qu'une proposition par jardinier. Avant
+US-234, le bouton envoyait `interp:ok` sans dire laquelle : « Confirmer » sous un
+**ancien** message validait donc la demande la plus récente, et le potager
+n'était pas retenu (après un `/potager`, la commande s'exécutait dans le nouveau).
+
+| Élément | Règle |
+|---|---|
+| `callback_data` | `interp:ok:<id>`, `interp:non:<id>`, `interp:cand:<rang>:<id>`, `interp:val:<rang>:<id>` ; `<id>` = 6 caractères hexadécimaux (`_nouvel_id_proposition`), toujours différent de celui de la proposition remplacée |
+| Entrée de `_INTERP_PENDING` | porte `id` et `potager_id` (celui du `TenantContext` au moment de la proposition) |
+| Bouton dont l'id n'est pas celui de la proposition en cours, ou sans id (message d'avant US-234) | rien n'est exécuté, « Demande expirée, rien n'a été fait » ; la proposition en cours **n'est pas touchée** (y compris pour « Annuler ») |
+| Potager actif au clic ≠ `potager_id` de la proposition | rien n'est exécuté, la proposition est retirée et journalisée `abandonnee` ; « Annuler » reste possible |
+| Nouvelle proposition pendant qu'une autre attend | l'ancienne est journalisée `abandonnee` avant d'être écrasée |
+
+⚠️ Le potager « au moment du clic » ne se lit **pas** par `current_context()` : un
+callback ne passe pas par le garde de liaison (`_arm_tenant_context`, groupe -1,
+n'arme que le GUC RLS par défaut), il y lirait le contexte par défaut.
+`_potager_actif_au_clic` le relit par le chat (`resoudre_user_id_pour_chat` puis
+`resoudre_tenant_context`) et rend `None` s'il ne peut pas — ce qui vaut refus,
+jamais exécution présumée. Tout nouveau callback qui écrit doit faire de même.
+
+### L'agent interpréteur remplace le repli modèle [US-235]
+
+`interpreter()` garde son ordre : garde de savoir → règles → filtre « geste
+annoncé » → **repli**. Seul le repli change, selon `AGENT_MODE` (lu à chaque
+phrase, `app/config.py`) :
+
+| Mode | Repli |
+|---|---|
+| `off` (défaut du code) | l'ancien `_appeler_modele` (format texte, seuil 0,7), comme avant |
+| `ombre` | l'ancien repli répond ; l'agent est consulté **à côté** (fil d'arrière-plan) et ce qu'il aurait proposé est journalisé (`issue_interpretation = 'ombre'`) |
+| `actif` | l'agent, sans seuil de confiance (CA9) ; s'il est indisponible (429, panne, outils non gérés, appel malformé), l'ancien repli (CA13) ; **si lui non plus ne propose rien et que la phrase demande d'agir, un message explicite** (INC-018, voir plus bas), jamais le routeur |
+
+Le paquet `app/services/agent/` : `catalogue_outils` (13 outils GÉNÉRÉS depuis
+`FORMES_DICTABLES` et les caractéristiques de parcelle ; `controler_parite_outils()`
+échoue si une forme n'a pas d'outil), `adaptateurs` (outil typé → `clé=valeur`),
+`validation`, `interpreteur_agent` (l'appel, le mode ombre).
+
+⚠️ **Révision de CA4 d'US-172** : l'ancrage mot pour mot devient un ancrage
+selon la NATURE de la valeur (`validation.py`) :
+
+| Nature | Règle |
+|---|---|
+| parcelle | dite ET existante à l'identique ; un rattachement du modèle (« la serre » → « Serre extérieure ») est PROPOSÉ, jamais substitué |
+| nombre | dit en chiffres ou en lettres, sinon l'appel est rejeté |
+| oui / non, liste fermée | **déductible** (« n'est plus une pépinière » → `pepiniere=non`), si le champ est évoqué (son nom, son libellé ou une valeur, sur 4 lettres) ; sinon retiré |
+| texte libre, nom choisi | dit, sinon retiré puis demandé ; une copie d'un autre argument (`Planche Nord → Planche Nord`) est retirée |
+
+**Gel des règles (A3)** : plus de nouvelle règle de commande pour couvrir une
+tournure. Une tournure ratée devient une ligne de `tests/corpus/us235_agent_commandes.csv`,
+mesurée par `tools/evaluer_interpreteur_agent.py` (0 destructrice erronée et 0
+régression exigées). Exception : une commande destructrice fréquente.
+
+Le récapitulatif d'une modification proposée par l'agent dit le sens de chaque
+champ (« Je *retire* le statut pépinière de *Serre extérieure* »), celui des
+règles garde ses puces. Plusieurs `clé=valeur` deviennent plusieurs arguments du
+handler (`CommandeInterpretee.args`).
+
+⚠️ Le filtre « geste annoncé » passe AVANT l'agent : « retire le paillage de la
+planche sud » s'ouvre sur un mot de geste et n'atteint jamais l'agent. US-236
+a gardé cet ordre (CA9 : les filtres sans modèle passent avant l'agent).
+
+### L'agent dit où va la phrase — `Aiguillage` [US-236]
+
+En `actif`, un outil terminal n'est plus jeté : `interpreter()` rend un
+`Aiguillage(vers, nature_question, message)` et le bot le suit **sans** repasser
+par `routeur.classer_demande` (les mots-clés du routeur ne servent plus qu'aux
+phrases que l'agent n'a pas prises : `off`, `ombre`, et en `actif` indisponible ou
+rejet du validateur pour une phrase qui ne demande PAS d'agir — CA8, INC-018).
+
+| `vers` | Qui le traite | Effet |
+|---|---|---|
+| `question` | `messages.py` (texte et voix) | `_ask_question(…, nature=…)` → `repondre_avec_cascade(decision=…)`, origine `agent` ; nature illisible → la cascade classe elle-même |
+| `geste` | `messages.py` | droit à `_parse_and_save`, sans routeur ni `parse_message` |
+| `precision` | `interpretation._suivre_aiguillage` | « ❓ <question du modèle> — Rien n'a été fait » ; aucune proposition en attente |
+| `hors_perimetre` | `interpretation._suivre_aiguillage` | « 🤷 Je ne sais pas encore faire ça (<raison>) » |
+| `non_compris` [INC-018] | `interpretation._suivre_aiguillage` | « 🙏 Je n'ai pas réussi à traiter cette demande… Rien n'a été fait » + la commande à taper (`message`) ; produit par `interpreter()`, jamais par un outil |
+
+Précision et hors périmètre écrivent une ligne `routage_logs`
+(`issue_interpretation` = `precision` / `hors_perimetre`, `outils_agent` = l'outil) :
+`SELECT question_normalisee FROM routage_logs WHERE issue_interpretation = 'hors_perimetre'`
+est la liste des demandes de fonctionnalité. Le texte du modèle est échappé
+(`_md`) avant d'entrer dans le message Markdown.
+
+⚠️ Une désignation relative n'est pas un nom (`_DESIGNATION_RELATIVE` dans
+`_nom_plausible`) : « supprime la parcelle près des tomates » n'est plus
+reconnue par la règle `parcelle_supprimer`, elle passe à l'agent qui demande
+laquelle. Une parcelle réellement nommée « Près du puits » se supprime donc par
+la commande tapée, ou par l'agent.
+
+### Une demande d'agir qui échoue est dite, pas routée [INC-018]
+
+En `actif`, si l'agent est indisponible ou rejeté (appel `tool_use_failed`,
+validateur) ET que l'ancien repli ne propose rien (ou sous le seuil 0,7),
+`interpreter()` rend `Aiguillage(vers='non_compris')` quand la phrase **demande
+d'agir** (`demande_d_agir` : verbe d'action en tête, impératif ou « peux-tu / je
+veux » ; une phrase en « ? » sans cette formule est une question). Sans cela, le
+routeur par mots-clés prenait « Créez la planche Nord… » pour une question de
+données et répondait la liste des lots en pépinière (confiance 1,00).
+
+- Les règles de commande et le parseur de gestes restent des raccourcis, avant l'agent.
+- Une déclaration (« la planche nord a 6 rangs ») garde le chemin d'avant (routeur).
+- `/ask` garde la cascade : ce chemin ne passe pas par `interpreter()`.
+- `off` et `ombre` ne changent pas. Un `non_compris` n'entre pas dans le contexte court.
+- **Tour de complément** : un tour sans `lire` clôt la boucle, et gpt-oss-120b n'émet souvent
+  qu'un appel d'écriture par réponse (« crée la planche nord de 20m2 et de longueur 2 m »
+  ne créait que la planche). `validation.chiffres_non_repris` compare les nombres dits aux
+  arguments appelés (l'unité de « m2 » est ignorée) ; un nombre perdu accorde UN tour de
+  plus, où seules les écritures sont retenues (un doute tardif n'annule rien). Sans modèle
+  ni écriture ; un faux positif coûte un appel. Ne couvre pas une seconde demande sans
+  nombre (« …et mets la serre en pépinière ») : reste US-250.
+- Le schéma des outils accepte `null` pour un champ facultatif (« non dit », retiré
+  par le validateur) : un type strict faisait rejeter l'appel par le serveur ; la
+  génération rejetée est journalisée (`llm.passerelle`, WARNING).
+
+### Plusieurs commandes en une phrase — `Plan` [US-237]
+
+`interpreteur_agent.proposer` est une boucle d'au plus `AGENT_MAX_TOURS` appels
+(`historique` de `passerelle.appeler_chat_outils`). L'outil `lire` (parcelle,
+parcelles, lot, culture — `agent/lecture.py`, potager du contexte, résultat en
+JSON sous `donnees`) est exécuté et renvoyé au modèle ; une écriture reçoit
+« noté » et n'est **jamais** exécutée dans la boucle ; un tour sans lecture ou
+un outil terminal la clôt.
+
+| Appels retenus | Résultat |
+|---|---|
+| terminal en tête, ou `demander_precision` après des écritures | `Aiguillage` (US-236) |
+| une écriture | `CommandeInterpretee`, proposition simple (CA9) |
+| plusieurs écritures | `validation.valider_plan` → `Plan`, ou `Aiguillage(precision)` |
+
+`valider_plan` passe chaque appel par `valider_appel` avec la liste des parcelles
+**enrichie des créations précédentes** (règle 7) ; une création sur un nom pris
+va dans `Plan.deja_faites` (signalée, sautée). Une étape sans exécuteur
+(suppression, renommage, tout sauf `/parcelle ajouter|modifier`) refuse le plan :
+« je ne sais faire celle-ci que seule ». Un plan refusé ne retourne jamais à
+l'ancien chemin, qui n'en verrait qu'une commande.
+
+Le bot (`interpretation._plan_proposer`) affiche `recapitulatif_plan` et une
+seule paire `interp:ok:<id>` / `interp:non:<id>` (US-234). À la confirmation,
+`_plan_executer` relit le `TenantContext` au clic (`_contexte_au_clic`) et
+appelle `agent/executeurs.executer_plan` : **pas les handlers**, qui rendent
+`None`. Chaque étape est revalidée en base (nom exact, jamais rapproché), la
+première `echouee` arrête la suite, `compte_rendu` rend ✅ ❌ ⏭ en texte brut.
+`executeurs.SERVICES` pointe les mêmes fonctions que les handlers
+(`create_parcelle` de `messages.py`, `update_parcelle` de `commandes_parcelle.py`) :
+le test de parité échoue si l'un des deux change de service. Journal : une ligne
+par plan, `commande_interpretee = "plan parcelle ajouter,modifier,…"` (64 car.).
+
+### Corriger ou prolonger la dernière demande — `ContexteCourt` [US-238]
+
+« Non, l'autre », « et la planche sud aussi » ne se comprennent qu'à la lumière de
+la proposition en attente. `app/services/agent/contexte_court.py` la résume :
+`ContexteCourt(commandes, texte_origine, candidats, ecartes, echanges)`, rendu en
+JSON dans la partie **variable** du message système (`prompt_variable(…,
+contexte_court=)`), avec les consignes de correction. Sans proposition en attente le
+message système reste celui qui a été mesuré (US-233, US-235) : les consignes ne sont
+PAS dans `PROMPT_FIXE`.
+
+| Borne | Où elle tient |
+|---|---|
+| CA1 : proposition + 3 échanges, tronqués | `NB_ECHANGES_MAX`, `LONGUEUR_MAX` (tronqué par le début : la dernière phrase est à la fin) |
+| CA5 : hors délai, demande nouvelle | `construire` rend None après `_INTERP_TIMEOUT` (300 s) ; les échanges plus vieux sont oubliés |
+| CA6 : un jardinier, un potager | la proposition vient de `_INTERP_PENDING[user_id]` ; `construire` refuse un autre `potager_id` ; les échanges sont rangés par `(user_id, potager_id)` |
+
+Le bot construit le contexte (`interpretation.contexte_court_de(update)`, texte **et**
+voix) et le passe à `interpreter(…, contexte_court=)`, que seul l'agent en mode
+`actif` lit. Chaque phrase interprétée (`_traiter_commande_interpretee`) est notée
+comme un échange par `contexte_court.noter_resultat`.
+
+⚠️ **L'ancrage reste celui du validateur.** `proposer` ancre sur « phrase d'origine
+de la proposition ; nouvelle phrase » : « et la planche sud aussi » reprend le « 6 »
+dit plus tôt, mais un nombre dit nulle part reste refusé. La phrase d'origine du
+résultat est cette phrase combinée, donc `Plan.texte_origine` et le journal portent la
+demande complète — et une prolongation de prolongation garde ses valeurs.
+
+⚠️ **« L'autre » est une déduction : elle est proposée, jamais substituée.** Le nom
+n'a pas été dit, `_resoudre_entites` le range en candidat et le jardinier le valide
+d'un bouton. `pending["ecartes"]` (voir `_ecartes_apres`) garde les voisins déjà
+refusés d'une proposition à l'autre ; `_conclure` n'en repropose aucun et demande
+« Laquelle ? ». La nouvelle proposition remplace l'ancienne par le chemin d'US-234
+(`_abandonner_precedente` : journal `abandonnee`, nouvel identifiant de boutons).
+
 Mesure et journal :
 
 ```bash
 psql -d potager -f migrations/migration_v44.sql   # routage_logs : commande + issue
-pytest tests/test_us172_interpreteur_commandes.py
+psql -d potager -f migrations/migration_v59.sql   # routage_logs.outils_agent [US-235]
+pytest tests/test_us172_interpreteur_commandes.py tests/test_us235_agent_interpreteur.py tests/test_us236_aiguillage_agent.py tests/test_us237_plan_agent.py tests/test_us238_contexte_court.py
+python tools/evaluer_interpreteur_agent.py --dry-run   # puis sans --dry-run : vrai modèle
 ```
 
 `tests/corpus/us172_commandes.csv` : 162 formulations de commande, 36 questions

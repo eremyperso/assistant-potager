@@ -345,8 +345,11 @@ def _extract_plan_parcelle(texte: str) -> str | None:
 
 
 # ── QUESTION ANALYTIQUE ─────────────────────────────────────────────────────────
-async def _ask_question(update: Update, question: str):
+async def _ask_question(update: Update, question: str, nature: str | None = None):
     """
+    [US-236 / CA2] `nature` : celle que l'agent interpréteur a donnée — la
+    cascade la reçoit telle quelle au lieu de reclasser la phrase.
+
     [US-012 / US-093 / US-097] Interroge l'historique via SQL agent, ou bascule
     vers le savoir/raisonnement selon l'aiguillage du routeur — zéro
     hallucination sur l'étage data, zéro appel modèle sur la frange non
@@ -362,7 +365,14 @@ async def _ask_question(update: Update, question: str):
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        resultat = routeur.repondre_avec_cascade(current_context(), question)
+        if nature:
+            resultat = routeur.repondre_avec_cascade(
+                current_context(), question,
+                decision=routeur.DecisionRoutage(
+                    nature=nature, origine=routeur.ORIGINE_AGENT, confiance=1.0),
+            )
+        else:
+            resultat = routeur.repondre_avec_cascade(current_context(), question)
         reponse = resultat.texte
         log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 

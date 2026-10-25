@@ -220,6 +220,10 @@ class Argument:
     obligatoire: bool = True
     vocabulaire: tuple[str, ...] = ()
     unite: Optional[str] = None
+    #: [INC-018] Ce que le CHAMP désigne, pour le schéma de l'agent. Distinct de
+    #: `question` : une question dans la description d'un champ invite le modèle à
+    #: la poser au jardinier, ou à remplir le champ par déduction.
+    description: str = ""
 
 
 @dataclass(frozen=True)
@@ -264,21 +268,29 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     FormeCommande(
         "parcelle", "ajouter", "Créer une parcelle",
         (
-            Argument("nom", TYPE_NOM_LIBRE, "Quel nom pour cette parcelle ?"),
-            Argument("exposition", TYPE_NOM_LIBRE, "Quelle exposition ?", obligatoire=False),
-            Argument("superficie", TYPE_NOMBRE, "Quelle superficie ?", obligatoire=False, unite="m²"),
+            Argument("nom", TYPE_NOM_LIBRE, "Quel nom pour cette parcelle ?",
+                     description="Nom de la parcelle à créer, tel que dit par le jardinier"),
+            Argument("exposition", TYPE_NOM_LIBRE, "Quelle exposition ?",
+                     description="Exposition de la parcelle (nord, sud, est, ouest…), seulement "
+                                 "si le jardinier l'a dite : elle ne se déduit pas du nom",
+                     obligatoire=False),
+            Argument("superficie", TYPE_NOMBRE, "Quelle superficie ?",
+                     description="Superficie de la parcelle", obligatoire=False, unite="m²"),
         ),
     ),
     FormeCommande(
         "parcelle", "renommer", "Renommer une parcelle",
         (
-            Argument("ancien", TYPE_PARCELLE, "Quelle parcelle renommer ?"),
-            Argument("nouveau", TYPE_NOM_LIBRE, "Quel nouveau nom ?"),
+            Argument("ancien", TYPE_PARCELLE, "Quelle parcelle renommer ?",
+                     description="Nom actuel de la parcelle à renommer"),
+            Argument("nouveau", TYPE_NOM_LIBRE, "Quel nouveau nom ?",
+                     description="Nouveau nom de la parcelle, tel que dit par le jardinier"),
         ),
     ),
     FormeCommande(
         "parcelle", "supprimer", "Supprimer une parcelle",
-        (Argument("nom", TYPE_PARCELLE, "Quelle parcelle supprimer ?"),),
+        (Argument("nom", TYPE_PARCELLE, "Quelle parcelle supprimer ?",
+                 description="Nom de la parcelle à supprimer"),),
         destructrice=True,
     ),
     FormeCommande(
@@ -330,7 +342,8 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     FormeCommande(
         "lot", None, "Afficher un lot de pépinière, ou la liste des lots",
         (
-            Argument("numero", TYPE_NOMBRE, "Quel numéro de lot ?", obligatoire=False, unite="n°"),
+            Argument("numero", TYPE_NOMBRE, "Quel numéro de lot ?",
+                     description="Numéro du lot de pépinière", obligatoire=False, unite="n°"),
             Argument("culture", TYPE_CULTURE, "Quelle culture ?", obligatoire=False),
         ),
         confirmation=False,
@@ -361,10 +374,13 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
             Argument("culture_a", TYPE_CULTURE, "Quelle première culture ?"),
             Argument("culture_b", TYPE_CULTURE, "Quelle seconde culture ?"),
             Argument("nature", TYPE_VOCABULAIRE, "Cette association est-elle favorable, défavorable ou neutre ?",
+                     description="Nature de l'association",
                      vocabulaire=_vocabulaire("app.services.associations", "NATURES")),
             Argument("preuve", TYPE_VOCABULAIRE, "Sur quoi repose-t-elle ?",
+                     description="Niveau de preuve de l'association",
                      vocabulaire=_vocabulaire("app.services.associations", "NIVEAUX_PREUVE")),
-            Argument("motif", TYPE_TEXTE, "Pour quel motif ?"),
+            Argument("motif", TYPE_TEXTE, "Pour quel motif ?",
+                     description="Motif de l'association, tel que dit par le jardinier"),
         ),
     ),
 
@@ -385,7 +401,8 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "culture", "delai_retour", "Corriger le délai de retour d'une famille",
         (
             Argument("famille", TYPE_FAMILLE, "Quelle famille botanique ?"),
-            Argument("annees", TYPE_NOMBRE, "Combien d'années ?", unite="ans"),
+            Argument("annees", TYPE_NOMBRE, "Combien d'années ?",
+                     description="Délai de retour de la famille botanique", unite="ans"),
         ),
     ),
     FormeCommande(
@@ -393,6 +410,7 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("valeur", TYPE_VOCABULAIRE, "Quelle exposition ?",
+                     description="Exposition de la culture",
                      vocabulaire=_vocabulaire("app.services.attributs_culture", "EXPOSITIONS")),
         ),
     ),
@@ -401,6 +419,7 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("valeur", TYPE_VOCABULAIRE, "Quel besoin en eau ?",
+                     description="Besoin en eau de la culture",
                      vocabulaire=_vocabulaire("app.services.attributs_culture", "BESOINS_EAU")),
         ),
     ),
@@ -408,14 +427,16 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "culture", "profondeur", "Corriger la profondeur de semis d'une culture",
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
-            Argument("valeur", TYPE_NOMBRE, "Quelle profondeur de semis ?", unite="cm"),
+            Argument("valeur", TYPE_NOMBRE, "Quelle profondeur de semis ?",
+                     description="Profondeur de semis de la culture", unite="cm"),
         ),
     ),
     FormeCommande(
         "culture", "rusticite", "Corriger la rusticité d'une culture",
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
-            Argument("valeur", TYPE_NOMBRE, "Quelle température minimale ?", unite="°C"),
+            Argument("valeur", TYPE_NOMBRE, "Quelle température minimale ?",
+                     description="Température minimale supportée par la culture", unite="°C"),
         ),
     ),
 
@@ -444,6 +465,7 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("action", TYPE_VOCABULAIRE, "Un semis ou une plantation ?",
+                     description="Semis ou plantation",
                      vocabulaire=_vocabulaire("app.services.confiance_semis", "ACTIONS")),
             Argument("date", TYPE_DATE, "À quelle date ?", obligatoire=False),
             Argument("parcelle", TYPE_PARCELLE, "Sur quelle parcelle ?", obligatoire=False),
@@ -454,6 +476,7 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "calendrier", "zone", "Choisir la zone climatique du potager",
         (
             Argument("zone", TYPE_VOCABULAIRE, "Quelle zone climatique ?",
+                     description="Zone climatique du potager",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "ZONES_CLIMATIQUES")),
         ),
     ),
@@ -463,10 +486,14 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("phase", TYPE_VOCABULAIRE,
                      "Quelle période : semis en pépinière, semis en pleine terre, plantation ou récolte ?",
+                     description="Période du calendrier : semis en pépinière, semis en pleine terre, "
+                                 "plantation ou récolte",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "PHASES")),
             Argument("mois_debut", TYPE_VOCABULAIRE, "À partir de quel mois ?",
+                     description="Mois de début de la période",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "MOIS")),
-            Argument("mois_fin", TYPE_VOCABULAIRE, "Jusqu'à quel mois ?", obligatoire=False,
+            Argument("mois_fin", TYPE_VOCABULAIRE, "Jusqu'à quel mois ?",
+                     description="Mois de fin de la période", obligatoire=False,
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "MOIS")),
         ),
     ),
@@ -480,9 +507,13 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
             Argument("etape", TYPE_VOCABULAIRE,
                      "Quel délai : levée, récolte, repiquage, plantation → récolte "
                      "ou semis → godet ?",
+                     description="Délai du calendrier : levée, récolte, repiquage, "
+                                 "plantation → récolte ou semis → godet",
                      vocabulaire=_vocabulaire("app.services.calendrier_cultural", "ETAPES")),
-            Argument("jours_min", TYPE_NOMBRE, "Combien de jours ?", unite="jours"),
-            Argument("jours_max", TYPE_NOMBRE, "Jusqu'à combien de jours ?", obligatoire=False,
+            Argument("jours_min", TYPE_NOMBRE, "Combien de jours ?",
+                     description="Délai, en jours (minimum s'il y a une fourchette)", unite="jours"),
+            Argument("jours_max", TYPE_NOMBRE, "Jusqu'à combien de jours ?",
+                     description="Délai maximum, seulement s'il y a une fourchette", obligatoire=False,
                      unite="jours"),
         ),
     ),
@@ -497,8 +528,10 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "bioagresseur", "declarer", "Déclarer un bioagresseur dans ce potager",
         (
             Argument("categorie", TYPE_VOCABULAIRE, "De quelle nature est-il ?",
+                     description="Nature du bioagresseur",
                      vocabulaire=_vocabulaire("app.services.bioagresseurs", "CATEGORIES")),
-            Argument("nom", TYPE_NOM_LIBRE, "Quel est son nom ?"),
+            Argument("nom", TYPE_NOM_LIBRE, "Quel est son nom ?",
+                     description="Nom du bioagresseur, tel que dit par le jardinier"),
         ),
     ),
     FormeCommande(
@@ -506,8 +539,10 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?"),
             Argument("frequence", TYPE_VOCABULAIRE, "À quelle fréquence l'attaque-t-il ?",
+                     description="Fréquence des attaques sur la culture",
                      vocabulaire=_vocabulaire("app.services.bioagresseurs", "FREQUENCES")),
-            Argument("bioagresseur", TYPE_NOM_LIBRE, "Quel bioagresseur ?"),
+            Argument("bioagresseur", TYPE_NOM_LIBRE, "Quel bioagresseur ?",
+                     description="Nom du bioagresseur, tel que dit par le jardinier"),
         ),
     ),
     FormeCommande("bioagresseur", "orphelins", "Lister les bioagresseurs rattachés à aucune culture",
@@ -516,7 +551,8 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     # ── Potager, parcours guidés, confort ────────────────────────────────────
     FormeCommande(
         "potager", None, "Changer de potager actif",
-        (Argument("nom", TYPE_NOM_LIBRE, "Quel potager ?", obligatoire=False),),
+        (Argument("nom", TYPE_NOM_LIBRE, "Quel potager ?",
+                 description="Nom du potager, tel que dit par le jardinier", obligatoire=False),),
     ),
     FormeCommande("note", None, "Ouvrir la saisie guidée d'une note", confirmation=False),
     FormeCommande("corriger", None, "Ouvrir le parcours de correction", confirmation=False),
@@ -524,7 +560,8 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         "vendre", None, "Ouvrir l'enregistrement d'une vente de plants",
         (
             Argument("culture", TYPE_CULTURE, "Quelle culture ?", obligatoire=False),
-            Argument("variete", TYPE_NOM_LIBRE, "Quelle variété ?", obligatoire=False),
+            Argument("variete", TYPE_NOM_LIBRE, "Quelle variété ?",
+                     description="Variété, telle que dite par le jardinier", obligatoire=False),
         ),
         confirmation=False,
     ),
@@ -533,7 +570,8 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     FormeCommande("tts", None, "Dire si les réponses vocales sont actives", confirmation=False),
     FormeCommande(
         "help", None, "Afficher l'aide",
-        (Argument("domaine", TYPE_NOM_LIBRE, "Sur quel domaine ?", obligatoire=False),),
+        (Argument("domaine", TYPE_NOM_LIBRE, "Sur quel domaine ?",
+                 description="Domaine de l'aide demandée", obligatoire=False),),
         confirmation=False,
     ),
 )

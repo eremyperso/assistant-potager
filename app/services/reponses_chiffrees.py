@@ -71,7 +71,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import date as _date, datetime
+from datetime import date as _date, datetime, timedelta
 from typing import Callable, Optional
 
 from sqlalchemy import func
@@ -83,6 +83,7 @@ from app.services import catalogue_sql
 from app.services import prediagnostic as svc_prediagnostic
 from app.services import familles as _familles
 from app.services import memoire_potager as _memoire
+from app.services import potager_actif as _potager_actif
 from app.services.catalogue_sql import GardeCatalogueError
 from app.services.context import TenantContext
 from database.db import SessionLocal
@@ -227,8 +228,21 @@ GABARITS: dict[str, str] = {
     "rendement_global":         "Rendement cumulé {periode} : {total} au total.\n{lignes}",
     "rendement_global_vide":    "Je n'ai aucune récolte pesée enregistrée {periode}.",
 
+    # [US-248] Classement des récoltes et total de la période ; les pièces sont à part
+    "classement_recoltes":      "Récoltes {periode}, de la plus à la moins productive :\n{lignes}",
+    "total_recoltes":           "Tu as récolté {total} {periode}, toutes cultures confondues.",
+    "recoltes_pieces":          "À part, comptées à la pièce (jamais additionnées aux kilos) :\n{lignes}",
+    "recoltes_pieces_seules":   "Tu n'as aucune récolte pesée {periode}. Comptées à la pièce :\n{lignes}",
+    "recoltes_aucune":          "Je n'ai aucune récolte enregistrée {periode}.",
+    # [US-249] Le potager actif
+    "potager_actif":            "Ton potager actif est « {actif} ».",
+    "potager_actif_autres":     "Tu as aussi accès à : {autres}. Pour changer de potager actif : /potager.",
+    "potagers_nombre":          "Tu as accès à {nb} potager(s) : {liste}.",
+    "potager_actif_inconnu":    "Je ne retrouve pas ton potager actif. Pour en choisir un : /potager.",
+    "potagers_nombre_un":       "Tu as accès à un seul potager : « {actif} », ton potager actif.",
+
     # Stock courant, toutes cultures confondues
-    "stock_global":             "Ton stock actuel :\n{lignes}",
+    "stock_global":            "Ton stock actuel :\n{lignes}",
     "stock_global_vide":        "Je n'ai aucune culture en place enregistrée dans ce potager.",
 
     # Contenu de la pépinière
@@ -237,6 +251,29 @@ GABARITS: dict[str, str] = {
 
     # Parcelles libres — la place disponible pour la prochaine culture
     "parcelles_libres":         "{nb} parcelle(s) libre(s) sur {total} :\n{lignes}",
+    "liste_parcelles":          "Tu as {nb} parcelle(s) dans ce potager :\n{lignes}",
+    # [US-244] Caractéristiques d'une parcelle et parcelles filtrées sur l'une d'elles
+    "attribut_parcelle":        "{parcelle} — {lignes}",
+    "attribut_parcelle_vide":   "{libelle} de {parcelle} : non renseigné. Pour le renseigner : /parcelle modifier {parcelle} {cle}=…",
+    "parcelles_filtrees":       "{nb} parcelle(s) {libelle} sur {total} :\n{lignes}",
+    "parcelles_filtrees_aucune": "Aucune parcelle {libelle} sur tes {total} parcelles.",
+    # [US-245] Inventaire des cultures et variétés
+    "cultures_en_place":        "Cultures en place ({nb}) :\n{lignes}",
+    "cultures_en_place_aucune": "Aucune culture en place pour l'instant.",
+    "varietes_culture":         "{nb} variété(s) de {culture} :\n{lignes}",
+    "varietes_culture_nombre":  "{nb} variété(s) de {culture}.",
+    "varietes_culture_aucune":  "Aucune variété de {culture} enregistrée dans ce potager.",
+    # [US-246] Compter un geste, relire l'historique d'un type de geste
+    "nombre_occurrences":       "{nb} {action} de {culture} {periode}.",
+    "nombre_occurrences_sans_culture": "{nb} {action} {periode}, toutes cultures confondues.",
+    "nombre_occurrences_vide":  "Je n'ai {aucun} {action} de {culture} enregistré{e} {periode}.",
+    "nombre_occurrences_vide_sans_culture": "Je n'ai {aucun} {action} enregistré{e} {periode}, toutes cultures confondues.",
+    "historique_action":        "{nb} {action} de {culture} {periode} :\n{lignes}",
+    "historique_action_sans_culture": "{nb} {action} {periode} :\n{lignes}",
+    # [US-247] Ce que j'ai fait sur une période
+    "journal_periode":          "Ce que tu as fait {periode} ({nb} geste(s)) :\n{lignes}",
+    "journal_periode_resume":   "Ce que tu as fait {periode} : {nb} gestes — {resume}.\nLe détail jour par jour est dans l'historique de l'application.",
+    "journal_periode_vide":     "Rien d'enregistré {periode}.",
     "parcelles_libres_aucune":  "Aucune parcelle libre : tes {total} parcelles sont toutes occupées.",
 
     # Parcelles où une culture est en place — « où sont mes tomates ? »
@@ -380,6 +417,30 @@ def _detecter_periode(normalisee: str, aujourdhui: _date) -> Periode:
 
     if re.search(r"\bcet hiver\b", normalisee):
         return Periode(_date(annee - 1, 12, 1), _date(annee, 2, 28), "cet hiver", annee)
+
+    # [US-247] Les périodes COURTES du journal. Du plus précis au plus large :
+    # « avant-hier » avant « hier », « la semaine dernière » avant « cette semaine ».
+    if re.search(r"\bavant hier\b", normalisee):
+        jour = aujourdhui - timedelta(days=2)
+        return Periode(jour, jour, "avant-hier", jour.year)
+    if re.search(r"\bhier\b", normalisee):
+        jour = aujourdhui - timedelta(days=1)
+        return Periode(jour, jour, "hier", jour.year)
+    if re.search(r"\baujourd hui\b|\bce jour\b", normalisee):
+        return Periode(aujourdhui, aujourdhui, "aujourd'hui", annee)
+    lundi = aujourdhui - timedelta(days=aujourdhui.weekday())
+    if re.search(r"\bsemaine (?:derniere|passee)\b", normalisee):
+        return Periode(lundi - timedelta(days=7), lundi - timedelta(days=1), "la semaine dernière", annee)
+    if re.search(r"\bcette semaine\b", normalisee):
+        return Periode(lundi, aujourdhui, "cette semaine", annee)
+    jour_cite = re.search(rf"\ble (\d{{1,2}}) (?:er )?({'|'.join(MOIS)})\b", normalisee)
+    if jour_cite:
+        try:
+            jour = _date(annee, MOIS[jour_cite.group(2)], int(jour_cite.group(1)))
+        except ValueError:
+            jour = None
+        if jour is not None:
+            return Periode(jour, jour, f"le {jour.day} {jour_cite.group(2)}", annee)
 
     if re.search(r"\bce mois\b|\bce mois ci\b", normalisee):
         debut = _date(annee, aujourdhui.month, 1)
@@ -698,6 +759,113 @@ def _agreger_derniere_occurrence(
     }
 
 
+#: [US-246] Occurrences citées dans l'historique d'un geste ; le reste est annoncé.
+LIMITE_HISTORIQUE_GESTE = 10
+
+#: [US-247] Au-delà, le journal d'une période se RÉSUME par type de geste au lieu
+#: de se dérouler : quinze lignes se lisent, soixante se font défiler.
+LIMITE_LIGNES_JOURNAL = 15
+
+#: [US-247] Période par défaut de « qu'est-ce que j'ai fait ? », dite dans la réponse.
+JOURS_JOURNAL_PAR_DEFAUT = 7
+
+
+def _evenements_filtres(
+    db: Session, ctx: TenantContext, periode: Periode,
+    action: Optional[str] = None, culture: Optional[str] = None,
+):
+    """Requête commune des familles de journal : potager actif, geste, culture et
+    fenêtre de dates, dans cet ordre — la même lecture pour compter et pour lister."""
+    debut, fin = _bornes(periode)
+    requete = db.query(Evenement).filter(Evenement.potager_id == ctx.potager_id)
+    if action:
+        requete = requete.filter(Evenement.type_action == action)
+    if culture:
+        requete = requete.filter(func.lower(Evenement.culture) == culture.lower())
+    if debut is not None:
+        requete = requete.filter(Evenement.date >= debut)
+    if fin is not None:
+        requete = requete.filter(Evenement.date <= fin)
+    return requete
+
+
+def _noms_parcelles(db: Session, ctx: TenantContext, evenements) -> dict[int, str]:
+    ids = {e.parcelle_id for e in evenements if e.parcelle_id}
+    if not ids:
+        return {}
+    lignes = db.query(Parcelle.id, Parcelle.nom).filter(
+        Parcelle.potager_id == ctx.potager_id, Parcelle.id.in_(ids)
+    ).all()
+    return {identifiant: nom for identifiant, nom in lignes}
+
+
+def _ligne_evenement(e: Evenement, noms: dict[int, str]) -> dict:
+    return {
+        "date": e.date, "action": e.type_action, "culture": e.culture, "variete": e.variete,
+        "quantite": e.quantite, "unite": e.unite, "produit": e.traitement,
+        "parcelle": noms.get(e.parcelle_id),
+    }
+
+
+@catalogue_sql.enregistrer("nombre_occurrences")
+def _agreger_nombre_occurrences(
+    db: Session, ctx: TenantContext, action: str, culture: Optional[str], periode: Periode
+) -> dict:
+    """[US-246 / CA1, CA4, CA6] Nombre de saisies d'un type de geste, avec le total
+    de pieds pour une perte. `present` est toujours vrai : zéro est une réponse."""
+    evenements = _evenements_filtres(db, ctx, periode, action, culture).all()
+    pieces, unite_pieces = 0.0, ""
+    for e in evenements:
+        if (e.unite or "").lower() not in _stock.UNITES_POIDS_EN_G and e.quantite:
+            pieces += e.quantite
+            unite_pieces = e.unite or "pieds"
+    return {
+        "present": True, "periode": periode.libelle, "nb": len(evenements),
+        "pieces": pieces, "unite_pieces": unite_pieces,
+    }
+
+
+@catalogue_sql.enregistrer("historique_action")
+def _agreger_historique_action(
+    db: Session, ctx: TenantContext, action: str, culture: Optional[str], periode: Periode
+) -> dict:
+    """[US-246 / CA3, CA6] Les occurrences d'un geste, de la plus récente à la plus
+    ancienne, plafonnées ; le total est celui de toute la fenêtre."""
+    requete = _evenements_filtres(db, ctx, periode, action, culture)
+    nb = requete.count()
+    evenements = requete.order_by(Evenement.date.desc().nullslast(), Evenement.id.desc()).limit(
+        LIMITE_HISTORIQUE_GESTE
+    ).all()
+    noms = _noms_parcelles(db, ctx, evenements)
+    return {
+        "present": True, "periode": periode.libelle, "nb": nb,
+        "lignes": [_ligne_evenement(e, noms) for e in evenements],
+    }
+
+
+@catalogue_sql.enregistrer("journal_periode")
+def _agreger_journal_periode(
+    db: Session, ctx: TenantContext, periode: Periode, culture: Optional[str] = None
+) -> dict:
+    """[US-247 / CA1-CA5] Tous les gestes d'une période, du plus ancien au plus
+    récent. Au-delà de `LIMITE_LIGNES_JOURNAL`, seul le décompte par type de geste
+    est rendu — les lignes ne sont alors pas chargées."""
+    requete = _evenements_filtres(db, ctx, periode, None, culture).filter(Evenement.date.isnot(None))
+    nb = requete.count()
+    par_type = dict(
+        _evenements_filtres(db, ctx, periode, None, culture)
+        .filter(Evenement.date.isnot(None))
+        .with_entities(Evenement.type_action, func.count(Evenement.id))
+        .group_by(Evenement.type_action).all()
+    )
+    lignes: list[dict] = []
+    if 0 < nb <= LIMITE_LIGNES_JOURNAL:
+        evenements = requete.order_by(Evenement.date.asc(), Evenement.id.asc()).all()
+        noms = _noms_parcelles(db, ctx, evenements)
+        lignes = [_ligne_evenement(e, noms) for e in evenements]
+    return {"present": True, "periode": periode.libelle, "nb": nb, "par_type": par_type, "lignes": lignes}
+
+
 @catalogue_sql.enregistrer("stock_culture")
 def _agreger_stock_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
     """Stock courant, pieds actifs et rendement d'une culture — lus par la même
@@ -763,6 +931,73 @@ def _agreger_rendement_global(db: Session, ctx: TenantContext, periode: Periode)
     }
 
 
+@catalogue_sql.enregistrer("classement_recoltes")
+def _agreger_classement_recoltes(db: Session, ctx: TenantContext, periode: Periode) -> dict:
+    """[US-248 / CA1-CA4, CA6] Les récoltes de la période, par culture : le poids
+    (classé du plus au moins productif) et, À PART, ce qui se compte en pièces ou
+    en bottes. Mêmes règles que `utils/stock.calcul_rendement_mensuel`, qui
+    alimente la courbe de rendement du web : seules les saisies de récolte d'une
+    culture nommée et chiffrée comptent, et le poids est converti par la même
+    table d'unités — le total est donc celui du web, pas une seconde vérité.
+    Le nombre de pieds n'entre jamais ici : toutes les cueillettes s'additionnent."""
+    debut, fin = _bornes(periode)
+    requete = (
+        db.query(Evenement.culture, Evenement.unite, func.sum(Evenement.quantite))
+        .filter(
+            Evenement.potager_id == ctx.potager_id,
+            Evenement.type_action == "recolte",
+            Evenement.culture.isnot(None),
+            Evenement.quantite.isnot(None),
+        )
+    )
+    if debut is not None:
+        requete = requete.filter(Evenement.date >= debut)
+    if fin is not None:
+        requete = requete.filter(Evenement.date <= fin)
+
+    poids_g: dict[str, float] = {}
+    pieces: dict[tuple[str, str], float] = {}
+    for culture, unite, total in requete.group_by(Evenement.culture, Evenement.unite).all():
+        unite_normalisee = (unite or "").lower()
+        if unite_normalisee in _stock.UNITES_POIDS_EN_G:
+            poids_g[culture] = poids_g.get(culture, 0.0) + (total or 0.0) * _stock.UNITES_POIDS_EN_G[unite_normalisee]
+        else:
+            cle = (culture, unite or "pièces")
+            pieces[cle] = pieces.get(cle, 0.0) + (total or 0.0)
+
+    classement = sorted(poids_g.items(), key=lambda entree: entree[1], reverse=True)
+    a_part = sorted(pieces.items(), key=lambda entree: entree[1], reverse=True)
+    return {
+        "present": bool(classement or a_part),
+        "periode": periode.libelle,
+        "total_g": sum(poids_g.values()),
+        "cultures": classement[:MAX_LIGNES_AFFICHEES],
+        "nb": len(classement),
+        "pieces": a_part[:MAX_LIGNES_AFFICHEES],
+        "nb_pieces": len(a_part),
+    }
+
+
+@catalogue_sql.enregistrer("potager_actif")
+def _agreger_potager_actif(db: Session, ctx: TenantContext) -> dict:
+    """[US-249 / CA1-CA4] Le potager actif et les potagers auxquels le jardinier
+    a accès. Les potagers viennent de `lister_potagers_utilisateur` (appartenance
+    réelle, comme /potager) : jamais ceux d'un autre compte. Un potager actif dont
+    le jardinier n'est pas membre n'est pas cité — la question retombe alors
+    sur la cascade plutôt que de révéler le nom d'un potager étranger."""
+    accessibles = (
+        _potager_actif.lister_potagers_utilisateur(db, ctx.user_id, etat="tous")
+        if ctx.user_id is not None else []
+    )
+    actif = next((p for p in accessibles if p.id == ctx.potager_id), None)
+    return {
+        "present": actif is not None,
+        "actif": actif.nom if actif is not None else "",
+        "autres": [p.nom for p in accessibles if p.id != ctx.potager_id][:MAX_LIGNES_AFFICHEES],
+        "nb": len(accessibles),
+    }
+
+
 @catalogue_sql.enregistrer("stock_global")
 def _agreger_stock_global(db: Session, ctx: TenantContext) -> dict:
     """Stock courant de toutes les cultures en place — même source que /stats."""
@@ -816,6 +1051,214 @@ def _agreger_parcelles_libres(db: Session, ctx: TenantContext) -> dict:
         "libres": libres[:MAX_LIGNES_AFFICHEES],
         "nb": len(libres),
     }
+
+
+@catalogue_sql.enregistrer("liste_parcelles")
+def _agreger_liste_parcelles(db: Session, ctx: TenantContext) -> dict:
+    """Les parcelles actives du potager — `utils/parcelles.get_all_parcelles`,
+    la lecture de /parcelle lister [CA4]. Relevé du 21/10/2026 : « combien de
+    parcelle ? » ne trouvait aucune famille et finissait en réponse générique."""
+    parcelles = _parcelles.get_all_parcelles(db, potager_id=ctx.potager_id)
+    return {
+        "present": bool(parcelles),
+        "parcelles": [(p.nom, bool(p.est_pepiniere)) for p in parcelles[:MAX_LIGNES_AFFICHEES]],
+        "nb": len(parcelles),
+    }
+
+
+# [US-244] Les caractéristiques d'une parcelle : clé de la commande /parcelle
+# modifier, libellé de la réponse, motif qui la désigne dans la question. Une
+# seule table pour les trois lectures (une parcelle, un filtre, un libellé) :
+# deux copies divergeraient au premier attribut ajouté.
+ATTRIBUTS_PARCELLE: dict[str, tuple[str, re.Pattern]] = {
+    "pepiniere":      ("le statut de pépinière", re.compile(r"\bpepiniere\b")),
+    "type_sol":       ("le type de sol", re.compile(r"\bsol\b|\bterrain\b")),
+    "rangs":          ("le nombre de rangs", re.compile(r"\brangs?\b|\brangees?\b")),
+    "longueur":       ("la longueur", re.compile(r"\blongueur\b|\bde long\b|\blongue?\b")),
+    "superficie":     ("la superficie", re.compile(r"\bsuperficie\b|\bsurface\b|\bm2\b|\bmetres? carres?\b")),
+    "exposition":     ("l'exposition", re.compile(r"\bexposition\b|\bexposee?\b|\borientation\b|\borientee?\b")),
+    "ensoleillement": ("l'ensoleillement", re.compile(r"\bensoleillement\b|\bensoleillee?\b|\bsoleil\b|\bombre\b")),
+    "paillage":       ("le paillage", re.compile(r"\bpaill\w*")),
+    "abri":           ("l'abri", re.compile(r"\babris?\b|\babrit\w*|\bsous (?:serre|tunnel|voile|chassis)\b")),
+}
+
+
+def _attributs_cites(normalisee: str) -> list[str]:
+    """Les caractéristiques de parcelle que la question désigne, dans l'ordre de
+    la table. Redérivées de la phrase à chaque service (voir `aiguillage_de`)."""
+    return [cle for cle, (_, motif) in ATTRIBUTS_PARCELLE.items() if motif.search(normalisee)]
+
+
+def _valeur_attribut(parcelle, cle: str) -> Optional[str]:
+    """La valeur lisible d'une caractéristique, `None` si elle n'est pas renseignée.
+    « Non renseigné » n'est jamais remplacé par une valeur par défaut [CA4]."""
+    c = _parcelles.caracteristiques_declarees(parcelle)
+    if cle == "pepiniere":
+        if not c["est_pepiniere"]:
+            return "pleine terre (pas une pépinière)"
+        return {"chaude": "pépinière chaude", "froide": "pépinière froide"}.get(
+            c["genre_pepiniere"] or "", "pépinière (type non renseigné)")
+    if cle == "paillage":
+        return None if c["paillage"] is None else ("paillée" if c["paillage"] else "non paillée")
+    if cle == "abri":
+        if not c["abri"]:
+            return None
+        return "aucun abri" if c["abri"] == _parcelles.ABRI_AUCUN else _parcelles.LIBELLES_ABRI.get(
+            c["abri"], c["abri"])
+    brut = c[cle]
+    if brut in (None, ""):
+        return None
+    if cle == "rangs":
+        return f"{brut} rang(s)"
+    if cle == "longueur":
+        return f"{brut:g} m"
+    if cle == "superficie":
+        return f"{brut:g} m²"
+    return str(brut)
+
+
+@catalogue_sql.enregistrer("attributs_parcelle")
+def _agreger_attributs_parcelle(db: Session, ctx: TenantContext, parcelle: str, attributs: list) -> dict:
+    """[US-244 / CA3, CA4] Les caractéristiques enregistrées d'UNE parcelle du
+    potager — `utils/parcelles.get_all_parcelles`, la lecture de /parcelle lister.
+    `present` est vrai dès que la parcelle existe : « non renseigné » est une
+    réponse exacte, pas une absence de donnée."""
+    cible = _normaliser(parcelle)
+    for fiche in _parcelles.get_all_parcelles(db, potager_id=ctx.potager_id):
+        if _normaliser(fiche.nom) == cible:
+            return {
+                "present": True,
+                "parcelle": fiche.nom,
+                "valeurs": {cle: _valeur_attribut(fiche, cle) for cle in attributs},
+            }
+    return {"present": False, "parcelle": parcelle, "valeurs": {}}
+
+
+# [US-244 / CA2, CA5] Les filtres de liste : « quelles parcelles sont paillées ? »
+_FILTRES_PARCELLES: tuple[tuple[str, re.Pattern, str], ...] = (
+    ("pepiniere", re.compile(r"\bpepinieres?\b"), "en pépinière"),
+    ("paillage", re.compile(r"\bpaill\w*"), "paillée(s)"),
+    ("abri_serre", re.compile(r"\bsous serre\b"), "sous serre"),
+    ("abri_tunnel", re.compile(r"\bsous tunnel\b"), "sous tunnel"),
+    ("abri_voile", re.compile(r"\bsous voile\b"), "sous voile"),
+    ("abri_chassis", re.compile(r"\bsous chassis\b"), "sous châssis"),
+    ("abri", re.compile(r"\babrit\w*|\bsous abri\b"), "sous abri"),
+    ("mi_ombre", re.compile(r"\bmi ombre\b"), "en mi-ombre"),
+    ("plein_soleil", re.compile(r"\bplein soleil\b|\bau soleil\b"), "en plein soleil"),
+    ("ombre", re.compile(r"\bombre\b|\bombragees?\b"), "à l'ombre"),
+)
+
+
+def _filtre_cite(normalisee: str) -> Optional[tuple[str, str]]:
+    for cle, motif, libelle in _FILTRES_PARCELLES:
+        if motif.search(normalisee):
+            return cle, libelle
+    return None
+
+
+def _parcelle_retenue(fiche, filtre: str) -> Optional[bool]:
+    """Vrai/faux si la parcelle porte la caractéristique, `None` si elle n'est pas
+    renseignée (comptée à part : elle n'est ni oui ni non)."""
+    c = _parcelles.caracteristiques_declarees(fiche)
+    if filtre == "pepiniere":
+        return c["est_pepiniere"]
+    if filtre == "paillage":
+        return c["paillage"]
+    if filtre.startswith("abri"):
+        if not c["abri"]:
+            return None
+        if filtre == "abri":
+            return c["abri"] != _parcelles.ABRI_AUCUN
+        return c["abri"] == filtre.split("_", 1)[1]
+    if not c["ensoleillement"]:
+        return None
+    return c["ensoleillement"] == {
+        "mi_ombre": "mi-ombre", "plein_soleil": "plein soleil", "ombre": "ombre",
+    }[filtre]
+
+
+@catalogue_sql.enregistrer("parcelles_filtrees")
+def _agreger_parcelles_filtrees(db: Session, ctx: TenantContext, filtre: str, libelle: str) -> dict:
+    """[US-244 / CA2, CA5] Les parcelles qui portent une caractéristique. `present`
+    est vrai dès que le potager a des parcelles : « aucune parcelle paillée » est
+    une réponse chiffrée (CA7 d'US-096), pas une absence de donnée."""
+    fiches = _parcelles.get_all_parcelles(db, potager_id=ctx.potager_id)
+    retenues: list[dict] = []
+    inconnues = 0
+    for fiche in fiches:
+        verdict = _parcelle_retenue(fiche, filtre)
+        if verdict is None:
+            inconnues += 1
+        elif verdict:
+            detail = _valeur_attribut(fiche, "pepiniere") if filtre == "pepiniere" else None
+            retenues.append({"nom": fiche.nom, "detail": detail})
+    return {
+        "present": bool(fiches), "filtre": filtre, "libelle": libelle,
+        "parcelles": retenues[:MAX_LIGNES_AFFICHEES], "nb": len(retenues),
+        "total": len(fiches), "non_renseignees": inconnues,
+    }
+
+
+@catalogue_sql.enregistrer("cultures_en_place")
+def _agreger_cultures_en_place(db: Session, ctx: TenantContext) -> dict:
+    """[US-245 / CA1-CA3, CA6, CA7] L'inventaire du potager : les cultures qui ont
+    au moins un pied en place, et à part ce qui est encore en pépinière.
+
+    Le stock est celui de `calcul_stock_cultures` (la source de /stats et de
+    `stock_global`) : une culture végétative entièrement récoltée n'y figure plus,
+    une reproductrice cueillie y reste, la cueillette ne retire pas le pied. Les
+    parcelles viennent de `calcul_occupation_parcelles`, la lecture de /plan.
+    `present` est toujours vrai : « aucune culture en place » est une réponse."""
+    stocks = _stock.calcul_stock_cultures(db, potager_id=ctx.potager_id)
+    actives = sorted(
+        (fiche for fiche in stocks.values() if fiche.stock_plants > 0),
+        key=lambda fiche: fiche.culture,
+    )
+    parcelles_par_culture: dict[str, list[str]] = {}
+    for nom, entrees in _parcelles.calcul_occupation_parcelles(db, potager_id=ctx.potager_id).items():
+        for entree in entrees:
+            if nom and nom not in parcelles_par_culture.setdefault(entree["culture"], []):
+                parcelles_par_culture[entree["culture"]].append(nom)
+    lots = _stock.calcul_lots_pepiniere(db, potager_id=ctx.potager_id)
+    en_pepiniere: dict[str, int] = {}
+    for lot in lots:
+        restant = (lot.get("stock_residuel_godet") or 0) + _stock.graines_restantes(lot)
+        if restant > 0 and lot.get("culture"):
+            en_pepiniere[lot["culture"]] = en_pepiniere.get(lot["culture"], 0) + 1
+    return {
+        "present": True,
+        "cultures": [
+            {
+                "culture": fiche.culture,
+                "stock": fiche.stock_plants,
+                "unite": fiche.unite,
+                "parcelles": parcelles_par_culture.get(fiche.culture, []),
+            }
+            for fiche in actives[:MAX_LIGNES_AFFICHEES]
+        ],
+        "nb": len(actives),
+        "pepiniere": [{"culture": culture, "lots": nb} for culture, nb in sorted(en_pepiniere.items())],
+    }
+
+
+@catalogue_sql.enregistrer("varietes_culture")
+def _agreger_varietes_culture(db: Session, ctx: TenantContext, culture: str) -> dict:
+    """[US-245 / CA4, CA5, CA7] Les variétés d'une culture, avec les pieds en place
+    de chacune — `utils/stock.calcul_stock_varietes`, la lecture de l'écran Stocks
+    du web. Les variétés encore en godet sont comptées à part : ce ne sont pas des
+    pieds en place."""
+    lignes = [v for v in _stock.calcul_stock_varietes(db, potager_id=ctx.potager_id)
+              if _normaliser(v["culture"]) == _normaliser(culture)]
+    varietes: list[dict] = []
+    for ligne in lignes:
+        if ligne["etat"] == "pep":
+            varietes.append({"variete": ligne["variete"], "stock": 0, "unite": ligne["unite"],
+                             "en_pepiniere": ligne["stock_actuel"]})
+        else:
+            varietes.append({"variete": ligne["variete"], "stock": ligne["stock_actuel"],
+                             "unite": ligne["unite"], "en_pepiniere": 0})
+    return {"present": True, "culture": culture, "varietes": varietes[:MAX_LIGNES_AFFICHEES],
+            "nb": len(varietes)}
 
 
 @catalogue_sql.enregistrer("occupation_parcelle")
@@ -1315,6 +1758,107 @@ def _rendu_derniere_occurrence(params: Parametres, agregat: dict) -> str:
     return _remplir(GABARITS["derniere_occurrence_sans_culture"], valeurs | {"culture_citee": citee})
 
 
+def _accords_action(action: Optional[str]) -> tuple[str, dict[str, str]]:
+    libelle, genre = LIBELLES_ACTION.get(action or "", (action or "geste", "f"))
+    return libelle, {"aucun": "aucun" if genre == "m" else "aucune", "e": "" if genre == "m" else "e"}
+
+
+def _pluriel_action(action: Optional[str], nb: float) -> str:
+    """« 1 arrosage », « 4 arrosages », « 2 mises en godet », « 3 semis »."""
+    libelle, _ = _accords_action(action)
+    if nb < 2:
+        return libelle
+    premier, _, reste = libelle.partition(" ")
+    if not premier.endswith(("s", "x")):
+        premier += "s"
+    return f"{premier} {reste}".strip()
+
+
+def _rendu_nombre_occurrences(params: Parametres, agregat: dict) -> str:
+    libelle, accords = _accords_action(params.action)
+    valeurs = {"periode": agregat["periode"]}
+    if params.culture:
+        valeurs["culture"] = _sur(params.culture)
+    if not agregat["nb"]:
+        cle = "nombre_occurrences_vide" if params.culture else "nombre_occurrences_vide_sans_culture"
+        return _remplir(GABARITS[cle], valeurs | accords | {"action": libelle})
+    cle = "nombre_occurrences" if params.culture else "nombre_occurrences_sans_culture"
+    texte = _remplir(GABARITS[cle], valeurs | {
+        "nb": agregat["nb"], "action": _pluriel_action(params.action, agregat["nb"]),
+    })
+    if params.action in ("perte", "perte_godet") and agregat["pieces"]:
+        texte += f" Au total : {agregat['pieces']:g} {_sur(agregat['unite_pieces'])} perdu(s)."
+    return texte
+
+
+def _texte_geste(ligne: dict, avec_culture: bool = True, avec_action: bool = True) -> str:
+    """Un geste en une ligne : ce qui est saisi est dit, ce qui ne l'est pas est tu."""
+    libelle, _ = _accords_action(ligne["action"])
+    morceaux = []
+    if avec_action:
+        cible = f" de {_sur(ligne['culture'])}" if avec_culture and ligne["culture"] else ""
+        morceaux.append(libelle + cible)
+    elif avec_culture and ligne["culture"]:
+        morceaux.append(_sur(ligne["culture"]))
+    if ligne["variete"]:
+        morceaux.append(f"variété {_sur(ligne['variete'])}")
+    if ligne["produit"]:
+        morceaux.append(f"produit : {_sur(ligne['produit'])}")
+    if ligne["quantite"]:
+        morceaux.append(f"{ligne['quantite']:g} {_sur(ligne['unite'])}".strip())
+    if ligne["parcelle"]:
+        morceaux.append(f"parcelle {_sur(ligne['parcelle'])}")
+    return " — ".join(morceaux)
+
+
+def _rendu_historique_action(params: Parametres, agregat: dict) -> str:
+    if not agregat["nb"]:
+        return _rendu_nombre_occurrences(params, agregat)
+    lignes = [
+        "  • {} : {}".format(
+            f"{ligne['date']:%d/%m/%Y}" if ligne["date"] else "date inconnue",
+            _texte_geste(ligne, avec_culture=not params.culture, avec_action=False),
+        ).rstrip(" :")
+        for ligne in agregat["lignes"]
+    ]
+    cle = "historique_action" if params.culture else "historique_action_sans_culture"
+    texte = _remplir(GABARITS[cle], {
+        "nb": agregat["nb"], "action": _pluriel_action(params.action, agregat["nb"]),
+        "culture": _sur(params.culture), "periode": agregat["periode"],
+        "lignes": _lignes_avec_reste(lignes, agregat["nb"]),
+    })
+    if params.action in ("perte", "perte_godet"):
+        total = sum(ligne["quantite"] or 0 for ligne in agregat["lignes"])
+        if total and agregat["nb"] == len(agregat["lignes"]):
+            texte += f"\nAu total : {total:g} perdu(s)."
+    return texte
+
+
+def _rendu_journal_periode(params: Parametres, agregat: dict) -> str:
+    periode = agregat["periode"]
+    if not agregat["nb"]:
+        return _remplir(GABARITS["journal_periode_vide"], {"periode": periode})
+    if not agregat["lignes"]:
+        resume = ", ".join(
+            f"{nb} {_pluriel_action(action, nb)}"
+            for action, nb in sorted(agregat["par_type"].items(), key=lambda t: (-t[1], str(t[0])))
+        )
+        return _remplir(GABARITS["journal_periode_resume"], {
+            "periode": periode, "nb": agregat["nb"], "resume": resume,
+        })
+    jours = sorted({ligne["date"].date() for ligne in agregat["lignes"]})
+    lignes: list[str] = []
+    for jour in jours:
+        if len(jours) > 1:
+            lignes.append(f"{jour:%d/%m/%Y} :")
+        lignes += [
+            f"  • {_texte_geste(ligne)}" for ligne in agregat["lignes"] if ligne["date"].date() == jour
+        ]
+    return _remplir(GABARITS["journal_periode"], {
+        "periode": periode, "nb": agregat["nb"], "lignes": "\n".join(lignes),
+    })
+
+
 def _rendu_stock(params: Parametres, agregat: dict) -> str:
     if not agregat["present"]:
         return _remplir(GABARITS["stock_vide"], {"culture": _sur(params.culture)})
@@ -1389,6 +1933,60 @@ def _rendu_rendement_global(params: Parametres, agregat: dict) -> str:
     })
 
 
+def _poids_lisible(poids_g: float) -> str:
+    valeur, unite = _stock.poids_lisible(poids_g)
+    return f"{valeur:g} {unite}"
+
+
+def _rendu_classement_recoltes(params: Parametres, agregat: dict) -> str:
+    """[US-248] « Quelle culture a le plus produit ? » classe ; « combien de kg ai-je
+    récoltés ? » donne le total. Dans les deux cas, ce qui se compte en pièces est
+    présenté à part, avec son unité, et jamais additionné aux kilos [CA3]."""
+    if not agregat["present"]:
+        return _remplir(GABARITS["recoltes_aucune"], {"periode": agregat["periode"]})
+    lignes_pieces = _lignes_avec_reste(
+        [f"  • {_sur(culture)} — {_stock.quantite_lisible(total, unite):g} {unite}"
+         for (culture, unite), total in agregat["pieces"]],
+        agregat["nb_pieces"],
+    )
+    if not agregat["cultures"]:
+        return _remplir(GABARITS["recoltes_pieces_seules"], {
+            "periode": agregat["periode"], "lignes": lignes_pieces,
+        })
+    if re.search(r"\bcombien\b", params.normalisee):
+        texte = _remplir(GABARITS["total_recoltes"], {
+            "total": _poids_lisible(agregat["total_g"]), "periode": agregat["periode"],
+        })
+    else:
+        lignes = _lignes_avec_reste(
+            [f"  {rang}. {_sur(culture)} — {_poids_lisible(poids)}"
+             for rang, (culture, poids) in enumerate(agregat["cultures"], start=1)],
+            agregat["nb"],
+        )
+        texte = _remplir(GABARITS["classement_recoltes"], {"periode": agregat["periode"], "lignes": lignes})
+    if agregat["pieces"]:
+        texte += "\n" + _remplir(GABARITS["recoltes_pieces"], {"lignes": lignes_pieces})
+    return texte
+
+
+def _rendu_potager_actif(params: Parametres, agregat: dict) -> str:
+    """[US-249] Le nom du potager actif ; avec plusieurs potagers, les autres et
+    la commande pour en changer. « Combien de potagers ? » donne le nombre."""
+    if not agregat["present"]:
+        return GABARITS["potager_actif_inconnu"]
+    if re.search(r"\bcombien\b", params.normalisee):
+        if agregat["nb"] <= 1:
+            return _remplir(GABARITS["potagers_nombre_un"], {"actif": _sur(agregat["actif"])})
+        noms = [f"{_sur(agregat['actif'])} (actif)"] + [_sur(nom) for nom in agregat["autres"]]
+        return _remplir(GABARITS["potagers_nombre"], {"nb": agregat["nb"], "liste": ", ".join(noms)})
+    texte = _remplir(GABARITS["potager_actif"], {"actif": _sur(agregat["actif"])})
+    if agregat["autres"]:
+        texte += " " + _remplir(GABARITS["potager_actif_autres"], {
+            "autres": ", ".join(f"« {_sur(nom)} »" for nom in agregat["autres"]),
+        })
+    return texte
+
+
 def _rendu_stock_global(params: Parametres, agregat: dict) -> str:
     if not agregat["present"]:
         return GABARITS["stock_global_vide"]
@@ -1432,6 +2030,85 @@ def _rendu_parcelles_libres(params: Parametres, agregat: dict) -> str:
     return _remplir(GABARITS["parcelles_libres"], {
         "nb": agregat["nb"], "total": agregat["total"], "lignes": lignes,
     })
+
+
+def _rendu_liste_parcelles(params: Parametres, agregat: dict) -> str:
+    if not agregat["present"]:
+        return "Je n'ai aucune parcelle enregistrée dans ce potager."
+    lignes = _lignes_avec_reste(
+        [f"  • {_sur(nom)}{' (pépinière)' if pepiniere else ''}" for nom, pepiniere in agregat["parcelles"]],
+        agregat["nb"],
+    )
+    return _remplir(GABARITS["liste_parcelles"], {"nb": agregat["nb"], "lignes": lignes})
+
+
+def _rendu_attributs_parcelle(params: Parametres, agregat: dict) -> str:
+    nom = _sur(agregat["parcelle"])
+    valeurs = agregat["valeurs"]
+    if len(valeurs) == 1:
+        cle, valeur = next(iter(valeurs.items()))
+        libelle = ATTRIBUTS_PARCELLE[cle][0]
+        if valeur is None:
+            return _remplir(GABARITS["attribut_parcelle_vide"], {
+                "libelle": libelle[0].upper() + libelle[1:], "parcelle": nom, "cle": cle})
+        return f"{libelle[0].upper() + libelle[1:]} de {nom} : {_sur(valeur)}."
+    lignes = "\n".join(
+        f"  • {ATTRIBUTS_PARCELLE[cle][0]} : {_sur(valeur) if valeur is not None else 'non renseigné'}"
+        for cle, valeur in valeurs.items()
+    )
+    return _remplir(GABARITS["attribut_parcelle"], {"parcelle": nom, "lignes": "\n" + lignes}).replace("— \n", "—\n")
+
+
+def _rendu_parcelles_filtrees(params: Parametres, agregat: dict) -> str:
+    if not agregat["present"]:
+        return "Je n'ai aucune parcelle enregistrée dans ce potager."
+    if not agregat["nb"]:
+        texte = _remplir(GABARITS["parcelles_filtrees_aucune"], {
+            "libelle": agregat["libelle"], "total": agregat["total"]})
+    else:
+        lignes = _lignes_avec_reste(
+            [f"  • {_sur(p['nom'])}" + (f" ({p['detail']})" if p["detail"] else "")
+             for p in agregat["parcelles"]],
+            agregat["nb"],
+        )
+        texte = _remplir(GABARITS["parcelles_filtrees"], {
+            "nb": agregat["nb"], "libelle": agregat["libelle"], "total": agregat["total"], "lignes": lignes})
+    if agregat["non_renseignees"]:
+        texte += f"\n_{agregat['non_renseignees']} parcelle(s) sans cette information renseignée._"
+    return texte
+
+
+def _rendu_cultures_en_place(params: Parametres, agregat: dict) -> str:
+    morceaux: list[str] = []
+    if agregat["nb"]:
+        lignes = []
+        for fiche in agregat["cultures"]:
+            quantite = _stock.quantite_lisible(fiche["stock"], fiche["unite"])
+            ou = f" — {', '.join(_sur(n) for n in fiche['parcelles'])}" if fiche["parcelles"] else ""
+            lignes.append(f"  • {_sur(fiche['culture'])} : {quantite:g} {fiche['unite']}{ou}")
+        morceaux.append(_remplir(GABARITS["cultures_en_place"], {
+            "nb": agregat["nb"], "lignes": _lignes_avec_reste(lignes, agregat["nb"])}))
+    if agregat["pepiniere"]:
+        morceaux.append("En pépinière : " + ", ".join(
+            f"{_sur(p['culture'])} ({p['lots']} lot(s))" for p in agregat["pepiniere"]) + ".")
+    return "\n\n".join(morceaux) if morceaux else GABARITS["cultures_en_place_aucune"]
+
+
+def _rendu_varietes_culture(params: Parametres, agregat: dict) -> str:
+    culture = _sur(agregat["culture"])
+    if not agregat["nb"]:
+        return _remplir(GABARITS["varietes_culture_aucune"], {"culture": culture})
+    if re.search(r"\bcombien\b", params.normalisee):
+        return _remplir(GABARITS["varietes_culture_nombre"], {"nb": agregat["nb"], "culture": culture})
+    lignes = []
+    for v in agregat["varietes"]:
+        nom = _sur(v["variete"] or _stock.LABEL_VARIETE_NON_PRECISEE)
+        detail = f"{_stock.quantite_lisible(v['stock'], v['unite']):g} {v['unite']} en place" if v["stock"] else ""
+        if v["en_pepiniere"]:
+            detail = (detail + " · " if detail else "") + f"{v['en_pepiniere']:g} en pépinière"
+        lignes.append(f"  • {nom} : {detail or 'aucun pied en place'}")
+    return _remplir(GABARITS["varietes_culture"], {
+        "nb": agregat["nb"], "culture": culture, "lignes": _lignes_avec_reste(lignes, agregat["nb"])})
 
 
 def _rendu_occupation(params: Parametres, agregat: dict) -> str:
@@ -1671,6 +2348,10 @@ class Famille:
     # larges, qui doivent rendre la main plutôt que servir un chiffre à une
     # question qui n'en attend pas.
     exclut: Optional[re.Pattern] = None
+    # Paramètres qui, s'ils sont présents, retirent la question à cette famille :
+    # « combien de rangs de carottes sur la parcelle nord » nomme une culture, ce
+    # n'est pas la caractéristique de la parcelle qui est demandée.
+    incompatible: tuple[str, ...] = ()
 
 
 # Ce qui retire une question aux familles volontairement larges (celles qui se
@@ -1724,6 +2405,20 @@ _EXCLUT_PREDIAGNOSTIC = re.compile(
     + r"|\bobserve\b|\bobservee?s?\b|\bconstate\b|\bconstatee?s?\b"
     + r"|\bremarque\b|\bj ai vu\b|\bjai vu\b|\bj ai note\b|\btraite\b"
     + r"|\bpulverise\b"
+)
+
+
+# [US-246] « combien de fois » ou « combien d'<un geste du référentiel> » : le motif
+# s'ancre sur le NOM du geste, tiré des synonymes d'`ACTION_MAP` (pas de second
+# référentiel). Un « combien » seul laisserait passer « combien de physalis ai-je
+# récolté » — culture inconnue — qui serait alors comptée toutes cultures confondues.
+_NOMS_GESTE = "|".join(sorted(
+    {re.escape(_normaliser(synonyme)) for synonymes in ACTION_MAP.values() for synonyme in synonymes
+     if len(_normaliser(synonyme)) >= 4},
+    key=len, reverse=True,
+))
+_MOTIF_NOMBRE_OCCURRENCES = re.compile(
+    r"\b(?:combien|nombre) (?:de fois\b|(?:d |de |des |du )(?:" + _NOMS_GESTE + r"))"
 )
 
 
@@ -1891,6 +2586,72 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_prediagnostic,
     ),
     Famille(
+        # [US-244] AVANT `pepiniere` et `occupation_parcelle` : « quelle est
+        # l'exposition de la parcelle nord ? » nomme une parcelle et recevait la
+        # liste de ses cultures — la seule famille qui rendait une réponse FAUSSE
+        # plutôt qu'absente (mesure du 21/10/2026).
+        nom="attributs_parcelle",
+        dependances=(NATURE_PLAN,),
+        agregation="attributs_parcelle",
+        motif=re.compile("|".join(motif.pattern for _, motif in ATTRIBUTS_PARCELLE.values())),
+        exclut=_EXCLUT_SAVOIR,
+        exige=("parcelle",),
+        incompatible=("culture",),
+        arguments=lambda p: {"parcelle": p.parcelle, "attributs": _attributs_cites(p.normalisee)},
+        rendu=_rendu_attributs_parcelle,
+    ),
+    Famille(
+        nom="parcelles_filtrees",
+        dependances=(NATURE_PLAN,),
+        agregation="parcelles_filtrees",
+        motif=re.compile(
+            r"\b(?:quelles?|liste\w*|combien|affiche\w*|montre\w*)\b.*\bpepinieres\b|^(?:mes )?pepinieres$|"
+            # « combien de pépinière ? » (singulier) = combien de PARCELLES pépinière ;
+            # « combien de lots en pépinière » garde le gabarit du contenu.
+            r"\bcombien (?:de |d )?(?:parcelles? |planches? )?(?:en )?pepinieres?\b|"
+            r"\b(?:parcelles?|planches?)\b.*(?:\bpaill\w*|\babrit\w*|\bsous (?:abri|serre|tunnel|voile|chassis)\b|"
+            r"\bplein soleil\b|\bmi ombre\b|\bombre\b|\bombragees?\b|\bau soleil\b)"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=(),
+        arguments=lambda p: dict(zip(("filtre", "libelle"), _filtre_cite(p.normalisee) or ("pepiniere", "en pépinière"))),
+        rendu=_rendu_parcelles_filtrees,
+    ),
+    Famille(
+        # [US-245] L'inventaire du potager, sans culture ni parcelle nommée.
+        nom="cultures_en_place",
+        dependances=(NATURE_STOCK, NATURE_RECOLTE, NATURE_SEMIS, NATURE_PLAN, NATURE_PEPINIERE),
+        agregation="cultures_en_place",
+        motif=re.compile(
+            r"\bqu est ce que je cultive\b|\bce que je cultive\b|\bje cultive quoi\b|"
+            r"\bquelles? (?:sont )?(?:mes |les )?cultures\b|"
+            r"\b(?:liste\w*|affiche\w*|montre\w*|donne\w*)(?: moi)?(?: la liste)?(?: de| des)? (?:mes|les) cultures\b|"
+            r"\bcultures? (?:en place|actuelles?|en cours|plantees?)\b"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=(),
+        incompatible=("culture",),
+        arguments=lambda p: {},
+        rendu=_rendu_cultures_en_place,
+    ),
+    Famille(
+        # [US-245] Les variétés d'UNE culture — pas « quelles variétés planter ? »,
+        # qui est une question de conseil : une marque de possession est exigée.
+        nom="varietes_culture",
+        dependances=(NATURE_STOCK, NATURE_SEMIS, NATURE_PLAN, NATURE_PEPINIERE),
+        agregation="varietes_culture",
+        motif=re.compile(
+            r"^(?=.*\b(?:j ai|ai je|mes|mon|ma|combien|en place|cultive\w*|potager|plante\w*)\b).*\bvarietes?\b"
+        ),
+        exclut=re.compile(
+            _EXCLUT_SAVOIR.pattern + r"|\bplanter\b|\bsemer\b|\bchoisir\b|\brecommand\w*|\bconseill\w*|"
+            r"\bmeilleur\w*|\bresistan\w*|\bexistent?\b|\bexiste\b"
+        ),
+        exige=("culture",),
+        arguments=lambda p: {"culture": p.culture},
+        rendu=_rendu_varietes_culture,
+    ),
+    Famille(
         nom="pepiniere",
         dependances=(NATURE_PEPINIERE, NATURE_SEMIS),
         agregation="pepiniere",
@@ -1961,6 +2722,26 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_rendement,
     ),
     Famille(
+        # [US-248] « Quelle culture a le plus produit ? », « combien de kg ai-je
+        # récoltés cette année ? » : aucune culture nommée — dès qu'une l'est, ce
+        # sont `total_recolte` et `rendement_saison` qui répondent, plus précisément.
+        nom="classement_recoltes",
+        dependances=(NATURE_RECOLTE, NATURE_STOCK),
+        agregation="classement_recoltes",
+        motif=re.compile(
+            r"\bmeilleures? recoltes?\b|\bquelles? cultures? (?:a|ont) (?:le |la )?(?:plus|mieux) (?:produit|donne|rapporte|recolte)\b|"
+            r"\bcultures? (?:la|les) plus (?:productives?|rentables?)\b|\bqu est ce qui a (?:le )?(?:plus|mieux) (?:produit|donne)\b|"
+            r"\bclassement\b.*\b(?:recoltes?|cultures?)\b|"
+            r"\bcombien (?:de |d )?(?:kg|kilos?|kilogrammes?)\b.*\b(?:recolt|cueilli|produit)|"
+            r"\bcombien (?:ai je|j ai) (?:recolte|cueilli)\b|\bpoids total\b.*\brecolt"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        incompatible=("culture",),
+        exige=(),
+        arguments=lambda p: {"periode": _periode_saison(p.periode)},
+        rendu=_rendu_classement_recoltes,
+    ),
+    Famille(
         nom="rendement_global",
         dependances=(NATURE_RECOLTE, NATURE_STOCK),
         agregation="rendement_global",
@@ -2021,6 +2802,55 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_stock_global,
     ),
     Famille(
+        # [US-246] Compter un geste : « combien de fois j'ai arrosé », « combien
+        # d'arrosages ce mois-ci », « combien de pertes de carottes ». APRÈS
+        # `total_recolte`, `pieds_actifs` et les stocks, qui prennent « combien de
+        # haricots récoltés », « combien de plants » et « combien il me reste » :
+        # ce motif large (un comptage + un geste reconnu) ne leur vole rien.
+        nom="nombre_occurrences",
+        dependances=(NATURE_JOURNAL,),
+        agregation="nombre_occurrences",
+        motif=_MOTIF_NOMBRE_OCCURRENCES,
+        exclut=re.compile(_EXCLUT_SAVOIR.pattern + r"|\bil me reste\b|\bdernier\w*\b|\bparcelles?\b"),
+        exige=("action",),
+        arguments=lambda p: {"action": p.action, "culture": p.culture, "periode": _periode_saison(p.periode)},
+        rendu=_rendu_nombre_occurrences,
+    ),
+    Famille(
+        # [US-246] L'historique d'un type de geste : « quels traitements ai-je
+        # faits sur les haricots ». Le motif exige une tournure de LISTE (ou une
+        # demande explicite) ET un geste reconnu ; sans période citée, c'est tout
+        # le journal du geste, plafonné.
+        nom="historique_action",
+        dependances=(NATURE_JOURNAL,),
+        agregation="historique_action",
+        motif=re.compile(
+            r"\bquel(?:le)?s? \w+ (?:ai je|j ai|ont ete|a t on)\b|"
+            r"\b(?:liste|lister|montre|affiche|donne)\w*(?: moi)? (?:mes|les|tous mes|tous les)\b|"
+            r"\bhistorique d\w* \w+"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=("action",),
+        arguments=lambda p: {"action": p.action, "culture": p.culture, "periode": p.periode},
+        rendu=_rendu_historique_action,
+    ),
+    Famille(
+        # [US-247] Ce que j'ai fait sur une période : « qu'ai-je fait hier ».
+        # Après `notes_culture` (« qu'avais-je noté »), qui ne parle pas de gestes.
+        # Sans période citée, les 7 derniers jours — et la réponse le dit.
+        nom="journal_periode",
+        dependances=(NATURE_JOURNAL,),
+        agregation="journal_periode",
+        motif=re.compile(
+            r"\bqu ai je fait\b|\bqu est ce que j ai fait\b|\bce que j ai fait\b|\bqu est ce qui s est passe\b|"
+            r"\bmes derniers gestes\b|\bmon journal\b"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=(),
+        arguments=lambda p: {"periode": _periode_journal(p.periode), "culture": p.culture},
+        rendu=_rendu_journal_periode,
+    ),
+    Famille(
         # La question INVERSE d'`occupation_parcelle` : celle-ci part d'une
         # parcelle et rend ses cultures, celle-là part d'une culture et rend
         # ses parcelles. L'association parcelle ↔ culture était déjà acquise
@@ -2075,6 +2905,42 @@ FAMILLES: tuple[Famille, ...] = (
         rendu=_rendu_parcelles_par_famille,
     ),
     Famille(
+        # [US-249] Le potager actif est dans le contexte de chaque message : le
+        # demander ne doit coûter ni requête écrite par le modèle, ni modèle de
+        # réponse. Pas `_EXCLUT_SAVOIR` : il retire « comment », or « comment
+        # s'appelle mon potager ? » EST la question.
+        nom="potager_actif",
+        dependances=(NATURE_PLAN,),
+        agregation="potager_actif",
+        motif=re.compile(
+            r"\bquel (?:est|c est) (?:mon|le) potager(?: actif| courant| actuel)?\s*$|"
+            r"\b(?:mon|le) potager (?:actif|courant|actuel)\b|"
+            r"\bsur quel potager (?:je suis|suis je|je travaille|on est|j enregistre)\b|"
+            r"\bcomment s appelle (?:mon|le) potager\b|"
+            r"\bcombien de potagers?\b"
+        ),
+        exclut=re.compile(r"\bpourquoi\b|\bfaut il\b|\bdois je\b|\bque faire\b|\bconseils?\b|\bcreer\b|\bsupprimer\b"),
+        exige=(),
+        arguments=lambda p: {},
+        rendu=_rendu_potager_actif,
+    ),
+    Famille(
+        # Avant `occupation_parcelle`, qui exige une parcelle nommée : « combien
+        # de parcelles ? » n'en nomme aucune et ne trouvait aucune famille.
+        nom="liste_parcelles",
+        dependances=(NATURE_PLAN,),
+        agregation="liste_parcelles",
+        motif=re.compile(
+            r"\b(?:combien|nombre)(?: de)? (?:parcelles?|planches?)\b|"
+            r"\b(?:liste|lister|affiche\w*|montre\w*|donne\w*)(?: moi)?(?: la liste)?(?: de| des)? (?:mes|les) parcelles\b|"
+            r"\bquelles sont (?:mes|les) parcelles\s*$|^(?:mes|les) parcelles\s*$"
+        ),
+        exclut=_EXCLUT_SAVOIR,
+        exige=(),
+        arguments=lambda p: {},
+        rendu=_rendu_liste_parcelles,
+    ),
+    Famille(
         # En DERNIER, et volontairement large : dès qu'une parcelle est nommée
         # et qu'aucune famille plus précise n'explique la question, le sens
         # attendu est « ce qu'il y a dessus ».
@@ -2108,6 +2974,17 @@ def _periode_saison(periode: Periode) -> Periode:
     return Periode(_date(annee, 1, 1), _date(annee, 12, 31), "cette saison", annee)
 
 
+def _periode_journal(periode: Periode) -> Periode:
+    """[US-247 / CA4] Sans période citée, les 7 derniers jours aujourd'hui compris."""
+    if periode.debut is not None or periode.fin is not None:
+        return periode
+    aujourdhui = _date.today()
+    return Periode(
+        aujourdhui - timedelta(days=JOURS_JOURNAL_PAR_DEFAUT - 1), aujourdhui,
+        f"ces {JOURS_JOURNAL_PAR_DEFAUT} derniers jours", aujourdhui.year,
+    )
+
+
 def _choisir_famille(params: Parametres) -> Optional[Famille]:
     """Première famille dont le motif matche ET dont les paramètres obligatoires
     ont été extraits. Une famille reconnue sans sa culture (« combien j'ai
@@ -2116,6 +2993,8 @@ def _choisir_famille(params: Parametres) -> Optional[Famille]:
         if not famille.motif.search(params.normalisee):
             continue
         if famille.exclut is not None and famille.exclut.search(params.normalisee):
+            continue
+        if any(getattr(params, nom) for nom in famille.incompatible):
             continue
         if all(getattr(params, nom) for nom in famille.exige):
             return famille

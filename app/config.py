@@ -81,8 +81,51 @@ GROQ_MODELE_PAR_TYPE = {
     "parsing":        os.environ.get("GROQ_MODEL_PARSING",        GROQ_MODEL),
     "question":       os.environ.get("GROQ_MODEL_QUESTION",       GROQ_MODEL),
     "synthese":       os.environ.get("GROQ_MODEL_SYNTHESE",       GROQ_MODEL),
+    # [US-233 / CA2] Agent interpréteur : modèle PROPRE, distinct de celui de la
+    # classification — l'agent appelle des outils, ce que tout modèle ne fait pas
+    # avec la même fiabilité, et son choix se décide sur une mesure (US-233).
+    "agent":          os.environ.get("GROQ_MODEL_AGENT",          GROQ_MODEL),
     "transcription":  os.environ.get("GROQ_MODEL_TRANSCRIPTION",  GROQ_WHISPER_MODEL),
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fournisseur tiers Mistral — un type d'appel bascule par son seul modèle
+# -----------------------------------------------------------------------------
+# Un modèle préfixé `mistral/` dans `GROQ_MODEL_<TYPE>` (ex.
+# `GROQ_MODEL_AGENT=mistral/ministral-3b-latest`) est servi par l'API Mistral,
+# compatible OpenAI ; les autres types restent sur Groq. Sans clé, un type
+# basculé sur Mistral rend une indisponibilité (repli de l'appelant), jamais un
+# appel muet à Groq.
+# ─────────────────────────────────────────────────────────────────────────────
+MISTRAL_API_KEY  = os.environ.get("MISTRAL_API_KEY", "")
+MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").rstrip("/")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-233 / CA5] Agent interpréteur — réglages lus ici, sans effet tant
+# qu'aucun agent ne les utilise (US-235 et suivantes).
+# -----------------------------------------------------------------------------
+# AGENT_MODE : "off" (défaut — le bot se comporte comme avant), "ombre" (l'agent
+# interprète et journalise ce qu'il AURAIT proposé, sans rien montrer) ou
+# "actif" (ses propositions sont affichées). Une valeur inconnue retombe sur
+# "off" : une faute de frappe ne doit jamais activer l'agent.
+# AGENT_MAX_TOURS : borne de la boucle d'outils de lecture (phase 4) ; un entier
+# strictement positif, 3 sinon.
+# ─────────────────────────────────────────────────────────────────────────────
+AGENT_MODES = ("off", "ombre", "actif")
+AGENT_MODE = os.environ.get("AGENT_MODE", "off").strip().lower()
+if AGENT_MODE not in AGENT_MODES:
+    AGENT_MODE = "off"
+
+
+def _entier_strictement_positif(nom: str, defaut: int) -> int:
+    try:
+        valeur = int(os.environ.get(nom, defaut))
+    except ValueError:
+        return defaut
+    return valeur if valeur >= 1 else defaut
+
+
+AGENT_MAX_TOURS = _entier_strictement_positif("AGENT_MAX_TOURS", 3)
 
 # [US-092 / CA12] Délai maximal par appel LLM, en secondes. Un appel qui
 # n'aboutit pas dans ce délai emprunte le même chemin de repli qu'un 429.
@@ -170,3 +213,65 @@ try:
     CALENDRIER_SEUIL_MONTAGNARD_M = float(os.environ.get("CALENDRIER_SEUIL_MONTAGNARD_M", "700"))
 except ValueError:
     CALENDRIER_SEUIL_MONTAGNARD_M = 700.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# État de la configuration, affiché au démarrage du bot
+# -----------------------------------------------------------------------------
+# Pour contrôler ce que le système RETIENT : la valeur effective de chaque
+# réglage, et d'où elle vient — « défini » (environnement ou fichier .env) ou
+# « défaut ». Une valeur invalide qui retombe sur son défaut est signalée : une
+# faute de frappe dans `AGENT_MODE` ne doit pas passer inaperçue.
+#
+# Aucun secret n'est jamais affiché : clés, jetons et mots de passe sont rendus
+# « défini » ou « absent », sans le moindre caractère de leur valeur.
+# ─────────────────────────────────────────────────────────────────────────────
+def etat_configuration() -> list[str]:
+    """Les lignes à afficher au démarrage : un réglage par ligne, valeur retenue."""
+    lignes: list[str] = []
+
+    def _origine(nom: str) -> str:
+        return "défini" if nom in os.environ else "défaut"
+
+    def _ligne(nom: str, retenu, invalide: bool = False) -> None:
+        brut = os.environ.get(nom)
+        alerte = f" ⚠️ « {brut} » non retenu → valeur par défaut" if invalide and brut is not None else ""
+        lignes.append(f"   {nom:<30}: {retenu}  ({_origine(nom)}){alerte}")
+
+    def _secret(nom: str, valeur) -> None:
+        lignes.append(f"   {nom:<30}: {'défini' if valeur else 'absent'}")
+
+    existe = os.path.exists(_fichier_env)
+    lignes.append(f"   Fichier d'environnement     : {os.path.basename(_fichier_env)} "
+                  f"({'chargé' if existe else 'introuvable'})")
+    _ligne("APP_ENV", APP_ENV)
+
+    # Agent interpréteur — ce que l'on contrôle le plus souvent.
+    brut_mode = os.environ.get("AGENT_MODE")
+    _ligne("AGENT_MODE", AGENT_MODE,
+           invalide=brut_mode is not None and brut_mode.strip().lower() != AGENT_MODE)
+    brut_tours = os.environ.get("AGENT_MAX_TOURS")
+    _ligne("AGENT_MAX_TOURS", AGENT_MAX_TOURS,
+           invalide=brut_tours is not None and brut_tours.strip() != str(AGENT_MAX_TOURS))
+
+    for type_appel, modele in GROQ_MODELE_PAR_TYPE.items():
+        _ligne(f"GROQ_MODEL_{type_appel.upper()}", modele)
+    _ligne("GROQ_TIMEOUT_S", GROQ_TIMEOUT_S)
+    _ligne("GROQ_RETRY_MAX_S", GROQ_RETRY_MAX_S)
+    _ligne("RAG_ACTIF", "oui" if RAG_ACTIF else "non")
+    _ligne("RAG_SEUIL_CONFIANCE", RAG_SEUIL_CONFIANCE)
+    _ligne("RAG_MAX_PASSAGES", RAG_MAX_PASSAGES)
+    _ligne("PREDIAGNOSTIC_SEUIL_SYMPTOME", PREDIAGNOSTIC_SEUIL_SYMPTOME)
+    _ligne("PREDIAGNOSTIC_MAX_PISTES", PREDIAGNOSTIC_MAX_PISTES)
+    _ligne("CALENDRIER_ZONE_DEFAUT", CALENDRIER_ZONE_DEFAUT)
+    _ligne("CALENDRIER_SEUIL_MONTAGNARD_M", CALENDRIER_SEUIL_MONTAGNARD_M)
+
+    for nom, valeur in (
+        ("GROQ_API_KEY", GROQ_API_KEY), ("MISTRAL_API_KEY", MISTRAL_API_KEY),
+        ("TELEGRAM_BOT_TOKEN", TELEGRAM_BOT_TOKEN),
+        ("DATABASE_URL", DATABASE_URL), ("JWT_SECRET", JWT_SECRET),
+        ("BREVO_API_KEY", BREVO_API_KEY), ("GOOGLE_CLIENT_ID", GOOGLE_CLIENT_ID),
+        ("GOOGLE_CLIENT_SECRET", GOOGLE_CLIENT_SECRET), ("ADMIN_EMAIL", ADMIN_EMAIL),
+    ):
+        _secret(nom, valeur)
+    return lignes

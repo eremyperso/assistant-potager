@@ -88,9 +88,10 @@ export function groupesParMois(lots) {
 // ── Les nombres d'un lot ─────────────────────────────────────────────────────
 
 /**
- * Les parts de la barre empilée : mis en terre, en godet, en levée, vendus, pertes,
- * non levées. « En levée » = levés à repiquer (levée terminée) ou graines encore
- * en germination ; « non levées » = le reste des graines semées, une fois tout compté.
+ * Les parts de la barre empilée : mis en terre, en godet, levés à repiquer, en
+ * germination, vendus, pertes, non levées. « Levés à repiquer » = levée terminée et
+ * notée ; « en germination » = graines dont la levée n'est pas terminée (jamais
+ * comptées comme levées) ; « non levées » = le reste des graines semées.
  */
 export function partsDuLot(lot) {
   const graines = lot?.graines_semees > 0 ? lot.graines_semees : 0
@@ -102,13 +103,17 @@ export function partsDuLot(lot) {
   let le = estCloture(lot) ? 0 : grainesRestantes(lot)
   if (lot?.levee_terminee && lot?.nb_leves != null) le = Math.min(le, Math.max(0, lot.nb_leves - obtenus))
   const nl = graines ? Math.max(0, graines - obtenus - le) : 0
-  const parts = { pl, go, le, vd, pe, nl }
-  const somme = pl + go + le + vd + pe + nl
+  // Tant que la levée n'est pas terminée et notée, ces graines germent encore : elles
+  // ne doivent pas se lire « levées » dans la barre ni dans le bilan.
+  let ge = 0
+  if (!(lot?.levee_terminee && lot?.nb_leves != null)) { ge = le; le = 0 }
+  const parts = { pl, go, le, ge, vd, pe, nl }
+  const somme = pl + go + le + ge + vd + pe + nl
   return { parts, base: Math.max(graines, somme) }
 }
 
 export const SEGMENTS = Object.freeze([
-  ['pl', 'mis en terre'], ['go', 'en godet'], ['le', 'en levée'], ['vd', 'vendus'], ['pe', 'pertes'], ['nl', 'non levées'],
+  ['pl', 'mis en terre'], ['go', 'en godet'], ['le', 'levés à repiquer'], ['ge', 'en germination'], ['vd', 'vendus'], ['pe', 'pertes'], ['nl', 'non levées'],
 ])
 
 /** La barre : `[{ cle, valeur, libelle, largeur }]`, sans les parts nulles. */
@@ -131,7 +136,7 @@ export function tauxDuLot(lot) {
   const { parts } = partsDuLot(lot)
   return {
     valeur: Math.round((obtenus / graines) * 100),
-    libelle: parts.le > 0 ? 'germination, levée en cours' : 'germination',
+    libelle: parts.ge > 0 ? 'germination, levée en cours' : 'germination',
     sur: graines,
   }
 }
@@ -167,11 +172,8 @@ export function etatEnUneLigne(lot) {
   if (statut === 'a_regler') bouts.push('délai non renseigné')
   if (parts.pl > 0) bouts.push(`${parts.pl} mis en terre`)
   if (parts.go > 0) bouts.push(pluriel(parts.go, 'godet'))
-  if (parts.le > 0) {
-    bouts.push(lot.levee_terminee && lot.nb_leves != null
-      ? `${pluriel(parts.le, 'levé')} à repiquer`
-      : `${pluriel(parts.le, 'graine')} en levée`)
-  }
+  if (parts.le > 0) bouts.push(`${pluriel(parts.le, 'levé')} à repiquer`)
+  if (parts.ge > 0) bouts.push(`${pluriel(parts.ge, 'graine')} en levée`)
   const ech = echeanceCourte(lot)
   if (ech) bouts.push(ech)
   if (estDormant(lot)) bouts.push(`sans geste depuis ${lot.echeances.dormance.jours_sans_geste} j`)
@@ -364,12 +366,12 @@ export function frise(lot, f, aujourdhui, ecartMin = 3) {
 // ── Le bilan des lots visibles (CA2) ─────────────────────────────────────────
 
 export function bilanDesLots(lots, aujourdhui = null) {
-  const s = { lots: (lots ?? []).length, semees: 0, obtenus: 0, pl: 0, go: 0, le: 0, vd: 0, pe: 0, nl: 0 }
+  const s = { lots: (lots ?? []).length, semees: 0, obtenus: 0, pl: 0, go: 0, le: 0, ge: 0, vd: 0, pe: 0, nl: 0 }
   for (const l of lots ?? []) {
     const { parts } = partsDuLot(l)
     s.semees += l.graines_semees > 0 ? l.graines_semees : 0
     s.obtenus += (l.plants_obtenus ?? 0) > 0 ? l.plants_obtenus : (l.nb_leves ?? 0)
-    for (const k of ['pl', 'go', 'le', 'vd', 'pe', 'nl']) s[k] += parts[k]
+    for (const k of ['pl', 'go', 'le', 'ge', 'vd', 'pe', 'nl']) s[k] += parts[k]
   }
   const pourcent = s.semees ? Math.round((s.obtenus / s.semees) * 100) : null
   // Le lot dont la mise en terre est à faire (fenêtre atteinte ou dépassée), le plus pressé.
@@ -379,6 +381,7 @@ export function bilanDesLots(lots, aujourdhui = null) {
   let phrase
   if (s.go > 0) phrase = `${pluriel(s.go, 'plant attend', 'plants attendent')} en godet`
   else if (s.pl > 0) phrase = `${pluriel(s.pl, 'plant mis', 'plants mis')} en terre sur ${pluriel(s.lots, 'lot')}.`
+  else if (s.le > 0) phrase = `${pluriel(s.le, 'plant levé attend', 'plants levés attendent')} d'être repiqués.`
   else phrase = s.lots ? "Aucun plant obtenu pour l'instant." : 'Aucun lot.'
   let urgence = null
   if (s.go > 0 && pret) {
