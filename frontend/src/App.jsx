@@ -6,6 +6,7 @@ import { setTokens } from './lib/api.js'
 import { PotagerContextProvider, usePotager } from './context/PotagerContext.jsx'
 import TopBar    from './components/TopBar.jsx'
 import BottomNav from './components/BottomNav.jsx'
+import RegleTemps from './components/RegleTemps.jsx'
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
 import { VUE_PAR_DEFAUT, NAV_OF, vueDeSection } from './navigation.js'
@@ -176,6 +177,10 @@ function AppInner({ intentionAdresse }) {
             {renderView({ refresh: refreshKey })}
           </div>
         </main>
+
+        {/* Règle des temps : au-dessus de la barre basse, hors du défilement de
+            la page — donc la même sur toutes les vues qui portent le sélecteur de date. */}
+        <RegleTemps />
 
         <BottomNav view={view} onGo={changerSection} />
       </div>

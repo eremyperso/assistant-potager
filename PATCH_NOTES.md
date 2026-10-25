@@ -1,3 +1,16 @@
+## [v3.102.0] — 2026-10-25
+
+### 🚀 Nouveautés
+- Ajoute la **règle des temps** : un bouton en forme de règle, à côté du sélecteur de date, ouvre une réglette au bas de l'écran pour faire défiler les jours (glisser au doigt ou à la souris, molette, clic sur un jour, flèches du clavier, Maj pour une semaine, T pour revenir).
+- Applique la règle des temps à toutes les vues qui portent le sélecteur de date (Plan, Cultures, Pépinière, Stocks, Stats) : la date reste commune, la réglette et le calendrier se suivent.
+- Écrit la date de référence seulement quand la réglette s'arrête sur un jour, et non pendant le glissé : les écrans ne se rechargent pas à chaque jour traversé.
+- Borne la réglette aux 24 derniers mois et à aujourd'hui, comme le calendrier : aucun jour à venir n'est consultable.
+
+### 🔧 Améliorations techniques
+- Isole la logique de la réglette dans `frontend/src/lib/regleTemps.js` (10 tests) et monte le composant une seule fois dans la coquille de l'app, au-dessus de la barre basse.
+- Ajoute la page de contrôle visuel `/regle-temps`, sans backend.
+- Documente la réglette dans le corpus de connaissance (fiche `stock-plants-calcul.md`, deux questions de mesure, table de relecture).
+
 ## [v3.93.0] — 2026-10-20
 
 **ÉPIC 9-12 — bilan depuis la dernière version commitée (v3.89.0)** : la Pépinière passe de quatre onglets à deux, **« Ma pépinière »** (kanban emplacement × stade) et **« Lots »** (journal de saison), sur des données de lot désormais réparties par pépinière. Les entrées v3.90.0 à v3.92.1 ci-dessous donnent le détail ; celle-ci ajoute **US-220 et US-240**, qui n'y figuraient pas, et récapitule le périmètre.

@@ -285,3 +285,33 @@
   @keyframes deplier-fiche { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
   .deplier { animation: deplier-fiche .25s ease; }
   @media (prefers-reduced-motion: reduce) { .deplier { animation: none; } }
+
+/* Règle des temps — réglette de date (components/RegleTemps.jsx). Hors @layer :
+   classes composées à l'exécution. Un trait tous les 10 px (PPJ du composant). */
+.regle-w { position: relative; flex: 1; min-width: 0; height: 54px; }
+.regle-vue { height: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; cursor: grab;
+  touch-action: pan-x; outline: 0; border-radius: 10px;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent); }
+.regle-vue::-webkit-scrollbar { display: none; }
+.regle-vue:focus-visible { box-shadow: inset 0 0 0 2px var(--brand); }
+.regle-glisse .regle-vue { cursor: grabbing; }
+.regle-in { box-sizing: content-box; padding: 0 50%; height: 100%; user-select: none; -webkit-user-select: none; }
+.regle-rl { position: relative; height: 100%; }
+.regle-trait { position: absolute; bottom: 0; width: 1px; height: 6px; background: var(--txt3); opacity: .45; }
+.regle-trait-semaine { height: 12px; opacity: 1; }
+.regle-trait-mois { height: 24px; width: 1.5px; background: var(--txt2); opacity: 1; }
+.regle-mois { position: absolute; top: 3px; margin-left: 5px; font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .05em; color: var(--txt2); white-space: nowrap; }
+.regle-auj { position: absolute; top: 20px; bottom: 0; width: 2px; margin-left: -1px; background: var(--brand); }
+.regle-auj::after { content: "auj."; position: absolute; right: 5px; top: -4px; font-family: Kalam, cursive;
+  font-size: 13px; font-weight: 700; color: var(--brand-text); }
+.regle-centre { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px;
+  background: var(--txt); border-radius: 2px; pointer-events: none; }
+.regle-centre::before { content: ""; position: absolute; left: -5px; top: -2px; border: 6px solid transparent;
+  border-top-color: var(--txt); }
+.regle-tip { position: absolute; top: -22px; transform: translateX(-50%); font-size: 11px; font-weight: 600;
+  background: var(--surface); color: var(--txt); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0 6px; pointer-events: none; white-space: nowrap; z-index: 2; }
+.regle-kbd { font-family: inherit; font-size: 10.5px; border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 4px; padding: 0 4px; color: var(--txt2); }
