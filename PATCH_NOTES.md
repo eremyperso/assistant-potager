@@ -1,3 +1,16 @@
+## [v3.102.1] — 2026-10-27
+
+### 🐛 Corrections
+- Corrige « renomme la planche sud en planche des courges et supprime la planche nord », que les règles proposaient de renommer en « planche des courges et supprime la planche nord » : une phrase composée part désormais à l'agent (US-277).
+- Corrige « la planche sud n'est plus paillée », que les règles lisaient comme un paillage **activé** sur une parcelle nommée « planche sud n'est plus » : une négative mal lue part à l'agent, une négative bien lue (« n'est pas paillée », « sans abri ») reste aux règles (US-277).
+- Corrige « mets la serre en pépinière froide et la planche centrale en pépinière chaude », dont la seconde parcelle était perdue (US-277).
+- Corrige le message reçu quand l'agent est désactivé ou indisponible : une phrase composée ou négative n'est plus réduite à une commande tronquée, le jardinier lit que rien n'a été fait et la commande à taper (US-277).
+
+### 🔧 Améliorations techniques
+- Ajoute `interpreteur_commandes.phrase_pour_l_agent` : liaison en tête, seconde demande après « et », « puis » ou une virgule, négative perdue par la lecture des règles ; les noms de parcelle du potager sont masqués avant la détection (US-277).
+- Fait passer le bot texte par `interpreter()` même quand les règles ont reconnu la phrase ; leur lecture ne sert plus qu'à protéger le raccourci « annuler ma dernière saisie » (US-277).
+- Ajoute `tests/test_us277_regles_phrases_composees.py` (27 tests) et met à jour la fiche `compagnon-telegram.md` du corpus de fonctionnement (US-277).
+
 ## [v3.102.0] — 2026-10-25
 
 ### 🚀 Nouveautés

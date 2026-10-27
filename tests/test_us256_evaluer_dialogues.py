@@ -312,9 +312,21 @@ class TestCascade:
         assert ed.Bilan(resultats).bon_outil == (0, 0)
 
     def test_les_regles_passent_avant_l_agent(self):
-        resultats, modele = _jouer(["PLU-2"], {})
+        simple = ed.Dialogue(id="R-1", categorie="creations", source="test", titre="phrase simple", tours=(
+            ed.Tour(jardinier="renomme la planche sud en planche des courges",
+                    attendu=ed.Attendu(outils=("parcelle",), ecriture=True)),
+        ))
+        modele = ModeleSimule({})
+        resultats = ed.jouer_corpus([simple], CTX, appeler=modele, pause_s=0, dormir=lambda s: None)
         assert modele.requetes == []
         assert resultats[0].chemin == ed.CHEMIN_REGLES and not resultats[0].couperets_jardinier
+
+    def test_us277_une_phrase_composee_va_a_l_agent(self):
+        resultats, modele = _jouer(["PLU-2"], {
+            "renomme la planche sud en planche des courges et supprime la planche nord":
+                _reponse(_appel("parcelle", action="renommer", ancien="Planche Sud", nouveau="planche des courges")),
+        })
+        assert len(modele.requetes) == 1 and resultats[0].chemin == ed.CHEMIN_AGENT
 
     def test_une_question_devenue_suppression_arrive_au_jardinier(self):
         resultats, _ = _jouer(["QUE-3"], {

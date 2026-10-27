@@ -767,7 +767,10 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
     # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
     # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
-    resultat_commande = commande_reglee or svc_interpreteur.interpreter(
+    # [US-277] `interpreter` relit les règles (sans coût) et écarte leur lecture
+    # d'une phrase composée ou négative ; `commande_reglee` ne sert plus qu'au
+    # raccourci destructeur ci-dessus.
+    resultat_commande = svc_interpreteur.interpreter(
         texte_raw, current_context(), contexte_court=contexte_court_de(update),
     )
     if await _traiter_commande_interpretee(update, ctx, resultat_commande):

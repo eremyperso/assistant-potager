@@ -1,8 +1,8 @@
 # Le compagnon actif : cadrage fonctionnel, solution retenue et découpage en US
 
 > **Statut** : cadrage du 27/10/2026. Aucun code n'a été modifié. **US créées le
-> 27/10/2026 dans `backlog/` (US-256 à US-275, puis US-276 après la première
-> mesure)**, réparties en trois épics, avec le modèle et l'effort de production
+> 27/10/2026 dans `backlog/` (US-256 à US-275, puis US-276 et US-277 après la
+> première mesure)**, réparties en trois épics, avec le modèle et l'effort de production
 > de chacune (§6). Tickets Jira à créer. **Ordre d'implémentation : §6.5.**
 > **Vérifié sur** : la branche `epic-13-agent-interpreteur` (commit 68683cb,
 > v3.101.0, plus l'arbre de travail du 27/10).
@@ -512,7 +512,7 @@ estimations sont en points, sur l'échelle du backlog.
 
 | Épic | Ce qu'il livre | US | Points |
 |---|---|---|---|
-| **ÉPIC 13 — Agent interpréteur** (suite du §12) | Le moteur conversationnel : mesure, réponse rédigée, mémoire commune, correction, lectures croisées, compte rendu. Profite d'abord à Telegram | US-256, 257, 259 à 264, 276 | 54 |
+| **ÉPIC 13 — Agent interpréteur** (suite du §12) | Le moteur conversationnel : mesure, réponse rédigée, mémoire commune, correction, lectures croisées, compte rendu. Profite d'abord à Telegram | US-256, 257, 259 à 264, 276, 277 | 57 |
 | **ÉPIC 14 — Compagnon actif : profil, mémoire et initiative** | Ce qui fait du moteur un compagnon : prénom et registre, carnet, veilleur, messages spontanés, rappels. Telegram d'abord (D11) | US-258, 265 à 268 | 31 |
 | **ÉPIC 15 — Compagnon dans la PWA** | Le branchement du portail sur le même moteur : gestes sans Telegram, API, panneau, proposition à deux fenêtres, mode Extra, ménage, Web Push | US-269 à 275 | 42 (dont 5 facultatifs) |
 
@@ -547,6 +547,7 @@ même au chemin d'écriture.
 
 | US | Épic | Titre | Contenu | Pts | Modèle | Effort |
 |---|---|---|---|---|---|---|
+| [**US-277**](../../backlog/US-277_regles-laissent-phrases-composees.md) | 13 | Laisser à l'agent les phrases composées ou négatives que les règles déforment | *Ajoutée le 27/10/2026 après la mesure US-256 rejouée par la cascade.* Les règles ne gardent que les phrases simples : une phrase composée, négative ou qui commence par « et » passe à l'agent. Défaut de production indépendant du modèle. Livrée **avant** US-276 | 3 | Sonnet 5.5 | `high` |
 | [**US-276**](../../backlog/US-276_catalogue-allege-projete.md) | 13 | Alléger le catalogue de l'agent et le projeter selon la phrase | *Ajoutée le 27/10/2026 après la mesure US-256.* Outils qui ne se recouvrent plus (`parcelle` / `parcelle_supprimer`, `calendrier` / `consulter`). Le code projette le catalogue avant l'appel : aucune écriture pour une phrase interrogative, aucune suppression sans verbe de destruction. Projections bornées pour garder le cache. Livrée **avant** US-257 | 5 | **Opus 5.5** | `high` |
 | [**US-257**](../../backlog/US-257_compagnon-repond-en-texte.md) | 13 | Laisser le compagnon répondre en texte et poser ses vraies questions | `tool_choice="auto"`, `ReponseAgent`, verdict du validateur renvoyé au modèle, `poser_question` / `demander_precision` / `hors_perimetre` retirés au profit du texte et de `manque_catalogue`. Contrôle déterministe des annonces mensongères. Fin des textes figés dans le bot. **Absorbe US-250** (plusieurs écritures par réponse) | 8 | **Opus 5.5** | `xhigh` |
 | [**US-258**](../../backlog/US-258_prenom-registre-compagnon.md) | 14 | Appeler le jardinier par son prénom et parler à son registre | Profil d'échange, partie 1 : prénom d'usage validé, demandé au premier contact ; registre `sobre` / `voisin` / `gouailleur` ; `/profil` dans le bot. Migration de la table de profil. R10 | 5 | Sonnet 5.5 | `medium` |
@@ -598,7 +599,7 @@ même au chemin d'écriture.
 | [**US-273**](../../backlog/US-273_analyse-approfondie-mode-extra.md) | Analyser le potager en profondeur, sans rien modifier (mode Extra) | Boucle de lecture seule, type d'appel `analyse`, bornes de tours et de jetons, bouton « Approfondir ». R2 vérifiée par test | 8 | Sonnet 5.5 | `high` |
 | [**US-274**](../../backlog/US-274_retirer-ecritures-sans-confirmation.md) | Retirer les chemins d'écriture sans confirmation | `/voice` (ACTION, INTERROGER), `/parse`, `classify_intent_pwa`, dès que `static/` n'en dépend plus (E6) | 3 | Sonnet 5.5 | `medium` |
 
-**Total** : 20 US, 122 points, plus US-275, facultative (5 points). US-251
+**Total** : 21 US, 125 points, plus US-275, facultative (5 points). US-251
 (rapprocher une valeur mal dite) reste à part : elle concerne le validateur et se
 livre à tout moment (Sonnet 5.5, `medium`).
 
@@ -608,13 +609,13 @@ livre à tout moment (Sonnet 5.5, `medium`).
 |---|---|---|
 | **Opus 5.5 · `xhigh`** | US-257, US-259, US-267 | 24 |
 | **Opus 5.5 · `high`** | US-262, US-266, US-269, US-272, US-276 | 34 |
-| **Sonnet 5.5 · `high`** | US-256, US-260, US-270, US-271, US-273 | 31 |
+| **Sonnet 5.5 · `high`** | US-256, US-260, US-270, US-271, US-273, US-277 | 34 |
 | **Sonnet 5.5 · `medium`** | US-258, US-261, US-263, US-264, US-265, US-268, US-274 (+ US-275) | 33 (+ 5) |
 
-Opus 5.5 se justifie sur **8 US sur 20** : celles qui portent le chemin
+Opus 5.5 se justifie sur **8 US sur 21** : celles qui portent le chemin
 d'écriture (projection du catalogue, boucle et validateur, propositions atomiques, correction), la
 boucle multi-potager du veilleur, le distributeur, la refactorisation du bot et
-la concurrence entre canaux. Sonnet 5.5 suffit pour les 12 autres.
+la concurrence entre canaux. Sonnet 5.5 suffit pour les 13 autres.
 
 **Pratique économique**, reprise du §11.5 de l'architecture : sur une US Opus,
 concevoir et écrire le cœur (validateur, consommation atomique, règles du
@@ -630,7 +631,7 @@ ne se livrent qu'avec un rapport US-256 sur le vrai modèle (§7).
 
 ```mermaid
 flowchart LR
-    256 --> 276 --> 257 --> 258
+    256 --> 277 --> 276 --> 257 --> 258
     257 --> 259 --> 260
     259 --> 261 --> 262
     257 --> 263 --> 264
@@ -660,6 +661,7 @@ sans lien** avec ce chantier (pépinière, stock). Il faut les livrer d'abord.
 | # | US | Lot | Condition de passage |
 |---:|---|---|---|
 | 1 | US-256 | 0 | Rapport rejoué par la cascade : fait le 27/10. À clore |
+| 1 bis | US-277 | 1 | 📏 PLU-1, PLU-2 et NEG-2 (tour 2) passent par l'agent ; aucune proposition déformée par les règles |
 | 2 | US-276 | 1 | 📏 0 couperet au jardinier sur QUE-3, REG-1, DOU-1, DOU-2, REG-2 ; aucun taux en baisse |
 | 3 | US-257 | 1 | 📏 critère du lot 1 (§7) sur le périmètre de l'agent |
 | 4 | US-258 | 1 | 📏 critère du lot 1 complet (prénom, registres) |

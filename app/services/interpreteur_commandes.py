@@ -2612,6 +2612,89 @@ def demande_d_agir(normalise: str) -> Optional[str]:
     return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-277] Les règles ne lisent que les phrases simples
+# -----------------------------------------------------------------------------
+# Une règle reconnaît UNE commande dans une phrase et en prend les arguments par
+# position. Sur une phrase composée ou négative, elle déforme : « renomme la
+# planche sud en planche des courges et supprime la planche nord » renommait en
+# « planche des courges et supprime la planche nord » ; « et la planche sud
+# n'est plus paillée » activait le paillage d'une parcelle nommée « et la
+# planche sud n'est plus » (mesure US-256 du 27/10/2026). Ces phrases vont à
+# l'agent ; les règles gardent ce dont elles sont sûres.
+# ─────────────────────────────────────────────────────────────────────────────
+_VERBES_DE_COMMANDE = "|".join(verbes for _, verbes in _VERBES_D_ACTION)
+#: Désignations génériques d'une parcelle : « … et la planche centrale en pépinière chaude »
+#: ouvre une seconde cible sans répéter le verbe.
+_PARCELLE_GENERIQUE = r"parcelle|planche|serre|tunnel|carre|bac|butte|jardiniere|pepiniere"
+_MARQUE_PARCELLE = "parcelle"
+
+#: « puis-je semer… ? » est une question, pas la suite d'une demande.
+_LIAISON_EN_TETE = re.compile(r"^(?:et|puis|ainsi que)\b(?!\s+je\b)")
+_SECONDE_DEMANDE = re.compile(
+    r"(?:\bet\b|\bpuis\b|,|;)\s*(?:je\s+|on\s+|tu\s+)?"
+    rf"(?:(?:{_VERBES_DE_COMMANDE})\b|(?:(?:le|la|les|l)\s+)?(?:{_PARCELLE_GENERIQUE})\b)"
+)
+_NEGATION = re.compile(
+    r"\bne?\s+(?:\w+\s+){1,3}?(?:plus|pas|jamais|aucune?|guere)\b"
+    r"|\b(?:plus|pas)\s+d(?:e|u|es)?\b|\bsans\b"
+)
+
+
+def _noms_de_parcelle_masques(normalise: str, ctx: Optional[TenantContext]) -> str:
+    """La phrase normalisée où chaque nom de parcelle du potager devient « parcelle » :
+    un nom qui contient « sans » ou « et » ne fait pas d'une phrase simple une phrase
+    composée (CA5), et il reste une cible pour la détection d'une seconde demande."""
+    if ctx is None:
+        return normalise
+    from app.services.agent.interpreteur_agent import noms_parcelles_du_potager
+
+    reste = normalise
+    for nom in sorted(noms_parcelles_du_potager(ctx), key=len, reverse=True):
+        forme = normaliser(nom or "")[0].strip()
+        if forme:
+            reste = re.sub(rf"\b{re.escape(forme)}\b", _MARQUE_PARCELLE, reste)
+    return reste
+
+
+def _negation_mal_lue(lecture: "CommandeInterpretee | Ambiguite") -> bool:
+    """La lecture des règles a perdu la négation de la phrase : elle l'a avalée dans
+    une valeur (un nom « planche nord n'est plus ») ou en a fait une valeur
+    affirmative (`paillage=oui`). « n'est pas paillée » → `paillage=non` et « sans
+    abri » → `abri=aucun` sont lues juste, et restent aux règles (CA4)."""
+    if isinstance(lecture, Ambiguite):
+        return True
+    valeurs = [normaliser(str(v))[0] for v in lecture.valeurs.values()]
+    return any(_NEGATION.search(v) or re.search(r"(?:^|=)oui$", v) for v in valeurs)
+
+
+def phrase_pour_l_agent(texte: str, ctx: Optional[TenantContext] = None,
+                        lecture: "CommandeInterpretee | Ambiguite | None" = None) -> bool:
+    """[US-277 / CA1 à CA3, CA5] La phrase dépasse ce qu'une règle sait lire :
+    elle s'ouvre sur une liaison (la suite d'une demande), enchaîne une seconde
+    demande (un verbe d'action ou une seconde parcelle après « et », « puis » ou
+    une virgule), ou exprime un retrait (« n'est plus », « ne … pas », « sans »)
+    que la `lecture` des règles, quand elle est donnée, n'a pas su garder."""
+    normalise = _noms_de_parcelle_masques(normaliser(texte or "")[0], ctx)
+    if _LIAISON_EN_TETE.match(normalise) or _SECONDE_DEMANDE.search(normalise):
+        return True
+    if not _NEGATION.search(normalise):
+        return False
+    return lecture is None or _negation_mal_lue(lecture)
+
+
+def _syntaxe(resultat: "CommandeInterpretee | Ambiguite") -> str:
+    """La commande à taper pour ce que les règles ont reconnu, sans les valeurs
+    qu'elles ont mal lues : « /parcelle renommer <ancien> <nouveau> »."""
+    candidats = resultat.candidats if isinstance(resultat, Ambiguite) else (resultat,)
+    syntaxes = []
+    for candidat in candidats:
+        forme = candidat.forme
+        nom = f"{forme.commande} {forme.sous_commande}" if forme.sous_commande else forme.commande
+        syntaxes.append(f"/{nom} " + " ".join(f"<{a.nom}>" for a in forme.arguments))
+    return " puis ".join(s.strip() for s in syntaxes)
+
+
 def _mode_agent() -> str:
     """[US-235 / CA12] `AGENT_MODE` lu à chaque phrase : changer de mode est un
     réglage (CA15), pas une livraison, et les tests le surchargent sans recharger."""
@@ -2621,10 +2704,14 @@ def _mode_agent() -> str:
     return mode if mode in getattr(config, "AGENT_MODES", ("off",)) else "off"
 
 
-def _non_compris(brut: str, normalise: str, debut: float) -> Optional[Aiguillage]:
+def _non_compris(brut: str, normalise: str, debut: float,
+                 ecartee: "CommandeInterpretee | Ambiguite | None" = None) -> Optional[Aiguillage]:
     """[INC-018] L'agent (puis l'ancien repli) n'a rien proposé : le jardinier le lit si sa
-    phrase demandait d'agir ; sinon None, et elle poursuit son chemin habituel."""
-    commande = demande_d_agir(normalise)
+    phrase demandait d'agir ; sinon None, et elle poursuit son chemin habituel.
+    [US-277 / CA6] Une phrase dont les règles ont reconnu la commande, puis écartée parce
+    qu'elle est composée ou négative, demande d'agir par construction : la commande à
+    taper est celle que les règles avaient reconnue, sans ses valeurs."""
+    commande = _syntaxe(ecartee) if ecartee is not None else demande_d_agir(normalise)
     if commande is None:
         return None
     log.warning(
@@ -2660,18 +2747,31 @@ def interpreter(
     La dictée vocale ne change rien (CA5) : ce module ne voit qu'un texte, et
     `bot.handle_voice` lui passe la transcription au même point du flux que
     `bot.handle_text` lui passe la frappe.
+
+    [US-277] Les règles ne gardent que les phrases simples : une phrase composée,
+    négative ou ouverte par une liaison (`phrase_pour_l_agent`) voit sa lecture
+    par les règles ÉCARTÉE et passe à l'agent, sans le filtre « geste annoncé »
+    (les règles y ont reconnu une commande, pas un geste). Sans agent, elle n'est
+    jamais lue de travers : le jardinier lit qu'elle n'a pas été traitée.
     """
     debut = time.monotonic()
     resultat = reconnaitre_par_regles(texte)
+    ecartee: "CommandeInterpretee | Ambiguite | None" = None
+    if resultat is not None and phrase_pour_l_agent(texte, ctx, resultat):
+        log.info(
+            "🎛️  INTERPRETEUR   : phrase composée ou négative → lecture des règles écartée │ %r",
+            (texte or "")[:80],
+        )
+        ecartee, resultat = resultat, None
     if resultat is not None:
         latence = int((time.monotonic() - debut) * 1000)
         if isinstance(resultat, Ambiguite):
             return Ambiguite(resultat.candidats, resultat.texte_origine, latence)
         return replace(resultat, latence_ms=latence)
 
-    if not autoriser_modele:
-        return None
     brut = (texte or "").strip()
+    if not autoriser_modele:
+        return _non_compris(brut, "", debut, ecartee) if ecartee is not None else None
     if not brut or brut.startswith("/"):
         return None
     normalise, _ = normaliser(brut)
@@ -2681,7 +2781,8 @@ def interpreter(
     # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
     # quantité, variété et date. Import local : le routeur importe la base.
     from llm.routeur import annonce_un_geste
-    if annonce_un_geste(brut) and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx)):
+    if (ecartee is None and annonce_un_geste(brut)
+            and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx))):
         return None
 
     # [US-235 / CA12] L'agent prend la place de l'ancien repli selon AGENT_MODE.
@@ -2709,7 +2810,7 @@ def interpreter(
                 return aiguillage
             # Commande rejetée par le validateur : la phrase poursuit son chemin
             # habituel (routeur, cascade) — sauf si elle demandait d'agir [INC-018].
-            return _non_compris(brut, normalise, debut)
+            return _non_compris(brut, normalise, debut, ecartee)
         # [CA13] Modèle indisponible : l'ancien repli ci-dessous reste tenté.
     elif mode == "ombre":
         from app.services.agent import interpreteur_agent
@@ -2718,6 +2819,10 @@ def interpreter(
             lambda: interpreteur_agent.observer(brut, ctx)
         )
 
+    if ecartee is not None:
+        # [US-277 / CA6] L'ancien repli ne rend qu'UNE commande : sur une phrase
+        # composée, il en perdrait une, exactement ce que les règles faisaient.
+        return _non_compris(brut, normalise, debut, ecartee)
     candidate = _appeler_modele(brut, ctx)
     if candidate is None:
         return _non_compris(brut, normalise, debut) if mode == "actif" else None

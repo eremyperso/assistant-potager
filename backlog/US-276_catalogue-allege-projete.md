@@ -21,6 +21,7 @@ Le code sait déjà reconnaître une destruction (la règle `parcelle_supprimer`
 - [ ] CA2 : Le code projette le catalogue avant l'appel au modèle. Une phrase interrogative (point d'interrogation, « est-ce que », « comment », « quand », « peux-tu ») n'expose aucun outil d'écriture : seulement la lecture et les outils de réponse.
 - [ ] CA3 : Un outil destructeur n'est exposé que si la phrase contient un verbe de destruction, reconnu par la même liste que la règle `parcelle_supprimer`, jamais par une seconde liste. Il ne l'est jamais pour une phrase interrogative.
 - [ ] CA4 : Un catalogue projeté est un sous-ensemble du catalogue complet : `controler_parite_outils` tient, et chaque outil garde son schéma (C5). Le nombre de projections est borné (complet, sans écriture, sans destruction), et chacune garde un ordre stable pour que son préfixe reste en cache.
+- [ ] CA4 bis *(ajouté le 27/10/2026 d'après le rapport US-256 rejoué)* : Le modèle crée une parcelle **avec ses caractéristiques en un seul appel** (« crée la planche Est 6 mètres 4 rangs »). Le code découpe cet appel en création, puis modification, et le présente comme un plan à confirmer en une fois. Aujourd'hui, le modèle ajoute `longueur_m` ou `nb_rangs` à la création, le validateur rejette l'appel, et le jardinier lit « je n'ai pas su relire l'étape 1 » (CRE-1, CRE-2, DES-4).
 - [ ] CA5 : Les descriptions des outils sont raccourcies. Le rapport US-256 donne les jetons d'entrée par message avant et après.
 - [ ] CA6 : Rejoué par US-256 sur Ministral 3B (cascade et couperets au jardinier, US-256 / CA9) : aucun couperet n'arrive au jardinier sur QUE-3, REG-1, DOU-1, DOU-2 et REG-2. Le taux de bon outil de l'agent ne baisse dans aucune catégorie.
 - [ ] CA7 : Les tests existants de l'agent (US-235 à US-238) restent verts ; une projection se teste sans modèle.
@@ -28,7 +29,7 @@ Le code sait déjà reconnaître une destruction (la règle `parcelle_supprimer`
 **Notes fonctionnelles :**
 - Zone fonctionnelle concernée : interaction Telegram (agent interpréteur)
 - Migration BDD requise : non
-- Dépendances : US-256 (CA9). À livrer **avant** US-257, qui retire `poser_question`, `demander_precision` et `hors_perimetre` : US-257 reprendra la projection telle quelle.
+- Dépendances : US-256 (CA9), US-277. À livrer **avant** US-257, qui retire `poser_question`, `demander_precision` et `hors_perimetre` : US-257 reprendra la projection telle quelle.
 - Production conseillée : **Opus 5.5, effort `high`**. C'est un garde-fou sur le chemin d'écriture, et un choix de projection qui touche au cache de prompt. Les tests de projection sont délégables à Sonnet 5.5.
 
 **Estimation :** 5 points
