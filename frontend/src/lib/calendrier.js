@@ -279,3 +279,16 @@ export function couleurDuMoisReferentiel(frise) {
     return (frise?.croissance || []).includes(i) ? ETAT_CROISSANCE.teinte : 'bg-card-alt'
   }
 }
+
+/**
+ * [US-255 / CA2, CA3] Teinte d'un mois quand la légende filtre UNE phase : la
+ * phase choisie colore tous ses mois, sans tenir compte de la priorité (un mois
+ * de plantation reste coloré sous le filtre « semis en pleine terre »), les
+ * autres mois sont neutres. `frise` est indexée par clé de phase (`pepiniere`,
+ * `pleineTerre`, `plantation`, `rec`, `croissance`, ou `semis` / `plant` / `rec`
+ * pour la frise historique).
+ */
+export function couleurDuMoisFiltre(frise, cle, teinte) {
+  const mois = frise?.[cle] || []
+  return (i) => (mois.includes(i) ? teinte : 'bg-card-alt')
+}

@@ -48,6 +48,7 @@ from .commandes_culture import (
 from .commandes_calendrier import cmd_calendrier
 from .commandes_confiance import cmd_confiance, _confiance_cb
 from .commandes_plan import cmd_plan
+from .commandes_profil import cmd_profil, _profil_cb
 from .commandes_stats import (
     cmd_ask,
     cmd_historique,
@@ -183,6 +184,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "delier",     cmd_delier)  # [US-050]
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
     _enregistrer_commande(app, "rejoindre",  cmd_rejoindre)  # [US-087]
+    _enregistrer_commande(app, "profil",     cmd_profil)  # [US-258]
 
     # Commandes TTS
     _enregistrer_commande(app, "tts",        cmd_tts)
@@ -233,6 +235,7 @@ def _construire_application() -> "Application":
     app.add_handler(CallbackQueryHandler(_semis_organe_cb, pattern=r"^semis_organe"))
     # [US-179] Filière, enregistrement, question décalée de dix jours
     app.add_handler(CallbackQueryHandler(_confiance_cb, pattern=r"^conf:"))
+    app.add_handler(CallbackQueryHandler(_profil_cb, pattern=r"^profil:"))   # [US-258]
 
     # [US-038] Confirmation avant enregistrement d'une note — boutons inline
     app.add_handler(CallbackQueryHandler(_note_confirm_cb, pattern=r"^note_"))

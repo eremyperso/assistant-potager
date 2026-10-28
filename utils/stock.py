@@ -2583,20 +2583,22 @@ def calcul_lots_pepiniere(
         # est encore en train de lever » et tombe à 0 quand la levée est terminée, alors
         # que les plants levés restent à repiquer. Les garde-fous de repiquage lisent donc
         # `graines_non_soldees`, jamais `graines_en_germination`.
-        lot["graines_non_soldees"]    = 0 if lot["cloture"] else max(0, graines - soldees)
+        # Une levée terminée solde aussi les non-levées : seuls les levés restent à repiquer.
+        leves = lot["nb_leves"]
+        non_levees = (
+            max(0, graines - leves) if lot["levee_terminee"] and leves is not None and graines > 0 else 0
+        )
+        lot["graines_non_soldees"]    = 0 if lot["cloture"] else max(0, graines - non_levees - soldees)
         lot["graines_en_germination"] = 0 if (lot["cloture"] or lot["levee_terminee"]) else max(0, graines - soldees)
         lot["etat_germination"]       = etat
 
         # [US-212 / CA6, CA7, CA3, CA9] Lecture de la levée. Le taux n'existe que si les
         # graines semées sont connues. Les valeurs saisies sont exposées telles quelles ;
         # une incohérence est un drapeau, jamais un bornage.
-        leves = lot["nb_leves"]
         lot["taux_levee"] = (
             round(leves / graines * 100) if leves is not None and graines > 0 else None
         )
-        lot["graines_non_levees_soldees"] = (
-            max(0, graines - leves) if lot["levee_terminee"] and leves is not None and graines > 0 else 0
-        )
+        lot["graines_non_levees_soldees"] = non_levees
         lot["incoherence_levee"] = leves is not None and graines > 0 and leves > graines
         lot["incoherence_repiquage_levee"] = leves is not None and plants > leves
         if lot["incoherence_levee"]:

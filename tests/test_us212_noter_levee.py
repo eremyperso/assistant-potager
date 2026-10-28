@@ -272,14 +272,15 @@ class TestIncoherences:
         semis = _semis(db, quantite=48)
         assert self._resoudre(db, semis, 40, sur=48)["_alertes_levee"] == []
 
-    def test_us212_ca3_plus_de_leves_que_de_graines_est_signale_et_garde(self, db):
+    def test_us212_ca3_plus_de_leves_que_de_graines_est_refuse(self, db):
         semis = _semis(db, quantite=48)
-        item = self._resoudre(db, semis, 60)
-        assert any("impossible" in a for a in item["_alertes_levee"])
-        svc_evenements.creer_evenement_confirme(db, CTX, item, "levée", None)
-        lot = _lot(db, semis)
-        assert lot["nb_leves"] == 60                  # valeur gardée telle quelle
-        assert lot["incoherence_levee"] is True
+        with pytest.raises(svc_evenements.LeveeRefuseeError, match="impossible"):
+            self._resoudre(db, semis, 60)
+        assert _lot(db, semis)["nb_leves"] is None    # rien n'est écrit
+
+    def test_us212_ca3_autant_de_leves_que_de_graines_est_accepte(self, db):
+        semis = _semis(db, quantite=48)
+        assert self._resoudre(db, semis, 48)["_alertes_levee"] == []
 
     def test_us212_ca3_le_recapitulatif_porte_les_alertes(self, db):
         from app.bot.enregistrement import _build_action_summary
@@ -430,13 +431,14 @@ class TestLeveeTerminee:
         """`graines_en_germination` tombe à 0, mais les 40 levés doivent pouvoir être repiqués."""
         semis = _semis(db, quantite=48)
         _noter(db, semis, 40, terminee=True)
-        assert _lot(db, semis)["graines_non_soldees"] == 48
+        assert _lot(db, semis)["graines_non_soldees"] == 40     # les 8 non-levées sont soldées
         item = {"action": "mise_en_godet", "culture": "chou", "nb_plants_godets": 40,
                 "nb_graines_semees": 48, "origine_graines_id": semis.id, "date": "2026-09-20"}
         svc_evenements.creer_evenement_godet(db, CTX, item, "mise en godet 40 choux sur 48")
         lot = _lot(db, semis)
         assert lot["plants_obtenus"] == 40 and lot["stock_residuel_godet"] == 40
         assert lot["incoherence_repiquage_levee"] is False
+        assert lot["graines_non_soldees"] == 0    # plus rien à repiquer : « Repiquer » disparaît
 
     def test_us212_ca14_chaque_comptage_figure_dans_le_cycle_de_vie_du_lot(self, db):
         """Le fil « Détail du lot » montre chaque comptage, pas seulement le dernier."""

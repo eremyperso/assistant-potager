@@ -197,22 +197,22 @@ class TestCA2NonLAutre:
         modele.return_value = _reponse(_rangs("Planche Nord"))
         resultat = interpreteur_agent.proposer("non, l'autre", CTX, _contexte(_commande_a_choisir()))
         assert resultat.commande is None
-        assert resultat.aiguillage.vers == interp.VERS_PRECISION
-        assert "Planche Nord" in resultat.aiguillage.message and resultat.motif == "candidat écarté"
+        # [US-257] Le refus revient au modèle ; muet, c'est la question du code qui part.
+        assert resultat.texte == "Laquelle ? Je t'ai déjà proposé Planche Nord."
 
     def test_us238_ca2_un_nom_ecarte_plus_tot_n_est_pas_repropose(self, modele, parcelles_connues):
         modele.return_value = _reponse(_rangs("Serre"))
         contexte = _contexte(_commande_a_choisir(), ecartes=("Serre",))
         resultat = interpreteur_agent.proposer("non, l'autre", CTX, contexte)
-        assert resultat.aiguillage.vers == interp.VERS_PRECISION and "Serre" in resultat.aiguillage.message
+        assert resultat.proposition is None and "Serre" in resultat.texte
 
     def test_us238_ca2_plusieurs_possibles_le_bot_demande_laquelle(self, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil(
-            "demander_precision", {"question": "Planche Sud ou Serre ?"}))
+        # [US-257] La question se pose en texte, plus par `demander_precision`.
+        modele.return_value = ReponseOutils(texte="Planche Sud ou Serre ?", modele="test",
+                                            appel_type=passerelle.TYPE_AGENT)
         resultat = interpreteur_agent.proposer("non, l'autre", CTX, _contexte(_commande_a_choisir()))
-        assert resultat.aiguillage.vers == interp.VERS_PRECISION
-        assert resultat.aiguillage.message == "Planche Sud ou Serre ?"
-        assert "Planche Sud ou Serre ?" in bot_interpretation.texte_aiguillage(resultat.aiguillage)
+        assert resultat.proposition is None
+        assert resultat.texte == "Planche Sud ou Serre ?"
 
     def test_us238_ca2_un_nom_dit_est_retenu_tel_quel(self, modele, parcelles_connues):
         modele.return_value = _reponse(_rangs("Planche Sud"))
@@ -263,22 +263,24 @@ class TestCA3Extension:
         """Le validateur n'accepte toujours pas un nombre que le jardinier n'a dit nulle part."""
         modele.return_value = _reponse(_rangs("Planche Nord"), _rangs("Planche Sud"))
         resultat = interpreteur_agent.proposer(PHRASE_EXTENSION, CTX)
-        assert resultat.plan is None and resultat.aiguillage.vers == interp.VERS_PRECISION
+        assert resultat.proposition is None and len(resultat.refus) >= 2
 
     def test_us238_ca3_un_nombre_jamais_dit_reste_refuse_meme_avec_contexte(self, modele, parcelles_connues):
         modele.return_value = _reponse(_rangs("Planche Nord"), _rangs("Planche Sud", 9))
         resultat = interpreteur_agent.proposer(PHRASE_EXTENSION, CTX, _contexte())
-        assert resultat.plan is None and resultat.aiguillage.vers == interp.VERS_PRECISION
+        # [US-257] Le 9 est refusé, le modèle le lit ; seul ce qui a été dit reste proposé.
+        assert resultat.plan is None and resultat.refus
+        assert resultat.commande.commande_equivalente() == "/parcelle modifier Planche Nord rangs=6"
 
     def test_us238_ca3_une_suppression_ne_se_prolonge_pas_en_plan(self, modele, parcelles_connues):
         suppression = interp._construire_commande(
             interp.FORMES_PAR_CLE[("parcelle", "supprimer")], {"nom": "Planche Nord"},
             interp.ORIGINE_AGENT, 1.0, "supprime la planche nord")
         modele.return_value = _reponse(
-            AppelOutil("parcelle_supprimer", {"nom": "Planche Nord"}),
-            AppelOutil("parcelle_supprimer", {"nom": "Planche Sud"}))
+            AppelOutil("supprimer_parcelle", {"nom": "Planche Nord"}),
+            AppelOutil("supprimer_parcelle", {"nom": "Planche Sud"}))
         resultat = interpreteur_agent.proposer(PHRASE_EXTENSION, CTX, _contexte(suppression))
-        assert resultat.plan is None and "que seule" in resultat.aiguillage.message
+        assert resultat.plan is None and any("que seule" in raison for raison in resultat.refus)
 
     def test_us238_ca3_un_plan_en_attente_se_prolonge_encore(self, modele, parcelles_connues):
         plan = interp.Plan(
@@ -293,14 +295,15 @@ class TestCA3Extension:
     ):
         modele.return_value = _reponse(_rangs("Planche Nord"), _rangs("Planche Sud"))
         resultat = interp.interpreter(PHRASE_EXTENSION, CTX, contexte_court=_contexte())
-        assert isinstance(resultat, interp.Plan) and len(resultat.etapes) == 2
+        assert isinstance(resultat.proposition, interp.Plan) and len(resultat.proposition.etapes) == 2
 
     def test_us238_ca3_non_l_autre_passe_par_l_interpreteur_en_mode_actif(
         self, agent_actif, modele, parcelles_connues
     ):
         modele.return_value = _reponse(_rangs("Planche Sud"))
         resultat = interp.interpreter("non, l'autre", CTX, contexte_court=_contexte(_commande_a_choisir()))
-        assert isinstance(resultat, interp.CommandeInterpretee) and resultat.candidats == ("Planche Sud",)
+        assert isinstance(resultat.proposition, interp.CommandeInterpretee)
+        assert resultat.proposition.candidats == ("Planche Sud",)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -27,6 +27,7 @@ from .liaison import _delier_confirm, _verifier_liaison_ou_onboarding, cmd_start
 from .enregistrement import _parse_multi
 from .godets import _godet_graines_reponse
 from .notes import _note_category_selected, _note_details_received, _note_start
+from .commandes_profil import phrase_de_profil
 from .interpretation import (
     _INTERP_MODE_COMPLETION, _interp_completion_texte, _traiter_commande_interpretee, contexte_court_de,
 )
@@ -767,7 +768,13 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
     # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
     # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
-    resultat_commande = commande_reglee or svc_interpreteur.interpreter(
+    # [US-277] `interpreter` relit les règles (sans coût) et écarte leur lecture
+    # d'une phrase composée ou négative ; `commande_reglee` ne sert plus qu'au
+    # raccourci destructeur ci-dessus.
+    # [US-258 / CA6] « appelle-moi Rico » est une proposition de profil, sans modèle.
+    if await phrase_de_profil(update, ctx, texte_raw):
+        return
+    resultat_commande = svc_interpreteur.interpreter(
         texte_raw, current_context(), contexte_court=contexte_court_de(update),
     )
     if await _traiter_commande_interpretee(update, ctx, resultat_commande):

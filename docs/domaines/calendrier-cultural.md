@@ -111,6 +111,10 @@ python tools/importer_referentiel.py data/referentiel/calendrier_redaction_inter
 python tools/importer_referentiel.py data/referentiel/calendrier_redaction_interne.json
 ```
 
+[US-254] Ces manifestes (`calendrier_redaction_interne.json`, `wind_river_attributs.json`)
+sont importés automatiquement à chaque déploiement dev et prod, selon
+`data/referentiel/deploiement.json` : la commande manuelle ne sert plus qu'à un essai.
+
 ## Semis en pépinière ou en pleine terre [US-069]
 
 Un semis porte sa FILIÈRE (`evenements.contexte_semis`) : dite dans la phrase

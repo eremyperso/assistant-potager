@@ -560,6 +560,13 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
                 db.rollback()
                 log.warning(f"❌ ÉVÉNEMENT INVALIDE (écriture) : {e} | texte={texte!r}")
                 err_msg = f"❌ {e}"
+                if saved_items:
+                    # Chaque événement est validé en base à part : les précédents
+                    # sont déjà enregistrés, et le dire évite un doublon à la reprise.
+                    deja = ", ".join(
+                        f"{p.get('culture') or '?'} (n° {eid})" for p, eid in saved_items
+                    )
+                    err_msg += f"\n\n✅ Déjà enregistré avant l'erreur : {deja}."
                 if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
                 else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
                 return False

@@ -12,6 +12,12 @@ psql -d potager -f migrations/migration_v57.sql
 
 ## Ce que portent les dernières migrations
 
+- **v60 [US-258]** — ajoute à `potager_membres` (clé `(user_id, potager_id)`, donc le couple jardinier × potager)
+  `prenom_compagnon` VARCHAR(30) nullable (NULL = jamais donné, jamais supposé),
+  `registre_compagnon` VARCHAR(12) NOT NULL DEFAULT `voisin` (CHECK `sobre|voisin|gouailleur`)
+  et `compagnon_accueilli` BOOLEAN NOT NULL DEFAULT FALSE (le premier contact a eu lieu).
+  Pas de nouvelle table ni de RLS. **Aucun backfill** : chaque membre est accueilli une fois. Rollback : `rollback_v60.sql` (perd prénoms et registres).
+
 - **v57 [US-212]** — ajoute `evenements.levee_terminee` (BOOLEAN nullable) : la levée d'un
   lot de semis déclarée **terminée**, qui clôt la germination du lot. CHECK
   `ck_evenements_levee_terminee_levee_seule` : seul un événement `levee` la porte. NULL pour

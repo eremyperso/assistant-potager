@@ -56,9 +56,9 @@ Une phrase ne sert pas qu'à rapporter ce qu'on a fait au jardin : elle sert aus
 ## Ce qui est relu avant d'être écrit
 
 **Intention :** comprendre
-**On parle aussi de :** vérifier avant ; récapitulatif chiffré ; valeur en toutes lettres ; se tromper de nom de parcelle ; erreur de dictée ; mal dicter un nom ; nom approchant
+**On parle aussi de :** vérifier avant ; récapitulatif chiffré ; se tromper de nom de parcelle ; erreur de dictée ; mal dicter un nom ; nom approchant
 
-Une demande qui modifie quelque chose est toujours récapitulée avant d'être exécutée, et le récapitulatif rappelle la commande équivalente — de quoi l'apprendre sans avoir eu à l'apprendre. Toute valeur chiffrée y est relue en chiffres et en toutes lettres avec son unité, parce qu'un « un » et un « dix » ne s'entendent pas de la même façon selon la qualité du micro. Un nom de parcelle mal dicté n'est jamais remplacé d'autorité par un nom voisin : le nom approchant est proposé, et rien ne se fait tant qu'il n'a pas été confirmé. Une demande à laquelle il manque une information ne échoue pas non plus : ce qui manque est demandé, valeurs possibles à l'appui.
+Une demande qui modifie quelque chose est toujours récapitulée avant d'être exécutée, et le récapitulatif rappelle la commande équivalente — de quoi l'apprendre sans avoir eu à l'apprendre. Toute valeur chiffrée y est relue en chiffres avec son unité, parce qu'un « un » et un « dix » ne s'entendent pas de la même façon selon la qualité du micro : c'est là qu'une erreur de dictée se voit. Un nom de parcelle mal dicté n'est jamais remplacé d'autorité par un nom voisin : le nom approchant est proposé, et rien ne se fait tant qu'il n'a pas été confirmé. Une demande à laquelle il manque une information ne échoue pas non plus : ce qui manque est demandé, valeurs possibles à l'appui.
 
 ## Une troisième façon de commencer un geste
 

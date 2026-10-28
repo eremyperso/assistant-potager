@@ -12,6 +12,22 @@ python tools/importer_referentiel.py --derive-de wikidata  # que retirer avec ce
 python tools/importer_referentiel.py --lister-sources      # registre : licence + attribution
 ```
 
+### Import automatique au déploiement [US-254]
+
+Les déploiements dev et prod lancent `tools/importer_referentiel_deploiement.py`
+juste après l'ingestion du corpus et avant le redémarrage des services. Il importe,
+dans l'ordre, les manifestes de la clé `importer` de `data/referentiel/deploiement.json`
+(idempotent : un manifeste inchangé n'écrit rien), affiche le compte rendu de chaque
+import puis le rapport de couverture. Un échec (liste incohérente, manifeste invalide,
+licence refusée, base indisponible) rend un code non nul et arrête le déploiement.
+
+Les manifestes volontairement hors déploiement sont listés sous `exclus`, avec leur
+motif (archive, revue humaine en attente, extraction brute). Un fichier JSON de
+`data/referentiel/` absent des deux listes fait échouer le déploiement : l'exclusion
+est toujours explicite. Les commandes ci-dessus restent valables pour un essai
+`--dry-run` ou un import ponctuel. Retirer un manifeste de la liste n'efface rien en
+base (`--derive-de` indique quoi retirer).
+
 ## Attributs agronomiques de conduite [US-161]
 
 Le gabarit est livré VIDE et se remplit à la main : aucun chiffre agronomique

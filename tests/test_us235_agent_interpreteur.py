@@ -39,6 +39,11 @@ def _sans_gras(texte: str) -> str:
     return texte.replace("*", "")
 
 
+def _texte(texte: str = "Je te propose ceci.") -> ReponseOutils:
+    """[US-257] Le tour où le modèle répond en texte : il clôt la boucle (sans jeton compté)."""
+    return ReponseOutils(texte=texte, modele="test", appel_type=passerelle.TYPE_AGENT)
+
+
 def _valider(texte: str, outil: str, arguments: dict, voisin=None, noms=PARCELLES):
     return valider_appel(
         AppelOutil(outil, arguments),
@@ -101,8 +106,9 @@ class TestCA1Catalogue:
     def test_us235_ca1_chaque_outil_de_commande_vient_d_une_forme_dictable(self):
         """[CA1] Aucun outil écrit à la main : chacun couvre des formes du catalogue."""
         for outil in catalogue_outils.outils():
-            if outil.terminal or outil.lecture:
-                # [US-237] L'outil de lecture, comme les terminaux, n'écrit rien.
+            if outil.terminal or outil.lecture or outil.signal:
+                # [US-237] L'outil de lecture, comme les terminaux, n'écrit rien ; [US-257] le
+                # signal du manque au catalogue non plus.
                 assert not outil.formes
                 continue
             assert outil.formes
@@ -117,11 +123,11 @@ class TestCA1Catalogue:
         monkeypatch.setattr(catalogue_outils, "FORMES_DICTABLES",
                             (*menu_commandes.FORMES_DICTABLES, nouvelle))
         noms = {o.nom for o in catalogue_outils.generer_outils()}
-        assert "compost_retourner" in noms
+        assert "retourner_compost" in noms
 
     def test_us235_ca1_regroupe_par_commande(self):
         """[CA1] Les sous-commandes d'une même commande partagent un outil (`action`)."""
-        culture = catalogue_outils.outils_par_nom()["culture"]
+        culture = catalogue_outils.outils_par_nom()["corriger_culture"]
         proprietes = culture.schema["function"]["parameters"]["properties"]
         assert set(proprietes["action"]["enum"]) == {
             "famille", "delai_retour", "exposition", "eau", "profondeur", "rusticite",
@@ -129,7 +135,7 @@ class TestCA1Catalogue:
 
     def test_us235_ca1_un_argument_homonyme_de_type_different_est_suffixe(self):
         """[CA1] `valeur` est une exposition ici, un nombre là : deux propriétés distinctes."""
-        proprietes = catalogue_outils.outils_par_nom()["culture"].schema["function"]["parameters"]["properties"]
+        proprietes = catalogue_outils.outils_par_nom()["corriger_culture"].schema["function"]["parameters"]["properties"]
         assert proprietes["valeur_profondeur"]["type"] == ["number", "null"]
         assert "enum" in proprietes["valeur_exposition"]
         assert "valeur" not in proprietes
@@ -257,7 +263,7 @@ class TestCA3Parite:
 
     def test_us235_ca3_une_forme_couverte_deux_fois_fait_echouer(self, monkeypatch):
         outils = catalogue_outils.outils()
-        doublon = replace(outils[0], nom="parcelle_modifier_bis")
+        doublon = replace(outils[0], nom="modifier_parcelle_bis")
         monkeypatch.setattr(catalogue_outils, "_CACHE", (*outils, doublon))
         assert any("plusieurs outils" in a for a in catalogue_outils.controler_parite_outils())
 
@@ -345,12 +351,12 @@ class TestCA5Nombres:
         assert "n'a pas été dit" in verdict.motif
 
     def test_us235_ca5_nombre_d_une_autre_commande_non_dit_rejete(self):
-        verdict = _valider("corrige la profondeur de semis des carottes", "culture",
+        verdict = _valider("corrige la profondeur de semis des carottes", "corriger_culture",
                            {"action": "profondeur", "culture": "carottes", "valeur_profondeur": 2})
         assert verdict.commande is None
 
     def test_us235_ca5_nombre_dit_d_une_autre_commande(self):
-        verdict = _valider("la profondeur de semis des carottes est de 2 cm", "culture",
+        verdict = _valider("la profondeur de semis des carottes est de 2 cm", "corriger_culture",
                            {"action": "profondeur", "culture": "carottes", "valeur_profondeur": 2})
         assert verdict.commande.commande_equivalente() == "/culture profondeur carottes 2"
 
@@ -400,10 +406,12 @@ class TestCA6AncrageDuChamp:
         assert verdict.commande.valeurs["modification"] == "abri=aucun"
 
     def test_us235_ca6_tous_les_champs_retires_la_modification_est_demandee(self):
-        """Rien d'évoqué : la complétion demande quoi modifier, rien n'est écrit."""
+        """Rien d'évoqué : la modification est demandée, rien n'est écrit.
+        [US-276] Par une précision, plus par une proposition vide à compléter."""
         verdict = _valider("occupe-toi de la planche nord", OUTIL_MODIFIER_PARCELLE,
                            {"parcelle": "Planche Nord", "paillage": True})
-        assert [a.nom for a in verdict.commande.manquants] == ["modification"]
+        assert verdict.commande is None and verdict.retires == ("paillage",)
+        assert verdict.precision == "Que veux-tu changer sur « Planche Nord » ?"
 
     def test_us235_ca6_valeur_hors_liste_rejetee(self):
         verdict = _valider("la planche nord est sous cloche", OUTIL_MODIFIER_PARCELLE,
@@ -417,14 +425,14 @@ class TestCA6AncrageDuChamp:
 
     def test_us235_ca6_vocabulaire_d_une_autre_commande_non_evoque_retire(self):
         """`/bioagresseur rattacher` : une fréquence non dite est retirée, puis demandée."""
-        verdict = _valider("le mildiou attaque la tomate", "bioagresseur",
+        verdict = _valider("le mildiou attaque la tomate", "renseigner_bioagresseur",
                            {"action": "rattacher", "culture": "tomate", "frequence": "courant",
                             "bioagresseur": "mildiou"})
         assert verdict.retires == ("frequence",)
         assert [a.nom for a in verdict.commande.manquants] == ["frequence"]
 
     def test_us235_ca6_valeur_d_une_autre_commande_hors_liste_rejetee(self):
-        verdict = _valider("le mildiou attaque souvent la tomate", "bioagresseur",
+        verdict = _valider("le mildiou attaque souvent la tomate", "renseigner_bioagresseur",
                            {"action": "rattacher", "culture": "tomate", "frequence": "souvent",
                             "bioagresseur": "mildiou"})
         assert verdict.commande is None
@@ -441,32 +449,32 @@ class TestCA6AncrageDuChamp:
 class TestCA7Destructrice:
 
     def test_us235_ca7_suppression_sur_nom_exact_dit(self):
-        verdict = _valider("supprime la planche nord", "parcelle_supprimer", {"nom": "Planche Nord"})
+        verdict = _valider("supprime la planche nord", "supprimer_parcelle", {"nom": "Planche Nord"})
         assert verdict.commande.complete
         assert verdict.commande.forme.destructrice
 
     def test_us235_ca7_suppression_sur_nom_deduit_jamais_executable(self):
-        verdict = _valider("supprime la planche", "parcelle_supprimer", {"nom": "Planche Nord"})
-        commande = verdict.commande
-        assert "nom" not in commande.valeurs
-        assert commande.candidats == ("Planche Nord",)
+        """[US-276] Ni proposée avec un candidat : la précision nomme les choix réels."""
+        verdict = _valider("supprime la planche", "supprimer_parcelle", {"nom": "Planche Nord"})
+        assert verdict.commande is None
+        assert verdict.precision == "Quelle parcelle veux-tu supprimer : Planche Nord ou Planche Sud ?"
 
     def test_us235_ca7_suppression_sur_nom_voisin_jamais_executable(self):
-        verdict = _valider("supprime la planche nordest", "parcelle_supprimer", {"nom": "planche nordest"},
+        verdict = _valider("supprime la planche nordest", "supprimer_parcelle", {"nom": "planche nordest"},
                            voisin=lambda nom: "Planche Nord")
-        assert "nom" not in verdict.commande.valeurs
+        assert verdict.commande is None and "Planche Nord" in verdict.precision
 
     def test_us235_ca7_renommer_vers_le_meme_nom_demande_le_nouveau(self):
         """La leçon d'US-233 : « renomme la planche nord » → Planche Nord → Planche Nord."""
-        verdict = _valider("renomme la planche nord", "parcelle",
-                           {"action": "renommer", "ancien": "Planche Nord", "nouveau": "Planche Nord"})
+        verdict = _valider("renomme la planche nord", "renommer_parcelle",
+                           {"ancien": "Planche Nord", "nouveau": "Planche Nord"})
         commande = verdict.commande
         assert "nouveau" in verdict.retires
         assert [a.nom for a in commande.manquants] == ["nouveau"]
 
     def test_us235_ca7_renommer_avec_un_nouveau_nom_dit(self):
-        verdict = _valider("renomme la planche nord en planche des courges", "parcelle",
-                           {"action": "renommer", "ancien": "Planche Nord", "nouveau": "planche des courges"})
+        verdict = _valider("renomme la planche nord en planche des courges", "renommer_parcelle",
+                           {"ancien": "Planche Nord", "nouveau": "planche des courges"})
         assert verdict.commande.commande_equivalente() == "/parcelle renommer Planche Nord planche des courges"
 
 
@@ -481,7 +489,7 @@ class TestCA8Potager:
             assert not any("potager_id" in p for p in proprietes)
 
     def test_us235_ca8_un_potager_produit_par_le_modele_est_rejete(self):
-        verdict = _valider("supprime la planche nord", "parcelle_supprimer",
+        verdict = _valider("supprime la planche nord", "supprimer_parcelle",
                            {"nom": "Planche Nord", "potager_id": 2})
         assert verdict.commande is None
         assert "potager_id" in verdict.motif
@@ -508,7 +516,7 @@ class TestCA8Potager:
         assert interpreteur_agent.voisin_en_base(CTX)("planche") is None
 
     def test_us235_ca8_le_contexte_est_passe_a_la_passerelle(self, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil("consulter", {"commande": "meteo"}))
+        modele.return_value = _reponse(AppelOutil("afficher", {"commande": "meteo"}))
         interpreteur_agent.proposer("et le temps demain", CTX)
         assert modele.call_args.kwargs["ctx"] is CTX
 
@@ -520,9 +528,9 @@ class TestCA9SeuilDeConfiance:
 
     def test_us235_ca9_agent_sans_seuil(self, agent_actif, modele, parcelles_connues, monkeypatch):
         monkeypatch.setattr(interp, "SEUIL_CONFIANCE_MODELE", 2.0)
-        modele.return_value = _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
-                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False}))
-        assert isinstance(interp.interpreter(NEGATION, CTX), interp.CommandeInterpretee)
+        modele.side_effect = [_reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
+                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False})), _texte()]
+        assert isinstance(interp.interpreter(NEGATION, CTX).proposition, interp.CommandeInterpretee)
 
     def test_us235_ca9_le_seuil_reste_sur_l_ancien_chemin(self, monkeypatch):
         monkeypatch.setattr(config, "AGENT_MODE", "off")
@@ -551,13 +559,13 @@ class TestCA10CA11Recapitulatif:
     def test_us235_ca11_je_passe_a_six_rangs(self):
         recap = _sans_gras(self._recap("la planche nord a maintenant 6 rangs",
                                        {"parcelle": "Planche Nord", "nb_rangs": 6}))
-        assert "Je passe le nombre de rangs de Planche Nord à 6 (six)" in recap
+        assert "Je passe le nombre de rangs de Planche Nord à 6." in recap
 
     def test_us235_ca11_chaque_champ_modifie_est_nomme(self):
         recap = _sans_gras(self._recap(
             "la planche nord fait 12 m, n'est plus paillée et passe sous tunnel",
             {"parcelle": "Planche Nord", "longueur_m": 12, "paillage": False, "abri": "tunnel"}))
-        assert "la longueur de Planche Nord à 12 m (douze m)" in recap
+        assert "la longueur de Planche Nord à 12 m." in recap
         assert "Je retire le paillage de Planche Nord" in recap
         assert "l'abri de Planche Nord à tunnel" in recap
 
@@ -582,7 +590,7 @@ class TestCA10CA11Recapitulatif:
     def test_us235_ca11_le_recapitulatif_des_regles_ne_change_pas(self):
         """L'ancien récapitulatif (puces) reste celui des règles : aucune régression."""
         recap = interp.recapitulatif(interp.reconnaitre_par_regles("la planche nord a 5 rangs"))
-        assert "• nombre de rangs : *5* (cinq)" in recap
+        assert "• nombre de rangs : *5*\n" in recap
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -628,12 +636,12 @@ class TestCA12Modes:
         assert resultat.commande.commande_equivalente() == "/parcelle modifier Serre extérieure pepiniere=non"
 
     def test_us235_ca12_actif_l_agent_remplace_l_ancien_repli(self, agent_actif, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
-                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False}))
+        modele.side_effect = [_reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
+                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False})), _texte()]
         with patch.object(interp, "_appeler_modele") as ancien:
             resultat = interp.interpreter(NEGATION, CTX)
         ancien.assert_not_called()
-        assert resultat.origine == interp.ORIGINE_AGENT
+        assert resultat.proposition.origine == interp.ORIGINE_AGENT
 
     def test_us235_ca12_actif_les_regles_passent_avant_l_agent(self, agent_actif, modele):
         """CA15 par construction : ce que les règles reconnaissent ne change pas."""
@@ -654,18 +662,30 @@ class TestCA12Modes:
         self, agent_actif, modele, parcelles_connues
     ):
         """Relevé du 21/10/2026 : « tunnel », mot de geste, est ici le nom de la parcelle."""
-        modele.return_value = _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
-                                                  {"parcelle": "Tunnel", "est_pepiniere": False}))
+        modele.side_effect = [_reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
+                                                  {"parcelle": "Tunnel", "est_pepiniere": False})), _texte()]
         resultat = interp.interpreter("le tunnel n'est plus une pépinière", CTX)
-        assert resultat.commande_equivalente() == "/parcelle modifier Tunnel pepiniere=non"
+        assert resultat.proposition.commande_equivalente() == "/parcelle modifier Tunnel pepiniere=non"
 
-    def test_us235_ca12_actif_un_aiguillage_poursuit_son_chemin(self, agent_actif, modele, parcelles_connues):
-        """[US-236] L'aiguillage n'est plus jeté : il est rendu au bot, qui le suit."""
-        modele.return_value = _reponse(AppelOutil("poser_question", {"nature": "QUESTION_DATA"}))
+    def test_us235_ca12_actif_un_nom_dit_en_partie_n_est_pas_un_geste(self, agent_actif, modele, monkeypatch):
+        """Relevé du 28/10/2026 : « ma planche tunnel » nomme TUNNEL CHAUFFÉ."""
+        monkeypatch.setattr(interpreteur_agent, "noms_parcelles_du_potager", lambda ctx: ("TUNNEL CHAUFFÉ",))
+        modele.side_effect = [_texte()]
+        interp.interpreter("ma planche tunnel a une superficie de 20m2, longueur de 7m", CTX)
+        modele.assert_called()
+
+    def test_us235_ca12_actif_un_geste_reste_un_geste_a_cote_d_un_nom(self, agent_actif, modele, monkeypatch):
+        """« tunnel » sans mot de parcelle devant reste un geste, même quand une parcelle s'appelle Tunnel…"""
+        monkeypatch.setattr(interpreteur_agent, "noms_parcelles_du_potager", lambda ctx: ("TUNNEL CHAUFFÉ",))
+        assert interp.interpreter("tunnel posé sur les fraises", CTX) is None
+        modele.assert_not_called()
+
+    def test_us235_ca12_actif_une_reponse_en_texte_est_rendue_au_bot(self, agent_actif, modele, parcelles_connues):
+        """[US-257] L'agent répond en texte : la réponse est rendue au bot, jamais à l'ancien repli."""
+        modele.return_value = _texte("Tu as deux pépinières : la Serre extérieure et le Tunnel.")
         with patch.object(interp, "_appeler_modele") as ancien:
-            resultat = interp.interpreter("quelles sont mes pépinières", CTX)
-        assert isinstance(resultat, interp.Aiguillage)
-        assert resultat.vers == interp.VERS_QUESTION
+            resultat = interp.interpreter("liste mes pépinières", CTX)
+        assert isinstance(resultat, interp.ReponseAgent) and "pépinières" in resultat.texte
         ancien.assert_not_called()
 
     def test_us235_ca12_actif_un_rejet_du_validateur_poursuit_son_chemin(
@@ -674,8 +694,10 @@ class TestCA12Modes:
         modele.return_value = _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
                                                   {"parcelle": "Planche Nord", "nb_rangs": 9}))
         with patch.object(interp, "_appeler_modele") as ancien:
-            assert interp.interpreter("la planche nord a maintenant six rangs", CTX) is None
+            resultat = interp.interpreter("la planche nord a maintenant six rangs", CTX)
         ancien.assert_not_called()
+        # [US-278] Le 9 inventé reste refusé ; le filet propose la valeur DITE.
+        assert resultat.proposition.commande_equivalente() == "/parcelle modifier Planche Nord rangs=6"
 
     def test_us235_ca12_sans_contexte_l_agent_n_est_pas_appele(self, agent_actif, modele):
         with patch.object(interp, "_appeler_modele", return_value=None):
@@ -719,23 +741,28 @@ class TestCA13Repli:
             resultat = interp.interpreter("et le ciel aujourd'hui", CTX)
         assert resultat.origine == interp.ORIGINE_MODELE
 
-    def test_us235_ca13_aucun_appel_d_outil_est_une_indisponibilite(self, modele, parcelles_connues):
+    def test_us257_aucun_appel_ni_texte_est_une_reponse_vide(self, modele, parcelles_connues):
+        """[US-257] Sans outil obligatoire, un tour sans appel est une réponse ; vide, elle n'a
+        rien à montrer, et l'interpréteur le dit au jardinier sans tenter un autre modèle."""
         modele.return_value = _reponse()
-        assert interpreteur_agent.proposer(NEGATION, CTX).disponible is False
+        resultat = interpreteur_agent.proposer(NEGATION, CTX)
+        assert resultat.disponible and resultat.motif == interpreteur_agent.MOTIF_REPONSE_VIDE
 
     def test_us235_ca13_plusieurs_appels_avec_une_suppression_rien_n_est_propose(
         self, modele, parcelles_connues
     ):
         """[US-237 / CA4] Plusieurs appels forment un plan ; une suppression n'y
-        entre pas — une précision est demandée, rien n'est proposé."""
-        modele.return_value = _reponse(
+        entre pas. [US-257] Le refus revient au modèle ; ce qui passe reste proposé, seul."""
+        modele.side_effect = [_reponse(
             AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "Serre extérieure", "est_pepiniere": False}),
-            AppelOutil("parcelle_supprimer", {"nom": "Planche Nord"}),
-        )
-        resultat = interpreteur_agent.proposer(NEGATION, CTX)
-        assert resultat.commande is None and resultat.plan is None
-        assert "que seule" in resultat.aiguillage.message
-        assert resultat.outils == (OUTIL_MODIFIER_PARCELLE, "parcelle_supprimer")
+            AppelOutil("supprimer_parcelle", {"nom": "Planche Nord"}),
+        ), _texte("La suppression se demande à part.")]
+        # [US-276 / CA3] L'outil destructeur n'est vu que si la phrase dit la destruction.
+        resultat = interpreteur_agent.proposer(f"{NEGATION} et supprime la planche nord", CTX)
+        assert resultat.plan is None
+        assert resultat.commande.commande_equivalente() == "/parcelle modifier Serre extérieure pepiniere=non"
+        assert any("que seule" in raison for raison in resultat.refus)
+        assert resultat.outils == (OUTIL_MODIFIER_PARCELLE, "supprimer_parcelle")
 
     def test_us235_ca13_appel_malforme_rejete(self):
         verdict = valider_appel(AppelOutil(OUTIL_MODIFIER_PARCELLE, {}, arguments_valides=False),
@@ -754,7 +781,8 @@ class TestCA13Repli:
         kwargs = modele.call_args.kwargs
         assert kwargs["prompt_fixe"] == interpreteur_agent.PROMPT_FIXE
         assert "Serre extérieure" in kwargs["prompt_variable"]
-        assert kwargs["outils"] == catalogue_outils.schemas()
+        # [US-276] Sans verbe de destruction, le catalogue projeté sans destruction.
+        assert kwargs["outils"] == catalogue_outils.schemas(catalogue_outils.PROJECTION_SANS_DESTRUCTION)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -809,8 +837,8 @@ class TestCA14Journal:
         assert "origine=agent" in caplog.text and OUTIL_MODIFIER_PARCELLE in caplog.text
 
     def test_us235_ca14_la_proposition_porte_jetons_et_outils(self, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
-                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False}))
+        modele.side_effect = [_reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE,
+                                                  {"parcelle": "Serre extérieure", "est_pepiniere": False})), _texte()]
         commande = interpreteur_agent.proposer(NEGATION, CTX).commande
         assert commande.outils == (OUTIL_MODIFIER_PARCELLE,)
         assert commande.tokens_consommes == 950
@@ -1028,19 +1056,18 @@ class TestINC018SchemaNullable:
                 assert not any(q in description for q in questions), (outil.nom, nom, description)
 
     def test_inc018_l_exposition_d_une_parcelle_ne_se_deduit_pas_du_nom(self):
-        proprietes, _ = _proprietes_de(catalogue_outils.outils_par_nom()["parcelle"])
+        proprietes, _ = _proprietes_de(catalogue_outils.outils_par_nom()["creer_parcelle"])
         description = proprietes["exposition"]["description"]
         assert "exposition de la parcelle" in description.lower()
         assert "ne se déduit pas du nom" in description
 
     @pytest.mark.parametrize("arguments", [
-        {"action": "ajouter", "nom": "Planche Nord", "exposition": None, "superficie": None},
-        {"action": "ajouter", "nom": "Planche Nord", "superficie": None},
-        {"action": "ajouter", "nom": "Planche Nord", "exposition": "", "superficie": None,
-         "ancien": None, "nouveau": None},
+        {"nom": "Planche Nord", "exposition": None, "superficie_m2": None},
+        {"nom": "Planche Nord", "superficie_m2": None},
+        {"nom": "Planche Nord", "exposition": "", "superficie_m2": None, "nb_rangs": None},
     ])
     def test_inc018_null_vaut_non_dit_a_la_validation(self, arguments):
-        verdict = _valider("crée la planche Nord", "parcelle", arguments)
+        verdict = _valider("crée la planche Nord", "creer_parcelle", arguments)
         assert verdict.commande is not None
         assert verdict.commande.valeurs == {"nom": "Planche Nord"}
 
@@ -1064,18 +1091,18 @@ class TestINC018ChampsFacultatifs:
         return proprietes[propriete]["description"]
 
     def test_inc018_exposition_et_superficie_a_la_creation_sont_facultatives(self):
-        assert self._description("parcelle", "exposition").startswith("FACULTATIF. ")
-        assert self._description("parcelle", "superficie").startswith("FACULTATIF. ")
+        assert self._description("creer_parcelle", "exposition").startswith("FACULTATIF. ")
+        assert self._description("creer_parcelle", "superficie_m2").startswith("FACULTATIF. ")
 
     def test_inc018_le_nom_a_creer_ne_l_est_pas(self):
-        assert not self._description("parcelle", "nom").startswith("FACULTATIF")
-        assert not self._description("parcelle_supprimer", "nom").startswith("FACULTATIF")
+        assert not self._description("creer_parcelle", "nom").startswith("FACULTATIF")
+        assert not self._description("supprimer_parcelle", "nom").startswith("FACULTATIF")
 
     def test_inc018_un_champ_obligatoire_dans_une_forme_ne_l_est_pas_dans_l_outil(self):
         """`culture` est facultative pour le bilan mais obligatoire pour la fiche : l'outil
         `consulter` les réunit, le champ n'est donc pas annoncé facultatif."""
-        assert not self._description("consulter", "culture").startswith("FACULTATIF")
-        assert self._description("consulter", "date").startswith("FACULTATIF. ")
+        assert not self._description("afficher", "culture").startswith("FACULTATIF")
+        assert self._description("afficher", "date").startswith("FACULTATIF. ")
 
     def test_inc018_le_marquage_vient_de_obligatoire(self):
         for forme in menu_commandes.FORMES_DICTABLES:

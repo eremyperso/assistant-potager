@@ -102,6 +102,9 @@ ORIGINE_REGLE = "regle"
 ORIGINE_MODELE = "modele"
 #: [US-235 / CA14] Proposition de l'agent interpréteur (`app.services.agent`).
 ORIGINE_AGENT = "agent"
+#: [US-278] La règle d'une proposition du filet des caractéristiques de parcelle
+#: (`app.services.agent.filet_fiche`), qui passe après l'agent, jamais devant.
+REGLE_FILET_FICHE = "filet_fiche"
 
 #: Nature écrite au journal (CA18). Le routeur en connaît quatre (ACTION,
 #: QUESTION_*) ; celle-ci est la cinquième, et elle se décide avant lui.
@@ -262,6 +265,26 @@ class Aiguillage:
     vers: str
     nature_question: Optional[str] = None
     message: Optional[str] = None
+    texte_origine: str = ""
+    latence_ms: int = 0
+
+
+@dataclass(frozen=True)
+class ReponseAgent:
+    """[US-257, architecture §12.4] Ce que l'agent dit au jardinier, et ce qu'il lui propose.
+
+    `texte` est rédigé par le modèle et a passé le contrôle des annonces : il ne dit
+    jamais qu'une action est faite. Vide seulement quand ce contrôle l'a retiré devant
+    une proposition : le récapitulatif du code parle alors seul. `proposition` est
+    validée et attend la confirmation du jardinier ; rien n'est exécuté ici.
+    `manque_catalogue` : ce que l'application ne sait pas faire (ex-`hors_perimetre`).
+    """
+
+    texte: str
+    proposition: "CommandeInterpretee | Plan | None" = None
+    outils: tuple[str, ...] = ()
+    sources: tuple[str, ...] = ()
+    manque_catalogue: Optional[str] = None
     texte_origine: str = ""
     latence_ms: int = 0
 
@@ -718,11 +741,19 @@ def _construire_parcelle_renommer(groupes):
     return {"ancien": ancien, "nouveau": nouveau}
 
 
+#: Les verbes de destruction de la règle `parcelle_supprimer`. [US-276 / CA3] La
+#: projection du catalogue de l'agent lit CETTE liste pour exposer, ou non, l'outil
+#: destructeur : il n'y en a jamais une seconde.
+VERBES_DE_DESTRUCTION = (
+    r"supprime|supprimer|efface|effacer|retire|retirer|enleve|enlever|detruis|"
+    r"detruire|suppression de|suppression d"
+)
+
+
 @_regle(
     "parcelle_supprimer",
     _INTENTION
-    + r"(?:supprime|supprimer|efface|effacer|retire|retirer|enleve|enlever|detruis|"
-    + r"detruire|suppression de|suppression d)\s+"
+    + r"(?:" + VERBES_DE_DESTRUCTION + r")\s+"
     + _ARTICLE + r"parcelle\s+(?P<nom>.+)",
     "parcelle",
     "supprimer",
@@ -2545,17 +2576,35 @@ def _sans_noms_de_parcelle(texte: str, ctx: Optional[TenantContext]) -> str:
     """La phrase privée des noms de parcelle du potager. Un nom peut contenir un
     mot de geste : « le tunnel chauffé n'est plus une pépinière » (relevé du
     21/10/2026) passait pour une saisie de geste par « tunnel », n'arrivait
-    jamais à l'agent et finissait en réponse de culture."""
+    jamais à l'agent et finissait en réponse de culture.
+
+    Un nom dit en partie après le mot qui désigne une parcelle l'est aussi : « ma
+    planche tunnel a une superficie de 20m2… » (relevé du 28/10/2026) nomme TUNNEL
+    CHAUFFÉ, ce n'est pas la pose d'un tunnel."""
     if ctx is None:
         return texte
     from app.services.agent.interpreteur_agent import noms_parcelles_du_potager
 
+    return phrase_sans_noms(texte, noms_parcelles_du_potager(ctx))
+
+
+def phrase_sans_noms(texte: str, noms: tuple[str, ...]) -> str:
+    """`_sans_noms_de_parcelle` sans base : la phrase, minuscules et sans accents, privée
+    des noms de `noms` et des mots d'un nom dits après « planche », « parcelle »…"""
     reste = unidecode((texte or "").lower())
-    for nom in sorted(noms_parcelles_du_potager(ctx), key=len, reverse=True):
+    for nom in sorted(noms, key=len, reverse=True):
         forme = unidecode((nom or "").lower()).strip()
         if forme:
             reste = re.sub(rf"\b{re.escape(forme)}\b", " ", reste)
+    mots = sorted({mot for nom in noms for mot in re.findall(r"[a-z0-9]+", unidecode((nom or "").lower()))
+                   if len(mot) >= 3}, key=len, reverse=True)
+    if mots:
+        reste = re.sub(rf"\b{_DESIGNATION_PARCELLE}\s+(?:{'|'.join(map(re.escape, mots))})\b", " ", reste)
     return " ".join(reste.split())
+
+
+#: Les mots qui désignent une parcelle avant son nom : « ma planche tunnel ».
+_DESIGNATION_PARCELLE = r"(?:planche|parcelle|carre|butte|bande)s?"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2612,6 +2661,89 @@ def demande_d_agir(normalise: str) -> Optional[str]:
     return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-277] Les règles ne lisent que les phrases simples
+# -----------------------------------------------------------------------------
+# Une règle reconnaît UNE commande dans une phrase et en prend les arguments par
+# position. Sur une phrase composée ou négative, elle déforme : « renomme la
+# planche sud en planche des courges et supprime la planche nord » renommait en
+# « planche des courges et supprime la planche nord » ; « et la planche sud
+# n'est plus paillée » activait le paillage d'une parcelle nommée « et la
+# planche sud n'est plus » (mesure US-256 du 27/10/2026). Ces phrases vont à
+# l'agent ; les règles gardent ce dont elles sont sûres.
+# ─────────────────────────────────────────────────────────────────────────────
+_VERBES_DE_COMMANDE = "|".join(verbes for _, verbes in _VERBES_D_ACTION)
+#: Désignations génériques d'une parcelle : « … et la planche centrale en pépinière chaude »
+#: ouvre une seconde cible sans répéter le verbe.
+_PARCELLE_GENERIQUE = r"parcelle|planche|serre|tunnel|carre|bac|butte|jardiniere|pepiniere"
+_MARQUE_PARCELLE = "parcelle"
+
+#: « puis-je semer… ? » est une question, pas la suite d'une demande.
+_LIAISON_EN_TETE = re.compile(r"^(?:et|puis|ainsi que)\b(?!\s+je\b)")
+_SECONDE_DEMANDE = re.compile(
+    r"(?:\bet\b|\bpuis\b|,|;)\s*(?:je\s+|on\s+|tu\s+)?"
+    rf"(?:(?:{_VERBES_DE_COMMANDE})\b|(?:(?:le|la|les|l)\s+)?(?:{_PARCELLE_GENERIQUE})\b)"
+)
+_NEGATION = re.compile(
+    r"\bne?\s+(?:\w+\s+){1,3}?(?:plus|pas|jamais|aucune?|guere)\b"
+    r"|\b(?:plus|pas)\s+d(?:e|u|es)?\b|\bsans\b"
+)
+
+
+def _noms_de_parcelle_masques(normalise: str, ctx: Optional[TenantContext]) -> str:
+    """La phrase normalisée où chaque nom de parcelle du potager devient « parcelle » :
+    un nom qui contient « sans » ou « et » ne fait pas d'une phrase simple une phrase
+    composée (CA5), et il reste une cible pour la détection d'une seconde demande."""
+    if ctx is None:
+        return normalise
+    from app.services.agent.interpreteur_agent import noms_parcelles_du_potager
+
+    reste = normalise
+    for nom in sorted(noms_parcelles_du_potager(ctx), key=len, reverse=True):
+        forme = normaliser(nom or "")[0].strip()
+        if forme:
+            reste = re.sub(rf"\b{re.escape(forme)}\b", _MARQUE_PARCELLE, reste)
+    return reste
+
+
+def _negation_mal_lue(lecture: "CommandeInterpretee | Ambiguite") -> bool:
+    """La lecture des règles a perdu la négation de la phrase : elle l'a avalée dans
+    une valeur (un nom « planche nord n'est plus ») ou en a fait une valeur
+    affirmative (`paillage=oui`). « n'est pas paillée » → `paillage=non` et « sans
+    abri » → `abri=aucun` sont lues juste, et restent aux règles (CA4)."""
+    if isinstance(lecture, Ambiguite):
+        return True
+    valeurs = [normaliser(str(v))[0] for v in lecture.valeurs.values()]
+    return any(_NEGATION.search(v) or re.search(r"(?:^|=)oui$", v) for v in valeurs)
+
+
+def phrase_pour_l_agent(texte: str, ctx: Optional[TenantContext] = None,
+                        lecture: "CommandeInterpretee | Ambiguite | None" = None) -> bool:
+    """[US-277 / CA1 à CA3, CA5] La phrase dépasse ce qu'une règle sait lire :
+    elle s'ouvre sur une liaison (la suite d'une demande), enchaîne une seconde
+    demande (un verbe d'action ou une seconde parcelle après « et », « puis » ou
+    une virgule), ou exprime un retrait (« n'est plus », « ne … pas », « sans »)
+    que la `lecture` des règles, quand elle est donnée, n'a pas su garder."""
+    normalise = _noms_de_parcelle_masques(normaliser(texte or "")[0], ctx)
+    if _LIAISON_EN_TETE.match(normalise) or _SECONDE_DEMANDE.search(normalise):
+        return True
+    if not _NEGATION.search(normalise):
+        return False
+    return lecture is None or _negation_mal_lue(lecture)
+
+
+def _syntaxe(resultat: "CommandeInterpretee | Ambiguite") -> str:
+    """La commande à taper pour ce que les règles ont reconnu, sans les valeurs
+    qu'elles ont mal lues : « /parcelle renommer <ancien> <nouveau> »."""
+    candidats = resultat.candidats if isinstance(resultat, Ambiguite) else (resultat,)
+    syntaxes = []
+    for candidat in candidats:
+        forme = candidat.forme
+        nom = f"{forme.commande} {forme.sous_commande}" if forme.sous_commande else forme.commande
+        syntaxes.append(f"/{nom} " + " ".join(f"<{a.nom}>" for a in forme.arguments))
+    return " puis ".join(s.strip() for s in syntaxes)
+
+
 def _mode_agent() -> str:
     """[US-235 / CA12] `AGENT_MODE` lu à chaque phrase : changer de mode est un
     réglage (CA15), pas une livraison, et les tests le surchargent sans recharger."""
@@ -2621,10 +2753,14 @@ def _mode_agent() -> str:
     return mode if mode in getattr(config, "AGENT_MODES", ("off",)) else "off"
 
 
-def _non_compris(brut: str, normalise: str, debut: float) -> Optional[Aiguillage]:
+def _non_compris(brut: str, normalise: str, debut: float,
+                 ecartee: "CommandeInterpretee | Ambiguite | None" = None) -> Optional[Aiguillage]:
     """[INC-018] L'agent (puis l'ancien repli) n'a rien proposé : le jardinier le lit si sa
-    phrase demandait d'agir ; sinon None, et elle poursuit son chemin habituel."""
-    commande = demande_d_agir(normalise)
+    phrase demandait d'agir ; sinon None, et elle poursuit son chemin habituel.
+    [US-277 / CA6] Une phrase dont les règles ont reconnu la commande, puis écartée parce
+    qu'elle est composée ou négative, demande d'agir par construction : la commande à
+    taper est celle que les règles avaient reconnue, sans ses valeurs."""
+    commande = _syntaxe(ecartee) if ecartee is not None else demande_d_agir(normalise)
     if commande is None:
         return None
     log.warning(
@@ -2642,7 +2778,7 @@ def interpreter(
     ctx: Optional[TenantContext] = None,
     autoriser_modele: bool = True,
     contexte_court=None,
-) -> "CommandeInterpretee | Ambiguite | Aiguillage | Plan | None":
+) -> "CommandeInterpretee | Ambiguite | Aiguillage | Plan | ReponseAgent | None":
     """[CA1 → CA5] Traduit une phrase en une commande du catalogue, ou rien.
 
     Ordre strict : règles (CA3) → garde de savoir (CA2) et geste annoncé →
@@ -2660,18 +2796,36 @@ def interpreter(
     La dictée vocale ne change rien (CA5) : ce module ne voit qu'un texte, et
     `bot.handle_voice` lui passe la transcription au même point du flux que
     `bot.handle_text` lui passe la frappe.
+
+    [US-277] Les règles ne gardent que les phrases simples : une phrase composée,
+    négative ou ouverte par une liaison (`phrase_pour_l_agent`) voit sa lecture
+    par les règles ÉCARTÉE et passe à l'agent, sans le filtre « geste annoncé »
+    (les règles y ont reconnu une commande, pas un geste). Sans agent, elle n'est
+    jamais lue de travers : le jardinier lit qu'elle n'a pas été traitée.
+
+    [US-257] En mode `actif`, l'agent qui répond rend une `ReponseAgent` : son
+    texte, et la proposition validée qu'il fait, à confirmer. Une phrase
+    interrogative va à la cascade des questions sans appel au modèle (un
+    `Aiguillage` « question ») ; un geste rapporté, au parseur de gestes.
     """
     debut = time.monotonic()
     resultat = reconnaitre_par_regles(texte)
+    ecartee: "CommandeInterpretee | Ambiguite | None" = None
+    if resultat is not None and phrase_pour_l_agent(texte, ctx, resultat):
+        log.info(
+            "🎛️  INTERPRETEUR   : phrase composée ou négative → lecture des règles écartée │ %r",
+            (texte or "")[:80],
+        )
+        ecartee, resultat = resultat, None
     if resultat is not None:
         latence = int((time.monotonic() - debut) * 1000)
         if isinstance(resultat, Ambiguite):
             return Ambiguite(resultat.candidats, resultat.texte_origine, latence)
         return replace(resultat, latence_ms=latence)
 
-    if not autoriser_modele:
-        return None
     brut = (texte or "").strip()
+    if not autoriser_modele:
+        return _non_compris(brut, "", debut, ecartee) if ecartee is not None else None
     if not brut or brut.startswith("/"):
         return None
     normalise, _ = normaliser(brut)
@@ -2681,7 +2835,8 @@ def interpreter(
     # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
     # quantité, variété et date. Import local : le routeur importe la base.
     from llm.routeur import annonce_un_geste
-    if annonce_un_geste(brut) and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx)):
+    if (ecartee is None and annonce_un_geste(brut)
+            and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx))):
         return None
 
     # [US-235 / CA12] L'agent prend la place de l'ancien repli selon AGENT_MODE.
@@ -2690,26 +2845,36 @@ def interpreter(
     mode = _mode_agent() if ctx is not None else "off"
     if mode == "actif":
         from app.services.agent import interpreteur_agent
+        from app.services.agent.projection import est_interrogative
 
+        if est_interrogative(brut):
+            # [US-257] Une question part à la cascade des questions, qui lit le carnet,
+            # le savoir et la mémoire du potager ; l'agent n'a pas encore ces lectures
+            # (US-263). C'est ce que faisait `poser_question`, sans l'appel au modèle.
+            log.info("🎛️  INTERPRETEUR   : phrase interrogative → cascade des questions │ %r", brut[:80])
+            return Aiguillage(vers=VERS_QUESTION, texte_origine=brut,
+                              latence_ms=int((time.monotonic() - debut) * 1000))
         resultat = interpreteur_agent.proposer(brut, ctx, contexte_court)
         if resultat.disponible:
             latence = int((time.monotonic() - debut) * 1000)
-            # [CA9] Aucun seuil de confiance sur ce chemin : le validateur et le
-            # récapitulatif en tiennent lieu.
-            if resultat.commande is not None:
-                return replace(resultat.commande, latence_ms=latence)
-            if resultat.plan is not None:
-                return replace(resultat.plan, latence_ms=latence)
             if resultat.aiguillage is not None:
-                # [US-236] L'agent dit où va la phrase : le bot le suit sans
-                # repasser par la classification par mots-clés.
-                aiguillage = replace(resultat.aiguillage, latence_ms=latence)
-                if aiguillage.vers in (VERS_PRECISION, VERS_HORS_PERIMETRE):
-                    interpreteur_agent.persister_aiguillage(ctx, brut, resultat)
-                return aiguillage
-            # Commande rejetée par le validateur : la phrase poursuit son chemin
-            # habituel (routeur, cascade) — sauf si elle demandait d'agir [INC-018].
-            return _non_compris(brut, normalise, debut)
+                # [US-236] Un geste rapporté : le bot va droit au parseur de gestes.
+                return replace(resultat.aiguillage, latence_ms=latence)
+            # [US-257] L'agent a répondu : son texte, et sa proposition s'il en fait une.
+            # [CA9] Aucun seuil de confiance sur ce chemin : le validateur et le
+            # récapitulatif en tiennent lieu. La phrase ne repart jamais aux mots-clés (CA6).
+            interpreteur_agent.persister_reponse(ctx, brut, resultat)
+            proposition = resultat.proposition
+            if not resultat.texte and proposition is None:
+                # Rien de montrable : la phrase poursuit son chemin habituel, sauf si elle
+                # demandait d'agir [INC-018].
+                return _non_compris(brut, normalise, debut, ecartee)
+            return ReponseAgent(
+                texte=resultat.texte,
+                proposition=replace(proposition, latence_ms=latence) if proposition is not None else None,
+                outils=resultat.outils, manque_catalogue=resultat.manque_catalogue,
+                texte_origine=brut, latence_ms=latence,
+            )
         # [CA13] Modèle indisponible : l'ancien repli ci-dessous reste tenté.
     elif mode == "ombre":
         from app.services.agent import interpreteur_agent
@@ -2718,8 +2883,15 @@ def interpreter(
             lambda: interpreteur_agent.observer(brut, ctx)
         )
 
+    if ecartee is not None:
+        # [US-277 / CA6] L'ancien repli ne rend qu'UNE commande : sur une phrase
+        # composée, il en perdrait une, exactement ce que les règles faisaient.
+        return _filet_fiche(brut, ctx, debut) or _non_compris(brut, normalise, debut, ecartee)
     candidate = _appeler_modele(brut, ctx)
     if candidate is None:
+        filet = _filet_fiche(brut, ctx, debut)
+        if filet is not None:
+            return filet
         return _non_compris(brut, normalise, debut) if mode == "actif" else None
     if candidate.confiance < SEUIL_CONFIANCE_MODELE:
         # [CA12] Le doute ne fait jamais agir : sous le seuil, la phrase repart
@@ -2728,8 +2900,31 @@ def interpreter(
             "🎛️  INTERPRETEUR   : confiance %.2f < %.2f → rendu à la cascade",
             candidate.confiance, SEUIL_CONFIANCE_MODELE,
         )
+        filet = _filet_fiche(brut, ctx, debut)
+        if filet is not None:
+            return filet
         return _non_compris(brut, normalise, debut) if mode == "actif" else None
     return replace(candidate, latence_ms=int((time.monotonic() - debut) * 1000))
+
+
+def _filet_fiche(brut: str, ctx: Optional[TenantContext], debut: float) -> Optional[ReponseAgent]:
+    """[US-278 / CA8] Sans agent (`off`, quota, panne) ni repli qui propose, des
+    caractéristiques de parcelle dictées reçoivent quand même leur proposition.
+    Sans modèle : le filet ne lit que la parcelle désignée et les valeurs de fiche."""
+    if ctx is None:
+        return None
+    from app.services.agent import filet_fiche
+    from app.services.agent.interpreteur_agent import noms_parcelles_du_potager, voisin_en_base
+
+    filet = filet_fiche.proposer(brut, noms_parcelles_du_potager(ctx), voisin_en_base(ctx))
+    if filet is None:
+        return None
+    latence = int((time.monotonic() - debut) * 1000)
+    return ReponseAgent(
+        texte=filet.texte,
+        proposition=replace(filet.commande, origine=ORIGINE_REGLE, outils=(), latence_ms=latence),
+        texte_origine=brut, latence_ms=latence,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2749,6 +2944,9 @@ def _entier_en_lettres(valeur: int) -> str:
         return f"moins {_entier_en_lettres(-valeur)}"
     if valeur < 17:
         return _UNITES_LETTRES[valeur]
+    if valeur < 20:
+        # [US-278] « dix-sept » : sans ce cas, 17 à 19 levaient KeyError (pas de dizaine 1).
+        return f"dix-{_UNITES_LETTRES[valeur - 10]}"
     if valeur < 100:
         if valeur < 70:
             dizaine, unite = divmod(valeur, 10)
@@ -2796,7 +2994,7 @@ def nombre_en_lettres(valeur: str) -> str:
 
 #: Unités des clés `clé=valeur` de `/parcelle modifier` — le seul argument du
 #: catalogue qui porte plusieurs valeurs sous un même nom. La superficie y est
-#: chiffrée, donc relue en toutes lettres comme les autres (CA11).
+#: chiffrée, donc relue avec son unité comme les autres (CA11).
 _UNITES_MODIFICATION: dict[str, Optional[str]] = {
     "superficie": "m²", "exposition": None, "pepiniere": None, "ordre": None,
     "abri": None, "paillage": None, "rangs": None,
@@ -2830,7 +3028,7 @@ _LIBELLES_MODIFICATION: dict[str, str] = {
 def _ligne_valeur(libelle: str, valeur: str, unite: Optional[str], chiffree: bool) -> str:
     suffixe = f" {unite}" if unite else ""
     if chiffree:
-        return f"• {libelle} : *{valeur}{suffixe}* ({nombre_en_lettres(valeur)}{suffixe})"
+        return f"• {libelle} : *{valeur}{suffixe}*"
     return f"• {libelle} : *{valeur}*"
 
 
@@ -2838,12 +3036,15 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
     """[CA10, CA11] Ce qui va être fait, en clair, et la commande équivalente.
 
     Le rappel de la syntaxe n'est pas décoratif : c'est ainsi que le jardinier
-    apprend la commande sans avoir eu à l'apprendre. Et tout nombre y est
-    restitué en chiffres ET en toutes lettres, avec son unité — « profondeur
-    1 » et « profondeur 10 » ne s'entendent pas, et la seconde écrirait une
-    donnée fausse dans un référentiel partagé.
+    apprend la commande sans avoir eu à l'apprendre. Tout nombre y est restitué
+    en chiffres avec son unité — « profondeur 1 » et « profondeur 10 » ne
+    s'entendent pas, et la seconde écrirait une donnée fausse dans un référentiel
+    partagé. Le rappel en toutes lettres, entre parenthèses, a été retiré le
+    28/10/2026 à la demande du jardinier : le chiffre suffit à relire.
     """
-    if commande.origine == ORIGINE_AGENT and commande.forme.cle == ("parcelle", "modifier"):
+    if commande.forme.cle == ("parcelle", "modifier") and (
+        commande.origine == ORIGINE_AGENT or commande.regle == REGLE_FILET_FICHE
+    ):
         return _recapitulatif_modification(commande)
     lignes = [f"*{commande.forme.libelle}*"]
     for argument in commande.forme.arguments:
@@ -2912,8 +3113,6 @@ def _phrase_modification(nom: str, cle: str, brute: str) -> str:
     unite = _UNITES_MODIFICATION.get(cle)
     suffixe = f" {unite}" if unite else ""
     texte = f"*{lisible}{suffixe}*"
-    if _est_chiffre(lisible):
-        texte += f" ({nombre_en_lettres(lisible)}{suffixe})"
     article = _ARTICLES_MODIFICATION.get(cle, f"« {cle} »")
     return f"Je *passe* {article} de *{nom}* à {texte}."
 
@@ -2938,7 +3137,7 @@ def _resume_etape(commande: CommandeInterpretee) -> str:
             details.append(f"exposition {commande.valeurs['exposition']}")
         if commande.valeurs.get("superficie"):
             superficie = commande.valeurs["superficie"]
-            details.append(f"{superficie} m² ({nombre_en_lettres(superficie)} m²)")
+            details.append(f"{superficie} m²")
         suffixe = f" ({', '.join(details)})" if details else ""
         return f"Je *crée* la parcelle *{nom}*{suffixe}."
     if commande.forme.cle == ("parcelle", "modifier"):

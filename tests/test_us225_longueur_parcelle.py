@@ -276,7 +276,7 @@ def test_us225_ca5_recapitulatif_nomme_la_longueur_en_metres() -> None:
     assert "planche centrale" in recap.lower()
     assert "longueur" in recap
     assert "12 m" in recap
-    assert "douze" in recap          # [US-172 / CA11] relu en toutes lettres
+    assert "douze" not in recap      # le chiffre suffit (28/10/2026)
     assert "longueur=12" in recap    # la commande équivalente, pour l'apprendre
 
 
@@ -487,6 +487,9 @@ def test_us225_ca8_aucun_moteur_de_calcul_ne_lit_la_longueur() -> None:
         # [US-227] La longueur est devenue la base des places d'un rang — elle
         # se lit donc aussi dans la répartition, et nulle part ailleurs.
         Path("app/services/repartition_rangs.py"),
+        # [US-278] Le filet des caractéristiques LIT la valeur dictée pour la proposer ;
+        # il ne calcule rien, l'écriture reste celle de `/parcelle modifier`.
+        Path("app/services/agent/filet_fiche.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

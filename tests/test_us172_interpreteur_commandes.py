@@ -576,22 +576,22 @@ class TestCA10CA11ConfirmationEtRelecture:
         for cle in ecrivent:
             assert svc_menu.FORMES_PAR_CLE[cle].confirmation is True, cle
 
-    @pytest.mark.parametrize("phrase, attendus", [
-        ("la profondeur de semis de la carotte est de 1 centimètre", ["1 cm", "un cm"]),
-        ("la planche sud fait 8,5 m²", ["8.5 m²", "huit virgule cinq m²"]),
-        ("délai de retour des solanacées : 4 ans", ["4 ans", "quatre ans"]),
-        ("la tomate gèle à -2 degrés", ["-2 °C", "moins deux °C"]),
+    @pytest.mark.parametrize("phrase, attendu", [
+        ("la profondeur de semis de la carotte est de 1 centimètre", "1 cm"),
+        ("la planche sud fait 8,5 m²", "8.5 m²"),
+        ("délai de retour des solanacées : 4 ans", "4 ans"),
+        ("la tomate gèle à -2 degrés", "-2 °C"),
     ])
-    def test_us172_ca11_une_valeur_est_relue_en_chiffres_et_en_lettres(self, phrase, attendus):
+    def test_us172_ca11_une_valeur_est_relue_en_chiffres_avec_son_unite(self, phrase, attendu):
         """[CA11] « profondeur 1 » et « profondeur 10 » ne s'entendent pas.
 
         C'est précisément là que la transcription vocale échoue, et la valeur
         part dans un référentiel PARTAGÉ. Le récapitulatif restitue donc le
-        chiffre, son unité, et le nombre en toutes lettres.
+        chiffre et son unité ; le rappel en toutes lettres a été retiré le 28/10/2026.
         """
         recapitulatif = interp.recapitulatif(interp.reconnaitre_par_regles(phrase))
-        for attendu in attendus:
-            assert attendu in recapitulatif, recapitulatif
+        assert attendu in recapitulatif, recapitulatif
+        assert "(" not in recapitulatif.split("Équivalent")[0], recapitulatif
 
     def test_us172_ca11_une_valeur_de_vocabulaire_est_restituee(self):
         """[CA11] Une valeur qualitative est relue elle aussi."""

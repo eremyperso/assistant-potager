@@ -40,6 +40,11 @@ def _reponse(*appels: AppelOutil, statut: str = passerelle.STATUT_OK) -> Reponse
     )
 
 
+def _texte(texte: str) -> ReponseOutils:
+    """[US-257] Le tour où le modèle répond en texte, sans outil : il clôt la boucle."""
+    return ReponseOutils(texte=texte, modele="test", appel_type=passerelle.TYPE_AGENT)
+
+
 @pytest.fixture
 def agent_actif(monkeypatch):
     monkeypatch.setattr(config, "AGENT_MODE", "actif")
@@ -60,8 +65,8 @@ def modele():
 @pytest.fixture
 def sans_journal(monkeypatch):
     """Le journal a ses propres tests : ailleurs, il n'écrit rien."""
-    monkeypatch.setattr(interpreteur_agent, "persister_aiguillage", MagicMock())
-    return interpreteur_agent.persister_aiguillage
+    monkeypatch.setattr(interpreteur_agent, "persister_reponse", MagicMock())
+    return interpreteur_agent.persister_reponse
 
 
 @pytest.fixture
@@ -103,59 +108,31 @@ async def _handle_text(texte: str, resultat):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA1 — l'agent choisit toujours un outil
+# CA1 — [US-257] l'agent ne choisit plus toujours un outil : il peut répondre en texte.
+# `tool_choice="required"`, `poser_question`, `demander_precision` et `hors_perimetre`
+# sont remplacés (tests/test_us257_compagnon_repond_en_texte.py). Reste l'aiguillage
+# vers le parseur de gestes.
 # ═════════════════════════════════════════════════════════════════════════════
 class TestCA1ToujoursUnOutil:
 
-    def test_us236_ca1_appel_avec_tool_choice_required(self, agent_actif, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil("hors_perimetre", {"raison": "export"}))
-        interpreteur_agent.proposer(EXCEL, CTX)
-        assert modele.call_args.kwargs.get("tool_choice", "required") == "required"
-
-    def test_us236_ca1_les_quatre_outils_terminaux_sont_au_catalogue(self):
+    def test_us236_ca1_l_outil_terminal_qui_reste_est_au_catalogue(self):
         noms = {o.nom for o in catalogue_outils.outils()}
-        assert set(catalogue_outils.OUTILS_TERMINAUX) <= noms
-
-    def test_us236_ca1_un_texte_libre_n_est_pas_une_reponse(self, agent_actif, modele, parcelles_connues):
-        """Pas d'appel d'outil = agent indisponible : rien n'est montré du texte."""
-        modele.return_value = _reponse()
-        resultat = interpreteur_agent.proposer(EXCEL, CTX)
-        assert resultat.disponible is False
-        assert resultat.aiguillage is None and resultat.commande is None
-
-    @pytest.mark.parametrize("outil,vers", [
-        ("poser_question", interp.VERS_QUESTION),
-        ("saisir_geste", interp.VERS_GESTE),
-        ("demander_precision", interp.VERS_PRECISION),
-        ("hors_perimetre", interp.VERS_HORS_PERIMETRE),
-    ])
-    def test_us236_ca1_chaque_outil_terminal_donne_son_aiguillage(self, outil, vers):
-        aiguillage = interpreteur_agent.aiguillage_de(AppelOutil(outil, {}), "x")
-        assert aiguillage.vers == vers
-
-    def test_us236_ca1_un_outil_de_commande_n_est_pas_un_aiguillage(self):
-        assert interpreteur_agent.aiguillage_de(AppelOutil(OUTIL_MODIFIER_PARCELLE, {}), "x") is None
+        assert set(catalogue_outils.OUTILS_TERMINAUX) == {"saisir_geste"} <= noms
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA2 — une question va à la cascade avec sa nature, sans mots-clés
+# CA2 — une question va à la cascade, sans mots-clés
 # ═════════════════════════════════════════════════════════════════════════════
 class TestCA2Question:
 
-    def test_us236_ca2_poser_question_rend_un_aiguillage_avec_sa_nature(
+    def test_us257_une_question_va_a_la_cascade_sans_appel_au_modele(
         self, agent_actif, modele, parcelles_connues
     ):
-        modele.return_value = _reponse(AppelOutil("poser_question", {"nature": "QUESTION_DATA"}))
+        """[US-257] Plus de `poser_question` : la phrase interrogative va à la cascade, qui la classe."""
         resultat = interp.interpreter("quelles sont mes pépinières ?", CTX)
         assert isinstance(resultat, interp.Aiguillage)
-        assert resultat.vers == interp.VERS_QUESTION
-        assert resultat.nature_question == routeur.NATURE_QUESTION_DATA
-
-    def test_us236_ca2_nature_inconnue_laisse_la_cascade_classer(self):
-        aiguillage = interpreteur_agent.aiguillage_de(
-            AppelOutil("poser_question", {"nature": "ACTION"}), "x")
-        assert aiguillage.vers == interp.VERS_QUESTION
-        assert aiguillage.nature_question is None
+        assert resultat.vers == interp.VERS_QUESTION and resultat.nature_question is None
+        modele.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_us236_ca2_le_bot_ne_reclasse_pas(self):
@@ -221,19 +198,18 @@ class TestCA3Geste:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestCA4Precision:
 
-    def test_us236_ca4_demander_precision_porte_la_question(
+    def test_us257_le_refus_du_validateur_devient_une_question_redigee(
         self, agent_actif, modele, parcelles_connues, sans_journal
     ):
-        modele.return_value = _reponse(AppelOutil(
-            "demander_precision", {"question": "Que veux-tu modifier sur « Serre extérieure » ?"}))
+        """[US-257] « Modifie ma serre » ne dit aucun champ : le validateur refuse, le modèle demande."""
+        modele.side_effect = [
+            _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "Serre extérieure"}, id="m1")),
+            _texte("Que veux-tu changer sur la Serre extérieure : ses rangs, son abri, son paillage ?"),
+        ]
         resultat = interp.interpreter(VAGUE, CTX)
-        assert resultat.vers == interp.VERS_PRECISION
-        assert "Serre extérieure" in resultat.message
+        assert isinstance(resultat, interp.ReponseAgent) and resultat.proposition is None
+        assert "Serre extérieure" in resultat.texte
         sans_journal.assert_called_once()
-
-    def test_us236_ca4_precision_sans_texte_reste_une_precision(self):
-        aiguillage = interpreteur_agent.aiguillage_de(AppelOutil("demander_precision", {"question": "  "}), "x")
-        assert aiguillage.message == interpreteur_agent.PRECISION_PAR_DEFAUT
 
     def test_us236_ca4_designation_relative_n_est_pas_un_nom(self):
         """« près des tomates » n'est pas un nom : aucune règle ne complète par supposition."""
@@ -247,44 +223,49 @@ class TestCA4Precision:
     @pytest.mark.asyncio
     async def test_us236_ca4_rien_n_est_propose(self):
         bot_interpretation._INTERP_PENDING.pop(4242, None)
-        aiguillage = interp.Aiguillage(vers=interp.VERS_PRECISION,
-                                       message="Que veux-tu modifier sur « Serre extérieure » ?")
-        update, classer, ask, parse = await _handle_text(VAGUE, aiguillage)
+        reponse = interp.ReponseAgent(texte="Que veux-tu changer sur la Serre extérieure ?",
+                                      texte_origine=VAGUE)
+        update, classer, ask, parse = await _handle_text(VAGUE, reponse)
         texte = update.message.reply_text.await_args.args[0]
-        assert texte.startswith("❓ Que veux-tu modifier sur « Serre extérieure » ?")
-        assert "Rien n'a été fait" in texte
+        # [US-257 / CA6] Le texte de l'agent, sans le « Rien n'a été fait. Redis ta demande ».
+        assert texte == "Que veux-tu changer sur la Serre extérieure ?"
         assert 4242 not in bot_interpretation._INTERP_PENDING
         assert update.message.reply_text.await_args.kwargs.get("reply_markup") is None
         classer.assert_not_called()
         ask.assert_not_called()
         parse.assert_not_called()
 
-    def test_us236_ca4_le_texte_du_modele_est_echappe(self):
-        texte = bot_interpretation.texte_aiguillage(
-            interp.Aiguillage(vers=interp.VERS_PRECISION, message="quelle *planche_nord* ?"))
-        assert "planche\\_nord" in texte and "*" not in texte.split("\n")[0]
+    def test_us257_le_texte_de_l_agent_est_echappe_devant_un_recapitulatif(self):
+        texte = bot_interpretation.texte_de_l_agent("quelle *planche_nord* ?")
+        assert texte == "quelle planche\\_nord ?"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA5 — hors catalogue : « je ne sais pas encore faire ça », journalisé
+# CA5 — hors catalogue : expliqué par l'agent, journalisé
 # ═════════════════════════════════════════════════════════════════════════════
 class TestCA5HorsPerimetre:
 
-    def test_us236_ca5_hors_perimetre_porte_la_raison(
+    def _manque(self, modele):
+        modele.side_effect = [
+            _reponse(AppelOutil("manque_catalogue", {"demande": "exporter vers Excel"}, id="x1")),
+            _texte("Je ne sais pas encore exporter vers Excel ; je peux te résumer ta saison."),
+        ]
+
+    def test_us257_manque_catalogue_porte_la_demande(
         self, agent_actif, modele, parcelles_connues, sans_journal
     ):
-        modele.return_value = _reponse(AppelOutil("hors_perimetre", {"raison": "exporter vers Excel"}))
+        self._manque(modele)
         resultat = interp.interpreter(EXCEL, CTX)
-        assert resultat.vers == interp.VERS_HORS_PERIMETRE
-        assert resultat.message == "exporter vers Excel"
+        assert resultat.manque_catalogue == "exporter vers Excel"
+        assert resultat.texte.startswith("Je ne sais pas encore exporter vers Excel")
         sans_journal.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_us236_ca5_aucune_liste_n_est_affichee(self):
-        aiguillage = interp.Aiguillage(vers=interp.VERS_HORS_PERIMETRE, message="exporter vers Excel")
-        update, classer, ask, parse = await _handle_text(EXCEL, aiguillage)
-        texte = update.message.reply_text.await_args.args[0]
-        assert "Je ne sais pas encore faire ça (exporter vers Excel)" in texte
+        reponse = interp.ReponseAgent(texte="Je ne sais pas encore exporter vers Excel.",
+                                      manque_catalogue="exporter vers Excel", texte_origine=EXCEL)
+        update, classer, ask, parse = await _handle_text(EXCEL, reponse)
+        assert update.message.reply_text.await_args.args[0] == "Je ne sais pas encore exporter vers Excel."
         classer.assert_not_called()
         ask.assert_not_called()
         parse.assert_not_called()
@@ -292,48 +273,47 @@ class TestCA5HorsPerimetre:
     def test_us236_ca5_journalise_comme_demande_de_fonctionnalite(
         self, agent_actif, modele, parcelles_connues, session_de_test
     ):
-        modele.return_value = _reponse(AppelOutil("hors_perimetre", {"raison": "exporter vers Excel"}))
+        self._manque(modele)
         interp.interpreter(EXCEL, CTX)
         ligne = session_de_test.query(RoutageLog).one()
         assert ligne.issue_interpretation == interp.ISSUE_HORS_PERIMETRE
         assert ligne.origine_classification == interp.ORIGINE_AGENT
-        assert ligne.outils_agent == "hors_perimetre"
+        assert ligne.outils_agent == "manque_catalogue"
         assert "excel" in ligne.question_normalisee
         assert ligne.potager_id == CTX.potager_id
 
     def test_us236_ca4_ca5_precision_journalisee(
         self, agent_actif, modele, parcelles_connues, session_de_test
     ):
-        modele.return_value = _reponse(AppelOutil("demander_precision", {"question": "Quoi ?"}))
+        modele.side_effect = [
+            _reponse(AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "Serre extérieure"}, id="m1")),
+            _texte("Que veux-tu changer ?"),
+        ]
         interp.interpreter(VAGUE, CTX)
         assert session_de_test.query(RoutageLog).one().issue_interpretation == interp.ISSUE_PRECISION
 
-    def test_us236_ca5_question_et_geste_ne_sont_pas_journalises_ici(
+    def test_us236_ca5_geste_et_conversation_ne_sont_pas_journalises_ici(
         self, agent_actif, modele, parcelles_connues, sans_journal
     ):
-        """La cascade et le parseur ont leur propre journal : pas de double ligne."""
-        modele.return_value = _reponse(AppelOutil("poser_question", {"nature": "QUESTION_DATA"}))
-        interp.interpreter("quelles sont mes pépinières ?", CTX)
+        """Le parseur a son propre journal ; un « merci » n'est pas une demande."""
+        modele.return_value = _reponse(AppelOutil("saisir_geste", {}))
+        interp.interpreter("bon les radis c'est fait", CTX)
         sans_journal.assert_not_called()
 
     def test_us236_ca5_journal_en_panne_ne_bloque_pas(
         self, agent_actif, modele, parcelles_connues, monkeypatch
     ):
         monkeypatch.setattr("database.db.SessionLocal", MagicMock(side_effect=RuntimeError("base")))
-        modele.return_value = _reponse(AppelOutil("hors_perimetre", {"raison": "export"}))
-        assert interp.interpreter(EXCEL, CTX).vers == interp.VERS_HORS_PERIMETRE
+        self._manque(modele)
+        assert interp.interpreter(EXCEL, CTX).manque_catalogue == "exporter vers Excel"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CA6 — les paires piégeuses
 # ═════════════════════════════════════════════════════════════════════════════
 _MODELE_SIMULE = {
-    "la serre extérieure est-elle une pépinière ?":
-        AppelOutil("poser_question", {"nature": "QUESTION_DATA"}),
     "la serre extérieure n'est plus une pépinière":
         AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "Serre extérieure", "est_pepiniere": False}),
-    "quelles sont mes pépinières ?":
-        AppelOutil("poser_question", {"nature": "QUESTION_DATA"}),
 }
 
 
@@ -341,7 +321,11 @@ class TestCA6PairesPiegeuses:
 
     @pytest.fixture
     def modele_par_phrase(self, modele):
-        modele.side_effect = lambda **kw: _reponse(_MODELE_SIMULE[kw["message_utilisateur"]])
+        # [US-257] Le modèle propose au premier tour, répond en texte après le verdict.
+        modele.side_effect = lambda **kw: (
+            _texte("Je te propose ceci.") if kw.get("historique")
+            else _reponse(_MODELE_SIMULE[kw["message_utilisateur"]])
+        )
         return modele
 
     def test_us236_ca6_affirmation_commande(self, agent_actif, modele_par_phrase, parcelles_connues):
@@ -354,16 +338,17 @@ class TestCA6PairesPiegeuses:
         resultat = interp.interpreter("la serre extérieure est-elle une pépinière ?", CTX)
         assert isinstance(resultat, interp.Aiguillage)
         assert resultat.vers == interp.VERS_QUESTION
+        modele_par_phrase.assert_not_called()
 
     def test_us236_ca6_negation_commande(self, agent_actif, modele_par_phrase, parcelles_connues):
         resultat = interp.interpreter("la serre extérieure n'est plus une pépinière", CTX)
-        assert isinstance(resultat, interp.CommandeInterpretee)
-        assert resultat.commande_equivalente() == "/parcelle modifier Serre extérieure pepiniere=non"
+        assert isinstance(resultat.proposition, interp.CommandeInterpretee)
+        assert resultat.proposition.commande_equivalente() == "/parcelle modifier Serre extérieure pepiniere=non"
 
     def test_us236_ca6_liste_question(self, agent_actif, modele_par_phrase, parcelles_connues):
         resultat = interp.interpreter("quelles sont mes pépinières ?", CTX)
-        assert isinstance(resultat, interp.Aiguillage)
-        assert resultat.nature_question == routeur.NATURE_QUESTION_DATA
+        assert isinstance(resultat, interp.Aiguillage) and resultat.vers == interp.VERS_QUESTION
+        modele_par_phrase.assert_not_called()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -460,11 +445,13 @@ class TestCanalVocal:
     @pytest.mark.asyncio
     async def test_us236_vocal_hors_perimetre_edite_le_message_d_attente(self):
         msg = AsyncMock()
-        aiguillage = interp.Aiguillage(vers=interp.VERS_HORS_PERIMETRE, message="exporter vers Excel")
-        pris = await bot_interpretation._traiter_commande_interpretee(_update(EXCEL), MagicMock(),
-                                                                      aiguillage, msg=msg)
+        reponse = interp.ReponseAgent(texte="Je ne sais pas encore exporter vers Excel.",
+                                      manque_catalogue="exporter vers Excel", texte_origine=EXCEL)
+        with patch.object(bot_interpretation, "current_context", return_value=CTX):
+            pris = await bot_interpretation._traiter_commande_interpretee(_update(EXCEL), MagicMock(),
+                                                                          reponse, msg=msg)
         assert pris is True
-        assert "Je ne sais pas encore faire ça" in msg.edit_text.await_args.args[0]
+        assert msg.edit_text.await_args.args[0] == "Je ne sais pas encore exporter vers Excel."
 
     @pytest.mark.asyncio
     async def test_us236_vocal_question_et_geste_rendent_la_main(self):

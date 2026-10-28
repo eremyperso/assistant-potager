@@ -38,6 +38,7 @@ from app.services.interpreteur_commandes import (
     Ambiguite,
     CommandeInterpretee,
     Plan,
+    ReponseAgent,
 )
 
 #: Durée de vie d'une proposition en attente — celle du bot (`_INTERP_TIMEOUT`).
@@ -119,8 +120,8 @@ class ContexteCourt:
             "la demande COMPLÈTE, un appel par commande : la proposition reprise avec sa correction, "
             "ou la proposition suivie de la nouvelle commande. Les valeurs de la proposition ont été "
             "dites par le jardinier : tu peux les reprendre. « L'autre » ne désigne qu'UNE parcelle ; "
-            "s'il y en a plusieurs possibles, appelle demander_precision, et ne propose jamais un nom "
-            "déjà proposé ou écarté. Si la phrase n'a aucun rapport avec la proposition, traite-la "
+            "s'il y en a plusieurs possibles, demande-lui laquelle en texte, et ne propose jamais un "
+            "nom déjà proposé ou écarté. Si la phrase n'a aucun rapport avec la proposition, traite-la "
             "comme une demande nouvelle.\n"
         )
 
@@ -169,6 +170,11 @@ def oublier_tout() -> None:
 
 def resume_de(resultat) -> Optional[str]:
     """Ce que le bot a fait d'une phrase, en une ligne — None si rien à retenir."""
+    if isinstance(resultat, ReponseAgent):
+        # [US-257] La proposition d'abord : c'est elle qu'une phrase suivante corrige.
+        if resultat.proposition is not None:
+            return resume_de(resultat.proposition)
+        return f"réponse : {resultat.texte}" if resultat.texte else None
     if isinstance(resultat, Plan):
         return "plan proposé : " + " ; ".join(e.commande_equivalente() for e in resultat.etapes)
     if isinstance(resultat, CommandeInterpretee):

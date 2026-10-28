@@ -1,73 +1,73 @@
 phrase,categorie,outil_attendu,parametres_attendus,source
-crée la parcelle PlancheTomate,commande,parcelle,action=ajouter|nom=PlancheTomate,us172
-renomme planche nord en planche des courges,commande,parcelle,action=renommer|ancien=planche nord|nouveau=planche des courges,us172
-supprime la parcelle PlancheTomate,commande,parcelle_supprimer,nom=PlancheTomate,us172
-supprime la planche sud,commande,parcelle_supprimer,nom=planche sud,nouveau
-la planche centrale fait 4 rangs,commande,parcelle_modifier,parcelle=planche centrale|nb_rangs=4,us172
-l'exposition de la parcelle nord est plein sud,commande,parcelle_modifier,parcelle=nord|exposition=Sud,us172
-la longueur de la planche sud est de 12 mètres,commande,parcelle_modifier,parcelle=planche sud|longueur_m=12,nouveau
-mets un tunnel sur la planche centrale,commande,parcelle_modifier,parcelle=planche centrale|abri=tunnel,nouveau
-je veux voir mes parcelles,commande,consulter,commande=parcelle lister,us172
-montre-moi le lot 128,commande,consulter,commande=lot|numero=128,us172
-Ma serre extérieure n'est plus une pépinière,negation,parcelle_modifier,parcelle=serre extérieure|est_pepiniere=false,nouveau
-arrête la pépinière dans la serre extérieure,negation,parcelle_modifier,parcelle=serre extérieure|est_pepiniere=false,nouveau
-la serre extérieure ne sert plus de pépinière,negation,parcelle_modifier,parcelle=serre extérieure|est_pepiniere=false,nouveau
-retire le statut pépinière du tunnel,negation,parcelle_modifier,parcelle=tunnel|est_pepiniere=false,nouveau
-la planche nord n'a plus d'abri,negation,parcelle_modifier,parcelle=planche nord|abri=aucun,nouveau
-retire l'abri de la planche sud,negation,parcelle_modifier,parcelle=planche sud|abri=aucun,nouveau
-la planche sud n'est plus paillée,negation,parcelle_modifier,parcelle=planche sud|paillage=false,nouveau
-désactive la planche centrale je ne m'en sers plus,negation,parcelle_modifier,parcelle=planche centrale|actif=false,nouveau
-le tunnel n'est plus actif,negation,parcelle_modifier,parcelle=tunnel|actif=false,nouveau
-la serre extérieure est une pépinière,declaration_question,parcelle_modifier,parcelle=serre extérieure|est_pepiniere=true,nouveau
-la serre extérieure est-elle une pépinière ?,declaration_question,poser_question,nature=QUESTION_DATA,nouveau
-la planche nord a 5 rangs,declaration_question,parcelle_modifier,parcelle=planche nord|nb_rangs=5,us172
-combien de rangs a la planche nord ?,declaration_question,poser_question,nature=QUESTION_DATA,nouveau
-la planche sud fait 12 mètres de long,declaration_question,parcelle_modifier,parcelle=planche sud|longueur_m=12,nouveau
-quelle est la longueur de la planche sud ?,declaration_question,poser_question,nature=QUESTION_DATA,nouveau
-mets la planche centrale en pépinière,declaration_question,parcelle_modifier,parcelle=planche centrale|est_pepiniere=true,nouveau
-quelles sont mes pépinières ?,declaration_question,poser_question,nature=QUESTION_DATA,nouveau
-la planche nord est exposée plein sud,declaration_question,parcelle_modifier,parcelle=planche nord|exposition=Sud,nouveau
-comment est exposée la planche nord ?,declaration_question,poser_question,nature=QUESTION_DATA,nouveau
-mets la serre en pépinière,ancrage_champ,parcelle_modifier,parcelle=serre|est_pepiniere=true,us172
-passe la planche centrale en pépinière,ancrage_champ,parcelle_modifier,parcelle=planche centrale|est_pepiniere=true,nouveau
-la planche nord a maintenant 6 rangs,ancrage_champ,parcelle_modifier,parcelle=planche nord|nb_rangs=6,nouveau
-comment supprimer une parcelle ?,question,poser_question,nature=QUESTION_SAVOIR,us172
-comment renommer une parcelle ?,question,poser_question,nature=QUESTION_SAVOIR,us172
-comment est calculé le bilan ?,question,poser_question,nature=QUESTION_SAVOIR,us172
-comment consulter mon historique ?,question,poser_question,nature=QUESTION_SAVOIR,us172
-quand ai-je planté les tomates ?,question,poser_question,nature=QUESTION_DATA,us172
+crée la parcelle PlancheTomate,commande,creer_parcelle,nom=PlancheTomate,us172
+renomme planche nord en planche des courges,commande,renommer_parcelle,ancien=planche nord|nouveau=planche des courges,us172
+supprime la parcelle PlancheTomate,commande,supprimer_parcelle,nom=PlancheTomate,us172
+supprime la planche sud,commande,supprimer_parcelle,nom=planche sud,nouveau
+la planche centrale fait 4 rangs,commande,modifier_parcelle,parcelle=planche centrale|nb_rangs=4,us172
+l'exposition de la parcelle nord est plein sud,commande,modifier_parcelle,parcelle=nord|exposition=Sud,us172
+la longueur de la planche sud est de 12 mètres,commande,modifier_parcelle,parcelle=planche sud|longueur_m=12,nouveau
+mets un tunnel sur la planche centrale,commande,modifier_parcelle,parcelle=planche centrale|abri=tunnel,nouveau
+je veux voir mes parcelles,commande,afficher,commande=parcelle lister,us172
+montre-moi le lot 128,commande,afficher,commande=lot|numero=128,us172
+Ma serre extérieure n'est plus une pépinière,negation,modifier_parcelle,parcelle=serre extérieure|est_pepiniere=false,nouveau
+arrête la pépinière dans la serre extérieure,negation,modifier_parcelle,parcelle=serre extérieure|est_pepiniere=false,nouveau
+la serre extérieure ne sert plus de pépinière,negation,modifier_parcelle,parcelle=serre extérieure|est_pepiniere=false,nouveau
+retire le statut pépinière du tunnel,negation,modifier_parcelle,parcelle=tunnel|est_pepiniere=false,nouveau
+la planche nord n'a plus d'abri,negation,modifier_parcelle,parcelle=planche nord|abri=aucun,nouveau
+retire l'abri de la planche sud,negation,modifier_parcelle,parcelle=planche sud|abri=aucun,nouveau
+la planche sud n'est plus paillée,negation,modifier_parcelle,parcelle=planche sud|paillage=false,nouveau
+désactive la planche centrale je ne m'en sers plus,negation,modifier_parcelle,parcelle=planche centrale|actif=false,nouveau
+le tunnel n'est plus actif,negation,modifier_parcelle,parcelle=tunnel|actif=false,nouveau
+la serre extérieure est une pépinière,declaration_question,modifier_parcelle,parcelle=serre extérieure|est_pepiniere=true,nouveau
+la serre extérieure est-elle une pépinière ?,declaration_question,texte,,nouveau
+la planche nord a 5 rangs,declaration_question,modifier_parcelle,parcelle=planche nord|nb_rangs=5,us172
+combien de rangs a la planche nord ?,declaration_question,texte,,nouveau
+la planche sud fait 12 mètres de long,declaration_question,modifier_parcelle,parcelle=planche sud|longueur_m=12,nouveau
+quelle est la longueur de la planche sud ?,declaration_question,texte,,nouveau
+mets la planche centrale en pépinière,declaration_question,modifier_parcelle,parcelle=planche centrale|est_pepiniere=true,nouveau
+quelles sont mes pépinières ?,declaration_question,texte,,nouveau
+la planche nord est exposée plein sud,declaration_question,modifier_parcelle,parcelle=planche nord|exposition=Sud,nouveau
+comment est exposée la planche nord ?,declaration_question,texte,,nouveau
+mets la serre en pépinière,ancrage_champ,modifier_parcelle,parcelle=serre|est_pepiniere=true,us172
+passe la planche centrale en pépinière,ancrage_champ,modifier_parcelle,parcelle=planche centrale|est_pepiniere=true,nouveau
+la planche nord a maintenant 6 rangs,ancrage_champ,modifier_parcelle,parcelle=planche nord|nb_rangs=6,nouveau
+comment supprimer une parcelle ?,question,texte,,us172
+comment renommer une parcelle ?,question,texte,,us172
+comment est calculé le bilan ?,question,texte,,us172
+comment consulter mon historique ?,question,texte,,us172
+quand ai-je planté les tomates ?,question,texte,,us172
 récolté 2 kg de tomates cerise,geste,saisir_geste,,us172
 arrosé les courgettes 30 min,geste,saisir_geste,,us172
 semé carottes Nantaise rang 4,geste,saisir_geste,,us172
 j'ai vendu 6 plants de tomate,geste,saisir_geste,,us172
 planté 4 salades sur 3 rangs dans la planche nord,geste,saisir_geste,,us172
-modifie ma serre,ambigu,demander_precision,,nouveau
-supprime la parcelle près des tomates,ambigu,demander_precision,,nouveau
-change la planche,ambigu,demander_precision,,nouveau
-mets-la en pépinière,ambigu,demander_precision,,nouveau
-renomme la planche nord,ambigu,demander_precision,,nouveau
-exporte-moi tout l'historique en Excel,hors_perimetre,hors_perimetre,,nouveau
-envoie le plan par mail à mon voisin,hors_perimetre,hors_perimetre,,nouveau
-commande des graines de tomates pour moi,hors_perimetre,hors_perimetre,,nouveau
-règle un rappel demain à 8 heures,hors_perimetre,hors_perimetre,,nouveau
-crée la planche Nord,creation,parcelle,action=ajouter|nom=planche nord,inc018
-crée la planche Est,creation,parcelle,action=ajouter|nom=planche est,inc018
-ajoute la planche Ouest,creation,parcelle,action=ajouter|nom=planche ouest,inc018
-crée une parcelle Carré des herbes de 6 m²,creation,parcelle,action=ajouter|nom=Carré des herbes|superficie=6,inc018
-crée la parcelle tunnel sud exposée au sud,creation,parcelle,action=ajouter|nom=tunnel sud|exposition=sud,inc018
-nouvelle planche Centre,creation,parcelle,action=ajouter|nom=planche centre,inc018
-crée la planche Nord de 8 mètres de long avec 4 rangs,creation_caracteristiques,parcelle+parcelle_modifier,,inc018
-crée la parcelle Verger de 20 m² et mets-la à l'ombre,creation_caracteristiques,parcelle+parcelle_modifier,,inc018
-Créez la planche Nord de 8 mètres de long avec 4 rangs et mets la serre en pépinière froide.,deux_actions,parcelle+parcelle_modifier+parcelle_modifier,,inc018
-mets la serre en pépinière froide et la planche centrale en pépinière chaude,deux_actions,parcelle_modifier+parcelle_modifier,,inc018
-renomme la planche sud en planche des courges et supprime la planche nord,deux_actions,parcelle+parcelle_supprimer,,inc018
-passe la planche nord en plein soleil et montre-moi le plan,deux_actions,parcelle_modifier+consulter,,inc018
-devrais-je créer une planche pour les courges ?,conseil_action,poser_question,,inc018
-est-ce que je peux supprimer la planche sud sans perdre mon historique ?,conseil_action,poser_question,,inc018
-faut-il renommer la planche nord ?,conseil_action,poser_question,,inc018
-"je pense créer une planche de basilic, qu'en penses-tu ?",conseil_action,poser_question,,inc018
-comment mettre une serre en pépinière ?,conseil_action,poser_question,nature=QUESTION_SAVOIR,inc018
-supprime la planche,doute,demander_precision,,inc018
-enlève la serre,doute,demander_precision,,inc018
-supprime tout,doute,demander_precision/hors_perimetre,,inc018
-change le nom de la planche,doute,demander_precision,,inc018
+modifie ma serre,ambigu,texte,,nouveau
+supprime la parcelle près des tomates,ambigu,texte,,nouveau
+change la planche,ambigu,texte,,nouveau
+mets-la en pépinière,ambigu,texte,,nouveau
+renomme la planche nord,ambigu,texte,,nouveau
+exporte-moi tout l'historique en Excel,hors_perimetre,manque_catalogue,,nouveau
+envoie le plan par mail à mon voisin,hors_perimetre,manque_catalogue,,nouveau
+commande des graines de tomates pour moi,hors_perimetre,manque_catalogue,,nouveau
+règle un rappel demain à 8 heures,hors_perimetre,manque_catalogue,,nouveau
+crée la planche Nord,creation,creer_parcelle,nom=planche nord,inc018
+crée la planche Est,creation,creer_parcelle,nom=planche est,inc018
+ajoute la planche Ouest,creation,creer_parcelle,nom=planche ouest,inc018
+crée une parcelle Carré des herbes de 6 m²,creation,creer_parcelle,nom=Carré des herbes|superficie_m2=6,inc018
+crée la parcelle tunnel sud exposée au sud,creation,creer_parcelle,nom=tunnel sud|exposition=Sud,inc018
+nouvelle planche Centre,creation,creer_parcelle,nom=planche centre,inc018
+crée la planche Nord de 8 mètres de long avec 4 rangs,creation_caracteristiques,creer_parcelle,,inc018
+crée la parcelle Verger de 20 m² et mets-la à l'ombre,creation_caracteristiques,creer_parcelle,,inc018
+Créez la planche Nord de 8 mètres de long avec 4 rangs et mets la serre en pépinière froide.,deux_actions,creer_parcelle+modifier_parcelle,,inc018
+mets la serre en pépinière froide et la planche centrale en pépinière chaude,deux_actions,modifier_parcelle+modifier_parcelle,,inc018
+renomme la planche sud en planche des courges et supprime la planche nord,deux_actions,renommer_parcelle+supprimer_parcelle,,inc018
+passe la planche nord en plein soleil et montre-moi le plan,deux_actions,modifier_parcelle+afficher,,inc018
+devrais-je créer une planche pour les courges ?,conseil_action,texte,,inc018
+est-ce que je peux supprimer la planche sud sans perdre mon historique ?,conseil_action,texte,,inc018
+faut-il renommer la planche nord ?,conseil_action,texte,,inc018
+"je pense créer une planche de basilic, qu'en penses-tu ?",conseil_action,texte,,inc018
+comment mettre une serre en pépinière ?,conseil_action,texte,,inc018
+supprime la planche,doute,texte,,inc018
+enlève la serre,doute,texte,,inc018
+supprime tout,doute,texte/manque_catalogue,,inc018
+change le nom de la planche,doute,texte,,inc018

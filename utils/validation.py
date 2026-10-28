@@ -159,6 +159,12 @@ def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     if parsed.get("_lot_numero") is not None:
         return parsed
     if culture and not culture_grounded_dans_texte(culture, texte_original):
+        # Culture déduite d'une variété dite dans la phrase (« butternut » → courge) :
+        # le jardinier l'a bien nommée, la déduction est légitime — la retirer
+        # laissait un semis sans culture, rejeté à l'écriture.
+        variete = parsed.get("variete")
+        if variete and culture_grounded_dans_texte(variete, texte_original):
+            return parsed
         parsed = dict(parsed)
         parsed["culture"] = None
         parsed["variete"] = None

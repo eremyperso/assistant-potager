@@ -41,7 +41,7 @@ import tools.evaluer_agent as ev
 RACINE = Path(__file__).resolve().parent.parent
 CTX = TenantContext(user_id=7, potager_id=3, role="owner")
 OUTILS = [{"type": "function", "function": {
-    "name": "parcelle_modifier", "description": "x",
+    "name": "modifier_parcelle", "description": "x",
     "parameters": {"type": "object", "properties": {"parcelle": {"type": "string"}}},
 }}]
 URL = "https://api.groq.com/openai/v1/chat/completions"
@@ -90,7 +90,7 @@ def _capacites_propres():
 def client():
     faux = MagicMock()
     faux.chat.completions.create.return_value = _reponse_outils(
-        [("parcelle_modifier", '{"parcelle": "serre", "est_pepiniere": false}')]
+        [("modifier_parcelle", '{"parcelle": "serre", "est_pepiniere": false}')]
     )
     with patch("llm.passerelle._client", faux), patch("llm.passerelle.time.sleep"):
         yield faux
@@ -143,7 +143,7 @@ class TestCA1AppelAvecOutils:
     def test_us233_ca1_rend_le_texte_et_les_appels_d_outils(self, client):
         """[CA1] Le texte ET les appels, arguments décodés."""
         client.chat.completions.create.return_value = _reponse_outils(
-            [("parcelle_modifier", '{"parcelle": "serre", "est_pepiniere": false}')],
+            [("modifier_parcelle", '{"parcelle": "serre", "est_pepiniere": false}')],
             contenu="  je m'en occupe ",
         )
         reponse = _appeler()
@@ -151,16 +151,16 @@ class TestCA1AppelAvecOutils:
         assert reponse.ok and reponse.statut == STATUT_OK
         assert reponse.texte == "je m'en occupe"
         assert reponse.appels == (AppelOutil(
-            nom="parcelle_modifier",
+            nom="modifier_parcelle",
             arguments={"parcelle": "serre", "est_pepiniere": False},
             arguments_valides=True, id="call_0",
         ),)
 
     def test_us233_ca1_plusieurs_appels_sont_tous_rendus_dans_l_ordre(self, client):
         client.chat.completions.create.return_value = _reponse_outils(
-            [("parcelle_ajouter", '{"nom": "carré"}'), ("parcelle_modifier", '{"parcelle": "carré"}')]
+            [("parcelle_ajouter", '{"nom": "carré"}'), ("modifier_parcelle", '{"parcelle": "carré"}')]
         )
-        assert [a.nom for a in _appeler().appels] == ["parcelle_ajouter", "parcelle_modifier"]
+        assert [a.nom for a in _appeler().appels] == ["parcelle_ajouter", "modifier_parcelle"]
 
     def test_us233_ca1_un_outil_sans_argument_est_valide(self, client):
         """[CA1] `saisir_geste()` n'a pas d'argument : ce n'est pas un appel illisible."""
@@ -171,7 +171,7 @@ class TestCA1AppelAvecOutils:
     @pytest.mark.parametrize("brut", ["{pas du json", "[1, 2]", '"texte"', 42])
     def test_us233_ca1_un_argument_illisible_est_signale_pas_ignore(self, client, brut):
         """[CA1] Jamais pris pour « aucun argument » : l'appelant doit pouvoir le distinguer."""
-        client.chat.completions.create.return_value = _reponse_outils([("parcelle_modifier", brut)])
+        client.chat.completions.create.return_value = _reponse_outils([("modifier_parcelle", brut)])
         appel = _appeler().appels[0]
         assert appel.arguments == {} and not appel.arguments_valides
 
@@ -443,7 +443,8 @@ class TestCA5Configuration:
 
     def test_us233_ca5_valeurs_par_defaut(self):
         config = _charger_config({"AGENT_MODE": None, "AGENT_MAX_TOURS": None})
-        assert config.AGENT_MODE == "off" and config.AGENT_MAX_TOURS == 3
+        # [US-257] La boucle conversationnelle : 6 tours (architecture §12.4).
+        assert config.AGENT_MODE == "off" and config.AGENT_MAX_TOURS == 6
 
     @pytest.mark.parametrize("brut,attendu", [
         ("off", "off"), ("ombre", "ombre"), ("actif", "actif"),
@@ -457,7 +458,7 @@ class TestCA5Configuration:
         """Une faute de frappe ne doit jamais activer l'agent."""
         assert _charger_config({"AGENT_MODE": brut}).AGENT_MODE == "off"
 
-    @pytest.mark.parametrize("brut,attendu", [("5", 5), ("1", 1), ("0", 3), ("-2", 3), ("abc", 3), ("", 3)])
+    @pytest.mark.parametrize("brut,attendu", [("5", 5), ("1", 1), ("0", 6), ("-2", 6), ("abc", 6), ("", 6)])
     def test_us233_ca5_agent_max_tours(self, brut, attendu):
         assert _charger_config({"AGENT_MAX_TOURS": brut}).AGENT_MAX_TOURS == attendu
 
@@ -503,18 +504,19 @@ class TestCA6Echantillon:
         assert len(par_categorie["negation"]) >= 6
         assert len(par_categorie["ambigu"]) >= 4
         paires = par_categorie["declaration_question"]
-        assert {"parcelle_modifier", "poser_question"} <= {o for p in paires for o in p.outils_attendus}
-        assert all(p.outils_attendus == ("demander_precision",) for p in par_categorie["ambigu"])
+        # [US-257] Une question et une précision se disent en texte.
+        assert {"modifier_parcelle", ev.PSEUDO_TEXTE} <= {o for p in paires for o in p.outils_attendus}
+        assert all(p.outils_attendus == (ev.PSEUDO_TEXTE,) for p in par_categorie["ambigu"])
 
     def test_us233_ca6_le_catalogue_mesure_est_le_catalogue_livre(self):
         """[INC-018] La mesure ne garde pas sa copie : ce qu'elle note est ce qui est livré."""
         assert ev.NOMS_OUTILS == tuple(o["function"]["name"] for o in catalogue_outils.schemas())
-        assert "parcelle_modifier" in ev.NOMS_OUTILS
+        assert "modifier_parcelle" in ev.NOMS_OUTILS
         assert set(ev.OUTILS_TERMINAUX) <= set(ev.NOMS_OUTILS)
 
     def test_us233_ca6_est_pepiniere_est_un_booleen_dans_le_schema(self):
         """[CA6] C'est le typage qui doit porter la négation, sans règle."""
-        outil = next(o for o in catalogue_outils.schemas() if o["function"]["name"] == "parcelle_modifier")
+        outil = next(o for o in catalogue_outils.schemas() if o["function"]["name"] == "modifier_parcelle")
         assert outil["function"]["parameters"]["properties"]["est_pepiniere"]["type"] == ["boolean", "null"]
 
     def test_us233_ca6_chaque_attendu_existe_dans_le_catalogue(self):
@@ -524,7 +526,7 @@ class TestCA6Echantillon:
                    for o in catalogue_outils.schemas()}
         for p in ev.charger_echantillon():
             for outil in (n for attendu in p.outils_attendus for n in attendu.split("+")):
-                assert outil in schemas, f"{p.texte!r} attend l'outil inconnu {outil!r}"
+                assert outil in schemas or outil == ev.PSEUDO_TEXTE, f"{p.texte!r} attend l'outil inconnu {outil!r}"
             if p.parametres:
                 inconnus = set(p.parametres) - set(schemas[p.outils_attendus[0]])
                 assert not inconnus, f"{p.texte!r} attend des paramètres inconnus : {inconnus}"
@@ -545,7 +547,7 @@ class TestCA6Echantillon:
         # — le catalogue porte le sens, aucune liste de formulations ne s'y ajoute.
         import re
         assert ev.PROMPT_FIXE is interpreteur_agent.PROMPT_FIXE
-        assert len(re.findall(r"^\d+\. ", ev.PROMPT_FIXE, flags=re.M)) <= 12
+        assert len(re.findall(r"^\d+\. ", ev.PROMPT_FIXE, flags=re.M)) <= 12   # [US-257] toujours douze
         assert len(re.findall(r"«[^»]*»", ev.PROMPT_FIXE)) <= 3
         assert "n'est plus" not in ev.PROMPT_FIXE
         assert "Serre extérieure" not in ev.PROMPT_FIXE
@@ -559,7 +561,7 @@ class TestCA6Echantillon:
 # ═════════════════════════════════════════════════════════════════════════════
 # CA7 — la notation et le rapport par catégorie
 # ═════════════════════════════════════════════════════════════════════════════
-def _phrase(texte="p", categorie="commande", outils=("parcelle_modifier",), parametres=None):
+def _phrase(texte="p", categorie="commande", outils=("modifier_parcelle",), parametres=None):
     return ev.Phrase(texte, categorie, tuple(outils), parametres or {}, "nouveau")
 
 
@@ -571,29 +573,29 @@ class TestCA7Notation:
 
     def test_us233_ca7_bon_outil_bons_parametres(self):
         phrase = _phrase(parametres={"parcelle": "serre extérieure", "est_pepiniere": False})
-        notes = ev.noter(phrase, (_appel("parcelle_modifier", parcelle="Serre Extérieure", est_pepiniere=False),), STATUT_OK)
+        notes = ev.noter(phrase, (_appel("modifier_parcelle", parcelle="Serre Extérieure", est_pepiniere=False),), STATUT_OK)
         assert notes.outil_ok and notes.parametres_ok and notes.reussite and not notes.champs_en_trop
 
     def test_us233_ca7_un_booleen_inverse_est_faux(self):
         """Le cas de départ : `true` au lieu de `false` ne se rattrape pas."""
         phrase = _phrase(parametres={"parcelle": "serre", "est_pepiniere": False})
-        notes = ev.noter(phrase, (_appel("parcelle_modifier", parcelle="serre", est_pepiniere=True),), STATUT_OK)
+        notes = ev.noter(phrase, (_appel("modifier_parcelle", parcelle="serre", est_pepiniere=True),), STATUT_OK)
         assert notes.outil_ok and notes.parametres_ok is False and not notes.reussite
 
     def test_us233_ca7_un_booleen_n_est_pas_un_nombre(self):
         phrase = _phrase(parametres={"nb_rangs": 1})
-        assert ev.noter(phrase, (_appel("parcelle_modifier", nb_rangs=True),), STATUT_OK).parametres_ok is False
+        assert ev.noter(phrase, (_appel("modifier_parcelle", nb_rangs=True),), STATUT_OK).parametres_ok is False
 
     def test_us233_ca7_un_nombre_se_compare_a_la_valeur(self):
         phrase = _phrase(parametres={"longueur_m": 12})
-        assert ev.noter(phrase, (_appel("parcelle_modifier", longueur_m=12.0),), STATUT_OK).parametres_ok
-        assert not ev.noter(phrase, (_appel("parcelle_modifier", longueur_m=21),), STATUT_OK).parametres_ok
+        assert ev.noter(phrase, (_appel("modifier_parcelle", longueur_m=12.0),), STATUT_OK).parametres_ok
+        assert not ev.noter(phrase, (_appel("modifier_parcelle", longueur_m=21),), STATUT_OK).parametres_ok
 
     def test_us233_ca7_un_nom_de_parcelle_se_rattache_par_inclusion(self):
         """« serre » pour « Serre extérieure » : le rattachement est l'affaire du validateur."""
         phrase = _phrase(parametres={"parcelle": "serre"})
-        assert ev.noter(phrase, (_appel("parcelle_modifier", parcelle="Serre extérieure"),), STATUT_OK).parametres_ok
-        assert not ev.noter(phrase, (_appel("parcelle_modifier", parcelle="Planche Nord"),), STATUT_OK).parametres_ok
+        assert ev.noter(phrase, (_appel("modifier_parcelle", parcelle="Serre extérieure"),), STATUT_OK).parametres_ok
+        assert not ev.noter(phrase, (_appel("modifier_parcelle", parcelle="Planche Nord"),), STATUT_OK).parametres_ok
 
     def test_us233_ca7_un_nouveau_nom_se_compare_a_egalite(self):
         phrase = _phrase(outils=("parcelle_renommer",), parametres={"nouveau_nom": "planche des courges"})
@@ -603,14 +605,14 @@ class TestCA7Notation:
     def test_us233_ca7_un_champ_ajoute_sans_etre_evoque_est_releve(self):
         """Le risque de la règle 9 du validateur : `type_pepiniere` ajouté de lui-même."""
         phrase = _phrase(categorie="ancrage_champ", parametres={"parcelle": "serre", "est_pepiniere": True})
-        notes = ev.noter(phrase, (_appel("parcelle_modifier", parcelle="serre", est_pepiniere=True,
+        notes = ev.noter(phrase, (_appel("modifier_parcelle", parcelle="serre", est_pepiniere=True,
                                          type_pepiniere="chaude"),), STATUT_OK)
         assert notes.parametres_ok and notes.champs_en_trop == ("type_pepiniere",)
         assert not notes.reussite
 
     def test_us233_ca7_un_champ_vide_n_est_pas_un_champ_ajoute(self):
         phrase = _phrase(parametres={"parcelle": "serre"})
-        notes = ev.noter(phrase, (_appel("parcelle_modifier", parcelle="serre", actif=None, exposition=""),), STATUT_OK)
+        notes = ev.noter(phrase, (_appel("modifier_parcelle", parcelle="serre", actif=None, exposition=""),), STATUT_OK)
         assert notes.champs_en_trop == ()
 
     def test_us233_ca7_le_mauvais_outil(self):
@@ -623,12 +625,12 @@ class TestCA7Notation:
 
     def test_us233_ca7_un_appel_destructeur_errone_est_releve_meme_en_second(self):
         """Le couperet : supprimer ce qu'on n'a pas demandé de supprimer."""
-        notes = ev.noter(_phrase(), (_appel("parcelle_modifier"), _appel("parcelle_supprimer", parcelle="x")), STATUT_OK)
+        notes = ev.noter(_phrase(), (_appel("modifier_parcelle"), _appel("supprimer_parcelle", parcelle="x")), STATUT_OK)
         assert notes.destructif_errone and notes.appels_multiples
 
     def test_us233_ca7_supprimer_quand_c_est_demande_n_est_pas_une_erreur(self):
-        phrase = _phrase(outils=("parcelle_supprimer",), parametres={"parcelle": "planche sud"})
-        notes = ev.noter(phrase, (_appel("parcelle_supprimer", parcelle="Planche Sud"),), STATUT_OK)
+        phrase = _phrase(outils=("supprimer_parcelle",), parametres={"parcelle": "planche sud"})
+        notes = ev.noter(phrase, (_appel("supprimer_parcelle", parcelle="Planche Sud"),), STATUT_OK)
         assert not notes.destructif_errone and notes.reussite
 
     @pytest.mark.parametrize("statut", [STATUT_SANS_OUTILS, STATUT_APPEL_INVALIDE, "indisponible"])
@@ -639,7 +641,7 @@ class TestCA7Notation:
         assert ev.noter(_phrase(), (), STATUT_OK).echec_technique
 
     def test_us233_ca7_un_argument_illisible_est_un_echec(self):
-        illisible = AppelOutil(nom="parcelle_modifier", arguments={}, arguments_valides=False)
+        illisible = AppelOutil(nom="modifier_parcelle", arguments={}, arguments_valides=False)
         assert ev.noter(_phrase(), (illisible,), STATUT_OK).echec_technique
 
     def test_us233_ca7_lire_les_parametres_attendus(self):
@@ -665,13 +667,13 @@ def _resultats_de_demonstration() -> list:
     reponses = {
         "Ma serre extérieure n'est plus une pépinière": ReponseOutils(
             texte="", modele="m", appel_type="agent", tokens_in=1500, tokens_out=30, tokens_cache=1200,
-            latence_ms=400, appels=(_appel("parcelle_modifier", parcelle="Serre extérieure", est_pepiniere=False),)),
+            latence_ms=400, appels=(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False),)),
         "la planche nord a 5 rangs": ReponseOutils(
             texte="", modele="m", appel_type="agent", tokens_in=1500, tokens_out=30, tokens_cache=1200,
-            latence_ms=600, appels=(_appel("parcelle_modifier", parcelle="Planche Nord", nb_rangs=5),)),
+            latence_ms=600, appels=(_appel("modifier_parcelle", parcelle="Planche Nord", nb_rangs=5),)),
         "combien de rangs a la planche nord ?": ReponseOutils(
             texte="", modele="m", appel_type="agent", tokens_in=1500, tokens_out=20, tokens_cache=0,
-            latence_ms=500, appels=(_appel("parcelle_modifier", parcelle="Planche Nord"),)),   # ❌ confond avec une commande
+            latence_ms=500, appels=(_appel("modifier_parcelle", parcelle="Planche Nord"),)),   # ❌ confond avec une commande
         "modifie ma serre": ReponseOutils(
             texte="", modele="m", appel_type="agent", tokens_in=1500, tokens_out=25, tokens_cache=1200,
             latence_ms=700, appels=(_appel("demander_precision", question="Que veux-tu modifier ?"),)),
@@ -706,13 +708,13 @@ class TestCA7Rapport:
         assert "550 ms" in rapport and "700 ms" in rapport
 
     def test_us233_gherkin_le_rapport_indique_l_outil_et_la_valeur_de_la_phrase_de_reference(self):
-        """[Gherkin] « Ma serre extérieure n'est plus une pépinière » → parcelle_modifier,
+        """[Gherkin] « Ma serre extérieure n'est plus une pépinière » → modifier_parcelle,
         est_pepiniere à false ; latence p95 et jetons ; un go ou un no-go."""
         resultats = _resultats_de_demonstration()
         agregats = ev.agreger(resultats)
         rapport = ev.rediger_rapport({"m": (agregats, ev.evaluer_criteres(agregats), resultats)})
         ligne = next(l for l in rapport.splitlines() if "Ma serre extérieure n'est plus une pépinière" in l)
-        assert "parcelle_modifier" in ligne and '"est_pepiniere": false' in ligne and "✅" in ligne
+        assert "modifier_parcelle" in ligne and '"est_pepiniere": false' in ligne and "✅" in ligne
         assert "p95" in rapport and "1500" in rapport
         assert "GO" in rapport
 
@@ -861,7 +863,7 @@ class TestExecutionDeLaMesure:
             assert ev.main(["--dry-run"]) == 0
         appel.assert_not_called()
         sortie = capsys.readouterr().out
-        assert "Plan de la mesure" in sortie and "parcelle_modifier" in sortie
+        assert "Plan de la mesure" in sortie and "modifier_parcelle" in sortie
 
     def test_us233_mesure_sans_raisonnement_ne_vise_que_les_modeles_nommes(self):
         """Un modèle qui refuse `reasoning_effort` ferait mesurer un paramètre, pas le modèle."""
@@ -883,7 +885,8 @@ class TestExecutionDeLaMesure:
         with patch.object(passerelle, "appeler_chat_outils", return_value=reponse) as appel:
             ev.appeler_agent(CTX, "récolté 2 kg")
         envoye = appel.call_args.kwargs
-        assert envoye["outils"] == catalogue_outils.schemas()
+        # [US-276] La mesure projette le catalogue comme le bot.
+        assert envoye["outils"] == catalogue_outils.schemas(catalogue_outils.PROJECTION_SANS_DESTRUCTION)
         assert envoye["message_utilisateur"] == "récolté 2 kg"
         assert envoye["prompt_fixe"] == ev.PROMPT_FIXE and "Parcelles du potager" in envoye["prompt_variable"]
 
@@ -894,15 +897,15 @@ class TestExecutionDeLaMesure:
 class TestMesureINC018:
 
     def test_inc018_une_sequence_attendue_exige_chaque_outil(self):
-        phrase = _phrase(outils=("parcelle+parcelle_modifier",), categorie="creation_caracteristiques")
-        deux = (_appel("parcelle", action="ajouter"), _appel("parcelle_modifier", parcelle="x"))
+        phrase = _phrase(outils=("creer_parcelle+modifier_parcelle",), categorie="deux_actions")
+        deux = (_appel("creer_parcelle"), _appel("modifier_parcelle", parcelle="x"))
         assert ev.noter(phrase, deux, "ok").reussite
-        assert not ev.noter(phrase, (_appel("parcelle", action="ajouter"),), "ok").outil_ok
-        assert not ev.noter(phrase, (_appel("parcelle"), _appel("parcelle")), "ok").outil_ok
+        assert not ev.noter(phrase, (_appel("creer_parcelle"),), "ok").outil_ok
+        assert not ev.noter(phrase, (_appel("creer_parcelle"), _appel("creer_parcelle")), "ok").outil_ok
 
     def test_inc018_plusieurs_appels_attendus_ne_sont_pas_un_defaut(self):
-        phrase = _phrase(outils=("parcelle_modifier+parcelle_modifier",))
-        notes = ev.noter(phrase, (_appel("parcelle_modifier"), _appel("parcelle_modifier")), "ok")
+        phrase = _phrase(outils=("modifier_parcelle+modifier_parcelle",))
+        notes = ev.noter(phrase, (_appel("modifier_parcelle"), _appel("modifier_parcelle")), "ok")
         assert notes.appels_multiples is False and notes.reussite
 
     def test_inc018_un_appel_rejete_par_le_serveur_est_compte(self):
@@ -910,16 +913,15 @@ class TestMesureINC018:
         assert notes.appel_invalide and notes.echec_technique and not notes.reussite
 
     def test_inc018_une_precision_demandee_pour_rien_est_comptee(self):
-        creation = _phrase(outils=("parcelle",), parametres={"action": "ajouter"})
+        creation = _phrase(outils=("creer_parcelle",), parametres={})
         assert ev.noter(creation, (_appel("demander_precision", question="?"),), "ok").precision_inutile
         ambigu = _phrase(outils=("demander_precision",), categorie="ambigu")
         assert not ev.noter(ambigu, (_appel("demander_precision", question="?"),), "ok").precision_inutile
 
     def test_inc018_un_champ_deduit_du_nom_est_un_champ_invente(self):
         """« crée la planche Est » : l'exposition ne se déduit pas du nom."""
-        phrase = _phrase(outils=("parcelle",), parametres={"action": "ajouter", "nom": "planche est"})
-        appel = AppelOutil("parcelle", {"action": "ajouter", "nom": "Planche Est",
-                                        "exposition": "Est", "superficie": None})
+        phrase = _phrase(outils=("creer_parcelle",), parametres={"nom": "planche est"})
+        appel = AppelOutil("creer_parcelle", {"nom": "Planche Est", "exposition": "Est", "superficie_m2": None})
         notes = ev.noter(phrase, (appel,), "ok")
         assert notes.champs_en_trop == ("exposition",) and not notes.reussite
 
@@ -943,7 +945,7 @@ class TestMesureINC018:
             assert par_categorie.get(categorie), categorie
         assert any("Planche Nord" in p.texte or "planche Nord" in p.texte for p in par_categorie["creation"])
         assert any("pépinière froide" in p.texte for p in par_categorie["deux_actions"])
-        assert all(p.outils_attendus == ("poser_question",) for p in par_categorie["conseil_action"])
+        assert all(p.outils_attendus == (ev.PSEUDO_TEXTE,) for p in par_categorie["conseil_action"])  # [US-257]
 
     def test_inc018_la_mesure_rejoue_la_boucle_de_l_agent_livre(self):
         """`lire` ouvre un tour de plus (lecture fictive) ; la réponse rendue porte les appels
@@ -965,10 +967,10 @@ class TestMesureINC018:
 
     def test_inc018_un_tour_sans_lecture_clot_la_boucle(self):
         reponse = ReponseOutils(texte="", modele="m", appel_type="agent",
-                                appels=(_appel("parcelle_modifier", parcelle="x"),))
+                                appels=(_appel("modifier_parcelle", parcelle="x"),))
         with patch.object(passerelle, "appeler_chat_outils", return_value=reponse) as appel:
             rendue = ev.appeler_agent(CTX, "mets x en pépinière")
-        assert appel.call_count == 1 and [a.nom for a in rendue.appels] == ["parcelle_modifier"]
+        assert appel.call_count == 1 and [a.nom for a in rendue.appels] == ["modifier_parcelle"]
 
     def test_inc018_la_boucle_est_bornee(self):
         lecture = ReponseOutils(texte="", modele="m", appel_type="agent",

@@ -141,6 +141,17 @@ class PotagerMembre(Base):
     potager_id = Column(Integer, ForeignKey("potagers.id"), primary_key=True)
     role       = Column(String(10), nullable=False)  # 'owner' | 'editor' | 'lecteur'
 
+    # [US-258] Profil d'échange du compagnon : propre au couple (jardinier, potager).
+    # `prenom_compagnon` NULL = jamais donné ; le registre ne change que le TON.
+    prenom_compagnon    = Column(String(30), nullable=True)
+    registre_compagnon  = Column(String(12), nullable=False, default="voisin", server_default="voisin")
+    compagnon_accueilli = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+
+    __table_args__ = (
+        CheckConstraint("registre_compagnon IN ('sobre', 'voisin', 'gouailleur')",
+                        name="ck_potager_membres_registre_compagnon"),
+    )
+
 
 class Invitation(Base):
     """[US-048] Code à usage unique invitant un utilisateur à rejoindre un potager

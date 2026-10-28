@@ -16,6 +16,7 @@ from app.services.agent import contexte_court as svc_contexte_court
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from .noyau import _md, log
+from .commandes_profil import accueil_premier_contact
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -257,7 +258,8 @@ def contexte_court_de(update: Update):
     )
 
 
-async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, commande, msg=None) -> None:
+async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, commande, msg=None,
+                           preambule: str = "") -> None:
     """Point d'entrée unique d'une commande interprétée : rien ne s'exécute ici.
 
     Trois issues possibles, dans cet ordre — le doute d'abord, l'incomplétude
@@ -265,6 +267,9 @@ async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, comma
       * un nom de parcelle inexact → les voisins sont proposés (CA12) ;
       * un argument obligatoire absent → il est demandé (CA13) ;
       * sinon → récapitulatif et confirmation explicite (CA10, CA11).
+
+    [US-257] `preambule` : le texte rédigé par l'agent, affiché une fois, au-dessus
+    de ce que le code montre. Ce qui s'exécute reste le récapitulatif, jamais le texte.
     """
     commande = _resoudre_noms_parcelle(commande)
     user_id = update.effective_user.id
@@ -279,6 +284,7 @@ async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, comma
         "id": _nouvel_id_proposition(ancienne.get("id") if ancienne else None),
         "potager_id": current_context().potager_id,
         "ecartes": _ecartes_apres(ancienne, commande),
+        "preambule": preambule,
     }
     await _interp_etape_suivante(update, ctx, msg=msg)
 
@@ -295,9 +301,12 @@ async def _interp_etape_suivante(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     # l'a déjà posé ; l'attribuer ici garantit seulement qu'aucun bouton n'est
     # jamais affiché sans identifiant, d'où qu'ait été construite la proposition.
     ident = pending.setdefault("id", _nouvel_id_proposition())
+    preambule = pending.pop("preambule", "")
 
     async def _repondre(texte: str, boutons) -> None:
         clavier = InlineKeyboardMarkup(boutons) if boutons else None
+        if preambule:
+            texte = f"{texte_de_l_agent(preambule)}\n\n{texte}"
         if msg is not None:
             await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
         else:
@@ -311,7 +320,10 @@ async def _interp_etape_suivante(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
             for rang, nom in enumerate(commande.candidats)
         ]
         boutons.append([InlineKeyboardButton("❌ Annuler", callback_data=f"interp:non:{ident}")])
-        if commande.candidats:
+        if len(commande.candidats) > 1:
+            # [US-278 / CA5] Aucun nom voisin : les parcelles du potager sont offertes au choix.
+            texte = "❓ Quelle parcelle ?"
+        elif commande.candidats:
             texte = (
                 f"❓ Aucune parcelle ne porte exactement ce nom.\n"
                 f"Vouliez-vous dire *{_md(commande.candidats[0].upper())}* ?"
@@ -561,9 +573,11 @@ async def _interp_completion_texte(update: Update, ctx: ContextTypes.DEFAULT_TYP
 # étapes passent par les exécuteurs de service (`app.services.agent.executeurs`),
 # qui appellent le même service que les handlers et rendent un résultat.
 
-async def _plan_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, plan, msg=None) -> None:
+async def _plan_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, plan, msg=None,
+                         preambule: str = "") -> None:
     """[CA5] Les étapes numérotées et UNE paire « Tout confirmer » / « Annuler »,
-    liée à sa proposition et à son potager (US-234). Rien ne s'exécute ici."""
+    liée à sa proposition et à son potager (US-234). Rien ne s'exécute ici.
+    [US-257] `preambule` : le texte de l'agent, au-dessus des étapes."""
     user_id = update.effective_user.id
     ancienne = _abandonner_precedente(user_id)
     log_id = svc_interpreteur.persister_journal(current_context(), plan, svc_interpreteur.ISSUE_PROPOSEE)
@@ -579,6 +593,8 @@ async def _plan_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, plan, m
         InlineKeyboardButton("❌ Annuler", callback_data=f"interp:non:{ident}"),
     ]])
     texte = "📋 " + svc_interpreteur.recapitulatif_plan(plan)
+    if preambule:
+        texte = f"{texte_de_l_agent(preambule)}\n\n{texte}"
     if msg is not None:
         await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
     else:
@@ -601,20 +617,18 @@ async def _plan_executer(update: Update, plan, query) -> None:
     await query.edit_message_text(svc_executeurs.compte_rendu(plan, resultats), reply_markup=None)
 
 
+def texte_de_l_agent(texte: str) -> str:
+    """[US-257] Le texte rédigé par l'agent, sûr dans un message Markdown : un `_`,
+    un `*` ou un accent grave qu'il écrirait casserait le message entier."""
+    return _md((texte or "").replace("*", "").replace("`", "")).strip()
+
+
 def texte_aiguillage(aiguillage) -> Optional[str]:
-    """[US-236 / CA4, CA5] Ce que le bot répond à une précision ou à une demande
-    hors catalogue ; None pour une question ou un geste, que le flux suit."""
-    # Le texte du modèle est échappé : un `_` ou un `*` qu'il écrirait casserait
-    # le Markdown du message entier.
-    dit = _md((aiguillage.message or "").replace("*", "").replace("`", "")).strip()
-    if aiguillage.vers == svc_interpreteur.VERS_PRECISION:
-        return f"❓ {dit}\n\n_Rien n'a été fait. Redis ta demande en précisant._"
-    if aiguillage.vers == svc_interpreteur.VERS_HORS_PERIMETRE:
-        raison = f" ({dit})" if dit else ""
-        return (
-            f"🤷 Je ne sais pas encore faire ça{raison}.\n\n"
-            "_Ta demande est notée pour les prochaines évolutions._"
-        )
+    """[INC-018] Ce que le bot répond quand une demande d'agir n'a pas été traitée ;
+    None pour une question ou un geste, que le flux suit.
+
+    [US-257 / CA6] Plus aucun texte figé ne répond pour l'agent : une précision ou
+    une demande hors catalogue est une `ReponseAgent`, rédigée par lui."""
     if aiguillage.vers == svc_interpreteur.VERS_NON_COMPRIS:
         # [INC-018] Une demande d'agir que ni l'agent ni l'ancien repli n'ont traitée : on le
         # dit, au lieu de laisser le routeur répondre à côté (la liste des lots en pépinière).
@@ -628,8 +642,8 @@ def texte_aiguillage(aiguillage) -> Optional[str]:
 
 
 async def _suivre_aiguillage(message, aiguillage, msg=None) -> bool:
-    """[US-236] Une précision ou un hors-périmètre reçoit sa réponse ici, et rien
-    n'est proposé ni exécuté (CA4). Une question ou un geste rend False : le flux
+    """[US-236, INC-018] Une demande d'agir non traitée reçoit sa réponse ici, et rien
+    n'est proposé ni exécuté. Une question ou un geste rend False : le flux
     appelant les envoie à la cascade ou au parseur, sans reclasser (CA2, CA3)."""
     texte = texte_aiguillage(aiguillage)
     if texte is None:
@@ -639,6 +653,30 @@ async def _suivre_aiguillage(message, aiguillage, msg=None) -> bool:
         await msg.edit_text(texte, parse_mode="Markdown")
     else:
         await message.reply_text(texte, parse_mode="Markdown")
+    return True
+
+
+async def _repondre_agent(update: Update, ctx: ContextTypes.DEFAULT_TYPE, reponse, msg=None) -> bool:
+    """[US-257] La réponse de l'agent : son texte, et sa proposition s'il en fait une.
+
+    Une proposition passe par le chemin habituel (récapitulatif, boutons, complétion),
+    le texte de l'agent au-dessus. Sans proposition, le texte est la réponse : une
+    salutation, une vraie question qui nomme les choix, ce que l'application ne sait
+    pas faire. Il part en texte brut — c'est le modèle qui l'a écrit.
+    """
+    if isinstance(reponse.proposition, svc_interpreteur.Plan):
+        await _plan_proposer(update, ctx, reponse.proposition, msg=msg, preambule=reponse.texte)
+    elif reponse.proposition is not None:
+        await _interp_proposer(update, ctx, reponse.proposition, msg=msg, preambule=reponse.texte)
+    else:
+        log.info("[US-257] Réponse de l'agent (%s) : %r", ", ".join(reponse.outils) or "texte seul",
+                 reponse.texte[:80])
+        if msg is not None:
+            await msg.edit_text(reponse.texte)
+        else:
+            await _message_de(update).reply_text(reponse.texte)
+    # [US-258 / CA1] Le premier échange avec le compagnon demande comment appeler le jardinier.
+    await accueil_premier_contact(update, ctx)
     return True
 
 
@@ -657,6 +695,8 @@ async def _traiter_commande_interpretee(
     # lira si la prochaine phrase corrige ou prolonge celle-ci.
     svc_contexte_court.noter_resultat(current_context(), resultat)
     message = _message_de(update)
+    if isinstance(resultat, svc_interpreteur.ReponseAgent):
+        return await _repondre_agent(update, ctx, resultat, msg=msg)
     if isinstance(resultat, svc_interpreteur.Aiguillage):
         return await _suivre_aiguillage(message, resultat, msg=msg)
     if isinstance(resultat, svc_interpreteur.Plan):

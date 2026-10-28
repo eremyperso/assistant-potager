@@ -235,14 +235,18 @@ export function enteteEtiquette(etiquette, lot = null) {
 /**
  * [CA12] Le grand chiffre : « +6 j » (retard), « 8 j » (avant l'échéance),
  * « reste 8 j » (dans la fourchette de mise en terre), « J3/7 » (endurcissement),
- * « ? » (délai non renseigné), ou `null` quand aucune échéance n'est attendue (A33).
+ * « J62 » (délai non renseigné : les jours depuis le semis, « ? » sans date), ou `null` quand aucune échéance n'est attendue (A33).
  * `{ texte, avant, apres }` : `avant` et `apres` s'écrivent en petit.
  */
 export function grandChiffre(etiquette, dateRef = null) {
   const e = etiquette?.echeance ?? {}
   if (e.en_retard && e.jours != null) return { texte: `+${e.jours} j` }
   switch (etiquette?.etat) {
-    case 'duree_inconnue': return { texte: '?' }
+    case 'duree_inconnue': {
+      // Les jours écoulés depuis le semis sont un fait, pas une durée : ils ne manquent jamais.
+      const jours = etiquette?.lot?.date_semis && dateRef ? ecartJours(etiquette.lot.date_semis, dateRef) : null
+      return { texte: jours != null && jours >= 0 ? `J${jours}` : '?' }
+    }
     case 'endurcir':
       return e.endurcissement ? { texte: `J${e.endurcissement.jour}`, apres: `/${e.endurcissement.sur}` } : null
     case 'a_sortir': {

@@ -73,6 +73,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "parcelles",
     "culture",
     "potager",
+    "profil",
     "rejoindre",
     "lier",
     "tts_on",
@@ -106,6 +107,7 @@ DESCRIPTIONS: dict[str, str] = {
     "parcelles":   "Lister vos parcelles",
     "culture":     "Corriger la fiche d'une culture",
     "potager":     "Changer de potager actif",
+    "profil":      "Votre prénom et le ton du compagnon",  # [US-258]
     "rejoindre":   "Rejoindre un potager avec un code d'invitation",  # [US-087]
     "lier":        "Relier ce chat à votre compte web",
     "tts_on":      "Activer les réponses vocales",
@@ -629,6 +631,10 @@ MOTIFS_EXCLUSION_INTERPRETEUR: dict[str, str] = {
     ),
     "version": (
         "Diagnostic sans usage quotidien pour le jardinier."
+    ),
+    "profil": (
+        "Le prénom se dit déjà en phrase (« appelle-moi Rico », proposition à confirmer, US-258) "
+        "et le ton se choisit par boutons : une commande dictée en plus créerait deux chemins."
     ),
 }
 
