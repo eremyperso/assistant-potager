@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import {
-  couleurDuMois, couleurDuMoisReferentiel, phasesDuMois, PHASES_REFERENTIEL, ETAT_CROISSANCE,
+  couleurDuMois, couleurDuMoisReferentiel, couleurDuMoisFiltre, phasesDuMois,
+  PHASES_REFERENTIEL, ETAT_CROISSANCE,
 } from '../../lib/calendrier.js'
 
 const M_INI = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
@@ -8,10 +10,11 @@ const M_NOMS = [
   'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
 ]
 
+// [teinte, libellé, clé de phase dans la frise]
 const LEGEND = [
-  ['bg-blue', 'Semis'],
-  ['bg-brand', 'Plantation'],
-  ['bg-amber', 'Récolte'],
+  ['bg-blue', 'Semis', 'semis'],
+  ['bg-brand', 'Plantation', 'plant'],
+  ['bg-amber', 'Récolte', 'rec'],
 ]
 
 /**
@@ -20,7 +23,7 @@ const LEGEND = [
  * `PHASES_REFERENTIEL`, jamais recopiées : teinte et libellé n'y sont écrits
  * qu'une fois.
  */
-const LEGEND_REFERENTIEL = PHASES_REFERENTIEL.map(({ teinte, libelle }) => [teinte, libelle])
+const LEGEND_REFERENTIEL = PHASES_REFERENTIEL.map(({ teinte, libelle, cle }) => [teinte, libelle, cle])
 
 /**
  * Légende des phases du calendrier [US-060] — extraite de `MonthStrip`
@@ -28,19 +31,42 @@ const LEGEND_REFERENTIEL = PHASES_REFERENTIEL.map(({ teinte, libelle }) => [tein
  * l'en-tête de sa carte « Cultures en place », où elle vaut pour toutes les
  * tuiles à la fois (CA6). Les couleurs restent définies une seule fois.
  */
-export function MonthStripLegend({ variante, avecCroissance = false, className = '' }) {
+export function MonthStripLegend({
+  variante, avecCroissance = false, className = '', actif = null, onChoisir,
+}) {
   // [US-070 / CA7] « En croissance » n'est nommé que si une frise recalée l'affiche.
   const entrees = variante === 'referentiel'
-    ? [...LEGEND_REFERENTIEL, ...(avecCroissance ? [[ETAT_CROISSANCE.teinte, ETAT_CROISSANCE.libelle]] : [])]
+    ? [...LEGEND_REFERENTIEL, ...(avecCroissance ? [[ETAT_CROISSANCE.teinte, ETAT_CROISSANCE.libelle, ETAT_CROISSANCE.cle]] : [])]
     : LEGEND
   return (
     <div className={`flex flex-wrap gap-3 ${className}`}>
-      {entrees.map(([bg, l]) => (
-        <span key={l} className="flex items-center gap-1.5 text-[11.5px] text-txt2">
+      {entrees.map(([bg, l, cle]) => {
+        const pastille = (
           <span className={`w-2 h-2 rounded-sm ${bg} ${bg === ETAT_CROISSANCE.teinte ? 'ring-1 ring-inset ring-brand' : ''}`} />
-          {l}
-        </span>
-      ))}
+        )
+        // Sans `onChoisir`, la légende reste un simple libellé.
+        if (!onChoisir) {
+          return (
+            <span key={l} className="flex items-center gap-1.5 text-[11.5px] text-txt2">{pastille}{l}</span>
+          )
+        }
+        // [US-255 / CA1, CA6] Bouton à bascule : l'actif se détache, les autres s'atténuent.
+        const choisi = actif === cle
+        return (
+          <button
+            key={l}
+            type="button"
+            aria-pressed={choisi}
+            onClick={() => onChoisir(choisi ? null : cle)}
+            className={`flex items-center gap-1.5 text-[11.5px] min-h-[44px] px-2 -mx-2 rounded-md cursor-pointer ${
+              choisi ? 'font-semibold text-txt bg-card-alt' : actif ? 'text-txt3' : 'text-txt2'
+            }`}
+          >
+            {pastille}
+            {l}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -78,7 +104,16 @@ export function MonthStrip({
     pepiniere: pepiniere ?? [], pleineTerre: pleineTerre ?? [], plantation: plantation ?? [], rec,
     croissance: croissance ?? [],
   }
-  const couleur = referentiel ? couleurDuMoisReferentiel(frise) : couleurDuMois({ semis, plant, rec })
+  // [US-255] Filtre de légende : état local à cette frise, jamais mémorisé.
+  const [filtre, setFiltre] = useState(null)
+  const phases = referentiel ? frise : { semis, plant, rec }
+  const entreeFiltre = filtre
+    && (referentiel ? [...PHASES_REFERENTIEL, ETAT_CROISSANCE] : null)?.find((p) => p.cle === filtre)
+  const teinteFiltre = referentiel ? entreeFiltre?.teinte : LEGEND.find(([, , c]) => c === filtre)?.[0]
+  const couleur = filtre && teinteFiltre
+    ? couleurDuMoisFiltre(phases, filtre, teinteFiltre)
+    : referentiel ? couleurDuMoisReferentiel(frise) : couleurDuMois({ semis, plant, rec })
+  const phaseVide = Boolean(filtre && teinteFiltre && !(phases[filtre] || []).length)
   const libelle = (i) => {
     if (!referentiel) return undefined
     const phases = phasesDuMois(frise, i)
@@ -113,7 +148,13 @@ export function MonthStrip({
         ))}
       </div>
       {legend && (
-        <MonthStripLegend variante={referentiel ? 'referentiel' : undefined} avecCroissance={recalee} className="mt-2" />
+        <MonthStripLegend
+          variante={referentiel ? 'referentiel' : undefined} avecCroissance={recalee} className="mt-2"
+          actif={filtre} onChoisir={setFiltre}
+        />
+      )}
+      {legend && phaseVide && (
+        <p className="mt-1 text-[11px] text-txt3">Aucun mois pour cette phase</p>
       )}
     </div>
   )

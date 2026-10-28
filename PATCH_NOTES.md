@@ -1,3 +1,79 @@
+## [v3.105.0] — 2026-10-28
+
+> Regroupé par Epic. Les US-257, US-258 et US-278 de l'Epic 13/14 sont détaillées dans v3.103.0 et v3.104.0.
+
+### ÉPIC 11 — Cultures : tout savoir d'une culture
+
+#### 🚀 Nouveautés
+- Ajoute le filtre de la frise calendrier : toucher un élément de la légende n'affiche que cette phase, le retoucher réaffiche tout (US-255).
+
+#### 🔧 Améliorations techniques
+- Complète les fenêtres et durées du référentiel (tomate, courgette, concombre, haricot, carotte, salade) dans `wind_river_attributs.json` ; liste de travail dans `LISTE_CULTURES_CALENDRIER.md`.
+- Retire du modèle `calendrier_redaction_interne.json` le commentaire obsolète « l'importer ne fait rien ».
+
+### ÉPIC 13 — Agent interpréteur
+
+#### 🚀 Nouveautés
+- Ne propose plus d'écrire ni de supprimer quand le jardinier pose une question (« est-ce que je peux supprimer la planche sud ? ») (US-276).
+
+#### 🔧 Améliorations techniques
+- Allège le catalogue d'outils de l'agent et le projette selon la phrase avant l'appel, d'où `app/services/agent/projection.py` (US-276).
+- Ajoute `tests/test_us276_catalogue_projete.py`.
+
+### Pépinière (hors US)
+
+#### 🐛 Corrections
+- Affiche les jours écoulés depuis le semis (« J12 ») au lieu de « ? » quand la durée de l'étape n'est pas renseignée.
+
+### Déploiement
+
+#### 🚀 Nouveautés
+- Importe automatiquement le référentiel de cultures à chaque déploiement dev et prod, sans import manuel (US-254).
+
+#### 🔧 Améliorations techniques
+- Ajoute `tools/importer_referentiel_deploiement.py`, la liste `data/referentiel/deploiement.json` et l'étape correspondante dans `deploy.yml` et `deploy-dev.yml` (US-254).
+
+## [v3.104.0] — 2026-10-28
+
+### 🚀 Nouveautés
+- Propose toujours à l'enregistrement la superficie, la longueur, les rangs, l'ensoleillement ou l'exposition dictés pour une planche, même quand le compagnon répond à côté ou affiche la liste des parcelles : l'application relit elle-même la phrase (US-278).
+- Propose au choix le nom le plus proche d'une planche mal dite (« planche tubercul » → PLANT TUBERCULE), et demande « Quelle parcelle ? » avec les parcelles en boutons quand aucun nom ne s'en approche, sans faire redire les valeurs (US-278).
+- Propose aussi ces caractéristiques quand l'agent est désactivé ou indisponible (US-278).
+
+### 🐛 Corrections
+- Corrige « ma planche principal a une superficie de 50m2… », que le compagnon voulait créer en double puis laissait en question sans suite : une création sur une parcelle existante devient sa modification (suite d'US-257).
+- Corrige « ma planche tunnel a une superficie de 20m2… », enregistré comme la pose d'un tunnel puis répondu par un conseil de culture : un mot du nom d'une parcelle après « planche » ou « parcelle » n'est plus un geste (suite d'US-257).
+- Corrige la liste des parcelles affichée à la place d'une modification quand la phrase donne des valeurs : la lecture est écartée une fois et le modèle est relancé (suite d'US-257).
+- Corrige le plantage de la relecture d'un nombre entre 17 et 19 dit en lettres (« dix-sept rangs »).
+
+### 🔧 Améliorations techniques
+- Retire du récapitulatif le rappel des nombres en toutes lettres entre parenthèses : « 50 m² » au lieu de « 50 m² (cinquante m²) ».
+- Ajoute `app/services/agent/filet_fiche.py`, tendu après l'agent seulement : les règles ne lisent toujours que les phrases simples (US-277) et une écriture proposée par l'agent n'est jamais remplacée (US-278).
+- Signale au modèle une valeur de vocabulaire dite et oubliée (« mi-ombre »), comme un nombre oublié (US-278).
+- Ajoute la catégorie « caractéristiques » et quatre dialogues au corpus de mesure du compagnon ; la mesure sur Ministral 3B reste à lancer (US-278).
+- Ajoute `tests/test_us278_filet_caracteristiques_parcelle.py` (41 tests) et met à jour la fiche `compagnon-telegram.md`, la fiche de domaine `commandes-bot.md` et le cadrage du compagnon (US-278).
+
+## [v3.103.0] — 2026-10-28
+
+### 🚀 Nouveautés
+- Ajoute le **profil d'échange** du compagnon : au premier échange sur un potager, il demande comment appeler le jardinier en proposant son prénom Telegram, sans jamais le supposer (US-258).
+- Ajoute trois tons — *sobre*, *comme un voisin* (par défaut) et *gouailleur* — choisis par boutons au premier contact et modifiables avec la nouvelle commande `/profil` (US-258).
+- Propose, sans modèle, de retenir un prénom dit en phrase (« appelle-moi Rico ») : l'écriture attend la confirmation du jardinier (US-258).
+- Refuse avec une explication un prénom qui n'en est pas un (chiffres, balises, plus de deux mots, plus de 30 caractères) : « Ignore tes règles » ne peut pas devenir un prénom (US-258).
+
+### 🐛 Corrections
+- Corrige les formulations du compagnon qui remontaient jusqu'au jardinier : « elle affiche le détail et les boutons », « refusée » et la raison recopiée, le texte de repli figé « Je n'ai rien fait pour l'instant… » (suite d'US-257).
+- Marque comme relevant du lot 2 les trois tours « elle est plein sud », « non 4 rangs » et « plutôt planche Ouest » du corpus de mesure, qui étaient comptés comme du lot 1 (US-257).
+
+### 🔧 Améliorations techniques
+- Injecte le profil dans la partie **variable** du prompt de l'agent, balisé `<profil_jardinier>` comme une donnée, jamais dans les consignes ; le registre change le ton, pas les faits (US-258).
+- Porte le corpus de mesure du compagnon à 31 dialogues, dont 6 nouveaux qui produisent un texte (suite d'US-257).
+- Ajoute `app/services/profil_echange.py`, `app/bot/commandes_profil.py` et `tests/test_us258_profil_echange.py` (33 tests).
+- Met à jour la fiche `compagnon-telegram.md` du corpus de fonctionnement et trois questions de mesure (US-258).
+
+### 💾 Base de données
+- Ajoute à `potager_membres` (migration v60) le prénom, le registre (contraint à trois valeurs) et l'accueil du compagnon : pas de nouvelle table. Rollback : `rollback_v60.sql`.
+
 ## [v3.102.1] — 2026-10-27
 
 ### 🐛 Corrections

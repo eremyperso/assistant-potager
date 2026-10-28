@@ -1,0 +1,27 @@
+{
+  "_lisez_moi": [
+    "[US-254] Liste de déploiement du référentiel : lue par tools/importer_referentiel_deploiement.py,",
+    "appelé par les workflows deploy-dev.yml et deploy.yml après l'ingestion du corpus.",
+    "",
+    "« importer » : manifestes importés à chaque déploiement, DANS CET ORDRE (les familles",
+    "d'abord, les bioagresseurs avant les symptômes qui s'y rattachent). L'import est",
+    "idempotent : un manifeste inchangé n'écrit rien.",
+    "",
+    "« exclus » : manifestes volontairement hors déploiement, avec le motif. Tout fichier",
+    "JSON de data/referentiel/ absent des deux listes fait échouer le déploiement :",
+    "l'exclusion doit toujours être explicite."
+  ],
+  "importer": [
+    "wikidata_familles.json",
+    "attributs_redaction_interne.json",
+    "wind_river_attributs.json",
+    "calendrier_redaction_interne.json",
+    "bioagresseurs_redaction_interne.json",
+    "symptomes_redaction_interne.json"
+  ],
+  "exclus": {
+    "_original_bioagresseurs_avant_scission.json": "archive d'avant la scission des bioagresseurs, conservée pour mémoire",
+    "bioagresseurs_redaction_interne_complet.json": "valeurs éditoriales à soumettre à une revue humaine avant import en production ; à promouvoir vers bioagresseurs_redaction_interne.json une fois relues",
+    "wind_river_associations.json": "extraction brute non canonicalisée, pas un manifeste d'import (US-161) ; la version curée vit dans wind_river_attributs.json"
+  }
+}

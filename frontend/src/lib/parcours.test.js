@@ -145,7 +145,9 @@ test('CA12 — le grand chiffre : retard, compte à rebours, J n/7, ?, ou rien',
   assert.deepEqual(grandChiffre(RETARD), { texte: '+6 j' })
   assert.deepEqual(grandChiffre(T2), { texte: '20 j' })
   assert.deepEqual(grandChiffre(etq(1, 'endurcissement', 2, 'endurcir', { e: { endurcissement: { jour: 3, sur: 7 } } })), { texte: 'J3', apres: '/7' })
-  assert.deepEqual(grandChiffre(etq(1, 'levee', 2, 'duree_inconnue')), { texte: '?' })
+  assert.deepEqual(grandChiffre(etq(1, 'levee', 2, 'duree_inconnue')), { texte: '?' })   // sans date de référence
+  // La durée manque, pas le semis : on montre les jours écoulés plutôt qu'un « ? ».
+  assert.deepEqual(grandChiffre(etq(1, 'levee', 2, 'duree_inconnue', { semis: '2026-10-01' }), '2026-10-13'), { texte: 'J12' })
   assert.deepEqual(grandChiffre(PRET, REF), { avant: 'reste', texte: '8 j' })
   assert.equal(grandChiffre(T1), null)   // A33 : pas d'échéance attendue
 })

@@ -30,6 +30,8 @@ Ces captures servent de référence d'usage, pas de maquette à reproduire.
 
 | Document | Contenu |
 |---|---|
+| [CADRAGE_COMPAGNON_ACTIF.md](CADRAGE_COMPAGNON_ACTIF.md) | **Cadrage du 27/10/2026** : décisions D1 à D4 et D11 (Mistral payant avec Ministral 3B en référence, proactivité complète, confirmation dans la PWA, prénom et registre, Telegram canal des notifications avec une proposition traitable dans les deux canaux), dialogues cibles, profil d'échange et carnet, quatre mémoires, veilleur et distributeur, règles R7 à R10, découpage US-254 à US-272 (US-273 facultative) et critères de mesure |
+| [25-10-2026 analyse.md](25-10-2026%20analyse.md) | Note de reprise du 25/10 : objectif d'un vrai dialogue, défauts constatés, points de vigilance |
 | [ARTICULATION_COMPAGNON_AGENT_INTERPRETEUR.md](ARTICULATION_COMPAGNON_AGENT_INTERPRETEUR.md) | Cartographie des composants réutilisables, limites du périmètre actuel, comparaison des options A, B et C, conséquences des US-236 à US-238, garanties à conserver (validation, confirmation, potager actif, cloisonnement des potagers), stratégie de modèles, schéma cible et recommandation |
 
 ## Ce qui est décidé, et ce qui reste à arbitrer

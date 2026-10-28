@@ -209,10 +209,37 @@ phrase, `app/config.py`) :
 | `ombre` | l'ancien repli répond ; l'agent est consulté **à côté** (fil d'arrière-plan) et ce qu'il aurait proposé est journalisé (`issue_interpretation = 'ombre'`) |
 | `actif` | l'agent, sans seuil de confiance (CA9) ; s'il est indisponible (429, panne, outils non gérés, appel malformé), l'ancien repli (CA13) ; **si lui non plus ne propose rien et que la phrase demande d'agir, un message explicite** (INC-018, voir plus bas), jamais le routeur |
 
-Le paquet `app/services/agent/` : `catalogue_outils` (13 outils GÉNÉRÉS depuis
+Le paquet `app/services/agent/` : `catalogue_outils` (15 outils GÉNÉRÉS depuis
 `FORMES_DICTABLES` et les caractéristiques de parcelle ; `controler_parite_outils()`
-échoue si une forme n'a pas d'outil), `adaptateurs` (outil typé → `clé=valeur`),
+échoue si une forme n'a pas d'outil), `projection` (les outils que le modèle voit
+selon la phrase, US-276), `adaptateurs` (outil typé → `clé=valeur`),
 `validation`, `interpreteur_agent` (l'appel, le mode ombre).
+
+### Le catalogue nommé par verbe et projeté selon la phrase [US-276]
+
+Un outil porte le nom de son verbe, tiré du libellé de la forme (`creer_parcelle`,
+`supprimer_parcelle`, `afficher`, `renseigner_calendrier`), et sa description
+commence par lui. Une commande dont une forme a déjà son outil (la modification
+typée, la suppression) n'est plus regroupée : `parcelle(action=…)` faisait inventer
+`parcelle(action="supprimer")` au 3B. Renommer un outil change les attendus de
+`tests/corpus/us233_agent_echantillon.csv` et `us256_dialogues.json`.
+
+Trois projections, et pas une de plus (`PROJECTIONS`), dans l'ordre du catalogue,
+destructeurs en queue pour que « sans destruction » en soit un préfixe :
+
+| Phrase | Projection |
+|---|---|
+| interrogative : « ? », « est-ce que », « comment », « quand », « peux-tu », demande de procédure — sauf formule de demande + verbe d'action (`demande_d_agir`) | `sans_ecriture` : `afficher`, `lire`, outils de réponse (pas `saisir_geste`) |
+| verbe de destruction (`VERBES_DE_DESTRUCTION`, la liste de la règle `parcelle_supprimer`) dans la phrase ou son contexte court | `complete` |
+| toute autre | `sans_destruction` |
+
+Un outil appelé hors de sa projection est écarté (journal « hors projection »).
+`creer_parcelle` prend les caractéristiques de la fiche : `validation.deplier_creations`
+en fait `ajouter` (avec superficie et exposition, que la forme porte) puis
+`modifier_parcelle` (le reste), donc un plan. Deux règles du validateur s'ajoutent :
+une suppression dont le nom n'est pas exact ET dit devient une précision qui nomme les
+choix (aucun candidat proposé) ; les mots d'un nom de parcelle non dit en entier
+n'évoquent aucun champ, et une modification qui ne garde rien devient une précision.
 
 ⚠️ **Révision de CA4 d'US-172** : l'ancrage mot pour mot devient un ancrage
 selon la NATURE de la valeur (`validation.py`) :
@@ -250,21 +277,112 @@ rejet du validateur pour une phrase qui ne demande PAS d'agir — CA8, INC-018).
 |---|---|---|
 | `question` | `messages.py` (texte et voix) | `_ask_question(…, nature=…)` → `repondre_avec_cascade(decision=…)`, origine `agent` ; nature illisible → la cascade classe elle-même |
 | `geste` | `messages.py` | droit à `_parse_and_save`, sans routeur ni `parse_message` |
-| `precision` | `interpretation._suivre_aiguillage` | « ❓ <question du modèle> — Rien n'a été fait » ; aucune proposition en attente |
-| `hors_perimetre` | `interpretation._suivre_aiguillage` | « 🤷 Je ne sais pas encore faire ça (<raison>) » |
 | `non_compris` [INC-018] | `interpretation._suivre_aiguillage` | « 🙏 Je n'ai pas réussi à traiter cette demande… Rien n'a été fait » + la commande à taper (`message`) ; produit par `interpreter()`, jamais par un outil |
 
-Précision et hors périmètre écrivent une ligne `routage_logs`
-(`issue_interpretation` = `precision` / `hors_perimetre`, `outils_agent` = l'outil) :
-`SELECT question_normalisee FROM routage_logs WHERE issue_interpretation = 'hors_perimetre'`
-est la liste des demandes de fonctionnalité. Le texte du modèle est échappé
-(`_md`) avant d'entrer dans le message Markdown.
+[US-257] `precision` et `hors_perimetre` ne sont plus produits par l'agent (les
+constantes restent pour le contexte court) : `texte_aiguillage` n'a plus de texte
+figé pour eux. Depuis US-257, l'aiguillage `question` vient d'`interpreter()`
+(phrase interrogative, sans appel au modèle) et `geste` de l'outil `saisir_geste`.
+
+### L'agent répond en texte — `ReponseAgent` [US-257]
+
+`interpreteur_agent.proposer` est une boucle **conversationnelle**
+(`tool_choice="auto"`, au plus `AGENT_MAX_TOURS` = 6 appels, puis un appel
+`tool_choice="none"` si le dernier tour n'a pas rédigé). `interpreter()` rend une
+`ReponseAgent(texte, proposition, outils, manque_catalogue)` ; le bot
+(`interpretation._repondre_agent`) envoie le texte seul (texte brut, c'est le
+modèle qui l'a écrit) ou le place, échappé (`texte_de_l_agent`), au-dessus du
+récapitulatif et des boutons habituels (`_interp_proposer` / `_plan_proposer`,
+argument `preambule`, affiché une fois).
+
+- **Outils retirés** : `poser_question`, `demander_precision`, `hors_perimetre`.
+  Reste `saisir_geste` (terminal) et entre `manque_catalogue(demande)`, un signal
+  sans effet, journalisé `hors_perimetre` (`persister_reponse`). Un refus du
+  validateur sans proposition est journalisé `precision`. « merci » n'écrit rien.
+- **Verdict au modèle** (`Propositions.juger`) : chaque écriture est validée avec
+  celles déjà retenues (état simulé du plan) ; le message `tool` dit « proposée »
+  (commande ou étapes) ou « refusée » avec la raison, et le modèle se corrige dans
+  la boucle. Un appel sur la même cible (outil + parcelle) complète ou corrige le
+  précédent au lieu de doubler (« non 4 rangs »).
+- **Rien de perdu (CA4, US-250)** : le verdict signale, une fois, ce que la phrase
+  dit et qu'aucun appel ne reprend — un nombre (`chiffres_non_repris`), une
+  demande au-delà du nombre d'appels ou un verbe à un seul outil sans son appel
+  (`validation.demandes_non_reprises` : crée, supprime, renomme), la proposition
+  en attente qu'une suite « et … aussi » prolonge. Une phrase qui demande d'agir
+  et ne reçoit qu'un texte est relancée une fois (`demandes_sans_appel`). Le
+  signal porte sur la phrase dite, pas sur le contexte : « non 4 rangs » ne
+  signale pas le 3 qu'il remplace.
+- **Contrôle des annonces (CA5)** : `annonce_une_action` (« c'est fait », « j'ai
+  noté »…) et `decrit_une_proposition` (« voici ce que je propose » sans appel)
+  sont déterministes. Devant une proposition, une annonce est retirée (le
+  récapitulatif parle seul) ; sans proposition, le modèle reçoit une fois
+  `CORRECTION_ANNONCE` / `CORRECTION_PROPOSITION`, puis `TEXTE_RIEN_FAIT` remplace.
+- **Questions** : en `actif`, une phrase `projection.est_interrogative` part à la
+  cascade des questions (`Aiguillage(question)`, 0 appel) tant que l'agent n'a
+  pas les lectures d'US-263.
+- **Réponse vide** (`MOTIF_REPONSE_VIDE`) : ni texte ni proposition → `_non_compris`
+  (message explicite si la phrase demande d'agir), jamais l'ancien repli.
+- **Réversible** : `AGENT_MODE` inchangé (`off`, `ombre` qui journalise aussi le
+  texte, `actif`). La mesure de livraison est `tools/evaluer_dialogues.py`
+  (pseudo-attendus `texte` et `aucune_ecriture`, section « Naturel » à noter).
 
 ⚠️ Une désignation relative n'est pas un nom (`_DESIGNATION_RELATIVE` dans
 `_nom_plausible`) : « supprime la parcelle près des tomates » n'est plus
 reconnue par la règle `parcelle_supprimer`, elle passe à l'agent qui demande
 laquelle. Une parcelle réellement nommée « Près du puits » se supprime donc par
 la commande tapée, ou par l'agent.
+
+### Le filet des caractéristiques de parcelle — `filet_fiche` [US-278]
+
+Retours de terrain du 28/10/2026 (Ministral 3B) : « ma planche X a une superficie
+de 20 m2, longueur de 7m et ensoleillement mi-ombre » donnait, selon X, la bonne
+proposition, la liste des parcelles (`afficher` répété) ou une réponse sur les
+pommes de terre (« tubercul » pris pour une culture). `app/services/agent/filet_fiche.py`
+lit la phrase **sans modèle** et construit l'appel `modifier_parcelle` que le
+modèle aurait dû faire ; `valider_appel` en fait la proposition, comme d'habitude.
+
+- **Après l'agent, jamais devant** : US-277 inchangée, les règles ne lisent que
+  les phrases simples. `interpreteur_agent._filet` (début de `_conclure`) le tend
+  quand la boucle finit sans écriture proposée (texte, lecture, refus) ; une
+  écriture de l'agent n'est jamais remplacée. `interpreteur_commandes._filet_fiche`
+  le tend quand il n'y a pas d'agent (`off`, panne, quota) ni de repli qui propose,
+  et sur une phrase écartée par les règles (US-277 / CA6) : il rend une
+  `ReponseAgent` d'origine `regle`, `regle = REGLE_FILET_FICHE`.
+- **Déclenchement** : une parcelle désignée (nom exact du potager, ou « planche /
+  parcelle / carré / butte / bande » suivi d'un nom) ET au moins une valeur lue :
+  superficie (m2, m², mètres carrés), longueur (m, mètres), rangs, ensoleillement
+  (`DEFINITIONS_ENSOLEILLEMENT`), exposition (après « exposé(e) » / « exposition »
+  seulement : « planche Est » est un nom). Nombres en chiffres ou en lettres.
+  Jamais sur une question, une création, ni un geste (`annonce_un_geste`).
+- **Nom** : exact → proposition directe ; approchant (`resolve_parcelle`) →
+  candidat au bouton « 📍 », jamais substitué ; rien → « ❓ Quelle parcelle ? »
+  avec les parcelles en boutons (≤ `NB_CHOIX_MAX`), sinon le nom est demandé
+  (`manquants`). Les valeurs lues restent dans la proposition.
+- **Texte** : `TEXTE_FILET` du code remplace celui du modèle ; un nombre que le
+  filet n'a rattaché à aucun champ est dit (« je n'ai pas su placer : 3 »).
+- **Relance (CA6)** : `filet_fiche.valeurs_non_reprises` ajoute au signal « non
+  repris » d'US-257 une valeur de vocabulaire dite et oubliée (« mi-ombre »).
+- Le récapitulatif d'une proposition du filet est celui d'une modification de
+  l'agent (« Je passe la superficie de X à 20 m². »), quelle que soit son origine.
+
+### Le prénom et le ton du compagnon — `/profil` [US-258]
+
+`app/services/profil_echange.py` (service, validation, bloc de prompt) et
+`app/bot/commandes_profil.py` (accueil, `/profil`, boutons `profil:`). Profil rangé
+par `(user_id, potager_id)`, en colonnes de `potager_membres` (migration v60).
+
+- **Premier contact** : après la première réponse de l'agent (`_repondre_agent`),
+  une seule fois, le bot propose le `first_name` Telegram et les trois registres.
+  Le prénom n'est écrit qu'après le bouton.
+- **« appelle-moi X »** : reconnu par `phrase_de_profil` AVANT l'interpréteur, sans
+  modèle. C'est une proposition (Oui / Non), pas une écriture (R9).
+- **Validation** (`valider_prenom`) : lettres, espaces, tirets, 30 caractères,
+  deux mots au plus. Cette dernière borne est ce qui refuse « Ignore tes règles »
+  (CA5) ; la balise de donnée est la seconde ligne de défense.
+- **Prompt** : `prompt_variable(..., profil=)` ajoute `<profil_jardinier>` APRÈS la
+  date et les parcelles ; la partie fixe ne porte que la consigne de lecture. Le
+  registre change le ton, jamais les faits ni les prudences (CA7).
+- `/profil` est exclue de l'interpréteur (`MOTIFS_EXCLUSION_INTERPRETEUR`).
 
 ### Une demande d'agir qui échoue est dite, pas routée [INC-018]
 
@@ -277,7 +395,8 @@ routeur par mots-clés prenait « Créez la planche Nord… » pour une question
 données et répondait la liste des lots en pépinière (confiance 1,00).
 
 - Les règles de commande et le parseur de gestes restent des raccourcis, avant l'agent.
-- Une déclaration (« la planche nord a 6 rangs ») garde le chemin d'avant (routeur).
+- Une déclaration garde le chemin d'avant (routeur), sauf si elle dit des caractéristiques
+  d'une parcelle (« la planche nord a maintenant 6 rangs ») : le filet d'US-278 les propose.
 - `/ask` garde la cascade : ce chemin ne passe pas par `interpreter()`.
 - `off` et `ombre` ne changent pas. Un `non_compris` n'entre pas dans le contexte court.
 - **Tour de complément** : un tour sans `lire` clôt la boucle, et gpt-oss-120b n'émet souvent
@@ -286,7 +405,7 @@ données et répondait la liste des lots en pépinière (confiance 1,00).
   arguments appelés (l'unité de « m2 » est ignorée) ; un nombre perdu accorde UN tour de
   plus, où seules les écritures sont retenues (un doute tardif n'annule rien). Sans modèle
   ni écriture ; un faux positif coûte un appel. Ne couvre pas une seconde demande sans
-  nombre (« …et mets la serre en pépinière ») : reste US-250.
+  nombre (« …et mets la serre en pépinière ») : couvert depuis US-257 (verdict au modèle, ci-dessus).
 - Le schéma des outils accepte `null` pour un champ facultatif (« non dit », retiré
   par le validateur) : un type strict faisait rejeter l'appel par le serveur ; la
   génération rejetée est journalisée (`llm.passerelle`, WARNING).
@@ -297,14 +416,14 @@ données et répondait la liste des lots en pépinière (confiance 1,00).
 (`historique` de `passerelle.appeler_chat_outils`). L'outil `lire` (parcelle,
 parcelles, lot, culture — `agent/lecture.py`, potager du contexte, résultat en
 JSON sous `donnees`) est exécuté et renvoyé au modèle ; une écriture reçoit
-« noté » et n'est **jamais** exécutée dans la boucle ; un tour sans lecture ou
-un outil terminal la clôt.
+son verdict (US-257, ci-dessus) et n'est **jamais** exécutée dans la boucle ; un
+tour sans appel la clôt.
 
-| Appels retenus | Résultat |
+| Écritures retenues | Proposition de la `ReponseAgent` |
 |---|---|
-| terminal en tête, ou `demander_precision` après des écritures | `Aiguillage` (US-236) |
+| `saisir_geste` en tête | `Aiguillage(geste)` (US-236), pas de `ReponseAgent` |
 | une écriture | `CommandeInterpretee`, proposition simple (CA9) |
-| plusieurs écritures | `validation.valider_plan` → `Plan`, ou `Aiguillage(precision)` |
+| plusieurs écritures | `validation.valider_plan` → `Plan` ; une étape refusée reste hors du plan, le modèle lit pourquoi |
 
 `valider_plan` passe chaque appel par `valider_appel` avec la liste des parcelles
 **enrichie des créations précédentes** (règle 7) ; une création sur un nom pris

@@ -35,7 +35,7 @@ CTX = TenantContext(user_id=1, potager_id=1, role="owner")
 PARCELLES = ("Serre", "Planche Sud")
 PHRASE = "Crée la planche nord, 8 mètres de long avec 4 rangs, et mets la serre en pépinière froide"
 
-CREER = AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord"}, id="a1")
+CREER = AppelOutil("creer_parcelle", {"nom": "planche nord"}, id="a1")
 REGLER = AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "planche nord", "longueur_m": 8, "nb_rangs": 4}, id="a2")
 SERRE_FROIDE = AppelOutil(
     OUTIL_MODIFIER_PARCELLE, {"parcelle": "Serre", "est_pepiniere": True, "type_pepiniere": "froide"}, id="a3",
@@ -47,6 +47,11 @@ def _reponse(*appels: AppelOutil, statut: str = passerelle.STATUT_OK) -> Reponse
         texte="", modele="test", appel_type=passerelle.TYPE_AGENT,
         tokens_in=900, tokens_out=50, latence_ms=400, appels=appels, statut=statut,
     )
+
+
+def _texte(texte: str = "Je te propose ceci.") -> ReponseOutils:
+    """[US-257] Le tour où le modèle répond en texte : il clôt la boucle (sans jeton compté)."""
+    return ReponseOutils(texte=texte, modele="test", appel_type=passerelle.TYPE_AGENT)
 
 
 def _lire(quoi: str = "parcelles", nom: str = "", ident: str = "l1") -> AppelOutil:
@@ -151,25 +156,28 @@ class TestCA1Lecture:
         assert resultat.plan is not None and len(resultat.plan.etapes) == 3
 
     def test_us237_ca1_le_premier_appel_n_a_pas_d_historique(self, modele, parcelles_connues):
-        modele.return_value = _reponse(CREER, REGLER)
+        modele.side_effect = [_reponse(CREER, REGLER), _texte()]
         interpreteur_agent.proposer(PHRASE, CTX)
-        assert "historique" not in modele.call_args.kwargs
+        assert "historique" not in modele.call_args_list[0].kwargs
+        assert "historique" in modele.call_args_list[1].kwargs
 
     def test_us237_ca1_la_boucle_est_bornee_par_agent_max_tours(self, monkeypatch, modele, parcelles_connues):
         monkeypatch.setattr(config, "AGENT_MAX_TOURS", 2)
         modele.return_value = _reponse(_lire())
         with patch.object(lecture, "lire", return_value='{"donnees": []}'):
             resultat = interpreteur_agent.proposer(PHRASE, CTX)
-        assert modele.call_count == 2
+        # [US-257] Deux tours, puis la rédaction sans outil.
+        assert modele.call_count == 3 and modele.call_args.kwargs["tool_choice"] == "none"
         assert resultat.disponible and resultat.commande is None and resultat.plan is None
 
-    def test_us237_ca1_un_tour_sans_lecture_clot_la_boucle(self, modele, parcelles_connues):
-        modele.return_value = _reponse(CREER, REGLER, SERRE_FROIDE)
-        interpreteur_agent.proposer(PHRASE, CTX)
-        assert modele.call_count == 1
+    def test_us257_un_tour_sans_appel_clot_la_boucle(self, modele, parcelles_connues):
+        """[US-257] Ce n'est plus l'absence de lecture qui clôt la boucle, c'est le texte."""
+        modele.side_effect = [_reponse(CREER, REGLER, SERRE_FROIDE), _texte()]
+        resultat = interpreteur_agent.proposer(PHRASE, CTX)
+        assert modele.call_count == 2 and len(resultat.plan.etapes) == 3
 
     def test_us237_ca1_une_ecriture_dans_la_boucle_est_notee_jamais_executee(self, modele, parcelles_connues):
-        modele.side_effect = [_reponse(CREER, _lire()), _reponse(REGLER)]
+        modele.side_effect = [_reponse(CREER, _lire()), _reponse(REGLER), _texte()]
         with (
             patch.object(lecture, "lire", return_value='{"donnees": []}'),
             patch.dict(executeurs.SERVICES, {executeurs.CLE_AJOUTER: MagicMock()}) as services,
@@ -177,9 +185,9 @@ class TestCA1Lecture:
             resultat = interpreteur_agent.proposer(PHRASE, CTX)
             services[executeurs.CLE_AJOUTER].assert_not_called()
         reponse_ecriture = modele.call_args_list[1].kwargs["historique"][1]
-        assert reponse_ecriture == {
-            "role": "tool", "tool_call_id": "a1", "content": interpreteur_agent.REPONSE_ECRITURE,
-        }
+        assert reponse_ecriture["role"] == "tool" and reponse_ecriture["tool_call_id"] == "a1"
+        # [US-257] Le verdict du validateur, plus « noté » : proposée, en attente de confirmation.
+        assert json.loads(reponse_ecriture["content"])["verdict"].startswith("proposée")
         assert [e.sous_commande for e in resultat.plan.etapes] == ["ajouter", "modifier"]
 
     def test_us237_ca1_panne_au_second_tour_garde_les_ecritures_notees(self, modele, parcelles_connues):
@@ -281,7 +289,7 @@ class TestCA2CA3EtatSimule:
         assert "9" in verdict.motif
 
     def test_us237_ca3_un_argument_manquant_est_demande(self):
-        sans_nom = AppelOutil("parcelle", {"action": "ajouter"})
+        sans_nom = AppelOutil("creer_parcelle", {})
         verdict = valider_plan((CREER, sans_nom), _contexte())
         assert verdict.plan is None and "Quel nom" in verdict.precision
 
@@ -299,8 +307,8 @@ class TestCA2CA3EtatSimule:
 class TestCA4HorsPlan:
 
     @pytest.mark.parametrize("appel", [
-        AppelOutil("parcelle_supprimer", {"nom": "Serre"}),
-        AppelOutil("parcelle", {"action": "renommer", "ancien": "Serre", "nouveau": "abri"}),
+        AppelOutil("supprimer_parcelle", {"nom": "Serre"}),
+        AppelOutil("renommer_parcelle", {"ancien": "Serre", "nouveau": "abri"}),
     ])
     def test_us237_ca4_forme_sans_executeur_refusee(self, appel):
         verdict = valider_plan((CREER, appel), _contexte(texte=PHRASE + ", supprime la serre, renomme la serre en abri"))
@@ -312,13 +320,21 @@ class TestCA4HorsPlan:
         assert executeurs.admise_dans_un_plan(_etape("ajouter", nom="x"))
         assert not executeurs.admise_dans_un_plan(_etape("supprimer", nom="x"))
 
-    def test_us237_ca4_le_refus_est_une_precision_journalisee(self, agent_actif, modele, parcelles_connues):
-        modele.return_value = _reponse(CREER, AppelOutil("parcelle_supprimer", {"nom": "Serre"}))
-        with patch.object(interpreteur_agent, "persister_aiguillage") as journal:
+    def test_us237_ca4_le_refus_revient_au_modele_le_reste_est_propose(self, agent_actif, modele, parcelles_connues):
+        """[US-257] Une suppression ne s'ajoute pas à un plan : le modèle lit pourquoi, la
+        création reste proposée, et le jardinier lit l'explication du modèle."""
+        modele.side_effect = [
+            _reponse(CREER, AppelOutil("supprimer_parcelle", {"nom": "Serre"}, id="s1")),
+            _texte("Je te propose la planche nord ; la suppression de la serre se demande à part."),
+        ]
+        with patch.object(interpreteur_agent, "persister_reponse") as journal:
             resultat = interp.interpreter(PHRASE + " et supprime la serre", CTX)
-        assert isinstance(resultat, interp.Aiguillage) and resultat.vers == interp.VERS_PRECISION
+        verdicts = [json.loads(m["content"]) for m in modele.call_args_list[1].kwargs["historique"]
+                    if m["role"] == "tool"]
+        assert verdicts[1]["verdict"] == "refusée" and "que seule" in verdicts[1]["raison"]
+        assert resultat.proposition.commande_equivalente() == "/parcelle ajouter planche nord"
+        assert "à part" in resultat.texte
         journal.assert_called_once()
-        assert bot_interpretation.texte_aiguillage(resultat).startswith("❓")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -333,13 +349,13 @@ class TestCA5Recapitulatif:
                             (2, "/parcelle modifier planche nord longueur=8 rangs=4"),
                             (3, "/parcelle modifier Serre pepiniere=froide")):
             assert f"\n{rang}. " in recap and f"`{ligne}`" in recap
-        assert "pépinière froide" in recap and "huit" in recap
+        assert "pépinière froide" in recap and "à *8 m*." in recap
 
     def test_us237_ca5_creation_avec_details_relus(self):
-        creer = AppelOutil("parcelle", {"action": "ajouter", "nom": "carre", "exposition": "sud", "superficie": 6})
+        creer = AppelOutil("creer_parcelle", {"nom": "carre", "exposition": "sud", "superficie_m2": 6})
         plan = _plan(creer, AppelOutil(OUTIL_MODIFIER_PARCELLE, {"parcelle": "carre", "nb_rangs": 4}),
                      texte="crée le carre exposé sud de 6 m2 et mets-lui 4 rangs")
-        assert "exposition sud, 6 m² (six m²)" in interp.recapitulatif_plan(plan)
+        assert "exposition sud, 6 m²)" in interp.recapitulatif_plan(plan)
 
     @pytest.mark.asyncio
     async def test_us237_ca5_une_seule_paire_tout_confirmer_annuler(self):
@@ -574,21 +590,26 @@ class TestCA9UneSeuleCommande:
         assert resultat.outils == (OUTIL_LIRE, OUTIL_MODIFIER_PARCELLE)
 
     def test_us237_ca9_interpreter_rend_le_plan_en_mode_actif(self, agent_actif, modele, parcelles_connues):
-        modele.return_value = _reponse(CREER, REGLER, SERRE_FROIDE)
+        modele.side_effect = [_reponse(CREER, REGLER, SERRE_FROIDE), _texte()]
         resultat = interp.interpreter(PHRASE, CTX)
-        assert isinstance(resultat, interp.Plan) and len(resultat.etapes) == 3
-        assert resultat.outils == ("parcelle", OUTIL_MODIFIER_PARCELLE, OUTIL_MODIFIER_PARCELLE)
-        assert resultat.tokens_consommes == 950
+        plan = resultat.proposition
+        assert isinstance(plan, interp.Plan) and len(plan.etapes) == 3
+        assert plan.outils == ("creer_parcelle", OUTIL_MODIFIER_PARCELLE, OUTIL_MODIFIER_PARCELLE)
+        assert plan.tokens_consommes == 950
 
-    def test_us237_ca9_une_precision_apres_des_ecritures_l_emporte(self, modele, parcelles_connues):
-        modele.return_value = _reponse(CREER, AppelOutil("demander_precision", {"question": "Quelle serre ?"}))
-        resultat = interpreteur_agent.proposer(PHRASE, CTX)
-        assert resultat.aiguillage.vers == interp.VERS_PRECISION and resultat.plan is None
+    def test_us257_une_question_apres_des_ecritures_accompagne_la_proposition(self, modele, parcelles_connues):
+        """[US-257] La question d'un champ facultatif est une offre : la proposition reste confirmable."""
+        modele.side_effect = [_reponse(CREER), _texte("Je te propose la planche nord. Quelle exposition ?")]
+        resultat = interpreteur_agent.proposer("crée la planche nord", CTX)
+        assert resultat.commande is not None and resultat.texte.endswith("Quelle exposition ?")
 
-    def test_us237_ca9_une_question_en_tete_reste_un_aiguillage(self, modele, parcelles_connues):
-        modele.return_value = _reponse(AppelOutil("poser_question", {"nature": "QUESTION_DATA"}), CREER)
+    def test_us257_un_ancien_outil_d_aiguillage_est_refuse(self, modele, parcelles_connues):
+        """[US-257 / CA2] `poser_question` n'existe plus : un modèle qui l'appelle encore est refusé."""
+        modele.side_effect = [
+            _reponse(AppelOutil("poser_question", {"nature": "QUESTION_DATA"}, id="q1"), CREER), _texte(),
+        ]
         resultat = interpreteur_agent.proposer(PHRASE, CTX)
-        assert resultat.aiguillage.vers == interp.VERS_QUESTION and resultat.plan is None
+        assert resultat.aiguillage is None and resultat.commande is not None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -598,7 +619,7 @@ class TestJournal:
 
     def test_us237_journal_d_un_plan(self, session_de_test):
         plan = interp.Plan((_etape("ajouter", nom="x"), _etape("modifier", nom="x", modification="rangs=4")),
-                           texte_origine=PHRASE, outils=("parcelle", OUTIL_MODIFIER_PARCELLE), tokens_consommes=950)
+                           texte_origine=PHRASE, outils=("creer_parcelle", OUTIL_MODIFIER_PARCELLE), tokens_consommes=950)
         log_id = interp.persister_journal(CTX, plan, interp.ISSUE_PROPOSEE)
         interp.persister_journal(CTX, plan, interp.ISSUE_CONFIRMEE, log_id)
         interp.journaliser(plan, interp.ISSUE_CONFIRMEE)
@@ -607,7 +628,7 @@ class TestJournal:
         assert ligne.commande_interpretee == "plan parcelle ajouter,modifier"
         assert ligne.issue_interpretation == interp.ISSUE_CONFIRMEE
         assert ligne.origine_classification == interp.ORIGINE_AGENT and ligne.confiance is None
-        assert ligne.outils_agent == f"parcelle,{OUTIL_MODIFIER_PARCELLE}" and ligne.tokens_consommes == 950
+        assert ligne.outils_agent == f"creer_parcelle,{OUTIL_MODIFIER_PARCELLE}" and ligne.tokens_consommes == 950
 
     def test_us237_journal_tient_dans_la_colonne(self):
         plan = interp.Plan(tuple(_etape("modifier", nom="x", modification="rangs=4") for _ in range(20)))
@@ -652,42 +673,48 @@ class TestINC018TourDeComplement:
     def test_inc018_chiffres_non_repris(self, texte, reste):
         from app.services.agent.validation import chiffres_non_repris
 
-        appel = AppelOutil("parcelle", {"action": "ajouter", "nom": "Nord", "superficie": 20})
+        appel = AppelOutil("creer_parcelle", {"nom": "Nord", "superficie_m2": 20})
         assert chiffres_non_repris(texte, [appel]) == reste
 
     def test_inc018_la_seconde_demande_n_est_plus_perdue(self):
-        premier = self._tour(AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord", "superficie": 20}))
-        second = self._tour(AppelOutil("parcelle_modifier", {"parcelle": "planche nord", "longueur_m": 2}))
-        with patch.object(passerelle, "appeler_chat_outils", side_effect=[premier, second]) as appel:
+        premier = self._tour(AppelOutil("creer_parcelle", {"nom": "planche nord", "superficie_m2": 20}))
+        second = self._tour(AppelOutil("modifier_parcelle", {"parcelle": "planche nord", "longueur_m": 2}))
+        with patch.object(passerelle, "appeler_chat_outils", side_effect=[premier, second, _texte()]) as appel:
             resultat = interpreteur_agent.proposer(self.PHRASE, CTX)
-        assert appel.call_count == 2
+        assert appel.call_count == 3
+        verdict = json.loads(appel.call_args_list[1].kwargs["historique"][-1]["content"])
+        assert verdict["non_repris_dans_tes_appels"] == ["2"]  # [US-257] le signal est dans le verdict
         assert [e.commande_equivalente() for e in resultat.plan.etapes] == [
             "/parcelle ajouter planche nord 20", "/parcelle modifier planche nord longueur=2"]
         assert "historique" in appel.call_args_list[1].kwargs
 
     def test_inc018_aucun_tour_de_plus_quand_tout_est_repris(self):
-        premier = self._tour(AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord", "superficie": 20}))
-        with patch.object(passerelle, "appeler_chat_outils", return_value=premier) as appel:
+        premier = self._tour(AppelOutil("creer_parcelle", {"nom": "planche nord", "superficie_m2": 20}))
+        with patch.object(passerelle, "appeler_chat_outils", side_effect=[premier, _texte()]) as appel:
             resultat = interpreteur_agent.proposer("crée la planche nord de 20 m²", CTX)
-        assert appel.call_count == 1 and resultat.commande is not None
+        assert appel.call_count == 2 and resultat.commande is not None
+        verdict = json.loads(appel.call_args_list[1].kwargs["historique"][-1]["content"])
+        assert "non_repris_dans_tes_appels" not in verdict
 
     def test_inc018_un_seul_tour_de_complement(self):
-        creation = self._tour(AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord", "superficie": 20}))
-        autre = self._tour(AppelOutil("parcelle_modifier", {"parcelle": "planche nord", "nb_rangs": 3}))
-        with patch.object(passerelle, "appeler_chat_outils", side_effect=[creation, autre, creation]) as appel:
+        creation = self._tour(AppelOutil("creer_parcelle", {"nom": "planche nord", "superficie_m2": 20}))
+        autre = self._tour(AppelOutil("modifier_parcelle", {"parcelle": "planche nord", "nb_rangs": 3}))
+        with patch.object(passerelle, "appeler_chat_outils", side_effect=[creation, autre, _texte()]) as appel:
             interpreteur_agent.proposer(self.PHRASE, CTX)
-        assert appel.call_count == 2
+        verdicts = [json.loads(appel.call_args_list[rang].kwargs["historique"][-1]["content"]) for rang in (1, 2)]
+        assert "non_repris_dans_tes_appels" in verdicts[0]
+        assert "non_repris_dans_tes_appels" not in verdicts[1]
 
     def test_inc018_un_doute_tardif_n_annule_pas_ce_qui_est_compris(self):
         """Faux positif possible (« dans 3 jours ») : le complément ne peut qu'ajouter."""
-        premier = self._tour(AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord", "superficie": 20}))
+        premier = self._tour(AppelOutil("creer_parcelle", {"nom": "planche nord", "superficie_m2": 20}))
         doute = self._tour(AppelOutil("demander_precision", {"question": "Que veux-tu d'autre ?"}))
         with patch.object(passerelle, "appeler_chat_outils", side_effect=[premier, doute]):
             resultat = interpreteur_agent.proposer(self.PHRASE, CTX)
         assert resultat.aiguillage is None and resultat.commande is not None
 
     def test_inc018_un_complement_vide_garde_le_premier_tour(self):
-        premier = self._tour(AppelOutil("parcelle", {"action": "ajouter", "nom": "planche nord", "superficie": 20}))
+        premier = self._tour(AppelOutil("creer_parcelle", {"nom": "planche nord", "superficie_m2": 20}))
         vide = ReponseOutils(texte="", modele="m", appel_type="agent", appels=())
         with patch.object(passerelle, "appeler_chat_outils", side_effect=[premier, vide]):
             resultat = interpreteur_agent.proposer(self.PHRASE, CTX)

@@ -149,7 +149,17 @@ class TestInterpreteur:
     ):
         _mode(monkeypatch, "actif")
         modele.side_effect = passerelle.FournisseurLLMIndisponibleError("panne")
-        assert interp.interpreter("la planche nord a maintenant 6 rangs", CTX) is None
+        assert interp.interpreter("la planche nord est belle aujourd'hui", CTX) is None
+
+    def test_inc018_une_caracteristique_declaree_recoit_sa_proposition(
+        self, monkeypatch, modele, parcelles_connues, ancien_repli_muet
+    ):
+        """[US-278 / CA8] Agent en panne : le filet propose ce que la déclaration dit."""
+        _mode(monkeypatch, "actif")
+        modele.side_effect = passerelle.FournisseurLLMIndisponibleError("panne")
+        resultat = interp.interpreter("la planche nord a maintenant 6 rangs", CTX)
+        assert resultat.proposition.commande_equivalente().endswith("rangs=6")
+        assert resultat.proposition.regle == interp.REGLE_FILET_FICHE
 
     @pytest.mark.parametrize("mode", ["off", "ombre"])
     def test_inc018_hors_mode_actif_rien_ne_change(

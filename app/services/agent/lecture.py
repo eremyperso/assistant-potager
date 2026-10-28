@@ -26,7 +26,7 @@ NB_RESULTATS_MAX = 30
 
 
 def _parcelle_en_donnee(parcelle) -> dict:
-    """Le nom et les champs typés de l'outil `parcelle_modifier`, renseignés —
+    """Le nom et les champs typés de l'outil `modifier_parcelle`, renseignés —
     les mêmes que le modèle peut modifier, projetés de la même source : aucune
     liste de champs n'est tenue ici, et aucun n'y est calculé."""
     donnee = {"nom": parcelle.nom}

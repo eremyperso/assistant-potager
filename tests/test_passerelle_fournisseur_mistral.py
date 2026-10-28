@@ -17,7 +17,7 @@ from llm.passerelle import LLMIndisponibleError, TYPE_AGENT, TYPE_CLASSIFICATION
 
 CTX = TenantContext(user_id=7, potager_id=3, role="owner")
 OUTILS = [{"type": "function", "function": {
-    "name": "parcelle_modifier", "description": "x",
+    "name": "modifier_parcelle", "description": "x",
     "parameters": {"type": "object", "properties": {"parcelle": {"type": "string"}}},
 }}]
 MODELE = "mistral/ministral-3b-latest"
@@ -45,7 +45,7 @@ def mistral():
     """Client Mistral simulé, Groq simulé à côté pour vérifier qu'il n'est pas touché."""
     faux_mistral, faux_groq = MagicMock(), MagicMock()
     faux_mistral.chat.completions.create.return_value = _reponse(
-        [("parcelle_modifier", '{"parcelle": "serre"}')]
+        [("modifier_parcelle", '{"parcelle": "serre"}')]
     )
     with patch.dict(passerelle.GROQ_MODELE_PAR_TYPE, {TYPE_AGENT: MODELE, TYPE_CLASSIFICATION: MODELE}), \
          patch("llm.passerelle.MISTRAL_API_KEY", "cle-de-test"), \
@@ -71,10 +71,10 @@ class TestRoutage:
         kwargs = mistral.mistral.chat.completions.create.call_args.kwargs
         assert kwargs["model"] == "ministral-3b-latest"
         assert reponse.modele == MODELE, "la mesure garde le préfixe : elle dit qui a servi"
-        assert reponse.appels[0].nom == "parcelle_modifier"
+        assert reponse.appels[0].nom == "modifier_parcelle"
 
     def test_un_modele_groq_reste_chez_groq_inchange(self, mistral):
-        mistral.groq.chat.completions.create.return_value = _reponse([("parcelle_modifier", "{}")])
+        mistral.groq.chat.completions.create.return_value = _reponse([("modifier_parcelle", "{}")])
         with patch.dict(passerelle.GROQ_MODELE_PAR_TYPE, {TYPE_AGENT: "openai/gpt-oss-120b"}):
             passerelle.appeler_chat_outils(
                 ctx=CTX, outils=OUTILS, prompt_fixe="consignes", message_utilisateur="phrase",

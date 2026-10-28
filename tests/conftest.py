@@ -13,6 +13,15 @@ from database.db import Base
 
 
 @pytest.fixture(autouse=True)
+def _sans_accueil_du_compagnon(monkeypatch):
+    """[US-258] L'accueil du premier échange (message de plus) a ses propres tests ;
+    les autres tests de l'agent lisent LA réponse, pas l'accueil qui la suit."""
+    from unittest.mock import AsyncMock
+    from app.bot import interpretation
+    monkeypatch.setattr(interpretation, "accueil_premier_contact", AsyncMock())
+
+
+@pytest.fixture(autouse=True)
 def _cache_previsions_meteo_vide():
     """[US-182] Le cache météo vit dans la mémoire du processus : chaque test
     part d'un cache vide, sinon une prévision mise en cache par un test serait

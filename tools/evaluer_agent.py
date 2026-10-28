@@ -22,6 +22,12 @@ Ce qui est mesuré, par catégorie de phrases (`tests/corpus/us233_agent_echanti
   ambiguës, jamais une commande complétée par supposition ;
 * **latence** p50 / p95, **jetons** moyens par phrase et part servie par le cache.
 
+[US-257] L'agent converse : `tool_choice="auto"`, une question ou un doute se disent en
+texte (pseudo-attendu `texte` de l'échantillon : aucun appel, ou aucun qui écrive), ce
+que l'application ne sait pas faire par le signal `manque_catalogue`. Ce script en mesure
+le PREMIER tour, sur des phrases isolées ; la mesure de livraison, en plusieurs tours et
+par la cascade du bot, est `tools/evaluer_dialogues.py`.
+
 [INC-018] La mesure porte sur ce qui est LIVRÉ : `interpreteur_agent.PROMPT_FIXE` et
 `catalogue_outils.schemas()` (le catalogue généré depuis `FORMES_DICTABLES`), pas
 sur une copie. Un prompt ou un schéma retouché se remesure ici, sur le vrai modèle,
@@ -77,6 +83,7 @@ except (AttributeError, OSError):  # flux redirigé qui ne le supporte pas
 from unidecode import unidecode  # noqa: E402
 
 from app.services.agent import catalogue_outils, interpreteur_agent  # noqa: E402
+from app.services.agent.projection import projection_pour  # noqa: E402
 from app.services.context import TenantContext, default_context  # noqa: E402
 from llm import passerelle  # noqa: E402
 
@@ -98,8 +105,10 @@ PARCELLES_DU_POTAGER = (
 #: étant l'affaire du validateur d'US-235. Les autres textes sont comparés à égalité.
 CHAMPS_ENTITE_EXISTANTE = frozenset({"parcelle", "ancien"})
 
-#: Outils de l'architecture §3.3 qui ne sont pas des commandes : ils aiguillent.
-OUTILS_TERMINAUX = ("poser_question", "saisir_geste", "demander_precision", "hors_perimetre")
+#: Outils de l'architecture §3.3 qui ne sont pas des commandes : ils aiguillent ou signalent.
+OUTILS_TERMINAUX = (*catalogue_outils.OUTILS_TERMINAUX, catalogue_outils.OUTIL_MANQUE_CATALOGUE)
+#: [US-257] Une réponse en texte : aucun appel, ou aucun qui écrive.
+PSEUDO_TEXTE = "texte"
 
 #: Catégories qui relèvent de l'aiguillage (US-236), pas de la compréhension d'une commande.
 CATEGORIES_AIGUILLAGE = ("question", "geste", "hors_perimetre")
@@ -224,6 +233,12 @@ def _sequence_ok(attendu: tuple[str, ...], appels: tuple) -> bool:
 
 def noter(phrase: Phrase, appels: tuple, statut: str) -> Notes:
     """Note UNE réponse. `appels` : les `AppelOutil` de la passerelle."""
+    if PSEUDO_TEXTE in phrase.outils_attendus and statut == passerelle.STATUT_OK and all(
+        a.nom in (catalogue_outils.OUTIL_LIRE, catalogue_outils.OUTIL_CONSULTER, catalogue_outils.OUTIL_MANQUE_CATALOGUE)
+        for a in appels
+    ):
+        # [US-257] Répondre en texte, sans écriture, est la réponse attendue.
+        return Notes(True, None, (), False, False, False)
     echec = (statut != passerelle.STATUT_OK or not appels
              or any(not a.arguments_valides for a in appels))
     premier = appels[0] if appels else None
@@ -246,8 +261,8 @@ def noter(phrase: Phrase, appels: tuple, statut: str) -> Notes:
                 cle for cle, valeur in arguments.items()
                 if cle not in phrase.parametres and valeur not in (None, "")
             ))
-    destructif = (any(a.nom == "parcelle_supprimer" for a in appels)
-                  and "parcelle_supprimer" not in phrase.outils_attendus)
+    destructif = (any(a.nom == "supprimer_parcelle" for a in appels)
+                  and "supprimer_parcelle" not in phrase.outils_attendus)
     return Notes(
         outil_ok, parametres_ok, en_trop,
         # Une séquence attendue n'est pas un défaut : plusieurs appels sont l'attendu.
@@ -500,10 +515,11 @@ def appeler_agent(ctx: TenantContext, phrase: str, *, reasoning: bool = True):
     for tour in range(1, interpreteur_agent._max_tours() + 1):
         arguments = dict(
             ctx=ctx,
-            outils=catalogue_outils.schemas(),
+            outils=catalogue_outils.schemas(projection_pour(phrase)),   # [US-276] comme le bot
             prompt_fixe=PROMPT_FIXE,
             prompt_variable=prompt_variable(),
             message_utilisateur=phrase,
+            tool_choice="auto",   # [US-257] l'agent peut répondre en texte
             reasoning=reasoning,
         )
         if historique:
@@ -640,7 +656,7 @@ def rediger_rapport(
         "les créations, phrases à plusieurs actions, conseils et doutes d'INC-018 (source `inc018`).",
         f"- **Catalogue d'outils** : celui livré (`catalogue_outils.schemas()`), {len(NOMS_OUTILS)} outils "
         f"({', '.join(NOMS_OUTILS)}), champs facultatifs nullables.",
-        "- **Chemin** : `llm.passerelle.appeler_chat_outils`, `tool_choice=\"required\"`, une seule tentative "
+        "- **Chemin** : `llm.passerelle.appeler_chat_outils`, `tool_choice=\"auto\"`, une seule tentative "
         "de la passerelle sur 429 (puis attente et nouvel essai par l'outil, dénombrés ci-dessous).",
         "- **Prompt** : `interpreteur_agent.PROMPT_FIXE`, tel que livré, **non ajusté sur ces résultats**.",
         "- **Notation** : bon outil = premier outil appelé ; bons paramètres = chaque paramètre attendu juste "
@@ -707,10 +723,12 @@ def rediger_rapport(
 # ═════════════════════════════════════════════════════════════════════════════
 # Programme
 # ═════════════════════════════════════════════════════════════════════════════
-def estimer_jetons_entree() -> int:
+def estimer_jetons_entree(projection: str = catalogue_outils.PROJECTION_COMPLETE) -> int:
     """Ordre de grandeur du préfixe fixe, sans appel : ≈ 5 caractères par jeton,
-    calibré sur la mesure du 21/10/2026 (977 jetons mesurés pour ≈ 4 960 caractères)."""
-    return int((len(json.dumps(catalogue_outils.schemas(), ensure_ascii=False)) + len(PROMPT_FIXE)) / 5.0)
+    calibré sur la mesure du 21/10/2026 (977 jetons mesurés pour ≈ 4 960 caractères).
+    [US-276] Par projection du catalogue : le complet par défaut."""
+    schemas = catalogue_outils.schemas(projection)
+    return int((len(json.dumps(schemas, ensure_ascii=False)) + len(PROMPT_FIXE)) / 5.0)
 
 
 def plan(echantillon: list[Phrase], modeles: list[str]) -> str:

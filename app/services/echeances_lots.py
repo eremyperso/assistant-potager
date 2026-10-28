@@ -792,7 +792,7 @@ def _graines_en_levee(lot: dict) -> int:
     """[CA2] Graines non soldées : ni repiquées, ni soldées par une clôture (déjà hors
     de `graines_restantes`), ni par une levée terminée — les non-levées d'une levée
     terminée ne lèveront plus, seuls les levés restent à repiquer."""
-    return max(0, graines_restantes(lot) - int(lot.get("graines_non_levees_soldees") or 0))
+    return graines_restantes(lot)   # les non-levées d'une levée terminée en sont déjà déduites
 
 
 def _semis_sans_quantite(lot: dict) -> bool:

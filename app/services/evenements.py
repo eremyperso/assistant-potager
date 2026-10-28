@@ -826,9 +826,9 @@ def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
     récapitulatif) et `_lot_levee` (graines semées, comptage précédent, taux, moyenne de
     la culture). Retourne le lot.
 
-    Les incohérences sont SIGNALÉES, jamais corrigées : un « sur 48 » qui ne correspond
-    pas aux graines semées du lot, ou plus de levés que de graines, laissent le nombre
-    dicté tel quel (comme l'incohérence de lot d'US-065).
+    Un « sur 48 » qui ne correspond pas aux graines semées du lot est SIGNALÉ, jamais
+    corrigé (comme l'incohérence de lot d'US-065). Plus de levés que de graines semées est
+    en revanche REFUSÉ : le taux de levée et les ratios en aval n'ont plus de sens.
 
     Lève `LeveeHorsPepiniereError` quand aucun lot de pépinière ne correspond à la
     culture dite (semis en pleine terre), `LeveeRefuseeError` pour un lot clôturé ou sans
@@ -861,9 +861,9 @@ def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
             "Je garde votre nombre de levés tel quel : vérifiez."
         )
     if leves is not None and graines > 0 and leves > graines:
-        alertes.append(
-            f"⚠️ {leves} levés pour {graines} graines semées : c'est impossible. "
-            "Je le garde tel quel, à vérifier."
+        raise LeveeRefuseeError(
+            f"{leves} levés pour {graines} graines semées : c'est impossible. "
+            f"Comptez au plus {graines}."
         )
 
     parsed["origine_graines_id"] = lot["semis_id"]
@@ -1977,7 +1977,9 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     if origine_graines_id is not None:
         lot_parent = lot_pepiniere_par_semis(db, origine_graines_id, potager_id=ctx.potager_id)
         if lot_parent and lot_parent["graines_semees"] > 0 and graines_demandees > 0:
-            restantes = graines_restantes(lot_parent)   # [US-212] jamais « en germination » : une levée terminée la ramène à 0
+            # [US-212] jamais « en germination » : une levée terminée la ramène à 0. Les non-levées
+            # qu'elle a soldées restent comptées : « 40 plants sur 48 » les solde avec les levés.
+            restantes = graines_restantes(lot_parent) + int(lot_parent.get("graines_non_levees_soldees") or 0)
             if graines_demandees > restantes:
                 log.warning(
                     "[fix garde-fou graines du lot] Refus : %d graines demandées sur le lot #%s "

@@ -34,6 +34,11 @@ def _reponse(*appels: AppelOutil, statut: str = passerelle.STATUT_OK) -> Reponse
                          latence_ms=400, appels=appels, statut=statut)
 
 
+def _texte(texte: str) -> ReponseOutils:
+    """[US-257] Le tour où le modèle répond en texte, sans outil : il clôt la boucle."""
+    return ReponseOutils(texte=texte, modele="test", appel_type=passerelle.TYPE_AGENT, latence_ms=400)
+
+
 def _pour_l_agent(phrase: str, ctx=None) -> bool:
     """La détection telle qu'`interpreter` l'appelle : avec la lecture des règles."""
     return interp.phrase_pour_l_agent(phrase, ctx, interp.reconnaitre_par_regles(phrase))
@@ -129,22 +134,28 @@ class TestInterpreteur:
 
     def test_us277_ca1_l_agent_recoit_la_phrase_composee(self, monkeypatch, modele, parcelles_connues):
         _mode(monkeypatch, "actif")
-        modele.return_value = _reponse(
-            AppelOutil("parcelle", {"action": "renommer", "ancien": "Planche Sud", "nouveau": "planche des courges"}))
+        # [US-257] Le modèle propose, lit le verdict, puis répond en texte : deux appels.
+        modele.side_effect = [
+            _reponse(AppelOutil("renommer_parcelle", {"ancien": "Planche Sud", "nouveau": "planche des courges"})),
+            _texte("Je te propose de renommer la Planche Sud."),
+        ]
         resultat = interp.interpreter(RENOMME_ET_SUPPRIME, CTX)
-        assert modele.call_count == 1
-        assert resultat.valeurs.get("nouveau") != "planche des courges et supprime la planche nord"
+        assert modele.call_count == 2
+        assert resultat.proposition.valeurs.get("nouveau") != "planche des courges et supprime la planche nord"
 
     def test_us277_ca2_la_negation_va_a_l_agent_sans_passer_par_le_filtre_des_gestes(
         self, monkeypatch, modele, parcelles_connues
     ):
         """« paillée » est un mot de geste : la phrase n'est pas pour autant un geste, les règles y ont vu une commande."""
         _mode(monkeypatch, "actif")
-        modele.return_value = _reponse(AppelOutil("parcelle_modifier", {"parcelle": "Planche Sud", "paillage": False}))
+        modele.side_effect = [
+            _reponse(AppelOutil("modifier_parcelle", {"parcelle": "Planche Sud", "paillage": False})),
+            _texte("Je te propose de retirer le paillage de la Planche Sud."),
+        ]
         resultat = interp.interpreter(PLUS_PAILLEE, CTX)
-        assert modele.call_count == 1
-        assert isinstance(resultat, interp.CommandeInterpretee)
-        assert "oui" not in resultat.valeurs.get("modification", "")
+        assert modele.call_count == 2
+        assert isinstance(resultat.proposition, interp.CommandeInterpretee)
+        assert "oui" not in resultat.proposition.valeurs.get("modification", "")
 
     def test_us277_ca4_une_phrase_simple_n_appelle_aucun_modele(self, monkeypatch, modele, parcelles_connues):
         _mode(monkeypatch, "actif")

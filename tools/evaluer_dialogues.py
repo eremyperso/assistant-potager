@@ -81,7 +81,7 @@ from app.services import interpreteur_commandes  # noqa: E402
 from app.services.agent import catalogue_outils, contexte_court, interpreteur_agent, lecture  # noqa: E402
 from app.services.context import TenantContext, default_context  # noqa: E402
 from app.services.interpreteur_commandes import (  # noqa: E402
-    VERS_GESTE, Aiguillage, Ambiguite, CommandeInterpretee, Plan,
+    VERS_GESTE, VERS_QUESTION, Aiguillage, Ambiguite, CommandeInterpretee, Plan, ReponseAgent,
 )
 from llm import passerelle  # noqa: E402
 from tools import evaluer_agent as ev  # noqa: E402
@@ -104,14 +104,13 @@ VOLUMES = (("régime stable", 50), ("mois de découverte", 200))
 
 CLICS = ("Confirmer", "Annuler", "Corriger", "Tout confirmer")
 PSEUDO_AUCUNE_ECRITURE = "aucune_ecriture"
+#: [US-257] Une réponse en texte (une question, une explication), sans aucune écriture.
+PSEUDO_TEXTE = "texte"
 
 #: Ce qui ne modifie rien. Tout autre nom d'outil — y compris un nom inconnu — est une écriture.
 OUTILS_SANS_ECRITURE = frozenset({
-    catalogue_outils.OUTIL_LIRE, catalogue_outils.OUTIL_CONSULTER,
-    "poser_question", "demander_precision", "hors_perimetre",
+    catalogue_outils.OUTIL_LIRE, catalogue_outils.OUTIL_CONSULTER, catalogue_outils.OUTIL_MANQUE_CATALOGUE,
 })
-#: Outils dont le texte est lu tel quel par le jardinier.
-OUTILS_A_TEXTE = ("demander_precision", "hors_perimetre", "poser_question")
 
 #: Couperet « 0 texte qui annonce une action non exécutée » (§12.10) : rien n'est jamais
 #: exécuté pendant la mesure, donc toute annonce d'un fait accompli est fausse.
@@ -141,9 +140,11 @@ COUPERETS_JARDINIER = {
 CHEMIN_AGENT = "agent"
 CHEMIN_REGLES = "règles"
 CHEMIN_SAVOIR = "garde de savoir"
+#: [US-257] Une phrase interrogative va à la cascade des questions, sans appel au modèle.
+CHEMIN_QUESTIONS = "cascade des questions"
 CHEMIN_GESTES = "parseur de gestes"
 OUTIL_GESTE = "saisir_geste"
-OUTIL_SUPPRIMER = "parcelle_supprimer"
+OUTIL_SUPPRIMER = "supprimer_parcelle"
 
 #: Ordre et libellés des catégories (CA2).
 CATEGORIES = {
@@ -156,6 +157,8 @@ CATEGORIES = {
     "conversation_simple": "Conversation simple",
     "hors_catalogue": "Hors catalogue",
     "registres": "Registres et prénom",
+    # [US-278] Retours de terrain du 28/10/2026 : la même phrase, quatre résultats.
+    "caracteristiques": "Caractéristiques d'une parcelle",
 }
 
 #: CA6 — pour chaque catégorie, l'ALLÈGEMENT du §4.5 du cadrage qui la corrigerait.
@@ -205,6 +208,11 @@ ALLEGEMENTS = {
         "Faits fournis par le code, rédaction par gabarit en secours (US-258, US-264)",
         "Le modèle reçoit des faits triés et chiffrés ; si la rédaction dérape (dose, produit, fait "
         "inventé), le gabarit du code part à sa place.",
+    ),
+    "caracteristiques": (
+        "Filet des caractéristiques de parcelle (US-278)",
+        "Quand l'agent ne propose aucune écriture, le code lit la parcelle désignée et les valeurs de "
+        "fiche (vocabulaire fermé) et propose lui-même la modification ; un nom mal dit est proposé au choix.",
     ),
 }
 
@@ -344,12 +352,8 @@ def _outils_nommes(attendu: Attendu) -> set[str]:
 
 
 def textes_du_jardinier(reponses: list, appels: tuple) -> list[str]:
-    """Tout ce que le jardinier lirait : le texte de chaque outil de réponse, et le texte libre du modèle."""
-    textes = [r.texte for r in reponses if getattr(r, "texte", "")]
-    for appel in appels:
-        if appel.nom in OUTILS_A_TEXTE:
-            textes += [v for v in appel.arguments.values() if isinstance(v, str)]
-    return textes
+    """Ce que le modèle a écrit, avant le contrôle des annonces (US-257) : le texte libre de chaque tour."""
+    return [r.texte for r in reponses if getattr(r, "texte", "")]
 
 
 def noter_tour(dialogue: Dialogue, attendu: Attendu, phrase: str, appels: tuple, statut: str) -> ev.Notes:
@@ -357,11 +361,13 @@ def noter_tour(dialogue: Dialogue, attendu: Attendu, phrase: str, appels: tuple,
     modele = ev.Phrase(phrase, dialogue.categorie, attendu.outils, attendu.parametres, dialogue.source)
     notes = ev.noter(modele, appels, statut)
     nommes = _outils_nommes(attendu)
-    # `noter` compare à l'égalité : « parcelle+parcelle_supprimer » n'y contient pas la suppression demandée.
+    # `noter` compare à l'égalité : « parcelle+supprimer_parcelle » n'y contient pas la suppression demandée.
     notes = replace(notes, destructif_errone=any(a.nom == OUTIL_SUPPRIMER for a in appels)
                     and OUTIL_SUPPRIMER not in nommes)
-    if PSEUDO_AUCUNE_ECRITURE in attendu.outils and appels and not any(est_ecriture(a.nom) for a in appels):
-        notes = replace(notes, outil_ok=True)
+    sans_ecriture = statut == passerelle.STATUT_OK and not any(est_ecriture(a.nom) for a in appels)
+    if sans_ecriture and ({PSEUDO_AUCUNE_ECRITURE, PSEUDO_TEXTE} & set(attendu.outils)):
+        # [US-257] Répondre en texte, sans aucun appel, est la réponse attendue.
+        notes = replace(notes, outil_ok=True, echec_technique=False)
     return notes
 
 
@@ -399,6 +405,10 @@ def vu_par_le_jardinier(resultat, chemin: str) -> tuple[tuple[str, ...], list[st
     """Ce que la cascade met devant le jardinier : les outils équivalents de ce qu'on lui
     propose de confirmer, et les textes qu'il lit. Une phrase rendue au parseur de gestes
     y devient un geste : c'est ce qu'il verra."""
+    if isinstance(resultat, ReponseAgent):
+        # [US-257] Le texte de l'agent après le contrôle des annonces, et sa proposition.
+        noms, _ = vu_par_le_jardinier(resultat.proposition, chemin)
+        return noms, [resultat.texte]
     if isinstance(resultat, Plan):
         return tuple(outil_de_forme(e.forme) for e in resultat.etapes), []
     if isinstance(resultat, CommandeInterpretee):
@@ -443,6 +453,8 @@ class ResultatTour:
     quotas: int = 0
     chemin: str = CHEMIN_AGENT
     couperets_jardinier: tuple[str, ...] = ()
+    #: [US-257] Le texte de l'agent lu par le jardinier (vide hors réponse de l'agent).
+    texte: str = ""
 
     @property
     def livre(self) -> bool:
@@ -522,6 +534,8 @@ class Cascade:
         à la cascade est une question de savoir ou une saisie de geste."""
         if self.agent is not None:
             return CHEMIN_AGENT
+        if isinstance(resultat, Aiguillage) and resultat.vers == VERS_QUESTION:
+            return CHEMIN_QUESTIONS
         if resultat is not None:
             return CHEMIN_REGLES
         return CHEMIN_SAVOIR if self.savoir else CHEMIN_GESTES
@@ -535,7 +549,7 @@ def cascade_de_production(cascade: Cascade) -> Iterator[None]:
 
     with patch.object(config, "AGENT_MODE", "actif"), \
          patch.object(interpreteur_agent, "proposer", cascade.proposer), \
-         patch.object(interpreteur_agent, "persister_aiguillage", lambda *a, **k: None), \
+         patch.object(interpreteur_agent, "persister_reponse", lambda *a, **k: None), \
          patch.object(interpreteur_commandes, "_est_demande_de_savoir", cascade.est_demande_de_savoir), \
          patch.object(interpreteur_commandes, "_appeler_modele", lambda *a, **k: None):
         yield
@@ -555,6 +569,11 @@ def potager_fictif() -> Iterator[None]:
 def _decrire_vu(resultat, chemin: str) -> str:
     """Ce que le jardinier verrait : la proposition validée, la question, le refus, ou
     la suite de la cascade."""
+    if isinstance(resultat, ReponseAgent):
+        texte = f"« {resultat.texte} »" if resultat.texte else "(récapitulatif seul)"
+        if resultat.proposition is None:
+            return texte
+        return f"{texte} + {_decrire_vu(resultat.proposition, chemin)}"
     if isinstance(resultat, Plan):
         return "plan : " + " ; ".join(e.commande_equivalente() for e in resultat.etapes)
     if isinstance(resultat, CommandeInterpretee):
@@ -565,6 +584,11 @@ def _decrire_vu(resultat, chemin: str) -> str:
         return f"{resultat.vers} : {resultat.message or ''}".strip(" :")
     return {CHEMIN_GESTES: "parseur de gestes", CHEMIN_SAVOIR: "réponse de savoir"}.get(
         chemin, "routeur par mots-clés")
+
+
+def texte_au_jardinier(resultat) -> str:
+    """[US-257] Le texte rédigé par l'agent que le jardinier lit, à noter pour le naturel."""
+    return resultat.texte if isinstance(resultat, ReponseAgent) else ""
 
 
 def jouer_tour(
@@ -606,20 +630,22 @@ def jouer_tour(
     notes = noter_tour(dialogue, tour.attendu, tour.jardinier, appels, statut)
     couperets = couperets_du_tour(tour.attendu, appels, textes_du_jardinier(reponses, appels), notes)
 
-    proposition = resultat if isinstance(resultat, (Plan, CommandeInterpretee)) else None
+    proposition = resultat.proposition if isinstance(resultat, ReponseAgent) else resultat
+    proposition = proposition if isinstance(proposition, (Plan, CommandeInterpretee)) else None
     instant = time.time()
     if proposition is not None:
         etat.en_attente, etat.instant = proposition, instant
     else:
         etat.en_attente = None
-    retenu = proposition or (resultat if isinstance(resultat, Aiguillage) else None)
+    retenu = resultat if isinstance(resultat, ReponseAgent) else (
+        proposition or (resultat if isinstance(resultat, Aiguillage) else None))
     if retenu is not None:
         contexte_court.noter_resultat(ctx, retenu, instant)
 
     return ResultatTour(
         dialogue=dialogue.id, categorie=dialogue.categorie, rang=rang, phrase=tour.jardinier,
         attendu=tour.attendu, statut=statut, appels=appels, vu=_decrire_vu(resultat, chemin), notes=notes,
-        couperets=couperets, chemin=chemin,
+        couperets=couperets, chemin=chemin, texte=texte_au_jardinier(resultat),
         couperets_jardinier=couperets_au_jardinier(tour.attendu, resultat, chemin),
         latence_ms=sum(int(r.latence_ms or 0) for r in reponses),
         tokens_in=sum(int(r.tokens_in or 0) for r in reponses),
@@ -810,8 +836,12 @@ def _cellule(texte: str) -> str:
     return str(texte).replace("|", "/").replace("\n", " ")
 
 
+TITRE_RAPPORT = "US-256 — Le compagnon sur Ministral 3B, mesuré en plusieurs tours"
+
+
 def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, tarifs: dict,
-                    cle_distincte: bool = True, jour: Optional[date] = None) -> str:
+                    cle_distincte: bool = True, jour: Optional[date] = None,
+                    titre: str = TITRE_RAPPORT) -> str:
     jour = jour or date.today()
     tours_ref = evaluations[reference]
     bilans = par_categorie(tours_ref)
@@ -826,7 +856,7 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
         chemins[t.chemin] += 1
 
     sortie = [
-        "# US-256 — Le compagnon sur Ministral 3B, mesuré en plusieurs tours",
+        f"# {titre}",
         "",
         f"*Généré par `tools/evaluer_dialogues.py` le {jour.isoformat()}. Référence : `{reference}`. "
         f"Clé de mesure distincte de celle du bot : {'oui' if cle_distincte else 'NON'}. "
@@ -837,7 +867,8 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
         "(outil ou mémoire) : ils sont mesurés et listés, mais exclus des taux du catalogue livré.",
         "",
         "**Chemin en production** : " + ", ".join(
-            f"{chemins[c]} par {c}" for c in (CHEMIN_AGENT, CHEMIN_REGLES, CHEMIN_GESTES, CHEMIN_SAVOIR)
+            f"{chemins[c]} par {c}"
+            for c in (CHEMIN_AGENT, CHEMIN_REGLES, CHEMIN_GESTES, CHEMIN_SAVOIR, CHEMIN_QUESTIONS)
             if chemins[c]
         ) + f". Les {len(total.hors_agent)} tours que la cascade prend avant l'agent ne jugent pas le "
         "modèle : ils sont exclus des taux, mais leurs couperets au jardinier comptent.",
@@ -960,6 +991,14 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
                "(ou pas encore) de jetons en cache dans `usage.prompt_tokens_details` : le préfixe fixe "
                "(prompt + catalogue) est alors facturé plein tarif à chaque appel.", ""]
 
+    textes = [t for t in tours_ref if t.texte]
+    sortie += [f"## Naturel — les textes de l'agent, à noter de 1 à 3 — `{reference}`", "",
+               "Critère du lot 1 : ≥ 2,5/3 sur 30 dialogues relus (1 « figé », 2 « correct », 3 « naturel »). "
+               f"{len(textes)} texte(s) dans cette mesure. La note est humaine : la colonne est à remplir.", "",
+               "| Dialogue | Tour | Phrase | Texte lu par le jardinier | Note |", "|---|---:|---|---|---:|"]
+    sortie += [f"| {t.dialogue} | {t.rang} | {_cellule(t.phrase)} | {_cellule(t.texte)} | |" for t in textes]
+    sortie += [""]
+
     sortie += [f"## Tours à relire — `{reference}`", "",
                "| Dialogue | Tour | Phrase | Chemin | Attendu | Obtenu du modèle | Vu par le jardinier | "
                "Couperets (modèle) | Couperets (jardinier) |",
@@ -995,6 +1034,10 @@ def plan(dialogues: list[Dialogue], modeles: list[str]) -> str:
         f"  • appels         : un par tour confié à l'agent et par modèle (au plus {len(avec_modele) * len(modeles)}), plus les tours de lecture",
         f"  • jetons d'entrée: ≈ {ev.estimer_jetons_entree()} par appel, soit ≈ "
         f"{ev.estimer_jetons_entree() * len(avec_modele) * len(modeles):,} au total".replace(",", " "),
+        # [US-276 / CA5] Le catalogue est projeté selon la phrase : le préfixe dépend de la projection.
+        "  • par projection: " + ", ".join(
+            f"{p} ≈ {ev.estimer_jetons_entree(p)}" for p in catalogue_outils.PROJECTIONS
+        ),
     ])
 
 
@@ -1009,6 +1052,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--tarifs", type=Path, help="grille tarifaire JSON confirmée (même forme que TARIFS_RELEVES)")
     parser.add_argument("--detail", action="store_true", help="chaque tour, son attendu et son obtenu")
     parser.add_argument("--rapport", type=Path, default=RAPPORT, help="fichier du rapport markdown")
+    parser.add_argument("--titre", default=TITRE_RAPPORT, help="titre du rapport")
     parser.add_argument("--sans-rapport", action="store_true", help="n'écrit aucun fichier")
     args = parser.parse_args(argv)
 
@@ -1056,7 +1100,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT] = modele_initial
         passerelle.reinitialiser_capacites_outils()
 
-    rapport = rediger_rapport(evaluations, modeles[0], tarifs)
+    rapport = rediger_rapport(evaluations, modeles[0], tarifs, titre=args.titre)
     if args.sans_rapport:
         print("\n" + rapport)
     else:

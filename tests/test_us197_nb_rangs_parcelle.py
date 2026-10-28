@@ -155,7 +155,7 @@ def test_us197_ca3_recapitulatif_nomme_les_rangs() -> None:
     resultat = interp.interpreter("la planche nord a 5 rangs", autoriser_modele=False)
     recap = interp.recapitulatif(resultat)
     assert "nombre de rangs" in recap
-    assert "cinq" in recap  # [US-172 / CA11] tout nombre est relu en toutes lettres
+    assert "*5*" in recap and "cinq" not in recap  # chiffré, sans rappel en lettres (28/10/2026)
     assert "rangs=5" in recap  # la commande équivalente, pour l'apprendre
 
 
@@ -357,6 +357,9 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
         # l'API vers ceux du point d'ecriture du domaine. Il ne calcule rien.
         Path("app/services/parcelles.py"),
         Path("app/api/main.py"),
+        # [US-278] Le filet des caractéristiques LIT la valeur dictée pour la proposer ;
+        # il ne calcule rien, l'écriture reste celle de `/parcelle modifier`.
+        Path("app/services/agent/filet_fiche.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

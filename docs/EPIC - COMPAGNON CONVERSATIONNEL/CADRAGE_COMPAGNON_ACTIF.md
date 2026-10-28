@@ -2,8 +2,8 @@
 
 > **Statut** : cadrage du 27/10/2026. Aucun code n'a été modifié. **US créées le
 > 27/10/2026 dans `backlog/` (US-256 à US-275, puis US-276 et US-277 après la
-> première mesure)**, réparties en trois épics, avec le modèle et l'effort de production
-> de chacune (§6). Tickets Jira à créer. **Ordre d'implémentation : §6.5.**
+> première mesure, et US-278 le 28/10 après les retours de terrain sur US-257)**, réparties en trois épics, avec le modèle et l'effort de production
+> de chacune (§6). Tickets Jira à créer (US-278 : PIA-254, créé le 28/10). **Ordre d'implémentation : §6.5.**
 > **Vérifié sur** : la branche `epic-13-agent-interpreteur` (commit 68683cb,
 > v3.101.0, plus l'arbre de travail du 27/10).
 > **S'appuie sur** :
@@ -368,6 +368,7 @@ tâche du modèle :
 | Calculer une date, un délai, une suite logique | Calculés par le code (référentiel, `echeances_lots`, rotation) et donnés au modèle comme des faits à dire |
 | Émettre plusieurs écritures dans une réponse (US-250) | La boucle redonne un tour quand une partie de la phrase n'est reprise par aucun appel (`chiffres_non_repris`, étendu aux mots d'action). On demande plusieurs tours, pas un modèle plus gros |
 | Se tromper d'argument | Le verdict du validateur revient au modèle, qui se corrige (§12.4) |
+| Retrouver la parcelle et les valeurs d'une phrase de caractéristiques (« ma planche tubercul a 20 m2, 7 m de long, mi-ombre ») | *Ajouté le 28/10/2026 (US-278).* Quand l'agent ne propose aucune écriture, un **filet** du code relit la parcelle désignée et les valeurs de fiche, au vocabulaire fermé, et propose lui-même la modification. Un nom mal dit est proposé au choix. Le filet passe **après** l'agent : les règles ne lisent toujours que les phrases simples (US-277) |
 | Rédiger un message spontané | Le modèle reçoit les faits, déjà triés et chiffrés, et écrit 2 ou 3 phrases. Si la rédaction échoue ou invente un chiffre, le gabarit du code part à sa place |
 
 **Le choix du modèle.**
@@ -496,7 +497,8 @@ dans Telegram, et la PWA (lot 6) vient se brancher sur un moteur déjà rodé :
 ## 6. Découpage en US
 
 > **Fiches créées le 27/10/2026** dans `backlog/` (US-256 à US-275 ; US-276
-> ajoutée le même jour après la mesure US-256). Les
+> ajoutée le même jour après la mesure US-256 ; US-278 ajoutée le 28/10/2026
+> après les retours de terrain sur US-257). Les
 > tickets Jira restent à créer (`python tools/jira_tracker.py create-issue …`).
 > **Renumérotation** : la première version de ce cadrage numérotait à partir
 > d'US-254, mais US-254 (import du référentiel au déploiement) et US-255 (filtre
@@ -512,7 +514,7 @@ estimations sont en points, sur l'échelle du backlog.
 
 | Épic | Ce qu'il livre | US | Points |
 |---|---|---|---|
-| **ÉPIC 13 — Agent interpréteur** (suite du §12) | Le moteur conversationnel : mesure, réponse rédigée, mémoire commune, correction, lectures croisées, compte rendu. Profite d'abord à Telegram | US-256, 257, 259 à 264, 276, 277 | 57 |
+| **ÉPIC 13 — Agent interpréteur** (suite du §12) | Le moteur conversationnel : mesure, réponse rédigée, mémoire commune, correction, lectures croisées, compte rendu. Profite d'abord à Telegram | US-256, 257, 259 à 264, 276 à 278 | 62 |
 | **ÉPIC 14 — Compagnon actif : profil, mémoire et initiative** | Ce qui fait du moteur un compagnon : prénom et registre, carnet, veilleur, messages spontanés, rappels. Telegram d'abord (D11) | US-258, 265 à 268 | 31 |
 | **ÉPIC 15 — Compagnon dans la PWA** | Le branchement du portail sur le même moteur : gestes sans Telegram, API, panneau, proposition à deux fenêtres, mode Extra, ménage, Web Push | US-269 à 275 | 42 (dont 5 facultatifs) |
 
@@ -550,6 +552,7 @@ même au chemin d'écriture.
 | [**US-277**](../../backlog/US-277_regles-laissent-phrases-composees.md) | 13 | Laisser à l'agent les phrases composées ou négatives que les règles déforment | *Ajoutée le 27/10/2026 après la mesure US-256 rejouée par la cascade.* Les règles ne gardent que les phrases simples : une phrase composée, négative ou qui commence par « et » passe à l'agent. Défaut de production indépendant du modèle. Livrée **avant** US-276 | 3 | Sonnet 5.5 | `high` |
 | [**US-276**](../../backlog/US-276_catalogue-allege-projete.md) | 13 | Alléger le catalogue de l'agent et le projeter selon la phrase | *Ajoutée le 27/10/2026 après la mesure US-256.* Outils qui ne se recouvrent plus (`parcelle` / `parcelle_supprimer`, `calendrier` / `consulter`). Le code projette le catalogue avant l'appel : aucune écriture pour une phrase interrogative, aucune suppression sans verbe de destruction. Projections bornées pour garder le cache. Livrée **avant** US-257 | 5 | **Opus 5.5** | `high` |
 | [**US-257**](../../backlog/US-257_compagnon-repond-en-texte.md) | 13 | Laisser le compagnon répondre en texte et poser ses vraies questions | `tool_choice="auto"`, `ReponseAgent`, verdict du validateur renvoyé au modèle, `poser_question` / `demander_precision` / `hors_perimetre` retirés au profit du texte et de `manque_catalogue`. Contrôle déterministe des annonces mensongères. Fin des textes figés dans le bot. **Absorbe US-250** (plusieurs écritures par réponse) | 8 | **Opus 5.5** | `xhigh` |
+| [**US-278**](../../backlog/US-278_filet-caracteristiques-parcelle.md) | 13 | Proposer les caractéristiques d'une parcelle dictées quand l'agent ne propose rien | *Ajoutée le 28/10/2026 après les retours de terrain sur US-257 (Ministral 3B : la même phrase de caractéristiques donne une liste de parcelles, ou un conseil sur les pommes de terre, selon le nom de la planche).* Filet **après** l'agent, sans revenir sur US-277 : quand l'agent ne propose aucune écriture, le code lit lui-même la parcelle désignée et les valeurs de fiche (superficie, longueur, rangs, ensoleillement, exposition) et propose `/parcelle modifier`. Nom mal dit rapproché et proposé au bouton, « Quelle parcelle ? » si rien ne s'en approche. Livrée **après** US-257 | 5 | **Opus 5.5** | `high` |
 | [**US-258**](../../backlog/US-258_prenom-registre-compagnon.md) | 14 | Appeler le jardinier par son prénom et parler à son registre | Profil d'échange, partie 1 : prénom d'usage validé, demandé au premier contact ; registre `sobre` / `voisin` / `gouailleur` ; `/profil` dans le bot. Migration de la table de profil. R10 | 5 | Sonnet 5.5 | `medium` |
 
 #### Lot 2 : il se souvient (ÉPIC 13 ; étape 4 du §12.11, et §16)
@@ -599,7 +602,7 @@ même au chemin d'écriture.
 | [**US-273**](../../backlog/US-273_analyse-approfondie-mode-extra.md) | Analyser le potager en profondeur, sans rien modifier (mode Extra) | Boucle de lecture seule, type d'appel `analyse`, bornes de tours et de jetons, bouton « Approfondir ». R2 vérifiée par test | 8 | Sonnet 5.5 | `high` |
 | [**US-274**](../../backlog/US-274_retirer-ecritures-sans-confirmation.md) | Retirer les chemins d'écriture sans confirmation | `/voice` (ACTION, INTERROGER), `/parse`, `classify_intent_pwa`, dès que `static/` n'en dépend plus (E6) | 3 | Sonnet 5.5 | `medium` |
 
-**Total** : 21 US, 125 points, plus US-275, facultative (5 points). US-251
+**Total** : 22 US, 130 points, plus US-275, facultative (5 points). US-251
 (rapprocher une valeur mal dite) reste à part : elle concerne le validateur et se
 livre à tout moment (Sonnet 5.5, `medium`).
 
@@ -608,11 +611,11 @@ livre à tout moment (Sonnet 5.5, `medium`).
 | Profil | US | Points |
 |---|---|---|
 | **Opus 5.5 · `xhigh`** | US-257, US-259, US-267 | 24 |
-| **Opus 5.5 · `high`** | US-262, US-266, US-269, US-272, US-276 | 34 |
+| **Opus 5.5 · `high`** | US-262, US-266, US-269, US-272, US-276, US-278 | 39 |
 | **Sonnet 5.5 · `high`** | US-256, US-260, US-270, US-271, US-273, US-277 | 34 |
 | **Sonnet 5.5 · `medium`** | US-258, US-261, US-263, US-264, US-265, US-268, US-274 (+ US-275) | 33 (+ 5) |
 
-Opus 5.5 se justifie sur **8 US sur 21** : celles qui portent le chemin
+Opus 5.5 se justifie sur **9 US sur 22** : celles qui portent le chemin
 d'écriture (projection du catalogue, boucle et validateur, propositions atomiques, correction), la
 boucle multi-potager du veilleur, le distributeur, la refactorisation du bot et
 la concurrence entre canaux. Sonnet 5.5 suffit pour les 13 autres.
@@ -632,6 +635,7 @@ ne se livrent qu'avec un rapport US-256 sur le vrai modèle (§7).
 ```mermaid
 flowchart LR
     256 --> 277 --> 276 --> 257 --> 258
+    257 --> 278
     257 --> 259 --> 260
     259 --> 261 --> 262
     257 --> 263 --> 264
@@ -664,6 +668,7 @@ sans lien** avec ce chantier (pépinière, stock). Il faut les livrer d'abord.
 | 1 bis | US-277 | 1 | 📏 PLU-1, PLU-2 et NEG-2 (tour 2) passent par l'agent ; aucune proposition déformée par les règles |
 | 2 | US-276 | 1 | 📏 0 couperet au jardinier sur QUE-3, REG-1, DOU-1, DOU-2, REG-2 ; aucun taux en baisse |
 | 3 | US-257 | 1 | 📏 critère du lot 1 (§7) sur le périmètre de l'agent |
+| 3 bis | US-278 | 1 | *Ajoutée le 28/10/2026, implémentée le même jour (v3.104.0, PIA-254) ; mesure à lancer.* 📏 FIC-1 à FIC-4 (les quatre phrases de caractéristiques du 28/10) en proposition correcte au jardinier ; aucun geste, aucune question ni création pris par le filet |
 | 4 | US-258 | 1 | 📏 critère du lot 1 complet (prénom, registres) |
 | 5 | US-259 | 2 | Tests de consommation atomique ; pas de mesure (aucun changement de modèle) |
 | 6 | US-260 | 2 | 📏 0 destruction confirmée par une phrase |
@@ -693,7 +698,7 @@ des lots 1 à 5. Le corpus s'enrichit à chaque lot.
 
 | Lot | Dialogues du corpus | Critère de sortie |
 |---|---|---|
-| 1 | §12.2 (création INC-018, doute, hors catalogue, échec, « merci »), §1.1, §1.7 | Couperets au jardinier à 0 sur le périmètre de l'agent ; au moins 2 actions sur 2 proposées pour les phrases doubles (US-250) ; naturel ≥ 2,5/3 sur 30 dialogues relus ; même fond en `sobre` et en `gouailleur` |
+| 1 | §12.2 (création INC-018, doute, hors catalogue, échec, « merci »), §1.1, §1.7 ; caractéristiques d'une parcelle FIC-1 à FIC-4 (US-278, retours du 28/10) | Couperets au jardinier à 0 sur le périmètre de l'agent ; au moins 2 actions sur 2 proposées pour les phrases doubles (US-250) ; naturel ≥ 2,5/3 sur 30 dialogues relus ; même fond en `sobre` et en `gouailleur` ; les 4 dialogues FIC en proposition correcte au jardinier, par l'agent ou par le filet |
 | 2 | §12.2 (« non 4 rangs », « elle est plein sud », « vas-y »), §16.1, variantes (« en fait c'était 3 rangs », « annule le dernier semis ») | 0 second geste créé sur une phrase de correction ; 0 confirmation par une phrase pour une destruction ; bonne action désignée ≥ 95 % ; précision demandée quand deux actions sont candidates |
 | 3 | Arrosage (§12.2), §1.5, limaces (§1.7) | Chiffres cités = chiffres lus ; source citée quand le corpus est utilisé ; 0 dose ni produit |
 | 4 | §1.6, injection dans un fait | 0 fait écrit sans confirmation ; injection sans effet |
@@ -726,6 +731,7 @@ le taux sert à comparer deux mesures (avant / après une US), pas à bloquer un
 | La file d'US-224 et les propositions divergent | Une seule table (US-259). Deux magasins d'attente seraient deux moteurs |
 | Le bot est arrêté : la PWA ne peut plus notifier | La PWA garde le panneau et ses cartes. Les notifications Telegram partent au redémarrage, sauf celles qui ont expiré, qui sont consommées sans envoi |
 | Le 3B échoue sur une catégorie (plusieurs actions, désignation, négation) | US-256 avant tout code. On allège d'abord la tâche du modèle (préchargement, catalogue projeté, tour de complément), puis on monte de modèle **pour ce seul type d'appel** si l'échec persiste (§4.5) |
+| Le filet d'US-278 prend une phrase qui n'était pas pour lui (geste, question, création) ou remplace une bonne proposition de l'agent | Il passe après l'agent et seulement quand aucune écriture n'est proposée ; il ne prend ni question, ni création, ni geste (tests de non-régression d'US-278 / CA9) ; il ne fait que proposer, le jardinier confirme. Il ne couvre qu'une famille de phrases au vocabulaire fermé : une autre famille s'ouvre par une US, sur relevé de terrain |
 | On reporte peu à peu sur le modèle ce que le code sait faire | Règle du §4.5 : un délai, une date, une suite ou un seuil se calcule dans le code. Dans le modèle, un calcul est un défaut à corriger |
 
 ---

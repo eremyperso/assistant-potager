@@ -274,6 +274,18 @@ def test_us011bis_strip_culture_hallucinee_conserve_culture_fondee():
     assert result["quantite"] == 2
 
 
+def test_us011bis_strip_culture_hallucinee_conserve_culture_deduite_de_la_variete():
+    """Relevé du 25/10/2026 : « butternut » dictée, le modèle déduit la culture
+    « courge » — retirée, le semis partait sans culture et échouait à l'écriture."""
+    parsed = {"action": "semis", "culture": "courge", "variete": "butternut", "quantite": 10}
+    texte = "j'ai semé 10 graine de butternut en pépinière le 10 Mai dernier"
+
+    result = strip_culture_hallucinee(parsed, texte)
+
+    assert result["culture"] == "courge"
+    assert result["variete"] == "butternut"
+
+
 def test_us011bis_strip_culture_hallucinee_sans_culture_inchange():
     """Pas de culture dans l'item → aucune modification."""
     parsed = {"action": "paillage", "culture": None, "parcelle": "nord"}

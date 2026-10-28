@@ -1,7 +1,7 @@
 """
 app/services/agent/adaptateurs.py — Un appel d'outil typé → les arguments de la commande [US-235 / CA2]
 =====================================================================================================
-L'outil `parcelle_modifier` expose des champs TYPÉS ; le handler de
+L'outil `modifier_parcelle` expose des champs TYPÉS ; le handler de
 `/parcelle modifier`, lui, lit toujours des `clé=valeur`. L'adaptateur les
 resérialise, et le handler reste inchangé :
 

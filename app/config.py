@@ -108,8 +108,9 @@ MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").
 # interprète et journalise ce qu'il AURAIT proposé, sans rien montrer) ou
 # "actif" (ses propositions sont affichées). Une valeur inconnue retombe sur
 # "off" : une faute de frappe ne doit jamais activer l'agent.
-# AGENT_MAX_TOURS : borne de la boucle d'outils de lecture (phase 4) ; un entier
-# strictement positif, 3 sinon.
+# AGENT_MAX_TOURS : borne de la boucle conversationnelle de l'agent (US-257,
+# architecture §12.4 : lecture, proposition, correction après le verdict du
+# validateur, réponse) ; un entier strictement positif, 6 sinon.
 # ─────────────────────────────────────────────────────────────────────────────
 AGENT_MODES = ("off", "ombre", "actif")
 AGENT_MODE = os.environ.get("AGENT_MODE", "off").strip().lower()
@@ -125,7 +126,7 @@ def _entier_strictement_positif(nom: str, defaut: int) -> int:
     return valeur if valeur >= 1 else defaut
 
 
-AGENT_MAX_TOURS = _entier_strictement_positif("AGENT_MAX_TOURS", 3)
+AGENT_MAX_TOURS = _entier_strictement_positif("AGENT_MAX_TOURS", 6)
 
 # [US-092 / CA12] Délai maximal par appel LLM, en secondes. Un appel qui
 # n'aboutit pas dans ce délai emprunte le même chemin de repli qu'un 429.

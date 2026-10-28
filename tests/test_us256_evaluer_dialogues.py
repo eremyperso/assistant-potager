@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 
 import pytest
+from dataclasses import replace
 
 import tools.evaluer_dialogues as ed
 from app.services.agent import catalogue_outils, contexte_court
@@ -34,24 +35,39 @@ def _reponse(*appels: AppelOutil, texte: str = "", latence: int = 120, tin: int 
                          tokens_cache=cache, latence_ms=latence, appels=tuple(appels), statut=statut)
 
 
+#: [US-257] Ce que le modèle simulé écrit après avoir lu le verdict de l'application.
+SUITE = "Je te propose ceci, à toi de confirmer."
+
+
 class ModeleSimule:
-    """Le modèle : une réponse prévue par phrase du jardinier. Garde chaque requête reçue."""
+    """Le modèle : une réponse prévue par phrase du jardinier. Garde chaque requête reçue.
+
+    [US-257] La boucle est conversationnelle : après des appels d'outils, le modèle lit le
+    verdict et répond en texte (`SUITE`), ce qui clôt la boucle. Une LISTE de réponses est
+    jouée dans l'ordre, la dernière se répétant."""
 
     def __init__(self, scenario: dict):
         self.scenario = scenario
         self.requetes: list[dict] = []
+        self._rangs: dict[str, int] = {}
 
     def __call__(self, **arguments):
         self.requetes.append(arguments)
-        reponse = self.scenario[arguments["message_utilisateur"]]
-        return reponse(arguments) if callable(reponse) else reponse
+        phrase = arguments["message_utilisateur"]
+        reponse = self.scenario[phrase]
+        if isinstance(reponse, list):
+            rang = self._rangs.get(phrase, 0)
+            self._rangs[phrase] = rang + 1
+            return reponse[min(rang, len(reponse) - 1)]
+        reponse = reponse(arguments) if callable(reponse) else reponse
+        if arguments.get("historique") and reponse.appels:
+            return _reponse(texte=SUITE, latence=0, tin=0, tout=0)
+        return reponse
 
 
 def _creation_est(rangs: int):
-    return _reponse(
-        _appel("parcelle", action="ajouter", nom="planche Est"),
-        _appel("parcelle_modifier", parcelle="planche Est", longueur_m=6, nb_rangs=rangs),
-    )
+    # [US-276 / CA4 bis] La création porte ses caractéristiques, en un seul appel.
+    return _reponse(_appel("creer_parcelle", nom="planche Est", longueur_m=6, nb_rangs=rangs))
 
 
 def _dialogue(identifiant: str) -> ed.Dialogue:
@@ -98,7 +114,7 @@ class TestCorpus:
         for d in ed.charger_corpus():
             for t in d.tours:
                 if t.appelle_le_modele and t.attendu.livre:
-                    inconnus = ed._outils_nommes(t.attendu) - livres - {ed.PSEUDO_AUCUNE_ECRITURE}
+                    inconnus = ed._outils_nommes(t.attendu) - livres - {ed.PSEUDO_AUCUNE_ECRITURE, ed.PSEUDO_TEXTE}
                     assert not inconnus, f"{d.id} : outil(s) absent(s) du catalogue livré {inconnus}"
 
     def test_un_tour_non_livre_nomme_une_brique_absente(self):
@@ -106,7 +122,8 @@ class TestCorpus:
         non_livres = [t for d in ed.charger_corpus() for t in d.tours if t.appelle_le_modele and not t.attendu.livre]
         assert non_livres
         assert all(t.attendu.note for t in non_livres), "chaque tour non livré dit ce qui manque"
-        assert any(ed._outils_nommes(t.attendu) - livres - {ed.PSEUDO_AUCUNE_ECRITURE} for t in non_livres)
+        assert any(ed._outils_nommes(t.attendu) - livres - {ed.PSEUDO_AUCUNE_ECRITURE, ed.PSEUDO_TEXTE}
+                   for t in non_livres)
 
     def test_corpus_invalide_est_refuse(self, tmp_path):
         chemin = tmp_path / "c.json"
@@ -139,7 +156,7 @@ class TestRejeuPlusieursTours:
     def test_un_clic_vide_la_proposition_en_attente(self):
         resultats, modele = _jouer(["CON-2"], {
             "j'ai semé des radis sur la planche sud 2 rangs": _reponse(_appel("saisir_geste")),
-            "super merci": _reponse(_appel("hors_perimetre", raison="remerciement")),
+            "super merci": _reponse(texte="Avec plaisir !"),
         })
         dernier = modele.requetes[-1]
         assert dernier["message_utilisateur"] == "super merci"
@@ -150,8 +167,8 @@ class TestRejeuPlusieursTours:
         _, modele = _jouer(["CRE-2", "CRE-3"], {
             "crée la planche Est 6 mètres 3 rangs": _creation_est(3),
             "non 4 rangs": _creation_est(4),
-            "crée la planche Est": _reponse(_appel("parcelle", action="ajouter", nom="planche Est")),
-            "plutôt planche Ouest": _reponse(_appel("parcelle", action="ajouter", nom="planche Ouest")),
+            "crée la planche Est": _reponse(_appel("creer_parcelle", nom="planche Est")),
+            "plutôt planche Ouest": _reponse(_appel("creer_parcelle", nom="planche Ouest")),
         })
         ouverture = next(r for r in modele.requetes if r["message_utilisateur"] == "crée la planche Est")
         assert "proposition_en_attente" not in ouverture["prompt_variable"]
@@ -159,23 +176,26 @@ class TestRejeuPlusieursTours:
     def test_ca3_le_prompt_et_le_catalogue_sont_les_livres(self):
         _, modele = _jouer(["NEG-1"], {
             "la serre extérieure ne sert plus de pépinière":
-                _reponse(_appel("parcelle_modifier", parcelle="Serre extérieure", est_pepiniere=False)),
+                _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False)),
         })
         requete = modele.requetes[0]
         assert requete["prompt_fixe"] == ed.interpreteur_agent.PROMPT_FIXE
-        assert requete["outils"] == catalogue_outils.schemas()
+        assert requete["outils"] == catalogue_outils.schemas(catalogue_outils.PROJECTION_SANS_DESTRUCTION)
 
     def test_les_jetons_et_la_latence_sont_cumules_sur_la_boucle(self):
-        resultats, _ = _jouer(["QUE-2"], {
-            "quand ai-je planté les tomates ?": _reponse(_appel("poser_question", nature="QUESTION_DATA"),
-                                                         latence=300, tin=2000, tout=60, cache=900),
-        })
+        resultats, _ = _jouer(["NEG-1"], {"la serre extérieure ne sert plus de pépinière": [
+            _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False),
+                     latence=300, tin=2000, tout=60, cache=900),
+            _reponse(texte="Je te propose de la retirer des pépinières.", latence=100, tin=2500, tout=20),
+        ]})
         t = resultats[0]
-        assert (t.latence_ms, t.tokens_in, t.tokens_out, t.tokens_cache) == (300, 2000, 60, 900)
-        assert t.jetons == 2060 and t.appels_modele == 1
+        assert (t.latence_ms, t.tokens_in, t.tokens_out, t.tokens_cache) == (400, 4500, 80, 900)
+        assert t.jetons == 4580 and t.appels_modele == 2
 
     def test_un_429_est_attendu_puis_rejoue_et_denombre(self):
-        etats = iter([passerelle.QuotaLLMDepasseError("429"), _reponse(_appel("poser_question", nature="QUESTION_DATA"))])
+        etats = iter([passerelle.QuotaLLMDepasseError("429"),
+                      _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False)),
+                      _reponse(texte=SUITE)])
 
         def modele(**arguments):
             suivant = next(etats)
@@ -184,7 +204,7 @@ class TestRejeuPlusieursTours:
             return suivant
 
         pauses: list[float] = []
-        resultats = ed.jouer_corpus([_dialogue("QUE-2")], CTX, appeler=modele, pause_s=0, dormir=pauses.append)
+        resultats = ed.jouer_corpus([_dialogue("NEG-1")], CTX, appeler=modele, pause_s=0, dormir=pauses.append)
         assert resultats[0].quotas == 1 and resultats[0].juste
         assert pauses == [20.0]
 
@@ -192,9 +212,9 @@ class TestRejeuPlusieursTours:
         def panne(**arguments):
             raise passerelle.LLMIndisponibleError("panne")
 
-        resultats = ed.jouer_corpus([_dialogue("NEG-1"), _dialogue("QUE-2")], CTX, appeler=panne,
+        resultats = ed.jouer_corpus([_dialogue("NEG-1"), _dialogue("CON-1")], CTX, appeler=panne,
                                     pause_s=0, dormir=lambda s: None)
-        assert len(resultats) == 2
+        assert len(resultats) == 3
         assert all(r.statut == "indisponible" and not r.juste for r in resultats)
 
 
@@ -205,7 +225,7 @@ class TestNotation:
     def test_bon_outil_et_bons_parametres(self):
         resultats, _ = _jouer(["NEG-1"], {
             "la serre extérieure ne sert plus de pépinière":
-                _reponse(_appel("parcelle_modifier", parcelle="Serre extérieure", est_pepiniere=False)),
+                _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False)),
         })
         t = resultats[0]
         assert t.notes.outil_ok and t.notes.parametres_ok and t.juste and not t.couperets
@@ -213,14 +233,14 @@ class TestNotation:
     def test_une_negation_prise_a_l_envers_est_un_mauvais_parametre(self):
         resultats, _ = _jouer(["NEG-1"], {
             "la serre extérieure ne sert plus de pépinière":
-                _reponse(_appel("parcelle_modifier", parcelle="Serre extérieure", est_pepiniere=True)),
+                _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=True)),
         })
         assert resultats[0].notes.outil_ok and resultats[0].notes.parametres_ok is False
 
     def test_un_champ_ajoute_que_le_jardinier_n_a_pas_dit_est_un_echec(self):
         resultats, _ = _jouer(["NEG-1"], {
             "la serre extérieure ne sert plus de pépinière":
-                _reponse(_appel("parcelle_modifier", parcelle="Serre extérieure", est_pepiniere=False,
+                _reponse(_appel("modifier_parcelle", parcelle="Serre extérieure", est_pepiniere=False,
                                 exposition="Sud")),
         })
         assert resultats[0].notes.champs_en_trop == ("exposition",) and not resultats[0].juste
@@ -229,14 +249,14 @@ class TestNotation:
         """Le renommage + la suppression demandés ne sont pas une « suppression erronée »."""
         attendu = _dialogue("PLU-2").tours[0].attendu
         notes = ed.noter_tour(_dialogue("PLU-2"), attendu, "p",
-                              (_appel("parcelle", action="renommer"), _appel("parcelle_supprimer", nom="planche nord")),
+                              (_appel("renommer_parcelle"), _appel("supprimer_parcelle", nom="planche nord")),
                               passerelle.STATUT_OK)
         assert notes.outil_ok and not notes.destructif_errone
 
     def test_suppression_non_demandee_est_un_couperet(self):
         resultats, _ = _jouer(["DOU-1"], {
-            "supprime la planche": _reponse(_appel("parcelle_supprimer", nom="planche sud")),
-            "la sud": _reponse(_appel("parcelle_supprimer", nom="planche sud")),
+            "supprime la planche": _reponse(_appel("supprimer_parcelle", nom="planche sud")),
+            "la sud": _reponse(_appel("supprimer_parcelle", nom="planche sud")),
         })
         premier = resultats[0]
         assert "destruction_erronee" in premier.couperets
@@ -246,14 +266,15 @@ class TestNotation:
     def test_une_ecriture_sur_un_merci_est_un_couperet(self):
         resultats, _ = _jouer(["CON-1"], {
             "merci": _reponse(_appel("saisir_geste")),
-            "bonne journée": _reponse(_appel("hors_perimetre", raison="salutation")),
+            "bonne journée": _reponse(texte="Bonne journée à toi !"),
         })
         assert resultats[0].couperets == ("ecriture_sans_attente",)
         assert resultats[1].juste and not resultats[1].couperets
 
     def test_aucune_ecriture_accepte_tout_outil_qui_ne_modifie_rien(self):
-        for outil in (_appel("poser_question", nature="QUESTION_SAVOIR"), _appel("hors_perimetre", raison="x")):
-            resultats, _ = _jouer(["CON-1"], {"merci": _reponse(outil), "bonne journée": _reponse(outil)})
+        for reponse in (_reponse(_appel("lire", quoi="parcelles")), _reponse(_appel("manque_catalogue", demande="x")),
+                        _reponse(texte="Avec plaisir !")):
+            resultats, _ = _jouer(["CON-1"], {"merci": reponse, "bonne journée": reponse})
             assert all(r.juste and not r.couperets for r in resultats)
 
     @pytest.mark.parametrize("texte", [
@@ -261,32 +282,37 @@ class TestNotation:
         "Voilà, c'est enregistré.",
     ])
     def test_une_annonce_d_action_non_executee_est_un_couperet(self, texte):
-        resultats, _ = _jouer(["HOR-1"], {
-            "exporte-moi tout l'historique en Excel": _reponse(_appel("hors_perimetre", raison=texte)),
-        })
+        """Compté au modèle ; [US-257 / CA5] le contrôle des annonces l'arrête avant le jardinier."""
+        resultats, _ = _jouer(["HOR-1"], {"exporte-moi tout l'historique en Excel": _reponse(texte=texte)})
         assert "annonce_non_executee" in resultats[0].couperets
+        assert "annonce_non_executee" not in resultats[0].couperets_jardinier
 
     def test_un_refus_honnete_n_est_pas_une_annonce(self):
         resultats, _ = _jouer(["HOR-1"], {
             "exporte-moi tout l'historique en Excel":
-                _reponse(_appel("hors_perimetre", raison="Je ne sais pas encore exporter vers Excel.")),
+                [_reponse(_appel("manque_catalogue", demande="export Excel")),
+                 _reponse(texte="Je ne sais pas encore exporter vers Excel.")],
         })
         assert resultats[0].juste and not resultats[0].couperets
+        assert resultats[0].texte == "Je ne sais pas encore exporter vers Excel."
 
     def test_le_texte_libre_du_modele_est_lu_aussi(self):
         resultats, _ = _jouer(["HOR-1"], {
             "exporte-moi tout l'historique en Excel":
-                _reponse(_appel("hors_perimetre", raison="export"), texte="C'est fait, voici le fichier."),
+                _reponse(_appel("manque_catalogue", demande="export"), texte="C'est fait, voici le fichier."),
         })
         assert "annonce_non_executee" in resultats[0].couperets
 
     @pytest.mark.parametrize("texte", ["Mets 20 ml de produit par litre.", "Épands du métaldéhyde au pied."])
     def test_une_dose_ou_un_produit_est_un_couperet(self, texte):
-        resultats, _ = _jouer(["REG-1"], {
-            "les limaces ont bouffé toutes mes salades, comment m'en débarrasser ?":
-                _reponse(_appel("poser_question", nature="QUESTION_SAVOIR"), texte=texte),
-        })
+        """La question de REG-1 part à la cascade (US-257) : sa forme déclarative va à l'agent."""
+        dialogue = _dialogue("REG-1")
+        tour = replace(dialogue.tours[0], jardinier="dis-moi quoi faire contre les limaces")
+        modele = ModeleSimule({tour.jardinier: _reponse(texte=texte)})
+        resultats = ed.jouer_corpus([replace(dialogue, tours=(tour,))], CTX, appeler=modele,
+                                    pause_s=0, dormir=lambda s: None)
         assert "texte_interdit" in resultats[0].couperets
+        assert "texte_interdit" in resultats[0].couperets_jardinier
 
     def test_un_second_geste_sur_une_correction_est_un_couperet_et_un_tour_non_livre(self):
         resultats, _ = _jouer(["DES-1"], {
@@ -314,7 +340,7 @@ class TestCascade:
     def test_les_regles_passent_avant_l_agent(self):
         simple = ed.Dialogue(id="R-1", categorie="creations", source="test", titre="phrase simple", tours=(
             ed.Tour(jardinier="renomme la planche sud en planche des courges",
-                    attendu=ed.Attendu(outils=("parcelle",), ecriture=True)),
+                    attendu=ed.Attendu(outils=("renommer_parcelle",), ecriture=True)),
         ))
         modele = ModeleSimule({})
         resultats = ed.jouer_corpus([simple], CTX, appeler=modele, pause_s=0, dormir=lambda s: None)
@@ -324,33 +350,34 @@ class TestCascade:
     def test_us277_une_phrase_composee_va_a_l_agent(self):
         resultats, modele = _jouer(["PLU-2"], {
             "renomme la planche sud en planche des courges et supprime la planche nord":
-                _reponse(_appel("parcelle", action="renommer", ancien="Planche Sud", nouveau="planche des courges")),
+                _reponse(_appel("renommer_parcelle", ancien="Planche Sud", nouveau="planche des courges")),
         })
-        assert len(modele.requetes) == 1 and resultats[0].chemin == ed.CHEMIN_AGENT
+        # [US-257] L'appel, puis la réponse en texte après le verdict.
+        assert len(modele.requetes) == 2 and resultats[0].chemin == ed.CHEMIN_AGENT
 
-    def test_une_question_devenue_suppression_arrive_au_jardinier(self):
-        resultats, _ = _jouer(["QUE-3"], {
-            "est-ce que je peux supprimer la planche sud sans perdre mon historique ?":
-                _reponse(_appel("parcelle_supprimer", nom="Planche Sud")),
-        })
+    def test_us257_une_question_va_a_la_cascade_sans_appeler_le_modele(self):
+        """[US-257] Une phrase interrogative part à la cascade des questions : aucune suppression
+        ne peut en sortir, et le modèle n'est pas appelé."""
+        resultats, modele = _jouer(["QUE-3"], {})
         t = resultats[0]
-        assert t.chemin == ed.CHEMIN_AGENT
-        assert {"ecriture_sans_attente", "outil_interdit", "destruction_erronee"} <= set(t.couperets_jardinier)
+        assert modele.requetes == []
+        assert t.chemin == ed.CHEMIN_QUESTIONS and not t.couperets_jardinier
 
     def test_le_validateur_arrete_plusieurs_suppressions_avant_le_jardinier(self):
         resultats, _ = _jouer(["DOU-2"], {
-            "enlève la serre": _reponse(_appel("demander_precision", question="Que veux-tu enlever de la serre ?")),
-            "supprime tout": _reponse(*(_appel("parcelle_supprimer", nom=n) for n in ed.ev.PARCELLES_DU_POTAGER[:3])),
+            "enlève la serre": _reponse(texte="Que veux-tu enlever de la serre ?"),
+            "supprime tout": _reponse(*(_appel("supprimer_parcelle", nom=n) for n in ed.ev.PARCELLES_DU_POTAGER[:3])),
         })
         tout = resultats[1]
         assert "destruction_erronee" in tout.couperets
-        assert not tout.couperets_jardinier and tout.vu.startswith("precision")
+        assert not tout.couperets_jardinier and "supprimer" not in tout.vu
 
     def test_une_demande_d_agir_rendue_au_routeur_est_un_couperet_au_jardinier(self):
         resultats, _ = _jouer(["CRE-1"], {
             "crée la planche Nord 8 mètres 4 rangs et mets la serre en pépinière froide":
-                _reponse(_appel("demander_precision", question="Quelle longueur ?")),
-            "elle est plein sud": _reponse(_appel("outil_inexistant")),
+                _reponse(texte="Quelle longueur ?"),
+            # Le modèle répond sans rien dire : la phrase, qui n'ouvre sur aucun verbe, file au routeur.
+            "elle est plein sud": [_reponse(_appel("outil_inexistant")), _reponse(texte="")],
         })
         assert resultats[1].vu == "routeur par mots-clés"
         assert resultats[1].couperets_jardinier == ("routeur_mots_cles",)
