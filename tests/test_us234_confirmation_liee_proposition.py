@@ -7,14 +7,18 @@ correctif touche `app/bot/interpretation.py` ; les tests d'US-172 qui couvrent
 le délai d'expiration, les noms voisins et la complétion (CA6) restent dans
 `test_us172_interpreteur_commandes.py` et sont rejoués à chaque livraison.
 
-Un point à lire pour ce qu'il est : le potager actif « au moment du clic » est
-lu en base par `_potager_actif_au_clic` (un callback ne passe pas par le garde
-de liaison, donc `current_context()` y vaut le contexte par défaut). Ces tests
-le remplacent par un double ; sa lecture réelle (chat → utilisateur → potager
-actif) est couverte au niveau des services par les tests d'US-046.
+Un point à lire pour ce qu'il est : le jardinier « au moment du clic » est lu
+en base par `_jardinier_au_clic` (un callback ne passe pas par le garde de
+liaison, donc `current_context()` y vaut le contexte par défaut), et son rôle
+sur le potager de la proposition par `_contexte_sur`. Ces tests les remplacent
+par des doubles ; leur lecture réelle est couverte au niveau des services.
+
+[US-259] La proposition en attente est lue en base (`propositions.en_attente`),
+plus dans `_INTERP_PENDING` ; et CA3 suit désormais CA4 d'US-259 : une proposition
+s'exécute dans SON potager, quel que soit le potager actif au moment du clic.
 """
 import itertools
-import time
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -22,7 +26,9 @@ from telegram.ext import CommandHandler
 
 from app import bot as bot_module
 from app.services import interpreteur_commandes as interp
+from app.services.compagnon import propositions as svc_propositions
 from app.services.context import TenantContext
+from database.models import Proposition
 
 _CONTEXTE_POTAGER_1 = TenantContext(user_id=1, potager_id=1, role="owner")
 
@@ -82,11 +88,9 @@ def _creation():
     return interp.reconnaitre_par_regles("crée la parcelle carré nord")
 
 
-@pytest.fixture(autouse=True)
-def _etat_propre():
-    bot_module._INTERP_PENDING.clear()
-    yield
-    bot_module._INTERP_PENDING.clear()
+def _en_attente(potager_id: int = 1):
+    """[US-259] La proposition qui attend le jardinier 1 dans ce potager, lue en base."""
+    return svc_propositions.en_attente(_CONTEXTE_POTAGER_1.user_id, potager_id)
 
 
 @pytest.fixture(autouse=True)
@@ -98,10 +102,15 @@ def _decor():
         yield
 
 
+def _sur(user_id, potager_id):
+    return TenantContext(user_id=user_id, potager_id=potager_id, role="owner")
+
+
 @pytest.fixture
 def potager_au_clic():
-    """Potager actif du jardinier au moment du clic — 1 par défaut."""
-    with patch.object(bot_module, "_potager_actif_au_clic", return_value=1) as faux:
+    """Le jardinier 1 clique ; il est membre du potager de la proposition."""
+    with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+         patch.object(bot_module, "_contexte_sur", side_effect=_sur) as faux:
         yield faux
 
 
@@ -117,6 +126,14 @@ def journal():
 
     with patch.object(interp, "persister_journal", side_effect=_ecrire) as faux:
         yield faux
+
+
+def _vieillir(code: str) -> None:
+    """[US-259 / CA5] La demi-heure de la proposition est passée."""
+    with svc_propositions.session_sur(1) as db:
+        db.query(Proposition).filter(Proposition.code == code).update(
+            {"expire_le": datetime.utcnow() - timedelta(seconds=1)}, synchronize_session=False)
+        db.commit()
 
 
 def _issues(journal) -> list[tuple[str, object]]:
@@ -136,7 +153,7 @@ class TestCA1IdentifiantDeProposition:
         update = _update()
         await bot_module._interp_proposer(update, _ctx(), _suppression())
 
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
         assert ident
         assert _boutons(update) == [f"interp:ok:{ident}", f"interp:non:{ident}"]
 
@@ -155,7 +172,7 @@ class TestCA1IdentifiantDeProposition:
         with patch.object(bot_module, "_resoudre_noms_parcelle", side_effect=lambda c: c):
             await bot_module._interp_proposer(update, _ctx(), commande)
 
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
         assert _boutons(update) == [f"interp:cand:0:{ident}", f"interp:non:{ident}"]
 
     @pytest.mark.asyncio
@@ -165,7 +182,7 @@ class TestCA1IdentifiantDeProposition:
         update = _update()
         await bot_module._interp_proposer(update, _ctx(), commande)
 
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
         boutons = _boutons(update)
         assert boutons[-1] == f"interp:non:{ident}"
         assert boutons[:-1] and all(
@@ -176,9 +193,9 @@ class TestCA1IdentifiantDeProposition:
     async def test_us234_ca1_deux_propositions_successives_n_ont_pas_le_meme_identifiant(self, journal):
         """[CA1] Sans cela, le bouton de la première parlerait de la seconde."""
         await bot_module._interp_proposer(_update(), _ctx(), _suppression())
-        premier = bot_module._INTERP_PENDING[42]["id"]
+        premier = _en_attente().code
         await bot_module._interp_proposer(_update(), _ctx(), _creation())
-        assert bot_module._INTERP_PENDING[42]["id"] != premier
+        assert _en_attente().code != premier
 
     def test_us234_ca1_le_decodage_des_boutons(self):
         """[CA1] `interp:<action>[:<rang>]:<id>` — et un ancien bouton sans id."""
@@ -205,10 +222,10 @@ class TestCA2BoutonPerime:
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        id_suppression = bot_module._INTERP_PENDING[42]["id"]
+        id_suppression = _en_attente().code
         creation = _creation()
         await bot_module._interp_proposer(_update(), ctx, creation)
-        id_creation = bot_module._INTERP_PENDING[42]["id"]
+        id_creation = _en_attente().code
 
         ancien = _clic(f"interp:ok:{id_suppression}")
         await bot_module._interp_cb(ancien, ctx)
@@ -216,7 +233,7 @@ class TestCA2BoutonPerime:
         handler.assert_not_awaited()
         assert "Demande expirée, rien n'a été fait" in _texte_du_clic(ancien)
         # La seconde proposition est intacte…
-        assert bot_module._INTERP_PENDING[42]["id"] == id_creation
+        assert _en_attente().code == id_creation
 
         # …et c'est seulement SA confirmation qui crée la parcelle.
         await bot_module._interp_cb(_clic(f"interp:ok:{id_creation}"), ctx)
@@ -229,29 +246,29 @@ class TestCA2BoutonPerime:
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         clic = _clic("interp:ok")
         await bot_module._interp_cb(clic, ctx)
 
         handler.assert_not_awaited()
         assert "Demande expirée, rien n'a été fait" in _texte_du_clic(clic)
-        assert bot_module._INTERP_PENDING[42]["id"] == ident
+        assert _en_attente().code == ident
 
     @pytest.mark.asyncio
     async def test_us234_ca2_un_ancien_annuler_n_annule_pas_la_proposition_en_cours(self, journal, potager_au_clic):
         """[CA2] « Annuler » sous un ancien message ne retire pas la demande actuelle."""
         ctx = _ctx(AsyncMock())
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ancien_id = bot_module._INTERP_PENDING[42]["id"]
+        ancien_id = _en_attente().code
         await bot_module._interp_proposer(_update(), ctx, _creation())
-        courant = bot_module._INTERP_PENDING[42]["id"]
+        courant = _en_attente().code
 
         clic = _clic(f"interp:non:{ancien_id}")
         await bot_module._interp_cb(clic, ctx)
 
         assert "Demande expirée, rien n'a été fait" in _texte_du_clic(clic)
-        assert bot_module._INTERP_PENDING[42]["id"] == courant
+        assert _en_attente().code == courant
 
     @pytest.mark.asyncio
     async def test_us234_ca2_un_ancien_choix_de_nom_ne_modifie_pas_la_proposition_en_cours(self, journal, potager_au_clic):
@@ -259,13 +276,13 @@ class TestCA2BoutonPerime:
         ctx = _ctx(AsyncMock())
         proposee = _suppression().avec_candidats("nom", ("Test Nord",))
         await bot_module._interp_proposer(_update(), ctx, proposee)
-        ancien_id = bot_module._INTERP_PENDING[42]["id"]
+        ancien_id = _en_attente().code
         courante = _creation()
         await bot_module._interp_proposer(_update(), ctx, courante)
 
         await bot_module._interp_cb(_clic(f"interp:cand:0:{ancien_id}"), ctx)
 
-        assert bot_module._INTERP_PENDING[42]["commande"] is courante
+        assert _en_attente().commande == courante
 
     @pytest.mark.asyncio
     async def test_us234_ca2_aucune_proposition_en_cours_expire_aussi(self, potager_au_clic):
@@ -301,104 +318,122 @@ class TestCA3PotagerRetenu:
         autre = TenantContext(user_id=1, potager_id=7, role="owner")
         with patch.object(bot_module, "current_context", return_value=autre):
             await bot_module._interp_proposer(_update(), _ctx(), _suppression())
-        assert bot_module._INTERP_PENDING[42]["potager_id"] == 7
+        assert _en_attente(7).potager_id == 7
 
     @pytest.mark.asyncio
-    async def test_us234_ca3_potager_change_rien_n_est_execute(self, journal):
-        """[CA3] « supprime la parcelle test » dit dans le potager 1, confirmé dans le 2."""
-        handler = AsyncMock()
-        ctx = _ctx(handler)
+    async def test_us234_ca3_la_commande_s_execute_dans_le_potager_de_la_proposition(self, journal):
+        """[CA3, US-259 / CA4] « supprime la parcelle test » dit dans le potager 1, confirmé
+        alors que le potager actif est le 2 : elle s'exécute dans le 1, celui où elle a été dite."""
+        vu: list = []
+
+        async def handler(update, ctx):
+            vu.append(ctx.user_data.get(bot_module.CLE_POTAGER_IMPOSE))
+
+        ctx = _ctx(None)
+        ctx.application.handlers = {0: [CommandHandler("parcelle", handler)]}
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
-        clic = _clic(f"interp:ok:{ident}")
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=2):
-            await bot_module._interp_cb(clic, ctx)
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+             patch.object(bot_module, "_contexte_sur", side_effect=_sur) as contexte:
+            await bot_module._interp_cb(_clic(f"interp:ok:{ident}"), ctx)
 
-        handler.assert_not_awaited()
-        assert "potager actif a changé" in _texte_du_clic(clic)
-        assert "rien n'a été fait" in _texte_du_clic(clic)
-        assert 42 not in bot_module._INTERP_PENDING
-        assert ctx.user_data["mode"] is None
+        contexte.assert_called_once_with(1, 1)
+        assert vu == [1], "le garde de liaison arme le potager DE LA PROPOSITION"
+        assert bot_module.CLE_POTAGER_IMPOSE not in ctx.user_data, "il ne vaut que pour cette exécution"
 
     @pytest.mark.asyncio
-    async def test_us234_ca3_le_controle_precede_le_choix_d_un_nom_voisin(self, journal):
-        """[CA3] Une demande périmée ne se construit pas plus avant."""
+    async def test_us234_ca3_hors_d_acces_rien_n_est_execute(self, journal):
+        """[CA3, US-259 / CA4] Le jardinier n'est plus membre du potager de la proposition :
+        rien ne s'exécute, et le contrôle précède le choix d'un nom voisin."""
         ctx = _ctx(AsyncMock())
         await bot_module._interp_proposer(
             _update(), ctx, _suppression().avec_candidats("nom", ("Test Nord",))
         )
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         clic = _clic(f"interp:cand:0:{ident}")
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=2):
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+             patch.object(bot_module, "_contexte_sur", return_value=None):
             await bot_module._interp_cb(clic, ctx)
 
-        assert "potager actif a changé" in _texte_du_clic(clic)
-        assert 42 not in bot_module._INTERP_PENDING
+        assert "plus accès au potager" in _texte_du_clic(clic)
+        assert "rien n'a été fait" in _texte_du_clic(clic)
+        assert _en_attente() is None
+        assert ctx.user_data["mode"] is None
 
     @pytest.mark.asyncio
-    async def test_us234_ca3_potager_illisible_rien_n_est_execute(self, journal):
+    async def test_us234_ca3_jardinier_illisible_rien_n_est_execute(self, journal):
         """[CA3] Faute de pouvoir vérifier, on n'exécute pas : le contrôle ne présume rien."""
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         clic = _clic(f"interp:ok:{ident}")
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=None):
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=None):
             await bot_module._interp_cb(clic, ctx)
 
         handler.assert_not_awaited()
         assert "Impossible de vérifier le potager actif" in _texte_du_clic(clic)
-        assert 42 not in bot_module._INTERP_PENDING
 
     @pytest.mark.asyncio
-    async def test_us234_ca3_annuler_reste_possible_apres_un_changement_de_potager(self, journal):
+    async def test_us234_ca3_annuler_reste_possible_hors_d_acces(self, journal):
         """[CA3] Annuler n'écrit rien : il ne dépend pas du potager."""
         ctx = _ctx(AsyncMock())
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         clic = _clic(f"interp:non:{ident}")
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=2):
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+             patch.object(bot_module, "_contexte_sur", return_value=None):
             await bot_module._interp_cb(clic, ctx)
 
         assert "Annulé" in _texte_du_clic(clic)
-        assert 42 not in bot_module._INTERP_PENDING
+        assert _en_attente() is None
 
-    def test_us234_ca3_la_lecture_du_potager_ne_leve_jamais(self):
+    def test_us234_ca3_les_lectures_au_clic_ne_levent_jamais(self):
         """[CA3] Une panne de lecture donne None (donc un refus), jamais une exception."""
         update = _update()
         update.effective_chat.id = 99
         with patch("database.db.SessionLocal", side_effect=RuntimeError("base indisponible")), \
              patch.object(bot_module, "SessionLocal", side_effect=RuntimeError("base indisponible")):
-            assert bot_module._potager_actif_au_clic(update, _ctx()) is None
+            assert bot_module._jardinier_au_clic(update) is None
+            assert bot_module._contexte_sur(5, 3) is None
 
-    def test_us234_ca3_la_lecture_du_potager_passe_par_le_chat_puis_le_service(self):
-        """[CA3] Chat → utilisateur → potager actif, par les services du garde de liaison."""
+    def test_us234_ca3_le_jardinier_se_lit_par_le_chat(self):
+        """[CA3] Chat → utilisateur, par le service du garde de liaison."""
         update = _update()
         update.effective_chat.id = 99
         base = MagicMock()
         with patch.object(bot_module, "SessionLocal", return_value=base), \
              patch.object(bot_module.svc_liaison_telegram, "resoudre_user_id_pour_chat",
-                          return_value=5) as chat, \
-             patch.object(bot_module.svc_potager_actif, "resoudre_tenant_context",
-                          return_value=TenantContext(user_id=5, potager_id=3, role="owner")) as tenant:
-            assert bot_module._potager_actif_au_clic(update, _ctx()) == 3
+                          return_value=5) as chat:
+            assert bot_module._jardinier_au_clic(update) == 5
 
         chat.assert_called_once_with(base, 99)
-        tenant.assert_called_once_with(base, 5)
+        base.close.assert_called_once()
+
+    def test_us234_ca3_le_role_se_lit_sur_le_potager_de_la_proposition(self):
+        """[US-259 / CA4] Le rôle est relu sur LE potager de la proposition, pas l'actif."""
+        base = MagicMock()
+        attendu = TenantContext(user_id=5, potager_id=3, role="editor")
+        with patch.object(bot_module, "SessionLocal", return_value=base), \
+             patch.object(bot_module.svc_potager_actif, "contexte_sur_potager",
+                          return_value=attendu) as service:
+            assert bot_module._contexte_sur(5, 3) is attendu
+
+        service.assert_called_once_with(base, 5, 3)
         base.close.assert_called_once()
 
     def test_us234_ca3_chat_non_lie_donne_none(self):
-        """[CA3] Pas d'utilisateur derrière le chat : pas de potager, donc refus."""
+        """[CA3] Pas d'utilisateur derrière le chat : refus."""
         update = _update()
         update.effective_chat.id = 99
         with patch.object(bot_module, "SessionLocal", return_value=MagicMock()), \
              patch.object(bot_module.svc_liaison_telegram, "resoudre_user_id_pour_chat",
                           return_value=None):
-            assert bot_module._potager_actif_au_clic(update, _ctx()) is None
+            assert bot_module._jardinier_au_clic(update) is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -412,7 +447,7 @@ class TestCA4PasDeDoubleExecution:
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         await bot_module._interp_cb(_clic(f"interp:ok:{ident}"), ctx)
         second = _clic(f"interp:ok:{ident}")
@@ -428,12 +463,12 @@ class TestCA4PasDeDoubleExecution:
         vu_pendant_l_execution: list[bool] = []
 
         async def handler(update, ctx):
-            vu_pendant_l_execution.append(42 in bot_module._INTERP_PENDING)
+            vu_pendant_l_execution.append(_en_attente() is not None)
 
         ctx = _ctx(None)
         ctx.application.handlers = {0: [CommandHandler("parcelle", handler)]}
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         await bot_module._interp_cb(_clic(f"interp:ok:{ident}"), ctx)
 
@@ -454,7 +489,7 @@ class TestCA5CommandeAffichee:
         update = _update()
         await bot_module._interp_proposer(update, ctx, commande)
         affiche = update.message.reply_text.await_args.args[0]
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         with patch.object(interp, "interpreter") as reinterpretation, \
              patch.object(interp, "reconnaitre_par_regles") as regles:
@@ -478,10 +513,10 @@ class TestCA6ComportementsConserves:
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        pending = bot_module._INTERP_PENDING[42]
-        pending["ts"] = time.time() - bot_module._INTERP_TIMEOUT - 1
+        ident = _en_attente().code
+        _vieillir(ident)
 
-        clic = _clic(f"interp:ok:{pending['id']}")
+        clic = _clic(f"interp:ok:{ident}")
         await bot_module._interp_cb(clic, ctx)
 
         handler.assert_not_awaited()
@@ -495,14 +530,14 @@ class TestCA6ComportementsConserves:
         await bot_module._interp_proposer(
             _update(), ctx, _suppression().avec_candidats("nom", ("Test Nord",))
         )
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         clic = _clic(f"interp:cand:0:{ident}")
         await bot_module._interp_cb(clic, ctx)
 
-        courante = bot_module._INTERP_PENDING[42]
-        assert courante["id"] == ident
-        assert courante["commande"].valeurs["nom"] == "Test Nord"
+        courante = _en_attente()
+        assert courante.code == ident
+        assert courante.commande.valeurs["nom"] == "Test Nord"
 
     @pytest.mark.asyncio
     async def test_us234_ca6_la_completion_texte_garde_la_meme_proposition(self, journal, potager_au_clic):
@@ -510,13 +545,13 @@ class TestCA6ComportementsConserves:
         ctx = _ctx(AsyncMock())
         commande = interp.reconnaitre_par_regles("note une association entre la carotte et l'aneth")
         await bot_module._interp_proposer(_update(), ctx, commande)
-        avant = dict(bot_module._INTERP_PENDING[42])
+        avant = _en_attente()
 
         await bot_module._interp_completion_texte(_update(), ctx, "defavorable")
 
-        apres = bot_module._INTERP_PENDING[42]
-        assert (apres["id"], apres["potager_id"]) == (avant["id"], avant["potager_id"])
-        assert apres["commande"].valeurs["nature"] == "defavorable"
+        apres = _en_attente()
+        assert (apres.code, apres.potager_id) == (avant.code, avant.potager_id)
+        assert apres.commande.valeurs["nature"] == "defavorable"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -536,7 +571,7 @@ class TestCA7Journal:
             (interp.ISSUE_ABANDONNEE, 10),       # remplacée → sa ligne est complétée
             (interp.ISSUE_PROPOSEE, None),       # 2e demande → ligne 11
         ]
-        assert bot_module._INTERP_PENDING[42]["log_id"] == 11
+        assert _en_attente().log_id == 11
 
     @pytest.mark.asyncio
     async def test_us234_ca7_une_premiere_demande_n_abandonne_rien(self, journal):
@@ -545,13 +580,14 @@ class TestCA7Journal:
         assert _issues(journal) == [(interp.ISSUE_PROPOSEE, None)]
 
     @pytest.mark.asyncio
-    async def test_us234_ca7_un_changement_de_potager_est_journalise_abandonne(self, journal):
+    async def test_us234_ca7_un_potager_hors_d_acces_est_journalise_abandonne(self, journal):
         """[CA7] Refusée par CA3 : abandonnée, sur la ligne de SA proposition."""
         ctx = _ctx(AsyncMock())
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=2):
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+             patch.object(bot_module, "_contexte_sur", return_value=None):
             await bot_module._interp_cb(_clic(f"interp:ok:{ident}"), ctx)
 
         assert _issues(journal)[-1] == (interp.ISSUE_ABANDONNEE, 10)
@@ -562,7 +598,7 @@ class TestCA7Journal:
         remplacement ; celle en cours reste « proposée », elle n'est pas touchée."""
         ctx = _ctx(AsyncMock())
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ancien_id = bot_module._INTERP_PENDING[42]["id"]
+        ancien_id = _en_attente().code
         await bot_module._interp_proposer(_update(), ctx, _creation())
         ecritures = journal.call_count
 
@@ -576,7 +612,7 @@ class TestCA7Journal:
         handler = AsyncMock()
         ctx = _ctx(handler)
         await bot_module._interp_proposer(_update(), ctx, _suppression())
-        ident = bot_module._INTERP_PENDING[42]["id"]
+        ident = _en_attente().code
 
         await bot_module._interp_cb(_clic(f"interp:ok:{ident}"), ctx)
 

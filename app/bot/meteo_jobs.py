@@ -2,6 +2,8 @@
 
 Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from database.db import SessionLocal, tenant_scope
@@ -14,7 +16,11 @@ from utils.meteo import (
 )
 from app.services.context import current_context, default_context
 from app.services import potagers as svc_potagers
+from app.services import meteo_lieu as svc_meteo_lieu
 from app.services import metriques_routage as svc_metriques_routage
+from app.services.compagnon import conversations as svc_conversations  # [US-259]
+from app.services.compagnon import actions_menees as svc_actions_menees  # [US-261]
+from app.services.compagnon import propositions as svc_propositions  # [US-259]
 from .noyau import _md, log
 
 
@@ -30,6 +36,34 @@ def _libelle_lieu(potager) -> str:
     return f"📍 {coordonnees}"
 
 
+def _lieu_demande(ctx: ContextTypes.DEFAULT_TYPE) -> str:
+    """« /meteo Lyon » ou « quel temps fait-il à Lyon ? » : le lieu dit, ou « » pour le potager."""
+    args = ctx.args if isinstance(ctx.args, (list, tuple)) else []
+    return " ".join(str(a) for a in args).strip()
+
+
+async def _meteo_d_un_autre_lieu(update: Update, lieu_dit: str) -> None:
+    """La météo du jour d'une ville que le jardinier nomme : lecture seule, rien n'est enregistré
+    (ni observation, ni rattachement au potager). La logique est dans `meteo_lieu`."""
+    msg = await update.message.reply_text("🌤️ *Récupération météo en cours...*", parse_mode="Markdown")
+    try:
+        resultat = await asyncio.to_thread(svc_meteo_lieu.meteo_du_lieu, lieu_dit)
+    except svc_meteo_lieu.LieuIntrouvable:
+        await msg.edit_text(
+            f"📍 Je ne trouve pas de lieu nommé « {lieu_dit} ». "
+            "Essayez avec le nom de la ville seul (par exemple « /meteo Lyon »)."
+        )
+        return
+    except svc_meteo_lieu.ServiceIndisponible:
+        await msg.edit_text("❌ Impossible de récupérer la météo de ce lieu pour l'instant. Réessayez dans un moment.")
+        return
+    texte = f"🌤️ *Météo du jour*\n📍 {_md(resultat.lieu.libelle())}\n\n`{resultat.commentaire()}`"
+    if resultat.autres:
+        texte += f"\n\n_Il existe aussi : {_md(resultat.homonymes())}._"
+    texte += "\n_Non enregistrée : ce n'est pas la météo de votre potager._"
+    await msg.edit_text(texte, parse_mode="Markdown")
+
+
 async def cmd_meteo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
     /meteo — Déclenche manuellement la récupération météo et l'enregistre en base.
@@ -38,7 +72,14 @@ async def cmd_meteo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     Météo calculée sur la localisation du potager actif (US-074), observation
     rattachée à ce potager — pas les coordonnées globales du bot. Sans
     localisation, aucun appel : même règle que `GET /meteo` (US-075 / CA4).
+
+    `/meteo Lyon` (ou « quel temps fait-il à Lyon ? ») donne la météo du jour de ce lieu,
+    sans rien enregistrer : la météo d'un potager reste celle de SON potager.
     """
+    lieu_dit = _lieu_demande(ctx)
+    if lieu_dit:
+        await _meteo_d_un_autre_lieu(update, lieu_dit)
+        return
     msg = await update.message.reply_text("🌤️ *Récupération météo en cours...*", parse_mode="Markdown")
     potager_id = current_context().potager_id
     db  = SessionLocal()
@@ -134,6 +175,15 @@ async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
         nb_routage = svc_metriques_routage.purger_routage_logs_expires(db)
         if nb_routage:
             log.info("🗑️  PURGE AUTO      : %s entrée(s) de routage_logs expirée(s) effacée(s)", nb_routage)
+        # [US-259 / CA1] La mémoire courte du compagnon : échanges et propositions de
+        # conversation au-delà de 30 jours.
+        nb_echanges = svc_conversations.purger()
+        nb_propositions = svc_propositions.purger()
+        # [US-261] Les actions menées, gardées 30 jours.
+        svc_actions_menees.purger()
+        if nb_echanges or nb_propositions:
+            log.info("🗑️  PURGE AUTO      : %s échange(s) et %s proposition(s) de conversation effacés",
+                     nb_echanges, nb_propositions)
     except Exception as e:
         log.error(f"❌ JOB PURGE ERREUR : {e}")
     finally:

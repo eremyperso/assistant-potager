@@ -8,6 +8,7 @@ from app.config import TELEGRAM_BOT_TOKEN, etat_configuration
 from database.db import current_potager_id
 from utils.tts import is_tts_enabled
 from app.services.context import default_context
+from app.services.compagnon.actions_menees import CANAL_TELEGRAM, canal_courant  # [US-261]
 from app.services import menu_commandes as svc_menu_commandes
 from app.services import relances_file as svc_relances_file  # [US-224]
 from .noyau import log
@@ -28,7 +29,7 @@ from .godets import (
 )
 from .pertes import _handle_perte_callback, _vendu_variete_cb
 from .notes import _note_confirm_cb, _note_start
-from .interpretation import _interp_cb
+from .interpretation import _interp_cb, _suggestion_cb
 from .questions import _retour_routage_cb
 from .saisie import (
     _creation_parcelle_geste_cb,
@@ -37,7 +38,7 @@ from .saisie import (
     cmd_vendre,
 )
 from .correction import _corr_start
-from .commandes_parcelle import _cmd_parcelles_lister, _parcelle_suppr_cb, cmd_parcelle
+from .commandes_parcelle import _cmd_parcelles_lister, _parcelle_ajout_cb, _parcelle_suppr_cb, cmd_parcelle
 from .commandes_culture import (
     cmd_association,
     cmd_bioagresseur,
@@ -45,7 +46,7 @@ from .commandes_culture import (
     cmd_fiche,
     cmd_rotation,
 )
-from .commandes_calendrier import cmd_calendrier
+from .commandes_calendrier import cmd_calendrier, _calendrier_maj_cb
 from .commandes_confiance import cmd_confiance, _confiance_cb
 from .commandes_plan import cmd_plan
 from .commandes_profil import cmd_profil, _profil_cb
@@ -71,6 +72,8 @@ from .messages import handle_text, handle_voice
 # fuite entre mises à jour concurrentes (sémantique standard de contextvars).
 async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_potager_id.set(default_context().potager_id)
+    # [US-261] Tout ce que ce message fera s'écrit dans les actions menées sous le canal Telegram.
+    canal_courant.set(CANAL_TELEGRAM)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -236,12 +239,14 @@ def _construire_application() -> "Application":
     # [US-179] Filière, enregistrement, question décalée de dix jours
     app.add_handler(CallbackQueryHandler(_confiance_cb, pattern=r"^conf:"))
     app.add_handler(CallbackQueryHandler(_profil_cb, pattern=r"^profil:"))   # [US-258]
+    app.add_handler(CallbackQueryHandler(_calendrier_maj_cb, pattern=r"^calmaj:"))   # [US-279]
 
     # [US-038] Confirmation avant enregistrement d'une note — boutons inline
     app.add_handler(CallbackQueryHandler(_note_confirm_cb, pattern=r"^note_"))
 
     # [US-009] Suppression parcelle — boutons inline
     app.add_handler(CallbackQueryHandler(_parcelle_suppr_cb, pattern=r"^parcelle_suppr_"))
+    app.add_handler(CallbackQueryHandler(_parcelle_ajout_cb, pattern=r"^parcelle_ajout_"))
 
     # [US-046] Sélection du potager actif — boutons inline
     app.add_handler(CallbackQueryHandler(_potager_select_cb, pattern=r"^potager_select_"))
@@ -252,6 +257,7 @@ def _construire_application() -> "Application":
     # [US-172] Commande dictée : confirmation, refus, complétion d'un argument,
     # choix d'un nom voisin. Motif disjoint de "^interpparc:" ci-dessous.
     app.add_handler(CallbackQueryHandler(_interp_cb, pattern=r"^interp:"))
+    app.add_handler(CallbackQueryHandler(_suggestion_cb, pattern=r"^sug:"))  # [US-264]
     # [US-172 / CA19] Création de la parcelle citée par un geste
     app.add_handler(CallbackQueryHandler(_creation_parcelle_geste_cb, pattern=r"^interpparc:"))
 

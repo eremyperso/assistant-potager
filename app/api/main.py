@@ -105,10 +105,13 @@ from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from llm.rag import add_to_rag
 from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
+from app.services.compagnon.actions_menees import CANAL_PWA, canal_courant  # [US-261]
 from app.services import auth as svc_auth
 from app.services import email as svc_email
 from app.services import previsions_meteo as svc_previsions_meteo  # [US-182]
 from app.services import liaison_telegram as svc_liaison_telegram
+from app.services.compagnon import conversations as svc_conversations  # [US-259]
+from app.services.compagnon import propositions as svc_propositions  # [US-259]
 from app.services import telegram_notify as svc_telegram_notify  # [US-091]
 from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
@@ -265,6 +268,8 @@ app.add_middleware(
 # désormais avec get_current_user_ctx() ci-dessous.
 @app.middleware("http")
 async def _tenant_context_middleware(request, call_next):
+    # [US-261] Une écriture faite par l'API est une action menée depuis la PWA.
+    canal_courant.set(CANAL_PWA)
     with tenant_scope(default_context().potager_id):
         return await call_next(request)
 
@@ -1377,11 +1382,6 @@ def restaurer_potager(potager_id: int, user: User = Depends(get_current_user)):
         db.close()
 
 
-# ── Sessions conversationnelles (in-memory, multi-tours) ──────────────────────
-# { session_id: [{"role": "user"|"assistant", "content": str}, ...] }
-_sessions: dict[str, list[dict]] = {}
-_SESSION_MAX_TURNS = 5  # garder les 5 derniers échanges
-
 # ── Mapping MIME type → extension fichier audio ────────────────────────────────
 _MIME_EXT: dict[str, str] = {
     "audio/mp4"  : ".mp4",
@@ -1717,7 +1717,7 @@ def _geste_pour_pwa(geste) -> dict:
     Ni le code, ni l'item complet : une liste de file se lit, elle ne se rejoue
     pas depuis l'application — la confirmation reste au compagnon (A16).
     """
-    item = geste.geste or {}
+    item = geste.contenu or {}
     return {
         "id": geste.id,
         "potager_id": geste.potager_id,
@@ -2006,10 +2006,10 @@ async def voice(
             "session_id" : session_id or str(uuid.uuid4()),
         }
 
-    # 3. Session
+    # 3. Session — [US-259] l'identifiant reste rendu à l'ancienne PWA, mais la
+    # mémoire de la conversation est en base, commune à Telegram (CA1, CA7).
     if not session_id:
         session_id = str(uuid.uuid4())
-    history = _sessions.get(session_id, [])
 
     # 4. Classification de l'intention
     try:
@@ -2118,10 +2118,11 @@ async def voice(
             "avertissements": avertissements,
         }
 
-    # 6. Mettre à jour la session (historique multi-tours)
-    history.append({"role": "user",      "content": texte})
-    history.append({"role": "assistant", "content": result["reponse"]})
-    _sessions[session_id] = history[-(  _SESSION_MAX_TURNS * 2):]
+    # 6. [US-259 / CA1] L'échange rejoint la conversation du jardinier dans ce
+    # potager, celle que le compagnon Telegram lira aussi.
+    svc_conversations.noter(
+        ctx, texte, result["reponse"], canal=svc_propositions.CANAL_PWA, outils=(result["intent"],),
+    )
 
     return result
 

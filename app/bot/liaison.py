@@ -163,13 +163,37 @@ _MSG_AUCUN_POTAGER = (
 )
 
 
+#: [US-259 / CA4] Le potager à armer pour le PROCHAIN handler, à la place du potager
+#: actif : celui d'une proposition confirmée, qui s'exécute là où elle a été faite.
+#: Consommé à la première lecture — il ne vaut que pour cette exécution.
+CLE_POTAGER_IMPOSE = "potager_impose"
+
+_MSG_POTAGER_PERDU = (
+    "⚠️ Vous n'avez plus accès au potager de cette demande, rien n'a été fait."
+)
+
+
 async def _resoudre_et_armer_contexte(update: Update, ctx: ContextTypes.DEFAULT_TYPE, db, user_id: int) -> bool:
     """[US-046 / CA1, CA5, CA6] Résout le TenantContext réel (potager actif) de
     `user_id` et l'arme pour tout le reste du traitement de cet Update — via
     set_current_context() (relu par current_context() partout dans bot.py) et
     en réarmant le GUC RLS current_potager_id (US-043) avec le vrai potager.
     Renvoie False (et bloque, message CA5) si l'utilisateur n'a aucun potager.
+
+    [US-259 / CA4] Une proposition confirmée impose SON potager
+    (`CLE_POTAGER_IMPOSE`) : le rôle est relu sur ce potager-là.
     """
+    donnees = getattr(ctx, "user_data", None)
+    impose = donnees.pop(CLE_POTAGER_IMPOSE, None) if isinstance(donnees, dict) else None
+    if impose is not None:
+        tenant_ctx = svc_potager_actif.contexte_sur_potager(db, user_id, impose)
+        if tenant_ctx is None:
+            log.info("[US-259 / CA4] Potager %s de la proposition hors d'accès pour user_id=%s", impose, user_id)
+            await update.message.reply_text(_MSG_POTAGER_PERDU)
+            return False
+        set_current_context(tenant_ctx)
+        current_potager_id.set(tenant_ctx.potager_id)
+        return True
     try:
         tenant_ctx = svc_potager_actif.resoudre_tenant_context(db, user_id)
     except svc_potager_actif.AucunPotagerError:

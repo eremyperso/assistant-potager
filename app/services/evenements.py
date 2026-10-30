@@ -23,6 +23,7 @@ from typing import Optional
 from sqlalchemy import func, or_, and_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.services.compagnon import actions_menees as svc_actions_menees  # [US-261]
 from app.services import contexte_semis as svc_contexte_semis
 from app.services.context import TenantContext
 from app.services.permissions import require_role, require_potager_non_archive
@@ -1689,6 +1690,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
     db.add(event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     return event
 
 
@@ -1746,6 +1748,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
     db.add(event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     return event
 
 
@@ -1847,6 +1850,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     db.add(event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     log.info(
         f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} "
         f"| qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}"
@@ -2015,6 +2019,7 @@ def creer_evenement_godet(db: Session, ctx: TenantContext, parsed: dict, texte: 
     db.add(event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     log.info(f"💾 GODET SAVE : id={event.id} culture={event.culture} variete={event.variete} origine={origine_graines_id}")
     return event
 
@@ -2059,6 +2064,7 @@ def creer_evenement_observation(db: Session, ctx: TenantContext, fields: dict, t
     _indexer_memoire(db, event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     log.info(f"💾 DB SAVE [US-038] : id={event.id} | culture={event.culture} | parcelle_id={event.parcelle_id}")
     return event
 
@@ -2099,6 +2105,7 @@ def creer_evenement_perte(db: Session, ctx: TenantContext, item: dict, texte: st
     db.add(event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
     log.info(f"💾 PERTE SAVE : id={event.id} action={event.type_action} culture={event.culture} variete={event.variete} qte={event.quantite}")
     return event
 
@@ -2123,6 +2130,8 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     # stock de tomates figé sur une récolte qui n'existe plus.
     culture_avant = event.culture
     action_avant  = event.type_action
+    # [US-262] L'état d'avant, retenu avec la correction parmi les actions menées.
+    instantane_avant = svc_actions_menees.instantane_avant_correction(db, event)
 
     action_final   = corrections.get("action", event.type_action)
     culture_final  = corrections.get("culture", event.culture)
@@ -2201,6 +2210,7 @@ def corriger_evenement(db: Session, ctx: TenantContext, evenement_id: int, corre
     _indexer_memoire(db, event)
     db.commit()
     db.refresh(event)
+    svc_actions_menees.noter_correction(db, ctx, event, instantane_avant)   # [US-262] corrigé, donc mené
     return event
 
 
@@ -2218,9 +2228,13 @@ def supprimer_evenement(db: Session, ctx: TenantContext, evenement_id: int) -> b
     # [US-141 / CA11] Même raison, même ordre : lu et retiré AVANT la
     # suppression, dans la même transaction.
     _oublier_memoire(db, ctx, evenement_id)
+    # [US-262] Ce qui part, lu avant de partir : l'annulation est retenue parmi les actions menées.
+    instantane_avant = svc_actions_menees.instantane_avant_correction(db, event)
+    resume = svc_actions_menees.resume_evenement(event, instantane_avant.get("parcelle"))
     db.delete(event)
     db.commit()
     log.info(f"🗑 SUPPRESSION     : id={evenement_id}")
+    svc_actions_menees.noter_annulation(ctx, evenement_id, instantane_avant, resume)
     return True
 
 

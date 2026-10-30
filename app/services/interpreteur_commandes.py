@@ -81,6 +81,7 @@ from typing import Callable, Optional
 
 from unidecode import unidecode
 
+from app.services.compagnon.decisions import Decision  # [US-260]
 from app.services.context import TenantContext
 from app.services.menu_commandes import (
     FORMES_PAR_CLE,
@@ -105,6 +106,9 @@ ORIGINE_AGENT = "agent"
 #: [US-278] La règle d'une proposition du filet des caractéristiques de parcelle
 #: (`app.services.agent.filet_fiche`), qui passe après l'agent, jamais devant.
 REGLE_FILET_FICHE = "filet_fiche"
+#: [US-253] La règle d'une suite proposée après une commande exécutée
+#: (`app.services.anticipation_commande`).
+REGLE_ANTICIPATION = "anticipation"
 
 #: Nature écrite au journal (CA18). Le routeur en connaît quatre (ACTION,
 #: QUESTION_*) ; celle-ci est la cinquième, et elle se décide avant lui.
@@ -142,10 +146,70 @@ VERS_NON_COMPRIS = "non_compris"
 #: commande la plus probable.
 SEUIL_CONFIANCE_MODELE = 0.7
 
+#: [US-262] La commande des propositions de correction (`compagnon.corrections.COMMANDE`),
+#: recopiée ici pour ne pas importer le service à chaque commande.
+COMMANDE_CORRECTION = "action"
+#: [US-262] La ligne avant → après d'une parcelle corrigée (`compagnon.corrections.CLE_AVANT_APRES`).
+CLE_AVANT_APRES = "correction"
+
+
+def _md_simple(texte: str) -> str:
+    """Échappe ce que le Markdown de Telegram lirait comme une mise en forme."""
+    return re.sub(r"([_*`\[])", r"\\\1", texte or "")
+
+
+def _cle_nom(nom: str) -> str:
+    """La normalisation d'un nom de parcelle (casse, accents, espaces, tirets) : deux noms
+    qui ne diffèrent que par elle ne sont pas un rapprochement à montrer."""
+    return re.sub(r"[\s\-_]+", "", unidecode(nom or "").strip().lower())
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Résultat d'une interprétation
 # ─────────────────────────────────────────────────────────────────────────────
+@dataclass(frozen=True)
+class PrecisionDemandee:
+    """[US-250] Un mot de la phrase que la reconnaissance n'a pas su utiliser.
+
+    La commande reconnue ne se propose pas tant que cette question reste ouverte :
+    une proposition qui a perdu une partie de la phrase ne peut pas se présenter
+    comme entièrement comprise (CA1). Rien n'est écrit avant la confirmation (CA3).
+    """
+
+    #: Le mot tel que le jardinier l'a dit (« chaud »), accents compris.
+    mot: str
+    #: La caractéristique que le mot aurait dû préciser (« pepiniere »), ou None
+    #: quand la règle n'en attendait aucune : alors le mot est seulement signalé.
+    caracteristique: Optional[str] = None
+    #: Comment la dire au jardinier : « type de pépinière ».
+    libelle: str = ""
+    #: Les valeurs offertes en boutons, dans l'ordre : celles que le mot pourrait
+    #: désigner (US-251 / CA4), sinon toutes les valeurs admises.
+    options: tuple[str, ...] = ()
+    #: Ce que l'assistant ne sait pas faire de ce mot (« Je ne donne que la météo du potager »).
+    note: str = ""
+    #: [US-253 / CA2] Non vide : ce n'est pas un mot non compris mais une SUITE proposée après
+    #: une commande exécutée ; c'est la question, déjà rédigée. « Sans précision » y devient
+    #: « Plus tard » et n'écrit rien (CA6).
+    invite: str = ""
+
+    def question(self) -> str:
+        """[CA2] « Je connais *chaude* ou *froide* pour le type de pépinière, pas « chaud » : laquelle ? »"""
+        if self.invite:
+            return self.invite
+        mot = _md_simple(self.mot)
+        if not self.options:
+            note = f"{_md_simple(self.note)} " if self.note else ""
+            return (
+                f"Je n'ai pas su utiliser « {mot} » dans votre phrase. {note}"
+                "Je continue sans, ou vous la reformulez ?"
+            )
+        connues = [f"*{_md_simple(valeur)}*" for valeur in self.options]
+        liste = connues[0] if len(connues) == 1 else f"{', '.join(connues[:-1])} ou {connues[-1]}"
+        pour = f" pour {self.libelle}" if self.libelle else ""
+        return f"Je connais {liste}{pour}, pas « {mot} » : laquelle ?"
+
+
 @dataclass(frozen=True)
 class CommandeInterpretee:
     """Une phrase traduite en une commande du catalogue.
@@ -178,6 +242,15 @@ class CommandeInterpretee:
     outils: tuple[str, ...] = ()
     #: [US-235] Jetons consommés pour produire la proposition (0 pour une règle).
     tokens_consommes: int = 0
+    #: [US-250] Un mot de la phrase que la reconnaissance n'a pas utilisé : la
+    #: question à poser avant toute proposition. Vide : la phrase est comprise en entier.
+    precision: Optional[PrecisionDemandee] = None
+    #: [US-251 / CA3] Les valeurs mal dites rapprochées d'une valeur admise, (dit,
+    #: retenue) : le récapitulatif les montre avant la confirmation.
+    corrections: tuple[tuple[str, str], ...] = ()
+    #: [US-252 / CA2] Le nom de parcelle tel que dit, gardé le temps que le jardinier choisisse
+    #: le nom voisin proposé : le récapitulatif montre « tunnel → tunnel chauffé ».
+    mot_candidat: Optional[str] = None
 
     @property
     def args(self) -> tuple[str, ...]:
@@ -199,11 +272,42 @@ class CommandeInterpretee:
     def complete(self) -> bool:
         # [US-235] Un nom retiré faute de voisin (`candidats` vide) n'est pas plus
         # complet qu'un nom à choisir : la précision reste due.
-        return not self.manquants and not self.candidats and self.argument_candidat is None
+        return (
+            not self.manquants and not self.candidats and self.argument_candidat is None
+            and self.precision is None
+        )
+
+    def avec_choix(self, rang: int) -> "CommandeInterpretee":
+        """[US-250 / CA3] Le jardinier a choisi la valeur `rang` de la question : elle
+        est posée, la question est levée, la proposition habituelle peut suivre."""
+        precision = self.precision
+        if precision is None:
+            return self
+        valeur = precision.options[rang]
+        valeurs = dict(self.valeurs)
+        if precision.caracteristique:
+            from app.services import vocabulaire_parcelle as vocabulaire
+
+            carac = vocabulaire.caracteristique(precision.caracteristique)
+            ecrite = carac.pour_commande(valeur) if carac is not None else valeur
+            valeurs["modification"] = _poser_valeur(
+                valeurs.get("modification", ""), precision.caracteristique, ecrite,
+            )
+        return replace(self, valeurs=valeurs, precision=None)
+
+    def sans_precision(self) -> "CommandeInterpretee":
+        """[US-250 / CA2] « Sans précision » : la commande reste telle que les règles
+        l'ont lue, le mot est assumé comme sans portée."""
+        return replace(self, precision=None)
 
     def commande_equivalente(self) -> str:
         """[CA10] La commande tapée qui produirait le même effet — rappelée au
         jardinier pour qu'il apprenne la syntaxe sans avoir eu à l'apprendre."""
+        if self.forme.commande == COMMANDE_CORRECTION:
+            # [US-262] Aucune commande tapée ne corrige d'un coup : la ligne dit l'avant → après.
+            from app.services.compagnon import corrections
+
+            return corrections.commande_equivalente(self)
         return " ".join([f"/{self.commande}", *self.args]).strip()
 
     def avec(self, **valeurs: str) -> "CommandeInterpretee":
@@ -217,12 +321,18 @@ class CommandeInterpretee:
         fusion = dict(self.valeurs)
         fusion.update({nom: valeur for nom, valeur in valeurs.items() if valeur})
         tranche = self.argument_candidat is not None and fusion.get(self.argument_candidat)
+        corrections = self.corrections
+        if tranche and self.mot_candidat and _cle_nom(self.mot_candidat) != _cle_nom(fusion[self.argument_candidat]):
+            # [US-252 / CA2] Le nom choisi n'est pas le mot dit : les deux sont montrés.
+            corrections = corrections + ((self.mot_candidat, fusion[self.argument_candidat]),)
         return replace(
             self,
             valeurs=fusion,
             manquants=tuple(a for a in self.manquants if not fusion.get(a.nom)),
             candidats=() if tranche else self.candidats,
             argument_candidat=None if tranche else self.argument_candidat,
+            corrections=corrections,
+            mot_candidat=None if tranche else self.mot_candidat,
         )
 
     def avec_candidats(self, argument: str, candidats: tuple[str, ...]) -> "CommandeInterpretee":
@@ -231,7 +341,8 @@ class CommandeInterpretee:
         l'exécuter telle quelle."""
         valeurs = {nom: v for nom, v in self.valeurs.items() if nom != argument}
         return replace(
-            self, valeurs=valeurs, candidats=candidats, argument_candidat=argument
+            self, valeurs=valeurs, candidats=candidats, argument_candidat=argument,
+            mot_candidat=self.valeurs.get(argument) or self.mot_candidat,
         )
 
 
@@ -287,6 +398,12 @@ class ReponseAgent:
     manque_catalogue: Optional[str] = None
     texte_origine: str = ""
     latence_ms: int = 0
+    #: [US-260 / CA1] « Vas-y », « laisse tomber » : la décision de l'agent, validée contre la
+    #: proposition en cours. Le bot l'exécute comme le bouton, après avoir relu la base.
+    decision: "Optional[Decision]" = None
+    #: [US-260 / CA3] Une action destructrice dite d'un mot : `texte` invite à cliquer, et la
+    #: carte de la proposition est remontrée avec ses boutons.
+    bouton_seul: bool = False
 
 
 @dataclass(frozen=True)
@@ -595,18 +712,31 @@ class Regle:
     #: [Garde 2] La règle lit une phrase DÉCLARATIVE pour écrire une valeur.
     #: Elle est refusée sur une ouverture interrogative.
     declarative: bool = False
+    #: [US-250 / US-251] La caractéristique de parcelle dont la règle laisse la valeur
+    #: FACULTATIVE en fin de phrase (« … est une pépinière [chaude] »). Un mot qui reste
+    #: à cet endroit est rapproché de ses valeurs admises, ou demandé (voir
+    #: `app.services.vocabulaire_parcelle`).
+    caracteristique: Optional[str] = None
+    #: [US-250] Une CONSULTATION dont un mot perdu change la réponse (« quel temps fait-il à
+    #: Lyon ? » donne la météo du potager) : le contrôle des mots non utilisés s'y applique
+    #: aussi. Par défaut il ne porte que sur ce qui écrit (`forme.confirmation`).
+    controle_mots: bool = False
 
 
 _REGLES: list[Regle] = []
 
 
-def _regle(nom, motif, commande, sous_commande, declarative=False):
+def _regle(nom, motif, commande, sous_commande, declarative=False, caracteristique=None,
+           controle_mots=False):
     """Déclare une règle — décorateur, pour que le motif et sa construction de
     valeurs restent côte à côte et ne puissent pas se désynchroniser."""
 
     def _decorateur(construire):
         _REGLES.append(
-            Regle(nom, re.compile(motif), commande, sous_commande, construire, declarative)
+            Regle(
+                nom, re.compile(motif), commande, sous_commande, construire, declarative,
+                caracteristique, controle_mots,
+            )
         )
         return construire
 
@@ -775,6 +905,7 @@ def _construire_parcelle_supprimer(groupes):
     "parcelle",
     "modifier",
     declarative=True,
+    caracteristique="pepiniere",
 )
 def _construire_parcelle_pepiniere(groupes):
     nom = _nettoyer_nom(groupes["nom"])
@@ -817,9 +948,13 @@ def _construire_parcelle_pepiniere_chauffee(groupes):
     r"\A" + _INTENTION
     + r"(?:mets|mettre|passe|passer|declare|declarer|transforme|transformer)\s+"
     + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+(?:en|comme)\s+"
-    + _ARTICLE + r"pepiniere\b",
+    + _ARTICLE + r"pepiniere\b"
+    # [US-250] Le type facultatif, dit comme dans la déclaration : sans lui, « mets la
+    # serre en pépinière chaude » perdait « chaude » en silence.
+    r"(?:\s+(?P<type>chaude|froide|chauffee|non\s+chauffee)\b)?",
     "parcelle",
     "modifier",
+    caracteristique="pepiniere",
 )
 def _construire_parcelle_pepiniere_imperatif(groupes):
     # L'impératif est verbe-en-tête (« mets la serre en pépinière »), la
@@ -1149,16 +1284,60 @@ def _construire_historique(groupes):
     return {}
 
 
+#: [Météo d'un autre lieu] Un mot du lieu : jamais un jour (« demain »), jamais une formule
+#: de politesse — « à Lyon demain » est le lieu « Lyon » et un jour que la règle ne sait pas
+#: donner, que `controle_mots` signale.
+_MOT_DE_LIEU = (
+    r"(?!(?:demain|aujourd|maintenant|ce|cette|matin|soir|stp|svp|merci|apres)\b)[a-z0-9]+"
+)
+_LIEU_DIT = (
+    r"(?:\s+(?P<prep>a|au|aux|en|sur|dans|pour|de|du|d)\s+(?:(?P<art>la|le|les|l)\s+)?"
+    rf"(?P<lieu>{_MOT_DE_LIEU}(?:\s+{_MOT_DE_LIEU}){{0,3}}))?"
+)
+#: Ce qui n'est pas un lieu à chercher : le potager lui-même, ou une de ses parties. « quel
+#: temps fait-il dans la serre ? » est la météo du potager, pas celle d'un village nommé Serre.
+_PAS_UN_LIEU = frozenset({
+    "mon", "ma", "mes", "ce", "cette", "notre", "potager", "jardin", "ici", "maison", "dehors",
+    "dedans", "exterieur", "interieur", "terrain", "champ", "verger", "serre", "tunnel",
+    "planche", "parcelle", "carre", "bac", "butte", "jardiniere", "pepiniere", "chassis",
+})
+
+
 @_regle(
     "meteo",
     r"\A" + _INTENTION + _MONTRER + _ARTICLE
-    + r"(?:meteo\b|previsions?\b|quel temps\b|le temps qu il fait\b|"
-    r"il va (?:pleuvoir|geler)\b|va t il pleuvoir\b)",
+    + r"(?:meteo\b|previsions?\b|quelle(?:\s+est\s+la)?\s+meteo\b|"
+    r"quel temps(?:\s+(?:fait\s+il|va\s+t\s+il\s+faire))?\b|"
+    r"le temps qu il fait\b|il va (?:pleuvoir|geler)\b|va t il pleuvoir\b)"
+    # [US-250] « … du jour », « … aujourd'hui » : la météo donnée EST celle du jour, ces mots
+    # ne sont pas perdus. Un autre jour (« demain ») l'est : voir `controle_mots`.
+    r"(?:\s+(?:du jour|(?:d\s+)?aujourd hui)\b)?"
+    # Un lieu que le jardinier nomme (« à Lyon ») : la météo de ce lieu, sans rien enregistrer.
+    + _LIEU_DIT +
+    r"(?:\s+(?:du jour|(?:d\s+)?aujourd hui)\b)?",
     "meteo",
     None,
+    controle_mots=True,
 )
 def _construire_meteo(groupes):
-    return {}
+    lieu = (groupes.get("lieu") or "").strip()
+    if not lieu:
+        return {}
+    premier = normaliser(lieu)[0].split(" ")[0]
+    if premier in _PAS_UN_LIEU:
+        return {}  # la météo du potager, comme sans lieu
+    # « à La Rochelle », « au Havre » : l'article fait partie du nom de la ville.
+    prep = normaliser(groupes.get("prep") or "")[0]
+    art = normaliser(groupes.get("art") or "")[0]
+    if prep in ("au", "du"):
+        lieu = f"Le {lieu}"
+    elif prep == "aux":
+        lieu = f"Les {lieu}"
+    elif art == "l":
+        lieu = f"L'{lieu}"
+    elif art:
+        lieu = f"{art.capitalize()} {lieu}"
+    return {"lieu": lieu}
 
 
 @_regle(
@@ -1718,7 +1897,10 @@ def _construire_calendrier_duree_semis_godet(groupes):
     r"sont\s+(?:mis|mises|repiques|repiquees|rempotes|rempotees))\s+"
     + _EN_GODET + r"\s+(?:(?:environ|a peu pres)\s+)?(?:(?:apres|au bout de)\s+)?"
     + _NOMBRE.format("jours_min")
-    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b",
+    + r"(?:\s*(?:a|et)\s*" + _NOMBRE.format("jours_max") + r")?\s*(?:jours?|j)\b"
+    # [US-250] « … 15 à 20 jours après le semis » : l'ancre de la durée fait partie de la
+    # phrase lue, ce n'est pas un mot que la règle aurait laissé.
+    r"(?:\s+apres\s+(?:le\s+)?semis)?",
     "calendrier",
     "duree",
     declarative=True,
@@ -2366,6 +2548,113 @@ def _arbitrer(trouvees: list[CommandeInterpretee]) -> Optional[CommandeInterpret
     return retenue
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-250] Aucun mot perdu en silence
+# -----------------------------------------------------------------------------
+# Une règle reconnaît le début d'une phrase et laisse le reste : « Mon tunnel est une
+# pépinière chaud » devenait « pépinière, type non renseigné », confirmée avec une
+# confiance totale, et « chaud » avait disparu. Le contrôle est donc fait ICI, pour
+# TOUTES les règles à la fois, sur ce que le motif n'a pas consommé — pas règle par
+# règle, où chaque nouvelle règle pourrait l'oublier.
+#
+# Il ne porte que sur ce qui ÉCRIT (`forme.confirmation`). Une consultation n'écrit
+# rien et rappelle la commande lue (« ↪️ /meteo ») : « quel temps fait-il ? » ou
+# « qu'est-ce que j'ai fait dernièrement ? » ne méritent pas une question.
+# ─────────────────────────────────────────────────────────────────────────────
+#: [CA4] Des mots de politesse ou de liaison sans portée : ils ne sont jamais « non compris ».
+_EXPRESSIONS_SANS_PORTEE = re.compile(
+    r"\b(?:s il (?:te|vous) plait|pour moi|tout de suite|des maintenant|a present|"
+    r"merci beaucoup|si possible)\b"
+)
+_MOTS_SANS_PORTEE: frozenset[str] = frozenset({
+    "stp", "svp", "merci", "maintenant", "alors", "bon", "ok", "okay", "ensuite",
+    "puis", "donc", "aussi", "egalement", "voila", "please", "moi",
+})
+
+
+#: Ce que l'assistant dit d'un mot qu'il ne sait pas traiter, quand la règle le sait.
+_NOTES_DU_RESTE: dict[str, str] = {
+    "meteo": "Je donne la météo du jour, pour votre potager ou pour une ville (« à Lyon »).",
+}
+
+
+def _mots_non_utilises(
+    texte: str, normalise: str, index: list[int], trouve: "re.Match[str]"
+) -> list[str]:
+    """[CA1, CA4] Les mots de la phrase que le motif n'a pas consommés, tels que le
+    jardinier les a dits, privés des mots de politesse ou de liaison sans portée."""
+    restants: list[str] = []
+    for debut, fin in ((0, trouve.start()), (trouve.end(), len(normalise))):
+        morceau = _EXPRESSIONS_SANS_PORTEE.sub(" ", normalise[debut:fin])
+        mots = [m for m in re.findall(r"[a-z0-9]+", morceau) if m not in _MOTS_SANS_PORTEE]
+        if not mots:
+            continue
+        dits = {
+            normaliser(mot)[0]: mot.strip(".,;:!?\"«»()")
+            for mot in re.findall(r"[^\s']+", _fragment_source(texte, index, debut, fin))
+        }
+        restants.extend(dits.get(mot, mot) for mot in mots)
+    return restants
+
+
+def _valeur_de(modification: str, cle: str) -> Optional[str]:
+    """La valeur de `cle` dans « pepiniere=oui rangs=4 », ou None."""
+    for morceau in (modification or "").split():
+        nom, _, valeur = morceau.partition("=")
+        if nom.strip().lower() == cle:
+            return valeur.strip().lower()
+    return None
+
+
+def _poser_valeur(modification: str, cle: str, valeur: str) -> str:
+    """« pepiniere=oui » + (pepiniere, chaude) → « pepiniere=chaude » ; ajoutée si absente."""
+    morceaux = (modification or "").split()
+    ecrit = f"{cle}={valeur}"
+    for rang, morceau in enumerate(morceaux):
+        if morceau.partition("=")[0].strip().lower() == cle:
+            morceaux[rang] = ecrit
+            break
+    else:
+        morceaux.append(ecrit)
+    return " ".join(morceaux)
+
+
+def _lire_restes(
+    commande: CommandeInterpretee, regle: Regle, restes: list[str]
+) -> CommandeInterpretee:
+    """[CA1, CA2 ; US-251 / CA2 à CA5] Que faire d'un mot que la règle n'a pas utilisé.
+
+    - la règle laisse sa caractéristique FACULTATIVE en fin de phrase et la phrase
+      ne l'a pas précisée : le mot est rapproché de ses valeurs admises. Une seule
+      valeur proche → corrigée et montrée au récapitulatif ; plusieurs → la question
+      est posée avec ces valeurs ; aucune → la question est posée avec toutes ;
+    - sinon : le mot est signalé, le jardinier continue sans lui ou reformule.
+
+    Rien n'est écrit ici : la commande reste à confirmer (CA3).
+    """
+    from app.services import vocabulaire_parcelle as vocabulaire
+
+    mot = " ".join(restes)
+    carac = vocabulaire.caracteristique(regle.caracteristique) if regle.caracteristique else None
+    modification = commande.valeurs.get("modification", "")
+    if carac is None or _valeur_de(modification, carac.cle) not in carac.non_precisees:
+        return replace(
+            commande, precision=PrecisionDemandee(mot, note=_NOTES_DU_RESTE.get(regle.nom, "")),
+        )
+    rapproche = vocabulaire.rapprocher(mot, carac.valeurs)
+    if rapproche.statut in (vocabulaire.EXACT, vocabulaire.CORRIGE):
+        valeurs = dict(commande.valeurs)
+        valeurs["modification"] = _poser_valeur(
+            modification, carac.cle, carac.pour_commande(rapproche.valeur),
+        )
+        corrections = (
+            ((mot, rapproche.valeur),) if rapproche.statut == vocabulaire.CORRIGE else ()
+        )
+        return replace(commande, valeurs=valeurs, corrections=corrections)
+    options = rapproche.candidats if rapproche.statut == vocabulaire.AMBIGU else carac.valeurs
+    return replace(commande, precision=PrecisionDemandee(mot, carac.cle, carac.libelle, options))
+
+
 def _appliquer_regle(
     regle: Regle, texte: str, normalise: str, index: list[int]
 ) -> Optional[CommandeInterpretee]:
@@ -2395,7 +2684,16 @@ def _appliquer_regle(
             regle.nom, regle.commande, regle.sous_commande,
         )
         return None
-    return _construire_commande(forme, valeurs, ORIGINE_REGLE, 1.0, texte, regle.nom)
+    commande = _construire_commande(forme, valeurs, ORIGINE_REGLE, 1.0, texte, regle.nom)
+    if forme.confirmation or regle.controle_mots:
+        restes = _mots_non_utilises(texte, normalise, index, trouve)
+        if restes:
+            log.info(
+                "🎛️  INTERPRETEUR   : règle %s │ mot non utilisé %r │ %r",
+                regle.nom, " ".join(restes), (texte or "")[:80],
+            )
+            commande = _lire_restes(commande, regle, restes)
+    return commande
 
 
 def reconnaitre_par_regles(texte: str) -> "CommandeInterpretee | Ambiguite | None":
@@ -2682,7 +2980,8 @@ _MARQUE_PARCELLE = "parcelle"
 _LIAISON_EN_TETE = re.compile(r"^(?:et|puis|ainsi que)\b(?!\s+je\b)")
 _SECONDE_DEMANDE = re.compile(
     r"(?:\bet\b|\bpuis\b|,|;)\s*(?:je\s+|on\s+|tu\s+)?"
-    rf"(?:(?:{_VERBES_DE_COMMANDE})\b|(?:(?:le|la|les|l)\s+)?(?:{_PARCELLE_GENERIQUE})\b)"
+    # « et une parcelle sud » ouvre une seconde cible comme « et la parcelle sud » [US-252].
+    rf"(?:(?:{_VERBES_DE_COMMANDE})\b|(?:(?:le|la|les|l|un|une|des)\s+)?(?:{_PARCELLE_GENERIQUE})\b)"
 )
 _NEGATION = re.compile(
     r"\bne?\s+(?:\w+\s+){1,3}?(?:plus|pas|jamais|aucune?|guere)\b"
@@ -2773,6 +3072,22 @@ def _non_compris(brut: str, normalise: str, debut: float,
     )
 
 
+def _correction_d_une_action_recente(brut: str, ctx: Optional[TenantContext]) -> bool:
+    """[US-262 / CA3] Pendant 10 minutes après un geste, une phrase de correction (« en fait
+    j'ai semé 3 rangs ») passe à l'agent AVANT le filtre « geste annoncé » : elle rectifie le
+    geste, elle n'en annonce pas un second. « Annule le dernier semis » aussi, tant qu'un geste
+    des 24 h peut l'être (`corrections.passe_avant_le_filtre_geste`). Sans agent actif, rien ne change."""
+    if ctx is None or _mode_agent() != "actif":
+        return False
+    from app.services.compagnon import corrections
+
+    if not corrections.passe_avant_le_filtre_geste(brut, ctx):
+        return False
+    log.info("🎛️  INTERPRETEUR   : correction juste après un geste → l'agent avant le filtre geste │ %r",
+             brut[:80])
+    return True
+
+
 def interpreter(
     texte: str,
     ctx: Optional[TenantContext] = None,
@@ -2807,6 +3122,10 @@ def interpreter(
     texte, et la proposition validée qu'il fait, à confirmer. Une phrase
     interrogative va à la cascade des questions sans appel au modèle (un
     `Aiguillage` « question ») ; un geste rapporté, au parseur de gestes.
+
+    [US-262 / CA3] Exception au filtre « geste annoncé » : dans les 10 minutes qui
+    suivent un geste, une phrase de correction va à l'agent, qui la propose comme
+    correction de ce geste (`_correction_d_une_action_recente`).
     """
     debut = time.monotonic()
     resultat = reconnaitre_par_regles(texte)
@@ -2836,7 +3155,8 @@ def interpreter(
     # quantité, variété et date. Import local : le routeur importe la base.
     from llm.routeur import annonce_un_geste
     if (ecartee is None and annonce_un_geste(brut)
-            and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx))):
+            and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx))
+            and not _correction_d_une_action_recente(brut, ctx)):
         return None
 
     # [US-235 / CA12] L'agent prend la place de l'ancien repli selon AGENT_MODE.
@@ -2865,6 +3185,12 @@ def interpreter(
             # récapitulatif en tiennent lieu. La phrase ne repart jamais aux mots-clés (CA6).
             interpreteur_agent.persister_reponse(ctx, brut, resultat)
             proposition = resultat.proposition
+            if resultat.decision is not None:
+                # [US-260] Le jardinier répond à une proposition : le bot exécute ce que le bouton ferait.
+                return ReponseAgent(
+                    texte="", decision=resultat.decision, outils=resultat.outils,
+                    texte_origine=brut, latence_ms=latence,
+                )
             if not resultat.texte and proposition is None:
                 # Rien de montrable : la phrase poursuit son chemin habituel, sauf si elle
                 # demandait d'agir [INC-018].
@@ -2873,7 +3199,7 @@ def interpreter(
                 texte=resultat.texte,
                 proposition=replace(proposition, latence_ms=latence) if proposition is not None else None,
                 outils=resultat.outils, manque_catalogue=resultat.manque_catalogue,
-                texte_origine=brut, latence_ms=latence,
+                texte_origine=brut, latence_ms=latence, bouton_seul=resultat.bouton_seul,
             )
         # [CA13] Modèle indisponible : l'ancien repli ci-dessous reste tenté.
     elif mode == "ombre":
@@ -3042,6 +3368,16 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
     partagé. Le rappel en toutes lettres, entre parenthèses, a été retiré le
     28/10/2026 à la demande du jardinier : le chiffre suffit à relire.
     """
+    if commande.forme.commande == COMMANDE_CORRECTION:
+        # [US-262 / CA1] « Semis radis : 2 rangs → 3 rangs », ou le geste qui sera retiré.
+        from app.services.compagnon import corrections
+
+        return corrections.recapitulatif(commande)
+    avant_apres = commande.valeurs.get(CLE_AVANT_APRES)
+    if avant_apres:
+        # [US-262 / CA1] Une parcelle corrigée d'une phrase : l'avant → après en tête.
+        return f"*Corriger* : {_md_simple(avant_apres)}\n\n" + recapitulatif(replace(
+            commande, valeurs={c: v for c, v in commande.valeurs.items() if c != CLE_AVANT_APRES}))
     if commande.forme.cle == ("parcelle", "modifier") and (
         commande.origine == ORIGINE_AGENT or commande.regle == REGLE_FILET_FICHE
     ):
@@ -3069,9 +3405,43 @@ def recapitulatif(commande: CommandeInterpretee) -> str:
         lignes.append(_ligne_valeur(
             libelle, valeur, argument.unite, chiffree=(argument.type == TYPE_NOMBRE)
         ))
+    lignes.extend(_lignes_corrections(commande))
+    lignes.extend(_lignes_supposees(commande))
     lignes.append("")
     lignes.append(f"Équivalent tapé : `{commande.commande_equivalente()}`")
     return "\n".join(lignes)
+
+
+def _lignes_corrections(commande: CommandeInterpretee) -> list[str]:
+    """[US-251 / CA3] « chaud → chaude » : ce que le jardinier a dit et ce qui sera
+    écrit, visible avant la confirmation."""
+    return [f"↪️ _{_md_simple(dit)} → {_md_simple(retenue)}_" for dit, retenue in commande.corrections]
+
+
+def _lignes_supposees(commande: CommandeInterpretee) -> list[str]:
+    """[US-252 / CA1, CA3, CA4] Ce que la phrase n'a pas dit et que la commande laisse vide.
+
+    Une caractéristique que la règle écrit en valeur par défaut (« pepiniere=oui ») est
+    nommée, avec la façon de la donner : une ligne par caractéristique, rien quand tout a été
+    dit. Calculé depuis la commande, sans modèle.
+    """
+    from app.services import vocabulaire_parcelle as vocabulaire
+
+    modification = commande.valeurs.get("modification") or ""
+    if commande.forme.cle != ("parcelle", "modifier") or not modification:
+        return []
+    nom = commande.valeurs.get("nom", "")
+    lignes = []
+    for carac in vocabulaire.caracteristiques().values():
+        if not carac.non_precisees or _valeur_de(modification, carac.cle) not in carac.non_precisees:
+            continue
+        choix = " ou ".join(carac.valeurs)
+        libelle = carac.libelle.removeprefix("le ").removeprefix("l'")
+        lignes.append(
+            f"❔ _{_md_simple(libelle)} non précisé ({_md_simple(choix)}) — "
+            f"à donner : « {_md_simple(nom)} est une pépinière {_md_simple(carac.valeurs[0])} »_"
+        )
+    return lignes
 
 
 def _est_chiffre(valeur: str) -> bool:
@@ -3123,6 +3493,8 @@ def _recapitulatif_modification(commande: CommandeInterpretee) -> str:
     for morceau in (commande.valeurs.get("modification") or "").split():
         cle, _, brute = morceau.partition("=")
         lignes.append(_phrase_modification(nom, cle.strip().lower(), brute))
+    lignes.extend(_lignes_corrections(commande))
+    lignes.extend(_lignes_supposees(commande))
     lignes.append("")
     lignes.append(f"Équivalent tapé : `{commande.commande_equivalente()}`")
     return "\n".join(lignes)
@@ -3166,6 +3538,8 @@ def recapitulatif_plan(plan: "Plan") -> str:
         else:
             lignes.append(f"{rang + 1}. {_resume_etape(etape)}")
         lignes.append(f"    `{etape.commande_equivalente()}`")
+        # [US-252 / CA5] Le même rapprochement et la même supposition qu'une commande seule.
+        lignes.extend(f"    {ligne}" for ligne in (*_lignes_corrections(etape), *_lignes_supposees(etape)))
     lignes.append("")
     lignes.append("_Rien n'est écrit avant « Tout confirmer » ; une étape refusée arrête la suite._")
     return "\n".join(lignes)
@@ -3272,3 +3646,13 @@ def journaliser(commande: "CommandeInterpretee | Plan", issue: str) -> None:
         commande.regle or ",".join(commande.outils) or "-",
         (commande.texte_origine or "")[:80],
     )
+    if commande.precision is not None:
+        # [US-250 / CA6] Le mot non compris : de quoi mesurer la fréquence du cas et
+        # savoir quelle formulation enrichir. La colonne de l'issue ne porte que « precision ».
+        log.info(
+            "🎛️  INTERPRETEUR   │ issue=%-10s │ mot non compris=%r │ caracteristique=%s │ regle=%s",
+            issue, commande.precision.mot, commande.precision.caracteristique or "-",
+            commande.regle or "-",
+        )
+    for dit, retenue in commande.corrections:
+        log.info("🎛️  INTERPRETEUR   │ valeur rapprochée │ %r → %r │ regle=%s", dit, retenue, commande.regle or "-")

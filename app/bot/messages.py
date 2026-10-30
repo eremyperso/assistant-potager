@@ -18,6 +18,7 @@ from utils.deplacer import is_deplacer_request as _is_deplacer_request, extract_
 from utils.notes import is_note_request as _is_note_request
 from app.services.context import current_context
 from app.services import interpreteur_commandes as svc_interpreteur
+from app.services.compagnon import corrections as svc_corrections
 from .noyau import MENU_KEYBOARD, log
 from .etat import (
     _CULTURE_PENDING, _CULTURE_TIMEOUT, _GODET_GRAINES_PENDING, _QUANTITE_PENDING,
@@ -724,17 +725,24 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # CA16 pose en couperet. Le raccourci reste inchangé pour tout ce que
     # l'interpréteur ne reconnaît pas — un « supprimer » nu, notamment.
     commande_reglee = svc_interpreteur.reconnaitre_par_regles(texte_raw)
+    # [US-262] « annuler le dernier semis » désigne un geste : l'agent le retrouve parmi les
+    # actions menées, là où le raccourci proposerait le dernier enregistrement quel qu'il soit.
+    raccourci_cede = (
+        commande_reglee is None
+        and any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler", "corriger", "modifier"])
+        and svc_corrections.pour_l_agent_plutot_que_le_raccourci(texte_raw, current_context())
+    )
 
     # ── PRIORITÉ 3 : mots-clés correction/suppression
     if texte in NAV_SUPPRIMER or (
         any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"])
-        and commande_reglee is None
+        and commande_reglee is None and not raccourci_cede
     ):
         await _corr_annuler_dernier(update, ctx)
         return
     if texte in NAV_CORRIGER or (
         any(texte.startswith(k) for k in ["corriger", "modifier"])
-        and commande_reglee is None
+        and commande_reglee is None and not raccourci_cede
     ):
         # Nettoyer tout contexte correction résiduel avant de démarrer
         for k in ['mode','corr_event_id','corr_candidates','corr_last_id',

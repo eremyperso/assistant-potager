@@ -502,6 +502,87 @@ class TestCmdParcelle:
         assert ctx.user_data.get('parcelle_pending', {}).get('nom') == 'ouest'
 
     @pytest.mark.asyncio
+    async def test_ajouter_nouveau_boutons_sans_liste(self) -> None:
+        """Nouvelle parcelle → boutons Oui/Non, et pas la liste des parcelles existantes."""
+        update, ctx = _make_update_ctx(args=["ajouter", "ouest"])
+        with (
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.normalize_parcelle_name", return_value="ouest"),
+            patch("app.bot.find_doublon", return_value=(None, None)),
+        ):
+            mock_sl.return_value = MagicMock()
+            from app.bot import cmd_parcelle
+            await cmd_parcelle(update, ctx)
+
+        kwargs = update.message.reply_text.call_args.kwargs
+        texte = update.message.reply_text.call_args[0][0]
+        assert "Parcelles existantes" not in texte
+        assert "oui / non" not in texte
+        boutons = [b.callback_data for ligne in kwargs["reply_markup"].inline_keyboard for b in ligne]
+        assert boutons == ["parcelle_ajout_oui", "parcelle_ajout_non"]
+
+    @pytest.mark.asyncio
+    async def test_doublon_exact_liste_les_parcelles(self) -> None:
+        """Doublon exact → la liste des parcelles existantes est montrée."""
+        update, ctx = _make_update_ctx(args=["ajouter", "nord"])
+        nord = Parcelle(nom="Nord", nom_normalise="nord", ordre=1, actif=True)
+        sud = Parcelle(nom="Sud", nom_normalise="sud", ordre=2, actif=True)
+        with (
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.normalize_parcelle_name", return_value="nord"),
+            patch("app.bot.find_doublon", return_value=(nord, None)),
+            patch("app.bot.get_all_parcelles", return_value=[nord, sud]),
+        ):
+            mock_sl.return_value = MagicMock()
+            from app.bot import cmd_parcelle
+            await cmd_parcelle(update, ctx)
+
+        texte = update.message.reply_text.call_args[0][0]
+        assert "existe déjà" in texte
+        assert "SUD" in texte
+
+    @pytest.mark.asyncio
+    async def test_bouton_non_annule(self) -> None:
+        """Bouton Non → la demande en attente est consommée, rien n'est créé."""
+        from app.bot import _parcelle_ajout_cb
+        update = MagicMock()
+        update.callback_query.data = "parcelle_ajout_non"
+        update.callback_query.answer = AsyncMock()
+        update.callback_query.edit_message_text = AsyncMock()
+        ctx = MagicMock()
+        ctx.user_data = {'mode': 'parcelle_confirm', 'parcelle_pending': {"nom": "ouest"}}
+
+        with patch("app.bot.create_parcelle") as mock_creer:
+            await _parcelle_ajout_cb(update, ctx)
+
+        mock_creer.assert_not_called()
+        assert "annulée" in update.callback_query.edit_message_text.call_args[0][0]
+        assert 'parcelle_pending' not in ctx.user_data
+
+    @pytest.mark.asyncio
+    async def test_bouton_oui_cree(self) -> None:
+        """Bouton Oui → la parcelle en attente est créée."""
+        from app.bot import _parcelle_ajout_cb
+        update = MagicMock()
+        update.callback_query.data = "parcelle_ajout_oui"
+        update.callback_query.answer = AsyncMock()
+        update.callback_query.edit_message_text = AsyncMock()
+        ctx = MagicMock()
+        ctx.user_data = {'mode': 'parcelle_confirm', 'parcelle_pending': {"nom": "ouest"}}
+        creee = MagicMock(exposition=None, superficie_m2=None)
+        creee.nom = "ouest"
+
+        with (
+            patch("app.bot.SessionLocal") as mock_sl,
+            patch("app.bot.create_parcelle", return_value=creee) as mock_creer,
+        ):
+            mock_sl.return_value = MagicMock()
+            await _parcelle_ajout_cb(update, ctx)
+
+        mock_creer.assert_called_once()
+        assert "créée" in update.callback_query.edit_message_text.call_args[0][0]
+
+    @pytest.mark.asyncio
     async def test_parcelle_usage_sans_args(self) -> None:
         """Aucun argument → message d'usage affiché."""
         update, ctx = _make_update_ctx(args=[])

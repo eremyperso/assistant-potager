@@ -76,11 +76,7 @@ def modele():
 def _sans_effets(monkeypatch):
     monkeypatch.setattr(interpreteur_agent, "persister_reponse", MagicMock())
     monkeypatch.setattr(bot_interpretation, "accueil_premier_contact", AsyncMock())
-    contexte_court.oublier_tout()
-    bot_interpretation._INTERP_PENDING.clear()
     yield
-    contexte_court.oublier_tout()
-    bot_interpretation._INTERP_PENDING.clear()
 
 
 def _filet(phrase: str, noms: tuple[str, ...] = PARCELLES):
@@ -349,7 +345,9 @@ async def test_us278_ca4_le_choix_mene_a_la_proposition_complete():
     tg_ctx = await _afficher(update, _filet(TUBERCUL))
     assert "PLANT TUBERCULE" in update.message.reply_text.await_args.args[0]
 
-    ident = bot_interpretation._INTERP_PENDING[32]["id"]
+    from app.services.compagnon import propositions as svc_propositions
+
+    ident = svc_propositions.en_attente(CTX.user_id, CTX.potager_id).code
     clic = MagicMock()
     clic.effective_user.id = 32
     clic.message = None
@@ -358,11 +356,12 @@ async def test_us278_ca4_le_choix_mene_a_la_proposition_complete():
     clic.callback_query.message = AsyncMock()
     with (
         patch.object(bot_interpretation, "current_context", return_value=CTX),
-        patch.object(bot_interpretation, "_potager_actif_au_clic", return_value=1),
+        patch.object(bot_interpretation, "_jardinier_au_clic", return_value=CTX.user_id),
+        patch.object(bot_interpretation, "_contexte_sur", return_value=CTX),
         patch.object(bot_interpretation.svc_interpreteur, "persister_journal", return_value=None),
     ):
         await bot_interpretation._interp_cb(clic, tg_ctx)
-    commande = bot_interpretation._INTERP_PENDING[32]["commande"]
+    commande = svc_propositions.en_attente(CTX.user_id, CTX.potager_id).commande
     assert commande.complete
     assert commande.commande_equivalente() == (
         "/parcelle modifier PLANT TUBERCULE superficie=20 longueur=7 ensoleillement=mi-ombre")

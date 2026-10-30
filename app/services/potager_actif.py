@@ -188,6 +188,21 @@ def obtenir_potager(db: Session, user_id: int, potager_id: int) -> Optional[dict
     }
 
 
+def contexte_sur_potager(db: Session, user_id: int, potager_id: int) -> Optional[TenantContext]:
+    """[US-259 / CA4] Le contexte du jardinier sur UN potager précis, actif à l'écran ou non.
+
+    Une proposition s'exécute dans le potager où elle a été faite, quel que soit le
+    potager actif du canal qui la confirme. Le rôle est relu sur CE potager ; None
+    si le jardinier n'en est plus membre ou si le potager n'est plus actif.
+    """
+    if _etat_potager(db, potager_id) != ETAT_ACTIF:
+        return None
+    role = _role_utilisateur(db, user_id, potager_id)
+    if role is None:
+        return None
+    return TenantContext(user_id=user_id, potager_id=potager_id, role=role)
+
+
 def resoudre_tenant_context(db: Session, user_id: int) -> TenantContext:
     """[CA1, CA5, CA6] Résout le TenantContext réel d'un utilisateur.
 

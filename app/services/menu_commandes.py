@@ -102,7 +102,7 @@ DESCRIPTIONS: dict[str, str] = {
     "association": "Cultures à associer ou à éloigner",
     "rotation":    "Vérifier la rotation avant de semer",
     "bioagresseur": "Ce qui attaque une culture",
-    "meteo":       "Météo du jour et conseil potager",
+    "meteo":       "Météo du jour : votre potager ou une ville",
     "parcelle":    "Créer, renommer ou lister vos parcelles",
     "parcelles":   "Lister vos parcelles",
     "culture":     "Corriger la fiche d'une culture",
@@ -340,7 +340,13 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
         confirmation=False,
     ),
     FormeCommande("historique", None, "Afficher vos derniers événements", confirmation=False),
-    FormeCommande("meteo", None, "Afficher la météo du jour", confirmation=False),
+    FormeCommande(
+        "meteo", None, "Afficher la météo du jour",
+        # Sans lieu : la météo du potager actif, enregistrée. Avec un lieu (« à Lyon ») :
+        # la météo de ce lieu, lue sans rien enregistrer.
+        (Argument("lieu", TYPE_TEXTE, "Pour quelle ville ?", obligatoire=False),),
+        confirmation=False,
+    ),
     FormeCommande(
         "lot", None, "Afficher un lot de pépinière, ou la liste des lots",
         (

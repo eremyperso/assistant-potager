@@ -2,6 +2,8 @@
 
 Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 from database.db import SessionLocal
 from app.services.context import current_context
 from app.services import calendrier_cultural as svc_calendrier
@@ -98,6 +100,183 @@ def _formater_calendrier(calendrier, itineraire_cible: "str | None" = None) -> s
     return "\n".join(lignes)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# [US-279] /calendrier maj — remplacer une copie personnalisée par le référentiel
+# ──────────────────────────────────────────────────────────────────────────────
+def _nom_ecart(ecart) -> str:
+    """« courgette », ou « chou-fleur — culture d'hiver » hors itinéraire standard."""
+    if svc_calendrier.normaliser_itineraire(ecart.itineraire) == svc_calendrier.ITINERAIRE_PAR_DEFAUT:
+        return ecart.culture
+    return f"{ecart.culture} — {ecart.itineraire}"
+
+
+def _resume_differences(ecart) -> str:
+    nb = len(ecart.differences)
+    texte = f"{nb} valeur{'s' if nb > 1 else ''} différente{'s' if nb > 1 else ''}" if nb else "aucune valeur pour votre zone"
+    if ecart.autres_zones:
+        texte += ", et d'autres zones"
+    return texte
+
+
+def _texte_liste(ecarts) -> str:
+    """[CA3] Les cultures en retard sur le référentiel, une ligne chacune."""
+    lignes = ["🔄 *Le référentiel a évolué pour des cultures que vous avez personnalisées :*", ""]
+    for ecart in ecarts:
+        lignes.append(f"• *{_md(_nom_ecart(ecart))}* — {_md(_resume_differences(ecart))}")
+    lignes.append("")
+    lignes.append("Choisissez une culture pour voir ce qui change.")
+    return "\n".join(lignes)
+
+
+def _clavier_liste(ecarts) -> InlineKeyboardMarkup:
+    lignes = [
+        [InlineKeyboardButton(_nom_ecart(e), callback_data=f"calmaj:v:{e.itineraire_id}")]
+        for e in ecarts
+    ]
+    # [CA3] À partir de deux cultures, tout d'un coup.
+    if len(ecarts) >= 2:
+        lignes.append([InlineKeyboardButton(f"Tout mettre à jour ({len(ecarts)})", callback_data="calmaj:t")])
+    return InlineKeyboardMarkup(lignes)
+
+
+def _texte_ecart(ecart) -> str:
+    """[CA4] Avant/après pour la zone du potager et les durées, et l'avertissement."""
+    lignes = [f"🔄 *{_md(_nom_ecart(ecart))}* — votre calendrier et le référentiel", ""]
+    for diff in ecart.differences:
+        lignes.append(f"• {_md(diff.libelle)} : {_md(diff.avant)} → *{_md(diff.apres)}*")
+    if ecart.autres_zones:
+        lignes.append("• D'autres zones climatiques changent aussi.")
+    lignes.append("")
+    lignes.append(
+        "_Remplacer reprend tout le calendrier du référentiel : les corrections "
+        "faites sur ce calendrier seront perdues._"
+    )
+    return "\n".join(lignes)
+
+
+def _clavier_ecart(ecart) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Remplacer par le référentiel", callback_data=f"calmaj:r:{ecart.itineraire_id}"),
+        InlineKeyboardButton("🔒 Garder ma version", callback_data=f"calmaj:g:{ecart.itineraire_id}"),
+    ]])
+
+
+async def _repondre_maj(message, db, tenant_ctx, jetons: list[str]) -> None:
+    """[CA3, CA4] `/calendrier maj [culture]` — lecture seule, rien n'est écrit."""
+    if not jetons:
+        ecarts = svc_calendrier.ecarts_referentiel(db, tenant_ctx.potager_id)
+        log.info(f"[US-279] /calendrier maj : {len(ecarts)} culture(s) en retard (potager_id={tenant_ctx.potager_id})")
+        if not ecarts:
+            await message.reply_text("✅ Le calendrier de votre potager suit déjà le référentiel.")
+            return
+        await message.reply_text(_texte_liste(ecarts), parse_mode="Markdown", reply_markup=_clavier_liste(ecarts))
+        return
+
+    culture, _ = svc_calendrier.separer_culture_itineraire(db, list(jetons), tenant_ctx.potager_id)
+    etat = svc_calendrier.etat_mise_a_jour(db, tenant_ctx.potager_id, culture)
+    log.info(f"[US-279] /calendrier maj '{culture}' : {etat.statut} (potager_id={tenant_ctx.potager_id})")
+    raisons = {
+        svc_calendrier.STATUT_CULTURE_INCONNUE: (
+            f"❌ Culture inconnue : *{_md(culture)}*\nElle doit avoir déjà été dictée au moins une fois."
+        ),
+        svc_calendrier.STATUT_SANS_COPIE: (
+            f"✅ *{_md(culture)}* : vous n'avez pas personnalisé son calendrier, "
+            "il suit déjà le référentiel."
+        ),
+        svc_calendrier.STATUT_A_JOUR: (
+            f"✅ *{_md(culture)}* : le référentiel n'a pas évolué depuis votre version."
+        ),
+    }
+    if etat.statut != svc_calendrier.STATUT_ECART:
+        await message.reply_text(raisons[etat.statut], parse_mode="Markdown")
+        return
+    for ecart in etat.ecarts:
+        await message.reply_text(_texte_ecart(ecart), parse_mode="Markdown", reply_markup=_clavier_ecart(ecart))
+
+
+async def _calendrier_maj_cb(update, ctx) -> None:
+    """
+    [US-279] Boutons de `/calendrier maj` :
+      calmaj:v:<id>  détail d'une copie           calmaj:r:<id>  remplacer (CA5)
+      calmaj:g:<id>  garder ma version (CA7)      calmaj:t       tout : confirmation
+      calmaj:T       tout : confirmé (CA6)        calmaj:x       annuler
+    Le clic sur ✅ EST la confirmation : rien n'est écrit avant.
+    """
+    query = update.callback_query
+    await query.answer()
+    _, action, *reste = query.data.split(":")
+    tenant_ctx = current_context()
+    db = SessionLocal()
+    try:
+        if action == "x":
+            await query.edit_message_text("D'accord, je ne change rien.")
+            return
+
+        if action == "v":
+            ecart = next(
+                (e for e in svc_calendrier.ecarts_referentiel(db, tenant_ctx.potager_id)
+                 if e.itineraire_id == int(reste[0])),
+                None,
+            )
+            if ecart is None:
+                await query.message.reply_text("✅ Ce calendrier suit déjà le référentiel.")
+                return
+            await query.message.reply_text(
+                _texte_ecart(ecart), parse_mode="Markdown", reply_markup=_clavier_ecart(ecart)
+            )
+            return
+
+        if action == "t":
+            ecarts = svc_calendrier.ecarts_referentiel(db, tenant_ctx.potager_id)
+            if not ecarts:
+                await query.edit_message_text("✅ Le calendrier de votre potager suit déjà le référentiel.")
+                return
+            noms = ", ".join(_nom_ecart(e) for e in ecarts)
+            await query.message.reply_text(
+                f"Remplacer par le référentiel le calendrier de : *{_md(noms)}* ?\n"
+                "_Les corrections faites sur ces calendriers seront perdues._",
+                parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"✅ Tout remplacer ({len(ecarts)})", callback_data="calmaj:T"),
+                    InlineKeyboardButton("❌ Annuler", callback_data="calmaj:x"),
+                ]]),
+            )
+            return
+
+        if action in ("r", "T"):
+            ids = (
+                [int(reste[0])] if action == "r"
+                else [e.itineraire_id for e in svc_calendrier.ecarts_referentiel(db, tenant_ctx.potager_id)]
+            )
+            remplaces = svc_calendrier.remplacer_par_referentiel(db, tenant_ctx, ids)
+            noms = ", ".join(_nom_ecart(e) for e in remplaces)
+            await query.edit_message_text(
+                f"✅ Calendrier remplacé par le référentiel : *{_md(noms)}*\n"
+                "_Il suit désormais les mises à jour du référentiel, jusqu'à votre prochaine correction._",
+                parse_mode="Markdown",
+            )
+            return
+
+        if action == "g":
+            ecart = svc_calendrier.garder_version_locale(db, tenant_ctx, int(reste[0]))
+            await query.edit_message_text(
+                f"🔒 Vous gardez votre calendrier : *{_md(_nom_ecart(ecart))}*\n"
+                "_Je vous le reproposerai si le référentiel évolue de nouveau._",
+                parse_mode="Markdown",
+            )
+            return
+    except svc_calendrier.ValeurCalendrierInvalideError as err:
+        await query.message.reply_text(f"❌ {err}\nRien n'a été modifié.")
+    except (PermissionInsuffisanteError, PotagerArchiveError) as err:
+        await query.message.reply_text(f"⛔ {err}")
+    except Exception as e:
+        log.error(f"[US-279] _calendrier_maj_cb erreur : {e}")
+        # [CA6] Tout ou rien : le service a annulé la transaction.
+        await query.message.reply_text("❌ La mise à jour a échoué : rien n'a été modifié.")
+    finally:
+        db.close()
+
+
 async def cmd_calendrier(update, ctx) -> None:
     """
     /calendrier — Calendrier cultural d'une culture et zone climatique du potager (US-068).
@@ -109,6 +288,8 @@ async def cmd_calendrier(update, ctx) -> None:
       fenetre <culture> [itinéraire] <pepiniere|pleine_terre|plantation|recolte> <mars-mai|aucune>
       duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte|semis-godet> <jours|70-90|mention|aucune>
                                                            — corriger (CA10)
+      maj [culture]                                        — remplacer une copie personnalisée
+                                                             par le référentiel (US-279)
 
     Aucune logique métier ici : lecture, validation et écriture vivent dans
     `app.services.calendrier_cultural`. Une correction est TOUJOURS propre au
@@ -119,7 +300,8 @@ async def cmd_calendrier(update, ctx) -> None:
         "  /calendrier <culture>\n"
         "  /calendrier zone [océanique|continental|méditerranéen|montagnard|auto]\n"
         "  /calendrier fenetre <culture> [itinéraire] <pepiniere|pleine\\_terre|plantation|recolte> <mois-mois|aucune>\n"
-        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte|semis-godet> <jours|aucune>\n\n"
+        "  /calendrier duree <culture> [itinéraire] <levee|recolte|repiquage|plantation-recolte|semis-godet> <jours|aucune>\n"
+        "  /calendrier maj [culture]\n\n"
         "Exemples :\n"
         "  /calendrier tomate\n"
         "  /calendrier zone méditerranéen\n"
@@ -128,8 +310,10 @@ async def cmd_calendrier(update, ctx) -> None:
         "  /calendrier fenetre chou-fleur culture d'hiver recolte novembre-février\n"
         "  /calendrier duree courgette recolte 50-60\n"
         "  /calendrier duree tomate plantation-recolte 60-80\n"
-        "  /calendrier duree chou semis-godet 10-15\n\n"
-        "_Vos corrections ne valent que pour votre potager._"
+        "  /calendrier duree chou semis-godet 10-15\n"
+        "  /calendrier maj courgette\n\n"
+        "_Vos corrections ne valent que pour votre potager. /calendrier maj dit si le "
+        "référentiel a évolué depuis, et propose de reprendre sa version._"
     )
 
     if not ctx.args:
@@ -167,6 +351,11 @@ async def cmd_calendrier(update, ctx) -> None:
                 f"*{_md(svc_calendrier.libelle_zone(*apres, altitude))}*",
                 parse_mode="Markdown",
             )
+            return
+
+        # ── /calendrier maj [culture] — US-279 ────────────────────────────────
+        if sous_cmd in ("maj", "mise-a-jour"):
+            await _repondre_maj(update.message, db, tenant_ctx, " ".join(ctx.args[1:]).split())
             return
 
         # ── /calendrier fenetre|duree … ───────────────────────────────────────
@@ -259,9 +448,15 @@ async def cmd_calendrier(update, ctx) -> None:
             )
             return
         cible = itineraire if itineraire != svc_calendrier.ITINERAIRE_PAR_DEFAUT else None
-        await update.message.reply_text(
-            _formater_calendrier(calendrier, cible), parse_mode="Markdown"
-        )
+        texte = _formater_calendrier(calendrier, cible)
+        # [US-279 / CA8] Indice passif : dit qu'une mise à jour attend, sans
+        # jamais rien envoyer spontanément.
+        if svc_calendrier.etat_mise_a_jour(db, tenant_ctx.potager_id, culture).statut == svc_calendrier.STATUT_ECART:
+            texte += (
+                "\n\nℹ️ Le référentiel a évolué depuis votre copie — "
+                f"/calendrier maj {_md(culture)}"
+            )
+        await update.message.reply_text(texte, parse_mode="Markdown")
     except Exception as e:
         log.error(f"[US-068] cmd_calendrier erreur : {e}")
         await update.message.reply_text(f"❌ Erreur : {e}")

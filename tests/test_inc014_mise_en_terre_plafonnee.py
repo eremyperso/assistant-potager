@@ -108,11 +108,11 @@ def test_inc014_confirmation_refuse_un_geste_que_le_lot_ne_peut_plus_fournir(db,
     db.commit()
     assert svc.plants_restants_du_lot(db, 1, lot.id) == 0
     # Un second geste arrivé avant le correctif (injecté tel quel dans la file).
-    from database.models import GesteIntention
+    from database.models import Proposition
     from datetime import timedelta
-    ancien = GesteIntention(
+    ancien = Proposition(
         code="ancien", user_id=1, potager_id=1, etat=svc.ETAT_EN_ATTENTE,
-        geste={"action": "plantation", "culture": "poireau", "quantite": 50, "_lot_id": lot.id},
+        contenu={"action": "plantation", "culture": "poireau", "quantite": 50, "_lot_id": lot.id},
         cree_le=datetime.utcnow(), expire_le=datetime.utcnow() + timedelta(days=3),
     )
     db.add(ancien)
@@ -180,14 +180,14 @@ def test_inc014_repiquage_plafonne_par_les_graines_en_germination(db, ctx):
 
 def test_inc014_confirmation_refuse_une_perte_que_le_lot_ne_peut_plus_fournir(db, ctx, lot):
     from datetime import timedelta
-    from database.models import GesteIntention
+    from database.models import Proposition
     db.add(Evenement(
         type_action="perte_godet", culture="poireau", variete="bleu", quantite=50, unite="plants",
         origine_graines_id=lot.id, date=datetime(2026, 9, 1), potager_id=1,
     ))
-    ancien = GesteIntention(
+    ancien = Proposition(
         code="ancienne-perte", user_id=1, potager_id=1, etat=svc.ETAT_EN_ATTENTE,
-        geste={"action": "perte_godet", "culture": "poireau", "quantite": 10, "_lot_id": lot.id},
+        contenu={"action": "perte_godet", "culture": "poireau", "quantite": 10, "_lot_id": lot.id},
         cree_le=datetime.utcnow(), expire_le=datetime.utcnow() + timedelta(days=3),
     )
     db.add(ancien)

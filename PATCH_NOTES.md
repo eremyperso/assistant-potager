@@ -1,3 +1,166 @@
+## [v3.113.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Répond à une question ou à un constat de dégât (« les limaces ont mangé toutes mes salades ») en croisant le carnet, la pluie des derniers jours et le savoir agronomique, avec la source citée (US-263).
+- Remplace par un texte écrit à partir des lectures tout chiffre que la réponse ne tient pas des outils, et toute dose ou tout produit de traitement ; une parade se dit en gestes (US-263).
+- Ne crée jamais d'écriture sur un constat : le compagnon peut seulement proposer de noter les dégâts (US-263).
+- Rédige le compte rendu d'un plan confirmé à partir du résultat réel de chaque étape, et garde le texte de l'application si le chiffre, l'étape en échec ou l'appel ne tiennent pas (US-264).
+- Propose, après un compte rendu, une seule suite utile avec « Oui » et « Plus tard » : caractéristique vide d'une planche créée, ou gestes sans planche après une suppression ; « Oui » rend la suggestion à l'agent, qui propose l'action à confirmer (US-264).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/agent/savoir.py` (outils `consulter_donnees`, `chercher_connaissance`, `meteo`, préchargement des cultures en place et de la météo du jour, contrôle du texte final) et les schémas correspondants dans `catalogue_outils.py`, offerts seulement à une phrase sans écriture.
+- Ajoute `app/services/agent/compte_rendu.py` (`composer`, `controler`, `suggerer`), le callback `sug:` et `tests/test_us263_croiser_donnees_meteo_connaissance.py`, `tests/test_us264_compte_rendu_suite_utile.py`.
+- Étend `controler_parite_outils` à la projection sans écriture avec les outils de savoir et de décision.
+- Met à jour la fiche `compagnon-telegram.md` du corpus de fonctionnement.
+- Limites connues : la règle de rotation (engrais vert après une famille à long délai de retour) est écrite et testée, mais aucune étape de plan ne libère encore une planche, donc elle n'est pas encore déclenchée en usage ; la mesure du lot 3 sur le vrai modèle n'a pas été lancée.
+
+## [v3.112.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Montre au récapitulatif le nom de parcelle rapproché avec le mot dit (« tunnel → tunnel chauffé »), comme les valeurs corrigées d'US-251 (US-252).
+- Nomme au récapitulatif ce que la phrase laisse vide : « mon tunnel est une pépinière » affiche « type de pépinière non précisé (chaude ou froide) » et la façon de le donner ; rien n'est ajouté quand tout a été dit tel quel (US-252).
+- Applique la même présentation à une commande reconnue par règle, à une proposition de l'agent et à chaque étape d'un plan de plusieurs commandes (US-252).
+- Avertit avant la suppression ou la mise hors service d'une parcelle de ce qui en dépend : « 12 pieds de tomate sont encore en place sur cette parcelle », lots de pépinière encore suivis ; rien ne bloque, la confirmation reste nécessaire (US-253).
+- Propose, après une parcelle déclarée pépinière sans type, les boutons « Chaude », « Froide » et « Plus tard » ; un bouton ne fait que poser la valeur et le récapitulatif habituel attend la confirmation, « Plus tard » ou une nouvelle phrase laisse la suggestion de côté (US-253).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/anticipation_commande.py` (`avertissements`, `suite_suggeree`) : lecture des données du potager, sans modèle, qui ne lève jamais.
+- Ajoute le champ `mot_candidat` de `CommandeInterpretee` (le nom tel que dit, gardé jusqu'au choix du nom voisin, sérialisé avec la proposition), le champ `invite` de `PrecisionDemandee` et la règle `anticipation`.
+- Ajoute `tests/test_us252_us253_anticipation_et_recapitulatif.py` (24 tests), une section de la fiche `enregistrer-un-geste.md` du corpus de fonctionnement, une phrase dans celle de la suppression d'une parcelle et trois questions de mesure.
+- Limite connue (US-253 / CA2) : la longueur et le nombre de rangs d'une parcelle ne sont pas encore suggérés — seul le type de pépinière l'est, par boutons.
+
+## [v3.111.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Donne la météo du jour d'une autre ville que le potager (« quel temps fait-il à Lyon ? », « quelle météo à Saint-Étienne ? », `/meteo Lyon`) : la ville est nommée avec sa région et son pays, les homonymes sont signalés, et rien n'est enregistré dans le journal météo du potager.
+- Garde la météo du potager pour « quel temps fait-il ? », « dans la serre » ou « dans mon potager » : une partie du potager n'est pas une ville à chercher.
+- Ajoute `/help meteo` (les deux usages, la lecture seule, la limite du jour) et `/meteo [ville]` à la liste de l'aide ; le menu natif de Telegram dit « votre potager ou une ville ».
+
+### 🐛 Corrections
+- Corrige « quelle météo à Lyon ? », qui partait à la cascade des questions et recevait un fragment de documentation sur les rangs : la phrase est désormais reconnue comme une demande de météo.
+- Remplace le message de la v3.110.0 « je ne donne que la météo de votre potager » par la vraie réponse : la ville dite est lue, seul un autre jour (« demain ») ou une ville sans préposition (« météo Lyon ») reste signalé.
+
+### 🔧 Améliorations techniques
+- Ajoute `utils/geocodage.py` (géocodage Open-Meteo, mêmes paramètres que la recherche de ville du frontend) et `app/services/meteo_lieu.py` (lecture seule, sans base ni cache).
+- Ajoute l'argument facultatif `lieu` à la commande `/meteo` du catalogue, et fait lire le lieu par la règle `meteo` (`au Havre` → Le Havre).
+- Ajoute `tests/test_meteo_autre_lieu.py` (sans réseau), une section de la fiche du corpus de fonctionnement rattachée au domaine d'aide `meteo` (`domaines_aide`) et trois questions de mesure.
+- Met à jour le guide utilisateur (§ 17.1 et table des commandes, dans `data/connaissance/guide user/` lu par le RAG et dans `docs/MANUEL/`) et `docs/CONFIGURATION/SETUP.md`.
+
+## [v3.110.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Pose une question à boutons quand un mot de la phrase n'a servi à rien (« ma serre est une pépinière tiède » → « Je connais chaude ou froide pour le type de pépinière, pas "tiède" : laquelle ? »), au lieu de le jeter en silence (US-250).
+- Corrige « Mon tunnel est une pépinière chaud » en pépinière chaude et le montre au récapitulatif (« chaud → chaude ») : le genre, le nombre, les accents ou la casse d'une valeur dite ne font plus reformuler (US-251).
+- Ne pose jamais la question pour un mot de politesse ou de liaison (« stp », « s'il te plaît », « merci », « maintenant ») (US-250).
+
+### 🐛 Corrections
+- Corrige « mets la serre en pépinière chaude » : le type dit était perdu et la serre devenait une pépinière sans type (US-250).
+- Corrige « quel temps fait-il à Lyon ? » : la météo du potager était donnée sans un mot sur Lyon ; l'assistant dit désormais qu'il ne donne que la météo du jour du potager et propose de continuer sans la ville ou le jour (US-250).
+- Corrige « les tomates se mettent en godet 15 à 20 jours après le semis » : « après le semis » fait partie de la phrase lue (US-250).
+
+### 🔧 Améliorations techniques
+- Contrôle les mots non consommés par le motif à un seul endroit (`_appliquer_regle`), pour toutes les règles qui écrivent ; `PHRASES_PAR_REGLE` fait échouer le test d'une règle ajoutée sans phrase d'exemple (US-250).
+- Ajoute `PrecisionDemandee`, les champs `precision` et `corrections` de `CommandeInterpretee`, les boutons `interp:prec` / `interp:sans` et leur sérialisation avec la proposition (US-250, US-251).
+- Journalise la question sous l'issue `precision` sur sa propre ligne et le mot non compris dans le log, sans migration (`issue_interpretation` reste un `String(16)`) (US-250).
+- Ajoute `app/services/vocabulaire_parcelle.py` : une seule liste de valeurs admises par caractéristique, lue aux règles, aux `enum` des outils de l'agent et au validateur, avec un rapprochement sans modèle (US-251).
+- Rapproche aussi côté agent une variante unique d'une valeur de la liste (« argileuse » → Argileux) et la montre au récapitulatif ; une valeur hors liste ou proche de deux valeurs reste refusée (US-251).
+- Ajoute `tests/test_us250_mot_non_utilise.py` et `tests/test_us251_rapprochement_valeur.py`, trois phrases du relevé au corpus de l'interpréteur, une fiche du corpus de fonctionnement et trois questions de mesure.
+
+## [v3.109.2] — 2026-10-29
+
+### 🐛 Corrections
+- Corrige « oups, c'était 2 plants » juste après une plantation : le compagnon montre toujours la carte de correction avec ses boutons, que « oui » confirme, même quand le modèle se contente de décrire la correction en texte (recette US-262 sur Ministral 8B).
+
+### 🔧 Améliorations techniques
+- Ajoute le filet de correction sans modèle (`corrections.filet`, `valeur_dite`) : la valeur dite (« 2 plants », « huit rangs ») est lue par le code quand le modèle n'appelle pas `corriger_action` (US-262).
+- Relance une fois le modèle en nommant `corriger_action` quand une phrase de correction ne reçoit aucun appel, et reconnaît « Proposition : », « confirme-moi » et « → » comme une proposition décrite sans appel (US-262).
+- Départage les gestes candidats par l'unité dite et, à défaut, par le seul geste des 10 dernières minutes ; reconnaît « me suis trompé » sans « je » (US-262).
+
+## [v3.109.1] — 2026-10-29
+
+### 🐛 Corrections
+- Corrige « en fait c'était 8 rangs » juste après une modification de parcelle : le compagnon propose « principal — nombre de rangs : 6 → 8 » au lieu de demander laquelle parmi des gestes sans rapport (recette US-262 sur Ministral 8B).
+- Corrige la question « laquelle ? » d'une correction, qui ne nomme plus que les actions que le champ corrigé concerne : « 8 rangs » n'évoque ni un arrosage, ni un semis compté en graines (US-262).
+
+### 🔧 Améliorations techniques
+- Rend corrigeables par `corriger_action` les parcelles créées ou modifiées : la correction devient la commande `/parcelle modifier`, validée par `valider_appel`, avec sa ligne avant → après en tête du récapitulatif (US-262).
+- Ajoute `corrections.compatibles`, journalise la référence et les champs reçus par `corriger_action`, et ajoute à `test_us262` la séquence de la recette (US-262).
+
+## [v3.109.0] — 2026-10-29
+
+### 🚀 Nouveautés
+- Permet de corriger d'une phrase un geste qu'on vient d'enregistrer : « en fait c'était 3 rangs » propose « Semis radis : 2 rangs → 3 rangs », à confirmer, sans créer de second semis (US-262).
+- Permet d'annuler d'une phrase un geste récent (« annule le dernier semis ») : le compagnon propose de le retirer du carnet, ce qui ne se confirme qu'au bouton (US-262).
+- Demande lequel, en les nommant, quand deux gestes récents peuvent être visés, au lieu de choisir à la place du jardinier (US-262).
+- Lit comme une correction, pendant 10 minutes après un geste, une phrase en « en fait », « finalement », « non » ou « je me suis trompé », même si elle ressemble à un nouveau geste ; « annule… » n'enregistre jamais de geste (US-262).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/corrections.py` : désignation du geste (le dernier, la culture ou le geste cité), champs ancrés sur la phrase, récapitulatif avant → après, exécution par `evenements.corriger_evenement` / `supprimer_evenement` après relecture du geste (US-262).
+- Ajoute les outils `corriger_action(ref, champs)` et `annuler_action(ref)`, offerts seulement quand un geste récent est corrigeable, et porte `NB_OUTILS_MAX` de 15 à 17 ; leur consigne est dans la partie variable, `PROMPT_FIXE` est inchangé (US-262).
+- Renvoie une fois au modèle un `saisir_geste` fait sur une phrase de correction, et refuse de mêler une correction à une autre écriture (US-262).
+- Fait céder le raccourci « annuler… / corriger… » du bot à l'agent quand la phrase désigne un geste et qu'un geste récent existe (US-262).
+- Retient parmi les actions menées les corrections et annulations exécutées par `evenements`, quel que soit le chemin (US-262).
+- Ajoute `tests/test_us262_corriger_annuler_action.py`, adapte `test_us235` (plafond) et `test_us261` (les outils de correction désignent une action par `ref`), ajoute la section « Corriger ou annuler d'une phrase » à la fiche `journal-et-corrections.md` avec deux questions à son corpus, et documente l'US dans `docs/domaines/commandes-bot.md` (US-262).
+
+## [v3.108.0] — 2026-10-28
+
+### 🚀 Nouveautés
+- Ajoute `/calendrier maj`, qui liste les cultures dont le calendrier de référence a évolué depuis que le potager l'a personnalisé, avec le nombre de valeurs qui diffèrent (US-279).
+- Ajoute `/calendrier maj <culture>`, qui montre l'avant/après pour la zone du potager et les durées, avec « ✅ Remplacer par le référentiel » ou « 🔒 Garder ma version » (US-279).
+- Remplace d'un coup toutes les cultures en attente dès qu'il y en a deux, après une seule confirmation qui les nomme, tout ou rien (US-279).
+- Signale d'une ligne, dans `/calendrier <culture>`, qu'une mise à jour du référentiel attend, sans jamais envoyer de message spontané (US-279).
+
+### 🔧 Améliorations techniques
+- Ajoute à `calendrier_cultural` la détection par empreinte (`ecarts_referentiel`, `etat_mise_a_jour`), le remplacement par suppression de la copie (`remplacer_par_referentiel`) et la garde (`garder_version_locale`) ; l'import reste inchangé et n'écrit toujours que le partagé (US-279).
+- Fait mémoriser par `_itineraire_personnalise` l'empreinte du partagé copié, pour qu'une correction du jardinier ne passe jamais pour une évolution du référentiel (US-279).
+- Ajoute les boutons `calmaj:` (`_calendrier_maj_cb`), qui revérifient à chaque clic que la copie appartient au potager courant (US-279).
+- Ajoute `tests/test_us279_remplacer_calendrier_personnalise.py`, la section « Reprendre le calendrier général après l'avoir corrigé » à la fiche `calendrier-et-zone-climatique.md` avec deux questions à son corpus de mesure, et documente l'US dans `calendrier-cultural.md`, `commandes-bot.md` et `migrations.md` (US-279).
+
+### 💾 Base de données
+- Ajoute `migration_v63.sql` : colonne nullable `itineraire_cultural.empreinte_reference`, sans backfill ; rollback dans `rollback_v63.sql`. Non encore jouée sur PostgreSQL (US-279).
+
+## [v3.107.0] — 2026-10-28
+
+### 🚀 Nouveautés
+- Permet de répondre à une proposition du compagnon par une phrase : « vas-y » la confirme, « laisse tomber » l'abandonne, « non, 4 rangs » la remplace par une nouvelle (US-260).
+- Réserve au bouton la confirmation d'une suppression ou d'une mise hors service de parcelle : une phrase reçoit l'invitation d'appuyer sur « Confirmer », avec la carte remontrée sous les yeux (US-260).
+- Demande laquelle quand « ok » n'a rien à confirmer ou que deux propositions attendent dans des potagers différents, sans rien exécuter (US-260).
+- Répond où et à quelle heure une proposition a déjà été traitée quand on la confirme une seconde fois, sans la refaire (US-260).
+- Retient ce que le compagnon a fait pour le jardinier, depuis Telegram comme depuis l'application, pour que « mon dernier semis » ou « ce que je viens de noter » se comprennent sans description (US-261).
+
+### 🔧 Améliorations techniques
+- Ajoute les outils `confirmer_proposition` et `abandonner_proposition`, offerts seulement quand une proposition attend et validés contre son identifiant par `Propositions._decider` ; la règle vit dans `app/services/compagnon/decisions.py` (US-260).
+- Fait relire la proposition en base par `_interp_decider` avant toute exécution par phrase : même sortie atomique que le bouton, même potager, et le refus des destructions rejoué côté bot (US-260).
+- Transmet à l'agent les cinq dernières actions des 24 h sous `A1`…`A5`, balisées comme des données, et étend `lire` à `quoi="actions"` pour les suivantes (US-261).
+- Écrit les actions menées par le seul chemin d'exécution (six créations d'événement, étapes de plan avec valeurs avant / après, commandes confirmées) dans `app/services/compagnon/actions_menees.py` ; aucun outil de l'agent n'y écrit (US-261).
+- Pose le canal du traitement (`canal_courant`) à l'entrée du bot et du middleware de l'API, et purge les actions de plus de 30 jours dans le job de 04h00 (US-261).
+- Ajoute `tests/test_us260_confirmer_par_phrase.py` et `tests/test_us261_actions_menees.py` ; adapte `test_us237` (énumération de `lire`) et `test_us238` (la proposition d'un autre potager est nommée, jamais reprise) et la fixture `memoire_compagnon` (US-260, US-261).
+- Ajoute la fiche `compagnon-reponses-et-memoire.md` au corpus de fonctionnement, quatre questions à son corpus de mesure, et documente les deux US dans `docs/domaines/commandes-bot.md` et `migrations.md`.
+
+### 💾 Base de données
+- Ajoute `migration_v62.sql` : table `actions_menees` (RLS stricte par potager) et colonne `propositions.traite_canal` ; rollback dans `rollback_v62.sql`. Non encore jouée sur PostgreSQL (US-261, US-260).
+
+## [v3.106.0] — 2026-10-28
+
+### 🚀 Nouveautés
+- Garde en mémoire les dix derniers échanges avec le compagnon Telegram, sur une conversation de trente minutes glissantes, et les transmet à l'agent même sans proposition en attente ; la mémoire est en base, prête à être partagée avec le futur compagnon de l'application (US-259).
+- Rend une proposition du compagnon confirmable après un redémarrage du bot, pendant trente minutes au lieu de cinq (US-259).
+- Exécute une demande confirmée dans le potager où elle a été dite, même si le potager actif a changé entre-temps, et nomme ce potager sur la carte quand le jardinier en a plusieurs (US-259).
+
+### 🔧 Améliorations techniques
+- Range propositions et échanges en base dans `app/services/compagnon/propositions.py` et `conversations.py`, et retire `_INTERP_PENDING` du bot, `_sessions` de l'API et le magasin en mémoire du contexte court d'US-238 (US-259).
+- Fait de la sortie d'attente d'une proposition un `UPDATE … WHERE etat = 'en_attente'` atomique, partagé par la file d'US-224 : deux confirmations simultanées n'exécutent qu'une fois (US-259).
+- Fait de la file d'US-224 une nature `geste` de la même table, sans changement visible pour le jardinier : relances, lien `?start=` et expiration de trois jours inchangés (US-259).
+- Garde dans `tools/evaluer_dialogues.py` les échanges le temps d'un dialogue, sans rien écrire en base (US-259).
+- Ajoute `tests/test_us259_conversation_propositions.py` et la fixture `memoire_compagnon` de `tests/conftest.py` ; adapte au seul stockage les tests d'US-172, US-224, US-234, US-235 à US-238, US-257 et US-278, et réécrit ceux du potager au clic d'US-234 vers l'exécution dans le potager de la proposition (US-259).
+- Met à jour les fiches `compagnon-telegram.md` et `enregistrer-un-geste.md` du corpus de fonctionnement (US-259).
+
+### 💾 Base de données
+- Ajoute `migration_v61.sql` : renomme `gestes_intentions` en `propositions` (colonnes `nature`, `canal`, `notifiee`, `remplacee_par_id`, `geste` → `contenu`, états au féminin dont `remplacee`) et crée `echanges_conversation` sous RLS stricte ; rollback `rollback_v61.sql` (US-259).
+
+### ⚠️ Breaking changes
+- Change l'état des gestes sortis de la file exposé par `GET /gestes/file` en `confirmee`, `abandonnee`, `perimee` ; la PWA (`BandeauFile.jsx`) est alignée (US-259).
+
 ## [v3.105.0] — 2026-10-28
 
 > Regroupé par Epic. Les US-257, US-258 et US-278 de l'Epic 13/14 sont détaillées dans v3.103.0 et v3.104.0.

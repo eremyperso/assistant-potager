@@ -315,6 +315,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         # [US-235 / CA2] Un point de DÉCLARATION de plus : le champ typé de l'outil
         # `parcelle_modifier`, par lequel l'agent fait dire le type au jardinier.
         Path("app/services/agent/catalogue_outils.py"),
+        # [US-253 / CA2] Une SUGGESTION, pas un calcul : constater qu'une parcelle déclarée
+        # pépinière n'a pas encore de type pour proposer de le dire.
+        Path("app/services/anticipation_commande.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

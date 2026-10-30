@@ -632,8 +632,15 @@ ne se livrent qu'avec un rapport US-256 sur le vrai modèle (§7).
 
 ### 6.4 Enchaînement
 
+> **Statut des US (consulté le 30/10/2026) :** ✅ = Réalisé (Revue en cours), 🟡 = En cours, ❌ = À faire, ⚪ = Facultatif/Non créé
+
 ```mermaid
 flowchart LR
+    classDef realise fill:#90EE90,stroke:#333,color:#000;
+    classDef encours fill:#FFA500,stroke:#333,color:#000;
+    classDef afaire fill:#FF9999,stroke:#333,color:#000;
+    classDef facultatif fill:#D3D3D3,stroke:#333,color:#666;
+    
     256 --> 277 --> 276 --> 257 --> 258
     257 --> 278
     257 --> 259 --> 260
@@ -650,7 +657,18 @@ flowchart LR
     271 --> 273
     271 --> 274
     272 -.-> 275
+    
+    class 256,258,259,260,262,263,264,276,277,278 realise;
+    class 257 encours;
+    class 261,265,266,267,268,269,270,271,272,273,274 afaire;
+    class 275 facultatif;
 ```
+
+**Légende :**
+- ✅ **Vert** : US en "Revue en cours" (réalisées)
+- 🟡 **Orange** : US en "En cours"
+- ❌ **Rouge** : US en "À faire"
+- ⚪ **Gris** : US facultative non créée (US-275)
 
 US-269 ne dépend d'aucune autre US et peut avancer en parallèle. Elle touche
 `app/bot/enregistrement.py`, qui porte aujourd'hui des **modifications en cours

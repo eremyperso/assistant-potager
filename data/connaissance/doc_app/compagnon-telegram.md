@@ -141,13 +141,13 @@ Après « Tout confirmer », les étapes s'exécutent une par une, chacune revé
 **Intention :** comprendre
 **On parle aussi de :** non, l'autre ; et la planche sud aussi ; corriger la proposition du bot ; compléter ma demande ; répondre sans tout redire ; changer de parcelle après la proposition
 
-Là où la compréhension des phrases est en service, une proposition du compagnon se corrige ou se prolonge en répondant, sans redire toute la demande. Il lit pour cela la proposition en attente et vos trois derniers échanges, résumés, jamais toute la conversation.
+Là où la compréhension des phrases est en service, une proposition du compagnon se corrige ou se prolonge en répondant, sans redire toute la demande. Il lit pour cela la proposition en attente et vos dix derniers échanges de la conversation en cours, résumés, jamais tout l'historique. Ces échanges lui servent aussi quand rien n'attend votre réponse : une phrase peut renvoyer à la précédente. Une conversation dure tant que vous lui parlez ; après une demi-heure de silence, elle repart de zéro.
 
 « Non, l'autre » après un choix entre deux parcelles voisines propose l'autre. S'il y en a plusieurs, le compagnon demande laquelle ; il ne repropose jamais un nom que vous venez de laisser de côté. Il ne choisit pas à votre place : l'autre parcelle vous est proposée, à vous de la valider d'un bouton.
 
 « Et la planche sud aussi », après « passe la planche nord à 6 rangs », donne un plan de deux étapes, la planche nord puis la planche sud à 6 rangs, à confirmer en une fois par « Tout confirmer ». Les valeurs que vous avez déjà dites sont reprises ; une valeur que vous n'avez dite nulle part ne l'est jamais.
 
-La nouvelle proposition remplace l'ancienne : les boutons de l'ancien message ne valident plus rien, et rien n'est enregistré avant votre nouvelle confirmation. Passé cinq minutes sans réponse, la proposition expire et votre phrase suivante est une demande nouvelle. Ce contexte est propre à vous et à votre potager : un autre membre du potager ne le voit pas, et il ne suit pas un changement de potager.
+La nouvelle proposition remplace l'ancienne : les boutons de l'ancien message ne valident plus rien, et rien n'est enregistré avant votre nouvelle confirmation. Passé trente minutes sans réponse, la proposition expire et votre phrase suivante est une demande nouvelle. Une proposition en attente reste confirmable même si le compagnon a redémarré entre-temps. Ce contexte est propre à vous et à votre potager : un autre membre du potager ne le voit pas, et il ne suit pas un changement de potager. Les échanges sont effacés au bout de trente jours.
 
 ## Choisir son prénom et le ton du compagnon avec /profil
 
@@ -161,3 +161,23 @@ Le ton change la façon de dire, jamais ce qui est dit : mêmes faits, mêmes pr
 La commande /profil montre le prénom et le ton retenus, et permet de changer de ton d'un bouton. Pour changer de prénom, dites « appelle-moi Rico » (ou tapez /profil prenom Rico) : le compagnon vous propose de le retenir et attend votre accord avant de l'enregistrer. Un prénom compte des lettres, des espaces ou des tirets, trente caractères au plus, un ou deux mots ; une phrase n'est pas un prénom et il la refuse en vous disant pourquoi.
 
 Le prénom et le ton sont propres à vous et à chaque potager : sur deux potagers, vous pouvez choisir deux tons différents.
+
+## Ce que le compagnon dit après « Tout confirmer », et la suite qu'il propose
+
+**Intention :** comprendre
+**On parle aussi de :** compte rendu après confirmation ; ce qui a vraiment été fait ; une étape a échoué ; suite proposée ; tu veux que je renseigne l'exposition ; Oui ou Plus tard ; engrais vert après une culture ; gestes sans planche après une suppression
+
+Après « Tout confirmer », le compte rendu dit ce qui a vraiment été fait, en une à trois phrases. Le compagnon le rédige à partir du résultat réel de chaque étape ; l'application le vérifie : un chiffre qui ne figure pas dans les résultats, une étape non faite que le texte ne nomme pas, ou une rédaction impossible, et c'est le compte rendu de l'application qui s'affiche, étape par étape : ✅ faite, ❌ refusée avec la raison donnée, ⏭ non exécutée. Quand une étape a échoué, sa raison, telle que l'application la donne, reste toujours sous le texte. Ce qui a été fait reste fait, sans retour en arrière : redites seulement la suite, une fois la cause corrigée.
+
+Après un compte rendu, le compagnon peut proposer **une seule suite utile**, avec « Oui » et « Plus tard ». Elle est calculée par l'application, pas devinée : une planche qui vient d'être créée sans exposition ni type de sol (« Tu veux que je renseigne l'exposition de Planche Nord ? »), une planche dont la dernière famille ne doit pas revenir de sitôt (un engrais vert), les gestes qui restent sans planche après une suppression. « Oui » ne fait rien d'écrit : le compagnon reprend la suggestion comme si vous l'aviez dite, et vous propose alors l'action à confirmer. « Plus tard », ou ne rien répondre, ne bloque rien et n'enregistre rien.
+
+## Poser une question qui mélange le potager, la météo et le savoir
+
+**Intention :** comprendre
+**On parle aussi de :** les limaces ont mangé mes salades ; combien de pluie ces derniers jours ; question avec la météo ; réponse avec sa source ; le compagnon cite ses sources ; pourquoi mes salades sont mangées ; conseil sans produit ni dose ; tu veux que je note les dégâts
+
+Là où la compréhension des phrases est en service, une question (« est-ce qu'il a trop plu pour mes salades ? ») ou un constat de problème (« les limaces ont mangé toutes mes salades », « mes tomates ont du mildiou ») reçoit une réponse qui croise trois lectures : votre carnet, la pluie et les températures des derniers jours à l'endroit de votre potager, et le savoir agronomique de l'application. Le compagnon voit déjà vos cultures en place et la météo du jour ; il va chercher le reste.
+
+Les chiffres cités sont ceux qui ont été lus : si la réponse en contient un qui ne vient d'aucune lecture, l'application le remplace par un texte écrit à partir de ce qui a été lu. Quand le savoir agronomique a servi, la réponse nomme sa source. Elle ne donne jamais de dose, de dilution ni de produit de traitement : une parade se dit en gestes (ramasser le soir, protéger les jeunes plants). Les causes possibles sont présentées par ordre de probabilité, sans en affirmer une comme certaine.
+
+Une question ou un constat n'écrit jamais rien dans le carnet. Le compagnon peut seulement proposer de noter (« tu veux que je note les dégâts ? ») ; il ne dit jamais que c'est noté tant que vous n'avez pas confirmé une action. Si votre potager n'a pas de localisation, la pluie ne peut pas être lue et la réponse s'en passe.

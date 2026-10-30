@@ -1300,6 +1300,14 @@ Pour un relevé manuel immédiat :
 /meteo
 ```
 
+Pour connaître la météo d'une **autre ville** que celle de votre potager, nommez-la, à la commande ou dans une phrase :
+
+```
+/meteo Lyon
+```
+
+« Quel temps fait-il à Lyon ? » ou « Quelle météo à Saint-Étienne ? » fonctionnent aussi, à l'écrit comme à la voix. L'assistant donne la météo du jour de cette ville et la nomme avec sa région et son pays ; si le même nom existe ailleurs, il le dit. Cette météo n'est **pas enregistrée** : l'historique météo reste celui de votre potager, et « quel temps fait-il ? » sans ville donne toujours la météo de votre potager. Seule la météo du jour est donnée : si vous demandez « demain », l'assistant le signale au lieu de répondre pour aujourd'hui sans rien dire. `/help meteo` rappelle ces formulations.
+
 Sur le tableau de bord, le widget météo affiche en plus le lever et le coucher du soleil, la prévision à 5 jours et un **conseil potager du jour** (arrosage, gel, vent…) calculé sur la localisation réelle de votre potager. Pensez à renseigner la commune du potager depuis l'écran de paramètres, sans quoi la météo affichée n'est pas la vôtre.
 
 ### 17.2 Les réponses vocales
@@ -1439,7 +1447,8 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 | `/stats <culture> <date>` | Détail à une date passée |
 | `/historique` | Les 10 derniers événements |
 | `/ask <question>` | Poser une question sur le potager |
-| `/meteo` | Relevé météo immédiat |
+| `/meteo` | Relevé météo immédiat de votre potager |
+| `/meteo <ville>` | Météo du jour d'une autre ville — rien n'est enregistré |
 
 ### 21.3 Cultures et référentiel
 

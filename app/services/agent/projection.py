@@ -50,9 +50,23 @@ _VERBE_DE_DESTRUCTION = re.compile(rf"\b(?:{VERBES_DE_DESTRUCTION})\b")
 _COMMANDE_D_AFFICHAGE = "/menu"
 
 
+#: Au moins ce nombre de mots après le dernier « ? » : une demande y suit la question.
+_MOTS_DE_LA_SUITE = 3
+
+
+def _apres_la_derniere_question(normalise: str) -> str:
+    """« Bon, tu m'entends ? Alors, je veux que tu me crées une parcelle nord… » : la phrase
+    parle de ce qui SUIT le dernier « ? », pas de la politesse qui l'ouvre. Une réponse de un
+    ou deux mots après la question (« … ? oui ») n'en fait pas une demande."""
+    avant, point, suite = normalise.rpartition("?")
+    if point and len(suite.split()) >= _MOTS_DE_LA_SUITE:
+        return suite.strip()
+    return normalise
+
+
 def est_interrogative(phrase: str) -> bool:
     """[CA2] La phrase pose-t-elle une question plutôt qu'elle ne demande d'agir ?"""
-    normalise = normaliser(phrase or "")[0]
+    normalise = _apres_la_derniere_question(normaliser(phrase or "")[0])
     demande = demande_d_agir(normalise)
     if demande is not None and demande != _COMMANDE_D_AFFICHAGE:
         return False
@@ -68,6 +82,28 @@ def demande_une_destruction(texte: str) -> bool:
     return bool(_VERBE_DE_DESTRUCTION.search(normaliser(texte or "")[0]))
 
 
+#: [US-263 / CA5] Un constat de dégât ou de maladie (« les limaces ont bouffé mes salades ») n'est pas un
+#: geste : le compagnon lit, conseille et PROPOSE de noter, il n'écrit rien. Le constat est un
+#: signe du problème (ravageur, maladie, dégât) dit sans demande d'agir et sans geste accompli.
+_SIGNE_DE_PROBLEME = re.compile(
+    r"\b(?:bouff\w*|mange[a-z]*|mangent|rong\w*|grignot\w*|devor\w*|ravag\w*|attaqu\w*|degats?|"
+    r"limaces?|escargots?|pucerons?|doryphores?|chenilles?|mildiou|oidium|rouille|campagnols?|taupes?|"
+    r"jauni\w*|fane\w*|pourri\w*|moisi\w*|malades?|taches?)\b"
+)
+_GESTE_ACCOMPLI = re.compile(
+    r"\bj ai (?:\w+ )?(?:traite|pulverise|epandu|mis|pose|ramasse|enleve|arrache|desherbe|paille|"
+    r"arrose|plante|seme|recolte|repique|taille|bine|butte|fertilise|ferti)\w*"
+)
+
+
+def est_un_constat_de_probleme(phrase: str) -> bool:
+    """[US-263 / CA5] La phrase dit un problème au jardin, sans demander d'agir ni rapporter un geste."""
+    normalise = normaliser(phrase or "")[0]
+    if demande_d_agir(normalise) is not None or _GESTE_ACCOMPLI.search(normalise):
+        return False
+    return bool(_SIGNE_DE_PROBLEME.search(normalise))
+
+
 def projection_pour(phrase: str, texte_en_contexte: Optional[str] = None) -> str:
     """[CA2, CA3] La projection du catalogue pour cette phrase.
 
@@ -75,8 +111,9 @@ def projection_pour(phrase: str, texte_en_contexte: Optional[str] = None) -> str
     question. `texte_en_contexte` : la phrase précédée de la demande en attente
     (US-238) ; « non, la sud » prolonge « supprime la planche » et garde l'outil
     destructeur, jamais une question qui suit.
+    [US-263 / CA5] Un constat de problème se lit comme une question : aucune écriture.
     """
-    if est_interrogative(phrase):
+    if est_interrogative(phrase) or (texte_en_contexte in (None, phrase) and est_un_constat_de_probleme(phrase)):
         return PROJECTION_SANS_ECRITURE
     if demande_une_destruction(texte_en_contexte or phrase):
         return PROJECTION_COMPLETE

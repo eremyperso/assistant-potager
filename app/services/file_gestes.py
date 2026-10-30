@@ -42,7 +42,6 @@ que la ligne lui apprend) mais l'exige en ÉCRITURE. US-224 fait du bot un
 protège, et aucune écriture croisée entre potagers n'est possible.
 """
 import logging
-import secrets
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, date as _date
@@ -54,7 +53,8 @@ from app.services.context import TenantContext
 from app.services.permissions import require_potager_non_archive, require_role
 from app.services import contexte_semis as svc_contexte_semis
 from database.db import tenant_scope, SessionLocal
-from database.models import Evenement, GesteIntention, Parcelle, Potager
+from database.models import Evenement, Parcelle, Potager, Proposition
+from app.services.compagnon import propositions as svc_propositions
 from llm.parseur_deterministe import ORIGINE_DETERMINISTE
 from utils.actions import normalize_action
 from app.services.evenements import GESTES_SOL
@@ -85,7 +85,9 @@ LONGUEUR_MAX_CODE = 64
 #: [CA3] Un geste en attente vit trois jours à compter de SON PROPRE dépôt.
 #: Trois jours, et pas quinze minutes : on prépare ses gestes devant l'écran,
 #: souvent plusieurs à la suite, et on les confirme quand on a les mains libres.
-DUREE_VIE_JOURS = 3
+#: [US-259 / CA5] C'est la durée de toute proposition NOTIFIÉE : un geste de la
+#: file l'est par nature (relances), et sa durée est celle de `propositions`.
+DUREE_VIE_JOURS = svc_propositions.DUREE_NOTIFIEE_JOURS
 
 #: [CA17] Un dernier message avant la purge, parce qu'il annonce une perte.
 DELAI_AVERTISSEMENT_HEURES = 4
@@ -99,10 +101,14 @@ RETENTION_SORTIS_HEURES = 48
 #: [CA3, CA8] Les quatre états d'un geste. Seuls `confirme`, `abandonne` et
 #: `perime` le retirent de la file — « Plus tard », un délai de confirmation
 #: dépassé ou une relance ignorée le laissent en `en_attente`.
-ETAT_EN_ATTENTE = "en_attente"
-ETAT_CONFIRME = "confirme"
-ETAT_ABANDONNE = "abandonne"
-ETAT_PERIME = "perime"
+#:
+#: [US-259 / CA2, CA6] Un geste de la file est une proposition de nature
+#: `geste` : ses états sont ceux de `app.services.compagnon.propositions`, la
+#: seule référence. Un geste ne passe jamais à `remplacee`.
+ETAT_EN_ATTENTE = svc_propositions.ETAT_EN_ATTENTE
+ETAT_CONFIRME = svc_propositions.ETAT_CONFIRMEE
+ETAT_ABANDONNE = svc_propositions.ETAT_ABANDONNEE
+ETAT_PERIME = svc_propositions.ETAT_PERIMEE
 ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRME, ETAT_ABANDONNE, ETAT_PERIME)
 
 #: [US-196 / CA2] Les gestes qu'un écran a le droit de préparer — un sous-ensemble
@@ -244,10 +250,19 @@ class Depot:
     constats faits au moment du dépôt, que l'API restitue à l'écran (CA4) et à
     la relance (CA14). Les relire plus tard n'aurait aucun sens.
     """
-    geste: GesteIntention
+    geste: Proposition
     doublon: bool
     file_etait_vide: bool
     nb_en_attente: int
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-259 / CA6] La file : les propositions de nature « geste »
+# ══════════════════════════════════════════════════════════════════════════════
+def _file(db: Session):
+    """Toute lecture de la file part d'ici : une commande proposée en conversation
+    n'est ni listée, ni relancée, ni périmée comme un geste de la file."""
+    return db.query(Proposition).filter(Proposition.nature == svc_propositions.NATURE_GESTE)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -293,10 +308,7 @@ def lecture_hors_tenant() -> Iterator[Session]:
 # Déposer
 # ══════════════════════════════════════════════════════════════════════════════
 def _generer_code(db: Session) -> str:
-    code = PREFIXE_CODE + secrets.token_urlsafe(_OCTETS_ALEA)
-    while db.query(GesteIntention).filter(GesteIntention.code == code).first() is not None:
-        code = PREFIXE_CODE + secrets.token_urlsafe(_OCTETS_ALEA)
-    return code
+    return svc_propositions.generer_code(db, PREFIXE_CODE, _OCTETS_ALEA)
 
 
 def date_enregistrable(date_demandee: Optional[str], aujourd_hui: Optional[_date] = None) -> str:
@@ -480,9 +492,9 @@ def _gestes_de_lot_en_attente(
     db: Session, user_id: int, potager_id: int, lot_id: int, maintenant: Optional[datetime] = None,
 ) -> list[dict]:
     return [
-        g.geste or {}
+        g.contenu or {}
         for g in lister_en_attente(db, user_id, potager_id=potager_id, maintenant=maintenant)
-        if (g.geste or {}).get("_lot_id") == int(lot_id)
+        if (g.contenu or {}).get("_lot_id") == int(lot_id)
     ]
 
 
@@ -637,7 +649,7 @@ def deposer_geste(
     supprimer_gestes_sortis(db, maintenant=instant)
 
     en_attente = lister_en_attente(db, ctx.user_id, maintenant=instant)
-    doublon = any(_meme_geste(item, existant.geste or {}) for existant in en_attente)
+    doublon = any(_meme_geste(item, existant.contenu or {}) for existant in en_attente)
     if doublon:
         # [CA4] Signalé, pas interdit : semer deux fois la même chose le même
         # jour est un cas réel, et un écran qui refuserait le second dépôt
@@ -647,15 +659,20 @@ def deposer_geste(
             ctx.user_id, item["action"], item.get("culture"),
         )
 
-    intention = GesteIntention(
+    intention = Proposition(
         code=_generer_code(db),
         user_id=ctx.user_id,
         potager_id=ctx.potager_id,
-        geste=item,
+        nature=svc_propositions.NATURE_GESTE,
+        contenu=item,
         ecran=ecran if ecran in ECRANS_CONNUS else None,
+        canal=svc_propositions.CANAL_PWA,
         cree_le=instant,
         # [CA3] Trois jours à compter de CE dépôt. Jamais l'échéance de la pile.
-        expire_le=instant + timedelta(days=DUREE_VIE_JOURS),
+        # [US-259 / CA5] Un geste de la file est notifié (relances) : la durée
+        # d'une proposition notifiée.
+        notifiee=True,
+        expire_le=svc_propositions.expiration(instant, notifiee=True),
         etat=ETAT_EN_ATTENTE,
     )
     db.add(intention)
@@ -685,13 +702,13 @@ def deposer_geste(
 # ══════════════════════════════════════════════════════════════════════════════
 def _requete_en_attente(db: Session, user_id: int, maintenant: datetime):
     return (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.user_id == user_id,
-            GesteIntention.etat == ETAT_EN_ATTENTE,
-            GesteIntention.expire_le > maintenant,
+            Proposition.user_id == user_id,
+            Proposition.etat == ETAT_EN_ATTENTE,
+            Proposition.expire_le > maintenant,
         )
-        .order_by(GesteIntention.cree_le.asc(), GesteIntention.id.asc())
+        .order_by(Proposition.cree_le.asc(), Proposition.id.asc())
     )
 
 
@@ -700,7 +717,7 @@ def lister_en_attente(
     user_id: int,
     potager_id: Optional[int] = None,
     maintenant: Optional[datetime] = None,
-) -> list[GesteIntention]:
+) -> list[Proposition]:
     """[CA5, CA13] Les gestes qui attendent, du plus ancien au plus récent.
 
     Tous potagers confondus par défaut : la file est celle d'un COMPTE, et le
@@ -710,7 +727,7 @@ def lister_en_attente(
     """
     requete = _requete_en_attente(db, user_id, maintenant or datetime.utcnow())
     if potager_id is not None:
-        requete = requete.filter(GesteIntention.potager_id == potager_id)
+        requete = requete.filter(Proposition.potager_id == potager_id)
     return requete.all()
 
 
@@ -725,13 +742,13 @@ def compter_en_attente(
     """
     requete = _requete_en_attente(db, user_id, maintenant or datetime.utcnow())
     if potager_id is not None:
-        requete = requete.filter(GesteIntention.potager_id == potager_id)
+        requete = requete.filter(Proposition.potager_id == potager_id)
     return requete.count()
 
 
 def lister_sortis_recents(
     db: Session, user_id: int, maintenant: Optional[datetime] = None,
-) -> list[GesteIntention]:
+) -> list[Proposition]:
     """[CA18] Ce qui a quitté la file récemment, et ce que c'était.
 
     L'envoi sortant du compagnon est best-effort : il n'échoue jamais
@@ -743,14 +760,14 @@ def lister_sortis_recents(
     """
     instant = maintenant or datetime.utcnow()
     return (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.user_id == user_id,
-            GesteIntention.etat.in_(ETATS_SORTIS),
-            GesteIntention.traite_le.isnot(None),
-            GesteIntention.traite_le > instant - timedelta(hours=RETENTION_SORTIS_HEURES),
+            Proposition.user_id == user_id,
+            Proposition.etat.in_(ETATS_SORTIS),
+            Proposition.traite_le.isnot(None),
+            Proposition.traite_le > instant - timedelta(hours=RETENTION_SORTIS_HEURES),
         )
-        .order_by(GesteIntention.traite_le.desc())
+        .order_by(Proposition.traite_le.desc())
         .all()
     )
 
@@ -764,10 +781,10 @@ def comptes_avec_file(db: Session, maintenant: Optional[datetime] = None) -> lis
     """
     instant = maintenant or datetime.utcnow()
     lignes = (
-        db.query(GesteIntention.user_id)
+        _file(db).with_entities(Proposition.user_id)
         .filter(
-            GesteIntention.etat == ETAT_EN_ATTENTE,
-            GesteIntention.expire_le > instant,
+            Proposition.etat == ETAT_EN_ATTENTE,
+            Proposition.expire_le > instant,
         )
         .distinct()
         .all()
@@ -775,9 +792,9 @@ def comptes_avec_file(db: Session, maintenant: Optional[datetime] = None) -> lis
     return [ligne[0] for ligne in lignes]
 
 
-def par_potager(gestes: list[GesteIntention]) -> dict[int, list[GesteIntention]]:
+def par_potager(gestes: list[Proposition]) -> dict[int, list[Proposition]]:
     """[CA13] Quand la file couvre plusieurs potagers, le niveau 1 les groupe."""
-    groupes: dict[int, list[GesteIntention]] = {}
+    groupes: dict[int, list[Proposition]] = {}
     for geste in gestes:
         groupes.setdefault(geste.potager_id, []).append(geste)
     return groupes
@@ -803,7 +820,7 @@ def est_code_geste(payload: Optional[str]) -> bool:
 def geste_par_code(
     db: Session, code: str, user_id: Optional[int],
     maintenant: Optional[datetime] = None,
-) -> GesteIntention:
+) -> Proposition:
     """[CA11] Le geste que ce lien désigne — sans le consommer.
 
     C'est la différence de fond avec `consommer_intention` d'US-196 : ouvrir le
@@ -814,7 +831,7 @@ def geste_par_code(
     ou `GestePerimeError` — quatre refus, tous motivés (CA12).
     """
     instant = maintenant or datetime.utcnow()
-    geste = db.query(GesteIntention).filter(GesteIntention.code == code.strip()).first()
+    geste = _file(db).filter(Proposition.code == code.strip()).first()
     if geste is None:
         log.info("[US-224 / CA11] Code de geste inconnu")
         raise CodeIntrouvableError("Code de geste inconnu")
@@ -844,7 +861,7 @@ def geste_par_code(
 
 def geste_par_id(
     db: Session, geste_id: int, user_id: int, maintenant: Optional[datetime] = None,
-) -> Optional[GesteIntention]:
+) -> Optional[Proposition]:
     """Le geste en attente d'identifiant donné, pour ce compte — ou `None`.
 
     Le filtre `user_id` n'est pas décoratif : c'est lui qui tient l'isolation
@@ -852,25 +869,25 @@ def geste_par_id(
     """
     instant = maintenant or datetime.utcnow()
     return (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.id == int(geste_id),
-            GesteIntention.user_id == user_id,
-            GesteIntention.etat == ETAT_EN_ATTENTE,
-            GesteIntention.expire_le > instant,
+            Proposition.id == int(geste_id),
+            Proposition.user_id == user_id,
+            Proposition.etat == ETAT_EN_ATTENTE,
+            Proposition.expire_le > instant,
         )
         .first()
     )
 
 
-def item_du_geste(geste: GesteIntention) -> dict:
+def item_du_geste(geste: Proposition) -> dict:
     """L'item tel que `saisie._parse_and_save` l'attend — sans les champs internes.
 
     `_lot_id` est stocké avec le geste mais n'appartient pas au contrat du
     parseur : il est retiré ici, à l'unique frontière où l'item repasse dans le
     flux d'enregistrement.
     """
-    brut = geste.geste or {}
+    brut = geste.contenu or {}
     item = {k: v for k, v in brut.items() if not k.startswith("_")}
     if item.get("action") == "deplacement" and brut.get("_lot_id") is not None:
         item["origine_graines_id"] = int(brut["_lot_id"])   # [US-211 / CA9] le lot à déplacer
@@ -888,29 +905,17 @@ def _sortir(
 
     Idempotent : un geste déjà sorti n'est pas re-sorti, et la fonction rend
     `False` — deux clics sur « Confirmer » ne produisent pas deux événements.
+    [US-259 / CA3] La sortie est celle de toute proposition, atomique : même deux
+    confirmations SIMULTANÉES (le portail et Telegram) n'en font sortir qu'une.
     """
-    instant = maintenant or datetime.utcnow()
     with _ecriture(potager_id) as db:
-        geste = (
-            db.query(GesteIntention)
-            .filter(
-                GesteIntention.id == int(geste_id),
-                GesteIntention.etat == ETAT_EN_ATTENTE,
-            )
-            .first()
-        )
-        if geste is None:
-            return False
-        geste.etat = etat
-        geste.traite_le = instant
-        if motif:
-            geste.motif_refus = motif[:200]
-        db.commit()
+        sorti = svc_propositions.sortir(db, geste_id, etat, maintenant=maintenant, motif=motif)
+    if sorti:
         log.info("[US-224 / CA8] Geste sorti de la file : id=%s état=%s", geste_id, etat)
-        return True
+    return sorti
 
 
-def confirmer(geste: GesteIntention, maintenant: Optional[datetime] = None) -> bool:
+def confirmer(geste: Proposition, maintenant: Optional[datetime] = None) -> bool:
     """[CA7] *Confirmer* — enregistre et retire de la file.
 
     Appelée APRÈS l'écriture de l'événement, jamais avant : si l'enregistrement
@@ -919,7 +924,7 @@ def confirmer(geste: GesteIntention, maintenant: Optional[datetime] = None) -> b
     return _sortir(geste.id, geste.potager_id, ETAT_CONFIRME, maintenant=maintenant)
 
 
-def abandonner(geste: GesteIntention, maintenant: Optional[datetime] = None) -> bool:
+def abandonner(geste: Proposition, maintenant: Optional[datetime] = None) -> bool:
     """[CA7, CA23] *Abandonner ce geste* — le retire définitivement, et le dit.
 
     Le libellé « Annuler » d'US-196 disparaît de ce flux : il ne permettait pas
@@ -929,7 +934,7 @@ def abandonner(geste: GesteIntention, maintenant: Optional[datetime] = None) -> 
     return _sortir(geste.id, geste.potager_id, ETAT_ABANDONNE, maintenant=maintenant)
 
 
-def refuser(geste: GesteIntention, motif: str, maintenant: Optional[datetime] = None) -> bool:
+def refuser(geste: Proposition, motif: str, maintenant: Optional[datetime] = None) -> bool:
     """[CA12] Le contexte a disparu — refusé en clair, avec son motif, et retiré.
 
     Jamais d'écriture silencieuse, jamais un geste fantôme qui échoue à chaque
@@ -941,7 +946,7 @@ def refuser(geste: GesteIntention, motif: str, maintenant: Optional[datetime] = 
 # ══════════════════════════════════════════════════════════════════════════════
 # [CA12] Le contexte a-t-il tenu depuis le dépôt ?
 # ══════════════════════════════════════════════════════════════════════════════
-def verifier_contexte(db: Session, geste: GesteIntention, user_id: int) -> Optional[str]:
+def verifier_contexte(db: Session, geste: Proposition, user_id: int) -> Optional[str]:
     """Le motif de refus de ce geste, ou `None` s'il peut être joué.
 
     Quatre façons pour un contexte de disparaître entre le dépôt et la
@@ -970,7 +975,7 @@ def verifier_contexte(db: Session, geste: GesteIntention, user_id: int) -> Optio
     if role not in ("owner", "editor"):
         return f"votre rôle sur « {potager.nom} » est devenu lecteur"
 
-    item = geste.geste or {}
+    item = geste.contenu or {}
     nom_parcelle = (item.get("parcelle") or "").strip()
     if nom_parcelle:
         from utils.parcelles import resolve_parcelle
@@ -1009,7 +1014,7 @@ def verifier_contexte(db: Session, geste: GesteIntention, user_id: int) -> Optio
 # ══════════════════════════════════════════════════════════════════════════════
 # [CA3, CA17, CA18] Périmer
 # ══════════════════════════════════════════════════════════════════════════════
-def gestes_a_avertir(db: Session, maintenant: Optional[datetime] = None) -> list[GesteIntention]:
+def gestes_a_avertir(db: Session, maintenant: Optional[datetime] = None) -> list[Proposition]:
     """[CA17] Les gestes dont la purge tombe dans moins de quatre heures.
 
     Un seul avertissement par geste (`avertissement_le`), et par geste et non
@@ -1017,43 +1022,43 @@ def gestes_a_avertir(db: Session, maintenant: Optional[datetime] = None) -> list
     """
     instant = maintenant or datetime.utcnow()
     return (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.etat == ETAT_EN_ATTENTE,
-            GesteIntention.avertissement_le.is_(None),
-            GesteIntention.expire_le > instant,
-            GesteIntention.expire_le <= instant + timedelta(hours=DELAI_AVERTISSEMENT_HEURES),
+            Proposition.etat == ETAT_EN_ATTENTE,
+            Proposition.avertissement_le.is_(None),
+            Proposition.expire_le > instant,
+            Proposition.expire_le <= instant + timedelta(hours=DELAI_AVERTISSEMENT_HEURES),
         )
-        .order_by(GesteIntention.expire_le.asc())
+        .order_by(Proposition.expire_le.asc())
         .all()
     )
 
 
-def marquer_averti(geste: GesteIntention, maintenant: Optional[datetime] = None) -> None:
+def marquer_averti(geste: Proposition, maintenant: Optional[datetime] = None) -> None:
     """[CA17] L'avertissement est parti — il ne repartira pas pour ce geste."""
     instant = maintenant or datetime.utcnow()
     with _ecriture(geste.potager_id) as db:
-        ligne = db.query(GesteIntention).filter(GesteIntention.id == geste.id).first()
+        ligne = _file(db).filter(Proposition.id == geste.id).first()
         if ligne is not None and ligne.avertissement_le is None:
             ligne.avertissement_le = instant
             db.commit()
 
 
-def gestes_perimes(db: Session, maintenant: Optional[datetime] = None) -> list[GesteIntention]:
+def gestes_perimes(db: Session, maintenant: Optional[datetime] = None) -> list[Proposition]:
     """[CA3] Les gestes en attente dont les trois jours sont écoulés."""
     instant = maintenant or datetime.utcnow()
     return (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.etat == ETAT_EN_ATTENTE,
-            GesteIntention.expire_le <= instant,
+            Proposition.etat == ETAT_EN_ATTENTE,
+            Proposition.expire_le <= instant,
         )
-        .order_by(GesteIntention.user_id.asc(), GesteIntention.expire_le.asc())
+        .order_by(Proposition.user_id.asc(), Proposition.expire_le.asc())
         .all()
     )
 
 
-def perimer(geste: GesteIntention, maintenant: Optional[datetime] = None) -> bool:
+def perimer(geste: Proposition, maintenant: Optional[datetime] = None) -> bool:
     """[CA3, CA18] Marque un geste périmé — sans le supprimer tout de suite.
 
     La ligne survit `RETENTION_SORTIS_HEURES` : c'est elle que l'application
@@ -1076,11 +1081,11 @@ def supprimer_gestes_sortis(db: Session, maintenant: Optional[datetime] = None) 
     instant = maintenant or datetime.utcnow()
     limite = instant - timedelta(hours=RETENTION_SORTIS_HEURES)
     nb = (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.etat.in_(ETATS_SORTIS),
-            GesteIntention.traite_le.isnot(None),
-            GesteIntention.traite_le < limite,
+            Proposition.etat.in_(ETATS_SORTIS),
+            Proposition.traite_le.isnot(None),
+            Proposition.traite_le < limite,
         )
         .delete(synchronize_session=False)
     )
@@ -1097,10 +1102,10 @@ def acquitter_sortis(db: Session, user_id: int) -> int:
     que l'information a été lue.
     """
     nb = (
-        db.query(GesteIntention)
+        _file(db)
         .filter(
-            GesteIntention.user_id == user_id,
-            GesteIntention.etat.in_(ETATS_SORTIS),
+            Proposition.user_id == user_id,
+            Proposition.etat.in_(ETATS_SORTIS),
         )
         .delete(synchronize_session=False)
     )
@@ -1181,7 +1186,7 @@ def echapper_markdown(texte: str) -> str:
     return texte
 
 
-def libelle_court(geste: GesteIntention) -> str:
+def libelle_court(geste: Proposition) -> str:
     """[CA5] Une ligne de file : geste, culture, parcelle, date.
 
     Quatre champs, ceux que le CA5 nomme — assez pour reconnaître son geste
@@ -1189,7 +1194,7 @@ def libelle_court(geste: GesteIntention) -> str:
 
     Le résultat est destiné à un message Markdown : les noms y sont échappés.
     """
-    item = geste.geste or {}
+    item = geste.contenu or {}
     morceaux = [echapper_markdown(str(item.get("action") or "geste"))]
     if item.get("culture"):
         morceaux.append(echapper_markdown(str(item["culture"])))

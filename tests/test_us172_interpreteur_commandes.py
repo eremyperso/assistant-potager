@@ -140,12 +140,30 @@ def _potager_de_test(db) -> None:
 
 @pytest.fixture(autouse=True)
 def _etat_propre():
-    """Aucune proposition en attente ne fuit d'un test à l'autre."""
-    bot_module._INTERP_PENDING.clear()
+    """Aucune proposition en attente ne fuit d'un test à l'autre.
+    [US-259] Les propositions de commande sont en base : `conftest.memoire_compagnon`."""
     bot_module._CREATION_PARCELLE_PENDING.clear()
     yield
-    bot_module._INTERP_PENDING.clear()
     bot_module._CREATION_PARCELLE_PENDING.clear()
+
+
+_CTX_1 = TenantContext(user_id=1, potager_id=1, role="owner")
+
+
+def _proposer(commande, attend=None):
+    """[US-259] Une proposition en attente, rangée en base comme le bot la range."""
+    from app.services.compagnon import propositions as svc_propositions
+
+    proposition = svc_propositions.proposer(_CTX_1, commande, log_id=1)
+    if attend is not None:
+        proposition = svc_propositions.mettre_a_jour(proposition, commande=commande, attend=attend)
+    return proposition
+
+
+def _en_attente():
+    from app.services.compagnon import propositions as svc_propositions
+
+    return svc_propositions.en_attente(_CTX_1.user_id, _CTX_1.potager_id)
 
 
 @pytest.fixture
@@ -529,20 +547,16 @@ class TestCA10CA11ConfirmationEtRelecture:
         # [US-234] Les boutons portent l'identifiant de leur proposition, et la
         # proposition le potager où elle a été faite : le contrat de ce test est
         # inchangé, seule la forme de ses boutons a évolué.
-        with patch.object(bot_module, "_potager_actif_au_clic", return_value=1):
-            bot_module._INTERP_PENDING[42] = {
-                "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
-                "id": "a1b2c3", "potager_id": 1,
-            }
-            await bot_module._interp_cb(_update_callback(42, "interp:non:a1b2c3"), ctx)
+        with patch.object(bot_module, "_jardinier_au_clic", return_value=1), \
+             patch.object(bot_module, "_contexte_sur",
+                          side_effect=lambda u, p: TenantContext(user_id=u, potager_id=p, role="owner")):
+            ident = _proposer(commande).code
+            await bot_module._interp_cb(_update_callback(42, f"interp:non:{ident}"), ctx)
             handler.assert_not_awaited()
-            assert 42 not in bot_module._INTERP_PENDING
+            assert _en_attente() is None
 
-            bot_module._INTERP_PENDING[42] = {
-                "commande": commande, "attend": None, "log_id": 1, "ts": time.time(),
-                "id": "a1b2c3", "potager_id": 1,
-            }
-            await bot_module._interp_cb(_update_callback(42, "interp:ok:a1b2c3"), ctx)
+            ident = _proposer(commande).code
+            await bot_module._interp_cb(_update_callback(42, f"interp:ok:{ident}"), ctx)
             handler.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -689,7 +703,7 @@ class TestCA12LeDouteNeFaitJamaisAgir:
         envoye = _texte_envoye(update)
         assert "Plusieurs commandes possibles" in envoye
         assert "/plan" in envoye and "/stats" in envoye
-        assert bot_module._INTERP_PENDING == {}
+        assert _en_attente() is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -736,14 +750,12 @@ class TestCA13CompletionGuidee:
         commande = interp.reconnaitre_par_regles(
             "note une association entre la carotte et l'aneth"
         )
-        bot_module._INTERP_PENDING[42] = {
-            "commande": commande, "attend": "nature", "log_id": 1, "ts": time.time(),
-        }
+        _proposer(commande, attend="nature")
         update = _update(42)
         await bot_module._interp_completion_texte(update, ctx, "ça se marie bien")
 
         assert "Valeur attendue" in _texte_envoye(update)
-        assert "nature" not in bot_module._INTERP_PENDING[42]["commande"].valeurs
+        assert "nature" not in _en_attente().commande.valeurs
 
     @pytest.mark.asyncio
     async def test_us172_ca13_la_completion_avance_argument_par_argument(self, sans_journal):
@@ -752,13 +764,11 @@ class TestCA13CompletionGuidee:
         commande = interp.reconnaitre_par_regles(
             "note une association entre la carotte et l'aneth"
         )
-        bot_module._INTERP_PENDING[42] = {
-            "commande": commande, "attend": "nature", "log_id": 1, "ts": time.time(),
-        }
+        _proposer(commande, attend="nature")
         update = _update(42)
         await bot_module._interp_completion_texte(update, ctx, "defavorable")
 
-        courante = bot_module._INTERP_PENDING[42]["commande"]
+        courante = _en_attente().commande
         assert courante.valeurs["nature"] == "defavorable"
         assert [a.nom for a in courante.manquants] == ["preuve", "motif"]
 

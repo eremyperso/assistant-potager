@@ -470,7 +470,7 @@ def test_us211_ca9_la_phrase_a_dicter_est_lue_sans_modele(db):
 def test_us211_ca9_le_lot_du_geste_pre_rempli_devient_le_lot_deplace(db):
     from types import SimpleNamespace
     from app.services.file_gestes import item_du_geste
-    geste = SimpleNamespace(geste={"action": "deplacement", "culture": "poireau",
+    geste = SimpleNamespace(contenu={"action": "deplacement", "culture": "poireau",
                                    "parcelle": "Châssis froid", "_lot_id": 42})
     item = item_du_geste(geste)
     assert item["origine_graines_id"] == 42 and "_lot_id" not in item

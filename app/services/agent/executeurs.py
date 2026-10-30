@@ -25,6 +25,7 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
+from app.services.compagnon import actions_menees
 from app.services.context import TenantContext
 from app.services.interpreteur_commandes import CommandeInterpretee, Plan
 from app.services.permissions import PermissionInsuffisanteError, require_role
@@ -141,8 +142,31 @@ def admise_dans_un_plan(commande: CommandeInterpretee) -> bool:
     return commande.forme.cle in EXECUTEURS and not commande.forme.destructrice
 
 
-def executer_etape(db: Session, ctx: TenantContext, commande: CommandeInterpretee) -> ResultatEtape:
-    """[CA6, CA8] Revalide puis exécute UNE étape. Ne lève jamais."""
+def executer_etape(
+    db: Session, ctx: TenantContext, commande: CommandeInterpretee,
+    proposition_id: Optional[int] = None,
+) -> ResultatEtape:
+    """[CA6, CA8] Revalide puis exécute UNE étape. Ne lève jamais.
+
+    [US-261 / CA1] Une étape exécutée est retenue parmi les actions menées, avec les valeurs
+    de la parcelle avant / après : c'est CE chemin d'exécution qui l'écrit, jamais le modèle.
+    """
+    if commande.forme.cle not in EXECUTEURS:
+        return _jouer_etape(db, ctx, commande)
+    avant = actions_menees.instantane_commande(ctx, commande, apres=False, db=db)
+    resultat = _jouer_etape(db, ctx, commande)
+    reussie = resultat.statut == STATUT_REUSSIE
+    actions_menees.noter_commande(
+        ctx, commande,
+        statut=actions_menees.STATUT_REUSSIE if reussie else actions_menees.STATUT_ECHOUEE,
+        avant=avant if reussie else None,
+        apres=actions_menees.instantane_commande(ctx, commande, apres=True, db=db) if reussie else None,
+        proposition_id=proposition_id,
+    )
+    return resultat
+
+
+def _jouer_etape(db: Session, ctx: TenantContext, commande: CommandeInterpretee) -> ResultatEtape:
     executeur = EXECUTEURS.get(commande.forme.cle)
     if executeur is None:
         return ResultatEtape(STATUT_ECHOUEE, "je ne sais faire celle-ci que seule")
@@ -165,7 +189,9 @@ def executer_etape(db: Session, ctx: TenantContext, commande: CommandeInterprete
         return ResultatEtape(STATUT_ECHOUEE, f"erreur inattendue ({type(e).__name__})")
 
 
-def executer_plan(plan: Plan, ctx: TenantContext) -> tuple[ResultatEtape, ...]:
+def executer_plan(
+    plan: Plan, ctx: TenantContext, proposition_id: Optional[int] = None,
+) -> tuple[ResultatEtape, ...]:
     """[CA6, CA7] Les étapes dans l'ordre ; la première en échec arrête la suite.
 
     Une création signalée « existe déjà » (CA3) est sautée sans arrêter le plan :
@@ -186,7 +212,7 @@ def executer_plan(plan: Plan, ctx: TenantContext) -> tuple[ResultatEtape, ...]:
                     STATUT_NON_EXECUTEE, f"la parcelle « {etape.valeurs.get('nom', '')} » existait déjà",
                 ))
                 continue
-            resultat = executer_etape(db, ctx, etape)
+            resultat = executer_etape(db, ctx, etape, proposition_id=proposition_id)
             log.info(
                 "[US-237] Étape %d/%d %s → %s (%s)",
                 rang + 1, len(plan.etapes), etape.commande_equivalente(), resultat.statut, resultat.message,

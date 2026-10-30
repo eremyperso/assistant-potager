@@ -3,6 +3,7 @@ titre: Enregistrer un geste au potager
 famille: doc_app
 source: Guide de l'Assistant Potager
 niveau_confiance: verifie
+domaines_aide: meteo
 index_terms:
   - "message vocal"
   - "validation avant enregistrement"
@@ -108,4 +109,27 @@ Pour les gestes de pépinière (mise en godet, perte, vente de plants, plantatio
 **Intention :** comprendre
 **On parle aussi de :** demande expirée ; ancien message ; bouton qui ne marche plus ; confirmer la mauvaise demande ; changer de potager avant de confirmer ; rien n'a été fait
 
-Chaque bouton ne vaut que pour la demande qu'il accompagne. Si l'on formule une nouvelle demande avant d'avoir tranché la précédente, la nouvelle remplace l'ancienne : appuyer sur « Confirmer » sous l'ancien message répond « Demande expirée, rien n'a été fait » et laisse la demande en cours intacte. De même, une demande se confirme dans le potager où elle a été dite : si le potager actif a changé entre-temps, rien n'est exécuté et il suffit de la redire dans le bon potager.
+Chaque bouton ne vaut que pour la demande qu'il accompagne. Si l'on formule une nouvelle demande avant d'avoir tranché la précédente, la nouvelle remplace l'ancienne : appuyer sur « Confirmer » sous l'ancien message répond « Demande expirée, rien n'a été fait » et laisse la demande en cours intacte. Une demande s'exécute toujours dans le potager où elle a été dite, même si le potager actif a changé entre-temps : quand vous avez plusieurs potagers, le récapitulatif nomme celui où elle agira. Si vous n'avez plus accès à ce potager, rien n'est exécuté. Deux appuis sur « Confirmer », même au même instant, n'enregistrent la demande qu'une fois.
+
+## Un mot de la phrase que l'assistant n'a pas compris n'est jamais jeté en silence
+
+**Intention :** comprendre
+**On parle aussi de :** mot non compris ; mot ignoré ; mot perdu ; valeur mal dite ; pépinière chaud ; masculin ou féminin ; faute d'accord ; sans précision ; chaud ou froid ; correction proposée
+
+Quand l'assistant reconnaît votre demande mais qu'un mot de la phrase ne lui a servi à rien, il ne fait pas comme s'il avait tout compris. Si le mot est une variante évidente d'une valeur qu'il connaît — « chaud » pour une pépinière chaude, « froid » pour une pépinière froide, « argileuse » pour un sol argileux, au masculin ou au féminin, au pluriel, avec ou sans accent —, il la rapproche lui-même et le dit dans le récapitulatif (« chaud → chaude ») : elle n'est appliquée qu'après votre accord, et un refus ne change rien. Si le mot ne ressemble à aucune valeur connue (« ma serre est une pépinière tiède »), ou pourrait en désigner deux, il ne devine pas : il vous répond « Je connais chaude ou froide pour le type de pépinière, pas "tiède" : laquelle ? », avec un bouton par valeur, un bouton « Sans précision » et « Annuler ». Pour un mot qui ne précise aucune valeur, il vous propose de continuer sans lui ou de reformuler. Les mots de politesse ou de liaison — « stp », « s'il te plaît », « merci », « maintenant » — ne déclenchent jamais cette question. Ce contrôle porte sur les demandes qui changent une caractéristique ou un nom ; une simple consultation (« qu'ai-je fait hier ? ») se lit comme avant. La météo fait exception : « quel temps fait-il demain ? » ne donne pas en silence la météo d'aujourd'hui, l'assistant dit qu'il ne donne que celle du jour et vous laisse continuer sans le jour, ou reformuler.
+
+## Demander la météo d'une autre ville que son potager
+
+**Intention :** procédure
+**On parle aussi de :** quel temps fait-il à Lyon ; météo d'une autre ville ; météo ailleurs ; météo ailleurs que chez moi ; la météo à Paris ; il va pleuvoir à Marseille ; un autre lieu que le potager ; /meteo Lyon
+
+On peut interroger le compagnon sur la météo d'une ville qui n'est pas celle de son potager : « quel temps fait-il à Lyon ? », « quelle météo à Saint-Étienne ? », « il va pleuvoir au Havre ? » ou la commande « /meteo Lyon ». Il donne la météo du jour de cette ville et la nomme avec sa région et son pays (« Lyon, Auvergne-Rhône-Alpes, France ») ; si le même nom existe ailleurs, il le dit. Cette météo n'est pas enregistrée : le journal météo reste celui de votre potager, et « quel temps fait-il ? » sans lieu, ou « dans la serre », donne toujours la météo de votre potager. Si la ville est introuvable, il le dit sans en deviner une autre ; seule la météo du jour est donnée, pas celle de demain.
+
+## Ce que le récapitulatif dit de ce qui a été interprété, et ce qui peut suivre
+
+**Intention :** procédure
+**On parle aussi de :** récapitulatif d'une commande ; ligne avec une flèche dans le récapitulatif ; nom dit et nom retenu ; suggestion proposée après une commande ; plus tard ; ce qui dépend d'une parcelle
+
+Avant de confirmer une commande dite en une phrase, le récapitulatif dit la part de la phrase que l'assistant a interprétée à votre place. Ce que vous avez dit tel quel n'est pas commenté. Un nom de parcelle que vous avez choisi parmi les noms voisins proposés est montré avec le mot que vous aviez dit (« tunnel → tunnel chauffé »). Une caractéristique que votre phrase laisse vide est nommée, avec la façon de la donner : « mon tunnel est une pépinière » affiche « type de pépinière non précisé » suivi des deux choix possibles. Il y a au plus une ligne par élément rapproché ou supposé, et rien du tout quand tout a été dit tel quel. La même présentation vaut pour une commande reconnue par règle, pour une proposition de l'agent et pour chaque étape d'un plan de plusieurs commandes.
+
+L'assistant regarde aussi l'état du potager autour de la commande, sans appeler de modèle. Avant de confirmer la suppression ou la mise hors service d'une parcelle, le récapitulatif signale ce qui en dépend, avec les nombres : « 12 pieds de tomate sont encore en place sur cette parcelle », ou les lots encore suivis ; la suppression n'a lieu qu'après votre confirmation. Après une commande exécutée qui laisse une caractéristique utile vide, l'assistant propose de la renseigner — aujourd'hui, le type d'une parcelle déclarée en pépinière, par deux boutons — au plus une suggestion par commande. Elle n'est jamais enchaînée toute seule : un bouton ne fait que poser la valeur, et le récapitulatif habituel attend votre confirmation. « Plus tard », ou une nouvelle phrase, laisse la suggestion de côté sans rien écrire. La longueur et le nombre de rangs d'une parcelle ne sont pas encore suggérés : ils se donnent par une phrase (« la serre : longueur 12 m ») ou par la fiche de la parcelle.

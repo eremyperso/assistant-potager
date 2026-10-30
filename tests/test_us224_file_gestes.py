@@ -42,7 +42,7 @@ from app.services import telegram_notify as svc_notify
 from app.services.context import TenantContext
 from app.services.permissions import PermissionInsuffisanteError, PotagerArchiveError
 from database.models import (
-    CultureConfig, Evenement, FileGestesReglage, GesteIntention, Parcelle, Potager,
+    CultureConfig, Evenement, FileGestesReglage, Proposition, Parcelle, Potager,
     PotagerMembre, User,
 )
 from llm.parseur_deterministe import ORIGINE_DETERMINISTE, parser_saisie
@@ -136,11 +136,11 @@ def test_us224_depot_ne_cree_aucun_evenement(db, ctx):
     assert geste.potager_id == 1
     assert geste.etat == svc.ETAT_EN_ATTENTE
     assert geste.traite_le is None
-    assert geste.geste["action"] == "semis"
+    assert geste.contenu["action"] == "semis"
     # La parcelle est stockée par son NOM : c'est ce que le flux du bot sait lire.
-    assert geste.geste["parcelle"] == "carré nord"
+    assert geste.contenu["parcelle"] == "carré nord"
     # Zéro jeton : l'item se présente comme déjà parsé.
-    assert geste.geste["origine_parsing"] == ORIGINE_DETERMINISTE
+    assert geste.contenu["origine_parsing"] == ORIGINE_DETERMINISTE
 
 
 def test_us224_code_opaque_et_compatible_deep_link(db, ctx):
@@ -177,14 +177,14 @@ def test_us224_action_non_ouverte_refusee(db, ctx, action):
     """
     with pytest.raises(svc.ActionNonOuverteError):
         _deposer(db, ctx, action=action)
-    assert db.query(GesteIntention).count() == 0
+    assert db.query(Proposition).count() == 0
 
 
 def test_us224_parcelle_d_un_autre_potager_refusee(db, ctx):
     """[CA2] La parcelle doit appartenir au potager consulté (US-042)."""
     with pytest.raises(svc.ParcelleHorsPotagerError):
         _deposer(db, ctx, parcelle_id=2)
-    assert db.query(GesteIntention).count() == 0
+    assert db.query(Proposition).count() == 0
 
 
 def test_us224_lot_d_un_autre_potager_refuse(db, ctx):
@@ -201,7 +201,7 @@ def test_us224_lecteur_ne_depose_rien(db):
     lecteur = TenantContext(user_id=1, potager_id=1, role="lecteur")
     with pytest.raises(PermissionInsuffisanteError):
         _deposer(db, lecteur)
-    assert db.query(GesteIntention).count() == 0
+    assert db.query(Proposition).count() == 0
 
 
 def test_us224_potager_archive_refuse(db, ctx):
@@ -220,7 +220,7 @@ def test_us224_item_du_geste_retire_les_champs_internes(db, ctx):
     db.commit()
     geste = _deposer(db, ctx, lot_id=7).geste
 
-    assert geste.geste["_lot_id"] == 7
+    assert geste.contenu["_lot_id"] == 7
     assert "_lot_id" not in svc.item_du_geste(geste)
 
 
@@ -234,7 +234,7 @@ def test_us224_doublon_signale_mais_depose_quand_meme(db, ctx):
 
     assert premier.doublon is False
     assert second.doublon is True, "l'écran doit pouvoir le DIRE"
-    assert db.query(GesteIntention).count() == 2, "et le geste entre quand même"
+    assert db.query(Proposition).count() == 2, "et le geste entre quand même"
 
 
 def test_us224_geste_different_n_est_pas_un_doublon(db, ctx):
@@ -362,7 +362,7 @@ def test_us224_un_geste_perime_n_est_plus_en_attente(db, ctx):
     apres = depot + timedelta(days=3, minutes=1)
     assert svc.compter_en_attente(db, 1, maintenant=apres) == 0
     with pytest.raises(svc.GestePerimeError):
-        svc.geste_par_code(db, db.query(GesteIntention).first().code, 1, maintenant=apres)
+        svc.geste_par_code(db, db.query(Proposition).first().code, 1, maintenant=apres)
 
 
 def test_us224_geste_sorti_reste_visible_puis_part(db, ctx):
@@ -379,7 +379,7 @@ def test_us224_geste_sorti_reste_visible_puis_part(db, ctx):
 
     tard = instant + timedelta(hours=svc.RETENTION_SORTIS_HEURES + 1)
     svc.supprimer_gestes_sortis(db, maintenant=tard)
-    assert db.query(GesteIntention).count() == 0
+    assert db.query(Proposition).count() == 0
 
 
 def test_us224_acquittement_efface_ce_qui_a_ete_vu(db, ctx):
@@ -453,7 +453,7 @@ def test_us224_contexte_intact_ne_refuse_rien(db, ctx):
 def test_us224_date_a_venir_ramenee_au_jour_du_depot(db, ctx):
     """[CA26] La date de référence d'un écran peut être à venir ; le geste, non."""
     geste = _deposer(db, ctx, date="2026-10-15", aujourd_hui=date(2026, 9, 21)).geste
-    assert geste.geste["date"] == "2026-09-21"
+    assert geste.contenu["date"] == "2026-09-21"
 
 
 def test_us224_date_du_depot_survit_a_trois_jours_d_attente(db, ctx):
@@ -467,7 +467,7 @@ def test_us224_date_du_depot_survit_a_trois_jours_d_attente(db, ctx):
     svc.confirmer(geste, maintenant=datetime(2026, 9, 22, 8, 0))
 
     db.refresh(geste)
-    assert geste.geste["date"] == "2026-09-19"
+    assert geste.contenu["date"] == "2026-09-19"
     assert svc.item_du_geste(geste)["date"] == "2026-09-19"
 
 
@@ -893,7 +893,7 @@ async def test_us224_conversation_non_liee_dit_que_les_gestes_attendent(bot, ctx
 
 
 def db_code(db) -> str:
-    return db.query(GesteIntention).first().code
+    return db.query(Proposition).first().code
 
 
 @pytest.mark.asyncio
@@ -1004,7 +1004,7 @@ async def test_us224_plus_tard_repose_le_geste_et_le_dit(db, ctx, monkeypatch):
     # Relu depuis la base, et non par `refresh` : le compagnon a détaché ce
     # geste de la session en annonçant la suite — ce que la session partagée du
     # test rend visible, et que deux processus distincts masqueraient.
-    relu = db.query(GesteIntention).filter(GesteIntention.id == geste.id).first()
+    relu = db.query(Proposition).filter(Proposition.id == geste.id).first()
     assert relu.etat == svc.ETAT_EN_ATTENTE
     assert svc.compter_en_attente(db, 1) == 1
 
