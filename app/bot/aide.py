@@ -241,6 +241,23 @@ _HELP_LOT = (
 )
 
 
+_HELP_METEO = (
+    "🌤️ *Aide — Météo*\n"
+    "La météo du jour, avec un conseil potager : celle de votre potager, ou celle d'une autre ville.\n\n"
+    "*Actions disponibles :*\n"
+    "• La météo de votre potager (enregistrée dans son journal météo)\n"
+    "  → /meteo\n"
+    "  → _\"quel temps fait-il ?\"_ · _\"la météo\"_ · _\"il va pleuvoir ?\"_\n"
+    "• La météo d'une autre ville (lecture seule : rien n'est enregistré)\n"
+    "  → /meteo Lyon\n"
+    "  → _\"quel temps fait-il à Lyon ?\"_ · _\"quelle météo à Saint-Étienne ?\"_\n"
+    "  → _\"il va pleuvoir au Havre ?\"_\n\n"
+    "💡 _La ville est nommée avec sa région et son pays ; si le même nom existe ailleurs, "
+    "c'est dit. Seule la météo du jour est donnée : « demain » est signalé, jamais ignoré "
+    "en silence. Chaque matin à 5 h, la météo de votre potager est aussi relevée seule._"
+)
+
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -249,7 +266,7 @@ _HELP_LOT = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
-    "calendrier", "lot",
+    "calendrier", "lot", "meteo",
 )
 
 
@@ -279,6 +296,7 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "famille":   _HELP_CULTURE,
     "fiche":     _HELP_FICHE,
     "calendrier": _HELP_CALENDRIER,  # [US-068]
+    "meteo":     _HELP_METEO,
 }
 
 
@@ -357,7 +375,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/profil — Votre prénom et le ton du compagnon\n"
         # [US-087 / CA10] Même section que /lier et /potager : c'est de l'appartenance.
         "/rejoindre [code] — Rejoindre un potager avec un code d'invitation\n"
-        "/meteo — Météo + conseil potager\n"
+        "/meteo [ville] — Météo + conseil potager, ou météo d'une autre ville\n"
         "/tts\\_on · /tts\\_off — Vocal on/off\n"
         "/version — Version déployée\n"
         "/help — Cette aide\n\n"

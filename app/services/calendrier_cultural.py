@@ -45,6 +45,7 @@ attributs de conduite (US-161) et les relations (US-162, US-163) non plus.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import statistics
@@ -1065,18 +1066,24 @@ def _itineraire_personnalise(
     db.add(local)
     db.flush()
     if partage is not None:
-        for f in db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == partage.id).all():
+        fenetres = db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == partage.id).all()
+        durees = db.query(DureeCulturale).filter(DureeCulturale.itineraire_id == partage.id).all()
+        for f in fenetres:
             db.add(FenetreCulturale(
                 itineraire_id=local.id, zone_climatique=f.zone_climatique, phase=f.phase,
                 mois_debut=f.mois_debut, mois_fin=f.mois_fin, potager_id=potager_id,
                 source_id=f.source_id,
             ))
-        for d in db.query(DureeCulturale).filter(DureeCulturale.itineraire_id == partage.id).all():
+        for d in durees:
             db.add(DureeCulturale(
                 itineraire_id=local.id, etape=d.etape, jours_min=d.jours_min,
                 jours_max=d.jours_max, mention=d.mention, potager_id=potager_id,
                 source_id=d.source_id,
             ))
+        # [US-279 / CA2] La copie retient CE qu'elle a copié : c'est la seule
+        # façon de dire plus tard « le référentiel a changé » plutôt que « vos
+        # corrections diffèrent du référentiel ».
+        local.empreinte_reference = _empreinte(fenetres, durees)
         db.flush()
     log.info(
         "[US-068] Calendrier personnalisé créé : '%s' / '%s' potager_id=%s (%s)",
@@ -1234,6 +1241,263 @@ def corriger_duree(
         culture, local.nom, etape, affichage_avant, affichage_apres, ctx.potager_id,
     )
     return affichage_avant, affichage_apres
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-279] Remplacer un calendrier personnalisé par la version du référentiel
+# ═════════════════════════════════════════════════════════════════════════════
+# L'import n'écrit que du partagé (CA9) : une copie personnalisée ne reçoit
+# donc plus aucune mise à jour. C'est le JARDINIER qui la tire, jamais l'import
+# qui la pousse. Remplacer = supprimer la copie : la lecture retombe sur le
+# partagé, et le potager suit de nouveau le référentiel jusqu'à sa prochaine
+# correction (qui recopie la version courante). Jamais de fusion.
+
+STATUT_ECART = "ecart"
+STATUT_A_JOUR = "a_jour"
+STATUT_SANS_COPIE = "sans_copie"
+STATUT_CULTURE_INCONNUE = "culture_inconnue"
+
+
+@dataclass(frozen=True)
+class DifferenceCalendrier:
+    """Une valeur qui diffère entre la copie et le référentiel, telle que lue."""
+    libelle: str
+    avant: str      # la copie du potager
+    apres: str      # le référentiel
+
+
+@dataclass(frozen=True)
+class EcartReferentiel:
+    """[CA1] Une copie personnalisée en retard sur le référentiel."""
+    itineraire_id: int          # la COPIE du potager — jamais le partagé
+    culture: str
+    itineraire: str
+    #: [CA3, CA4] Ce qui diffère pour la zone du potager et pour les durées.
+    differences: list[DifferenceCalendrier]
+    #: Des fenêtres d'autres zones diffèrent aussi : elles seront remplacées
+    #: avec le reste (CA5), sans être détaillées.
+    autres_zones: bool
+
+
+@dataclass(frozen=True)
+class EtatMiseAJour:
+    """[CA4] Réponse à « où en est le calendrier de cette culture ? »."""
+    statut: str
+    ecarts: list[EcartReferentiel] = field(default_factory=list)
+
+
+def _empreinte(fenetres: Iterable[FenetreCulturale], durees: Iterable[DureeCulturale]) -> str:
+    """
+    [CA1] Empreinte des VALEURS d'un itinéraire — zone, phase et mois pour les
+    fenêtres ; étape, jours et mention pour les durées. L'origine (`source_id`)
+    n'y entre pas : une valeur réécrite à l'identique n'est pas une évolution.
+    """
+    lignes = sorted(
+        [f"f|{f.zone_climatique}|{f.phase}|{f.mois_debut}|{f.mois_fin}" for f in fenetres]
+        + [f"d|{d.etape}|{d.jours_min}|{d.jours_max}|{d.mention or ''}" for d in durees]
+    )
+    return hashlib.sha256("\n".join(lignes).encode("utf-8")).hexdigest()
+
+
+def _lignes(db: Session, itineraire_id: int) -> tuple[list[FenetreCulturale], list[DureeCulturale]]:
+    return (
+        db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == itineraire_id).all(),
+        db.query(DureeCulturale).filter(DureeCulturale.itineraire_id == itineraire_id).all(),
+    )
+
+
+def _homologue_partage(db: Session, local: ItineraireCultural) -> Optional[ItineraireCultural]:
+    """Itinéraire PARTAGÉ de même nom que la copie, pour la même culture."""
+    fiche = db.query(CultureConfig).filter(CultureConfig.id == local.culture_id).first()
+    ids = [f.id for f in fiches_visibles(db, fiche.nom, local.potager_id)] if fiche is not None else []
+    if local.culture_id not in ids:
+        ids.append(local.culture_id)
+    return (
+        db.query(ItineraireCultural)
+        .filter(
+            ItineraireCultural.culture_id.in_(ids),
+            ItineraireCultural.nom_normalise == local.nom_normalise,
+            ItineraireCultural.potager_id.is_(None),
+        )
+        .order_by(ItineraireCultural.id)
+        .first()
+    )
+
+
+def _differences(
+    copie: tuple[list[FenetreCulturale], list[DureeCulturale]],
+    reference: tuple[list[FenetreCulturale], list[DureeCulturale]],
+    zone: str,
+) -> tuple[list[DifferenceCalendrier], bool]:
+    """[CA4] Avant/après pour la zone du potager et les durées ; et le fait que
+    d'autres zones diffèrent aussi."""
+    differences: list[DifferenceCalendrier] = []
+    f_copie = {(f.zone_climatique, f.phase): (f.mois_debut, f.mois_fin) for f in copie[0]}
+    f_ref = {(f.zone_climatique, f.phase): (f.mois_debut, f.mois_fin) for f in reference[0]}
+    for phase in PHASES:
+        avant, apres = f_copie.get((zone, phase)), f_ref.get((zone, phase))
+        if avant != apres:
+            differences.append(DifferenceCalendrier(
+                libelle=LIBELLES_PHASES[phase],
+                avant=formater_fenetre(*avant) if avant else "aucune",
+                apres=formater_fenetre(*apres) if apres else "aucune",
+            ))
+    d_copie = {d.etape: (d.jours_min, d.jours_max, d.mention) for d in copie[1]}
+    d_ref = {d.etape: (d.jours_min, d.jours_max, d.mention) for d in reference[1]}
+    for etape in ETAPES:
+        avant, apres = d_copie.get(etape), d_ref.get(etape)
+        if avant != apres:
+            differences.append(DifferenceCalendrier(
+                libelle=LIBELLES_ETAPES[etape],
+                avant=formater_duree(*avant) if avant else affichage_absent(etape),
+                apres=formater_duree(*apres) if apres else affichage_absent(etape),
+            ))
+    cles = (set(f_copie) | set(f_ref)) - {(zone, p) for p in PHASES}
+    autres_zones = any(f_copie.get(c) != f_ref.get(c) for c in cles)
+    return differences, autres_zones
+
+
+def _ecart(db: Session, local: ItineraireCultural, zone: str) -> Optional[EcartReferentiel]:
+    """
+    [CA1] L'écart d'UNE copie, ou None.
+
+    Le référentiel a évolué si l'empreinte du partagé ne vaut plus celle que la
+    copie a mémorisée. Sans empreinte (copie d'avant US-279), la copie est
+    comparée valeur par valeur. Dans les deux cas, une copie identique au
+    partagé n'a rien à remplacer.
+    """
+    partage = _homologue_partage(db, local)
+    if partage is None:
+        return None     # créée de zéro : rien à quoi se comparer
+    copie, reference = _lignes(db, local.id), _lignes(db, partage.id)
+    empreinte_ref = _empreinte(*reference)
+    if local.empreinte_reference is not None and local.empreinte_reference == empreinte_ref:
+        return None
+    if _empreinte(*copie) == empreinte_ref:
+        return None
+    differences, autres_zones = _differences(copie, reference, zone)
+    fiche = db.query(CultureConfig).filter(CultureConfig.id == local.culture_id).first()
+    return EcartReferentiel(
+        itineraire_id=local.id,
+        culture=fiche.nom if fiche is not None else local.nom,
+        itineraire=local.nom,
+        differences=differences,
+        autres_zones=autres_zones,
+    )
+
+
+def _copies_du_potager(db: Session, potager_id: int) -> list[ItineraireCultural]:
+    return (
+        db.query(ItineraireCultural)
+        .filter(ItineraireCultural.potager_id == potager_id)
+        .order_by(ItineraireCultural.id)
+        .all()
+    )
+
+
+def ecarts_referentiel(db: Session, potager_id: Optional[int]) -> list[EcartReferentiel]:
+    """
+    [CA1, CA3] Copies personnalisées de CE potager en retard sur le référentiel
+    — lecture seule. Une copie d'un autre potager n'est jamais lue (CA10).
+    """
+    if potager_id is None:
+        return []
+    zone, _ = zone_du_potager(db, potager_id)
+    ecarts = [e for e in (_ecart(db, it, zone) for it in _copies_du_potager(db, potager_id)) if e]
+    return sorted(ecarts, key=lambda e: (normaliser_culture(e.culture), _ordre_itineraire(normaliser_itineraire(e.itineraire))))
+
+
+def etat_mise_a_jour(db: Session, potager_id: Optional[int], culture: str) -> EtatMiseAJour:
+    """[CA4, CA8] Où en est le calendrier d'une culture pour ce potager, et pourquoi."""
+    fiches = fiches_visibles(db, culture, potager_id)
+    if not fiches:
+        return EtatMiseAJour(STATUT_CULTURE_INCONNUE)
+    ids = {f.id for f in fiches}
+    copies = [it for it in _copies_du_potager(db, potager_id) if it.culture_id in ids] if potager_id else []
+    if not copies:
+        return EtatMiseAJour(STATUT_SANS_COPIE)
+    zone, _ = zone_du_potager(db, potager_id)
+    ecarts = [e for e in (_ecart(db, it, zone) for it in copies) if e]
+    return EtatMiseAJour(STATUT_ECART if ecarts else STATUT_A_JOUR, ecarts)
+
+
+def _copie_du_contexte(db: Session, ctx: TenantContext, itineraire_id: int) -> ItineraireCultural:
+    """[CA10] La copie demandée, À CONDITION qu'elle soit celle du potager courant."""
+    local = (
+        db.query(ItineraireCultural)
+        .filter(ItineraireCultural.id == itineraire_id, ItineraireCultural.potager_id == ctx.potager_id)
+        .first()
+    )
+    if local is None or ctx.potager_id is None:
+        raise ValeurCalendrierInvalideError(
+            "Ce calendrier personnalisé n'existe plus pour votre potager."
+        )
+    return local
+
+
+def remplacer_par_referentiel(
+    db: Session, ctx: TenantContext, itineraire_ids: Iterable[int]
+) -> list[EcartReferentiel]:
+    """
+    [CA5, CA6, CA11] Remplace des copies personnalisées par le référentiel :
+    chacune est SUPPRIMÉE (fenêtres, durées, itinéraire), et la lecture retombe
+    sur le partagé. Tout ou rien : une copie introuvable ou déjà à jour annule
+    l'ensemble, rien n'est écrit.
+
+    Retourne les écarts remplacés (pour la réponse au jardinier).
+    """
+    _verifier_ecriture(db, ctx, "remplacer le calendrier d'une culture")
+    zone, _ = zone_du_potager(db, ctx.potager_id)
+    remplaces: list[tuple[ItineraireCultural, EcartReferentiel]] = []
+    for itineraire_id in dict.fromkeys(itineraire_ids):
+        local = _copie_du_contexte(db, ctx, itineraire_id)
+        ecart = _ecart(db, local, zone)
+        if ecart is None:
+            raise ValeurCalendrierInvalideError(
+                f"Le calendrier « {local.nom} » suit déjà le référentiel : rien à remplacer."
+            )
+        remplaces.append((local, ecart))
+    if not remplaces:
+        return []
+    try:
+        for local, ecart in remplaces:
+            nb_fenetres = db.query(FenetreCulturale).filter(FenetreCulturale.itineraire_id == local.id).delete()
+            nb_durees = db.query(DureeCulturale).filter(DureeCulturale.itineraire_id == local.id).delete()
+            db.delete(local)
+            log.info(
+                "[US-279] Calendrier personnalisé remplacé par le référentiel : '%s' / '%s' "
+                "potager_id=%s (%d fenêtre(s), %d durée(s) supprimées)",
+                ecart.culture, ecart.itineraire, ctx.potager_id, nb_fenetres, nb_durees,
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return [ecart for _, ecart in remplaces]
+
+
+def garder_version_locale(db: Session, ctx: TenantContext, itineraire_id: int) -> EcartReferentiel:
+    """
+    [CA7] Le jardinier garde sa copie : elle mémorise l'empreinte ACTUELLE du
+    référentiel, et ne sera reproposée qu'à sa prochaine évolution. Aucune
+    valeur de la copie ne change.
+    """
+    _verifier_ecriture(db, ctx, "garder le calendrier d'une culture")
+    local = _copie_du_contexte(db, ctx, itineraire_id)
+    zone, _ = zone_du_potager(db, ctx.potager_id)
+    ecart = _ecart(db, local, zone)
+    partage = _homologue_partage(db, local)
+    if ecart is None or partage is None:
+        raise ValeurCalendrierInvalideError(
+            f"Le calendrier « {local.nom} » n'a aucune mise à jour en attente."
+        )
+    local.empreinte_reference = _empreinte(*_lignes(db, partage.id))
+    db.commit()
+    log.info(
+        "[US-279] Calendrier personnalisé gardé : '%s' / '%s' potager_id=%s",
+        ecart.culture, ecart.itineraire, ctx.potager_id,
+    )
+    return ecart
 
 
 # ═════════════════════════════════════════════════════════════════════════════

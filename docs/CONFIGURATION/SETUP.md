@@ -117,7 +117,7 @@ Config is loaded from `.env.{APP_ENV}` (at the repo root) via `app/config.py`.
 | `/parcelle lister` | — | Lister toutes les parcelles actives |
 | `/parcelles` | — | Alias de `/parcelle lister` (`bot.py:4665`) |
 | `/vendre <culture> [variété] <quantité>` | `<culture> [variété] <quantité>` | Enregistrer une vente de plants pépinière (`bot.py:4585`) |
-| `/meteo` | — | Déclencher la météo manuellement (job auto à 05h00) |
+| `/meteo [ville]` | `[ville]` facultatif | Sans ville : déclencher la météo du potager manuellement (job auto à 05h00). Avec une ville : sa météo du jour, en lecture seule |
 | `/tts` | — | Afficher l'état de la synthèse vocale |
 | `/tts_on` | — | Activer les réponses vocales |
 | `/tts_off` | — | Désactiver les réponses vocales |

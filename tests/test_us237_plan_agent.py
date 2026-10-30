@@ -25,6 +25,7 @@ from app.services import interpreteur_commandes as interp
 from app.services.agent import catalogue_outils, executeurs, interpreteur_agent, lecture
 from app.services.agent.catalogue_outils import OUTIL_LIRE, OUTIL_MODIFIER_PARCELLE
 from app.services.agent.validation import ContexteValidation, valider_plan
+from app.services.compagnon import propositions as svc_propositions
 from app.services.context import TenantContext
 from database.models import Parcelle, RoutageLog
 from llm import passerelle
@@ -125,10 +126,22 @@ def _update():
 
 
 @pytest.fixture(autouse=True)
-def _vider_propositions():
-    bot_interpretation._INTERP_PENDING.clear()
-    yield
-    bot_interpretation._INTERP_PENDING.clear()
+def _au_clic():
+    """[US-259] Le jardinier 1 clique ; il est membre du potager de la proposition.
+    Les propositions sont en base, vidée à chaque test (`conftest.memoire_compagnon`)."""
+    with patch.object(bot_interpretation, "_jardinier_au_clic", return_value=CTX.user_id), \
+         patch.object(bot_interpretation, "_contexte_sur",
+                      side_effect=lambda u, p: TenantContext(user_id=u, potager_id=p, role="owner")):
+        yield
+
+
+def _ranger(plan) -> str:
+    """[US-259] Un plan en attente, rangé en base comme le bot le range ; rend son code."""
+    return svc_propositions.proposer(CTX, plan).code
+
+
+def _en_attente():
+    return svc_propositions.en_attente(CTX.user_id, CTX.potager_id)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -140,7 +153,7 @@ class TestCA1Lecture:
         outil = catalogue_outils.outils_par_nom()[OUTIL_LIRE]
         assert outil.lecture and not outil.terminal and not outil.formes
         quoi = outil.schema["function"]["parameters"]["properties"]["quoi"]["enum"]
-        assert quoi == ["parcelle", "parcelles", "lot", "culture"]
+        assert quoi == ["parcelle", "parcelles", "lot", "culture", "actions"]   # [US-261 / CA4]
         assert len(catalogue_outils.outils()) <= catalogue_outils.NB_OUTILS_MAX
         assert catalogue_outils.controler_parite_outils() == []
 
@@ -368,9 +381,9 @@ class TestCA5Recapitulatif:
         assert pris is True
         clavier = update.message.reply_text.call_args.kwargs["reply_markup"].inline_keyboard
         assert len(clavier) == 1 and [b.text for b in clavier[0]] == ["✅ Tout confirmer", "❌ Annuler"]
-        pending = bot_interpretation._INTERP_PENDING[4237]
-        assert [b.callback_data for b in clavier[0]] == [f"interp:ok:{pending['id']}", f"interp:non:{pending['id']}"]
-        assert pending["potager_id"] == CTX.potager_id and pending["log_id"] == 7
+        pending = _en_attente()
+        assert [b.callback_data for b in clavier[0]] == [f"interp:ok:{pending.code}", f"interp:non:{pending.code}"]
+        assert pending.potager_id == CTX.potager_id and pending.log_id == 7
 
     @pytest.mark.asyncio
     async def test_us237_ca5_un_nouveau_plan_abandonne_le_precedent(self):
@@ -380,16 +393,14 @@ class TestCA5Recapitulatif:
             patch.object(interp, "persister_journal", return_value=7) as journal,
         ):
             await bot_interpretation._plan_proposer(update, tg_ctx, _plan())
-            premier = bot_interpretation._INTERP_PENDING[4237]["id"]
+            premier = _en_attente().code
             await bot_interpretation._plan_proposer(update, tg_ctx, _plan())
-        assert bot_interpretation._INTERP_PENDING[4237]["id"] != premier
+        assert _en_attente().code != premier
         assert journal.call_args_list[1].args[2] == interp.ISSUE_ABANDONNEE
 
     @pytest.mark.asyncio
     async def test_us237_ca5_bouton_d_un_ancien_plan_n_execute_rien(self):
-        bot_interpretation._INTERP_PENDING[4237] = {
-            "commande": _plan(), "attend": None, "log_id": None, "ts": 10**12, "id": "neuf", "potager_id": 1,
-        }
+        _ranger(_plan())
         update = _update()
         update.callback_query = MagicMock(data="interp:ok:ancien", answer=AsyncMock(), edit_message_text=AsyncMock())
         with patch.object(executeurs, "executer_plan") as executer:
@@ -481,29 +492,22 @@ class TestCA6CA7Execution:
     @pytest.mark.asyncio
     async def test_us237_ca7_tout_confirmer_execute_et_rend_le_compte_rendu(self, potager):
         plan = _plan()
-        bot_interpretation._INTERP_PENDING[4237] = {
-            "commande": plan, "attend": None, "log_id": None, "ts": 10**12, "id": "abc", "potager_id": 1,
-        }
+        code = _ranger(plan)
         update = _update()
-        update.callback_query = MagicMock(data="interp:ok:abc", answer=AsyncMock(), edit_message_text=AsyncMock())
-        with (
-            patch.object(bot_interpretation, "_contexte_au_clic", return_value=CTX),
-            patch.object(interp, "persister_journal") as journal,
-        ):
+        update.callback_query = MagicMock(data=f"interp:ok:{code}", answer=AsyncMock(), edit_message_text=AsyncMock())
+        with patch.object(interp, "persister_journal") as journal:
             await bot_interpretation._interp_cb(update, MagicMock(user_data={}))
         assert journal.call_args.args[2] == interp.ISSUE_CONFIRMEE
         texte = update.callback_query.edit_message_text.call_args.args[0]
         assert texte.count("✅") == 3
-        assert 4237 not in bot_interpretation._INTERP_PENDING
+        assert _en_attente() is None
         assert _parcelle(potager, "planche nord") is not None
 
     @pytest.mark.asyncio
     async def test_us237_ca7_annuler_n_execute_rien(self, potager):
-        bot_interpretation._INTERP_PENDING[4237] = {
-            "commande": _plan(), "attend": None, "log_id": None, "ts": 10**12, "id": "abc", "potager_id": 1,
-        }
+        code = _ranger(_plan())
         update = _update()
-        update.callback_query = MagicMock(data="interp:non:abc", answer=AsyncMock(), edit_message_text=AsyncMock())
+        update.callback_query = MagicMock(data=f"interp:non:{code}", answer=AsyncMock(), edit_message_text=AsyncMock())
         with patch.object(interp, "persister_journal"):
             await bot_interpretation._interp_cb(update, MagicMock(user_data={}))
         assert "Annulé" in update.callback_query.edit_message_text.call_args.args[0]
@@ -511,22 +515,21 @@ class TestCA6CA7Execution:
 
     @pytest.mark.asyncio
     async def test_us237_ca5_un_choix_de_valeur_sur_un_plan_est_invalide(self):
-        bot_interpretation._INTERP_PENDING[4237] = {
-            "commande": _plan(), "attend": None, "log_id": None, "ts": 10**12, "id": "abc", "potager_id": 1,
-        }
+        code = _ranger(_plan())
         update = _update()
-        update.callback_query = MagicMock(data="interp:cand:0:abc", answer=AsyncMock(), edit_message_text=AsyncMock())
-        with patch.object(bot_interpretation, "_contexte_au_clic", return_value=CTX):
-            await bot_interpretation._interp_cb(update, MagicMock(user_data={}))
+        update.callback_query = MagicMock(data=f"interp:cand:0:{code}", answer=AsyncMock(), edit_message_text=AsyncMock())
+        await bot_interpretation._interp_cb(update, MagicMock(user_data={}))
         assert "invalides" in update.callback_query.edit_message_text.call_args.args[0]
 
     @pytest.mark.asyncio
     async def test_us237_ca7_potager_illisible_au_clic_rien_n_est_execute(self, potager):
+        code = _ranger(_plan())
         update = _update()
-        query = MagicMock(edit_message_text=AsyncMock())
-        with patch.object(bot_interpretation, "_contexte_au_clic", return_value=None):
-            await bot_interpretation._plan_executer(update, _plan(), query)
-        assert query.edit_message_text.call_args.args[0] == bot_interpretation._MSG_POTAGER_INCONNU
+        update.callback_query = MagicMock(data=f"interp:ok:{code}", answer=AsyncMock(), edit_message_text=AsyncMock())
+        with patch.object(bot_interpretation, "_jardinier_au_clic", return_value=None), \
+             patch.object(interp, "persister_journal"):
+            await bot_interpretation._interp_cb(update, MagicMock(user_data={}))
+        assert update.callback_query.edit_message_text.call_args.args[0] == bot_interpretation._MSG_POTAGER_INCONNU
         assert _parcelle(potager, "planche nord") is None
 
 

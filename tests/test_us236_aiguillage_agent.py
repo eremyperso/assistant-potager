@@ -222,14 +222,14 @@ class TestCA4Precision:
 
     @pytest.mark.asyncio
     async def test_us236_ca4_rien_n_est_propose(self):
-        bot_interpretation._INTERP_PENDING.pop(4242, None)
         reponse = interp.ReponseAgent(texte="Que veux-tu changer sur la Serre extérieure ?",
                                       texte_origine=VAGUE)
         update, classer, ask, parse = await _handle_text(VAGUE, reponse)
         texte = update.message.reply_text.await_args.args[0]
         # [US-257 / CA6] Le texte de l'agent, sans le « Rien n'a été fait. Redis ta demande ».
         assert texte == "Que veux-tu changer sur la Serre extérieure ?"
-        assert 4242 not in bot_interpretation._INTERP_PENDING
+        from app.services.compagnon import propositions as svc_propositions
+        assert svc_propositions.en_attente(CTX.user_id, CTX.potager_id) is None
         assert update.message.reply_text.await_args.kwargs.get("reply_markup") is None
         classer.assert_not_called()
         ask.assert_not_called()

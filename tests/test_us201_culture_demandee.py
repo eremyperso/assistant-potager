@@ -167,7 +167,7 @@ async def test_us201_un_geste_avec_sa_culture_n_est_pas_interroge():
 def test_us201_libelle_court_echappe_le_markdown_des_noms():
     from app.services import file_gestes as svc
 
-    geste = SimpleNamespace(geste={
+    geste = SimpleNamespace(contenu={
         "action": "plantation", "culture": "petit_pois", "parcelle": "planche_centrale",
         "date": "2026-10-06",
     })

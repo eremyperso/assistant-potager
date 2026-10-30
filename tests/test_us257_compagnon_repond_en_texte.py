@@ -93,15 +93,6 @@ def _sans_accueil(monkeypatch):
     monkeypatch.setattr(bot_interpretation, "accueil_premier_contact", AsyncMock())
 
 
-@pytest.fixture(autouse=True)
-def _contexte_vide():
-    contexte_court.oublier_tout()
-    bot_interpretation._INTERP_PENDING.clear()
-    yield
-    contexte_court.oublier_tout()
-    bot_interpretation._INTERP_PENDING.clear()
-
-
 # ═════════════════════════════════════════════════════════════════════════════
 # CA1 — une réponse en texte libre, sans outil
 # ═════════════════════════════════════════════════════════════════════════════
@@ -641,7 +632,8 @@ class TestCA6PlusDeTexteFige:
         texte = envoye.args[0]
         assert texte.startswith("Je te propose la planche\\_est.")
         assert "Confirmer" in str(envoye.kwargs["reply_markup"])
-        assert bot_interpretation._INTERP_PENDING[8]["commande"] == commande
+        from app.services.compagnon import propositions as svc_propositions
+        assert svc_propositions.en_attente(CTX.user_id, CTX.potager_id).commande == commande
 
     @pytest.mark.asyncio
     async def test_us257_ca6_un_plan_garde_le_texte_au_dessus_des_etapes(self):

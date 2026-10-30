@@ -10,7 +10,7 @@ Un service = un module, sans dépendance à Telegram ni à FastAPI. Les handlers
 | `familles`, `attributs_culture`, `associations`, `rotation`, `bioagresseurs`, `fiche_culture`, `import_referentiel`, `adaptateur_wind_river`, `referentiel_sources` | `docs/domaines/referentiel-cultures.md` |
 | `prediagnostic`, `reponses_chiffrees` (famille `bioagresseurs_culture`) | `docs/domaines/prediagnostic.md` |
 | `calendrier_cultural`, `contexte_semis`, `recalage_calendrier` | `docs/domaines/calendrier-cultural.md` |
-| `menu_commandes`, `interpreteur_commandes` | `docs/domaines/commandes-bot.md` |
+| `menu_commandes`, `interpreteur_commandes`, `anticipation_commande`, `vocabulaire_parcelle` | `docs/domaines/commandes-bot.md` |
 | `connaissance`, `memoire_potager`, `cache_questions` | `docs/domaines/socle-connaissance.md` |
 | `repartition_rangs` | `docs/domaines/plan-et-rangs.md` |
 

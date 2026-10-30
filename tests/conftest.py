@@ -33,6 +33,39 @@ def _cache_previsions_meteo_vide():
 
 
 @pytest.fixture(scope="session")
+def _moteur_compagnon():
+    """[US-259] Une base SQLite en mémoire, partagée par toutes les connexions du test
+    (StaticPool) : les propositions et les échanges du compagnon y vivent."""
+    from sqlalchemy.pool import StaticPool
+    import database.models  # noqa: F401 — enregistre les tables dans Base.metadata
+
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False},
+    )
+    Base.metadata.create_all(bind=engine)
+    return engine
+
+
+@pytest.fixture(autouse=True)
+def memoire_compagnon(_moteur_compagnon, monkeypatch):
+    """[US-259] Propositions et conversation sont en base, plus en mémoire du bot :
+    chaque test part d'une mémoire vide. Rend la fabrique de sessions, pour les
+    tests qui y lisent ou y écrivent directement. [US-261] Les actions menées y sont aussi."""
+    from app.services.compagnon import actions_menees, conversations, propositions
+    from database.models import ActionMenee, EchangeConversation, Proposition
+
+    fabrique = sessionmaker(bind=_moteur_compagnon, autocommit=False, autoflush=False)
+    monkeypatch.setattr(propositions, "SessionLocal", fabrique)
+    monkeypatch.setattr(conversations, "SessionLocal", fabrique)
+    monkeypatch.setattr(actions_menees, "SessionLocal", fabrique)
+    yield fabrique
+    with _moteur_compagnon.begin() as connexion:
+        connexion.execute(ActionMenee.__table__.delete())
+        connexion.execute(EchangeConversation.__table__.delete())
+        connexion.execute(Proposition.__table__.delete())
+
+
+@pytest.fixture(scope="session")
 def test_engine():
     """Engine de test SQLite en mémoire."""
     engine = create_engine("sqlite:///:memory:")

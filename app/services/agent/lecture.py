@@ -2,7 +2,8 @@
 app/services/agent/lecture.py — L'outil de lecture de l'agent [US-237 / CA1]
 ===========================================================================
 Pendant la construction d'un plan, l'agent peut consulter le potager : trouver
-une parcelle, lister les parcelles, trouver un lot, trouver une culture.
+une parcelle, lister les parcelles, trouver un lot, trouver une culture, et [US-261]
+relire les actions menées au-delà des cinq que le contexte porte.
 
 Trois règles :
   * le potager est TOUJOURS celui du contexte, jamais un argument du modèle ;
@@ -67,6 +68,15 @@ def _lire(db, ctx: TenantContext, quoi: str, nom: str) -> list[dict]:
             for culture in svc_stock.calcul_stock_cultures(db, ctx)
             if not cible or cible in culture.lower()
         ]
+    if quoi == "actions":
+        # [US-261 / CA4] Les actions menées que le contexte ne porte pas (A6, A7…) : la
+        # mémoire se lit ici, elle ne s'écrit jamais par un outil (CA2).
+        from app.services.compagnon import actions_menees
+
+        actions, premier_rang = actions_menees.au_dela(ctx)
+        donnees = actions_menees.en_donnees(actions, premier_rang)
+        cible = nom.lower()
+        return [d for d in donnees if not cible or cible in d["action"].lower()]
     return []
 
 

@@ -5,7 +5,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from database.db import SessionLocal
-from utils.parcelles import normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle, format_longueur, libelle_pepiniere, DEFINITIONS_ENSOLEILLEMENT
+from utils.parcelles import create_parcelle, normalize_parcelle_name, find_doublon, update_parcelle, get_all_parcelles, resolve_parcelle, rename_parcelle, format_longueur, libelle_pepiniere, DEFINITIONS_ENSOLEILLEMENT
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
@@ -186,14 +186,16 @@ async def cmd_parcelle(update, ctx) -> None:
             # création neuve.
             remise_en_service = bool(exact) and not exact.actif
 
-            # [CA10] Doublon exact
+            # [CA10] Doublon exact — c'est ici, et seulement ici, que la liste
+            # des parcelles aide : elle montre ce qui existe déjà.
             if exact and exact.actif:
                 log.info(f"[US_Plan_occupation_parcelles] Doublon exact : {nom!r} → {exact.nom!r}")
-                await update.message.reply_text(
-                    f"❌ La parcelle *{_md(exact.nom.upper())}* existe déjà.\n"
-                    "Utilisez /plan pour consulter les parcelles existantes.",
-                    parse_mode="Markdown",
-                )
+                existantes = get_all_parcelles(db, potager_id=current_context().potager_id)
+                lignes_doublon = [f"❌ La parcelle *{_md(exact.nom.upper())}* existe déjà."]
+                if existantes:
+                    lignes_doublon.append("\n📋 *Parcelles existantes :*")
+                    lignes_doublon += [f"  · {_md(p.nom.upper())}" for p in existantes]
+                await update.message.reply_text("\n".join(lignes_doublon), parse_mode="Markdown")
                 return
 
             # [CA12] Variante proche
@@ -207,19 +209,15 @@ async def cmd_parcelle(update, ctx) -> None:
                 }
                 await update.message.reply_text(
                     f"⚠️ Une parcelle similaire existe : *{_md(proche.nom.upper())}*.\n"
-                    f"Confirmer la création de *{_md(nom.upper())}* ? _(oui / non)_",
+                    f"Confirmer la création de *{_md(nom.upper())}* ?",
                     parse_mode="Markdown",
+                    reply_markup=_clavier_creation(),
                 )
                 return
 
-            # [CA13] Pas de doublon → récapitulatif + confirmation
-            parcelles_existantes = get_all_parcelles(db, potager_id=current_context().potager_id)
-            lignes = ["📋 *Parcelles existantes :*"]
-            for p in parcelles_existantes:
-                lignes.append(f"  · {_md(p.nom.upper())}")
-            if not parcelles_existantes:
-                lignes.append("  _(aucune pour l'instant)_")
-
+            # [CA13] Pas de doublon → confirmation par boutons, sans lister
+            # les parcelles : la liste se perd dans un potager fourni.
+            lignes = []
             detail_parts = []
             if exposition:
                 detail_parts.append(f"exposition : {exposition}")
@@ -229,13 +227,11 @@ async def cmd_parcelle(update, ctx) -> None:
             if remise_en_service:
                 lignes.append(
                     f"\n♻️ La parcelle *{_md(nom.upper())}* avait été supprimée."
-                    f"\nLa remettre en service{detail_conf} ? _(oui / non)_"
+                    f"\nLa remettre en service{detail_conf} ?"
                     f"\n_Les gestes qu'elle portait restent « non localisés »._"
                 )
             else:
-                lignes.append(
-                    f"\n➕ Créer la parcelle *{_md(nom.upper())}*{detail_conf} ? _(oui / non)_"
-                )
+                lignes.append(f"➕ Créer la parcelle *{_md(nom.upper())}*{detail_conf} ?")
 
             ctx.user_data['mode'] = 'parcelle_confirm'
             ctx.user_data['parcelle_pending'] = {
@@ -243,7 +239,9 @@ async def cmd_parcelle(update, ctx) -> None:
                 "exposition": exposition,
                 "superficie_m2": superficie_m2,
             }
-            await update.message.reply_text("\n".join(lignes), parse_mode="Markdown")
+            await update.message.reply_text(
+                "\n".join(lignes), parse_mode="Markdown", reply_markup=_clavier_creation(),
+            )
 
         except Exception as e:
             log.error(f"[US_Plan_occupation_parcelles] cmd_parcelle ajouter erreur : {e}")
@@ -336,6 +334,58 @@ async def cmd_parcelle(update, ctx) -> None:
 
     # Sous-commande inconnue
     await update.message.reply_text(USAGE, parse_mode="Markdown")
+
+
+def _clavier_creation() -> InlineKeyboardMarkup:
+    """[US_Plan_occupation_parcelles] Boutons Oui / Non de la création d'une parcelle."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Oui", callback_data="parcelle_ajout_oui"),
+        InlineKeyboardButton("❌ Non", callback_data="parcelle_ajout_non"),
+    ]])
+
+
+async def _parcelle_ajout_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """[US_Plan_occupation_parcelles] Callback des boutons Oui / Non de `/parcelle ajouter`.
+
+    Même effet que de taper « oui » / « non » (`messages.py`, mode
+    `parcelle_confirm`) : la demande en attente est consommée une seule fois.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    pending = ctx.user_data.pop('parcelle_pending', None)
+    ctx.user_data['mode'] = None
+
+    if query.data == "parcelle_ajout_non":
+        await query.edit_message_text("↩️ Création annulée.", reply_markup=None)
+        return
+    if not pending or not pending.get("nom"):
+        await query.edit_message_text("⌛ Cette demande a expiré — refaites la commande.", reply_markup=None)
+        return
+
+    db = SessionLocal()
+    try:
+        new_p = create_parcelle(
+            db, pending["nom"],
+            exposition=pending.get("exposition"),
+            superficie_m2=pending.get("superficie_m2"),
+            potager_id=current_context().potager_id,
+        )
+        log.info(f"[US_Plan_occupation_parcelles] Parcelle confirmée (bouton) : {new_p.nom!r}")
+        details = []
+        if new_p.exposition:
+            details.append(f"exposition {new_p.exposition}")
+        if new_p.superficie_m2 is not None:
+            details.append(f"{new_p.superficie_m2} m²")
+        detail_str = f" ({', '.join(details)})" if details else ""
+        await query.edit_message_text(
+            f"✅ Parcelle *{_md(new_p.nom.upper())}* créée{detail_str}.",
+            parse_mode="Markdown", reply_markup=None,
+        )
+    except ValueError as e:
+        await query.edit_message_text(f"❌ {e}", reply_markup=None)
+    finally:
+        db.close()
 
 
 async def _cmd_parcelles_lister(update, ctx) -> None:

@@ -48,6 +48,7 @@ import re
 from dataclasses import dataclass, field, replace
 from typing import Callable, Optional
 
+from app.services import vocabulaire_parcelle
 from app.services.agent import adaptateurs
 from app.services.agent.catalogue_outils import (
     CHAMP_TYPE_PEPINIERE,
@@ -268,14 +269,28 @@ def _nombre(valeur, entier: bool = False) -> float:
     return float(valeur)
 
 
-def _dans_liste(valeur, vocabulaire: tuple[str, ...]) -> str:
-    """La valeur canonique de la liste fermée, ou rejet (règle 1)."""
+def _dans_liste(
+    valeur, vocabulaire: tuple[str, ...], corrections: Optional[list[tuple[str, str]]] = None,
+) -> str:
+    """La valeur canonique de la liste fermée, ou rejet (règle 1).
+
+    [US-251 / CA2, CA6] Avec `corrections`, une valeur qui ne diffère d'une SEULE
+    valeur de la liste que par le genre ou le nombre (« argileuse » → Argileux) est
+    rapprochée, et consignée pour que le récapitulatif la montre. Hors de la liste, ou
+    proche de deux valeurs, elle reste un rejet : l'agent ne propose jamais une valeur
+    que la liste n'admet pas.
+    """
     if not isinstance(valeur, str):
         raise _Rejet(f"{valeur!r} hors de la liste fermée")
     cible = normaliser(valeur.strip())[0]
     for entree in vocabulaire:
         if normaliser(entree)[0] == cible:
             return entree
+    if corrections is not None:
+        rapproche = vocabulaire_parcelle.rapprocher(valeur, vocabulaire)
+        if rapproche.statut == vocabulaire_parcelle.CORRIGE:
+            corrections.append((valeur.strip(), rapproche.valeur))
+            return rapproche.valeur
     raise _Rejet(f"{valeur!r} hors de la liste fermée")
 
 
@@ -310,9 +325,14 @@ def _phrase_sans(texte: str, noms: list[str]) -> list[str]:
 
 
 def _valeurs_modifier_parcelle(
-    arguments: dict, contexte: ContexteValidation
+    arguments: dict, contexte: ContexteValidation,
+    corrections: Optional[list[tuple[str, str]]] = None,
 ) -> tuple[dict[str, str], list[str]]:
-    """[CA2, CA5, CA6] Les champs typés de `modifier_parcelle` → valeurs de la commande."""
+    """[CA2, CA5, CA6] Les champs typés de `modifier_parcelle` → valeurs de la commande.
+
+    [US-251] `corrections` reçoit les valeurs rapprochées d'une valeur admise, pour les
+    champs retenus seulement : un champ retiré faute d'avoir été évoqué n'a rien corrigé.
+    """
     nom = arguments.get("parcelle")
     mots = _phrase_sans(contexte.texte, [str(nom or "")])
     retenus: list[tuple[ChampFiche, object]] = []
@@ -321,6 +341,7 @@ def _valeurs_modifier_parcelle(
         valeur = arguments.get(champ.nom)
         if valeur is None or valeur == "":
             continue
+        rapprochees: list[tuple[str, str]] = []
         if champ.type_json == "boolean":
             if not isinstance(valeur, bool):
                 raise _Rejet(f"{champ.nom} : {valeur!r} n'est pas un oui / non")
@@ -331,7 +352,7 @@ def _valeurs_modifier_parcelle(
             retenus.append((champ, valeur))
             continue
         elif champ.vocabulaire:
-            valeur = _dans_liste(valeur, champ.vocabulaire)
+            valeur = _dans_liste(valeur, champ.vocabulaire, rapprochees)
         else:  # pragma: no cover — tout champ texte de la fiche a une liste
             valeur = _texte(valeur)
         # Valeur FERMÉE (oui / non ou liste) : déductible, si le champ est évoqué.
@@ -344,6 +365,8 @@ def _valeurs_modifier_parcelle(
             retires.append(champ.nom)
             continue
         retenus.append((champ, valeur))
+        if corrections is not None:
+            corrections.extend(rapprochees)
 
     valeurs: dict[str, str] = {}
     if nom:
@@ -606,9 +629,10 @@ def valider_appel(appel, contexte: ContexteValidation) -> Verdict:
                 return Verdict(motif="destruction sans nom exact et dit",
                                precision=question_de_destruction(forme, contexte))
 
+    corrections: list[tuple[str, str]] = []
     try:
         if outil.nom == OUTIL_MODIFIER_PARCELLE:
-            valeurs, retires = _valeurs_modifier_parcelle(appel.arguments, contexte)
+            valeurs, retires = _valeurs_modifier_parcelle(appel.arguments, contexte, corrections)
         else:
             valeurs, retires = _valeurs_commande(outil, forme, appel.arguments, contexte)
     except _Rejet as rejet:
@@ -623,7 +647,7 @@ def valider_appel(appel, contexte: ContexteValidation) -> Verdict:
 
     retires += _retirer_copies(forme, valeurs)
     commande = _construire_commande(forme, valeurs, ORIGINE_AGENT, 1.0, contexte.texte)
-    commande = replace(commande, outils=(appel.nom,))
+    commande = replace(commande, outils=(appel.nom,), corrections=tuple(corrections))
     commande = _resoudre_entites(commande, contexte)
     if retires:
         log.info("🤖 AGENT          : champ(s) non évoqué(s) retiré(s) : %s", ", ".join(retires))

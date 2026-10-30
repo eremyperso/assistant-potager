@@ -101,7 +101,9 @@ def _parcelle(db, nom: str, **champs) -> Parcelle:
 class TestCA1Catalogue:
 
     def test_us235_ca1_au_plus_quinze_outils(self):
-        assert len(catalogue_outils.outils()) <= catalogue_outils.NB_OUTILS_MAX == 15
+        # [US-262] Le plafond compte aussi les 2 outils de décision et les 2 de correction, offerts à la demande.
+        assert len(catalogue_outils.outils()) <= 15
+        assert catalogue_outils.NB_OUTILS_MAX == 17
 
     def test_us235_ca1_chaque_outil_de_commande_vient_d_une_forme_dictable(self):
         """[CA1] Aucun outil écrit à la main : chacun couvre des formes du catalogue."""
@@ -321,7 +323,6 @@ class TestCA4Entites:
             await bot_module._interp_proposer(update, ctx, commande)
         texte = update.message.reply_text.await_args.args[0]
         assert "Vouliez-vous dire" in texte and "SERRE EXTÉRIEURE" in texte
-        bot_module._INTERP_PENDING.clear()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -979,7 +980,9 @@ async def test_us235_gherkin_serre_exterieure_n_est_plus_une_pepiniere(
     assert "/parcelle modifier serre extérieure pepiniere=non" in recap.lower()
 
     # When je confirme
-    ident = bot_module._INTERP_PENDING[42]["id"]
+    from app.services.compagnon import propositions as svc_propositions
+
+    ident = svc_propositions.en_attente(CTX.user_id, CTX.potager_id).code
     clic = MagicMock()
     clic.effective_user.id = 42
     clic.message = None
@@ -987,7 +990,8 @@ async def test_us235_gherkin_serre_exterieure_n_est_plus_une_pepiniere(
     clic.callback_query.data = f"interp:ok:{ident}"
     clic.callback_query.message = AsyncMock()
     with patch.object(bot_module, "current_context", return_value=CTX), \
-         patch.object(bot_module, "_potager_actif_au_clic", return_value=1), \
+         patch.object(bot_module, "_jardinier_au_clic", return_value=CTX.user_id), \
+         patch.object(bot_module, "_contexte_sur", return_value=CTX), \
          patch.object(interp, "persister_journal", return_value=1), \
          patch("app.bot.commandes_parcelle.SessionLocal", fabrique), \
          patch("app.bot.commandes_parcelle.current_context", return_value=CTX), \
@@ -997,7 +1001,7 @@ async def test_us235_gherkin_serre_exterieure_n_est_plus_une_pepiniere(
     # Then "Serre extérieure" n'est plus une pépinière
     session_de_test.expire_all()
     assert session_de_test.get(Parcelle, serre.id).est_pepiniere is False
-    assert 42 not in bot_module._INTERP_PENDING
+    assert svc_propositions.en_attente(CTX.user_id, CTX.potager_id) is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════

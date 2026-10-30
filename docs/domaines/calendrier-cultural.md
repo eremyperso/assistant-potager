@@ -1,4 +1,4 @@
-# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183, US-213
+# Calendrier cultural — US-068, US-069, US-070, US-177, US-178, US-180, US-183, US-213, US-279
 
 ## Calendrier cultural et zone climatique [US-068]
 
@@ -56,7 +56,9 @@ Le modèle — `app/services/calendrier_cultural.py` (seul point de lecture/écr
   le remplace pour ce potager. `culture_config.nom` étant UNIQUE, la
   convention « fiche personnalisée » s'applique sur les tables du calendrier,
   pas sur `culture_config`. L'import n'écrit que du PARTAGÉ : il ne peut pas
-  écraser une correction, par construction (CA9).
+  écraser une correction, par construction (CA9). [US-279] Seul le jardinier
+  peut reprendre le référentiel, par `/calendrier maj` : sa copie est alors
+  SUPPRIMÉE, jamais fusionnée (voir la section dédiée plus bas).
 - **HONNÊTETÉ** : aucune fenêtre empruntée à une zone voisine, aucune durée
   moyenne, jamais une date calculée (CA4, CA13). Sans donnée : frise vide,
   durée « — ».
@@ -114,6 +116,41 @@ python tools/importer_referentiel.py data/referentiel/calendrier_redaction_inter
 [US-254] Ces manifestes (`calendrier_redaction_interne.json`, `wind_river_attributs.json`)
 sont importés automatiquement à chaque déploiement dev et prod, selon
 `data/referentiel/deploiement.json` : la commande manuelle ne sert plus qu'à un essai.
+
+## Reprendre le référentiel après une correction [US-279]
+
+Une copie personnalisée ne reçoit plus rien de l'import (CA9) : le jardinier
+TIRE la mise à jour, l'import ne la pousse jamais.
+
+```
+/calendrier maj              — cultures en retard sur le référentiel, boutons par culture,
+                               « Tout mettre à jour (N) » à partir de deux
+/calendrier maj <culture>    — avant/après (zone du potager + durées),
+                               ✅ Remplacer par le référentiel · 🔒 Garder ma version
+```
+
+Boutons `calmaj:` (`_calendrier_maj_cb`) : `v:<id>` détail, `r:<id>` remplacer,
+`g:<id>` garder, `t` puis `T` tout remplacer, `x` annuler. L'id est celui de la
+COPIE, revérifié contre `ctx.potager_id` à chaque clic (`_copie_du_contexte`).
+
+⚠️ Trois décisions (28/10/2026), à ne pas rouvrir sans rouvrir l'US :
+
+- **REMPLACER = SUPPRIMER LA COPIE** (fenêtres, durées, itinéraire) :
+  `lire_calendrier` retombe sur le partagé, que le potager suit de nouveau
+  jusqu'à sa prochaine correction (qui recopie la version courante). Jamais de
+  fusion : aucune ligne « vidée volontairement » à distinguer d'une nouveauté.
+  Tout ou rien sur plusieurs cultures (une transaction).
+- **ÉCART = EMPREINTE** : `itineraire_cultural.empreinte_reference` (migration
+  v63) retient le partagé copié (`_itineraire_personnalise`) ou gardé
+  (`garder_version_locale`). Sans elle, une correction se confondrait avec une
+  évolution du référentiel et le jardinier serait alerté en permanence.
+  L'empreinte (`_empreinte`) porte sur les VALEURS, pas sur `source_id`. Copie
+  d'avant v63 (NULL) : comparée valeur par valeur. Une copie identique au
+  partagé, ou sans homologue partagé de même nom, n'est jamais listée.
+- **INDICE PASSIF** : `/calendrier <culture>` ajoute une ligne quand un écart
+  existe ; aucun message spontané (US-267 non livrée). Pas de dictée, pas
+  d'écran frontend : `ecarts_referentiel` / `etat_mise_a_jour` sont la forme de
+  lecture qu'une US ultérieure pourra exposer.
 
 ## Semis en pépinière ou en pleine terre [US-069]
 

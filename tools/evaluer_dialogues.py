@@ -480,9 +480,15 @@ class ResultatTour:
 
 @dataclass
 class EtatDialogue:
-    """Ce que le bot retient entre deux tours : la proposition en attente, et quand."""
+    """Ce que le bot retient entre deux tours : la proposition en attente, et quand.
+
+    [US-259] Et les échanges de la conversation : le bot les range en base
+    (`app.services.compagnon.conversations`) ; la mesure les garde ici, le temps
+    d'un dialogue, pour ne rien écrire dans la base qu'elle interroge.
+    """
     en_attente: object = None
     instant: float = 0.0
+    echanges: list = field(default_factory=list)
 
 
 class Enregistreur:
@@ -606,7 +612,8 @@ def jouer_tour(
 ) -> ResultatTour:
     """Joue une phrase du jardinier : contexte court → cascade → notes. Met l'état à jour."""
     contexte = contexte_court.construire(
-        ctx, etat.en_attente, etat.instant, ctx.potager_id, maintenant=etat.instant
+        ctx, etat.en_attente, etat.instant, ctx.potager_id, maintenant=etat.instant,
+        echanges=tuple(etat.echanges),
     )
     quotas = 0
     for essai in range(1, tentatives + 1):
@@ -640,7 +647,9 @@ def jouer_tour(
     retenu = resultat if isinstance(resultat, ReponseAgent) else (
         proposition or (resultat if isinstance(resultat, Aiguillage) else None))
     if retenu is not None:
-        contexte_court.noter_resultat(ctx, retenu, instant)
+        echange = contexte_court.echange_de(retenu, instant)
+        if echange is not None:
+            etat.echanges = (etat.echanges + [echange])[-contexte_court.NB_ECHANGES_MAX:]
 
     return ResultatTour(
         dialogue=dialogue.id, categorie=dialogue.categorie, rang=rang, phrase=tour.jardinier,
@@ -673,7 +682,6 @@ def jouer_corpus(
     with potager_fictif(), cascade_de_production(cascade), \
          patch.object(passerelle, "appeler_chat_outils", enregistreur):
         for dialogue in dialogues:
-            contexte_court.oublier_tout()
             etat = EtatDialogue()
             if detail:
                 print(f"  ▸ {dialogue.id} — {dialogue.titre}")

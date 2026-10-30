@@ -91,7 +91,8 @@ export function BandeauFile() {
   // [CA18] Ce qui a été VIDÉ, et rien d'autre : un geste confirmé n'a pas
   // besoin d'être annoncé, il est au Journal. Un geste abandonné l'a été
   // exprès. Seule la purge est subie, et c'est elle qu'il faut dire.
-  const vides = sortis.filter((geste) => geste.etat === 'perime')
+  // [US-259] Un geste de la file est une proposition : ses états sont au féminin.
+  const vides = sortis.filter((geste) => geste.etat === 'perimee')
 
   if (nbEnAttente === 0 && vides.length === 0) return null
 

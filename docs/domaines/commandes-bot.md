@@ -133,6 +133,31 @@ gestes » et dit exactement le contraire : ce qui est FAIT, pas ce qui attend.
 `/start` reste exclu de l'interprétation par phrase, ci-dessous : c'est un point
 d'entrée à payload, pas une commande qu'on dicte.
 
+## Dire ce qui a été interprété, anticiper la suite [US-252, US-253]
+
+Le récapitulatif distingue trois choses, et ne commente que les deux dernières : ce qui a été dit
+tel quel (rien), ce qui a été **rapproché** (une ligne `↪️ dit → retenu`, dans
+`CommandeInterpretee.corrections` : valeur corrigée d'US-251, ou nom de parcelle choisi parmi les
+voisins — `avec_candidats` garde le mot dit dans `mot_candidat`, `avec` le verse aux corrections) et
+ce qui a été **supposé** (une ligne `❔` par caractéristique que la règle écrit en valeur par défaut,
+`_lignes_supposees`, lue au registre `vocabulaire_parcelle.non_precisees`). `recapitulatif` et
+`recapitulatif_plan` partagent ces deux lecteurs : une commande de règle, une proposition de l'agent
+et une étape de plan se présentent pareil.
+
+`app/services/anticipation_commande.py` regarde l'état du potager, sans modèle, et ne lève jamais :
+
+- `avertissements` : pour `parcelle supprimer` et `parcelle modifier actif=non`, les cultures en
+  place (`plan.get_occupation`) et les lots de pépinière encore suivis, ajoutés sous le récapitulatif
+  par `interpretation._anticiper`. Une information, jamais un blocage.
+- `suite_suggeree` : appelée par `interpretation._suggerer_suite` APRÈS l'exécution d'une commande
+  confirmée, sur l'état de la base. Une parcelle devenue pépinière sans type donne une commande de
+  modification dont `precision.invite` est la question : les boutons existants (`interp:prec`) posent
+  la valeur, le récapitulatif habituel attend la confirmation, « Plus tard » (`interp:sans` avec
+  `invite`) abandonne la suggestion sans rien écrire. Au plus une suite par commande.
+
+⚠️ La longueur et le nombre de rangs ne sont pas suggérés : ce ne sont pas des valeurs fermées, un
+bouton ne peut pas les porter (reste d'US-253 / CA2).
+
 ## Piloter le bot par une phrase [US-172]
 
 Les 26 commandes du bot ont toutes leur décision : 19 sont DICTABLES pour de
@@ -264,6 +289,9 @@ handler (`CommandeInterpretee.args`).
 ⚠️ Le filtre « geste annoncé » passe AVANT l'agent : « retire le paillage de la
 planche sud » s'ouvre sur un mot de geste et n'atteint jamais l'agent. US-236
 a gardé cet ordre (CA9 : les filtres sans modèle passent avant l'agent).
+**Exception US-262** : une phrase de correction dans les 10 min qui suivent un geste,
+ou une phrase en « annul… » tant qu'un geste des 24 h peut l'être, passe à l'agent
+(voir « Corriger ou annuler une action menée » plus bas).
 
 ### L'agent dit où va la phrase — `Aiguillage` [US-236]
 
@@ -365,6 +393,94 @@ modèle aurait dû faire ; `valider_appel` en fait la proposition, comme d'habit
 - Le récapitulatif d'une proposition du filet est celui d'une modification de
   l'agent (« Je passe la superficie de X à 20 m². »), quelle que soit son origine.
 
+### Un mot que la règle n'a pas utilisé — `PrecisionDemandee` [US-250, US-251]
+
+Relevé du 22/10/2026 : « Mon tunnel est une pépinière chaud » était confirmé puis
+écrit en « pépinière, type non renseigné » — une règle reconnaît le début d'une
+phrase et laisse le reste. Le contrôle est à UN endroit, `_appliquer_regle`, et vaut
+donc pour toutes les règles à la fois :
+
+- **Ce qui est contrôlé** : les mots que le motif n'a pas consommés (avant et après
+  `trouve.span()`), moins la politesse et les liaisons sans portée
+  (`_MOTS_SANS_PORTEE`, `_EXPRESSIONS_SANS_PORTEE` : stp, merci, maintenant, « s'il te
+  plaît »…). Pour les commandes qui ÉCRIVENT (`forme.confirmation`), et pour les
+  consultations dont la règle déclare `controle_mots=True` : seule la météo, où un mot
+  perdu (« demain », un lieu sans préposition) change la réponse sans que rien ne le dise
+  (recette du 30/10/2026 ; `_NOTES_DU_RESTE` dit ce que la règle sait faire à la place).
+  Les autres consultations restent exemptées : mesuré sur le corpus, les étendre toutes
+  poserait une question à 12 phrases naturelles (« qu'ai-je fait hier ? », « corrige ma
+  dernière saisie »…) dont la réponse ne change pas. Une règle dont le motif doit
+  laisser des mots *légitimes* (« … 15 à 20 jours après le semis », « … du jour ») les
+  consomme dans son motif, sinon elle poserait une question à tort.
+- **`CommandeInterpretee.precision`** (`PrecisionDemandee`) : le mot tel que dit, la
+  caractéristique attendue, les valeurs offertes. Tant qu'elle est posée, `complete`
+  est faux et `decisions.est_prete` aussi : « oui » tapé ne la tranche pas.
+- **Bot** : `_interp_etape_suivante` pose la question après les noms voisins et avant
+  les arguments manquants. Boutons `interp:prec:<rang>:<id>` (une valeur),
+  `interp:sans:<id>` (« Sans précision »), `interp:non:<id>`. Le choix passe par
+  `CommandeInterpretee.avec_choix` / `sans_precision`, puis la proposition habituelle.
+- **Journal (CA6)** : la question a SA ligne `routage_logs` (`issue = precision`,
+  jamais réécrite, `log_id=None` sur la proposition) ; le choix ouvre une ligne
+  `proposee` neuve (`propositions.mettre_a_jour(log_id=…)`). Le mot non compris est
+  dans la ligne de log `mot non compris=…` — pas de colonne : `issue_interpretation`
+  est un `String(16)` et la story exclut toute migration.
+- **Les phrases du relevé** sont au corpus `tests/corpus/us172_commandes.csv`, et
+  `tests/test_us250_mot_non_utilise.py` rejoue CHAQUE règle qui écrit avec un mot
+  parasite (`PHRASES_PAR_REGLE` : une règle ajoutée sans phrase d'exemple échoue).
+
+**Rapprocher une valeur mal dite** (`app/services/vocabulaire_parcelle.py`, US-251) :
+le registre des caractéristiques à valeurs admises (type de pépinière, abri, type de
+sol, ensoleillement, exposition) est LU au domaine (`parcelles.vocabulaires_fiche()`,
+`utils.parcelles.TYPES_PEPINIERE`) à chaque appel, et sert aux règles ET à l'agent
+(`catalogue_outils.champs_fiche` en tire les `enum` de ses outils) : une seule liste.
+
+- `rapprocher(dit, valeurs)` rend `exact`, `corrige`, `ambigu` ou `aucun`, sans
+  modèle. Une variante de genre, de nombre, d'accent, de tiret ou de casse se
+  rapproche (« chaud » → chaude, « argileuse » → Argileux) ; deux valeurs proches ou
+  aucune ne sont JAMAIS tranchées : la question d'US-250 est posée, avec les deux
+  valeurs pour l'ambiguïté et toutes les valeurs pour l'inconnu.
+- Dans une règle : `@_regle(…, caracteristique="pepiniere")` déclare la caractéristique
+  dont la valeur est FACULTATIVE en fin de phrase. Tant que la règle a écrit la valeur
+  par défaut (`Caracteristique.non_precisees`, « oui »), le mot restant est rapproché
+  (`_lire_restes`). La correction va dans `CommandeInterpretee.corrections` et le
+  récapitulatif la montre (« ↪️ chaud → chaude »), règle ou agent.
+- Dans l'agent : `validation._dans_liste(…, corrections)` rapproche une variante unique
+  d'une valeur de la liste ; hors liste, ou proche de deux valeurs, le rejet reste.
+- ⚠️ Un nouveau champ à liste de valeurs entre dans le registre
+  (`vocabulaire_parcelle.caracteristiques`) ; le booléen `est_pepiniere` n'a pas de
+  liste, seul le champ du TYPE porte « chaude / froide ».
+
+### La météo d'un autre lieu que le potager — `/meteo <lieu>`
+
+Recette du 30/10/2026 : « quel temps fait-il à Lyon ? » donnait la météo du potager sans un
+mot sur Lyon, et « quelle météo à Lyon ? » (rien de reconnu, donc `est_interrogative` →
+cascade des questions) recevait un fragment de documentation sur les rangs.
+
+- **La commande** : `/meteo` gagne un argument FACULTATIF `lieu` (`menu_commandes.FORMES_DICTABLES`,
+  `TYPE_TEXTE`). Sans lieu : la météo du potager actif, enregistrée comme avant. Avec un lieu :
+  `cmd_meteo` → `_meteo_d_un_autre_lieu` → `app/services/meteo_lieu.meteo_du_lieu`, en lecture
+  seule — ni `save_meteo_observation`, ni cache, ni base (`test_meteo_autre_lieu` le garde).
+- **Le géocodage** : `utils/geocodage.chercher_lieu`, Open-Meteo, mêmes paramètres que
+  `VilleSearch.jsx` (un lieu dit au compagnon et une ville choisie à l'écran se résolvent pareil).
+  Le premier résultat (le plus peuplé) est retenu, et la réponse le NOMME avec sa région et son
+  pays (« Lyon, Auvergne-Rhône-Alpes, France ») ; les homonymes de même nom ailleurs sont dits
+  (« Il existe aussi : Lyon, Mississippi, États-Unis »). Injoignable ≠ introuvable : deux messages.
+- **La règle `meteo`** capte le lieu après une préposition (`_LIEU_DIT`) : « à Lyon », « de Lyon »,
+  « au Havre » (→ Le Havre), « aux Sables-d'Olonne » (→ Les Sables-d'Olonne), « à La Rochelle ».
+  `_PAS_UN_LIEU` écarte le potager et ses parties : « dans la serre » reste la météo du potager.
+  Elle précède l'`est_interrogative` de `interpreter()` : une question de météo n'atteint plus
+  la cascade.
+- **Où la commande est documentée** (à tenir ensemble quand elle change) : `/help meteo`
+  (`aide._HELP_METEO`, domaine `meteo` de `_HELP_DOMAINES`, couvert par `domaines_aide: meteo`
+  de la fiche `enregistrer-un-geste.md` — `tools/controler_aide_corpus.py`), la liste générale
+  de `/help`, la description du menu natif (`menu_commandes`), le guide utilisateur en DEUX
+  copies (`data/connaissance/guide user/`, celle que lit le RAG, et `docs/MANUEL/`),
+  `docs/CONFIGURATION/SETUP.md`. Le RAG ne la voit qu'après `tools/ingerer_connaissance.py`
+  (fait par `scripts/update_dev.ps1`).
+- **Ce qui n'est pas fait** : un autre jour que le jour même (« demain ») est signalé par
+  `controle_mots` (`Continuer sans « demain »`), pas donné en silence ; un lieu sans préposition
+  (« météo Lyon ») aussi. `fetch_meteo` rend pourtant 14 jours : le jour est la suite naturelle.
+
 ### Le prénom et le ton du compagnon — `/profil` [US-258]
 
 `app/services/profil_echange.py` (service, validation, bloc de prompt) et
@@ -383,6 +499,15 @@ par `(user_id, potager_id)`, en colonnes de `potager_membres` (migration v60).
   date et les parcelles ; la partie fixe ne porte que la consigne de lecture. Le
   registre change le ton, jamais les faits ni les prudences (CA7).
 - `/profil` est exclue de l'interpréteur (`MOTIFS_EXCLUSION_INTERPRETEUR`).
+
+### Reprendre le référentiel du calendrier — `/calendrier maj` [US-279]
+
+Sous-commande de `/calendrier` (aucune commande ajoutée au menu natif), boutons
+`calmaj:` dans `app/bot/commandes_calendrier.py`, logique dans
+`calendrier_cultural` (`ecarts_referentiel`, `etat_mise_a_jour`,
+`remplacer_par_referentiel`, `garder_version_locale`). Le clic sur ✅ est la
+confirmation : rien n'est écrit avant. Non dictable (décision du 28/10/2026).
+Détail : `docs/domaines/calendrier-cultural.md`, § « Reprendre le référentiel ».
 
 ### Une demande d'agir qui échoue est dite, pas routée [INC-018]
 
@@ -476,6 +601,96 @@ d'un bouton. `pending["ecartes"]` (voir `_ecartes_apres`) garde les voisins déj
 refusés d'une proposition à l'autre ; `_conclure` n'en repropose aucun et demande
 « Laquelle ? ». La nouvelle proposition remplace l'ancienne par le chemin d'US-234
 (`_abandonner_precedente` : journal `abandonnee`, nouvel identifiant de boutons).
+
+### Répondre à une proposition par une phrase [US-260]
+
+« Vas-y », « laisse tomber » : deux outils de DÉCISION, `confirmer_proposition(id)` et
+`abandonner_proposition(id)` (`catalogue_outils.outils_decision()`), hors du catalogue
+généré mais comptés dans `NB_OUTILS_MAX` (13 + 2 + 2 de correction = 17, US-262). Ils ne sont offerts QUE si
+`ContexteCourt.decidable` (une proposition attend, vient d'être traitée, ou attend dans un
+autre potager) ; leur consigne est dans la partie variable (`ContexteCourt._consigne_decision`),
+jamais dans `PROMPT_FIXE`. Le texte du modèle seul ne confirme rien (B3).
+
+`Propositions._decider` (agent) valide contre le CONTEXTE : identifiant = celui de la
+proposition en attente (ou de la dernière traitée), pas de nouvelle écriture dans le même
+message, pas de deux candidates, proposition prête (aucun nom ni valeur en attente). Une décision
+acceptée CLÔT la boucle et sort en `ResultatAgent.decision` → `ReponseAgent.decision` ; un refus dont
+le code dicte la réponse (`decisions.TEXTE_*`) sort en `texte`, que le modèle ne réécrit pas.
+
+⚠️ **Rien ne s'exécute dans l'agent.** `bot/interpretation._interp_decider` relit la proposition par son
+code SOUS LE JARDINIER du message, la sort de l'attente (`consommer(…, canal="telegram")`, atomique)
+puis fait ce que le bouton fait. Une destruction (`decisions.est_destructrice` : forme
+`destructrice`, ou `/parcelle modifier actif=non`) ne se confirme jamais par une phrase : l'agent
+refuse (`bouton_seul`), le bot REMONTRE la carte avec ses boutons (`_remontrer_la_carte`), et
+`_interp_decider` rejoue le refus contre la base. L'abandon n'a aucune restriction de sécurité. Une proposition
+déjà traitée répond où et quand (`traite_canal`, heure de Paris) sans rien refaire.
+
+⚠️ **Une décision ne reprend rien** (recette du 29/10/2026 : sur Mistral Small 4, « non 4 rangs » appelait
+`abandonner_proposition`). `Propositions._dit_en_plus` lit la phrase SANS modèle — nombres en chiffres
+(`chiffres_non_repris`) et en lettres avec leur unité (`filet_fiche.lire_valeurs`), valeur de vocabulaire,
+parcelle nommée, hors noms de parcelle — et en retranche ce que la proposition visée (en attente, ou la
+dernière traitée) porte déjà. S'il reste quelque chose, la décision est écartée UNE fois
+(`RAISON_DECISION_AVEC_VALEURS` : le modèle reprend avec l'outil de commande, modèle de `_lecture_a_ecarter`).
+S'il y tient, l'abandon passe (il ne fait rien) ; une confirmation ne passe JAMAIS : le code répond
+`decisions.TEXTE_VALEUR_A_REPRENDRE` et le bot remontre la carte (`bouton_seul`), pour qu'un « oui, 4 rangs »
+ne lance pas les 2 rangs de la carte. Faux positif connu : « oui, à 18 h » coûte un clic.
+
+⚠️ **Le modèle est un prérequis.** Les outils de décision supposent un modèle qui appelle les outils de façon
+fiable. Recette du 29/10/2026 : `mistral/mistral-small-2603` confirme, abandonne et refuse la destruction comme
+prévu ; Ministral 3B répond en texte et n'appelle ni `confirmer_proposition` ni `abandonner_proposition`. Les
+tests de `test_us260_*` simulent le modèle : ils ne prouvent pas qu'un modèle donné appelle l'outil.
+
+### Retenir les actions menées [US-261]
+
+`app/services/compagnon/actions_menees.py` : une entrée par écriture exécutée, écrite par le
+CHEMIN D'EXÉCUTION — `evenements.creer_evenement_*` (six, après le commit), `executeurs.executer_etape`
+(étape de plan, avec avant / après de la parcelle), `bot/interpretation._interp_executer` (commande
+confirmée au bouton ou à la phrase ; l'échec du handler se lit dans ses réponses,
+`_MessageEcoute`). Jamais par un outil : le test `test_us261_ca2_*` refuse qu'un autre module importe
+`noter*`. Le canal vient d'une `ContextVar` posée à l'entrée (`_arm_tenant_context`, middleware API).
+L'agent reçoit les 5 dernières des 24 h sous `A1`…`A5` (`interpreteur_agent.bloc_actions`, balisées
+comme données) ; `lire(quoi="actions")` donne les suivantes (`A6`…, 7 jours). Seules les `reussie` sont
+lues. Par jardinier ET par potager, RLS stricte.
+
+[US-262] Une correction ou une annulation exécutée par `evenements.corriger_evenement` /
+`supprimer_evenement` est retenue elle aussi (`noter_correction`, `noter_annulation`, nature
+`geste`, même cible) — quel que soit le chemin : phrase, `/corriger`, API.
+
+### Corriger ou annuler une action menée [US-262]
+
+« En fait c'était 3 rangs », « annule le dernier semis » : `app/services/compagnon/corrections.py`.
+Deux outils d'ÉCRITURE, hors catalogue généré : `corriger_action(ref, champs)` (offert dès qu'une
+des actions A1…A5 est un geste) et `annuler_action(ref)` (en plus, si la phrase demande de retirer :
+`demande_une_annulation`). Jamais sur une question (`sans_ecriture`). La consigne est dans la partie
+VARIABLE (`CONSIGNE_CORRECTION`, ajoutée à `bloc_actions`) : `PROMPT_FIXE` inchangé.
+
+| Étape | Où | Règle |
+|---|---|---|
+| Candidates | `corrections.candidates` | gestes (cible `evenement`) encore au carnet et parcelles créées ou modifiées (cible `parcelle`, fiche d'après connue, encore active), A1…A5 puis A6…, une cible touchée deux fois une seule fois (référence la plus récente) |
+| Compatibilité | `corrections.compatibles` | une correction ne vise que les candidates auxquelles TOUS ses champs s'appliquent : un champ de geste déjà renseigné (`rang`, `quantite`), culture / variété / parcelle / date pour tout geste, un champ de fiche pour une parcelle (`rang` → `nb_rangs`) ; aucune → toutes. Recette du 29/10 (Ministral 8B) : « en fait c'était 8 rangs » après une modification de parcelle demandait laquelle entre deux arrosages et un semis en graines |
+| Désignation | `corrections.designer` | « le dernier » → la plus récente (parmi celles que la phrase nomme) ; une ANNULATION qui nomme une culture ou un geste ne vise que lui ; sans désignation et plusieurs candidates → question du CODE qui les nomme (CA4), boucle close (`texte_code`) |
+| Champs | `corrections._champs_corriges` | ancrage du validateur : nombre dit (chiffres ou lettres), texte dit, parcelle exacte, date `AAAA-MM-JJ` + repère dans la phrase ; seuls les champs qui CHANGENT ; « 3 rangs » sur un geste compté en `rangs` corrige `quantite` |
+| Proposition | `CommandeInterpretee` de forme `action corriger` / `action annuler` | rangée comme une commande (nature `commande`, pas de migration) ; `commande_equivalente` / `recapitulatif` délèguent à `corrections` : « Semis radis : 2 rangs → 3 rangs » ; annuler est `destructrice` → bouton seul (US-260) ; un semis qui a des suites (`origine_graines_id`) ne s'annule pas d'une phrase |
+| Parcelle | `corrections._corriger_parcelle` | la correction DEVIENT `/parcelle modifier` (appel `modifier_parcelle` passé à `valider_appel`, nom de la parcelle ajouté au texte d'ancrage car il vient de l'action, valeurs dites) ; `valeurs["correction"]` porte l'avant → après que `recapitulatif` met en tête ; exécutée par le handler comme toute commande ; une annulation de parcelle demande la valeur à remettre |
+| Exécution | `bot/interpretation._interp_executer` → `corrections.executer` | geste relu : disparu ou changé depuis la proposition → rien ; sinon `corriger_evenement` (mêmes invariants qu'une création) ou `supprimer_evenement` |
+
+⚠️ **Le modèle qui décrit sans appeler** (recette du 29/10, Ministral 8B : « Proposition : /corriger — Plantation tomate : 5 plants → 2 plants. Confirme-moi » en TEXTE, sans carte ; « oui » ne confirmait rien). Trois parades, dans l'ordre : `_PROPOSITION_DECRITE` reconnaît « Proposition : », « confirme-moi » et « N … → » ; une phrase de correction sans aucun appel reçoit UNE relance qui nomme l'outil (`CORRECTION_SANS_APPEL_ACTION`, avant les relances génériques) ; si la boucle finit sans écriture, `_filet_correction` (début de `_conclure`) appelle `corrections.filet` : la valeur dite est lue SANS modèle (`valeur_dite` : « 2 plants », « huit rangs », une seule valeur, celle après « pas » / « au lieu de » ignorée) et passe par `corrections.valider` comme un appel sans référence. Une correction aboutit donc toujours à une carte avec ses boutons, que « oui » peut confirmer. La désignation départage aussi par l'unité dite (« plants » écarte un semis en graines) et, sans autre indice, par le seul geste des 10 dernières minutes.
+
+⚠️ **CA6 — pas de second geste.** `Propositions.geste_a_ecarter` renvoie UNE fois au modèle un
+`saisir_geste` fait sur une phrase de correction (`ressemble_a_une_correction`) quand `corriger_action`
+est offert ; s'il y tient, le geste passe. Une correction ne se mélange à aucune autre écriture.
+
+⚠️ **CA3 — avant le filtre « geste annoncé ».** `interpreteur_commandes._correction_d_une_action_recente`
+(agent `actif` seulement) : marque de correction (« en fait », « finalement », « non… », « je me suis
+trompé », « annule »…) ET geste mené il y a moins de `DELAI_CORRECTION` (10 min) ; une phrase en
+« annul… » passe tant qu'un geste des 24 h est corrigeable (« annule le dernier semis » est un geste
+annoncé pour `annonce_un_geste`). Un geste nouveau sans marque garde le filtre. Le raccourci
+« annuler… / corriger… » de `handle_text` (PRIORITÉ 3) cède à l'interpréteur quand la phrase a plus
+d'un mot et qu'un geste récent existe (`pour_l_agent_plutot_que_le_raccourci`) : sinon « annuler le
+dernier semis » proposait le dernier enregistrement, quel qu'il soit.
+
+⚠️ Les tests (`test_us262_*`) simulent le modèle. La mesure du lot 2 (CA6 : bonne action ≥ 95 %,
+0 second geste) se fait sur le vrai modèle avec `tools/evaluer_dialogues.py`, avec accord.
 
 Mesure et journal :
 

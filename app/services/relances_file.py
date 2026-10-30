@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session
 
 from app.services import file_gestes as svc_file
 from app.services import telegram_notify as svc_telegram_notify
-from database.models import FileGestesReglage, GesteIntention, Potager, User
+from database.models import FileGestesReglage, Potager, Proposition, User
 
 log = logging.getLogger("potager")
 
@@ -136,7 +136,7 @@ def _nom_potager(db: Session, potager_id: int) -> str:
     return potager.nom if potager else f"potager {potager_id}"
 
 
-def texte_file(db: Session, gestes: list[GesteIntention], entete: str) -> str:
+def texte_file(db: Session, gestes: list[Proposition], entete: str) -> str:
     """Le nombre de gestes en attente, le détail des trois premiers, « et N autres ».
 
     [CA13] Quand la file couvre plusieurs potagers, les lignes sont groupées par
@@ -199,7 +199,7 @@ def compagnon_joignable(db: Session, user_id: int) -> bool:
 
 
 def _envoyer_niveau_1(
-    db: Session, user_id: int, chat_id: int, gestes: list[GesteIntention],
+    db: Session, user_id: int, chat_id: int, gestes: list[Proposition],
     entete: str, remplacer: Optional[int],
 ) -> Optional[int]:
     """Poste (ou remplace) le niveau 1, et rend l'identifiant du message obtenu.
@@ -260,7 +260,7 @@ def inviter_si_premier_depot(
     return message_id is not None
 
 
-def _ancre_relances(ligne: FileGestesReglage, gestes: list[GesteIntention]) -> datetime:
+def _ancre_relances(ligne: FileGestesReglage, gestes: list[Proposition]) -> datetime:
     """Depuis quand compte-t-on les trois jours de relance ? [CA16, CA19]
 
     La dernière activité si elle existe (une consultation remet le compteur à
@@ -274,7 +274,7 @@ def _ancre_relances(ligne: FileGestesReglage, gestes: list[GesteIntention]) -> d
 
 
 def doit_relancer(
-    ligne: FileGestesReglage, gestes: list[GesteIntention], maintenant: datetime,
+    ligne: FileGestesReglage, gestes: list[Proposition], maintenant: datetime,
 ) -> bool:
     """[CA15, CA16, CA19, CA20] Ce compte doit-il être relancé MAINTENANT ?
 
@@ -333,7 +333,7 @@ def relancer(
 # ══════════════════════════════════════════════════════════════════════════════
 # [CA17, CA18] La fin de vie d'un geste — ce qui n'a pas de seconde chance
 # ══════════════════════════════════════════════════════════════════════════════
-def texte_avertissement(gestes: list[GesteIntention]) -> str:
+def texte_avertissement(gestes: list[Proposition]) -> str:
     """[CA17] Ton distinct d'une relance ordinaire : il annonce une PERTE.
 
     Il nomme les gestes concernés — pas un compte, des gestes : « 2 gestes vont
@@ -350,7 +350,7 @@ def texte_avertissement(gestes: list[GesteIntention]) -> str:
     return "\n".join(lignes)
 
 
-def texte_purge(gestes: list[GesteIntention]) -> str:
+def texte_purge(gestes: list[Proposition]) -> str:
     """[CA18] Ce qui a été vidé, et ce que cela décrivait.
 
     Rien ne disparaît en silence : un geste préparé et jamais confirmé doit
@@ -371,7 +371,7 @@ def texte_purge(gestes: list[GesteIntention]) -> str:
 
 
 def avertir(
-    db: Session, user_id: int, gestes: list[GesteIntention],
+    db: Session, user_id: int, gestes: list[Proposition],
     maintenant: Optional[datetime] = None,
 ) -> bool:
     """[CA17, CA20] L'avertissement des quatre heures — muet si les relances sont coupées."""
@@ -393,7 +393,7 @@ def avertir(
     return envoye
 
 
-def notifier_purge(db: Session, user_id: int, gestes: list[GesteIntention]) -> bool:
+def notifier_purge(db: Session, user_id: int, gestes: list[Proposition]) -> bool:
     """[CA18] Dire ce qui a été vidé — la seule notification sans seconde chance.
 
     ⚠️ L'envoi sortant est best-effort : il n'échoue jamais bruyamment, un

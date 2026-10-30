@@ -12,6 +12,42 @@ psql -d potager -f migrations/migration_v57.sql
 
 ## Ce que portent les dernières migrations
 
+- **v63 [US-279]** — ajoute `itineraire_cultural.empreinte_reference` VARCHAR(64)
+  nullable : sur une copie personnalisée, l'empreinte du partagé copié ou gardé
+  (« Garder ma version »), qui dit que le référentiel a évolué DEPUIS. NULL sur
+  un partagé, et pour les copies d'avant v63 (comparées alors valeur par
+  valeur). **Aucun backfill**, pas de RLS ajoutée (policy de v46). Rollback :
+  `rollback_v63.sql` (perd les « Garder ma version » ; aucun calendrier perdu).
+
+- **v62 [US-261, US-260]** — crée `actions_menees` (la mémoire de ce que le compagnon a
+  FAIT : une entrée par écriture exécutée, geste ou commande ; `nature`
+  `geste | commande`, `cible_type` + `cible_id` ou `cible_nom`, `resume`, `avant` /
+  `apres` JSONB, `canal`, `statut` `reussie | echouee`, `proposition_id` ON DELETE SET
+  NULL), **RLS stricte** par `potager_id` (comme `echanges_conversation`) : les actions
+  d'un potager ne se lisent jamais depuis un autre. Écrite par le chemin d'exécution
+  (`compagnon/actions_menees`), jamais par un outil de l'agent ; purgée à 30 jours par le
+  job de 04h00. Ajoute `propositions.traite_canal` (le canal qui l'a fait sortir de
+  l'attente : un « oui » sur une proposition déjà traitée répond où et quand). Additive :
+  rien à reprendre. Rollback : `rollback_v62.sql` (perd les actions menées).
+
+- **v61 [US-259]** — une seule table de **propositions**, communes aux canaux.
+  `gestes_intentions` est RENOMMÉE `propositions` (séquence, index et policy
+  suivent) : chaque geste en attente reste la même ligne, même `id`, même `code`,
+  donc même lien `?start=`. `geste` devient `contenu` ; `nature` (`geste` |
+  `commande` | `plan`, CHECK) distingue le geste de la file d'US-224 d'une
+  proposition de conversation. Les états passent au féminin (CHECK
+  `en_attente | confirmee | abandonnee | perimee | remplacee`) — reprise entre
+  marqueurs `REPRISE`, exécutée telle quelle par
+  `tests/test_us259_conversation_propositions.py`, idempotente. `notifiee`
+  (TRUE pour les gestes : 3 jours ; FALSE en conversation : 30 min), `canal`,
+  `remplacee_par_id`. La sortie de l'attente est un `UPDATE … WHERE etat =
+  'en_attente'` (`compagnon/propositions.sortir`) : jamais une lecture puis une
+  écriture. Crée `echanges_conversation` (10 derniers échanges, 30 min
+  glissantes, purge à 30 jours par le job de 04h00), **RLS stricte** : la purge
+  arme chaque potager à son tour. La policy de `propositions` reste celle de v50
+  (lecture tolérante au GUC désarmé, écriture stricte). Rollback :
+  `rollback_v61.sql` (perd échanges et propositions de conversation).
+
 - **v60 [US-258]** — ajoute à `potager_membres` (clé `(user_id, potager_id)`, donc le couple jardinier × potager)
   `prenom_compagnon` VARCHAR(30) nullable (NULL = jamais donné, jamais supposé),
   `registre_compagnon` VARCHAR(12) NOT NULL DEFAULT `voisin` (CHECK `sobre|voisin|gouailleur`)

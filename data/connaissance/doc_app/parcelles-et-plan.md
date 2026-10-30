@@ -62,7 +62,7 @@ Renommer une parcelle conserve l'intégralité des gestes qui s'y rattachent : l
 **Intention :** procédure
 **On parle aussi de :** enlever une planche ; parcelle qui n'existe plus ; suppression ; non localisé ; supprimer en le disant
 
-Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun geste : les événements qui s'y rattachaient restent au journal et basculent sous la mention « non localisé ». Rien n'est donc perdu du passé de la planche, ni les récoltes qu'on y a faites, ni les cultures qui s'y sont succédé. La suppression se demande aussi en une phrase, et elle est alors récapitulée avant d'être faite : si le nom prononcé ne correspond exactement à aucune planche, le nom voisin est proposé plutôt que retenu d'office.
+Supprimer une parcelle la retire des listes et du plan, mais n'efface aucun geste : les événements qui s'y rattachaient restent au journal et basculent sous la mention « non localisé ». Rien n'est donc perdu du passé de la planche, ni les récoltes qu'on y a faites, ni les cultures qui s'y sont succédé. La suppression se demande aussi en une phrase, et elle est alors récapitulée avant d'être faite : si le nom prononcé ne correspond exactement à aucune planche, le nom voisin est proposé plutôt que retenu d'office. Avant que vous confirmiez, le récapitulatif signale ce qui est encore en place sur la parcelle (« 12 pieds de tomate sont encore en place sur cette parcelle ») ou les lots de pépinière qui y sont suivis : vous confirmez en le sachant, et rien n'est supprimé avant votre accord.
 
 ## Déclarer une serre ou une pépinière
 

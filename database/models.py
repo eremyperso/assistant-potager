@@ -28,6 +28,8 @@ database/models.py — Modèles SQLAlchemy pour l'Assistant Potager
          FenetreCulturale, DureeCulturale) et de Potager.zone_climatique
 [US-224] GesteIntention devient une file (etat, traite_le, motif_refus,
          avertissement_le) et ajout du modèle FileGestesReglage (relance)
+[US-259] GesteIntention devient Proposition (table `propositions`, nature
+         geste | commande | plan) et ajout du modèle EchangeConversation
 """
 from sqlalchemy import Column, Integer, BigInteger, SmallInteger, String, Text, Float, Date, DateTime, Boolean, ForeignKey, Index, UniqueConstraint, CheckConstraint, JSON
 # [US-098] TSVECTOR est un type du dialecte PostgreSQL ; l'importer ne charge
@@ -472,6 +474,11 @@ class ItineraireCultural(Base):
     nom_normalise = Column(String, nullable=False)
     potager_id    = Column(Integer, ForeignKey("potagers.id"), nullable=True, index=True)
     source_id     = Column(Integer, ForeignKey("referentiel_source.id"), nullable=False, index=True)
+    # [US-279 / CA2] Copie personnalisée seulement : empreinte du partagé copié,
+    # ou gardé par le jardinier (« Garder ma version »). C'est elle qui dit que
+    # le référentiel a évolué depuis. NULL = base inconnue (copie d'avant
+    # migration_v63, partagé jamais copié) ; toujours NULL sur un partagé.
+    empreinte_reference = Column(String(64), nullable=True)
 
     culture_rel   = relationship("CultureConfig", foreign_keys=[culture_id])
 
@@ -1295,11 +1302,19 @@ class KnowledgeChunk(Base):
     document       = relationship("KnowledgeDocument", back_populates="fragments")
 
 
-class GesteIntention(Base):
-    """[US-196, US-224] Un geste préparé par la PWA, en attente dans la file.
+class Proposition(Base):
+    """[US-196, US-224, US-259] Une chose proposée au jardinier, en attente de sa réponse.
 
-    N'est PAS un événement : rien ici n'apparaît au Journal, dans un stock ou
-    dans une statistique (US-224 / CA1). Un geste en attente n'est qu'une
+    [US-259] Une seule table de propositions, communes aux canaux : un geste
+    préparé par la PWA (la file d'US-224, nature `geste`) n'est qu'une nature
+    parmi d'autres, à côté de la commande et du plan proposés en conversation
+    (natures `commande` et `plan`). Deux magasins de choses en attente auraient
+    fait deux moteurs : deux règles d'expiration, deux relances. L'état, la
+    consommation atomique et l'expiration vivent dans
+    `app.services.compagnon.propositions`, seule référence.
+
+    Un geste en attente n'est PAS un événement : rien ici n'apparaît au Journal,
+    dans un stock ou dans une statistique (US-224 / CA1). Ce n'est qu'une
     **préparation** — le seul chemin d'écriture reste `saisie._parse_and_save`,
     qui le recevra sous la forme d'un item pré-parsé, exactement comme le
     bouton « Enregistrer » d'US-179.
@@ -1316,35 +1331,57 @@ class GesteIntention(Base):
     * `code` n'est plus à usage unique : le lien reste valide tant que le geste
       l'est (CA11).
 
-    ⚠️ RLS par potager (migration_v50), policy tolérante au GUC non armé en
-    LECTURE seulement : le bot cherche un geste avant de savoir de quel potager
-    il relève. Il arme `app.potager_id` sur le potager DU GESTE avant toute
-    écriture (`file_gestes._ecriture`), la policy restant stricte là où elle
-    protège.
+    ⚠️ RLS par potager (migration_v50, table renommée par migration_v61),
+    policy tolérante au GUC non armé en LECTURE seulement : le bot cherche une
+    proposition par son code avant de savoir de quel potager elle relève. Il arme
+    `app.potager_id` sur le potager DE LA PROPOSITION avant toute écriture
+    (`file_gestes._ecriture`, `propositions.ecriture`), la policy restant
+    stricte là où elle protège.
     """
-    __tablename__ = "gestes_intentions"
+    __tablename__ = "propositions"
 
     id          = Column(Integer, primary_key=True, index=True)
-    # [US-196 / CA3] ≥128 bits d'aléa, préfixe réservé, compatible `?start=`.
+    # [US-196 / CA3] ≥128 bits d'aléa pour un geste, préfixe réservé, compatible
+    # `?start=`. [US-259] Identifiant repris par les boutons d'une proposition de
+    # conversation (`interp:ok:<code>`).
     code        = Column(String(64), unique=True, nullable=False, index=True)
     user_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
     potager_id  = Column(Integer, ForeignKey("potagers.id"), nullable=False, index=True)
-    # [CA2] Item au contrat de `llm.parseur_deterministe` (US-094). JSON générique
-    # plutôt que JSONB : la même définition doit tenir sous SQLite (tests).
-    geste       = Column(JSON, nullable=False)
+    # [US-259] geste | commande | plan — voir `propositions.NATURES`.
+    nature      = Column(String(16), nullable=False, default="geste")
+    # [US-224 / CA2] Pour un geste : l'item au contrat de `llm.parseur_deterministe`
+    # (US-094). [US-259] Pour une commande ou un plan : la proposition sérialisée.
+    # JSON générique plutôt que JSONB : la même définition doit tenir sous SQLite.
+    contenu     = Column(JSON, nullable=False)
     ecran       = Column(String(32), nullable=True)
+    # [US-259] telegram | pwa — le canal où elle a été faite.
+    canal       = Column(String(16), nullable=True)
     cree_le     = Column(DateTime, server_default=func.now())
-    # [CA3] Trois jours à compter du dépôt de CE geste.
+    # [US-259 / CA5] 30 min en conversation ; 3 jours une fois notifiée (la file d'US-224).
     expire_le   = Column(DateTime, nullable=False)
-    # [CA3, CA8] en_attente | confirme | abandonne | perime — voir
-    # `app.services.file_gestes.ETAT_*`, qui est la seule référence.
+    notifiee    = Column(Boolean, nullable=False, default=False)
+    # en_attente | confirmee | abandonnee | perimee | remplacee — voir
+    # `app.services.compagnon.propositions.ETAT_*`, qui est la seule référence.
     etat        = Column(String(16), nullable=False, default="en_attente")
-    # [CA8] Instant de SORTIE de la file, jamais d'ouverture du lien.
+    # [US-224 / CA8] Instant de SORTIE de l'attente, jamais d'ouverture du lien.
     traite_le   = Column(DateTime, nullable=True)
-    # [CA12] Pourquoi ce geste n'a pas pu être joué — dit en clair, jamais tu.
+    # [US-224 / CA12] Pourquoi ce geste n'a pas pu être joué — dit en clair, jamais tu.
     motif_refus = Column(String(200), nullable=True)
-    # [CA17] L'avertissement « vidé dans 4 heures », une fois par geste.
+    # [US-224 / CA17] L'avertissement « vidé dans 4 heures », une fois par geste.
     avertissement_le = Column(DateTime, nullable=True)
+    # [US-259] La proposition qui a remplacé celle-ci (état `remplacee`).
+    remplacee_par_id = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
+    # [US-260 / CA5] telegram | pwa — le canal qui l'a fait sortir de l'attente (migration_v62).
+    traite_canal = Column(String(16), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("nature IN ('geste', 'commande', 'plan')", name="ck_propositions_nature"),
+        CheckConstraint(
+            "etat IN ('en_attente', 'confirmee', 'abandonnee', 'perimee', 'remplacee')",
+            name="ck_propositions_etat",
+        ),
+        Index("ix_propositions_conversation", "user_id", "potager_id", "nature", "etat"),
+    )
 
 
 class FileGestesReglage(Base):
@@ -1369,4 +1406,79 @@ class FileGestesReglage(Base):
     derniere_invitation_le = Column(DateTime, nullable=True)
     derniere_relance_le    = Column(DateTime, nullable=True)
     message_relance_id     = Column(Integer, nullable=True)
+
+
+class EchangeConversation(Base):
+    """[US-259 / CA1] Un échange entre le jardinier et le compagnon, quel que soit le canal.
+
+    La mémoire courte de la conversation, commune à Telegram et à la PWA : la
+    phrase du jardinier, ce que le compagnon en a fait, les outils appelés, la
+    proposition laissée en attente et le signal d'origine (un message spontané
+    du veilleur, plus tard). Rangée par jardinier ET par potager, lue sur 30
+    minutes glissantes, purgée à 30 jours (`app.services.compagnon.conversations`).
+
+    Les résultats des lectures n'y sont pas : seul le texte du compagnon l'est
+    (architecture §12.5) — une donnée lue il y a dix minutes est relue, pas crue.
+
+    RLS stricte par potager (migration_v61) : un échange s'écrit et se lit dans
+    le potager où il a eu lieu.
+    """
+    __tablename__ = "echanges_conversation"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False)
+    potager_id      = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    canal           = Column(String(16), nullable=False)
+    texte_jardinier = Column(Text, nullable=False, default="")
+    texte_compagnon = Column(Text, nullable=False, default="")
+    outils          = Column(JSON, nullable=True)
+    proposition_id  = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
+    signal          = Column(String(64), nullable=True)
+    cree_le         = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_echanges_conversation_fil", "user_id", "potager_id", "cree_le"),
+    )
+
+
+class ActionMenee(Base):
+    """[US-261 / CA1] Une écriture exécutée pour le jardinier, quel que soit le canal.
+
+    La mémoire de ce que le compagnon a FAIT, pour qu'une phrase puisse la désigner
+    (« mon dernier semis », « ce que je viens de noter »). Elle est écrite par le
+    chemin d'exécution — l'enregistrement d'un geste, l'exécuteur d'une commande ou
+    d'une étape de plan — et jamais par le modèle : aucun outil de l'agent n'y
+    écrit (CA2). Elle porte la nature de l'action, la référence de sa cible en
+    base, un résumé, les valeurs avant / après quand l'exécuteur les connaît, le
+    canal et le statut. Voir `app.services.compagnon.actions_menees`.
+
+    RLS stricte par potager (migration_v62) : les actions d'un potager ne sont
+    jamais visibles depuis un autre (CA6).
+    """
+    __tablename__ = "actions_menees"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=True)
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    # telegram | pwa | inconnu
+    canal          = Column(String(16), nullable=False, default="inconnu")
+    # geste (un événement enregistré) | commande (une commande ou une étape de plan)
+    nature         = Column(String(16), nullable=False)
+    # Ce que l'action a touché : le type (evenement, parcelle…), son id, ou son nom.
+    cible_type     = Column(String(32), nullable=True)
+    cible_id       = Column(Integer, nullable=True)
+    cible_nom      = Column(String(120), nullable=True)
+    resume         = Column(Text, nullable=False, default="")
+    avant          = Column(JSON, nullable=True)
+    apres          = Column(JSON, nullable=True)
+    # reussie | echouee — seules les réussies sont transmises à l'agent.
+    statut         = Column(String(16), nullable=False, default="reussie")
+    proposition_id = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
+    cree_le        = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("nature IN ('geste', 'commande')", name="ck_actions_menees_nature"),
+        CheckConstraint("statut IN ('reussie', 'echouee')", name="ck_actions_menees_statut"),
+        Index("ix_actions_menees_fil", "potager_id", "cree_le"),
+    )
 from database import numerotation_lots  # noqa: E402,F401  [US-209] enregistre l'écouteur
