@@ -233,6 +233,7 @@ phrase, `app/config.py`) :
 | `off` (défaut du code) | l'ancien `_appeler_modele` (format texte, seuil 0,7), comme avant |
 | `ombre` | l'ancien repli répond ; l'agent est consulté **à côté** (fil d'arrière-plan) et ce qu'il aurait proposé est journalisé (`issue_interpretation = 'ombre'`) |
 | `actif` | l'agent, sans seuil de confiance (CA9) ; s'il est indisponible (429, panne, outils non gérés, appel malformé), l'ancien repli (CA13) ; **si lui non plus ne propose rien et que la phrase demande d'agir, un message explicite** (INC-018, voir plus bas), jamais le routeur |
+| `prioritaire` | *En mesure (01/11/2026).* L'ordre s'inverse : `_l_agent_d_abord` envoie toute phrase libre à l'agent AVANT les règles, avec le catalogue complet, les outils de savoir et `PROMPT_FIXE_PRIORITAIRE` ; les règles et l'ancien repli ne servent qu'en mode dégradé (agent indisponible). Hérite de tout ce que `actif` ouvre (`agent_actif()`). Les raccourcis du bot placés avant `interpreter` (annuler, godets, déplacer, note) restent en place : le catalogue ne les couvre pas encore |
 
 Le paquet `app/services/agent/` : `catalogue_outils` (15 outils GÉNÉRÉS depuis
 `FORMES_DICTABLES` et les caractéristiques de parcelle ; `controler_parite_outils()`
@@ -784,3 +785,105 @@ courant d'un lot (`calcul_lots_pepiniere#emplacement`) : dernier déplacement
 (US-211, à venir), sinon dernière mise en godet localisée, sinon parcelle du
 semis, sinon non renseigné — il n'entre dans aucun total (`calcul_godets`, stocks
 et `/stats` agrègent toujours par culture et variété).
+
+### Le carnet du compagnon — `/carnet` [US-265]
+
+`app/services/carnet_compagnon.py` (service, validation, bloc de prompt),
+`app/bot/commandes_carnet.py` (`/carnet`, boutons `carnet:`), table `carnet_faits` et colonnes
+`niveau_compagnon` / `objectifs_saison` de `potager_membres` (migration v64). API : `/compagnon/carnet`.
+Écran PWA : `frontend/src/components/ModalMonCompagnon.jsx` (menu du compte).
+
+- **Écrit sur confirmation seulement (R9)** : `retenir_carnet` est une forme dictable `("carnet", "retenir")`
+  à `confirmation=True`, donc un outil d'ÉCRITURE du catalogue : l'agent la PROPOSE, la carte montre
+  « OK, retiens-le / Non » (`interpretation.py`), et c'est `/carnet retenir <fait>` qui écrit, via le handler,
+  comme toute commande confirmée. Une règle (`carnet_retenir`) lit « retiens que… » sans modèle. Le carnet
+  n'entre pas dans les actions menées (`actions_menees.retenir_commande` l'écarte) : ce n'est pas un geste.
+- **Bornes** : fait de 200 caractères, 30 faits par (jardinier, potager), 3 objectifs de 80 caractères.
+  Un fait est nettoyé des chevrons à l'écriture ET au rendu du prompt (R10).
+- **Prompt** : `Profil.carnet` ; `profil_echange.bloc_prompt` ajoute `<carnet_jardinier>` après
+  `<profil_jardinier>` avec `CONSIGNE_CARNET`, en partie VARIABLE. `PROMPT_FIXE` n'a pas changé. Sans carnet,
+  le texte est celui d'avant, à l'octet près.
+- **Niveau** : `niveau_deduit` (40 gestes ET 180 jours d'ancienneté → `confirme`, sinon `debutant`),
+  `niveau_a_proposer` ; jamais écrit sans le bouton ou `PUT /compagnon/carnet/niveau`.
+- **Effacement** : `tout_oublier` vide faits, niveau et objectifs ; `potagers._supprimer_appartenance`
+  efface le carnet de celui qui quitte ou est retiré (`effacer_du_membre`). Fiche : `docs/RGPD/RGPD_CARNET_COMPAGNON.md`.
+- `/carnet` est dictable (`FORMES_DICTABLES`), plafond d'outils porté à 18 (`NB_OUTILS_MAX`).
+- **Le fait n'est pas ancré** (`Argument.libre`) : le validateur n'exige pas qu'il soit mot pour mot dans la phrase,
+  mais `fait_fidele` (75 % des mots pleins venus de la phrase) écarte une invention du modèle (mesuré : l'exemple de
+  la description d'outil était recopié) ; sinon, ou si le fait manque, `fait_dit` reprend la dernière phrase du
+  jardinier. Jamais de carte « Quel fait retenir ? ». Aucun exemple dans la description de l'outil.
+- **Tri avant le parseur de gestes** : `exprime_une_habitude` (toujours, jamais, d'habitude, objectif, « retiens que »…,
+  sauf geste daté) rend la phrase à l'agent. Filet : si l'agent ne propose rien, ou propose une consultation,
+  `_proposition_carnet` propose le carnet (`genre` objectif si `est_un_objectif`). Rien n'est écrit sans clic.
+- **Le carnet répond aux questions** : `llm/routeur.repondre_avec_cascade` lit `faits_pour_question` (racine de mot commune, « arroser » ↔ « j'arrose »). Si un fait touche à la question, la réponse est PERSONNELLE : pas de fragment recopié, pas de cache commun, pas de mémorisation ; le modèle reçoit les faits (`bloc_pour_reponse`, balisés comme données) avec la règle « l'habitude du jardinier prime sur un conseil général ».
+
+### Les rappels de suivi — `/rappel`, `/rappels` [US-268]
+
+`app/services/compagnon/rappels.py` (service), `app/bot/commandes_rappels.py` (commandes, boutons `rap:`), table
+`rappels` d'US-266 (migration v65, aucune migration ici). Cadrage : ÉPIC 14, lot 5, R9.
+
+- **Proposition après un geste (CA1)** : `enregistrement._do_save_items` appelle `proposer_rappel` après le compte
+  rendu. `ACTIONS_A_RAPPEL` ne connaît que le semis (étape `levee`) : la date est celle du geste + la borne haute de
+  `DureeCulturale` ; une reprise de repiquage n'a pas de durée au référentiel et n'est donc pas proposée. Les boutons
+  ne portent que l'identifiant du geste (`rap:o:<id>` / `rap:n:<id>`) : la proposition est RECALCULÉE au clic, aucun état
+  n'est gardé ; un double clic ne double pas le rappel (`existe_pour`).
+- **Écriture (CA2)** : seul `programmer` écrit. `programmer_rappel` est la forme dictable `("rappel", "programmer")`
+  (`objet` texte, `date` dite), confirmée comme toute écriture ; plafond d'outils porté à 19. Règle `rappel_programmer` :
+  elle renonce sans jour reconnu (la phrase revient à l'agent) ; `rappel_lister` lit « mes rappels ».
+- **Date (CA3)** : `objet_et_jour` / `resoudre_date` s'appuient sur `utils.date_utils` en lecture d'avenir ; une date ISO est
+  lue à part (la grammaire la lit mal). Passé ou au-delà de 366 jours : refusé.
+- **Échéance (CA4)** : `veilleur.detecter_rappels_echus` (signal `rappel:<id>`, thème « rappels », immédiat) ; le passage
+  met le rappel à `echu` une fois le signal en base. Le texte est le gabarit « ⏰ Rappel : <objet> ».
+- **Liste (CA5)** : `/rappels` est un alias de `("rappel", "lister")` ; annuler passe par `rap:a:<id>`.
+- **Thème coupé (CA6)** et distributeur éteint (`COMPAGNON_PROACTIF=non`, défaut) : aucune proposition ; un rappel
+  libre est programmé avec un avertissement.
+
+### Les messages spontanés et leurs réglages — `/profil` → « Messages spontanés » [US-267]
+
+Le distributeur fait partir dans Telegram ce que le veilleur (US-266) a détecté. Quatre modules :
+`app/services/compagnon/distributeur.py` (règles PURES, sans base ni modèle — test d'AST),
+`distribution.py` (passage en base, envoi, réponse), `redaction_signal.py` (gabarits, rédaction contrôlée),
+`reponse_signal.py` (boutons, lecture d'une réponse courte), plus `proactivite.py` (réglages, phrases) côté
+service ; `app/bot/messages_spontanes.py` (job, boutons `spon:`, `reprendre_reponse`) côté bot. Tables
+`messages_spontanes` et `envois_signaux`, colonnes `proactivite_compagnon` / `silence_debut` / `silence_fin` /
+`heure_resume` de `potager_membres` (migration v66).
+
+- **Interrupteur** : `COMPAGNON_PROACTIF` (défaut `non`) ; éteint, `distribution.passer` ne prend rien, les
+  signaux restent `detecte`. Seul le bot distribue : `job_distributeur` toutes les 15 min, et juste après
+  `job_veilleur` / `job_bilan_semaine` (CA11). L'API ne distribue jamais.
+- **Atomique** : un signal passe `detecte` → `planifie` par un UPDATE conditionnel (un seul passage gagne),
+  puis UNE ligne `envois_signaux` par jardinier owner/editor (UNIQUE `(signal_id, user_id)`) ; l'envoi passe
+  `en_attente` → `envoye` de même. Telegram refuse (`telegram_notify.envoyer` rend None) : retour en attente.
+  Sans `telegram_chat_id` : `ignore` / `sans_telegram` (le panneau PWA viendra avec le lot 6).
+- **Règles (`planifier`)** : thème `coupe` → ignoré ; `immediat` → maintenant, ou fin du silence ; `resume` →
+  prochain point du matin (après la fin du silence s'il tombe dedans). Expire avant l'heure prévue : il part
+  maintenant si on est hors silence, sinon il est ignoré (`expire_pendant_le_silence`). Le mode est celui du
+  THÈME choisi par le jardinier ; la priorité du signal ne route pas. Défauts : météo, rappels, bilan
+  `immediat` ; échéances, suivis, suggestions `resume` ; silence 21 h → 8 h ; point du matin 8 h.
+- **Regroupement (CA2)** : tous les envois dus d'un jardinier partent en UN message ; un message parti il y a
+  moins de 30 min retient les suivants jusqu'à la fin de la demi-heure (`report_de_regroupement`), sauf si
+  elle tombe dans le silence ou après une expiration. Un message qui porte un envoi `resume` est le point du
+  matin (`genre = resume`) ; jamais de point du matin vide (D7).
+- **Bascule (CA5)** : thème `immediat` dont les 3 derniers messages `genre = signal` (envoyés depuis le
+  dernier changement de mode du thème) n'ont pas de `reaction_le` → écrit `{"mode": "resume", "auto": true}`
+  et l'envoi porte `annonce_bascule` : le message le dit (texte du code, `pied_bascules`). Le bilan
+  (`resume`) ne bascule jamais. Réaction = clic sur un bouton `spon:` ou phrase dans la fenêtre de réponse.
+- **Rédaction (CA6)** : `passerelle.appeler_chat`, type `compagnon_signal`, SANS outil (R8 par construction).
+  Le code donne `quand` (« demain ») et la `question` du sujet ; contrôle : non vide, ≤ 900 caractères, aucun
+  nombre absent des données (`validation._nombres_de`), aucune action annoncée (`annonce_une_action`). Sinon,
+  ou au-delà de 6 signaux, le gabarit part. `messages_spontanes.redige` = `agent` | `gabarit`.
+- **Boutons (CA7)** : `spon:<potager>:<envoi>:<code>` ; `phrase_du_geste` rend une phrase de geste
+  (« j'ai posé un voile de protection sur Planche Est », « levée du lot 14 ») passée à `saisie._parse_and_save` :
+  récapitulatif à confirmer, rien n'est écrit au clic. Bouton d'un autre potager que l'actif : refus motivé (F5).
+  `spon:<potager>:0:reglages` ouvre les réglages.
+- **Réponse (CA8)** : `reprendre_reponse` (handle_text avant la reconnaissance déterministe, handle_voice avant
+  l'interpréteur) : message cité (réponse Telegram) ou dernier envoyé depuis moins de 12 h (30 min après une
+  première réaction). `reformuler` ne lit qu'une réponse courte (≤ 8 mots, sans négation) sur UN sujet à
+  question : « oui » → le geste de la question, nombre sur une levée → « levée du lot N : x ». Sinon la
+  phrase passe telle quelle et `contexte_court_de` met `message_spontane` dans le contexte de l'agent (consigne
+  dans la partie variable seulement). Chaque message spontané est aussi noté comme échange (`signal = spontane:<id>`).
+- **Réglages (CA9)** : boutons `profil:proactif`, `profil:pt:<thème>` (fait tourner tout de suite → point du
+  matin → jamais, le clic vaut confirmation), `profil:silence`, `profil:matin` ; phrases lues par
+  `proactivite.lire_phrase` dans `phrase_de_profil` (avant l'interpréteur, sans modèle) → proposition Oui / Non
+  (`profil:pok`). Aide : `/help alertes`.
+- **Purge** : `signaux.purger` efface aussi envois et messages de plus de 30 jours.

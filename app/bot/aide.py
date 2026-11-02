@@ -258,6 +258,26 @@ _HELP_METEO = (
 )
 
 
+_HELP_ALERTES = (
+    "🔔 *Aide — Messages du compagnon*\n"
+    "Le compagnon vous écrit de lui-même : gel ou forte chaleur sur vos cultures, fortes pluies, "
+    "arrosage oublié, lot à repiquer, levée pas notée, récolte qui approche, semis du mois, bilan du dimanche.\n\n"
+    "*Régler ce qu'il vous écrit :*\n"
+    "• Sujet par sujet : tout de suite, au point du matin, ou jamais\n"
+    "  → /profil puis *Messages spontanés*\n"
+    "  → _\"arrête de me parler de la météo\"_ · _\"regroupe la météo le matin\"_\n"
+    "  → _\"préviens-moi tout de suite pour les levées\"_\n"
+    "• La plage de silence et l'heure du point du matin\n"
+    "  → _\"silence de 22 h à 7 h\"_ · _\"pas de silence\"_ · _\"point du matin à 7 h\"_\n\n"
+    "*Lui répondre :*\n"
+    "• Ses boutons préparent le geste, à confirmer : _Voile posé_, _Noter la levée_…\n"
+    "• Ou répondez-lui : à _\"Ça a germé ?\"_ → _\"oui, environ 20 sur 24\"_\n\n"
+    "💡 _Silence de 21 h à 8 h par défaut ; un gel annoncé pour l'aube part avant. Une phrase "
+    "de réglage est proposée, rien ne change avant votre « Oui ». Sans réponse à trois messages "
+    "d'un sujet, il passe au point du matin, et le compagnon vous le dit._"
+)
+
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -266,7 +286,7 @@ _HELP_METEO = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
-    "calendrier", "lot", "meteo",
+    "calendrier", "lot", "meteo", "alertes",
 )
 
 
@@ -297,6 +317,11 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "fiche":     _HELP_FICHE,
     "calendrier": _HELP_CALENDRIER,  # [US-068]
     "meteo":     _HELP_METEO,
+    "alertes":   _HELP_ALERTES,   # [US-267]
+    "alerte":    _HELP_ALERTES,
+    "messages":  _HELP_ALERTES,
+    "notifications": _HELP_ALERTES,
+    "silence":   _HELP_ALERTES,
 }
 
 
@@ -372,7 +397,9 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/lier [code] — Relier ce chat à votre compte web\n"
         "/delier — Dissocier ce chat de votre compte web\n"
         "/potager — Changer de potager actif\n"
-        "/profil — Votre prénom et le ton du compagnon\n"
+        "/profil — Votre prénom, le ton du compagnon et ses messages spontanés\n"
+        "/carnet — Ce que le compagnon retient de vous\n"
+        "/rappels — Vos rappels à venir, à annuler si besoin\n"
         # [US-087 / CA10] Même section que /lier et /potager : c'est de l'appartenance.
         "/rejoindre [code] — Rejoindre un potager avec un code d'invitation\n"
         "/meteo [ville] — Météo + conseil potager, ou météo d'une autre ville\n"

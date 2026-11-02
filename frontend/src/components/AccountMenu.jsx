@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronDown, RefreshCw, Bell, Send, Unlink, LogOut } from 'lucide-react'
+import { ChevronDown, RefreshCw, Bell, Send, Unlink, LogOut, NotebookPen } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { api } from '../lib/api.js'
@@ -8,6 +8,7 @@ import { initiales, nomAffiche, prenomAffiche } from '../lib/identite.js'
 import { Pop, PopItem, PopHead, PopSep, Badge } from './ui'
 import LierTelegram from './LierTelegram.jsx'
 import DelierTelegram from './DelierTelegram.jsx'
+import ModalMonCompagnon from './ModalMonCompagnon.jsx'  // [US-265]
 
 /**
  * Menu Compte [US-055].
@@ -30,7 +31,7 @@ export default function AccountMenu({ onRefresh, loading }) {
   const { logout } = useAuth()
   const { potagerActif } = usePotager()
   const [ouvert, setOuvert] = useState(false)
-  const [modale, setModale] = useState(null) // null | 'telegram' | 'delier'
+  const [modale, setModale] = useState(null) // null | 'telegram' | 'delier' | 'compagnon'
   const [moi, setMoi] = useState(null)
   const [version, setVersion] = useState(null)
 
@@ -152,6 +153,14 @@ export default function AccountMenu({ onRefresh, loading }) {
             }
           />
 
+          {/* [US-265 / CA3] Ce que le compagnon sait du jardinier : voir, corriger, oublier. */}
+          <PopItem
+            icon={NotebookPen}
+            label="Mon compagnon"
+            sub="Ce qu'il retient de vous"
+            onClick={() => ouvrirModale('compagnon')}
+          />
+
           <PopSep />
 
           <PopItem
@@ -175,6 +184,7 @@ export default function AccountMenu({ onRefresh, loading }) {
       {modale === 'telegram' && (
         <LierTelegram telegramLie={telegramLie} onClose={() => { setModale(null); chargerIdentite() }} />
       )}
+      {modale === 'compagnon' && <ModalMonCompagnon onClose={() => setModale(null)} />}
       {modale === 'delier' && (
         <DelierTelegram onClose={() => { setModale(null); chargerIdentite() }} />
       )}

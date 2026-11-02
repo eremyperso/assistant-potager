@@ -1260,6 +1260,25 @@ def lire_echeances(
     return {"date_reference": ref.isoformat(), "par_lot": par_lot, "resume": resume, "parcours": parcours}
 
 
+def echeances_et_actions(
+    db: Session, ctx: TenantContext, lots: list[dict], date_ref: Optional[date] = None,
+) -> dict[str, dict]:
+    """[US-266] Échéances et action suggérée de chaque lot, par `lot_id` — pour le veilleur.
+
+    Même calcul que `lire_echeances` (`_echeances_du_lot`), sans ce qui ne sert qu'aux
+    écrans : ni rang, ni résumé, ni « Où les mettre », ni parcours. Le Plan n'est donc
+    jamais lu, et le passage horaire du veilleur reste une lecture de calendrier.
+    """
+    ref = date_ref or date.today()
+    cache: dict = {}
+    sortie: dict[str, dict] = {}
+    for lot in lots:
+        delais = _delais_de(db, lot.get("culture") or "", ctx.potager_id, cache)
+        calcul = _echeances_du_lot(lot, delais, ref)
+        sortie[lot["lot_id"]] = {"echeances": calcul["echeances"], "action_suggeree": calcul["action_suggeree"]}
+    return sortie
+
+
 def echeances_d_un_lot(
     db: Session, ctx: TenantContext, lot: dict, date_ref: Optional[date] = None,
 ) -> dict:

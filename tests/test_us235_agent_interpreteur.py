@@ -102,8 +102,9 @@ class TestCA1Catalogue:
 
     def test_us235_ca1_au_plus_quinze_outils(self):
         # [US-262] Le plafond compte aussi les 2 outils de décision et les 2 de correction, offerts à la demande.
-        assert len(catalogue_outils.outils()) <= 15
-        assert catalogue_outils.NB_OUTILS_MAX == 17
+        assert len(catalogue_outils.outils()) <= 16
+        # [US-265] +1 : `retenir_carnet`. [US-268] +1 : `programmer_rappel`.
+        assert catalogue_outils.NB_OUTILS_MAX == 19
 
     def test_us235_ca1_chaque_outil_de_commande_vient_d_une_forme_dictable(self):
         """[CA1] Aucun outil écrit à la main : chacun couvre des formes du catalogue."""

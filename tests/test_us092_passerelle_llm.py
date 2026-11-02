@@ -222,10 +222,11 @@ class TestCA2AucunAppelAnonyme:
 
     def test_us092_ca2_les_six_types_sont_declares(self):
         """CA2 : la nomenclature couvre les usages réels du produit — les cinq
-        d'origine, plus `agent` (US-233, appel d'outils typés)."""
+        d'origine, plus `agent` (US-233, appel d'outils typés) et `compagnon_signal`
+        (US-267, rédaction d'un message spontané, comptée à part)."""
         assert TYPES_APPEL == {
             "classification", "parsing", "question", "synthese", "transcription",
-            "agent",
+            "agent", "compagnon_signal",
         }
 
     def test_us092_ca2_erreur_de_contexte_nest_pas_une_indisponibilite(self):

@@ -194,9 +194,9 @@ def pour_l_agent_plutot_que_le_raccourci(texte: str, ctx: Optional[TenantContext
     Avec l'agent actif et un geste récent, elle va à l'agent plutôt qu'au raccourci du bot, qui
     proposerait le dernier enregistrement quel qu'il soit. Le mot seul (« annuler ») garde le raccourci."""
     from app.services.compagnon import actions_menees
-    from app.services.interpreteur_commandes import _mode_agent
+    from app.services.interpreteur_commandes import agent_actif
 
-    if ctx is None or len(_mots(texte)) < 2 or _mode_agent() != "actif":
+    if ctx is None or len(_mots(texte)) < 2 or not agent_actif():
         return False
     return any(corrigeable(a) for a in actions_menees.recentes(ctx))
 

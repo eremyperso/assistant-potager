@@ -89,6 +89,14 @@ Copy `.env.example` to `.env.dev` and fill in:
 
 Config is loaded from `.env.{APP_ENV}` (at the repo root) via `app/config.py`.
 
+Réglages facultatifs du compagnon (US-267), sans redéploiement de code :
+- `COMPAGNON_PROACTIF` — `oui` : le bot envoie dans Telegram les messages spontanés (gel, levée
+  non notée, point du matin…) ; toute autre valeur (défaut `non`) : le veilleur détecte, rien ne
+  part. C'est le retour arrière. Exige la migration v66.
+- `GROQ_MODEL_COMPAGNON_SIGNAL` — modèle qui rédige ces messages (type d'appel `compagnon_signal`
+  dans `conso_tokens`) ; par défaut celui de l'agent (`GROQ_MODEL_AGENT`). En panne ou infidèle, le
+  gabarit du code part à sa place.
+
 ## Architecture
 
 ### Entry Points
@@ -118,6 +126,9 @@ Config is loaded from `.env.{APP_ENV}` (at the repo root) via `app/config.py`.
 | `/parcelles` | — | Alias de `/parcelle lister` (`bot.py:4665`) |
 | `/vendre <culture> [variété] <quantité>` | `<culture> [variété] <quantité>` | Enregistrer une vente de plants pépinière (`bot.py:4585`) |
 | `/meteo [ville]` | `[ville]` facultatif | Sans ville : déclencher la météo du potager manuellement (job auto à 05h00). Avec une ville : sa météo du jour, en lecture seule |
+| `/carnet [retenir <fait>\|objectif <texte>]` | `[retenir <fait>]` `[objectif <texte>]` | Le carnet du compagnon (US-265) : sans argument, liste les faits retenus avec [Modifier] [Oublier un point] [Tout oublier] ; `retenir` écrit un fait (exécuté à la confirmation de la proposition) ; `objectif` ajoute un objectif de saison (3 au plus) |
+| `/rappel programmer <objet> <jour>` · `/rappels` | `<objet> <jour>` | Les rappels de suivi (US-268) : `programmer` écrit un rappel (exécuté à la confirmation de la phrase « rappelle-moi de tailler les tomates samedi », jour résolu par le code ; proposé aussi après un semis, date prise à la durée de levée du référentiel, bouton « Oui, rappelle-moi »). `/rappels` liste les rappels à venir et permet d'en annuler un. Le signal « rappels » part à l'échéance par le distributeur (US-267) : sans `COMPAGNON_PROACTIF=oui`, aucun rappel n'est proposé |
+| `/profil [prenom <prénom>]` | `[prenom <prénom>]` | Le prénom et le ton du compagnon (US-258) ; bouton « Messages spontanés » (US-267) : mode de chaque thème (tout de suite / point du matin / jamais), plage de silence, heure du point du matin. Les phrases « arrête de me parler de la météo », « silence de 22 h à 7 h », « point du matin à 7 h » sont proposées puis confirmées |
 | `/tts` | — | Afficher l'état de la synthèse vocale |
 | `/tts_on` | — | Activer les réponses vocales |
 | `/tts_off` | — | Désactiver les réponses vocales |

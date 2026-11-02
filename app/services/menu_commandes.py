@@ -74,6 +74,9 @@ ORDRE_METIER: tuple[str, ...] = (
     "culture",
     "potager",
     "profil",
+    "carnet",
+    "rappel",
+    "rappels",
     "rejoindre",
     "lier",
     "tts_on",
@@ -107,7 +110,10 @@ DESCRIPTIONS: dict[str, str] = {
     "parcelles":   "Lister vos parcelles",
     "culture":     "Corriger la fiche d'une culture",
     "potager":     "Changer de potager actif",
-    "profil":      "Votre prénom et le ton du compagnon",  # [US-258]
+    "profil":      "Votre prénom, le ton du compagnon et ses messages spontanés",  # [US-258, US-267]
+    "carnet":      "Ce que le compagnon retient de vous",  # [US-265]
+    "rappel":      "Programmer un rappel de suivi",  # [US-268]
+    "rappels":     "Vos rappels à venir, à annuler si besoin",  # [US-268]
     "rejoindre":   "Rejoindre un potager avec un code d'invitation",  # [US-087]
     "lier":        "Relier ce chat à votre compte web",
     "tts_on":      "Activer les réponses vocales",
@@ -226,6 +232,9 @@ class Argument:
     #: `question` : une question dans la description d'un champ invite le modèle à
     #: la poser au jardinier, ou à remplir le champ par déduction.
     description: str = ""
+    #: [US-265] Un texte que le modèle REFORMULE (un fait du carnet) : il n'a pas à figurer mot pour mot
+    #: dans la phrase, et s'il manque, le validateur reprend la phrase du jardinier.
+    libre: bool = False
 
 
 @dataclass(frozen=True)
@@ -391,6 +400,35 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
                      description="Motif de l'association, tel que dit par le jardinier"),
         ),
     ),
+
+    # ── Le carnet du compagnon [US-265] ──────────────────────────────────────
+    # `retenir` écrit : il est PROPOSÉ puis confirmé (R9). Le modèle ne l'appelle jamais
+    # pour exécuter ; la consultation, elle, n'a rien à confirmer.
+    FormeCommande(
+        "carnet", "retenir", "Retenir dans le carnet",
+        (
+            Argument("genre", TYPE_VOCABULAIRE, "Une habitude ou un objectif ?",
+                     description="habitude ou objectif",
+                     vocabulaire=("habitude", "objectif"), obligatoire=False),
+            Argument("fait", TYPE_TEXTE, "Quel fait retenir ?", libre=True,
+                     description="Le fait, en une phrase courte"),
+        ),
+    ),
+    FormeCommande("carnet", "lister", "Afficher le carnet du compagnon", confirmation=False),
+
+    # ── Les rappels de suivi [US-268] ────────────────────────────────────────
+    # `programmer` écrit : il est PROPOSÉ puis confirmé (R9). La date est dite par le jardinier
+    # (« samedi ») et résolue par le code, jamais par le modèle ; l'annulation se fait aux boutons.
+    FormeCommande(
+        "rappel", "programmer", "Programmer un rappel",
+        (
+            Argument("objet", TYPE_TEXTE, "De quoi dois-je te faire souvenir ?",
+                     description="Ce dont le jardinier veut qu'on lui rappelle, en peu de mots"),
+            Argument("date", TYPE_DATE, "Pour quand ?",
+                     description="Le jour du rappel, tel que dit (« samedi », « dans 3 jours »)"),
+        ),
+    ),
+    FormeCommande("rappel", "lister", "Afficher les rappels à venir", confirmation=False),
 
     # ── Fiche de culture partagée ────────────────────────────────────────────
     FormeCommande(
@@ -600,6 +638,7 @@ FORMES_PAR_CLE: "dict[tuple[str, Optional[str]], FormeCommande]" = {
 # lui-même — et le contrôle de parité vérifie que cette cible existe bien.
 ALIAS_COMMANDES: dict[str, tuple[str, Optional[str]]] = {
     "parcelles": ("parcelle", "lister"),
+    "rappels": ("rappel", "lister"),   # [US-268]
 }
 
 COMMANDES_DICTABLES: frozenset[str] = frozenset(f.commande for f in FORMES_DICTABLES)

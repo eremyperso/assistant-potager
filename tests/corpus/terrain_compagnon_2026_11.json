@@ -1,0 +1,331 @@
+{
+  "_lisez_moi": [
+    "[Agent d'abord, 01/11/2026] Corpus de TERRAIN : les dialogues réellement tenus avec le compagnon sur Telegram,",
+    "tirés de `echanges_conversation` (229 échanges) et `routage_logs` du potager 33 « Potager de recette »,",
+    "du 28/10 au 01/11/2026. Les phrases sont celles du jardinier, fautes et dictée comprises.",
+    "Il se rejoue sur les VRAIES données du potager 33, en lecture seule :",
+    "  python tools/evaluer_dialogues.py --corpus tests/corpus/terrain_compagnon_2026_11.json --potager 33 --utilisateur 2",
+    "Parcelles actives au 01/11 : principal, serre, plant tubercule, planche test, tunnel, Est. Une phrase qui visait une",
+    "parcelle désactivée depuis (essai 259, essai B) est adaptée à une parcelle active ; la source le dit.",
+    "Chaque dialogue cite l'échange d'origine (#id de echanges_conversation) et ce que le jardinier a reçu ce jour-là.",
+    "Même format que tests/corpus/us256_dialogues.json, mêmes catégories : les taux se comparent à ceux d'US-256.",
+    "Les questions attendent l'outil de lecture qui sait (consulter_donnees, chercher_connaissance, afficher) ou un",
+    "texte : un modèle qui répond juste sans outil, à partir des données préchargées, n'est pas pénalisé.",
+    "La météo d'un autre lieu passe par afficher(commande=meteo, lieu=…) : l'outil meteo ne lit que l'historique du potager."
+  ],
+  "dialogues": [
+    {
+      "id": "TER-01", "categorie": "questions_croisees", "source": "terrain #75 (29/10) — servi : un passage de documentation",
+      "titre": "« Ce que je viens de noter, c'était quoi ? » : une question sur ses données, pas sur l'application",
+      "tours": [
+        {"jardinier": "ce que je viens de noter , c'était quoi ?",
+         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-02", "categorie": "questions_croisees", "source": "terrain routage 29/10 16:09 — servi : un passage de documentation (score 0,77)",
+      "titre": "« C'est quoi la dernière action notée » : les actions menées, pas la doc",
+      "tours": [
+        {"jardinier": "c'est quoi la dernière action notée",
+         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-03", "categorie": "questions_croisees", "source": "terrain #70 (29/10) — aiguillé vers la cascade des questions",
+      "titre": "Le dernier semis",
+      "tours": [
+        {"jardinier": "quel est mon dernier semis ?",
+         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-04", "categorie": "questions_croisees", "source": "terrain #131-#138 (30/10) — trois tournures renvoyées à la doc avant que « quel temps fait il à Lyon » passe",
+      "titre": "La météo de Lyon, puis « et demain ? »",
+      "tours": [
+        {"jardinier": "Quelle météo sur Lyon ?",
+         "attendu": {"outils": ["afficher"], "parametres": {"commande": "meteo", "lieu": "lyon"}, "ecriture": false}},
+        {"jardinier": "et demain ?",
+         "attendu": {"outils": ["afficher"], "parametres": {"commande": "meteo", "lieu": "lyon"}, "ecriture": false,
+                     "note": "« et demain » reprend Lyon : servi le 30/10, un passage de doc (score 0,29)"}}
+      ]
+    },
+    {
+      "id": "TER-05", "categorie": "questions_croisees", "source": "terrain #140 (30/10) — aiguillé vers la cascade, passage de doc",
+      "titre": "La météo d'un pays",
+      "tours": [
+        {"jardinier": "quel météo en Belgique ?",
+         "attendu": {"outils": ["afficher", "texte"], "ecriture": false,
+                     "note": "une ville est attendue : demander laquelle, ou interroger la Belgique, sont deux bonnes réponses"}}
+      ]
+    },
+    {
+      "id": "TER-06", "categorie": "questions_croisees", "source": "terrain #141-#142 (30/10) — posée deux fois, avis 👍 sur la seconde",
+      "titre": "Une question sur ce que sait faire l'application",
+      "tours": [
+        {"jardinier": "est ce que je peux obtenir la météo d'une autre région ?",
+         "attendu": {"outils": ["texte", "chercher_connaissance", "afficher"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-07", "categorie": "questions_croisees", "source": "terrain #227 (01/11) — servi : un passage de documentation (score 0,91)",
+      "titre": "La date du jour",
+      "tours": [
+        {"jardinier": "quel est la date ?",
+         "attendu": {"outils": ["texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-08", "categorie": "registres", "source": "terrain #220 et #224 (01/11) — doc, puis /carnet lister",
+      "titre": "« Que sais-tu sur moi ? » : le profil et le carnet, déjà dans le contexte",
+      "tours": [
+        {"jardinier": "que sais-tu sur moi ?",
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-09", "categorie": "questions_croisees", "source": "terrain #226 (01/11) — servi : un passage de documentation (score 1,00)",
+      "titre": "Rappeler son objectif",
+      "tours": [
+        {"jardinier": "rappel moi quel a été mon objectif cette année ?",
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-10", "categorie": "questions_croisees", "source": "terrain routage 01/11 21:48 — « quels sont mes notes » : aucun passage trouvé",
+      "titre": "Ses notes",
+      "tours": [
+        {"jardinier": "quels sont mes notes ?",
+         "attendu": {"outils": ["afficher", "consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-11", "categorie": "questions_croisees", "source": "terrain #186-#202 (30/10) — posée onze fois sous des formes voisines",
+      "titre": "Un conseil qui doit croiser le carnet (« j'arrose le soir ») et le savoir",
+      "tours": [
+        {"jardinier": "quand dois je arroser mes tomates ?",
+         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-12", "categorie": "questions_croisees", "source": "terrain #223 (01/11) — servi : un passage de documentation",
+      "titre": "Un conseil sur son objectif d'autonomie en tomate",
+      "tours": [
+        {"jardinier": "pour mon objectif d'autonomie, que dois je privilégie ?",
+         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-13", "categorie": "questions_croisees", "source": "terrain #215-#216 (31/10) — /confiance proposé",
+      "titre": "Semer des tomates ce week-end ?",
+      "tours": [
+        {"jardinier": "est ce que je peux semer des tomates ce week-end ?",
+         "attendu": {"outils": ["chercher_connaissance", "afficher", "consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-14", "categorie": "questions_croisees", "source": "terrain #213 (31/10) — aiguillé vers la cascade",
+      "titre": "Ses cultures en pépinière",
+      "tours": [
+        {"jardinier": "mes cultures en pépinière ?",
+         "attendu": {"outils": ["consulter_donnees", "afficher", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-15", "categorie": "questions_croisees", "source": "terrain #65-#69 (29/10) — cinq tournures, une seule a répondu",
+      "titre": "Ce qu'il a fait aujourd'hui",
+      "tours": [
+        {"jardinier": "liste tout ce que j'ai fais aujourd'hui",
+         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-16", "categorie": "questions_croisees", "source": "terrain #78 (29/10) — savoir transmis au raisonnement",
+      "titre": "« Que dois-je faire ? » : une suggestion tirée de son potager",
+      "tours": [
+        {"jardinier": "que dois je faire ?",
+         "attendu": {"outils": ["texte", "consulter_donnees", "afficher", "chercher_connaissance"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-17", "categorie": "conversation_simple", "source": "terrain #11-#12 (28/10) — la suite partait à la cascade des questions",
+      "titre": "Bonsoir, puis « quoi de neuf ? »",
+      "tours": [
+        {"jardinier": "Bonsoir",
+         "attendu": {"outils": ["texte"], "ecriture": false}},
+        {"jardinier": "En effet , quoi de neuf ?",
+         "attendu": {"outils": ["texte", "consulter_donnees", "afficher", "meteo"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-18", "categorie": "conversation_simple", "source": "terrain #38-#39 (29/10) — la suite partait à la cascade des questions",
+      "titre": "Bonjour, puis « que puis-je faire aujourd'hui ? »",
+      "tours": [
+        {"jardinier": "bonjour",
+         "attendu": {"outils": ["texte"], "ecriture": false}},
+        {"jardinier": "oui je suis prêt et que puis je faire aujourd'hui alors ?",
+         "attendu": {"outils": ["texte", "consulter_donnees", "afficher", "chercher_connaissance"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-19", "categorie": "conversation_simple", "source": "terrain #205 et #111 (31/10, 29/10) — le nom servi par un passage de doc",
+      "titre": "Son nom, puis merci",
+      "tours": [
+        {"jardinier": "bonsoir, quel est ton nom ?",
+         "attendu": {"outils": ["texte"], "ecriture": false}},
+        {"jardinier": "Merci.",
+         "attendu": {"outils": ["texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-20", "categorie": "conversation_simple", "source": "terrain #93 (29/10) — un bruit de dictée",
+      "titre": "Une phrase de dictée sans demande",
+      "tours": [
+        {"jardinier": "Laissez le micro.",
+         "attendu": {"outils": ["texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "TER-21", "categorie": "creations", "source": "terrain #149 (30/10) — aiguillé vers la cascade des questions à cause du « ? » d'ouverture",
+      "titre": "Quatre créations dans une phrase dictée, dont une parcelle qui existe déjà (Est)",
+      "tours": [
+        {"jardinier": "Bon, tu m'entends ? Alors, je veux que tu me crées une parcelle nord, puis une parcelle sud, puis une parcelle ouest, et enfin tu termines par la création d'une parcelle est.",
+         "attendu": {"outils": ["creer_parcelle+creer_parcelle+creer_parcelle"], "ecriture": true,
+                     "note": "Est est active : le validateur la refuse, le modèle doit le dire au lieu de la proposer"}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-22", "categorie": "plusieurs_actions", "source": "terrain #145 (30/10) — les règles ont proposé « /parcelle ajouter nord et une parcelle sud »",
+      "titre": "Deux créations liées par « et »",
+      "tours": [
+        {"jardinier": "créé moi une parcelle nord et une parcelle sud",
+         "attendu": {"outils": ["creer_parcelle+creer_parcelle"], "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-23", "categorie": "creations", "source": "terrain #101 (29/10) — « est-ce que tu peux renommer » aiguillé vers la cascade des questions",
+      "titre": "Une demande polie de renommage",
+      "tours": [
+        {"jardinier": "Est-ce que tu peux renommer la parcelle tunnel en serre chaude ?",
+         "attendu": {"outils": ["renommer_parcelle"], "parametres": {"ancien": "tunnel", "nouveau": "serre chaude"}, "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-24", "categorie": "plusieurs_actions", "source": "terrain #129 (30/10) — réussi ce jour-là, gardé contre la régression (valeurs inversées)",
+      "titre": "Deux pépinières dans une phrase",
+      "tours": [
+        {"jardinier": "Mets la serre en pépinière chaude et le tunnel en pépinière froide.",
+         "attendu": {"outils": ["modifier_parcelle+modifier_parcelle"], "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-25", "categorie": "caracteristiques", "source": "terrain #117 (30/10) — les règles ont proposé pepiniere=oui",
+      "titre": "« Pépinière tiède » : une valeur hors du vocabulaire, à demander",
+      "tours": [
+        {"jardinier": "ma serre est une pépinière tiède",
+         "attendu": {"outils": ["texte"],
+                     "note": "froide ou chaude : demander, ne pas deviner (consigne 11)"}}
+      ]
+    },
+    {
+      "id": "TER-26", "categorie": "caracteristiques", "source": "terrain #128 (30/10) — réussi ce jour-là, gardé contre la régression (autre parcelle)",
+      "titre": "Le sol d'une parcelle",
+      "tours": [
+        {"jardinier": "Le sol de ma serre est argileux.",
+         "attendu": {"outils": ["modifier_parcelle"], "parametres": {"parcelle": "serre", "type_sol": "argileux"}, "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-27", "categorie": "negations", "source": "terrain #27-#29 et #56-#57 (29/10) — « non 5 rangs » puis « oui » : un salut à la place de la confirmation",
+      "titre": "Une proposition corrigée par « non 4 rangs »",
+      "tours": [
+        {"jardinier": "passe la planche principal à 2 rangs",
+         "attendu": {"outils": ["modifier_parcelle"], "parametres": {"parcelle": "principal", "nb_rangs": 2}, "ecriture": true}},
+        {"jardinier": "non 4 rangs",
+         "attendu": {"outils": ["modifier_parcelle"], "parametres": {"parcelle": "principal", "nb_rangs": 4}, "ecriture": true,
+                     "interdits": ["creer_parcelle"]}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-28", "categorie": "creations", "source": "terrain : geste dicté, chemin des gestes gardé contre la régression",
+      "titre": "Un geste au passé va au parseur de gestes",
+      "tours": [
+        {"jardinier": "j'ai arrosé la planche principal ce soir",
+         "attendu": {"outils": ["saisir_geste"], "ecriture": true,
+                     "texte_interdit": ["c'est fait", "j'ai (not|enregistr)"]}}
+      ]
+    },
+    {
+      "id": "TER-29", "categorie": "doutes", "source": "terrain #14-#16 (28/10) — « laquelle ? », « 259 », « La supprimer » : jamais proposé ; adapté aux parcelles actives",
+      "titre": "Une suppression sans nom, puis la réponse courte",
+      "tours": [
+        {"jardinier": "Supprime la planche",
+         "attendu": {"outils": ["texte"], "ecriture": false,
+                     "note": "demander laquelle en nommant les parcelles, jamais en deviner une"}},
+        {"jardinier": "la planche test",
+         "attendu": {"outils": ["supprimer_parcelle"], "parametres": {"nom": "planche test"}, "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-30", "categorie": "doutes", "source": "terrain #23-#24 (28/10) — « si tu veux que je te rappelle… », puis « oui » : « Salut, potager ! »",
+      "titre": "Un rappel demandé, puis accepté d'un mot",
+      "tours": [
+        {"jardinier": "Rappelle moi l'événement demain matin",
+         "attendu": {"outils": ["programmer_rappel", "texte"]}},
+        {"jardinier": "Oui je veux bien",
+         "attendu": {"outils": ["confirmer_proposition", "programmer_rappel"], "ecriture": true}}
+      ]
+    },
+    {
+      "id": "TER-31", "categorie": "doutes", "source": "terrain #228-#229 (01/11) — le geste avait été vidé 25 s plus tôt ; « je vais effacer… », puis « oui » : « Salut Emmanuel ! »",
+      "titre": "« Vide le geste », puis « oui » : ni promesse, ni suppression d'une entrée du carnet",
+      "tours": [
+        {"jardinier": "vide le geste",
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "interdits": ["annuler_action", "supprimer_parcelle"],
+                     "note": "la réponse idéale (« il vient d'être retiré ») exige que l'agent voie les messages envoyés par le bot : brique absente, seul le refus de promettre est jugé ici"}},
+        {"jardinier": "oui",
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "interdits": ["annuler_action", "supprimer_parcelle"]}}
+      ]
+    },
+    {
+      "id": "TER-32", "categorie": "negations", "source": "terrain #147 (30/10) — « supprime la dernière commande » ; la dernière action (suppression d'Ouest) date de 2 jours",
+      "titre": "« Supprime la dernière commande » ne supprime jamais une parcelle",
+      "tours": [
+        {"jardinier": "Oups, excuse-moi, supprime la dernière commande.",
+         "attendu": {"outils": ["texte"], "ecriture": false, "interdits": ["supprimer_parcelle"],
+                     "note": "une suppression de parcelle ne s'annule pas par une phrase : l'expliquer"}}
+      ]
+    },
+    {
+      "id": "TER-33", "categorie": "hors_catalogue", "source": "terrain #181 (30/10) — /carnet lister proposé",
+      "titre": "Vider le carnet",
+      "tours": [
+        {"jardinier": "vider mon carnet",
+         "attendu": {"outils": ["manque_catalogue", "texte", "afficher"], "ecriture": false, "interdits": ["supprimer_parcelle"]}}
+      ]
+    },
+    {
+      "id": "TER-34", "categorie": "registres", "source": "terrain #204 (30/10) — le carnet dit « engrais bio, toujours »",
+      "titre": "Une envie qui contredit son carnet",
+      "tours": [
+        {"jardinier": "je veux utiliser de l'engrais chimique pour mes tomates",
+         "attendu": {"outils": ["texte", "chercher_connaissance"], "ecriture": false,
+                     "texte_interdit": ["\\d+\\s*(g|kg|ml|l)\\b", "c'est fait"]}}
+      ]
+    },
+    {
+      "id": "TER-35", "categorie": "registres", "source": "terrain #179 (30/10) — /fiche tomate proposé ; l'objectif est déjà dans le profil",
+      "titre": "Un objectif déjà connu",
+      "tours": [
+        {"jardinier": "objectif autonomie en tomate",
+         "attendu": {"outils": ["texte", "retenir_carnet"]}}
+      ]
+    }
+  ]
+}

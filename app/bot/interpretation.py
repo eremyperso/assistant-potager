@@ -303,6 +303,9 @@ def contexte_court_de(update: Update):
     échanges de la conversation l'accompagnent, même sans proposition. None :
     ni proposition ni conversation en cours, la phrase est une demande nouvelle.
     Une mémoire illisible ne bloque jamais la phrase : elle passe sans contexte.
+
+    [US-267 / CA8] Il porte aussi le message spontané auquel le jardinier répond, avec les
+    faits de son signal d'origine.
     """
     tenant = current_context()
     try:
@@ -312,6 +315,7 @@ def contexte_court_de(update: Update):
         proposition = None
     echanges = svc_conversations.recents(tenant)
     ailleurs = _ailleurs_de(tenant)
+    spontane = _spontane_de(update, tenant)
     if proposition is None:
         traitee = None
         try:
@@ -324,12 +328,24 @@ def contexte_court_de(update: Update):
                 code=derniere.code, etat=derniere.etat, resume=_resume_de_proposition(derniere.commande),
                 traite_le=derniere.traite_le, canal=derniere.traite_canal or derniere.canal,
             )
-        return svc_contexte_court.construire(tenant, echanges=echanges, ailleurs=ailleurs, traitee=traitee)
+        return svc_contexte_court.construire(tenant, echanges=echanges, ailleurs=ailleurs, traitee=traitee,
+                                             spontane=spontane)
     return svc_contexte_court.construire(
         tenant, proposition.commande, proposition.ts, proposition.potager_id,
         ecartes=proposition.ecartes, delai=_INTERP_TIMEOUT, echanges=echanges,
-        code=proposition.code, ailleurs=ailleurs,
+        code=proposition.code, ailleurs=ailleurs, spontane=spontane,
     )
+
+
+def _spontane_de(update: Update, tenant: TenantContext) -> Optional[dict]:
+    """[US-267 / CA8] Le message spontané auquel le jardinier répond (celui qu'il cite, sinon
+    le dernier encore en cours), pour l'agent ; None sans lui."""
+    from app.services.compagnon import distribution as svc_distribution
+
+    cite = getattr(getattr(getattr(update, "message", None), "reply_to_message", None), "message_id", None)
+    en_cours = svc_distribution.message_en_contexte(
+        tenant.potager_id, tenant.user_id, telegram_message_id=cite if isinstance(cite, int) else None)
+    return en_cours.donnees() if en_cours is not None else None
 
 
 def _noter_echange(resultat) -> None:
@@ -509,11 +525,14 @@ async def _interp_etape_suivante(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
     ctx.user_data['mode'] = None
     entete = (
         "🗑 " if commande.forme.destructrice
-        else "✏️ " if svc_corrections.est_correction(commande) else "➕ "
+        else "✏️ " if svc_corrections.est_correction(commande)
+        else "📓 " if commande.forme.commande == "carnet" else "➕ "
     )
+    # [US-265 / CA1] Le carnet se confirme avec ses mots : « OK, retiens-le » / « Non ».
+    carnet = commande.forme.commande == "carnet"
     boutons = [[
-        InlineKeyboardButton("✅ Confirmer", callback_data=f"interp:ok:{ident}"),
-        InlineKeyboardButton("❌ Annuler", callback_data=f"interp:non:{ident}"),
+        InlineKeyboardButton("✅ OK, retiens-le" if carnet else "✅ Confirmer", callback_data=f"interp:ok:{ident}"),
+        InlineKeyboardButton("❌ Non" if carnet else "❌ Annuler", callback_data=f"interp:non:{ident}"),
     ]]
     # [US-253 / CA1] Ce qui dépend de ce qu'on retire, lu dans les données du potager.
     avertissements = _anticiper(commande)

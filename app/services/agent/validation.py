@@ -393,6 +393,16 @@ def _valeurs_commande(
         valeur = arguments.get(outil.propriete(forme, argument.nom))
         if valeur is None or valeur == "":
             continue
+        if argument.libre:
+            # [US-265] Un fait reformulé n'a pas à être mot pour mot dans la phrase.
+            from app.services import carnet_compagnon
+
+            texte_libre = _texte(valeur)[:200]
+            if carnet_compagnon.fait_fidele(texte_libre, contexte.texte.split(" ; ")[-1]):
+                valeurs[argument.nom] = texte_libre
+            else:
+                log.info("🤖 AGENT          : %s=%r s'écarte de la phrase → phrase du jardinier", argument.nom, texte_libre)
+            continue
         if argument.type == TYPE_NOMBRE:
             nombre = _nombre(valeur)
             if not _nombre_dit(nombre, contexte.texte):
@@ -413,6 +423,15 @@ def _valeurs_commande(
             else:
                 log.info("🤖 AGENT          : %s=%r absent de la phrase → retiré", argument.nom, texte)
                 retires.append(argument.nom)
+    for argument in forme.arguments:
+        if argument.libre and argument.obligatoire and not valeurs.get(argument.nom):
+            # [US-265] Le modèle n'a pas reformulé : la phrase du jardinier fait le fait, jamais une carte vide.
+            from app.services import carnet_compagnon
+
+            repli = carnet_compagnon.fait_dit(contexte.texte)
+            if repli:
+                log.info("🤖 AGENT          : %s repris de la phrase du jardinier", argument.nom)
+                valeurs[argument.nom] = repli
     return valeurs, retires
 
 

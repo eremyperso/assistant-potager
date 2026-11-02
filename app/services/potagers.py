@@ -32,6 +32,7 @@ from app.services.context import TenantContext
 from app.services.permissions import LIBELLES_ROLE, NIVEAUX_ROLE, require_role
 from app.services import auth as svc_auth
 from app.services import cache_questions as svc_cache_questions
+from app.services import carnet_compagnon
 from app.services import connaissance as svc_connaissance
 from app.services import potager_actif as svc_potager_actif
 from app.services import telegram_notify as svc_telegram_notify
@@ -905,6 +906,8 @@ def _supprimer_appartenance(
         _garantir_un_owner_restant(db, potager_id, membre_user_id, action_label, propose_archivage)
 
     db.delete(membre)
+    # [US-265 / CA6] Le carnet du compagnon est personnel : il part avec l'appartenance.
+    carnet_compagnon.effacer_du_membre(db, membre_user_id, potager_id)
 
     membre_user = db.query(User).filter(User.id == membre_user_id).first()
     if membre_user.potager_actif_id == potager_id:

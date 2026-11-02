@@ -131,6 +131,18 @@ async function patch(path, body) {
   return res.json()
 }
 
+// [US-265] PUT — mêmes conventions d'erreur que patch()
+async function put(path, body) {
+  const options = { method: 'PUT', headers: headers() }
+  if (body !== undefined) options.body = JSON.stringify(body)
+  const res = await requeteAvecRefresh(path, options)
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    throw new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+  }
+  return res.json()
+}
+
 // [US-084 / CA4] `body` optionnel : DELETE /potagers/{id} transporte la
 // re-saisie du mot de passe. `err.code` reporte le code métier renvoyé par
 // l'API (`mot_de_passe_invalide`, `trop_d_echecs`) — l'appelant doit pouvoir
@@ -228,6 +240,13 @@ export const api = {
   },
   // [US-055] Identité du compte connecté + état de la liaison Telegram (menu Compte)
   moi: () => get('/auth/me'),
+  // [US-265] « Mon compagnon » : le carnet du compagnon (faits, niveau, objectifs de saison).
+  carnet:            () => get('/compagnon/carnet'),
+  modifierFaitCarnet: (id, texte) => patch(`/compagnon/carnet/faits/${id}`, { texte }),
+  oublierFaitCarnet:  (id) => del(`/compagnon/carnet/faits/${id}`),
+  toutOublierCarnet:  () => del('/compagnon/carnet'),
+  reglerNiveauCarnet: (niveau) => put('/compagnon/carnet/niveau', { niveau }),
+  reglerObjectifsCarnet: (objectifs) => put('/compagnon/carnet/objectifs', { objectifs }),
 
   // [US-224 / CA1] Dépose un geste dans la FILE d'attente. N'écrit AUCUN
   // événement : rend l'identifiant du geste, son échéance (trois jours), le

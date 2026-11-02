@@ -74,7 +74,19 @@ log = logging.getLogger("potager")
 
 #: Plafond du CA1 : « une quinzaine d'outils au plus ». [US-262] 13 du catalogue, 2 de
 #: décision et 2 de correction, ces quatre-là offerts seulement quand ils servent.
-NB_OUTILS_MAX = 17
+#: [US-265] +1 : `retenir_carnet`, le carnet du compagnon.
+#: [US-268] +1 : `programmer_rappel`, le rappel de suivi.
+NB_OUTILS_MAX = 19
+
+#: [US-265] Une description d'outil plus riche que le libellé de la forme, quand le choix de l'outil en dépend.
+#: `retenir_carnet` doit être préféré à `saisir_geste` pour une habitude : « j'arrose toujours le soir » n'est
+#: pas un arrosage fait.
+DESCRIPTIONS_OUTILS: dict[tuple, str] = {
+    ("carnet", "retenir"): (
+        "Retenir une habitude ou un objectif durable du jardinier. "
+        "Pas un geste fait : « toujours », « jamais », « objectif »."
+    ),
+}
 
 CLE_MODIFIER_PARCELLE = ("parcelle", "modifier")
 CLE_AJOUTER_PARCELLE = ("parcelle", "ajouter")
@@ -685,7 +697,8 @@ def generer_outils() -> tuple[Outil, ...]:
             continue
         for forme in formes:
             outils.append(_outil_de_formes(
-                f"{_verbe(forme.libelle)}_{commande}", [forme], None, forme.libelle + ".",
+                f"{_verbe(forme.libelle)}_{commande}", [forme], None,
+                DESCRIPTIONS_OUTILS.get(forme.cle, forme.libelle + "."),
             ))
     outils.append(_outil_de_formes(
         OUTIL_CONSULTER, consultations, PROPRIETE_COMMANDE,

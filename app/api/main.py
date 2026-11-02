@@ -117,6 +117,7 @@ from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
+from app.services import carnet_compagnon as svc_carnet  # [US-265]
 from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
 from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
@@ -3006,6 +3007,102 @@ def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
             "age_donnees_secondes": lecture.age_secondes,
             "source_donnees": lecture.source,
         }
+    finally:
+        db.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-265] « Mon compagnon » — le carnet du compagnon
+# ═════════════════════════════════════════════════════════════════════════════
+class FaitCarnetRequest(BaseModel):
+    texte: str
+
+
+class NiveauCarnetRequest(BaseModel):
+    niveau: Optional[str] = None
+
+
+class ObjectifsCarnetRequest(BaseModel):
+    objectifs: list[str] = []
+
+
+def _carnet_json(db, ctx: TenantContext) -> dict:
+    """[CA3] Le carnet tel que l'écran « Mon compagnon » l'affiche."""
+    carnet = svc_carnet.lire(db, ctx)
+    return {
+        "faits": [{"id": f.id, "texte": f.texte, "origine": f.origine,
+                   "cree_le": f.cree_le.isoformat() if f.cree_le else None} for f in carnet.faits],
+        "niveau": carnet.niveau,
+        "niveau_propose": svc_carnet.niveau_a_proposer(db, ctx),
+        "objectifs": list(carnet.objectifs),
+        "limites": {"fait": svc_carnet.FAIT_LONGUEUR_MAX, "faits": svc_carnet.FAITS_MAX,
+                    "objectifs": svc_carnet.OBJECTIFS_MAX, "objectif": svc_carnet.OBJECTIF_LONGUEUR_MAX},
+    }
+
+
+@app.get("/compagnon/carnet")
+def lire_carnet(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA3] Faits, niveau, niveau proposé et objectifs de saison du jardinier sur ce potager."""
+    db = SessionLocal()
+    try:
+        return _carnet_json(db, ctx)
+    finally:
+        db.close()
+
+
+def _carnet_ecrire(ecriture):
+    """Exécute `ecriture(db)` ; un refus du service devient un 422 lisible, un fait inconnu un 404."""
+    db = SessionLocal()
+    try:
+        try:
+            ecriture(db)
+        except svc_carnet.CarnetError as e:
+            raise HTTPException(status_code=404 if str(e) == svc_carnet.ERREUR_INCONNU else 422, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.patch("/compagnon/carnet/faits/{fait_id}")
+def modifier_fait_carnet(fait_id: int, req: FaitCarnetRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA3] Corrige un fait (200 caractères au plus)."""
+    _carnet_ecrire(lambda db: svc_carnet.modifier(db, ctx, fait_id, req.texte))
+    db = SessionLocal()
+    try:
+        return _carnet_json(db, ctx)
+    finally:
+        db.close()
+
+
+@app.delete("/compagnon/carnet/faits/{fait_id}", status_code=204)
+def oublier_fait_carnet(fait_id: int, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA3] Oublie un fait."""
+    _carnet_ecrire(lambda db: svc_carnet.oublier(db, ctx, fait_id))
+
+
+@app.delete("/compagnon/carnet", status_code=204)
+def tout_oublier_carnet(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA3, CA6] Efface faits, niveau et objectifs (droit à l'effacement)."""
+    _carnet_ecrire(lambda db: svc_carnet.tout_oublier(db, ctx))
+
+
+@app.put("/compagnon/carnet/niveau")
+def regler_niveau_carnet(req: NiveauCarnetRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA5] Confirme le niveau proposé (`debutant` | `confirme`), ou l'efface avec null."""
+    _carnet_ecrire(lambda db: svc_carnet.definir_niveau(db, ctx, req.niveau))
+    db = SessionLocal()
+    try:
+        return _carnet_json(db, ctx)
+    finally:
+        db.close()
+
+
+@app.put("/compagnon/carnet/objectifs")
+def regler_objectifs_carnet(req: ObjectifsCarnetRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-265 / CA5] Remplace les objectifs de saison (3 au plus)."""
+    _carnet_ecrire(lambda db: svc_carnet.definir_objectifs(db, ctx, req.objectifs))
+    db = SessionLocal()
+    try:
+        return _carnet_json(db, ctx)
     finally:
         db.close()
 

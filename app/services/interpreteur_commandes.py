@@ -1284,6 +1284,71 @@ def _construire_historique(groupes):
     return {}
 
 
+@_regle(
+    "carnet_lister",
+    # [US-265] « montre-moi mon carnet », « ce que tu sais de moi ». « carnet de … » est autre chose.
+    r"\A" + _INTENTION + _MONTRER + _ARTICLE
+    + r"(?:carnet(?:\s+du\s+compagnon)?\b(?!\s+(?:de|des|d)\b)"
+    r"|qu est ce que tu sais (?:de|sur) moi\b|ce que tu sais (?:de|sur) moi\b"
+    r"|ce que tu retiens (?:de|sur) moi\b)",
+    "carnet",
+    "lister",
+)
+def _construire_carnet_lister(groupes):
+    return {}
+
+
+@_regle(
+    "carnet_retenir",
+    # [US-265] « retiens que j'arrose le soir » : une demande EXPLICITE de retenir, jamais déduite.
+    # Le fait garde les mots du jardinier ; l'agent, lui, sait en tirer un fait d'une phrase libre.
+    r"\A" + _INTENTION
+    + r"(?:tu )?(?:retiens|retiennes|retenir|souviens toi|rappelle toi|n oublie pas|"
+    r"(?:ajoute|note|mets)(?: ca)? (?:a|dans) (?:ton|le) carnet)"
+    r"(?:\s+bien)?(?:\s+(?:que|qu))?\s+(?P<fait>.+)\Z",
+    "carnet",
+    "retenir",
+    declarative=True,
+)
+def _construire_carnet_retenir(groupes):
+    fait = " ".join((groupes.get("fait") or "").split()).strip(" :,.!")
+    # Au-delà de 200 caractères ce n'est plus un fait : la phrase revient à l'agent.
+    return {"fait": fait} if fait and len(fait) <= 200 else None
+
+
+@_regle(
+    "rappel_lister",
+    # [US-268] « mes rappels », « quels sont mes rappels ». « rappels de … » est autre chose.
+    r"\A" + _INTENTION + _MONTRER + r"(?:quels sont )?" + _ARTICLE
+    + r"rappels?\b(?!\s+(?:de|des|d|du)\b)(?:\s+(?:a venir|programmes?|en attente|prevus?))?\Z",
+    "rappel",
+    "lister",
+)
+def _construire_rappel_lister(groupes):
+    return {}
+
+
+@_regle(
+    "rappel_programmer",
+    # [US-268 / CA3] « rappelle-moi de tailler les tomates samedi » : l'objet garde les mots du
+    # jardinier, la jour est lu par la grammaire d'US-094 en lecture d'avenir (ISO dans la valeur).
+    # Sans jour reconnu, la règle renonce : la phrase revient à l'agent, qui demandera quand.
+    r"\A" + _INTENTION + r"(?:tu )?(?:peux tu |pourrais tu )?(?:me )?rappelle(?:s|z)?(?: moi| nous)?"
+    r"(?:\s+(?:de|d|que|qu))?\s+(?P<tail>.+)\Z",
+    "rappel",
+    "programmer",
+    declarative=True,
+)
+def _construire_rappel_programmer(groupes):
+    date_iso, reste = _extraire_date(" ".join((groupes.get("tail") or "").split()), futur=True)
+    objet = " ".join(reste.split()).strip(" :,.!")
+    # Une particule restée accrochée à l'objet une fois le jour retiré : « … tomates pour ».
+    objet = re.sub(r"(?:\s+(?:le|la|pour|a|à|vers|avant|d|de|du|ce|cette|au))+\Z", "", objet, flags=re.IGNORECASE)
+    if not date_iso or not objet or len(objet) > 200:
+        return None
+    return {"objet": objet, "date": date_iso}
+
+
 #: [Météo d'un autre lieu] Un mot du lieu : jamais un jour (« demain »), jamais une formule
 #: de politesse — « à Lyon demain » est le lieu « Lyon » et un jour que la règle ne sait pas
 #: donner, que `controle_mots` signale.
@@ -3052,6 +3117,17 @@ def _mode_agent() -> str:
     return mode if mode in getattr(config, "AGENT_MODES", ("off",)) else "off"
 
 
+#: [Agent d'abord] Les modes où l'agent répond au jardinier : `prioritaire` hérite de tout ce
+#: que `actif` ouvre (corrections, conversation), et passe en plus avant les règles.
+MODES_AGENT_ACTIF: tuple[str, ...] = ("actif", "prioritaire")
+MODE_PRIORITAIRE = "prioritaire"
+
+
+def agent_actif() -> bool:
+    """L'agent répond-il au jardinier (`actif` ou `prioritaire`) ?"""
+    return _mode_agent() in MODES_AGENT_ACTIF
+
+
 def _non_compris(brut: str, normalise: str, debut: float,
                  ecartee: "CommandeInterpretee | Ambiguite | None" = None) -> Optional[Aiguillage]:
     """[INC-018] L'agent (puis l'ancien repli) n'a rien proposé : le jardinier le lit si sa
@@ -3077,7 +3153,7 @@ def _correction_d_une_action_recente(brut: str, ctx: Optional[TenantContext]) ->
     j'ai semé 3 rangs ») passe à l'agent AVANT le filtre « geste annoncé » : elle rectifie le
     geste, elle n'en annonce pas un second. « Annule le dernier semis » aussi, tant qu'un geste
     des 24 h peut l'être (`corrections.passe_avant_le_filtre_geste`). Sans agent actif, rien ne change."""
-    if ctx is None or _mode_agent() != "actif":
+    if ctx is None or not agent_actif():
         return False
     from app.services.compagnon import corrections
 
@@ -3128,6 +3204,9 @@ def interpreter(
     correction de ce geste (`_correction_d_une_action_recente`).
     """
     debut = time.monotonic()
+    d_abord = _l_agent_d_abord(texte, ctx, contexte_court, autoriser_modele, debut)
+    if d_abord is not _CASCADE_HABITUELLE:
+        return d_abord
     resultat = reconnaitre_par_regles(texte)
     ecartee: "CommandeInterpretee | Ambiguite | None" = None
     if resultat is not None and phrase_pour_l_agent(texte, ctx, resultat):
@@ -3154,8 +3233,13 @@ def interpreter(
     # commande ne l'a reconnue, elle file au parseur de gestes, qui garde
     # quantité, variété et date. Import local : le routeur importe la base.
     from llm.routeur import annonce_un_geste
+    # [US-265] « j'arrose toujours le soir » annonce un verbe de geste, mais dit une habitude : le tri large
+    # `exprime_une_habitude` la rend à l'agent, qui choisit entre le carnet et le geste.
+    from app.services import carnet_compagnon
+
     if (ecartee is None and annonce_un_geste(brut)
             and annonce_un_geste(_sans_noms_de_parcelle(brut, ctx))
+            and not carnet_compagnon.exprime_une_habitude(brut)
             and not _correction_d_une_action_recente(brut, ctx)):
         return None
 
@@ -3176,31 +3260,7 @@ def interpreter(
                               latence_ms=int((time.monotonic() - debut) * 1000))
         resultat = interpreteur_agent.proposer(brut, ctx, contexte_court)
         if resultat.disponible:
-            latence = int((time.monotonic() - debut) * 1000)
-            if resultat.aiguillage is not None:
-                # [US-236] Un geste rapporté : le bot va droit au parseur de gestes.
-                return replace(resultat.aiguillage, latence_ms=latence)
-            # [US-257] L'agent a répondu : son texte, et sa proposition s'il en fait une.
-            # [CA9] Aucun seuil de confiance sur ce chemin : le validateur et le
-            # récapitulatif en tiennent lieu. La phrase ne repart jamais aux mots-clés (CA6).
-            interpreteur_agent.persister_reponse(ctx, brut, resultat)
-            proposition = resultat.proposition
-            if resultat.decision is not None:
-                # [US-260] Le jardinier répond à une proposition : le bot exécute ce que le bouton ferait.
-                return ReponseAgent(
-                    texte="", decision=resultat.decision, outils=resultat.outils,
-                    texte_origine=brut, latence_ms=latence,
-                )
-            if not resultat.texte and proposition is None:
-                # Rien de montrable : la phrase poursuit son chemin habituel, sauf si elle
-                # demandait d'agir [INC-018].
-                return _non_compris(brut, normalise, debut, ecartee)
-            return ReponseAgent(
-                texte=resultat.texte,
-                proposition=replace(proposition, latence_ms=latence) if proposition is not None else None,
-                outils=resultat.outils, manque_catalogue=resultat.manque_catalogue,
-                texte_origine=brut, latence_ms=latence, bouton_seul=resultat.bouton_seul,
-            )
+            return _suite_de_l_agent(resultat, brut, ctx, normalise, debut, ecartee)
         # [CA13] Modèle indisponible : l'ancien repli ci-dessous reste tenté.
     elif mode == "ombre":
         from app.services.agent import interpreteur_agent
@@ -3218,7 +3278,7 @@ def interpreter(
         filet = _filet_fiche(brut, ctx, debut)
         if filet is not None:
             return filet
-        return _non_compris(brut, normalise, debut) if mode == "actif" else None
+        return _non_compris(brut, normalise, debut) if mode in MODES_AGENT_ACTIF else None
     if candidate.confiance < SEUIL_CONFIANCE_MODELE:
         # [CA12] Le doute ne fait jamais agir : sous le seuil, la phrase repart
         # à la cascade normale plutôt que d'exécuter la plus probable.
@@ -3229,8 +3289,98 @@ def interpreter(
         filet = _filet_fiche(brut, ctx, debut)
         if filet is not None:
             return filet
-        return _non_compris(brut, normalise, debut) if mode == "actif" else None
+        return _non_compris(brut, normalise, debut) if mode in MODES_AGENT_ACTIF else None
     return replace(candidate, latence_ms=int((time.monotonic() - debut) * 1000))
+
+
+#: [Agent d'abord] Rendu par `_l_agent_d_abord` quand la cascade habituelle suit : `None` ne
+#: peut pas le dire, c'est déjà une réponse (« la phrase poursuit son chemin »).
+_CASCADE_HABITUELLE = object()
+
+
+def _l_agent_d_abord(texte: str, ctx: Optional[TenantContext], contexte_court, autoriser_modele: bool,
+                     debut: float):
+    """[Agent d'abord] En mode `prioritaire`, toute phrase libre va d'abord à l'agent : ni règle,
+    ni garde de savoir, ni filtre « geste annoncé » ne la lui prend. Rend `_CASCADE_HABITUELLE`
+    hors de ce mode, pour une commande tapée, ou quand l'agent est indisponible (quota, panne,
+    pas d'outils) : les règles servent alors de mode dégradé."""
+    libre = (texte or "").strip()
+    if not (autoriser_modele and ctx is not None and libre and not libre.startswith("/")
+            and _mode_agent() == MODE_PRIORITAIRE):
+        return _CASCADE_HABITUELLE
+    from app.services.agent import interpreteur_agent
+
+    reponse_agent = interpreteur_agent.proposer(libre, ctx, contexte_court, prioritaire=True)
+    if not reponse_agent.disponible:
+        log.info("🎛️  INTERPRETEUR   : agent indisponible (%s) → mode dégradé, règles", reponse_agent.motif)
+        return _CASCADE_HABITUELLE
+    return _suite_de_l_agent(reponse_agent, libre, ctx, normaliser(libre)[0], debut, filet_carnet=False)
+
+
+def _suite_de_l_agent(resultat, brut: str, ctx: TenantContext, normalise: str, debut: float,
+                      ecartee: "CommandeInterpretee | Ambiguite | None" = None,
+                      filet_carnet: bool = True):
+    """Ce que le jardinier reçoit d'un agent qui a répondu (`resultat.disponible`).
+
+    [Agent d'abord] Partagé par les modes `actif` et `prioritaire` ; `filet_carnet=False`
+    retire le filet d'US-265, un tri par mots-clés que le mode `prioritaire` laisse à l'agent.
+    """
+    from app.services import carnet_compagnon
+    from app.services.agent import interpreteur_agent
+
+    latence = int((time.monotonic() - debut) * 1000)
+    if resultat.aiguillage is not None:
+        # [US-236] Un geste rapporté : le bot va droit au parseur de gestes.
+        return replace(resultat.aiguillage, latence_ms=latence)
+    # [US-257] L'agent a répondu : son texte, et sa proposition s'il en fait une.
+    # [CA9] Aucun seuil de confiance sur ce chemin : le validateur et le
+    # récapitulatif en tiennent lieu. La phrase ne repart jamais aux mots-clés (CA6).
+    interpreteur_agent.persister_reponse(ctx, brut, resultat)
+    proposition = resultat.proposition
+    if resultat.decision is not None:
+        # [US-260] Le jardinier répond à une proposition : le bot exécute ce que le bouton ferait.
+        return ReponseAgent(
+            texte="", decision=resultat.decision, outils=resultat.outils,
+            texte_origine=brut, latence_ms=latence,
+        )
+    forme_proposee = getattr(proposition, "forme", None)
+    consultation = forme_proposee is not None and not forme_proposee.confirmation \
+        and forme_proposee.commande != "carnet"
+    if filet_carnet and (proposition is None or consultation) and carnet_compagnon.exprime_une_habitude(brut):
+        # [US-265] Filet : une habitude ou un objectif dit, que l'agent a pris pour une question
+        # ou un geste, ou pour une consultation (mesuré : « je veux devenir autonome en… » ouvrait le calendrier). La proposition reste à
+        # confirmer, rien n'est écrit : le tri large ne décide pas, il évite de perdre la phrase.
+        filet = _proposition_carnet(brut, latence)
+        if filet is not None:
+            return filet
+    if not resultat.texte and proposition is None:
+        # Rien de montrable : la phrase poursuit son chemin habituel, sauf si elle
+        # demandait d'agir [INC-018].
+        return _non_compris(brut, normalise, debut, ecartee)
+    return ReponseAgent(
+        texte=resultat.texte,
+        proposition=replace(proposition, latence_ms=latence) if proposition is not None else None,
+        outils=resultat.outils, manque_catalogue=resultat.manque_catalogue,
+        texte_origine=brut, latence_ms=latence, bouton_seul=resultat.bouton_seul,
+    )
+
+
+def _proposition_carnet(brut: str, latence: int) -> Optional[ReponseAgent]:
+    """[US-265] « Retenir dans le carnet » proposé sur la phrase du jardinier, sans modèle."""
+    from app.services import carnet_compagnon
+
+    fait = carnet_compagnon.fait_dit(brut)
+    forme = FORMES_PAR_CLE.get(("carnet", "retenir"))
+    if not fait or forme is None:
+        return None
+    valeurs = {"fait": fait}
+    if carnet_compagnon.est_un_objectif(brut):
+        valeurs["genre"] = "objectif"
+    commande = _construire_commande(forme, valeurs, ORIGINE_AGENT, 1.0, brut, "filet_carnet")
+    return ReponseAgent(
+        texte="Je te propose de retenir ça dans ton carnet.",
+        proposition=replace(commande, latence_ms=latence), texte_origine=brut, latence_ms=latence,
+    )
 
 
 def _filet_fiche(brut: str, ctx: Optional[TenantContext], debut: float) -> Optional[ReponseAgent]:

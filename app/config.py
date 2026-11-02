@@ -87,6 +87,12 @@ GROQ_MODELE_PAR_TYPE = {
     "agent":          os.environ.get("GROQ_MODEL_AGENT",          GROQ_MODEL),
     "transcription":  os.environ.get("GROQ_MODEL_TRANSCRIPTION",  GROQ_WHISPER_MODEL),
 }
+# [US-267 / CA6] La rédaction d'un message spontané : un type d'appel à part, compté à part
+# dans `conso_tokens` (le coût suit le volume de signaux). Par défaut, le modèle de l'agent :
+# c'est lui qui « rédige sans décider ».
+GROQ_MODELE_PAR_TYPE["compagnon_signal"] = os.environ.get(
+    "GROQ_MODEL_COMPAGNON_SIGNAL", GROQ_MODELE_PAR_TYPE["agent"],
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fournisseur tiers Mistral — un type d'appel bascule par son seul modèle
@@ -108,14 +114,27 @@ MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").
 # interprète et journalise ce qu'il AURAIT proposé, sans rien montrer) ou
 # "actif" (ses propositions sont affichées). Une valeur inconnue retombe sur
 # "off" : une faute de frappe ne doit jamais activer l'agent.
+# [Agent d'abord, mesure du 01/11/2026] "prioritaire" : toute phrase libre va
+# d'abord à l'agent, qui voit tout le catalogue et les outils de savoir ; les
+# règles ne servent plus qu'en mode dégradé (agent indisponible). À mesurer
+# avec `tools/evaluer_dialogues.py --mode prioritaire` avant tout usage.
 # AGENT_MAX_TOURS : borne de la boucle conversationnelle de l'agent (US-257,
 # architecture §12.4 : lecture, proposition, correction après le verdict du
 # validateur, réponse) ; un entier strictement positif, 6 sinon.
 # ─────────────────────────────────────────────────────────────────────────────
-AGENT_MODES = ("off", "ombre", "actif")
+AGENT_MODES = ("off", "ombre", "actif", "prioritaire")
 AGENT_MODE = os.environ.get("AGENT_MODE", "off").strip().lower()
 if AGENT_MODE not in AGENT_MODES:
     AGENT_MODE = "off"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-267 / CA11] Les messages spontanés du compagnon. « oui » : le distributeur
+# envoie dans Telegram ce que le veilleur a détecté. Tout autre valeur (défaut
+# « non ») : le veilleur détecte toujours, rien ne part. Le retour arrière est ce
+# seul réglage, sans redéploiement de code.
+# ─────────────────────────────────────────────────────────────────────────────
+_VALEURS_OUI = ("oui", "1", "true", "on", "actif")
+COMPAGNON_PROACTIF = os.environ.get("COMPAGNON_PROACTIF", "non").strip().lower() in _VALEURS_OUI
 
 
 def _entier_strictement_positif(nom: str, defaut: int) -> int:
@@ -254,6 +273,7 @@ def etat_configuration() -> list[str]:
     brut_tours = os.environ.get("AGENT_MAX_TOURS")
     _ligne("AGENT_MAX_TOURS", AGENT_MAX_TOURS,
            invalide=brut_tours is not None and brut_tours.strip() != str(AGENT_MAX_TOURS))
+    _ligne("COMPAGNON_PROACTIF", "oui" if COMPAGNON_PROACTIF else "non")
 
     for type_appel, modele in GROQ_MODELE_PAR_TYPE.items():
         _ligne(f"GROQ_MODEL_{type_appel.upper()}", modele)

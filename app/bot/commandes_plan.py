@@ -7,6 +7,8 @@ from utils.parcelles import calcul_occupation_parcelles, get_all_parcelles
 from utils.tts import send_voice_reply
 from utils.cultures_icons import get_emoji_culture
 from app.services.context import current_context
+# [US-266 / CA4] La règle vit dans un service, que le veilleur lit aussi.
+from app.services.alerte_recolte import SEUIL_ALERTE, alerte_recolte as _alerte_recolte
 from .noyau import (
     MENU_KEYBOARD,
     _looks_like_date,
@@ -20,10 +22,6 @@ from .noyau import (
 # ──────────────────────────────────────────────────────────────────────────────
 # [US_Plan_occupation_parcelles / CA1-CA7, CA9] Commande /plan
 # ──────────────────────────────────────────────────────────────────────────────
-
-# [US_Plan_occupation_parcelles / CA3] Seuils d'alerte par type d'organe (jours)
-SEUIL_ALERTE = {"végétatif": 45, "reproducteur": 90}
-
 
 async def cmd_plan(update, ctx) -> None:
     """
@@ -221,10 +219,3 @@ async def cmd_plan(update, ctx) -> None:
         await update.message.reply_text(f"❌ Erreur : {e}", reply_markup=MENU_KEYBOARD)
     finally:
         db.close()
-
-
-def _alerte_recolte(type_organe: str | None, age_jours: int) -> bool:
-    """[CA3] Retourne True si la culture dépasse le seuil d'alerte."""
-    if type_organe and type_organe in SEUIL_ALERTE:
-        return age_jours >= SEUIL_ALERTE[type_organe]
-    return False

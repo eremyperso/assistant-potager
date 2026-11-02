@@ -28,7 +28,9 @@ from .liaison import _delier_confirm, _verifier_liaison_ou_onboarding, cmd_start
 from .enregistrement import _parse_multi
 from .godets import _godet_graines_reponse
 from .notes import _note_category_selected, _note_details_received, _note_start
+from .commandes_carnet import phrase_de_carnet
 from .commandes_profil import phrase_de_profil
+from .messages_spontanes import reprendre_reponse
 from .interpretation import (
     _INTERP_MODE_COMPLETION, _interp_completion_texte, _traiter_commande_interpretee, contexte_court_de,
 )
@@ -315,6 +317,8 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # après toutes les gardes de conversation ci-dessus, avant le parsing de
     # geste. Sans cela, « supprime la parcelle nord » dicté serait parti au
     # parseur d'événement, qui n'a aucune façon d'en faire quoi que ce soit.
+    # [US-267 / CA8] Une réponse dictée à un message spontané se lit avec son signal.
+    texte = reprendre_reponse(update, texte)
     resultat_commande = svc_interpreteur.interpreter(
         texte, current_context(), contexte_court=contexte_court_de(update),
     )
@@ -717,6 +721,12 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("↩️ Création annulée.", parse_mode="Markdown")
             return
 
+    # ── [US-267 / CA8] La réponse à un message spontané continue la conversation : lue
+    # avec le signal d'origine (« oui environ 20 sur 24 » → « levée du lot 14 : 20 »), elle
+    # suit ensuite le chemin de toute phrase ; un geste se confirme au récapitulatif.
+    texte_raw = reprendre_reponse(update, texte_raw)
+    texte = texte_raw.lower()
+
     # ── [US-172] Reconnaissance déterministe — calculée ici, appliquée en 3e
     # Elle ne coûte ni jeton ni requête (CA3), et elle est CONSULTÉE dès
     # maintenant parce que le raccourci destructeur ci-dessous en dépend :
@@ -781,6 +791,9 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # raccourci destructeur ci-dessus.
     # [US-258 / CA6] « appelle-moi Rico » est une proposition de profil, sans modèle.
     if await phrase_de_profil(update, ctx, texte_raw):
+        return
+    # [US-265 / CA3] La nouvelle version d'un point du carnet que le jardinier a choisi de modifier.
+    if await phrase_de_carnet(update, ctx, texte_raw):
         return
     resultat_commande = svc_interpreteur.interpreter(
         texte_raw, current_context(), contexte_court=contexte_court_de(update),

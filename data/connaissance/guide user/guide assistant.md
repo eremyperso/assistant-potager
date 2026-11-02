@@ -1332,6 +1332,55 @@ Affiche la version déployée, le commit et l'environnement. Utile pour un signa
 
 ---
 
+### 17.4 Le carnet du compagnon — ce qu'il retient de vous
+
+Dites à votre compagnon une habitude ou une contrainte, par exemple « j'arrose toujours le soir, jamais le matin » : il vous propose de la **retenir** (« Je retiens ça : tu arroses le soir »), avec deux boutons, **OK, retiens-le** et **Non**. Rien n'est écrit tant que vous n'avez pas confirmé. Vous pouvez aussi le demander : « retiens que je n'ai pas de temps le week-end ».
+
+```
+/carnet
+```
+
+La commande liste ce que le compagnon sait de vous, avec les boutons **Modifier**, **Oublier un point** et **Tout oublier**. « Montre-moi mon carnet » ou « qu'est-ce que tu sais de moi ? » fonctionnent aussi. Dans l'application, le menu du compte ouvre l'écran **Mon compagnon**, qui permet la même chose.
+
+- Un point tient en 200 caractères, et le carnet en garde 30 au plus par potager.
+- Le carnet est **personnel** : les autres membres du potager ne le voient pas, et chaque potager a le sien. Quitter un potager efface votre carnet de ce potager.
+- Le compagnon **vous propose** votre niveau (débutant ou confirmé) d'après votre activité : il ne l'enregistre qu'après votre accord.
+- Jusqu'à trois **objectifs de saison** se règlent depuis l'écran **Mon compagnon**, ou avec `/carnet objectif autonomie en tomates`.
+- **Tout oublier** vide le carnet, le niveau et les objectifs.
+
+Le carnet n'est pas vos notes : les notes (`/note`) sont ce que vous écrivez sur le potager, le carnet est ce que vous dites de vous.
+
+### 17.4 bis Les rappels de suivi — « fais-moi signe le moment venu »
+
+Après un **semis**, le compagnon peut vous proposer de revenir voir la levée : « Je te fais signe le 3 novembre pour voir où en est la levée des radis ? », avec **Oui, rappelle-moi** et **Pas la peine**. La date vient du référentiel de la culture ; sans durée connue, il ne propose rien. Rien n'est programmé avant votre « oui ».
+
+Vous pouvez aussi demander un rappel vous-même, avec un jour : « rappelle-moi de tailler les tomates samedi », « rappelle-moi d'arroser dans 3 jours ». Le compagnon récapitule et attend votre confirmation ; sans jour compris, il vous demande pour quand.
+
+```
+/rappels
+```
+
+La commande liste vos rappels à venir, avec un bouton **Annuler** pour chacun. Le jour venu, le compagnon vous écrit vers 9 h, comme pour ses autres messages spontanés : le sujet **rappels** se règle dans `/profil` (tout de suite, point du matin ou jamais), et s'il est sur **jamais**, plus aucun rappel n'est proposé. Un potager garde 30 rappels en attente au plus.
+
+### 17.5 Les messages que le compagnon vous envoie de lui-même
+
+Le compagnon surveille votre potager chaque heure et vous écrit dans Telegram quand quelque chose mérite votre attention : **gel** ou **forte chaleur** annoncés sur des cultures en place, **fortes pluies**, jours chauds et secs **sans arrosage noté**, lot de la pépinière **bon à repiquer** ou à mettre en terre, **récolte** qui approche, **levée** attendue mais pas notée, **semis** qui s'ouvrent ce mois-ci, et le **bilan** de votre semaine le dimanche soir. Un même constat n'est dit qu'une fois, et un message n'enregistre jamais rien à votre place.
+
+**Quand il vous écrit.** Chaque sujet se règle à part : *tout de suite*, *au point du matin* ou *jamais*. Au départ, la météo, les rappels et le bilan arrivent tout de suite, le reste au **point du matin** (8 h), un seul message qui regroupe tout — et pas de point du matin s'il n'y a rien à dire. Entre 21 h et 8 h, il se tait : ce qui arrive attend la fin de la plage, sauf un gel annoncé pour l'aube, qui part en fin de journée, avant la plage. Plusieurs alertes dans la même demi-heure partent dans un seul message.
+
+```
+/profil   →   bouton « Messages spontanés »
+```
+
+Chaque sujet y a son bouton (chaque appui passe au choix suivant) ; le bouton **Régler ces messages**, sous chaque message du compagnon, y mène aussi. Vous pouvez le dire en une phrase, à l'écrit comme à la voix, et confirmer la proposition :
+
+- « arrête de me parler de la météo » · « regroupe la météo le matin » · « préviens-moi tout de suite pour les levées » ;
+- « silence de 22 h à 7 h » · « pas de silence » · « point du matin à 7 h ».
+
+**Lui répondre.** Ses boutons préparent le geste, que vous confirmez sur le récapitulatif habituel : **Voile posé**, **J'ai arrosé**, **Noter la levée**, **Noter le repiquage**… ; **Je m'en occupe** et **Pas encore** ne notent rien. Vous pouvez aussi lui répondre : à « Ça a germé ? » sur un lot, « oui, environ 20 sur 24 » prépare la levée de 20 plants sur ce lot, à confirmer. Un message attend votre réponse douze heures.
+
+Si vous ne réagissez à aucun des trois derniers messages d'un sujet, le compagnon ne coupe rien : il range ce sujet dans le point du matin et vous le dit une fois. Le réglage vaut pour vous et pour ce potager ; `/help alertes` rappelle ces formulations.
+
 ## 18. Partager son potager
 
 *Depuis l'application web — le compagnon Telegram suit automatiquement.*
@@ -1423,7 +1472,7 @@ Pendant ce mois, le propriétaire peut faire machine arrière depuis la corbeill
 
 ## 21. Toutes les commandes
 
-Les 23 commandes du compagnon de terrain. Toutes sont accessibles depuis le bouton **Menu** de Telegram, à gauche de la zone de saisie — sauf trois, volontairement écartées du menu mais parfaitement fonctionnelles à la saisie : `/version`, `/delier` et `/tts`.
+Les 24 commandes du compagnon de terrain. Toutes sont accessibles depuis le bouton **Menu** de Telegram, à gauche de la zone de saisie — sauf trois, volontairement écartées du menu mais parfaitement fonctionnelles à la saisie : `/version`, `/delier` et `/tts`.
 
 ### 21.1 Enregistrer
 
@@ -1449,6 +1498,11 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 | `/ask <question>` | Poser une question sur le potager |
 | `/meteo` | Relevé météo immédiat de votre potager |
 | `/meteo <ville>` | Météo du jour d'une autre ville — rien n'est enregistré |
+| `/carnet` | Voir ce que le compagnon retient de vous — modifier, oublier un point, tout oublier |
+| `/carnet retenir <fait>` | Lui faire retenir un fait, après confirmation — ex. `/carnet retenir j'arrose le soir` |
+| `/carnet objectif <texte>` | Ajouter un objectif de saison (3 au plus) |
+| `/rappels` | Voir vos rappels à venir et en annuler un |
+| `/rappel programmer <objet> <jour>` | Programmer un rappel, après confirmation — ex. `/rappel programmer tailler les tomates samedi` |
 
 ### 21.3 Cultures et référentiel
 

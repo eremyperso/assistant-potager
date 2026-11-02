@@ -105,10 +105,11 @@ TYPE_QUESTION       = "question"
 TYPE_SYNTHESE       = "synthese"
 TYPE_TRANSCRIPTION  = "transcription"
 TYPE_AGENT          = "agent"            # [US-233 / CA2] interprétation par appel d'outils
+TYPE_COMPAGNON_SIGNAL = "compagnon_signal"  # [US-267 / CA6] rédaction d'un message spontané
 
 TYPES_APPEL: frozenset[str] = frozenset({
     TYPE_CLASSIFICATION, TYPE_PARSING, TYPE_QUESTION, TYPE_SYNTHESE, TYPE_TRANSCRIPTION,
-    TYPE_AGENT,
+    TYPE_AGENT, TYPE_COMPAGNON_SIGNAL,
 })
 
 # Valeurs de la colonne `conso_tokens.issue` [CA5]
