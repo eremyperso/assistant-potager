@@ -354,7 +354,8 @@ def retenir_commande(
 
     Une commande de consultation n'écrit rien et n'est pas retenue.
     """
-    if not commande.forme.confirmation:
+    if not commande.forme.confirmation or commande.forme.commande == "carnet":
+        # [US-265] Le carnet retient ce que le jardinier a DIT, pas un geste au potager : il ne se corrige pas par A1…
         return None
     statut = statut_des_reponses(reponses)
     apres = instantane_commande(ctx, commande, apres=True) if statut == STATUT_REUSSIE else None

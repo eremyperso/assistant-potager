@@ -4,6 +4,9 @@
 > 27/10/2026 dans `backlog/` (US-256 à US-275, puis US-276 et US-277 après la
 > première mesure, et US-278 le 28/10 après les retours de terrain sur US-257)**, réparties en trois épics, avec le modèle et l'effort de production
 > de chacune (§6). Tickets Jira à créer (US-278 : PIA-254, créé le 28/10). **Ordre d'implémentation : §6.5.**
+> **Révision du 02/11/2026** : la mesure de l'agent d'abord sur des dialogues réels
+> ([ANALYSE_MESURE_AGENT_D_ABORD.md](ANALYSE_MESURE_AGENT_D_ABORD.md)) révise le §4.5
+> (décision D14) et ajoute US-280 à US-287 (§6.6).
 > **Vérifié sur** : la branche `epic-13-agent-interpreteur` (commit 68683cb,
 > v3.101.0, plus l'arbre de travail du 27/10).
 > **S'appuie sur** :
@@ -22,6 +25,7 @@
 > | D11 | **Telegram est le canal des notifications.** Les messages spontanés, et les propositions nées dans la PWA, arrivent **toujours** dans le bot. Si la PWA est ouverte, la même proposition s'y traite aussi. **La première réponse l'emporte**, et l'autre canal le montre (§4.7). Web Push n'est plus prévu au départ |
 > | D12 | **Aucune règle selon la présence dans la PWA.** Une notification Telegram part et sonne normalement, que le jardinier soit ou non devant le portail. Les seules règles d'envoi sont celles du profil (thèmes, plages de silence, §4.4) |
 > | D13 | **Toute proposition apparaît dans Telegram dès sa création, même faite et confirmée dans la PWA.** Si elle est déjà traitée, la carte est réécrite (« ✅ Confirmé depuis le portail »). Le fil Telegram est le journal complet. Aucune temporisation, aucune condition |
+> | D14 | *(02/11/2026, après mesure)* **L'agent d'abord.** Toute phrase libre va à l'agent, qui voit tout le catalogue ; les garde-fous passent après le modèle, dans le validateur. **Mistral Small 4** (`mistral-small-2603`) devient le modèle de référence. Le bot bascule à US-287, une fois les seuils de la remesure franchis (§4.5) |
 
 ---
 
@@ -344,6 +348,31 @@ urgentes.
 
 ### 4.5 Le modèle (D1 : Mistral payant) : le code pense, le modèle choisit et parle
 
+> **Révisé le 02/11/2026 (D14) : le modèle comprend, le code garde.** Le principe
+> ci-dessous reposait sur un pari : un petit modèle suffit si le code ne lui laisse que
+> trois tâches. Pour tenir ce pari, le code décidait **avant** l'appel (règles, garde de
+> savoir, filtre de gestes, catalogue projeté selon les mots), et chacune de ces décisions
+> piégeait les phrases libres. Deux mesures l'ont infirmé : US-256 (52 % sur le 3B) et la
+> mesure du 01/11 sur des dialogues réels
+> ([ANALYSE_MESURE_AGENT_D_ABORD.md](ANALYSE_MESURE_AGENT_D_ABORD.md)).
+>
+> **La règle devient :** toute phrase libre va au modèle, qui voit tout le catalogue.
+> Le code ne retire plus rien avant l'appel. Il garde ce qui fait sa force :
+> - il **précharge** les faits (cultures, actions, météo, profil, carnet) ;
+> - il **calcule** les dates, délais et suites ;
+> - il **valide après** : une question ne produit jamais d'écriture, une valeur non dite
+>   n'est jamais acceptée, une suppression exige le nom dit et le clic (US-281).
+>
+> Le veilleur reste sans modèle (R7). La ligne « Catalogue projeté selon l'état » du
+> tableau ci-dessous ne vaut plus qu'en mode `actif`, qui devient le mode dégradé.
+> **Modèle de référence : Mistral Small 4** (`mistral/mistral-small-2603`) : même
+> justesse que le 8B et le 14B sur 43 tours réels, p95 de 2,6 s contre 8,6 et 10,5 s,
+> et le moins cher grâce au cache. Les trois modèles échouent sur les mêmes tours : les
+> corrections sont dans le code (US-281 à US-286), pas dans la taille du modèle. Bascule
+> du bot : US-287, une fois les seuils de la remesure franchis.
+>
+> Le texte qui suit est celui du 27/10, gardé pour l'historique.
+
 > Révisé le 27/10/2026. La première version écartait Ministral 3B sans aucune
 > mesure. Rien ne justifiait ce choix : aucun rapport (US-233, US-235, INC-018)
 > ne teste ce modèle.
@@ -375,7 +404,7 @@ tâche du modèle :
 
 | Usage | Modèle de référence | Comparaison dans US-256 |
 |---|---|---|
-| Agent conversationnel (dialogue, outils, rédaction des signaux) | **`mistral/ministral-3b-latest`**, celui de `.env.dev` | `ministral-8b`, puis `mistral-small`, **seulement** pour situer l'écart |
+| Agent conversationnel (dialogue, outils, rédaction des signaux) | ~~`mistral/ministral-3b-latest`~~ → **`mistral/mistral-small-2603`** depuis le 02/11/2026 (D14) | 8B et 14B mesurés le 01/11 : aucun gain sur Small 4 |
 | Analyse approfondie (mode Extra) | Le même, en premier lieu | C'est l'usage le plus exigeant (synthèse sur plusieurs lectures). C'est là qu'une montée de modèle a le plus de chances de se justifier, par `GROQ_MODEL_ANALYSE`, sans code |
 | Parsing des gestes, classification | Inchangés (`GROQ_MODEL_PARSING`…) | Hors du périmètre de ce chantier |
 
@@ -632,8 +661,6 @@ ne se livrent qu'avec un rapport US-256 sur le vrai modèle (§7).
 
 ### 6.4 Enchaînement
 
-> **Statut des US (consulté le 30/10/2026) :** ✅ = Réalisé (Revue en cours), 🟡 = En cours, ❌ = À faire, ⚪ = Facultatif/Non créé
-
 ```mermaid
 flowchart LR
     classDef realise fill:#90EE90,stroke:#333,color:#000;
@@ -658,17 +685,11 @@ flowchart LR
     271 --> 274
     272 -.-> 275
     
-    class 256,258,259,260,262,263,264,276,277,278 realise;
+    class 256,258,259,260,261,262,263,264,265,276,277,278,266,267,268 realise;
     class 257 encours;
-    class 261,265,266,267,268,269,270,271,272,273,274 afaire;
+    class 269,270,271,272,273,274 afaire;
     class 275 facultatif;
 ```
-
-**Légende :**
-- ✅ **Vert** : US en "Revue en cours" (réalisées)
-- 🟡 **Orange** : US en "En cours"
-- ❌ **Rouge** : US en "À faire"
-- ⚪ **Gris** : US facultative non créée (US-275)
 
 US-269 ne dépend d'aucune autre US et peut avancer en parallèle. Elle touche
 `app/bot/enregistrement.py`, qui porte aujourd'hui des **modifications en cours
@@ -705,6 +726,26 @@ sans lien** avec ce chantier (pépinière, stock). Il faut les livrer d'abord.
 US-251 (validateur) se livre à tout moment. Le choix du modèle (D1) se revoit à
 chaque 📏 : on ne passe au 8B que si le 3B échoue **après** l'allègement de la
 catégorie et que le 8B la tient sur plusieurs passages (§4.5).
+*(02/11/2026 : remplacé par D14, Small 4 en référence ; voir §6.6.)*
+
+### 6.6 Après la mesure du 01/11/2026 : l'agent d'abord (US-280 à US-287)
+
+Ajoutées le 02/11/2026 ; détail et seuils de bascule dans
+[ANALYSE_MESURE_AGENT_D_ABORD.md](ANALYSE_MESURE_AGENT_D_ABORD.md) §7.
+
+| US | Titre | Pts | Modèle | Effort |
+|---|---|---:|---|---|
+| [**US-280**](../../backlog/US-280_mesurer-agent-d-abord-dialogues-reels.md) | Mesurer l'agent d'abord sur des dialogues réels *(réalisée le 01/11, reste le texte attendu)* | 3 | Sonnet 5.5 | `medium` (CA6) |
+| [**US-281**](../../backlog/US-281_garde-fous-apres-le-modele.md) | Garder les garde-fous après le modèle, dans le validateur | 5 | Opus 5.5 | `high` |
+| [**US-282**](../../backlog/US-282_un-seul-outil-meteo.md) | Un seul outil météo pour l'agent : ici ou ailleurs, passé ou prévision | 3 | Sonnet 5.5 | `medium` |
+| [**US-283**](../../backlog/US-283_connaissance-application-et-jardinage.md) | Séparer, dans la recherche de l'agent, l'application et le jardinage | 5 | Opus 5.5 | `medium` |
+| [**US-284**](../../backlog/US-284_question-en-attente.md) | Garder en attente la question que pose le compagnon | 5 | Opus 5.5 | `high` |
+| [**US-285**](../../backlog/US-285_habitudes-gestes-registre.md) | Distinguer habitudes, objectifs et gestes notés, et garder le registre | 3 | Sonnet 5.5 | `medium` |
+| [**US-286**](../../backlog/US-286_agent-voit-messages-envoyes.md) | Montrer à l'agent ce que le bot a envoyé de lui-même | 5 | Sonnet 5.5 | `medium` |
+| [**US-287**](../../backlog/US-287_basculer-agent-d-abord.md) | Basculer le bot en agent d'abord sur Mistral Small 4 | 5 | Opus 5.5 | `high` (CA3) |
+
+Ordre : US-280, US-281, US-282, US-283, US-285, US-284, US-286, puis US-287. Une
+remesure sur Small 4 après chaque US, en un seul passage et avec accord.
 
 ---
 
@@ -748,7 +789,8 @@ le taux sert à comparer deux mesures (avant / après une US), pas à bloquer un
 | La proposition est traitée deux fois, une fois par canal | F1 : consommation atomique ; F2 : cartes réécrites (§4.7) |
 | La file d'US-224 et les propositions divergent | Une seule table (US-259). Deux magasins d'attente seraient deux moteurs |
 | Le bot est arrêté : la PWA ne peut plus notifier | La PWA garde le panneau et ses cartes. Les notifications Telegram partent au redémarrage, sauf celles qui ont expiré, qui sont consommées sans envoi |
-| Le 3B échoue sur une catégorie (plusieurs actions, désignation, négation) | US-256 avant tout code. On allège d'abord la tâche du modèle (préchargement, catalogue projeté, tour de complément), puis on monte de modèle **pour ce seul type d'appel** si l'échec persiste (§4.5) |
+| Le 3B échoue sur une catégorie (plusieurs actions, désignation, négation) | US-256 avant tout code. On allège d'abord la tâche du modèle (préchargement, catalogue projeté, tour de complément), puis on monte de modèle **pour ce seul type d'appel** si l'échec persiste (§4.5). *Avéré : D14 du 02/11/2026* |
+| L'agent d'abord retire un garde-fou que la projection assurait (une question qui produit une suppression, mesuré le 01/11 sur les trois modèles) | US-281 : la garde passe après le modèle, dans le validateur ; le bot ne bascule qu'à US-287, seuils franchis |
 | Le filet d'US-278 prend une phrase qui n'était pas pour lui (geste, question, création) ou remplace une bonne proposition de l'agent | Il passe après l'agent et seulement quand aucune écriture n'est proposée ; il ne prend ni question, ni création, ni geste (tests de non-régression d'US-278 / CA9) ; il ne fait que proposer, le jardinier confirme. Il ne couvre qu'une famille de phrases au vocabulaire fermé : une autre famille s'ouvre par une US, sur relevé de terrain |
 | On reporte peu à peu sur le modèle ce que le code sait faire | Règle du §4.5 : un délai, une date, une suite ou un seuil se calcule dans le code. Dans le modèle, un calcul est un défaut à corriger |
 

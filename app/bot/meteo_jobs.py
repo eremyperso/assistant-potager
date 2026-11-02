@@ -21,6 +21,7 @@ from app.services import metriques_routage as svc_metriques_routage
 from app.services.compagnon import conversations as svc_conversations  # [US-259]
 from app.services.compagnon import actions_menees as svc_actions_menees  # [US-261]
 from app.services.compagnon import propositions as svc_propositions  # [US-259]
+from app.services.compagnon import signaux as svc_signaux  # [US-266]
 from .noyau import _md, log
 
 
@@ -181,6 +182,8 @@ async def job_purge_potagers(context: ContextTypes.DEFAULT_TYPE):
         nb_propositions = svc_propositions.purger()
         # [US-261] Les actions menées, gardées 30 jours.
         svc_actions_menees.purger()
+        # [US-266] Les signaux du veilleur et les rappels échus, gardés 30 jours.
+        svc_signaux.purger()
         if nb_echanges or nb_propositions:
             log.info("🗑️  PURGE AUTO      : %s échange(s) et %s proposition(s) de conversation effacés",
                      nb_echanges, nb_propositions)

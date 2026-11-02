@@ -23,6 +23,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.services import carnet_compagnon
 from app.services.context import TenantContext
 from database.models import PotagerMembre
 
@@ -62,6 +63,8 @@ class Profil:
     prenom: Optional[str] = None
     registre: str = REGISTRE_DEFAUT
     accueilli: bool = False
+    #: [US-265] Le carnet : faits retenus, niveau confirmé, objectifs de saison.
+    carnet: Optional[carnet_compagnon.Carnet] = None
 
 
 def valider_prenom(saisie: Optional[str]) -> tuple[Optional[str], Optional[str]]:
@@ -98,7 +101,7 @@ def lire(db: Session, ctx: TenantContext) -> Optional[Profil]:
     if membre is None:
         return None
     return Profil(prenom=membre.prenom_compagnon, registre=membre.registre_compagnon or REGISTRE_DEFAUT,
-                  accueilli=bool(membre.compagnon_accueilli))
+                  accueilli=bool(membre.compagnon_accueilli), carnet=carnet_compagnon.lire(db, ctx))
 
 
 def est_premier_contact(db: Session, ctx: TenantContext) -> bool:
@@ -144,6 +147,8 @@ def bloc_prompt(profil: Optional[Profil]) -> str:
 
     Le registre vient d'une liste fermée et le prénom a passé `valider_prenom` :
     aucun caractère de balisage ne peut y entrer. Vide sans profil.
+
+    [US-265 / CA4] Le carnet suit, balisé de même, avec sa consigne de lecture.
     """
     if profil is None:
         return ""
@@ -152,4 +157,6 @@ def bloc_prompt(profil: Optional[Profil]) -> str:
         lignes.append(f"prénom : {profil.prenom}")
     lignes.append(f"registre : {profil.registre if profil.registre in REGISTRES else REGISTRE_DEFAUT}")
     lignes.append(f"</{BALISE_PROFIL}>")
-    return "\n".join(lignes) + "\n"
+    texte = "\n".join(lignes) + "\n"
+    bloc_carnet = carnet_compagnon.bloc_prompt(profil.carnet)
+    return texte + bloc_carnet + carnet_compagnon.CONSIGNE_CARNET if bloc_carnet else texte

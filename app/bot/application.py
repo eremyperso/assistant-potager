@@ -11,6 +11,7 @@ from app.services.context import default_context
 from app.services.compagnon.actions_menees import CANAL_TELEGRAM, canal_courant  # [US-261]
 from app.services import menu_commandes as svc_menu_commandes
 from app.services import relances_file as svc_relances_file  # [US-224]
+from app.services.compagnon import distribution as svc_distribution  # [US-267]
 from .noyau import log
 from .aide import cmd_help, cmd_version
 from .liaison import (
@@ -23,7 +24,9 @@ from .liaison import (
     cmd_start,
 )
 from .enregistrement import _action_confirm_cb
-from .file_gestes import cmd_gestes, file_cb, job_file_gestes  # [US-224]
+from .file_gestes import cmd_gestes, file_cb  # [US-224]
+from .veilleur_jobs import job_bilan_semaine, job_veilleur  # [US-266]
+from .messages_spontanes import _spontane_cb, job_distributeur  # [US-267]
 from .godets import (
     _deplacement_lot_cb, _levee_detail_cb, _levee_lot_cb, _godet_graines_cb, _godet_lot_cb, _godet_plants_cb, _godet_variete_cb, cmd_lot,
 )
@@ -50,6 +53,8 @@ from .commandes_calendrier import cmd_calendrier, _calendrier_maj_cb
 from .commandes_confiance import cmd_confiance, _confiance_cb
 from .commandes_plan import cmd_plan
 from .commandes_profil import cmd_profil, _profil_cb
+from .commandes_carnet import cmd_carnet, _carnet_cb
+from .commandes_rappels import cmd_rappel, cmd_rappels, _rappel_cb
 from .commandes_stats import (
     cmd_ask,
     cmd_historique,
@@ -188,6 +193,9 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "potager",    cmd_potager)  # [US-046]
     _enregistrer_commande(app, "rejoindre",  cmd_rejoindre)  # [US-087]
     _enregistrer_commande(app, "profil",     cmd_profil)  # [US-258]
+    _enregistrer_commande(app, "carnet",     cmd_carnet)  # [US-265]
+    _enregistrer_commande(app, "rappel",     cmd_rappel)  # [US-268]
+    _enregistrer_commande(app, "rappels",    cmd_rappels)  # [US-268]
 
     # Commandes TTS
     _enregistrer_commande(app, "tts",        cmd_tts)
@@ -239,6 +247,8 @@ def _construire_application() -> "Application":
     # [US-179] Filière, enregistrement, question décalée de dix jours
     app.add_handler(CallbackQueryHandler(_confiance_cb, pattern=r"^conf:"))
     app.add_handler(CallbackQueryHandler(_profil_cb, pattern=r"^profil:"))   # [US-258]
+    app.add_handler(CallbackQueryHandler(_carnet_cb, pattern=r"^carnet:"))   # [US-265]
+    app.add_handler(CallbackQueryHandler(_rappel_cb, pattern=r"^rap:"))   # [US-268]
     app.add_handler(CallbackQueryHandler(_calendrier_maj_cb, pattern=r"^calmaj:"))   # [US-279]
 
     # [US-038] Confirmation avant enregistrement d'une note — boutons inline
@@ -258,6 +268,7 @@ def _construire_application() -> "Application":
     # choix d'un nom voisin. Motif disjoint de "^interpparc:" ci-dessous.
     app.add_handler(CallbackQueryHandler(_interp_cb, pattern=r"^interp:"))
     app.add_handler(CallbackQueryHandler(_suggestion_cb, pattern=r"^sug:"))  # [US-264]
+    app.add_handler(CallbackQueryHandler(_spontane_cb, pattern=r"^spon:"))  # [US-267] messages spontanés
     # [US-172 / CA19] Création de la parcelle citée par un geste
     app.add_handler(CallbackQueryHandler(_creation_parcelle_geste_cb, pattern=r"^interpparc:"))
 
@@ -286,22 +297,42 @@ def _construire_application() -> "Application":
     )
     log.info("🗑️  JOB PURGE       : planifié à 04h00 Europe/Paris")
 
-    # ── [US-224 / CA15, CA17, CA18] Rendez-vous horaire de la file de gestes ──
-    # Horaire, et non quotidien : l'avertissement des 4 heures avant purge tombe
-    # à une heure qui dépend du dépôt de chaque geste, pas d'un créneau fixe.
-    # Les relances, elles, ne partent qu'aux deux créneaux de
+    # ── [US-266 / CA5, CA7] Rendez-vous horaire du veilleur ───────────────────
+    # Il porte la file de gestes d'US-224 comme thème « suivis », sans en changer
+    # le comportement : horaire, et non quotidien, car l'avertissement des 4 heures
+    # avant purge tombe à une heure qui dépend du dépôt de chaque geste. Les
+    # relances, elles, ne partent qu'aux deux créneaux de
     # `relances_file.CRENEAUX_RELANCE` — c'est le service qui en juge, pas la
-    # planification.
+    # planification. Puis les détecteurs, potager par potager : rien n'est envoyé.
     app.job_queue.run_repeating(
-        job_file_gestes,
+        job_veilleur,
         interval=3600,
         first=300,
-        name="file_gestes",
+        name="veilleur",
     )
     log.info(
-        "📋 JOB FILE GESTES : toutes les heures · relances à %s",
+        "👁️  JOB VEILLEUR    : toutes les heures · suivis (file de gestes, relances à %s) + détecteurs",
         ", ".join(f"{h}h" for h in svc_relances_file.CRENEAUX_RELANCE),
     )
+    # [US-266 / CA2, CA5] Bilan de la semaine : dimanche (0 pour PTB ≥ 20) à 18h00.
+    app.job_queue.run_daily(
+        job_bilan_semaine,
+        time=dtime(hour=18, minute=0, second=0, tzinfo=tz_paris),
+        days=(0,),
+        name="veilleur_bilan_semaine",
+    )
+    log.info("👁️  JOB BILAN       : dimanche 18h00 Europe/Paris")
+    # [US-267 / CA11] Le distributeur : seul le bot distribue. Il passe aussi juste après
+    # chaque détection ; ce rendez-vous tient la fin du silence, le point du matin et la
+    # demi-heure de regroupement à un quart d'heure près.
+    app.job_queue.run_repeating(
+        job_distributeur,
+        interval=900,
+        first=420,
+        name="distributeur",
+    )
+    log.info("📨 JOB DISTRIBUTEUR : tous les quarts d'heure · COMPAGNON_PROACTIF=%s",
+             "oui" if svc_distribution.actif() else "non (rien ne part)")
 
     return app
 

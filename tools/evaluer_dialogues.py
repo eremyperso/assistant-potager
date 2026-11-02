@@ -42,11 +42,31 @@ Il relève la grille tarifaire utilisée et ce que la mesure dit du cache de pro
 Le prompt n'est jamais retouché pour faire passer le corpus : on mesure le
 prompt livré, pas un prompt ajusté.
 
+[Agent d'abord, 01/11/2026] Trois options pour comparer l'architecture actuelle à
+l'agent d'abord, sur les mêmes dialogues :
+
+* `--mode prioritaire` rejoue la cascade avec `AGENT_MODE=prioritaire` : toute
+  phrase va d'abord à l'agent, qui voit tout le catalogue et les outils de savoir ;
+* `--corpus tests/corpus/terrain_compagnon_2026_11.json` rejoue des dialogues
+  RÉELS, tirés de `echanges_conversation` et `routage_logs` (potager 33, du 28/10
+  au 01/11/2026), avec leurs tournures d'origine ;
+* `--potager 33 --utilisateur 2` les joue sur les VRAIES données de ce potager
+  (parcelles, carnet, profil, actions, savoir), en lecture seule : aucune écriture
+  n'est exécutée, l'échange n'est pas persisté ; seule la ligne `conso_tokens` de la
+  passerelle s'écrit, comme en production.
+
+Deux couperets au jardinier viennent de ces traces : un texte qui demande une
+confirmation sans proposition à confirmer (le « oui » qui reste sans suite), et
+une conversation reprise à zéro par un salut en plein dialogue.
+
 Utilisation :
     python tools/evaluer_dialogues.py --dry-run                      # le plan, la clé, 0 appel
     python tools/evaluer_dialogues.py                                # les trois modèles
     python tools/evaluer_dialogues.py --modeles mistral/ministral-3b-latest --detail
     python tools/evaluer_dialogues.py --categorie negations,doutes --limite 3
+    python tools/evaluer_dialogues.py --mode prioritaire --dry-run   # les trois modèles du 01/11
+    python tools/evaluer_dialogues.py --mode prioritaire \
+        --corpus tests/corpus/terrain_compagnon_2026_11.json --potager 33 --utilisateur 2
 
 Code de sortie : 0 si aucun couperet n'atteint le jardinier sur le modèle de
 référence, 1 sinon, 2 si la mesure ne peut pas partir (clé absente ou non distincte).
@@ -88,6 +108,12 @@ from tools import evaluer_agent as ev  # noqa: E402
 
 CORPUS = RACINE / "tests" / "corpus" / "us256_dialogues.json"
 RAPPORT = RACINE / "docs" / "EPIC - COMPAGNON CONVERSATIONNEL" / "RAPPORT_US256_MESURE_COMPAGNON.md"
+#: [Agent d'abord] Les dialogues réels du 28/10 au 01/11/2026, et le rapport de la mesure.
+CORPUS_TERRAIN = RACINE / "tests" / "corpus" / "terrain_compagnon_2026_11.json"
+RAPPORT_PRIORITAIRE = RACINE / "docs" / "EPIC - COMPAGNON CONVERSATIONNEL" / "RAPPORT_MESURE_AGENT_D_ABORD.md"
+MODE_ACTIF = "actif"
+MODE_PRIORITAIRE = "prioritaire"
+MODES = (MODE_ACTIF, MODE_PRIORITAIRE)
 
 #: CA3 : la mesure a sa clé, jamais celle du bot.
 VARIABLE_CLE_MESURE = "MISTRAL_API_KEY_MESURE"
@@ -95,6 +121,10 @@ VARIABLE_CLE_MESURE = "MISTRAL_API_KEY_MESURE"
 #: CA4 : la référence d'abord, puis les deux modèles qui ne servent qu'à situer l'écart.
 MODELE_REFERENCE = "mistral/ministral-3b-latest"
 MODELES_PAR_DEFAUT = (MODELE_REFERENCE, "mistral/ministral-8b-latest", "mistral/mistral-small-latest")
+#: [Agent d'abord] Versions datées, pour une mesure rejouable : le modèle du bot aujourd'hui
+#: (Ministral 3 8B) en référence, puis Ministral 3 14B et Mistral Small 4. Mistral Large 4
+#: est écarté pour son prix (choix du 01/11/2026).
+MODELES_PRIORITAIRE = ("mistral/ministral-8b-2512", "mistral/ministral-14b-2512", "mistral/mistral-small-2603")
 
 #: En dessous, une catégorie est « en échec » (cadrage §7 : bonne action désignée ≥ 95 %).
 SEUIL_REUSSITE = 0.90
@@ -110,6 +140,8 @@ PSEUDO_TEXTE = "texte"
 #: Ce qui ne modifie rien. Tout autre nom d'outil — y compris un nom inconnu — est une écriture.
 OUTILS_SANS_ECRITURE = frozenset({
     catalogue_outils.OUTIL_LIRE, catalogue_outils.OUTIL_CONSULTER, catalogue_outils.OUTIL_MANQUE_CATALOGUE,
+    # [Agent d'abord] Les trois lectures du savoir (US-263), offertes à toute phrase en mode `prioritaire`.
+    *catalogue_outils.OUTILS_SAVOIR,
 })
 
 #: Couperet « 0 texte qui annonce une action non exécutée » (§12.10) : rien n'est jamais
@@ -134,7 +166,29 @@ COUPERETS = {
 COUPERETS_JARDINIER = {
     **COUPERETS,
     "routeur_mots_cles": "phrase qui demande d'agir rendue au routeur par mots-clés",
+    # [Agent d'abord] Relevés dans les traces réelles du 28/10 au 01/11/2026 : ce que le
+    # jardinier a vécu, et qu'aucun couperet du §12.10 ne voyait.
+    "promesse_sans_proposition": "texte qui demande une confirmation sans proposition à confirmer",
+    "salut_en_cours": "conversation reprise à zéro (salut en plein dialogue)",
 }
+
+#: « Je vais effacer le dernier geste… tu veux vraiment ? », « Si tu veux que je te rappelle… » :
+#: une confirmation demandée en texte, sans carte à confirmer. Le « oui » qui suit ne trouve rien.
+_VERBES_D_ECRITURE = (r"(?:propos|effac|supprim|annul|corrig|cr[ée]|not|chang|modifi|renomm|ajout|retir|"
+                      r"enregistr|rappel|programm|vid)")
+PROMESSE_SANS_PROPOSITION = re.compile(
+    rf"\bje vais (?:te |le |la |les |l')?{_VERBES_D_ECRITURE}"
+    rf"|\bje te propose (?:de |d')?(?:l')?(?:{_VERBES_D_ECRITURE}|ceci|cela|ça)"
+    r"|\b(?:tu )?confirmes?\b|\bconfirme[- ]moi\b|\bà toi de confirmer\b|\bpour confirmer\b"
+    # « Tu veux vraiment effacer… ? » demande une confirmation ; « Quelle parcelle veux-tu supprimer ? »
+    # est la question de la consigne 11 : `veux-tu` ne compte que suivi de « que je ».
+    rf"|\b(?:tu veux (?:vraiment |bien )?(?:que je (?:te |le |la |les |l')?)?"
+    rf"|(?:veux-tu|si tu veux) que je (?:te |le |la |les |l')?){_VERBES_D_ECRITURE}"
+    r"|\bc'est bien (?:ça|celui|celle)\b|\bdis-moi si c'est bon\b",
+    re.IGNORECASE,
+)
+#: Un salut en tête de réponse, quand des échanges précèdent dans le même dialogue.
+SALUT_EN_TETE = re.compile(r"^\W*(?:salut|bonjour|bonsoir|coucou|hello|hey)\b", re.IGNORECASE)
 
 #: Où la cascade de production envoie une phrase. Seul `CHEMIN_AGENT` mesure le modèle.
 CHEMIN_AGENT = "agent"
@@ -232,6 +286,22 @@ TARIFS_RELEVES = {
     },
     "cache": "mistral.ai/pricing : « cached input tokens reduce input cost by up to 90 % for repeated "
              "prompts » ; le mécanisme (seuil, durée, facturation) n'est pas documenté publiquement.",
+}
+
+#: [Agent d'abord] Grille fournie par le jardinier le 01/11/2026, USD par million de jetons
+#: (entrée, sortie) ; l'entrée en cache est notée à part, le calcul de coût ne la déduit pas.
+TARIFS_01_11_2026 = {
+    "date": "2026-11-01",
+    "source": "grille fournie par le jardinier le 01/11/2026",
+    "confirme": True,
+    "modeles": {
+        "mistral/ministral-3b-2512": [0.10, 0.10],
+        "mistral/ministral-8b-2512": [0.15, 0.15],
+        "mistral/ministral-14b-2512": [0.20, 0.20],
+        "mistral/mistral-small-2603": [0.15, 0.60],
+    },
+    "cache": "entrée en cache, USD par million : Ministral 3B 0,01 ; 8B 0,015 ; 14B 0,02 ; "
+             "Small 4 0,015. Le coût mensuel ci-dessous la compte au plein tarif : c'est un plafond.",
 }
 
 
@@ -351,6 +421,23 @@ def _outils_nommes(attendu: Attendu) -> set[str]:
     return {nom for entree in attendu.outils for morceau in entree.split("/") for nom in morceau.split("+")}
 
 
+def appels_juges(reponses: list, attendu: Attendu) -> tuple:
+    """Les appels que la note regarde, dans l'ordre : sans `lire`, ni une lecture du savoir que
+    l'attendu ne nomme pas (consulter avant d'agir n'est pas une faute) ; sans un
+    `abandonner_proposition` suivi d'une écriture — abandonner puis reproposer, c'est corriger
+    (« non 4 rangs »)."""
+    nommes = _outils_nommes(attendu)
+    appels = [a for r in reponses if r.ok for a in r.appels
+              if a.nom != catalogue_outils.OUTIL_LIRE
+              and (a.nom not in catalogue_outils.OUTILS_SAVOIR or a.nom in nommes)]
+    if catalogue_outils.OUTIL_ABANDONNER not in nommes:
+        rang = next((i for i, a in enumerate(appels) if a.nom == catalogue_outils.OUTIL_ABANDONNER), None)
+        if rang is not None and any(est_ecriture(a.nom) and a.nom not in catalogue_outils.OUTILS_DECISION
+                                    for a in appels[rang + 1:]):
+            del appels[rang]
+    return tuple(appels)
+
+
 def textes_du_jardinier(reponses: list, appels: tuple) -> list[str]:
     """Ce que le modèle a écrit, avant le contrôle des annonces (US-257) : le texte libre de chaque tour."""
     return [r.texte for r in reponses if getattr(r, "texte", "")]
@@ -420,13 +507,23 @@ def vu_par_le_jardinier(resultat, chemin: str) -> tuple[tuple[str, ...], list[st
     return (), []
 
 
-def couperets_au_jardinier(attendu: Attendu, resultat, chemin: str) -> tuple[str, ...]:
-    """Les couperets du §12.10 qui ARRIVENT au jardinier, après le validateur et la cascade."""
+def couperets_au_jardinier(attendu: Attendu, resultat, chemin: str, *,
+                           en_attente=None, en_cours: bool = False) -> tuple[str, ...]:
+    """Les couperets du §12.10 qui ARRIVENT au jardinier, après le validateur et la cascade.
+
+    [Agent d'abord] `en_attente` : la proposition qui attendait AVANT ce tour (sa carte porte
+    déjà la confirmation) ; `en_cours` : des échanges précèdent dans le dialogue."""
     noms, textes = vu_par_le_jardinier(resultat, chemin)
     destruction = OUTIL_SUPPRIMER in noms and OUTIL_SUPPRIMER not in _outils_nommes(attendu)
     trouves = _couperets(attendu, noms, textes, destruction)
     if resultat is None and chemin == CHEMIN_AGENT and attendu.ecriture is True:
         trouves.append("routeur_mots_cles")
+    if isinstance(resultat, ReponseAgent):
+        texte = (resultat.texte or "").replace("’", "'")
+        if resultat.proposition is None and en_attente is None and PROMESSE_SANS_PROPOSITION.search(texte):
+            trouves.append("promesse_sans_proposition")
+        if en_cours and SALUT_EN_TETE.search(texte):
+            trouves.append("salut_en_cours")
     return tuple(trouves)
 
 
@@ -548,12 +645,12 @@ class Cascade:
 
 
 @contextmanager
-def cascade_de_production(cascade: Cascade) -> Iterator[None]:
-    """La cascade du bot en mode `actif`, sans rien écrire en base et sans l'ancien repli,
-    qui appellerait un autre modèle que celui mesuré."""
+def cascade_de_production(cascade: Cascade, mode: str = MODE_ACTIF) -> Iterator[None]:
+    """La cascade du bot en mode `actif` (ou `prioritaire`), sans rien écrire en base et sans
+    l'ancien repli, qui appellerait un autre modèle que celui mesuré."""
     from unittest.mock import patch
 
-    with patch.object(config, "AGENT_MODE", "actif"), \
+    with patch.object(config, "AGENT_MODE", mode), \
          patch.object(interpreteur_agent, "proposer", cascade.proposer), \
          patch.object(interpreteur_agent, "persister_reponse", lambda *a, **k: None), \
          patch.object(interpreteur_commandes, "_est_demande_de_savoir", cascade.est_demande_de_savoir), \
@@ -570,6 +667,14 @@ def potager_fictif() -> Iterator[None]:
          patch.object(interpreteur_agent, "voisin_en_base", lambda c: _voisin), \
          patch.object(lecture, "lire", ev.lecture_fictive):
         yield
+
+
+@contextmanager
+def potager_reel() -> Iterator[None]:
+    """[Agent d'abord] Les vraies données du potager du contexte, lues telles quelles : rien à
+    simuler, puisque rien n'est écrit (la cascade ne persiste pas l'échange, l'ancien repli est
+    coupé, et aucune proposition n'est exécutée)."""
+    yield
 
 
 def _decrire_vu(resultat, chemin: str) -> str:
@@ -611,6 +716,7 @@ def jouer_tour(
     dormir: Callable[[float], None] = time.sleep,
 ) -> ResultatTour:
     """Joue une phrase du jardinier : contexte court → cascade → notes. Met l'état à jour."""
+    en_attente_avant, en_cours = etat.en_attente, bool(etat.echanges)
     contexte = contexte_court.construire(
         ctx, etat.en_attente, etat.instant, ctx.potager_id, maintenant=etat.instant,
         echanges=tuple(etat.echanges),
@@ -633,7 +739,7 @@ def jouer_tour(
         statut = chemin
     else:
         statut = premiere_ratee.statut if premiere_ratee else (passerelle.STATUT_OK if reponses else "indisponible")
-    appels = tuple(a for r in reponses if r.ok for a in r.appels if a.nom != catalogue_outils.OUTIL_LIRE)
+    appels = appels_juges(reponses, tour.attendu)
     notes = noter_tour(dialogue, tour.attendu, tour.jardinier, appels, statut)
     couperets = couperets_du_tour(tour.attendu, appels, textes_du_jardinier(reponses, appels), notes)
 
@@ -655,7 +761,8 @@ def jouer_tour(
         dialogue=dialogue.id, categorie=dialogue.categorie, rang=rang, phrase=tour.jardinier,
         attendu=tour.attendu, statut=statut, appels=appels, vu=_decrire_vu(resultat, chemin), notes=notes,
         couperets=couperets, chemin=chemin, texte=texte_au_jardinier(resultat),
-        couperets_jardinier=couperets_au_jardinier(tour.attendu, resultat, chemin),
+        couperets_jardinier=couperets_au_jardinier(tour.attendu, resultat, chemin,
+                                                   en_attente=en_attente_avant, en_cours=en_cours),
         latence_ms=sum(int(r.latence_ms or 0) for r in reponses),
         tokens_in=sum(int(r.tokens_in or 0) for r in reponses),
         tokens_out=sum(int(r.tokens_out or 0) for r in reponses),
@@ -672,14 +779,19 @@ def jouer_corpus(
     pause_s: float = 1.0,
     dormir: Callable[[float], None] = time.sleep,
     detail: bool = False,
+    mode: str = MODE_ACTIF,
+    fictif: bool = True,
 ) -> list[ResultatTour]:
-    """Rejoue tous les dialogues par la cascade, avec le modèle courant de la passerelle (type `agent`)."""
+    """Rejoue tous les dialogues par la cascade, avec le modèle courant de la passerelle (type `agent`).
+
+    [Agent d'abord] `mode` : la cascade `actif` ou `prioritaire` ; `fictif=False` : les vraies
+    données du potager de `ctx`, en lecture seule."""
     from unittest.mock import patch
 
     resultats: list[ResultatTour] = []
     enregistreur = Enregistreur(appeler)
     cascade = Cascade(interpreteur_agent.proposer, interpreteur_commandes._est_demande_de_savoir)
-    with potager_fictif(), cascade_de_production(cascade), \
+    with (potager_fictif() if fictif else potager_reel()), cascade_de_production(cascade, mode), \
          patch.object(passerelle, "appeler_chat_outils", enregistreur):
         for dialogue in dialogues:
             etat = EtatDialogue()
@@ -847,9 +959,22 @@ def _cellule(texte: str) -> str:
 TITRE_RAPPORT = "US-256 — Le compagnon sur Ministral 3B, mesuré en plusieurs tours"
 
 
+def _chemin_rejoue(mode: str, potager: Optional[int]) -> str:
+    """La phrase d'en-tête du rapport : quelle cascade, sur quel potager."""
+    donnees = (f"données réelles du potager {potager} en lecture seule" if potager is not None
+               else "potager fictif")
+    if mode == MODE_PRIORITAIRE:
+        return ("Rejoué par la cascade du bot (`interpreter`, mode `prioritaire`) : toute phrase va d'abord "
+                f"à l'agent, catalogue complet et outils de savoir. Prompt et catalogue livrés, {donnees}, "
+                "aucune écriture exécutée.*")
+    return ("Rejoué par la cascade du bot (`interpreter`, mode `actif`) : règles, garde de savoir, filtre des "
+            f"gestes, puis l'agent. Prompt et catalogue livrés, {donnees}, aucune écriture exécutée.*")
+
+
 def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, tarifs: dict,
                     cle_distincte: bool = True, jour: Optional[date] = None,
-                    titre: str = TITRE_RAPPORT) -> str:
+                    titre: str = TITRE_RAPPORT, mode: str = MODE_ACTIF,
+                    potager: Optional[int] = None) -> str:
     jour = jour or date.today()
     tours_ref = evaluations[reference]
     bilans = par_categorie(tours_ref)
@@ -868,8 +993,7 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
         "",
         f"*Généré par `tools/evaluer_dialogues.py` le {jour.isoformat()}. Référence : `{reference}`. "
         f"Clé de mesure distincte de celle du bot : {'oui' if cle_distincte else 'NON'}. "
-        "Rejoué par la cascade du bot (`interpreter`, mode `actif`) : règles, garde de savoir, filtre des "
-        "gestes, puis l'agent. Prompt et catalogue livrés, potager fictif, aucune écriture exécutée.*",
+        + _chemin_rejoue(mode, potager),
         "",
         f"{len(tours_ref)} tours joués, dont {len(total.non_livres)} qui exigent une brique pas encore livrée "
         "(outil ou mémoire) : ils sont mesurés et listés, mais exclus des taux du catalogue livré.",
@@ -1027,12 +1151,36 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
 # ═════════════════════════════════════════════════════════════════════════════
 # Programme
 # ═════════════════════════════════════════════════════════════════════════════
-def plan(dialogues: list[Dialogue], modeles: list[str]) -> str:
+def estimer_jetons_prioritaire() -> int:
+    """[Agent d'abord] Le préfixe fixe du mode `prioritaire` (prompt, catalogue complet, savoir,
+    correction), à ≈ 5 caractères par jeton comme `evaluer_agent.estimer_jetons_entree` ; la
+    partie variable (profil, actions, préchargement, échanges) s'y ajoute."""
+    schemas = (catalogue_outils.schemas(catalogue_outils.PROJECTION_COMPLETE) + catalogue_outils.schemas_savoir()
+               + catalogue_outils.schemas_correction(True))
+    return int((len(json.dumps(schemas, ensure_ascii=False)) + len(interpreteur_agent.PROMPT_FIXE_PRIORITAIRE)) / 5.0)
+
+
+def plan(dialogues: list[Dialogue], modeles: list[str], mode: str = MODE_ACTIF,
+         potager: Optional[int] = None) -> str:
     tours = [t for d in dialogues for t in d.tours]
     avec_modele = [t for t in tours if t.appelle_le_modele]
     categories = defaultdict(int)
     for d in dialogues:
         categories[d.categorie] += 1
+    if mode == MODE_PRIORITAIRE:
+        prefixe = estimer_jetons_prioritaire()
+        return "\n".join([
+            "Plan de la mesure (rien n'est envoyé) :",
+            f"  • cascade        : mode prioritaire (l'agent d'abord), "
+            + (f"données réelles du potager {potager} en lecture seule" if potager is not None else "potager fictif"),
+            f"  • modèles        : {', '.join(modeles)} (référence : {modeles[0]})",
+            f"  • dialogues      : {len(dialogues)} ("
+            + ", ".join(f"{CATEGORIES[c]} {n}" for c, n in categories.items()) + ")",
+            f"  • tours          : {len(tours)} dont {len(avec_modele)} à l'agent et {len(tours) - len(avec_modele)} clic(s)",
+            f"  • préfixe fixe   : ≈ {prefixe} jetons par appel, plus la partie variable",
+            f"  • volume estimé  : ≈ {len(avec_modele) * len(modeles) * 2 * (prefixe + 1500):,} jetons d'entrée ".replace(",", " ")
+            + "au plus (2 appels par tour, partie variable ≈ 1 500)",
+        ])
     return "\n".join([
         "Plan de la mesure (rien n'est envoyé) :",
         f"  • modèles        : {', '.join(modeles)} (référence : {modeles[0]})",
@@ -1059,12 +1207,28 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--pause", type=float, default=1.0, help="secondes entre deux tours (défaut 1)")
     parser.add_argument("--tarifs", type=Path, help="grille tarifaire JSON confirmée (même forme que TARIFS_RELEVES)")
     parser.add_argument("--detail", action="store_true", help="chaque tour, son attendu et son obtenu")
-    parser.add_argument("--rapport", type=Path, default=RAPPORT, help="fichier du rapport markdown")
-    parser.add_argument("--titre", default=TITRE_RAPPORT, help="titre du rapport")
+    parser.add_argument("--rapport", type=Path, help="fichier du rapport markdown (défaut : selon mode et corpus)")
+    parser.add_argument("--titre", help="titre du rapport (défaut : selon mode et corpus)")
     parser.add_argument("--sans-rapport", action="store_true", help="n'écrit aucun fichier")
+    parser.add_argument("--mode", choices=MODES, default=MODE_ACTIF,
+                        help="cascade rejouée : actif (règles d'abord, défaut) ou prioritaire (l'agent d'abord)")
+    parser.add_argument("--corpus", type=Path, help=f"corpus de dialogues (défaut : {CORPUS.name})")
+    parser.add_argument("--potager", type=int, help="rejouer sur les vraies données de ce potager, en lecture seule")
+    parser.add_argument("--utilisateur", type=int, help="le jardinier de ce potager (avec --potager)")
     args = parser.parse_args(argv)
+    if (args.potager is None) != (args.utilisateur is None):
+        parser.error("--potager et --utilisateur vont ensemble")
 
-    dialogues = charger_corpus()
+    corpus = args.corpus or CORPUS
+    defaut = args.mode == MODE_ACTIF and corpus == CORPUS and args.potager is None
+    if args.rapport is None:
+        args.rapport = RAPPORT if defaut else (
+            RAPPORT_PRIORITAIRE.parent / f"RAPPORT_MESURE_{args.mode.upper()}_{Path(corpus).stem}.md")
+    if args.titre is None:
+        args.titre = TITRE_RAPPORT if defaut else (
+            f"Agent d'abord — corpus `{Path(corpus).stem}`, cascade `{args.mode}`")
+
+    dialogues = charger_corpus(corpus)
     if args.categorie:
         retenues = {c.strip() for c in args.categorie.split(",")}
         inconnues = retenues - set(CATEGORIES)
@@ -1073,9 +1237,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         dialogues = [d for d in dialogues if d.categorie in retenues]
     if args.limite:
         dialogues = dialogues[: args.limite]
-    modeles = [m.strip() for m in args.modeles.split(",")] if args.modeles else list(MODELES_PAR_DEFAUT)
+    modeles = [m.strip() for m in args.modeles.split(",")] if args.modeles else list(
+        MODELES_PRIORITAIRE if args.mode == MODE_PRIORITAIRE else MODELES_PAR_DEFAUT)
 
-    print(plan(dialogues, modeles))
+    print(plan(dialogues, modeles, args.mode, args.potager))
     try:
         verifier_modeles(modeles)
         cle = cle_de_mesure()
@@ -1089,8 +1254,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"\n✅ {VARIABLE_CLE_MESURE} présente et distincte de MISTRAL_API_KEY.")
         return 0
 
-    ctx = default_context()
-    tarifs = charger_tarifs(args.tarifs)
+    fictif = args.potager is None
+    ctx = default_context() if fictif else TenantContext(
+        user_id=args.utilisateur, potager_id=args.potager, role="owner")
+    tarifs = charger_tarifs(args.tarifs) if args.tarifs or defaut else TARIFS_01_11_2026
     modele_initial = passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT]
     evaluations: dict[str, list[ResultatTour]] = {}
     try:
@@ -1099,7 +1266,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                 print(f"\n▶ {modele}")
                 passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT] = modele
                 passerelle.reinitialiser_capacites_outils()
-                evaluations[modele] = jouer_corpus(dialogues, ctx, pause_s=args.pause, detail=args.detail)
+                evaluations[modele] = jouer_corpus(dialogues, ctx, pause_s=args.pause, detail=args.detail,
+                                                   mode=args.mode, fictif=fictif)
                 bilan = Bilan(evaluations[modele])
                 print(f"  bon outil {pourcent(*bilan.bon_outil)} · couperets au jardinier "
                       f"{bilan.couperets_jardinier} · couperets du modèle {bilan.couperets} · "
@@ -1108,7 +1276,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT] = modele_initial
         passerelle.reinitialiser_capacites_outils()
 
-    rapport = rediger_rapport(evaluations, modeles[0], tarifs, titre=args.titre)
+    rapport = rediger_rapport(evaluations, modeles[0], tarifs, titre=args.titre, mode=args.mode,
+                              potager=args.potager)
     if args.sans_rapport:
         print("\n" + rapport)
     else:

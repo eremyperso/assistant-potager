@@ -846,6 +846,7 @@ def _repondre_raisonnement(
     question: str,
     contexte_donnees: str = "",
     contexte_savoir: str = "",
+    faits_carnet: tuple[str, ...] = (),
 ) -> str:
     """Étage de dernier recours : raisonnement/savoir général via la passerelle.
     Peut lever `LLMIndisponibleError` — volontairement non rattrapée ici, pour
@@ -861,6 +862,11 @@ def _repondre_raisonnement(
         message = f"{message}\n\nPassages de la base de connaissance :\n{contexte_savoir}"
     if contexte_donnees:
         message = f"{message}\n\nDonnées du potager déjà connues : {contexte_donnees}"
+    if faits_carnet:
+        # [US-265] Le carnet du jardinier : ses habitudes priment sur le conseil général.
+        from app.services import carnet_compagnon
+
+        message = f"{message}\n\n{carnet_compagnon.bloc_pour_reponse(faits_carnet)}"
     reponse = passerelle.appeler_chat(
         appel_type=passerelle.TYPE_QUESTION,
         ctx=ctx,
@@ -1018,8 +1024,14 @@ def repondre_avec_cascade(
     # jardinier verrait sa mémoire répondre « je ne trouve aucune note » sans
     # qu'aucune recherche n'ait eu lieu. Refuser de servir les fait expirer
     # d'elles-mêmes, sans purge manuelle.
+    # [US-265] Une question qui touche au carnet du jardinier reçoit une réponse PERSONNELLE : ni servie
+    # d'un fragment recopié, ni lue dans le cache, ni mémorisée pour d'autres.
+    from app.services import carnet_compagnon
+
+    faits_carnet = () if _est_rappel_de_note(question) else carnet_compagnon.faits_pour_question(ctx, question)
+    options_carnet = {"faits_carnet": faits_carnet} if faits_carnet else {}  # appels inchangés sans carnet
     depuis_cache = (
-        None if _est_rappel_de_note(question)
+        None if (_est_rappel_de_note(question) or faits_carnet)
         else cache_questions.servir(ctx, question)
     )
     if depuis_cache is not None:
@@ -1062,7 +1074,7 @@ def repondre_avec_cascade(
                 log.info(f"↪️ ROUTEUR REMONTÉE : donnée non exploitable → raisonnement (1 saut) : '{question[:80]}'")
                 cascade_remontee = True
                 chiffree = None
-                texte = _repondre_raisonnement(ctx, question)
+                texte = _repondre_raisonnement(ctx, question, **options_carnet)
         elif decision.nature == NATURE_QUESTION_SAVOIR:
             # ── [US-098] Étage 2 — le socle de connaissance ──────────────────
             # Consulté AVANT tout appel modèle : c'est toute la raison d'être de
@@ -1080,7 +1092,7 @@ def repondre_avec_cascade(
                 if _est_rappel_de_note(question) else None
             )
             savoir = _consulter_savoir(ctx, question, famille=famille_savoir)
-            if savoir is not None and savoir.suffisant:
+            if savoir is not None and savoir.suffisant and not faits_carnet:
                 # [CA7, CA8] Le texte servi est le passage HUMAINEMENT écrit,
                 # recopié — pas une génération. Zéro appel modèle sur ce chemin.
                 texte = connaissance.restituer(savoir)
@@ -1109,7 +1121,7 @@ def repondre_avec_cascade(
                         "↪️ ROUTEUR REMONTÉE : %s (score=%.2f) → raisonnement (1 saut) : '%s'",
                         motif, savoir.confiance, question[:80],
                     )
-                texte = _repondre_raisonnement(ctx, question, contexte_savoir=passages)
+                texte = _repondre_raisonnement(ctx, question, contexte_savoir=passages, **options_carnet)
                 # [CA7] L'attribution suit le contenu, même quand le modèle l'a
                 # RÉÉCRIT. Sur le chemin `servi`, `restituer()` ajoute
                 # « _Source : … _ » ; sur celui-ci, la même matière partait sans
@@ -1139,7 +1151,8 @@ def repondre_avec_cascade(
             # remontée dédiée — cet étage héberge déjà le raisonnement, un
             # second saut n'aurait pas de sens.
             texte_donnees, confiant, _ = repondre_question_detaille(ctx, question)
-            texte = _repondre_raisonnement(ctx, question, contexte_donnees=texte_donnees if confiant else "")
+            texte = _repondre_raisonnement(
+                ctx, question, contexte_donnees=texte_donnees if confiant else "", **options_carnet)
     except Exception:
         passerelle.cumul_mesure_cascade(jeton_mesure)  # désarme sans persister
         raise
@@ -1154,7 +1167,8 @@ def repondre_avec_cascade(
     # [US-095] Mémorisation APRÈS coup, et seulement sur une réponse réellement
     # produite : une cascade qui lève (mode dégradé 429, US-092) n'arrive jamais
     # ici — mémoriser une non-réponse la ferait servir comme une réponse.
-    _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte, savoir)
+    if not faits_carnet:  # une réponse personnalisée par le carnet n'est jamais mémorisée
+        _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte, savoir)
     return ReponseCascade(texte=texte, etage_resolveur=etage_resolveur, routage_log_id=routage_log_id)
 
 

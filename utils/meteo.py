@@ -262,6 +262,10 @@ def _analyser_prevision(raw: dict) -> dict:
     # couvert ci-dessus) — jusqu'à 5 jours, selon ce que renvoie Open-Meteo.
     # [US-182 / CA1] Même lecture étendue à l'horizon de prévision complet, avec
     # l'horizon de chaque jour pour qu'un consommateur puisse en pondérer la fiabilité.
+    # [US-266] Le cumul de pluie du jour, pour le veilleur (fortes pluies,
+    # sécheresse) : absent d'une réponse plus courte, il vaut None, jamais 0.
+    cumuls_pluie = daily.get("precipitation_sum") or []
+
     previsions = []
     previsions_etendues = []
     for i in range(1, min(METEO_HORIZON_PREVISION_JOURS + 1, len(daily["time"]))):
@@ -274,6 +278,7 @@ def _analyser_prevision(raw: dict) -> dict:
             "label"    : p_label,
             "temp_max" : _round_or_none(daily["temperature_2m_max"][i]),
             "temp_min" : _round_or_none(daily["temperature_2m_min"][i]),
+            "precipitations": _round_or_none(cumuls_pluie[i]) if i < len(cumuls_pluie) else None,
         }
         if i <= METEO_HORIZON_WIDGET_JOURS:
             previsions.append(dict(jour))

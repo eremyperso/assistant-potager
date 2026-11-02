@@ -370,7 +370,9 @@ class TestCascade:
         })
         tout = resultats[1]
         assert "destruction_erronee" in tout.couperets
-        assert not tout.couperets_jardinier and "supprimer" not in tout.vu
+        # [Agent d'abord] Le texte par défaut du faux modèle (« Je te propose ceci, à toi de confirmer. »)
+        # arrive au jardinier sans carte : c'est le couperet relevé dans les traces du 01/11, pas une suppression.
+        assert set(tout.couperets_jardinier) <= {"promesse_sans_proposition"} and "supprimer" not in tout.vu
 
     def test_une_demande_d_agir_rendue_au_routeur_est_un_couperet_au_jardinier(self):
         resultats, _ = _jouer(["CRE-1"], {

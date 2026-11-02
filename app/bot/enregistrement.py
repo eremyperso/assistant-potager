@@ -28,6 +28,7 @@ from .noyau import (
 )
 from .etat import _ACTION_PENDING, _ACTION_TIMEOUT
 from .normalisation import _normalize_items, _parser_items
+from .commandes_rappels import proposer_rappel
 
 
 # ── PARSING MULTI-LIGNES ─────────────────────────────────────────────────────────
@@ -604,6 +605,9 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     # conversationnel n'est ouvert ici.
     if avertissements:
         await update.effective_message.reply_text("\n".join(avertissements))
+
+    # [US-268 / CA1] Au plus un rappel proposé, après le compte rendu ; rien n'est écrit sans le clic.
+    await proposer_rappel(update, saved_items)
 
     await update.effective_message.reply_text(
         "_Que voulez-vous faire ensuite ?_",

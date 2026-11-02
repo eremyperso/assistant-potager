@@ -394,6 +394,10 @@ PHRASES_PAR_REGLE: dict[str, str] = {
     "potager_lister": "je veux changer de potager",
     # Une consultation dont un mot perdu change la réponse (`controle_mots`) : la météo.
     "meteo": "quel temps fait-il ?",
+    # [US-265] Le fait garde les mots du jardinier : un mot de plus reste dans la valeur.
+    "carnet_retenir": "retiens que j'arrose le soir",
+    # [US-268] L'objet garde les mots du jardinier ; le jour est lu par le code.
+    "rappel_programmer": "rappelle-moi de tailler les tomates samedi",
 }
 PARASITE = "zorglub"
 

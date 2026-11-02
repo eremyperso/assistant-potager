@@ -19,7 +19,10 @@ Décisions de domaine (menu natif US-171, dictée US-172) : `docs/domaines/comma
 | `saisie` | `_parse_and_save` (cœur de la saisie dictée) et les rappels qui y reviennent |
 | `correction` / `deplacement` | corriger ou supprimer un événement ; déplacer une culture |
 | `commandes_*` | une commande slash par domaine : parcelle, culture, calendrier, plan, stats |
-| `file_gestes` | `/gestes`, la file préparée par la PWA (US-224) : niveau 1 (liste, boutons `file:`), niveau 2 (le récapitulatif d'US-021), `/start g<code>`, job horaire (relance, avertissement, purge) |
+| `file_gestes` | `/gestes`, la file préparée par la PWA (US-224) : niveau 1 (liste, boutons `file:`), niveau 2 (le récapitulatif d'US-021), `/start g<code>`, `job_file_gestes` (relance, avertissement, purge), appelé par le job horaire du veilleur |
+| `veilleur_jobs` | planification du veilleur (US-266) : `job_veilleur` horaire (file de gestes = thème « suivis », puis détecteurs, puis distributeur) et `job_bilan_semaine` (dimanche 18h). Logique dans `app/services/compagnon/veilleur*.py` |
+| `commandes_rappels` | rappels de suivi (US-268) : `proposer_rappel` (appelé par `enregistrement` après un geste), `/rappel`, `/rappels`, boutons `rap:`. Logique dans `app/services/compagnon/rappels.py` |
+| `messages_spontanes` | messages spontanés (US-267) : `job_distributeur` (15 min), boutons `spon:` (phrase de geste → récapitulatif à confirmer), `reprendre_reponse` (réponse lue avec le signal). Logique dans `app/services/compagnon/distribution.py` ; éteint par `COMPAGNON_PROACTIF` |
 | `meteo_jobs` | `/meteo`, jobs planifiés (météo 05h, purge 04h) |
 | `messages` | `handle_voice`, `handle_text` — points d'entrée des messages libres |
 | `application` | `_construire_application`, enregistrement des handlers, `main()` |

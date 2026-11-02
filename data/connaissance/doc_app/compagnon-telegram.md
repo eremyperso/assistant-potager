@@ -115,7 +115,7 @@ Il commence par décider ce qu'est votre phrase, d'après sa construction et non
 
 Quand il manque une information, il vous pose une vraie question, qui reprend ce qu'il a compris et nomme les choix possibles, au lieu de deviner. « Mets la planche sous abri » reçoit « Laquelle : Planche Nord, Planche Sud ou Planche Centrale ? » ; « modifie ma serre » reçoit une question sur ce que vous voulez changer. Rien n'est proposé ni enregistré tant que la demande reste incomplète. Pour l'instant, il ne se souvient pas de sa question : répondez en redisant la demande en entier (« mets la planche sud sous abri »). Une information facultative, comme l'exposition d'une planche à créer, n'empêche jamais de proposer : il peut vous la demander en plus, la proposition reste confirmable sans elle.
 
-Quand la demande dépasse ce que l'application sait faire — « exporte l'historique en Excel », « règle un rappel demain à 8 heures » —, le compagnon vous le dit simplement et vous propose ce qui s'en approche, plutôt que de montrer une liste sans rapport. La demande est notée pour orienter les prochaines évolutions.
+Quand la demande dépasse ce que l'application sait faire — « exporte l'historique en Excel », « commande des graines de tomate » —, le compagnon vous le dit simplement et vous propose ce qui s'en approche, plutôt que de montrer une liste sans rapport. La demande est notée pour orienter les prochaines évolutions.
 
 Quand une demande qui commence par un verbe d'action (« crée… », « supprime… », « mets… ») n'a pas pu être traitée — le compagnon ne l'a pas comprise, ou il est momentanément indisponible —, il vous le dit : « Je n'ai pas réussi à traiter cette demande », rien n'a été fait, avec la commande à taper à la place (par exemple /parcelle ajouter). Il ne répond plus par une liste sans rapport, comme celle des lots en pépinière à qui demandait de créer une planche.
 
@@ -158,7 +158,7 @@ Au premier échange avec le compagnon sur un potager, il vous demande comment vo
 
 Le ton change la façon de dire, jamais ce qui est dit : mêmes faits, mêmes prudences, mêmes sources, et aucun ton ne donne de dose ni de produit de traitement.
 
-La commande /profil montre le prénom et le ton retenus, et permet de changer de ton d'un bouton. Pour changer de prénom, dites « appelle-moi Rico » (ou tapez /profil prenom Rico) : le compagnon vous propose de le retenir et attend votre accord avant de l'enregistrer. Un prénom compte des lettres, des espaces ou des tirets, trente caractères au plus, un ou deux mots ; une phrase n'est pas un prénom et il la refuse en vous disant pourquoi.
+La commande /profil montre le prénom et le ton retenus, et permet de changer de ton d'un bouton ; son bouton *Messages spontanés* règle ce que le compagnon vous écrit de lui-même. Pour changer de prénom, dites « appelle-moi Rico » (ou tapez /profil prenom Rico) : le compagnon vous propose de le retenir et attend votre accord avant de l'enregistrer. Un prénom compte des lettres, des espaces ou des tirets, trente caractères au plus, un ou deux mots ; une phrase n'est pas un prénom et il la refuse en vous disant pourquoi.
 
 Le prénom et le ton sont propres à vous et à chaque potager : sur deux potagers, vous pouvez choisir deux tons différents.
 

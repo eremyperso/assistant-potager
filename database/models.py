@@ -148,10 +148,29 @@ class PotagerMembre(Base):
     prenom_compagnon    = Column(String(30), nullable=True)
     registre_compagnon  = Column(String(12), nullable=False, default="voisin", server_default="voisin")
     compagnon_accueilli = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # [US-265] Profil, partie 2 : le niveau n'est écrit que sur confirmation (NULL = pas
+    # encore choisi) ; les objectifs de saison sont 3 au plus (JSON : liste de textes).
+    niveau_compagnon    = Column(String(10), nullable=True)
+    objectifs_saison    = Column(JSON, nullable=True)
+    # [US-267] Profil, partie 3 : les messages spontanés. Mode par thème (JSON
+    # {theme: {"mode", "le", "auto"}}, thème absent = défaut), plage de silence et heure du
+    # point du matin (NULL = 21 h, 8 h, 8 h). Lus par le distributeur.
+    proactivite_compagnon = Column(JSON, nullable=True)
+    silence_debut         = Column(SmallInteger, nullable=True)
+    silence_fin           = Column(SmallInteger, nullable=True)
+    heure_resume          = Column(SmallInteger, nullable=True)
 
     __table_args__ = (
         CheckConstraint("registre_compagnon IN ('sobre', 'voisin', 'gouailleur')",
                         name="ck_potager_membres_registre_compagnon"),
+        CheckConstraint("niveau_compagnon IS NULL OR niveau_compagnon IN ('debutant', 'confirme')",
+                        name="ck_potager_membres_niveau_compagnon"),
+        CheckConstraint(
+            "(silence_debut IS NULL OR silence_debut BETWEEN 0 AND 23)"
+            " AND (silence_fin IS NULL OR silence_fin BETWEEN 0 AND 23)"
+            " AND (heure_resume IS NULL OR heure_resume BETWEEN 0 AND 23)",
+            name="ck_potager_membres_heures_compagnon",
+        ),
     )
 
 
@@ -1482,3 +1501,167 @@ class ActionMenee(Base):
         Index("ix_actions_menees_fil", "potager_id", "cree_le"),
     )
 from database import numerotation_lots  # noqa: E402,F401  [US-209] enregistre l'écouteur
+
+
+class FaitCarnet(Base):
+    """[US-265] Un fait que le jardinier a DIT au compagnon de lui-même (« j'arrose le soir »).
+
+    Le carnet du compagnon : personnel (un jardinier × un potager, D9), 30 faits au plus,
+    200 caractères chacun. Écrit uniquement après la confirmation d'une proposition
+    (`retenir_carnet`, R9), consultable, modifiable et effaçable à tout moment (RGPD).
+    Distinct de la mémoire du potager d'US-141, qui retrouve ce que le jardinier a ÉCRIT
+    dans ses notes. RLS stricte par potager (migration_v64).
+    """
+    __tablename__ = "carnet_faits"
+
+    id         = Column(Integer, primary_key=True, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
+    potager_id = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    texte      = Column(String(200), nullable=False)
+    #: L'échange qui a fait naître le fait : ce que le jardinier avait dit (tronqué à 500).
+    origine    = Column(Text, nullable=True)
+    cree_le    = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        Index("ix_carnet_faits_jardinier", "user_id", "potager_id", "cree_le"),
+    )
+
+
+class SignalVeilleur(Base):
+    """[US-266] Ce que le veilleur a détecté dans un potager, et qui mérite peut-être un message.
+
+    Écrit par le veilleur seul (`app.services.compagnon.signaux`), sans modèle (R7) : un
+    gel annoncé sur des cultures en place, un lot à repiquer, une levée non notée…
+    `cle_unique` décrit le FAIT (« gel:2026-10-28:parcelle-12 ») : un même fait ne
+    produit qu'un signal par potager, quel que soit le nombre de passages (CA3).
+
+    `etat` est le sort du signal ; le distributeur d'US-267 le fera avancer. Ici, rien
+    n'est envoyé : un signal reste `detecte`, visible dans la base et les journaux.
+    Horodatages en heure locale du potager (Europe/Paris), comme les prévisions qui les
+    font naître. RLS stricte par potager (migration_v65) ; purge à 30 jours.
+    """
+    __tablename__ = "signaux"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    potager_id  = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    #: NULL = un fait du potager (le gel concerne chaque membre) ; renseigné pour un fait
+    #: propre à un jardinier (un rappel qu'il a demandé).
+    user_id     = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # meteo | suivis | echeances | suggestions | rappels | resume
+    theme       = Column(String(16), nullable=False)
+    cle_unique  = Column(String(160), nullable=False)
+    # immediat | normal | resume
+    priorite    = Column(String(10), nullable=False)
+    expire_le   = Column(DateTime, nullable=False)
+    donnees     = Column(JSON, nullable=True)
+    # detecte | planifie (US-267, pris en charge par le distributeur) | envoye | regroupe
+    # | ignore | repondu
+    etat        = Column(String(12), nullable=False, default="detecte", server_default="detecte")
+    detecte_le  = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("potager_id", "cle_unique", name="uq_signaux_potager_cle"),
+        CheckConstraint(
+            "theme IN ('meteo', 'suivis', 'echeances', 'suggestions', 'rappels', 'resume')",
+            name="ck_signaux_theme",
+        ),
+        CheckConstraint("priorite IN ('immediat', 'normal', 'resume')", name="ck_signaux_priorite"),
+        CheckConstraint(
+            "etat IN ('detecte', 'planifie', 'envoye', 'regroupe', 'ignore', 'repondu')",
+            name="ck_signaux_etat",
+        ),
+        Index("ix_signaux_potager_detecte", "potager_id", "detecte_le"),
+    )
+
+
+class MessageSpontane(Base):
+    """[US-267] Un message parti de lui-même vers UN jardinier : un ou plusieurs signaux
+    regroupés, ou le point du matin.
+
+    `telegram_message_id` est gardé pour réécrire la carte plus tard (F2) ; `reaction_le`
+    reste NULL tant que le jardinier n'a ni cliqué ni répondu (trois messages d'un thème
+    sans réaction le font passer au point du matin). Heure locale (Europe/Paris). RLS
+    stricte par potager (migration_v66) ; purge à 30 jours avec les signaux.
+    """
+    __tablename__ = "messages_spontanes"
+
+    id                  = Column(Integer, primary_key=True, index=True)
+    potager_id          = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    user_id             = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # signal | resume
+    genre               = Column(String(10), nullable=False)
+    themes              = Column(JSON, nullable=False)
+    texte               = Column(Text, nullable=False)
+    # agent | gabarit
+    redige              = Column(String(8), nullable=False)
+    telegram_chat_id    = Column(BigInteger, nullable=True)
+    telegram_message_id = Column(BigInteger, nullable=True)
+    envoye_le           = Column(DateTime, nullable=False)
+    reaction_le         = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("genre IN ('signal', 'resume')", name="ck_messages_spontanes_genre"),
+        CheckConstraint("redige IN ('agent', 'gabarit')", name="ck_messages_spontanes_redige"),
+        Index("ix_messages_spontanes_destinataire", "potager_id", "user_id", "envoye_le"),
+    )
+
+
+class EnvoiSignal(Base):
+    """[US-267] Le sort d'un signal pour UN jardinier, décidé par le distributeur.
+
+    Planifié une fois par jardinier (UNIQUE `(signal_id, user_id)`), puis consommé de façon
+    atomique : `en_attente` → `envoye` (dans `message_id`) ou `ignore` (`motif` : thème
+    coupé, expiré pendant le silence…). `envoyer_le` est l'heure où il peut partir : tout de
+    suite, à la fin de la plage de silence, ou au point du matin. RLS stricte par potager.
+    """
+    __tablename__ = "envois_signaux"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    potager_id      = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    signal_id       = Column(Integer, ForeignKey("signaux.id", ondelete="CASCADE"), nullable=False)
+    user_id         = Column(Integer, ForeignKey("users.id"), nullable=False)
+    # immediat | resume | coupe
+    mode            = Column(String(10), nullable=False)
+    # en_attente | envoye | ignore
+    etat            = Column(String(12), nullable=False, default="en_attente", server_default="en_attente")
+    envoyer_le      = Column(DateTime, nullable=False)
+    motif           = Column(String(32), nullable=True)
+    #: Ce signal a fait passer son thème au point du matin : le message qui le porte le dit.
+    annonce_bascule = Column(Boolean, nullable=False, default=False, server_default=text("false"))
+    message_id      = Column(Integer, ForeignKey("messages_spontanes.id", ondelete="SET NULL"), nullable=True)
+    traite_le       = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("signal_id", "user_id", name="uq_envois_signaux_signal_user"),
+        CheckConstraint("mode IN ('immediat', 'resume', 'coupe')", name="ck_envois_signaux_mode"),
+        CheckConstraint("etat IN ('en_attente', 'envoye', 'ignore')", name="ck_envois_signaux_etat"),
+        Index("ix_envois_signaux_a_envoyer", "potager_id", "etat", "envoyer_le"),
+    )
+
+
+class Rappel(Base):
+    """[US-266] Un rappel confirmé par le jardinier (« vérifier la levée vers le 12 »).
+
+    La table naît avec celle des signaux (cadrage §3 : « signaux et rappels ») ; US-268
+    l'écrit, après confirmation (R9), et le veilleur en tire un signal « rappels » à
+    l'échéance. RLS stricte par potager (migration_v65) ; purge 30 jours après l'échéance.
+    """
+    __tablename__ = "rappels"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=False)
+    potager_id     = Column(Integer, ForeignKey("potagers.id"), nullable=False)
+    objet          = Column(String(200), nullable=False)
+    echeance_le    = Column(DateTime, nullable=False)
+    # Ce que le rappel concerne, quand il en a une cible (lot, événement…).
+    cible_type     = Column(String(32), nullable=True)
+    cible_id       = Column(Integer, nullable=True)
+    # programme | echu | annule
+    etat           = Column(String(12), nullable=False, default="programme", server_default="programme")
+    proposition_id = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
+    cree_le        = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("etat IN ('programme', 'echu', 'annule')", name="ck_rappels_etat"),
+        Index("ix_rappels_echeance", "potager_id", "etat", "echeance_le"),
+    )

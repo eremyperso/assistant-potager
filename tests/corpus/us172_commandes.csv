@@ -235,3 +235,21 @@ comment retrouver un lot de pépinière ?,,savoir
 Mon tunnel est une pépinière chaud,parcelle modifier,elliptique
 ma serre est une pépinière tiède,parcelle modifier,elliptique
 mets la serre en pépinière stp,parcelle modifier,imperatif
+montre-moi mon carnet,carnet lister,imperatif
+je veux voir le carnet du compagnon,carnet lister,intention
+qu'est-ce que tu sais de moi,carnet lister,elliptique
+mon carnet,carnet lister,elliptique
+retiens que j'arrose toujours le soir,carnet retenir,imperatif
+je voudrais que tu retiennes que je ne traite jamais,carnet retenir,intention
+souviens-toi que ma planche nord est inondable,carnet retenir,elliptique
+note dans ton carnet que j'ai peu de temps le week-end,carnet retenir,imperatif
+comment fonctionne le carnet du compagnon ?,,savoir
+comment retenir une habitude dans le carnet ?,,savoir
+montre-moi mes rappels,rappel lister,imperatif
+je veux voir mes rappels à venir,rappel lister,intention
+mes rappels,rappel lister,elliptique
+rappelle-moi de tailler les tomates samedi,rappel programmer,imperatif
+je voudrais que tu me rappelles d'arroser les semis demain,rappel programmer,intention
+rappelle-moi de vérifier les radis dans 3 jours,rappel programmer,elliptique
+comment programmer un rappel de suivi ?,,savoir
+comment annuler un rappel ?,,savoir

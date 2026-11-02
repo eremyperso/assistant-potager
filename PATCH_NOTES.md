@@ -1,3 +1,64 @@
+## [v3.116.0] — 2026-11-01
+
+### 🚀 Nouveautés
+- Propose, après un semis, de faire signe le jour de la levée : « Je te fais signe le 3 novembre pour voir où en est la levée des radis ? » avec [Oui, rappelle-moi] [Pas la peine] ; rien n'est programmé avant le clic (US-268).
+- Prend la date dans le référentiel (durée de levée la plus longue connue, comptée depuis le semis) ; sans durée connue, avec une échéance déjà passée ou avec le sujet « rappels » coupé, ne propose rien (US-268).
+- Comprend « rappelle-moi de tailler les tomates samedi » (ou « dans 3 jours », « le 12 novembre ») : l'objet garde les mots du jardinier, le jour est lu par le code, le récapitulatif est confirmé comme toute écriture (US-268).
+- Ajoute `/rappels` : liste des rappels à venir avec un bouton [Annuler] chacun, et `/rappel programmer <objet> <jour>` (US-268).
+- À l'échéance, le veilleur produit un signal « rappels » (« ⏰ Rappel : … »), distribué tout de suite par les règles d'US-267 (US-268).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/rappels.py` (proposition, programmation, liste, annulation, échéance) et `app/bot/commandes_rappels.py` ; la proposition est recalculée au clic (`rap:o:<id>`), un double clic ne double pas le rappel.
+- Ajoute le détecteur `detecter_rappels_echus` au passage horaire du veilleur ; le rappel passe à « échu » une fois son signal en base.
+- Ajoute les formes dictables `("rappel", "programmer")` (outil `programmer_rappel`, écriture) et `("rappel", "lister")`, les règles `rappel_programmer` et `rappel_lister`, l'alias `/rappels` ; porte le plafond d'outils de l'agent à 19.
+- Ne propose aucun rappel tant que `COMPAGNON_PROACTIF=non` : il ne partirait jamais ; un rappel libre est alors programmé avec un avertissement.
+- Met à jour `/help`, les guides utilisateur, `SETUP.md`, la fiche `messages-spontanes.md` (et son exemple de demande non prise en charge dans `compagnon-telegram.md`), le corpus de mesure et la fiche de domaine `commandes-bot.md`.
+- Ajoute `tests/test_us268_rappels.py` (57 tests, 91 % de couverture) ; adapte les tests d'US-235 (plafond), d'US-250 (phrase de contrôle) et d'US-266 (liste des détecteurs).
+- Limites connues : seul le semis a une durée au référentiel, donc la reprise après repiquage n'est pas proposée ; la proposition ne passe pas par la saisie de la PWA (Telegram d'abord) ; le rappel est partagé par le potager (le signal part à tous les destinataires, selon leurs réglages), pas réservé à celui qui l'a demandé ; l'agent n'a pas été mesuré sur le vrai modèle pour `programmer_rappel` ; aucune migration, mais la table `rappels` (v65) n'a toujours pas été jouée sur PostgreSQL.
+
+## [v3.115.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Détecte seul, toutes les heures et potager par potager, ce qui mérite de prévenir le jardinier : gel ou canicule sur des cultures en place, fortes pluies, chaleur sèche sans arrosage noté, lot à repiquer ou à mettre en terre, récolte imminente, levée non notée, fenêtres de semis qui s'ouvrent (US-266).
+- Prépare chaque dimanche à 18 h le bilan de la semaine (gestes par type, récoltes par culture) d'un potager actif (US-266).
+- N'envoie encore aucun message : les signaux sont en base et dans les journaux, en attendant le distributeur d'US-267 (US-266).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/veilleur.py` (détecteurs purs, état du potager → signaux), `veilleur_passage.py` (lecture et boucle multi-potager sous `tenant_scope`) et `signaux.py` (dédoublonnage par `cle_unique`, purge à 30 jours).
+- Prend les seuils propres à une culture dans le référentiel (rusticité, durée de levée, fenêtres de semis), jamais d'un modèle ; une culture sans donnée ne produit aucun signal.
+- Déplace `_alerte_recolte` et `SEUIL_ALERTE` de `commandes_plan` vers `app/services/alerte_recolte.py`, sans changement pour `/plan`.
+- Remplace le job horaire `file_gestes` par `job_veilleur`, qui appelle d'abord la file de gestes (thème « suivis », comportement inchangé) puis les détecteurs ; ajoute `job_bilan_semaine` (dimanche 18 h).
+- Ajoute le cumul de pluie de chaque jour aux prévisions étendues (`utils/meteo.py`) et `echeances_lots.echeances_et_actions` (échéances sans relire le Plan).
+- Vérifie par un test d'AST qu'aucun module `veilleur*.py` n'importe `llm` ni l'agent (R7) ; ajoute `tests/test_us266_veilleur.py` (75 tests, 93 % de couverture).
+- Ajoute `tools/recette_veilleur.py` : fait passer le vrai veilleur sur un potager, avec une météo réelle ou simulée (gel, canicule, pluie, sécheresse), en lecture seule par défaut.
+- Limites connues : la migration v65 n'a pas été jouée sur PostgreSQL (RLS à vérifier) ; le passage horaire interroge désormais Open-Meteo une fois par heure pour tous les potagers localisés (un appel groupé, cache d'une heure) ; les seuils de canicule (32 °C), de fortes pluies (20 mm) et de chaleur sèche (28 °C, 3 jours, 5 jours sans arrosage) sont des hypothèses à valider ; le détecteur « rappel arrivé à terme » viendra avec US-268.
+
+### 💾 Base de données
+- Ajoute la migration v65 : tables `signaux` (unicité `(potager_id, cle_unique)`) et `rappels`, RLS stricte par potager.
+
+## [v3.114.0] — 2026-10-30
+
+### 🚀 Nouveautés
+- Retient sur confirmation ce que le jardinier dit de lui (« j'arrose toujours le soir ») : le compagnon propose « OK, retiens-le » / « Non », rien n'est écrit avant le clic (US-265).
+- Ajoute `/carnet` (liste des faits, [Modifier] [Oublier un point] [Tout oublier], `/carnet objectif <texte>`) et l'écran « Mon compagnon » dans le menu du compte de l'application (US-265).
+- Comprend « retiens que… », « montre-moi mon carnet » et « qu'est-ce que tu sais de moi » sans appel au modèle (US-265).
+- Propose le niveau (débutant ou confirmé) déduit de l'activité sans l'écrire d'office, et permet de régler jusqu'à trois objectifs de saison (US-265).
+- Efface le carnet d'un jardinier qui quitte un potager ou en est retiré (US-265).
+- Comprend les variantes d'une habitude (« j'arrose généralement tous les soirs », « je ne bêche jamais ») et d'un objectif (« objectif : autonomie en tomates ») : un tri large les rend à l'agent au lieu du parseur de gestes, et la proposition garde la phrase du jardinier si le modèle la reformule mal (US-265).
+- Rédige la réponse à une question qui touche au carnet (« quand arroser mes tomates ? ») en tenant compte de l'habitude du jardinier, au lieu de recopier un conseil général : « comme tu le fais déjà, arrose le soir » (US-265).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/carnet_compagnon.py`, `app/bot/commandes_carnet.py`, les routes `/compagnon/carnet` et `ModalMonCompagnon.jsx` (container queries).
+- Injecte le carnet en partie variable du prompt, balisé `<carnet_jardinier>` ; `PROMPT_FIXE` inchangé, chevrons retirés des faits (injection sans effet).
+- Porte le plafond d'outils de l'agent à 18 (`retenir_carnet`) ; le carnet n'entre pas dans les actions menées.
+- Ajoute `docs/RGPD/RGPD_CARNET_COMPAGNON.md`, une section de `compagnon-reponses-et-memoire.md`, trois questions de mesure, les guides utilisateur, `/help` et `SETUP.md`.
+- Ajoute `tests/test_us265_carnet_compagnon.py` (71 tests).
+- Mesure sur Ministral 8B (un passage, 44 phrases d'habitudes, d'objectifs, de gestes et de questions) : aucun geste ni question pris pour un fait ; deux phrases d'habitude sans marqueur (« j'ai un jardin en pente et très venté », « je récupère l'eau de pluie ») échappent encore à l'agent.
+- Limites connues : la migration v64 n'a pas été jouée sur PostgreSQL (RLS et effacement à la sortie d'un potager à vérifier) ; l'écran « Mon compagnon » n'a pas été vérifié à 375/768/desktop dans un navigateur ; l'effet du carnet sur une réponse rédigée par le modèle (étage de raisonnement) n'est pas mesuré.
+
+### 💾 Base de données
+- Ajoute la migration v64 : table `carnet_faits` (RLS stricte par potager), colonnes `niveau_compagnon` et `objectifs_saison` de `potager_membres`.
+
 ## [v3.113.0] — 2026-10-30
 
 ### 🚀 Nouveautés
