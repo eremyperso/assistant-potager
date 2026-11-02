@@ -1332,7 +1332,7 @@ Affiche la version déployée, le commit et l'environnement. Utile pour un signa
 
 ---
 
-### 17.4 Le carnet du compagnon — ce qu'il retient de vous
+## 17.4 Le carnet du compagnon — ce qu'il retient de vous
 
 Dites à votre compagnon une habitude ou une contrainte, par exemple « j'arrose toujours le soir, jamais le matin » : il vous propose de la **retenir** (« Je retiens ça : tu arroses le soir »), avec deux boutons, **OK, retiens-le** et **Non**. Rien n'est écrit tant que vous n'avez pas confirmé. Vous pouvez aussi le demander : « retiens que je n'ai pas de temps le week-end ».
 
@@ -1362,7 +1362,7 @@ Vous pouvez aussi demander un rappel vous-même, avec un jour : « rappelle-moi 
 
 La commande liste vos rappels à venir, avec un bouton **Annuler** pour chacun. Le jour venu, le compagnon vous écrit vers 9 h, comme pour ses autres messages spontanés : le sujet **rappels** se règle dans `/profil` (tout de suite, point du matin ou jamais), et s'il est sur **jamais**, plus aucun rappel n'est proposé. Un potager garde 30 rappels en attente au plus.
 
-### 17.5 Les messages que le compagnon vous envoie de lui-même
+## 17.5 Les messages que le compagnon vous envoie de lui-même
 
 Le compagnon surveille votre potager chaque heure et vous écrit dans Telegram quand quelque chose mérite votre attention : **gel** ou **forte chaleur** annoncés sur des cultures en place, **fortes pluies**, jours chauds et secs **sans arrosage noté**, lot de la pépinière **bon à repiquer** ou à mettre en terre, **récolte** qui approche, **levée** attendue mais pas notée, **semis** qui s'ouvrent ce mois-ci, et le **bilan** de votre semaine le dimanche soir. Un même constat n'est dit qu'une fois, et un message n'enregistre jamais rien à votre place.
 
@@ -1521,7 +1521,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 | `/association saisir <A> <B> <favorable\|defavorable\|neutre> <etabli\|traditionnel> <motif>` | Saisir ou corriger une association |
 | `/rotation <parcelle> <culture>` | Vérifier la rotation avant de planter |
 
-### 21.4 Parcelles
+## 21.4 Parcelles
 
 | Commande | Ce qu'elle fait |
 |---|---|
