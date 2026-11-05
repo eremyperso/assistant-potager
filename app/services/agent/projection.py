@@ -104,6 +104,14 @@ def est_un_constat_de_probleme(phrase: str) -> bool:
     return bool(_SIGNE_DE_PROBLEME.search(normalise))
 
 
+def est_une_question(phrase: str, texte_en_contexte: Optional[str] = None) -> bool:
+    """[US-281 / CA1] La phrase ne peut produire aucune écriture : une question, ou un constat de
+    problème (US-263 / CA5) dit hors de toute proposition en attente. La projection (mode `actif`)
+    et le validateur (les deux modes) en jugent par cette seule fonction."""
+    return est_interrogative(phrase) or (
+        texte_en_contexte in (None, phrase) and est_un_constat_de_probleme(phrase))
+
+
 def projection_pour(phrase: str, texte_en_contexte: Optional[str] = None) -> str:
     """[CA2, CA3] La projection du catalogue pour cette phrase.
 
@@ -113,7 +121,7 @@ def projection_pour(phrase: str, texte_en_contexte: Optional[str] = None) -> str
     destructeur, jamais une question qui suit.
     [US-263 / CA5] Un constat de problème se lit comme une question : aucune écriture.
     """
-    if est_interrogative(phrase) or (texte_en_contexte in (None, phrase) and est_un_constat_de_probleme(phrase)):
+    if est_une_question(phrase, texte_en_contexte):
         return PROJECTION_SANS_ECRITURE
     if demande_une_destruction(texte_en_contexte or phrase):
         return PROJECTION_COMPLETE

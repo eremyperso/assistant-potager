@@ -398,14 +398,17 @@ class TestCA8MotsClesActifs:
 class TestCA9OrdreDesEtages:
 
     def test_us236_ca9_ordre_dans_handle_text(self):
-        """Gardes de conversation → règles → filtres → agent → routeur → cascade."""
+        """Gardes de conversation → règles → filtres → agent → routeur → cascade.
+
+        [US-287] En mode `prioritaire`, l'agent passe avant les raccourcis (règles et filtres sans
+        modèle), désormais dans `_raccourcis_a_mots_cles` ; leur ordre interne est vérifié à part."""
         source = inspect.getsource(bot_messages.handle_text)
         reperes = [
             "_verifier_liaison_ou_onboarding(",           # garde de liaison
             "_interp_completion_texte(",                  # gardes de flux en cours
             "if mode == 'ask'",
-            "reconnaitre_par_regles(",                    # règles
-            "_is_requete_godets(",                        # filtres sans modèle
+            "svc_interpreteur.agent_d_abord(",            # [US-287] agent d'abord (mode prioritaire)
+            "_raccourcis_a_mots_cles(",                   # règles et filtres sans modèle
             "svc_interpreteur.interpreter(",              # agent (filtres de savoir/geste dedans)
             "svc_interpreteur.VERS_QUESTION",             # aiguillage suivi
             "routeur.classer_demande(",                   # routeur
@@ -413,6 +416,11 @@ class TestCA9OrdreDesEtages:
         ]
         positions = [source.index(repere) for repere in reperes[:-1]] + [source.rindex(reperes[-1])]
         assert positions == sorted(positions)
+
+    def test_us236_ca9_ordre_dans_les_raccourcis(self):
+        """[US-287] Les règles sont lues avant les filtres sans modèle, comme avant leur extraction."""
+        source = inspect.getsource(bot_messages._raccourcis_a_mots_cles)
+        assert source.index("reconnaitre_par_regles(") < source.index("_is_requete_godets(")
 
     def test_us236_ca9_ordre_dans_interpreter(self):
         source = inspect.getsource(interp.interpreter)

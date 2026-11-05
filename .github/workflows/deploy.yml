@@ -114,7 +114,7 @@ jobs:
             set -a && source .env.prod && set +a
             venv/bin/python tools/controler_aide_corpus.py
             venv/bin/python tools/controler_corpus_agronomie.py
-            venv/bin/python tools/ingerer_connaissance.py --strict --elaguer
+            venv/bin/python tools/ingerer_connaissance.py --strict --elaguer --purger-hors-liste
             # [US-254] Référentiel de cultures : manifestes de data/referentiel/deploiement.json,
             # importés après le corpus. Idempotent ; un échec arrête le déploiement (set -e).
             venv/bin/python tools/importer_referentiel_deploiement.py

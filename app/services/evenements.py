@@ -1264,7 +1264,7 @@ def evenements_recents(db: Session, ctx: TenantContext, limit: int = 10) -> list
     return (
         db.query(Evenement)
         .filter(Evenement.potager_id == ctx.potager_id)
-        .order_by(Evenement.date.desc())
+        .order_by(Evenement.date.desc(), Evenement.id.desc())
         .limit(limit)
         .all()
     )

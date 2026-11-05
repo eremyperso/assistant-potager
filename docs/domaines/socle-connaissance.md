@@ -34,6 +34,15 @@ Interrupteurs (`app/config.py`, variables d'environnement, sans redéploiement) 
 - `RAG_SEUIL_CONFIANCE` — au-dessus : réponse servie telle quelle, à coût nul
 - `RAG_MAX_PASSAGES` — nombre de passages retenus (3 = cible du CA13)
 
+[US-283] Liste BLANCHE des sources par famille (`connaissance.SOURCES_PAR_FAMILLE`) :
+`doc_app` → « Guide de l'Assistant Potager », `agronomie` → attributions de
+`SOURCES_SOCLE`, `memoire_potager` → « ton carnet du potager ». L'ingestion refuse
+une source hors liste ; `--purger-hors-liste` (branché au déploiement) retire ce
+qui est déjà en base — origine : `tests/corpus/automobile/` ingéré en dev par
+`--racine`. L'agent cherche dans UN domaine (`rechercher(domaine=…)` :
+`application`, `jardinage`, `carnet`), jamais relâché ; sous le seuil, il ne
+rend rien plutôt que le meilleur passage hors sujet.
+
 Ce que la base ne sait pas répondre — c'est cela qui dit quoi écrire ensuite :
 `GET /admin/savoir/lacunes` (réservé à `ADMIN_EMAIL`).
 

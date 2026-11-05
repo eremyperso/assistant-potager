@@ -80,7 +80,7 @@ BULLETIN_AUTO_METEO = svc_rotation.BULLETIN_AUTO_METEO
 # servie (« _Source : …_ »). Volontairement à la deuxième personne : la phrase
 # doit dire d'où vient le texte sans qu'on ait à lui expliquer ce qu'est une
 # famille de fragments.
-SOURCE_MEMOIRE = "ton carnet du potager"
+SOURCE_MEMOIRE = connaissance.SOURCE_MEMOIRE
 
 # [CA5] Une note est ce que le jardinier a écrit : elle est vraie par
 # construction, donc `verifie`. C'est ce qui la rend servable telle quelle, à

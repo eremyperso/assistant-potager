@@ -132,12 +132,12 @@ class TestReponseCroisee:
     def _tours(self, texte_final: str):
         return (
             _reponse("", _appel(OUTIL_METEO, "m1", jours=3),
-                     _appel(OUTIL_CHERCHER_CONNAISSANCE, "c1", question="limaces salades")),
+                     _appel(OUTIL_CHERCHER_CONNAISSANCE, "c1", question="limaces salades", domaine="jardinage")),
             _reponse(texte_final),
         )
 
     def _connaissance(self):
-        contexte = SimpleNamespace(passages=(_passage(),))
+        contexte = SimpleNamespace(passages=(_passage(),), confiance=1.0)
         return patch("app.services.connaissance.rechercher", return_value=contexte)
 
     def test_gherkin_la_reponse_cite_la_pluie_et_la_source(self, modele):
@@ -226,15 +226,15 @@ class TestOutils:
 
     def test_chercher_connaissance_garde_la_source(self):
         releves = savoir.Releves()
-        with patch("app.services.connaissance.rechercher", return_value=SimpleNamespace(passages=(_passage(),))):
-            brut = json.loads(savoir.executer(OUTIL_CHERCHER_CONNAISSANCE, {"question": "limaces"}, CTX, releves))
+        with patch("app.services.connaissance.rechercher", return_value=SimpleNamespace(passages=(_passage(),), confiance=1.0)):
+            brut = json.loads(savoir.executer(OUTIL_CHERCHER_CONNAISSANCE, {"question": "limaces", "domaine": "jardinage"}, CTX, releves))
         assert brut["passages"][0]["source"] == SOURCE
         assert releves.sources == [SOURCE]
 
     def test_chercher_connaissance_corpus_vide(self):
         releves = savoir.Releves()
-        with patch("app.services.connaissance.rechercher", return_value=SimpleNamespace(passages=())):
-            brut = json.loads(savoir.executer(OUTIL_CHERCHER_CONNAISSANCE, {"question": "x"}, CTX, releves))
+        with patch("app.services.connaissance.rechercher", return_value=SimpleNamespace(passages=(), confiance=0.0)):
+            brut = json.loads(savoir.executer(OUTIL_CHERCHER_CONNAISSANCE, {"question": "x", "domaine": "jardinage"}, CTX, releves))
         assert brut["disponible"] is False and releves.vide
 
     def test_une_question_vide_n_appelle_rien(self):

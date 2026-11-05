@@ -19,7 +19,7 @@
       "titre": "« Ce que je viens de noter, c'était quoi ? » : une question sur ses données, pas sur l'application",
       "tours": [
         {"jardinier": "ce que je viens de noter , c'était quoi ?",
-         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false, "texte_attendu": ["arros", "sem", "récolt", "plant", "paill", "traitement", "désherb", "taill", "repiqu", "fertili"]}}
       ]
     },
     {
@@ -27,7 +27,7 @@
       "titre": "« C'est quoi la dernière action notée » : les actions menées, pas la doc",
       "tours": [
         {"jardinier": "c'est quoi la dernière action notée",
-         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "consulter_donnees"], "ecriture": false, "texte_attendu": ["arros", "sem", "récolt", "plant", "paill", "traitement", "désherb", "taill", "repiqu", "fertili"]}}
       ]
     },
     {
@@ -35,7 +35,7 @@
       "titre": "Le dernier semis",
       "tours": [
         {"jardinier": "quel est mon dernier semis ?",
-         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["radis"]}}
       ]
     },
     {
@@ -43,7 +43,7 @@
       "titre": "La météo de Lyon, puis « et demain ? »",
       "tours": [
         {"jardinier": "Quelle météo sur Lyon ?",
-         "attendu": {"outils": ["afficher"], "parametres": {"commande": "meteo", "lieu": "lyon"}, "ecriture": false}},
+         "attendu": {"outils": ["afficher"], "parametres": {"commande": "meteo", "lieu": "lyon"}, "ecriture": false, "texte_attendu": ["Lyon"], "texte_interdit": ["mm de pluie sur les 3 derniers jours"]}},
         {"jardinier": "et demain ?",
          "attendu": {"outils": ["afficher"], "parametres": {"commande": "meteo", "lieu": "lyon"}, "ecriture": false,
                      "note": "« et demain » reprend Lyon : servi le 30/10, un passage de doc (score 0,29)"}}
@@ -54,7 +54,7 @@
       "titre": "La météo d'un pays",
       "tours": [
         {"jardinier": "quel météo en Belgique ?",
-         "attendu": {"outils": ["afficher", "texte"], "ecriture": false,
+         "attendu": {"outils": ["afficher", "texte"], "ecriture": false, "texte_attendu": ["Belgique", "ville"],
                      "note": "une ville est attendue : demander laquelle, ou interroger la Belgique, sont deux bonnes réponses"}}
       ]
     },
@@ -63,7 +63,7 @@
       "titre": "Une question sur ce que sait faire l'application",
       "tours": [
         {"jardinier": "est ce que je peux obtenir la météo d'une autre région ?",
-         "attendu": {"outils": ["texte", "chercher_connaissance", "afficher"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "chercher_connaissance", "afficher"], "ecriture": false, "texte_attendu": ["/meteo", "ville", "lieu", "oui"]}}
       ]
     },
     {
@@ -71,7 +71,7 @@
       "titre": "La date du jour",
       "tours": [
         {"jardinier": "quel est la date ?",
-         "attendu": {"outils": ["texte"], "ecriture": false}}
+         "attendu": {"outils": ["texte"], "ecriture": false, "texte_attendu": ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]}}
       ]
     },
     {
@@ -79,7 +79,7 @@
       "titre": "« Que sais-tu sur moi ? » : le profil et le carnet, déjà dans le contexte",
       "tours": [
         {"jardinier": "que sais-tu sur moi ?",
-         "attendu": {"outils": ["texte", "afficher"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "texte_attendu": ["autonomie", "objectif", "carnet", "profil"]}}
       ]
     },
     {
@@ -87,7 +87,7 @@
       "titre": "Rappeler son objectif",
       "tours": [
         {"jardinier": "rappel moi quel a été mon objectif cette année ?",
-         "attendu": {"outils": ["texte", "afficher"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "texte_attendu": ["autonomie", "objectif"]}}
       ]
     },
     {
@@ -95,7 +95,7 @@
       "titre": "Ses notes",
       "tours": [
         {"jardinier": "quels sont mes notes ?",
-         "attendu": {"outils": ["afficher", "consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["afficher", "consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["note"]}}
       ]
     },
     {
@@ -103,7 +103,7 @@
       "titre": "Un conseil qui doit croiser le carnet (« j'arrose le soir ») et le savoir",
       "tours": [
         {"jardinier": "quand dois je arroser mes tomates ?",
-         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["soir", "matin"]}}
       ]
     },
     {
@@ -111,7 +111,7 @@
       "titre": "Un conseil sur son objectif d'autonomie en tomate",
       "tours": [
         {"jardinier": "pour mon objectif d'autonomie, que dois je privilégie ?",
-         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["chercher_connaissance", "consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["autonomie", "semence", "graine", "variét"]}}
       ]
     },
     {
@@ -119,7 +119,7 @@
       "titre": "Semer des tomates ce week-end ?",
       "tours": [
         {"jardinier": "est ce que je peux semer des tomates ce week-end ?",
-         "attendu": {"outils": ["chercher_connaissance", "afficher", "consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["chercher_connaissance", "afficher", "consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["tomate"]}}
       ]
     },
     {
@@ -127,7 +127,7 @@
       "titre": "Ses cultures en pépinière",
       "tours": [
         {"jardinier": "mes cultures en pépinière ?",
-         "attendu": {"outils": ["consulter_donnees", "afficher", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["consulter_donnees", "afficher", "texte"], "ecriture": false, "texte_attendu": ["pépinière", "lot", "godet", "semis"]}}
       ]
     },
     {
@@ -135,7 +135,7 @@
       "titre": "Ce qu'il a fait aujourd'hui",
       "tours": [
         {"jardinier": "liste tout ce que j'ai fais aujourd'hui",
-         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false}}
+         "attendu": {"outils": ["consulter_donnees", "texte"], "ecriture": false, "texte_attendu": ["aujourd", "arros", "sem", "récolt", "plant", "aucun", "rien"]}}
       ]
     },
     {
@@ -143,7 +143,7 @@
       "titre": "« Que dois-je faire ? » : une suggestion tirée de son potager",
       "tours": [
         {"jardinier": "que dois je faire ?",
-         "attendu": {"outils": ["texte", "consulter_donnees", "afficher", "chercher_connaissance"], "ecriture": false}}
+         "attendu": {"outils": ["texte", "consulter_donnees", "afficher", "chercher_connaissance"], "ecriture": false, "texte_attendu": ["tomate", "arros", "sem", "récolt", "plant", "repiqu", "pépinière", "parcelle"]}}
       ]
     },
     {
@@ -285,10 +285,12 @@
     {
       "id": "TER-31", "categorie": "doutes", "source": "terrain #228-#229 (01/11) — le geste avait été vidé 25 s plus tôt ; « je vais effacer… », puis « oui » : « Salut Emmanuel ! »",
       "titre": "« Vide le geste », puis « oui » : ni promesse, ni suppression d'une entrée du carnet",
+      "annonce": "1 geste vidé : il n'avait pas été confirmé",
       "tours": [
         {"jardinier": "vide le geste",
-         "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "interdits": ["annuler_action", "supprimer_parcelle"],
-                     "note": "la réponse idéale (« il vient d'être retiré ») exige que l'agent voie les messages envoyés par le bot : brique absente, seul le refus de promettre est jugé ici"}},
+         "attendu": {"outils": ["lire", "texte", "afficher"], "ecriture": false, "interdits": ["annuler_action", "supprimer_parcelle"],
+                     "texte_attendu": ["retiré", "plus rien"],
+                     "note": "[US-286 / CA6] le bot vient d'annoncer la purge (annonce) : l'agent la voit et répond que le geste est retiré, sans rien écrire"}},
         {"jardinier": "oui",
          "attendu": {"outils": ["texte", "afficher"], "ecriture": false, "interdits": ["annuler_action", "supprimer_parcelle"]}}
       ]
@@ -325,6 +327,32 @@
       "tours": [
         {"jardinier": "objectif autonomie en tomate",
          "attendu": {"outils": ["texte", "retenir_carnet"]}}
+      ]
+    },
+    {
+      "id": "TER-36", "categorie": "doutes", "source": "terrain #14-#16 (28/10), famille de TER-29 et DOU-1 sur une valeur manquante — US-284 / CA5 : question → réponse courte",
+      "titre": "Un renommage sans nouveau nom, puis le nom seul",
+      "tours": [
+        {"jardinier": "Renomme la planche test",
+         "attendu": {"outils": ["texte", "renommer_parcelle"], "ecriture": false,
+                     "note": "demander le nouveau nom, jamais en inventer un"}},
+        {"jardinier": "planche des courges",
+         "attendu": {"outils": ["renommer_parcelle"], "parametres": {"ancien": "planche test", "nouveau": "planche des courges"}, "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "TER-37", "categorie": "doutes", "source": "terrain #14-#16 (28/10) « Tu veux supprimer la planche test ? » redemandé, #23-#24 « oui » → « Salut, potager ! » — US-284 / CA5 : question → oui",
+      "titre": "Une suppression à demi dite, puis « oui » : la carte, jamais un salut",
+      "tours": [
+        {"jardinier": "il faudrait supprimer la planche test",
+         "attendu": {"outils": ["texte", "supprimer_parcelle"],
+                     "note": "demander s'il faut la supprimer, ou la proposer directement (bouton seul)"}},
+        {"jardinier": "oui",
+         "attendu": {"outils": ["supprimer_parcelle", "confirmer_proposition"],
+                     "texte_interdit": ["salut", "bonjour"],
+                     "note": "après une question : la carte ; après une carte : le bouton seul, rien n'est supprimé d'un mot"}},
+        {"clic": "Annuler"}
       ]
     }
   ]

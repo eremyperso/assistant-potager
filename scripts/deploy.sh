@@ -88,7 +88,7 @@ ssh "${DEPLOY_HOST}" "
   set -a && source .env.prod && set +a
   python3 tools/controler_aide_corpus.py
   python3 tools/controler_corpus_agronomie.py
-  python3 tools/ingerer_connaissance.py --strict --elaguer
+  python3 tools/ingerer_connaissance.py --strict --elaguer --purger-hors-liste
 "
 
 # ── 5. Redémarrage du service systemd ──────────────────────────────────────────

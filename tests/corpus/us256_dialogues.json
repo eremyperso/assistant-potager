@@ -373,6 +373,139 @@
          "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "interdits": ["afficher"]}},
         {"clic": "Confirmer"}
       ]
+    },
+    {
+      "id": "ENC-1", "categorie": "designation_action", "source": "enchaînement réel (base locale dev, 29/10, fil « planche principal »)",
+      "titre": "Une proposition de rangs corrigée deux fois : jamais prise pour la correction d'un geste",
+      "tours": [
+        {"jardinier": "passe la planche nord à 7 rangs", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true}},
+        {"jardinier": "non 6 rangs", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "interdits": ["creer_parcelle", "corriger_action"]}},
+        {"jardinier": "en fait c'était 8 rangs", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "interdits": ["corriger_action", "saisir_geste"], "note": "relevé : le compagnon répondait « laquelle veux-tu corriger ? A2, A3… » alors qu'une proposition de rangs était en attente"}}
+      ]
+    },
+    {
+      "id": "ENC-2", "categorie": "designation_action", "source": "enchaînement réel (base locale dev, 29/10 16:09)",
+      "titre": "Un semis confirmé, corrigé sur sa quantité, puis annulé",
+      "tours": [
+        {"jardinier": "j'ai semé des radis sur la planche nord", "attendu": {"outils": ["saisir_geste"], "ecriture": true}},
+        {"clic": "Confirmer"},
+        {"jardinier": "en fait c'était 8 graines", "attendu": {"outils": ["corriger_action"], "ecriture": true, "interdits": ["saisir_geste"], "livre": false, "note": "outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif"}},
+        {"jardinier": "annule le dernier semis", "attendu": {"outils": ["annuler_action"], "ecriture": true, "interdits": ["saisir_geste"], "livre": false, "note": "outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif"}}
+      ]
+    },
+    {
+      "id": "ENC-3", "categorie": "designation_action", "source": "enchaînement réel (base locale dev, 29/10 16:09)",
+      "titre": "« Oups, me suis trompé, c'était 2 plants » : une correction, pas une seconde plantation",
+      "tours": [
+        {"jardinier": "j'ai planté 5 tomates sur la planche sud", "attendu": {"outils": ["saisir_geste"], "ecriture": true}},
+        {"clic": "Confirmer"},
+        {"jardinier": "oups me suis trompé c'était 2 plants de tomate", "attendu": {"outils": ["corriger_action"], "ecriture": true, "interdits": ["saisir_geste"], "livre": false, "note": "outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif"}}
+      ]
+    },
+    {
+      "id": "ENC-4", "categorie": "designation_action", "source": "enchaînement réel (base locale dev, 29/10 20:32)",
+      "titre": "La même date corrigée sur deux semis dictés à la suite",
+      "tours": [
+        {"jardinier": "j'ai semé des tomates sur la planche nord", "attendu": {"outils": ["saisir_geste"], "ecriture": true}},
+        {"clic": "Confirmer"},
+        {"jardinier": "j'ai semé des haricots sur la planche sud", "attendu": {"outils": ["saisir_geste"], "ecriture": true}},
+        {"clic": "Confirmer"},
+        {"jardinier": "Oups, je me suis trompé sur les dates de semis. Il s'agit du 1er juin dernier.", "attendu": {"outils": ["corriger_action+corriger_action", "corriger_action", "texte"], "interdits": ["saisir_geste"], "note": "relevé : deux corrections dans une phrase ; une question « lequel ? » est aussi acceptable ; outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif", "livre": false}}
+      ]
+    },
+    {
+      "id": "ENC-5", "categorie": "doutes", "source": "enchaînement réel (base locale dev, 29/10 14:22)",
+      "titre": "« Vas-y » sur une suppression : jamais lancée sur un mot, puis « laisse tomber »",
+      "tours": [
+        {"jardinier": "supprime la parcelle carré des aromatiques", "attendu": {"outils": ["supprimer_parcelle"], "ecriture": true}},
+        {"jardinier": "vas y", "attendu": {"outils": ["texte"], "interdits": ["supprimer_parcelle"], "note": "le garde-fou est du code (« cette action est définitive ») ; l'agent ne doit pas relancer la suppression"}},
+        {"jardinier": "oui", "attendu": {"outils": ["texte"], "interdits": ["supprimer_parcelle"]}},
+        {"jardinier": "laisse tomber", "attendu": {"outils": ["abandonner_proposition"], "ecriture": true, "livre": false, "note": "abandonner_proposition n'existe que dans le catalogue du mode prioritaire (US-260) ; outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif", "interdits": ["supprimer_parcelle"]}}
+      ]
+    },
+    {
+      "id": "ENC-6", "categorie": "doutes", "source": "enchaînement réel (base locale dev, 29/10 14:22)",
+      "titre": "« On oublie » après une suppression proposée : abandonner, pas redemander",
+      "tours": [
+        {"jardinier": "supprime la planche centrale", "attendu": {"outils": ["supprimer_parcelle"], "ecriture": true}},
+        {"jardinier": "on oublie", "attendu": {"outils": ["abandonner_proposition"], "ecriture": true, "livre": false, "note": "relevé : le compagnon répondait « tu veux dire qu'on oublie la suppression ? » trois fois de suite ; outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif", "interdits": ["supprimer_parcelle"]}},
+        {"jardinier": "ok sans rien en attente", "attendu": {"outils": ["aucune_ecriture"], "interdits": ["supprimer_parcelle"]}}
+      ]
+    },
+    {
+      "id": "ENC-7", "categorie": "plusieurs_actions", "source": "enchaînement réel (base locale dev, 30/10 11:25)",
+      "titre": "Quatre planches supprimées dans une phrase, puis annulées",
+      "tours": [
+        {"jardinier": "supprime les planches nord sud centrale et carré des aromatiques", "attendu": {"outils": ["supprimer_parcelle+supprimer_parcelle+supprimer_parcelle+supprimer_parcelle"], "ecriture": true}},
+        {"clic": "Annuler"}
+      ]
+    },
+    {
+      "id": "ENC-8", "categorie": "creations", "source": "enchaînement réel (base locale dev, 30/10 11:25)",
+      "titre": "Deux créations dictées de trois façons : jamais « est et une parcelle ouest » comme nom",
+      "tours": [
+        {"jardinier": "créé moi une parcelle est et une parcelle ouest", "attendu": {"outils": ["creer_parcelle+creer_parcelle"], "ecriture": true, "note": "relevé : « ajouter nord et une parcelle sud » proposé comme un seul nom"}},
+        {"clic": "Annuler"},
+        {"jardinier": "Crée-moi une parcelle est, puis ensuite crée-moi une parcelle ouest.", "attendu": {"outils": ["creer_parcelle+creer_parcelle"], "ecriture": true, "note": "relevé : seule la première parcelle était proposée"}},
+        {"clic": "Annuler"},
+        {"jardinier": "Je veux que tu crées la planche Est, ainsi que la planche Ouest, ainsi que la planche Haute et ainsi que la planche Basse.", "attendu": {"outils": ["creer_parcelle+creer_parcelle+creer_parcelle+creer_parcelle"], "ecriture": true}}
+      ]
+    },
+    {
+      "id": "ENC-9", "categorie": "caracteristiques", "source": "enchaînement réel (base locale dev, 30/10 09:52)",
+      "titre": "Une pépinière en vocabulaire approximatif, puis retirée",
+      "tours": [
+        {"jardinier": "mon tunnel est une pépinière chaud", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel"}}},
+        {"jardinier": "ma serre est pépinière froid", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "serre"}}},
+        {"jardinier": "retire le tunnel de pépinière", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel"}, "interdits": ["supprimer_parcelle"]}},
+        {"jardinier": "ma planche centrale à 10 rangs bidule", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "planche centrale", "nb_rangs": 10}, "note": "relevé : un mot parasite en fin de phrase dictée"}}
+      ]
+    },
+    {
+      "id": "ENC-10", "categorie": "caracteristiques", "source": "enchaînement réel (base locale dev, 30/10 11:25)",
+      "titre": "Longueur, surface puis sol d'un tunnel en trois phrases",
+      "tours": [
+        {"jardinier": "Mon tunnel a une longueur de 12 mètres.", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel", "longueur_m": 12}}},
+        {"jardinier": "La surface de mon tunnel est de 12 mètres carrés.", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel", "superficie_m2": 12}}},
+        {"jardinier": "Le sol de mon tunnel est argileux.", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel", "type_sol": "argileux"}}}
+      ]
+    },
+    {
+      "id": "ENC-11", "categorie": "negations", "source": "enchaînement réel (base locale dev, 30/10 09:52)",
+      "titre": "Mettre en pépinière, confirmer, puis « oups, annuler la dernière commande »",
+      "tours": [
+        {"jardinier": "mets le tunnel en pépinière", "attendu": {"outils": ["modifier_parcelle"], "ecriture": true, "parametres": {"parcelle": "tunnel"}}},
+        {"clic": "Confirmer"},
+        {"jardinier": "oups, annuler la dernière commande", "attendu": {"outils": ["annuler_action", "texte"], "interdits": ["supprimer_parcelle"], "note": "relevé : « annule la dernière commande » ne désigne jamais une parcelle à supprimer ; outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif", "livre": false}}
+      ]
+    },
+    {
+      "id": "ENC-12", "categorie": "registres", "source": "enchaînement réel (base locale dev, 30/10 17:03)",
+      "titre": "Le carnet : retenir une habitude, puis la retrouver par des questions",
+      "tours": [
+        {"jardinier": "retiens que j'arrose mes salades tous les matins", "attendu": {"outils": ["retenir_carnet"], "ecriture": true, "livre": false, "note": "outil du mode prioritaire seulement (US-260/265/284), absent du catalogue livré du mode actif"}},
+        {"clic": "Confirmer"},
+        {"jardinier": "quand dois je arroser mes salades ?", "attendu": {"outils": ["texte"], "ecriture": false}},
+        {"jardinier": "j'arrose quoi le matin ?", "attendu": {"outils": ["texte"], "ecriture": false}}
+      ]
+    },
+    {
+      "id": "ENC-13", "categorie": "conversation_simple", "source": "enchaînement réel (base locale dev, 29/10 22:00)",
+      "titre": "Des mots sans demande (« fini », « clear », « oui » seul) : rien à écrire",
+      "tours": [
+        {"jardinier": "Fini", "attendu": {"outils": ["aucune_ecriture"]}},
+        {"jardinier": "clear", "attendu": {"outils": ["aucune_ecriture"]}},
+        {"jardinier": "oui", "attendu": {"outils": ["aucune_ecriture"]}}
+      ]
+    },
+    {
+      "id": "ENC-14", "categorie": "questions_croisees", "source": "enchaînement réel (base locale dev, 29/10 20:32)",
+      "titre": "Afficher d'une phrase dictée à la voix, fautes comprises",
+      "tours": [
+        {"jardinier": "Affichement des parcelles.", "attendu": {"outils": ["afficher", "lire"], "ecriture": false}},
+        {"jardinier": "Affiche-moi mes lots de pépinières.", "attendu": {"outils": ["afficher", "lire", "texte"], "ecriture": false}},
+        {"jardinier": "mes gestes", "attendu": {"outils": ["afficher", "lire", "texte"], "ecriture": false}}
+      ]
     }
   ]
 }

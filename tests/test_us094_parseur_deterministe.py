@@ -447,7 +447,7 @@ class TestCA6Precision:
         enregistrée. Les 44 questions du corpus de diagnostic doivent toutes
         tomber au repli."""
         import re
-        corpus = (RACINE / "docs" / "CORPUS_QUESTIONS_DIAGNOSTIC_CA11.md").read_text(encoding="utf-8")
+        corpus = (RACINE / "docs" / "CAHIER DE TESTS" / "CORPUS_QUESTIONS_DIAGNOSTIC_CA11.md").read_text(encoding="utf-8")
         bloc = corpus.split("## Partie 1")[1]
         questions = [m.group(1).split("→")[0].strip()
                      for m in re.finditer(r"^\s*\d+\.\s+(.+)$", bloc, re.M)]

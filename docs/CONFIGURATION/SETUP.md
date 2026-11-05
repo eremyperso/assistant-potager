@@ -97,6 +97,15 @@ Réglages facultatifs du compagnon (US-267), sans redéploiement de code :
   dans `conso_tokens`) ; par défaut celui de l'agent (`GROQ_MODEL_AGENT`). En panne ou infidèle, le
   gabarit du code part à sa place.
 
+Réglages de l'agent interpréteur (US-287, décision D14 du 02/11/2026) :
+- `AGENT_MODE` — `prioritaire` est la cible : toute phrase libre va d'abord à l'agent, avant les
+  règles et avant les raccourcis à mots-clés du bot (annuler, godets, déplacer, note). Les dialogues
+  en cours (correction, note, profil, carnet) et les textes exacts des boutons passent toujours
+  avant lui. Sur quota ou panne, les règles et les raccourcis d'aujourd'hui reprennent la main.
+  En dev d'abord ; la prod suit après une semaine d'usage réel sans couperet relevé au journal.
+- `GROQ_MODEL_AGENT` et `GROQ_MODEL_COMPAGNON_SIGNAL` — `mistral/mistral-small-2603` (Mistral
+  Small 4) avec `MISTRAL_API_KEY`. Le coût se suit dans `conso_tokens`.
+
 ## Architecture
 
 ### Entry Points
@@ -116,6 +125,7 @@ Réglages facultatifs du compagnon (US-267), sans redéploiement de code :
 | `/historique` | — | 10 derniers événements |
 | `/ask` | `[question en langage naturel]` | Question analytique (ou saisie interactive si sans arg) |
 | `/corriger` | — | Lancer le flux de correction d'un événement existant |
+| `/deplacer [culture]` | `[culture]` | Déplacer une culture vers une autre parcelle (parcours guidé, US-007 / US-287) |
 | `/plan` | — | Plan d'occupation global du potager |
 | `/plan <parcelle>` | `<nom_parcelle>` | Plan filtré sur une parcelle spécifique |
 | `/plan <date>` | `[JJ/MM/AAAA\|AAAA-MM-JJ]` | État du potager à une date de référence (`bot.py:2677`) |

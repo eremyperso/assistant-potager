@@ -57,15 +57,20 @@ def noter(
     ctx: TenantContext, texte_jardinier: str, texte_compagnon: str, *, canal: str,
     outils: tuple[str, ...] = (), proposition_id: Optional[int] = None,
     signal: Optional[str] = None, maintenant: Optional[datetime] = None,
+    question: Optional[dict] = None,
 ) -> None:
-    """[CA1] Retient un échange : ce qu'a dit le jardinier, ce que le compagnon en a fait."""
+    """[CA1] Retient un échange : ce qu'a dit le jardinier, ce que le compagnon en a fait.
+
+    [US-284 / CA1] `question` : la question que le compagnon vient de poser pour faire ce que la
+    phrase demandait. Un échange sans question efface, de fait, la précédente (`recents` ne lit
+    que celle du dernier échange)."""
     try:
         with _session(ctx.potager_id) as db:
             db.add(EchangeConversation(
                 user_id=ctx.user_id, potager_id=ctx.potager_id, canal=canal,
                 texte_jardinier=texte_jardinier or "", texte_compagnon=texte_compagnon or "",
                 outils=list(outils) or None, proposition_id=proposition_id, signal=signal,
-                cree_le=maintenant or datetime.utcnow(),
+                question=question or None, cree_le=maintenant or datetime.utcnow(),
             ))
             db.commit()
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
@@ -111,9 +116,32 @@ def recents(ctx: TenantContext, maintenant: Optional[datetime] = None) -> tuple[
         retenus.append(ligne)
         suivant = ligne.cree_le
     return tuple(
-        Echange(ligne.texte_jardinier, ligne.texte_compagnon, _ts(ligne.cree_le))
+        Echange(ligne.texte_jardinier, ligne.texte_compagnon, _ts(ligne.cree_le), ligne.question or None)
         for ligne in reversed(retenus)
     )
+
+
+def clore_question(ctx: TenantContext) -> None:
+    """[US-284 / CA4] Efface la question en attente : une phrase l'a lue sans laisser d'échange
+    (rien compris), elle ne doit pas attendre la suivante."""
+    try:
+        with _session(ctx.potager_id) as db:
+            nb = (
+                db.query(EchangeConversation)
+                .filter(
+                    EchangeConversation.user_id == ctx.user_id,
+                    EchangeConversation.potager_id == ctx.potager_id,
+                    EchangeConversation.question.isnot(None),
+                )
+                .update({EchangeConversation.question: None}, synchronize_session=False)
+            )
+            db.commit()
+        if nb:
+            log.info("[US-284 / CA4] Question en attente effacée (user_id=%s potager_id=%s)",
+                     ctx.user_id, ctx.potager_id)
+    except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
+        log.exception("[US-284 / CA4] Question en attente non effacée (user_id=%s potager_id=%s)",
+                      ctx.user_id, ctx.potager_id)
 
 
 def purger(maintenant: Optional[datetime] = None) -> int:

@@ -77,9 +77,13 @@ class TestWorkflowGitHubActions:
         assert "-----BEGIN" not in content
 
     def test_contient_smoke_test(self):
-        """CA5 — smoke test présent dans le workflow."""
-        content = open(WORKFLOW).read()
-        assert "health" in content
+        """CA5 — smoke test présent dans le workflow.
+
+        Depuis le 16/04/2026 (commit 2e20e80), il vérifie que le service systemd de
+        l'API est actif au lieu d'appeler /health sur localhost:8000."""
+        content = open(WORKFLOW, encoding="utf-8").read()
+        assert "Smoke test" in content
+        assert "systemctl is-active potager-prod.service" in content
 
     def test_contient_migration_sql(self):
         """CA2 — migrations SQL incluses dans le workflow."""

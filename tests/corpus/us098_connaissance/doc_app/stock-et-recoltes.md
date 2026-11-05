@@ -1,7 +1,7 @@
 ---
 titre: Stock et récoltes
 famille: doc_app
-source: Corpus de mesure US-098
+source: Guide de l'Assistant Potager
 niveau_confiance: verifie
 ---
 

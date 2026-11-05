@@ -30,6 +30,7 @@ from telegram.ext import ContextTypes
 
 from database.db import SessionLocal, current_potager_id
 from app.services import file_gestes as svc_file
+from app.services.compagnon import file_agent as svc_file_agent
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services import potager_actif as svc_potager_actif
 from app.services import relances_file as svc_relances
@@ -401,6 +402,29 @@ async def traiter_code_geste(
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# [US-286 / CA4] Abandonner un geste de la file sur une phrase
+# ══════════════════════════════════════════════════════════════════════════════
+_CB_ABANDON = "file:abandon:"
+_CB_GARDER = "file:garder"
+
+
+async def proposer_abandon(update: Update, geste_id: int, libelle: str, msg=None) -> None:
+    """« Vide le geste » avec un geste en attente : l'abandon se propose, il ne s'écrit pas.
+
+    Le geste de la file n'est pas une entrée du carnet : rien d'autre que son retrait de la file
+    n'est en jeu, et il se fait au bouton, comme dans le récapitulatif du geste."""
+    texte = f"🗑 Abandonner ce geste de ta file ?\n• {libelle}\n\nRien n'a été enregistré."
+    clavier = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🗑 Abandonner", callback_data=f"{_CB_ABANDON}{geste_id}"),
+        InlineKeyboardButton("↩️ Le garder", callback_data=_CB_GARDER),
+    ]])
+    if msg is not None:
+        await msg.edit_text(texte, reply_markup=clavier)
+    else:
+        await update.effective_message.reply_text(texte, reply_markup=clavier)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Les boutons du niveau 1
 # ══════════════════════════════════════════════════════════════════════════════
 async def file_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -421,6 +445,23 @@ async def file_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 
     if donnee == svc_relances.CB_COMMENCER:
         await ouvrir_premier_geste(update, ctx, user_id)
+        return
+
+    if donnee == _CB_GARDER:
+        await query.edit_message_text("👍 Je garde ce geste dans ta file.")
+        return
+
+    if donnee.startswith(_CB_ABANDON):
+        # [US-286 / CA4] Le bouton confirme : le geste quitte la file, rien n'entre au carnet.
+        try:
+            geste_id = int(donnee[len(_CB_ABANDON):])
+        except ValueError:
+            return
+        libelle = svc_file_agent.abandonner(user_id, geste_id)
+        if libelle is None:
+            await query.edit_message_text("👌 Ce geste n'attend plus dans ta file.")
+        else:
+            await query.edit_message_text(f"🗑 Geste abandonné : {libelle}.\nRien n'a été enregistré.")
         return
 
     if donnee == "file:pause":

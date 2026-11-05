@@ -22,6 +22,7 @@ Périmètre
 Code applicatif uniquement. Sont exclus :
   * `llm/passerelle.py`      — la passerelle EST le point de passage autorisé ;
   * ce fichier               — il cite les motifs recherchés ;
+  * `tools/mesurer_modeles_llm.py` — banc de mesure du fournisseur nu, lancé à la main ;
   * `tests/`                 — mocker le client est le comportement attendu ;
   * `.venv/`, caches, build frontend.
 """
@@ -37,6 +38,10 @@ RACINE = Path(__file__).resolve().parent.parent
 FICHIERS_AUTORISES = {
     "llm/passerelle.py",
     "tools/audit_appels_llm.py",
+    # Banc de mesure des modèles (US-140/US-094) : il mesure le fournisseur NU — sans les
+    # relances sur 429 ni l'écriture de `conso_tokens` de la passerelle, qui fausseraient
+    # latence et coût. Outil lancé à la main, jamais importé par l'application.
+    "tools/mesurer_modeles_llm.py",
 }
 
 # Répertoires hors périmètre applicatif.

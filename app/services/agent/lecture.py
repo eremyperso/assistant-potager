@@ -3,7 +3,8 @@ app/services/agent/lecture.py — L'outil de lecture de l'agent [US-237 / CA1]
 ===========================================================================
 Pendant la construction d'un plan, l'agent peut consulter le potager : trouver
 une parcelle, lister les parcelles, trouver un lot, trouver une culture, et [US-261]
-relire les actions menées au-delà des cinq que le contexte porte.
+relire les actions menées au-delà des cinq que le contexte porte, et [US-286] lire la file des
+gestes préparés depuis l'application qui attendent encore.
 
 Trois règles :
   * le potager est TOUJOURS celui du contexte, jamais un argument du modèle ;
@@ -77,6 +78,13 @@ def _lire(db, ctx: TenantContext, quoi: str, nom: str) -> list[dict]:
         donnees = actions_menees.en_donnees(actions, premier_rang)
         cible = nom.lower()
         return [d for d in donnees if not cible or cible in d["action"].lower()]
+    if quoi == "gestes_en_attente":
+        # [US-286 / CA2] La file des gestes préparés depuis l'application : seule lecture, l'abandon
+        # d'un geste se propose par `abandonner_proposition` et se confirme au bouton.
+        from app.services.compagnon import file_agent
+
+        cible = nom.lower()
+        return [g for g in file_agent.lister(ctx) if not cible or cible in g["geste"].lower()]
     return []
 
 

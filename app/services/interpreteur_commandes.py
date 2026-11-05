@@ -77,9 +77,12 @@ import logging
 import re
 import time
 from dataclasses import dataclass, field, replace
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from unidecode import unidecode
+
+if TYPE_CHECKING:
+    from app.services.agent.contexte_court import QuestionEnAttente  # [US-284] import circulaire
 
 from app.services.compagnon.decisions import Decision  # [US-260]
 from app.services.context import TenantContext
@@ -404,6 +407,9 @@ class ReponseAgent:
     #: [US-260 / CA3] Une action destructrice dite d'un mot : `texte` invite à cliquer, et la
     #: carte de la proposition est remontrée avec ses boutons.
     bouton_seul: bool = False
+    #: [US-284 / CA1] `texte` pose une question pour faire ce que la phrase demandait
+    #: (`contexte_court.QuestionEnAttente`) : le bot la garde sur l'échange, pour la phrase suivante.
+    question_en_attente: "Optional[QuestionEnAttente]" = None
 
 
 @dataclass(frozen=True)
@@ -2470,6 +2476,24 @@ def _construire_corriger(groupes):
 
 
 @_regle(
+    "deplacer",
+    # [US-287 / CA3] Le déplacement d'un LOT de pépinière est un geste (US-211) : un lot, des
+    # godets, une pépinière, un châssis ou la serre écartent la règle, comme
+    # `utils.deplacer.est_deplacement_de_lot`. La destination dite est ignorée : le parcours
+    # guidé la demande parmi les parcelles réelles.
+    r"\A(?!.*\b(?:lot|godets?|pepinieres?|chassis|serre)\b)" + _INTENTION
+    + r"(?:deplace|deplacer|demenage|demenager|changer de parcelle|changement de parcelle)\s+"
+    r"(?:(?:pour|de)\s+)?" + _ARTICLE
+    + r"(?P<culture>.+?)(?:\s+(?:sur|vers|dans|a|au)\s+.*)?\Z",
+    "deplacer",
+    None,
+)
+def _construire_deplacer(groupes):
+    culture = _nettoyer_nom(groupes.get("culture") or "")
+    return {"culture": culture} if _nom_plausible(culture) else {}
+
+
+@_regle(
     "vendre",
     r"\A" + _INTENTION
     + r"(?:vendre|mettre en vente|proposer a la vente|vente de|vente d)\s+" + _ARTICLE
@@ -2982,7 +3006,9 @@ _DESIGNATION_PARCELLE = r"(?:planche|parcelle|carre|butte|bande)s?"
 # ─────────────────────────────────────────────────────────────────────────────
 _OUVERTURE_DE_DEMANDE = (
     r"^(?:(?:s il (?:te|vous) plait|stp|svp|alors|bon|ok|ensuite|puis)\s*,?\s+)*"
-    r"(?P<modalite>(?:peux tu|pourrais tu|pouvez vous|pourriez vous)\s+|"
+    # [US-281 / CA8] « est-ce que tu peux renommer… ? » demande d'agir comme « peux-tu renommer… ? ».
+    r"(?P<modalite>(?:peux tu|pourrais tu|pouvez vous|pourriez vous|"
+    r"est ce que (?:tu peux|tu pourrais|vous pouvez|vous pourriez))\s+(?:me\s+|nous\s+)?|"
     r"(?:je veux|je voudrais|j aimerais|il faut que je)\s+)?"
 )
 #: (commande à taper, verbes à l'impératif ou à l'infinitif) — le premier qui s'ouvre gagne.
@@ -3128,6 +3154,11 @@ def agent_actif() -> bool:
     return _mode_agent() in MODES_AGENT_ACTIF
 
 
+def agent_prioritaire() -> bool:
+    """[US-287 / CA3] L'agent passe-t-il avant les règles ET les raccourcis du bot ?"""
+    return _mode_agent() == MODE_PRIORITAIRE
+
+
 def _non_compris(brut: str, normalise: str, debut: float,
                  ecartee: "CommandeInterpretee | Ambiguite | None" = None) -> Optional[Aiguillage]:
     """[INC-018] L'agent (puis l'ancien repli) n'a rien proposé : le jardinier le lit si sa
@@ -3169,6 +3200,7 @@ def interpreter(
     ctx: Optional[TenantContext] = None,
     autoriser_modele: bool = True,
     contexte_court=None,
+    consulter_agent_d_abord: bool = True,
 ) -> "CommandeInterpretee | Ambiguite | Aiguillage | Plan | ReponseAgent | None":
     """[CA1 → CA5] Traduit une phrase en une commande du catalogue, ou rien.
 
@@ -3202,11 +3234,16 @@ def interpreter(
     [US-262 / CA3] Exception au filtre « geste annoncé » : dans les 10 minutes qui
     suivent un geste, une phrase de correction va à l'agent, qui la propose comme
     correction de ce geste (`_correction_d_une_action_recente`).
+
+    [US-287 / CA3] `consulter_agent_d_abord=False` : l'appelant a déjà consulté l'agent
+    (`agent_d_abord`) et l'a trouvé indisponible ; un second appel ne coûterait qu'une
+    seconde erreur 429.
     """
     debut = time.monotonic()
-    d_abord = _l_agent_d_abord(texte, ctx, contexte_court, autoriser_modele, debut)
-    if d_abord is not _CASCADE_HABITUELLE:
-        return d_abord
+    if consulter_agent_d_abord:
+        d_abord = _l_agent_d_abord(texte, ctx, contexte_court, autoriser_modele, debut)
+        if d_abord is not CASCADE_HABITUELLE:
+            return d_abord
     resultat = reconnaitre_par_regles(texte)
     ecartee: "CommandeInterpretee | Ambiguite | None" = None
     if resultat is not None and phrase_pour_l_agent(texte, ctx, resultat):
@@ -3295,25 +3332,37 @@ def interpreter(
 
 #: [Agent d'abord] Rendu par `_l_agent_d_abord` quand la cascade habituelle suit : `None` ne
 #: peut pas le dire, c'est déjà une réponse (« la phrase poursuit son chemin »).
-_CASCADE_HABITUELLE = object()
+#: [US-287] Public : le bot le reçoit d'`agent_d_abord` et repasse alors par ses raccourcis.
+CASCADE_HABITUELLE = object()
+
+
+def agent_d_abord(texte: str, ctx: Optional[TenantContext], contexte_court=None):
+    """[US-287 / CA3] L'agent consulté seul, AVANT les raccourcis à mots-clés du bot.
+
+    Rend ce qu'`interpreter` rendrait de la réponse de l'agent (`None` compris : la phrase
+    poursuit son chemin sans repasser par les mots-clés), ou `CASCADE_HABITUELLE` hors du
+    mode `prioritaire`, pour une commande tapée, ou quand l'agent est indisponible (CA4) : le
+    bot suit alors ses raccourcis puis `interpreter(..., consulter_agent_d_abord=False)`.
+    """
+    return _l_agent_d_abord(texte, ctx, contexte_court, True, time.monotonic())
 
 
 def _l_agent_d_abord(texte: str, ctx: Optional[TenantContext], contexte_court, autoriser_modele: bool,
                      debut: float):
     """[Agent d'abord] En mode `prioritaire`, toute phrase libre va d'abord à l'agent : ni règle,
-    ni garde de savoir, ni filtre « geste annoncé » ne la lui prend. Rend `_CASCADE_HABITUELLE`
+    ni garde de savoir, ni filtre « geste annoncé » ne la lui prend. Rend `CASCADE_HABITUELLE`
     hors de ce mode, pour une commande tapée, ou quand l'agent est indisponible (quota, panne,
     pas d'outils) : les règles servent alors de mode dégradé."""
     libre = (texte or "").strip()
     if not (autoriser_modele and ctx is not None and libre and not libre.startswith("/")
             and _mode_agent() == MODE_PRIORITAIRE):
-        return _CASCADE_HABITUELLE
+        return CASCADE_HABITUELLE
     from app.services.agent import interpreteur_agent
 
     reponse_agent = interpreteur_agent.proposer(libre, ctx, contexte_court, prioritaire=True)
     if not reponse_agent.disponible:
         log.info("🎛️  INTERPRETEUR   : agent indisponible (%s) → mode dégradé, règles", reponse_agent.motif)
-        return _CASCADE_HABITUELLE
+        return CASCADE_HABITUELLE
     return _suite_de_l_agent(reponse_agent, libre, ctx, normaliser(libre)[0], debut, filet_carnet=False)
 
 
@@ -3362,6 +3411,7 @@ def _suite_de_l_agent(resultat, brut: str, ctx: TenantContext, normalise: str, d
         proposition=replace(proposition, latence_ms=latence) if proposition is not None else None,
         outils=resultat.outils, manque_catalogue=resultat.manque_catalogue,
         texte_origine=brut, latence_ms=latence, bouton_seul=resultat.bouton_seul,
+        question_en_attente=resultat.question_en_attente,
     )
 
 

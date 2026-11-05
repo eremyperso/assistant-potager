@@ -1,7 +1,7 @@
 ---
 titre: Semer et repiquer la tomate
 famille: agronomie
-source: Corpus de mesure US-098
+source: Assistant Potager — rédaction interne
 licence: proprietaire
 niveau_confiance: verifie
 culture: tomate

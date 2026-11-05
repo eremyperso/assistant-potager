@@ -1453,6 +1453,10 @@ class EchangeConversation(Base):
     outils          = Column(JSON, nullable=True)
     proposition_id  = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
     signal          = Column(String(64), nullable=True)
+    #: [US-284 / CA1] La question que le compagnon a posée pour faire ce que la phrase demandait :
+    #: {"phrase", "question", "choix"}. Lue avec la phrase suivante, 10 minutes au plus ;
+    #: seul le dernier échange compte (migration_v67).
+    question        = Column(JSON(none_as_null=True), nullable=True)
     cree_le         = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (

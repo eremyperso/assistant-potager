@@ -76,6 +76,48 @@ FAMILLES: frozenset[str] = frozenset({
     FAMILLE_AGRONOMIE, FAMILLE_DOC_APP, FAMILLE_MEMOIRE_POTAGER,
 })
 
+# [US-283 / CA1, CA4] Les sources admises, par famille. Une liste BLANCHE : un
+# document « Assistant Automobile — rédaction interne » ingéré en dev depuis le
+# corpus de test `tests/corpus/automobile/` remontait en tête d'une question de
+# sécurité, parce qu'il portait la famille `agronomie`. La famille se déclare,
+# la source s'affiche au jardinier : c'est elle qu'on ferme.
+SOURCE_GUIDE_APPLICATION = "Guide de l'Assistant Potager"
+SOURCE_MEMOIRE = "ton carnet du potager"
+
+
+def _attributions_du_socle() -> frozenset[str]:
+    """Les attributions du registre des sources (US-140 / CA4) : une fiche d'agronomie
+    affiche celle de sa licence, `controler_corpus_agronomie` le vérifie déjà."""
+    from app.services.referentiel_sources import SOURCES_SOCLE
+
+    return frozenset(entree["attribution"] for entree in SOURCES_SOCLE)
+
+
+SOURCES_PAR_FAMILLE: dict[str, frozenset[str]] = {
+    FAMILLE_DOC_APP: frozenset({SOURCE_GUIDE_APPLICATION}),
+    FAMILLE_AGRONOMIE: _attributions_du_socle(),
+    FAMILLE_MEMOIRE_POTAGER: frozenset({SOURCE_MEMOIRE}),
+}
+
+# [US-283 / CA1] Le domaine d'une question de l'agent : il désigne une famille, et
+# donc une liste de sources. « comment devenir autonome en tomates ? » ne doit pas
+# recevoir le passage du guide sur le plan d'occupation.
+DOMAINE_APPLICATION = "application"
+DOMAINE_JARDINAGE = "jardinage"
+DOMAINE_CARNET = "carnet"
+FAMILLE_PAR_DOMAINE: dict[str, str] = {
+    DOMAINE_APPLICATION: FAMILLE_DOC_APP,
+    DOMAINE_JARDINAGE: FAMILLE_AGRONOMIE,
+    DOMAINE_CARNET: FAMILLE_MEMOIRE_POTAGER,
+}
+DOMAINES: tuple[str, ...] = tuple(FAMILLE_PAR_DOMAINE)
+
+
+def source_autorisee(famille: str, source: str) -> bool:
+    """[US-283 / CA4] Vrai si `source` figure dans la liste blanche de `famille`."""
+    return (source or "").strip() in SOURCES_PAR_FAMILLE.get(famille, frozenset())
+
+
 NIVEAU_VERIFIE = "verifie"
 NIVEAU_INDICATIF = "indicatif"
 NIVEAUX_CONFIANCE: frozenset[str] = frozenset({NIVEAU_VERIFIE, NIVEAU_INDICATIF})
@@ -452,7 +494,8 @@ def resoudre_culture(db: Session, ctx: TenantContext, question: str) -> Optional
 # ─────────────────────────────────────────────────────────────────────────────
 def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
                         culture_id: Optional[int], type_fragment: Optional[str],
-                        limite: int, famille: Optional[str] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                        limite: int, famille: Optional[str] = None,
+                        sources: Optional[frozenset[str]] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     requete_texte = tsquery(question)
     rang = func.ts_rank_cd(
         KnowledgeChunk.recherche_fts, requete_texte, _NORMALISATION_RANG,
@@ -460,7 +503,7 @@ def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).add_columns(rang.label("rang")).filter(
         KnowledgeChunk.recherche_fts.op("@@")(requete_texte)
     )
-    requete = _restreindre(requete, culture_id, type_fragment, famille)
+    requete = _restreindre(requete, culture_id, type_fragment, famille, sources)
     lignes = requete.order_by(text("rang DESC")).limit(limite).all()
     return [(fragment, document, float(score or 0.0)) for fragment, document, score in lignes]
 
@@ -501,7 +544,8 @@ def score_lexical(termes: Iterable[str], indexe: Iterable[str]) -> float:
 
 def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
                     culture_id: Optional[int], type_fragment: Optional[str],
-                    limite: int, famille: Optional[str] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                    limite: int, famille: Optional[str] = None,
+                    sources: Optional[frozenset[str]] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     """Repli de test — même sémantique, moteur sans dictionnaire.
 
     Le classement est fait en Python sur les seuls fragments qui portent au
@@ -516,7 +560,7 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).filter(
         or_(*[KnowledgeChunk.recherche_fts.like(f"%{terme}%") for terme in termes])
     )
-    requete = _restreindre(requete, culture_id, type_fragment, famille)
+    requete = _restreindre(requete, culture_id, type_fragment, famille, sources)
 
     classees: list[tuple[KnowledgeChunk, KnowledgeDocument, float]] = []
     for fragment, document in requete.all():
@@ -528,16 +572,20 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
 
 
 def _restreindre(requete, culture_id: Optional[int], type_fragment: Optional[str],
-                 famille: Optional[str] = None):
+                 famille: Optional[str] = None, sources: Optional[frozenset[str]] = None):
     """[CA6] Restriction par métadonnée — appliquée seulement quand elle existe.
 
     [US-141 / CA5] `famille` n'est PAS une métadonnée du même ordre : c'est le
     REGISTRE que la question désigne, et il ne se relâche jamais (voir la boucle
     de tentatives dans `rechercher`). « Qu'ai-je noté sur les tomates ? » ne
     demande pas de conseil sur la tomate — elle demande les notes du jardinier.
+
+    [US-283 / CA1] `sources`, la liste blanche du domaine, ne se relâche pas non plus.
     """
     if famille:
         requete = requete.filter(KnowledgeDocument.famille == famille)
+    if sources is not None:
+        requete = requete.filter(KnowledgeDocument.source.in_(sorted(sources)))
     if culture_id is not None:
         requete = requete.filter(KnowledgeChunk.culture_id == culture_id)
     if type_fragment:
@@ -553,6 +601,7 @@ def rechercher(
     culture_id: Optional[int] = None,
     type_fragment: Optional[str] = None,
     famille: Optional[str] = None,
+    domaine: Optional[str] = None,
     detecter_metadonnees: bool = True,
     limite: int = RAG_MAX_PASSAGES,
     seuil: float = RAG_SEUIL_CONFIANCE,
@@ -578,9 +627,18 @@ def rechercher(
     remporte le classement à tous les coups. Un filtre qui viderait le résultat
     est un filtre faux ; un filtre qui rend le mauvais registre l'est aussi, et
     aucun assouplissement ne peut réparer cela.
+
+    [US-283 / CA1] `domaine` (`application`, `jardinage`, `carnet`) fixe la famille ET
+    la liste blanche de ses sources : une source hors liste n'est jamais rendue.
     """
     debut = time.monotonic()
     question = (question or "").strip()
+    sources: Optional[frozenset[str]] = None
+    if domaine is not None:
+        if domaine not in FAMILLE_PAR_DOMAINE:
+            raise ValueError(f"Domaine inconnu : {domaine!r} (attendu : {', '.join(DOMAINES)})")
+        famille = FAMILLE_PAR_DOMAINE[domaine]
+        sources = SOURCES_PAR_FAMILLE[famille]
     if not question:
         return ContexteConnaissance(question=question, issue=ISSUE_VIDE)
 
@@ -608,7 +666,7 @@ def rechercher(
     lignes: list = []
     metadonnees: dict[str, str] = {}
     for culture_essai, type_essai in tentatives:
-        lignes = classer(db, ctx, question, culture_essai, type_essai, limite, famille)
+        lignes = classer(db, ctx, question, culture_essai, type_essai, limite, famille, sources)
         if lignes:
             if culture_essai is not None:
                 metadonnees["culture_id"] = str(culture_essai)

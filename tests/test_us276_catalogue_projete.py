@@ -35,6 +35,11 @@ PARCELLES = ("Serre extérieure", "Planche Nord", "Planche Sud", "Planche Centra
 SUPPRIMER = "supprimer_parcelle"
 #: Taille du catalogue livré avant US-276 (JSON des 14 outils, mesurée sur le commit 5506714).
 CARACTERES_AVANT_US276 = 13_723
+#: [US-287] Plafond du catalogue complet. Il a regrossi depuis US-276 (formes et outils
+#: ajoutés jusqu'à `deplacer` : 14 354 caractères au 04/11/2026). Le relever est un
+#: choix conscient, à faire en même temps que l'ajout d'un outil : chaque caractère
+#: part dans CHAQUE appel de l'agent.
+PLAFOND_CATALOGUE = 14_500
 
 
 def _reponse(*appels: AppelOutil) -> ReponseOutils:
@@ -282,9 +287,10 @@ class TestCA4BisCreationDepliee:
 # ═════════════════════════════════════════════════════════════════════════════
 class TestCA5Allegement:
 
-    def test_us276_ca5_le_catalogue_complet_est_plus_court_qu_avant(self):
-        """Plus court malgré un outil de plus (`creer_parcelle` et `renommer_parcelle`)."""
-        assert _taille(PROJECTION_COMPLETE) < CARACTERES_AVANT_US276
+    def test_us276_ca5_le_catalogue_complet_reste_sous_son_plafond(self):
+        """US-276 l'avait ramené sous les 13 723 caractères d'avant ; les outils ajoutés
+        depuis l'ont fait regrossir. Il ne dépasse pas le plafond relevé consciemment."""
+        assert _taille(PROJECTION_COMPLETE) <= PLAFOND_CATALOGUE
 
     def test_us276_ca5_une_question_ne_porte_plus_qu_un_tiers_du_catalogue(self):
         assert _taille(PROJECTION_SANS_ECRITURE) * 3 < _taille(PROJECTION_COMPLETE)

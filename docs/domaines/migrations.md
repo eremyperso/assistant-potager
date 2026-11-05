@@ -1,6 +1,6 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v66),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v67),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
@@ -12,6 +12,7 @@ psql -d potager -f migrations/migration_v57.sql
 
 ## Ce que portent les dernières migrations
 
+- **v67 [US-284]** — la question en attente du compagnon. Ajoute à `echanges_conversation` `question` JSONB nullable (`{"phrase": phrase d'origine ancrée, "question", "choix": [parcelles nommées]}`). Seule celle du dernier échange du jardinier dans le potager est lue, 10 minutes au plus ; `conversations.clore_question` la remet à NULL quand une phrase la consomme sans laisser d'échange. RLS inchangée (stricte, v61). Additive, aucun backfill. Rollback : `rollback_v67.sql` (perd les questions en attente).
 - **v66 [US-267]** — le distributeur des messages spontanés. Ajoute à `potager_membres` `proactivite_compagnon` JSONB nullable (`{theme: {"mode": immediat|resume|coupe, "le", "auto"}}`, thème absent = défaut), `silence_debut` / `silence_fin` / `heure_resume` SMALLINT nullables (CHECK 0-23 ; NULL = 21 h, 8 h, 8 h ; début = fin : pas de silence). `signaux.etat` gagne `planifie` (CHECK recréé). Crée `messages_spontanes` (un message vers UN jardinier : `genre` signal|resume, `themes`, `texte`, `redige` agent|gabarit, `telegram_chat_id` / `telegram_message_id` gardés pour réécrire la carte — F2, `envoye_le`, `reaction_le`) et `envois_signaux` (le sort d'un signal pour un jardinier : `mode`, `etat` en_attente|envoye|ignore, `envoyer_le`, `motif`, `annonce_bascule`, `message_id` ON DELETE SET NULL, `signal_id` ON DELETE CASCADE) avec **UNIQUE `(signal_id, user_id)`**. **RLS stricte** par `potager_id` sur les deux. Purge à 30 jours avec les signaux. Additive, aucun backfill. Rollback : `rollback_v66.sql` (perd messages, envois et réglages ; `planifie` → `detecte`).
 
 - **v65 [US-266]** — crée `signaux` (ce que le veilleur a détecté, sans modèle : `theme`, `cle_unique`, `priorite` `immediat|normal|resume`, `expire_le`, `donnees` JSONB, `etat` `detecte|envoye|regroupe|ignore|repondu`, `detecte_le` ; `user_id` NULL = fait du potager) avec **UNIQUE `(potager_id, cle_unique)`** : un même fait (« gel:2026-10-28:parcelle-12 ») ne fait qu'un signal par potager. Crée aussi `rappels` (`objet`, `echeance_le`, `cible_type` / `cible_id`, `etat` `programme|echu|annule`, `proposition_id` ON DELETE SET NULL), que US-268 écrira après confirmation. **RLS stricte** par `potager_id` sur les deux (comme `actions_menees`) ; le veilleur arme chaque potager à son tour. Horodatages en heure locale (Europe/Paris), écrits par le service. Purge à 30 jours par le job de 04h00 (`compagnon/signaux.purger` ; un rappel encore programmé n'est jamais effacé). Additive, aucun backfill. Rollback : `rollback_v65.sql` (perd signaux et rappels).

@@ -43,13 +43,14 @@ def db(engine):
     session.close()
 
 
-def _make_event(id_, action, culture, variete=None, parcelle=None, quantite=10.0):
+def _make_event(id_, action, culture, variete=None, quantite=10.0):
+    # `Evenement.parcelle` est une propriété en lecture seule (nom lu par la relation) :
+    # aucun appel ne la renseignait, elle n'est plus passée au constructeur.
     return Evenement(
         id=id_,
         type_action=action,
         culture=culture,
         variete=variete,
-        parcelle=parcelle,
         quantite=quantite,
         unite="plants",
         date=datetime(2026, 4, 7),

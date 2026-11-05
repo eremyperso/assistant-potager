@@ -1,7 +1,7 @@
 ---
 titre: Arrosage et paillage au potager
 famille: agronomie
-source: Corpus de mesure US-098
+source: Assistant Potager — rédaction interne
 licence: proprietaire
 niveau_confiance: verifie
 type: arrosage

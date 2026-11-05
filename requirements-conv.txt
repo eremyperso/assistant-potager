@@ -1,0 +1,4 @@
+# Harnais de scénarios conversationnels (US-288) — poste de test et CI, jamais déployé.
+# Installer avec : pip install -r requirements-conv.txt
+telethon==1.45.0
+pyyaml>=6.0

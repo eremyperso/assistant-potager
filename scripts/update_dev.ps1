@@ -156,7 +156,7 @@ python tools/controler_aide_corpus.py
 if ($LASTEXITCODE -ne 0) { fail "un domaine de /help n'a plus de fiche (US-099 / CA7)." }
 python tools/controler_corpus_agronomie.py
 if ($LASTEXITCODE -ne 0) { fail "une fiche d'agronomie est refusee a la relecture (US-140)." }
-python tools/ingerer_connaissance.py --strict --elaguer
+python tools/ingerer_connaissance.py --strict --elaguer --purger-hors-liste
 if ($LASTEXITCODE -ne 0) { fail "ingestion du corpus en echec." }
 ok "corpus ingere (idempotent : aucune ecriture si rien n'a change)"
 

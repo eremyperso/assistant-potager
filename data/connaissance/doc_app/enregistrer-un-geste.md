@@ -71,7 +71,7 @@ Un geste peut naître de trois façons, et toutes trois finissent au même endro
 ## Un geste préparé attend, il ne se perd pas en route
 
 **Intention :** comprendre
-**On parle aussi de :** geste en attente ; je n'ai pas confirmé tout de suite ; file d'attente ; préparer plusieurs gestes ; confirmer plus tard
+**On parle aussi de :** geste en attente ; je n'ai pas confirmé tout de suite ; file d'attente ; préparer plusieurs gestes ; confirmer plus tard ; combien de temps un geste reste en attente
 
 Un geste lancé depuis un écran n'est pas enregistré : il est **mis en attente**, et il y reste trois jours. On peut donc en préparer plusieurs à la suite, devant l'écran, et les confirmer plus tard — c'est la façon normale de s'en servir, pas un rattrapage.
 
@@ -82,7 +82,7 @@ Chaque geste a sa propre échéance : en confirmer un ne prolonge pas les autres
 ## Quelle date porte un geste lancé depuis un écran
 
 **Intention :** comprendre
-**On parle aussi de :** date du geste ; pas la date que je regardais ; date à venir ; mauvaise date ; confirmé deux jours après
+**On parle aussi de :** date du geste ; pas la date que je regardais ; date à venir ; mauvaise date ; confirmé deux jours après ; pourquoi mon geste est daté d'aujourd'hui
 
 Un écran se consulte volontiers en avant : on regarde où en sera le jardin dans trois semaines. Un geste, lui, raconte ce qui vient d'être fait, et ne se date donc jamais dans le futur. Quand la date consultée est à venir, le geste lancé depuis cet écran prend la date du jour — et le bouton l'annonce avant qu'on appuie, jamais après coup. Quand la date consultée est passée, c'est elle qui est retenue : on peut donc rattraper un geste oublié sans rien redire.
 

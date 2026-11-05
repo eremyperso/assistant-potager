@@ -37,6 +37,7 @@ LONGUEUR_MAX_DESCRIPTION = 60
 # exclues restent pleinement fonctionnelles à la saisie manuelle (CA3bis) — les
 # retirer du menu ne les retire pas du bot.
 COMMANDES_EXCLUES: frozenset[str] = frozenset({
+    "reset_test",  # [US-288] mode test seulement : jamais proposée au jardinier
     "version",  # diagnostic sans usage quotidien ; la version se consulte en ligne
     "delier",   # action rare et destructive : à garder délibérée, pas à mettre en avant
     "tts",      # ne règle rien — affiche l'état puis renvoie vers /tts_on ou /tts_off,
@@ -54,6 +55,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "gestes",
     "note",
     "corriger",
+    "deplacer",
     "vendre",
     # Consultation
     "stats",
@@ -93,6 +95,7 @@ DESCRIPTIONS: dict[str, str] = {
     "gestes":      "Vos gestes préparés, en attente de confirmation",  # [US-224]
     "note":        "Noter une observation, guidé pas à pas",
     "corriger":    "Corriger ou supprimer un événement",
+    "deplacer":    "Déplacer une culture vers une autre parcelle",  # [US-287]
     "vendre":      "Enregistrer une vente de plants",
     "stats":       "Bilan chiffré de la saison",
     "historique":  "Vos 10 derniers événements",
@@ -602,6 +605,14 @@ FORMES_DICTABLES: tuple[FormeCommande, ...] = (
     ),
     FormeCommande("note", None, "Ouvrir la saisie guidée d'une note", confirmation=False),
     FormeCommande("corriger", None, "Ouvrir le parcours de correction", confirmation=False),
+    # [US-287 / CA3] Le parcours guidé d'US-007, offert à l'agent : en mode `prioritaire`, le
+    # raccourci à mots-clés qui l'ouvrait ne passe plus avant lui.
+    FormeCommande(
+        "deplacer", None, "Ouvrir le déplacement d'une culture vers une autre parcelle",
+        # Même type que la culture de /fiche ou /vendre : `afficher` garde un seul champ `culture`.
+        (Argument("culture", TYPE_CULTURE, "Quelle culture déplacer ?", obligatoire=False),),
+        confirmation=False,
+    ),
     FormeCommande(
         "vendre", None, "Ouvrir l'enregistrement d'une vente de plants",
         (
@@ -680,6 +691,10 @@ MOTIFS_EXCLUSION_INTERPRETEUR: dict[str, str] = {
     "profil": (
         "Le prénom se dit déjà en phrase (« appelle-moi Rico », proposition à confirmer, US-258) "
         "et le ton se choisit par boutons : une commande dictée en plus créerait deux chemins."
+    ),
+    "reset_test": (
+        "[US-288] Remise à zéro du harnais tests_conv, enregistrée seulement en APP_ENV=test : "
+        "une phrase ne doit jamais pouvoir vider un potager."
     ),
 }
 

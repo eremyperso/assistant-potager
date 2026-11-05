@@ -83,6 +83,7 @@ data/           référentiel structuré (JSON) et corpus de connaissance (Markd
 migrations/     SQL manuel, v2 → v48, rollback_vN.sql depuis v16
 tests/          pytest, SQLite en mémoire
 tools/          import, ingestion, mesures, purge, suivi Jira
+tests_conv/     scénarios Markdown joués sur Telegram (Telethon) → python -m tests_conv
 scripts/        update_dev.ps1 (env dev), deploy.sh (repli manuel)
 infra/          unités systemd ; .github/workflows/ : déploiement dev et prod
 frontend/       dashboard React (Vite) ; static/ : ancienne PWA de repli
@@ -102,6 +103,7 @@ uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload   # API + frontend 
 pytest tests/                                     # suite complète (SQLite, sans PostgreSQL)
 pytest tests/test_us006_renommer_parcelle.py      # un fichier
 pytest tests/ -k "nom_du_test"                    # un test
+python -m tests_conv validate                     # scénarios conversationnels (voir docs/domaines/tests-conversationnels.md)
 
 psql -d potager -f migrations/migration_v48.sql   # dernière migration
 .\scripts\update_dev.ps1                          # pull + deps + migrations + corpus ; -SkipPull, -Force

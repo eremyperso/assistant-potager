@@ -234,3 +234,54 @@ class TestCorpusDeTerrain:
     def test_potager_sans_utilisateur_est_refuse(self):
         with pytest.raises(SystemExit):
             ed.main(["--potager", "33", "--dry-run"])
+
+
+class TestTexteAttendu:
+    """[US-280 / CA6] Une réponse en texte sans le texte attendu n'est pas un bon outil."""
+
+    def _attendu(self, *expressions: str) -> "ed.Attendu":
+        return ed.Attendu(outils=("texte",), ecriture=False, texte_attendu=expressions)
+
+    def test_le_corpus_charge_les_questions_avec_leur_texte_attendu(self):
+        avec = [d.id for d in ed.charger_corpus(ed.CORPUS_TERRAIN)
+                if d.tours[0].attendu and d.tours[0].attendu.texte_attendu]
+        # [US-286 / CA6] TER-31 attend aussi un texte : « il vient d'être retiré », après l'annonce de purge.
+        assert avec == [f"TER-{n:02d}" for n in range(1, 17)] + ["TER-31"]
+
+    def test_lyon_exige_lyon_et_refuse_la_pluie_des_trois_jours(self):
+        ter04 = next(d for d in ed.charger_corpus(ed.CORPUS_TERRAIN) if d.id == "TER-04")
+        attendu = ter04.tours[0].attendu
+        assert attendu.texte_attendu == ("Lyon",)
+        assert ed._couperets(attendu, (), ["Il est tombé 0.0 mm de pluie sur les 3 derniers jours"], False) == [
+            "texte_interdit"]
+
+    def test_une_expression_suffit_sans_tenir_compte_des_accents_ni_de_la_casse(self):
+        attendu = self._attendu("décembre", "novembre")
+        assert ed.texte_attendu_present(attendu, ["Nous sommes le 2 NOVEMBRE 2026."]) is True
+        assert ed.texte_attendu_present(self._attendu("pépinière"), ["Ta PEPINIERE est vide"]) is True
+
+    def test_une_reponse_sans_l_expression_est_fausse(self):
+        assert ed.texte_attendu_present(self._attendu("radis"), ["Ton dernier semis est une tomate."]) is False
+
+    def test_sans_texte_attendu_ou_sans_texte_lu_le_tour_ne_se_juge_pas(self):
+        assert ed.texte_attendu_present(ed.Attendu(outils=("texte",)), ["peu importe"]) is None
+        assert ed.texte_attendu_present(self._attendu("radis"), ["", "  "]) is None
+        assert ed.texte_attendu_present(self._attendu("radis"), []) is None
+
+    def test_le_rapport_ajoute_la_colonne_reponses_justes(self):
+        def tour(juste: bool) -> "ed.ResultatTour":
+            t = _tour_texte(juste)
+            return t
+        rapport = ed.rediger_rapport({"m": [tour(True), tour(False)]}, "m", ed.TARIFS_01_11_2026)
+        assert "Réponses justes" in rapport
+        ligne = next(l for l in rapport.splitlines() if l.startswith("| **Total**"))
+        assert "1/2 (50 %)" in ligne
+
+
+def _tour_texte(juste: bool) -> "ed.ResultatTour":
+    notes = ed.ev.Notes(outil_ok=juste, parametres_ok=None, champs_en_trop=(), appels_multiples=False,
+                        destructif_errone=False, echec_technique=False)
+    return ed.ResultatTour(
+        dialogue="D", categorie="questions_croisees", rang=1, phrase="p", attendu=ed.Attendu(outils=("texte",)),
+        statut="ok", appels=(), vu="", notes=notes, couperets=(), texte_juste=juste, appels_modele=1,
+    )

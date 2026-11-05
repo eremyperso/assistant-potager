@@ -31,12 +31,19 @@ Les bornes :
 son identifiant (que `confirmer_proposition` et `abandonner_proposition` doivent
 reprendre), la dernière proposition TRAITÉE (un « oui » tardif ne refait rien) et les
 propositions qui attendent dans un autre potager (deux candidates : on demande laquelle).
+
+[US-284] Et la QUESTION que le compagnon vient de poser pour faire ce que la phrase
+demandait (« Laquelle : planche test ou plant tubercule ? ») : la réponse courte qui
+suit (« la planche test », « oui ») est lue avec elle, comme une suite de proposition.
+Une question n'est pas un état : elle vit sur le dernier échange de la conversation,
+10 minutes au plus, et la phrase suivante la consomme, qu'elle y réponde ou non.
 """
 from __future__ import annotations
 
 import json
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Optional
 
@@ -51,6 +58,7 @@ from app.services.interpreteur_commandes import (
     CommandeInterpretee,
     Plan,
     ReponseAgent,
+    normaliser,
 )
 
 #: [US-259 / CA5] Durée de vie d'une proposition de conversation (30 min).
@@ -60,6 +68,10 @@ NB_ECHANGES_MAX = 10
 #: Un échange tient en une ligne : une phrase dictée longue est tronquée par le DÉBUT,
 #: la dernière phrase du jardinier étant à la fin d'une demande prolongée.
 LONGUEUR_MAX = 120
+#: [US-284 / CA1] Durée de vie d'une question en attente (10 min).
+DELAI_QUESTION_S = 600
+#: La phrase d'origine et la question gardées, tronquées par le DÉBUT (la question est à la fin).
+LONGUEUR_QUESTION_MAX = 300
 
 
 @dataclass(frozen=True)
@@ -69,6 +81,36 @@ class Echange:
     texte: str
     resume: str
     ts: float
+    #: [US-284 / CA1] La question en attente que cet échange a laissée (`QuestionEnAttente.donnees`).
+    question: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class QuestionEnAttente:
+    """[US-284 / CA1] La question que le compagnon a posée pour faire ce que la phrase demandait.
+
+    `phrase` est la phrase d'origine, ANCRÉE (« Supprime la planche », ou « Supprime la
+    planche ; la planche » quand une réponse amène une seconde question) : c'est elle que le
+    validateur reprend devant la réponse. `choix` : les parcelles du potager que la question nomme.
+    """
+
+    phrase: str
+    question: str
+    choix: tuple[str, ...] = ()
+    ts: float = 0.0
+
+    def donnees(self) -> dict:
+        """La forme rangée en base (colonne `question` de l'échange)."""
+        return {"phrase": self.phrase, "question": self.question, "choix": list(self.choix)}
+
+    @classmethod
+    def depuis(cls, donnees: Optional[dict], ts: float = 0.0) -> Optional["QuestionEnAttente"]:
+        """Relue depuis un échange ; None s'il n'en porte pas (ou une forme illisible)."""
+        if not isinstance(donnees, dict) or not donnees.get("phrase") or not donnees.get("question"):
+            return None
+        choix = donnees.get("choix") or ()
+        return cls(phrase=str(donnees["phrase"]), question=str(donnees["question"]),
+                   choix=tuple(str(c) for c in choix if c), ts=ts)
 
 
 @dataclass(frozen=True)
@@ -112,6 +154,12 @@ class ContexteCourt:
     #: [US-267 / CA8] Le message que le compagnon a envoyé DE LUI-MÊME et auquel le jardinier
     #: répond peut-être : son texte et les faits du signal d'origine.
     spontane: Optional[dict] = None
+    #: [US-284 / CA2] La question que le compagnon vient de poser, à laquelle la phrase répond sans doute.
+    question: Optional[QuestionEnAttente] = None
+
+    def sans_question(self) -> "ContexteCourt":
+        """[US-284 / CA4] Le même contexte, la question effacée : la phrase est une demande nouvelle."""
+        return replace(self, question=None)
 
     @property
     def en_attente(self) -> bool:
@@ -162,6 +210,11 @@ class ContexteCourt:
             donnees["propositions_dans_d_autres_potagers"] = list(self.ailleurs)
         if self.spontane:
             donnees["message_spontane"] = self.spontane
+        if self.question is not None:
+            question: dict = {"phrase_du_jardinier": self.question.phrase, "ta_question": self.question.question}
+            if self.question.choix:
+                question["choix"] = list(self.question.choix)
+            donnees["question_en_attente"] = question
         donnees["derniers_echanges"] = [
             {"jardinier": _tronque(e.texte), "bot": _tronque(e.resume)}
             for e in self.echanges[-NB_ECHANGES_MAX:]
@@ -186,6 +239,7 @@ class ContexteCourt:
                 "peut-être. Sers-toi des faits du signal pour la comprendre (lot, parcelle, culture). "
                 "Un geste qu'il rapporte se propose, il ne s'annonce jamais comme fait."
             )
+        entete += self._consigne_question()
         if not self.en_attente:
             # [US-259] Pas de proposition : les échanges seuls, pour qu'une phrase
             # puisse renvoyer à la précédente (« et pour la serre ? »).
@@ -209,6 +263,22 @@ class ContexteCourt:
             "nom déjà proposé ou écarté. Si la phrase n'a aucun rapport avec la proposition, traite-la "
             "comme une demande nouvelle.\n"
             + self._consigne_decision()
+        )
+
+    def _consigne_question(self) -> str:
+        """[US-284 / CA2, CA3] Comment lire une réponse à la question posée — dans la partie variable,
+        jamais dans le prompt fixe : sans question en attente, le message système reste celui mesuré."""
+        if self.question is None:
+            return ""
+        return (
+            "\nTu viens de poser une question au jardinier (question_en_attente) pour faire ce que "
+            "demandait sa phrase d'origine. Sa phrase y RÉPOND sans doute, d'un mot : un choix (« la "
+            "planche test »), une valeur, ou un accord (« oui », « vas-y », « d'accord »). Fais alors ce "
+            "que demandait la phrase d'origine avec sa réponse : appelle l'outil de commande avec la "
+            "demande complète. Un accord accepte l'action que ta question offrait : propose-la, ne salue "
+            "pas, ne repose pas la question. L'application lui demandera elle-même de confirmer : ne "
+            "demande jamais de confirmation en texte. S'il refuse (« non », « laisse tomber »), ne propose "
+            "rien. Si sa phrase n'a aucun rapport, traite-la comme une demande nouvelle."
         )
 
     def _consigne_decision(self) -> str:
@@ -239,9 +309,70 @@ class ContexteCourt:
         return ""
 
 
-def _tronque(texte: str) -> str:
+def _tronque(texte: str, longueur: int = LONGUEUR_MAX) -> str:
     texte = " ".join((texte or "").split())
-    return texte if len(texte) <= LONGUEUR_MAX else "…" + texte[-(LONGUEUR_MAX - 1):]
+    return texte if len(texte) <= longueur else "…" + texte[-(longueur - 1):]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-284] La question en attente
+# ═════════════════════════════════════════════════════════════════════════════
+#: [US-284 / CA3] Une question qui OFFRE une action : « veux-tu que je… ? », « si tu veux, je… ».
+_OFFRE_D_ACTION = re.compile(
+    r"\b(?:veux tu|voulez vous|tu veux|vous voulez|souhaites tu|souhaitez vous|tu souhaites|"
+    r"si tu (?:le )?veux|si vous (?:le )?voulez|dois je|puis je|je peux|je (?:te|vous) propose)\b"
+)
+#: [US-284 / CA4] Un refus de ce que la question offrait : rien n'est relancé.
+_REFUS_D_UNE_QUESTION = re.compile(
+    r"(?:non|nan|non merci|laisse tomber|laisse|oublie|annule|pas maintenant|plus tard|"
+    r"ni l un ni l autre|aucune?|rien|non c est bon|c est bon merci)"
+)
+
+
+def offre_une_action(texte: str) -> bool:
+    """[US-284 / CA3] Le texte du compagnon pose-t-il une question qui offre une action ?"""
+    return "?" in (texte or "") and bool(_OFFRE_D_ACTION.search(normaliser(texte or "")[0]))
+
+
+def refuse_la_question(phrase: str) -> bool:
+    """[US-284 / CA4] « non », « laisse tomber » : la réponse refuse ce que la question offrait."""
+    return bool(_REFUS_D_UNE_QUESTION.fullmatch(normaliser(phrase or "")[0].strip(" ,.;!")))
+
+
+def choix_nommes(question: str, noms_parcelles: tuple[str, ...]) -> tuple[str, ...]:
+    """[US-284 / CA1] Les parcelles du potager que la question nomme, dans l'ordre où elle les dit."""
+    normalise = normaliser(question or "")[0]
+    trouves: list[tuple[int, str]] = []
+    for nom in noms_parcelles:
+        forme = normaliser(nom or "")[0].strip()
+        trouve = re.search(rf"\b{re.escape(forme)}\b", normalise) if forme else None
+        if trouve is not None:
+            trouves.append((trouve.start(), nom))
+    return tuple(nom for _, nom in sorted(trouves))
+
+
+def nouvelle_question(phrase: str, texte: str, noms_parcelles: tuple[str, ...] = ()) -> QuestionEnAttente:
+    """[US-284 / CA1] La question en attente que laisse `texte`, posé après `phrase` (ancrée)."""
+    return QuestionEnAttente(
+        phrase=_tronque(phrase, LONGUEUR_QUESTION_MAX),
+        question=_tronque(texte, LONGUEUR_QUESTION_MAX),
+        choix=choix_nommes(texte, noms_parcelles),
+    )
+
+
+def question_de(echanges: tuple[Echange, ...], maintenant: Optional[float] = None,
+                delai: float = DELAI_QUESTION_S) -> Optional[QuestionEnAttente]:
+    """[US-284 / CA1, CA4] La question en attente : celle du DERNIER échange, dans son délai.
+
+    Un échange plus récent l'a consommée : c'est ainsi qu'une phrase sans rapport l'efface.
+    """
+    if not echanges:
+        return None
+    dernier = echanges[-1]
+    maintenant = time.time() if maintenant is None else maintenant
+    if dernier.question is None or maintenant - dernier.ts > delai:
+        return None
+    return QuestionEnAttente.depuis(dernier.question, dernier.ts)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -290,7 +421,10 @@ def echange_de(resultat, maintenant: Optional[float] = None) -> Optional[Echange
     texte = getattr(resultat, "texte_origine", "") or ""
     if isinstance(resultat, Plan) and not texte and resultat.etapes:
         texte = resultat.etapes[0].texte_origine
-    return Echange(texte, resume, time.time() if maintenant is None else maintenant)
+    # [US-284 / CA1] La question que le compagnon vient de poser reste sur l'échange.
+    question = getattr(resultat, "question_en_attente", None)
+    return Echange(texte, resume, time.time() if maintenant is None else maintenant,
+                   question.donnees() if question is not None else None)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -309,6 +443,7 @@ def construire(
     ailleurs: tuple[str, ...] = (),
     traitee: Optional[Traitee] = None,
     spontane: Optional[dict] = None,
+    question: Optional[QuestionEnAttente] = None,
 ) -> Optional[ContexteCourt]:
     """[CA1, CA5, CA6] Le contexte de la conversation, ou None.
 
@@ -327,6 +462,9 @@ def construire(
 
     [US-267 / CA8] `spontane` : le message spontané auquel le jardinier répond peut-être ;
     il suffit, seul, à faire un contexte.
+
+    [US-284 / CA2] `question` : la question en attente (`question_de`). Elle suffit, seule, à
+    faire un contexte, et prime sur la dernière proposition traitée, qu'un « oui » ne vise plus.
     """
     maintenant = time.time() if maintenant is None else maintenant
     echanges = tuple(echanges)[-NB_ECHANGES_MAX:]
@@ -339,7 +477,7 @@ def construire(
             commandes=tuple(e.commande_equivalente() for e in commande.etapes),
             texte_origine=commande.texte_origine, echanges=echanges, plan=True,
             code=code, destructrice=decisions.est_destructrice(commande), ailleurs=tuple(ailleurs),
-            spontane=spontane,
+            spontane=spontane, question=question,
         )
     if reprise and isinstance(commande, CommandeInterpretee):
         return ContexteCourt(
@@ -350,9 +488,12 @@ def construire(
             echanges=echanges,
             code=code, destructrice=decisions.est_destructrice(commande),
             prete=decisions.est_prete(commande), ailleurs=tuple(ailleurs),
-            spontane=spontane,
+            spontane=spontane, question=question,
         )
-    if echanges or ailleurs or traitee is not None or spontane:
+    if question is not None:
+        traitee = None
+    if echanges or ailleurs or traitee is not None or spontane or question is not None:
         return ContexteCourt(commandes=(), texte_origine="", echanges=echanges,
-                             ailleurs=tuple(ailleurs), traitee=traitee, spontane=spontane)
+                             ailleurs=tuple(ailleurs), traitee=traitee, spontane=spontane,
+                             question=question)
     return None

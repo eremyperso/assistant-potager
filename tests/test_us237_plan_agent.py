@@ -153,7 +153,7 @@ class TestCA1Lecture:
         outil = catalogue_outils.outils_par_nom()[OUTIL_LIRE]
         assert outil.lecture and not outil.terminal and not outil.formes
         quoi = outil.schema["function"]["parameters"]["properties"]["quoi"]["enum"]
-        assert quoi == ["parcelle", "parcelles", "lot", "culture", "actions"]   # [US-261 / CA4]
+        assert quoi == ["parcelle", "parcelles", "lot", "culture", "actions", "gestes_en_attente"]   # [US-261 / CA4, US-286 / CA2]
         assert len(catalogue_outils.outils()) <= catalogue_outils.NB_OUTILS_MAX
         assert catalogue_outils.controler_parite_outils() == []
 
@@ -285,9 +285,14 @@ class TestCA2CA3EtatSimule:
         verdict = valider_plan((REGLER, CREER), _contexte())
         assert verdict.plan is None and "Étape 1" in verdict.precision
 
-    def test_us237_ca3_creer_une_parcelle_qui_existe_est_signale(self):
-        plan = _plan(noms=("Serre", "Planche Sud", "Planche Nord"))
-        assert plan.deja_faites == (0,)
+    def test_us237_ca3_creer_une_parcelle_qui_existe_est_refuse(self):
+        """[US-281 / CA4] Une parcelle active ne se recrée pas : le plan est refusé, la raison le dit."""
+        verdict = valider_plan((CREER, REGLER, SERRE_FROIDE), _contexte(("Serre", "Planche Sud", "Planche Nord")))
+        assert verdict.plan is None
+        assert "« Planche Nord » existe déjà" in verdict.precision
+
+    def test_us237_ca3_une_creation_repetee_dans_le_plan_est_signalee(self):
+        plan = _plan(CREER, CREER)
         recap = interp.recapitulatif_plan(plan)
         assert "existe déjà : je passe à l'étape suivante ?" in recap
 
@@ -463,11 +468,11 @@ class TestCA6CA7Execution:
         assert _parcelle(potager, "Serre").nb_rangs is None
 
     def test_us237_ca3_une_etape_deja_faite_est_sautee_sans_arreter(self, potager):
-        create_parcelle(potager, "Planche Nord", potager_id=1)
-        plan = _plan(CREER, SERRE_FROIDE, noms=("Serre", "Planche Sud", "Planche Nord"))
+        # [US-281 / CA4] Seule la même création répétée dans le plan est encore « déjà faite ».
+        plan = _plan(CREER, CREER, SERRE_FROIDE)
         resultats = executeurs.executer_plan(plan, CTX)
-        assert [r.statut for r in resultats] == ["non_executee", "reussie"]
-        assert "existait déjà" in resultats[0].message
+        assert [r.statut for r in resultats] == ["reussie", "non_executee", "reussie"]
+        assert "existait déjà" in resultats[1].message
 
     def test_us237_ca7_un_lecteur_voit_l_etape_refusee(self, potager):
         lecteur = TenantContext(user_id=2, potager_id=1, role="lecteur")

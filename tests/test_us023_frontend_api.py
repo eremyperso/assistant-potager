@@ -119,8 +119,14 @@ def test_us023_ca6_cors_origin_dev_accepte(app_client):
     assert "access-control-allow-origin" in resp.headers
 
 
-# ─── Edge : route inconnue → 404 ─────────────────────────────────────────────
+# ─── Edge : route inconnue → la PWA, sans crash ───────────────────────────────
 
-def test_us023_edge_route_inconnue_404(app_client):
-    """Edge — Route inexistante retourne 404 sans crash."""
-    assert app_client.get("/inexistant").status_code == 404
+def test_us023_edge_route_inconnue_sans_crash(app_client):
+    """Edge — Route inexistante : jamais d'erreur serveur.
+
+    Depuis US-044, un GET sur une route inconnue sert index.html (repli SPA :
+    c'est le routeur du front qui décide). Sans front buildé ni PWA, 404."""
+    resp = app_client.get("/inexistant")
+    assert resp.status_code in (200, 404)
+    if resp.status_code == 200:
+        assert resp.headers["content-type"].startswith("text/html")

@@ -147,7 +147,8 @@ class TestCA1Catalogue:
         consulter = catalogue_outils.outils_par_nom()[OUTIL_CONSULTER]
         assert all(not f.confirmation for f in consulter.formes)
         enum = consulter.schema["function"]["parameters"]["properties"]["commande"]["enum"]
-        assert "meteo" in enum and "parcelle lister" in enum
+        # [US-282 / CA3] La météo a son outil de savoir : un seul chemin pour l'agent.
+        assert "meteo" not in enum and "parcelle lister" in enum
 
     def test_us235_ca1_une_destructrice_a_son_propre_outil(self):
         for outil in catalogue_outils.outils():
@@ -252,12 +253,12 @@ class TestCA3Parite:
         assert catalogue_outils.controler_parite_outils() == []
 
     def test_us235_ca3_une_forme_sans_outil_fait_echouer(self, monkeypatch):
-        sans_meteo = tuple(
-            replace(o, formes=tuple(f for f in o.formes if f.commande != "meteo"))
+        sans_historique = tuple(
+            replace(o, formes=tuple(f for f in o.formes if f.commande != "historique"))
             for o in catalogue_outils.outils()
         )
-        monkeypatch.setattr(catalogue_outils, "_CACHE", sans_meteo)
-        assert any("/meteo n'a pas d'outil" in a for a in catalogue_outils.controler_parite_outils())
+        monkeypatch.setattr(catalogue_outils, "_CACHE", sans_historique)
+        assert any("/historique n'a pas d'outil" in a for a in catalogue_outils.controler_parite_outils())
 
     def test_us235_ca3_un_outil_sans_forme_fait_echouer(self, monkeypatch):
         orphelin = catalogue_outils.Outil("exporter_excel", {"type": "function", "function": {}})
@@ -581,7 +582,8 @@ class TestCA10CA11Recapitulatif:
         ({"ensoleillement": "plein soleil"}, "l'ensoleillement de Planche Nord à plein soleil"),
     ])
     def test_us235_ca11_sens_de_chaque_champ(self, arguments, attendu):
-        texte = ("la planche nord : paillage, abri, en service, pépinière froide, "
+        # [US-281 / CA3] `actif=false` n'est accepté que si la phrase dit la mise hors service.
+        texte = ("la planche nord : paillage, abri, en service ou hors service, pépinière froide, "
                  "ensoleillement plein soleil")
         recap = _sans_gras(self._recap(texte, {"parcelle": "Planche Nord", **arguments}))
         assert attendu in recap
@@ -1067,14 +1069,15 @@ class TestINC018SchemaNullable:
         assert "ne se déduit pas du nom" in description
 
     @pytest.mark.parametrize("arguments", [
-        {"nom": "Planche Nord", "exposition": None, "superficie_m2": None},
-        {"nom": "Planche Nord", "superficie_m2": None},
-        {"nom": "Planche Nord", "exposition": "", "superficie_m2": None, "nb_rangs": None},
+        {"nom": "Planche Est", "exposition": None, "superficie_m2": None},
+        {"nom": "Planche Est", "superficie_m2": None},
+        {"nom": "Planche Est", "exposition": "", "superficie_m2": None, "nb_rangs": None},
     ])
     def test_inc018_null_vaut_non_dit_a_la_validation(self, arguments):
-        verdict = _valider("crée la planche Nord", "creer_parcelle", arguments)
+        # [US-281 / CA4] Une parcelle qui n'existe pas encore : « Planche Nord » serait refusée.
+        verdict = _valider("crée la planche Est", "creer_parcelle", arguments)
         assert verdict.commande is not None
-        assert verdict.commande.valeurs == {"nom": "Planche Nord"}
+        assert verdict.commande.valeurs == {"nom": "Planche Est"}
 
     def test_inc018_null_sur_une_modification_de_parcelle(self):
         verdict = _valider(

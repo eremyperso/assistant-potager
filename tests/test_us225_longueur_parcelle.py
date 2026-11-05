@@ -490,6 +490,10 @@ def test_us225_ca8_aucun_moteur_de_calcul_ne_lit_la_longueur() -> None:
         # [US-278] Le filet des caractéristiques LIT la valeur dictée pour la proposer ;
         # il ne calcule rien, l'écriture reste celle de `/parcelle modifier`.
         Path("app/services/agent/filet_fiche.py"),
+        # [US-227] Les suggestions d'échéance passent la longueur à
+        # `repartition_rangs._places_du_rang`, sans calcul propre : les places
+        # d'un rang se comptent toujours au même endroit.
+        Path("app/services/echeances_lots.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

@@ -50,3 +50,8 @@ ds-bundle/
 .coverage
 htmlcov/
 rapport_tests.html
+
+# Mode test conversationnel [US-288]
+.env.test
+rapports_conv/
+*.session

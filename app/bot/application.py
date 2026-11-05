@@ -4,7 +4,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, TypeHandler
-from app.config import TELEGRAM_BOT_TOKEN, etat_configuration
+from app.config import APP_ENV, TELEGRAM_BOT_TOKEN, etat_configuration
 from database.db import current_potager_id
 from utils.tts import is_tts_enabled
 from app.services.context import default_context
@@ -41,6 +41,7 @@ from .saisie import (
     cmd_vendre,
 )
 from .correction import _corr_start
+from .deplacement import cmd_deplacer  # [US-287]
 from .commandes_parcelle import _cmd_parcelles_lister, _parcelle_ajout_cb, _parcelle_suppr_cb, cmd_parcelle
 from .commandes_culture import (
     cmd_association,
@@ -55,6 +56,7 @@ from .commandes_plan import cmd_plan
 from .commandes_profil import cmd_profil, _profil_cb
 from .commandes_carnet import cmd_carnet, _carnet_cb
 from .commandes_rappels import cmd_rappel, cmd_rappels, _rappel_cb
+from .mode_test import cmd_reset_test  # [US-288]
 from .commandes_stats import (
     cmd_ask,
     cmd_historique,
@@ -186,6 +188,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "ask",        cmd_ask)
     _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
     _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
+    _enregistrer_commande(app, "deplacer",   cmd_deplacer)  # [US-287]
     _enregistrer_commande(app, "gestes",     cmd_gestes)  # [US-224]
     _enregistrer_commande(app, "lot",        cmd_lot)  # [US-209]
     _enregistrer_commande(app, "lier",       cmd_lier)  # [US-045]
@@ -196,6 +199,8 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "carnet",     cmd_carnet)  # [US-265]
     _enregistrer_commande(app, "rappel",     cmd_rappel)  # [US-268]
     _enregistrer_commande(app, "rappels",    cmd_rappels)  # [US-268]
+    if APP_ENV == "test":  # [US-288] remise à zéro du harnais tests_conv, jamais en dev ni en prod
+        _enregistrer_commande(app, "reset_test", cmd_reset_test)
 
     # Commandes TTS
     _enregistrer_commande(app, "tts",        cmd_tts)

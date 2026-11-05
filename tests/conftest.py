@@ -67,8 +67,17 @@ def memoire_compagnon(_moteur_compagnon, monkeypatch):
 
 @pytest.fixture(scope="session")
 def test_engine():
-    """Engine de test SQLite en mémoire."""
-    engine = create_engine("sqlite:///:memory:")
+    """Engine de test SQLite en mémoire.
+
+    Une seule connexion partagée par tous les threads (StaticPool) : avec le pool par
+    défaut d'une base `:memory:`, chaque thread reçoit sa propre base VIDE, et l'API
+    appelée par TestClient (thread de travail) ne voyait pas les tables du test
+    (`no such table: potagers`, 500 sur POST /parse)."""
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False},
+    )
     Base.metadata.create_all(bind=engine)
     return engine
 

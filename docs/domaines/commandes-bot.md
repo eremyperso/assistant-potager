@@ -233,7 +233,34 @@ phrase, `app/config.py`) :
 | `off` (défaut du code) | l'ancien `_appeler_modele` (format texte, seuil 0,7), comme avant |
 | `ombre` | l'ancien repli répond ; l'agent est consulté **à côté** (fil d'arrière-plan) et ce qu'il aurait proposé est journalisé (`issue_interpretation = 'ombre'`) |
 | `actif` | l'agent, sans seuil de confiance (CA9) ; s'il est indisponible (429, panne, outils non gérés, appel malformé), l'ancien repli (CA13) ; **si lui non plus ne propose rien et que la phrase demande d'agir, un message explicite** (INC-018, voir plus bas), jamais le routeur |
-| `prioritaire` | *En mesure (01/11/2026).* L'ordre s'inverse : `_l_agent_d_abord` envoie toute phrase libre à l'agent AVANT les règles, avec le catalogue complet, les outils de savoir et `PROMPT_FIXE_PRIORITAIRE` ; les règles et l'ancien repli ne servent qu'en mode dégradé (agent indisponible). Hérite de tout ce que `actif` ouvre (`agent_actif()`). Les raccourcis du bot placés avant `interpreter` (annuler, godets, déplacer, note) restent en place : le catalogue ne les couvre pas encore |
+| `prioritaire` | *La cible (US-287, décision D14), en dev d'abord.* L'ordre s'inverse : `_l_agent_d_abord` envoie toute phrase libre à l'agent AVANT les règles, avec le catalogue complet, les outils de savoir et `PROMPT_FIXE_PRIORITAIRE` ; les règles et l'ancien repli ne servent qu'en mode dégradé (agent indisponible). Hérite de tout ce que `actif` ouvre (`agent_actif()`). Dans `handle_text`, l'agent passe aussi AVANT les raccourcis à mots-clés (voir ci-dessous) |
+
+#### Les raccourcis à mots-clés en mode `prioritaire` [US-287]
+
+`handle_text` appelle `interpreteur_commandes.agent_d_abord` après les gardes de
+dialogue en cours (correction, déplacement, note, complétion, `ask`, réponse à un
+message spontané) et après `_phrase_de_dialogue` (profil, carnet), mais AVANT
+`_raccourcis_a_mots_cles` (PRIORITÉ 3 → 3d). Il rend la réponse de l'agent, ou
+`CASCADE_HABITUELLE` (hors `prioritaire`, commande tapée, agent indisponible) :
+seulement alors les raccourcis jouent, puis `interpreter(…, consulter_agent_d_abord=False)`
+— un second appel ne rapporterait qu'un second 429. Une phrase que l'agent laisse
+(`None`) ne repasse jamais par les mots-clés : elle va au routeur.
+
+| Raccourci | Équivalent dans le catalogue de l'agent |
+|---|---|
+| supprimer / effacer / annuler en tête | `annuler_action` (geste récent), destructeurs (`supprimer_parcelle`…), `afficher` → `corriger` |
+| corriger / modifier en tête | `corriger_action`, `afficher` → `corriger` |
+| godets (`_is_requete_godets`) | `afficher` → `lot`, `lire(quoi="lot")` |
+| déplacer une culture (`is_deplacer_request`) | `afficher` → `deplacer` : **`/deplacer [culture]`**, créée pour l'occasion, ouvre le parcours d'US-007 (`cmd_deplacer`) |
+| note guidée (`_is_note_request`) | `afficher` → `note` |
+
+Le raccourci « déplacer » ne pouvait pas rester gardé : ses mots-clés
+(« associer », « rattacher », « nouvelle parcelle ») prennent « associer tomate et
+basilic » ou « ajoute une nouvelle parcelle Est ». La règle `deplacer` est étroite
+(verbe en tête) et écarte un lot, des godets, une pépinière, un châssis ou la serre :
+ce déplacement-là est un geste (US-211). Les textes EXACTS de `NAV_SUPPRIMER` et
+`NAV_CORRIGER` (boutons, mot seul) restent servis sans agent dans tous les modes.
+Le canal vocal n'avait aucun raccourci avant `interpreter` : il ne change pas.
 
 Le paquet `app/services/agent/` : `catalogue_outils` (15 outils GÉNÉRÉS depuis
 `FORMES_DICTABLES` et les caractéristiques de parcelle ; `controler_parite_outils()`
@@ -641,6 +668,32 @@ fiable. Recette du 29/10/2026 : `mistral/mistral-small-2603` confirme, abandonne
 prévu ; Ministral 3B répond en texte et n'appelle ni `confirmer_proposition` ni `abandonner_proposition`. Les
 tests de `test_us260_*` simulent le modèle : ils ne prouvent pas qu'un modèle donné appelle l'outil.
 
+### Répondre d'un mot à une question du compagnon — `QuestionEnAttente` [US-284]
+
+Terrain du 28/10 et mesure du 01/11 : « Supprime la planche » → « Laquelle : planche test ou plant
+tubercule ? » → « la planche test » → le compagnon **redemandait**. Une proposition est un état ; une question
+de l'agent ne l'était pas, et la réponse courte arrivait seule, sans verbe.
+
+- **Quand elle naît** (`interpreteur_agent._avec_question`) : texte final avec « ? », sans proposition ni
+  décision, et la phrase ANCRÉE demande d'agir (`demande_d_agir`, hors `/menu`), ou une écriture a été refusée
+  pour un nom ou une valeur manquants (`Propositions.questions`, US-281), ou le texte offre une action
+  (`contexte_court.offre_une_action` : « veux-tu que je… ? », « si tu veux… »). Elle porte la phrase d'origine
+  ancrée, la question et les parcelles qu'elle nomme (`choix_nommes`).
+- **Où elle vit** : colonne `question` (JSONB, migration_v67) de l'échange qui la porte. Seule celle du
+  DERNIER échange compte (`contexte_court.question_de`), 10 minutes au plus (`DELAI_QUESTION_S`) : un échange
+  plus récent la consomme. Une phrase qui ne laisse pas d'échange (rien compris, ou `interpreter` rend None) la
+  clôt (`conversations.clore_question`). Elle prime sur la dernière proposition traitée.
+- **Comment elle se lit** : « question en attente : … » dans la partie variable (`_consigne_question`) et le
+  validateur ancre sur « phrase d'origine ; réponse », comme une proposition en attente — la projection voit
+  donc le verbe de destruction d'origine. Une demande nouvelle (`demande_d_agir` ou `est_interrogative`) l'efface
+  avant l'appel (`_demande_nouvelle`). Une réponse restée sans appel (« oui » → texte) est relancée UNE fois
+  (`CORRECTION_REPONSE_A_QUESTION`), jamais sur un refus (`refuse_la_question` : « non », « laisse tomber »).
+- **Jamais d'écriture seule** : la réponse prépare une proposition, que le jardinier confirme ; une suppression
+  reste au bouton seul (US-260). Aucun outil de décision n'est offert pour elle : « oui » n'y est pas une
+  confirmation.
+- Mesure : TER-36 (question → réponse courte) et TER-37 (question → oui) du corpus de terrain, avec TER-29,
+  TER-30 et DOU-1. `tools/evaluer_dialogues.py` garde la question dans ses échanges en mémoire, comme le bot.
+
 ### Retenir les actions menées [US-261]
 
 `app/services/compagnon/actions_menees.py` : une entrée par écriture exécutée, écrite par le
@@ -887,3 +940,21 @@ service ; `app/bot/messages_spontanes.py` (job, boutons `spon:`, `reprendre_repo
   `proactivite.lire_phrase` dans `phrase_de_profil` (avant l'interpréteur, sans modèle) → proposition Oui / Non
   (`profil:pok`). Aide : `/help alertes`.
 - **Purge** : `signaux.purger` efface aussi envois et messages de plus de 30 jours.
+
+### Ce que le bot envoie de lui-même, vu par l'agent [US-286]
+
+- **Mémoire (CA1)** : tout message sortant entre dans `echanges_conversation` (`texte_jardinier=""`, `signal`
+  renseigné). Messages spontanés et rappels (`spontane:<id>`, `distribution._envoyer_message`) l'étaient déjà ;
+  la file de gestes y entre par `file_agent.noter_envoi`, appelé après chaque envoi réussi de
+  `relances_file` (`file:invitation`, `file:relance`, `file:avertissement`, `file:purge`) — Markdown retiré,
+  noté dans le potager de chaque geste nommé. Un envoi perdu n'est pas noté.
+- **Lecture (CA2)** : `lire(quoi="gestes_en_attente")` (`file_agent.lister`, file du COMPTE, `nom` filtre).
+  Pas de nouvel outil : `NB_OUTILS_MAX` reste à 19.
+- **Abandon (CA2, CA4)** : `abandonner_proposition(id=<code du geste>)`. `_decider` accepte un code de geste de la
+  file (`file_agent.existe`) avant la validation contre la proposition de la conversation ; `confirmer_proposition`
+  sur un geste de la file est refusé. L'outil est offert dès que la file n'est pas vide
+  (`file_agent.a_des_gestes`), même sans proposition en attente. Le bot (`_interp_decider` →
+  `file_gestes.proposer_abandon`) montre « Abandonner / Le garder » (`file:abandon:<id>`, `file:garder`) ; seul le
+  clic écrit (`file_agent.abandonner` → `file_gestes.abandonner`). Jamais d'entrée du carnet touchée.
+- **Mesure (CA6)** : champ `annonce` d'un dialogue du corpus (`tools/evaluer_dialogues.py`), joué comme un échange
+  du bot avant le premier tour (TER-31). Remesure Small 4 : non lancée, elle attend l'accord.

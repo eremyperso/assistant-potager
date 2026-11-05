@@ -46,6 +46,12 @@ MOCK_OCCUPATION = {
 }
 
 
+MOCK_ATTRIBUTS = {
+    "tomate":  {"surface_m2": 0.25},
+    "basilic": {"surface_m2": 0.05},
+}
+
+
 @pytest.fixture
 def client():
     from app.api.main import app, get_current_user_ctx
@@ -55,6 +61,9 @@ def client():
         patch("app.api.main.SessionLocal",              return_value=MagicMock()),
         patch("utils.parcelles.get_all_parcelles",          return_value=MOCK_PARCELLES),
         patch("utils.parcelles.calcul_occupation_parcelles", return_value=MOCK_OCCUPATION),
+        # Les empreintes au sol viennent des attributs de culture en base : avec une
+        # session simulée, on les fournit ici (sinon occupation_pct reste None).
+        patch("app.services.plan.attributs_par_culture",  return_value=MOCK_ATTRIBUTS),
     ):
         with TestClient(app) as c:
             yield c

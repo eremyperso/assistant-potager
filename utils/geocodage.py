@@ -24,6 +24,8 @@ GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 NB_RESULTATS = 6
 TIMEOUT_S = 8
 TIMEZONE_PAR_DEFAUT = "Europe/Paris"
+#: Régions (ADM1), continents et zones : trop larges pour une météo (les pays sont les « PCL* »).
+CODES_TROP_LARGES = frozenset({"ADM1", "CONT", "RGN", "TERR", "ADMD", "AREA"})
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,13 @@ class Lieu:
     region: Optional[str] = None
     pays: Optional[str] = None
     timezone: str = TIMEZONE_PAR_DEFAUT
+    #: Le `feature_code` GeoNames d'Open-Meteo (« PPLA » une ville, « PCLI » un pays).
+    code: Optional[str] = None
+
+    def trop_large(self) -> bool:
+        """[US-282] Un pays, une région ou un continent : une météo n'y a pas de sens, il faut une ville."""
+        code = (self.code or "").upper()
+        return code.startswith("PCL") or code in CODES_TROP_LARGES
 
     def libelle(self) -> str:
         """« Lyon, Auvergne-Rhône-Alpes, France » : de quoi voir de quel Lyon il s'agit."""
@@ -73,6 +82,7 @@ def chercher_lieu(nom: str, langue: str = "fr") -> Optional[list[Lieu]]:
                 region=entree.get("admin1"),
                 pays=entree.get("country"),
                 timezone=entree.get("timezone") or TIMEZONE_PAR_DEFAUT,
+                code=entree.get("feature_code"),
             ))
         except (KeyError, TypeError, ValueError):
             continue  # une entrée malformée ne fait pas perdre les autres

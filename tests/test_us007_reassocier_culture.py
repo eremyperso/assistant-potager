@@ -309,6 +309,7 @@ class TestDeplConfirm:
             depl_parcelle_cible_id=parc_new.id,
             depl_nb_records=2,
         )
+        id_new = parc_new.id  # _depl_confirm ferme la session : les objets seraient détachés
 
         with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
@@ -317,7 +318,7 @@ class TestDeplConfirm:
         db.expire_all()
         updated = db.query(Evenement).filter(Evenement.type_action == "plantation").all()
         for ev in updated:
-            assert ev.parcelle_id == parc_new.id, f"Event {ev.id} non migré"
+            assert ev.parcelle_id == id_new, f"Event {ev.id} non migré"
             assert "[DÉPL" in (ev.texte_original or ""), f"Trace manquante sur event {ev.id}"
 
         assert ctx.user_data.get("mode") is None
@@ -343,17 +344,18 @@ class TestDeplConfirm:
             depl_parcelle_cible_id=parc_new.id,
             depl_nb_records=1,
         )
+        ids = (e_cerise.id, e_coeur.id, parc_new.id, parc_old.id)  # avant la fermeture de session
 
         with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         db.expire_all()
-        ev_cerise = db.get(Evenement, e_cerise.id)
-        ev_coeur  = db.get(Evenement, e_coeur.id)
+        ev_cerise = db.get(Evenement, ids[0])
+        ev_coeur  = db.get(Evenement, ids[1])
 
-        assert ev_cerise.parcelle_id == parc_new.id
+        assert ev_cerise.parcelle_id == ids[2]
         assert "[DÉPL" in (ev_cerise.texte_original or "")
-        assert ev_coeur.parcelle_id == parc_old.id  # non modifiée
+        assert ev_coeur.parcelle_id == ids[3]  # non modifiée
 
     @pytest.mark.asyncio
     async def test_ca8_recolte_non_modifiee(self, db):
@@ -382,16 +384,17 @@ class TestDeplConfirm:
             depl_parcelle_cible_id=parc_new.id,
             depl_nb_records=1,
         )
+        ids = (e_plant.id, e_recolte.id, parc_new.id, parc_old.id)  # avant la fermeture de session
 
         with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
 
         db.expire_all()
-        ev_plant   = db.get(Evenement, e_plant.id)
-        ev_recolte = db.get(Evenement, e_recolte.id)
+        ev_plant   = db.get(Evenement, ids[0])
+        ev_recolte = db.get(Evenement, ids[1])
 
-        assert ev_plant.parcelle_id == parc_new.id
-        assert ev_recolte.parcelle_id == parc_old.id  # non modifiée
+        assert ev_plant.parcelle_id == ids[2]
+        assert ev_recolte.parcelle_id == ids[3]  # non modifiée
 
     @pytest.mark.asyncio
     async def test_ca9_non_annule(self, db):
@@ -437,6 +440,7 @@ class TestDeplConfirm:
             depl_parcelle_cible_id=None,
             depl_nb_records=1,
         )
+        id_event = e.id  # _depl_confirm ferme la session : l'objet serait détaché
 
         with patch("app.bot.SessionLocal", return_value=db):
             await _depl_confirm(update, ctx, "oui")
@@ -447,7 +451,7 @@ class TestDeplConfirm:
         assert nouvelle is not None
 
         db.expire_all()
-        ev = db.get(Evenement, e.id)
+        ev = db.get(Evenement, id_event)
         assert ev.parcelle_id == nouvelle.id
 
 

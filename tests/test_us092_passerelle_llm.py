@@ -467,7 +467,7 @@ class TestCA7ConsommationConsignee:
 
     def test_us092_ca7_ordre_de_grandeur_consigne(self):
         """CA7 : le relevé avant / après est consigné dans le dépôt."""
-        doc = RACINE / "docs" / "AUDIT_PASSERELLE_LLM_US092.md"
+        doc = RACINE / "docs" / "Epic 7 - BYOK  LLM du potager" / "AUDIT_PASSERELLE_LLM_US092.md"
         assert doc.exists(), "le relevé de consommation avant/après doit être consigné"
         contenu = doc.read_text(encoding="utf-8")
         assert "avant" in contenu.lower() and "après" in contenu.lower()

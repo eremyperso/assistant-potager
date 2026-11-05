@@ -69,12 +69,13 @@ PERIMETRE: tuple[str, ...] = (
     "concombre", "cornichon", "poivron", "ail", "blette",
 )
 
-# La blette est la seule culture du périmètre dont le libellé du jardinier n'est
-# pas celui du référentiel : `culture_config` porte « bette » (semé par
-# migration_v6), et les fiches s'y rattachent sous ce nom. Le mot du jardinier,
-# lui, est porté par la ligne « On parle aussi de » de chaque section — c'est
-# elle, et non l'en-tête, qui décide de ce que la recherche retrouve.
-LIBELLE_REFERENTIEL = {"blette": "bette"}
+# La blette était la seule culture du périmètre dont le libellé du jardinier
+# n'était pas celui du référentiel (« bette », semé par migration_v6). Le mot du
+# jardinier reste porté par la ligne « On parle aussi de » de chaque section —
+# c'est elle, et non l'en-tête, qui décide de ce que la recherche retrouve.
+# Le référentiel (wind_river_attributs.json) et les fiches disent désormais « blette » :
+# plus aucune culture n'a de libellé distinct.
+LIBELLE_REFERENTIEL: dict[str, str] = {}
 
 # [CA11] Cible de l'US : la bonne fiche dans les trois premiers résultats.
 RANG_CIBLE = 3
@@ -289,7 +290,9 @@ def test_us140_ca3_la_licence_reste_facultative_pour_les_autres_familles(base, t
     pas le nôtre. `doc_app` (US-099) décrit notre propre application : lui
     imposer une licence obligerait à recréditer treize fiches sans tiers à
     créditer, et rendrait la règle décorative."""
-    entete = _ENTETE_VALIDE.replace('famille: "agronomie"', 'famille: "doc_app"')
+    # [US-283 / CA4] doc_app n'admet que la source du guide.
+    entete = _ENTETE_VALIDE.replace('famille: "agronomie"', 'famille: "doc_app"').replace(
+        "Assistant Potager — rédaction interne", "Guide de l'Assistant Potager")
     chemin = _ecrire_fiche(tmp_path, "doc-app.md", entete, _CORPS_VALIDE)
     ing.ingerer_fichier(base, chemin, tmp_path, ing.Rapport())
     assert base.query(KnowledgeDocument).count() == 1

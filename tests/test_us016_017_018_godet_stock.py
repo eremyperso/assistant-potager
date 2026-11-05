@@ -54,13 +54,14 @@ def _semis(session, parcelle_id, culture, variete=None, quantite=20, unite="grai
     return ev
 
 
-def _godet(session, parcelle_id, culture, variete=None, nb_plants=None, nb_graines=None):
+def _godet(session, parcelle_id, culture, variete=None, nb_plants=None, nb_graines=None, origine=None):
     ev = Evenement(
         type_action="mise_en_godet",
         culture=culture,
         variete=variete,
         nb_plants_godets=nb_plants,
         nb_graines_semees=nb_graines,
+        origine_graines_id=origine.id if origine is not None else None,
         date=datetime(2026, 4, 25),
         parcelle_id=parcelle_id,
     )
@@ -174,7 +175,9 @@ def test_us017_ca4_stock_residuel_jamais_negatif(db):
 def test_us018_ca1_godets_par_culture(db):
     """CA1 — calcul_godets_par_culture() liste les godets par variété pour une culture."""
     session, pid = db
-    _godet(session, pid, "courgette", variete="jaune", nb_plants=10, nb_graines=20)
+    # [US-029] Le taux se calcule depuis le semis d'origine, pas depuis nb_graines_semees du godet.
+    semis_jaune = _semis(session, pid, "courgette", variete="jaune", quantite=20)
+    _godet(session, pid, "courgette", variete="jaune", nb_plants=10, nb_graines=20, origine=semis_jaune)
     _godet(session, pid, "courgette", variete="ronde", nb_plants=5)
 
     result = calcul_godets_par_culture(session, "courgette")
@@ -185,7 +188,7 @@ def test_us018_ca1_godets_par_culture(db):
     assert by_var["jaune"]["taux_reussite"] == 50    # 10/20 * 100
     assert "ronde" in by_var
     assert by_var["ronde"]["nb_plants_godets"] == 5
-    assert by_var["ronde"]["taux_reussite"] is None  # pas de nb_graines_semees
+    assert by_var["ronde"]["taux_reussite"] is None  # pas de semis d'origine
 
 
 # ── US-018 CA1 (insensibilité à la casse) ──

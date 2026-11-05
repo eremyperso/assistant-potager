@@ -1063,6 +1063,8 @@ Chaque correction laisse une **trace horodatée** attachée à l'événement. Ri
 
 Dites *« supprimer »*, *« effacer »* ou *« annuler »*. Le bot vous propose de corriger ou de supprimer le dernier événement, avec confirmation. La suppression retire définitivement le geste des calculs : stock, pépinière et bilans se recalculent immédiatement sans lui.
 
+Quand le compagnon lit vos phrases en premier (mode « agent d'abord »), dites ce que vous voulez retirer : *« annule le dernier semis »*, *« supprime la parcelle Est »*. Il lit la phrase entière, pas son premier mot : *« effacer mon carnet »* parle de votre carnet, pas de votre dernière saisie. Le mot dit seul, ou le bouton, ouvre toujours la suppression du dernier événement.
+
 **Réflexe à prendre :** une saisie erronée se corrige mieux qu'elle ne se supprime. Supprimer crée un trou dans votre historique ; corriger le préserve.
 
 ### 14.4 Déplacer une culture vers une autre parcelle
@@ -1074,6 +1076,8 @@ Déplacer mes tomates sur la parcelle nord
 Associer ma zone courgette sur une nouvelle parcelle
 Rattacher les salades à la parcelle B2
 ```
+
+La commande `/deplacer tomates` (ou `/deplacer` seul : le bot demande la culture) ouvre le même parcours. Le déplacement d'un **lot de pépinière** vers un châssis n'est pas celui-ci : c'est un geste (voir 8.2 bis).
 
 Le bot vous guide :
 
@@ -1480,6 +1484,7 @@ Les 24 commandes du compagnon de terrain. Toutes sont accessibles depuis le bout
 |---|---|
 | `/note` | Noter une observation, guidé pas à pas (4 catégories) |
 | `/corriger` | Corriger ou supprimer un événement |
+| `/deplacer [culture]` | Déplacer une culture vers une autre parcelle, guidé pas à pas |
 | `/vendre <culture> [variété] <quantité>` | Enregistrer une vente de plants — ex. `/vendre tomate cerise 5` |
 
 Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phrase (chapitre 6).
@@ -1593,6 +1598,8 @@ Certaines phrases sont comprises comme une **navigation** plutôt que comme un g
 | *« je veux noter une observation »* | La saisie guidée de note |
 | *« déplacer mes tomates sur la parcelle nord »* | Le déplacement de culture |
 | *« combien… »*, *« quand… »*, *« quelle… »* | Une réponse à votre question |
+
+En mode « agent d'abord », le compagnon lit la phrase entière avant ces mots-là : *« effacer mon carnet »* ou *« associer tomate et basilic »* ne sont plus détournés vers la suppression ou le déplacement. Les mots dits seuls et les boutons gardent leur effet. Si le compagnon est momentanément indisponible, le tableau ci-dessus s'applique de nouveau.
 
 ---
 

@@ -78,7 +78,8 @@ def test_us040_ca2_potager_plan_par_defaut_free(test_db):
 def test_us040_ca3_table_potager_membres_colonnes(test_engine):
     inspector = inspect(test_engine)
     columns = {c["name"] for c in inspector.get_columns("potager_membres")}
-    assert columns == {"user_id", "potager_id", "role"}
+    # Les colonnes du compagnon (US-258, US-265, US-267) s'y sont ajoutées depuis.
+    assert {"user_id", "potager_id", "role"} <= columns
 
     pk = inspector.get_pk_constraint("potager_membres")["constrained_columns"]
     assert set(pk) == {"user_id", "potager_id"}

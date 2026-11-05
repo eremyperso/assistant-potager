@@ -480,6 +480,86 @@ async def handle_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _parse_and_save(update, texte, msg, pre_parsed_items=parsed.get("items"))
 
 
+async def _phrase_de_dialogue(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_raw: str) -> bool:
+    """Les gardes du profil et du carnet, qui passent avant l'interpréteur dans tous les modes."""
+    # [US-258 / CA6] « appelle-moi Rico » est une proposition de profil, sans modèle.
+    if await phrase_de_profil(update, ctx, texte_raw):
+        return True
+    # [US-265 / CA3] La nouvelle version d'un point du carnet que le jardinier a choisi de modifier.
+    return await phrase_de_carnet(update, ctx, texte_raw)
+
+
+async def _raccourcis_a_mots_cles(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte_raw: str) -> bool:
+    """PRIORITÉ 3 → 3d : les raccourcis à mots-clés placés avant l'interpréteur. True s'il a pris la phrase.
+
+    [US-287 / CA3] En mode `prioritaire`, ils ne voient une phrase libre que si l'agent est
+    indisponible : chacun a son équivalent dans le catalogue de l'agent, qui lit la phrase
+    entière au lieu d'un mot.
+    - supprimer / effacer / annuler → `annuler_action` (un geste récent), les outils
+      destructeurs (`supprimer_parcelle`…), ou `afficher` → `corriger` (le parcours) ;
+    - corriger / modifier → `corriger_action`, ou `afficher` → `corriger` ;
+    - godets → `afficher` → `lot`, ou `lire(quoi="lot")` ;
+    - déplacer une culture → `afficher` → `deplacer` (le même parcours guidé, via /deplacer) ;
+    - note guidée → `afficher` → `note`.
+    Les textes exacts des boutons (NAV_SUPPRIMER, NAV_CORRIGER) restent servis ici dans tous
+    les modes : ce ne sont pas des phrases libres.
+    """
+    texte = texte_raw.lower()
+    # ── [US-172] Reconnaissance déterministe
+    # Elle ne coûte ni jeton ni requête (CA3), et elle est CONSULTÉE dès
+    # maintenant parce que le raccourci destructeur ci-dessous en dépend :
+    # « supprimer la parcelle nord » n'est pas « annuler ma dernière saisie »,
+    # et l'exécuter comme telle serait précisément la suppression erronée que le
+    # CA16 pose en couperet. Le raccourci reste inchangé pour tout ce que
+    # l'interpréteur ne reconnaît pas — un « supprimer » nu, notamment.
+    commande_reglee = svc_interpreteur.reconnaitre_par_regles(texte_raw)
+    # [US-262] « annuler le dernier semis » désigne un geste : l'agent le retrouve parmi les
+    # actions menées, là où le raccourci proposerait le dernier enregistrement quel qu'il soit.
+    raccourci_cede = (
+        commande_reglee is None
+        and any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler", "corriger", "modifier"])
+        and svc_corrections.pour_l_agent_plutot_que_le_raccourci(texte_raw, current_context())
+    )
+
+    # ── PRIORITÉ 3 : mots-clés correction/suppression
+    if texte in NAV_SUPPRIMER or (
+        any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"])
+        and commande_reglee is None and not raccourci_cede
+    ):
+        await _corr_annuler_dernier(update, ctx)
+        return True
+    if texte in NAV_CORRIGER or (
+        any(texte.startswith(k) for k in ["corriger", "modifier"])
+        and commande_reglee is None and not raccourci_cede
+    ):
+        # Nettoyer tout contexte correction résiduel avant de démarrer
+        for k in ['mode','corr_event_id','corr_candidates','corr_last_id',
+                  'corr_pending','corr_event_actuel']:
+            ctx.user_data.pop(k, None)
+        await _corr_start(update, ctx)
+        return True
+
+    # ── PRIORITÉ 3b : requête godets en attente ──────────────────────────────
+    if _is_requete_godets(texte_raw):
+        log.info(f"🪴 GODETS          : détecté → _consulter_godets")
+        await _consulter_godets(update)
+        return True
+
+    # ── PRIORITÉ 3c : [US-007 / CA10] détection déplacement culture → parcelle
+    if _is_deplacer_request(texte_raw):
+        culture = _extract_culture_deplacer(texte_raw)
+        log.info(f"🔀 DEPLACER TEXTE  : détecté → culture='{culture}'")
+        await _depl_start(update, ctx, culture)
+        return True
+
+    # ── PRIORITÉ 3d : [US-038 / CA2] détection demande de note guidée
+    if _is_note_request(texte_raw):
+        log.info(f"📝 NOTE TEXTE      : détectée → _note_start")
+        await _note_start(update, ctx)
+        return True
+    return False
+
+
 async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Message texte → parsing direct ou commande de navigation."""
     texte_raw = update.message.text.strip()
@@ -727,77 +807,38 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     texte_raw = reprendre_reponse(update, texte_raw)
     texte = texte_raw.lower()
 
-    # ── [US-172] Reconnaissance déterministe — calculée ici, appliquée en 3e
-    # Elle ne coûte ni jeton ni requête (CA3), et elle est CONSULTÉE dès
-    # maintenant parce que le raccourci destructeur ci-dessous en dépend :
-    # « supprimer la parcelle nord » n'est pas « annuler ma dernière saisie »,
-    # et l'exécuter comme telle serait précisément la suppression erronée que le
-    # CA16 pose en couperet. Le raccourci reste inchangé pour tout ce que
-    # l'interpréteur ne reconnaît pas — un « supprimer » nu, notamment.
-    commande_reglee = svc_interpreteur.reconnaitre_par_regles(texte_raw)
-    # [US-262] « annuler le dernier semis » désigne un geste : l'agent le retrouve parmi les
-    # actions menées, là où le raccourci proposerait le dernier enregistrement quel qu'il soit.
-    raccourci_cede = (
-        commande_reglee is None
-        and any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler", "corriger", "modifier"])
-        and svc_corrections.pour_l_agent_plutot_que_le_raccourci(texte_raw, current_context())
-    )
-
-    # ── PRIORITÉ 3 : mots-clés correction/suppression
-    if texte in NAV_SUPPRIMER or (
-        any(texte.startswith(k) for k in ["supprimer", "effacer", "annuler"])
-        and commande_reglee is None and not raccourci_cede
-    ):
-        await _corr_annuler_dernier(update, ctx)
-        return
-    if texte in NAV_CORRIGER or (
-        any(texte.startswith(k) for k in ["corriger", "modifier"])
-        and commande_reglee is None and not raccourci_cede
-    ):
-        # Nettoyer tout contexte correction résiduel avant de démarrer
-        for k in ['mode','corr_event_id','corr_candidates','corr_last_id',
-                  'corr_pending','corr_event_actuel']:
-            ctx.user_data.pop(k, None)
-        await _corr_start(update, ctx)
-        return
-
-    # ── PRIORITÉ 3b : requête godets en attente ──────────────────────────────
-    if _is_requete_godets(texte_raw):
-        log.info(f"🪴 GODETS          : détecté → _consulter_godets")
-        await _consulter_godets(update)
-        return
-
-    # ── PRIORITÉ 3c : [US-007 / CA10] détection déplacement culture → parcelle
-    if _is_deplacer_request(texte_raw):
-        culture = _extract_culture_deplacer(texte_raw)
-        log.info(f"🔀 DEPLACER TEXTE  : détecté → culture='{culture}'")
-        await _depl_start(update, ctx, culture)
-        return
-
-    # ── PRIORITÉ 3d : [US-038 / CA2] détection demande de note guidée
-    if _is_note_request(texte_raw):
-        log.info(f"📝 NOTE TEXTE      : détectée → _note_start")
-        await _note_start(update, ctx)
-        return
-
-    # ── PRIORITÉ 3e : [US-172] la phrase désigne-t-elle une COMMANDE ?
-    # Placé après toutes les gardes de flux de conversation et après les flux
-    # guidés déjà dictables (godets, déplacement, note), et AVANT le routeur :
-    # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
-    # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
-    # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
-    # [US-277] `interpreter` relit les règles (sans coût) et écarte leur lecture
-    # d'une phrase composée ou négative ; `commande_reglee` ne sert plus qu'au
-    # raccourci destructeur ci-dessus.
-    # [US-258 / CA6] « appelle-moi Rico » est une proposition de profil, sans modèle.
-    if await phrase_de_profil(update, ctx, texte_raw):
-        return
-    # [US-265 / CA3] La nouvelle version d'un point du carnet que le jardinier a choisi de modifier.
-    if await phrase_de_carnet(update, ctx, texte_raw):
-        return
-    resultat_commande = svc_interpreteur.interpreter(
-        texte_raw, current_context(), contexte_court=contexte_court_de(update),
-    )
+    # ── [US-287 / CA3] Agent d'abord : en mode `prioritaire`, la phrase libre va à l'agent
+    # AVANT les raccourcis à mots-clés (PRIORITÉ 3 → 3d), qui ne servent plus qu'au mode
+    # dégradé (CA4 : quota, panne). Restent avant lui : les gardes de dialogue en cours
+    # ci-dessus, le profil et le carnet, et les textes EXACTS des boutons (NAV_SUPPRIMER,
+    # NAV_CORRIGER) — un bouton n'est pas une phrase libre.
+    agent_prioritaire = svc_interpreteur.agent_prioritaire()
+    resultat_commande = svc_interpreteur.CASCADE_HABITUELLE
+    if agent_prioritaire and texte not in NAV_SUPPRIMER and texte not in NAV_CORRIGER:
+        if await _phrase_de_dialogue(update, ctx, texte_raw):
+            return
+        resultat_commande = svc_interpreteur.agent_d_abord(
+            texte_raw, current_context(), contexte_court=contexte_court_de(update),
+        )
+    if resultat_commande is svc_interpreteur.CASCADE_HABITUELLE:
+        if await _raccourcis_a_mots_cles(update, ctx, texte_raw):
+            return
+        # ── PRIORITÉ 3e : [US-172] la phrase désigne-t-elle une COMMANDE ?
+        # Placé après toutes les gardes de flux de conversation et après les flux
+        # guidés déjà dictables (godets, déplacement, note), et AVANT le routeur :
+        # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
+        # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
+        # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
+        # [US-277] `interpreter` relit les règles (sans coût) et écarte leur lecture
+        # d'une phrase composée ou négative.
+        # [US-287] En mode `prioritaire`, le profil et le carnet ont déjà été lus, et
+        # l'agent consulté : il est indisponible, inutile de le rappeler.
+        if not agent_prioritaire and await _phrase_de_dialogue(update, ctx, texte_raw):
+            return
+        resultat_commande = svc_interpreteur.interpreter(
+            texte_raw, current_context(), contexte_court=contexte_court_de(update),
+            consulter_agent_d_abord=False,
+        )
     if await _traiter_commande_interpretee(update, ctx, resultat_commande):
         return
 

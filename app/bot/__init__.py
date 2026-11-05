@@ -41,6 +41,7 @@ from . import (
     file_gestes,
     veilleur_jobs,
     messages_spontanes,
+    mode_test,
     messages,
     application,
 )
@@ -73,6 +74,7 @@ _SOUS_MODULES = (
     file_gestes,
     veilleur_jobs,
     messages_spontanes,
+    mode_test,
     messages,
     application,
 )

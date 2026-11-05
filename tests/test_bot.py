@@ -33,6 +33,7 @@ class TestCmdStats:
         mock_update = MagicMock()
         mock_message = MagicMock()
         mock_update.message = mock_message
+        mock_update.effective_message = mock_message  # _send_chunked répond par effective_message
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db
@@ -67,6 +68,7 @@ class TestCmdStats:
         mock_update = MagicMock()
         mock_message = MagicMock()
         mock_update.message = mock_message
+        mock_update.effective_message = mock_message  # _send_chunked répond par effective_message
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db
@@ -91,6 +93,7 @@ class TestCmdStats:
         mock_update = MagicMock()
         mock_message = MagicMock()
         mock_update.message = mock_message
+        mock_update.effective_message = mock_message  # _send_chunked répond par effective_message
         mock_message.reply_text = AsyncMock()
 
         # Patch SessionLocal to return test_db

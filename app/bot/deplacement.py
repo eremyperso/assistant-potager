@@ -24,6 +24,13 @@ MODES_DEPLACER = {
 }
 
 
+async def cmd_deplacer(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """[US-287 / CA3] `/deplacer [culture]` : le parcours guidé d'US-007, tapé ou proposé par l'agent."""
+    culture = " ".join(getattr(ctx, "args", None) or []).strip() or None
+    log.info(f"🔀 /deplacer       : culture={culture!r}")
+    await _depl_start(update, ctx, culture)
+
+
 async def _depl_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE, culture: str | None):
     """
     [US-007] Point d'entrée du flux de réassociation.
@@ -230,8 +237,11 @@ async def _depl_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE, texte: s
     try:
         # CA6 : créer la parcelle si elle n'existe pas encore
         if parcelle_id is None:
-            from utils.parcelles import create_parcelle, find_doublon
-            doublon = find_doublon(db, nom_parcelle, potager_id=current_context().potager_id)
+            from utils.parcelles import create_parcelle, find_doublon, normalize_parcelle_name
+            # find_doublon rend (exact, proche) : seul l'exact évite la création.
+            doublon, _ = find_doublon(
+                db, normalize_parcelle_name(nom_parcelle), potager_id=current_context().potager_id
+            )
             if doublon:
                 parcelle_id = doublon.id
                 nom_affiche = doublon.nom.upper()

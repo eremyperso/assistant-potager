@@ -79,6 +79,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -315,6 +316,9 @@ class Attendu:
     ecriture: Optional[bool] = None
     interdits: tuple[str, ...] = ()
     texte_interdit: tuple[str, ...] = ()
+    #: [US-280 / CA6] Au moins une de ces expressions doit figurer dans le texte lu par le
+    #: jardinier : sans elle, une réponse fausse à une question passerait pour un bon outil.
+    texte_attendu: tuple[str, ...] = ()
     livre: bool = True
     note: str = ""
 
@@ -337,6 +341,9 @@ class Dialogue:
     source: str
     titre: str
     tours: tuple[Tour, ...]
+    #: [US-286 / CA6] Ce que le bot a envoyé de lui-même juste avant le premier tour (purge, relance…) :
+    #: il entre dans les échanges que lit l'agent, comme `file_agent.noter_envoi` le fait en production.
+    annonce: str = ""
 
 
 def charger_corpus(chemin: Path = CORPUS) -> list[Dialogue]:
@@ -363,9 +370,11 @@ def charger_corpus(chemin: Path = CORPUS) -> list[Dialogue]:
                 outils=tuple(a["outils"]), parametres=dict(a.get("parametres") or {}),
                 ecriture=a.get("ecriture"), interdits=tuple(a.get("interdits") or ()),
                 texte_interdit=tuple(a.get("texte_interdit") or ()),
+                texte_attendu=tuple(a.get("texte_attendu") or ()),
                 livre=bool(a.get("livre", True)), note=a.get("note", ""),
             )))
-        dialogues.append(Dialogue(d["id"], d["categorie"], d["source"], d["titre"], tuple(tours)))
+        dialogues.append(Dialogue(d["id"], d["categorie"], d["source"], d["titre"], tuple(tours),
+                                  annonce=d.get("annonce", "")))
     return dialogues
 
 
@@ -441,6 +450,20 @@ def appels_juges(reponses: list, attendu: Attendu) -> tuple:
 def textes_du_jardinier(reponses: list, appels: tuple) -> list[str]:
     """Ce que le modèle a écrit, avant le contrôle des annonces (US-257) : le texte libre de chaque tour."""
     return [r.texte for r in reponses if getattr(r, "texte", "")]
+
+
+def _sans_accent(texte: str) -> str:
+    return unicodedata.normalize("NFKD", texte.replace("’", "'")).encode("ascii", "ignore").decode().lower()
+
+
+def texte_attendu_present(attendu: Attendu, textes: list[str]) -> Optional[bool]:
+    """[US-280 / CA6] `None` si le tour n'attend aucun texte ou si le jardinier n'a lu aucun texte
+    (une proposition seule ne se juge pas ici) ; sinon, une expression attendue y figure-t-elle ?"""
+    lus = [t for t in textes if t and t.strip()]
+    if not attendu.texte_attendu or not lus:
+        return None
+    corps = _sans_accent(" ".join(lus))
+    return any(_sans_accent(e) in corps for e in attendu.texte_attendu)
 
 
 def noter_tour(dialogue: Dialogue, attendu: Attendu, phrase: str, appels: tuple, statut: str) -> ev.Notes:
@@ -552,6 +575,8 @@ class ResultatTour:
     couperets_jardinier: tuple[str, ...] = ()
     #: [US-257] Le texte de l'agent lu par le jardinier (vide hors réponse de l'agent).
     texte: str = ""
+    #: [US-280 / CA6] `None` : aucun texte attendu ; sinon, le texte lu porte-t-il l'expression attendue ?
+    texte_juste: Optional[bool] = None
 
     @property
     def livre(self) -> bool:
@@ -720,6 +745,7 @@ def jouer_tour(
     contexte = contexte_court.construire(
         ctx, etat.en_attente, etat.instant, ctx.potager_id, maintenant=etat.instant,
         echanges=tuple(etat.echanges),
+        question=contexte_court.question_de(tuple(etat.echanges)),  # [US-284 / CA5]
     )
     quotas = 0
     for essai in range(1, tentatives + 1):
@@ -742,6 +768,10 @@ def jouer_tour(
     appels = appels_juges(reponses, tour.attendu)
     notes = noter_tour(dialogue, tour.attendu, tour.jardinier, appels, statut)
     couperets = couperets_du_tour(tour.attendu, appels, textes_du_jardinier(reponses, appels), notes)
+    # [US-280 / CA6] Le texte que le jardinier lit doit porter ce que la question demandait.
+    texte_juste = texte_attendu_present(tour.attendu, vu_par_le_jardinier(resultat, chemin)[1])
+    if texte_juste is False:
+        notes = replace(notes, outil_ok=False)
 
     proposition = resultat.proposition if isinstance(resultat, ReponseAgent) else resultat
     proposition = proposition if isinstance(proposition, (Plan, CommandeInterpretee)) else None
@@ -752,15 +782,17 @@ def jouer_tour(
         etat.en_attente = None
     retenu = resultat if isinstance(resultat, ReponseAgent) else (
         proposition or (resultat if isinstance(resultat, Aiguillage) else None))
-    if retenu is not None:
-        echange = contexte_court.echange_de(retenu, instant)
-        if echange is not None:
-            etat.echanges = (etat.echanges + [echange])[-contexte_court.NB_ECHANGES_MAX:]
+    echange = contexte_court.echange_de(retenu, instant) if retenu is not None else None
+    if echange is not None:
+        etat.echanges = (etat.echanges + [echange])[-contexte_court.NB_ECHANGES_MAX:]
+    elif etat.echanges and etat.echanges[-1].question is not None:
+        # [US-284 / CA4] Comme le bot : une phrase sans échange consomme la question en attente.
+        etat.echanges[-1] = replace(etat.echanges[-1], question=None)
 
     return ResultatTour(
         dialogue=dialogue.id, categorie=dialogue.categorie, rang=rang, phrase=tour.jardinier,
         attendu=tour.attendu, statut=statut, appels=appels, vu=_decrire_vu(resultat, chemin), notes=notes,
-        couperets=couperets, chemin=chemin, texte=texte_au_jardinier(resultat),
+        couperets=couperets, chemin=chemin, texte=texte_au_jardinier(resultat), texte_juste=texte_juste,
         couperets_jardinier=couperets_au_jardinier(tour.attendu, resultat, chemin,
                                                    en_attente=en_attente_avant, en_cours=en_cours),
         latence_ms=sum(int(r.latence_ms or 0) for r in reponses),
@@ -795,6 +827,8 @@ def jouer_corpus(
          patch.object(passerelle, "appeler_chat_outils", enregistreur):
         for dialogue in dialogues:
             etat = EtatDialogue()
+            if dialogue.annonce:
+                etat.echanges.append(contexte_court.Echange("", dialogue.annonce, time.time()))
             if detail:
                 print(f"  ▸ {dialogue.id} — {dialogue.titre}")
             for rang, tour in enumerate(dialogue.tours, 1):
@@ -862,6 +896,12 @@ class Bilan:
     def bons_parametres(self) -> tuple[int, int]:
         avec = [t for t in self.mesures if t.notes.parametres_ok is not None]
         return sum(1 for t in avec if t.notes.parametres_ok and not t.notes.champs_en_trop), len(avec)
+
+    @property
+    def reponses_justes(self) -> tuple[int, int]:
+        """[US-280 / CA6] Parmi les tours à texte attendu que l'agent a traités, ceux dont le texte est juste."""
+        avec = [t for t in self.mesures if t.texte_juste is not None]
+        return sum(1 for t in avec if t.texte_juste), len(avec)
 
     @property
     def couperets(self) -> int:
@@ -1042,8 +1082,8 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
         f"## Par catégorie — `{reference}`",
         "",
         "| Catégorie | Tours | Hors agent | Bon outil | Bons paramètres | Sans couperet (modèle) | "
-        "Couperets au jardinier | p50 | p95 | Jetons/msg | Lecture |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "Réponses justes | Couperets au jardinier | p50 | p95 | Jetons/msg | Lecture |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     lecture_statut = {"ok": "✅ tient", "echec": "❌ en échec", "non_livree": "⏳ cible non livrée",
                       "hors_agent": "↪️ prise avant l'agent"}
@@ -1053,7 +1093,8 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
         sans, tous = bilan.sans_couperet
         sortie.append(
             f"| {CATEGORIES[cle]} | {len(bilan.tours)} | {len(bilan.hors_agent)} | {pourcent(outil, n)} | "
-            f"{pourcent(param, m)} | {pourcent(sans, tous)} | {bilan.couperets_jardinier} | "
+            f"{pourcent(param, m)} | {pourcent(sans, tous)} | {pourcent(*bilan.reponses_justes)} | "
+            f"{bilan.couperets_jardinier} | "
             f"{bilan.latence(0.5)} ms | {bilan.latence(0.95)} ms | "
             f"{bilan.jetons_par_message} | {lecture_statut[bilan.statut]} |"
         )
@@ -1062,11 +1103,13 @@ def rediger_rapport(evaluations: dict[str, list[ResultatTour]], reference: str, 
     sans, tous = total.sans_couperet
     sortie += [
         f"| **Total** | {len(total.tours)} | {len(total.hors_agent)} | **{pourcent(outil, n)}** | "
-        f"**{pourcent(param, m)}** | **{pourcent(sans, tous)}** | **{total.couperets_jardinier}** | "
+        f"**{pourcent(param, m)}** | **{pourcent(sans, tous)}** | **{pourcent(*total.reponses_justes)}** | "
+        f"**{total.couperets_jardinier}** | "
         f"{total.latence(0.5)} ms | {total.latence(0.95)} ms | {total.jetons_par_message} | |",
         "",
         f"*Bon outil* et *bons paramètres* ne portent que sur les tours dont la brique est livrée et que la "
-        f"cascade confie à l'agent ; un paramètre ajouté que le jardinier n'a pas dit est compté faux. Seuil "
+        f"cascade confie à l'agent ; un paramètre ajouté que le jardinier n'a pas dit est compté faux. *Réponses justes* : parmi les "
+        f"questions qui portent un texte attendu, celles dont le texte lu contient l'une des expressions. Seuil "
         f"d'une catégorie « qui tient » : {round(SEUIL_REUSSITE * 100)} %, aucun couperet du modèle et aucun "
         f"couperet au jardinier.",
         "",

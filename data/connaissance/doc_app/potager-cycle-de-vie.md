@@ -28,7 +28,7 @@ Archiver un potager le met en lecture seule : tout reste consultable, plus rien 
 ## Supprimer un potager sans le perdre tout de suite
 
 **Intention :** procédure
-**On parle aussi de :** effacer un jardin ; supprimer définitivement ; se tromper de potager ; revenir en arrière
+**On parle aussi de :** effacer un jardin ; supprimer définitivement ; se tromper de potager ; revenir en arrière ; comment supprimer un potager ; un potager dont je ne veux plus
 
 Un potager doit d'abord être archivé avant de pouvoir être supprimé : on ne supprime jamais un jardin en cours d'usage. La suppression demande de retaper son mot de passe, puis ouvre un délai de trente jours pendant lequel rien n'est détruit. Pendant ce mois, le propriétaire peut faire machine arrière : le potager revient alors à l'état archivé, consultable, et il faudra le désarchiver pour y écrire de nouveau.
 

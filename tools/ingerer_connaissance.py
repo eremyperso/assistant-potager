@@ -13,6 +13,13 @@ Utilisation :
     python tools/ingerer_connaissance.py --racine <dossier>  # autre racine (corpus de test)
     python tools/ingerer_connaissance.py --strict            # échoue sur un défaut de découpage
     python tools/ingerer_connaissance.py --elaguer           # retire aussi les documents disparus du dépôt
+    python tools/ingerer_connaissance.py --purger-hors-liste # retire les documents d'une source hors liste
+
+[US-283 / CA4] Une source hors de la liste blanche de sa famille
+(`connaissance.SOURCES_PAR_FAMILLE`) est refusée. Origine du défaut : le corpus
+de test `tests/corpus/automobile/` (« Assistant Automobile — rédaction
+interne », famille `agronomie`), ingéré en dev par `--racine`, remontait aux
+questions du jardinier. `--purger-hors-liste` retire ce qui est déjà en base.
 
 [CA10] Idempotent et rejouable. L'empreinte SHA-256 du fichier décide : même
 empreinte, aucune écriture — pas même un UPDATE. Relancer deux fois de suite ne
@@ -295,6 +302,18 @@ def valider_licence(famille: str, licence: Optional[str]) -> Optional[str]:
     return valeur
 
 
+def valider_source(famille: str, source: str) -> str:
+    """[US-283 / CA4] La source affichée doit figurer dans la liste blanche de sa famille :
+    aucun document hors du domaine du potager n'entre dans l'index."""
+    if not connaissance.source_autorisee(famille, source):
+        admises = sorted(connaissance.SOURCES_PAR_FAMILLE.get(famille, ()))
+        raise DocumentInvalide(
+            f"source « {source} » hors liste pour la famille « {famille} » (US-283 / CA4). "
+            f"Sources admises : {'; '.join(admises) or 'aucune'}"
+        )
+    return source
+
+
 def _normaliser(valeur: str) -> str:
     """Comparaison d'intitulé insensible à la casse et aux accents."""
     from unidecode import unidecode
@@ -472,6 +491,7 @@ def ingerer_fichier(db, chemin: Path, racine_depot: Path, rapport: Rapport,
                                      entete["niveau_confiance"])
     connaissance.valider_entete(entete["famille"], niveau)
     valider_licence(entete["famille"], entete.get("licence"))
+    valider_source(entete["famille"], entete["source"])
     culture_id = _resoudre_culture(db, entete.get("culture"), potager_id)
 
     sections = decouper(corps)
@@ -568,6 +588,28 @@ def elaguer(db, racine: Path, racine_depot: Path, presents: set[str], rapport: R
             rapport.invalidations += cache_questions.invalider_par_fragment(db, ancienne)
 
 
+def purger_hors_liste(db, rapport: Rapport, dry_run: bool = False) -> list[str]:
+    """[US-283 / CA4] Retire les documents PARTAGÉS dont la source est hors de la liste blanche
+    de leur famille. Les notes du jardinier (`potager_id` non nul) ne sont jamais touchées."""
+    hors_liste = [
+        reference
+        for reference, famille, source in db.query(
+            KnowledgeDocument.reference, KnowledgeDocument.famille, KnowledgeDocument.source,
+        ).filter(KnowledgeDocument.potager_id.is_(None)).all()
+        if not connaissance.source_autorisee(famille, source)
+    ]
+    for reference in hors_liste:
+        rapport.supprimes += 1
+        log.info("📚 INGESTION : source hors liste → %s retiré%s", reference, " (simulation)" if dry_run else "")
+        if dry_run:
+            continue
+        _, retirees = connaissance.supprimer_document(db, reference)
+        db.commit()
+        for ancienne in retirees:
+            rapport.invalidations += cache_questions.invalider_par_fragment(db, ancienne)
+    return hors_liste
+
+
 def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(
         description="Ingère le corpus de connaissance Markdown du dépôt (US-098 / CA10-CA12)."
@@ -580,6 +622,8 @@ def main(argv: "list[str] | None" = None) -> int:
                         help="Échoue si un fragment est signalé non autonome (CA12)")
     parser.add_argument("--elaguer", action="store_true",
                         help="Retire aussi les documents dont le fichier a disparu du dépôt")
+    parser.add_argument("--purger-hors-liste", action="store_true",
+                        help="Retire les documents partagés dont la source est hors liste (US-283)")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -616,6 +660,8 @@ def main(argv: "list[str] | None" = None) -> int:
 
         if args.elaguer:
             elaguer(db, racine, racine_depot, presents, rapport, dry_run=args.dry_run)
+        if args.purger_hors_liste:
+            purger_hors_liste(db, rapport, dry_run=args.dry_run)
 
         volumes = connaissance.compter(db)
     finally:

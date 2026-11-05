@@ -404,15 +404,19 @@ class TestCA8GetGodetsExclusion:
         from datetime import datetime
         from app.api.main import app
 
+        # Décision PO du 07/10/2026 : seule une plantation de même culture ET de même
+        # variété (renseignée) sort des godets — d'où la variété des deux côtés.
         test_db.add(Evenement(
             type_action="mise_en_godet",
             culture="poivron",
+            variete="doux",
             nb_plants_godets=15,
             date=datetime(2026, 3, 10),
         ))
         test_db.add(Evenement(
             type_action="plantation",
             culture="poivron",
+            variete="doux",
             quantite=15.0,
             unite="plants",
             rang=1,
@@ -439,12 +443,18 @@ class TestCA9CalcGodets:
         """CA9 — calcul_godets() retourne 80% pour 24 plants sur 30 graines."""
         from utils.stock import calcul_godets
 
+        # [US-029] Le taux se calcule depuis le semis d'origine (30 graines).
+        semis = Evenement(type_action="semis", culture="tomate", variete="cerise",
+                          quantite=30, unite="graines")
+        test_db.add(semis)
+        test_db.flush()
         test_db.add(Evenement(
             type_action="mise_en_godet",
             culture="tomate",
             variete="cerise",
             nb_graines_semees=30,
             nb_plants_godets=24,
+            origine_graines_id=semis.id,
         ))
         test_db.commit()
 

@@ -23,6 +23,7 @@ Décisions de domaine (menu natif US-171, dictée US-172) : `docs/domaines/comma
 | `veilleur_jobs` | planification du veilleur (US-266) : `job_veilleur` horaire (file de gestes = thème « suivis », puis détecteurs, puis distributeur) et `job_bilan_semaine` (dimanche 18h). Logique dans `app/services/compagnon/veilleur*.py` |
 | `commandes_rappels` | rappels de suivi (US-268) : `proposer_rappel` (appelé par `enregistrement` après un geste), `/rappel`, `/rappels`, boutons `rap:`. Logique dans `app/services/compagnon/rappels.py` |
 | `messages_spontanes` | messages spontanés (US-267) : `job_distributeur` (15 min), boutons `spon:` (phrase de geste → récapitulatif à confirmer), `reprendre_reponse` (réponse lue avec le signal). Logique dans `app/services/compagnon/distribution.py` ; éteint par `COMPAGNON_PROACTIF` |
+| `mode_test` | `/reset_test` (US-288) : enregistrée seulement si `APP_ENV=test`, vide le potager de test et les `_*_PENDING` de `etat`. Logique dans `app/services/mode_test.py`. Voir `docs/domaines/tests-conversationnels.md` |
 | `meteo_jobs` | `/meteo`, jobs planifiés (météo 05h, purge 04h) |
 | `messages` | `handle_voice`, `handle_text` — points d'entrée des messages libres |
 | `application` | `_construire_application`, enregistrement des handlers, `main()` |

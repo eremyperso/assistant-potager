@@ -16,6 +16,7 @@ from app.services.compagnon import actions_menees as svc_actions_menees
 from app.services.compagnon import conversations as svc_conversations
 from app.services.compagnon import corrections as svc_corrections
 from app.services.compagnon import decisions as svc_decisions
+from app.services.compagnon import file_agent as svc_file_agent
 from app.services.compagnon import propositions as svc_propositions
 from app.services.compagnon.propositions import PropositionConversation
 from app.services import liaison_telegram as svc_liaison_telegram
@@ -316,6 +317,8 @@ def contexte_court_de(update: Update):
     echanges = svc_conversations.recents(tenant)
     ailleurs = _ailleurs_de(tenant)
     spontane = _spontane_de(update, tenant)
+    # [US-284 / CA2] La question que le compagnon vient de poser, 10 minutes au plus.
+    question = svc_contexte_court.question_de(echanges)
     if proposition is None:
         traitee = None
         try:
@@ -329,11 +332,11 @@ def contexte_court_de(update: Update):
                 traite_le=derniere.traite_le, canal=derniere.traite_canal or derniere.canal,
             )
         return svc_contexte_court.construire(tenant, echanges=echanges, ailleurs=ailleurs, traitee=traitee,
-                                             spontane=spontane)
+                                             spontane=spontane, question=question)
     return svc_contexte_court.construire(
         tenant, proposition.commande, proposition.ts, proposition.potager_id,
         ecartes=proposition.ecartes, delai=_INTERP_TIMEOUT, echanges=echanges,
-        code=proposition.code, ailleurs=ailleurs, spontane=spontane,
+        code=proposition.code, ailleurs=ailleurs, spontane=spontane, question=question,
     )
 
 
@@ -350,10 +353,14 @@ def _spontane_de(update: Update, tenant: TenantContext) -> Optional[dict]:
 
 def _noter_echange(resultat) -> None:
     """[US-259 / CA1] Chaque phrase interprétée devient un échange de la conversation,
-    avec la proposition qu'elle a laissée en attente, s'il y en a une."""
+    avec la proposition qu'elle a laissée en attente, s'il y en a une.
+
+    [US-284] Et la question que le compagnon y a posée. Une phrase qui ne laisse aucun échange
+    (rien compris) efface la question en attente : elle l'a lue, elle l'a consommée (CA4)."""
     try:
         echange = svc_contexte_court.echange_de(resultat)
         if echange is None:
+            svc_conversations.clore_question(current_context())
             return
         tenant = current_context()
         propose = isinstance(resultat, (svc_interpreteur.CommandeInterpretee, svc_interpreteur.Plan)) or (
@@ -364,6 +371,7 @@ def _noter_echange(resultat) -> None:
             tenant, echange.texte, echange.resume, canal=svc_propositions.CANAL_TELEGRAM,
             outils=tuple(getattr(resultat, "outils", ()) or ()),
             proposition_id=proposition.id if proposition is not None else None,
+            question=echange.question,
         )
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
         log.exception("[US-259 / CA1] Échange non retenu")
@@ -832,6 +840,15 @@ async def _interp_decider(update: Update, ctx: ContextTypes.DEFAULT_TYPE, decisi
         else:
             await message.reply_text(texte, parse_mode="Markdown" if markdown else None)
 
+    if decision.action == svc_decisions.ACTION_ABANDONNER and tenant.user_id is not None:
+        # [US-286 / CA4] Le code désigne peut-être un geste de la file : la carte d'abandon, au bouton.
+        geste_id = svc_file_agent.id_par_code(tenant.user_id, decision.code)
+        if geste_id is not None:
+            from .file_gestes import proposer_abandon
+
+            await proposer_abandon(update, geste_id, svc_file_agent.libelle(tenant.user_id, decision.code) or "", msg=msg)
+            return
+
     proposition = svc_propositions.par_code(decision.code, tenant.user_id)
     if proposition is None or proposition.potager_id != tenant.potager_id:
         log.info("[US-260 / CA1] Décision %s sur %r : proposition inconnue de ce jardinier → rien d'exécuté",
@@ -1173,6 +1190,11 @@ async def _traiter_commande_interpretee(
     n'exécute pas la plus probable : elle demande laquelle.
     """
     if resultat is None:
+        # [US-284 / CA4] La phrase part ailleurs (geste, cascade) : elle consomme la question en attente.
+        try:
+            svc_conversations.clore_question(current_context())
+        except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
+            log.exception("[US-284 / CA4] Question en attente non close")
         return False
     try:
         return await _aiguiller(update, ctx, resultat, msg)

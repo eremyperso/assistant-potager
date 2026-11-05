@@ -361,7 +361,9 @@ def _valeurs_modifier_parcelle(
             # Le type n'est évoqué que par lui-même : dans « mets la serre en
             # pépinière », le mot « pépinière » ne dit ni chaude ni froide (règle 9).
             termes = list(champ.vocabulaire)
-        if not _evoque(termes, mots):
+        # [US-281 / CA3] « désactive », « archive » disent la mise hors service sans évoquer « en service ».
+        desactive = champ.nom == "actif" and valeur is False and desactivation_dite(contexte.texte)
+        if not _evoque(termes, mots) and not desactive:
             retires.append(champ.nom)
             continue
         retenus.append((champ, valeur))
@@ -541,6 +543,60 @@ def question_de_modification(nom: Optional[str], contexte: ContexteValidation) -
     return f"Que veux-tu changer sur « {nom} » ?"
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-281] Ce que la phrase n'a pas demandé — la garde APRÈS le modèle
+# ═════════════════════════════════════════════════════════════════════════════
+#: [CA1] La raison lue par le modèle quand il propose une écriture sur une question.
+RAISON_QUESTION = ("c'est une question : réponds-y en texte, sans rien proposer — "
+                   "le jardinier n'a demandé aucune action")
+
+#: [CA3] Ce qui dit, en toutes lettres, de mettre une parcelle hors service. « enlève la serre »
+#: n'en est pas : il peut viser l'abri, la parcelle ou sa suppression.
+_DESACTIVATION_DITE = re.compile(
+    r"\b(?:desactiv\w*|archiv\w*|(?:ne )?sert plus|(?:ne )?servira plus|hors service|"
+    r"plus en service|retir\w*(?: la| le| les)? du potager)\b"
+)
+
+
+def desactivation_dite(texte: str) -> bool:
+    """[US-281 / CA3] La phrase dit-elle de désactiver (« désactive », « archive », « ne sert plus »,
+    « retire-la du potager ») ?"""
+    return bool(_DESACTIVATION_DITE.search(normaliser(texte or "")[0]))
+
+
+def question_de_desactivation(nom: Optional[str]) -> str:
+    """[US-281 / CA3] `actif=false` sans que la phrase le dise : la question qui nomme les choix."""
+    cible = f"« {nom} »" if nom else "cette parcelle"
+    return (f"Que veux-tu faire de {cible} : la retirer du potager (sans perdre son historique), "
+            "la supprimer, ou changer une de ses caractéristiques ?")
+
+
+def question_de_manque(commande: CommandeInterpretee) -> str:
+    """[US-281 / CA2] La question d'une valeur indispensable qui manque. « renomme la planche sud »
+    → « En quoi veux-tu renommer « Planche Sud » ? »."""
+    manquant = commande.manquants[0]
+    ancien = commande.valeurs.get("ancien")
+    if manquant.nom == "nouveau" and ancien:
+        return f"En quoi veux-tu renommer « {ancien} » ?"
+    return manquant.question
+
+
+def raison_de_manque(commande: CommandeInterpretee) -> str:
+    """[US-281 / CA2] La raison lue par le modèle : ce qui manque, et qu'il le demande."""
+    manquant = commande.manquants[0]
+    libelle = (manquant.description or manquant.nom).split(",")[0].lower()
+    return (f"il manque une valeur indispensable — {libelle} : pose la question au jardinier "
+            "avec tes mots, ne la devine pas")
+
+
+def _creation_existante(appel, noms_parcelles: tuple[str, ...]) -> Optional[str]:
+    """[US-281 / CA4] Le nom, tel qu'en base, de la parcelle ACTIVE qu'une création recréerait."""
+    if appel.nom != OUTIL_CREER_PARCELLE or not isinstance(appel.arguments, dict):
+        return None
+    par_cle = {_compact(nom): nom for nom in noms_parcelles}
+    return par_cle.get(_compact(str(appel.arguments.get("nom") or "")))
+
+
 def _creation_nettoyee(appel, noms_parcelles: tuple[str, ...]):
     """[US-257] Une création que le modèle a recopiée d'une fiche lue, rendue à ce qu'elle dit.
 
@@ -550,8 +606,8 @@ def _creation_nettoyee(appel, noms_parcelles: tuple[str, ...]):
     - `actif=true` à la création ne dit rien (une parcelle naît en service) : retiré ;
     - un nom de parcelle EXISTANT (nom exact) avec des caractéristiques devient
       `modifier_parcelle` ; les champs que la phrase n'évoque pas y sont retirés.
-    Une création sans caractéristique sur un nom pris reste une création : le plan la
-    signale comme déjà faite (`Plan.deja_faites`).
+    Une création sans caractéristique sur un nom pris reste une création : le validateur
+    la refuse (US-281 / CA4).
     """
     if appel.nom != OUTIL_CREER_PARCELLE or not appel.arguments_valides or not isinstance(appel.arguments, dict):
         return appel
@@ -637,6 +693,19 @@ def valider_appel(appel, contexte: ContexteValidation) -> Verdict:
     if outil.nom == OUTIL_CREER_PARCELLE and deplier_creations([appel]) != [appel]:
         # [US-276 / CA4 bis] Ses caractéristiques seraient perdues : c'est un plan.
         return Verdict(motif="création avec caractéristiques : à déplier en plan")
+    existante = _creation_existante(appel, contexte.noms_parcelles)
+    if existante is not None:
+        # [US-281 / CA4] Une parcelle active ne se recrée pas : la raison revient au modèle.
+        log.info("🤖 AGENT          : %s sur %r, qui existe déjà → refusé", appel.nom, existante)
+        return Verdict(motif="parcelle existante",
+                       precision=f"La parcelle « {existante} » existe déjà : je ne la recrée pas.")
+    if (outil.nom == OUTIL_MODIFIER_PARCELLE and appel.arguments.get("actif") is False
+            and not desactivation_dite(contexte.texte)):
+        # [US-281 / CA3] « enlève la serre » ne dit pas de la mettre hors service.
+        nom = appel.arguments.get("parcelle")
+        log.info("🤖 AGENT          : %s actif=false sans désactivation dite → précision", appel.nom)
+        return Verdict(motif="désactivation non dite",
+                       precision=question_de_desactivation(nom if isinstance(nom, str) else None))
 
     if forme.destructrice:
         for argument in forme.arguments:
@@ -713,7 +782,8 @@ def valider_plan(appels, contexte: ContexteValidation) -> VerdictPlan:
     Chaque appel passe par `valider_appel` (règles 1 à 6 et 9), avec la liste
     des parcelles ENRICHIE des créations des étapes précédentes : « mets la
     planche nord à 8 m » est accepté après « crée la planche nord » (CA2, CA3).
-    Une création sur un nom déjà pris n'est pas dupliquée : elle est gardée,
+    [US-281 / CA4] Une création sur une parcelle en base refuse le plan ; la même
+    création deux fois dans le plan n'est pas dupliquée : elle est gardée,
     signalée, et sera sautée (`Plan.deja_faites`).
     """
     from app.services.agent.executeurs import CLE_AJOUTER, admise_dans_un_plan
@@ -722,7 +792,10 @@ def valider_plan(appels, contexte: ContexteValidation) -> VerdictPlan:
     etapes: list[CommandeInterpretee] = []
     deja_faites: list[int] = []
     for rang, appel in enumerate(deplier_creations(appels, contexte.noms_parcelles), start=1):
-        verdict = valider_appel(appel, replace(contexte, noms_parcelles=tuple(noms)))
+        # [US-281 / CA4] Une création se juge contre les parcelles en base, qu'elle ne recrée
+        # jamais ; recréer celle d'une étape précédente reste signalé (`deja_faites`).
+        noms_etape = contexte.noms_parcelles if appel.nom == OUTIL_CREER_PARCELLE else tuple(noms)
+        verdict = valider_appel(appel, replace(contexte, noms_parcelles=noms_etape))
         commande = verdict.commande
         if commande is None and _caracteristiques_non_dites(verdict, appel, etapes):
             # [US-276 / CA4 bis] « crée la serre » avec `abri=serre` : la caractéristique n'est

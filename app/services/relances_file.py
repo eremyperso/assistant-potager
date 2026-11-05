@@ -200,7 +200,7 @@ def compagnon_joignable(db: Session, user_id: int) -> bool:
 
 def _envoyer_niveau_1(
     db: Session, user_id: int, chat_id: int, gestes: list[Proposition],
-    entete: str, remplacer: Optional[int],
+    entete: str, remplacer: Optional[int], signal: str = "file:relance",
 ) -> Optional[int]:
     """Poste (ou remplace) le niveau 1, et rend l'identifiant du message obtenu.
 
@@ -213,8 +213,22 @@ def _envoyer_niveau_1(
     if remplacer is not None and svc_telegram_notify.editer_message(
         chat_id, remplacer, texte, boutons,
     ):
-        return remplacer
-    return svc_telegram_notify.envoyer(chat_id, texte, boutons)
+        message_id = remplacer
+    else:
+        message_id = svc_telegram_notify.envoyer(chat_id, texte, boutons)
+    if message_id is not None:
+        _noter_dans_la_conversation(user_id, gestes, texte, signal)
+    return message_id
+
+
+def _noter_dans_la_conversation(
+    user_id: int, gestes: list[Proposition], texte: str, signal: str,
+) -> None:
+    """[US-286 / CA1] Ce que le bot vient d'envoyer de lui-même entre dans la conversation :
+    « vide le geste » juste après est une réponse à ce message, pas une entrée du carnet."""
+    from app.services.compagnon import file_agent
+
+    file_agent.noter_envoi(user_id, gestes, texte, signal)
 
 
 def inviter_si_premier_depot(
@@ -246,7 +260,7 @@ def inviter_si_premier_depot(
     message_id = _envoyer_niveau_1(
         db, user_id, chat_id, gestes,
         "🌱 *Un geste vous attend* — préparé depuis l'application, pas encore enregistré.",
-        remplacer=None,
+        remplacer=None, signal="file:invitation",
     )
     ligne = reglage(db, user_id)
     ligne.derniere_invitation_le = instant
@@ -380,10 +394,10 @@ def avertir(
     chat_id = _chat_id(db, user_id)
     if chat_id is None:
         return False
-    envoye = svc_telegram_notify.envoyer(
-        chat_id, texte_avertissement(gestes), boutons_file(),
-    ) is not None
+    texte = texte_avertissement(gestes)
+    envoye = svc_telegram_notify.envoyer(chat_id, texte, boutons_file()) is not None
     if envoye:
+        _noter_dans_la_conversation(user_id, gestes, texte, "file:avertissement")
         for geste in gestes:
             svc_file.marquer_averti(geste, maintenant=maintenant)
         log.info(
@@ -419,7 +433,9 @@ def notifier_purge(db: Session, user_id: int, gestes: list[Proposition]) -> bool
     chat_id = _chat_id(db, user_id)
     if chat_id is None:
         return False
-    if svc_telegram_notify.envoyer(chat_id, texte_purge(gestes)) is not None:
+    texte = texte_purge(gestes)
+    if svc_telegram_notify.envoyer(chat_id, texte) is not None:
+        _noter_dans_la_conversation(user_id, gestes, texte, "file:purge")
         log.info("[US-224 / CA18] Purge annoncée : user_id=%s (%s geste(s))", user_id, len(gestes))
         return True
     log.warning(

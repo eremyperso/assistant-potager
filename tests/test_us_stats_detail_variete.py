@@ -339,6 +339,7 @@ class TestCmdStatsAvecArg:
 
         mock_update = MagicMock()
         mock_update.message.reply_text = AsyncMock()
+        mock_update.effective_message = mock_update.message  # _send_chunked répond par effective_message
 
         mock_ctx = MagicMock()
         mock_ctx.args = ["marsien"]
@@ -364,6 +365,7 @@ class TestCmdStatsAvecArg:
 
         mock_update = MagicMock()
         mock_update.message.reply_text = AsyncMock()
+        mock_update.effective_message = mock_update.message  # _send_chunked répond par effective_message
 
         mock_ctx = MagicMock()
         mock_ctx.args = ["tomate"]
@@ -383,6 +385,7 @@ class TestCmdStatsAvecArg:
 
         mock_update = MagicMock()
         mock_update.message.reply_text = AsyncMock()
+        mock_update.effective_message = mock_update.message  # _send_chunked répond par effective_message
 
         mock_ctx = MagicMock()
         mock_ctx.args = []

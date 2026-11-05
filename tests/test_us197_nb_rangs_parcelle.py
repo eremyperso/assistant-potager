@@ -360,6 +360,9 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
         # [US-278] Le filet des caractéristiques LIT la valeur dictée pour la proposer ;
         # il ne calcule rien, l'écriture reste celle de `/parcelle modifier`.
         Path("app/services/agent/filet_fiche.py"),
+        # [US-262] « c'était 8 rangs » sur une parcelle : la correction TRADUIT le
+        # champ « rang » vers `nb_rangs` de la fiche. Elle ne calcule rien.
+        Path("app/services/compagnon/corrections.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

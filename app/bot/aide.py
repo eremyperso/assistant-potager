@@ -393,6 +393,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
         "/corriger — Modifier un événement\n"
+        "/deplacer [culture] — Déplacer une culture vers une autre parcelle (guidé)\n"
         "/note — Noter une observation (guidé)\n"
         "/lier [code] — Relier ce chat à votre compte web\n"
         "/delier — Dissocier ce chat de votre compte web\n"
