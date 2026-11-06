@@ -19,6 +19,8 @@ from utils.notes import is_note_request as _is_note_request
 from app.services.context import current_context
 from app.services import interpreteur_commandes as svc_interpreteur
 from app.services.compagnon import corrections as svc_corrections
+from app.services.compagnon import orchestrateur as svc_orchestrateur
+from app.services.compagnon import propositions as svc_propositions
 from .noyau import MENU_KEYBOARD, log
 from .etat import (
     _CULTURE_PENDING, _CULTURE_TIMEOUT, _GODET_GRAINES_PENDING, _QUANTITE_PENDING,
@@ -807,65 +809,37 @@ async def handle_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     texte_raw = reprendre_reponse(update, texte_raw)
     texte = texte_raw.lower()
 
-    # ── [US-287 / CA3] Agent d'abord : en mode `prioritaire`, la phrase libre va à l'agent
-    # AVANT les raccourcis à mots-clés (PRIORITÉ 3 → 3d), qui ne servent plus qu'au mode
-    # dégradé (CA4 : quota, panne). Restent avant lui : les gardes de dialogue en cours
+    # ── [US-270 / CA4] La distribution (gardes, agent, interpréteur, puis question ou geste)
+    # vit dans `app/services/compagnon/orchestrateur.py`, commune au bot et à la PWA.
+    # Le bot lui prête ses gardes — celles qui répondent dans Telegram — et exécute ce
+    # qu'il décide. [US-287 / CA3] En mode `prioritaire`, la phrase libre va à l'agent
+    # AVANT les raccourcis à mots-clés ; restent avant lui les gardes de dialogue en cours
     # ci-dessus, le profil et le carnet, et les textes EXACTS des boutons (NAV_SUPPRIMER,
     # NAV_CORRIGER) — un bouton n'est pas une phrase libre.
-    agent_prioritaire = svc_interpreteur.agent_prioritaire()
-    resultat_commande = svc_interpreteur.CASCADE_HABITUELLE
-    if agent_prioritaire and texte not in NAV_SUPPRIMER and texte not in NAV_CORRIGER:
-        if await _phrase_de_dialogue(update, ctx, texte_raw):
-            return
-        resultat_commande = svc_interpreteur.agent_d_abord(
-            texte_raw, current_context(), contexte_court=contexte_court_de(update),
-        )
-    if resultat_commande is svc_interpreteur.CASCADE_HABITUELLE:
-        if await _raccourcis_a_mots_cles(update, ctx, texte_raw):
-            return
-        # ── PRIORITÉ 3e : [US-172] la phrase désigne-t-elle une COMMANDE ?
-        # Placé après toutes les gardes de flux de conversation et après les flux
-        # guidés déjà dictables (godets, déplacement, note), et AVANT le routeur :
-        # une phrase reconnue comme commande n'atteint jamais le parseur de geste.
-        # Le repli modèle n'est tenté qu'ici — pas plus haut : le calculer avant les
-        # flux ci-dessus aurait payé des jetons pour des phrases qu'ils traitent déjà.
-        # [US-277] `interpreter` relit les règles (sans coût) et écarte leur lecture
-        # d'une phrase composée ou négative.
-        # [US-287] En mode `prioritaire`, le profil et le carnet ont déjà été lus, et
-        # l'agent consulté : il est indisponible, inutile de le rappeler.
-        if not agent_prioritaire and await _phrase_de_dialogue(update, ctx, texte_raw):
-            return
-        resultat_commande = svc_interpreteur.interpreter(
-            texte_raw, current_context(), contexte_court=contexte_court_de(update),
-            consulter_agent_d_abord=False,
-        )
+    canal = svc_orchestrateur.Canal(
+        nom=svc_propositions.CANAL_TELEGRAM,
+        dialogue=lambda phrase: _phrase_de_dialogue(update, ctx, phrase),
+        raccourcis=lambda phrase: _raccourcis_a_mots_cles(update, ctx, phrase),
+        contexte_court=lambda: contexte_court_de(update),
+        boutons_exacts=frozenset(NAV_SUPPRIMER) | frozenset(NAV_CORRIGER),
+    )
+    distribution = await svc_orchestrateur.distribuer(texte_raw, current_context(), canal)
+    if distribution.pris_par_le_canal:
+        return
+    resultat_commande = distribution.resultat
     if await _traiter_commande_interpretee(update, ctx, resultat_commande):
         return
 
-    # ── PRIORITÉ 3f : [US-236 / CA2, CA3] l'agent a dit où va la phrase
-    # Une question part à la cascade avec la nature qu'il a donnée, un geste au
-    # parseur : ni l'un ni l'autre ne repasse par les mots-clés du routeur, qui
-    # ne servent plus qu'aux phrases que l'agent n'a pas prises en charge (CA8).
-    aiguillage = resultat_commande if isinstance(resultat_commande, svc_interpreteur.Aiguillage) else None
-    if aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_QUESTION:
-        log.info(f"❓ QUESTION AGENT  : nature={aiguillage.nature_question} → _ask_question")
-        await _ask_question(update, texte_raw, nature=aiguillage.nature_question)
-        return
-    geste_aiguille = aiguillage is not None and aiguillage.vers == svc_interpreteur.VERS_GESTE
-
-    # ── PRIORITÉ 4 : nature de la demande décidée par le routeur [US-170 CA6, CA7]
-    # Remplace _is_question(), dont la moitié du critère (le point d'interrogation
-    # en fin de phrase) est absente du canal vocal — voir
-    # docs/ANALYSE_ROUTAGE_QUESTIONS_2026-08-30.md. Le routeur porte déjà les
-    # règles, la règle de geste, le catalogue, le cache de classification et le
-    # modèle en dernier recours (US-093) ; le filet US-011 plus bas reste le
-    # rattrapage des cas résiduels (CA10), inchangé.
-    if not geste_aiguille:
-        decision_routage = routeur.classer_demande(texte_raw, current_context())
-        if decision_routage.nature != routeur.NATURE_ACTION:
-            log.info(f"❓ QUESTION AUTO   : nature={decision_routage.nature} → reroutage vers _ask_question")
+    # ── PRIORITÉ 3f / 4 : [US-236 / CA2, CA3] l'agent a dit où va la phrase, sinon le routeur
+    # [US-170 CA6, CA7] décide de la nature. Une question part à la cascade avec la nature de
+    # l'agent, un geste au parseur ; le filet US-011 plus bas reste le rattrapage (CA10).
+    suite = svc_orchestrateur.orienter(resultat_commande, texte_raw, current_context())
+    if suite.vers == svc_orchestrateur.SUITE_QUESTION:
+        if suite.nature:
+            await _ask_question(update, texte_raw, nature=suite.nature)
+        else:
             await _ask_question(update, texte_raw)
-            return
+        return
 
     # Sinon : parser comme action(s) potager
     # Si multi-lignes → traiter chaque ligne séparément

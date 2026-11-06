@@ -40,6 +40,7 @@ from dataclasses import asdict, dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
 from typing import Iterator, Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
@@ -404,6 +405,29 @@ def par_code(code: Optional[str], user_id: Optional[int]) -> Optional[Propositio
         return _lire(ligne)
 
 
+def par_id(
+    proposition_id: int, user_id: int, potager_id: int,
+) -> Optional[PropositionConversation]:
+    """[US-270] La proposition de conversation de ce numéro pour CE jardinier dans CE potager.
+
+    Le portail désigne une carte par son identifiant : il ne peut viser que la proposition de
+    son compte, dans le potager actif (CA7) — contrairement au bouton Telegram, qui nomme un
+    code et peut viser un autre potager (`par_code`).
+    """
+    with session_sur(potager_id) as db:
+        ligne = (
+            db.query(Proposition)
+            .filter(
+                Proposition.id == int(proposition_id),
+                Proposition.user_id == user_id,
+                Proposition.potager_id == potager_id,
+                Proposition.nature.in_(NATURES_CONVERSATION),
+            )
+            .first()
+        )
+        return _lire(ligne)
+
+
 def mettre_a_jour(
     proposition: PropositionConversation, *, commande, attend: Optional[str],
     log_id: Optional[int] = None,
@@ -536,7 +560,14 @@ def purger(maintenant: Optional[datetime] = None) -> int:
     with session_sur(None) as db:
         nb = (
             db.query(Proposition)
-            .filter(Proposition.nature.in_(NATURES_CONVERSATION), Proposition.cree_le < limite)
+            .filter(
+                # [US-270] Les gestes DITS au compagnon (`ecran = 'compagnon'`) partent avec eux.
+                or_(
+                    Proposition.nature.in_(NATURES_CONVERSATION),
+                    (Proposition.nature == NATURE_GESTE) & (Proposition.ecran == "compagnon"),
+                ),
+                Proposition.cree_le < limite,
+            )
             .delete(synchronize_session=False)
         )
         db.commit()

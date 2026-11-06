@@ -398,24 +398,42 @@ class TestCA8MotsClesActifs:
 class TestCA9OrdreDesEtages:
 
     def test_us236_ca9_ordre_dans_handle_text(self):
-        """Gardes de conversation → règles → filtres → agent → routeur → cascade.
+        """Gardes de conversation → orchestrateur → présentation → question ou geste.
 
         [US-287] En mode `prioritaire`, l'agent passe avant les raccourcis (règles et filtres sans
-        modèle), désormais dans `_raccourcis_a_mots_cles` ; leur ordre interne est vérifié à part."""
+        modèle), désormais dans `_raccourcis_a_mots_cles` ; leur ordre interne est vérifié à part.
+        [US-270 / CA4] La distribution (agent, raccourcis, interpréteur, routeur) est extraite dans
+        `orchestrateur` : `handle_text` ne garde que l'ordre des gardes de conversation et de
+        l'exécution ; l'ordre des étages est vérifié sur l'orchestrateur."""
         source = inspect.getsource(bot_messages.handle_text)
         reperes = [
             "_verifier_liaison_ou_onboarding(",           # garde de liaison
             "_interp_completion_texte(",                  # gardes de flux en cours
             "if mode == 'ask'",
-            "svc_interpreteur.agent_d_abord(",            # [US-287] agent d'abord (mode prioritaire)
-            "_raccourcis_a_mots_cles(",                   # règles et filtres sans modèle
-            "svc_interpreteur.interpreter(",              # agent (filtres de savoir/geste dedans)
-            "svc_interpreteur.VERS_QUESTION",             # aiguillage suivi
-            "routeur.classer_demande(",                   # routeur
+            "svc_orchestrateur.distribuer(",              # [US-270] la distribution, extraite
+            "_traiter_commande_interpretee(",             # la commande interprétée, présentée
+            "svc_orchestrateur.orienter(",                # question ou geste
             "_parse_and_save(",                           # parseur de gestes (le dernier appel)
         ]
         positions = [source.index(repere) for repere in reperes[:-1]] + [source.rindex(reperes[-1])]
         assert positions == sorted(positions)
+
+    def test_us236_ca9_ordre_dans_l_orchestrateur(self):
+        """[US-270 / CA4] Agent d'abord → raccourcis → gardes de dialogue → interpréteur, puis
+        aiguillage suivi → routeur."""
+        from app.services.compagnon import orchestrateur
+
+        distribution = inspect.getsource(orchestrateur.distribuer)
+        reperes = [
+            "svc_interpreteur.agent_d_abord(",
+            "canal.raccourcis(",
+            "svc_interpreteur.interpreter(",
+        ]
+        positions = [distribution.index(repere) for repere in reperes]
+        assert positions == sorted(positions)
+
+        orientation = inspect.getsource(orchestrateur.orienter)
+        assert orientation.index("VERS_QUESTION") < orientation.index("routeur.classer_demande(")
 
     def test_us236_ca9_ordre_dans_les_raccourcis(self):
         """[US-287] Les règles sont lues avant les filtres sans modèle, comme avant leur extraction."""

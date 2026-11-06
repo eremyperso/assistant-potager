@@ -988,7 +988,8 @@ def _consulter_savoir(ctx: TenantContext, question: str, famille: "str | None" =
 # API publique — cascade complète [CA6, CA7, CA8]
 # ─────────────────────────────────────────────────────────────────────────────
 def repondre_avec_cascade(
-    ctx: TenantContext, question: str, decision: Optional[DecisionRoutage] = None
+    ctx: TenantContext, question: str, decision: Optional[DecisionRoutage] = None,
+    famille: Optional[str] = None,
 ) -> ReponseCascade:
     """Classe la demande puis produit une réponse, avec au plus une remontée
     de cascade (CA7). Ne renvoie jamais de message intermédiaire — seule la
@@ -996,6 +997,10 @@ def repondre_avec_cascade(
 
     [US-236 / CA2] `decision` : la nature est déjà connue (l'agent interpréteur
     l'a donnée) — la classification n'est pas rejouée.
+
+    [US-271 / mode Support] `famille` : la famille du corpus IMPOSÉE à la recherche (`doc_app` : la
+    documentation de l'application). Ni cache de questions, ni carnet, ni mémorisation : la réponse
+    ne vaut que pour ce mode et ne doit servir à aucun autre.
 
     [US-097 / CA1] Journalise la cascade dans `routage_logs` une fois la
     réponse produite (succès uniquement — une cascade qui lève une exception,
@@ -1028,10 +1033,12 @@ def repondre_avec_cascade(
     # d'un fragment recopié, ni lue dans le cache, ni mémorisée pour d'autres.
     from app.services import carnet_compagnon
 
-    faits_carnet = () if _est_rappel_de_note(question) else carnet_compagnon.faits_pour_question(ctx, question)
+    faits_carnet = (
+        () if (_est_rappel_de_note(question) or famille) else carnet_compagnon.faits_pour_question(ctx, question)
+    )
     options_carnet = {"faits_carnet": faits_carnet} if faits_carnet else {}  # appels inchangés sans carnet
     depuis_cache = (
-        None if (_est_rappel_de_note(question) or faits_carnet)
+        None if (_est_rappel_de_note(question) or faits_carnet or famille)
         else cache_questions.servir(ctx, question)
     )
     if depuis_cache is not None:
@@ -1087,7 +1094,7 @@ def repondre_avec_cascade(
             # — remporte le classement : « qu'ai-je noté sur les tomates ? »
             # rendait trois fiches d'agronomie et aucune note (constaté en
             # production le 08/09/2026).
-            famille_savoir = (
+            famille_savoir = famille or (
                 connaissance.FAMILLE_MEMOIRE_POTAGER
                 if _est_rappel_de_note(question) else None
             )
@@ -1167,7 +1174,7 @@ def repondre_avec_cascade(
     # [US-095] Mémorisation APRÈS coup, et seulement sur une réponse réellement
     # produite : une cascade qui lève (mode dégradé 429, US-092) n'arrive jamais
     # ici — mémoriser une non-réponse la ferait servir comme une réponse.
-    if not faits_carnet:  # une réponse personnalisée par le carnet n'est jamais mémorisée
+    if not faits_carnet and not famille:  # ni personnalisée par le carnet, ni limitée à un mode
         _memoriser_reponse(ctx, question, decision, etage_resolveur, chiffree, texte, savoir)
     return ReponseCascade(texte=texte, etage_resolveur=etage_resolveur, routage_log_id=routage_log_id)
 

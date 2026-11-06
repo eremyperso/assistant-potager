@@ -16,7 +16,8 @@ from utils.tts import send_voice_reply
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
-from app.services import avertissements_plantation as svc_avertissements
+from app.services import avertissements_plantation as svc_avertissements  # noqa: F401 — exposé par la façade (tests US-167)
+from app.services import gestes as svc_gestes
 from app.services import contexte_semis as svc_contexte_semis
 from app.services.permissions import require_role, PermissionInsuffisanteError
 from datetime import date
@@ -492,23 +493,11 @@ def _evaluer_avertissements_avant_ecriture(db, tenant_ctx, items: list[dict]) ->
     une plantation de tomate sur une parcelle sans aucun autre antécédent se
     voyait citée comme « déjà présente cette année », elle-même). Le message
     reste affiché après la confirmation d'enregistrement chez l'appelant —
-    seul le calcul est avancé plus tôt, l'ordre d'affichage ne change pas."""
-    messages: list[str] = []
-    for parsed in items:
-        if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
-            continue
-        nom_parcelle = parsed.get("parcelle")
-        if not nom_parcelle:
-            continue
-        parcelle = resolve_parcelle(db, nom_parcelle, potager_id=tenant_ctx.potager_id)
-        if parcelle is None:
-            continue
-        messages.extend(
-            svc_avertissements.evaluer_avertissements_plantation(
-                db, tenant_ctx, parcelle.id, parsed.get("culture")
-            )
-        )
-    return messages
+    seul le calcul est avancé plus tôt, l'ordre d'affichage ne change pas.
+
+    [US-269] Le calcul vit dans `app.services.gestes` ; le bot lui passe sa
+    résolution de parcelle."""
+    return svc_gestes.evaluer_avertissements(db, tenant_ctx, items, resolve_parcelle)
 
 
 async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None) -> bool:
@@ -517,71 +506,35 @@ async def _do_save_items(update: Update, items: list[dict], texte: str, msg=None
     Retourne False dès qu'un item a été refusé ou n'a pas pu être écrit : un geste
     de la file ne doit alors PAS en sortir (US-224 / CA7, « jamais avant l'écriture »).
     """
+    # [US-269 / CA2] L'écriture est faite par `app.services.gestes`, sans objet
+    # Telegram ; le bot ne garde que ce qu'il dit au jardinier (mêmes messages).
     db = SessionLocal()
-    saved_items = []
     try:
-        # [US-167] Évalué AVANT toute écriture ci-dessous — voir la docstring
-        # de `_evaluer_avertissements_avant_ecriture` pour la raison (sinon
-        # l'événement qu'on est en train de créer se compte comme son propre
-        # antécédent de rotation).
-        avertissements = _evaluer_avertissements_avant_ecriture(db, current_context(), items)
-
-        for parsed in items:
-            # [US-049] La résolution reste ici (nécessaire pour construire l'Evenement
-            # avec le bon parcelle_id), mais le BLOCAGE si la parcelle ne résout à rien
-            # est désormais décidé uniquement par la validation centrale à l'intérieur
-            # de creer_evenement_confirme (valider_evenement) — plus de duplication de
-            # la règle "parcelle inconnue" à cet endroit.
-            nom_parcelle = parsed.get("parcelle")
-            parcelle_obj = resolve_parcelle(db, nom_parcelle, potager_id=current_context().potager_id) if nom_parcelle else None
-
-            try:
-                # [fix bug id=351] mise_en_godet doit toujours passer par
-                # creer_evenement_godet (parcelle_id forcé à None + auto-link au
-                # semis d'origine), jamais par creer_evenement_confirme — même
-                # quand la variété est déjà connue (seul cas jusqu'ici routé vers
-                # la fonction dédiée, via l'interception _GODET_PENDING plus haut).
-                if normalize_action(parsed.get("action")) == "mise_en_godet":
-                    event = svc_evenements.creer_evenement_godet(db, current_context(), parsed, texte)
-                else:
-                    event = svc_evenements.creer_evenement_confirme(db, current_context(), parsed, texte, parcelle_obj)
-            except svc_evenements.ParcelleInconnueError as e:
-                db.rollback()
-                log.warning(f"⚠️ PARCELLE INCONNUE : {nom_parcelle!r} — sauvegarde bloquée")
-                err_msg = f"❌ {e}\n\nCréez-la d'abord avec : `/parcelle ajouter {nom_parcelle}`"
-                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
-                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                return False
-            except svc_evenements.EvenementInvalideError as e:
-                # [US-049] Filet de sécurité final — la validation centrale a rejeté
-                # l'événement au moment même de l'écriture. Les contrôles amont dans
-                # _parse_and_save couvrent déjà l'UX normale ; ce cas ne devrait se
-                # produire que si l'état du potager a changé entre la confirmation et
-                # l'écriture, ou via un chemin qui aurait échappé aux contrôles amont.
-                db.rollback()
-                log.warning(f"❌ ÉVÉNEMENT INVALIDE (écriture) : {e} | texte={texte!r}")
-                err_msg = f"❌ {e}"
-                if saved_items:
-                    # Chaque événement est validé en base à part : les précédents
-                    # sont déjà enregistrés, et le dire évite un doublon à la reprise.
-                    deja = ", ".join(
-                        f"{p.get('culture') or '?'} (n° {eid})" for p, eid in saved_items
-                    )
-                    err_msg += f"\n\n✅ Déjà enregistré avant l'erreur : {deja}."
-                if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
-                else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
-                return False
-            # [US-069] Le récapitulatif affiche le contexte RÉELLEMENT enregistré.
-            parsed["contexte_semis"] = event.contexte_semis
-            if event.numero_lot is not None:   # [US-209 / CA1, CA8] le semis annonce son lot
-                parsed["_lot_numero"] = event.numero_lot
-            saved_items.append((parsed, event.id))
+        resultat = svc_gestes.enregistrer_gestes(db, current_context(), items, texte, resolve_parcelle)
     except Exception as e:
-        db.rollback()
         await update.effective_message.reply_text(f"❌ Erreur base de données : {e}")
         return False
     finally:
         db.close()
+
+    saved_items = resultat.enregistres
+    avertissements = resultat.avertissements
+    if not resultat.complet:
+        if resultat.parcelle_inconnue is not None:
+            err_msg = (f"❌ {resultat.erreur}\n\nCréez-la d'abord avec : "
+                       f"`/parcelle ajouter {resultat.parcelle_inconnue}`")
+        else:
+            err_msg = f"❌ {resultat.erreur}"
+            if saved_items:
+                # Chaque événement est validé en base à part : les précédents
+                # sont déjà enregistrés, et le dire évite un doublon à la reprise.
+                deja = ", ".join(
+                    f"{p.get('culture') or '?'} (n° {eid})" for p, eid in saved_items
+                )
+                err_msg += f"\n\n✅ Déjà enregistré avant l'erreur : {deja}."
+        if msg:  await msg.edit_text(err_msg, parse_mode="Markdown")
+        else:    await update.effective_message.reply_text(err_msg, parse_mode="Markdown", reply_markup=MENU_KEYBOARD)
+        return False
 
     if len(saved_items) == 1:
         parsed, event_id = saved_items[0]

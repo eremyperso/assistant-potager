@@ -316,3 +316,84 @@
   padding: 0 6px; pointer-events: none; white-space: nowrap; z-index: 2; }
 .regle-kbd { font-family: inherit; font-size: 10.5px; border: 1px solid var(--border); border-bottom-width: 2px;
   border-radius: 4px; padding: 0 4px; color: var(--txt2); }
+
+/* ═══ [US-271] Gaston, le compagnon — maquette « Compagnon.html » (Claude Design) ═══
+   Trois états : replié sur le bord droit, présent en bas à droite, chat ouvert. Les couleurs de la
+   maquette (fond crème du chat, en-tête vert profond) sont des variables, avec leur version sombre. */
+:root {
+  --gst-fond: #F7F4EA;        /* fond du chat */
+  --gst-bord: #E4DEC9;        /* bord de la saisie, des cartes */
+  --gst-bord-doux: #ECE6D4;   /* filet au-dessus de la saisie */
+  --gst-entete: #2F5416;      /* en-tête du chat */
+  --gst-bulle: #FFFFFF;       /* bulle du compagnon */
+  --gst-visage: #FBF3D1;      /* fond de l'avatar */
+  --gst-visage-2: #F1E6C3;
+}
+.dark {
+  --gst-fond: #131A0D;
+  --gst-bord: #2C3822;
+  --gst-bord-doux: #232E19;
+  --gst-entete: #243B12;
+  --gst-bulle: #1E2815;
+  --gst-visage: #3A3920;
+  --gst-visage-2: #2E2D18;
+}
+
+.gst-yeux { transform-box: fill-box; transform-origin: center; animation: gst-blink 4.8s infinite; }
+@keyframes gst-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(.1); } }
+.gst-wave { animation: gst-wave 1.6s ease-in-out infinite; }
+@keyframes gst-wave { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(16deg); } }
+@keyframes gst-peek { 0%, 100% { transform: translateX(0) rotate(-10deg); } 30% { transform: translateX(-14px) rotate(-18deg); } 60% { transform: translateX(-8px) rotate(-4deg); } }
+@keyframes gst-hop { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-8px) rotate(-6deg); } 50% { transform: translateY(0) rotate(0); } 75% { transform: translateY(-4px) rotate(6deg); } }
+@keyframes gst-nudge { 0%, 84%, 100% { transform: translateX(0) rotate(-10deg); } 88% { transform: translateX(-12px) rotate(-18deg); } 92% { transform: translateX(-6px) rotate(-4deg); } 96% { transform: translateX(-10px) rotate(-14deg); } }
+@keyframes gst-hopi { 0%, 84%, 100% { transform: translateY(0) rotate(0); } 88% { transform: translateY(-8px) rotate(-6deg); } 92% { transform: translateY(0); } 96% { transform: translateY(-4px) rotate(6deg); } }
+@keyframes gst-tp { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+/* Replié : Gaston dépasse du bord droit, un chevron invite à le déplier */
+.gst-tab { position: absolute; right: 0; bottom: 96px; width: 74px; height: 110px; z-index: 3; }
+.gst-tab-sv { position: absolute; right: -30px; top: 0; width: 92px; height: 110px; transform: rotate(-10deg);
+  filter: drop-shadow(-2px 3px 4px rgba(0,0,0,.18)); pointer-events: none; }
+.gst-tab:hover .gst-tab-sv, .gst-tab:focus-within .gst-tab-sv { animation: gst-peek .9s ease-in-out infinite; }
+.gst-chev { position: absolute; left: 0; top: 50px; width: 40px; height: 40px; border-radius: 50%; background: var(--card);
+  box-shadow: 0 3px 10px rgba(22,33,12,.25); display: flex; align-items: center; justify-content: center;
+  color: var(--brand-text); transition: transform .2s; }
+.gst-tab:hover .gst-chev { transform: scale(1.08); }
+
+/* Présent : l'avatar rond, sa main qui salue, sa pastille « en ligne », son bouton replier */
+.gst-pres { position: absolute; right: 20px; bottom: 24px; width: 96px; height: 96px; z-index: 3; }
+.gst-av { width: 96px; height: 96px; border-radius: 50%; display: block; overflow: hidden; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, var(--gst-visage), var(--gst-visage-2));
+  border: 4px solid var(--card); box-shadow: 0 0 0 2px var(--brand), 0 8px 22px rgba(22,33,12,.25); }
+.gst-av svg { width: 100%; height: 100%; display: block; }
+.gst-pres:hover .gst-av, .gst-pres:focus-within .gst-av { animation: gst-hop .7s ease-in-out infinite; }
+.gst-hand { position: absolute; right: -18px; top: -12px; width: 34px; height: 34px; transform-origin: 20% 90%;
+  animation: gst-wave 1.4s ease-in-out infinite; pointer-events: none; }
+.gst-dot { position: absolute; right: 4px; bottom: 4px; width: 20px; height: 20px; border-radius: 50%; background: #43A047;
+  border: 3px solid var(--card); pointer-events: none; }
+.gst-bulle { position: absolute; right: 112px; bottom: 54px; background: var(--card); color: var(--txt);
+  border-radius: 14px 14px 4px 14px; padding: 8px 12px; font-size: 12.5px; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(22,33,12,.15); }
+.gst-min { position: absolute; left: -6px; top: -6px; width: 24px; height: 24px; border-radius: 50%; background: var(--card);
+  box-shadow: 0 2px 6px rgba(22,33,12,.25); display: flex; align-items: center; justify-content: center; color: var(--txt2); }
+
+/* Mobile et tablette (barre d'onglets basse) : pas de survol, un petit signe toutes les 6 s */
+@media (max-width: 899px) {
+  .gst-tab { bottom: 72px; width: 64px; height: 96px; }
+  .gst-tab-sv { width: 80px; height: 96px; right: -28px; animation: gst-nudge 6s ease-in-out infinite; }
+  .gst-chev { width: 44px; height: 44px; top: 42px; left: -4px; }
+  .gst-pres { width: 72px; height: 72px; right: 16px; bottom: 18px; }
+  .gst-av { width: 72px; height: 72px; border-width: 3px; animation: gst-hopi 6s ease-in-out infinite; }
+  .gst-hand { width: 28px; height: 28px; right: -12px; top: -12px; }
+  .gst-dot { width: 16px; height: 16px; right: 2px; bottom: 2px; }
+  .gst-min { width: 32px; height: 32px; left: -12px; top: -10px; }
+  .gst-min::after { content: ""; position: absolute; inset: -6px; }
+  .gst-bulle { right: 84px; bottom: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gst-yeux, .gst-wave, .gst-hand, .gst-tab-sv, .gst-av, .gst-tape i { animation: none !important; }
+}
+
+/* Chat : bulles, indicateur de frappe */
+.gst-tape i { width: 7px; height: 7px; border-radius: 50%; background: var(--txt3); animation: gst-tp 1s infinite; display: block; }
+.gst-tape i:nth-child(2) { animation-delay: .15s; }
+.gst-tape i:nth-child(3) { animation-delay: .3s; }

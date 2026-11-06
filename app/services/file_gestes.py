@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, date as _date
 from typing import Iterator, Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
@@ -262,7 +263,12 @@ class Depot:
 def _file(db: Session):
     """Toute lecture de la file part d'ici : une commande proposée en conversation
     n'est ni listée, ni relancée, ni périmée comme un geste de la file."""
-    return db.query(Proposition).filter(Proposition.nature == svc_propositions.NATURE_GESTE)
+    # [US-270] Un geste DIT au compagnon (panneau de la PWA, `ecran = 'compagnon'`) n'est pas un
+    # geste préparé pour plus tard : il vit trente minutes, sans relance ni péremption notifiée.
+    return db.query(Proposition).filter(
+        Proposition.nature == svc_propositions.NATURE_GESTE,
+        or_(Proposition.ecran.is_(None), Proposition.ecran != "compagnon"),
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════

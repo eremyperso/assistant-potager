@@ -13,6 +13,7 @@ from utils.tts import send_voice_reply
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import retours as svc_retours
+from app.services.compagnon import orchestrateur as svc_orchestrateur
 from .noyau import AFTER_RECORD_KEYBOARD, MENU_KEYBOARD, log, _decouper_en_blocs
 
 
@@ -365,14 +366,8 @@ async def _ask_question(update: Update, question: str, nature: str | None = None
     log.info(f"🔍 QUESTION       : {question}")
     msg = await update.message.reply_text("🔍 *Analyse de vos données...*", parse_mode="Markdown")
     try:
-        if nature:
-            resultat = routeur.repondre_avec_cascade(
-                current_context(), question,
-                decision=routeur.DecisionRoutage(
-                    nature=nature, origine=routeur.ORIGINE_AGENT, confiance=1.0),
-            )
-        else:
-            resultat = routeur.repondre_avec_cascade(current_context(), question)
+        # [US-270 / CA5] La cascade est commune au bot et à la PWA (E0, R3).
+        resultat = svc_orchestrateur.repondre_a_une_question(current_context(), question, nature)
         reponse = resultat.texte
         log.info(f"💡 RÉPONSE        : {reponse[:200]}{'...' if len(reponse) > 200 else ''}")
 

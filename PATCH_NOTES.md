@@ -1,3 +1,67 @@
+## [v3.119.0] — 2026-11-06
+
+### 🚀 Nouveautés
+- Ajoute dans la PWA un panneau du compagnon (bouton flottant, volet latéral ou plein écran sur mobile) : le jardinier y dicte une phrase, lit la réponse et confirme ou laisse tomber les cartes de proposition (US-271).
+- Range dans le panneau, avec la conversation, les messages spontanés envoyés au jardinier, qu'ils soient partis dans Telegram ou non (US-271).
+- Ajoute un mode « Support » au panneau : la question est posée à la seule documentation de l'application, sans carnet ni mémorisation de la réponse (US-271).
+
+### 🔧 Améliorations techniques
+- Ajoute les composants `PanneauCompagnon`, `CarteProposition`, `BoutonCompagnon` et `Gaston`, le hook `useMedia` et la bibliothèque `lib/compagnon.js` (avec `compagnon.test.js`) ; branche le tout dans `App.jsx` et `lib/api.js` (US-271).
+- Ajoute `llm/routeur.repondre_avec_cascade(famille=…)` : impose une famille du corpus à la recherche et coupe cache de questions, carnet et mémorisation (US-271).
+- Ajoute `messages_du_jardinier` dans `distribution.py` (lecture seule, RLS stricte par potager) (US-271).
+- Ajoute `tests/test_us271_compagnon_panneau.py` (US-271).
+- Limites connues : une commande qui demande confirmation n'est pas confirmable dans la PWA (réponse « à confirmer dans Telegram ») ; le panneau reprend l'aspect de Gaston d'après `Compagnon.html`.
+
+## [v3.118.0] — 2026-11-06
+
+### 🚀 Nouveautés
+- Ajoute une API du compagnon pour la PWA : `POST /compagnon/messages`, `POST /compagnon/propositions/{id}/confirmer`, `POST /compagnon/propositions/{id}/abandonner` et `GET /compagnon/historique` (30 minutes glissantes, 10 échanges au plus) (US-270).
+- Fait répondre `/ask` de l'API par la même cascade que le bot (données, savoir ou raisonnement) et rend `routage_log_id` et `etage` pour le retour 👍/👎 (US-270).
+- Permet de dicter un geste au compagnon depuis la PWA : il vit 30 minutes, sans relance ni péremption notifiée (US-270).
+
+### 🐛 Corrections
+- Refuse à un jardinier de confirmer ou d'abandonner la proposition d'un autre compte ou d'un autre potager : la carte est désignée par son identifiant et filtrée par jardinier et potager (US-270).
+- Traduit les refus du service en réponses HTTP lisibles : 404 introuvable, 409 déjà traitée ou à confirmer dans Telegram, 422 texte vide, 403 droits, 503 modèle indisponible (US-270).
+
+### 🔧 Améliorations techniques
+- Extrait l'enregistrement d'un geste du bot vers `app/services/gestes.py`, sans dépendance à Telegram ; `app/bot/enregistrement.py`, `interpretation.py`, `messages.py` et `questions.py` ne portent plus de logique métier (US-269).
+- Déplace la normalisation des gestes de `app/bot/normalisation.py` vers `app/services/normalisation_gestes.py` (US-269).
+- Ajoute l'orchestrateur `app/services/compagnon/orchestrateur.py` commun au bot et à la PWA, `echange_pwa.py` et `gestes_conversation.py` (US-270).
+- Ajoute `propositions.par_id` et exclut les gestes dits au compagnon de la file de gestes et de ses relances (US-270).
+- Ajoute `tests/test_us269_enregistrer_geste_service.py` et `tests/test_us270_api_compagnon.py` ; adapte les tests d'US-172 et d'US-236.
+- Met à jour la fiche de domaine `commandes-bot.md` et les fiches `doc_app` du compagnon (réponses et mémoire).
+- Limites connues : la voix (`handle_voice`) ne passe pas encore par l'orchestrateur.
+
+## [v3.117.0] — 2026-11-05
+
+### 🚀 Nouveautés
+- Fait passer toute phrase libre d'abord par l'agent, avant les règles et les raccourcis à mots-clés du bot (annuler, godets, déplacer, note) ; sur quota ou panne de l'agent, règles et raccourcis reprennent la main (US-287).
+- Bascule la cible sur Mistral Small 4 pour l'agent et les messages spontanés, après mesure (décision D14) (US-287, US-280).
+- Ajoute `/deplacer` à l'agent et un mode test pour les scénarios conversationnels (US-287).
+- Retient la question que le compagnon vient de poser : « la planche test » répond à « Laquelle : planche test ou plant tubercule ? » sans verbe, 10 minutes au plus, la phrase suivante la consomme (US-284).
+- Rattache un « oui » à la proposition en attente et ne confirme rien quand la carte n'est pas confirmée ni le sujet changé (US-284).
+- Répond aux gestes du jour, à la dernière action, aux habitudes du jardinier, avec le registre choisi (US-285).
+- Fait voir à l'agent les messages que le compagnon a envoyés (file agent) pour qu'il y réponde en connaissance de cause (US-286).
+- Distingue, dans la connaissance, l'application et le jardinage : « comment ranger mes notes » ne reçoit plus une fiche agronomique (US-283).
+- Respecte la ville explicitement nommée pour la météo, grâce à un seul outil météo (US-282).
+- Demande ce qui manque au lieu de le deviner et ne propose plus d'écriture sur une simple question : les gardes passent après le modèle (« renomme la planche sud » → « En quoi veux-tu renommer « Planche Sud » ? ») (US-281).
+- Ajoute le harnais `tests_conv/` : scénarios Markdown joués sur Telegram avec Telethon (`python -m tests_conv`) et ses 25 scénarios (US-288).
+
+### 🐛 Corrections
+- Évite d'archiver une parcelle sur « enlève la serre » : la mise hors service doit être dite (« désactive », « archive », « ne sert plus ») ou la question des choix est posée (US-281).
+- Documente les incidents INC-020 à INC-026 relevés en recette (renommage bloqué par une parcelle inactive, « affiche les rappels » non routé, mauvaise ville du potager, clôture de lot non dictable, note à la volée rejetée, cultures d'une parcelle illisibles, lot et parcelle inventés à la clôture) ; ils restent à corriger.
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/file_agent.py`, `app/services/mode_test.py` et `app/bot/mode_test.py` ; étend `savoir.py`, `contexte_court.py`, `interpreteur_agent.py`, `catalogue_outils.py` et `validation.py`.
+- Ajoute `utils/geocodage.py`, le filtre de domaine de `connaissance.py` et l'option `--purger-hors-liste` d'ingestion, jouée au déploiement.
+- Ajoute `tools/evaluer_dialogues.py` (mesures CA6 d'US-283 et d'US-280) et les rapports de mesure et de suite de tests (12/16 réponses justes sur la mesure d'US-283).
+- Ajoute `requirements-conv.txt`, les réglages `TELEGRAM_TEST_*` et `CONV_*` de `.env.example` et la fiche `docs/domaines/tests-conversationnels.md`.
+- Met à jour le corpus `doc_app`, le guide utilisateur (deux copies), `SETUP.md` et `commandes-bot.md`.
+- Limites connues : en prod, `AGENT_MODE=prioritaire` n'est pas activé (une semaine d'usage réel en dev d'abord) ; les mesures CA1/CA5 d'US-287 et la remesure d'US-284 sur Small 4 restent à lancer avec accord ; le harnais n'a jamais été joué sur un Telegram réel.
+
+### 💾 Base de données
+- Ajoute la migration v67 : colonne `echanges_conversation.question` (JSONB, NULL = pas de question en attente) ; rollback `rollback_v67.sql`. Elle n'a pas été jouée sur PostgreSQL.
+
 ## [v3.116.0] — 2026-11-01
 
 ### 🚀 Nouveautés

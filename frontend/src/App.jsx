@@ -17,6 +17,11 @@ import MessageIntention from './components/MessageIntention.jsx'
 import BandeauFile from './components/BandeauFile.jsx'  // [US-224]
 import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224]
 import { NotificationsProvider } from './context/NotificationsContext.jsx'  // retour d'action
+import BoutonCompagnon from './components/BoutonCompagnon.jsx'  // [US-271]
+import PanneauCompagnon from './components/PanneauCompagnon.jsx'  // [US-271]
+import { GastonDefs } from './components/Gaston.jsx'  // [US-271]
+import { useMedia } from './hooks/useMedia.js'  // [US-271]
+import { lireEtat, ecrireEtat, etatSuivant } from './lib/compagnon.js'  // [US-271]
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import PlanVue   from './views/PlanVue.jsx'  // [US-200]
@@ -115,6 +120,18 @@ function AppInner({ intentionAdresse }) {
   )
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading]     = useState(false)
+  // [US-271 / CA1] Gaston, le compagnon : replié, présent ou chat ouvert, depuis n'importe quel écran.
+  // Replié / présent sont retenus d'une visite à l'autre ; le chat ne se rouvre pas tout seul.
+  const [compagnon, setCompagnon] = useState(() => lireEtat(window.localStorage))
+  const agirCompagnon = useCallback((action) => setCompagnon((e) => {
+    const suivant = etatSuivant(e, action)
+    ecrireEtat(window.localStorage, suivant)
+    return suivant
+  }), [])
+  // Structure de page : plein écran au téléphone, carte flottante au-delà ; au-dessus de la barre
+  // d'onglets basse tant qu'elle existe (sous 900 px).
+  const compagnonPlein = useMedia('(max-width: 639px)')
+  const barreBasse = useMedia('(max-width: 899px)')
 
   const handleRefresh = useCallback(() => {
     setLoading(true)
@@ -178,11 +195,46 @@ function AppInner({ intentionAdresse }) {
           </div>
         </main>
 
+        {/* [US-271 / CA1] Bouton flottant du compagnon. L'ancre est de hauteur nulle et suit le
+            flux : elle se pose juste au-dessus de la règle des temps et de la barre d'onglets,
+            qu'elle ne recouvre donc jamais. Structure de page : les breakpoints sont ici à leur place. */}
+        <div className="relative z-30 h-0 w-full shrink-0 overflow-x-clip">
+          {compagnon !== 'chat' && (
+            <BoutonCompagnon
+              etat={compagnon}
+              onOuvrir={() => agirCompagnon('ouvrir')}
+              onReplier={() => agirCompagnon('replier')}
+              onDeplier={() => agirCompagnon('deplier')}
+            />
+          )}
+        </div>
+
         {/* Règle des temps : au-dessus de la barre basse, hors du défilement de
             la page — donc la même sur toutes les vues qui portent le sélecteur de date. */}
         <RegleTemps />
 
         <BottomNav view={view} onGo={changerSection} />
+
+        {/* Le chat de Gaston (maquette « Compagnon.html ») : plein écran au téléphone, carte de
+            380 × 600 en bas à droite au-delà. Un geste confirmé relit l'écran courant. */}
+        {compagnon === 'chat' && (
+          <div
+            className={compagnonPlein
+              ? 'fixed inset-0 z-50'
+              : 'fixed right-4 z-50 h-[600px] w-[380px] overflow-hidden rounded-[22px] shadow-[0_18px_50px_rgba(22,33,12,.28),0_2px_6px_rgba(22,33,12,.1)]'}
+            style={compagnonPlein ? undefined : {
+              bottom: barreBasse ? 96 : 16,
+              maxHeight: `calc(100dvh - ${barreBasse ? 112 : 32}px)`,
+            }}
+          >
+            <PanneauCompagnon
+              plein={compagnonPlein}
+              onFermer={() => agirCompagnon('fermer')}
+              onEnregistre={handleRefresh}
+            />
+          </div>
+        )}
+        <GastonDefs />
       </div>
       </NotificationsProvider>
       </FileGestesProvider>

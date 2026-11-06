@@ -112,6 +112,10 @@ from app.services import previsions_meteo as svc_previsions_meteo  # [US-182]
 from app.services import liaison_telegram as svc_liaison_telegram
 from app.services.compagnon import conversations as svc_conversations  # [US-259]
 from app.services.compagnon import propositions as svc_propositions  # [US-259]
+from app.services.compagnon import decisions as svc_decisions  # [US-260, US-270]
+from app.services.compagnon import echange_pwa as svc_echange_pwa  # [US-270]
+from app.services.compagnon import gestes_conversation as svc_gestes_dits  # [US-270]
+from app.services.compagnon import orchestrateur as svc_orchestrateur  # [US-270]
 from app.services import telegram_notify as svc_telegram_notify  # [US-091]
 from app.services import oauth_google as svc_oauth_google  # [US-090]
 from app.services import potager_actif as svc_potager_actif
@@ -144,6 +148,16 @@ from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
 from app.config import APP_ENV, FRONTEND_URL, ADMIN_EMAIL  # [US-044, US-090, US-097]
+
+# ── Logs de l'API : sans cette configuration, les log.info du logger « potager »
+# (orchestrateur, commandes, passerelle LLM) ne sortent pas côté API. Même format
+# que le bot ; no-op si app.bot.noyau a déjà configuré le logging.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s │ %(levelname)s │ %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 log = logging.getLogger("potager")
 
@@ -2133,9 +2147,13 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """
     Répond en langage naturel à une question sur l'historique du potager.
     Exemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'
+
+    [US-270 / CA5] Par la cascade COMMUNE aux canaux (`routeur.repondre_avec_cascade`, étape E0) :
+    la même réponse que `/ask` dans Telegram — données, savoir ou raisonnement. `routage_log_id`
+    et `etage` permettent le retour 👍/👎 (`POST /routage/{id}/retour`) sur une réponse de savoir.
     """
     try:
-        reponse = svc_questions.repondre_question(ctx, req.texte)
+        resultat = svc_orchestrateur.repondre_a_une_question(ctx, req.texte)
     except LLMIndisponibleError:
         # [US-092 / CA9, CA10] /stats, /plan, la météo et la consultation web
         # restent fonctionnels : seule l'analyse en langage naturel est dégradée.
@@ -2143,7 +2161,7 @@ def ask(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
 
-    return {"reponse": reponse}
+    return {"reponse": resultat.texte, "routage_log_id": resultat.routage_log_id, "etage": resultat.etage_resolveur}
 
 
 @app.post("/routage/{routage_log_id}/retour")
@@ -3009,6 +3027,73 @@ def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
         }
     finally:
         db.close()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-270] Le compagnon dans la PWA — la même parole que dans Telegram
+# ═════════════════════════════════════════════════════════════════════════════
+# Aucune logique ici (CA8) : tout est dans `app/services/compagnon/echange_pwa.py`, qui passe
+# par l'orchestrateur que le bot utilise aussi. Le potager est celui du compte connecté (RLS) :
+# une proposition d'un autre jardinier ou d'un autre potager n'existe pas pour lui (CA7).
+class MessageCompagnonRequest(BaseModel):
+    texte: str
+    #: [US-271] « normal » (défaut) ou « support » : la documentation de l'application d'abord.
+    mode: str = "normal"
+
+
+def _erreur_compagnon(e: Exception) -> HTTPException:
+    """Traduit un refus du service en réponse HTTP lisible (404, 409, 422, 403, 503)."""
+    if isinstance(e, (svc_echange_pwa.TexteVideError, svc_echange_pwa.ModeInconnuError)):
+        return HTTPException(status_code=422, detail=str(e))
+    if isinstance(e, svc_gestes_dits.GesteIntrouvableError):
+        return HTTPException(status_code=404, detail="Proposition introuvable")
+    if isinstance(e, svc_gestes_dits.GesteDejaTraiteError):
+        return HTTPException(status_code=409, detail={
+            "code": "deja_traitee", "etat": e.etat,
+            "message": svc_decisions.deja_traitee(e.etat, e.traite_le, e.canal),
+        })
+    if isinstance(e, svc_echange_pwa.NonConfirmableDansLaPwaError):
+        return HTTPException(status_code=409, detail={"code": "confirmable_dans_telegram", "message": str(e)})
+    if isinstance(e, PermissionInsuffisanteError):
+        return HTTPException(status_code=403, detail=str(e))
+    if isinstance(e, PotagerArchiveError):
+        return HTTPException(status_code=409, detail=str(e))
+    if isinstance(e, LLMIndisponibleError):
+        return HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
+    raise e
+
+
+@app.post("/compagnon/messages")
+def envoyer_message_compagnon(req: MessageCompagnonRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-270 / CA1] Transmet une phrase à l'orchestrateur ; rend la réponse et les cartes éventuelles."""
+    try:
+        return svc_echange_pwa.repondre(ctx, req.texte, req.mode).en_donnees()
+    except Exception as e:
+        raise _erreur_compagnon(e)
+
+
+@app.post("/compagnon/propositions/{proposition_id}/confirmer")
+def confirmer_proposition_compagnon(proposition_id: int, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-270 / CA2] Confirme une carte : sortie atomique de l'attente (US-259), puis écriture."""
+    try:
+        return svc_echange_pwa.confirmer(ctx, proposition_id).en_donnees()
+    except Exception as e:
+        raise _erreur_compagnon(e)
+
+
+@app.post("/compagnon/propositions/{proposition_id}/abandonner")
+def abandonner_proposition_compagnon(proposition_id: int, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-270 / CA2] Laisse tomber une carte : sortie atomique de l'attente, rien n'est écrit."""
+    try:
+        return svc_echange_pwa.abandonner(ctx, proposition_id).en_donnees()
+    except Exception as e:
+        raise _erreur_compagnon(e)
+
+
+@app.get("/compagnon/historique")
+def historique_compagnon(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-270 / CA3] Les échanges récents (30 min glissantes, 10 au plus) et les cartes en cours."""
+    return svc_echange_pwa.historique(ctx)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

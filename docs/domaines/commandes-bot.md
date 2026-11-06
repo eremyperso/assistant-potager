@@ -958,3 +958,37 @@ service ; `app/bot/messages_spontanes.py` (job, boutons `spon:`, `reprendre_repo
   clic écrit (`file_agent.abandonner` → `file_gestes.abandonner`). Jamais d'entrée du carnet touchée.
 - **Mesure (CA6)** : champ `annonce` d'un dialogue du corpus (`tools/evaluer_dialogues.py`), joué comme un échange
   du bot avant le premier tour (TER-31). Remesure Small 4 : non lancée, elle attend l'accord.
+
+## L'orchestrateur du compagnon — une phrase, une décision, deux canaux [US-270, US-271]
+
+`app/services/compagnon/orchestrateur.py` range **une fois** l'ordre dans lequel une phrase libre est lue
+(étapes E0 et E1 de `docs/EPIC - COMPAGNON CONVERSATIONNEL/ARTICULATION_COMPAGNON_AGENT_INTERPRETEUR.md`, règles R3 et R5 :
+*les canaux ne décident rien*). Deux temps, séparés par ce que seul le canal sait faire — montrer :
+
+1. `distribuer(texte, ctx, canal)` (async) : les gardes du canal, l'agent, les raccourcis, l'interpréteur. En mode
+   `prioritaire` (US-287) : dialogue → agent → (agent indisponible) raccourcis → interpréteur ; sinon raccourcis →
+   dialogue → interpréteur. Le canal prête ses gardes via `Canal` (fonctions ou coroutines qui répondent à leur
+   manière) : le bot ses gardes Telegram, l'API une seule (réglages du compagnon), pas de raccourcis.
+2. `orienter(resultat, texte, ctx)` : quand rien n'a été présenté — question (cascade commune,
+   `repondre_a_une_question`, utilisée par `/ask` du bot **et** de l'API) ou geste (parseur).
+
+`app/bot/messages.handle_text` ne garde que les gardes de conversation en cours, puis appelle ces deux fonctions.
+**handle_voice n'est PAS encore passé par l'orchestrateur** (sa distribution par intentions est antérieure) : écart connu.
+
+Côté PWA, `app/services/compagnon/echange_pwa.py` fait l'équivalent de ce que le bot dit au jardinier. Les routes de
+`app/api/main.py` (`POST /compagnon/messages`, `POST /compagnon/propositions/{id}/confirmer|abandonner`,
+`GET /compagnon/historique`) ne contiennent aucune logique (test d'AST). Décisions de conception :
+
+- **Un geste dit dans le panneau** attend en base : une ligne `propositions` de nature `geste`, `ecran = 'compagnon'`
+  (`gestes_conversation.py`), 30 minutes, remplacée par la suivante. `file_gestes._file()` l'exclut : ni `/gestes`, ni
+  relance, ni péremption notifiée. Sa confirmation sort la ligne de l'attente D'ABORD (`UPDATE … WHERE etat =
+  'en_attente'`, un seul appel gagne) puis écrit par `app.services.gestes.enregistrer_gestes` ; un refus d'écriture la
+  remet en attente avec les seuls items non écrits.
+- **Ce que le bot demande par boutons** (quantité, culture inconnue de `culture_config`, parcelle) devient une
+  *précision* en texte : rien n'est proposé. Le bot reste seul à choisir une parcelle quand le geste n'en cite pas.
+- **Une commande ou un plan** sont rangés par `propositions.proposer(canal="pwa")` — Telegram les voit — mais ne se
+  confirment que dans Telegram (leur exécution passe par les gestionnaires du bot) : `confirmable=False`, 409
+  `confirmable_dans_telegram`. On peut les abandonner depuis la PWA. Une consultation (plan, stats…) n'est pas rangée.
+- **Mode Support** (`mode="support"`, US-271) : `repondre_avec_cascade(..., famille="doc_app")` avec la nature
+  `QUESTION_SAVOIR` imposée ; ni classification, ni agent, ni cache, ni carnet, ni mémorisation, aucune écriture.
+- `historique` porte aussi les messages spontanés (`distribution.messages_du_jardinier`, US-271 / CA3).

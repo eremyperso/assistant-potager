@@ -1186,7 +1186,8 @@ class TestCA21CA22NonRegression:
         position_correction = corps.index("mode == 'corr_search'")
         position_ask = corps.index("if mode == 'ask'")
         position_interpreteur = corps.index("_traiter_commande_interpretee")
-        position_routeur = corps.index("routeur.classer_demande")
+        # [US-270] Le routeur est consulté par l'orchestrateur, après la présentation de la commande.
+        position_routeur = corps.index("svc_orchestrateur.orienter")
 
         assert position_correction < position_interpreteur
         assert position_ask < position_interpreteur

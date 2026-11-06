@@ -467,3 +467,30 @@ def signal_du_bouton(potager_id: int, user_id: Optional[int], envoi_id: int,
         trouve = _a_rediger([envoi], {signal.id: signal})[0]
     noter_reaction(potager_id, user_id, message_id, maintenant)
     return trouve
+
+
+def messages_du_jardinier(ctx: TenantContext, limite: int = 10) -> list[dict]:
+    """[US-271 / CA3] Les derniers messages spontanés envoyés à ce jardinier dans ce potager.
+
+    Le panneau de la PWA les range avec la conversation : ce que le compagnon a dit de lui-même,
+    qu'il soit parti dans Telegram ou non. Du plus ancien au plus récent ; lecture seule, propre
+    au jardinier et au potager (RLS stricte). Ne lève jamais : sans eux, le panneau reste vide
+    de ce côté.
+    """
+    try:
+        with _session(ctx.potager_id) as db:
+            lignes = (
+                db.query(MessageSpontane)
+                .filter(MessageSpontane.potager_id == ctx.potager_id, MessageSpontane.user_id == ctx.user_id)
+                .order_by(MessageSpontane.envoye_le.desc(), MessageSpontane.id.desc())
+                .limit(limite)
+                .all()
+            )
+            return [
+                {"id": m.id, "genre": m.genre, "themes": list(m.themes or []), "texte": m.texte,
+                 "envoye_le": m.envoye_le.isoformat(), "reagi": m.reaction_le is not None}
+                for m in reversed(lignes)
+            ]
+    except Exception:  # noqa: BLE001
+        log.exception("[US-271 / CA3] Messages spontanés illisibles (user %s, potager %s)", ctx.user_id, ctx.potager_id)
+        return []
