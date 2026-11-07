@@ -9,10 +9,11 @@ montre. Ce qu'il sait faire, et ce qu'il ne sait pas :
 * une **question** part à la cascade commune (E0) ;
 * un **geste** compris devient une carte à confirmer DANS la PWA (levée d'A16) :
   il attend en base (`gestes_conversation`) et s'écrit par `app.services.gestes` ;
-* une **commande** ou un **plan** compris sont rangés en base, visibles et
-  confirmables dans Telegram (US-259) — leur exécution passe par les gestionnaires
-  de commandes du bot, que la PWA n'a pas : la carte le dit (`confirmable=False`),
-  elle peut en revanche être abandonnée ;
+* une **commande** ou un **plan** compris sont rangés en base, visibles dans Telegram (US-259).
+  [US-289] Ceux qui ont un exécuteur de service (`agent/executeurs` : `/parcelle ajouter|modifier`,
+  seuls ou en plan ; corrections) se confirment AUSSI ici, par le même service que le bot. Les
+  autres passent par les gestionnaires de commandes du bot, que la PWA n'a pas : la carte le dit
+  (`confirmable=False`), elle peut en revanche être abandonnée ;
 * les parcours guidés de Telegram (corriger, déplacer, note, godets) n'ont pas
   d'équivalent à l'écran : la phrase va à l'agent, qui les propose en commande.
 
@@ -24,18 +25,24 @@ import asyncio
 import concurrent.futures
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 
+from sqlalchemy import or_
+
 from app.services import interpreteur_commandes as svc_interpreteur
+from app.services.agent import executeurs as svc_executeurs
 from app.services.compagnon import conversations as svc_conversations
+from app.services.compagnon import corrections as svc_corrections
 from app.services.compagnon import decisions as svc_decisions
+from app.services.compagnon import deux_canaux as svc_deux_canaux
 from app.services.compagnon import distribution as svc_distribution
 from app.services.compagnon import gestes_conversation as svc_gestes_dits
 from app.services.compagnon import orchestrateur as svc_orchestrateur
 from app.services.compagnon import proactivite as svc_proactivite
 from app.services.compagnon import propositions as svc_propositions
 from app.services.context import TenantContext
+from database.models import Proposition
 from llm.passerelle import LLMIndisponibleError  # noqa: F401  (remonte à la route : 503)
 
 log = logging.getLogger("potager")
@@ -48,12 +55,15 @@ VERS_QUESTION = "question"      # la cascade a répondu (savoir, données, raiso
 VERS_GESTE = "geste"            # un geste compris : une carte à confirmer
 VERS_COMMANDE = "commande"      # une commande ou un plan : une carte, confirmable dans Telegram
 VERS_DECISION = "decision"      # « laisse tomber » : la proposition en attente est abandonnée
+VERS_ANALYSE = "analyse"        # [US-273] une synthèse en lecture seule, avec ses sources
 
 #: [US-271 / CA1] Les modes du panneau. Normal : l'agent, les gestes, les commandes. Support : le
 #: corpus de l'application d'abord, jamais d'écriture (articulation §5.3).
 MODE_NORMAL = "normal"
 MODE_SUPPORT = "support"
-MODES = (MODE_NORMAL, MODE_SUPPORT)
+#: [US-273 / CA1] Extra : le bouton « Approfondir » — une analyse en lecture seule, jamais d'écriture.
+MODE_ANALYSE = "analyse"
+MODES = (MODE_NORMAL, MODE_SUPPORT, MODE_ANALYSE)
 
 TEXTE_COMMANDE_TELEGRAM = (
     "Cette commande se confirme dans Telegram, avec le bouton de sa carte : "
@@ -88,13 +98,21 @@ class ReponseCompagnon:
     #: Pour le retour 👍/👎 sur une réponse de savoir (US-097 / CA9) ; None sinon.
     routage_log_id: Optional[int] = None
     etage: Optional[str] = None
+    #: [US-273 / CA4] Les sources citées par une analyse ; vide pour toute autre réponse.
+    sources: list[str] = field(default_factory=list)
+    #: [US-273 / CA3] La borne qui a coupé l'analyse (« tours », « jetons »), vide sinon.
+    borne: str = ""
 
     def en_donnees(self) -> dict:
-        return {
+        donnees = {
             "texte": self.texte, "vers": self.vers, "propositions": self.propositions,
             "avertissements": self.avertissements, "routage_log_id": self.routage_log_id,
             "etage": self.etage,
         }
+        if self.vers == VERS_ANALYSE:
+            donnees["sources"] = self.sources
+            donnees["borne"] = self.borne or None
+        return donnees
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -104,9 +122,23 @@ def _iso(instant: Optional[datetime]) -> Optional[str]:
     return instant.isoformat() if instant is not None else None
 
 
+def _suivi(etat: str, traite_canal: Optional[str], traite_le: Optional[datetime], user_id: Optional[int],
+           potager_id: Optional[int]) -> dict:
+    """[US-272] Ce que la carte dit de plus que son état : où et quand elle a été traitée (CA3),
+    et le potager où elle s'exécute quand le jardinier en a plusieurs (CA6 / F5)."""
+    potager = (svc_propositions.potager_a_nommer(user_id, potager_id)
+               if user_id is not None and potager_id is not None else None)
+    return {
+        "traite_canal": traite_canal, "traite_le": _iso(traite_le),
+        "etat_dit": svc_deux_canaux.texte_etat(etat, traite_canal, traite_le) or None,
+        "potager": potager,
+    }
+
+
 def carte_de_geste(geste: svc_gestes_dits.GesteDit, avertissements: Optional[list[str]] = None) -> dict:
     """La carte d'un geste dit : ses lignes, et le droit de le confirmer ici."""
     return {
+        **_suivi(geste.etat, geste.traite_canal, geste.traite_le, geste.user_id, geste.potager_id),
         "id": geste.id, "code": geste.code, "nature": svc_propositions.NATURE_GESTE,
         "resume": " ; ".join(svc_gestes_dits.resume(item) for item in geste.items),
         "lignes": [svc_gestes_dits.resume(item) for item in geste.items],
@@ -116,18 +148,37 @@ def carte_de_geste(geste: svc_gestes_dits.GesteDit, avertissements: Optional[lis
     }
 
 
+def s_execute_dans_la_pwa(commande: Any) -> bool:
+    """[US-289] Cette commande ou ce plan a-t-il un exécuteur de service, sans Telegram ?
+
+    Ceux de `agent/executeurs` (`/parcelle ajouter|modifier`, seuls ou en plan) et les corrections
+    (`corrections.executer`). Toute autre forme garde son handler de bot : elle se confirme dans Telegram.
+    """
+    if isinstance(commande, svc_interpreteur.Plan):
+        return bool(commande.etapes) and all(svc_executeurs.admise_dans_un_plan(e) for e in commande.etapes)
+    if svc_corrections.est_correction(commande):
+        return True
+    forme = getattr(commande, "forme", None)
+    return forme is not None and forme.cle in svc_executeurs.EXECUTEURS
+
+
 def carte_de_commande(proposition: svc_propositions.PropositionConversation) -> dict:
-    """La carte d'une commande ou d'un plan : visible ici, confirmable dans Telegram."""
+    """La carte d'une commande ou d'un plan : confirmable ici quand un exécuteur de service existe
+    [US-289], sinon visible ici et confirmable dans Telegram."""
     commande = proposition.commande
+    ici = s_execute_dans_la_pwa(commande)
     if isinstance(commande, svc_interpreteur.Plan):
         lignes = [etape.commande_equivalente() for etape in commande.etapes]
     else:
         lignes = [commande.commande_equivalente()]
     return {
+        **_suivi(proposition.etat, proposition.traite_canal, proposition.traite_le, proposition.user_id,
+                 proposition.potager_id),
         "id": proposition.id, "code": proposition.code, "nature": proposition.nature,
         "resume": " ; ".join(lignes), "lignes": lignes, "items": [], "phrase": None, "etat": proposition.etat,
         "cree_le": _iso(proposition.cree_le), "expire_le": _iso(proposition.expire_le),
-        "confirmable": False, "motif_non_confirmable": TEXTE_COMMANDE_TELEGRAM, "avertissements": [],
+        "confirmable": ici and proposition.en_attente,
+        "motif_non_confirmable": None if ici else TEXTE_COMMANDE_TELEGRAM, "avertissements": [],
     }
 
 
@@ -154,6 +205,55 @@ def historique(ctx: TenantContext) -> dict:
             for e in echanges
         ],
         "cartes": cartes_en_cours(ctx),
+        # [US-272 / CA9] Sans Telegram lié : le panneau seul, et une invitation à l'activer, une fois.
+        "telegram_lie": svc_deux_canaux.telegram_lie(ctx.user_id),
+        "invitation_telegram": svc_deux_canaux.invitation_telegram(ctx.user_id),
+    }
+
+
+#: [US-272 / CA5] Une carte traitée reste visible ce temps-là : le rafraîchissement du panneau y lit
+#: son état réel, qu'elle ait été traitée ici ou dans Telegram.
+FENETRE_TRAITEES = timedelta(hours=12)
+
+
+def cartes_traitees(ctx: TenantContext, maintenant: Optional[datetime] = None) -> list[dict]:
+    """[US-272 / CA5] Les cartes sorties de l'attente depuis moins de 12 h, dans ce potager."""
+    instant = maintenant or datetime.utcnow()
+    with svc_propositions.session_sur(ctx.potager_id) as db:
+        lignes = (
+            db.query(Proposition.id, Proposition.nature)
+            .filter(
+                Proposition.user_id == ctx.user_id, Proposition.potager_id == ctx.potager_id,
+                Proposition.etat != svc_propositions.ETAT_EN_ATTENTE,
+                Proposition.traite_le >= instant - FENETRE_TRAITEES,
+                or_(Proposition.nature.in_(svc_propositions.NATURES_CONVERSATION),
+                    Proposition.ecran == svc_gestes_dits.ECRAN_COMPAGNON),
+            )
+            .order_by(Proposition.traite_le.desc(), Proposition.id.desc())
+            .limit(20)
+            .all()
+        )
+    cartes: list[dict] = []
+    for pid, nature in lignes:
+        if nature == svc_propositions.NATURE_GESTE:
+            try:
+                cartes.append(carte_de_geste(svc_gestes_dits.par_id(ctx, pid)))
+            except svc_gestes_dits.GesteIntrouvableError:
+                continue
+        else:
+            proposition = svc_propositions.par_id(pid, ctx.user_id, ctx.potager_id)
+            if proposition is not None:
+                cartes.append(carte_de_commande(proposition))
+    return cartes
+
+
+def etat(ctx: TenantContext) -> dict:
+    """[US-272 / CA5] Ce que le panneau relit à intervalle court, sans WebSocket : l'état réel des cartes
+    (en attente ET récemment traitées) et les messages spontanés. Lecture seule, rien n'est noté."""
+    return {
+        "cartes": cartes_en_cours(ctx),
+        "traitees": cartes_traitees(ctx),
+        "spontanes": svc_distribution.messages_du_jardinier(ctx),
     }
 
 
@@ -186,6 +286,8 @@ def repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> Reponse
         raise ModeInconnuError(f"Mode inconnu : {mode!r} (attendu : {', '.join(MODES)}).")
     if mode == MODE_SUPPORT:
         return _repondre_en_support(ctx, phrase)
+    if mode == MODE_ANALYSE:
+        return _repondre_en_analyse(ctx, phrase)
 
     reglage: list[str] = []
 
@@ -252,6 +354,18 @@ def _repondre_en_support(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
     return reponse
 
 
+def _repondre_en_analyse(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
+    """[US-273] Mode Extra : une boucle de lecture, une synthèse avec ses sources. Aucune carte,
+    aucune proposition, aucun événement : l'analyse ne propose des actions qu'en texte (CA5)."""
+    resultat = svc_orchestrateur.analyser_le_potager(ctx, phrase)
+    reponse = ReponseCompagnon(
+        texte=resultat.texte, vers=VERS_ANALYSE,
+        sources=list(resultat.sources), borne=resultat.borne,
+    )
+    _noter(ctx, phrase, reponse, outils=("analyse", *resultat.outils))
+    return reponse
+
+
 def _proposer_un_geste(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
     """Un geste compris devient une carte à confirmer ; ce qui manque devient une question."""
     with svc_propositions.session_sur(ctx.potager_id) as db:
@@ -269,6 +383,8 @@ def _proposer_un_geste(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
         return reponse
 
     geste = svc_gestes_dits.proposer(ctx, preparation.items, phrase)
+    # [US-272 / CA1, CA4] La carte part dans Telegram dès sa création ; celle qu'elle remplace y est réécrite.
+    svc_deux_canaux.apres_creation(geste.id, ctx.potager_id)
     reponse = ReponseCompagnon(
         texte="Voici ce que j'ai compris. Je n'écris rien tant que tu n'as pas confirmé.",
         vers=VERS_GESTE, propositions=[carte_de_geste(geste, avertissements)], avertissements=avertissements,
@@ -338,6 +454,8 @@ def _proposer_une_commande(ctx: TenantContext, commande: Any, preambule: str) ->
         svc_interpreteur.persister_journal(ctx, ancienne.commande, svc_interpreteur.ISSUE_ABANDONNEE, ancienne.log_id)
     log_id = svc_interpreteur.persister_journal(ctx, commande, svc_interpreteur.ISSUE_PROPOSEE)
     proposition = svc_propositions.proposer(ctx, commande, log_id=log_id, canal=CANAL)
+    # [US-272 / CA1, CA4] Telegram la reçoit aussi, avec ses boutons ; celle qu'elle remplace y est réécrite.
+    svc_deux_canaux.apres_creation(proposition.id, ctx.potager_id)
     carte = carte_de_commande(proposition)
     return ReponseCompagnon(
         texte=preambule or "Voici ce que je te propose.", vers=VERS_COMMANDE, propositions=[carte],
@@ -346,15 +464,27 @@ def _proposer_une_commande(ctx: TenantContext, commande: Any, preambule: str) ->
 
 def _decider(ctx: TenantContext, decision: svc_decisions.Decision) -> ReponseCompagnon:
     """[US-260] « Laisse tomber » : la proposition en attente est abandonnée comme par le bouton.
-    « Vas-y » sur une commande : elle se confirme dans Telegram."""
+
+    [US-289] « Vas-y » sur une commande qui a un exécuteur de service : elle s'exécute ici, sauf si
+    elle est destructrice (bouton seul, US-260 / CA3). Les autres se confirment dans Telegram."""
+    proposition = svc_propositions.par_code(decision.code, ctx.user_id)
     if decision.action == svc_decisions.ACTION_ABANDONNER:
-        proposition = svc_propositions.par_code(decision.code, ctx.user_id)
         if proposition is not None and proposition.en_attente:
             if svc_propositions.consommer(proposition, svc_propositions.ETAT_ABANDONNEE, canal=CANAL):
                 svc_interpreteur.persister_journal(
                     ctx, proposition.commande, svc_interpreteur.ISSUE_ABANDONNEE, proposition.log_id,
                 )
+                svc_deux_canaux.reecrire(proposition.id)  # [US-272 / CA3]
         return ReponseCompagnon(texte=svc_decisions.TEXTE_ABANDONNEE, vers=VERS_DECISION)
+    if (proposition is not None and proposition.en_attente and proposition.potager_id == ctx.potager_id
+            and s_execute_dans_la_pwa(proposition.commande)):
+        if svc_decisions.est_destructrice(proposition.commande):
+            return ReponseCompagnon(
+                texte=svc_decisions.TEXTE_BOUTON_SEUL, vers=VERS_DECISION,
+                propositions=[carte_de_commande(proposition)],
+            )
+        resultat = _confirmer_commande(ctx, proposition)
+        return ReponseCompagnon(texte=resultat.texte, vers=VERS_DECISION, propositions=[resultat.carte])
     return ReponseCompagnon(texte=TEXTE_COMMANDE_TELEGRAM, vers=VERS_DECISION)
 
 
@@ -389,12 +519,16 @@ def _est_un_geste_dit(ctx: TenantContext, proposition_id: int) -> bool:
 def confirmer(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
     """[US-270 / CA2] Confirme une carte : sortie atomique de l'attente, puis écriture (règles d'US-259).
 
+    [US-289] Une commande ou un plan qui a un exécuteur de service s'exécute ici de la même façon ;
+    les autres se confirment dans Telegram.
+
     Lève `GesteIntrouvableError` (404), `GesteDejaTraiteError` (409 : déjà confirmée, abandonnée,
     remplacée ou périmée — la seconde confirmation n'écrit rien) ou `NonConfirmableDansLaPwaError`.
     """
     if not _est_un_geste_dit(ctx, proposition_id):
-        _lever_si_commande(ctx, proposition_id)
+        return _confirmer_commande(ctx, _commande_par_id(ctx, proposition_id))
     geste, resultat = svc_gestes_dits.confirmer(ctx, proposition_id)
+    svc_deux_canaux.reecrire(geste.id)  # [US-272 / CA3] sans effet si le geste est revenu en attente
     enregistres = [{"event_id": eid, "resume": svc_gestes_dits.resume(item)} for item, eid in resultat.enregistres]
     if resultat.complet:
         texte = "✅ Confirmé" if len(enregistres) <= 1 else f"✅ Confirmé — {len(enregistres)} gestes enregistrés"
@@ -417,6 +551,7 @@ def abandonner(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
     """[US-270 / CA2] Laisse tomber une carte (geste ou commande) : sortie atomique, rien n'est écrit."""
     if _est_un_geste_dit(ctx, proposition_id):
         geste = svc_gestes_dits.abandonner(ctx, proposition_id)
+        svc_deux_canaux.reecrire(geste.id)  # [US-272 / CA3]
         return ResultatConfirmation(carte=carte_de_geste(geste), texte=svc_decisions.TEXTE_ABANDONNEE)
     proposition = _commande_par_id(ctx, proposition_id)
     if not proposition.en_attente or proposition.expiree():
@@ -428,6 +563,7 @@ def abandonner(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
         autre = _commande_par_id(ctx, proposition_id)
         raise svc_gestes_dits.GesteDejaTraiteError(autre.etat, autre.traite_canal or autre.canal, autre.traite_le)
     svc_interpreteur.persister_journal(ctx, proposition.commande, svc_interpreteur.ISSUE_ABANDONNEE, proposition.log_id)
+    svc_deux_canaux.reecrire(proposition.id)  # [US-272 / CA3]
     return ResultatConfirmation(
         carte=carte_de_commande(_commande_par_id(ctx, proposition_id)), texte=svc_decisions.TEXTE_ABANDONNEE,
     )
@@ -440,10 +576,59 @@ def _commande_par_id(ctx: TenantContext, proposition_id: int) -> svc_proposition
     return proposition
 
 
-def _lever_si_commande(ctx: TenantContext, proposition_id: int) -> None:
-    """Une commande ou un plan existe : il se confirme dans Telegram ; sinon, rien de ce numéro."""
-    proposition = _commande_par_id(ctx, proposition_id)
-    if not proposition.en_attente:
+#: [US-289] L'état d'une carte dont la commande, confirmée, n'a pas pu s'exécuter : rien n'est écrit,
+#: la proposition est sortie de l'attente (comme dans Telegram) — le jardinier redit sa demande.
+ETAT_ECHOUEE = "echouee"
+
+
+def _confirmer_commande(ctx: TenantContext, proposition: svc_propositions.PropositionConversation) -> ResultatConfirmation:
+    """[US-289] Confirme une commande ou un plan DANS la PWA, dans l'ordre du bot (interpretation.py) :
+    sortie atomique de l'attente, journal, puis exécution par le service — jamais par un handler Telegram.
+
+    Lève `GesteDejaTraiteError` (déjà sortie, expirée ou perdue à la course) et
+    `NonConfirmableDansLaPwaError` (aucun exécuteur de service : elle se confirme dans Telegram).
+    """
+    commande = proposition.commande
+    if not proposition.en_attente or proposition.expiree():
+        if proposition.en_attente:
+            svc_propositions.consommer(proposition, svc_propositions.ETAT_PERIMEE, canal=CANAL)
         raise svc_gestes_dits.GesteDejaTraiteError(
-            proposition.etat, proposition.traite_canal or proposition.canal, proposition.traite_le)
-    raise NonConfirmableDansLaPwaError(TEXTE_COMMANDE_TELEGRAM)
+            proposition.etat if not proposition.en_attente else svc_propositions.ETAT_PERIMEE,
+            proposition.traite_canal or proposition.canal, proposition.traite_le,
+        )
+    if not s_execute_dans_la_pwa(commande):
+        raise NonConfirmableDansLaPwaError(TEXTE_COMMANDE_TELEGRAM)
+    if not svc_propositions.consommer(proposition, svc_propositions.ETAT_CONFIRMEE, canal=CANAL):
+        autre = _commande_par_id(ctx, proposition.id)
+        raise svc_gestes_dits.GesteDejaTraiteError(autre.etat, autre.traite_canal or autre.canal, autre.traite_le)
+    svc_interpreteur.persister_journal(ctx, commande, svc_interpreteur.ISSUE_CONFIRMEE, proposition.log_id)
+    svc_deux_canaux.reecrire(proposition.id)  # [US-272 / CA3] la carte Telegram ne propose plus rien
+    texte, erreur = _jouer_commande(ctx, proposition)
+    carte = carte_de_commande(_commande_par_id(ctx, proposition.id))
+    if erreur:
+        carte.update(etat=ETAT_ECHOUEE, confirmable=False)
+    return ResultatConfirmation(carte=carte, texte=texte, erreur=erreur)
+
+
+def _jouer_commande(ctx: TenantContext, proposition: svc_propositions.PropositionConversation) -> tuple[str, Optional[str]]:
+    """[US-289] Exécute par le service, dans le potager de la proposition. Rend (texte, erreur).
+
+    Les exécuteurs ne lèvent pas : un refus (rôle, parcelle introuvable, valeur invalide) revient en
+    `erreur`, et ce qui a réussi avant dans un plan reste écrit (US-237 / CA7).
+    """
+    from database.db import tenant_scope
+
+    commande = proposition.commande
+    if isinstance(commande, svc_interpreteur.Plan):
+        with tenant_scope(ctx.potager_id):
+            resultats = svc_executeurs.executer_plan(commande, ctx, proposition_id=proposition.id)
+        echec = next((r.message for r in resultats if r.statut == svc_executeurs.STATUT_ECHOUEE), None)
+        return svc_executeurs.compte_rendu(commande, resultats), echec
+    with svc_propositions.session_sur(ctx.potager_id) as db:
+        if svc_corrections.est_correction(commande):
+            texte = svc_corrections.executer(db, ctx, commande)
+            return texte, (texte if texte.startswith(("❌", "⚠️")) else None)
+        resultat = svc_executeurs.executer_etape(db, ctx, commande, proposition_id=proposition.id)
+    if resultat.statut == svc_executeurs.STATUT_REUSSIE:
+        return f"✅ {resultat.message}", None
+    return f"❌ {resultat.message}", resultat.message

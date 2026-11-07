@@ -370,6 +370,27 @@ def _meteo_du_potager(ctx: TenantContext, jours: int) -> Optional[dict]:
     return _releve_meteo(*coordonnees, QUAND_PASSE, jours)
 
 
+def _meteo_du_jour(ctx: TenantContext) -> Optional[dict]:
+    """La prévision du jour au potager, LUE DANS LE CACHE de prévisions (US-182, validité 1 h).
+
+    Le préchargement tourne à chaque message de l'agent : il ne doit ni rappeler Open-Meteo à chaque
+    fois, ni chercher l'historique de la veille qu'il jetterait. Même forme que `_releve_meteo` :
+    `{"aujourdhui": {...}}`, ou None si la localisation ou la prévision manque."""
+    from app.services import previsions_meteo
+
+    coordonnees = _coordonnees_potager(ctx)
+    if coordonnees is None:
+        return None
+    lecture = previsions_meteo.lire_previsions(*coordonnees)
+    if not lecture.disponible or not lecture.meteo:
+        return None
+    prevision = lecture.meteo
+    return {"aujourdhui": {
+        "temps": prevision["label"], "temp_min": prevision["temp_min"],
+        "temp_max": prevision["temp_max"], "pluie_prevue_mm": prevision["precipitations"],
+    }}
+
+
 def _meteo_demandee(ctx: TenantContext, lieu_dit: str, quand: str, jours: int) -> dict:
     """[US-282 / CA1, CA2, CA4] La météo du lieu dit (le potager sans lieu), avec le lieu nommé.
     `{"erreur": …}` quand le lieu manque, `{"indisponible": True}` quand le service ne répond pas."""
@@ -477,7 +498,7 @@ def precharger(ctx: TenantContext, releves: Releves) -> str:
     except Exception as e:  # noqa: BLE001
         log.warning("🤖 AGENT          : préchargement des cultures impossible (%s)", type(e).__name__)
     try:
-        du_jour = _meteo_du_potager(ctx, 1)
+        du_jour = _meteo_du_jour(ctx)
         if du_jour and du_jour.get("aujourdhui"):
             donnees["meteo_du_jour"] = du_jour["aujourdhui"]
     except Exception as e:  # noqa: BLE001
@@ -543,9 +564,18 @@ _PRODUIT = re.compile(
 )
 
 
-def donne_une_dose_ou_un_produit(texte: str) -> bool:
-    """[CA4] Une dose, une dilution ou un produit de traitement dans le texte du modèle."""
-    return bool(_DOSE.search(texte or "") or _PRODUIT.search(texte or ""))
+def donne_une_dose_ou_un_produit(texte: str, releves: Optional["Releves"] = None) -> bool:
+    """[CA4] Une dose, une dilution ou un produit de traitement dans le texte du modèle.
+
+    [US-273 / CA4] Avec `releves` (une analyse parle de récoltes), une quantité dont le nombre a été
+    LU par un outil — « 12 kg » récoltés — n'est pas une dose. Un produit reste toujours interdit."""
+    if _PRODUIT.search(texte or ""):
+        return True
+    lus: set[float] = set()
+    if releves is not None:
+        for contenu in releves.contenus:
+            lus |= _nombres_de(contenu)
+    return any(not (_nombres_de(m.group(0)) & lus) for m in _DOSE.finditer(texte or ""))
 
 
 def nombres_inventes(texte: str, releves: Releves, phrase: str = "", jour: Optional[date] = None) -> list[float]:
@@ -676,7 +706,8 @@ def texte_aucun_geste(ecart: int) -> str:
     return f"Je ne vois aucun geste noté {quand} dans ton carnet."
 
 
-def controler(texte: str, releves: Releves, phrase: str = "", jour: Optional[date] = None) -> str:
+def controler(texte: str, releves: Releves, phrase: str = "", jour: Optional[date] = None,
+              quantites_lues: bool = False) -> str:
     """[CA2, CA3, CA4] Le texte du modèle, ou celui du code quand il sort de ce que les outils ont
     rendu. Sans lecture dans la boucle, le texte passe tel quel.
 
@@ -692,7 +723,7 @@ def controler(texte: str, releves: Releves, phrase: str = "", jour: Optional[dat
         return texte_aucun_geste(ecart)
     if releves.vide or not texte:
         return texte
-    if donne_une_dose_ou_un_produit(texte):
+    if donne_une_dose_ou_un_produit(texte, releves if quantites_lues else None):
         log.info("🤖 AGENT          : dose ou produit de traitement → texte du code")
         return texte_du_code(releves)
     if recopie(texte, releves):

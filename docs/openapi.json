@@ -1918,90 +1918,6 @@
         }
       }
     },
-    "/parse": {
-      "post": {
-        "summary": "Parse",
-        "description": "Reçoit une phrase dictée → parse via Groq → sauvegarde en base.\nGère les phrases multiples (ex: tomates ET courgettes → 2 événements).\nLa date réelle (hier, lundi...) est stockée correctement.",
-        "operationId": "parse_parse_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TexteRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/voice": {
-      "post": {
-        "summary": "Voice",
-        "description": "[PWA iPhone] Reçoit un blob audio MediaRecorder →\n  1. Groq Whisper → texte transcrit\n  2. classify_intent_pwa() → ACTION | INTERROGER\n  3. parse_commande() ou repondre_question()\n  4. Retourne { reponse, intent, texte, recap, session_id }",
-        "operationId": "voice_voice_post",
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_voice_voice_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/ask": {
       "post": {
         "summary": "Ask",
@@ -2962,25 +2878,6 @@
   },
   "components": {
     "schemas": {
-      "Body_voice_voice_post": {
-        "properties": {
-          "audio": {
-            "type": "string",
-            "format": "binary",
-            "title": "Audio"
-          },
-          "session_id": {
-            "type": "string",
-            "title": "Session Id",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "audio"
-        ],
-        "title": "Body_voice_voice_post"
-      },
       "CreerParcelleRequest": {
         "properties": {
           "nom": {

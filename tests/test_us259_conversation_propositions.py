@@ -228,11 +228,13 @@ class TestCA1Echanges:
         assert ligne.texte_compagnon == "proposition : /parcelle modifier Planche Sud rangs=2"
 
     def test_us259_ca1_l_api_note_dans_la_meme_conversation(self):
-        """`POST /voice` (la PWA) range son échange au même endroit que Telegram (canal pwa)."""
-        from app.api import main as api
+        """La PWA range son échange au même endroit que Telegram (canal pwa). [US-274] `POST /voice` est
+        retiré : c'est `echange_pwa` (panneau du compagnon) qui note l'échange."""
+        from app.services.compagnon import echange_pwa
 
-        source = inspect.getsource(api.voice)
-        assert "svc_conversations.noter(" in source and "CANAL_PWA" in source
+        source = inspect.getsource(echange_pwa._noter)
+        assert "svc_conversations.noter(" in source and "canal=CANAL" in source
+        assert echange_pwa.CANAL == svc_propositions.CANAL_PWA
 
 
 # ═════════════════════════════════════════════════════════════════════════════

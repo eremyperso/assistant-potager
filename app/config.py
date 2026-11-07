@@ -93,6 +93,12 @@ GROQ_MODELE_PAR_TYPE = {
 GROQ_MODELE_PAR_TYPE["compagnon_signal"] = os.environ.get(
     "GROQ_MODEL_COMPAGNON_SIGNAL", GROQ_MODELE_PAR_TYPE["agent"],
 )
+# [US-273 / CA3] L'analyse approfondie (mode Extra) : un type d'appel à part, compté à part. Par
+# défaut le modèle de l'agent ; c'est le seul endroit où une montée de modèle se justifie, et elle
+# se fait ici, par `GROQ_MODEL_ANALYSE`, sans code (cadrage §4.5).
+GROQ_MODELE_PAR_TYPE["analyse"] = os.environ.get(
+    "GROQ_MODEL_ANALYSE", GROQ_MODELE_PAR_TYPE["agent"],
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fournisseur tiers Mistral — un type d'appel bascule par son seul modèle
@@ -146,6 +152,13 @@ def _entier_strictement_positif(nom: str, defaut: int) -> int:
 
 
 AGENT_MAX_TOURS = _entier_strictement_positif("AGENT_MAX_TOURS", 6)
+
+# [US-273 / CA3] Les bornes de l'analyse approfondie, réglables sans redéploiement de code.
+# ANALYSE_MAX_TOURS : au plus ce nombre de tours de LECTURE (un tour = un appel du modèle).
+# ANALYSE_MAX_JETONS : au-delà de ce cumul de jetons (entrée + sortie), plus aucune lecture ;
+# la rédaction finale s'y ajoute. Dans les deux cas, l'analyse rend ce qu'elle a, avec une mention.
+ANALYSE_MAX_TOURS = _entier_strictement_positif("ANALYSE_MAX_TOURS", 6)
+ANALYSE_MAX_JETONS = _entier_strictement_positif("ANALYSE_MAX_JETONS", 20000)
 
 # [US-092 / CA12] Délai maximal par appel LLM, en secondes. Un appel qui
 # n'aboutit pas dans ce délai emprunte le même chemin de repli qu'un 429.
@@ -273,6 +286,8 @@ def etat_configuration() -> list[str]:
     brut_tours = os.environ.get("AGENT_MAX_TOURS")
     _ligne("AGENT_MAX_TOURS", AGENT_MAX_TOURS,
            invalide=brut_tours is not None and brut_tours.strip() != str(AGENT_MAX_TOURS))
+    _ligne("ANALYSE_MAX_TOURS", ANALYSE_MAX_TOURS)
+    _ligne("ANALYSE_MAX_JETONS", ANALYSE_MAX_JETONS)
     _ligne("COMPAGNON_PROACTIF", "oui" if COMPAGNON_PROACTIF else "non")
 
     for type_appel, modele in GROQ_MODELE_PAR_TYPE.items():

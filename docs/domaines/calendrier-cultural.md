@@ -450,8 +450,7 @@ d'US-183 n'a pas changé — `FicheCalendrier` ne le rend que si l'appelant four
 `onEnregistrer` — mais Plan et Stocks le fournissent désormais tous les deux.
 Le bouton n'écrit pas : c'est `BoutonGeste` (`frontend/src/components/`), qui
 PRÉPARE une intention de geste (`POST /gestes/intentions`) et ouvre le compagnon
-Telegram dessus. `/parse` n'est toujours pas un flux d'enregistrement — il passe
-par le modèle de langage et écrit sans confirmation.
+Telegram dessus. `/parse` n'existe plus (US-274) : l'écriture ne passe que par une proposition confirmée.
 
 - **AUCUN SECOND CHEMIN D'ÉCRITURE** : l'unique écriture reste
   `saisie._parse_and_save`, avec son item pré-parsé. C'est le contrat du bouton

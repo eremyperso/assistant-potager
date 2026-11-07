@@ -41,40 +41,28 @@ class TestAPI:
         assert any(c["nom"] == "tomate" and c["type_organe_recolte"] == "reproducteur" for c in data["cultures"])
         assert any(c["nom"] == "salade" and c["type_organe_recolte"] == "végétatif" for c in data["cultures"])
 
-    @patch('app.api.main.parse_commande')
-    @patch('llm.rag.add_to_rag')
-    def test_parse_inherits_type_organe_recolte(self, mock_rag, mock_parse, client, test_db):
-        """Test que POST /parse hérite automatiquement le type_organe_recolte depuis culture_config."""
-        # Mock du parsing Groq
-        mock_parse.return_value = [{
-            "action": "plantation",
-            "culture": "tomate",
-            "quantite": 5,
-            "unite": "plants"
-        }]
-        
-        response = client.post("/parse", json={"texte": "J'ai planté 5 tomates"})
-        assert response.status_code == 200
-        
-        # Vérifier que l'événement a été créé avec le bon type
+    def test_creation_evenement_herite_type_organe_recolte(self, client, test_db):
+        """[US-274] Le service d'enregistrement (autrefois derrière POST /parse) hérite le type_organe_recolte de culture_config."""
+        from app.services import evenements as svc_evenements
+
+        svc_evenements.creer_evenement_depuis_parse(
+            test_db, default_context(),
+            {"action": "plantation", "culture": "tomate", "quantite": 5, "unite": "plants"},
+            "J'ai planté 5 tomates",
+        )
         event = test_db.query(Evenement).filter(Evenement.culture == "tomate").first()
         assert event is not None
         assert event.type_organe_recolte == "reproducteur"
 
-    @patch('app.api.main.parse_commande')
-    @patch('llm.rag.add_to_rag')
-    def test_parse_unknown_culture_no_type(self, mock_rag, mock_parse, client, test_db):
-        """Test que POST /parse ne définit pas type_organe_recolte pour culture inconnue."""
-        mock_parse.return_value = [{
-            "action": "plantation",
-            "culture": "inconnue",
-            "quantite": 3,
-            "unite": "plants"
-        }]
-        
-        response = client.post("/parse", json={"texte": "J'ai planté 3 inconnues"})
-        assert response.status_code == 200
-        
+    def test_creation_evenement_culture_inconnue_sans_type(self, client, test_db):
+        """[US-274] Une culture inconnue de culture_config ne reçoit pas de type_organe_recolte."""
+        from app.services import evenements as svc_evenements
+
+        svc_evenements.creer_evenement_depuis_parse(
+            test_db, default_context(),
+            {"action": "plantation", "culture": "inconnue", "quantite": 3, "unite": "plants"},
+            "J'ai planté 3 inconnues",
+        )
         event = test_db.query(Evenement).filter(Evenement.culture == "inconnue").first()
         assert event is not None
         assert event.type_organe_recolte is None

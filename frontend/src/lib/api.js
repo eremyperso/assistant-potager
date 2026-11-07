@@ -113,6 +113,7 @@ async function post(path, body) {
     // [US-271 / CA4] Le statut et le code métier, pour dire l'erreur en clair (`lib/compagnon.messageErreur`).
     err.statut = res.status
     err.code = detail?.detail?.code ?? null
+    err.etat = detail?.detail?.etat ?? null  // [US-272 / CA2] l'état réel d'une proposition déjà traitée
     throw err
   }
   return res.json()
@@ -253,12 +254,15 @@ export const api = {
   reglerObjectifsCarnet: (objectifs) => put('/compagnon/carnet/objectifs', { objectifs }),
 
   // [US-270, US-271] Le compagnon dans la PWA : la même parole que dans Telegram. `mode` : 'normal'
-  // (agent, gestes, commandes) ou 'support' (la documentation de l'application, rien n'est écrit).
+  // (agent, gestes, commandes), 'support' (la documentation de l'application, rien n'est écrit) ou
+  // 'analyse' [US-273] (le bouton « Approfondir » : une synthèse en lecture seule, avec ses sources).
   // Un geste compris revient en CARTE, qui se confirme ici ; une commande se confirme dans Telegram.
   messageCompagnon:      (texte, mode = 'normal') => post('/compagnon/messages', { texte, mode }),
   confirmerProposition:  (id) => post(`/compagnon/propositions/${id}/confirmer`),
   abandonnerProposition: (id) => post(`/compagnon/propositions/${id}/abandonner`),
   historiqueCompagnon:   () => get('/compagnon/historique'),
+  // [US-272 / CA5] L'état réel des cartes et les messages spontanés, relus à intervalle court.
+  etatCompagnon:         () => get('/compagnon/etat'),
   // [US-097] 👍 / 👎 sur une réponse de savoir ou de raisonnement.
   retourReponse:         (routageLogId, avis) => post(`/routage/${routageLogId}/retour`, { avis }),
 

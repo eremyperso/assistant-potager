@@ -171,4 +171,5 @@ class TestCA4ErreursEnClair:
         assert reponse.status_code == 409
         detail = reponse.json()["detail"]
         assert detail["code"] == "deja_traitee" and detail["etat"] == "abandonnee"
-        assert "dans Telegram" in detail["message"] and "abandonnée" in detail["message"]
+        # [US-272 / CA2] « Déjà laissé tomber depuis Telegram à 14:32 : rien n'est fait. »
+        assert "depuis Telegram" in detail["message"] and "Déjà laissé tomber" in detail["message"]

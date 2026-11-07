@@ -73,6 +73,9 @@ class GesteDit:
     canal: Optional[str] = None
     traite_canal: Optional[str] = None
     traite_le: Optional[datetime] = None
+    #: [US-272 / F5] Le potager de la proposition : celui qu'arme sa confirmation, d'où qu'elle vienne.
+    potager_id: Optional[int] = None
+    user_id: Optional[int] = None
 
     @property
     def en_attente(self) -> bool:
@@ -102,6 +105,7 @@ def _en_geste(ligne: Proposition) -> GesteDit:
         id=ligne.id, code=ligne.code, items=list(contenu.get("items") or []), texte=contenu.get("texte") or "",
         etat=ligne.etat, cree_le=ligne.cree_le, expire_le=ligne.expire_le, canal=ligne.canal,
         traite_canal=ligne.traite_canal, traite_le=ligne.traite_le,
+        potager_id=ligne.potager_id, user_id=ligne.user_id,
     )
 
 
@@ -298,6 +302,26 @@ def par_id(ctx: TenantContext, geste_id: int) -> GesteDit:
         return _en_geste(ligne)
 
 
+def par_code(code: Optional[str], user_id: Optional[int]) -> Optional[GesteDit]:
+    """[US-272] Le geste dit qu'un bouton Telegram nomme (`cmp:ok:<code>`), dans tous ses états.
+
+    Lu GUC désarmé, comme `propositions.par_code` : le bouton peut viser un autre potager que
+    le potager actif du chat (F5). L'isolation tient au filtre `user_id`.
+    """
+    if not code or user_id is None:
+        return None
+    with svc_propositions.session_sur(None) as db:
+        ligne = (
+            db.query(Proposition)
+            .filter(
+                Proposition.code == code, Proposition.user_id == user_id,
+                Proposition.nature == svc_propositions.NATURE_GESTE, Proposition.ecran == ECRAN_COMPAGNON,
+            )
+            .first()
+        )
+        return _en_geste(ligne) if ligne is not None else None
+
+
 def _controler_en_attente(geste: GesteDit) -> None:
     if not geste.en_attente:
         raise GesteDejaTraiteError(geste.etat, geste.traite_canal or geste.canal, geste.traite_le)
@@ -305,25 +329,32 @@ def _controler_en_attente(geste: GesteDit) -> None:
         raise GesteDejaTraiteError(svc_propositions.ETAT_PERIMEE)
 
 
-def abandonner(ctx: TenantContext, geste_id: int) -> GesteDit:
-    """[CA2] Laisse tomber le geste : sortie atomique, rien n'est écrit."""
+def abandonner(ctx: TenantContext, geste_id: int, canal: str = svc_propositions.CANAL_PWA) -> GesteDit:
+    """[CA2] Laisse tomber le geste : sortie atomique, rien n'est écrit.
+
+    [US-272] `canal` : où il est laissé tomber (le portail, ou sa carte dans Telegram)."""
     geste = par_id(ctx, geste_id)
     _controler_en_attente(geste)
     with svc_propositions.session_sur(ctx.potager_id) as db:
         sorti = svc_propositions.sortir(
-            db, geste.id, svc_propositions.ETAT_ABANDONNEE, canal=svc_propositions.CANAL_PWA,
+            db, geste.id, svc_propositions.ETAT_ABANDONNEE, canal=canal,
         )
     if not sorti:
-        raise GesteDejaTraiteError(par_id(ctx, geste_id).etat)
+        autre = par_id(ctx, geste_id)
+        raise GesteDejaTraiteError(autre.etat, autre.traite_canal or autre.canal, autre.traite_le)
     return par_id(ctx, geste_id)
 
 
-def confirmer(ctx: TenantContext, geste_id: int) -> tuple[GesteDit, svc_gestes.ResultatEnregistrement]:
+def confirmer(
+    ctx: TenantContext, geste_id: int, canal: str = svc_propositions.CANAL_PWA,
+) -> tuple[GesteDit, svc_gestes.ResultatEnregistrement]:
     """[CA2] Confirme le geste : il sort de l'attente D'ABORD, puis s'écrit.
 
     Une seule confirmation écrit (règle d'US-234 / US-259 : `UPDATE … WHERE etat = 'en_attente'`).
     Si l'écriture est refusée, la proposition revient en attente avec ce qui reste à écrire —
     un geste ne disparaît jamais sans trace —, et le refus est rendu au canal en clair.
+
+    [US-272] `canal` : le portail, ou la carte du geste dans Telegram (F1 : le premier l'emporte).
     """
     geste = par_id(ctx, geste_id)
     _controler_en_attente(geste)
@@ -331,7 +362,7 @@ def confirmer(ctx: TenantContext, geste_id: int) -> tuple[GesteDit, svc_gestes.R
 
     with svc_propositions.session_sur(ctx.potager_id) as db:
         sorti = svc_propositions.sortir(
-            db, geste.id, svc_propositions.ETAT_CONFIRMEE, canal=svc_propositions.CANAL_PWA,
+            db, geste.id, svc_propositions.ETAT_CONFIRMEE, canal=canal,
         )
     if not sorti:
         # Un autre clic, un autre onglet ou Telegram a confirmé entre-temps.

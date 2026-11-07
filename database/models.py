@@ -86,6 +86,10 @@ class User(Base):
     # choix explicite via /potager ou le sélecteur PWA).
     potager_actif_id = Column(Integer, ForeignKey("potagers.id"), nullable=True)
 
+    # [US-272 / CA9] Un compte sans Telegram lié est invité UNE fois, depuis le panneau du
+    # compagnon, à le lier (migration_v68). NULL : pas encore invité.
+    invitation_telegram_le = Column(DateTime, nullable=True)
+
 
 class LiaisonTelegram(Base):
     """[US-045] Code à usage unique liant un telegram_chat_id à un compte web."""
@@ -1012,6 +1016,7 @@ class ConsoTokens(Base):
 
     - date         : jour d'imputation (agrégation quotidienne par potager)
     - appel_type   : classification | parsing | question | synthese | transcription | agent
+                     | compagnon_signal | analyse
     - modele       : modèle réellement appelé (les quotas Groq sont par modèle)
     - tokens_cache : [CA6] jetons servis depuis le cache de prompt du fournisseur,
                      distingués des jetons facturés plein tarif — 0 tant que le
@@ -1392,6 +1397,10 @@ class Proposition(Base):
     remplacee_par_id = Column(Integer, ForeignKey("propositions.id", ondelete="SET NULL"), nullable=True)
     # [US-260 / CA5] telegram | pwa — le canal qui l'a fait sortir de l'attente (migration_v62).
     traite_canal = Column(String(16), nullable=True)
+    # [US-272 / F2] La carte de cette proposition dans Telegram, pour la RÉÉCRIRE au changement
+    # d'état (migration_v68). NULL : aucune carte postée (compte sans Telegram, envoi perdu).
+    telegram_chat_id    = Column(BigInteger, nullable=True)
+    telegram_message_id = Column(BigInteger, nullable=True)
 
     __table_args__ = (
         CheckConstraint("nature IN ('geste', 'commande', 'plan')", name="ck_propositions_nature"),

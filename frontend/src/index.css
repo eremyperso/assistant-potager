@@ -375,6 +375,12 @@
   box-shadow: 0 4px 14px rgba(22,33,12,.15); }
 .gst-min { position: absolute; left: -6px; top: -6px; width: 24px; height: 24px; border-radius: 50%; background: var(--card);
   box-shadow: 0 2px 6px rgba(22,33,12,.25); display: flex; align-items: center; justify-content: center; color: var(--txt2); }
+/* [US-272 / CA5] La pastille des messages non lus : en bas à gauche de l'avatar (la main est en haut à
+   droite, le bouton replier en haut à gauche) ; sur l'onglet replié, au-dessus du chevron. */
+.gst-nonlus { position: absolute; left: -4px; bottom: 2px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: var(--red); color: #fff; border: 2px solid var(--card);
+  font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; pointer-events: none; }
+.gst-tab .gst-nonlus { left: 22px; bottom: auto; top: 32px; z-index: 1; }
 
 /* Mobile et tablette (barre d'onglets basse) : pas de survol, un petit signe toutes les 6 s */
 @media (max-width: 899px) {

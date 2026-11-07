@@ -226,7 +226,7 @@ class TestCA2AucunAppelAnonyme:
         (US-267, rédaction d'un message spontané, comptée à part)."""
         assert TYPES_APPEL == {
             "classification", "parsing", "question", "synthese", "transcription",
-            "agent", "compagnon_signal",
+            "agent", "compagnon_signal", "analyse",
         }
 
     def test_us092_ca2_erreur_de_contexte_nest_pas_une_indisponibilite(self):
@@ -559,14 +559,6 @@ class TestCA9ReplisDeclares:
         reponse = api_client.post("/ask", json={"texte": "combien de tomates ?"})
         assert reponse.status_code == 503
         assert reponse.json()["detail"] == MESSAGE_REPLI_IA
-
-    def test_us092_ca9_repli_de_lecture_json_reste_distinct(self, client_ok):
-        """CA9 edge : une réponse illisible garde son fallback conservatif —
-        elle ne doit pas être confondue avec une indisponibilité."""
-        from llm.groq_client import classify_intent_pwa
-
-        client_ok.chat.completions.create.return_value = _reponse_chat("n'importe quoi")
-        assert classify_intent_pwa("récolté 2 kg", ctx=CTX) == "ACTION"
 
 
 # ═════════════════════════════════════════════════════════════════════════════

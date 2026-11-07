@@ -6,7 +6,7 @@ agent [US-012] : extract_intent_query_mesuree() (~100 tokens Groq) puis
 query_agent_answer() (zéro Groq pour la réponse elle-même — l'agent SQL
 répond en Python pur, scopé par potager_id + fenêtre 12 mois / 100 événements
 max, voir llm/sql_agent.py). Auparavant dupliqué : bot.py utilisait déjà
-cette approche (_ask_question), tandis que main.py (/ask, /voice-INTERROGER)
+cette approche (_ask_question), tandis que main.py (/ask ; /voice-INTERROGER, retiré par US-274)
 chargeait tout l'historique en JSON et l'envoyait au LLM (~5000 tokens/appel).
 Cette US unifie les deux sur l'approche SQL agent, la moins coûteuse et la
 seule scopable proprement par potager.

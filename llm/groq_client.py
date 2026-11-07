@@ -5,8 +5,7 @@ Corrections v2.1 :
   - Date réelle extraite (hier, avant-hier, lundi dernier...)
   - Détection phrases multiples → liste de JSONs
 v2.24 :
-  - transcribe_audio() — Whisper côté serveur pour la PWA
-  - classify_intent_pwa() — ACTION vs INTERROGER (PWA /voice)
+[US-274] transcribe_audio() et classify_intent_pwa() (PWA /voice) sont retirés avec la route.
 
 [US-092] Ce module ne parle plus au fournisseur : il **assemble des prompts et
 interprète des réponses**. Tous les appels passent désormais par la passerelle
@@ -449,49 +448,6 @@ def repondre_question(
     return reponse.texte
 
 
-# ── Transcription Whisper (PWA /voice) ────────────────────────────────────────
-
-def transcribe_audio(
-    audio_path: str, ext: str = ".webm", *, ctx: Optional[TenantContext] = None
-) -> str:
-    """
-    Transcrit un fichier audio via la passerelle (type `transcription`, CA4).
-    Supporte mp4 (iOS), webm (Android/Chrome), ogg, wav, mp3.
-    Retourne le texte transcrit ou '' si silence.
-    """
-    reponse = passerelle.transcrire(
-        ctx=ctx or passerelle.contexte_courant(),
-        chemin_fichier=audio_path,
-        nom_fichier=f"audio{ext}",
-    )
-    return reponse.texte
-
-
-# ── Classificateur d'intention pour la PWA ────────────────────────────────────
-
-_PWA_CLASSIFY_PROMPT = """Tu es un classificateur pour un assistant potager.
-Réponds UNIQUEMENT par un seul mot : ACTION ou INTERROGER
-
-ACTION = description d'une action réalisée (récolte, semis, arrosage, plantation, traitement, paillage, désherbage, observation, perte, mise en godet...)
-INTERROGER = question ou demande d'affichage de données (quand, combien, historique, liste, bilan, stats, total, montre...)
-
-Exemples :
-"j'ai récolté 2 kg de tomates" → ACTION
-"semé des carottes hier" → ACTION
-"arrosage courgettes 20 minutes" → ACTION
-"planté 10 salades parcelle nord" → ACTION
-"perdu 3 plants de tomates" → ACTION
-"mis en godet 15 poivrons" → ACTION
-"combien de kg de tomates cette saison ?" → INTERROGER
-"quand ai-je semé les carottes ?" → INTERROGER
-"montre moi l'historique" → INTERROGER
-"bilan de la semaine" → INTERROGER
-"historique des traitements" → INTERROGER
-"stats courgettes" → INTERROGER
-"total des récoltes" → INTERROGER
-"""
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # PARSE UNIFIÉ — intent + parsing en un seul appel LLM
 # ─────────────────────────────────────────────────────────────────────────────
@@ -697,28 +653,3 @@ def parse_message(texte: str, *, ctx: Optional[TenantContext] = None) -> dict:
         _logger.error("[parse_message] erreur → fallback ACTION : %s", e)
         return {"intent": "ACTION", "culture": None, "parcelle": None,
                 "action_filtre": None, "items": None}
-
-
-def classify_intent_pwa(texte: str, *, ctx: Optional[TenantContext] = None) -> str:
-    """
-    Classifie l'intention d'un message vocal (PWA).
-    Retourne 'ACTION' ou 'INTERROGER' (~150 tokens, très rapide).
-
-    [US-092 / CA9] Le fallback conservatif 'ACTION' reste pour une réponse
-    illisible, mais pas pour une indisponibilité : classer en ACTION pour
-    échouer juste après au parsing ne rendrait service à personne, l'appelant
-    doit pouvoir servir le message de repli.
-    """
-    try:
-        reponse = passerelle.appeler_chat(
-            appel_type=TYPE_CLASSIFICATION,
-            ctx=ctx or passerelle.contexte_courant(),
-            prompt_fixe=_PWA_CLASSIFY_PROMPT,
-            message_utilisateur=texte,
-            max_tokens=100,
-        )
-        return "INTERROGER" if "INTERROGER" in reponse.texte.upper() else "ACTION"
-    except LLMIndisponibleError:
-        raise
-    except Exception:
-        return "ACTION"  # fallback conservatif

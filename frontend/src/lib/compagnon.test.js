@@ -13,9 +13,10 @@ import { readFileSync } from 'node:fs'
 import {
   MODES, MODE_DEFAUT, modeValide, modeDe, messageErreur, TEXTE_RESEAU, carteDefinitivementFermee,
   etatCarte, boutonsCarte, carteApresIssue, carteFermee, filDepuisHistorique, ajouterEchange,
-  ajouterErreur, remplacerCarte, cartesEnAttente, remplacerLesAnciennes, peutEnvoyer, texteACorriger,
-  aEnregistre, LONGUEUR_MAX, ETATS, ETAT_PAR_DEFAUT, etatSuivant, lireEtat, ecrireEtat, CLE_ETAT, GASTON,
+  ajouterErreur, ajouterPhrase, cleDePhrase, remplacerCarte, cartesEnAttente, remplacerLesAnciennes, peutEnvoyer,
+  texteACorriger, aEnregistre, LONGUEUR_MAX, ETATS, ETAT_PAR_DEFAUT, etatSuivant, lireEtat, ecrireEtat, CLE_ETAT, GASTON,
   ACCUEIL, SUGGESTIONS, questionDeSuggestion, filApresRecommencer, BULLE_PRESENT,
+  MODE_ANALYSE, peutApprofondir, peutApprofondirEntree, analyseBornee,
 } from './compagnon.js'
 
 const lire = (chemin) => readFileSync(new URL(chemin, import.meta.url), 'utf8')
@@ -59,6 +60,34 @@ test('[CA2] une commande ne se confirme pas ici : Confirmer est inactif et la ca
   assert.equal(boutons.some((b) => b.id === 'corriger'), false)
   assert.match(etatCarte(commande).libelle, /Telegram/)
   assert.ok(boutons.find((b) => b.id === 'abandonner').actif)   // on peut la laisser tomber
+})
+
+test('[US-289] une commande à exécuteur de service se confirme ici ; une confirmée relit les écrans', () => {
+  const commande = { ...CARTE, nature: 'commande', confirmable: true, phrase: null }
+  assert.equal(boutonsCarte(commande).find((b) => b.id === 'confirmer').actif, true)
+  assert.equal(etatCarte(commande).libelle, 'À confirmer')
+  const issue = { carte: { ...commande, etat: 'confirmee' }, texte: '✅ Parcelle « Sud » mise à jour', enregistres: [], erreur: null }
+  assert.equal(aEnregistre(issue), true)
+  assert.deepEqual(boutonsCarte(carteApresIssue(commande, issue)), [])
+})
+
+test('[US-289] une commande confirmée mais refusée par le service est fermée, avec la raison', () => {
+  const commande = { ...CARTE, nature: 'commande', confirmable: true, phrase: null }
+  const issue = { carte: { ...commande, etat: 'echouee', confirmable: false }, texte: '❌ rangs invalides', enregistres: [], erreur: 'rangs invalides' }
+  const apres = carteApresIssue(commande, issue)
+  assert.equal(etatCarte(apres).id, 'echouee')
+  assert.deepEqual(boutonsCarte(apres), [])
+  assert.equal(apres.erreur, 'rangs invalides')
+  assert.equal(aEnregistre(issue), false)
+})
+
+test('[US-289] « vas-y » dit dans le panneau met la carte existante à jour sans la dupliquer', () => {
+  const commande = { ...CARTE, nature: 'commande', confirmable: true, phrase: null }
+  const fil = [{ cle: 'c1', role: 'compagnon', texte: 'Voici', cartes: [commande] }]
+  const reponse = { texte: '✅ Fait', vers: 'decision', propositions: [{ ...commande, etat: 'confirmee' }] }
+  const apres = ajouterEchange(fil, 'vas-y', reponse)
+  assert.equal(apres[0].cartes[0].etat, 'confirmee')
+  assert.deepEqual(apres[apres.length - 1].cartes, [])
 })
 
 test('[CA2][Gherkin] une carte confirmée affiche « ✅ Confirmé » et n’a plus de bouton', () => {
@@ -188,6 +217,36 @@ test('[CA4] l’erreur entre dans le fil, après la phrase du jardinier', () => 
   assert.equal(fil[1].texte, TEXTE_RESEAU)
 })
 
+test('[CA1] la phrase du jardinier est dans le fil dès l’envoi, avant toute réponse', () => {
+  const cleJ = cleDePhrase()
+  const fil = ajouterPhrase([], 'cette planche fait 20 m²', cleJ)
+  assert.deepEqual(fil.map((e) => [e.role, e.texte]), [['jardinier', 'cette planche fait 20 m²']])
+  assert.equal(fil[0].cle, cleJ)
+})
+
+test('[CA1] la réponse reprend la phrase déjà affichée : elle n’est pas dupliquée', () => {
+  const cleJ = cleDePhrase()
+  const avant = ajouterPhrase([], 'quand semer les poireaux ?', cleJ)
+  const fil = ajouterEchange(avant, 'quand semer les poireaux ?', { texte: 'En mars.', vers: 'question' }, cleJ)
+  assert.deepEqual(fil.map((e) => e.role), ['jardinier', 'compagnon'])
+  assert.equal(fil[0].cle, cleJ)
+})
+
+test('[CA1] l’erreur reprend elle aussi la phrase déjà affichée', () => {
+  const cleJ = cleDePhrase()
+  const avant = ajouterPhrase([], 'j’ai arrosé', cleJ)
+  const fil = ajouterErreur(avant, new TypeError('Failed to fetch'), 'j’ai arrosé', cleJ)
+  assert.deepEqual(fil.map((e) => e.role), ['jardinier', 'erreur'])
+})
+
+test('[CA1] si le fil a été remis à zéro pendant l’attente, la réponse remet la phrase', () => {
+  // « Recommencer » pendant que Gaston réfléchit : la bulle d’avant l’envoi n’existe plus.
+  const cleJ = cleDePhrase()
+  const fil = ajouterEchange([], 'x', { texte: 'ok', vers: 'question' }, cleJ)
+  assert.deepEqual(fil.map((e) => e.role), ['jardinier', 'compagnon'])
+  assert.equal(fil[0].cle, cleJ)
+})
+
 test('[CA4] une carte fermée par le serveur garde la raison, dite par le serveur', () => {
   const e = Object.assign(new Error('Cette proposition a déjà été abandonnée à 9 h 15, dans l’application : je ne refais rien.'), { statut: 409 })
   const fermee = carteFermee(CARTE, e)
@@ -311,4 +370,134 @@ test('[CA5] le placement du chat (plein écran / carte flottante) est décidé p
   assert.ok(app.includes("useMedia('(max-width: 639px)')"))
   assert.ok(app.includes('w-[380px]'))
   assert.ok(app.includes('h-[600px]'))
+})
+
+// ── [US-272] Deux fenêtres : l'état réel des cartes, la pastille des non-lus ─
+import {
+  fusionnerEtat, compterNonLus, vuDepuisEtat, lireVu, ecrireVu, CLE_VU, libellePastille,
+  INTERVALLE_OUVERT_MS, INTERVALLE_FERME_MS,
+} from './compagnon.js'
+
+const FIL_AVEC_CARTE = () => [{ cle: 'c1', role: 'compagnon', texte: 'Voici', cartes: [{ ...CARTE }] }]
+
+test('[US-272 / CA3] confirmée dans Telegram, la carte du panneau le dit', () => {
+  const carte = { ...CARTE, etat: 'confirmee', traite_canal: 'telegram', etat_dit: '✅ Confirmé depuis Telegram à 14:32' }
+  assert.equal(etatCarte(carte).libelle, '✅ Confirmé depuis Telegram à 14:32')
+  assert.equal(etatCarte({ ...carte, traite_canal: 'pwa' }).libelle, '✅ Confirmé')
+})
+
+test('[US-272 / CA5] la relecture fait suivre à la carte son état réel', () => {
+  const fil = fusionnerEtat(FIL_AVEC_CARTE(), {
+    cartes: [], traitees: [{ ...CARTE, etat: 'confirmee', traite_canal: 'telegram', confirmable: false }], spontanes: [],
+  })
+  const carte = fil[0].cartes[0]
+  assert.equal(carte.etat, 'confirmee')
+  assert.deepEqual(boutonsCarte(carte), [])
+})
+
+test('[US-272 / CA5] une carte inchangée garde son erreur locale', () => {
+  const fil = [{ cle: 'c1', role: 'compagnon', cartes: [{ ...CARTE, erreur: 'réseau' }] }]
+  assert.equal(fusionnerEtat(fil, { cartes: [{ ...CARTE }], traitees: [], spontanes: [] })[0].cartes[0].erreur, 'réseau')
+})
+
+test('[US-272 / CA5] une carte née dans Telegram et un message spontané nouveaux s’ajoutent, une fois', () => {
+  const etat = {
+    cartes: [{ ...CARTE }, { ...CARTE, id: 9, nature: 'commande', confirmable: false }],
+    traitees: [], spontanes: [{ id: 3, texte: 'Gel demain', envoye_le: '2026-11-06T18:00:00', genre: 'signal' }],
+  }
+  const une = fusionnerEtat(FIL_AVEC_CARTE(), etat)
+  assert.deepEqual(une.flatMap((e) => e.cartes ?? []).map((c) => c.id), [7, 9])
+  assert.equal(une.filter((e) => e.role === 'spontane').length, 1)
+  assert.equal(fusionnerEtat(une, etat).length, une.length)
+})
+
+test('[US-272 / CA5] la pastille compte ce qui est arrivé depuis la dernière ouverture', () => {
+  const etat = {
+    spontanes: [{ id: 3 }, { id: 5 }],
+    cartes: [{ ...CARTE, id: 8 }, { ...CARTE, id: 12 }],
+    traitees: [{ ...CARTE, id: 14, etat: 'confirmee' }],
+  }
+  assert.equal(compterNonLus(etat, { spontane: 3, carte: 8 }), 2)
+  assert.deepEqual(vuDepuisEtat(etat), { spontane: 5, carte: 14 })
+  assert.equal(compterNonLus(etat, vuDepuisEtat(etat)), 0)
+  assert.equal(compterNonLus(etat, null), 0)
+  assert.equal(libellePastille(0), '')
+  assert.equal(libellePastille(3), '3')
+  assert.equal(libellePastille(12), '9+')
+  assert.ok(INTERVALLE_OUVERT_MS < INTERVALLE_FERME_MS)
+})
+
+test('[US-272 / CA5] le « vu » survit à un stockage indisponible', () => {
+  const memoire = new Map()
+  const stockage = { getItem: (k) => memoire.get(k) ?? null, setItem: (k, v) => memoire.set(k, v) }
+  ecrireVu(stockage, { spontane: 2, carte: 4 })
+  assert.deepEqual(lireVu(stockage), { spontane: 2, carte: 4 })
+  assert.ok(memoire.has(CLE_VU))
+  const casse = { getItem: () => { throw new Error('privé') }, setItem: () => { throw new Error('privé') } }
+  assert.equal(lireVu(casse), null)
+  ecrireVu(casse, { spontane: 1, carte: 1 })
+})
+
+test('[US-272 / CA2] un 409 ferme la carte avec l’état que le serveur donne', () => {
+  const err = Object.assign(new Error('Déjà laissé tomber depuis Telegram à 14:32 : rien n’est fait.'),
+    { statut: 409, code: 'deja_traitee', etat: 'abandonnee' })
+  const fermee = carteFermee(CARTE, err)
+  assert.equal(fermee.etat, 'abandonnee')
+  assert.match(fermee.note, /depuis Telegram/)
+})
+
+test('[US-272 / CA9] sans compagnon de terrain, l’invitation entre dans le fil', () => {
+  const fil = filDepuisHistorique({ spontanes: [], echanges: [], cartes: [], invitation_telegram: 'Active-le' })
+  assert.deepEqual(fil.map((e) => [e.role, e.texte]), [['spontane', 'Active-le']])
+  assert.equal(filDepuisHistorique({ invitation_telegram: null }).length, 0)
+})
+
+test('[US-272 / CA5] la pastille et le potager de la carte sont posés par l’écran', () => {
+  const bouton = lire('../components/BoutonCompagnon.jsx')
+  const carte = lire('../components/CarteProposition.jsx')
+  assert.match(bouton, /gst-nonlus/)
+  assert.match(carte, /carte\.potager/)
+})
+
+// ── [US-273] « Approfondir » : une analyse en lecture seule ─────────────────
+
+test('[US-273 / CA1] « Approfondir » demande le mode analyse, sans en faire un mode du panneau', () => {
+  assert.equal(MODE_ANALYSE, 'analyse')
+  assert.equal(modeValide(MODE_ANALYSE), false)
+  assert.equal(MODES.length, 2)
+})
+
+test('[US-273 / CA1] le bouton de la saisie suit la règle d’« Envoyer »', () => {
+  assert.equal(peutApprofondir('pourquoi si peu de tomates ?', false), true)
+  assert.equal(peutApprofondir('   ', false), false)
+  assert.equal(peutApprofondir('pourquoi ?', true), false)
+})
+
+test('[US-273 / CA1] « Approfondir » n’apparaît que sous la réponse à une question', () => {
+  const question = ajouterEchange([], 'pourquoi mes tomates ont peu donné ?', { texte: 'Peut-être le mildiou.', vers: 'question' })[1]
+  assert.equal(question.phrase, 'pourquoi mes tomates ont peu donné ?')
+  assert.equal(peutApprofondirEntree(question), true)
+  const geste = ajouterEchange([], 'j’ai arrosé', { texte: 'ok', vers: 'geste', propositions: [CARTE] })[1]
+  assert.equal(peutApprofondirEntree(geste), false)
+  const analyse = ajouterEchange([], 'x', { texte: 'Synthèse', vers: 'analyse', sources: [], borne: null })[1]
+  assert.equal(peutApprofondirEntree(analyse), false)
+  assert.equal(peutApprofondirEntree({ role: 'jardinier', texte: 'x' }), false)
+})
+
+test('[US-273 / CA3, CA4] une analyse garde ses sources et dit si elle a été coupée', () => {
+  const entree = ajouterEchange([], 'pourquoi ?', {
+    texte: 'Synthèse', vers: 'analyse', sources: ['Mildiou de la tomate'], borne: 'tours',
+  })[1]
+  assert.deepEqual(entree.sources, ['Mildiou de la tomate'])
+  assert.equal(analyseBornee(entree), true)
+  const entiere = ajouterEchange([], 'pourquoi ?', { texte: 'Synthèse', vers: 'analyse', sources: [], borne: null })[1]
+  assert.equal(analyseBornee(entiere), false)
+})
+
+test('[US-273 / CA1] le panneau lance l’analyse par le mode « analyse » de l’API, sans autre chemin', () => {
+  const panneau = lire('../components/PanneauCompagnon.jsx')
+  assert.match(panneau, /MODE_ANALYSE/)
+  assert.match(panneau, /Approfondir/)
+  // Un seul endroit appelle l'API : `messageCompagnon`, avec le mode — pas de route d'écriture à part.
+  assert.equal((panneau.match(/api\.messageCompagnon/g) ?? []).length, 1)
 })

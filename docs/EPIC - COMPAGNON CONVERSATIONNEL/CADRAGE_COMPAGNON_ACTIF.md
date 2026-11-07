@@ -4,6 +4,7 @@
 > 27/10/2026 dans `backlog/` (US-256 à US-275, puis US-276 et US-277 après la
 > première mesure, et US-278 le 28/10 après les retours de terrain sur US-257)**, réparties en trois épics, avec le modèle et l'effort de production
 > de chacune (§6). Tickets Jira à créer (US-278 : PIA-254, créé le 28/10). **Ordre d'implémentation : §6.5.**
+> **Avancement du 06/11/2026** : US-269 à US-274 réalisées (§6.4, tableau d'état) ; reste US-275, facultative.
 > **Révision du 02/11/2026** : la mesure de l'agent d'abord sur des dialogues réels
 > ([ANALYSE_MESURE_AGENT_D_ABORD.md](ANALYSE_MESURE_AGENT_D_ABORD.md)) révise le §4.5
 > (décision D14) et ajoute US-280 à US-287 (§6.6).
@@ -20,7 +21,7 @@
 > |---|---|
 > | D1 | **Mistral payant** pour le compagnon. Il est servi par la passerelle existante (préfixe `mistral/`) |
 > | D2 | **Proactivité complète.** Le compagnon prend l'initiative sur la météo, les échéances et les oublis de suivi, sans plafond fixe de messages |
-> | D3 | **Proposer, puis confirmer au bouton, PWA comprise.** L'arbitrage A16 est levé : un geste se confirme aussi dans la PWA |
+> | D3 | **Proposer, puis confirmer au bouton, PWA comprise.** L'arbitrage A16 est levé : un geste se confirme aussi dans la PWA. *Étendu par [US-289](../../backlog/US-289_commande-confirmable-pwa.md) (06/11/2026) : une commande à exécuteur de service (`/parcelle ajouter\|modifier`, corrections) se confirme aussi dans la PWA ; les autres formes restent à Telegram jusqu'à leur exécuteur* |
 > | D4 | Le compagnon **tutoie** le jardinier, l'appelle par son **prénom** et parle avec des **mots de tous les jours**. La limite d'une API gratuite n'est plus une contrainte de conception |
 > | D11 | **Telegram est le canal des notifications.** Les messages spontanés, et les propositions nées dans la PWA, arrivent **toujours** dans le bot. Si la PWA est ouverte, la même proposition s'y traite aussi. **La première réponse l'emporte**, et l'autre canal le montre (§4.7). Web Push n'est plus prévu au départ |
 > | D12 | **Aucune règle selon la présence dans la PWA.** Une notification Telegram part et sonne normalement, que le jardinier soit ou non devant le portail. Les seules règles d'envoi sont celles du profil (thèmes, plages de silence, §4.4) |
@@ -685,11 +686,22 @@ flowchart LR
     271 --> 274
     272 -.-> 275
     
-    class 256,258,259,260,261,262,263,264,265,276,277,278,266,267,268,269 realise;
+    class 256,258,259,260,261,262,263,264,265,276,277,278,266,267,268,269,270,271,272,273,274 realise;
     class 257 encours;
-    class 270,271,272,273,274 afaire;
     class 275 facultatif;
 ```
+
+**État au 06/11/2026 : les lots 6 et 7 (ÉPIC 15) sont réalisés**, à l'exception de US-275, facultative.
+Les tickets Jira sont en « Revue en cours » ; rien n'est commité.
+
+| US | Livrée | Jira | Ce qui reste |
+|---|---|---|---|
+| US-269 | service `gestes.py` sans Telegram (sans PATCH_NOTES) | PIA-246 | — |
+| US-270 | v3.118.0, API compagnon | PIA-247 | `handle_voice` hors orchestrateur (écart connu) |
+| US-271 | v3.119.0, panneau PWA | PIA-248 | — |
+| US-272 | v3.120.0, une proposition dans deux fenêtres | PIA-249 | migration v68 jouée sur `potager_test` seulement |
+| US-273 | v3.121.0, analyse approfondie (mode Extra) | PIA-250 | rendu du bouton non vérifié à l'écran (375 / 768 / 1280 px) ; aucune mesure sur le vrai modèle ; `GROQ_MODEL_ANALYSE` laissé au modèle de l'agent |
+| US-274 | v3.122.0, `/parse`, `/voice`, `classify_intent_pwa` et `static/` retirés | PIA-251 | `static/` supprimée avec l'accord du porteur (la PWA de repli dictait ses gestes à `/voice`) |
 
 US-269 ne dépend d'aucune autre US et peut avancer en parallèle. Elle touche
 `app/bot/enregistrement.py`, qui porte aujourd'hui des **modifications en cours

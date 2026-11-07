@@ -425,13 +425,15 @@ class TestPassageEnBase:
         assert chat_id == 111 and "-2 °C" in texte
         assert boutons[0][0] == ("🧣 Voile posé", "spon:1:1:voile")
         assert boutons[-1][0][1] == "spon:1:0:reglages"
-        message, = _lignes(base, MessageSpontane)
+        message, panneau = _lignes(base, MessageSpontane)
         # [CA10] L'identifiant du message Telegram est gardé pour réécrire la carte.
         assert (message.telegram_chat_id, message.telegram_message_id, message.genre) == (111, 5001, "signal")
+        # [US-272 / CA9] Sans Telegram lié : le message est rangé pour le panneau seul.
+        assert (panneau.user_id, panneau.telegram_chat_id, panneau.telegram_message_id) == (2, None, None)
         assert _lignes(base, SignalVeilleur)[0].etat == "envoye"
         envois = {e.user_id: e for e in _lignes(base, EnvoiSignal)}
         assert envois[1].etat == "envoye" and envois[1].message_id == message.id
-        assert (envois[2].etat, envois[2].motif) == ("ignore", "sans_telegram")
+        assert (envois[2].etat, envois[2].message_id) == ("envoye", panneau.id)
 
     def test_gherkin_le_gel_detecte_a_22h_ne_part_pas(self, base):
         _signal("gel:2026-10-31:parcelle-12", "meteo", DEMAIN_5H, A_22H, **_gel().donnees)
@@ -491,7 +493,7 @@ class TestPassageEnBase:
     def test_telegram_en_panne_les_envois_reviennent_en_attente(self, base):
         _signal("gel:2026-10-31:parcelle-12", "meteo", DEMAIN_5H, A_18H, **_gel().donnees)
         distribution.passer(A_18H, Telegram(en_panne=True), avec_modele=False)
-        assert _lignes(base, MessageSpontane) == []
+        assert [m for m in _lignes(base, MessageSpontane) if m.user_id == 1] == []
         telegram = Telegram()
         distribution.passer(A_18H + timedelta(minutes=15), telegram, avec_modele=False)
         assert len(telegram.envoyes) == 1
@@ -523,7 +525,7 @@ class TestPassageEnBase:
             _signal(f"pluie:{jour}", "meteo", instant + timedelta(hours=10), instant, jour="2026-10-31",
                     precipitations_mm=25.0)
             distribution.passer(instant, telegram, avec_modele=False)
-        dernier = _lignes(base, MessageSpontane)[-1]
+        dernier = [m for m in _lignes(base, MessageSpontane) if m.user_id == 1][-1]
         assert distribution.noter_reaction(1, 1, dernier.id, dernier.envoye_le + timedelta(minutes=5))
         instant = JOUR.replace(hour=12) + timedelta(days=3)
         _signal("pluie:3", "meteo", instant + timedelta(days=2), instant, jour="2026-11-03", precipitations_mm=30.0)
@@ -554,8 +556,9 @@ class TestPassageEnBase:
         distribution.passer(A_18H, Telegram(), avec_modele=False)
         from database.models import EchangeConversation
 
-        echange, = _lignes(base, EchangeConversation)
+        echange, panneau = _lignes(base, EchangeConversation)
         assert echange.texte_jardinier == "" and "-2 °C" in echange.texte_compagnon
+        assert (echange.canal, panneau.canal) == ("telegram", "pwa")  # [US-272 / CA9]
         assert echange.signal.startswith("spontane:")
 
     def test_r8_un_signal_redige_ne_produit_aucun_resultat_etape(self, base):
@@ -599,7 +602,9 @@ class TestCA9ReglagesEnBase:
         _signal("gel:2026-10-31:parcelle-12", "meteo", DEMAIN_5H, A_18H, **_gel().donnees)
         telegram = Telegram()
         distribution.passer(A_18H, telegram, avec_modele=False)
-        assert telegram.envoyes == [] and _lignes(base, SignalVeilleur)[0].etat == "ignore"
+        assert telegram.envoyes == []
+        # [US-272 / CA9] Le jardinier sans Telegram, qui n'a rien coupé, le lit dans son panneau.
+        assert [m.user_id for m in _lignes(base, MessageSpontane)] == [2]
 
     def test_le_texte_des_reglages(self):
         texte = proactivite.texte_reglages(regles.reglages_depuis(
@@ -633,7 +638,7 @@ class TestBot:
             asyncio.run(bot._spontane_cb(_update_bouton(voile), MagicMock()))
         saisie.assert_awaited_once()
         assert saisie.await_args.args[1] == "j'ai posé un voile de protection sur Planche Est"
-        assert _lignes(base, MessageSpontane)[0].reaction_le is not None
+        assert [m for m in _lignes(base, MessageSpontane) if m.user_id == 1][0].reaction_le is not None
 
     def test_ca7_plus_tard_n_ecrit_rien(self, base, monkeypatch):
         _signal("gel:2026-10-31:parcelle-12", "meteo", DEMAIN_5H, A_18H, **_gel().donnees)
@@ -671,7 +676,7 @@ class TestBot:
         monkeypatch.setattr(distribution.veilleur_passage, "maintenant_local", lambda: DEMAIN_8H + timedelta(hours=1))
         update = SimpleNamespace(message=SimpleNamespace(reply_to_message=None))
         assert bot.reprendre_reponse(update, "oui environ 20 sur 24") == "levée du lot 14 : 20"
-        assert _lignes(base, MessageSpontane)[0].reaction_le is not None
+        assert [m for m in _lignes(base, MessageSpontane) if m.user_id == 1][0].reaction_le is not None
         # Sans message spontané en cours, la phrase passe telle quelle.
         monkeypatch.setattr(bot, "current_context", lambda: TenantContext(user_id=2, potager_id=1))
         assert bot.reprendre_reponse(update, "oui environ 20 sur 24") == "oui environ 20 sur 24"

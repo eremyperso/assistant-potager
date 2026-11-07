@@ -67,7 +67,7 @@ cd ..
 uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-`app/api/main.py` sert `frontend/dist` en priorité (fallback sur `static/` si le build React est absent) —
+`app/api/main.py` sert `frontend/dist` (sans build React, aucune page n'est servie ; `static/` est retiré, US-274) —
 toute modification de l'UI nécessite un `npm run build` avant de se refléter via l'API,
 le mode `npm run dev` (port 3000) suffit pour itérer rapidement sans rebuild.
 
@@ -97,6 +97,13 @@ Réglages facultatifs du compagnon (US-267), sans redéploiement de code :
   dans `conso_tokens`) ; par défaut celui de l'agent (`GROQ_MODEL_AGENT`). En panne ou infidèle, le
   gabarit du code part à sa place.
 
+Réglages de l'analyse approfondie (US-273, bouton « Approfondir » et `/approfondir`) :
+
+- `GROQ_MODEL_ANALYSE` — modèle de la boucle de lecture (type d'appel `analyse` dans `conso_tokens`) ;
+  par défaut celui de l'agent. C'est l'usage où une montée de modèle se justifie le plus.
+- `ANALYSE_MAX_TOURS` (défaut `6`) et `ANALYSE_MAX_JETONS` (défaut `20000`) — au-delà, l'analyse cesse
+  de lire et rend ce qu'elle a, avec une mention. Lus au démarrage : redémarrer l'API et le bot.
+
 Réglages de l'agent interpréteur (US-287, décision D14 du 02/11/2026) :
 - `AGENT_MODE` — `prioritaire` est la cible : toute phrase libre va d'abord à l'agent, avant les
   règles et avant les raccourcis à mots-clés du bot (annuler, godets, déplacer, note). Les dialogues
@@ -124,6 +131,7 @@ Réglages de l'agent interpréteur (US-287, décision D14 du 02/11/2026) :
 | `/stats <culture> <date>` | `[culture] [JJ/MM/AAAA\|AAAA-MM-JJ]` | Stats à une date de référence (`bot.py:3191`) |
 | `/historique` | — | 10 derniers événements |
 | `/ask` | `[question en langage naturel]` | Question analytique (ou saisie interactive si sans arg) |
+| `/approfondir` | `[question]` | Analyse approfondie en lecture seule (récoltes, météo, parcelles, savoir) ; sans argument, rappelle l'usage. Bornée par `ANALYSE_MAX_TOURS` et `ANALYSE_MAX_JETONS` ; modèle réglable par `GROQ_MODEL_ANALYSE` |
 | `/corriger` | — | Lancer le flux de correction d'un événement existant |
 | `/deplacer [culture]` | `[culture]` | Déplacer une culture vers une autre parcelle (parcours guidé, US-007 / US-287) |
 | `/plan` | — | Plan d'occupation global du potager |

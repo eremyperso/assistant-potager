@@ -49,6 +49,11 @@ export default function CarteProposition({ carte, occupe = false, onAction }) {
         </span>
       </div>
 
+      {/* [US-272 / CA6 / F5] Le potager où elle s'exécute, quand le jardinier en a plusieurs. */}
+      {carte.potager && (
+        <p className="mt-1 text-[11.5px] font-semibold text-txt3 break-words">🏡 {carte.potager}</p>
+      )}
+
       <ul className="mt-1.5 space-y-0.5">
         {lignes.map((ligne, i) => (
           <li key={i} className="text-[13.5px] font-semibold text-txt break-words">{ligne}</li>

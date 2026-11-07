@@ -1194,6 +1194,20 @@ La deuxième cause, c'est une perte jamais déclarée : un stock qui ne baisse j
 
 ---
 
+### 15.7 Demander une analyse approfondie
+
+Pour comprendre une saison ou un souci — *« pourquoi mes tomates ont peu donné ? »* — demandez une **analyse approfondie** : le compagnon lit plusieurs choses (vos parcelles, vos récoltes et votre carnet, la météo de votre potager, les fiches de savoir) et les croise dans une synthèse.
+
+```
+/approfondir pourquoi mes tomates ont peu donné ?
+```
+
+Dans l'application web, écrivez votre question dans le panneau de Gaston puis appuyez sur **Approfondir**, à côté d'« Envoyer » ; le même bouton apparaît sous chaque réponse à une question.
+
+- **Rien n'est modifié.** L'analyse ne fait que lire : aucun geste enregistré, aucune proposition, aucune parcelle changée. Elle peut finir par des **pistes** (« pailler les pieds »), qui sont des suggestions ; pour en mener une, dites-la au compagnon, qui vous la propose et attend votre confirmation.
+- **Les chiffres sont ceux de vos données**, avec leur source ; ce qui n'a pas pu être lu est dit. Jamais de dose ni de produit de traitement.
+- **Elle prend plus de temps** qu'une question ordinaire. Elle s'arrête à une limite de lectures et le dit (*« Analyse arrêtée à sa limite : elle est partielle »*) : elle rend alors ce qu'elle a déjà lu.
+
 ## 16. Cultures, familles, rotation et associations
 
 *Avant de semer, et au moment de planter.*
@@ -1501,6 +1515,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 | `/stats <culture> <date>` | Détail à une date passée |
 | `/historique` | Les 10 derniers événements |
 | `/ask <question>` | Poser une question sur le potager |
+| `/approfondir <question>` | Analyse approfondie qui croise récoltes, météo et parcelles — rien n'est modifié |
 | `/meteo` | Relevé météo immédiat de votre potager |
 | `/meteo <ville>` | Météo du jour d'une autre ville — rien n'est enregistré |
 | `/carnet` | Voir ce que le compagnon retient de vous — modifier, oublier un point, tout oublier |

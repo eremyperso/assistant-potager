@@ -23,7 +23,7 @@ Le compagnon surveille votre potager chaque heure et vous écrit dans Telegram q
 
 Ces constats sont faits par l'application à partir de vos cultures, de vos lots, de votre journal et de la météo de votre potager ; le compagnon ne fait que les dire avec ses mots, au ton que vous avez choisi. S'il se trompe sur un chiffre, c'est le texte de l'application qui part à la place du sien. Un même constat ne vous est dit qu'une fois.
 
-Ces messages ne partent que si le compagnon a été activé dans Telegram : sans Telegram relié à votre compte, vous ne les recevez pas.
+Ces messages partent dans Telegram quand le compagnon y a été activé, et ils sont aussi rangés dans le panneau de Gaston, dans l'application. Sans Telegram relié à votre compte, vous les lisez dans ce panneau seulement : une pastille rouge sur Gaston signale ceux que vous n'avez pas encore lus.
 
 ## Choisir les sujets sur lesquels le compagnon vous écrit
 

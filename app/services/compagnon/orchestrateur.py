@@ -194,6 +194,18 @@ def repondre_en_mode_support(ctx: TenantContext, question: str):
     )
 
 
+def analyser_le_potager(ctx: TenantContext, question: str):
+    """[US-273 / mode Extra, articulation §5.4] Une analyse approfondie, en lecture seule.
+
+    Commune aux deux canaux (bouton « Approfondir » de la PWA, `/approfondir` du bot) : la boucle
+    n'expose que des outils de lecture, elle ne range aucune proposition et n'écrit aucun
+    événement. Peut lever `LLMIndisponibleError`.
+    """
+    from app.services.compagnon import analyse
+
+    return analyse.analyser(question, ctx)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Le contexte que l'agent lit avec la phrase — commun aux canaux
 # ═════════════════════════════════════════════════════════════════════════════

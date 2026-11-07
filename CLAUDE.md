@@ -86,7 +86,7 @@ tools/          import, ingestion, mesures, purge, suivi Jira
 tests_conv/     scénarios Markdown joués sur Telegram (Telethon) → python -m tests_conv
 scripts/        update_dev.ps1 (env dev), deploy.sh (repli manuel)
 infra/          unités systemd ; .github/workflows/ : déploiement dev et prod
-frontend/       dashboard React (Vite) ; static/ : ancienne PWA de repli
+frontend/       dashboard React (Vite)
 docs/domaines/  notes de conception par domaine — à lire avant de modifier un module
 ```
 

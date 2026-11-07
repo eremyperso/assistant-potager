@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { GastonComplet, VisageGaston, MainGaston } from './Gaston.jsx'
-import { BULLE_PRESENT, GASTON } from '../lib/compagnon.js'
+import { BULLE_PRESENT, GASTON, libellePastille } from '../lib/compagnon.js'
 
 const DUREE_BULLE_MS = 8000
 const CLE_BULLE = 'potager_compagnon_bulle_vue'
@@ -33,7 +33,18 @@ function useBulleDAccueil(visible) {
   return bulle
 }
 
-export default function BoutonCompagnon({ etat, onOuvrir, onReplier, onDeplier }) {
+/** [US-272 / CA5] La pastille des messages non lus, posée sur l'avatar (ou sur l'onglet replié). */
+function Pastille({ n }) {
+  const libelle = libellePastille(n)
+  if (!libelle) return null
+  return (
+    <span className="gst-nonlus" aria-label={`${n} message${n > 1 ? 's' : ''} non lu${n > 1 ? 's' : ''}`} role="status">
+      {libelle}
+    </span>
+  )
+}
+
+export default function BoutonCompagnon({ etat, nonLus = 0, onOuvrir, onReplier, onDeplier }) {
   const bulle = useBulleDAccueil(etat === 'present')
 
   if (etat === 'replie') {
@@ -43,6 +54,7 @@ export default function BoutonCompagnon({ etat, onOuvrir, onReplier, onDeplier }
         <button type="button" className="gst-chev" onClick={onDeplier} aria-label={`Déplier ${GASTON.nom}`} title={`Déplier ${GASTON.nom}`}>
           <ChevronLeft size={18} strokeWidth={2.4} aria-hidden="true" />
         </button>
+        <Pastille n={nonLus} />
       </div>
     )
   }
@@ -50,11 +62,12 @@ export default function BoutonCompagnon({ etat, onOuvrir, onReplier, onDeplier }
   return (
     <div className="gst-pres">
       {bulle && <div className="gst-bulle" role="status">{BULLE_PRESENT}</div>}
-      <button type="button" className="gst-av" onClick={onOuvrir} aria-label="Parler au compagnon" title={`Parler à ${GASTON.nom}`}>
+      <button type="button" className="gst-av" onClick={onOuvrir} aria-label={nonLus > 0 ? `Parler au compagnon (${nonLus} non lu${nonLus > 1 ? 's' : ''})` : 'Parler au compagnon'} title={`Parler à ${GASTON.nom}`}>
         <VisageGaston />
       </button>
       <MainGaston />
       <i className="gst-dot" aria-hidden="true" />
+      <Pastille n={nonLus} />
       <button type="button" className="gst-min" onClick={onReplier} aria-label={`Replier ${GASTON.nom}`} title="Replier">
         <ChevronRight size={12} strokeWidth={3} aria-hidden="true" />
       </button>

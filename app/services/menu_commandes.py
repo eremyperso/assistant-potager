@@ -63,6 +63,7 @@ ORDRE_METIER: tuple[str, ...] = (
     "plan",
     "lot",
     "ask",
+    "approfondir",
     "fiche",
     "calendrier",
     "confiance",
@@ -102,6 +103,7 @@ DESCRIPTIONS: dict[str, str] = {
     "plan":        "Plan d'occupation de vos parcelles",
     "lot":         "Un lot de pépinière, ou la liste des lots",  # [US-209]
     "ask":         "Poser une question sur votre potager",
+    "approfondir": "Analyse approfondie, sans rien modifier",  # [US-273]
     "fiche":       "Fiche agronomique courte d'une culture",
     "calendrier":  "Quand semer et récolter, selon votre zone",
     "confiance":   "Est-ce le moment de semer ou de planter ?",
@@ -667,6 +669,11 @@ MOTIFS_EXCLUSION_INTERPRETEUR: dict[str, str] = {
         "Son équivalent naturel EST la question elle-même : une question dictée "
         "est déjà aiguillée par le routeur (US-093). En faire une commande "
         "créerait deux entrées vers le même chemin."
+    ),
+    "approfondir": (
+        "[US-273] Une analyse coûte plusieurs appels au modèle : elle se lance par un geste délibéré "
+        "(la commande, le bouton « Approfondir » de la PWA), jamais déduite d'une phrase. Une question "
+        "dictée est déjà prise par l'agent et la cascade."
     ),
     "start": (
         "Point d'entrée du protocole Telegram (bouton « Démarrer »), pas une phrase."

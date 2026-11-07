@@ -54,6 +54,7 @@ ROLES_DESTINATAIRES: tuple[str, ...] = ("owner", "editor")
 GENRE_SIGNAL = "signal"
 GENRE_RESUME = "resume"
 SIGNAL_PLANIFIE = "planifie"
+#: [US-272 / CA9] Plus utilisé : sans Telegram, le message va au panneau. Gardé pour les lignes anciennes.
 MOTIF_SANS_TELEGRAM = "sans_telegram"
 MOTIF_PLUS_MEMBRE = "plus_membre"
 #: [CA8] Un message spontané attend sa réponse douze heures…
@@ -186,16 +187,14 @@ def planifier_potager(potager_id: int, maintenant: datetime) -> int:
                 if signal.user_id is not None and dest.user_id != signal.user_id:
                     continue
                 r = reglages[dest.user_id]
-                if dest.chat_id is None:
-                    decision = regles.Decision(r.mode(signal.theme), regles.ETAT_IGNORE, maintenant,
-                                               MOTIF_SANS_TELEGRAM)
-                else:
-                    sans_reaction = r.mode(signal.theme) == regles.MODE_IMMEDIAT and regles.doit_basculer(
-                        signal.theme,
-                        _reactions_du_theme(db, potager_id, dest.user_id, signal.theme, r.depuis_le(signal.theme)))
-                    decision = regles.planifier(signal.theme, signal.expire_le, r, maintenant, sans_reaction)
-                    if decision.annonce_bascule:
-                        reglages[dest.user_id] = _basculer(db, potager_id, dest.user_id, signal.theme, maintenant)
+                # [US-272 / CA9] Un compte sans Telegram lié n'est plus ignoré : son message va au
+                # panneau de la PWA seul (`_envoyer_message`), avec les mêmes règles d'envoi.
+                sans_reaction = r.mode(signal.theme) == regles.MODE_IMMEDIAT and regles.doit_basculer(
+                    signal.theme,
+                    _reactions_du_theme(db, potager_id, dest.user_id, signal.theme, r.depuis_le(signal.theme)))
+                decision = regles.planifier(signal.theme, signal.expire_le, r, maintenant, sans_reaction)
+                if decision.annonce_bascule:
+                    reglages[dest.user_id] = _basculer(db, potager_id, dest.user_id, signal.theme, maintenant)
                 db.add(_envoi(potager_id, signal_id, dest.user_id, decision, maintenant))
                 decisions.append(decision)
             if all(d.etat == regles.ETAT_IGNORE for d in decisions):
@@ -252,7 +251,11 @@ def _envoyer_message(
     db: Session, potager_id: int, dest: Destinataire, pris: list[EnvoiSignal],
     signaux: dict[int, SignalVeilleur], maintenant: datetime, envoyer: Envoyeur, avec_modele: bool,
 ) -> bool:
-    """Rédige, poste dans Telegram et range le message ; rend False si Telegram l'a refusé."""
+    """Rédige, poste dans Telegram et range le message ; rend False si Telegram l'a refusé.
+
+    [US-272 / CA9] Sans Telegram lié, le message est rangé pour le panneau de la PWA seul
+    (aucun identifiant de message Telegram) : il n'est jamais perdu.
+    """
     ctx = TenantContext(user_id=dest.user_id, potager_id=potager_id)
     a_rediger = _a_rediger(pris, signaux)
     resume = any(e.mode == regles.MODE_RESUME for e in pris)
@@ -264,8 +267,9 @@ def _envoyer_message(
         bascules=bascules, avec_modele=avec_modele,
     )
     clavier = [[(b.libelle, b.callback) for b in rangee] for rangee in reponse_signal.boutons(potager_id, a_rediger)]
-    message_telegram = envoyer(dest.chat_id, redac.texte, clavier)
-    if message_telegram is None:
+    panneau_seul = dest.chat_id is None
+    message_telegram = None if panneau_seul else envoyer(dest.chat_id, redac.texte, clavier)
+    if message_telegram is None and not panneau_seul:
         for envoi in pris:
             envoi.etat, envoi.traite_le = regles.ETAT_EN_ATTENTE, None
         db.commit()
@@ -286,7 +290,8 @@ def _envoyer_message(
         signaux[envoi.signal_id].etat = svc_signaux.ETAT_ENVOYE if seul else svc_signaux.ETAT_REGROUPE
     db.commit()
     # [CA8] Le message entre dans la conversation : une réponse dans la demi-heure le retrouve.
-    conversations.noter(ctx, "", redac.texte, canal=svc_propositions.CANAL_TELEGRAM, signal=f"spontane:{message.id}")
+    canal = svc_propositions.CANAL_PWA if panneau_seul else svc_propositions.CANAL_TELEGRAM
+    conversations.noter(ctx, "", redac.texte, canal=canal, signal=f"spontane:{message.id}")
     log.info("[US-267] 📨 Message spontané %s → user %s (potager %s) : %s signal(aux), %s, %s, "
              "telegram_message_id=%s", message.genre, dest.user_id, potager_id, len(pris), message.themes,
              message.redige, message_telegram)
@@ -311,8 +316,8 @@ def envoyer_dus(potager_id: int, maintenant: datetime, envoyer: Envoyeur, avec_m
         envoyes = 0
         for user_id, envois in par_jardinier.items():
             dest = vises.get(user_id)
-            if dest is None or dest.chat_id is None:
-                _ignorer(db, envois, MOTIF_PLUS_MEMBRE if dest is None else MOTIF_SANS_TELEGRAM, maintenant)
+            if dest is None:
+                _ignorer(db, envois, MOTIF_PLUS_MEMBRE, maintenant)
                 continue
             expires = [e for e in envois if signaux[e.signal_id].expire_le <= maintenant]
             _ignorer(db, expires, regles.MOTIF_EXPIRE, maintenant)
@@ -332,8 +337,8 @@ def envoyer_dus(potager_id: int, maintenant: datetime, envoyer: Envoyeur, avec_m
                          len(vivants), f"{report:%H:%M}", user_id)
                 continue
             pris = _prendre(db, vivants, maintenant)
-            if pris and _envoyer_message(db, potager_id, dest, pris, signaux, maintenant, envoyer, avec_modele):
-                envoyes += 1
+            if pris and _envoyer_message(db, potager_id, dest, pris, signaux, maintenant, envoyer, avec_modele)                     and dest.chat_id is not None:
+                envoyes += 1  # [US-272 / CA9] le compte est celui des messages partis dans Telegram
         return envoyes
 
 
@@ -403,8 +408,10 @@ def message_en_contexte(
     instant = maintenant or veilleur_passage.maintenant_local()
     try:
         with _session(potager_id) as db:
+            # [US-272 / CA9] Un message rangé pour le panneau seul n'a pas de réponse Telegram à attendre.
             requete = db.query(MessageSpontane).filter(
-                MessageSpontane.potager_id == potager_id, MessageSpontane.user_id == user_id)
+                MessageSpontane.potager_id == potager_id, MessageSpontane.user_id == user_id,
+                MessageSpontane.telegram_message_id.isnot(None))
             cite = None
             if telegram_message_id is not None:
                 cite = requete.filter(MessageSpontane.telegram_message_id == telegram_message_id).first()

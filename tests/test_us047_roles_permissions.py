@@ -276,43 +276,6 @@ def _creer_potager_avec_role(db, nom, proprietaire_id, membre_id, role):
     return potager
 
 
-def test_ca4_post_parse_403_pour_lecteur_sans_appel_llm(app_client, _auth_engine):
-    SessionLocal = sessionmaker(bind=_auth_engine)
-    db = SessionLocal()
-    proprietaire = _creer_compte_web(db, email="owner@example.com")
-    lecteur = _creer_compte_web(db, email="lecteur@example.com")
-    _creer_potager_avec_role(db, "Jardin partagé", proprietaire.id, lecteur.id, "lecteur")
-    access_token = svc_auth.creer_access_token(lecteur.id)
-    db.close()
+# [US-274] POST /parse est retiré : le garde de rôle de l'écriture se teste sur les exécuteurs de
+# proposition (US-270, US-271, US-289), plus sur une route qui écrivait sans confirmation.
 
-    with patch("app.api.main.parse_commande") as mock_parse_commande:
-        resp = app_client.post(
-            "/parse",
-            json={"texte": "j'ai récolté 2 kg de tomates"},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-
-    assert resp.status_code == 403
-    assert "lecteur" in resp.json()["detail"].lower()
-    mock_parse_commande.assert_not_called()  # [CA4]
-
-
-def test_editor_post_parse_enregistre_normalement(app_client, _auth_engine):
-    SessionLocal = sessionmaker(bind=_auth_engine)
-    db = SessionLocal()
-    proprietaire = _creer_compte_web(db, email="owner2@example.com")
-    editor = _creer_compte_web(db, email="editor2@example.com")
-    _creer_potager_avec_role(db, "Jardin partagé 2", proprietaire.id, editor.id, "editor")
-    access_token = svc_auth.creer_access_token(editor.id)
-    db.close()
-
-    items = [{"action": "arrosage", "culture": None, "variete": None, "quantite": None, "unite": None}]
-    with patch("app.api.main.parse_commande", return_value=items):
-        resp = app_client.post(
-            "/parse",
-            json={"texte": "j'ai arrosé"},
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-
-    assert resp.status_code == 200
-    assert resp.json()["success"] is True

@@ -454,7 +454,9 @@ class TestCA4PasDeDoubleExecution:
         await bot_module._interp_cb(second, ctx)
 
         handler.assert_awaited_once()
-        assert "Demande expirée, rien n'a été fait" in _texte_du_clic(second)
+        # [US-272 / CA2] Le second appui dit où et quand la proposition a été confirmée.
+        assert "Déjà confirmé depuis Telegram" in _texte_du_clic(second)
+        assert "rien n'est refait" in _texte_du_clic(second)
 
     @pytest.mark.asyncio
     async def test_us234_ca4_la_proposition_est_retiree_avant_l_execution(self, journal, potager_au_clic):

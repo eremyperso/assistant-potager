@@ -261,7 +261,7 @@ class TestPrechargement:
 
     def test_ca6_precharger_ne_leve_jamais(self, monkeypatch):
         monkeypatch.undo()
-        with patch("app.services.agent.savoir._meteo_du_potager", side_effect=RuntimeError):
+        with patch("app.services.agent.savoir._meteo_du_jour", side_effect=RuntimeError):
             with patch("database.db.SessionLocal", side_effect=RuntimeError):
                 assert savoir.precharger(CTX, savoir.Releves()) == ""
 

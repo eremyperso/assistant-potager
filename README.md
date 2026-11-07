@@ -102,7 +102,6 @@ Le module `app/config.py` lit toutes les configurations depuis `.env.{APP_ENV}` 
 
 2. **Endpoints principaux**
    - `GET /health` : Vérification de l'état de l'API
-   - `POST /parse` : Parser une commande vocale
    - `POST /ask` : Poser une question analytique
    - `GET /stats` : Statistiques JSON
    - `GET /historique` : Historique des événements
@@ -223,7 +222,7 @@ Les contributions sont les bienvenues !
 - `llm/` : Passerelle Groq, routeur, parseur déterministe
 - `utils/` : Utilitaires (actions, dates, météo, TTS)
 - `data/` : Référentiel structuré et corpus de connaissance
-- `frontend/` : Dashboard React (Vite) ; `static/` : ancienne PWA de repli
+- `frontend/` : Dashboard React (Vite) ; l'ancienne PWA `static/` est retirée (US-274)
 - `scripts/` : `update_dev.ps1` (env dev) et `deploy.sh` (repli manuel)
 - `infra/` : Unités systemd ; `.github/workflows/` : déploiement dev / prod
 - `tools/` : Outils d'exploitation (import, ingestion, mesures)

@@ -7,8 +7,8 @@ npm run dev        # http://localhost:3000, hot reload, API via .env.local (VITE
 npm run build      # génère frontend/dist, servi par l'API FastAPI (app/api/main.py)
 ```
 
-`app/api/main.py` sert `frontend/dist` en priorité (repli sur `static/` si le
-build est absent) : toute modification de l'UI exige `npm run build` pour être
+`app/api/main.py` sert `frontend/dist` (sans build, aucune page n'est servie ; l'ancienne
+PWA `static/` est retirée, US-274) : toute modification de l'UI exige `npm run build` pour être
 visible via l'API ; `npm run dev` suffit pour itérer.
 
 ## Responsive — partage breakpoints Tailwind / container queries (NON NÉGOCIABLE)

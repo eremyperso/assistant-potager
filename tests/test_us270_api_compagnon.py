@@ -180,7 +180,8 @@ class TestCA1Messages:
 
         assert reponse.vers == svc_echange.VERS_COMMANDE
         carte = reponse.propositions[0]
-        assert carte["nature"] == "commande" and carte["confirmable"] is False
+        # [US-289] `/parcelle modifier` a un exécuteur de service : la carte se confirme dans la PWA.
+        assert carte["nature"] == "commande" and carte["confirmable"] is True
         # La proposition est celle que le bot lira aussi (US-259) : même table, même jardinier.
         telegram = svc_propositions.en_attente(CTX.user_id, CTX.potager_id)
         assert telegram is not None and telegram.id == carte["id"] and telegram.canal == "pwa"
@@ -260,9 +261,10 @@ class TestCA2Confirmer:
             assert _compter(db, Evenement) == 0
 
     def test_ca2_une_commande_se_confirme_dans_telegram_mais_s_abandonne_ici(self, potager):
+        # [US-289] Une forme SANS exécuteur de service (ici `/parcelle supprimer`) reste à Telegram.
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "modifier")],
-            {"nom": "Sud", "modification": "rangs=2"}, interp.ORIGINE_REGLE, 1.0, "passe la sud à 2 rangs",
+            interp.FORMES_PAR_CLE[("parcelle", "supprimer")],
+            {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "supprime la sud",
         )
         proposition = svc_propositions.proposer(CTX, commande, canal="pwa")
         with pytest.raises(svc_echange.NonConfirmableDansLaPwaError):
@@ -494,8 +496,8 @@ class TestRoutes:
 
     def test_commande_non_confirmable_donne_409_explicite(self, client):
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "modifier")],
-            {"nom": "Sud", "modification": "rangs=2"}, interp.ORIGINE_REGLE, 1.0, "x",
+            interp.FORMES_PAR_CLE[("parcelle", "supprimer")],
+            {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "x",
         )
         proposition = svc_propositions.proposer(CTX, commande, canal="pwa")
         reponse = client.post(f"/compagnon/propositions/{proposition.id}/confirmer")

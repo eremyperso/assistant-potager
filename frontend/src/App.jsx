@@ -21,6 +21,7 @@ import BoutonCompagnon from './components/BoutonCompagnon.jsx'  // [US-271]
 import PanneauCompagnon from './components/PanneauCompagnon.jsx'  // [US-271]
 import { GastonDefs } from './components/Gaston.jsx'  // [US-271]
 import { useMedia } from './hooks/useMedia.js'  // [US-271]
+import { useNonLusCompagnon } from './hooks/useNonLusCompagnon.js'  // [US-272]
 import { lireEtat, ecrireEtat, etatSuivant } from './lib/compagnon.js'  // [US-271]
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
@@ -131,6 +132,8 @@ function AppInner({ intentionAdresse }) {
   // Structure de page : plein écran au téléphone, carte flottante au-delà ; au-dessus de la barre
   // d'onglets basse tant qu'elle existe (sous 900 px).
   const compagnonPlein = useMedia('(max-width: 639px)')
+  // [US-272 / CA5] La pastille des messages non lus, relue tant que le chat est fermé.
+  const { nonLus: nonLusCompagnon, marquerVu: marquerCompagnonVu } = useNonLusCompagnon(compagnon === 'chat')
   const barreBasse = useMedia('(max-width: 899px)')
 
   const handleRefresh = useCallback(() => {
@@ -202,6 +205,7 @@ function AppInner({ intentionAdresse }) {
           {compagnon !== 'chat' && (
             <BoutonCompagnon
               etat={compagnon}
+              nonLus={nonLusCompagnon}
               onOuvrir={() => agirCompagnon('ouvrir')}
               onReplier={() => agirCompagnon('replier')}
               onDeplier={() => agirCompagnon('deplier')}
@@ -231,6 +235,7 @@ function AppInner({ intentionAdresse }) {
               plein={compagnonPlein}
               onFermer={() => agirCompagnon('fermer')}
               onEnregistre={handleRefresh}
+              onVu={marquerCompagnonVu}
             />
           </div>
         )}

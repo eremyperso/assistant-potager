@@ -313,31 +313,20 @@ class TestCA5PromptLLM:
 # ──────────────────────────────────────────────────────────────────────────────
 
 class TestCA6MainParseSaveGodetFields:
-    def test_ca6_post_parse_sauvegarde_champs_godet(self, test_db) -> None:
-        """CA6 — POST /parse crée un Evenement avec nb_graines_semees et nb_plants_godets."""
-        from fastapi.testclient import TestClient
-        from unittest.mock import patch
-        from app.api.main import app
+    def test_ca6_creation_evenement_sauvegarde_champs_godet(self, test_db) -> None:
+        """CA6 — l'enregistrement (autrefois POST /parse, retiré par US-274) crée un Evenement
+        avec nb_graines_semees et nb_plants_godets."""
+        from app.services import evenements as svc_evenements
+        from app.services.context import default_context
 
-        parsed_mock = [{
-            "action": "mise_en_godet",
-            "culture": "tomate",
-            "variete": "cerise",
-            "nb_graines_semees": 30,
-            "nb_plants_godets": 24,
-            "quantite": None,
-            "unite": None,
-            "parcelle": None,
-            "date": None,
-            "commentaire": None,
-        }]
-        with patch("app.api.main.parse_commande", return_value=parsed_mock), \
-             patch("app.api.main.add_to_rag"), \
-             patch("app.api.main.SessionLocal", return_value=test_db):
-            client = TestClient(app)
-            resp = client.post("/parse", json={"texte": "mis en godet 24 tomates cerise sur 30 graines"})
-
-        assert resp.status_code == 200
+        parsed = {
+            "action": "mise_en_godet", "culture": "tomate", "variete": "cerise",
+            "nb_graines_semees": 30, "nb_plants_godets": 24,
+            "quantite": None, "unite": None, "parcelle": None, "date": None, "commentaire": None,
+        }
+        svc_evenements.creer_evenement_depuis_parse(
+            test_db, default_context(), parsed, "mis en godet 24 tomates cerise sur 30 graines",
+        )
         ev = test_db.query(Evenement).filter(Evenement.type_action == "mise_en_godet").first()
         assert ev is not None
         assert ev.nb_graines_semees == 30

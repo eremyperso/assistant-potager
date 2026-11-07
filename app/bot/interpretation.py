@@ -16,6 +16,7 @@ from app.services.compagnon import actions_menees as svc_actions_menees
 from app.services.compagnon import conversations as svc_conversations
 from app.services.compagnon import corrections as svc_corrections
 from app.services.compagnon import decisions as svc_decisions
+from app.services.compagnon import deux_canaux as svc_deux_canaux
 from app.services.compagnon import file_agent as svc_file_agent
 from app.services.compagnon import orchestrateur as svc_orchestrateur
 from app.services.compagnon import propositions as svc_propositions
@@ -328,6 +329,52 @@ def _entete_potager(proposition: PropositionConversation) -> str:
     return f"🏡 _{_md(nom)}_\n" if nom else ""
 
 
+def _retenir_la_carte(proposition: PropositionConversation, envoye) -> None:
+    """[US-272 / F2] Garde le message qui porte la carte : si la proposition est traitée dans le
+    portail, ou remplacée, cette carte sera réécrite. Silencieux sur un message illisible."""
+    message_id = getattr(envoye, "message_id", None)
+    chat_id = getattr(getattr(envoye, "chat", None), "id", None) or getattr(envoye, "chat_id", None)
+    if not isinstance(message_id, int) or not isinstance(chat_id, int):
+        return
+    try:
+        svc_deux_canaux.noter_message(proposition.id, proposition.potager_id, chat_id, message_id)
+    except Exception:  # noqa: BLE001 — l'observabilité d'une carte ne bloque jamais la proposition
+        log.exception("[US-272 / F2] Carte de la proposition %s non retenue", proposition.code)
+
+
+async def reecrire_carte(ctx: ContextTypes.DEFAULT_TYPE, proposition_id: Optional[int],
+                         sauf_message: Optional[int] = None) -> bool:
+    """[US-272 / CA3, CA4] Réécrit la carte Telegram d'une proposition sortie de l'attente AILLEURS
+    que sous cette carte (remplacée par une nouvelle, traitée dans le portail). Best-effort : un
+    message trop ancien ne se réécrit plus, et F1 suffit."""
+    if proposition_id is None:
+        return False
+    try:
+        carte = svc_deux_canaux.rendu_de_la_carte(proposition_id)
+        if carte is None or carte.message_id == sauf_message:
+            return False
+        await ctx.bot.edit_message_text(chat_id=carte.chat_id, message_id=carte.message_id, text=carte.texte)
+        log.info("[US-272 / F3] Carte de la proposition id=%s réécrite dans Telegram", proposition_id)
+        return True
+    except Exception as err:  # noqa: BLE001
+        log.info("[US-272 / F2] Carte de la proposition id=%s non réécrite : %s", proposition_id, err)
+        return False
+
+
+async def _refuser_le_second(query, identifiant: Optional[str], user_id: Optional[int],
+                             proposition: Optional[PropositionConversation] = None) -> None:
+    """[US-272 / CA2 / F1] La proposition n'attend plus : on dit où et quand elle a été traitée
+    (« Déjà confirmé depuis le portail à 14:32 »), et rien n'est exécuté. Une proposition périmée,
+    remplacée ou inconnue garde le message d'US-234."""
+    relue = svc_propositions.par_code(identifiant, user_id) if identifiant else None
+    relue = relue or proposition
+    if relue is not None and relue.etat in (svc_propositions.ETAT_CONFIRMEE, svc_propositions.ETAT_ABANDONNEE):
+        texte = svc_deux_canaux.texte_deja_traitee(relue.etat, relue.traite_canal, relue.traite_le)
+    else:
+        texte = _MSG_DEMANDE_EXPIREE
+    await query.edit_message_text(texte, reply_markup=None)
+
+
 async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, commande, msg=None,
                            preambule: str = "") -> None:
     """Point d'entrée unique d'une commande interprétée : rien ne s'exécute ici.
@@ -362,6 +409,9 @@ async def _interp_proposer(update: Update, ctx: ContextTypes.DEFAULT_TYPE, comma
     proposition = svc_propositions.proposer(
         tenant, commande, log_id=log_id, ecartes=_ecartes_apres(ancienne, commande),
     )
+    if ancienne is not None:
+        # [US-272 / CA4 / F3] Sa carte (dans ce fil, ou postée depuis le portail) dit qu'elle est remplacée.
+        await reecrire_carte(ctx, ancienne.id, sauf_message=getattr(msg, "message_id", None))
     await _interp_etape_suivante(update, ctx, proposition, msg=msg, preambule=preambule)
 
 
@@ -379,9 +429,11 @@ async def _interp_etape_suivante(update: Update, ctx: ContextTypes.DEFAULT_TYPE,
         if preambule:
             texte = f"{texte_de_l_agent(preambule)}\n\n{texte}"
         if msg is not None:
-            await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
+            envoye = await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
+            envoye = envoye if getattr(envoye, "message_id", None) is not None else msg
         else:
-            await message.reply_text(texte, parse_mode="Markdown", reply_markup=clavier)
+            envoye = await message.reply_text(texte, parse_mode="Markdown", reply_markup=clavier)
+        _retenir_la_carte(proposition, envoye)  # [US-272 / F2]
 
     def _attendre(nom: Optional[str]) -> None:
         """L'argument attendu est gardé avec la proposition : la réponse tapée le retrouve."""
@@ -599,7 +651,8 @@ async def _interp_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
             "[US-234 CA2] Bouton %r : proposition %s → rien d'exécuté",
             query.data, proposition.etat if proposition is not None else "inconnue",
         )
-        await query.edit_message_text(_MSG_DEMANDE_EXPIREE, reply_markup=None)
+        # [US-272 / CA2] Traitée dans le portail (ou par un autre clic) : où et quand.
+        await _refuser_le_second(query, identifiant, user_id, proposition)
         return
 
     commande = proposition.commande
@@ -608,7 +661,7 @@ async def _interp_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not svc_propositions.consommer(
             proposition, svc_propositions.ETAT_ABANDONNEE, canal=svc_propositions.CANAL_TELEGRAM,
         ):
-            await query.edit_message_text(_MSG_DEMANDE_EXPIREE, reply_markup=None)
+            await _refuser_le_second(query, identifiant, user_id)  # [US-272 / CA2]
             return
         svc_interpreteur.persister_journal(
             current_context(), commande,
@@ -660,7 +713,7 @@ async def _interp_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not svc_propositions.consommer(
             proposition, svc_propositions.ETAT_CONFIRMEE, canal=svc_propositions.CANAL_TELEGRAM,
         ):
-            await query.edit_message_text(_MSG_DEMANDE_EXPIREE, reply_markup=None)
+            await _refuser_le_second(query, identifiant, user_id)  # [US-272 / CA2]
             return
         svc_interpreteur.persister_journal(
             current_context(), commande,
@@ -752,7 +805,7 @@ async def _interp_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         if not svc_propositions.consommer(
             proposition, svc_propositions.ETAT_CONFIRMEE, canal=svc_propositions.CANAL_TELEGRAM,
         ):
-            await query.edit_message_text(_MSG_DEMANDE_EXPIREE, reply_markup=None)
+            await _refuser_le_second(query, identifiant, user_id)  # [US-272 / CA2]
             return
         svc_interpreteur.persister_journal(
             current_context(), commande,
@@ -835,6 +888,7 @@ async def _interp_decider(update: Update, ctx: ContextTypes.DEFAULT_TYPE, decisi
             return
         svc_interpreteur.persister_journal(tenant, commande, svc_interpreteur.ISSUE_REFUSEE, proposition.log_id)
         svc_interpreteur.journaliser(commande, svc_interpreteur.ISSUE_REFUSEE)
+        await reecrire_carte(ctx, proposition.id)  # [US-272 / CA3] sa carte ne propose plus rien
         await _dire(svc_decisions.TEXTE_ABANDONNEE)
         return
 
@@ -871,6 +925,7 @@ async def _interp_decider(update: Update, ctx: ContextTypes.DEFAULT_TYPE, decisi
     svc_interpreteur.persister_journal(contexte, commande, svc_interpreteur.ISSUE_CONFIRMEE, proposition.log_id)
     svc_interpreteur.journaliser(commande, svc_interpreteur.ISSUE_CONFIRMEE)
     log.info("[US-260 / CA1] Proposition %s confirmée par une phrase", proposition.code)
+    await reecrire_carte(ctx, proposition.id)  # [US-272 / CA3] sa carte ne propose plus rien
     if isinstance(commande, svc_interpreteur.Plan):
         from app.services.agent import executeurs as svc_executeurs
 
@@ -973,9 +1028,11 @@ async def _plan_afficher(update: Update, proposition: PropositionConversation, m
     if preambule:
         texte = f"{texte_de_l_agent(preambule)}\n\n{texte}"
     if msg is not None:
-        await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
+        envoye = await msg.edit_text(texte, parse_mode="Markdown", reply_markup=clavier)
+        envoye = envoye if getattr(envoye, "message_id", None) is not None else msg
     else:
-        await _message_de(update).reply_text(texte, parse_mode="Markdown", reply_markup=clavier)
+        envoye = await _message_de(update).reply_text(texte, parse_mode="Markdown", reply_markup=clavier)
+    _retenir_la_carte(proposition, envoye)  # [US-272 / F2]
 
 
 #: [US-264] La suite proposée attend dans `user_data` : l'ignorer ne bloque rien (CA6), un redémarrage

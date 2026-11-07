@@ -3,8 +3,6 @@ app/api/main.py — Assistant Potager v2 (moteur Groq, gratuit)
 ─────────────────────────────────────────────────────
 Endpoints :
   GET  /health      → vérifier que l'API tourne
-  POST /parse       → dicter une commande vocale (JSON)
-  POST /voice       → blob audio MediaRecorder → Whisper → intent → JSON (PWA iPhone)
   POST /ask         → poser une question analytique
   GET  /stats       → stats JSON instantanées (sans LLM)
   GET  /historique  → derniers événements avec filtres
@@ -60,17 +58,14 @@ Observabilité de la cascade de réponses + retour du jardinier [US-097] :
   GET  /admin/savoir/lacunes             → questions que la base de connaissance ne sert pas [US-098]
   GET  /admin/routage/retours-negatifs   → questions les plus souvent jugées mauvaises (réservé)
 """
-import json
 import logging
 import os
 import re
-import tempfile
-import uuid
 from datetime import date
 from ipaddress import ip_address
 from typing import Optional
 from urllib.parse import urlencode
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Form, Depends, Request
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi import Response
@@ -98,11 +93,9 @@ _APP_VERSION = _lire_version()
 from database.db import Base, engine, SessionLocal, tenant_scope, current_potager_id
 import utils.stock as _stock_mod
 from utils.observations import build_observations_index
-from llm.groq_client import parse_commande, transcribe_audio, classify_intent_pwa
 # [US-092] Mode dégradé : une indisponibilité du fournisseur de modèles est
 # convertie en 503 explicite portant le message de repli, jamais en erreur brute.
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
-from llm.rag import add_to_rag
 from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
 from app.services.compagnon.actions_menees import CANAL_PWA, canal_courant  # [US-261]
@@ -110,10 +103,9 @@ from app.services import auth as svc_auth
 from app.services import email as svc_email
 from app.services import previsions_meteo as svc_previsions_meteo  # [US-182]
 from app.services import liaison_telegram as svc_liaison_telegram
-from app.services.compagnon import conversations as svc_conversations  # [US-259]
-from app.services.compagnon import propositions as svc_propositions  # [US-259]
 from app.services.compagnon import decisions as svc_decisions  # [US-260, US-270]
 from app.services.compagnon import echange_pwa as svc_echange_pwa  # [US-270]
+from app.services.compagnon import deux_canaux as svc_deux_canaux  # [US-272]
 from app.services.compagnon import gestes_conversation as svc_gestes_dits  # [US-270]
 from app.services.compagnon import orchestrateur as svc_orchestrateur  # [US-270]
 from app.services import telegram_notify as svc_telegram_notify  # [US-091]
@@ -123,10 +115,9 @@ from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
 from app.services import carnet_compagnon as svc_carnet  # [US-265]
 from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
-from app.services.permissions import require_role, PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
+from app.services.permissions import PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
-from app.services import questions as svc_questions
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
@@ -138,10 +129,8 @@ from app.services import confiance_semis as svc_confiance  # [US-178]
 from app.services import echeances_lots as svc_echeances  # [US-214]
 from app.services import fiche_culture as svc_fiche_culture  # [US-164, US-206]
 from app.services import vue_cultures as svc_vue_cultures  # [US-204]
-from app.services import avertissements_plantation as svc_avertissements  # [US-167]
 from utils.culture_resolve import normaliser_culture
-from utils.parcelles import resolve_parcelle, largeur_deduite  # [US-167, US-225]
-from utils.actions import normalize_action  # [US-167]
+from utils.parcelles import largeur_deduite  # [US-225]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
@@ -1397,23 +1386,13 @@ def restaurer_potager(potager_id: int, user: User = Depends(get_current_user)):
         db.close()
 
 
-# ── Mapping MIME type → extension fichier audio ────────────────────────────────
-_MIME_EXT: dict[str, str] = {
-    "audio/mp4"  : ".mp4",
-    "audio/m4a"  : ".m4a",
-    "audio/webm" : ".webm",
-    "audio/ogg"  : ".ogg",
-    "audio/wav"  : ".wav",
-    "audio/mpeg" : ".mp3",
-    "audio/aac"  : ".aac",
-}
-
-# ── Frontend React (prioritaire) ou PWA fallback ──────────────────────────────
+# ── Frontend React ────────────────────────────────────────────────────────────
+# [US-274] L'ancienne PWA `static/` (qui dictait des gestes à /voice) est retirée : sans
+# `frontend/dist`, l'API ne sert aucune page.
 _DIST = os.path.join(_RACINE, "frontend", "dist")
-_STATIC = os.path.join(_RACINE, "static")
 
 if os.path.isdir(_DIST):
-    # Dashboard React buildé — servi en priorité
+    # Dashboard React buildé
     _DIST_ASSETS = os.path.join(_DIST, "assets")
     if os.path.isdir(_DIST_ASSETS):
         app.mount("/assets", StaticFiles(directory=_DIST_ASSETS), name="assets")
@@ -1422,14 +1401,6 @@ if os.path.isdir(_DIST):
     def serve_frontend():
         """Sert le dashboard React (frontend/dist/index.html)."""
         return FileResponse(os.path.join(_DIST, "index.html"))
-
-elif os.path.isdir(_STATIC):
-    # Fallback : ancienne PWA si le dist React n'est pas buildé
-    app.mount("/static", StaticFiles(directory=_STATIC), name="static")
-
-    @app.get("/", include_in_schema=False)
-    def serve_pwa():
-        return FileResponse(os.path.join(_STATIC, "index.html"))
 
 
 # ── Modèle de requête ──────────────────────────────────────────────────────────
@@ -1892,254 +1863,6 @@ def get_calendriers_plan(
         return corps
     finally:
         db.close()
-
-
-@app.post("/parse")
-def parse(req: TexteRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
-    """
-    Reçoit une phrase dictée → parse via Groq → sauvegarde en base.
-    Gère les phrases multiples (ex: tomates ET courgettes → 2 événements).
-    La date réelle (hier, lundi...) est stockée correctement.
-    """
-    if not req.texte or len(req.texte.strip()) < 3:
-        raise HTTPException(status_code=400, detail="Texte trop court")
-
-    # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
-    try:
-        require_role(ctx, "editor", "enregistrer d'action")
-    except PermissionInsuffisanteError as e:
-        raise HTTPException(status_code=403, detail=str(e))
-
-    # ── 1. Parsing LLM → liste d'événements ──────────────────────────────────
-    try:
-        items = parse_commande(req.texte, ctx=ctx)   # toujours une liste
-    except LLMIndisponibleError:
-        # [US-092 / CA8, CA9] Repli déclaré : rien n'est enregistré, et le client
-        # reçoit le message d'indisponibilité, jamais la trace technique du 429.
-        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=502, detail=f"JSON invalide retourné par le modèle : {e}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erreur d'appel au modèle : {e}")
-
-    # ── 2. Sauvegarde PostgreSQL ──────────────────────────────────────────────
-    db = SessionLocal()
-    saved = []
-    try:
-        # [US-167 / CA1-CA3] Avertissement de rotation/association — évalué
-        # AVANT toute écriture ci-dessous, sur l'historique tel qu'il était
-        # avant cette sauvegarde. L'évaluer après aurait fait apparaître
-        # l'événement tout juste créé comme son propre antécédent dans
-        # `rotation.evaluer_rotation` (faux conflit auto-référentiel). Additif
-        # au contrat JSON existant, ne modifie aucun champ déjà retourné.
-        avertissements = []
-        for parsed in items:
-            if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
-                continue
-            nom_parcelle = parsed.get("parcelle")
-            if not nom_parcelle:
-                continue
-            parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
-            if parcelle is None:
-                continue
-            avertissements.extend(
-                svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
-            )
-
-        for parsed in items:
-            event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, req.texte)
-            add_to_rag(event.id, parsed)
-            saved.append({"event_id": event.id, "parsed": parsed})
-
-        return {
-            "success"        : True,
-            "nb_evenements"  : len(saved),
-            "evenements"     : saved,
-            "event_id"       : saved[0]["event_id"] if saved else None,
-            "parsed"         : saved[0]["parsed"]   if saved else None,
-            "texte_original" : req.texte,
-            "avertissements" : avertissements,
-        }
-    except svc_evenements.EvenementInvalideError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    except PermissionInsuffisanteError as e:
-        db.rollback()
-        raise HTTPException(status_code=403, detail=str(e))
-    except PotagerArchiveError as e:
-        db.rollback()
-        raise HTTPException(status_code=409, detail=str(e))
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erreur base de données : {e}")
-    finally:
-        db.close()
-
-
-@app.post("/voice")
-async def voice(
-    audio: UploadFile = File(...),
-    session_id: str   = Form(default=""),
-    ctx: TenantContext = Depends(get_current_user_ctx),
-):
-    """
-    [PWA iPhone] Reçoit un blob audio MediaRecorder →
-      1. Groq Whisper → texte transcrit
-      2. classify_intent_pwa() → ACTION | INTERROGER
-      3. parse_commande() ou repondre_question()
-      4. Retourne { reponse, intent, texte, recap, session_id }
-    """
-    # 1. Écrire le blob audio dans un fichier temporaire
-    ct  = (audio.content_type or "audio/webm").split(";")[0].strip()
-    ext = _MIME_EXT.get(ct, ".webm")
-
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp_path = tmp.name
-        tmp.write(await audio.read())
-
-    # 2. Transcription Whisper
-    try:
-        texte = transcribe_audio(tmp_path, ext, ctx=ctx)
-    except LLMIndisponibleError:
-        # [US-092 / CA4, CA9] Le quota de transcription est distinct de celui du
-        # chat : c'est celui qui saturera le premier en usage vocal.
-        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Erreur Whisper : {e}")
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
-    if not texte:
-        return {
-            "reponse"    : "Je n'ai pas compris. Parlez plus distinctement et réessayez.",
-            "intent"     : "ERREUR",
-            "texte"      : "",
-            "recap"      : None,
-            "session_id" : session_id or str(uuid.uuid4()),
-        }
-
-    # 3. Session — [US-259] l'identifiant reste rendu à l'ancienne PWA, mais la
-    # mémoire de la conversation est en base, commune à Telegram (CA1, CA7).
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    # 4. Classification de l'intention
-    try:
-        intent = classify_intent_pwa(texte, ctx=ctx)
-    except LLMIndisponibleError:
-        raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
-
-    # 5a. INTERROGER — question analytique sur l'historique
-    if intent == "INTERROGER":
-        try:
-            reponse = svc_questions.repondre_question(ctx, texte)
-        except LLMIndisponibleError:
-            raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Erreur agent SQL : {e}")
-
-        result = {
-            "reponse"    : reponse,
-            "intent"     : "INTERROGER",
-            "texte"      : texte,
-            "recap"      : None,
-            "session_id" : session_id,
-        }
-
-    # 5b. ACTION — enregistrement d'un événement potager
-    else:
-        # [US-047 CA1, CA4] Garde de rôle AVANT tout appel de parsing LLM.
-        try:
-            require_role(ctx, "editor", "enregistrer d'action")
-        except PermissionInsuffisanteError as e:
-            raise HTTPException(status_code=403, detail=str(e))
-
-        try:
-            items = parse_commande(texte, ctx=ctx)
-        except LLMIndisponibleError:
-            raise HTTPException(status_code=503, detail=MESSAGE_REPLI_IA)
-        except json.JSONDecodeError as e:
-            raise HTTPException(status_code=502, detail=f"JSON invalide retourné par le modèle : {e}")
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"Erreur parsing : {e}")
-
-        db = SessionLocal()
-        saved_parsed: list[dict] = []
-        avertissements: list[str] = []
-        try:
-            # [US-167 / CA1-CA3] Évalué AVANT toute écriture ci-dessous — voir
-            # le commentaire équivalent dans POST /parse pour la raison (sinon
-            # l'événement tout juste créé se compte comme son propre
-            # antécédent de rotation).
-            for parsed in items:
-                if normalize_action(parsed.get("action")) not in svc_avertissements.ACTIONS_DECLENCHANT_AVERTISSEMENT:
-                    continue
-                nom_parcelle = parsed.get("parcelle")
-                if not nom_parcelle:
-                    continue
-                parcelle = resolve_parcelle(db, nom_parcelle, potager_id=ctx.potager_id)
-                if parcelle is None:
-                    continue
-                avertissements.extend(
-                    svc_avertissements.evaluer_avertissements_plantation(db, ctx, parcelle.id, parsed.get("culture"))
-                )
-
-            for parsed in items:
-                event = svc_evenements.creer_evenement_depuis_parse(db, ctx, parsed, texte)
-                add_to_rag(event.id, parsed)
-                saved_parsed.append(parsed)
-        except svc_evenements.EvenementInvalideError as e:
-            db.rollback()
-            raise HTTPException(status_code=400, detail=str(e))
-        except PermissionInsuffisanteError as e:
-            db.rollback()
-            raise HTTPException(status_code=403, detail=str(e))
-        except PotagerArchiveError as e:
-            db.rollback()
-            raise HTTPException(status_code=409, detail=str(e))
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Erreur base : {e}")
-        finally:
-            db.close()
-
-        recap = saved_parsed[0] if saved_parsed else None
-
-        # Réponse vocale synthétique
-        if recap:
-            parts = [
-                recap.get("action"),
-                (recap.get("culture") or "") + (f" {recap['variete']}" if recap.get("variete") else ""),
-                f"{recap['quantite']} {recap.get('unite', '')}".strip() if recap.get("quantite") is not None else None,
-                f"parcelle {recap['parcelle']}" if recap.get("parcelle") else None,
-            ]
-            resume = ", ".join(p for p in parts if p)
-            reponse = f"C'est noté ! J'ai enregistré : {resume}."
-            if len(saved_parsed) > 1:
-                reponse = f"C'est noté ! J'ai enregistré {len(saved_parsed)} actions."
-        else:
-            reponse = "Action enregistrée."
-
-        result = {
-            "reponse"       : reponse,
-            "intent"        : "ACTION",
-            "texte"         : texte,
-            "recap"         : recap,
-            "session_id"    : session_id,
-            "nb_evenements" : len(saved_parsed),
-            "avertissements": avertissements,
-        }
-
-    # 6. [US-259 / CA1] L'échange rejoint la conversation du jardinier dans ce
-    # potager, celle que le compagnon Telegram lira aussi.
-    svc_conversations.noter(
-        ctx, texte, result["reponse"], canal=svc_propositions.CANAL_PWA, outils=(result["intent"],),
-    )
-
-    return result
 
 
 @app.post("/ask")
@@ -3050,7 +2773,8 @@ def _erreur_compagnon(e: Exception) -> HTTPException:
     if isinstance(e, svc_gestes_dits.GesteDejaTraiteError):
         return HTTPException(status_code=409, detail={
             "code": "deja_traitee", "etat": e.etat,
-            "message": svc_decisions.deja_traitee(e.etat, e.traite_le, e.canal),
+            # [US-272 / CA2] « Déjà confirmé depuis Telegram à 14:32 : rien n'est refait. »
+            "message": svc_deux_canaux.texte_deja_traitee(e.etat, e.canal, e.traite_le),
         })
     if isinstance(e, svc_echange_pwa.NonConfirmableDansLaPwaError):
         return HTTPException(status_code=409, detail={"code": "confirmable_dans_telegram", "message": str(e)})
@@ -3094,6 +2818,12 @@ def abandonner_proposition_compagnon(proposition_id: int, ctx: TenantContext = D
 def historique_compagnon(ctx: TenantContext = Depends(get_current_user_ctx)):
     """[US-270 / CA3] Les échanges récents (30 min glissantes, 10 au plus) et les cartes en cours."""
     return svc_echange_pwa.historique(ctx)
+
+
+@app.get("/compagnon/etat")
+def etat_compagnon(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-272 / CA5] L'état réel des cartes et les messages spontanés, relus à intervalle court (sans WebSocket)."""
+    return svc_echange_pwa.etat(ctx)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -3300,7 +3030,20 @@ if os.path.isdir(_DIST):
     @app.get("/{chemin_complet:path}", include_in_schema=False)
     def serve_frontend_spa_fallback(chemin_complet: str):
         return FileResponse(os.path.join(_DIST, "index.html"))
-elif os.path.isdir(_STATIC):
-    @app.get("/{chemin_complet:path}", include_in_schema=False)
-    def serve_pwa_spa_fallback(chemin_complet: str):
-        return FileResponse(os.path.join(_STATIC, "index.html"))
+
+
+# ── [US-274] Un point d'API retiré répond 404, pas 405 ───────────────────────────
+# Sans cette route, le repli SPA ci-dessus (GET seulement) transforme un POST sur un chemin
+# retiré (`/parse`, `/voice`) en « 405 méthode non permise » : il laisserait croire que la route
+# existe encore. Un chemin connu avec une autre méthode garde son 405 ; tout autre chemin, 404.
+@app.api_route("/{chemin_complet:path}", methods=["POST", "PUT", "PATCH", "DELETE"], include_in_schema=False)
+def refuser_chemin_inconnu(request: Request, chemin_complet: str):
+    from starlette.routing import Match
+
+    for route in request.app.router.routes:
+        if getattr(route, "name", "") in ("refuser_chemin_inconnu", "serve_frontend_spa_fallback"):
+            continue
+        correspondance, _ = route.matches(request.scope)
+        if correspondance == Match.PARTIAL:
+            raise HTTPException(status_code=405, detail="Méthode non permise")
+    raise HTTPException(status_code=404, detail="Introuvable")

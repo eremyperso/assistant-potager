@@ -3,6 +3,7 @@ titre: Répondre au compagnon d'un mot et ce dont il se souvient
 famille: doc_app
 source: Guide de l'Assistant Potager
 niveau_confiance: verifie
+domaines_aide: analyse
 index_terms:
   - "vas-y"
   - "laisse tomber"
@@ -70,10 +71,36 @@ Le compagnon de l'application lit et répond **exactement comme celui de Telegra
 Ce que devient une phrase écrite dans l'application :
 
 - **Une question** (« combien de kg de tomates cette saison ? », « quand semer les poireaux ? ») reçoit la réponse de `/ask` dans Telegram : vos données d'abord, puis le savoir de l'application, puis le raisonnement. La réponse de savoir peut être notée 👍 ou 👎.
-- **Un geste** (« j'ai semé des radis sur la planche sud, 2 rangs ») devient une **carte de proposition** avec ce que le compagnon a compris. Rien n'est écrit dans le journal tant que vous n'avez pas confirmé, et **le geste se confirme dans l'application**, sans passer par Telegram. La carte attend trente minutes ; une nouvelle phrase de geste remplace la précédente, et un geste déjà confirmé, abandonné ou périmé ne s'écrit jamais deux fois, même en cliquant deux fois ou depuis deux endroits.
-- **Une commande** (changer le nombre de rangs d'une planche, par exemple) est proposée sous forme de carte, **que vous confirmez dans Telegram** avec le bouton de la carte : l'application ne sait pas encore les exécuter. Vous pouvez la laisser tomber depuis l'application.
+- **Un geste** (« j'ai semé des radis sur la planche sud, 2 rangs ») devient une **carte de proposition** avec ce que le compagnon a compris. Rien n'est écrit dans le journal tant que vous n'avez pas confirmé, et **le geste se confirme dans l'application**, sans passer par Telegram. La carte attend trente minutes (trois jours quand elle est aussi partie dans Telegram) ; une nouvelle phrase de geste remplace la précédente, et un geste déjà confirmé, abandonné ou périmé ne s'écrit jamais deux fois, même en cliquant deux fois ou depuis deux endroits.
+- **Une commande** (changer le nombre de rangs d'une planche, par exemple) est proposée sous forme de carte. **Créer ou modifier une parcelle**, et **corriger le dernier geste noté**, se confirment **dans l'application** (bouton **Confirmer** ou « vas-y », sauf action définitive : bouton seul). Les autres commandes (calendrier, culture, carnet, rappel, action définitive…) **se confirment dans Telegram** avec le bouton de leur carte, que la carte annonce. Refusée (lecture seule, valeur invalide), la carte affiche « ⚠️ Non exécuté » et rien n'est écrit. Vous pouvez toujours la laisser tomber depuis l'application.
 - **Ce qui manque** est demandé en clair, et rien n'est proposé : une quantité à donner, une parcelle introuvable, une culture que l'application ne connaît pas encore (c'est Telegram qui demande si elle est végétative ou reproductive, la première fois).
 
 **Le panneau.** Le compagnon de l'application s'appelle **Gaston**, une carotte. Il a trois états : **présent** (son avatar rond en bas à droite, au-dessus de la barre de navigation, avec une pastille verte « en ligne »), **replié** (il dépasse du bord droit de l'écran ; le petit chevron le déplie) et **chat ouvert** (appui sur son avatar). Le chat s'ouvre depuis n'importe quel écran : en plein écran au téléphone, en carte flottante en bas à droite sur tablette et ordinateur. Trois boutons ronds en haut : le **casque** (mode **Support** : l'aide de l'application, le compagnon n'écrit jamais rien ; à nouveau pour revenir au mode **Normal**, celui du geste et de la question), **Recommencer** (l'écran repart d'un accueil, la mémoire du compagnon reste la même) et **Fermer**. Chaque proposition s'affiche en **carte** avec trois boutons : **Confirmer** (un geste compris est alors écrit, la carte affiche « ✅ Confirmé » et le geste apparaît dans le journal), **Corriger** (votre texte revient dans la zone de saisie pour être refait ; la nouvelle carte remplace l'ancienne) et **Abandonner**. À l'ouverture, le panneau range ce que Gaston a dit de lui-même (ses messages spontanés), la conversation récente et les cartes qui attendent encore. Les erreurs sont dites en clair : réseau coupé (rien n'est parti), proposition expirée ou déjà traitée (où et quand), service de langage indisponible, droit de lecture seule.
 
 Seul le potager de votre compte est concerné : le compagnon de l'application ne montre ni ne confirme rien qui appartienne à un autre jardinier ou à un autre potager. Les parcours guidés de Telegram (corriger pas à pas, déplacer, note guidée) n'ont pas d'équivalent à l'écran ; le compagnon vous les propose comme commandes.
+
+## Une proposition, deux fenêtres : répondre dans Telegram ou dans l'application
+
+**Intention :** comprendre
+**On parle aussi de :** carte reçue dans Telegram après l'avoir dite dans l'application ; déjà confirmé depuis le portail ; confirmer deux fois ; carte périmée ; proposition remplacée ; pastille rouge sur Gaston ; non lus ; je n'ai pas Telegram
+
+Une proposition n'appartient à aucun canal : Telegram et l'application en sont deux fenêtres. Toute proposition faite dans l'application (un geste, une commande) part **aussi dans Telegram dès sa création**, avec ses boutons **Confirmer** et **Annuler**, même si vous la confirmez aussitôt dans l'application : le fil Telegram reste le journal complet. Elle attend alors trois jours au lieu de trente minutes, pour que vous puissiez y répondre le soir depuis votre téléphone. Le compagnon ne regarde pas si vous êtes devant l'application : la notification sonne normalement.
+
+**La première réponse l'emporte.** Confirmée dans l'application, la carte Telegram est réécrite « ✅ Confirmé depuis le portail à 14:32 » et perd ses boutons. Si vous appuyez quand même sur un ancien bouton, vous lisez « Déjà confirmé depuis le portail à 14:32 : rien n'est refait », et rien n'est enregistré deux fois. Dans l'autre sens, une carte confirmée ou laissée tomber dans Telegram s'affiche dans l'application « ✅ Confirmé depuis Telegram à 14:32 ». Une proposition remplacée par une nouvelle (« non, 10 tomates ») voit sa carte réécrite « Remplacée : voir la nouvelle proposition ». Une carte Telegram trop ancienne ne peut plus être réécrite : le refus au clic suffit alors.
+
+**Le panneau suit.** Ouvert, le panneau de Gaston se met à jour tout seul toutes les quinze secondes : une carte traitée dans Telegram y change d'état, une proposition faite dans Telegram ou une alerte de Gaston y apparaît. Fermé, une **pastille rouge** sur Gaston compte ce qui est arrivé depuis votre dernière ouverture (alertes de Gaston et propositions en attente) ; elle s'efface quand vous ouvrez le panneau. Avec deux potagers ou plus, la carte nomme celui où elle s'exécute, dans les deux fenêtres, et elle s'exécute toujours dans ce potager, quel que soit celui qui est affiché.
+
+**Sans Telegram.** Si votre compagnon de terrain n'est pas activé, tout arrive dans le panneau de l'application seulement, alertes spontanées comprises. Gaston vous invite une fois à l'activer (menu du compte, « Activer mon compagnon »).
+
+## Analyser en profondeur, sans rien modifier : le bouton Approfondir
+
+**Intention :** comprendre
+**On parle aussi de :** approfondir ; analyse approfondie ; pourquoi mes tomates ont peu donné ; synthèse de ma saison ; croiser mes récoltes et la météo ; mode Extra ; /approfondir ; analyser mon potager ; analyse en lecture seule ; /approfondir change-t-il mes données
+
+Pour comprendre une saison ou un souci (« pourquoi mes tomates ont peu donné ? »), demandez une **analyse approfondie**. Dans l'application, écrivez votre question dans le panneau de Gaston puis appuyez sur le bouton **Approfondir** à côté d'« Envoyer », ou appuyez sur **Approfondir** sous une réponse que Gaston vient de vous donner. Dans Telegram, tapez **/approfondir** suivi de votre question : `/approfondir pourquoi mes tomates ont peu donné ?`.
+
+Le compagnon consulte alors plusieurs sources l'une après l'autre : vos parcelles et vos cultures, vos récoltes et votre carnet, la météo de votre potager, les fiches de savoir, puis les croise dans une synthèse : ce qu'il constate, les causes possibles par ordre de probabilité, et parfois quelques **pistes**. Les chiffres cités sont ceux qu'il a lus, avec leur source ; ce qu'il n'a pas pu lire, il le dit. Il ne donne jamais de dose ni de produit de traitement.
+
+**Rien n'est modifié.** L'analyse ne fait que lire : elle n'enregistre aucun geste, ne range aucune proposition et ne change aucune parcelle. Ses pistes sont des suggestions, pas des actions faites ; elle le rappelle à la fin. Pour en mener une, dites-la au compagnon comme d'habitude : il vous la propose, et rien n'est fait avant que vous confirmiez.
+
+**Elle prend plus de temps qu'une question ordinaire**, car elle fait plusieurs lectures. Elle s'arrête à une limite de lectures ou de jetons (réglable par l'administrateur, `ANALYSE_MAX_TOURS` et `ANALYSE_MAX_JETONS`) : elle rend alors ce qu'elle a déjà lu, avec la mention « Analyse arrêtée à sa limite ; elle est partielle ». Tous les membres d'un potager peuvent la lancer, y compris un lecteur, puisqu'elle n'écrit rien.

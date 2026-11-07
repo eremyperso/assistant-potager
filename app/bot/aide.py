@@ -278,6 +278,22 @@ _HELP_ALERTES = (
 )
 
 
+_HELP_ANALYSE = (
+    "🔬 *Aide — Analyse approfondie*\n"
+    "Une synthèse qui croise vos récoltes, la météo, vos parcelles et le savoir agronomique, "
+    "pour comprendre une saison ou un problème. Elle ne modifie rien.\n\n"
+    "*Actions disponibles :*\n"
+    "• Lancer l'analyse d'une question\n"
+    "  → /approfondir pourquoi mes tomates ont peu donné ?\n"
+    "  → dans l'application web : le bouton *Approfondir* du compagnon\n\n"
+    "💡 _Les chiffres cités sont ceux lus dans votre carnet et la météo, avec leurs sources. "
+    "Elle peut finir par des pistes d'action : ce sont des suggestions, rien n'est fait. Pour "
+    "agir sur l'une, dites-le au compagnon, qui vous la propose et attend votre « Oui ». "
+    "Elle prend plus de temps qu'une question ordinaire, et s'arrête à une limite de lectures "
+    "en le disant._"
+)
+
+
 # [US-099 / CA7] Les domaines de l'aide ciblée, dans l'ordre où ils s'affichent.
 # C'est la liste de référence : `/help` en dérive son sommaire, et le corpus de
 # connaissance doit couvrir chacun d'eux par au moins une fiche
@@ -286,7 +302,7 @@ _HELP_ALERTES = (
 # saisie (« parcelles », « plan », « famille »…), pas des domaines à couvrir.
 _HELP_DOMAINES: tuple[str, ...] = (
     "parcelle", "semis", "godet", "recolte", "stock", "stats", "note", "culture", "fiche",
-    "calendrier", "lot", "meteo", "alertes",
+    "calendrier", "lot", "meteo", "alertes", "analyse",
 )
 
 
@@ -322,6 +338,8 @@ _HELP_CONTEXTUEL: dict[str, str] = {
     "messages":  _HELP_ALERTES,
     "notifications": _HELP_ALERTES,
     "silence":   _HELP_ALERTES,
+    "analyse":   _HELP_ANALYSE,   # [US-273]
+    "approfondir": _HELP_ANALYSE,
 }
 
 
@@ -392,6 +410,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/stats — Statistiques saison\n"
         "/historique — 10 derniers événements\n"
         "/ask — Question analytique\n"
+        "/approfondir [question] — Analyse approfondie, sans rien modifier\n"
         "/corriger — Modifier un événement\n"
         "/deplacer [culture] — Déplacer une culture vers une autre parcelle (guidé)\n"
         "/note — Noter une observation (guidé)\n"

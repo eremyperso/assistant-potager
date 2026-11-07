@@ -192,9 +192,21 @@ class TestCatalogue:
         assert [v for v in proprietes["quand"]["enum"] if v] == list(savoir.QUAND_VALEURS)
         assert not schema["function"]["parameters"].get("required")
 
-    def test_ca5_le_prechargement_du_potager_ne_change_pas(self, monkeypatch):
+    def test_ca5_le_prechargement_du_potager_ne_change_pas(self, monkeypatch, _reseau_coupe):
+        from app.services import previsions_meteo
+
+        previsions_meteo.vider_cache()
+        groupes = []
+        monkeypatch.setattr("app.services.previsions_meteo.fetch_meteo_groupe",
+                            lambda localisations, tz="Europe/Paris": groupes.append(localisations) or [PREVISION])
         monkeypatch.setattr("app.services.stock.calcul_stock_cultures", lambda db, ctx: {})
         releves = savoir.Releves()
         texte = savoir.precharger(CTX, releves)
         assert '"meteo_du_jour"' in texte and '"temp_max": 19.0' in texte
         assert releves.lieux == []                             # le préchargement ne « lit » aucun lieu
+        # La météo du jour vient du cache de prévisions : un seul appel réseau pour deux messages,
+        # et l'historique de la veille n'est pas demandé.
+        savoir.precharger(CTX, savoir.Releves())
+        assert len(groupes) == 1
+        assert _reseau_coupe == []                             # `fetch_meteo` direct n'est plus appelé
+        previsions_meteo.vider_cache()

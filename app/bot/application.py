@@ -33,6 +33,7 @@ from .godets import (
 from .pertes import _handle_perte_callback, _vendu_variete_cb
 from .notes import _note_confirm_cb, _note_start
 from .interpretation import _interp_cb, _suggestion_cb
+from .cartes_compagnon import carte_compagnon_cb  # [US-272]
 from .questions import _retour_routage_cb
 from .saisie import (
     _creation_parcelle_geste_cb,
@@ -54,6 +55,7 @@ from .commandes_calendrier import cmd_calendrier, _calendrier_maj_cb
 from .commandes_confiance import cmd_confiance, _confiance_cb
 from .commandes_plan import cmd_plan
 from .commandes_profil import cmd_profil, _profil_cb
+from .commandes_analyse import cmd_approfondir  # [US-273]
 from .commandes_carnet import cmd_carnet, _carnet_cb
 from .commandes_rappels import cmd_rappel, cmd_rappels, _rappel_cb
 from .mode_test import cmd_reset_test  # [US-288]
@@ -186,6 +188,7 @@ def _construire_application() -> "Application":
     _enregistrer_commande(app, "stats",      cmd_stats)
     _enregistrer_commande(app, "historique", cmd_historique)
     _enregistrer_commande(app, "ask",        cmd_ask)
+    _enregistrer_commande(app, "approfondir", cmd_approfondir)  # [US-273]
     _enregistrer_commande(app, "corriger",   lambda u, c: _corr_start(u, c))
     _enregistrer_commande(app, "note",       lambda u, c: _note_start(u, c))  # [US-038]
     _enregistrer_commande(app, "deplacer",   cmd_deplacer)  # [US-287]
@@ -274,6 +277,7 @@ def _construire_application() -> "Application":
     app.add_handler(CallbackQueryHandler(_interp_cb, pattern=r"^interp:"))
     app.add_handler(CallbackQueryHandler(_suggestion_cb, pattern=r"^sug:"))  # [US-264]
     app.add_handler(CallbackQueryHandler(_spontane_cb, pattern=r"^spon:"))  # [US-267] messages spontanés
+    app.add_handler(CallbackQueryHandler(carte_compagnon_cb, pattern=r"^cmp:"))  # [US-272] geste dit dans le portail
     # [US-172 / CA19] Création de la parcelle citée par un geste
     app.add_handler(CallbackQueryHandler(_creation_parcelle_geste_cb, pattern=r"^interpparc:"))
 

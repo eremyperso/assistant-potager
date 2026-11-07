@@ -907,7 +907,7 @@ service ; `app/bot/messages_spontanes.py` (job, boutons `spon:`, `reprendre_repo
 - **Atomique** : un signal passe `detecte` → `planifie` par un UPDATE conditionnel (un seul passage gagne),
   puis UNE ligne `envois_signaux` par jardinier owner/editor (UNIQUE `(signal_id, user_id)`) ; l'envoi passe
   `en_attente` → `envoye` de même. Telegram refuse (`telegram_notify.envoyer` rend None) : retour en attente.
-  Sans `telegram_chat_id` : `ignore` / `sans_telegram` (le panneau PWA viendra avec le lot 6).
+  Sans `telegram_chat_id` : le message est rangé pour le panneau de la PWA seul [US-272 / CA9] (plus de `sans_telegram`).
 - **Règles (`planifier`)** : thème `coupe` → ignoré ; `immediat` → maintenant, ou fin du silence ; `resume` →
   prochain point du matin (après la fin du silence s'il tombe dedans). Expire avant l'heure prévue : il part
   maintenant si on est hors silence, sinon il est ignoré (`expire_pendant_le_silence`). Le mode est celui du
@@ -992,3 +992,59 @@ Côté PWA, `app/services/compagnon/echange_pwa.py` fait l'équivalent de ce que
 - **Mode Support** (`mode="support"`, US-271) : `repondre_avec_cascade(..., famille="doc_app")` avec la nature
   `QUESTION_SAVOIR` imposée ; ni classification, ni agent, ni cache, ni carnet, ni mémorisation, aucune écriture.
 - `historique` porte aussi les messages spontanés (`distribution.messages_du_jardinier`, US-271 / CA3).
+
+### Une proposition, deux fenêtres — Telegram et le panneau [US-272]
+
+Cadrage §4.7 (D11 à D13, F1 à F5). `app/services/compagnon/deux_canaux.py` CALCULE les cartes ; l'envoi passe par
+`telegram_notify` (API, en arrière-plan : `ThreadPoolExecutor`, `SYNCHRONE=True` dans les tests) ou par le bot lui-même
+(`interpretation.reecrire_carte`, `ctx.bot.edit_message_text`, pour ne pas bloquer la boucle asyncio).
+
+- **D13 / CA1** : `echange_pwa._proposer_un_geste` et `_proposer_une_commande` appellent `deux_canaux.apres_creation` :
+  réécriture des cartes remplacées (F3), puis `notifier` → carte postée, `telegram_chat_id` / `telegram_message_id`
+  gardés sur `propositions` (migration v68), `marquer_notifiee` (F4 : trois jours). Confirmée pendant l'envoi : la carte
+  part quand même et est réécrite tout de suite (`_poster` relit l'état).
+- **Boutons** : un geste dit a `cmp:ok|non:<code>` (`app/bot/cartes_compagnon.py`, même service que le portail :
+  `gestes_conversation.confirmer(ctx, id, canal="telegram")`, potager DE LA PROPOSITION via `_contexte_sur`) ; une
+  commande ou un plan reprennent `interp:ok|non:<code>` (même gestionnaire que la conversation).
+- **F1 / CA2** : la sortie atomique reste celle de `propositions.sortir`. Le second reçoit
+  `deux_canaux.texte_deja_traitee` (« Déjà confirmé depuis le portail à 14:32 : rien n'est refait. ») : au bouton
+  `interp:` (`_refuser_le_second`, confirmée ou abandonnée seulement ; périmée, remplacée ou inconnue gardent
+  « Demande expirée »), au bouton `cmp:`, et dans le 409 de l'API (`detail.message`, `detail.etat`).
+- **F2 / CA3** : `deux_canaux.reecrire` après chaque sortie dans le portail (confirmer, abandonner, « laisse tomber ») ;
+  `reecrire_carte` après une décision par phrase dans Telegram. Un clic sous la carte, lui, réécrit son propre message.
+  Le bot retient aussi les cartes qu'il poste (`_retenir_la_carte` dans `_interp_etape_suivante` et `_plan_afficher`) :
+  une proposition de Telegram traitée dans le portail voit sa carte réécrite. Édition refusée : F1 suffit.
+- **CA5** : `GET /compagnon/etat` (`echange_pwa.etat`) — cartes en attente, cartes sorties depuis moins de 12 h
+  (`cartes_traitees`), messages spontanés ; lecture seule. Le panneau la relit toutes les 15 s (`fusionnerEtat` : l'état
+  d'une carte montrée n'est remplacé que s'il a CHANGÉ) ; fermé, `useNonLusCompagnon` toutes les 60 s pour la pastille
+  (plus grand id vu par sorte, en `localStorage` : une commodité de l'appareil, pas un suivi de présence, D12).
+- **CA6** : `carte.potager` et l'en-tête « 🏡 … » de la carte Telegram (`potager_a_nommer`).
+- **CA9** : `historique.telegram_lie` / `invitation_telegram` (une visite par compte, servie 10 min : `users.invitation_telegram_le`,
+  UPDATE conditionnel) ; texte au vocabulaire d'US-091 (« Activer mon compagnon »). Le distributeur d'US-267 ne
+  marque plus `sans_telegram` : le message est rangé sans envoi (`panneau_seul`), échange noté canal `pwa`, ignoré
+  par `message_en_contexte` (aucune réponse Telegram à attendre) et non compté par `envoyer_dus`.
+
+### L'analyse approfondie — mode Extra, lecture seule [US-273]
+
+`app/services/compagnon/analyse.py`, appelée par `orchestrateur.analyser_le_potager` pour les DEUX canaux : le mode
+`analyse` de `POST /compagnon/messages` (bouton « Approfondir » du panneau, à côté d'« Envoyer » et sous chaque réponse
+de type question) et `/approfondir <question>` (`app/bot/commandes_analyse.py`, hors de la boucle d'événements :
+`asyncio.to_thread`). Exclue de l'interpréteur (`MOTIFS_EXCLUSION_INTERPRETEUR`) : une analyse coûte plusieurs appels, elle
+se lance par un geste délibéré.
+
+- **R2 / CA2** : `outils_analyse()` tire du catalogue `lire` et les trois outils de savoir — `OUTILS_DE_LECTURE`, rien
+  d'autre. Un appel d'un autre nom est refusé AVANT tout dispatch (`_executer` rend `None`), le modèle reçoit « lecture
+  seule » et `ResultatAnalyse.refuses` le trace. `controler_lecture_seule()` est la preuve que les tests rejouent ; le module
+  n'importe aucun service d'écriture (test d'AST). Aucune carte, aucune proposition, aucun événement.
+- **CA3** : type d'appel `analyse` (`GROQ_MODEL_ANALYSE`, défaut = le modèle de l'agent), `ANALYSE_MAX_TOURS` (6) et
+  `ANALYSE_MAX_JETONS` (20 000). Une borne n'échoue pas : un dernier appel SANS outil (`tool_choice="none"`) rédige avec ce
+  qui est lu, et le code ajoute la mention « Analyse arrêtée à sa limite… ». La rédaction finale s'ajoute à la borne de jetons.
+  Panne au premier tour : `LLMIndisponibleError` remonte au canal (503 / « ⏳ »). Panne plus tard : rédaction avec l'acquis.
+- **CA4** : `savoir.controler(…, quantites_lues=True)` — chiffres absents des lectures renvoyés UNE fois au modèle puis
+  remplacés par le texte du code, ni dose ni produit, passage recopié renvoyé, source citée. Les résultats de `lire` sont
+  versés aux relevés pour que leurs chiffres soient citables. **Piège corrigé** : `_DOSE` prenait « 12 kg » de récolte pour
+  une dose ; avec `quantites_lues`, une quantité dont le nombre a été LU n'en est pas une (un produit reste interdit toujours).
+- **CA5** : la synthèse peut finir par des « Pistes » en texte ; le code termine TOUJOURS par `TEXTE_RIEN_MODIFIE`. Agir passe
+  par le dialogue ordinaire : une proposition que le jardinier confirme.
+- **Réponse** : `vers="analyse"`, `sources`, `borne` (« tours », « jetons » ou `null`) ; l'échange est noté dans la conversation.
+  Tout membre, lecteur compris, peut analyser.

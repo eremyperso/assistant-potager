@@ -1,3 +1,53 @@
+## [v3.122.0] — 2026-11-06
+
+### 🔧 Améliorations techniques
+- Supprime `POST /parse` et `POST /voice` (branches ACTION et INTERROGER), qui écrivaient un geste dès la phrase reçue : il ne reste qu'un chemin d'écriture, la proposition confirmée (US-274).
+- Supprime `classify_intent_pwa`, `transcribe_audio` et son prompt, ainsi que la table MIME audio et les imports devenus morts de `app/api/main.py` (US-274).
+- Supprime l'ancienne PWA `static/` (page, manifeste, icône, service worker) et le repli de l'API sur ce dossier : sans `frontend/dist`, l'API ne sert plus de page (US-274).
+- Fait répondre 404 à un point d'API retiré (au lieu de 405 sous le repli SPA) tout en gardant 405 pour une méthode non permise sur une route existante (US-274).
+- Retire `/parse` et `/voice` de `docs/openapi.json`, du README, des notes de domaine, du runbook et de SETUP (US-274).
+- Ajoute `tests/test_us274_retrait_ecritures_sans_confirmation.py` : inventaire des appelants dans `frontend/` et `static/`, 404 des chemins retirés, aucune route de l'API n'écrit un événement hors exécuteurs de proposition (US-274).
+- Reporte au niveau du service les tests qui passaient par `POST /parse` (héritage du type d'organe, champs de mise en godet) et supprime ceux qui ne vérifiaient que la route (US-274).
+
+### ⚠️ Breaking changes
+- `POST /parse` et `POST /voice` répondent désormais 404 ; l'ancienne PWA `static/` n'existe plus. Tout client qui dictait un geste à ces points d'API doit passer par `POST /compagnon/messages` puis confirmer la proposition.
+
+## [v3.121.0] — 2026-11-06
+
+### 🚀 Nouveautés
+- Ajoute l'analyse approfondie : un bouton « Approfondir » dans le panneau de Gaston (à côté d'« Envoyer » et sous chaque réponse à une question) et la commande `/approfondir <question>` croisent récoltes, météo, parcelles et savoir dans une synthèse (US-273).
+- Cite dans l'analyse les seuls chiffres lus dans les données du jardinier, avec leurs sources, sans dose ni produit de traitement (US-273).
+- Termine l'analyse par des pistes d'action en texte et par « Rien n'a été modifié » : pour en mener une, le jardinier la dit au compagnon, qui la propose et attend sa confirmation (US-273).
+- Arrête l'analyse à une limite de lectures ou de jetons, la signale par une mention (« Analyse arrêtée… ») et rend ce qu'elle a lu (US-273).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/analyse.py` : une boucle de lecture seule dont les seuls outils sont `lire`, `consulter_donnees`, `meteo` et `chercher_connaissance` ; tout autre appel est refusé avant exécution (R2) (US-273).
+- Ajoute le type d'appel `analyse` (`GROQ_MODEL_ANALYSE`, défaut : le modèle de l'agent) et les réglages `ANALYSE_MAX_TOURS` (6) et `ANALYSE_MAX_JETONS` (20 000) (US-273).
+- Ajoute le mode `analyse` à `POST /compagnon/messages` (réponse `vers="analyse"` avec `sources` et `borne`) et `orchestrateur.analyser_le_potager`, commun au panneau et au bot (US-273).
+- Corrige le contrôle de dose de `savoir.controler` : une quantité lue (« 12 kg » récoltés) n'est plus prise pour une dose quand l'appelant l'autorise ; le dialogue garde sa règle (US-273).
+- Ajoute `/approfondir` au menu natif, à `/help` (domaine `analyse`), au guide utilisateur (§15.7, deux copies), à `SETUP.md` et à la fiche `compagnon-reponses-et-memoire.md` avec ses questions de mesure ; l'exclut de l'interpréteur (US-273).
+- Ajoute `tests/test_us273_analyse_approfondie.py` et les tests front d'« Approfondir » (US-273).
+- Limite connue : le rendu du bouton n'a pas été vérifié à l'écran (375 / 768 / 1280 px), et aucune mesure sur le vrai modèle n'a été lancée.
+
+## [v3.120.0] — 2026-11-06
+
+### 🚀 Nouveautés
+- Envoie aussi dans Telegram, dès sa création, toute proposition faite dans la PWA (geste ou commande), avec ses boutons Confirmer et Annuler ; elle vit alors trois jours (US-272).
+- Fait gagner la première réponse : un second clic, dans l'autre canal, lit « Déjà confirmé depuis le portail à 14:32 » et rien n'est exécuté deux fois (US-272).
+- Réécrit la carte dans chaque canal au changement d'état (« ✅ Confirmé depuis le portail », « Remplacée : voir la nouvelle proposition ») ; une réécriture refusée par Telegram ne gêne rien (US-272).
+- Rafraîchit le panneau du compagnon toutes les 15 s sans WebSocket et ajoute sur Gaston une pastille des messages et propositions non lus (US-272).
+- Nomme le potager sur la carte, dans les deux canaux, quand le jardinier en a plusieurs (US-272).
+- Range dans le panneau seul les messages spontanés d'un compte sans Telegram et l'invite une fois à activer son compagnon de terrain (US-272).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/compagnon/deux_canaux.py` (cartes, envoi en arrière-plan, réécriture, invitation) et `app/bot/cartes_compagnon.py` (boutons `cmp:` d'un geste dit dans le portail) (US-272).
+- Ajoute la route `GET /compagnon/etat` (cartes en attente, cartes traitées depuis 12 h, messages spontanés) et le hook `useNonLusCompagnon` (US-272).
+- Fait retenir au bot le message de chaque carte qu'il poste, pour la réécrire si la proposition est traitée dans le portail ou remplacée (US-272).
+- Ajoute `tests/test_us272_deux_canaux.py`, dont 100 confirmations simultanées sans double écriture, et adapte les tests US-040, US-234, US-267 et US-271 aux nouvelles règles (US-272).
+
+### 💾 Base de données
+- Ajoute la migration `migration_v68.sql` (et `rollback_v68.sql`) : colonnes `telegram_chat_id` et `telegram_message_id` sur `propositions`, `invitation_telegram_le` sur `users` (US-272).
+
 ## [v3.119.0] — 2026-11-06
 
 ### 🚀 Nouveautés

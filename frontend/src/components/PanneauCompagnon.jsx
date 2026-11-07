@@ -11,15 +11,16 @@
 // change que les tailles tactiles (boutons de 44 px, marge haute, pied) de la maquette mobile. Son
 // contenu vit dans un conteneur (`@container/compagnon`), comme la règle de frontend/CLAUDE.md l'exige.
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Headset, RotateCcw, X, Send, Lock, Loader2 } from 'lucide-react'
+import { Headset, RotateCcw, X, Send, Lock, Loader2, Microscope } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { VisageGaston } from './Gaston.jsx'
 import CarteProposition from './CarteProposition.jsx'
 import {
   GASTON, MODE_DEFAUT, ACCUEIL, SUGGESTIONS, PLACEHOLDER, questionDeSuggestion, messageErreur,
   carteDefinitivementFermee, carteFermee, carteApresIssue, filDepuisHistorique, filApresRecommencer,
-  ajouterEchange, ajouterErreur, remplacerCarte, remplacerLesAnciennes, peutEnvoyer, texteACorriger,
-  aEnregistre, LONGUEUR_MAX,
+  ajouterEchange, ajouterErreur, ajouterPhrase, cleDePhrase, remplacerCarte, remplacerLesAnciennes, peutEnvoyer, texteACorriger,
+  aEnregistre, LONGUEUR_MAX, fusionnerEtat, INTERVALLE_OUVERT_MS,
+  MODE_ANALYSE, TEXTE_ANALYSE_EN_COURS, peutApprofondir, peutApprofondirEntree, analyseBornee,
 } from '../lib/compagnon.js'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 
@@ -48,7 +49,7 @@ function Bulle({ children, etiquette = null, teinte = '' }) {
   )
 }
 
-function Entree({ entree, occupe, onAction, onAvis, avisDonnes }) {
+function Entree({ entree, occupe, onAction, onAvis, avisDonnes, onApprofondir }) {
   const { role, texte } = entree
 
   if (role === 'jardinier') {
@@ -74,9 +75,28 @@ function Entree({ entree, occupe, onAction, onAvis, avisDonnes }) {
   return (
     <div className="space-y-2">
       {texte && (
-        <Bulle etiquette={spontane ? `Message de ${GASTON.nom}` : null} teinte={entree.resume ? 'italic text-txt2' : ''}>
+        <Bulle
+          etiquette={spontane ? `Message de ${GASTON.nom}` : entree.vers === 'analyse' ? (analyseBornee(entree) ? 'Analyse partielle' : 'Analyse approfondie') : null}
+          teinte={entree.resume ? 'italic text-txt2' : ''}
+        >
           {texte}
         </Bulle>
+      )}
+      {entree.vers === 'analyse' && entree.sources?.length > 0 && (
+        <p className="ml-[42px] text-[12px] text-txt3">Sources : {entree.sources.join(' · ')}</p>
+      )}
+      {peutApprofondirEntree(entree) && (
+        <div className="ml-[42px]">
+          <button
+            type="button"
+            disabled={occupe}
+            onClick={() => onApprofondir(entree.phrase)}
+            className="inline-flex items-center gap-1.5 rounded-full border-[1.5px] border-brand bg-[var(--gst-bulle)] px-3 py-1.5 text-[12.5px] font-semibold text-brand-text hover:bg-brand-soft disabled:opacity-40"
+          >
+            <Microscope size={14} aria-hidden="true" />
+            Approfondir
+          </button>
+        </div>
       )}
       {(entree.cartes ?? []).map((carte) => (
         <div key={carte.id} className="ml-[42px]">
@@ -104,12 +124,13 @@ function Entree({ entree, occupe, onAction, onAvis, avisDonnes }) {
   )
 }
 
-export default function PanneauCompagnon({ onFermer, onEnregistre, plein = false }) {
+export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein = false }) {
   const [mode, setMode] = useState(MODE_DEFAUT)
   const [fil, setFil] = useState([])
   const [texte, setTexte] = useState('')
   const [occupe, setOccupe] = useState(false)
   const [charge, setCharge] = useState(false)
+  const [analyse, setAnalyse] = useState(false)
   const [avisDonnes, setAvisDonnes] = useState({})
   const bas = useRef(null)
   const saisie = useRef(null)
@@ -121,11 +142,26 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, plein = false
   useEffect(() => {
     let vivant = true
     api.historiqueCompagnon()
-      .then((h) => { if (vivant) setFil(filDepuisHistorique(h)) })
+      .then((h) => { if (vivant) { setFil(filDepuisHistorique(h)); onVu?.(h) } })
       .catch((e) => { if (vivant) setFil((f) => ajouterErreur(f, e)) })
       .finally(() => { if (vivant) setCharge(true) })
     return () => { vivant = false }
-  }, [])
+  }, [onVu])
+
+  // [US-272 / CA5] Le panneau ouvert se relit à intervalle court, sans WebSocket : une carte confirmée
+  // dans Telegram y passe « Confirmé depuis Telegram », une proposition ou un message nouveaux s'ajoutent.
+  useEffect(() => {
+    if (!charge) return undefined
+    let vivant = true
+    const relire = () => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      api.etatCompagnon()
+        .then((etat) => { if (vivant) { setFil((f) => fusionnerEtat(f, etat)); onVu?.(etat) } })
+        .catch(() => { /* hors ligne un instant : la prochaine relecture rattrapera */ })
+    }
+    const minuterie = setInterval(relire, INTERVALLE_OUVERT_MS)
+    return () => { vivant = false; clearInterval(minuterie) }
+  }, [charge, onVu])
 
   useEffect(() => { bas.current?.scrollIntoView?.({ block: 'end' }) }, [fil, occupe])
 
@@ -136,23 +172,32 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, plein = false
     return () => window.removeEventListener('keydown', surTouche)
   }, [onFermer])
 
-  const envoyer = useCallback(async (brut) => {
+  const envoyer = useCallback(async (brut, modeForce) => {
     const phrase = (brut ?? texte).trim()
     if (!peutEnvoyer(phrase, occupe)) return
+    // La phrase s'affiche tout de suite : la saisie se vide, elle ne doit pas disparaître pendant
+    // que Gaston réfléchit. Sa clé la désigne au retour de la réponse, pour ne pas la remettre.
+    const cleJ = cleDePhrase()
     setOccupe(true)
+    setAnalyse(modeForce === MODE_ANALYSE)
     setTexte('')
+    setFil((f) => ajouterPhrase(f, phrase, cleJ))
     try {
-      const reponse = await api.messageCompagnon(phrase, mode)
-      setFil((f) => ajouterEchange(remplacerLesAnciennes(f, reponse.propositions), phrase, reponse))
+      const reponse = await api.messageCompagnon(phrase, modeForce ?? mode)
+      setFil((f) => ajouterEchange(remplacerLesAnciennes(f, reponse.propositions), phrase, reponse, cleJ))
     } catch (e) {
       // CA4 : réseau coupé, modèle indisponible, lecteur… dit en clair ; la phrase reste à reprendre.
-      setFil((f) => ajouterErreur(f, e, phrase))
+      setFil((f) => ajouterErreur(f, e, phrase, cleJ))
       setTexte(phrase)
     } finally {
       setOccupe(false)
+      setAnalyse(false)
       saisie.current?.focus()
     }
   }, [texte, occupe, mode])
+
+  // [US-273 / CA1] « Approfondir » : la même phrase, lue en profondeur et sans rien écrire.
+  const approfondir = useCallback((phrase) => envoyer(phrase, MODE_ANALYSE), [envoyer])
 
   const agirSurCarte = useCallback(async (action, carte) => {
     if (action === 'corriger') {
@@ -281,12 +326,13 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, plein = false
           </>
         )}
         {fil.map((entree) => (
-          <Entree key={entree.cle} entree={entree} occupe={occupe} onAction={agirSurCarte} onAvis={donnerAvis} avisDonnes={avisDonnes} />
+          <Entree key={entree.cle} entree={entree} occupe={occupe} onAction={agirSurCarte} onAvis={donnerAvis} avisDonnes={avisDonnes} onApprofondir={approfondir} />
         ))}
         {occupe && (
-          <div className="flex items-end gap-2" role="status" aria-label="Gaston réfléchit">
+          <div className="flex items-end gap-2" role="status" aria-label={analyse ? TEXTE_ANALYSE_EN_COURS : 'Gaston réfléchit'}>
             <Avatar />
             <div className="gst-tape flex gap-1 rounded-[16px] rounded-bl-[4px] bg-[var(--gst-bulle)] p-3.5 shadow-[0_1px_2px_rgba(22,33,12,.06)]"><i /><i /><i /></div>
+            {analyse && <span className="text-[12.5px] text-txt3">{TEXTE_ANALYSE_EN_COURS}</span>}
           </div>
         )}
         <div ref={bas} />
@@ -309,6 +355,16 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, plein = false
             autoComplete="off"
             className="min-w-0 flex-1 border-0 bg-transparent text-[13.5px] text-txt outline-none placeholder:text-txt3"
           />
+          <button
+            type="button"
+            disabled={!peutApprofondir(texte, occupe)}
+            onClick={() => envoyer(undefined, MODE_ANALYSE)}
+            aria-label="Approfondir"
+            title="Approfondir : une analyse qui croise vos données, sans rien modifier"
+            className={`${plein ? 'h-11 w-11' : 'h-[38px] w-[38px]'} inline-flex shrink-0 items-center justify-center rounded-full border-[1.5px] border-brand text-brand-text hover:bg-brand-soft disabled:opacity-40`}
+          >
+            <Microscope size={17} aria-hidden="true" />
+          </button>
           <button
             type="submit"
             disabled={!peutEnvoyer(texte, occupe)}

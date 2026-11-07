@@ -19,8 +19,9 @@ la confirmation) est indépendant de l'ordre de CALCUL. Si l'appelant écrit
 l'événement puis appelle cette fonction ensuite, `rotation.evaluer_rotation`
 retrouve l'événement tout juste créé dans son propre historique de parcelle
 et le cite comme son propre antécédent — un faux conflit auto-référentiel
-(« tomate déjà présente cette année », elle-même). Les quatre appelants
-(bot.py `_do_save_items`/`_parse_multi`, main.py `/parse`/`/voice`) évaluent
+(« tomate déjà présente cette année », elle-même). Les appelants
+(bot.py `_do_save_items`/`_parse_multi`, et les exécuteurs de proposition de l'API ; `/parse` et
+`/voice`, retirés par US-274, en faisaient partie) évaluent
 donc tous avant d'écrire, et ne font qu'afficher le résultat après.
 
 **[CA4] Liste vide = rien à dire.** Un message qui apparaît à chaque saisie

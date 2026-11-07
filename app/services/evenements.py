@@ -1622,7 +1622,7 @@ def _oublier_memoire(db: Session, ctx: TenantContext, evenement_id: int) -> None
 
 # ── Écriture ──────────────────────────────────────────────────────────────────
 def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
-    """[POST /parse, POST /voice-ACTION] Crée un événement depuis un item parsé par Groq,
+    """[Enregistrement d'un item parsé ; ex-POST /parse et POST /voice, retirés par US-274] Crée un événement depuis un item parsé par Groq,
     avec héritage automatique de type_organe_recolte depuis culture_config."""
     require_role(ctx, "editor", "enregistrer d'action")
     require_potager_non_archive(db, ctx, "enregistrer d'action")
@@ -1642,7 +1642,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         variete=parsed.get("variete"), parcelle=parcelle_obj,
         # [US-224] La quantité est transmise pour toutes les actions : la règle 9
         # (nombre de plants obligatoire) et les plafonds de stock la lisent. Avant,
-        # seul `deplacement` la recevait — `POST /parse` écrivait donc sans contrôle.
+        # seul `deplacement` la recevait — l'ancien `POST /parse` (retiré par US-274) écrivait donc sans contrôle.
         quantite=_to_float(parsed.get("quantite")),
         unite=parsed.get("unite"), texte=texte_original,
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),

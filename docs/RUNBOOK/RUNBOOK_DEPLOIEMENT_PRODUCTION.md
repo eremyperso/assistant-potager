@@ -441,8 +441,8 @@ la volée à chaque build (voir `.github/workflows/deploy.yml` ligne
 « Build frontend React »), qui fait foi. Ne pas éditer `.env.prod` en
 pensant que cela changera l'URL réellement buildée.
 
-Puis déployer le build statique sur le serveur (l'API le sert en priorité
-via `frontend/dist`, avec repli sur `static/` — l'ancienne PWA — si absent) :
+Puis déployer le build statique sur le serveur (l'API le sert via
+`frontend/dist` ; l'ancienne PWA `static/` n'existe plus, US-274) :
 
 ```bash
 rsync -az --delete frontend/dist/ <user>@<serveur>:/opt/potager-prod/frontend/dist/
