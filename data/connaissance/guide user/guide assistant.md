@@ -1168,7 +1168,7 @@ Vous pouvez aussi taper (ou dicter) simplement votre question, sans commande.
 
 > **Une limite à connaître.** Sur des questions très larges couvrant plusieurs années, l'interrogation libre travaille sur un extrait récent de votre historique. Pour un total de longue période, préférez `/stats` et le tableau de bord, qui calculent sur l'ensemble des données.
 
-### 15.5 Ce que l'assistant sait expliquer de lui-même
+## 15.5 Ce que l'assistant sait expliquer de lui-même
 
 Vous pouvez lui poser des questions sur **le fonctionnement de l'application**, dans vos mots :
 
