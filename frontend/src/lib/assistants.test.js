@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   AIDE_ASSISTANTS, assistantsDits, dateCourte, DUREES_JETON, libelleOutil, lienGeste, potagersDits,
-  revocable, trierConnexions,
+  libelleAnciennes, repartirConnexions, revocable, TEXTE_AUCUNE_ACTIVE,
 } from './assistants.js'
 
 test('[CA7] l’aide rappelle que les données suivent la politique de l’éditeur', () => {
@@ -27,11 +27,42 @@ test('[CA2] une connexion déjà révoquée n’est plus révocable', () => {
   assert.equal(revocable({ statut: 'revoquee' }), false)
 })
 
-test('[CA2] les connexions actives passent avant les révoquées, l’ordre du serveur est gardé', () => {
-  const triees = trierConnexions([
+// ── [US-297] Ranger les anciennes connexions ────────────────────────────────
+test('[US-297 CA1] seules les actives sont listées d’emblée, dans l’ordre du serveur', () => {
+  const { actives, anciennes } = repartirConnexions([
     { id: 4, statut: 'revoquee' }, { id: 3, statut: 'active' }, { id: 2, statut: 'expiree' }, { id: 1, statut: 'active' },
   ])
-  assert.deepEqual(triees.map((c) => c.id), [3, 1, 4, 2])
+  assert.deepEqual(actives.map((c) => c.id), [3, 1])
+  assert.deepEqual(anciennes.map((c) => c.id), [4, 2])
+})
+
+test('[US-297 CA4] rien n’est perdu : toute connexion est dans l’un des deux groupes', () => {
+  const connexions = [{ id: 1, statut: 'active' }, { id: 2, statut: 'revoquee' }, { id: 3, statut: 'expiree' }]
+  const { actives, anciennes } = repartirConnexions(connexions)
+  assert.equal(actives.length + anciennes.length, connexions.length)
+  assert.equal(anciennes[0], connexions[1]) // même objet : aucune copie altérée
+})
+
+test('[US-297 CA2] sans historique, aucune ancienne connexion ; une liste absente est vide', () => {
+  assert.deepEqual(repartirConnexions([{ id: 1, statut: 'active' }]).anciennes, [])
+  assert.deepEqual(repartirConnexions(), { actives: [], anciennes: [] })
+})
+
+test('[US-297 CA2, CA3] le lien dit le nombre replié, « Masquer » déplié', () => {
+  assert.equal(libelleAnciennes(3, false), 'Anciennes connexions (3)')
+  assert.equal(libelleAnciennes(3, true), 'Masquer les anciennes connexions')
+})
+
+test('[US-297 CA5] sans connexion active, la liste vide le dit', () => {
+  assert.equal(TEXTE_AUCUNE_ACTIVE, 'Aucun assistant n’a accès à vos potagers en ce moment.')
+})
+
+test('[US-297 CA6] une connexion révoquée rejoint les anciennes et le compteur augmente', () => {
+  const avant = [{ id: 2, statut: 'active' }, { id: 1, statut: 'revoquee' }]
+  const apres = avant.map((c) => (c.id === 2 ? { ...c, statut: 'revoquee' } : c))
+  assert.equal(repartirConnexions(avant).anciennes.length, 1)
+  assert.equal(repartirConnexions(apres).anciennes.length, 2)
+  assert.equal(repartirConnexions(apres).actives.length, 0)
 })
 
 test('[CA3] un outil inconnu garde son nom, jamais une chaîne vide', () => {

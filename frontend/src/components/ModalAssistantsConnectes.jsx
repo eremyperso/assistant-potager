@@ -11,11 +11,11 @@
 // ⚠️ Pas de maquette de référence au moment de l'écriture (« à produire dans Claude Design » dans
 // l'US) : structure et styles repris des modales voisines (Mon compagnon), à recaler sur la maquette.
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Copy, ExternalLink, KeyRound, Plug, Plus, ShieldCheck } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, KeyRound, Plug, Plus, ShieldCheck } from 'lucide-react'
 import { connecteurApi } from '../lib/api.js'
 import {
-  AIDE_ASSISTANTS, DUREES_JETON, LIBELLE_RESULTAT, LIBELLE_STATUT, TEINTE_RESULTAT, dateCourte,
-  libelleOutil, lienGeste, potagersDits, revocable, trierConnexions,
+  AIDE_ASSISTANTS, DUREES_JETON, LIBELLE_RESULTAT, LIBELLE_STATUT, TEINTE_RESULTAT, TEXTE_AUCUNE_ACTIVE,
+  dateCourte, libelleAnciennes, libelleOutil, lienGeste, potagersDits, repartirConnexions, revocable,
 } from '../lib/assistants.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { Badge, Btn, Card, InfoBanner, Modal, SectionLabel } from './ui'
@@ -210,6 +210,7 @@ export default function ModalAssistantsConnectes({ onClose }) {
   const [occupe, setOccupe] = useState(false)
   const [mode, setMode] = useState('liste') // liste | jeton | jeton-cree
   const [jeton, setJeton] = useState(null)
+  const [anciennesVisibles, setAnciennesVisibles] = useState(false) // [US-297 / CA3] repliées d'emblée
 
   const charger = useCallback(
     () => connecteurApi.connexions().then(setDonnees).catch((e) => setErreur(e.message)),
@@ -230,8 +231,9 @@ export default function ModalAssistantsConnectes({ onClose }) {
     }
   }
 
-  const connexions = donnees ? trierConnexions(donnees.connexions) : []
-  const vide = donnees && !connexions.length
+  // [US-297] Les actives d'emblée ; les révoquées et expirées sous un lien repliable, jamais effacées.
+  const { actives, anciennes } = repartirConnexions(donnees ? donnees.connexions : [])
+  const vide = donnees && !actives.length && !anciennes.length
 
   return (
     <Modal
@@ -265,9 +267,28 @@ export default function ModalAssistantsConnectes({ onClose }) {
                   </Card>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    {connexions.map((c) => (
+                    {actives.length ? actives.map((c) => (
                       <LigneConnexion key={c.id} connexion={c} onRevoquer={revoquer} occupe={occupe} />
-                    ))}
+                    )) : (
+                      <Card pad="p-3"><p className="text-[13.5px] text-txt2">{TEXTE_AUCUNE_ACTIVE}</p></Card>
+                    )}
+                    {anciennes.length > 0 && (
+                      <div className="flex flex-col gap-2">
+                        <button type="button" onClick={() => setAnciennesVisibles((v) => !v)}
+                          aria-expanded={anciennesVisibles} aria-controls="anciennes-connexions"
+                          className="self-start inline-flex items-center gap-1 text-[13px] font-semibold text-brand-text underline">
+                          {libelleAnciennes(anciennes.length, anciennesVisibles)}
+                          {anciennesVisibles ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+                        </button>
+                        {anciennesVisibles && (
+                          <div id="anciennes-connexions" className="flex flex-col gap-2">
+                            {anciennes.map((c) => (
+                              <LigneConnexion key={c.id} connexion={c} onRevoquer={revoquer} occupe={occupe} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </section>

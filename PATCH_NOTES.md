@@ -1,3 +1,12 @@
+## [v3.125.0] — 2026-11-08
+
+### 🚀 Nouveautés
+- Range les connexions révoquées ou expirées de l'écran « Assistants connectés » sous un lien « Anciennes connexions (n) » repliable : seules les connexions actives s'affichent d'emblée, rien n'est effacé (US-297).
+- Affiche « Aucun assistant n'a accès à vos potagers en ce moment. » quand plus aucune connexion n'est active (US-297).
+
+### 🔧 Améliorations techniques
+- Remplace `trierConnexions` par `repartirConnexions` dans `frontend/src/lib/assistants.js`, testé en node, et met à jour la fiche `assistants-ia-mcp` (US-297).
+
 ## [v3.124.0] — 2026-11-08
 
 ### 🚀 Nouveautés
