@@ -45,11 +45,24 @@ export function potagersDits(potagers = []) {
 /** Une connexion peut être révoquée tant qu'elle n'est pas déjà révoquée. */
 export const revocable = (connexion) => connexion?.statut !== 'revoquee'
 
-/** Actives d'abord (la plus récente en tête, ordre du serveur), puis révoquées / expirées. */
-export function trierConnexions(connexions = []) {
-  const rang = (c) => (c.statut === 'active' ? 0 : 1)
-  return [...connexions].sort((a, b) => rang(a) - rang(b))
+/**
+ * [US-297 / CA1, CA2] Les connexions actives d'un côté, les anciennes (révoquées, expirées) de l'autre.
+ * L'ordre du serveur (la plus récente d'abord) est conservé dans chaque groupe ; rien n'est retiré.
+ */
+export function repartirConnexions(connexions = []) {
+  const actives = []
+  const anciennes = []
+  for (const c of connexions) (c.statut === 'active' ? actives : anciennes).push(c)
+  return { actives, anciennes }
 }
+
+/** [US-297 / CA2, CA3] Le libellé du lien qui déplie ou replie les anciennes connexions. */
+export function libelleAnciennes(nombre, deplie) {
+  return deplie ? 'Masquer les anciennes connexions' : `Anciennes connexions (${nombre})`
+}
+
+/** [US-297 / CA5] Aucune connexion active, mais un historique : la liste vide le dit. */
+export const TEXTE_AUCUNE_ACTIVE = 'Aucun assistant n’a accès à vos potagers en ce moment.'
 
 /** [CA3] Le lien vers le geste dans le Journal : le jour du geste, sinon rien. */
 export function lienGeste(appel) {
