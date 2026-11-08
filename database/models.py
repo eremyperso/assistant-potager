@@ -137,6 +137,8 @@ class Potager(Base):
     # attribué dans CE potager. Incrémenté dans la transaction du semis, jamais
     # abaissé : un numéro n'est pas réutilisé, même après suppression.
     compteur_lots    = Column(Integer, nullable=False, default=0, server_default="0")
+    # [US-294 / CA6] Le propriétaire interdit les assistants IA externes (MCP) pour ce potager. Migration v70.
+    assistants_externes_interdits = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
 
 class PotagerMembre(Base):
@@ -1677,4 +1679,118 @@ class Rappel(Base):
     __table_args__ = (
         CheckConstraint("etat IN ('programme', 'echu', 'annule')", name="ck_rappels_etat"),
         Index("ix_rappels_echeance", "potager_id", "etat", "echeance_le"),
+    )
+
+
+# ── [US-290] Canal MCP : connecteurs d'assistants IA externes ──────────────────
+# Cinq tables de COMPTE, sans RLS (comme `liaisons_telegram`) : un connecteur
+# appartient à un jardinier, pas à un jardin. Le potager visé est vérifié à
+# chaque appel (consentement + appartenance), puis la RLS du potager s'applique
+# aux lectures de l'outil. Aucun secret n'est stocké en clair : seule l'empreinte
+# SHA-256 d'un jeton, d'un code ou d'un secret client l'est. Migration v69.
+
+class McpClient(Base):
+    """[US-290 / CA2] Un client OAuth enregistré (Claude, ChatGPT, Le Chat, Inspector…).
+
+    Créé par l'enregistrement dynamique (RFC 7591) : le client se présente seul, nous
+    ne connaissons que le nom qu'il se donne. Ce nom n'est donc jamais une garantie
+    d'identité ; la page de consentement le cite avec l'adresse de retour.
+    """
+    __tablename__ = "mcp_clients"
+
+    id                 = Column(Integer, primary_key=True, index=True)
+    client_id          = Column(String(64), unique=True, nullable=False, index=True)
+    nom                = Column(String(120), nullable=False)
+    redirect_uris      = Column(JSON, nullable=False)  # liste d'URL de retour exactes
+    # none (client public + PKCE) | client_secret_post | client_secret_basic
+    methode_auth_jeton = Column(String(24), nullable=False, default="none", server_default="none")
+    secret_empreinte   = Column(String(64), nullable=True)
+    cree_le            = Column(DateTime, nullable=False, server_default=func.now())
+
+
+class McpAutorisation(Base):
+    """[US-290 / CA2, CA8, CA9] Ce que le jardinier a consenti à UN connecteur.
+
+    `type` = `oauth` (connecteur d'un assistant, via la page de consentement) ou
+    `personnel` (jeton créé depuis la PWA pour un client de développement). `portee`
+    = `lecture` ou `ecriture` (l'écriture inclut la lecture). `potager_ids` = la liste
+    fermée des potagers consentis. Révoquer l'autorisation coupe tous ses jetons.
+    """
+    __tablename__ = "mcp_autorisations"
+
+    id                   = Column(Integer, primary_key=True, index=True)
+    user_id              = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    client_id            = Column(Integer, ForeignKey("mcp_clients.id", ondelete="CASCADE"), nullable=True)
+    type                 = Column(String(10), nullable=False)
+    libelle              = Column(String(120), nullable=False)
+    portee               = Column(String(10), nullable=False, default="lecture", server_default="lecture")
+    potager_ids          = Column(JSON, nullable=False)
+    cree_le              = Column(DateTime, nullable=False, server_default=func.now())
+    dernier_appel_le     = Column(DateTime, nullable=True)
+    revoque_le           = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("type IN ('oauth', 'personnel')", name="ck_mcp_autorisations_type"),
+        CheckConstraint("portee IN ('lecture', 'ecriture')", name="ck_mcp_autorisations_portee"),
+    )
+
+
+class McpJeton(Base):
+    """[US-290 / CA8, CA9] Un jeton opaque rattaché à une autorisation.
+
+    `type` = `acces` (1 h), `rafraichissement` (30 jours, à usage unique : rotation)
+    ou `personnel` (expiration choisie). Seule l'empreinte est stockée.
+    """
+    __tablename__ = "mcp_jetons"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    autorisation_id = Column(Integer, ForeignKey("mcp_autorisations.id", ondelete="CASCADE"), nullable=False, index=True)
+    type            = Column(String(16), nullable=False)
+    empreinte       = Column(String(64), unique=True, nullable=False, index=True)
+    expire_le       = Column(DateTime, nullable=False)
+    revoque_le      = Column(DateTime, nullable=True)
+    cree_le         = Column(DateTime, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint("type IN ('acces', 'rafraichissement', 'personnel')", name="ck_mcp_jetons_type"),
+    )
+
+
+class McpCodeAutorisation(Base):
+    """[US-290 / CA2] Code d'autorisation OAuth : 10 minutes, usage unique, lié au PKCE."""
+    __tablename__ = "mcp_codes_autorisation"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    autorisation_id = Column(Integer, ForeignKey("mcp_autorisations.id", ondelete="CASCADE"), nullable=False)
+    empreinte       = Column(String(64), unique=True, nullable=False, index=True)
+    code_challenge  = Column(String(128), nullable=False)
+    redirect_uri    = Column(Text, nullable=False)
+    expire_le       = Column(DateTime, nullable=False)
+    utilise_le      = Column(DateTime, nullable=True)
+
+
+class McpAppel(Base):
+    """[US-290 / CA6, CA7] Journal des appels d'outils MCP — sert aussi au plafond d'appels.
+
+    Jamais le contenu des arguments ni des textes libres : la date, le client, l'outil,
+    le potager, le résultat (`ok` | `refus` | `erreur`), un motif court et la durée.
+    """
+    __tablename__ = "mcp_appels"
+
+    id              = Column(Integer, primary_key=True, index=True)
+    horodatage      = Column(DateTime, nullable=False, server_default=func.now())
+    user_id         = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    autorisation_id = Column(Integer, ForeignKey("mcp_autorisations.id", ondelete="CASCADE"), nullable=False)
+    client          = Column(String(120), nullable=False)
+    outil           = Column(String(64), nullable=False)
+    potager_id      = Column(Integer, ForeignKey("potagers.id", ondelete="SET NULL"), nullable=True)
+    resultat        = Column(String(8), nullable=False)
+    motif           = Column(String(32), nullable=True)
+    duree_ms        = Column(Integer, nullable=False, default=0)
+    # [US-294 / CA3] Le geste écrit par un appel confirmé ; sans clé étrangère. Migration v70.
+    evenement_id    = Column(Integer, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("resultat IN ('ok', 'refus', 'erreur')", name="ck_mcp_appels_resultat"),
+        Index("ix_mcp_appels_autorisation_horodatage", "autorisation_id", "horodatage"),
     )

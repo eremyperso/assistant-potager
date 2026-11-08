@@ -818,6 +818,8 @@ def lister_potagers(etat: str = "actif", user: User = Depends(get_current_user))
                     # présentée comme un choix.
                     "zone_climatique": svc_calendrier.zone_effective(p)[0],
                     "zone_climatique_origine": svc_calendrier.zone_effective(p)[1],
+                    # [US-294 / CA6] Le propriétaire ferme le potager aux assistants IA externes.
+                    "assistants_externes_interdits": bool(p.assistants_externes_interdits),
                 }
                 for p in potagers
             ],
@@ -1188,7 +1190,13 @@ def lister_membres_potager(potager_id: int, user: User = Depends(get_current_use
         role = svc_potager_actif.role_utilisateur(db, user.id, potager_id)
         if role is None:
             raise HTTPException(status_code=403, detail="Vous n'êtes pas membre de ce potager")
-        return {"membres": svc_potagers.lister_membres(db, potager_id)}
+        # [US-294 / CA5] Les assistants IA que chaque membre a connectés à ce potager.
+        from app.services.mcp import connexions as svc_connexions_mcp
+
+        assistants = svc_connexions_mcp.assistants_du_potager(db, potager_id)
+        return {"membres": [
+            {**m, "assistants": assistants.get(m["user_id"], [])} for m in svc_potagers.lister_membres(db, potager_id)
+        ]}
     finally:
         db.close()
 
@@ -3019,6 +3027,16 @@ def historique(
         }
     finally:
         db.close()
+
+
+# ── [US-290] Canal MCP : OAuth 2.1 + serveur MCP sur /mcp ───────────────────────
+# Inclus AVANT le repli SPA (sinon GET /.well-known/… et /oauth/authorize rendraient
+# index.html). CORS ouvert sur ces seuls chemins (clients MCP tiers, jetons Bearer sans
+# cookie) : middleware ajouté après CORSMiddleware, donc exécuté avant lui.
+from app.api import mcp as _api_mcp  # noqa: E402
+
+app.include_router(_api_mcp.creer_routeur(get_current_user, limiter))
+app.middleware("http")(_api_mcp.middleware_cors_mcp)
 
 
 # ── Repli SPA — sert index.html pour les routes front sans backend (US-044) ────

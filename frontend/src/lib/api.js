@@ -443,3 +443,23 @@ export const authApi = {
     return body
   },
 }
+
+// [US-290] Connecter un assistant IA (Claude, ChatGPT, Le Chat) : la page de
+// consentement lit la demande signée par l'API, puis rend la réponse du jardinier.
+// L'API répond l'URL de retour vers l'assistant, que la page ouvre en pleine page.
+export const connecteurApi = {
+  demande: (jeton) => get(`/oauth/demande${qs({ demande: jeton })}`),
+  consentir: ({ demande, accepte, ecriture = false, potagerIds = [] }) =>
+    post('/oauth/consentement', { demande, accepte, ecriture, potager_ids: potagerIds }),
+  // [US-294] L'écran « Assistants connectés » : liste, activité, révocation, jeton personnel.
+  connexions: () => get('/mcp/connexions'),
+  activite: (id) => get(`/mcp/connexions/${id}/activite`),
+  revoquer: (id) => del(`/mcp/connexions/${id}`),
+  creerJeton: ({ libelle, ecriture = false, potagerIds, dureeJours }) =>
+    post('/mcp/jetons-personnels', {
+      libelle, ecriture, potager_ids: potagerIds, ...(dureeJours ? { duree_jours: dureeJours } : {}),
+    }),
+  // [US-294 / CA6] Le propriétaire interdit (ou rouvre) les assistants externes pour un potager.
+  interdireAssistants: (potagerId, interdit) =>
+    patch(`/potagers/${potagerId}/assistants-externes`, { interdit }),
+}

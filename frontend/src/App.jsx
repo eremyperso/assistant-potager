@@ -1,4 +1,4 @@
-import { useState, useCallback, useLayoutEffect, useRef } from 'react'
+import { useState, useCallback, useLayoutEffect, useEffect, useRef } from 'react'
 import { useTheme } from './hooks/useTheme.js'
 import { AppContextProvider } from './context/AppContext.jsx'
 import { AuthContextProvider, useAuth } from './context/AuthContext.jsx'
@@ -22,7 +22,7 @@ import PanneauCompagnon from './components/PanneauCompagnon.jsx'  // [US-271]
 import { GastonDefs } from './components/Gaston.jsx'  // [US-271]
 import { useMedia } from './hooks/useMedia.js'  // [US-271]
 import { useNonLusCompagnon } from './hooks/useNonLusCompagnon.js'  // [US-272]
-import { lireEtat, ecrireEtat, etatSuivant } from './lib/compagnon.js'  // [US-271]
+import { etatInitial, ecrireEtat, etatSuivant, PARAM_OUVRIR } from './lib/compagnon.js'  // [US-271, US-292]
 import Dashboard from './views/Dashboard.jsx'
 import Plan      from './views/Plan.jsx'
 import PlanVue   from './views/PlanVue.jsx'  // [US-200]
@@ -35,6 +35,8 @@ import Auth      from './views/Auth.jsx'
 import VerifyEmail from './views/VerifyEmail.jsx'
 import ReinitialiserMotDePasse from './views/ReinitialiserMotDePasse.jsx'
 import Onboarding from './views/Onboarding.jsx'
+import ConsentementConnecteur from './views/ConsentementConnecteur.jsx'  // [US-290]
+import { capterDemandeAdresse, demandeEnAttente } from './lib/connecteurIa.js'  // [US-290]
 
 // [US-044 / CA10] Lien de vérification reçu par e-mail : /verifier-email?token=...
 // Pas de librairie de routage dans ce projet — détection manuelle du chemin,
@@ -70,6 +72,10 @@ function consommerRetourOAuth() {
     info: params.get('info'),
   }
 }
+
+// [US-290] Demande de connexion d'un assistant IA (/connecteur-ia?demande=…) : captée
+// AVANT le retour Google ci-dessous, gardée le temps de la connexion du jardinier.
+const DEMANDE_CONNECTEUR = capterDemandeAdresse()
 
 // Évalué une seule fois, au chargement du module. L'opération n'est PAS
 // idempotente — elle efface le fragment — et React.StrictMode invoque deux fois
@@ -123,7 +129,15 @@ function AppInner({ intentionAdresse }) {
   const [loading, setLoading]     = useState(false)
   // [US-271 / CA1] Gaston, le compagnon : replié, présent ou chat ouvert, depuis n'importe quel écran.
   // Replié / présent sont retenus d'une visite à l'autre ; le chat ne se rouvre pas tout seul.
-  const [compagnon, setCompagnon] = useState(() => lireEtat(window.localStorage))
+  const [compagnon, setCompagnon] = useState(() => etatInitial(window.localStorage, window.location.search))
+  useEffect(() => {
+    // [US-292 / CA10] `?compagnon=ouvrir` n'ouvre le panneau qu'une fois : retiré de l'adresse.
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has(PARAM_OUVRIR)) return
+    params.delete(PARAM_OUVRIR)
+    const reste = params.toString()
+    window.history.replaceState(null, '', window.location.pathname + (reste ? `?${reste}` : '') + window.location.hash)
+  }, [])
   const agirCompagnon = useCallback((action) => setCompagnon((e) => {
     const suivant = etatSuivant(e, action)
     ecrireEtat(window.localStorage, suivant)
@@ -264,10 +278,16 @@ function PotagerGate() {
 
 function AppGate({ retourOAuth }) {
   const { isAuthenticated } = useAuth()
+  // [US-290 / CA2] Une demande de connexion d'assistant IA en attente passe avant
+  // l'application : connexion d'abord (e-mail ou Google), puis consentement.
+  const [demandeConnecteur, setDemandeConnecteur] = useState(() => demandeEnAttente(DEMANDE_CONNECTEUR))
   // [US-090 / CA3, CA11] Un retour Google en échec ramène ici, sur l'écran de
   // connexion, avec de quoi expliquer ce qui s'est passé ; un retour réussi a
   // déjà posé les jetons et traverse cette porte sans s'arrêter.
   if (!isAuthenticated) return <Auth retourOAuth={retourOAuth} />
+  if (demandeConnecteur) {
+    return <ConsentementConnecteur demande={demandeConnecteur} onAbandon={() => setDemandeConnecteur(null)} />
+  }
 
   return (
     <PotagerContextProvider>

@@ -363,6 +363,9 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
         # [US-262] « c'était 8 rangs » sur une parcelle : la correction TRADUIT le
         # champ « rang » vers `nb_rangs` de la fiche. Elle ne calcule rien.
         Path("app/services/compagnon/corrections.py"),
+        # [US-295] Le résumé du potager pour un assistant IA AFFICHE le nombre de rangs que
+        # la lecture du plan rend déjà. Il ne calcule rien.
+        Path("app/services/mcp/guides.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

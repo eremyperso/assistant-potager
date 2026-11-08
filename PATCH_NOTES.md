@@ -1,3 +1,35 @@
+## [v3.124.0] — 2026-11-08
+
+### 🚀 Nouveautés
+- Ajoute le serveur MCP distant sur `/mcp` : un jardinier connecte Claude, ChatGPT ou Le Chat à son potager avec son compte, via OAuth 2.1 (PKCE) et une page de consentement (portée, potager) (US-290).
+- Permet à l'assistant IA de proposer un geste ou une correction : rien n'est écrit tant que le jardinier ne confirme pas dans l'application, avec un lien vers la carte de confirmation (US-292).
+- Permet à l'assistant IA de proposer des commandes non destructives (parcelles, rappels), sans suppression ni écriture directe (US-293).
+- Ajoute la modale « Assistants connectés » : le jardinier voit les assistants connectés, leur activité, les révoque, crée un jeton personnel, et le propriétaire peut interdire les assistants externes sur son potager (US-294).
+- Ajoute des ressources, des prompts et un mode d'emploi du connecteur pour guider le modèle comme le jardinier (US-295).
+- Ajoute la fiche de connaissance `assistants-ia-mcp` et met à jour le guide utilisateur (US-295).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/api/mcp.py` et `app/services/mcp/` (autorisation, connexions, outils, lectures, écritures, commandes, guides) sans règle métier recopiée ni appel à un modèle de langage (US-290 à US-295).
+- Ajoute les tests `test_us290` à `test_us295` et les tests front `assistants`/`connecteurIa` (US-290 à US-295).
+- Ajoute l'étude, l'analyse RGPD (`docs/RGPD/RGPD_ASSISTANTS_IA_MCP.md`) et les US de l'épic 16 (US-290 à US-296).
+
+### 💾 Base de données
+- Ajoute la migration v69 : cinq tables de compte du canal MCP (clients OAuth, autorisations, codes, jetons, appels), sans RLS (US-290).
+- Ajoute la migration v70 : `potagers.assistants_externes_interdits` et `mcp_appels.evenement_id` (US-294).
+
+## [v3.123.0] — 2026-11-07
+
+### 🚀 Nouveautés
+- Permet à l'assistant IA connecté (Claude, ChatGPT, Le Chat…) de consulter le potager : plan, pépinière, stock, carnet, statistiques, météo, calendrier d'une culture, échéances et savoir de l'application (US-291).
+- Distingue dans `voir_statistiques` les pieds actifs et le rendement cumulé d'une culture reproductrice (haricot, tomate…) des pieds restants d'une culture végétative (laitue, carotte…) : une récolte de haricots ne réduit pas les pieds actifs (US-291).
+- Pagine le carnet pour l'assistant : 50 gestes par page, 12 mois au plus par appel, filtres par période, culture, parcelle et type de geste, avec l'indication des pages restantes (US-291).
+- Répond « Aucune parcelle » ou « Rien dans le corpus » plutôt qu'une erreur quand le potager est vide ou que le corpus ne répond pas (US-291).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/mcp/lectures.py` : dix outils MCP en lecture seule qui appellent les fonctions d'endpoint de la PWA, sans règle recopiée ni appel à un modèle de langage (US-291).
+- Signale dans chaque réponse que les textes libres (notes, noms de parcelles) sont des données, et retire les champs qui nommeraient un autre membre du potager (US-291).
+- Ajoute `tests/test_us291_consulter_potager.py` : parité avec `/plan`, `/pepiniere/lots` et `/stats`, bornes du carnet, potager vide et scénario des haricots des Mésanges (US-291).
+
 ## [v3.122.0] — 2026-11-06
 
 ### 🔧 Améliorations techniques

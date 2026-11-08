@@ -14,7 +14,7 @@ import {
   MODES, MODE_DEFAUT, modeValide, modeDe, messageErreur, TEXTE_RESEAU, carteDefinitivementFermee,
   etatCarte, boutonsCarte, carteApresIssue, carteFermee, filDepuisHistorique, ajouterEchange,
   ajouterErreur, ajouterPhrase, cleDePhrase, remplacerCarte, cartesEnAttente, remplacerLesAnciennes, peutEnvoyer,
-  texteACorriger, aEnregistre, LONGUEUR_MAX, ETATS, ETAT_PAR_DEFAUT, etatSuivant, lireEtat, ecrireEtat, CLE_ETAT, GASTON,
+  texteACorriger, aEnregistre, LONGUEUR_MAX, ETATS, ETAT_PAR_DEFAUT, etatSuivant, lireEtat, ecrireEtat, CLE_ETAT, etatInitial, GASTON,
   ACCUEIL, SUGGESTIONS, questionDeSuggestion, filApresRecommencer, BULLE_PRESENT,
   MODE_ANALYSE, peutApprofondir, peutApprofondirEntree, analyseBornee,
 } from './compagnon.js'
@@ -500,4 +500,11 @@ test('[US-273 / CA1] le panneau lance l’analyse par le mode « analyse » de l
   assert.match(panneau, /Approfondir/)
   // Un seul endroit appelle l'API : `messageCompagnon`, avec le mode — pas de route d'écriture à part.
   assert.equal((panneau.match(/api\.messageCompagnon/g) ?? []).length, 1)
+})
+
+test('[US-292 / CA10] ?compagnon=ouvrir ouvre le panneau, sinon l’état retenu', () => {
+  const stockage = { getItem: () => 'replie', setItem() {} }
+  assert.equal(etatInitial(stockage, '?compagnon=ouvrir'), 'chat')
+  assert.equal(etatInitial(stockage, '?autre=1'), 'replie')
+  assert.equal(etatInitial(stockage, ''), 'replie')
 })

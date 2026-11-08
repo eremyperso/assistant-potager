@@ -185,6 +185,8 @@ def obtenir_potager(db: Session, user_id: int, potager_id: int) -> Optional[dict
         "role": role,
         "nb_parcelles": nb_parcelles,
         "nb_membres": nb_membres,
+        # [US-294 / CA6] Le propriétaire a fermé ce potager aux assistants IA externes.
+        "assistants_externes_interdits": bool(potager.assistants_externes_interdits),
     }
 
 

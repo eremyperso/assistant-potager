@@ -358,6 +358,8 @@ cp .env.example /opt/potager-dev/.env.dev
 | `EMAIL_FROM` | non (défaut `noreply@assistant-potager.fr`) | mettre `noreply@potager.eremy.fr` — voir A11 |
 | `EMAIL_FROM_NOM` | non (défaut `Assistant Potager`) | — |
 | `FRONTEND_URL` | non (défaut `http://localhost:3000`) | **doit** pointer vers l'URL réelle de la PWA (`https://potager.eremy.fr` / `https://dev.potager.eremy.fr`) — sinon les liens de vérification e-mail sont cassés |
+| `MCP_URL_PUBLIQUE` | ✅ dès US-290 (défaut `http://localhost:8000`) | adresse publique de l'API, sans « / » final : `https://potager.eremy.fr` / `https://dev.potager.eremy.fr`. Émetteur OAuth du canal MCP et base de l'URL du connecteur (`…/mcp`) — fausse, et aucun assistant ne peut se connecter. Nginx doit transmettre à l'API `/mcp`, `/oauth/*` et `/.well-known/oauth-*` |
+| `MCP_QUOTA_MINUTE` / `MCP_QUOTA_JOUR` | non (30 / 1000) | plafond d'appels d'outils par connecteur (US-290 / CA6) |
 | `GOOGLE_CLIENT_ID` | non (connecteur masqué si vide) | Google Cloud Console — voir A12 |
 | `GOOGLE_CLIENT_SECRET` | non | Google Cloud Console — voir A12 |
 | `GOOGLE_REDIRECT_URIS` | non | `https://potager.eremy.fr/auth/oauth/google/callback` (prod), `https://dev.potager.eremy.fr/auth/oauth/google/callback` (dev) — séparées par des virgules si plusieurs |

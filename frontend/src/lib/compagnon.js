@@ -311,6 +311,17 @@ export function lireEtat(stockage) {
   }
 }
 
+/** [US-292 / CA10] Le lien rendu par un assistant IA connecté (`/?compagnon=ouvrir`) ouvre le
+ *  panneau, où la carte à confirmer attend ; sinon l'état retenu d'une visite à l'autre. */
+export const PARAM_OUVRIR = 'compagnon'
+
+export function etatInitial(stockage, recherche) {
+  try {
+    if (new URLSearchParams(recherche || '').get(PARAM_OUVRIR) === 'ouvrir') return 'chat'
+  } catch { /* adresse illisible : l'état retenu */ }
+  return lireEtat(stockage)
+}
+
 export function ecrireEtat(stockage, etat) {
   if (etat !== 'replie' && etat !== 'present') return
   try { stockage?.setItem(CLE_ETAT, etat) } catch { /* navigation privée : on n'en retient rien */ }

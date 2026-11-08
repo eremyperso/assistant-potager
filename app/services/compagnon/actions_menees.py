@@ -51,6 +51,7 @@ STATUT_ECHOUEE = "echouee"
 
 CANAL_TELEGRAM = "telegram"
 CANAL_PWA = "pwa"
+CANAL_MCP = "mcp"  # [US-290] un assistant IA externe, via le serveur MCP
 CANAL_INCONNU = "inconnu"
 
 #: Le canal du traitement en cours : posé par le point d'entrée (le bot pour Telegram,

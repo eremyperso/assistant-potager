@@ -516,18 +516,20 @@ def _est_un_geste_dit(ctx: TenantContext, proposition_id: int) -> bool:
         return False
 
 
-def confirmer(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
+def confirmer(ctx: TenantContext, proposition_id: int, canal: str = CANAL) -> ResultatConfirmation:
     """[US-270 / CA2] Confirme une carte : sortie atomique de l'attente, puis écriture (règles d'US-259).
 
     [US-289] Une commande ou un plan qui a un exécuteur de service s'exécute ici de la même façon ;
     les autres se confirment dans Telegram.
 
+    [US-292] `canal` : `pwa` par défaut, `mcp` quand un assistant IA connecté confirme.
+
     Lève `GesteIntrouvableError` (404), `GesteDejaTraiteError` (409 : déjà confirmée, abandonnée,
     remplacée ou périmée — la seconde confirmation n'écrit rien) ou `NonConfirmableDansLaPwaError`.
     """
     if not _est_un_geste_dit(ctx, proposition_id):
-        return _confirmer_commande(ctx, _commande_par_id(ctx, proposition_id))
-    geste, resultat = svc_gestes_dits.confirmer(ctx, proposition_id)
+        return _confirmer_commande(ctx, _commande_par_id(ctx, proposition_id), canal)
+    geste, resultat = svc_gestes_dits.confirmer(ctx, proposition_id, canal=canal)
     svc_deux_canaux.reecrire(geste.id)  # [US-272 / CA3] sans effet si le geste est revenu en attente
     enregistres = [{"event_id": eid, "resume": svc_gestes_dits.resume(item)} for item, eid in resultat.enregistres]
     if resultat.complet:
@@ -547,10 +549,10 @@ def confirmer(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
     )
 
 
-def abandonner(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
+def abandonner(ctx: TenantContext, proposition_id: int, canal: str = CANAL) -> ResultatConfirmation:
     """[US-270 / CA2] Laisse tomber une carte (geste ou commande) : sortie atomique, rien n'est écrit."""
     if _est_un_geste_dit(ctx, proposition_id):
-        geste = svc_gestes_dits.abandonner(ctx, proposition_id)
+        geste = svc_gestes_dits.abandonner(ctx, proposition_id, canal=canal)
         svc_deux_canaux.reecrire(geste.id)  # [US-272 / CA3]
         return ResultatConfirmation(carte=carte_de_geste(geste), texte=svc_decisions.TEXTE_ABANDONNEE)
     proposition = _commande_par_id(ctx, proposition_id)
@@ -559,7 +561,7 @@ def abandonner(ctx: TenantContext, proposition_id: int) -> ResultatConfirmation:
             proposition.etat if proposition.en_attente is False else svc_propositions.ETAT_PERIMEE,
             proposition.traite_canal or proposition.canal, proposition.traite_le,
         )
-    if not svc_propositions.consommer(proposition, svc_propositions.ETAT_ABANDONNEE, canal=CANAL):
+    if not svc_propositions.consommer(proposition, svc_propositions.ETAT_ABANDONNEE, canal=canal):
         autre = _commande_par_id(ctx, proposition_id)
         raise svc_gestes_dits.GesteDejaTraiteError(autre.etat, autre.traite_canal or autre.canal, autre.traite_le)
     svc_interpreteur.persister_journal(ctx, proposition.commande, svc_interpreteur.ISSUE_ABANDONNEE, proposition.log_id)
@@ -581,7 +583,8 @@ def _commande_par_id(ctx: TenantContext, proposition_id: int) -> svc_proposition
 ETAT_ECHOUEE = "echouee"
 
 
-def _confirmer_commande(ctx: TenantContext, proposition: svc_propositions.PropositionConversation) -> ResultatConfirmation:
+def _confirmer_commande(ctx: TenantContext, proposition: svc_propositions.PropositionConversation,
+                        canal: str = CANAL) -> ResultatConfirmation:
     """[US-289] Confirme une commande ou un plan DANS la PWA, dans l'ordre du bot (interpretation.py) :
     sortie atomique de l'attente, journal, puis exécution par le service — jamais par un handler Telegram.
 
@@ -591,14 +594,14 @@ def _confirmer_commande(ctx: TenantContext, proposition: svc_propositions.Propos
     commande = proposition.commande
     if not proposition.en_attente or proposition.expiree():
         if proposition.en_attente:
-            svc_propositions.consommer(proposition, svc_propositions.ETAT_PERIMEE, canal=CANAL)
+            svc_propositions.consommer(proposition, svc_propositions.ETAT_PERIMEE, canal=canal)
         raise svc_gestes_dits.GesteDejaTraiteError(
             proposition.etat if not proposition.en_attente else svc_propositions.ETAT_PERIMEE,
             proposition.traite_canal or proposition.canal, proposition.traite_le,
         )
     if not s_execute_dans_la_pwa(commande):
         raise NonConfirmableDansLaPwaError(TEXTE_COMMANDE_TELEGRAM)
-    if not svc_propositions.consommer(proposition, svc_propositions.ETAT_CONFIRMEE, canal=CANAL):
+    if not svc_propositions.consommer(proposition, svc_propositions.ETAT_CONFIRMEE, canal=canal):
         autre = _commande_par_id(ctx, proposition.id)
         raise svc_gestes_dits.GesteDejaTraiteError(autre.etat, autre.traite_canal or autre.canal, autre.traite_le)
     svc_interpreteur.persister_journal(ctx, commande, svc_interpreteur.ISSUE_CONFIRMEE, proposition.log_id)

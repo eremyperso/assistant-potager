@@ -1429,6 +1429,28 @@ Le partage ne concerne que le potager sur lequel on a été invité. Un membre n
 
 ---
 
+## 18.5 Votre potager dans votre assistant IA
+
+*Claude, ChatGPT et Le Chat peuvent lire votre potager et vous proposer des gestes. Rien n'est écrit sans votre accord.*
+
+### Connecter son assistant
+
+Dans l'assistant, ajoutez un **connecteur personnalisé** avec l'adresse de votre potager (menu Compte, « Assistants connectés ») : Claude, Paramètres puis Connecteurs ; ChatGPT, Connecteurs en mode développeur ; Le Chat, Connecteurs puis ajouter un connecteur MCP. L'assistant ouvre la page de connexion de l'Assistant Potager : vous choisissez la **lecture** (cochée d'office) ou la **lecture et l'écriture**, et les potagers concernés. Les connecteurs personnalisés sont souvent réservés aux abonnements payants de ces assistants.
+
+### Ce que l'assistant fait pour vous
+
+Il lit votre plan, votre pépinière, vos stocks, votre carnet, les échéances et la météo, et répond avec vos vraies données. Avec l'écriture, il **propose** un geste, une correction, la création ou la modification d'une parcelle : vous lisez le récapitulatif et son effet sur le stock, puis vous confirmez. Quatre demandes toutes prêtes l'attendent : « Bilan de la semaine », « Que semer ce mois-ci ? », « Préparer ma sortie au jardin », « Bilan de saison d'une culture ».
+
+### Ce qu'il ne fera pas
+
+- **Aucune suppression.** Supprimer ou mettre hors service une parcelle, annuler un geste, supprimer un potager : l'assistant vous donne un **lien vers l'application**, où vous confirmez au bouton. Ni membres, ni rôles, ni clé personnelle, ni compte.
+- **Aucune initiative** : pas de message ni de rappel de sa part (ils restent dans Telegram), pas de photo, pas de voix de l'application.
+- **Qualité variable** selon l'assistant. Certaines commandes restent dans Telegram : il vous donne alors la commande à taper.
+
+### Vos données et la révocation
+
+Ce que l'assistant lit **part chez son éditeur** et suit **sa** politique de conservation : nous ne pouvons ni l'effacer ni le contrôler. Dans « Assistants connectés », vous voyez chaque connexion, ses 100 derniers appels, et vous pouvez **révoquer** : l'accès est coupé tout de suite. Dans un potager partagé, les autres membres sont prévenus d'une connexion, et le propriétaire peut interdire les assistants externes pour ce potager.
+
 ## 19. Créer, archiver et supprimer un potager
 
 *Depuis l'application web.*

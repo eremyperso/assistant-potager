@@ -25,6 +25,7 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import { initiales, nomAffiche } from '../lib/identite.js'
 import { confirmationChangementRole, libelleRole, teinteRole } from '../lib/roles.js'
 import { Modal, Btn, RoleSelect, Badge } from './ui'
+import { assistantsDits } from '../lib/assistants.js'  // [US-294]
 
 // [US-055] Icône + description par rôle invitable — porté depuis `ROLE_OPTS`
 // de la maquette (`web-account.jsx`) ; libellé et teinte restent centralisés
@@ -158,6 +159,12 @@ export default function GestionMembres({ moiId, onClose, embedded = false, lectu
                 {m.user_id === moiId && <span className="text-[11px] font-medium text-txt3">(vous)</span>}
               </span>
               <span className="block text-[11.5px] text-txt3 truncate mt-px">{m.email}</span>
+              {/* [US-294 / CA5] Les assistants IA que ce membre a connectés à ce potager. */}
+              {m.assistants?.length > 0 && (
+                <span className="block text-[11.5px] text-txt2 mt-px" data-testid="assistants-du-membre">
+                  Assistant IA connecté : {assistantsDits(m.assistants)}
+                </span>
+              )}
             </span>
             {/* [US-085 / CA9] L'owner change le rôle depuis la ligne ; en lecture
                 seule (non-owner) le rôle reste un simple badge, comme avant. */}

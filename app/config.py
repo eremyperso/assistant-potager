@@ -53,6 +53,21 @@ GOOGLE_REDIRECT_URIS = [
     if uri.strip()
 ]
 
+# [US-290] Canal MCP — assistants IA externes (Claude, ChatGPT, Le Chat).
+# MCP_URL_PUBLIQUE : adresse publique de l'API, sans « / » final ; c'est
+# l'émetteur OAuth et la base de l'URL du connecteur (`{MCP_URL_PUBLIQUE}/mcp`).
+# Elle doit être exactement celle que voit l'assistant (https en prod).
+MCP_URL_PUBLIQUE = os.environ.get("MCP_URL_PUBLIQUE", "http://localhost:8000").rstrip("/")
+# [CA6] Plafond d'appels d'outils par connecteur : par minute glissante et par
+# 24 h glissantes. Au-delà, rien n'est exécuté et un message clair est rendu.
+MCP_QUOTA_MINUTE = int(os.environ.get("MCP_QUOTA_MINUTE", "30"))
+MCP_QUOTA_JOUR = int(os.environ.get("MCP_QUOTA_JOUR", "1000"))
+# Durées de vie : jeton d'accès (minutes), jeton de rafraîchissement (jours),
+# jeton personnel par défaut (jours, CA9).
+MCP_ACCES_TTL_MIN = int(os.environ.get("MCP_ACCES_TTL_MIN", "60"))
+MCP_RAFRAICHISSEMENT_TTL_JOURS = int(os.environ.get("MCP_RAFRAICHISSEMENT_TTL_JOURS", "30"))
+MCP_PERSONNEL_TTL_JOURS = int(os.environ.get("MCP_PERSONNEL_TTL_JOURS", "90"))
+
 # [US-045] URL de la PWA — référencée dans le message d'onboarding Telegram
 # (chat non lié). Pas de domaine en dur : reste un placeholder générique tant
 # que PWA_URL n'est pas configurée en environnement.

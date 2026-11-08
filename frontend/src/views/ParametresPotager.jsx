@@ -22,7 +22,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Settings, Sprout, Users, AlertTriangle, Archive, ArchiveRestore, Trash2, LogOut } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
-import { api } from '../lib/api.js'
+import { api, connecteurApi } from '../lib/api.js'
 import { libelleRole, teinteRole } from '../lib/roles.js'
 import { Modal, Card, SectionLabel, Field, VilleSearch, Btn, Badge, InfoBanner } from '../components/ui'
 import GestionMembres from '../components/GestionMembres.jsx'
@@ -69,6 +69,9 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  // [US-294 / CA6] Le propriétaire ferme le potager aux assistants IA externes.
+  const [erreurAssistants, setErreurAssistants] = useState(null)
+  const [occupeAssistants, setOccupeAssistants] = useState(false)
 
   const charger = useCallback(() => {
     if (!potagerId) return
@@ -91,6 +94,21 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
 
   useEffect(() => { charger() }, [charger])
   useEffect(() => { api.moi().then((m) => setMoiId(m.id)).catch(() => {}) }, [])
+
+  async function basculerAssistants(interdit) {
+    if (occupeAssistants) return
+    setOccupeAssistants(true)
+    setErreurAssistants(null)
+    try {
+      await connecteurApi.interdireAssistants(potagerId, interdit)
+      setDetail((d) => ({ ...d, assistants_externes_interdits: interdit }))
+      recharger?.()
+    } catch (e) {
+      setErreurAssistants(e.message)
+    } finally {
+      setOccupeAssistants(false)
+    }
+  }
 
   if (!potagerId) return null
 
@@ -269,6 +287,32 @@ export default function ParametresPotager({ potagerId: potagerIdProp, onClose })
                 <SectionLabel>Membres</SectionLabel>
                 <GestionMembres embedded potagerId={potagerId} moiId={moiId} lectureSeule={!estOwner} />
               </Card>
+
+              {/* [US-294 / CA6, D6] Assistants IA externes : décision du propriétaire, par potager. */}
+              {(estOwner || detail?.assistants_externes_interdits) && (
+                <Card className="mt-3">
+                  <SectionLabel>Assistants IA externes</SectionLabel>
+                  {erreurAssistants && <p role="alert" className="text-red text-[13px] mb-2">{erreurAssistants}</p>}
+                  <label className={`flex items-start gap-3 ${estOwner ? 'cursor-pointer' : ''}`}>
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 w-4 h-4 accent-brand shrink-0"
+                      checked={!!detail?.assistants_externes_interdits}
+                      disabled={!estOwner || occupeAssistants}
+                      onChange={(e) => basculerAssistants(e.target.checked)}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-[14px] font-semibold text-txt">
+                        Interdire les assistants externes pour ce potager
+                      </span>
+                      <span className="block text-[12.5px] text-txt2 mt-0.5 leading-snug">
+                        Les connexions existantes (Claude, ChatGPT, Le Chat…) perdent l’accès à ce potager tout de suite,
+                        et ne peuvent plus le choisir. Elles restent valables pour vos autres potagers.
+                      </span>
+                    </span>
+                  </label>
+                </Card>
+              )}
             </div>
 
             {/* [US-083 / CA5, CA8] Zone sensible — n'affiche que les actions

@@ -104,3 +104,12 @@ Le compagnon consulte alors plusieurs sources l'une après l'autre : vos parcell
 **Rien n'est modifié.** L'analyse ne fait que lire : elle n'enregistre aucun geste, ne range aucune proposition et ne change aucune parcelle. Ses pistes sont des suggestions, pas des actions faites ; elle le rappelle à la fin. Pour en mener une, dites-la au compagnon comme d'habitude : il vous la propose, et rien n'est fait avant que vous confirmiez.
 
 **Elle prend plus de temps qu'une question ordinaire**, car elle fait plusieurs lectures. Elle s'arrête à une limite de lectures ou de jetons (réglable par l'administrateur, `ANALYSE_MAX_TOURS` et `ANALYSE_MAX_JETONS`) : elle rend alors ce qu'elle a déjà lu, avec la mention « Analyse arrêtée à sa limite ; elle est partielle ». Tous les membres d'un potager peuvent la lancer, y compris un lecteur, puisqu'elle n'écrit rien.
+
+## Une proposition faite par votre assistant IA : une troisième fenêtre
+
+**Intention :** comprendre
+**On parle aussi de :** proposé par Claude ; déjà confirmé depuis l'assistant IA ; confirmer depuis ChatGPT ; carte venue d'un assistant ; ouvrir la carte dans l'application ; annuler un geste depuis Claude
+
+Un assistant IA connecté avec l'écriture (Claude, ChatGPT, Le Chat…) est une **troisième fenêtre** sur les mêmes propositions. Ce qu'il propose apparaît aussi dans le panneau de Gaston et dans Telegram, avec la mention « 🤖 Proposé par Claude ». Vous pouvez confirmer où vous voulez : la première réponse l'emporte. Confirmée depuis l'assistant, la carte se lit « ✅ Confirmé depuis l'assistant IA à 14:32 » dans l'application et dans Telegram. Si l'assistant tente de confirmer une carte que vous avez déjà traitée, il reçoit « Déjà confirmé depuis le portail à 14:32 : rien n'est refait ».
+
+Le geste confirmé fait partie de ce que le compagnon se rappelle avoir fait : vous pouvez ensuite le désigner dans Telegram ou dans l'application (« corrige mon dernier semis »). L'annulation d'un geste ne se confirme jamais depuis un assistant : il vous donne le lien de l'application, qui s'ouvre sur le panneau de Gaston où la carte attend.

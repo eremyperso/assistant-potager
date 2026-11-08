@@ -44,11 +44,14 @@ log = logging.getLogger("potager")
 _DEPUIS = {
     svc_propositions.CANAL_PWA: "depuis le portail",
     svc_propositions.CANAL_TELEGRAM: "depuis Telegram",
+    svc_propositions.CANAL_MCP: "depuis l'assistant IA",  # [US-292 / CA8]
 }
 
 TEXTE_REMPLACEE = "↪️ Remplacée : voir la nouvelle proposition."
 TEXTE_PERIMEE = "⏱ Expirée, rien n'a été fait."
 TEXTE_ORIGINE_PORTAIL = "💻 Proposé depuis le portail"
+#: [US-292 / CA9] L'origine d'une proposition faite par un assistant IA connecté (« 🤖 Proposé par Claude »).
+TEXTE_ORIGINE_ASSISTANT = "🤖 Proposé par {client}"
 
 #: [CA9] Vocabulaire d'US-091 / CA15 : un compagnon de terrain à ACTIVER, jamais « relier Telegram ».
 TEXTE_INVITATION_TELEGRAM = (
@@ -148,6 +151,9 @@ def _corps(ligne: Proposition, lignes: list[str]) -> str:
     nom = svc_propositions.potager_a_nommer(ligne.user_id, ligne.potager_id)  # [CA6 / F5]
     entete = [f"🏡 {nom}"] if nom else []
     origine = [TEXTE_ORIGINE_PORTAIL] if ligne.canal == svc_propositions.CANAL_PWA else []
+    if ligne.canal == svc_propositions.CANAL_MCP:
+        client = (ligne.contenu or {}).get("client") or "ton assistant IA"
+        origine = [TEXTE_ORIGINE_ASSISTANT.format(client=client)]
     return "\n".join(entete + origine + [f"• {texte}" for texte in lignes])
 
 

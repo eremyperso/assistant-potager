@@ -139,6 +139,16 @@ def preparer(db, ctx: TenantContext, texte: str) -> Preparation:
     for item in items:
         if isinstance(item, dict):
             item.setdefault("origine_parsing", ORIGINE_LLM)
+    return controler(db, ctx, items, texte)
+
+
+def controler(db, ctx: TenantContext, items: list[dict], texte: str) -> Preparation:
+    """[US-270, US-292 / CA6, CA7] Les contrôles d'un geste déjà STRUCTURÉ, sans modèle de langage.
+
+    La suite de `preparer` après le parseur : la PWA y passe les items du parseur, le canal MCP
+    ceux que le modèle du client a structurés (US-292) — mêmes règles, un seul endroit.
+    """
+    require_role(ctx, "editor", "enregistrer d'action")
     items = svc_normalisation.normaliser_items(items, texte)
     svc_lots.resoudre_references(db, ctx, items, texte)
     svc_lots.controler_emplacements_godets(db, ctx, items)
@@ -248,14 +258,21 @@ def _nombre(valeur) -> Optional[float]:
 # ═════════════════════════════════════════════════════════════════════════════
 def proposer(
     ctx: TenantContext, items: list[dict], texte: str, *, maintenant: Optional[datetime] = None,
+    canal: str = svc_propositions.CANAL_PWA, client: Optional[str] = None,
 ) -> GesteDit:
-    """Range le geste compris en attente de confirmation ; le précédent est REMPLACÉ."""
+    """Range le geste compris en attente de confirmation ; le précédent est REMPLACÉ.
+
+    [US-292] `canal` : `pwa`, ou `mcp` pour un assistant IA externe, dont `client` garde le nom
+    (Claude, ChatGPT…) pour la carte et la traçabilité (CA12)."""
     instant = maintenant or datetime.utcnow()
+    contenu = {"items": items, "texte": texte}
+    if client:
+        contenu["client"] = client
     with svc_propositions.session_sur(ctx.potager_id) as db:
         ligne = Proposition(
             code=svc_propositions.generer_code(db), user_id=ctx.user_id, potager_id=ctx.potager_id,
-            nature=svc_propositions.NATURE_GESTE, contenu={"items": items, "texte": texte},
-            ecran=ECRAN_COMPAGNON, canal=svc_propositions.CANAL_PWA, cree_le=instant,
+            nature=svc_propositions.NATURE_GESTE, contenu=contenu,
+            ecran=ECRAN_COMPAGNON, canal=canal, cree_le=instant,
             expire_le=svc_propositions.expiration(instant, notifiee=False), notifiee=False,
             etat=svc_propositions.ETAT_EN_ATTENTE,
         )

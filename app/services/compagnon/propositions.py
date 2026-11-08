@@ -66,6 +66,7 @@ ETATS_SORTIS: tuple[str, ...] = (ETAT_CONFIRMEE, ETAT_ABANDONNEE, ETAT_PERIMEE, 
 
 CANAL_TELEGRAM = "telegram"
 CANAL_PWA = "pwa"
+CANAL_MCP = "mcp"  # [US-292] un assistant IA externe, par le serveur MCP (US-290)
 
 #: [CA5] Une proposition faite en conversation vit 30 minutes…
 DUREE_CONVERSATION = timedelta(minutes=30)
