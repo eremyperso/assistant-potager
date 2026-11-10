@@ -20,7 +20,7 @@ index_terms:
 **Intention :** information
 **On parle aussi de :** Claude ; ChatGPT ; Le Chat ; Mistral ; connecteur ; brancher mon potager ; MCP ; utiliser une IA externe ; Claude avec mon potager
 
-Oui. L'Assistant Potager se connecte à Claude, à ChatGPT et au Chat de Mistral par un **connecteur** : l'assistant lit alors votre potager (parcelles, carnet, pépinière, échéances, météo) et vous répond avec vos vraies données. Il peut aussi **proposer** des modifications : rien n'est écrit tant que vous n'avez pas dit oui. Les connecteurs personnalisés sont souvent réservés aux abonnements payants de ces assistants : à vérifier chez chacun.
+Oui. L'application Les bons gestes se connecte à Claude, à ChatGPT et au Chat de Mistral par un **connecteur** : l'assistant lit alors votre potager (parcelles, carnet, pépinière, échéances, météo) et vous répond avec vos vraies données. Il peut aussi **proposer** des modifications : rien n'est écrit tant que vous n'avez pas dit oui. Les connecteurs personnalisés sont souvent réservés aux abonnements payants de ces assistants : à vérifier chez chacun.
 
 ## Comment connecter son potager à son assistant
 
@@ -33,7 +33,7 @@ La démarche est la même partout : dans l'assistant, ajoutez un connecteur pers
 2. **ChatGPT** : Paramètres, Connecteurs (mode développeur), Créer, collez l'adresse.
 3. **Le Chat** : Connecteurs, Ajouter un connecteur MCP, collez l'adresse.
 
-L'assistant ouvre alors la page de connexion de l'Assistant Potager. Connectez-vous, puis choisissez ce que vous autorisez : la **lecture** est cochée d'office, l'**écriture** est à cocher, et vous choisissez les potagers concernés. La page rappelle que ce que l'assistant lit part chez son éditeur. Validez : le connecteur apparaît dans l'assistant et dans votre liste d'assistants connectés.
+L'assistant ouvre alors la page de connexion de l'application Les bons gestes. Connectez-vous, puis choisissez ce que vous autorisez : la **lecture** est cochée d'office, l'**écriture** est à cocher, et vous choisissez les potagers concernés. La page rappelle que ce que l'assistant lit part chez son éditeur. Validez : le connecteur apparaît dans l'assistant et dans votre liste d'assistants connectés.
 
 ## Ce que l'assistant peut faire dans mon potager
 

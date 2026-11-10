@@ -403,3 +403,46 @@
 .gst-tape i { width: 7px; height: 7px; border-radius: 50%; background: var(--txt3); animation: gst-tp 1s infinite; display: block; }
 .gst-tape i:nth-child(2) { animation-delay: .15s; }
 .gst-tape i:nth-child(3) { animation-delay: .3s; }
+
+/* Section « Voix » de Mon compagnon [US-301] : égaliseur de l'extrait en lecture */
+.voix-eq { display: flex; gap: 2px; align-items: center; height: 16px; }
+.voix-eq i { width: 3px; height: 4px; border-radius: 2px; background: var(--brand); animation: voix-eq .9s ease-in-out infinite; }
+.voix-eq i:nth-child(2) { animation-delay: .12s; }
+.voix-eq i:nth-child(3) { animation-delay: .3s; }
+.voix-eq i:nth-child(4) { animation-delay: .18s; }
+.voix-eq i:nth-child(5) { animation-delay: .42s; }
+@keyframes voix-eq { 0%, 100% { height: 4px; } 50% { height: 16px; } }
+@media (prefers-reduced-motion: reduce) { .voix-eq i { animation: none; height: 10px; } }
+
+/* Dictée dans le panneau du compagnon [US-302] — maquette « Compagnon - Voix », §2.
+   Orange vif = micro ouvert ; orange clair = empêchement ; bleu = information. Pas de rouge :
+   chaque état se distingue aussi par son icône et son texte. */
+:root {
+  --gst-rec: #C2410C;          --gst-rec-fonce: #9A3412;     --gst-rec-doux: #FDECDF;
+  --gst-alerte-fond: #FFF4E5;  --gst-alerte-bord: #F3C796;   --gst-alerte-texte: #8A3B0B;
+  --gst-info-fond: #EEF4FB;    --gst-info-bord: #C8DAEE;     --gst-info-texte: #1F4E7A;
+  --gst-saisie-occupee: #FBFAF5;
+}
+.dark {
+  --gst-rec: #EA6A2A;          --gst-rec-fonce: #FDBA74;     --gst-rec-doux: #3A1D0C;
+  --gst-alerte-fond: #2E1C0A;  --gst-alerte-bord: #7A4A1A;   --gst-alerte-texte: #F6C38F;
+  --gst-info-fond: #0F2133;    --gst-info-bord: #28476A;     --gst-info-texte: #A9CBEF;
+  --gst-saisie-occupee: #1A2312;
+}
+.dicte-point { width: 10px; height: 10px; border-radius: 50%; background: var(--gst-rec); animation: dicte-clignote 1s infinite; flex-shrink: 0; }
+.dicte-statut { width: 8px; height: 8px; border-radius: 50%; background: #FDBA74; animation: dicte-clignote 1s infinite; }
+.dicte-niveau { display: flex; gap: 3px; align-items: center; height: 22px; margin-right: 4px; }
+.dicte-niveau i { width: 3px; height: 5px; border-radius: 2px; background: var(--gst-rec); animation: voix-eq .8s ease-in-out infinite; }
+.dicte-niveau i:nth-child(2) { animation-delay: .1s; }
+.dicte-niveau i:nth-child(3) { animation-delay: .32s; }
+.dicte-niveau i:nth-child(4) { animation-delay: .2s; }
+.dicte-niveau i:nth-child(5) { animation-delay: .45s; }
+.dicte-niveau i:nth-child(6) { animation-delay: .05s; }
+.dicte-niveau i:nth-child(7) { animation-delay: .27s; }
+.dicte-sonne { animation: dicte-sonne 1.4s infinite; }
+@keyframes dicte-clignote { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@keyframes dicte-sonne { 0% { box-shadow: 0 0 0 0 rgba(194, 65, 12, .45); } 100% { box-shadow: 0 0 0 10px rgba(194, 65, 12, 0); } }
+@media (prefers-reduced-motion: reduce) {
+  .dicte-point, .dicte-statut, .dicte-sonne { animation: none; }
+  .dicte-niveau i { animation: none; height: 10px; }
+}

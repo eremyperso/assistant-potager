@@ -47,6 +47,11 @@ Ce que la passerelle garantit
   par l'API Mistral (compatible OpenAI, clé `MISTRAL_API_KEY`) avec le même SDK :
   mêmes exceptions, même mesure, même repli. Basculer un type d'appel reste une
   opération de configuration.
+* **US-299** — `dicter()` (type `dictee`) et `synthetiser()` (type `voix`) servent
+  le compagnon vocal de la PWA (Voxtral). La synthèse Mistral n'est pas au format
+  OpenAI : appel dédié à `/v1/audio/speech`, mais même client, même mesure, même
+  journal, même indisponibilité typée. Une voix inconnue rend `VoixInconnueError`,
+  qui n'est PAS une indisponibilité. Le type `transcription` (Telegram) est intact.
 
 Ce que la passerelle ne fait PAS
 --------------------------------
@@ -69,13 +74,16 @@ mesurable vient du cache de prompt (CA6), désormais visible appel par appel.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import contextvars
 import json
 import logging
+import math
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import Callable, Optional
 
 import groq
 from groq import Groq
@@ -83,10 +91,12 @@ from groq import Groq
 from app.services.context import TenantContext, current_context
 from app.config import (
     GROQ_API_KEY,
+    GROQ_BASE_URL,
     GROQ_MODELE_PAR_TYPE,
     GROQ_REASONING_EFFORT,
     GROQ_RETRY_MAX_S,
     GROQ_TIMEOUT_S,
+    FOURNISSEURS_COMPATIBLES,
     MISTRAL_API_KEY,
     MISTRAL_BASE_URL,
 )
@@ -107,10 +117,13 @@ TYPE_TRANSCRIPTION  = "transcription"
 TYPE_AGENT          = "agent"            # [US-233 / CA2] interprétation par appel d'outils
 TYPE_COMPAGNON_SIGNAL = "compagnon_signal"  # [US-267 / CA6] rédaction d'un message spontané
 TYPE_ANALYSE        = "analyse"          # [US-273 / CA3] analyse approfondie, en lecture seule
+TYPE_DICTEE         = "dictee"           # [US-299 / CA1] dictée de la PWA (Voxtral), audio → texte
+TYPE_VOIX           = "voix"             # [US-299 / CA2] voix du compagnon (Voxtral), texte → MP3
+TYPE_ORAL           = "oral"             # [US-303 / CA9] résumé parlé d'une réponse du compagnon
 
 TYPES_APPEL: frozenset[str] = frozenset({
     TYPE_CLASSIFICATION, TYPE_PARSING, TYPE_QUESTION, TYPE_SYNTHESE, TYPE_TRANSCRIPTION,
-    TYPE_AGENT, TYPE_COMPAGNON_SIGNAL, TYPE_ANALYSE,
+    TYPE_AGENT, TYPE_COMPAGNON_SIGNAL, TYPE_ANALYSE, TYPE_DICTEE, TYPE_VOIX, TYPE_ORAL,
 })
 
 # Valeurs de la colonne `conso_tokens.issue` [CA5]
@@ -118,6 +131,7 @@ ISSUE_OK      = "ok"
 ISSUE_QUOTA   = "quota"
 ISSUE_DELAI   = "delai"
 ISSUE_ERREUR  = "erreur"
+ISSUE_VOIX_INCONNUE = "voix_inconnue"   # [US-299 / CA2] voix refusée par le fournisseur
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +173,15 @@ class FournisseurLLMIndisponibleError(LLMIndisponibleError):
     """[CA12] Panne réseau ou 5xx du fournisseur, nouvelle tentative comprise."""
 
     issue = ISSUE_ERREUR
+
+
+class VoixInconnueError(AppelLLMError):
+    """[US-299 / CA2] Le fournisseur ne connaît pas la voix demandée (Mistral :
+    404 `invalid_voice`). Ce n'est PAS une indisponibilité : réessayer plus tard
+    n'y change rien, il faut une autre voix (préférence périmée, catalogue changé).
+    L'appelant la distingue de `LLMIndisponibleError` pour revenir à la voix par défaut."""
+
+    issue = ISSUE_VOIX_INCONNUE
 
 
 # [CA9] Message invariable servi au jardinier à défaut de repli utile. Jamais un
@@ -277,13 +300,15 @@ def _creer_client_plateforme() -> Groq:
         )
         return Groq(
             api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
             max_retries=0,
             timeout=GROQ_TIMEOUT_S,
             http_client=http_client,
         )
     except Exception as e:  # pragma: no cover — filet si httpx change de contrat
         log.warning("⚠️  LLM │ hook d'en-têtes de débit indisponible (%s)", type(e).__name__)
-        return Groq(api_key=GROQ_API_KEY, max_retries=0, timeout=GROQ_TIMEOUT_S)
+        return Groq(api_key=GROQ_API_KEY, base_url=GROQ_BASE_URL, max_retries=0,
+                    timeout=GROQ_TIMEOUT_S)
 
 
 _client = _creer_client_plateforme()
@@ -308,9 +333,19 @@ def _est_mistral(modele: str) -> bool:
     return modele.startswith(PREFIXE_MISTRAL)
 
 
+def _fournisseur_compatible(modele: str) -> Optional[str]:
+    """Nom du fournisseur compatible OpenAI déclaré dans l'env (`<nom>/modèle`), ou None."""
+    nom, separateur, _ = modele.partition("/")
+    return nom if separateur and nom in FOURNISSEURS_COMPATIBLES else None
+
+
 def _modele_envoye(modele: str) -> str:
     """Identifiant attendu par le fournisseur : sans le préfixe de routage."""
-    return modele[len(PREFIXE_MISTRAL):] if _est_mistral(modele) else modele
+    if _est_mistral(modele):
+        return modele[len(PREFIXE_MISTRAL):]
+    if _fournisseur_compatible(modele):
+        return modele.partition("/")[2]
+    return modele
 
 
 def _reecrire_chemin_mistral(requete) -> None:
@@ -326,6 +361,8 @@ def _client_pour_mistral() -> Groq:
     global _client_mistral
     if not MISTRAL_API_KEY:
         raise FournisseurLLMIndisponibleError("MISTRAL_API_KEY absente : modèle mistral/ inutilisable")
+    if not MISTRAL_BASE_URL:
+        raise FournisseurLLMIndisponibleError("MISTRAL_BASE_URL absente : modèle mistral/ inutilisable")
     if _client_mistral is None:
         import httpx
 
@@ -343,6 +380,45 @@ def _client_pour_mistral() -> Groq:
             ),
         )
     return _client_mistral
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fournisseurs compatibles OpenAI déclarés dans l'env (`FOURNISSEURS_COMPATIBLES`)
+# -----------------------------------------------------------------------------
+# Même SDK, même mesure, même repli que Mistral. L'URL déclarée suit la convention
+# OpenAI (elle porte déjà `/v1`) : le hook retire le `/openai/v1` ajouté par le SDK.
+# ─────────────────────────────────────────────────────────────────────────────
+_clients_compatibles: dict[str, Groq] = {}
+
+
+def _reecrire_chemin_compatible(requete) -> None:
+    """Hook httpx — `<base>/openai/v1/audio/speech` → `<base>/audio/speech`."""
+    chemin = requete.url.path
+    if "/openai/v1/" in chemin:
+        requete.url = requete.url.copy_with(path=chemin.replace("/openai/v1/", "/", 1))
+
+
+def _client_pour_compatible(nom: str) -> Groq:
+    """Client du fournisseur `nom`, créé au premier appel. Clé absente : envoyée vide
+    (serveur local sans clé) ; un fournisseur qui l'exige répond 401, rendu en indisponibilité."""
+    if nom not in _clients_compatibles:
+        import httpx
+
+        declare = FOURNISSEURS_COMPATIBLES[nom]
+        _clients_compatibles[nom] = Groq(
+            api_key=declare["api_key"] or "sans-cle",
+            base_url=declare["base_url"],
+            max_retries=0,
+            timeout=GROQ_TIMEOUT_S,
+            http_client=httpx.Client(
+                timeout=GROQ_TIMEOUT_S,
+                event_hooks={
+                    "request": [_reecrire_chemin_compatible],
+                    "response": [_capturer_entetes_debit],
+                },
+            ),
+        )
+    return _clients_compatibles[nom]
 
 
 def _adapter_pour_mistral(kwargs: dict) -> dict:
@@ -372,11 +448,15 @@ def _preparer_requete(kwargs: dict, modele: str) -> dict:
 def _resoudre_client(ctx: TenantContext, modele: str = "") -> Groq:
     """Point d'extension « quel client pour ce potager ? » (US-143 — BYOK).
 
-    Le fournisseur se lit sur le modèle : `mistral/…` → client Mistral, sinon le
-    client plateforme Groq. La clé propre à un potager n'existe pas encore.
+    Le fournisseur se lit sur le modèle : `mistral/…` → client Mistral, `<nom>/…`
+    → fournisseur compatible déclaré dans l'env, sinon le client plateforme Groq.
+    La clé propre à un potager n'existe pas encore.
     """
     if _est_mistral(modele):
         return _client_pour_mistral()
+    nom = _fournisseur_compatible(modele)
+    if nom:
+        return _client_pour_compatible(nom)
     return _client
 
 
@@ -539,10 +619,16 @@ def _est_rejouable(erreur: Exception) -> bool:
     return isinstance(statut, int) and statut >= 500
 
 
-def _executer_avec_repli(appel, ctx: TenantContext, appel_type: str, modele: str):
+def _executer_avec_repli(
+    appel, ctx: TenantContext, appel_type: str, modele: str,
+    classer: Optional[Callable[[Exception], Optional[AppelLLMError]]] = None,
+):
     """Exécute `appel()` en appliquant la politique CA12 puis, en cas d'échec,
     mesure l'appel raté (CA5 — les échecs sont comptés eux aussi) et lève
-    l'exception typée correspondante (CA8)."""
+    l'exception typée correspondante (CA8).
+
+    `classer` : [US-299] reconnaît une erreur propre au type d'appel (voix
+    inconnue) avant la conversion en indisponibilité ; rend `None` sinon."""
     debut = time.monotonic()
     derniere: Exception | None = None
 
@@ -563,7 +649,7 @@ def _executer_avec_repli(appel, ctx: TenantContext, appel_type: str, modele: str
             break
 
     latence_ms = int((time.monotonic() - debut) * 1000)
-    typee = _convertir(derniere)
+    typee = (classer(derniere) if classer is not None else None) or _convertir(derniere)
     _journaliser(ctx, appel_type, modele, 0, 0, 0, latence_ms, typee.issue)
     _enregistrer_conso(ctx, appel_type, modele, 0, 0, 0, latence_ms, typee.issue)
     raise typee from derniere
@@ -578,10 +664,13 @@ def _executer_avec_repli(appel, ctx: TenantContext, appel_type: str, modele: str
 # "reasoning_effort is not supported". Comme `reasoning=True` est le défaut de
 # la plupart des appels (voir `appeler_chat`), basculer un type d'appel dessus
 # via `GROQ_MODEL_<TYPE>` casserait sans cette exemption. Même exemption pour
-# les modèles `mistral/` : l'API Mistral ne connaît pas ce paramètre.
+# les modèles `mistral/` : l'API Mistral ne connaît pas ce paramètre. Et pour les
+# fournisseurs compatibles déclarés dans l'env : ce réglage est propre à Groq, un
+# modèle qui ne raisonne pas (gpt-4o…) le refuserait.
 # ─────────────────────────────────────────────────────────────────────────────
 def _accepte_reasoning_effort(modele: str) -> bool:
-    return not (modele.startswith("groq/compound") or _est_mistral(modele))
+    return not (modele.startswith("groq/compound") or _est_mistral(modele)
+                or _fournisseur_compatible(modele))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -712,7 +801,8 @@ def reinitialiser_capacites_outils() -> None:
 def _cle_capacite(client: Groq, ctx: TenantContext, modele: str) -> tuple[str, str]:
     """Un client propre à un potager (BYOK, US-143) a sa propre capacité : le même
     modèle peut être gelé chez l'un et pas chez l'autre."""
-    return ("plateforme" if client in (_client, _client_mistral) else f"potager:{ctx.potager_id}", modele)
+    plateforme = client in (_client, _client_mistral) or client in _clients_compatibles.values()
+    return ("plateforme" if plateforme else f"potager:{ctx.potager_id}", modele)
 
 
 def _statut_echec_outils(erreur: Exception) -> Optional[str]:
@@ -918,6 +1008,244 @@ def transcrire(
         appel_type = TYPE_TRANSCRIPTION,
         latence_ms = latence_ms,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# API publique — compagnon vocal de la PWA [US-299]
+# -----------------------------------------------------------------------------
+# Dictée et voix sont deux types d'appel à part, distincts de `transcription`
+# (Telegram, Groq Whisper) : la PWA peut changer de fournisseur sans toucher le
+# bot (D7). Facturation à l'audio, pas au jeton : `conso_tokens.tokens_in` porte
+# les SECONDES d'audio pour `dictee` et les CARACTÈRES envoyés pour `voix`
+# (`tokens_out` à zéro) — le type d'appel dit l'unité, sans migration.
+# ─────────────────────────────────────────────────────────────────────────────
+FORMATS_VOIX: frozenset[str] = frozenset({"mp3", "opus", "wav", "flac", "pcm"})
+
+
+@dataclass(frozen=True)
+class ReponseDictee:
+    """[US-299 / CA1] Texte transcrit d'une dictée, et sa mesure."""
+
+    texte: str
+    modele: str
+    duree_audio_s: int = 0
+    latence_ms: int = 0
+
+
+@dataclass(frozen=True)
+class ReponseVoix:
+    """[US-299 / CA2] Audio synthétisé (octets bruts, jamais écrits en base), et sa mesure."""
+
+    audio: bytes = field(repr=False)
+    format_audio: str = "mp3"
+    modele: str = ""
+    nb_caracteres: int = 0
+    latence_ms: int = 0
+
+
+def _client_mesure(ctx: TenantContext, appel_type: str, modele: str) -> Groq:
+    """Client du fournisseur, l'échec compris dans la mesure : sans `MISTRAL_API_KEY`,
+    l'appel est journalisé et compté (issue `erreur`) avant de rendre l'indisponibilité."""
+    try:
+        return _resoudre_client(ctx, modele)
+    except LLMIndisponibleError as e:
+        _journaliser(ctx, appel_type, modele, 0, 0, 0, 0, e.issue, "client indisponible")
+        _enregistrer_conso(ctx, appel_type, modele, 0, 0, 0, 0, e.issue)
+        raise
+
+
+def _echec_reponse(ctx: TenantContext, appel_type: str, modele: str,
+                   latence_ms: int, motif: str) -> FournisseurLLMIndisponibleError:
+    """Réponse 200 inexploitable : mesurée comme un échec, rendue en indisponibilité."""
+    _journaliser(ctx, appel_type, modele, 0, 0, 0, latence_ms, ISSUE_ERREUR, motif)
+    _enregistrer_conso(ctx, appel_type, modele, 0, 0, 0, latence_ms, ISSUE_ERREUR)
+    return FournisseurLLMIndisponibleError(f"réponse du fournisseur inexploitable ({motif})")
+
+
+def _duree_audio(brut, duree_s: Optional[float]) -> int:
+    """Secondes d'audio facturées : `usage.prompt_audio_seconds` de Mistral s'il est
+    rendu, sinon la durée fournie par l'appelant, arrondies à la seconde supérieure."""
+    usage = getattr(brut, "usage", None)
+    if isinstance(usage, dict):
+        valeur = usage.get("prompt_audio_seconds")
+    else:
+        valeur = getattr(usage, "prompt_audio_seconds", None)
+    if not isinstance(valeur, (int, float)) or isinstance(valeur, bool):
+        valeur = duree_s
+    try:
+        return max(0, math.ceil(float(valeur))) if valeur is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def lister_voix_mistral() -> list[dict]:
+    """[US-300 / CA4] Voix prédéfinies du catalogue Mistral, telles que l'API les rend
+    (`id` UUID, `slug` = identifiant à envoyer à la synthèse, `name`, `languages`,
+    `gender`). Le filtre `language` de l'API est ignoré et la page fait 10 voix par
+    défaut : on demande 100 voix et le tri par langue est fait par l'appelant.
+
+    Pas un appel de modèle (rien n'est facturé, rien n'est compté dans `conso_tokens`).
+    Lève `LLMIndisponibleError` sans clé, en délai dépassé ou en panne : l'appelant
+    se replie sur sa liste de secours.
+    """
+    try:
+        client = _client_pour_mistral()
+        brut = client.get("/v1/audio/voices", cast_to=object,
+                          options={"params": {"limit": 100, "type": "preset"}})
+    except LLMIndisponibleError:
+        raise
+    except (groq.APIStatusError, groq.APIConnectionError, groq.APITimeoutError) as e:
+        raise _convertir(e) from e
+    elements = brut.get("items") if isinstance(brut, dict) else None
+    if not isinstance(elements, list):
+        raise FournisseurLLMIndisponibleError("liste des voix inexploitable")
+    return [e for e in elements if isinstance(e, dict)]
+
+
+def extrait_voix_mistral(voix_uuid: str) -> Optional[bytes]:
+    """[US-300 / CA6] Extrait audio fourni par Mistral pour une voix (`voices.get_sample_audio`),
+    ou `None` si l'API n'en rend pas. Ne lève jamais : l'appelant synthétise alors la
+    phrase d'essai. Réponse acceptée en octets bruts ou en JSON `audio_data` base64."""
+    try:
+        client = _client_pour_mistral()
+        brut = client.get(f"/v1/audio/voices/{voix_uuid}/sample", cast_to=object)
+    except Exception as e:  # noqa: BLE001 — l'extrait est un confort, jamais une erreur
+        log.info("🔊 VOIX │ extrait Mistral indisponible (%s)", type(e).__name__)
+        return None
+    if isinstance(brut, (bytes, bytearray)):
+        return bytes(brut) or None
+    encode = brut.get("audio_data") if isinstance(brut, dict) else None
+    try:
+        return base64.b64decode(encode, validate=True) or None if isinstance(encode, str) else None
+    except (binascii.Error, ValueError):
+        return None
+
+
+def dicter(
+    *,
+    ctx: Optional[TenantContext],
+    contenu: bytes,
+    nom_fichier: str,
+    langue: str = "fr",
+    duree_s: Optional[float] = None,
+) -> ReponseDictee:
+    """[US-299 / CA1, CA3, CA4] Transcrit une dictée de la PWA (type `dictee`).
+
+    L'audio est passé en mémoire : rien n'est écrit sur disque ni en base (CA7).
+    `nom_fichier` porte l'extension, d'après laquelle le fournisseur lit le format.
+    Lève `LLMIndisponibleError` (clé absente, délai, 5xx, 429), jamais une
+    exception brute du SDK.
+    """
+    ctx = _valider_appel(TYPE_DICTEE, ctx)
+    modele = modele_pour(TYPE_DICTEE)
+    client = _client_mesure(ctx, TYPE_DICTEE, modele)
+
+    def _appel():
+        return client.audio.transcriptions.create(
+            file=(nom_fichier, contenu),
+            model=_modele_envoye(modele),
+            language=langue,
+        )
+
+    brut, latence_ms = _executer_avec_repli(_appel, ctx, TYPE_DICTEE, modele)
+    texte = getattr(brut, "text", None)
+    if not isinstance(texte, str):
+        raise _echec_reponse(ctx, TYPE_DICTEE, modele, latence_ms, "sans texte")
+
+    duree = _duree_audio(brut, duree_s)
+    _journaliser(ctx, TYPE_DICTEE, modele, duree, 0, 0, latence_ms, ISSUE_OK,
+                 f"{duree} s d'audio")
+    _enregistrer_conso(ctx, TYPE_DICTEE, modele, duree, 0, 0, latence_ms, ISSUE_OK)
+    return ReponseDictee(texte=texte.strip(), modele=modele,
+                         duree_audio_s=duree, latence_ms=latence_ms)
+
+
+def _voix_inconnue(erreur: Exception) -> Optional[VoixInconnueError]:
+    """[US-299 / CA2] Mistral refuse une voix par un 404 `invalid_voice` (code 3051) ;
+    un identifiant de modèle qui n'accepte pas la voix rend le même motif. Tout autre
+    4xx reste une indisponibilité du fournisseur."""
+    statut = getattr(erreur, "status_code", None)
+    if statut not in (400, 404, 422):
+        return None
+    try:
+        corps = json.dumps(getattr(erreur, "body", None), ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        corps = ""
+    corps = (corps + " " + str(getattr(erreur, "message", ""))).lower()
+    if "voice" in corps or "3051" in corps:
+        return VoixInconnueError(f"voix inconnue du fournisseur ({statut})")
+    return None
+
+
+def synthetiser(
+    *,
+    ctx: Optional[TenantContext],
+    texte: str,
+    voix_id: str,
+    format_audio: str = "mp3",
+) -> ReponseVoix:
+    """[US-299 / CA2, CA3, CA4] Synthétise `texte` avec la voix `voix_id` (type `voix`).
+
+    L'API Mistral n'est pas au format OpenAI (`voice_id`, audio rendu en base64
+    dans `audio_data`) : appel HTTP dédié à `/v1/audio/speech`, par le même client
+    que le chat — donc même délai, mêmes erreurs typées, même mesure.
+    Tout autre fournisseur (déclaré dans `FOURNISSEURS_COMPATIBLES`, ou Groq) est
+    appelé au format OpenAI (`voice`, audio rendu en octets).
+    Lève `VoixInconnueError` si la voix est refusée, `LLMIndisponibleError` sinon.
+    Le texte n'est jamais journalisé : seul son nombre de caractères l'est.
+    """
+    ctx = _valider_appel(TYPE_VOIX, ctx)
+    if not texte or not texte.strip():
+        raise ValueError("synthèse vocale d'un texte vide")
+    if format_audio not in FORMATS_VOIX:
+        raise ValueError(
+            f"format audio inconnu : {format_audio!r} (attendu parmi {sorted(FORMATS_VOIX)})"
+        )
+    modele = modele_pour(TYPE_VOIX)
+    nb_caracteres = len(texte)
+    client = _client_mesure(ctx, TYPE_VOIX, modele)
+
+    if _est_mistral(modele):
+        def _appel():
+            return client.post(
+                "/v1/audio/speech",
+                cast_to=object,
+                body={
+                    "model":           _modele_envoye(modele),
+                    "input":           texte,
+                    "voice_id":        voix_id,
+                    "response_format": format_audio,
+                },
+            )
+    else:
+        def _appel():
+            # Format OpenAI : l'audio est lu DANS l'appel, pour qu'une coupure en cours
+            # de lecture soit une erreur mesurée comme les autres.
+            return client.audio.speech.create(
+                model=_modele_envoye(modele),
+                input=texte,
+                voice=voix_id,
+                response_format=format_audio,
+            ).read()
+
+    brut, latence_ms = _executer_avec_repli(_appel, ctx, TYPE_VOIX, modele,
+                                            classer=_voix_inconnue)
+    if isinstance(brut, (bytes, bytearray)):
+        audio = bytes(brut)
+    else:
+        encode = brut.get("audio_data") if isinstance(brut, dict) else None
+        try:
+            audio = base64.b64decode(encode, validate=True) if isinstance(encode, str) else b""
+        except (binascii.Error, ValueError):
+            audio = b""
+    if not audio:
+        raise _echec_reponse(ctx, TYPE_VOIX, modele, latence_ms, "sans audio")
+
+    _journaliser(ctx, TYPE_VOIX, modele, nb_caracteres, 0, 0, latence_ms, ISSUE_OK,
+                 f"{nb_caracteres} caractères")
+    _enregistrer_conso(ctx, TYPE_VOIX, modele, nb_caracteres, 0, 0, latence_ms, ISSUE_OK)
+    return ReponseVoix(audio=audio, format_audio=format_audio, modele=modele,
+                       nb_caracteres=nb_caracteres, latence_ms=latence_ms)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

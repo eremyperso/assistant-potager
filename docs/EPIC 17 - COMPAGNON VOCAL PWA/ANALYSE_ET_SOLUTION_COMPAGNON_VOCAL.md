@@ -286,6 +286,29 @@ Total : 29 points. Ordre de livraison : 298 → 299 → 300 → 301 → 302 → 
 US-301, US-302 et US-304 ont un rendu à l'écran : la maquette est à produire dans Claude
 Design avant leur développement.
 
+### 9.1 Modèle Claude et effort conseillés pour l'implémentation
+
+Réglage de la session Claude Code qui développe l'US (`/model`, niveau d'effort). Règle
+retenue : **Opus** quand l'US touche un composant partagé, un comportement propre à un
+navigateur ou la fidélité d'une réponse de modèle de langage ; **Sonnet** quand elle suit
+un schéma déjà présent dans le dépôt. Haiku n'est conseillé pour aucune : chaque US
+engage les règles du projet (passerelle, services, corpus `doc_app`, container queries).
+
+| US | Modèle | Effort | Pourquoi |
+|---|---|---|---|
+| US-298 | Sonnet 5.5 | medium | script jetable d'appels réels et rapport ; peu de code, pas de code applicatif. L'exigence porte sur la rigueur du rapport, pas sur la conception |
+| US-299 | Opus 5.5 | high | modifie la passerelle, commune à tout l'IA ; appel non OpenAI à intégrer sans casser la mesure, le journal, le mode dégradé ni la transcription Telegram ; conversion FFmpeg et nettoyage des fichiers en cas d'erreur |
+| US-300 | Sonnet 5.5 | medium | migration, service et routes sur des schémas déjà présents (préférences, cache) ; vigilance sur le cloisonnement par personne et la liste de secours |
+| US-301 | Sonnet 5.5 | medium | section de réglages dans une fenêtre existante, d'après la maquette ; seul point délicat : l'extrait audio sur iPhone |
+| US-302 | Opus 5.5 | high | `MediaRecorder` et `getUserMedia` diffèrent selon les navigateurs (formats, permissions, iOS, PWA installée) ; machine d'états du bouton, libération du micro, envoi automatique sans contourner la confirmation |
+| US-303 | Opus 5.5 | high | fidélité du résumé (aucun fait inventé, propositions jamais dites « enregistrées ») : prompt et jeu de réponses réelles à construire avec soin ; migration v72 et exposition d'`echange_id` |
+| US-304 | Opus 5.5 | high | lecture audio sur iOS (déverrouillage par geste), une lecture à la fois, arrêt avant ouverture du micro, cache invalidé au changement de voix, plafond quotidien |
+| US-305 | Sonnet 5.5 | medium | fichier de règles et contrôle des valeurs au chargement ; logique simple une fois le verdict d'US-298 connu |
+
+L'effort `xhigh` ou `max` n'est pas nécessaire : aucune US ne demande une exploration large
+du dépôt. On peut monter d'un cran si une US bute sur un défaut propre à un navigateur
+(US-302, US-304) ou si le résumé d'US-303 échoue au jeu de réponses réelles.
+
 ## 10. Sources
 
 - [Text to Speech — vue d'ensemble](https://docs.mistral.ai/studio/audio/text-to-speech/overview)

@@ -43,6 +43,13 @@ const DISPOSITIONS = {
     fond: 'items-end justify-center min-[480px]:items-center min-[480px]:p-5',
     boite: 'rounded-t-[18px] min-[480px]:rounded-[18px] max-h-[90%] min-[480px]:max-w-[420px]',
   },
+  // [US-301 / CA8, maquette « Compagnon - Voix »] « Mon compagnon » : plein écran sous 600 px,
+  // fenêtre centrée au-delà (480 px par défaut, via `width`). Seule structure de page : un
+  // breakpoint d'écran, à bon droit (frontend/CLAUDE.md).
+  plein_mobile: {
+    fond: 'items-stretch justify-stretch min-[600px]:items-center min-[600px]:justify-center min-[600px]:p-8',
+    boite: 'h-full rounded-none min-[600px]:h-auto min-[600px]:max-h-full min-[600px]:rounded-[20px] min-[600px]:max-w-[var(--modal-largeur-desktop)]',
+  },
   adaptative: {
     fond: 'min-[480px]:items-center min-[480px]:justify-center min-[480px]:p-5 lg:p-0 lg:items-stretch lg:justify-end',
     boite: 'h-full min-[480px]:h-auto min-[480px]:max-h-[calc(100%-48px)] min-[480px]:rounded-[18px] lg:h-full lg:max-h-full lg:rounded-none lg:border-l lg:border-border min-[480px]:max-w-[560px] lg:max-w-[var(--modal-largeur-desktop)]',
@@ -91,7 +98,7 @@ export function Modal({
   const d = DISPOSITIONS[disposition] || DISPOSITIONS.centree
   const styleLargeur = disposition === 'centree'
     ? { maxWidth: width }
-    : disposition === 'adaptative'
+    : disposition === 'adaptative' || disposition === 'plein_mobile'
       ? { '--modal-largeur-desktop': `${width}px` }
       : undefined
   return (

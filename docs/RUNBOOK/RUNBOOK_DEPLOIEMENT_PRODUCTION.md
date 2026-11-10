@@ -104,7 +104,7 @@
 | 15 | Telegram (BotFather) | Fournit le token du bot | SaaS externe | — | `TELEGRAM_BOT_TOKEN` |
 | 16 | Open-Meteo | Prévisions météo | SaaS externe, gratuit, sans clé | — | appelé en dur par `bot.py` |
 | 17 | GitHub Actions | CI/CD — push `main`/`dev` → déploiement SSH | GitHub | — | `.github/workflows/deploy.yml`, `deploy-dev.yml` |
-| 18 | FFmpeg | Conversion MP3→OGG/Opus pour les réponses vocales Telegram | Paquet système sur le serveur | — | dégradé silencieusement si absent |
+| 18 | FFmpeg | Conversion MP3→OGG/Opus pour les réponses vocales Telegram ; conversion des dictées de la PWA aux formats listés dans `VOIX_FORMATS_A_CONVERTIR` (US-299) | Paquet système sur le serveur | — | Telegram : dégradé silencieusement si absent ; PWA : erreur typée qui nomme le format, la PWA propose d'écrire |
 
 **Aucun service caché** : c'est la liste exhaustive des dépendances externes et
 internes. Toute reconstruction sur une nouvelle infra doit recréer/reconfigurer
@@ -364,10 +364,15 @@ cp .env.example /opt/potager-dev/.env.dev
 | `GOOGLE_CLIENT_SECRET` | non | Google Cloud Console — voir A12 |
 | `GOOGLE_REDIRECT_URIS` | non | `https://potager.eremy.fr/auth/oauth/google/callback` (prod), `https://dev.potager.eremy.fr/auth/oauth/google/callback` (dev) — séparées par des virgules si plusieurs |
 | `PWA_URL` | non (texte générique par défaut) | URL affichée dans le message d'onboarding Telegram |
+| `MISTRAL_API_KEY` | non (Mistral inutilisable si vide) | console.mistral.ai — dictée et voix de la PWA (Voxtral), agent si `GROQ_MODEL_AGENT=mistral/…` |
+| `MISTRAL_BASE_URL` | ✅ avec la clé Mistral | `https://api.mistral.ai` — **aucune adresse n'est écrite dans le code** : absente, tout modèle `mistral/…` est indisponible (la PWA dit « la voix est indisponible »). À ajouter dans `.env.prod` et `.env.dev` du serveur **avant** le déploiement qui l'introduit |
+| `GROQ_BASE_URL` | non (adresse du SDK Groq) | — |
+| `GROQ_MODEL` / `GROQ_WHISPER_MODEL` | non (`openai/gpt-oss-120b` / `whisper-large-v3-turbo`) | modèles de repli de la plateforme Groq |
+| `GROQ_REASONING_EFFORT` | non (`low`) | `low` \| `medium` \| `high` \| `aucun` |
+| `FOURNISSEURS_COMPATIBLES` | non | fournisseurs compatibles OpenAI déclarés sans code, avec `FOURNISSEUR_<NOM>_BASE_URL` et `FOURNISSEUR_<NOM>_API_KEY` ; voir `.env.example` |
+| `VOIX_CATALOGUE` | non (catalogue Mistral) | voix proposées quand la synthèse n'est pas Mistral — voir `.env.example` |
 
-`GROQ_MODEL`, `GROQ_WHISPER_MODEL` et `GROQ_REASONING_EFFORT` sont codés en
-dur dans `config.py` (pas de variable d'environnement) — rien à
-configurer côté `.env.*` pour eux.
+Toutes les variables `GROQ_MODEL_<TYPE>` et `VOIX_*` sont décrites dans `.env.example`.
 
 ### A8 — Migrations SQL
 
@@ -717,6 +722,14 @@ perdre de vue pour la résilience de l'infra :
   `APP_ENV=prod`), mais `main.py` instancie `FastAPI(title=..., version=...)`
   sans ce paramètre — Swagger reste donc accessible publiquement en l'état
   du code étudié pour ce runbook, indépendamment de l'infra.
+- **FFmpeg pour la dictée de la PWA (US-299 / CA6)** : présence sur le
+  serveur (dev et prod partagent la machine) **non vérifiée depuis la session
+  de développement** (pas d'accès au serveur). À contrôler une fois par
+  `ffmpeg -version | head -1` en SSH, et à noter ici avec la date. Il n'est
+  indispensable que si `VOIX_FORMATS_A_CONVERTIR` est renseigné : l'essai
+  US-298 a vu `webm` et `ogg` acceptés tels quels par Voxtral, `mp4`
+  (Safari) n'a pas été essayé. Sans FFmpeg, une dictée à convertir rend une
+  erreur qui nomme le format ; le reste du compagnon fonctionne.
 - **Noms des secrets GitHub Actions** (`SCALEWAY_*`) qui pointent en réalité
   vers un serveur **Hetzner** — piège documenté en A13, à ne pas retomber
   dedans lors d'une reconstruction sous pression.

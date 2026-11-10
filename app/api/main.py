@@ -65,7 +65,7 @@ from datetime import date
 from ipaddress import ip_address
 from typing import Optional
 from urllib.parse import urlencode
-from fastapi import FastAPI, HTTPException, Query, Depends, Request
+from fastapi import FastAPI, HTTPException, Query, Depends, Request, UploadFile, File, Form
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi import Response
@@ -114,6 +114,10 @@ from app.services import potager_actif as svc_potager_actif
 from app.services import potagers as svc_potagers
 from app.services import evenements as svc_evenements
 from app.services import carnet_compagnon as svc_carnet  # [US-265]
+from app.services import voix as svc_voix  # [US-300]
+from app.services.voix import transcription as svc_dictee  # [US-302]
+from app.services.voix import oral as svc_oral  # [US-303]
+from app.services.voix import lecture as svc_lecture  # [US-304]
 from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
 from app.services.permissions import PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
@@ -137,6 +141,7 @@ from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
 from app.config import APP_ENV, FRONTEND_URL, ADMIN_EMAIL  # [US-044, US-090, US-097]
+from app import config as app_config  # [US-302] réglages de la dictée
 
 # ── Logs de l'API : sans cette configuration, les log.info du logger « potager »
 # (orchestrateur, commandes, passerelle LLM) ne sortent pas côté API. Même format
@@ -219,7 +224,7 @@ def _cle_rate_limit_ip(request: Request) -> str:
 
 
 app = FastAPI(
-    title="Assistant Potager 🌿",
+    title="Les bons gestes 🌿",
     version=_APP_VERSION,
     **_urls_documentation_api(APP_ENV),
 )
@@ -260,7 +265,7 @@ app.add_middleware(
         "http://localhost:5173",        # dev Vite local
         "https://*.netlify.app",        # frontend Netlify (prod)
     ],
-    allow_methods=["GET", "POST", "DELETE", "PATCH"],  # DELETE [US-048] membres, PATCH [US-074] modifier_potager
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # DELETE [US-048] membres, PATCH [US-074] modifier_potager, PUT [US-265, US-301] carnet et voix (en dev, Vite → API)
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -1404,6 +1409,10 @@ if os.path.isdir(_DIST):
     _DIST_ASSETS = os.path.join(_DIST, "assets")
     if os.path.isdir(_DIST_ASSETS):
         app.mount("/assets", StaticFiles(directory=_DIST_ASSETS), name="assets")
+    # Favicon et icônes de la marque (frontend/public/brand, copiés dans dist par Vite).
+    _DIST_BRAND = os.path.join(_DIST, "brand")
+    if os.path.isdir(_DIST_BRAND):
+        app.mount("/brand", StaticFiles(directory=_DIST_BRAND), name="brand")
 
     @app.get("/", include_in_schema=False)
     def serve_frontend():
@@ -2832,6 +2841,135 @@ def historique_compagnon(ctx: TenantContext = Depends(get_current_user_ctx)):
 def etat_compagnon(ctx: TenantContext = Depends(get_current_user_ctx)):
     """[US-272 / CA5] L'état réel des cartes et les messages spontanés, relus à intervalle court (sans WebSocket)."""
     return svc_echange_pwa.etat(ctx)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-300] Voix du compagnon — préférences et catalogue (aucune logique ici : app/services/voix/)
+# ═════════════════════════════════════════════════════════════════════════════
+class PreferencesVoixRequest(BaseModel):
+    """Champs tous facultatifs : seuls ceux fournis sont modifiés. `voix_id: null` = voix par défaut."""
+    mode_vocal: Optional[bool] = None
+    voix_id: Optional[str] = None
+    lecture_auto: Optional[bool] = None
+
+
+@app.get("/compagnon/voix/preferences")
+def lire_preferences_voix(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-300 / CA2] Réglages vocaux du jardinier (défauts s'il n'en a jamais enregistré)."""
+    db = SessionLocal()
+    try:
+        # [US-302 / CA3] La durée maximale d'une dictée, pour que la PWA s'arrête seule au bon moment.
+        return {**svc_voix.preferences.lire(db, ctx).public(),
+                "dictee_duree_max_s": app_config.VOIX_DICTEE_DUREE_MAX_S}
+    finally:
+        db.close()
+
+
+@app.put("/compagnon/voix/preferences")
+def enregistrer_preferences_voix(req: PreferencesVoixRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-300 / CA3] Enregistre les réglages fournis ; une voix hors catalogue est refusée (422)."""
+    champs = {nom: getattr(req, nom) for nom in req.model_fields_set}
+    for booleen in ("mode_vocal", "lecture_auto"):
+        if champs.get(booleen, True) is None:
+            champs.pop(booleen)
+    db = SessionLocal()
+    try:
+        try:
+            return svc_voix.preferences.enregistrer(db, ctx, **champs).public()
+        except svc_voix.catalogue.VoixInconnueDuCatalogue as e:
+            raise HTTPException(status_code=422, detail={
+                "message": f"Voix « {e.voix_id} » inconnue.", "voix_valides": e.valides})
+    finally:
+        db.close()
+
+
+@app.get("/compagnon/voix/catalogue")
+def catalogue_voix(ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-300 / CA4, CA5] Voix françaises (cache 24 h) ; liste de secours si Mistral ne répond pas."""
+    return svc_voix.catalogue.lire_catalogue().public()
+
+
+@app.get("/compagnon/voix/catalogue/{voix_id}/extrait")
+def extrait_voix(voix_id: str, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-300 / CA6] MP3 court de la voix (extrait Mistral, sinon phrase d'essai gardée en cache)."""
+    try:
+        audio = svc_voix.catalogue.extrait(ctx, voix_id)
+    except svc_voix.catalogue.VoixInconnueDuCatalogue as e:
+        raise HTTPException(status_code=404, detail={
+            "message": f"Voix « {e.voix_id} » inconnue.", "voix_valides": e.valides})
+    except svc_voix.VoixInconnueError:
+        # Au catalogue mais refusée par le fournisseur (catalogue du .env qui ne correspond
+        # pas au fournisseur de la synthèse) : une erreur claire, jamais un 500.
+        raise HTTPException(status_code=404, detail={
+            "message": f"Voix « {voix_id} » inconnue du fournisseur de la voix."})
+    except svc_voix.LLMIndisponibleError:
+        raise HTTPException(status_code=503, detail=svc_voix.MESSAGE_VOIX_INDISPONIBLE)
+    return Response(content=audio, media_type="audio/mpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.post("/compagnon/voix/transcrire")
+def transcrire_dictee(
+    audio: UploadFile = File(...),
+    duree_s: Optional[float] = Form(None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-302 / CA5] Dictée de la PWA (multipart) → `{ texte }`, que la PWA envoie ensuite à
+    `/compagnon/messages` comme une phrase tapée. 403 sans mode vocal, 413 trop longue ou trop
+    lourde, 429 au-delà du plafond du jour, 503 si Voxtral ne répond pas."""
+    # Lecture bornée : un fichier énorme n'est jamais chargé en entier.
+    contenu = audio.file.read(svc_dictee.taille_max_octets() + 1)
+    db = SessionLocal()
+    try:
+        texte = svc_dictee.transcrire(db, ctx, contenu, audio.filename or "", audio.content_type, duree_s)
+    except svc_dictee.DicteeRefuseeError as e:
+        raise HTTPException(status_code=e.statut, detail={"code": e.code, "message": e.message})
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "dictee_vide", "message": "Aucun audio reçu."})
+    except (svc_voix.LLMIndisponibleError, svc_voix.FormatAudioNonConvertibleError):
+        raise HTTPException(status_code=503, detail={
+            "code": "dictee_indisponible", "message": svc_dictee.MESSAGE_DICTEE_INDISPONIBLE})
+    finally:
+        db.close()
+    return {"texte": texte}
+
+
+@app.get("/compagnon/voix/oral/{echange_id}")
+def resume_oral(echange_id: int, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-303 / CA7, CA8] Le résumé parlé d'une réponse de Gaston, calculé à la première demande
+    puis gardé. 404 pour un échange d'un autre jardinier ou d'un autre potager, 403 sans mode vocal.
+    La synthèse de ce texte (MP3) est l'affaire de la lecture (US-304)."""
+    db = SessionLocal()
+    try:
+        if not svc_voix.preferences.lire(db, ctx).mode_vocal:
+            raise HTTPException(status_code=403, detail={
+                "code": "mode_vocal_eteint", "message": svc_dictee.MESSAGE_MODE_VOCAL_ETEINT})
+    finally:
+        db.close()
+    try:
+        resume = svc_oral.texte_oral(ctx, echange_id)
+    except svc_oral.EchangeIntrouvableError:
+        raise HTTPException(status_code=404, detail="Échange introuvable")
+    return {"echange_id": echange_id, "texte_oral": resume.texte}
+
+
+@app.post("/compagnon/voix/lecture/{echange_id}")
+def lecture_voix(echange_id: int, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-304 / CA1, CA8, CA9] Le MP3 du résumé parlé d'un échange, dans la voix du jardinier.
+    Lecture PAR IDENTIFIANT : aucun texte de la PWA n'est synthétisé. 403 sans mode vocal, 404 hors
+    de son compte ou de son potager, 429 au-delà du plafond du jour, 503 si Voxtral ne répond pas."""
+    db = SessionLocal()
+    try:
+        audio = svc_lecture.lire_echange(db, ctx, echange_id)
+    except svc_lecture.LectureRefuseeError as e:
+        raise HTTPException(status_code=e.statut, detail={"code": e.code, "message": e.message})
+    except (svc_voix.LLMIndisponibleError, svc_voix.VoixInconnueError):
+        raise HTTPException(status_code=503, detail={
+            "code": "lecture_indisponible", "message": svc_lecture.MESSAGE_LECTURE_INDISPONIBLE})
+    finally:
+        db.close()
+    # [CA6] La PWA garde le MP3 en mémoire ; le navigateur, lui, ne le met pas en cache.
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "private, no-store"})
 
 
 # ═════════════════════════════════════════════════════════════════════════════

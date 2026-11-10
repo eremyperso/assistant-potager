@@ -126,7 +126,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"🌿 *Bonjour {prenom} !*\n\n"
-        f"Je suis votre assistant potager.\n"
+        f"Je suis votre compagnon Les bons gestes.\n"
         f"📦 *{nb} événements* enregistrés dans votre base.\n"
         f"Synthèse vocale : {tts_etat}\n\n"
         f"Envoyez-moi un *message vocal* ou *texte* pour enregistrer une action.\n"

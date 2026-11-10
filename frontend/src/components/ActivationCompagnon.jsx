@@ -10,21 +10,9 @@
 //
 // Jamais bloquante (CA6) : « Plus tard » mène directement au tableau de bord ;
 // la relance persistante prend le relais (bandeau du tableau de bord, CA14).
-import { Leaf, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
+import LogoMark from './brand/LogoMark.jsx'
 import { useCodeLiaison, PanneauActivation } from './LierTelegram.jsx'
-
-function LogoMark() {
-  return (
-    <span className="inline-flex items-center gap-2.5">
-      <span className="w-[34px] h-[34px] rounded-[11px] bg-brand-soft flex items-center justify-center shrink-0">
-        <Leaf size={20} className="text-brand" />
-      </span>
-      <span className="font-serif text-[18px] font-bold tracking-tight whitespace-nowrap text-txt">
-        Mon Potager
-      </span>
-    </span>
-  )
-}
 
 export default function ActivationCompagnon({ onSkip }) {
   // [Fix] Cet écran n'apparaît qu'une fois, juste après la création du premier

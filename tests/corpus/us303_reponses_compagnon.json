@@ -1,0 +1,129 @@
+{
+  "_lisez_moi": "[US-303 / CA9] Réponses du compagnon (anonymisées : prénoms, parcelles et chiffres remplacés), avec un résumé parlé fidèle (ce qu'un modèle correct rendrait) et des résumés infidèles que le contrôle doit refuser. Rejoué par tests/test_us303_resume_oral.py avec un modèle simulé, sans appel réel.",
+  "reponses": [
+    {
+      "id": "conseil-arrosage-tomates",
+      "nature": "conseil",
+      "carte": false,
+      "texte": "## Arrosage des tomates\nArrosez **au pied**, 2 à 3 litres par pied, le matin. Évitez le feuillage pour limiter le mildiou. 🍅",
+      "fidele": "Arrosez vos tomates au pied le matin, deux à trois litres par pied, sans mouiller les feuilles.",
+      "infideles": [
+        "Arrosez vos tomates au pied, 5 litres par pied, le matin.",
+        "Arrosez vos tomates au pied le matin, c'est conseillé par Rustica."
+      ]
+    },
+    {
+      "id": "geste-semis-radis",
+      "nature": "carte",
+      "carte": true,
+      "texte": "proposition : Semis de radis · 30 graines · Planche 2",
+      "fidele": "Je vous propose d'enregistrer un semis de trente graines de radis sur la planche deux : confirmez à l'écran.",
+      "infideles": [
+        "C'est enregistré : trente graines de radis sur la planche deux.",
+        "J'ai noté votre semis de radis sur la planche deux."
+      ]
+    },
+    {
+      "id": "commande-creer-parcelle",
+      "nature": "carte",
+      "carte": true,
+      "texte": "Je te propose de créer la parcelle « Serre nord » de 6 m². Tu confirmes ?",
+      "fidele": "Je te propose de créer la parcelle serre nord, six mètres carrés : confirme à l'écran.",
+      "infideles": [
+        "La parcelle serre nord est enregistrée.",
+        "Je te propose de créer la parcelle serre nord."
+      ]
+    },
+    {
+      "id": "geste-recolte-courgettes",
+      "nature": "carte",
+      "carte": true,
+      "texte": "proposition : Récolte de courgettes · 2,5 kg · Potager du bas",
+      "fidele": "Je vous propose d'enregistrer une récolte de deux kilos et demi de courgettes au potager du bas : confirmez à l'écran.",
+      "infideles": [
+        "Je vous propose d'enregistrer 3 kg de courgettes : confirmez à l'écran.",
+        "C'est fait, deux kilos et demi de courgettes."
+      ]
+    },
+    {
+      "id": "question-quelle-parcelle",
+      "nature": "question",
+      "carte": false,
+      "texte": "Sur quelle parcelle as-tu planté les poireaux ? J'en vois trois : **Planche 1**, **Planche 4** et **Serre**.",
+      "fidele": "Sur quelle parcelle as-tu planté les poireaux : planche un, planche quatre ou serre ?",
+      "infideles": [
+        "Sur quelle parcelle as-tu planté les poireaux, la planche 7 ?"
+      ]
+    },
+    {
+      "id": "question-donnees-recolte",
+      "nature": "question",
+      "carte": false,
+      "texte": "Cette saison, tu as récolté **12 kg** de tomates, dont 4 kg en août. Ta meilleure variété est la *Cœur de bœuf*.",
+      "fidele": "Cette saison, tu as récolté douze kilos de tomates, dont quatre en août, surtout de la cœur de bœuf.",
+      "infideles": [
+        "Cette saison, tu as récolté douze kilos de tomates, dont quatre en septembre.",
+        "Tu as récolté 15 kg de tomates."
+      ]
+    },
+    {
+      "id": "support-long-file-gestes",
+      "nature": "support",
+      "carte": false,
+      "texte": "### La file des gestes en attente\nQuand tu prépares un geste depuis l'application sans le confirmer, il part dans une **file** que le compagnon Telegram te présente :\n- chaque geste attend **trois jours** ;\n- tu peux le *Confirmer*, le remettre *Plus tard* ou l'*Abandonner* ;\n- la commande `/gestes` affiche la file à tout moment.\nPasser trois jours, le geste est retiré et tu en es averti. Plus de détails dans le guide : https://potager.eremy.fr/guide",
+      "fidele": "Un geste préparé sans confirmation attend trois jours dans la file, que Telegram te présente pour le confirmer, le remettre à plus tard ou l'abandonner.",
+      "infideles": [
+        "Un geste attend cinq jours dans la file, que Telegram te présente.",
+        "Un geste attend trois jours dans la file ; consulte https://potager.eremy.fr/guide pour la suite."
+      ]
+    },
+    {
+      "id": "support-long-mode-vocal",
+      "nature": "support",
+      "carte": false,
+      "texte": "Dans la fenêtre « Mon compagnon », la section « Voix » porte l'interrupteur « Mode vocal », éteint au départ. Éteint, le panneau n'affiche ni micro ni lecture des réponses. Allumé, la section liste les voix françaises, avec un bouton ▶ pour écouter un extrait de chacune, et l'interrupteur « Lire les réponses après une dictée ». Chaque changement est enregistré tout de suite.",
+      "fidele": "Allumez le mode vocal dans la section voix de mon compagnon, puis choisissez une voix française après en avoir écouté un extrait.",
+      "infideles": [
+        "Allumez le mode vocal dans la section voix de mon compagnon, depuis la version 3 de l'application."
+      ]
+    },
+    {
+      "id": "analyse-mildiou",
+      "nature": "analyse",
+      "carte": false,
+      "texte": "**Analyse approfondie**\n\nTes tomates de la *Planche 3* ont reçu 18 mm de pluie depuis lundi et l'humidité reste au-dessus de 85 %. Les conditions sont favorables au mildiou.\n\n**Pistes**\n1. Retire les feuilles basses touchées.\n2. Paille le pied pour éviter les éclaboussures.\n\nSources : météo du potager, fiche mildiou.",
+      "fidele": "Avec dix-huit millimètres de pluie depuis lundi et beaucoup d'humidité, le mildiou menace tes tomates : retire les feuilles basses touchées et paille le pied.",
+      "infideles": [
+        "Avec dix-huit millimètres de pluie depuis mardi, le mildiou menace tes tomates.",
+        "Le mildiou menace tes tomates : traite à la bouillie bordelaise, 20 g par litre."
+      ]
+    },
+    {
+      "id": "veilleur-gel",
+      "nature": "conseil",
+      "carte": false,
+      "texte": "🥶 **Gel annoncé samedi** au lever du jour (−2 °C). Rentre les godets de la serre extérieure dès vendredi soir et couvre les salades d'un voile.",
+      "fidele": "Du gel est annoncé samedi au lever du jour : rentre les godets de la serre extérieure dès vendredi soir et couvre les salades d'un voile.",
+      "infideles": [
+        "Du gel est annoncé dimanche : rentre les godets dès vendredi soir.",
+        "## Gel samedi\nRentre les godets."
+      ]
+    },
+    {
+      "id": "court-sans-markdown",
+      "nature": "conseil",
+      "carte": false,
+      "texte": "Les fèves se sèment de octobre à novembre, à 5 cm de profondeur.",
+      "fidele": null,
+      "infideles": []
+    },
+    {
+      "id": "court-confirmation-faite",
+      "nature": "conseil",
+      "carte": false,
+      "texte": "C'est noté : 3 plants de courgettes repiqués sur la Planche 2.",
+      "fidele": null,
+      "infideles": []
+    }
+  ]
+}

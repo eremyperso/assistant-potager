@@ -1,0 +1,28 @@
+{
+  "marque": {
+    "vert-potager": "#1F4D3A",
+    "vert-pousse": "#5B8F3A",
+    "terre-cuite": "#9E4524",
+    "lin": "#F6F1E4",
+    "kraft": "#D8C3A0"
+  },
+  "logo": {
+    "clair": {
+      "anneau": "#1F4D3A",
+      "feuille-a": "#1F4D3A",
+      "feuille-b": "#5B8F3A",
+      "sillon": "#9E4524"
+    },
+    "sombre": {
+      "anneau": "#E4EDD3",
+      "feuille-a": "#E4EDD3",
+      "feuille-b": "#A9D47A",
+      "sillon": "#E8A583"
+    }
+  },
+  "typographie": {
+    "logotype": "Fraunces 600",
+    "interface": "Lora (titres) + police système (texte)"
+  },
+  "nom": "Les Bons Gestes"
+}

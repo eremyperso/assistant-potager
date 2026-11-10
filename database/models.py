@@ -1018,8 +1018,13 @@ class ConsoTokens(Base):
 
     - date         : jour d'imputation (agrégation quotidienne par potager)
     - appel_type   : classification | parsing | question | synthese | transcription | agent
-                     | compagnon_signal | analyse
+                     | compagnon_signal | analyse | dictee | voix
+                     (colonne libre, pas de contrainte en base : un type ajouté
+                     ne demande aucune migration)
     - modele       : modèle réellement appelé (les quotas Groq sont par modèle)
+    - tokens_in    : jetons d'entrée ; [US-299] pour `dictee`, SECONDES d'audio ;
+                     pour `voix`, CARACTÈRES envoyés à la synthèse (facturation
+                     Voxtral à la minute et au caractère, pas au jeton)
     - tokens_cache : [CA6] jetons servis depuis le cache de prompt du fournisseur,
                      distingués des jetons facturés plein tarif — 0 tant que le
                      fournisseur ne les expose pas
@@ -1438,6 +1443,27 @@ class FileGestesReglage(Base):
     message_relance_id     = Column(Integer, nullable=True)
 
 
+class PreferencesVoix(Base):
+    """[US-300 / CA1] Les réglages vocaux du compagnon, par jardinier.
+
+    Préférence de la PERSONNE, pas du potager : un jardinier membre de deux potagers
+    garde sa voix. Pas de RLS (table de compte, comme `FileGestesReglage`) ; le service
+    ne lit et n'écrit que la ligne du jardinier connecté. Une ligne créée à la première
+    écriture : sans ligne, les défauts s'appliquent (migration_v71).
+
+    - mode_vocal   : faux par défaut — sans lui, ni micro ni lecture dans la PWA
+    - voix_id      : identifiant Mistral (ex. `voice_592`) ; NULL = `VOIX_PAR_DEFAUT`
+    - lecture_auto : vrai par défaut — lecture de la réponse après une dictée
+    """
+    __tablename__ = "preferences_voix"
+
+    user_id      = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    mode_vocal   = Column(Boolean, nullable=False, default=False, server_default="false")
+    voix_id      = Column(String(64), nullable=True)
+    lecture_auto = Column(Boolean, nullable=False, default=True, server_default="true")
+    maj_le       = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class EchangeConversation(Base):
     """[US-259 / CA1] Un échange entre le jardinier et le compagnon, quel que soit le canal.
 
@@ -1468,6 +1494,9 @@ class EchangeConversation(Base):
     #: {"phrase", "question", "choix"}. Lue avec la phrase suivante, 10 minutes au plus ;
     #: seul le dernier échange compte (migration_v67).
     question        = Column(JSON(none_as_null=True), nullable=True)
+    #: [US-303 / CA1] Le résumé parlé de la réponse (1 à 2 phrases), calculé à la première lecture
+    #: puis réutilisé : une seconde lecture ne rappelle pas le modèle (migration_v72).
+    texte_oral      = Column(Text, nullable=True)
     cree_le         = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (

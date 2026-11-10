@@ -142,12 +142,15 @@ const cle = (prefixe) => `${prefixe}-${++compteur}`
  * serveur et les échanges en UTC : on ne les entrelace pas, on les range en deux blocs lisibles.
  */
 export function filDepuisHistorique(historique) {
+  // [US-304 / CA7] Un message spontané ne porte le ▶ que s'il est rattaché à un échange.
   const fil = (historique?.spontanes ?? []).map((m) => ({
     cle: `spontane-${m.id}`, role: 'spontane', texte: m.texte, ts: m.envoye_le, genre: m.genre, themes: m.themes ?? [],
+    echangeId: m.echange_id ?? null,
   }))
   ;(historique?.echanges ?? []).forEach((e, i) => {
     fil.push({ cle: `echange-${i}-j`, role: 'jardinier', texte: e.jardinier, ts: e.ts })
-    fil.push({ cle: `echange-${i}-c`, role: 'compagnon', texte: e.compagnon, ts: e.ts, cartes: [], resume: true })
+    // [US-304 / CA4] L'identifiant de l'échange : les réponses anciennes s'écoutent aussi.
+    fil.push({ cle: `echange-${i}-c`, role: 'compagnon', texte: e.compagnon, ts: e.ts, cartes: [], resume: true, echangeId: e.echange_id ?? null })
   })
   const cartes = historique?.cartes ?? []
   if (cartes.length) {
@@ -170,7 +173,11 @@ export const cleDePhrase = () => cle('j')
  * La phrase du jardinier s'affiche dès l'envoi, pas au retour de la réponse : pendant que « Gaston
  * réfléchit », elle reste lisible au lieu de disparaître avec la saisie vidée.
  */
-export const ajouterPhrase = (fil, phrase, cleJ = cle('j')) => [...fil, { cle: cleJ, role: 'jardinier', texte: phrase }]
+export const ajouterPhrase = (fil, phrase, cleJ = cle('j'), dictee = false) => [
+  ...fil,
+  // [US-302 / CA6] Une phrase dictée porte la marque 🎤 dans sa bulle.
+  { cle: cleJ, role: 'jardinier', texte: phrase, ...(dictee ? { dictee: true } : {}) },
+]
 
 /** La bulle du jardinier à ajouter : aucune si elle est déjà dans le fil (`ajouterPhrase`), sinon la sienne. */
 const bulleAbsente = (fil, phrase, cleJ) => (
@@ -196,6 +203,8 @@ export function ajouterEchange(fil, phrase, reponse, cleJ = null) {
       cle: cle('c'), role: 'compagnon', texte: reponse.texte, vers: reponse.vers,
       cartes: reponse.propositions ?? [], avertissements: reponse.avertissements ?? [],
       routageLogId: reponse.routage_log_id ?? null, etage: reponse.etage ?? null,
+      // [US-304 / CA1] L'échange à lire à voix haute (par son identifiant, jamais par son texte).
+      echangeId: reponse.echange_id ?? null,
       // [US-273] La phrase dite, pour « Approfondir » sous une réponse ; les sources d'une analyse.
       phrase,
       ...(reponse.vers === 'analyse' ? { sources: reponse.sources ?? [], borne: reponse.borne ?? null } : {}),
@@ -387,7 +396,7 @@ export function fusionnerEtat(fil, etat) {
   const dejaLus = new Set(suite.map((e) => e.cle))
   const spontanes = (etat.spontanes ?? [])
     .filter((m) => !dejaLus.has(`spontane-${m.id}`))
-    .map((m) => ({ cle: `spontane-${m.id}`, role: 'spontane', texte: m.texte, ts: m.envoye_le, genre: m.genre, themes: m.themes ?? [] }))
+    .map((m) => ({ cle: `spontane-${m.id}`, role: 'spontane', texte: m.texte, ts: m.envoye_le, genre: m.genre, themes: m.themes ?? [], echangeId: m.echange_id ?? null }))
   if (spontanes.length) suite = [...suite, ...spontanes]
   if (nouvelles.length) {
     suite = [...suite, { cle: cle('cartes'), role: 'compagnon', texte: 'Ce qui attend votre réponse :', cartes: nouvelles, vers: 'geste' }]

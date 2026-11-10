@@ -21,7 +21,7 @@ index_terms:
   - "comment ça marche"
 ---
 
-# 🌿 Guide de l'Assistant Potager
+# 🌿 Guide de l'application Les bons gestes
 
 **Version 4.0 — septembre 2026** · *correspond à la version 3.54 de l'application*
 *Guide d'exploitation — le compagnon de terrain Telegram et le tableau de bord web*
@@ -46,9 +46,9 @@ index_terms:
 
 ## 1. Vue d'ensemble
 
-### 1.1 À quoi sert l'Assistant Potager
+### 1.1 À quoi sert Les bons gestes
 
-L'Assistant Potager est un **carnet de bord de jardinier**, alimenté à la voix depuis le terrain et consultable depuis n'importe quel écran.
+L'application Les bons gestes est un **carnet de bord de jardinier**, alimenté à la voix depuis le terrain et consultable depuis n'importe quel écran.
 
 Le principe est simple : chaque fois que vous faites quelque chose au potager — semer, arroser, récolter, constater une maladie — vous le dites à voix haute dans Telegram. L'assistant transcrit, comprend, vous montre ce qu'il a compris, et l'enregistre une fois que vous confirmez.
 
@@ -89,7 +89,7 @@ Savoir cela vous évitera d'attendre de l'assistant ce qu'il ne peut pas donner 
 
 ## 1.3 Les deux façons d'accéder à l'application
 
-L'Assistant Potager a **deux visages**, qui partagent exactement les mêmes données.
+L'application Les bons gestes a **deux visages**, qui partagent exactement les mêmes données.
 
 ```
                     ┌─────────────────────────┐
@@ -1399,6 +1399,53 @@ Chaque sujet y a son bouton (chaque appui passe au choix suivant) ; le bouton **
 
 Si vous ne réagissez à aucun des trois derniers messages d'un sujet, le compagnon ne coupe rien : il range ce sujet dans le point du matin et vous le dit une fois. Le réglage vaut pour vous et pour ce potager ; `/help alertes` rappelle ces formulations.
 
+## 17.6 Le mode vocal — choisir la voix de Gaston
+
+Dans l'application, la fenêtre **Mon compagnon** (menu Compte) a une section **Voix**. Elle porte un interrupteur **Mode vocal**, **éteint au départ** : tant qu'il l'est, le panneau de Gaston n'affiche ni micro ni lecture des réponses. C'est aussi le moyen de tout couper d'un geste.
+
+Une fois le mode vocal allumé :
+
+- la liste des **voix françaises** apparaît (Marie, Manon, Léa, Camille…) et la voix de Gaston est cochée ;
+- le bouton **▶** à côté de chaque voix joue un court extrait de « Bonjour, je suis Gaston, votre compagnon du potager » ; lancer un autre extrait arrête le précédent. Sur iPhone et iPad, l'appui sur ▶ suffit à autoriser le son ;
+- touchez une voix pour la choisir ; l'interrupteur **Lire les réponses après une dictée** (actif au départ) règle la lecture automatique ;
+- chaque changement est **enregistré aussitôt** (« Enregistré » s'affiche un instant) ; si le réseau manque, l'écran le dit et garde le réglage précédent.
+
+Ces réglages sont **les vôtres, pas ceux du potager** : vous retrouvez la même voix sur votre ordinateur, votre tablette et votre téléphone, quel que soit le potager ouvert. Si Mistral retire un jour la voix que vous aviez choisie, Gaston reprend sa voix par défaut sans rien vous demander.
+
+La dictée demande que l'enregistrement de la voix soit possible : elle exige une connexion sécurisée (adresse en `https`) et un navigateur récent. Sinon, la section vous le dit (« La dictée demande une connexion sécurisée » ou « Ce navigateur ne permet pas la dictée ») et la lecture des réponses reste réglable. Quand vous dictez, votre voix est envoyée à Mistral AI pour être transformée en texte, puis jetée : elle n'est jamais gardée par l'application.
+
+### 17.6 bis Dicter une phrase à Gaston
+
+Mode vocal allumé, le panneau de Gaston affiche un bouton **🎤** à côté de **Envoyer**. C'est « appuyer pour parler » :
+
+1. touchez **🎤** ; la première fois, le navigateur vous demande d'autoriser le micro ;
+2. parlez : le bandeau orange affiche **Écoute…** avec la durée écoulée, et Gaston « Vous écoute… » ;
+3. touchez de nouveau (le carré ⏹) : la phrase est transcrite, s'affiche dans votre bulle marquée du micro et **part aussitôt** à Gaston, comme si vous l'aviez tapée.
+
+Une dictée ne crée jamais de geste toute seule : « j'ai semé 30 graines de radis sur la planche 2 » revient en carte, et rien n'est enregistré avant **Confirmer**.
+
+Ses limites :
+
+- une dictée dure **une minute au plus** : l'enregistrement s'arrête seul (« Durée maximale atteinte ») et part en transcription ;
+- si rien n'a été entendu : « Je n'ai rien entendu, réessayez » ; au-delà de 1 000 caractères : « Message trop long, découpez-le » — rien n'est envoyé ;
+- toucher **🎤** arrête une réponse en cours de lecture : le micro ne s'ouvre jamais pendant que Gaston parle ;
+- micro refusé : le panneau explique comment le réautoriser (réglages du navigateur ; sur iPhone : Réglages › Safari › Micro) ; sans micro, hors `https` ou sur un navigateur trop ancien, une courte explication remplace le **🎤** ;
+- transcription indisponible : « La dictée est indisponible pour le moment, écrivez votre message » ; au-delà de cent dictées par jour : « Limite de dictées du jour atteinte ».
+
+Le clavier reste toujours disponible, et ce que vous aviez commencé à taper est gardé. La dictée fonctionne sur Chrome, Edge et Firefox (ordinateur), Safari (Mac), Safari et l'application installée (iPhone, iPad), Chrome et l'application installée (Android).
+
+### 17.6 ter Écouter les réponses de Gaston
+
+Mode vocal allumé, Gaston peut vous répondre **à voix haute**, avec la voix choisie dans **Mon compagnon**. Ce qu'il dit est un **résumé parlé** de sa réponse écrite, en une ou deux phrases ; le texte complet reste affiché.
+
+- **Lecture automatique** : quand vous lui avez **dicté** une phrase, sa réponse est lue dès qu'elle arrive, sans autre geste, y compris sur iPhone et iPad (le tap sur 🎤 autorise le son). Une phrase **tapée** n'est jamais lue d'elle-même ; l'interrupteur **Lire les réponses après une dictée** coupe aussi la lecture automatique des dictées.
+- **▶ Écouter la réponse** : chaque réponse de Gaston porte un bouton ▶, y compris les réponses anciennes de la conversation. Pendant la lecture, il devient **⏹ Arrêter la lecture** et l'en-tête dit « Parle… ».
+- **Une lecture à la fois** : lancer ▶ sur une autre réponse arrête la première ; fermer le panneau, changer de page ou toucher 🎤 arrête la lecture.
+- Une réponse déjà écoutée se **réécoute aussitôt**, sans nouvel appel, tant que la page reste ouverte ; changer de voix fait réentendre les réponses avec la nouvelle voix.
+- Les **messages que Gaston envoie de lui-même** (gel, arrosage…) ne sont jamais lus d'office.
+
+Si la voix ne répond pas, le ▶ dit « Lecture indisponible pour le moment » ; au-delà de **cent lectures par jour**, « Limite de lectures du jour atteinte ». Dans les deux cas, la réponse écrite reste lisible. Téléphone en mode silencieux, vous n'entendrez rien : ce n'est pas une panne. La lecture fonctionne sur les mêmes navigateurs que la dictée.
+
 ## 18. Partager son potager
 
 *Depuis l'application web — le compagnon Telegram suit automatiquement.*
@@ -1435,7 +1482,7 @@ Le partage ne concerne que le potager sur lequel on a été invité. Un membre n
 
 ### Connecter son assistant
 
-Dans l'assistant, ajoutez un **connecteur personnalisé** avec l'adresse de votre potager (menu Compte, « Assistants connectés ») : Claude, Paramètres puis Connecteurs ; ChatGPT, Connecteurs en mode développeur ; Le Chat, Connecteurs puis ajouter un connecteur MCP. L'assistant ouvre la page de connexion de l'Assistant Potager : vous choisissez la **lecture** (cochée d'office) ou la **lecture et l'écriture**, et les potagers concernés. Les connecteurs personnalisés sont souvent réservés aux abonnements payants de ces assistants.
+Dans l'assistant, ajoutez un **connecteur personnalisé** avec l'adresse de votre potager (menu Compte, « Assistants connectés ») : Claude, Paramètres puis Connecteurs ; ChatGPT, Connecteurs en mode développeur ; Le Chat, Connecteurs puis ajouter un connecteur MCP. L'assistant ouvre la page de connexion de l'application Les bons gestes : vous choisissez la **lecture** (cochée d'office) ou la **lecture et l'écriture**, et les potagers concernés. Les connecteurs personnalisés sont souvent réservés aux abonnements payants de ces assistants.
 
 ### Ce que l'assistant fait pour vous
 
@@ -1709,4 +1756,4 @@ Le guide ne décrit pas encore le tableau de bord web **écran par écran** : la
 
 ---
 
-*Fin du guide — Assistant Potager, septembre 2026.*
+*Fin du guide — Les bons gestes, septembre 2026.*

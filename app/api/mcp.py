@@ -93,7 +93,7 @@ def _non_authentifie(description: Optional[str] = None) -> JSONResponse:
     return JSONResponse(
         status_code=401,
         content={"error": "invalid_token" if description else "unauthorized",
-                 "error_description": description or "Connecte ce connecteur à ton compte Assistant Potager."},
+                 "error_description": description or "Connecte ce connecteur à ton compte Les bons gestes."},
         headers={"WWW-Authenticate": entete},
     )
 
@@ -110,7 +110,7 @@ def _page_erreur(message: str) -> HTMLResponse:
     corps = (
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        "<title>Connexion impossible — Assistant Potager</title></head>"
+        "<title>Connexion impossible — Les bons gestes</title></head>"
         "<body style='font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem'>"
         "<h1 style='font-size:1.25rem'>Connexion impossible</h1>"
         f"<p>{html.escape(message)}</p>"

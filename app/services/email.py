@@ -42,9 +42,9 @@ def envoyer_email_verification(destinataire: str, token: str) -> None:
     payload = {
         "sender": {"name": EMAIL_FROM_NOM, "email": EMAIL_FROM},
         "to": [{"email": destinataire}],
-        "subject": "Vérifiez votre adresse e-mail — Assistant Potager",
+        "subject": "Vérifiez votre adresse e-mail — Les bons gestes",
         "htmlContent": (
-            "<p>Bienvenue sur Assistant Potager !</p>"
+            "<p>Bienvenue sur Les bons gestes !</p>"
             "<p>Cliquez sur ce lien pour vérifier votre adresse e-mail (valable 24h) :</p>"
             f'<p><a href="{lien}">{lien}</a></p>'
             "<p>Si vous n'êtes pas à l'origine de cette inscription, ignorez cet e-mail.</p>"
@@ -83,9 +83,9 @@ def envoyer_email_reset_mdp(destinataire: str, token: str, definition_initiale: 
         return
 
     if definition_initiale:
-        sujet = "Définir un mot de passe pour votre compte — Assistant Potager"
+        sujet = "Définir un mot de passe pour votre compte — Les bons gestes"
         contenu = (
-            "<p>Votre compte Assistant Potager a été créé avec Google : il n'a pas "
+            "<p>Votre compte Les bons gestes a été créé avec Google : il n'a pas "
             "encore de mot de passe.</p>"
             "<p>Le plus simple reste de cliquer sur <strong>« Continuer avec Google »</strong> "
             "depuis l'écran de connexion — aucun mot de passe n'est nécessaire.</p>"
@@ -96,7 +96,7 @@ def envoyer_email_reset_mdp(destinataire: str, token: str, definition_initiale: 
             "votre compte reste inchangé.</p>"
         )
     else:
-        sujet = "Réinitialisation de votre mot de passe — Assistant Potager"
+        sujet = "Réinitialisation de votre mot de passe — Les bons gestes"
         contenu = (
             "<p>Vous avez demandé la réinitialisation de votre mot de passe.</p>"
             "<p>Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 1 heure) :</p>"

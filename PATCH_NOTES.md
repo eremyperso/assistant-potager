@@ -1,3 +1,27 @@
+## [v3.126.0] — 2026-11-10
+
+### 🚀 Nouveautés
+- Permet au jardinier de dicter sa phrase au compagnon dans la PWA : le micro transcrit par Voxtral, le texte s'envoie automatiquement, avec une limite de dictées par jour et un clavier toujours disponible (US-302).
+- Permet d'écouter la réponse de Gaston à voix haute depuis la PWA, après une dictée ou par un bouton ▶, avec une limite de lectures par jour (US-304).
+- Lit un résumé court de 1 à 2 phrases au lieu du texte complet : il est calculé à la première lecture puis gardé, une seconde lecture ne rappelle pas le modèle (US-303).
+- Ajoute la section « Voix » dans « Mon compagnon » : le jardinier active le mode vocal, choisit la voix de Gaston parmi les voix françaises et l'écoute avant de la retenir (US-301).
+- Retient le choix de voix par personne, pas par potager : un jardinier membre de deux potagers garde sa voix (US-300).
+- Renomme l'application « Les bons gestes » et lui donne son identité visuelle (médaillon-bulle, favicon, icônes, palette) dans la PWA, les e-mails, l'aide du bot et la page de connexion MCP.
+- Ajoute le rapport d'essai de Voxtral en français : formats acceptés en transcription (webm, ogg, AAC), identifiants de synthèse (`voxtral-mini-tts-3-0`) ; les balises d'émotion sont jugées peu convaincantes et le rythme n'est concluant que sur la voix Manon (US-298).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/voix/` (transcription, synthèse, catalogue de voix, préférences, résumé oral, nettoyage, conversion FFmpeg) et sept routes `/compagnon/voix/…` (US-299, US-300, US-302, US-303, US-304).
+- Branche la transcription et la synthèse Voxtral dans la passerelle `llm.passerelle`, avec deux types d'appel à part comptés dans `conso_tokens` (secondes d'audio pour la dictée, caractères pour la voix) ; le bot Telegram garde Groq Whisper (US-299).
+- Déclare d'autres fournisseurs compatibles OpenAI par l'environnement (`FOURNISSEURS_COMPATIBLES`, `VOIX_CATALOGUE`), sans code, et rend l'adresse de l'API Mistral obligatoire (`MISTRAL_BASE_URL`).
+- Ajoute les réglages `GROQ_MODEL_DICTEE`, `GROQ_MODEL_VOIX`, `GROQ_MODEL_ORAL`, `VOIX_PAR_DEFAUT`, `VOIX_FORMATS_A_CONVERTIR` et les plafonds `VOIX_*` à `.env.example` (US-299, US-302, US-303, US-304).
+- Ajoute les hooks `useDictee` et `useLecture`, la section `SectionVoix`, les composants de marque `frontend/src/components/brand/` et les tests node de `voix`, `dictee` et `lecture` (US-301, US-302, US-304).
+- Met à jour la fiche `compagnon-reponses-et-memoire`, les questions du corpus de fonctionnement, le guide utilisateur (2 copies), le runbook de déploiement et ajoute `docs/RGPD/RGPD_COMPAGNON_VOCAL.md`.
+
+### 💾 Base de données
+- Ajoute la migration `migration_v71.sql` : table `preferences_voix` (mode vocal et voix de Gaston, une ligne par jardinier, sans RLS) et son `rollback_v71.sql` (US-300).
+- Ajoute la migration `migration_v72.sql` : colonne du résumé parlé sur les échanges du compagnon, sous la RLS existante, et son `rollback_v72.sql` (US-303).
+- Les migrations v71 et v72 n'ont pas encore été jouées sur PostgreSQL.
+
 ## [v3.125.0] — 2026-11-08
 
 ### 🚀 Nouveautés

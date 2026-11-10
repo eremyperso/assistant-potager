@@ -49,6 +49,7 @@ def mistral():
     )
     with patch.dict(passerelle.GROQ_MODELE_PAR_TYPE, {TYPE_AGENT: MODELE, TYPE_CLASSIFICATION: MODELE}), \
          patch("llm.passerelle.MISTRAL_API_KEY", "cle-de-test"), \
+         patch("llm.passerelle.MISTRAL_BASE_URL", "https://api.mistral.ai"), \
          patch("llm.passerelle._client_mistral", faux_mistral), \
          patch("llm.passerelle._client", faux_groq), \
          patch("llm.passerelle._enregistrer_conso"), \

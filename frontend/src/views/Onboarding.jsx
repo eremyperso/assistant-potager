@@ -15,6 +15,7 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import { Field, VilleSearch, Badge, Tip, InfoBanner, Btn } from '../components/ui'
 import ActivationCompagnon from '../components/ActivationCompagnon.jsx'
+import LogoMark from '../components/brand/LogoMark.jsx'
 
 const STEPS = [
   { id: 'potager', label: 'Votre potager', sub: 'Nom et emplacement' },
@@ -50,22 +51,6 @@ function toFloat(v) {
   if (!v || !v.trim()) return undefined
   const n = parseFloat(v.replace(',', '.'))
   return Number.isFinite(n) ? n : undefined
-}
-
-// Dupliqué à l'identique depuis `views/Auth.jsx` (US-056) plutôt que partagé :
-// seul le deuxième usage, pas encore de justification à en faire un composant
-// commun tant qu'un troisième écran n'en a pas besoin.
-function LogoMark({ light }) {
-  return (
-    <span className="inline-flex items-center gap-2.5">
-      <span className={`w-[34px] h-[34px] rounded-[11px] flex items-center justify-center shrink-0 ${light ? 'bg-white/[.18]' : 'bg-brand-soft'}`}>
-        <Leaf size={20} className={light ? 'text-white' : 'text-brand'} />
-      </span>
-      <span className={`font-serif text-[18px] font-bold tracking-tight whitespace-nowrap ${light ? 'text-white' : 'text-txt'}`}>
-        Mon Potager
-      </span>
-    </span>
-  )
 }
 
 function Lab({ children, tip }) {
@@ -491,7 +476,7 @@ export default function Onboarding() {
               </p>
               <StepRail step={step} />
             </div>
-            <div className="text-xs text-white/60">© 2026 Mon Potager</div>
+            <div className="text-xs text-white/60">© 2026 Les bons gestes</div>
           </aside>
 
           {/* Assistant */}
@@ -548,7 +533,7 @@ export default function Onboarding() {
               </div>
 
               <div className="@[900px]/onb:hidden mt-5 pt-3.5 border-t border-border-soft flex items-center justify-center gap-3.5 flex-wrap">
-                <span className="text-xs text-txt3">© 2026 Mon Potager</span>
+                <span className="text-xs text-txt3">© 2026 Les bons gestes</span>
               </div>
             </div>
           </div>
