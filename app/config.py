@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
 import os
+import re
+from typing import Optional
 
 # Charge le bon fichier .env selon APP_ENV (dev | prod) — défaut : dev.
 # Cherché d'abord dans le répertoire courant (contrat historique, US-004), puis
@@ -15,9 +17,11 @@ load_dotenv(_fichier_env, override=True)
 GROQ_API_KEY       = os.environ["GROQ_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 DATABASE_URL       = os.environ["DATABASE_URL"]
-GROQ_MODEL         = "openai/gpt-oss-120b"
-#GROQ_MODEL         = "groq/compound-mini"
-GROQ_WHISPER_MODEL = "whisper-large-v3-turbo"
+# Groq, fournisseur de la plateforme. Adresse : `GROQ_BASE_URL` (absente → celle du SDK Groq).
+# Les deux modèles ci-dessous sont des valeurs de repli, remplacées par l'environnement.
+GROQ_BASE_URL      = os.environ.get("GROQ_BASE_URL", "").strip().rstrip("/") or None
+GROQ_MODEL         = os.environ.get("GROQ_MODEL", "").strip() or "openai/gpt-oss-120b"
+GROQ_WHISPER_MODEL = os.environ.get("GROQ_WHISPER_MODEL", "").strip() or "whisper-large-v3-turbo"
 
 # [US-044] Authentification web JWT — secret jamais codé en dur ni versionné
 JWT_SECRET           = os.environ["JWT_SECRET"]
@@ -32,7 +36,7 @@ JWT_REFRESH_TTL_DAYS = int(os.environ.get("JWT_REFRESH_TTL_DAYS", "30"))
 # Brevo n'est configuré.
 BREVO_API_KEY  = os.environ.get("BREVO_API_KEY", "")
 EMAIL_FROM     = os.environ.get("EMAIL_FROM", "noreply@assistant-potager.fr")
-EMAIL_FROM_NOM = os.environ.get("EMAIL_FROM_NOM", "Assistant Potager")
+EMAIL_FROM_NOM = os.environ.get("EMAIL_FROM_NOM", "Les bons gestes")
 # URL de base de la PWA pour construire le lien de vérification d'e-mail
 # (ex. https://assistant-potager.netlify.app) — distincte de PWA_URL ci-dessous
 # qui est un texte d'affichage Telegram, pas forcément une URL cliquable.
@@ -71,13 +75,15 @@ MCP_PERSONNEL_TTL_JOURS = int(os.environ.get("MCP_PERSONNEL_TTL_JOURS", "90"))
 # [US-045] URL de la PWA — référencée dans le message d'onboarding Telegram
 # (chat non lié). Pas de domaine en dur : reste un placeholder générique tant
 # que PWA_URL n'est pas configurée en environnement.
-PWA_URL = os.environ.get("PWA_URL", "l'application web Assistant Potager")
+PWA_URL = os.environ.get("PWA_URL", "l'application web Les bons gestes")
 
 # Niveau de raisonnement Groq ("low" | "medium" | "high" | None).
 # Uniquement supporté par les modèles reasoning (ex: gpt-oss-120b, qwen3.6-27b).
 # Mettre à None pour les modèles non-reasoning (ex: llama-3.3-70b-versatile),
 # sinon l'API Groq renvoie une erreur 400 "reasoning_effort is not supported".
-GROQ_REASONING_EFFORT = "low"
+# `GROQ_REASONING_EFFORT=aucun` (ou vide) : le paramètre n'est jamais envoyé.
+_effort = os.environ.get("GROQ_REASONING_EFFORT", "low").strip().lower()
+GROQ_REASONING_EFFORT = None if _effort in ("", "aucun", "none") else _effort
 
 # ─────────────────────────────────────────────────────────────────────────────
 # [US-092 / CA3] Passerelle LLM — un modèle configurable PAR TYPE D'APPEL
@@ -114,18 +120,144 @@ GROQ_MODELE_PAR_TYPE["compagnon_signal"] = os.environ.get(
 GROQ_MODELE_PAR_TYPE["analyse"] = os.environ.get(
     "GROQ_MODEL_ANALYSE", GROQ_MODELE_PAR_TYPE["agent"],
 )
+# [US-299 / CA1, CA2] Compagnon vocal de la PWA (Voxtral, Mistral). Deux types à part,
+# distincts de `transcription` (Telegram, Whisper) : changer la voix de la PWA ne touche
+# jamais le bot (décision D7). Identifiants relevés par l'essai US-298 (`-3` et `-3-0`
+# acceptés pour la dictée ; seul `voxtral-mini-tts-3-0` / `-3` accepte les voix 3).
+GROQ_MODELE_PAR_TYPE["dictee"] = os.environ.get(
+    "GROQ_MODEL_DICTEE", "mistral/voxtral-mini-transcribe-3-0",
+)
+GROQ_MODELE_PAR_TYPE["voix"] = os.environ.get(
+    "GROQ_MODEL_VOIX", "mistral/voxtral-mini-tts-3-0",
+)
+# [US-303] Résumé parlé d'une réponse (appel de chat ordinaire) : le modèle de l'agent par défaut.
+GROQ_MODELE_PAR_TYPE["oral"] = os.environ.get("GROQ_MODEL_ORAL", GROQ_MODELE_PAR_TYPE["agent"])
+
+
+def nettoyer_modele(brut: str) -> tuple[str, bool]:
+    """Un identifiant de modèle ne contient jamais d'espace : seul le premier mot est
+    retenu (`mistral/x   (voix : texte → MP3)` → `mistral/x`). Rend (modèle, rogné ?)."""
+    mots = (brut or "").split()
+    return (mots[0] if mots else brut), len(mots) > 1
+
+
+# Une explication laissée sur la ligne de la valeur dans le .env en ferait partie, et
+# ce texte serait envoyé au fournisseur comme nom de modèle. On la retire, signalée au démarrage.
+MODELES_ROGNES: dict[str, str] = {}
+for _type, _brut in list(GROQ_MODELE_PAR_TYPE.items()):
+    _propre, _rogne = nettoyer_modele(_brut)
+    GROQ_MODELE_PAR_TYPE[_type] = _propre
+    if _rogne:
+        MODELES_ROGNES[_type] = _brut
+
+# [US-300 / CA2] Voix du compagnon tant que le jardinier n'en a pas choisi (ou si la sienne
+# a été retirée par Mistral) : Marie, voix française de Voxtral 3.
+VOIX_PAR_DEFAUT = os.environ.get("VOIX_PAR_DEFAUT", "").strip() or "voice_592"
+
+# [US-299 / CA6] Formats audio de dictée convertis par FFmpeg avant l'envoi à Mistral
+# (extensions séparées par des virgules, ex. `mp4,m4a`). Vide par défaut : l'essai US-298 a
+# vu `webm` (Chrome, Edge) et `ogg` (Firefox) acceptés tels quels ; `mp4` (Safari) n'y a
+# pas été essayé. Un format listé ici part en WAV mono 16 kHz.
+VOIX_FORMATS_A_CONVERTIR: frozenset[str] = frozenset(
+    f.strip().lower().lstrip(".")
+    for f in os.environ.get("VOIX_FORMATS_A_CONVERTIR", "").split(",")
+    if f.strip()
+)
+
+def _entier_positif(nom: str, defaut: int) -> int:
+    """Entier strictement positif lu dans l'environnement ; la valeur par défaut sinon."""
+    try:
+        valeur = int(os.environ.get(nom, "").strip() or defaut)
+    except ValueError:
+        return defaut
+    return valeur if valeur > 0 else defaut
+
+
+# [US-302 / CA3, CA5, CA12] Dictée de la PWA : durée maximale d'un enregistrement (la PWA
+# s'arrête seule), poids maximal du fichier reçu, et nombre de dictées par jardinier et par jour.
+VOIX_DICTEE_DUREE_MAX_S = _entier_positif("VOIX_DICTEE_DUREE_MAX_S", 60)
+VOIX_DICTEE_TAILLE_MAX_KO = _entier_positif("VOIX_DICTEE_TAILLE_MAX_KO", 3072)
+VOIX_PLAFOND_DICTEES_JOUR = _entier_positif("VOIX_PLAFOND_DICTEES_JOUR", 100)
+
+# [US-303 / CA2] Résumé parlé d'une réponse du compagnon : 300 caractères au plus.
+VOIX_ORAL_MAX_CARACTERES = _entier_positif("VOIX_ORAL_MAX_CARACTERES", 300)
+
+# [US-304 / CA9] Lectures à voix haute des réponses de Gaston, par jardinier et par jour.
+VOIX_PLAFOND_LECTURES_JOUR = _entier_positif("VOIX_PLAFOND_LECTURES_JOUR", 100)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fournisseur tiers Mistral — un type d'appel bascule par son seul modèle
 # -----------------------------------------------------------------------------
 # Un modèle préfixé `mistral/` dans `GROQ_MODEL_<TYPE>` (ex.
 # `GROQ_MODEL_AGENT=mistral/ministral-3b-latest`) est servi par l'API Mistral,
-# compatible OpenAI ; les autres types restent sur Groq. Sans clé, un type
-# basculé sur Mistral rend une indisponibilité (repli de l'appelant), jamais un
-# appel muet à Groq.
+# compatible OpenAI ; les autres types restent sur Groq. Sans clé OU sans adresse
+# (`MISTRAL_BASE_URL`, aucune valeur dans le code), un type basculé sur Mistral rend
+# une indisponibilité (repli de l'appelant), jamais un appel muet à Groq.
 # ─────────────────────────────────────────────────────────────────────────────
 MISTRAL_API_KEY  = os.environ.get("MISTRAL_API_KEY", "")
-MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").rstrip("/")
+MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "").strip().rstrip("/")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fournisseurs compatibles OpenAI, déclarés dans l'environnement
+# -----------------------------------------------------------------------------
+# Brancher un autre fournisseur (OpenAI, un serveur local de voix, un hébergeur
+# compatible…) est un changement de configuration, jamais de code :
+#
+#   FOURNISSEURS_COMPATIBLES=oai,local
+#   FOURNISSEUR_OAI_BASE_URL=https://api.openai.com/v1      (URL AVEC /v1)
+#   FOURNISSEUR_OAI_API_KEY=sk-...
+#   GROQ_MODEL_VOIX=oai/gpt-4o-mini-tts
+#
+# Le préfixe `<nom>/` d'un modèle désigne le fournisseur, comme `mistral/`. Les noms
+# qui sont déjà des espaces de modèles Groq (`openai/gpt-oss-120b`…) sont refusés :
+# ils détourneraient des modèles Groq existants.
+# ─────────────────────────────────────────────────────────────────────────────
+NOMS_FOURNISSEURS_RESERVES: frozenset[str] = frozenset({
+    "mistral", "groq", "openai", "meta-llama", "qwen", "moonshotai", "deepseek",
+    "google", "canopylabs", "playai", "allam", "compound",
+})
+
+
+def lire_fournisseurs_compatibles(environ) -> tuple[dict[str, dict[str, str]], list[str]]:
+    """Fournisseurs déclarés `{nom: {"base_url", "api_key"}}`, et les noms écartés (motif)."""
+    retenus: dict[str, dict[str, str]] = {}
+    ecartes: list[str] = []
+    for brut in (environ.get("FOURNISSEURS_COMPATIBLES") or "").split(","):
+        nom = brut.strip().lower()
+        if not nom:
+            continue
+        if not re.fullmatch(r"[a-z][a-z0-9_]*", nom):
+            ecartes.append(f"{nom} (nom invalide : lettres, chiffres, _)")
+            continue
+        if nom in NOMS_FOURNISSEURS_RESERVES:
+            ecartes.append(f"{nom} (nom réservé)")
+            continue
+        base = (environ.get(f"FOURNISSEUR_{nom.upper()}_BASE_URL") or "").strip().rstrip("/")
+        if not base:
+            ecartes.append(f"{nom} (FOURNISSEUR_{nom.upper()}_BASE_URL absente)")
+            continue
+        retenus[nom] = {"base_url": base,
+                        "api_key": (environ.get(f"FOURNISSEUR_{nom.upper()}_API_KEY") or "").strip()}
+    return retenus, ecartes
+
+
+FOURNISSEURS_COMPATIBLES, FOURNISSEURS_ECARTES = lire_fournisseurs_compatibles(os.environ)
+
+
+def lire_catalogue_voix(brut: str) -> tuple[tuple[str, str, Optional[str]], ...]:
+    """`VOIX_CATALOGUE=id:Nom[:genre],…` → ((id, nom, genre), …), entrées incomplètes ignorées."""
+    voix = []
+    for entree in (brut or "").split(","):
+        morceaux = [m.strip() for m in entree.split(":")]
+        if len(morceaux) >= 2 and morceaux[0] and morceaux[1]:
+            voix.append((morceaux[0], morceaux[1], (morceaux[2] or None) if len(morceaux) > 2 else None))
+    return tuple(voix)
+
+
+# Voix proposées dans « Mon compagnon » quand la synthèse n'est pas servie par Mistral
+# (le catalogue Mistral n'a alors plus de sens). Définie, elle remplace aussi le
+# catalogue Mistral. `VOIX_PAR_DEFAUT` doit en faire partie.
+VOIX_CATALOGUE = lire_catalogue_voix(os.environ.get("VOIX_CATALOGUE", ""))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # [US-233 / CA5] Agent interpréteur — réglages lus ici, sans effet tant
@@ -307,6 +439,32 @@ def etat_configuration() -> list[str]:
 
     for type_appel, modele in GROQ_MODELE_PAR_TYPE.items():
         _ligne(f"GROQ_MODEL_{type_appel.upper()}", modele)
+    for type_appel, brut in MODELES_ROGNES.items():
+        lignes.append(f"   {'GROQ_MODEL_' + type_appel.upper():<30}: ⚠️ « {brut} » rogné au premier "
+                      "mot (commentaire sur la ligne de la valeur ?)")
+    if VOIX_CATALOGUE and VOIX_PAR_DEFAUT not in {v[0] for v in VOIX_CATALOGUE}:
+        lignes.append(f"   {'VOIX_PAR_DEFAUT':<30}: ⚠️ « {VOIX_PAR_DEFAUT} » absente de VOIX_CATALOGUE")
+    _ligne("VOIX_PAR_DEFAUT", VOIX_PAR_DEFAUT)
+    _ligne("VOIX_FORMATS_A_CONVERTIR", ",".join(sorted(VOIX_FORMATS_A_CONVERTIR)) or "aucun")
+    _ligne("VOIX_DICTEE_DUREE_MAX_S", VOIX_DICTEE_DUREE_MAX_S)
+    _ligne("VOIX_DICTEE_TAILLE_MAX_KO", VOIX_DICTEE_TAILLE_MAX_KO)
+    _ligne("VOIX_PLAFOND_DICTEES_JOUR", VOIX_PLAFOND_DICTEES_JOUR)
+    _ligne("VOIX_ORAL_MAX_CARACTERES", VOIX_ORAL_MAX_CARACTERES)
+    _ligne("VOIX_PLAFOND_LECTURES_JOUR", VOIX_PLAFOND_LECTURES_JOUR)
+    _ligne("GROQ_BASE_URL", GROQ_BASE_URL or "adresse du SDK Groq")
+    _ligne("GROQ_MODEL", GROQ_MODEL)
+    _ligne("GROQ_WHISPER_MODEL", GROQ_WHISPER_MODEL)
+    _ligne("GROQ_REASONING_EFFORT", GROQ_REASONING_EFFORT or "aucun")
+    _ligne("MISTRAL_BASE_URL", MISTRAL_BASE_URL or "absente")
+    if MISTRAL_API_KEY and not MISTRAL_BASE_URL:
+        lignes.append(f"   {'MISTRAL_BASE_URL':<30}: ⚠️ clé Mistral définie mais adresse absente : "
+                      "Mistral inutilisable")
+    _ligne("VOIX_CATALOGUE", ", ".join(v[0] for v in VOIX_CATALOGUE) or "catalogue Mistral")
+    _ligne("FOURNISSEURS_COMPATIBLES", ", ".join(
+        f"{nom} → {f['base_url']} (clé {'définie' if f['api_key'] else 'absente'})"
+        for nom, f in FOURNISSEURS_COMPATIBLES.items()) or "aucun")
+    for ecarte in FOURNISSEURS_ECARTES:
+        lignes.append(f"   {'FOURNISSEURS_COMPATIBLES':<30}: ⚠️ écarté : {ecarte}")
     _ligne("GROQ_TIMEOUT_S", GROQ_TIMEOUT_S)
     _ligne("GROQ_RETRY_MAX_S", GROQ_RETRY_MAX_S)
     _ligne("RAG_ACTIF", "oui" if RAG_ACTIF else "non")

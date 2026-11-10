@@ -1,0 +1,27 @@
+/* Identité visuelle — variables du logo (médaillon-bulle).
+   À importer UNE fois, dans main.jsx : `import './brand.css'`.
+   Les couleurs de l'interface (--brand, --brand-deep, …) ne changent pas : ces variables ne
+   servent qu'au logo et aux supports de marque. */
+
+:root {
+  /* Palette de marque */
+  --marque-vert-potager: #1F4D3A;
+  --marque-vert-pousse: #5B8F3A;
+  --marque-terre-cuite: #9E4524;
+  --marque-lin: #F6F1E4;
+  --marque-kraft: #D8C3A0;
+
+  /* Médaillon — mode clair */
+  --logo-anneau: #1F4D3A;
+  --logo-feuille-a: #1F4D3A;
+  --logo-feuille-b: #5B8F3A;
+  --logo-sillon: #9E4524;
+}
+
+.dark {
+  /* Médaillon — mode sombre (même logique que --txt / --brand du mode sombre de l'appli) */
+  --logo-anneau: #E4EDD3;
+  --logo-feuille-a: #E4EDD3;
+  --logo-feuille-b: #A9D47A;
+  --logo-sillon: #E8A583;
+}

@@ -110,8 +110,13 @@ class TestCA2Retrait:
     def test_ca2_main_n_importe_plus_ce_qui_servait_a_ces_routes(self):
         source = MAIN.read_text(encoding="utf-8")
         for nom in ("classify_intent_pwa", "transcribe_audio", "parse_commande", "add_to_rag", "_MIME_EXT",
-                    "UploadFile", "_STATIC"):
+                    "_STATIC"):
             assert nom not in source, nom
+        # [US-302] `UploadFile` revient pour la seule dictée du compagnon, qui ne fait que transcrire :
+        # la phrase repart par /compagnon/messages, donc par la carte de confirmation.
+        assert source.count("UploadFile") == 2
+        assert "audio: UploadFile = File(...)" in source
+        assert source.index("audio: UploadFile") > source.index('@app.post("/compagnon/voix/transcrire")')
 
     def test_ca2_l_openapi_versionne_ne_decrit_plus_ces_chemins(self):
         chemin = RACINE / "docs" / "openapi.json"

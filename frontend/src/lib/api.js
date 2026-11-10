@@ -85,7 +85,10 @@ async function requeteAvecRefresh(path, options) {
     if (code === 'token_expired') {
       const ok = await rafraichirAccessToken()
       if (ok) {
-        res = await fetch(`${BASE}${path}`, { ...options, headers: headers() })
+        // [US-302] Un envoi de fichier garde ses en-têtes sans Content-Type (frontière multipart).
+        const { 'Content-Type': _json, ...sansType } = headers()
+        const formulaire = typeof FormData !== 'undefined' && options?.body instanceof FormData
+        res = await fetch(`${BASE}${path}`, { ...options, headers: formulaire ? sansType : headers() })
       } else {
         notifySessionExpired()
       }
@@ -101,6 +104,42 @@ async function get(path) {
   const res = await requeteAvecRefresh(path, { headers: headers() })
   if (!res.ok) throw new Error(`Erreur API ${res.status} sur ${path}`)
   return res.json()
+}
+
+// [US-301] Un fichier audio protégé par le jeton : rendu en URL d'objet, à révoquer par l'appelant.
+async function getUrlAudio(path) {
+  const res = await requeteAvecRefresh(path, { headers: headers() })
+  if (!res.ok) throw new Error(`Erreur API ${res.status} sur ${path}`)
+  return URL.createObjectURL(await res.blob())
+}
+
+// [US-302] Envoi d'un fichier (multipart) : le navigateur pose lui-même le Content-Type et sa
+// frontière, d'où des en-têtes sans `Content-Type: application/json`. Mêmes erreurs que `post`.
+async function postFormulaire(path, formulaire) {
+  const { 'Content-Type': _json, ...entetes } = headers()
+  const res = await requeteAvecRefresh(path, { method: 'POST', headers: entetes, body: formulaire })
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    const err = new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    err.statut = res.status
+    err.code = detail?.detail?.code ?? null
+    throw err
+  }
+  return res.json()
+}
+
+// [US-304] Un MP3 rendu par un POST (lecture d'une réponse de Gaston) : rendu en URL d'objet, à
+// révoquer par l'appelant. Mêmes erreurs que `post` (`statut`, `code`).
+async function postUrlAudio(path) {
+  const res = await requeteAvecRefresh(path, { method: 'POST', headers: headers() })
+  if (!res.ok) {
+    const detail = await res.clone().json().catch(() => ({}))
+    const err = new Error(detail?.detail?.message || detail?.detail || `Erreur API ${res.status} sur ${path}`)
+    err.statut = res.status
+    err.code = detail?.detail?.code ?? null
+    throw err
+  }
+  return URL.createObjectURL(await res.blob())
 }
 
 async function post(path, body) {
@@ -252,6 +291,20 @@ export const api = {
   toutOublierCarnet:  () => del('/compagnon/carnet'),
   reglerNiveauCarnet: (niveau) => put('/compagnon/carnet/niveau', { niveau }),
   reglerObjectifsCarnet: (objectifs) => put('/compagnon/carnet/objectifs', { objectifs }),
+  // [US-301] Voix du compagnon (US-300) : réglages, catalogue des voix françaises, extrait MP3.
+  preferencesVoix:           () => get('/compagnon/voix/preferences'),
+  enregistrerPreferencesVoix: (reglages) => put('/compagnon/voix/preferences', reglages),
+  catalogueVoix:             () => get('/compagnon/voix/catalogue'),
+  extraitVoix:               (voixId) => getUrlAudio(`/compagnon/voix/catalogue/${encodeURIComponent(voixId)}/extrait`),
+  // [US-304] Lecture : le MP3 du résumé parlé d'un échange, dans la voix du jardinier.
+  lectureVoix: (echangeId) => postUrlAudio(`/compagnon/voix/lecture/${encodeURIComponent(echangeId)}`),
+  // [US-302] Dictée : le fichier enregistré → { texte }, ensuite envoyé par `messageCompagnon`.
+  transcrireDictee: (audio, nomFichier, dureeS) => {
+    const formulaire = new FormData()
+    formulaire.append('audio', audio, nomFichier)
+    if (Number.isFinite(dureeS)) formulaire.append('duree_s', String(Math.round(dureeS * 10) / 10))
+    return postFormulaire('/compagnon/voix/transcrire', formulaire)
+  },
 
   // [US-270, US-271] Le compagnon dans la PWA : la même parole que dans Telegram. `mode` : 'normal'
   // (agent, gestes, commandes), 'support' (la documentation de l'application, rien n'est écrit) ou

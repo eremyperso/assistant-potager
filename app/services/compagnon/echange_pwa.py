@@ -102,12 +102,14 @@ class ReponseCompagnon:
     sources: list[str] = field(default_factory=list)
     #: [US-273 / CA3] La borne qui a coupé l'analyse (« tours », « jetons »), vide sinon.
     borne: str = ""
+    #: [US-303 / CA8] L'échange retenu pour cette réponse : la PWA demande sa lecture par lui.
+    echange_id: Optional[int] = None
 
     def en_donnees(self) -> dict:
         donnees = {
             "texte": self.texte, "vers": self.vers, "propositions": self.propositions,
             "avertissements": self.avertissements, "routage_log_id": self.routage_log_id,
-            "etage": self.etage,
+            "etage": self.etage, "echange_id": self.echange_id,
         }
         if self.vers == VERS_ANALYSE:
             donnees["sources"] = self.sources
@@ -195,14 +197,16 @@ def cartes_en_cours(ctx: TenantContext) -> list[dict]:
 def historique(ctx: TenantContext) -> dict:
     """[CA3] Les échanges récents (les mêmes que lit le bot), les cartes en cours et les messages
     spontanés du compagnon [US-271 / CA3]."""
-    echanges = svc_conversations.recents(ctx)
+    echanges = svc_conversations.recents_avec_id(ctx)
     return {
         # [US-271 / CA3] Ce que le compagnon a dit de lui-même, rangé avec la conversation.
         "spontanes": svc_distribution.messages_du_jardinier(ctx),
         "echanges": [
             {"jardinier": e.texte, "compagnon": e.resume,
-             "ts": datetime.utcfromtimestamp(e.ts).isoformat() + "Z"}
-            for e in echanges
+             "ts": datetime.utcfromtimestamp(e.ts).isoformat() + "Z",
+             # [US-303 / CA8] ▶ sur une réponse ancienne : sa lecture se demande par cet identifiant.
+             "echange_id": echange_id}
+            for echange_id, e in echanges
         ],
         "cartes": cartes_en_cours(ctx),
         # [US-272 / CA9] Sans Telegram lié : le panneau seul, et une invitation à l'activer, une fois.
@@ -271,6 +275,20 @@ def _executer(coroutine):
 
 
 def repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> ReponseCompagnon:
+    """[US-270 / CA1] Transmet la phrase à l'orchestrateur et rend la réponse et les cartes éventuelles.
+
+    [US-303 / CA8] La réponse porte `echange_id`, l'échange que cette phrase a laissé dans la
+    conversation (le dernier écrit pendant l'appel) ; None si aucun ne l'a été.
+    """
+    avant = svc_conversations.dernier_id(ctx)
+    reponse = _repondre(ctx, texte, mode)
+    apres = svc_conversations.dernier_id(ctx)
+    if apres is not None and apres != avant:
+        reponse.echange_id = apres
+    return reponse
+
+
+def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> ReponseCompagnon:
     """[US-270 / CA1] Transmet la phrase à l'orchestrateur et rend la réponse et les cartes éventuelles.
 
     [US-271 / CA1] `mode="support"` : la phrase va droit à la documentation de l'application, sans

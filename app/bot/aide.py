@@ -347,7 +347,7 @@ async def cmd_version(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """[US-008] Affiche la version déployée, le SHA git et l'environnement actif."""
     app_env = os.environ.get("APP_ENV", "dev")
     texte = (
-        "🌿 *Assistant Potager*\n"
+        "🌿 *Les bons gestes*\n"
         f"Version : `{_APP_VERSION}`\n"
         f"Commit  : `{_APP_GIT_SHA}`\n"
         f"Env     : `{app_env}`"
@@ -380,7 +380,7 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # ── Aide générale (comportement existant / CA5) ────────────────────────────
     texte = (
-        "🌿 *AIDE — Assistant Potager*\n"
+        "🌿 *AIDE — Les bons gestes*\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
         "*📝 Enregistrer une action*\n"
         "Parlez ou écrivez naturellement :\n"

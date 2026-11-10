@@ -247,6 +247,7 @@ function AppInner({ intentionAdresse }) {
           >
             <PanneauCompagnon
               plein={compagnonPlein}
+              vue={view}
               onFermer={() => agirCompagnon('fermer')}
               onEnregistre={handleRefresh}
               onVu={marquerCompagnonVu}

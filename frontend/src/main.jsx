@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import './brand.css'
 
 // Pages de contrôle visuel [US-052 / US-053], hors navigation applicative.
 //

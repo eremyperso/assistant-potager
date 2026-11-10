@@ -89,6 +89,12 @@ def recents(ctx: TenantContext, maintenant: Optional[datetime] = None) -> tuple[
     successifs sont à moins de 30 minutes l'un de l'autre. Un dernier échange
     vieux de plus de 30 minutes : la conversation est close, rien n'est rendu.
     """
+    return tuple(echange for _, echange in recents_avec_id(ctx, maintenant))
+
+
+def recents_avec_id(ctx: TenantContext, maintenant: Optional[datetime] = None) -> tuple[tuple[int, Echange], ...]:
+    """[US-303 / CA8] `recents`, chaque échange accompagné de son identifiant : la PWA en a besoin
+    pour demander la lecture d'une réponse ancienne."""
     instant = maintenant or datetime.utcnow()
     try:
         with _session(ctx.potager_id) as db:
@@ -116,9 +122,57 @@ def recents(ctx: TenantContext, maintenant: Optional[datetime] = None) -> tuple[
         retenus.append(ligne)
         suivant = ligne.cree_le
     return tuple(
-        Echange(ligne.texte_jardinier, ligne.texte_compagnon, _ts(ligne.cree_le), ligne.question or None)
+        (ligne.id, Echange(ligne.texte_jardinier, ligne.texte_compagnon, _ts(ligne.cree_le), ligne.question or None))
         for ligne in reversed(retenus)
     )
+
+
+def dernier_id(ctx: TenantContext) -> Optional[int]:
+    """[US-303 / CA8] L'identifiant du dernier échange du jardinier dans ce potager ; None s'il n'y
+    en a aucun ou si la mémoire est illisible."""
+    try:
+        with _session(ctx.potager_id) as db:
+            ligne = (
+                db.query(EchangeConversation.id)
+                .filter(EchangeConversation.user_id == ctx.user_id,
+                        EchangeConversation.potager_id == ctx.potager_id)
+                .order_by(EchangeConversation.id.desc())
+                .first()
+            )
+        return ligne[0] if ligne else None
+    except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
+        log.exception("[US-303 / CA8] Dernier échange illisible (user_id=%s potager_id=%s)",
+                      ctx.user_id, ctx.potager_id)
+        return None
+
+
+def lire(ctx: TenantContext, echange_id: int) -> Optional[EchangeConversation]:
+    """[US-303 / CA8] Un échange du jardinier dans ce potager, détaché de sa session ; None pour un
+    échange d'un autre jardinier ou d'un autre potager (la PWA répond 404)."""
+    with _session(ctx.potager_id) as db:
+        ligne = (
+            db.query(EchangeConversation)
+            .filter(EchangeConversation.id == echange_id,
+                    EchangeConversation.user_id == ctx.user_id,
+                    EchangeConversation.potager_id == ctx.potager_id)
+            .first()
+        )
+        if ligne is not None:
+            db.expunge(ligne)
+        return ligne
+
+
+def retenir_texte_oral(ctx: TenantContext, echange_id: int, texte_oral: str) -> None:
+    """[US-303 / CA7] Garde le résumé parlé sur l'échange : une seconde lecture le reprend tel quel."""
+    with _session(ctx.potager_id) as db:
+        (
+            db.query(EchangeConversation)
+            .filter(EchangeConversation.id == echange_id,
+                    EchangeConversation.user_id == ctx.user_id,
+                    EchangeConversation.potager_id == ctx.potager_id)
+            .update({EchangeConversation.texte_oral: texte_oral}, synchronize_session=False)
+        )
+        db.commit()
 
 
 def clore_question(ctx: TenantContext) -> None:

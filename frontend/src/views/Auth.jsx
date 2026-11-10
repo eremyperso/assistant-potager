@@ -3,11 +3,12 @@
 // à partir de 900px de conteneur, formulaire seul en dessous — cf. maquette
 // `login-screens.jsx` et docs/ANALYSE_REFONTE_UI_WEB_2026.md §5.7.
 import { useEffect, useState } from 'react'
-import { Sun, Moon, Leaf, KeyRound, Sprout, LayoutGrid, Send } from 'lucide-react'
+import { Sun, Moon, KeyRound, Sprout, LayoutGrid, Send } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import { authApi } from '../lib/api.js'
 import { Field } from '../components/ui'
+import LogoMark from '../components/brand/LogoMark.jsx'
 
 function GoogleMark({ s = 18 }) {
   return (
@@ -65,19 +66,6 @@ const HERO = [
   { Icon: LayoutGrid, t: 'Parcelles, pépinière et stocks réunis', s: 'Un seul suivi pour tout votre potager' },
   { Icon: Send, t: 'Accessible aussi depuis Telegram', s: 'Dictez vos actions directement depuis le jardin' },
 ]
-
-function LogoMark({ light }) {
-  return (
-    <span className="inline-flex items-center gap-2.5">
-      <span className={`w-[34px] h-[34px] rounded-[11px] flex items-center justify-center shrink-0 ${light ? 'bg-white/[.18]' : 'bg-brand-soft'}`}>
-        <Leaf size={20} className={light ? 'text-white' : 'text-brand'} />
-      </span>
-      <span className={`font-serif text-[18px] font-bold tracking-tight whitespace-nowrap ${light ? 'text-white' : 'text-txt'}`}>
-        Mon Potager
-      </span>
-    </span>
-  )
-}
 
 // [US-090 / CA1, CA4] Actif dès que l'API déclare le connecteur configuré, et
 // purement absent sinon — masqué, jamais en erreur : sans identifiants Google
@@ -222,7 +210,7 @@ export default function Auth({ retourOAuth = null }) {
               </div>
             </div>
             <div className="flex gap-4 text-xs text-white/60 flex-wrap">
-              <span>© 2026 Mon Potager</span>
+              <span>© 2026 Les bons gestes</span>
               <a href="#">Mentions légales</a>
               <a href="#">Confidentialité</a>
             </div>
@@ -350,7 +338,7 @@ export default function Auth({ retourOAuth = null }) {
                         {googleActif && (
                           <>
                             {' '}En choisissant « Continuer avec Google », j'accepte que Google agisse comme
-                            fournisseur d'identité et transmette à Assistant Potager mon identifiant technique
+                            fournisseur d'identité et transmette à Les bons gestes mon identifiant technique
                             de compte, mon adresse e-mail et mon nom.
                           </>
                         )}
@@ -415,7 +403,7 @@ export default function Auth({ retourOAuth = null }) {
               )}
 
               <div className="@[900px]/auth:hidden mt-5 pt-3.5 border-t border-border-soft flex items-center justify-center gap-3.5 flex-wrap">
-                <span className="text-xs text-txt3">© 2026 Mon Potager</span>
+                <span className="text-xs text-txt3">© 2026 Les bons gestes</span>
                 <a href="#" className="text-xs text-txt2">Mentions légales</a>
                 <a href="#" className="text-xs text-txt2">Confidentialité</a>
               </div>

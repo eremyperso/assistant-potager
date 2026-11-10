@@ -1,4 +1,5 @@
-import { RefreshCw, Moon, Sun, Leaf } from 'lucide-react'
+import { RefreshCw, Moon, Sun } from 'lucide-react'
+import MedaillonBulle from './brand/MedaillonBulle.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import { NAV, NAV_OF } from '../navigation.js'
 import PotagerMenu from './PotagerMenu.jsx'
@@ -29,11 +30,10 @@ export default function TopBar({ view, onGo, onRefresh, loading }) {
       <div className="max-w-[1352px] mx-auto flex items-center gap-3.5 h-[58px] px-4 nav:px-6">
         {/* Identité + potager actif */}
         <div className="flex items-center gap-2.5 min-w-0 shrink">
-          <div className="w-8 h-8 rounded-[10px] bg-header-glass flex items-center justify-center shrink-0">
-            <Leaf size={19} />
-          </div>
+          {/* Médaillon inversé : le bandeau est toujours vert, clair comme sombre. */}
+          <MedaillonBulle taille={34} variante="inverse" />
           <span className="font-serif text-[17.5px] font-bold tracking-tight whitespace-nowrap hidden min-[1340px]:inline">
-            Mon Potager
+            Les bons gestes
           </span>
           {/* [US-054] Menu déroulant de bascule/adhésion — reste le seul accès
               permanent au code d'invitation (cf. US-048 / CA4). */}

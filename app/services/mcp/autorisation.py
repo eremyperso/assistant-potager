@@ -172,7 +172,7 @@ def metadonnees_serveur_autorisation() -> dict:
 def metadonnees_ressource_protegee() -> dict:
     return {
         "resource": url_ressource(),
-        "resource_name": "Assistant Potager",
+        "resource_name": "Les bons gestes",
         "authorization_servers": [emetteur()],
         "scopes_supported": SCOPES_SUPPORTES,
         "bearer_methods_supported": ["header"],
@@ -293,7 +293,7 @@ def valider_demande(db: Session, params: dict) -> str:
     """
     client = _client(db, params.get("client_id"))
     if client is None:
-        raise ErreurDemandeSansRetour("invalid_client", "Ce connecteur n'est pas enregistré auprès d'Assistant Potager.")
+        raise ErreurDemandeSansRetour("invalid_client", "Ce connecteur n'est pas enregistré auprès de Les bons gestes.")
     redirect_uri = params.get("redirect_uri") or ""
     if not redirect_uri and len(client.redirect_uris or []) == 1:
         redirect_uri = client.redirect_uris[0]

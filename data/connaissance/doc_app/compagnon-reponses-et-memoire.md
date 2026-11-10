@@ -113,3 +113,36 @@ Le compagnon consulte alors plusieurs sources l'une après l'autre : vos parcell
 Un assistant IA connecté avec l'écriture (Claude, ChatGPT, Le Chat…) est une **troisième fenêtre** sur les mêmes propositions. Ce qu'il propose apparaît aussi dans le panneau de Gaston et dans Telegram, avec la mention « 🤖 Proposé par Claude ». Vous pouvez confirmer où vous voulez : la première réponse l'emporte. Confirmée depuis l'assistant, la carte se lit « ✅ Confirmé depuis l'assistant IA à 14:32 » dans l'application et dans Telegram. Si l'assistant tente de confirmer une carte que vous avez déjà traitée, il reçoit « Déjà confirmé depuis le portail à 14:32 : rien n'est refait ».
 
 Le geste confirmé fait partie de ce que le compagnon se rappelle avoir fait : vous pouvez ensuite le désigner dans Telegram ou dans l'application (« corrige mon dernier semis »). L'annulation d'un geste ne se confirme jamais depuis un assistant : il vous donne le lien de l'application, qui s'ouvre sur le panneau de Gaston où la carte attend.
+
+## Choisir la voix de Gaston et activer le mode vocal dans l'application
+
+**Intention :** faire
+**On parle aussi de :** mode vocal ; changer la voix de Gaston ; écouter les voix ; voix de mon compagnon ; couper le micro ; lire les réponses à voix haute ; la dictée ne marche pas ; retrouver ma voix sur mon téléphone
+
+Dans la fenêtre « Mon compagnon », la section « Voix » porte l'interrupteur « Mode vocal », éteint au départ. Éteint, le panneau de Gaston n'affiche ni micro ni lecture des réponses : c'est le moyen de tout couper d'un geste. Allumé, la section liste les voix françaises, avec la voix choisie cochée, un bouton ▶ pour écouter un court extrait de chacune (un seul extrait à la fois, y compris sur iPhone et iPad) et l'interrupteur « Lire les réponses après une dictée », actif au départ.
+
+Chaque changement est enregistré tout de suite, avec un « Enregistré » discret ; sans réseau, l'écran le dit et garde le réglage précédent. Les réglages sont ceux de la personne et non du potager : la même voix se retrouve sur l'ordinateur, la tablette et le téléphone, et un jardinier membre de deux potagers garde sa voix. La liste des voix est lue chez Mistral et change sans mise à jour de l'application ; si Mistral ne répond pas, les quatre voix connues (Marie, Manon, Léa, Camille) sont proposées sans message d'erreur. Une voix choisie puis retirée par Mistral est remplacée par la voix par défaut, sans erreur.
+
+La dictée exige une connexion sécurisée et un navigateur capable d'enregistrer la voix ; sinon la section dit « La dictée demande une connexion sécurisée » ou « Ce navigateur ne permet pas la dictée », et la lecture des réponses reste réglable. La voix dictée est envoyée à Mistral AI pour être transformée en texte, puis jetée : l'application n'en garde aucune copie. Supprimer son compte supprime aussi ses réglages vocaux.
+
+## Dicter une phrase au compagnon au lieu de la taper
+
+**Intention :** faire
+**On parle aussi de :** micro ; dictée ; parler au lieu de taper ; appuyer pour parler ; le micro est bloqué ; je n'ai rien entendu ; durée maximale atteinte ; limite de dictées du jour ; la dictée est indisponible ; une dictée enregistre-t-elle un semis
+
+Mode vocal allumé, un bouton 🎤 apparaît à côté de « Envoyer » dans la saisie du compagnon. Touchez-le une fois : le navigateur demande l'accès au micro la première fois, puis l'écoute commence, avec la durée écoulée et le statut « Vous écoute… ». Touchez de nouveau pour arrêter : la phrase dictée est transformée en texte, s'affiche dans une bulle marquée du micro et part aussitôt, exactement comme une phrase tapée, dans le mode en cours (normal ou Support). Une dictée n'enregistre jamais de geste toute seule : un semis ou une récolte dicté revient en carte, et rien n'est enregistré avant « Confirmer ».
+
+L'enregistrement s'arrête seul au bout d'une minute (« Durée maximale atteinte ») et part en transcription. Pendant la transcription, le micro est déjà libéré et ne peut pas être relancé. Si rien n'a été entendu, l'écran dit « Je n'ai rien entendu, réessayez » sans rien envoyer ; une dictée de plus de 1 000 caractères est refusée avec « Message trop long, découpez-le ». Toucher le micro arrête d'abord une réponse en cours de lecture : le micro ne s'ouvre jamais pendant une lecture.
+
+Si le micro a été refusé, l'écran explique comment le réautoriser dans les réglages du navigateur (sur iPhone : Réglages › Safari › Micro) et le 🎤 reste pour réessayer. Sans micro, hors connexion sécurisée ou sur un navigateur qui ne sait pas enregistrer, une courte explication remplace le 🎤. Si la transcription ne répond pas : « La dictée est indisponible pour le moment, écrivez votre message » ; au-delà de cent dictées dans la journée : « Limite de dictées du jour atteinte ». Dans tous les cas, le clavier reste disponible et ce que vous aviez commencé à taper est gardé. La dictée fonctionne sur Chrome, Edge et Firefox sur ordinateur, Safari sur Mac, Safari et l'application installée sur iPhone et iPad, Chrome et l'application installée sur Android ; le bot Telegram garde sa propre transcription des messages vocaux.
+
+## Écouter la réponse de Gaston à voix haute
+
+**Intention :** faire
+**On parle aussi de :** écouter la réponse ; Gaston parle ; lecture automatique ; réponse à une phrase tapée pas lue ; lire la réponse à voix haute ; réécouter un conseil ; bouton lecture ; arrêter la lecture ; lecture indisponible pour le moment ; limite de lectures du jour ; je n'entends rien ; mode silencieux
+
+Mode vocal allumé, Gaston peut répondre à voix haute, avec la voix choisie dans « Mon compagnon ». Ce qu'il dit est le résumé parlé de sa réponse, en une ou deux phrases ; la réponse écrite complète reste affichée. Après une phrase dictée, la réponse est lue dès qu'elle arrive, sans autre geste, y compris sur iPhone et iPad : le tap sur 🎤 suffit à autoriser le son. Une phrase tapée n'est jamais lue d'elle-même, et l'interrupteur « Lire les réponses après une dictée » coupe aussi la lecture automatique des dictées. Les messages que Gaston envoie de lui-même ne sont jamais lus d'office.
+
+Chaque réponse de Gaston porte un bouton ▶ « Écouter la réponse », y compris les réponses anciennes de la conversation ; pendant la lecture, il devient ⏹ « Arrêter la lecture » et l'en-tête dit « Parle… ». Une seule lecture à la fois : lancer ▶ sur une autre réponse arrête la première, et fermer le panneau, changer de page ou toucher 🎤 arrête la lecture. Une réponse déjà écoutée se réécoute aussitôt, sans nouvel appel, tant que la page reste ouverte ; après un changement de voix, elle est relue avec la nouvelle voix.
+
+Si la voix ne répond pas, le bouton dit « Lecture indisponible pour le moment » ; au-delà de cent lectures dans la journée, « Limite de lectures du jour atteinte ». Dans les deux cas, la réponse reste lisible à l'écran. Téléphone en mode silencieux, aucun son ne sort : ce n'est pas une panne de l'application. La lecture fonctionne sur les mêmes navigateurs que la dictée ; le bot Telegram garde ses propres réponses vocales.

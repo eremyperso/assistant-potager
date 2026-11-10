@@ -110,7 +110,7 @@ export default function ConsentementConnecteur({ demande, onAbandon }) {
                 Connecter {nom} à votre potager
               </h1>
               <p className="text-[13.5px] text-txt2 mb-1">
-                <strong className="text-txt">{nom}</strong> demande l’accès à votre compte Assistant Potager.
+                <strong className="text-txt">{nom}</strong> demande l’accès à votre compte Les bons gestes.
               </p>
               <p className="text-[12px] text-txt3 mb-5 break-all">Retour vers : {infos.client.retour}</p>
 
@@ -165,7 +165,7 @@ export default function ConsentementConnecteur({ demande, onAbandon }) {
                 icon={ShieldAlert}
                 dismissible={false}
                 className="mb-5"
-                title="Vos données quittent Assistant Potager"
+                title="Vos données quittent Les bons gestes"
                 body={`Ce que ${nom} lira part chez son éditeur (Anthropic, OpenAI, Mistral…) et suit sa politique de confidentialité et de conservation. Nous ne pouvons ni l’effacer ni le contrôler. Vous pourrez révoquer cette connexion à tout moment.`}
               />
 
