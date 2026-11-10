@@ -1418,7 +1418,7 @@ Ces réglages sont **les vôtres, pas ceux du potager** : vous retrouvez la mêm
 
 La dictée demande que l'enregistrement de la voix soit possible : elle exige une connexion sécurisée (adresse en `https`) et un navigateur récent. Sinon, la section vous le dit (« La dictée demande une connexion sécurisée » ou « Ce navigateur ne permet pas la dictée ») et la lecture des réponses reste réglable. Quand vous dictez, votre voix est envoyée à Mistral AI pour être transformée en texte, puis jetée : elle n'est jamais gardée par l'application.
 
-### 17.6 bis Dicter une phrase à Gaston
+## 17.6 bis Dicter une phrase à Gaston
 
 Mode vocal allumé, le panneau de Gaston affiche un bouton **🎤** à côté de **Envoyer**. C'est « appuyer pour parler » :
 
@@ -1438,7 +1438,7 @@ Ses limites :
 
 Le clavier reste toujours disponible, et ce que vous aviez commencé à taper est gardé. La dictée fonctionne sur Chrome, Edge et Firefox (ordinateur), Safari (Mac), Safari et l'application installée (iPhone, iPad), Chrome et l'application installée (Android).
 
-### 17.6 ter Écouter les réponses de Gaston
+## 17.6 ter Écouter les réponses de Gaston
 
 Mode vocal allumé, Gaston peut vous répondre **à voix haute**, avec la voix choisie dans **Mon compagnon**. Ce qu'il dit est un **résumé parlé** de sa réponse écrite, en une ou deux phrases ; le texte complet reste affiché.
 
