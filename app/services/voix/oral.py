@@ -33,7 +33,7 @@ from app import config
 from app.services.compagnon import conversations as svc_conversations
 from app.services.context import TenantContext
 from app.services.voix.nettoyage import nettoyer_pour_voix
-from llm import passerelle
+from llm import contexte_appel, passerelle
 from llm.passerelle import LLMIndisponibleError
 
 log = logging.getLogger("potager")
@@ -293,6 +293,9 @@ def texte_oral(ctx: TenantContext, echange_id: int) -> ResumeOral:
     echange = svc_conversations.lire(ctx, echange_id)
     if echange is None:
         raise EchangeIntrouvableError(echange_id)
+    # [US-307 / CA3] Le résumé parlé est demandé après la réponse, dans une autre requête : ses
+    # lignes de consommation portent l'échange de la réponse.
+    contexte_appel.reprendre_echange(echange.echange_ref)
     if echange.texte_oral:
         return ResumeOral(echange.texte_oral, ISSUE_DEJA_CALCULE)
 

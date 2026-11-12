@@ -270,7 +270,7 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     return () => window.removeEventListener('keydown', surTouche)
   }, [onFermer])
 
-  const envoyer = useCallback(async (brut, modeForce, dictee = false) => {
+  const envoyer = useCallback(async (brut, modeForce, dictee = false, echangeRef = null) => {
     const phrase = (brut ?? texte).trim()
     if (!peutEnvoyer(phrase, occupe)) return
     // La phrase s'affiche tout de suite : la saisie se vide, elle ne doit pas disparaître pendant
@@ -283,7 +283,7 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     if (!dictee) setTexte('')
     setFil((f) => ajouterPhrase(f, phrase, cleJ, dictee))
     try {
-      const reponse = await api.messageCompagnon(phrase, modeForce ?? mode)
+      const reponse = await api.messageCompagnon(phrase, modeForce ?? mode, echangeRef)
       setFil((f) => ajouterEchange(remplacerLesAnciennes(f, reponse.propositions), phrase, reponse, cleJ))
       // [US-304 / CA2, CA3] Une phrase DICTÉE, lecture automatique active : la réponse est lue
       // aussitôt (le tap sur 🎤 a déverrouillé le son sur iPhone et iPad). Jamais une phrase tapée.
@@ -306,7 +306,7 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
   const dictee = useDictee({
     actif: modeVocal,
     dureeMaxS,
-    onTexte: (phrase) => envoyer(phrase, undefined, true),
+    onTexte: (phrase, echangeRef) => envoyer(phrase, undefined, true, echangeRef),
   })
   const micro = affichageMicro(dictee.etat, { modeVocal, occupe })
   // [US-304 / CA2, CA5] Le tap sur 🎤 arrête d'abord la lecture en cours (dans `useDictee`), puis

@@ -748,6 +748,10 @@ def plan(echantillon: list[Phrase], modeles: list[str]) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     parser = argparse.ArgumentParser(description="Mesure du prompt et du catalogue livrés de l'agent interpréteur (US-233, INC-018)")
     parser.add_argument("--dry-run", action="store_true", help="affiche le plan, n'appelle aucun modèle")
     parser.add_argument("--modeles", help="modèles à comparer, séparés par des virgules (défaut : GROQ_MODEL_AGENT)")

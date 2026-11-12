@@ -89,6 +89,17 @@ Copy `.env.example` to `.env.dev` and fill in:
 
 Config is loaded from `.env.{APP_ENV}` (at the repo root) via `app/config.py`.
 
+**Noms de modèle validés au démarrage (US-308).** `GROQ_MODEL`, `GROQ_WHISPER_MODEL` et chaque
+`GROQ_MODEL_<TYPE>` (dont `GROQ_MODEL_DICTEE` et `GROQ_MODEL_VOIX`) sont contrôlés au chargement de
+`app/config.py` : ni espace, ni parenthèse, ni `#`, 100 caractères au plus, et un préfixe
+`<fournisseur>/` connu (`mistral`, `openai`, `groq`, `meta-llama`… ou un fournisseur déclaré par
+`FOURNISSEURS_COMPATIBLES`). Une valeur invalide **arrête le démarrage du bot et de l'API** avec un
+message qui nomme la variable et montre la valeur lue, par exemple
+`GROQ_MODEL_VOIX : contient un espace (…) — valeur lue : "mistral/voxtral-mini-tts-3-0   (voix)"`.
+Un commentaire se met donc sur **une ligne à part**, jamais en fin de ligne de valeur
+(`.env.example` le dit en tête). Le bloc « État de la configuration » du démarrage marque
+chaque modèle `✓ format valide`.
+
 Réglages facultatifs du compagnon (US-267), sans redéploiement de code :
 - `COMPAGNON_PROACTIF` — `oui` : le bot envoie dans Telegram les messages spontanés (gel, levée
   non notée, point du matin…) ; toute autre valeur (défaut `non`) : le veilleur détecte, rien ne

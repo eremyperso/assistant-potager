@@ -80,6 +80,7 @@ import contextvars
 import json
 import logging
 import math
+import sys
 import time
 from dataclasses import dataclass, field
 from datetime import date
@@ -89,7 +90,10 @@ import groq
 from groq import Groq
 
 from app.services.context import TenantContext, current_context
+from llm import contexte_appel
+from app.services.pilotage import tarifs  # [US-309] grille lue au chargement : invalide, le démarrage s'arrête
 from app.config import (
+    VERSION_APP,
     GROQ_API_KEY,
     GROQ_BASE_URL,
     GROQ_MODELE_PAR_TYPE,
@@ -125,6 +129,42 @@ TYPES_APPEL: frozenset[str] = frozenset({
     TYPE_CLASSIFICATION, TYPE_PARSING, TYPE_QUESTION, TYPE_SYNTHESE, TYPE_TRANSCRIPTION,
     TYPE_AGENT, TYPE_COMPAGNON_SIGNAL, TYPE_ANALYSE, TYPE_DICTEE, TYPE_VOIX, TYPE_ORAL,
 })
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unité de `tokens_in` / `tokens_out` [US-307 / CA6] — UN seul endroit
+# -----------------------------------------------------------------------------
+# Le type d'appel dit ce que la ligne compte : des jetons, des secondes d'audio
+# (dictée), des caractères (voix). Un type ajouté sans unité déclarée fait échouer
+# `tests/test_us307_echange_canal_unite.py`.
+# ─────────────────────────────────────────────────────────────────────────────
+UNITE_JETON     = "jeton"
+UNITE_SECONDE   = "seconde"
+UNITE_CARACTERE = "caractere"
+
+UNITES_PAR_TYPE: dict[str, str] = {
+    TYPE_CLASSIFICATION:   UNITE_JETON,
+    TYPE_PARSING:          UNITE_JETON,
+    TYPE_QUESTION:         UNITE_JETON,
+    TYPE_SYNTHESE:         UNITE_JETON,
+    TYPE_TRANSCRIPTION:    UNITE_JETON,
+    TYPE_AGENT:            UNITE_JETON,
+    TYPE_COMPAGNON_SIGNAL: UNITE_JETON,
+    TYPE_ANALYSE:          UNITE_JETON,
+    TYPE_DICTEE:           UNITE_SECONDE,
+    TYPE_VOIX:             UNITE_CARACTERE,
+    TYPE_ORAL:             UNITE_JETON,
+}
+
+
+def unite_pour(appel_type: str) -> str:
+    """[US-307 / CA6] Unité des compteurs d'une ligne de ce type d'appel."""
+    try:
+        return UNITES_PAR_TYPE[appel_type]
+    except KeyError:
+        raise ContexteAppelManquantError(
+            f"type d'appel LLM sans unité déclarée : {appel_type!r} (voir UNITES_PAR_TYPE)"
+        ) from None
+
 
 # Valeurs de la colonne `conso_tokens.issue` [CA5]
 ISSUE_OK      = "ok"
@@ -488,6 +528,44 @@ def modele_pour(appel_type: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # Mesure [CA5]
 # ─────────────────────────────────────────────────────────────────────────────
+#: [US-306 / CA6] Vrai quand le dernier appel du traitement a rendu un objet factice
+#: (`unittest.mock`) : le modèle est simulé, rien n'a été consommé.
+_dernier_appel_simule: "contextvars.ContextVar[bool]" = contextvars.ContextVar(
+    "dernier_appel_simule", default=False
+)
+
+
+def _est_factice(objet) -> bool:
+    """Objet issu de `unittest.mock` ? Sans importer le module : s'il n'est pas chargé,
+    rien dans le processus ne peut être un factice."""
+    mock = sys.modules.get("unittest.mock")
+    return mock is not None and isinstance(objet, mock.NonCallableMock)
+
+
+def _base_de_session_de_test(db) -> bool:
+    """[US-306 / CA6] La base de la session est SQLite ou porte « test » dans son nom
+    (même définition que `app.services.mode_test.base_de_test`)."""
+    try:
+        from app.services.mode_test import base_de_test
+        return base_de_test(str(db.get_bind().url))
+    except Exception:  # noqa: BLE001 — dans le doute, on ne persiste pas un appel simulé
+        return False
+
+
+def _chiffrer(modele: str, unite: str, tokens_in: int, tokens_out: int, tokens_cache: int,
+              issue: str) -> "tarifs.Cout":
+    """[US-309 / CA4, CA5] Coût de l'appel d'après la grille en vigueur. Ne lève jamais : un calcul
+    impossible donne un coût nul (NULL), le fournisseur déduit du modèle et la version de la grille."""
+    grille = tarifs.GRILLE
+    try:
+        return tarifs.chiffrer(grille, modele, unite, tokens_in, tokens_out, tokens_cache, issue,
+                               compatibles=FOURNISSEURS_COMPATIBLES)
+    except Exception:  # noqa: BLE001 — la mesure ne casse jamais un appel réussi
+        log.warning("⚠️  CONSO LLM │ coût non chiffrable (%s)", modele, exc_info=True)
+        fournisseur, _ = tarifs.fournisseur_et_modele(modele, FOURNISSEURS_COMPATIBLES)
+        return tarifs.Cout(fournisseur, None, grille.version)
+
+
 def _enregistrer_conso(
     ctx: TenantContext,
     appel_type: str,
@@ -499,10 +577,21 @@ def _enregistrer_conso(
     issue: str,
 ) -> None:
     """Écrit une ligne dans `conso_tokens`. Ne lève jamais : la mesure est de
-    l'observabilité, une panne d'écriture ne doit pas casser un appel réussi."""
+    l'observabilité, une panne d'écriture ne doit pas casser un appel réussi.
+
+    [US-306 / CA2] La provenance n'est pas un paramètre : elle est lue dans le
+    contexte d'appel (`llm/contexte_appel.py`) posé par le point d'entrée.
+    [US-306 / CA6] Un appel simulé n'écrit rien hors d'une base de session de test."""
     db = None
     try:
         db = SessionLocal()
+        simule = _dernier_appel_simule.get() or contexte_appel.simulation_declaree()
+        if simule and not _base_de_session_de_test(db):
+            log.info("🔌 LLM %-14s │ appel simulé : aucune ligne écrite hors base de test", appel_type)
+            return
+        provenance = contexte_appel.resoudre_provenance(appel_type, ctx.user_id)
+        unite = unite_pour(appel_type)
+        cout = _chiffrer(modele, unite, tokens_in, tokens_out, tokens_cache, issue)
         db.add(ConsoTokens(
             potager_id   = ctx.potager_id,
             user_id      = ctx.user_id,
@@ -514,6 +603,17 @@ def _enregistrer_conso(
             tokens_cache = tokens_cache,
             latence_ms   = latence_ms,
             issue        = issue,
+            provenance   = provenance,
+            # [US-307] Tout vient du contexte posé à l'entrée de l'interaction, rien d'un appelant.
+            echange_ref  = contexte_appel.echange_a_ecrire(),
+            canal        = contexte_appel.resoudre_canal(provenance),
+            version_app  = VERSION_APP,
+            unite        = unite,
+            # [US-309] Le coût est CALCULÉ ICI, à l'écriture, et figé : changer la grille plus tard
+            # ne modifie aucune ligne déjà écrite.
+            fournisseur    = cout.fournisseur,
+            cout_micro_eur = cout.cout_micro_eur,
+            tarif_version  = cout.tarif_version,
         ))
         db.commit()
     except Exception as e:
@@ -631,10 +731,13 @@ def _executer_avec_repli(
     inconnue) avant la conversion en indisponibilité ; rend `None` sinon."""
     debut = time.monotonic()
     derniere: Exception | None = None
+    _dernier_appel_simule.set(False)
 
     for tentative in range(2):  # 1 appel + 1 nouvelle tentative au maximum
         try:
-            return appel(), int((time.monotonic() - debut) * 1000)
+            resultat = appel()
+            _dernier_appel_simule.set(_est_factice(resultat))  # [US-306 / CA6]
+            return resultat, int((time.monotonic() - debut) * 1000)
         except (groq.APIStatusError, groq.APIConnectionError, groq.APITimeoutError) as e:
             derniere = e
             if tentative == 0 and _est_rejouable(e):

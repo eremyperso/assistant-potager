@@ -125,7 +125,7 @@ class TestCA5Transcrire:
     def test_us302_ca5_rend_le_texte(self, client, mode_vocal, voxtral):
         r = _envoyer(client)
         assert r.status_code == 200
-        assert r.json() == {"texte": PHRASE}
+        assert r.json()["texte"] == PHRASE and set(r.json()) == {"texte", "echange_ref"}  # [US-307] + l'échange
 
     def test_us302_ca5_transmet_fichier_format_et_duree(self, client, mode_vocal, voxtral):
         _envoyer(client, nom="dictee.mp4", type_mime="audio/mp4", duree_s=12.5)
@@ -199,7 +199,7 @@ class TestCA7Longueurs:
         with patch("app.services.voix.transcription.dicter", return_value=_reponse("   ")):
             r = _envoyer(client)
         assert r.status_code == 200
-        assert r.json() == {"texte": ""}
+        assert r.json()["texte"] == "" and set(r.json()) == {"texte", "echange_ref"}  # [US-307]
 
     def test_us302_ca7_plus_de_1000_caracteres_refuse(self, client, mode_vocal):
         with patch("app.services.voix.transcription.dicter", return_value=_reponse("a" * 1001)):
@@ -273,7 +273,7 @@ class TestPwa:
 
     def test_us302_ca6_envoi_par_le_chemin_d_une_phrase_tapee(self):
         panneau = self.PANNEAU.read_text(encoding="utf-8")
-        assert "envoyer(phrase, undefined, true)" in panneau
+        assert "envoyer(phrase, undefined, true, echangeRef)" in panneau  # [US-307] + l'échange de la dictée
         assert 'aria-label="Phrase dictée"' in panneau
 
     def test_us302_ca13_cibles_de_44_px_en_plein_ecran(self):

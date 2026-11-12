@@ -69,11 +69,11 @@ export default function useDictee({ actif, dureeMaxS = DUREE_DICTEE_MAX_S_DEFAUT
 
   const transcrire = useCallback(async (blob, typeMime, dureeS) => {
     try {
-      const { texte } = await api.transcrireDictee(blob, `dictee.${extensionDictee(typeMime)}`, dureeS)
+      const { texte, echange_ref: echangeRef } = await api.transcrireDictee(blob, `dictee.${extensionDictee(typeMime)}`, dureeS)
       const issue = issueTranscription(texte)
       passer('transcrit')
       if (!vivant.current) return
-      if (issue.envoyer) onTexteRef.current?.(issue.phrase)
+      if (issue.envoyer) onTexteRef.current?.(issue.phrase, echangeRef)
       else setNote(issue.note)
     } catch (e) {
       passer('echec')

@@ -1241,6 +1241,10 @@ def plan(dialogues: list[Dialogue], modeles: list[str], mode: str = MODE_ACTIF,
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     parser = argparse.ArgumentParser(description="Mesure du compagnon en plusieurs tours (US-256)")
     parser.add_argument("--dry-run", action="store_true", help="plan et état de la clé, aucun appel")
     parser.add_argument("--modeles", help=f"séparés par des virgules ; le premier est la référence "

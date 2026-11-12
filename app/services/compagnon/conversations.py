@@ -31,6 +31,7 @@ from app.services.agent.contexte_court import Echange
 from app.services.context import TenantContext
 from database.db import SessionLocal, tenant_scope
 from database.models import EchangeConversation, Potager
+from llm import contexte_appel  # [US-307]
 
 log = logging.getLogger("potager")
 
@@ -71,6 +72,7 @@ def noter(
                 texte_jardinier=texte_jardinier or "", texte_compagnon=texte_compagnon or "",
                 outils=list(outils) or None, proposition_id=proposition_id, signal=signal,
                 question=question or None, cree_le=maintenant or datetime.utcnow(),
+                echange_ref=contexte_appel.echange_courant(),  # [US-307 / CA7]
             ))
             db.commit()
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse

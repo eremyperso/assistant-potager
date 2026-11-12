@@ -88,6 +88,10 @@ def _ingerer(racine: Path) -> int:
 
 
 def main(argv: "Optional[list[str]]" = None) -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     parser = argparse.ArgumentParser(
         description="Mesure la recherche de savoir sur un corpus de questions (US-098 / CA4, CA13)."
     )

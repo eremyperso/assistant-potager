@@ -251,6 +251,10 @@ def ecrire_csv(resultats: list[dict], chemin: Path) -> None:
 
 
 def main() -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     analyseur = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     analyseur.add_argument("--corpus", choices=("action", "savoir"), required=True)
     analyseur.add_argument("--fichier", type=Path, help="CSV du corpus action")

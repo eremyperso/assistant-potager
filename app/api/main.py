@@ -95,6 +95,7 @@ import utils.stock as _stock_mod
 from utils.observations import build_observations_index
 # [US-092] Mode dégradé : une indisponibilité du fournisseur de modèles est
 # convertie en 503 explicite portant le message de repli, jamais en erreur brute.
+from llm import contexte_appel  # [US-307]
 from llm.passerelle import LLMIndisponibleError, MESSAGE_REPLI_IA
 from database.models import User, Potager
 from app.services.context import default_context, TenantContext, DEFAULT_POTAGER_ID
@@ -279,6 +280,9 @@ app.add_middleware(
 async def _tenant_context_middleware(request, call_next):
     # [US-261] Une écriture faite par l'API est une action menée depuis la PWA.
     canal_courant.set(CANAL_PWA)
+    # [US-307 / CA3] Chaque requête ouvre un échange ; toutes les lignes de consommation écrites
+    # pendant son traitement le partagent. La PWA peut en reprendre un (dictée → message).
+    contexte_appel.ouvrir_echange()
     with tenant_scope(default_context().potager_id):
         return await call_next(request)
 
@@ -2779,6 +2783,9 @@ class MessageCompagnonRequest(BaseModel):
     texte: str
     #: [US-271] « normal » (défaut) ou « support » : la documentation de l'application d'abord.
     mode: str = "normal"
+    #: [US-307 / CA3] L'échange ouvert par la dictée de cette phrase (rendu par `transcrire`) :
+    #: la dictée et la réponse partagent ainsi leurs lignes de consommation. Ignoré s'il est mal formé.
+    echange_ref: Optional[str] = None
 
 
 def _erreur_compagnon(e: Exception) -> HTTPException:
@@ -2807,6 +2814,7 @@ def _erreur_compagnon(e: Exception) -> HTTPException:
 @app.post("/compagnon/messages")
 def envoyer_message_compagnon(req: MessageCompagnonRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """[US-270 / CA1] Transmet une phrase à l'orchestrateur ; rend la réponse et les cartes éventuelles."""
+    contexte_appel.reprendre_echange(req.echange_ref)  # [US-307 / CA3]
     try:
         return svc_echange_pwa.repondre(ctx, req.texte, req.mode).en_donnees()
     except Exception as e:
@@ -2931,7 +2939,8 @@ def transcrire_dictee(
             "code": "dictee_indisponible", "message": svc_dictee.MESSAGE_DICTEE_INDISPONIBLE})
     finally:
         db.close()
-    return {"texte": texte}
+    # [US-307 / CA3] La PWA renvoie cet identifiant avec la phrase : dictée et réponse font un échange.
+    return {"texte": texte, "echange_ref": contexte_appel.echange_courant()}
 
 
 @app.get("/compagnon/voix/oral/{echange_id}")

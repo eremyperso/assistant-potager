@@ -37,6 +37,7 @@ from unidecode import unidecode
 from app import config
 from app.services import potager_actif as svc_potager_actif
 from app.services.compagnon.actions_menees import CANAL_MCP, canal_courant
+from llm import contexte_appel  # [US-307]
 from app.services.context import TenantContext
 from app.services.mcp import autorisation as svc_autorisation
 from app.services.mcp.autorisation import Connexion
@@ -347,6 +348,7 @@ def appeler_outil(db: Session, connexion: Connexion, nom: str, arguments: Any) -
     # RLS du potager visé (`database.db._arm_rls_potager_setting`, à `after_begin`).
     db.commit()
     jeton_canal = canal_courant.set(CANAL_MCP)
+    jeton_echange = contexte_appel.ouvrir_echange()  # [US-307 / CA3] un appel d'outil = un échange
     try:
         if ctx is not None:
             with tenant_scope(ctx.potager_id):
@@ -363,6 +365,7 @@ def appeler_outil(db: Session, connexion: Connexion, nom: str, arguments: Any) -
         _journaliser(db, connexion, outil.nom, ctx.potager_id if ctx else None, RESULTAT_ERREUR, "exception", debut)
         return _resultat_texte(ERREUR_INTERNE, erreur=True)
     finally:
+        contexte_appel.fermer_echange(jeton_echange)
         canal_courant.reset(jeton_canal)
 
     _journaliser(db, connexion, outil.nom, ctx.potager_id if ctx else None, RESULTAT_OK, None, debut,

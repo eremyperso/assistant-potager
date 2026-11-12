@@ -310,7 +310,10 @@ export const api = {
   // (agent, gestes, commandes), 'support' (la documentation de l'application, rien n'est écrit) ou
   // 'analyse' [US-273] (le bouton « Approfondir » : une synthèse en lecture seule, avec ses sources).
   // Un geste compris revient en CARTE, qui se confirme ici ; une commande se confirme dans Telegram.
-  messageCompagnon:      (texte, mode = 'normal') => post('/compagnon/messages', { texte, mode }),
+  // [US-307] `echangeRef` : l'échange ouvert par la dictée de cette phrase, pour que la dictée et la
+  // réponse partagent leurs lignes de consommation (omis pour une phrase tapée).
+  messageCompagnon:      (texte, mode = 'normal', echangeRef = null) =>
+    post('/compagnon/messages', echangeRef ? { texte, mode, echange_ref: echangeRef } : { texte, mode }),
   confirmerProposition:  (id) => post(`/compagnon/propositions/${id}/confirmer`),
   abandonnerProposition: (id) => post(`/compagnon/propositions/${id}/abandonner`),
   historiqueCompagnon:   () => get('/compagnon/historique'),

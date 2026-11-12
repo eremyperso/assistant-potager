@@ -134,8 +134,11 @@ test('CA5 — le fichier part en multipart, avec sa durée, sans Content-Type JS
 test('CA6 — la phrase transcrite part aussitôt par l’envoi habituel', () => {
   assert.equal(issueTranscription(' j’ai semé 30 graines ').envoyer, true)
   assert.equal(issueTranscription(' j’ai semé 30 graines ').phrase, 'j’ai semé 30 graines')
-  assert.match(PANNEAU, /onTexte: \(phrase\) => envoyer\(phrase, undefined, true\)/)
-  assert.match(PANNEAU, /api\.messageCompagnon\(phrase, modeForce \?\? mode\)/)
+  // [US-307] L'échange ouvert par la dictée repart avec la phrase : dictée et réponse ne font qu'un.
+  assert.match(PANNEAU, /onTexte: \(phrase, echangeRef\) => envoyer\(phrase, undefined, true, echangeRef\)/)
+  assert.match(PANNEAU, /api\.messageCompagnon\(phrase, modeForce \?\? mode, echangeRef\)/)
+  assert.match(API, /echange_ref: echangeRef/)
+  assert.match(HOOK, /echange_ref: echangeRef \} = await api\.transcrireDictee/)
 })
 
 test('CA6 — la bulle d’une phrase dictée est marquée du micro', () => {
