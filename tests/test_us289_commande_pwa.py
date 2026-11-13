@@ -66,7 +66,7 @@ class TestConfirmer:
 
     def test_ca1_une_forme_sans_executeur_reste_a_telegram(self, potager):
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "supprimer")], {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "x",
+            interp.FORMES_PAR_CLE[("parcelle", "renommer")], {"ancien": "Sud", "nouveau": "Midi"}, interp.ORIGINE_REGLE, 1.0, "x",
         )
         carte = svc_echange.carte_de_commande(svc_propositions.proposer(CTX, commande, canal="pwa"))
         assert carte["confirmable"] is False and carte["motif_non_confirmable"] == svc_echange.TEXTE_COMMANDE_TELEGRAM
@@ -141,7 +141,7 @@ class TestConfirmer:
 
     def test_ca5_vas_y_sur_une_forme_sans_executeur_renvoie_vers_telegram(self, potager):
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "supprimer")], {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "x",
+            interp.FORMES_PAR_CLE[("parcelle", "renommer")], {"ancien": "Sud", "nouveau": "Midi"}, interp.ORIGINE_REGLE, 1.0, "x",
         )
         proposition = svc_propositions.proposer(CTX, commande, canal="pwa")
         reponse = svc_echange._decider(

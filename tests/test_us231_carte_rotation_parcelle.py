@@ -39,7 +39,7 @@ CTX = TenantContext(user_id=1, potager_id=1, role="owner")
 RACINE = Path(__file__).resolve().parent.parent
 API = RACINE / "app" / "api" / "main.py"
 LIB = RACINE / "frontend" / "src" / "lib" / "planParcelles.js"
-VUE = RACINE / "frontend" / "src" / "views" / "Plan.jsx"
+VUE = RACINE / "frontend" / "src" / "components" / "DetailParcelle.jsx"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -461,4 +461,4 @@ class TestCA1AucunCalculFrontend:
         assert "<CarteRotation" in vue
         assert vue.index("<CarteCaracteristiques") < vue.index("<CarteRotation")
         assert vue.index("<CarteRotation") < vue.index("<CarteSol")
-        assert "{rotation && <CarteRotation" in vue
+        assert "detail.rotation && (" in vue  # [US-330] onglet Rotation, absent d'une pépinière

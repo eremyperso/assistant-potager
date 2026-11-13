@@ -42,7 +42,7 @@ from utils.parcelles import normalize_parcelle_name
 RACINE = Path(__file__).resolve().parent.parent
 API = RACINE / "app" / "api" / "main.py"
 LIB = RACINE / "frontend" / "src" / "lib" / "planParcelles.js"
-VUE = RACINE / "frontend" / "src" / "views" / "Plan.jsx"
+VUE = RACINE / "frontend" / "src" / "components" / "DetailParcelle.jsx"
 JOURNAL = RACINE / "frontend" / "src" / "views" / "Journal.jsx"
 
 

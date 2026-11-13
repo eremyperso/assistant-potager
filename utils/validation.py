@@ -145,6 +145,10 @@ def unite_semis_ancree_dans_texte(unite_canonique: str, texte_original: str) -> 
     return bool(set(_ANCRES_UNITE_SEMIS.get(unite_canonique, ())) & mots_texte)
 
 
+#: [US-323] Marque d'un item dont la culture vient du contexte d'écran (`contexte_ecran.appliquer`).
+CLE_CULTURE_DU_CONTEXTE = "_culture_du_contexte"
+
+
 def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     """
     [US-011 bis] Retire `culture` (et `variete`) d'un item parsé si la culture
@@ -157,6 +161,10 @@ def strip_culture_hallucinee(parsed: dict, texte_original: str) -> dict:
     # [US-209] Culture reprise du lot cité ("repiqué 5 plants du lot 4") : elle vient
     # de la base, pas du modèle, et n'a pas à figurer dans la phrase.
     if parsed.get("_lot_numero") is not None:
+        return parsed
+    # [US-323 / C5] Culture reprise de l'écran (« Noter » sur le suivi du chou) : elle vient
+    # de la base, vérifiée contre le potager actif, pas du modèle.
+    if parsed.get(CLE_CULTURE_DU_CONTEXTE):
         return parsed
     if culture and not culture_grounded_dans_texte(culture, texte_original):
         # Culture déduite d'une variété dite dans la phrase (« butternut » → courge) :

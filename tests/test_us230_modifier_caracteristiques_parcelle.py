@@ -111,18 +111,19 @@ def test_ca1_patch_parcelle_ecrit_les_champs_transmis(client, db):
 
 
 def test_ca1_champ_hors_perimetre_est_refuse_en_le_nommant(client, db):
-    """[CA1] La largeur, en particulier : elle se déduit, elle ne se déclare
-    pas. Le refus la NOMME plutôt que de renvoyer une erreur de schéma."""
+    """[CA1] Un champ hors du périmètre de la fiche est NOMMÉ plutôt que de
+    renvoyer une erreur de schéma. (La largeur en faisait partie jusqu'à US-326,
+    qui la fait poser sur le plan : l'exemple est désormais l'emprise du potager.)"""
     user, potager, parcelle = _potager(db)
 
     resp = client.patch(
         f"/parcelles/{parcelle.id}",
-        json={"largeur_m": 2.0, "ordre": 3},
+        json={"emprise_longueur_m": 2.0, "ordre": 3},
         headers=_headers(user),
     )
 
     assert resp.status_code == 400
-    assert "largeur_m" in resp.json()["detail"]
+    assert "emprise_longueur_m" in resp.json()["detail"]
     assert "ordre" in resp.json()["detail"]
 
 
@@ -213,7 +214,8 @@ def test_ca4_aucune_colonne_ajoutee(db):
         "exposition", "type_sol", "abri", "paillage", "est_pepiniere", "actif",
     }
     assert ecrites <= colonnes
-    assert "largeur_m" not in colonnes  # la largeur se déduit, elle ne se stocke pas
+    # [US-326] « largeur_m » existe désormais : elle est ajoutée par US-326 (G1),
+    # pas par US-230, qui n'écrit toujours que les colonnes ci-dessus.
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -368,9 +370,9 @@ def test_e7_nom_deja_pris_est_refuse_en_nommant_le_conflit(client, db):
     assert db.get(Parcelle, parcelle.id).nom == "planche_centrale"
 
 
-def test_e9_passer_en_inactive_reprend_le_retrait_d_us009(client, db):
-    """[E9, CA2] `actif=false` n'est pas une colonne à écrire : c'est le retrait
-    d'US-009, qui réaffecte les gestes rattachés en « Non localisé »."""
+def test_e9_passer_en_inactive_garde_l_historique(client, db):
+    """[E9, CA2, US-332 / R5] `actif=false` rend la parcelle inactive : elle reste sur le plan, grisée,
+    et ses gestes lui restent rattachés (rotation et journal les lisent encore)."""
     user, potager, parcelle = _potager(db)
     db.add(Evenement(type_action="semis", culture="carotte", parcelle_id=parcelle.id,
                      potager_id=potager.id))
@@ -383,9 +385,9 @@ def test_e9_passer_en_inactive_reprend_le_retrait_d_us009(client, db):
     assert resp.json()["actif"] is False
     db.expire_all()
     assert db.get(Parcelle, parcelle.id).actif is False
-    assert db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count() == 0
+    assert db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id).count() == 1
     # [E9] La conséquence est DITE, pas seulement subie.
-    assert any("Non localisé" in m for m in resp.json()["modifications"])
+    assert any("historique" in m for m in resp.json()["modifications"])
 
 
 def test_e8_basculer_en_pepiniere_est_dit(client, db):

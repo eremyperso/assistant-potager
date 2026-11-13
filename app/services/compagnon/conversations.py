@@ -57,20 +57,23 @@ def noter(
     ctx: TenantContext, texte_jardinier: str, texte_compagnon: str, *, canal: str,
     outils: tuple[str, ...] = (), proposition_id: Optional[int] = None,
     signal: Optional[str] = None, maintenant: Optional[datetime] = None,
-    question: Optional[dict] = None,
+    question: Optional[dict] = None, contexte: Optional[dict] = None,
 ) -> None:
     """[CA1] Retient un échange : ce qu'a dit le jardinier, ce que le compagnon en a fait.
 
     [US-284 / CA1] `question` : la question que le compagnon vient de poser pour faire ce que la
     phrase demandait. Un échange sans question efface, de fait, la précédente (`recents` ne lit
-    que celle du dernier échange)."""
+    que celle du dernier échange).
+
+    [US-323 / CA6] `contexte` : ce que le jardinier avait sous les yeux dans la PWA (identifiants
+    et noms), pour mesurer l'effet du contexte d'écran sur l'interprétation."""
     try:
         with _session(ctx.potager_id) as db:
             db.add(EchangeConversation(
                 user_id=ctx.user_id, potager_id=ctx.potager_id, canal=canal,
                 texte_jardinier=texte_jardinier or "", texte_compagnon=texte_compagnon or "",
                 outils=list(outils) or None, proposition_id=proposition_id, signal=signal,
-                question=question or None, cree_le=maintenant or datetime.utcnow(),
+                question=question or None, contexte=contexte or None, cree_le=maintenant or datetime.utcnow(),
             ))
             db.commit()
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse

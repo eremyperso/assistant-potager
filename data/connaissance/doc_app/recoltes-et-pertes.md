@@ -30,7 +30,7 @@ D'autres cultures ne se récoltent qu'une fois, parce qu'on en consomme la feuil
 ## Déclarer une perte plutôt qu'une récolte
 
 **Intention :** procédure
-**On parle aussi de :** pied mort ; limaces ; gel ; arraché ; disparu ; crevé ; ce qui n'a pas été mangé
+**On parle aussi de :** pied mort ; limaces ; gel ; disparu ; crevé ; ce qui n'a pas été mangé
 
 Une perte retire des pieds du stock sans rien ajouter à la production : c'est ce qui distingue un pied dévoré par les limaces d'un pied effectivement consommé. La perte s'annonce comme n'importe quel autre geste, en disant ce qui a été perdu et combien, et vaut pour toutes les cultures, reproductrices comprises. Déclarer une perte plutôt que rien du tout est ce qui garde le stock crédible en fin de saison.
 
@@ -54,3 +54,10 @@ Deux comptes coexistent sans jamais se mêler. Le premier additionne les poids r
 **On parle aussi de :** vendu ; donné ; cédé ; plants vendus ; sortie sans récolte
 
 Un plant vendu ou donné quitte le potager sans avoir été récolté : il s'annonce comme tel, avec son nombre — une vente comme une perte de godet sans nombre est demandée avant d'être enregistrée —, et sort du compte des godets disponibles. Cette distinction évite de gonfler la production d'une saison avec des plants qui ont fini dans le jardin de quelqu'un d'autre.
+
+## Terminer une culture : arrachée, finie, planche libérée
+
+**Intention :** procédure
+**On parle aussi de :** fin de culture ; culture terminée ; arraché ; tout arraché ; les tomates sont finies ; libérer la planche ; rang à libérer ; vider une planche
+
+Quand une culture est finie — les tomates arrachées en fin de saison, les fèves retournées, la planche vidée —, dites-le simplement : « culture terminée pour les tomates de la serre », « j'ai arraché les fèves de la planche centrale ». Ce geste retire de la parcelle tout ce qui reste de la culture, quel qu'en soit le nombre : vous n'avez rien à compter. Elle sort du plan, le stock tombe à zéro pour cette parcelle, et son historique reste dans le journal et dans la rotation. Si la même culture pousse dans plusieurs parcelles, le compagnon demande laquelle terminer : rien n'est retiré ailleurs. Dire un nombre (« arraché 2 pieds de tomates malades ») reste une perte de ces pieds-là, et la culture continue. Une culture récoltée jusqu'au dernier pied ou entièrement perdue est terminée, mais reste « à libérer » sur le plan tant que la fin de culture n'est pas dite.

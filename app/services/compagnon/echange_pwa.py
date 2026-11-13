@@ -18,6 +18,10 @@ montre. Ce qu'il sait faire, et ce qu'il ne sait pas :
   d'équivalent à l'écran : la phrase va à l'agent, qui les propose en commande.
 
 La réponse porte toujours un texte et, s'il y en a, les cartes en attente.
+
+[US-323] Ouvert depuis le plan, le panneau envoie le CONTEXTE d'écran (culture, parcelle, rang) en
+identifiants : vérifié contre le potager actif (`contexte_ecran.resoudre`), il est une précision
+par défaut pour l'agent, l'orientation et le parseur, et il est gardé avec l'échange.
 """
 from __future__ import annotations
 
@@ -31,13 +35,18 @@ from typing import Any, Optional
 from sqlalchemy import or_
 
 from app.services import interpreteur_commandes as svc_interpreteur
+from app.services.permissions import require_role  # [US-332]
 from app.services.agent import executeurs as svc_executeurs
+from app.services.compagnon import contexte_ecran as svc_contexte_ecran
 from app.services.compagnon import conversations as svc_conversations
 from app.services.compagnon import corrections as svc_corrections
 from app.services.compagnon import decisions as svc_decisions
 from app.services.compagnon import deux_canaux as svc_deux_canaux
 from app.services.compagnon import distribution as svc_distribution
 from app.services.compagnon import gestes_conversation as svc_gestes_dits
+from app.services.compagnon import noter as svc_noter
+from app.services.compagnon import placement as svc_placement  # [US-328]
+from app.services import plan_gaston as svc_plan_gaston  # [US-332, US-333]
 from app.services.compagnon import orchestrateur as svc_orchestrateur
 from app.services.compagnon import proactivite as svc_proactivite
 from app.services.compagnon import propositions as svc_propositions
@@ -164,6 +173,23 @@ def s_execute_dans_la_pwa(commande: Any) -> bool:
     return forme is not None and forme.cle in svc_executeurs.EXECUTEURS
 
 
+def _lignes_du_plan(proposition: svc_propositions.PropositionConversation) -> list[str]:
+    """[US-332, US-333] Les lignes de la carte d'une création posée ou d'un retrait de parcelle ; jamais bloquant."""
+    commande = proposition.commande
+    if isinstance(commande, svc_interpreteur.Plan) or not hasattr(commande, "valeurs"):
+        return []
+    try:
+        from app.services import plan_gaston as svc_plan_gaston
+        from app.services.context import TenantContext as _Ctx
+
+        with svc_propositions.session_sur(proposition.potager_id) as db:
+            ctx = _Ctx(user_id=proposition.user_id, potager_id=proposition.potager_id, role="editor")
+            return svc_plan_gaston.lignes_de_carte(db, ctx, commande)
+    except Exception:  # noqa: BLE001 — une information de confort ne bloque jamais la carte
+        log.exception("[US-332] Lignes de la carte illisibles")
+        return []
+
+
 def carte_de_commande(proposition: svc_propositions.PropositionConversation) -> dict:
     """La carte d'une commande ou d'un plan : confirmable ici quand un exécuteur de service existe
     [US-289], sinon visible ici et confirmable dans Telegram."""
@@ -173,6 +199,8 @@ def carte_de_commande(proposition: svc_propositions.PropositionConversation) -> 
         lignes = [etape.commande_equivalente() for etape in commande.etapes]
     else:
         lignes = [commande.commande_equivalente()]
+    # [US-332] La géométrie posée d'une création, le bilan d'un retrait : ce que la carte ajoute.
+    avertissements = _lignes_du_plan(proposition)
     return {
         **_suivi(proposition.etat, proposition.traite_canal, proposition.traite_le, proposition.user_id,
                  proposition.potager_id),
@@ -180,7 +208,7 @@ def carte_de_commande(proposition: svc_propositions.PropositionConversation) -> 
         "resume": " ; ".join(lignes), "lignes": lignes, "items": [], "phrase": None, "etat": proposition.etat,
         "cree_le": _iso(proposition.cree_le), "expire_le": _iso(proposition.expire_le),
         "confirmable": ici and proposition.en_attente,
-        "motif_non_confirmable": None if ici else TEXTE_COMMANDE_TELEGRAM, "avertissements": [],
+        "motif_non_confirmable": None if ici else TEXTE_COMMANDE_TELEGRAM, "avertissements": avertissements,
     }
 
 
@@ -274,21 +302,88 @@ def _executer(coroutine):
         return pool.submit(asyncio.run, coroutine).result()
 
 
-def repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> ReponseCompagnon:
+def resoudre_contexte(ctx: TenantContext, contexte: Optional[dict]) -> Optional[svc_contexte_ecran.ContexteEcran]:
+    """[US-323 / C4, CA2] Le contexte d'écran envoyé par le panneau, vérifié ; None sans contexte.
+
+    Lève `ContexteIntrouvableError` (404) pour un identifiant étranger au potager actif.
+    """
+    if not contexte:
+        return None
+    with svc_propositions.session_sur(ctx.potager_id) as db:
+        return svc_contexte_ecran.resoudre(
+            db, ctx, parcelle_id=contexte.get("parcelle_id"), culture=contexte.get("culture"),
+            variete=contexte.get("variete"), rang=contexte.get("rang"),
+        )
+
+
+def repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL,
+             contexte: Optional[dict] = None, raccourci: Optional[str] = None,
+             placement: Optional[dict] = None, plan: Optional[dict] = None) -> ReponseCompagnon:
     """[US-270 / CA1] Transmet la phrase à l'orchestrateur et rend la réponse et les cartes éventuelles.
+
+    [US-332, US-333] `plan` : une demande née de l'écran du plan — créer une forme posée dans l'éditeur,
+    ou « Rendre inactive ou supprimer… ». Gaston vérifie, puis propose une carte ; rien n'est écrit.
 
     [US-303 / CA8] La réponse porte `echange_id`, l'échange que cette phrase a laissé dans la
     conversation (le dernier écrit pendant l'appel) ; None si aucun ne l'a été.
+
+    [US-323] `contexte` : ce que le jardinier a sous les yeux, en identifiants
+    (`parcelle_id`, `culture`, `variete`, `rang`) — vérifié AVANT tout appel de modèle.
+
+    [US-324 / CA2, CA4] `raccourci` : une pastille de « Noter » (`noter.RACCOURCIS`). Le geste
+    est construit sans modèle depuis le contexte d'écran, puis proposé en carte comme tout geste.
+
+    [US-328 / CA4, CA5] `placement` : une carte « À placer » glissée sur un rang libre (le rang
+    est dans `contexte`). La plantation est construite sans modèle, puis proposée en carte.
     """
+    if raccourci is not None and raccourci not in svc_noter.RACCOURCIS:
+        raise svc_noter.RaccourciInconnuError(f"Raccourci inconnu : {raccourci!r}.")
+    a_placer = svc_placement.lire_placement(placement)
+    demande_plan = svc_plan_gaston.lire_demande(plan)
+    ecran = resoudre_contexte(ctx, contexte)
     avant = svc_conversations.dernier_id(ctx)
-    reponse = _repondre(ctx, texte, mode)
+    if demande_plan is not None:
+        reponse = _proposer_depuis_le_plan(ctx, texte, demande_plan)
+    elif a_placer is not None:
+        phrase = (texte or "").strip() or (
+            svc_placement.phrase_de_placement(a_placer, ecran) if ecran else "Placer")
+        reponse = _proposer_un_geste(ctx, phrase, ecran, placement=a_placer)
+    elif raccourci is not None:
+        if not (texte or "").strip():
+            raise TexteVideError("Dis-moi quelque chose.")
+        reponse = _proposer_un_geste(ctx, texte.strip(), ecran, raccourci=raccourci)
+    else:
+        reponse = _repondre(ctx, texte, mode, ecran)
     apres = svc_conversations.dernier_id(ctx)
     if apres is not None and apres != avant:
         reponse.echange_id = apres
     return reponse
 
 
-def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> ReponseCompagnon:
+def _proposer_depuis_le_plan(ctx: TenantContext, texte: str, demande: dict) -> ReponseCompagnon:
+    """[US-332 / R1-R4, US-333 / E3] Gaston vérifie ce que la demande touche, puis propose une carte.
+
+    Un lecteur ne propose rien (CA6). Une parcelle qui a vécu n'est jamais proposée à la suppression :
+    la carte est celle de l'inactivation, et le texte dit pourquoi.
+    """
+    require_role(ctx, "editor", "modifier le plan")
+    with svc_propositions.session_sur(ctx.potager_id) as db:
+        if demande["action"] == svc_plan_gaston.ACTION_CREER:
+            commande = svc_plan_gaston.commande_de_creation(db, ctx, demande)
+            preambule = f"Je te propose de créer {svc_plan_gaston.decrire(svc_plan_gaston.decoder(commande.valeurs['geometrie']))}."
+        else:
+            try:
+                commande, bilan = svc_plan_gaston.commande_de_retrait(db, ctx, demande)
+            except LookupError:
+                raise svc_contexte_ecran.ContexteIntrouvableError("parcelle") from None
+            preambule = svc_plan_gaston.phrase_de_retrait(bilan)
+    reponse = _proposer_une_commande(ctx, commande, preambule=preambule)
+    _noter(ctx, (texte or "").strip() or commande.texte_origine, reponse, contexte=None)
+    return reponse
+
+
+def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL,
+              ecran: Optional[svc_contexte_ecran.ContexteEcran] = None) -> ReponseCompagnon:
     """[US-270 / CA1] Transmet la phrase à l'orchestrateur et rend la réponse et les cartes éventuelles.
 
     [US-271 / CA1] `mode="support"` : la phrase va droit à la documentation de l'application, sans
@@ -302,10 +397,11 @@ def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> Repons
         raise TexteVideError("Dis-moi quelque chose.")
     if mode not in MODES:
         raise ModeInconnuError(f"Mode inconnu : {mode!r} (attendu : {', '.join(MODES)}).")
+    journal = ecran.pour_le_journal() if ecran is not None else None
     if mode == MODE_SUPPORT:
-        return _repondre_en_support(ctx, phrase)
+        return _repondre_en_support(ctx, phrase, journal)
     if mode == MODE_ANALYSE:
-        return _repondre_en_analyse(ctx, phrase)
+        return _repondre_en_analyse(ctx, phrase, journal)
 
     reglage: list[str] = []
 
@@ -318,61 +414,66 @@ def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL) -> Repons
 
     canal = svc_orchestrateur.Canal(
         nom=CANAL, dialogue=_dialogue,
-        contexte_court=lambda: svc_orchestrateur.contexte_court_du_jardinier(ctx),
+        contexte_court=lambda: svc_orchestrateur.contexte_court_du_jardinier(
+            ctx, sous_les_yeux=ecran.pour_l_agent() if ecran is not None else None),
     )
     distribution = _executer(svc_orchestrateur.distribuer(phrase, ctx, canal))
     if distribution.pris_par_le_canal:
         reponse = ReponseCompagnon(texte=reglage[0] if reglage else "")
-        _noter(ctx, phrase, reponse)
+        _noter(ctx, phrase, reponse, contexte=journal)
         return reponse
 
     resultat = distribution.resultat
     if svc_orchestrateur.presente_par_le_canal(resultat):
         reponse = _presenter(ctx, phrase, resultat)
-        svc_orchestrateur.noter_echange(ctx, resultat, CANAL)
+        svc_orchestrateur.noter_echange(ctx, resultat, CANAL, contexte=journal)
         return reponse
 
     # Ni commande ni réponse : question (cascade commune) ou geste (parseur).
-    svc_orchestrateur.noter_echange(ctx, resultat, CANAL)
-    suite = svc_orchestrateur.orienter(resultat, phrase, ctx)
+    svc_orchestrateur.noter_echange(ctx, resultat, CANAL, contexte=journal)
+    suite = svc_orchestrateur.orienter(resultat, phrase, ctx, contexte_ecran=ecran)
     if suite.vers == svc_orchestrateur.SUITE_QUESTION:
-        return _repondre_a_la_question(ctx, phrase, suite.nature)
-    return _proposer_un_geste(ctx, phrase)
+        return _repondre_a_la_question(ctx, phrase, suite.nature, journal)
+    return _proposer_un_geste(ctx, phrase, ecran)
 
 
-def _noter(ctx: TenantContext, phrase: str, reponse: ReponseCompagnon, outils: tuple[str, ...] = ()) -> None:
-    """[US-259 / CA1] L'échange rejoint la conversation du jardinier, celle que Telegram lira aussi."""
+def _noter(ctx: TenantContext, phrase: str, reponse: ReponseCompagnon, outils: tuple[str, ...] = (),
+           contexte: Optional[dict] = None) -> None:
+    """[US-259 / CA1] L'échange rejoint la conversation du jardinier, celle que Telegram lira aussi.
+
+    [US-323 / CA6] `contexte` : le contexte d'écran de la phrase, gardé avec l'échange."""
     if not reponse.texte:
         return
     try:
-        svc_conversations.noter(ctx, phrase, reponse.texte, canal=CANAL, outils=outils)
+        svc_conversations.noter(ctx, phrase, reponse.texte, canal=CANAL, outils=outils, contexte=contexte)
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse
         log.exception("[US-270] Échange non retenu")
 
 
-def _repondre_a_la_question(ctx: TenantContext, phrase: str, nature: Optional[str]) -> ReponseCompagnon:
+def _repondre_a_la_question(ctx: TenantContext, phrase: str, nature: Optional[str],
+                            contexte: Optional[dict] = None) -> ReponseCompagnon:
     """[US-270 / CA5] La cascade commune : la même réponse que le bot, avec de quoi la noter 👍/👎."""
     resultat = svc_orchestrateur.repondre_a_une_question(ctx, phrase, nature)
     reponse = ReponseCompagnon(
         texte=resultat.texte, vers=VERS_QUESTION,
         routage_log_id=resultat.routage_log_id, etage=resultat.etage_resolveur,
     )
-    _noter(ctx, phrase, reponse, outils=("question",))
+    _noter(ctx, phrase, reponse, outils=("question",), contexte=contexte)
     return reponse
 
 
-def _repondre_en_support(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
+def _repondre_en_support(ctx: TenantContext, phrase: str, contexte: Optional[dict] = None) -> ReponseCompagnon:
     """[US-271] Mode Support : la cascade avec le corpus de l'application imposé."""
     resultat = svc_orchestrateur.repondre_en_mode_support(ctx, phrase)
     reponse = ReponseCompagnon(
         texte=resultat.texte, vers=VERS_QUESTION,
         routage_log_id=resultat.routage_log_id, etage=resultat.etage_resolveur,
     )
-    _noter(ctx, phrase, reponse, outils=("support",))
+    _noter(ctx, phrase, reponse, outils=("support",), contexte=contexte)
     return reponse
 
 
-def _repondre_en_analyse(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
+def _repondre_en_analyse(ctx: TenantContext, phrase: str, contexte: Optional[dict] = None) -> ReponseCompagnon:
     """[US-273] Mode Extra : une boucle de lecture, une synthèse avec ses sources. Aucune carte,
     aucune proposition, aucun événement : l'analyse ne propose des actions qu'en texte (CA5)."""
     resultat = svc_orchestrateur.analyser_le_potager(ctx, phrase)
@@ -380,35 +481,60 @@ def _repondre_en_analyse(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
         texte=resultat.texte, vers=VERS_ANALYSE,
         sources=list(resultat.sources), borne=resultat.borne,
     )
-    _noter(ctx, phrase, reponse, outils=("analyse", *resultat.outils))
+    _noter(ctx, phrase, reponse, outils=("analyse", *resultat.outils), contexte=contexte)
     return reponse
 
 
-def _proposer_un_geste(ctx: TenantContext, phrase: str) -> ReponseCompagnon:
-    """Un geste compris devient une carte à confirmer ; ce qui manque devient une question."""
+def _proposer_un_geste(ctx: TenantContext, phrase: str,
+                       ecran: Optional[svc_contexte_ecran.ContexteEcran] = None,
+                       raccourci: Optional[str] = None,
+                       placement: Optional[dict] = None) -> ReponseCompagnon:
+    """Un geste compris devient une carte à confirmer ; ce qui manque devient une question.
+
+    [US-323 / C5, CA3] Le contexte d'écran complète ce que la phrase ne dit pas.
+    [US-324 / CA2, CA4] Un raccourci donne ses items sans parseur ; ils passent les MÊMES contrôles."""
+    journal = ecran.pour_le_journal() if ecran is not None else None
     with svc_propositions.session_sur(ctx.potager_id) as db:
-        preparation = svc_gestes_dits.preparer(db, ctx, phrase)
+        if placement is not None or raccourci is not None:
+            if placement is not None:
+                # [US-328 / CA5] La part du rang se mesure par la géométrie (US-326 / P4).
+                from app.services import geometrie as svc_geometrie
+                longueur_part = svc_geometrie.longueur_de_la_part(
+                    db, ecran.parcelle_id if ecran is not None else None, placement.get("part"))
+                lecture = svc_placement.items_du_placement(placement, ecran, longueur_part)
+            else:
+                lecture = svc_noter.items_du_raccourci(raccourci, ecran, phrase)
+            preparation = (
+                svc_gestes_dits.Preparation(precision=lecture.precision) if lecture.precision
+                else svc_gestes_dits.controler(db, ctx, lecture.items, phrase)
+            )
+        else:
+            preparation = svc_gestes_dits.preparer(db, ctx, phrase, contexte=ecran)
         avertissements: list[str] = []
         if preparation.items:
             avertissements = _avertissements(db, ctx, preparation.items)
 
     if preparation.question:
         # Le parseur a reconnu une question dans une phrase d'action : elle part à la cascade.
-        return _repondre_a_la_question(ctx, phrase, None)
+        return _repondre_a_la_question(ctx, phrase, None, journal)
     if preparation.precision or not preparation.items:
         reponse = ReponseCompagnon(texte=preparation.precision or "Je n'ai détecté aucune action à enregistrer.")
-        _noter(ctx, phrase, reponse)
+        _noter(ctx, phrase, reponse, contexte=journal)
         return reponse
 
     geste = svc_gestes_dits.proposer(ctx, preparation.items, phrase)
     # [US-272 / CA1, CA4] La carte part dans Telegram dès sa création ; celle qu'elle remplace y est réécrite.
     svc_deux_canaux.apres_creation(geste.id, ctx.potager_id)
     reponse = ReponseCompagnon(
-        texte="Voici ce que j'ai compris. Je n'écris rien tant que tu n'as pas confirmé.",
+        texte=(
+            # [US-328 / Gherkin] « Placer 12 fraisiers · Planche haricots, rang 2 », à confirmer.
+            f"{phrase} ? Je n'écris rien tant que tu n'as pas confirmé." if placement is not None
+            else "Voici ce que j'ai compris. Je n'écris rien tant que tu n'as pas confirmé."
+        ),
         vers=VERS_GESTE, propositions=[carte_de_geste(geste, avertissements)], avertissements=avertissements,
     )
     _noter(ctx, phrase, ReponseCompagnon(texte="proposition : " + reponse.propositions[0]["resume"]),
-           outils=("geste",))
+           outils=("geste",), contexte=journal)
     return reponse
 
 
@@ -518,11 +644,13 @@ class ResultatConfirmation:
     enregistres: list[dict] = field(default_factory=list)
     erreur: Optional[str] = None
     avertissements: list[str] = field(default_factory=list)
+    #: [US-324 / CA5] Ce qui a changé sur le plan (« La fève passe à « Levé » sur le plan. »).
+    annonce: Optional[str] = None
 
     def en_donnees(self) -> dict:
         return {
             "carte": self.carte, "texte": self.texte, "enregistres": self.enregistres,
-            "erreur": self.erreur, "avertissements": self.avertissements,
+            "erreur": self.erreur, "avertissements": self.avertissements, "annonce": self.annonce,
         }
 
 
@@ -555,6 +683,7 @@ def confirmer(ctx: TenantContext, proposition_id: int, canal: str = CANAL) -> Re
         return ResultatConfirmation(
             carte=carte_de_geste(geste), texte=texte, enregistres=enregistres,
             avertissements=resultat.avertissements,
+            annonce=svc_noter.annonce_apres_confirmation([item for item, _ in resultat.enregistres]),
         )
     texte = f"❌ {resultat.erreur}"
     if enregistres:

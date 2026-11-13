@@ -540,7 +540,8 @@ def _outils_terminaux() -> list[Outil]:
     return [
         Outil("saisir_geste", _schema(
             "saisir_geste",
-            "Saisir un geste déjà accompli au jardin (récolte, semis, plantation, arrosage, vente…).",
+            "Saisir un geste (récolte, semis, plantation, arrosage, vente…), au passé ou à l'infinitif : "
+            "« planter 3 plants sur la planche X » est une plantation, pas des rangs.",
             {}, [],
         )),
     ]

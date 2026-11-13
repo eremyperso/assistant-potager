@@ -60,61 +60,12 @@ def test_us228_ca2_ca7_aucune_place_n_est_recalculee_cote_front() -> None:
 # CA3, CA4 — Design system : pictogrammes isolés, piste paramétrable
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_us228_ca3_les_symboles_de_culture_sont_proportionnels() -> None:
-    """CA3 — Sept symboles de culture sans équivalence en plants."""
-    piste = _lire(PISTE)
-    assert "function Repere" in piste
-    assert "data-repere={plein ? 'plein' : 'creux'}" in piste
-    assert "symboleDeCulture(culture, variete)" in piste
-    assert "<MarqueLibre taille={taille}" in piste
-    assert "<PictoCulture culture={rang.culture} variete={rang.variete}" in _lire(RANG)
-    assert "MAX_FENTES = 7" in _lire(LIB)
-    assert "piedsParFente" not in _lire(LIB)
-    assert "7 symboles = rang plein (en proportion)" in _lire(VUE)
-
-
-def test_us228_p15_la_phase_reste_ecrite_sur_chaque_rang() -> None:
-    """P15 — Le composant de phase écrit son mot, même sur mobile."""
-    rang = _lire(RANG)
-    assert "<PastillePhase ligne={rang}" in rang
-    assert "<PucePhase" not in rang
-
-
 def test_us228_les_phases_partagent_les_icones_de_la_maquette() -> None:
     """Les graines, la pousse et le panier se retrouvent dans la légende et les rangs."""
     phases = _lire(FRONT / "components" / "ui" / "PastillePhase.jsx")
     assert phases.count("<IconePhase phase={p.cle}") == 2
     for phase in ("PHASE_SEMEE", "PHASE_EN_PLACE", "PHASE_EN_RECOLTE"):
         assert f"phase === {phase}" in phases
-
-
-def test_us228_le_rang_libre_ne_propose_l_ajout_que_s_il_est_actionnable() -> None:
-    """[US-201 / CA3] L'invitation d'ajout, désormais implémentée, n'est rendue
-    que pour un rang libre actionnable — jamais pour un membre en lecture seule."""
-    source = _lire(RANG)
-    assert "rang.libre && actionnable" in source
-    assert "{rang.libre && actionnable && (" in source
-
-
-def test_us228_les_rangs_partagent_les_colonnes_et_les_libelles_sont_concis() -> None:
-    """Les pistes restent alignées et le rappel de plantation n'est pas affiché."""
-    rang = _lire(RANG)
-    assert "minmax(0,1fr)_80px_104px]" in rang
-    assert "reste.prefixe === 'reste' ? 'libre'" in rang
-    assert "reste.prefixe !== 'reste'" in rang
-    assert "rang.total" not in rang
-    assert 'className="whitespace-nowrap">{rang.sousLibelle?.quantite}' in rang
-
-
-def test_us228_p11_les_indicateurs_absents_sont_signales() -> None:
-    """P11 — Quatre icônes identifiées, texte accessible et rouge si absent."""
-    carte = _lire(FRONT / "components" / "ui" / "CartePlanParcelle.jsx")
-    assert "carte.indicateurs.map" in carte
-    assert "data-indicateur={indicateur.cle}" in carte
-    assert "title={indicateur.titre}" in carte
-    assert "indicateur.alerte ? 'text-red" in carte
-    for type_indicateur in ("surface", "longueur", "largeur", "rangs"):
-        assert f"type === '{type_indicateur}'" in carte
 
 
 def test_us228_ca4_la_piste_est_un_composant_du_design_system() -> None:
@@ -138,36 +89,30 @@ def test_us228_ca4_le_trait_d_us200_devient_le_mode_degrade() -> None:
 # CA5, CA6 — Container queries, jamais de breakpoint d'écran
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_us228_ca5_deux_colonnes_a_1000px_de_conteneur() -> None:
-    """CA5 / A23 — Le seuil de la maquette gelée remplace les 720 px d'A1."""
-    vue = _lire(VUE)
-    assert "@[1000px]/plan:grid-cols-2" in vue
-    assert "@[720px]/plan" not in vue
-    assert "grid-cols-3" not in vue
-    assert "md:grid-cols" not in vue and "lg:grid-cols" not in vue
-
-
-def test_us228_ca6_la_ligne_se_replie_sous_560px_de_carte() -> None:
-    """CA6 — Trois zones empilées sous 560 px de largeur de CARTE, 44 px de cible."""
-    rang = _lire(RANG)
-    assert "@[560px]/carte:grid-cols-" in rang
-    assert "min-h-[44px]" in rang
-    assert "md:" not in rang and "lg:" not in rang
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # CA12 — La page de contrôle visuel couvre les cas de l'US
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_us228_ca12_la_page_de_controle_couvre_les_cas_enumeres() -> None:
-    """CA12 — Piste normale, grande capacité, surcharge, semis en ligne, rang libre,
-    parcelle sans longueur et largeur incohérente s'y voient d'un coup d'œil."""
-    preview = _lire(PREVIEW)
-    assert "largeur_incoherente" in preview
-    assert "capacite_exemple" in preview
-    assert "part_semee" in preview
-    assert "'ml'" in preview
-    assert "parcelles_sans_longueur" in preview
-    # Un rang plus chargé que ses places, et un rang à plus de seize places.
-    assert "26, 'plants'" in preview
-    assert "60, 'graines'" in preview
+
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-327 / CA6] Les places quittent le plan
+# ══════════════════════════════════════════════════════════════════════════════
+# Le rang dessiné en piste de places (`RangPlan`, `CartePlanParcelle`, la Vue plan
+# d'US-200 et sa page de contrôle) a quitté l'écran Plan : la maquette « Plan -
+# Pistes » le juge inexploitable en consultation. Les places se lisent dans le suivi
+# d'une culture (US-322, bloc S3) ; la piste et le trait restent au design system.
+
+def test_us228_us327_la_carte_et_le_rang_de_la_vue_plan_sont_retires() -> None:
+    """[US-327 / CA6] Ni carte ni rang de l'ancienne Vue plan ; la piste reste."""
+    for retire in (RANG, VUE, PREVIEW, FRONT / "components" / "ui" / "CartePlanParcelle.jsx"):
+        assert not retire.exists(), retire
+    index = _lire(FRONT / "components" / "ui" / "index.js")
+    assert "export { PisteDesPlaces, IconeCote }" in index
+    assert "export { TraitRang }" in index
+
+
+def test_us228_us327_les_places_passent_dans_le_suivi() -> None:
+    """[US-327 / CA6, US-322 / S3] La ligne de place du suivi : pieds, mètres, espacement."""
+    lib = _lire(FRONT / "lib" / "suiviCulture.js")
+    assert "export function lignePlace" in lib
+    assert "⚠ +" in lib

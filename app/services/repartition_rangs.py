@@ -17,10 +17,13 @@ Les deux sens du mot « rang » ne se mélangent jamais :
   - le **rang d'un geste** (`Evenement.rang`) est un multiplicateur de quantité
     (« planté 4 salades sur 3 rangs » = 12 plants). Ce n'est pas une position.
 
-La base ne sait donc pas qu'une tomate est « au rang 1 » : les rangs sont
-numérotés **dans l'ordre d'installation** des cultures (arbitrage A5), ce que
-`mode_numerotation` dit explicitement. Règles R1 à R9 : voir
-`docs/domaines/plan-et-rangs.md`.
+[US-326] La POSITION d'un rang (« planté 8 tomates au rang 3 ») est un troisième
+champ, `Evenement.rang_position`. Une ligne qui en porte une occupe ce rang-là ;
+les autres gardent la numérotation **d'installation** (arbitrage A5, G3) en
+prenant les rangs libres dans l'ordre, et le disent (`position_source`).
+`mode_numerotation` vaut `ordre_installation`, `positions` ou `mixte`. Sans
+aucune position dans une parcelle, le calcul est celui d'avant, à l'identique
+(CA4). Règles R1 à R9 : voir `docs/domaines/plan-et-rangs.md`.
 """
 from __future__ import annotations
 
@@ -45,9 +48,19 @@ MODE_POQUET = "poquet"
 _UNITES_SURFACE = frozenset({"m2", "m²", "metre carre", "metres carres"})
 _UNITES_POQUET = frozenset({"poquet", "poquets"})
 
-# Numérotation : un seul mode aujourd'hui — la position réelle d'un rang n'est
-# pas connue de la base (US-203, optionnelle, ouvrira `positions` et `mixte`).
+# Numérotation [A5, US-326 / G3] : l'ordre d'installation tant qu'aucune culture
+# de la parcelle n'a de position dite ; `positions` quand toutes en ont une ;
+# `mixte` entre les deux.
 NUMEROTATION_ORDRE_INSTALLATION = "ordre_installation"
+NUMEROTATION_POSITIONS = "positions"
+NUMEROTATION_MIXTE = "mixte"
+
+# [US-326] D'où vient le numéro d'un rang, et sa part : dit par le jardinier, ou
+# déduit (numérotation d'installation, rang entier, part répartie).
+SOURCE_JARDINIER = "jardinier"
+SOURCE_INSTALLATION = "installation"
+PART_RANG_ENTIER = "rang_entier"
+PART_REPARTIE = "repartie"
 
 # Unité par défaut, identique à celle du plan d'occupation qu'on prolonge.
 _UNITE_DEFAUT_PLANTATION = "plants"
@@ -212,6 +225,8 @@ def _rangs_declares_a_installation(
             Evenement.quantite,
             Evenement.date,
             Evenement.id,
+            Evenement.rang_position,     # [US-326]
+            Evenement.rang_longueur_m,   # [US-326 / P4]
         )
         .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action.in_(("plantation", "semis")))
@@ -223,7 +238,8 @@ def _rangs_declares_a_installation(
         requete = requete.filter(Evenement.date <= cutoff)
 
     rangs: dict[tuple, int] = {}
-    for parcelle_nom, culture, variete, unite, type_action, rang, quantite, date, identifiant in requete.all():
+    for (parcelle_nom, culture, variete, unite, type_action, rang, quantite, date, identifiant,
+         position, longueur_rang) in requete.all():
         est_semis = type_action == "semis"
         cle = (
             parcelle_nom,
@@ -238,8 +254,108 @@ def _rangs_declares_a_installation(
                 "cle": cle, "rangs": rang,
                 "quantite": (quantite or 0) * (rang or 1),
                 "date": date, "id": identifiant,
+                "position": position, "longueur_m": longueur_rang,
             })
     return rangs
+
+
+def _positions_par_ligne(installations: list[dict]) -> dict[tuple, tuple]:
+    """[US-326 / CA5] La position dite de chaque ligne : celle de son PREMIER geste
+    d'installation qui en porte une (les gestes sont déjà dans l'ordre), avec la
+    longueur occupée dite sur ce rang. Limite assumée : une ligne née de deux
+    plantations à deux rangs différents se lit à partir de la première."""
+    positions: dict[tuple, tuple] = {}
+    for geste in installations:
+        if geste.get("position") and geste["cle"] not in positions:
+            positions[geste["cle"]] = (int(geste["position"]), geste.get("longueur_m"))
+    return positions
+
+
+def _appliquer_positions(
+    affectations: dict[tuple, list[dict]], positions: dict[tuple, tuple],
+) -> str:
+    """[US-326 / G3, G5, CA5] Pose chaque ligne à sa position dite, puis range les
+    autres dans les rangs libres, sans changer leur ordre relatif.
+
+    Une ligne posée au rang p qui occupe k rangs prend p … p + k − 1 ; plusieurs
+    lignes peuvent partager un numéro (rang partagé, G4 — le contrôle P4 est fait
+    à l'écriture). Les lignes sans position, dans leur ordre d'installation, prennent
+    chacune le premier bloc de rangs consécutifs libres : « sur 3 rangs » occupe
+    trois rangs consécutifs à partir du premier libre (G5).
+
+    Sans aucune position, RIEN n'est renuméroté (CA4) : chaque rang est seulement
+    marqué `installation`. Rend le mode de numérotation de la parcelle.
+    """
+    posees = {cle for cle in affectations if cle in positions and affectations[cle]}
+    if not posees:
+        for rangs in affectations.values():
+            for rang in rangs:
+                rang["position_source"] = SOURCE_INSTALLATION
+        return NUMEROTATION_ORDRE_INSTALLATION
+
+    pris: set[int] = set()
+    for cle in posees:
+        debut, longueur_rang = positions[cle]
+        for decalage, rang in enumerate(sorted(affectations[cle], key=lambda r: r["numero"])):
+            rang["numero"] = debut + decalage
+            rang["position_source"] = SOURCE_JARDINIER
+            # La longueur dite vaut pour chacun des rangs de la ligne.
+            rang["part_dite_m"] = longueur_rang
+            pris.add(rang["numero"])
+    # [G5] Chaque ligne sans position, dans son ordre d'installation, prend le
+    # PREMIER bloc de rangs consécutifs libres assez long pour elle.
+    restantes = sorted(
+        (sorted(rangs, key=lambda r: r["numero"])
+         for cle, rangs in affectations.items() if cle not in posees and rangs),
+        key=lambda rangs: rangs[0]["numero"],
+    )
+    for rangs in restantes:
+        debut = 1
+        while any(n in pris for n in range(debut, debut + len(rangs))):
+            debut += 1
+        for decalage, rang in enumerate(rangs):
+            rang["numero"] = debut + decalage
+            rang["position_source"] = SOURCE_INSTALLATION
+            pris.add(rang["numero"])
+    return NUMEROTATION_POSITIONS if not restantes else NUMEROTATION_MIXTE
+
+
+def _parts_des_rangs(affectations: dict[tuple, list[dict]], longueur: Optional[float]) -> None:
+    """[US-326 / G4, P4] La part de chaque culture sur son rang, en mètres et en
+    fraction. Une culture seule sur son rang l'occupe entier. Sur un rang partagé,
+    les longueurs dites sont gardées, le reste se répartit à parts égales entre
+    les cultures qui n'en ont pas dit (`part_source` = `repartie`). Sans longueur
+    de parcelle, aucune mesure n'est inventée : `part_m` à None, et la fraction ne
+    vaut 1 que pour un rang porté seul."""
+    par_numero: dict[int, list[dict]] = {}
+    for rangs in affectations.values():
+        for rang in rangs:
+            par_numero.setdefault(rang["numero"], []).append(rang)
+    for groupe in par_numero.values():
+        partage = len(groupe) > 1
+        if not longueur:
+            for rang in groupe:
+                rang["part_m"] = None
+                rang["part"] = None if partage else 1.0
+                rang["part_source"] = PART_REPARTIE if partage else PART_RANG_ENTIER
+            continue
+        dits = [r for r in groupe if r.get("part_dite_m")]
+        reste = max(0.0, float(longueur) - sum(float(r["part_dite_m"]) for r in dits))
+        muets = [r for r in groupe if not r.get("part_dite_m")]
+        for rang in groupe:
+            if rang.get("part_dite_m"):
+                rang["part_m"] = round(float(rang["part_dite_m"]), 1)
+                rang["part_source"] = SOURCE_JARDINIER
+            elif partage or dits:
+                rang["part_m"] = round(reste / len(muets), 1)
+                rang["part_source"] = PART_REPARTIE
+            else:
+                rang["part_m"] = float(longueur)
+                rang["part_source"] = PART_RANG_ENTIER
+            rang["part"] = round(rang["part_m"] / float(longueur), 2)
+    for rangs in affectations.values():
+        for rang in rangs:
+            rang.pop("part_dite_m", None)
 
 
 def _quantite_par_rang(quantite: float, rangs: int, mode: str) -> float:
@@ -405,25 +521,53 @@ def _affectations_par_rang(
     return affectations
 
 
+#: [US-329 / M6] Le stade d'un lot en cours, tel que le chemin mobile l'affiche.
+STADE_LOT_SEMIS = "semis"
+STADE_LOT_GODET = "godet"
+
+
 def _lots_en_cours_par_parcelle(
     db: Session, potager_id: Optional[int], date_ref: Optional[_date]
-) -> dict[str, int]:
+) -> dict[str, list[dict]]:
     """
-    [R8] Nombre de lots de semis encore en cours dans chaque parcelle pépinière,
-    en UNE lecture. Un lot est « en cours » tant qu'il occupe la pépinière : des
-    graines pas encore levées, ou des plants en godet pas encore plantés.
+    [R8] Lots de semis encore en cours dans chaque parcelle pépinière, en UNE
+    lecture. Un lot est « en cours » tant qu'il occupe la pépinière : des graines
+    pas encore levées, ou des plants en godet pas encore plantés.
+
+    [US-327 / P6] Le plan dessine ces lots en vignettes : chacun porte son numéro
+    court (celui de l'étiquette, US-209), sa culture et sa variété. Le nombre
+    (`nb_lots_en_cours`) reste la longueur de cette liste.
     """
-    lots: dict[str, int] = {}
+    lots: dict[str, list[dict]] = {}
     for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id):
         nom = lot.get("parcelle")
         if not nom:
             continue
-        occupe = graines_restantes(lot) > 0 or (   # [US-212]
-            lot.get("stock_residuel_godet") or 0
-        ) > 0
-        if occupe:
-            lots[nom] = lots.get(nom, 0) + 1
+        godets = int(lot.get("stock_residuel_godet") or 0)
+        graines = graines_restantes(lot)   # [US-212]
+        if graines > 0 or godets > 0:
+            lots.setdefault(nom, []).append({
+                "lot_id": lot.get("lot_id"),
+                "numero_lot": lot.get("numero_lot"),
+                "culture": lot.get("culture"),
+                "variete": lot.get("variete"),
+                # [US-329 / M6] La ligne d'un lot dans le chemin : sa quantité et son stade.
+                # Des godets l'emportent : c'est ce qui occupe la pépinière à planter.
+                "quantite": godets if godets > 0 else int(graines),
+                "unite": "godets" if godets > 0 else "graines",
+                "stade": STADE_LOT_GODET if godets > 0 else STADE_LOT_SEMIS,
+            })
     return lots
+
+
+def _lots_de(valeur) -> list[dict]:
+    """La liste des lots d'une pépinière ; un simple compte (ancien contrat) n'en a pas."""
+    return list(valeur) if isinstance(valeur, (list, tuple)) else []
+
+
+def _nombre_de_lots(valeur) -> int:
+    """[R8] Le nombre de lots en cours, qu'on reçoive la liste ou déjà le compte."""
+    return len(valeur) if isinstance(valeur, (list, tuple)) else int(valeur or 0)
 
 
 def repartition_du_plan(
@@ -466,6 +610,7 @@ def repartition_du_plan(
     attributs = attributs_culture or {}
     installations: list[dict] = []
     rangs_installes = _rangs_declares_a_installation(db, potager_id, date_ref, installations)
+    positions = _positions_par_ligne(installations)   # [US-326]
     pepinieres = {p.nom for p in parcelles if p.est_pepiniere}
     lots_par_parcelle = (
         _lots_en_cours_par_parcelle(db, potager_id, date_ref) if pepinieres else {}
@@ -509,15 +654,16 @@ def repartition_du_plan(
         affectations = _affectations_par_rang(
             parcelle, entrees, rangs_installes, installations, attributs, longueur,
         )
+        # [US-326] Position dite, puis part de chaque culture sur son rang.
+        mode_numerotation = _appliquer_positions(affectations, positions)
+        _parts_des_rangs(affectations, longueur)
         rangs_du_plan: list[dict] = []
-        numero = 0
         for entree in entrees:
             cle = cle_ligne(parcelle.nom, entree)
             mode = mode_implantation(entree.get("unite"))
             repartition = affectations[cle]
             numeros = [rang["numero"] for rang in repartition]
             rangs = len(numeros)
-            numero = max(numero, max(numeros, default=0))
 
             quantite = _quantite_par_rang(entree.get("nb_plants") or 0, rangs, mode)
             lignes[cle] = {
@@ -526,6 +672,10 @@ def repartition_du_plan(
                 "quantite_par_rang": quantite,
                 "date_installation": _jour(entree.get("date_plantation")),
                 "numeros_rangs": numeros,
+                # [US-326 / G3] « jardinier » si la position a été dite, sinon
+                # « installation » : le numéro est un ordre, pas une place en terre.
+                "position_source": (repartition[0].get("position_source") if repartition
+                                    else SOURCE_INSTALLATION),
             }
 
             espacement = (
@@ -533,7 +683,11 @@ def repartition_du_plan(
             ).get("espacement_rang_cm")
             for affectation in repartition:
                 mesures = _mesures_du_rang(
-                    mode=mode, unite=cle[3], longueur_m=longueur,
+                    # [US-326] Sur un rang partagé, la capacité se mesure sur la
+                    # part de CETTE culture ; seule sur son rang, part = longueur.
+                    mode=mode, unite=cle[3],
+                    longueur_m=(affectation["part_m"] if affectation.get("part_m") is not None
+                                else longueur),
                     espacement_cm=espacement,
                     quantite_par_rang=affectation["quantite_par_rang"],
                 )
@@ -551,16 +705,21 @@ def repartition_du_plan(
                 })
 
         rangs_du_plan.sort(key=lambda rang: rang["numero"])
-        rangs_occupes = numero
+        # [US-326] Un rang partagé compte une fois ; une position dite peut laisser
+        # des rangs libres AVANT elle. Sans position, les numéros sont 1 … n
+        # consécutifs et ces lignes redonnent exactement le calcul d'avant (CA4).
+        occupes = {rang["numero"] for rang in rangs_du_plan}
+        rangs_occupes = len(occupes)
         declares = parcelle.nb_rangs
+        libres = [n for n in range(1, (declares or 0) + 1) if n not in occupes]
         # [R6] Sans nombre déclaré, les rangs libres sont « inconnus » (None),
         # jamais zéro : une parcelle non mesurée n'est pas une parcelle pleine.
-        rangs_libres = None if declares is None else max(0, declares - rangs_occupes)
+        rangs_libres = None if declares is None else len(libres)
         # [R7] Plus de rangs occupés que déclarés : aucune culture n'est masquée,
         # c'est la parcelle qui porte l'écart.
         depassement = 0 if declares is None else max(0, rangs_occupes - declares)
 
-        for n in range(rangs_occupes + 1, (declares or 0) + 1):
+        for n in libres:
             rangs_du_plan.append({
                 "numero": n,
                 "libre": True,
@@ -581,10 +740,16 @@ def repartition_du_plan(
             "rangs_libres": rangs_libres,
             "depassement": depassement,
             "rangs": rangs_du_plan,
-            "mode_numerotation": NUMEROTATION_ORDRE_INSTALLATION,
+            "mode_numerotation": mode_numerotation,
             # [R8] Une pépinière porte ses lots en cours, pas des lignes de semis.
             "nb_lots_en_cours": (
-                lots_par_parcelle.get(parcelle.nom, 0) if parcelle.est_pepiniere else None
+                _nombre_de_lots(lots_par_parcelle.get(parcelle.nom, 0))
+                if parcelle.est_pepiniere else None
+            ),
+            # [US-327 / P6] Les lots eux-mêmes, que le plan dessine en vignettes ;
+            # None hors pépinière, comme le compte.
+            "lots_en_cours": (
+                _lots_de(lots_par_parcelle.get(parcelle.nom)) if parcelle.est_pepiniere else None
             ),
         }
 

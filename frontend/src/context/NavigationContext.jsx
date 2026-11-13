@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { validerIntention, creerMemoireEcrans, etatInitial } from '../lib/intentions.js'
+import { validerIntention, creerMemoireEcrans, etatInitial, vueRedirigee } from '../lib/intentions.js'
 
 /**
  * Navigation contextuelle de la coquille [US-195].
@@ -38,7 +38,9 @@ export function NavigationProvider({
    * [CA1] Ouvrir une vue, avec ou sans intention. L'intention est validée ICI —
    * une clé inconnue ou une valeur invalide est écartée avant d'atteindre la vue.
    */
-  const aller = useCallback((cible, intention) => {
+  const aller = useCallback((brute, intention) => {
+    // [US-330 / CA5] Les anciens liens vers l'onglet Parcelles arrivent au Plan.
+    const cible = vueRedirigee(brute)
     if (!vueValide(cible)) return
     const propre = validerIntention(cible, intention)
     setEnAttente(propre ? { vue: cible, intention: propre } : null)

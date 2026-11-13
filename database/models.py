@@ -140,6 +140,15 @@ class Potager(Base):
     # [US-294 / CA6] Le propriétaire interdit les assistants IA externes (MCP) pour ce potager. Migration v70.
     assistants_externes_interdits = Column(Boolean, nullable=False, default=False, server_default=text("false"))
 
+    # [US-326 / migration_v76] Géométrie du potager sur le plan vue du dessus :
+    # emprise (m), angle du plan, orientation du nord (8 directions). Bornes et
+    # vocabulaire : CHECK `ck_potagers_geometrie`, revalidés par
+    # `app.services.geometrie` (SQLite ne porte pas les CHECK ajoutés après coup).
+    emprise_longueur_m = Column(Float, nullable=True)
+    emprise_largeur_m  = Column(Float, nullable=True)
+    angle_deg          = Column(Float, nullable=True)
+    orientation_nord   = Column(String(2), nullable=True)
+
 
 class PotagerMembre(Base):
     """[US-040] Appartenance d'un utilisateur à un potager, avec son rôle."""
@@ -219,7 +228,13 @@ class Evenement(Base):
     # Localisation
     # [migration_v12] colonne parcelle (texte dénormalisé) supprimée — parcelle_id est l'unique référence
     parcelle_id    = Column(Integer, ForeignKey("parcelles.id"), nullable=True, index=True)
-    rang           = Column(Integer)   # [migration_v3] INTEGER (pas String)
+    rang           = Column(Integer)   # [migration_v3] INTEGER (pas String) — MULTIPLICATEUR (US-198)
+    # [US-326 / migration_v76] POSITION du premier rang occupé (1 à nb_rangs), dite
+    # à l'installation (« au rang 3 »). Rien à voir avec `rang` ci-dessus.
+    rang_position   = Column(SmallInteger, nullable=True)
+    # [US-326 / P4] Longueur occupée (m) sur un rang PARTAGÉ — n'existe que si la
+    # parcelle a une longueur : sans elle, un rang ne porte qu'une culture.
+    rang_longueur_m = Column(Float, nullable=True)
 
     # Détails
     duree          = Column(Integer)
@@ -988,6 +1003,18 @@ class Parcelle(Base):
     # garantis par le CHECK SQL, revalidés au point d'écriture Python.
     type_pepiniere = Column(String(8), nullable=True)
 
+    # [US-326 / migration_v76] Géométrie sur le plan. La LONGUEUR est
+    # `longueur_m` ci-dessus (G1 : pas de second champ). x_m et y_m NULL ensemble
+    # = parcelle « à placer » ; aucune géométrie n'est inventée (G6). `forme` est
+    # un champ libre de toute cohérence avec `abri` / `type_pepiniere` (P7).
+    # Validation : `app.services.geometrie`, doublée du CHECK `ck_parcelles_geometrie`.
+    forme         = Column(String(12), nullable=True)
+    x_m           = Column(Float, nullable=True)
+    y_m           = Column(Float, nullable=True)
+    largeur_m     = Column(Float, nullable=True)
+    rotation_deg  = Column(Float, nullable=True)
+    sens_rangs    = Column(String(10), nullable=True)
+
     # [US-040] Rattachement tenant, backfillé = potager #1.
     # [US-042 / migration_v17] NOT NULL en production — voir commentaire équivalent
     # sur Evenement.potager_id (nullable=True + default=1 ORM volontairement conservés).
@@ -1497,6 +1524,10 @@ class EchangeConversation(Base):
     #: [US-303 / CA1] Le résumé parlé de la réponse (1 à 2 phrases), calculé à la première lecture
     #: puis réutilisé : une seconde lecture ne rappelle pas le modèle (migration_v72).
     texte_oral      = Column(Text, nullable=True)
+    #: [US-323 / CA6] Ce que le jardinier avait sous les yeux dans la PWA quand il a écrit :
+    #: {"niveau", "parcelle_id", "parcelle", "culture", "variete", "rang"} ; NULL sans contexte
+    #: (Telegram, conversation libre). Sert à mesurer l'effet du contexte (migration_v77).
+    contexte        = Column(JSON(none_as_null=True), nullable=True)
     cree_le         = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (

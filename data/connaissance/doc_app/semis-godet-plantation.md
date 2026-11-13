@@ -95,3 +95,10 @@ Une mise en godet, une perte de godet ou une vente de plants ne s'enregistre pas
 Quand le lot est connu — cité par son numéro, ou seul lot de la culture —, la question annonce ce que la base en sait (« il reste 50 plants en godet ») et propose **Tout le lot : 50** : un appui solde le lot sans autre question. On peut aussi taper un autre nombre ; pour une mise en godet, l'assistant demande ensuite sur combien de graines, ce qui donne le taux de réussite. Une perte ou une vente ne peut pas dépasser ce qu'il reste dans le lot cité.
 
 Pour une mise en godet seulement, « Je ne sais pas » enregistre sans nombre : c'est un choix explicite, annoncé comme tel (aucun plant n'entre en stock, l'avancement du lot reste indéterminé). Pour une perte ou une vente, le nombre est nécessaire.
+
+## Noter la levée d'un semis en pleine terre
+
+**Intention :** procédure
+**On parle aussi de :** les carottes ont levé ; levée en pleine terre ; semis direct levé ; ça a germé ; levée vue
+
+Un semis fait directement en pleine terre se note levé d'une phrase : « les carottes ont levé », ou « les fèves ont levé sur la planche centrale ». Il n'y a rien à compter : constater la levée suffit, et elle valide l'étape « levé » de ce semis sur le plan. La levée est rattachée au semis le plus récent de cette culture en pleine terre, sur la parcelle dite si vous en citez une. En pépinière, la levée d'un lot reste un comptage (« levée du lot 128 : 40 »).

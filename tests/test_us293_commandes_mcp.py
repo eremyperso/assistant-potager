@@ -45,7 +45,8 @@ class TestCA1Registre:
         from app.services.agent.executeurs import EXECUTEURS
 
         proposables = {f.cle for f in svc_commandes.formes_proposables()}
-        assert proposables == set(EXECUTEURS)
+        # [US-332] La suppression d'une parcelle vide a un exécuteur, mais reste destructrice : jamais proposable.
+        assert proposables == set(EXECUTEURS) - {("parcelle", "supprimer")}
         assert ("parcelle", "supprimer") not in proposables
 
     def test_us293_une_forme_ajoutee_au_registre_devient_proposable(self, monkeypatch):

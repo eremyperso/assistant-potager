@@ -135,7 +135,8 @@ test('CA6 — la phrase transcrite part aussitôt par l’envoi habituel', () =>
   assert.equal(issueTranscription(' j’ai semé 30 graines ').envoyer, true)
   assert.equal(issueTranscription(' j’ai semé 30 graines ').phrase, 'j’ai semé 30 graines')
   assert.match(PANNEAU, /onTexte: \(phrase\) => envoyer\(phrase, undefined, true\)/)
-  assert.match(PANNEAU, /api\.messageCompagnon\(phrase, modeForce \?\? mode\)/)
+  // [US-323] puis le contexte d'écran, quand la barre de contexte est ouverte.
+  assert.match(PANNEAU, /api\.messageCompagnon\(\s*phrase, modeForce \?\? mode[,)]/)
 })
 
 test('CA6 — la bulle d’une phrase dictée est marquée du micro', () => {

@@ -64,7 +64,7 @@ ACTION_KEYWORDS = {
     "perdu"        : "perte",
     "perte"        : "perte",
     "mort"         : "perte",
-    "arraché"      : "perte",
+    "arraché"      : "fin_culture",   # [US-320] arracher = terminer la culture
     "crevé"        : "perte",
 }
 

@@ -43,8 +43,8 @@ test('[CA7] une culture non localisée ouvre sa fiche, sans contexte de parcelle
   assert.equal(destinationNonLocalisee({ culture: '' }), null)
 })
 
-test('[CA4, I4] « Fiche parcelle → » ouvre l’onglet Parcelles sur cette parcelle', () => {
-  assert.deepEqual(destinationFicheParcelle(carte), { type: 'aller', vue: 'plan', intention: { parcelle: 7 } })
+test('[CA4, I4] « Fiche parcelle → » ouvre le détail de cette parcelle dans le Plan', () => {
+  assert.deepEqual(destinationFicheParcelle(carte), { type: 'aller', vue: 'plan-vue', intention: { parcelle: 7 } })
 })
 
 test('[CA4, I5 amendée] une seule pépinière : « Ma pépinière », sans filtre', () => {

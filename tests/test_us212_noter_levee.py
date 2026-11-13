@@ -354,8 +354,12 @@ class TestDesignationDuLot:
         db.add(Evenement(type_action="semis", culture="carotte", quantite=100, unite="graines",
                          parcelle_id=1, contexte_semis="pleine_terre", date=datetime(2026, 9, 1), potager_id=1))
         db.commit()
-        with pytest.raises(svc_evenements.LeveeHorsPepiniereError, match="rien à compter"):
-            svc_evenements.resoudre_lot_levee(db, CTX, {"action": "levee", "culture": "carotte", "quantite": 12})
+        # [US-320 / E4] Ce n'est toujours pas un lot de pépinière, mais la levée d'un semis
+        # en pleine terre se note désormais : elle valide l'étape « Levé » de ce semis.
+        parsed = {"action": "levee", "culture": "carotte", "quantite": 12}
+        lot = svc_evenements.resoudre_lot_levee(db, CTX, parsed)
+        assert lot["pleine_terre"] is True and lot.get("numero_lot") is None
+        assert parsed["_levee_pleine_terre"] is True
 
     def test_us212_ca4_pleine_terre_le_bot_dit_et_propose_l_observation(self, db, monkeypatch):
         """Gherkin « Semis en pleine terre » : le bot indique que la levée se note sur un lot de

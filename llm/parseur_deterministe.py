@@ -111,6 +111,7 @@ VARIANTES_TROP_GENERIQUES: frozenset[str] = frozenset({
 # rejet plutôt que de produire un item voué à être refusé.
 GESTES_EXIGEANT_CULTURE: frozenset[str] = frozenset({
     "semis", "plantation", "mise_en_godet", "recolte", "perte", "perte_godet", "vendu",
+    "fin_culture",   # [US-320] on termine UNE culture
 })
 
 # Gestes pour lesquels un simple dénombrement sans unité prononcée signifie
@@ -379,6 +380,67 @@ def _regrouper_unites_implantation(mots: list[str], geste: str) -> list[str]:
     return sortie
 
 
+# [US-326 / CA5] « au rang 3 », « dans le rang 3 », « au troisième rang » : une
+# POSITION, pas le multiplicateur « sur 3 rangs » (qui reste au modèle).
+_PREFIXES_POSITION_RANG: frozenset[str] = frozenset({"au", "dans", "sur"})
+_MOTS_NUMERO: frozenset[str] = frozenset({"numero", "no", "n"})
+_ORDINAUX: dict[str, int] = {
+    "premier": 1, "1er": 1, "deuxieme": 2, "second": 2, "troisieme": 3, "quatrieme": 4,
+    "cinquieme": 5, "sixieme": 6, "septieme": 7, "huitieme": 8, "neuvieme": 9, "dixieme": 10,
+}
+
+
+def _valeur_rang(mot: str) -> Optional[int]:
+    """Un numéro de rang : chiffres, nombre en lettres, ou ordinal (« 3e », « 3eme »)."""
+    if re.fullmatch(r"\d{1,2}", mot):
+        return int(mot)
+    m = re.fullmatch(r"(\d{1,2})(?:e|eme|er)", mot)
+    if m:
+        return int(m.group(1))
+    if mot in _ORDINAUX:
+        return _ORDINAUX[mot]
+    if mot in NOMBRES_LETTRES:
+        return int(NOMBRES_LETTRES[mot])
+    return None
+
+
+def _detacher_position_rang(mots: list[str]) -> tuple[list[str], Optional[int]]:
+    """[US-326 / CA5] Retire « au rang 3 » / « dans le rang 3 » / « au 3e rang » des
+    mots et rend la position. Rien n'est retiré si la tournure n'est pas exactement
+    celle d'une position : « sur 3 rangs » reste un multiplicateur, et ira au modèle."""
+    for i, mot in enumerate(mots):
+        if mot not in ("rang", "rangee"):
+            continue
+        debut = i
+        # « au 4e rang » : la normalisation sépare « 4 » de « e ».
+        if i >= 3 and mots[i - 1] in ("e", "eme", "er", "ieme") and re.fullmatch(r"\d{1,2}", mots[i - 2]) \
+                and mots[i - 3] in ("au", "le"):
+            debut = i - 3
+            if mots[debut] == "le" and debut >= 1 and mots[debut - 1] in _PREFIXES_POSITION_RANG:
+                debut -= 1
+            return mots[:debut] + mots[i + 1:], int(mots[i - 2])
+        if debut >= 1 and mots[debut - 1] == "le" and debut >= 2 and mots[debut - 2] in _PREFIXES_POSITION_RANG:
+            debut -= 2
+        elif debut >= 1 and mots[debut - 1] == "au":
+            debut -= 1
+        elif debut >= 2 and mots[debut - 2] in ("au", "le") and _valeur_rang(mots[debut - 1]) is not None \
+                and not re.fullmatch(r"\d+", mots[debut - 1]):
+            # « au troisième rang », « au 3e rang » — jamais « au 3 rang ».
+            position = _valeur_rang(mots[debut - 1])
+            debut -= 2
+            if debut >= 1 and mots[debut] == "le" and mots[debut - 1] in _PREFIXES_POSITION_RANG:
+                debut -= 1
+            return mots[:debut] + mots[i + 1:], position
+        else:
+            continue
+        fin = i + 1
+        if fin < len(mots) and mots[fin] in _MOTS_NUMERO:
+            fin += 1
+        if fin < len(mots) and _valeur_rang(mots[fin]) is not None:
+            return mots[:debut] + mots[fin + 1:], _valeur_rang(mots[fin])
+    return mots, None
+
+
 def _extraire_nombres(mots: list[str]) -> tuple[list[tuple[int, float]], list[str]]:
     """Repère les nombres exploitables. Retourne [(position, valeur)] et les mots.
 
@@ -595,6 +657,9 @@ def parser_saisie(
 
     mots = _regrouper_unites_implantation(mots, geste)
 
+    rang_position: Optional[int] = None
+    if geste in ("plantation", "semis"):
+        mots, rang_position = _detacher_position_rang(mots)   # [US-326 / CA5]
     if any(m in _MOTS_RANG for m in mots):
         return _repli("vocabulaire de rangs — partage quantité/rang ambigu", texte)
 
@@ -740,6 +805,9 @@ def parser_saisie(
 
     if contexte_semis is not None:
         item["contexte_semis"] = contexte_semis
+
+    if rang_position is not None:
+        item["rang_position"] = rang_position   # [US-326 / CA5] une position, pas un multiplicateur
 
     if numero_lot_cite is not None:
         item["numero_lot_cite"] = numero_lot_cite   # [US-209 / CA5] résolu au récapitulatif

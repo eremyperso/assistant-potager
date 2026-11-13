@@ -742,9 +742,9 @@ export function destinationNonLocalisee(ligne) {
   return { type: 'culture', culture: ligne.culture, parcelleId: null, nomParcelle: '', rang: null }
 }
 
-/** [I4] « Fiche parcelle → » : l'onglet Parcelles, cette parcelle sélectionnée. */
+/** [I4, US-330] « Fiche parcelle → » : le détail de cette parcelle, dans le Plan. */
 export function destinationFicheParcelle(carte) {
-  return { type: 'aller', vue: 'plan', intention: { parcelle: carte?.id } }
+  return { type: 'aller', vue: 'plan-vue', intention: { parcelle: carte?.id } }
 }
 
 /**

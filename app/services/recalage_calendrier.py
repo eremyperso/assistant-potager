@@ -62,6 +62,10 @@ ACTION_SEMIS = "semis"
 ACTION_GODET = "mise_en_godet"
 ACTION_PLANTATION = "plantation"
 ACTION_RECOLTE = "recolte"
+#: [US-320] Gestes qui font avancer les étapes d'une culture sans ouvrir de série.
+ACTION_LEVEE = "levee"
+ACTION_PERTE = "perte"
+ACTION_FIN_CULTURE = "fin_culture"
 
 ORGANE_VEGETATIF = "végétatif"
 
@@ -660,6 +664,9 @@ class TuileLue:
     recoltes: list[Geste]
     itineraire: object
     organe: Optional[str]
+    #: [US-320] Levées, pertes et fins de culture de la tuile — lues par les étapes
+    #: seulement : la projection et la phase ne les voient pas (aucun calcul ne change).
+    suivis: tuple[Geste, ...] = ()
 
 
 def lire_tuiles(
@@ -684,7 +691,10 @@ def lire_tuiles(
     plafond = datetime.combine(date_ref, datetime.max.time())
     requete = (
         db.query(Evenement)
-        .filter(Evenement.type_action.in_([ACTION_SEMIS, ACTION_GODET, ACTION_PLANTATION, ACTION_RECOLTE]))
+        .filter(Evenement.type_action.in_([
+            ACTION_SEMIS, ACTION_GODET, ACTION_PLANTATION, ACTION_RECOLTE,
+            ACTION_LEVEE, ACTION_PERTE, ACTION_FIN_CULTURE,   # [US-320] étapes
+        ]))
         .filter(Evenement.date.isnot(None), Evenement.date >= plancher, Evenement.date <= plafond)
     )
     if potager_id is not None:
@@ -715,6 +725,10 @@ def lire_tuiles(
     for parcelle_id, culture, _v in tuiles:
         parcelles_par_culture.setdefault(culture, set()).add(parcelle_id)
     recoltes = [g for g in gestes if g.action == ACTION_RECOLTE and g.culture in demandees]
+    suivis = [
+        g for g in gestes
+        if g.action in (ACTION_LEVEE, ACTION_PERTE, ACTION_FIN_CULTURE) and g.culture in demandees
+    ]
 
     calendriers: dict[str, object] = {}
     organes: dict[str, Optional[str]] = {}
@@ -732,12 +746,24 @@ def lire_tuiles(
             and (r.parcelle_id == parcelle_id or (r.parcelle_id is None and seules))
             and (r.variete in ("", variete))
         ]
+        # [US-320] Une levée se rattache à son semis (lot ou semis direct) ; une perte ou
+        # une fin de culture à la parcelle de la tuile, variété dite ou non précisée.
+        ids_origines = {o.id for o in origines}
+        suivis_tuile = tuple(
+            g for g in suivis
+            if g.culture == culture and (
+                (g.action == ACTION_LEVEE and g.origine_graines_id in ids_origines)
+                or (g.action != ACTION_LEVEE and g.parcelle_id == parcelle_id
+                    and g.variete in ("", variete))
+            )
+        )
         lues.append(TuileLue(
             parcelle_id=parcelle_id, culture=culture, variete=variete,
             nom_culture=noms[(parcelle_id, culture, variete)][0],
             nom_variete=noms[(parcelle_id, culture, variete)][1],
             origines=origines, recoltes=recoltes_tuile,
             itineraire=calendriers[culture], organe=organes[culture],
+            suivis=suivis_tuile,
         ))
     return lues, index
 

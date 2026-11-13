@@ -161,6 +161,10 @@ _MOTIF_NOMBRE = re.compile(r"\d+(?:[.,]\d+)?")
 _MOTIF_UNITE_CARREE = re.compile(r"(?<=\d)\s*m(?:2|²)(?!\d)")
 
 
+#: Un nombre suivi d'une unité de longueur ou de surface : « 6 m », « 20 m2 », « 3 metres ».
+_MOTIF_MESURE = re.compile(r"\d\s*(?:m|m2|cm|metres?|centimetres?)\b")
+
+
 def _nombres_de(texte: str) -> set[float]:
     sans_unite = _MOTIF_UNITE_CARREE.sub(" m ", texte or "")
     return {float(brut.replace(",", ".")) for brut in _MOTIF_NOMBRE.findall(sans_unite)}
@@ -349,6 +353,12 @@ def _valeurs_modifier_parcelle(
             valeur = _nombre(valeur, entier=champ.type_json == "integer")
             if not _nombre_dit(valeur, contexte.texte):
                 raise _Rejet(f"{champ.nom} : {adaptateurs.texte_nombre(valeur)} n'a pas été dit")
+            # Un nombre dit ne suffit pas : « planter 3 plants d'aubergine sur la planche courges »
+            # n'est pas « 3 rangs ». Le champ doit être nommé (« rangs », « longueur »…) ou le nombre
+            # porter une unité de mesure (« 6 m », « 20 m² »).
+            if not (_evoque([champ.libelle, *_termes_du_nom(champ.nom), champ.cle], mots)
+                    or (champ.type_json == "number" and _MOTIF_MESURE.search(normaliser(contexte.texte or "")[0]))):
+                raise _Rejet(f"{champ.nom} : {adaptateurs.texte_nombre(valeur)} est dit, mais pas pour ce champ")
             retenus.append((champ, valeur))
             continue
         elif champ.vocabulaire:

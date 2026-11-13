@@ -55,7 +55,9 @@ class TestActionMap:
         assert "perte" in ACTION_MAP
         assert "perdu" in ACTION_MAP["perte"]
         assert "mort" in ACTION_MAP["perte"]
-        assert "arrache" in ACTION_MAP["perte"]
+        # [US-320] « arraché » seul est une fin de culture ; « arraché par » reste une perte.
+        assert "arrache" in ACTION_MAP["fin_culture"]
+        assert "arrache par" in ACTION_MAP["perte"]
         assert "creve" in ACTION_MAP["perte"]
 
     def test_action_map_structure(self):

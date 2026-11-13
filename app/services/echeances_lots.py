@@ -1145,6 +1145,46 @@ def _pepinieres_du_potager(db: Session, ctx: TenantContext) -> list[dict]:
     ]
 
 
+def _est_pret(lot: dict, echeances: dict) -> bool:
+    """[US-214, US-217] Prêt pour le plan : des godets, et une mise en terre prévue
+    atteinte ou inconnue (inconnue n'est jamais « pas encore »)."""
+    if not _a_des_godets(lot):
+        return False
+    etat = echeances["mise_en_terre"]["etat"]
+    return etat in (ETAT_ATTEINTE, ETAT_DEPASSEE) or etat is None
+
+
+def lots_prets_pour_le_plan(
+    db: Session, ctx: TenantContext, date_ref: Optional[date] = None,
+) -> list[dict]:
+    """[US-328 / CA3] Les lots de pépinière prêts à planter, pour la liste « À placer ».
+
+    Même règle que le bandeau « prêts pour le plan » de la Pépinière (`_est_pret`) : les
+    deux écrans ne peuvent pas compter différemment. Lecture seule ; le Plan n'est pas relu
+    (« Où les mettre » n'est pas demandé ici). Triés par numéro de lot.
+    """
+    ref = date_ref or date.today()
+    cache: dict = {}
+    prets: list[dict] = []
+    for lot in svc_stock.calcul_lots_pepiniere(db, ctx, date_ref):
+        if not _a_des_godets(lot):
+            continue
+        delais = _delais_de(db, lot.get("culture") or "", ctx.potager_id, cache)
+        if not _est_pret(lot, _echeances_du_lot(lot, delais, ref)["echeances"]):
+            continue
+        prets.append({
+            "lot_id": lot.get("lot_id"),
+            "numero_lot": lot.get("numero_lot"),
+            "culture": lot.get("culture"),
+            "variete": lot.get("variete"),
+            "quantite": int(lot.get("stock_residuel_godet") or 0),
+            "pepiniere": lot.get("parcelle"),
+        })
+    prets.sort(key=lambda l: (l["numero_lot"] is None, l["numero_lot"] or 0))
+    log.info("[US-328] Lots prêts pour le plan : potager=%s date=%s lots=%d", ctx.potager_id, ref, len(prets))
+    return prets
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Point d'entrée
 # ═════════════════════════════════════════════════════════════════════════════
@@ -1209,16 +1249,7 @@ def lire_echeances(
         if par_lot[lot["lot_id"]]["echeances"]["endurcissement"]["etat"] == ETAT_EN_COURS
     ]
 
-    def _pret(lot: dict) -> bool:
-        """Des godets, et une mise en terre prévue atteinte ou inconnue."""
-        if not _a_des_godets(lot):
-            return False
-        e = par_lot[lot["lot_id"]]["echeances"]
-        if e["mise_en_terre"]["etat"] in (ETAT_ATTEINTE, ETAT_DEPASSEE):
-            return True
-        return e["mise_en_terre"]["etat"] is None  # inconnue : jamais « pas encore »
-
-    prets = [lot for lot in lots if _pret(lot)]
+    prets = [lot for lot in lots if _est_pret(lot, par_lot[lot["lot_id"]]["echeances"])]
     plants_prets = sum(int(lot.get("stock_residuel_godet") or 0) for lot in prets)
 
     cultures_en_cours = {

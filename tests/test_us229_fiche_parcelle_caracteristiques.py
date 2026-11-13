@@ -30,7 +30,7 @@ from database.models import Parcelle
 
 RACINE = Path(__file__).resolve().parent.parent
 LIB = RACINE / "frontend" / "src" / "lib" / "planParcelles.js"
-VUE = RACINE / "frontend" / "src" / "views" / "Plan.jsx"
+VUE = RACINE / "frontend" / "src" / "components" / "DetailParcelle.jsx"
 
 #: [CA3] Les champs de la carte (C2) et la colonne de `parcelles` qui les porte.
 #: La largeur est la seule exception : elle ne se stocke pas, elle se déduit.
@@ -153,8 +153,11 @@ def test_us229_ca3_chaque_champ_affiche_est_une_colonne_existante() -> None:
 
 
 def test_us229_ca3_la_largeur_n_est_pas_une_colonne() -> None:
-    """CA3 — La largeur reste DÉDUITE : elle n'a jamais été stockée (US-225)."""
-    assert "largeur_m" not in Parcelle.__table__.columns.keys()
+    """CA3 — Jusqu'à US-326, la largeur était seulement DÉDUITE. US-326 / G1 la fait
+    POSER sur le plan : c'est désormais une colonne nullable, et la déduction
+    d'US-225 reste le repli tant qu'elle n'est pas posée."""
+    colonne = Parcelle.__table__.columns["largeur_m"]
+    assert colonne.nullable
 
 
 def test_us229_ca3_aucune_migration_livree() -> None:
@@ -184,7 +187,7 @@ def test_us229_ca9_leve_par_us230_le_bouton_modifier_agit() -> None:
     """
     vue = VUE.read_text(encoding="utf-8")
     bloc = vue[vue.index("function CarteCaracteristiques"):]
-    bloc = bloc[: bloc.index("// ── Panneau de détail")]
+    bloc = bloc[: bloc.index("// ── [US-231] Carte « Rotation »")]
     # La promesse d'US-229 est tenue : plus de bouton mort, plus de « bientôt ».
     assert "arrive bientôt" not in bloc
     assert "tabIndex={-1}" not in bloc
@@ -199,5 +202,5 @@ def test_us229_ca9_le_bouton_reste_absent_en_lecture_seule() -> None:
     n'est pas rendu."""
     vue = VUE.read_text(encoding="utf-8")
     bloc = vue[vue.index("function CarteCaracteristiques"):]
-    bloc = bloc[: bloc.index("// ── Panneau de détail")]
+    bloc = bloc[: bloc.index("// ── [US-231] Carte « Rotation »")]
     assert "!lectureSeule &&" in bloc

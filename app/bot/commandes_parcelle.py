@@ -1,4 +1,4 @@
-"""Commande /parcelle et suppression confirmée.
+"""Commande /parcelle et retrait confirmé (supprimer une parcelle vide, rendre inactive) [US-332].
 
 Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
@@ -9,6 +9,8 @@ from utils.parcelles import create_parcelle, normalize_parcelle_name, find_doubl
 from app.services.context import current_context
 from app.services import evenements as svc_evenements
 from app.services import parcelles as svc_parcelles
+from app.services import retrait_parcelle as svc_retrait  # [US-332]
+from app.services.permissions import PermissionInsuffisanteError
 from .noyau import MENU_KEYBOARD, _md, log
 from .liaison import _refuser_si_role_insuffisant
 
@@ -310,21 +312,30 @@ async def cmd_parcelle(update, ctx) -> None:
                     parse_mode="Markdown",
                 )
                 return
-            nb = svc_evenements.compter_evenements_parcelle(db, current_context(), parcelle.id)
-            nb_str = (
-                f"⚠️ *{nb} événement{'s' if nb > 1 else ''}* seront réaffectés en *Non localisé*."
-                if nb > 0 else "Aucun événement associé."
-            )
-            buttons = [[
-                InlineKeyboardButton("✅ Confirmer", callback_data=f"parcelle_suppr_confirm:{parcelle.id}"),
-                InlineKeyboardButton("❌ Annuler",   callback_data="parcelle_suppr_cancel"),
-            ]]
-            log.info(f"[US-009] Demande suppression : {parcelle.nom!r} — {nb} événements")
-            await update.message.reply_text(
-                f"🗑 Supprimer la parcelle *{parcelle.nom.upper()}* ?\n{nb_str}",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(buttons),
-            )
+            # [US-332 / R2-R4] Gaston vérifie d'abord ce que la parcelle porte : avec cultures ou
+            # historique, la suppression n'est jamais proposée — on propose de la rendre inactive.
+            bilan = svc_retrait.bilan(db, current_context(), parcelle)
+            log.info(f"[US-332] Demande de retrait : {parcelle.nom!r} — vide={bilan['vide']}")
+            if bilan["vide"]:
+                buttons = [[
+                    InlineKeyboardButton("✅ Supprimer", callback_data=f"parcelle_suppr_confirm:{parcelle.id}"),
+                    InlineKeyboardButton("❌ Annuler",   callback_data="parcelle_suppr_cancel"),
+                ]]
+                await update.message.reply_text(
+                    f"🗑 Supprimer la parcelle *{parcelle.nom.upper()}* ?\n"
+                    "Elle n'a ni culture ni historique : la suppression est définitive.",
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+            else:
+                buttons = [[
+                    InlineKeyboardButton("⏸ Rendre inactive", callback_data=f"parcelle_suppr_inactiver:{parcelle.id}"),
+                    InlineKeyboardButton("❌ Annuler",        callback_data="parcelle_suppr_cancel"),
+                ]]
+                await update.message.reply_text(
+                    svc_retrait.message_refus(bilan) + "\n\n" + "\n".join(svc_retrait.lignes_du_bilan(bilan)),
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
         except Exception as e:
             log.error(f"[US-009] cmd_parcelle supprimer erreur : {e}")
             await update.message.reply_text(f"❌ Erreur : {e}")
@@ -405,7 +416,9 @@ async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text("Suppression annulée — la parcelle est conservée.", reply_markup=None)
         return
 
-    # parcelle_suppr_confirm:<parcelle_id>
+    # parcelle_suppr_confirm:<parcelle_id> (suppression réelle d'une parcelle vide)
+    # parcelle_suppr_inactiver:<parcelle_id> (rendre inactive, historique conservé)
+    action = query.data.split(":")[0]
     try:
         parcelle_id = int(query.data.split(":")[1])
     except (IndexError, ValueError):
@@ -417,24 +430,24 @@ async def _parcelle_suppr_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> 
         tenant_ctx = current_context()
         parcelle = svc_parcelles.get_parcelle(db, tenant_ctx, parcelle_id)
         if parcelle is None or not parcelle.actif:
-            await query.edit_message_text("❌ Parcelle introuvable ou déjà supprimée.", reply_markup=None)
+            await query.edit_message_text("❌ Parcelle introuvable ou déjà retirée.", reply_markup=None)
             return
-        nom = parcelle.nom
-        nb = svc_evenements.liberer_evenements_parcelle(db, tenant_ctx, parcelle_id)
-        parcelle.actif = False
-        db.commit()
-        log.info(f"[US-009] Parcelle supprimée : {nom!r} — {nb} événements réaffectés")
-        if nb > 0:
-            msg = (
-                f"✅ Parcelle *{nom.upper()}* supprimée — "
-                f"{nb} événement{'s' if nb > 1 else ''} réaffectés en *Non localisé*"
-            )
-        else:
-            msg = f"✅ Parcelle *{nom.upper()}* supprimée"
-        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=None)
+        try:
+            if action == "parcelle_suppr_inactiver":
+                msg = svc_retrait.inactiver(db, tenant_ctx, parcelle.nom)
+            else:
+                msg = svc_retrait.supprimer(db, tenant_ctx, parcelle.nom)
+        except svc_retrait.ParcelleNonVideError as e:
+            # [CA3] Une culture ou un geste est arrivé depuis la demande : rien n'est supprimé.
+            await query.edit_message_text(f"⚠️ {e}", reply_markup=None)
+            return
+        except PermissionInsuffisanteError as e:
+            await query.edit_message_text(f"🔒 {e}", reply_markup=None)
+            return
+        await query.edit_message_text(f"✅ {msg}", reply_markup=None)
     except Exception as e:
         db.rollback()
-        log.error(f"[US-009] _parcelle_suppr_cb erreur : {e}")
+        log.error(f"[US-332] _parcelle_suppr_cb erreur : {e}")
         await query.edit_message_text(f"❌ Erreur : {e}", reply_markup=None)
     finally:
         db.close()

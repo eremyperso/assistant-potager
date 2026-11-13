@@ -306,8 +306,9 @@ L'icône apparaît sur votre écran d'accueil. Vous pouvez maintenant l'ouvrir d
 
 Le tableau de bord est conçu **pour le pouce** sur téléphone, et s'étale en largeur sur grand écran.
 
-- **Cinq écrans de consultation** : Tableau de bord (vue d'ensemble et statistiques), Plan, Pépinière, Stocks et Journal. En bandeau haut sur ordinateur, en barre d'onglets basse sur téléphone.
-- **Trois écrans annoncés mais pas encore disponibles** : Cultures, Vue plan à l'échelle et Rotation. Ils affichent ce qu'ils contiendront plutôt qu'un lien mort — en attendant, `/fiche` et `/rotation` répondent depuis Telegram.
+- **Les écrans de consultation** : Tableau de bord (vue d'ensemble et statistiques), Plan, Cultures, Pépinière, Stocks et Journal. En bandeau haut sur ordinateur. Sur téléphone, la barre d'onglets basse porte **Accueil**, **Plan**, le bouton **Noter** au centre, **Pépinière** et **Plus**, qui ouvre Cultures, Stocks et Journal.
+- **Le plan vu du dessus** : la Vue plan dessine chaque parcelle à sa place, à l'échelle, et chaque rang en segments colorés selon l'étape de la culture (hachuré : prévu ; pastille orange : à confirmer). Toucher une culture ouvre son suivi — origine, étapes, récolté, notes — et un bouton « Noter » ; une parcelle sans position est listée « à placer ». Toucher le nom d'une parcelle ouvre son détail dans le Plan — en place, caractéristiques (modifiables), rotation, entretien — et la bascule « Plan | Liste » montre les mêmes parcelles en liste : l'ancien onglet « Parcelles » n'existe plus.
+- **Un écran annoncé mais pas encore disponible** : Rotation. Il reste visible, grisé, plutôt qu'un lien mort — en attendant, `/rotation` répond depuis Telegram.
 - **Un sélecteur de date de référence** en tête d'écran, pour remonter dans le temps.
 - **Un filtre par culture** sur les écrans qui listent des cultures.
 - **Un thème clair et un thème sombre**, votre choix est mémorisé.
@@ -437,7 +438,7 @@ Le renommage se propage sur **tout l'historique** : aucun événement passé n'e
 /parcelle supprimer serre-1
 ```
 
-La suppression demande confirmation, puis retire la parcelle des listes et du plan — **sans effacer aucun événement**. Les gestes qui s'y rattachaient restent au journal et basculent sous la mention « Non localisé ». Rien n'est perdu du passé de la planche, ni les récoltes qu'on y a faites, ni les cultures qui s'y sont succédé.
+Gaston vérifie d'abord ce que la parcelle porte. **Une parcelle sans culture ni historique** (créée par erreur) se supprime après confirmation, pour de bon. **Une parcelle qui a vécu ne se supprime jamais** : il propose de la rendre **inactive** (`/parcelle modifier serre-1 actif=non`, ou « rends inactive la parcelle serre-1 », ou « Rendre inactive ou supprimer… » dans le détail de la parcelle). Elle reste alors sur le plan, **grisée**, avec son historique et sa rotation ; elle sort seulement des choix d'un nouveau geste, et se réactive (« réactive la parcelle serre-1 »).
 
 ### 5.6 Votre premier enregistrement
 
@@ -1450,6 +1451,22 @@ Mode vocal allumé, Gaston peut vous répondre **à voix haute**, avec la voix c
 
 Si la voix ne répond pas, le ▶ dit « Lecture indisponible pour le moment » ; au-delà de **cent lectures par jour**, « Limite de lectures du jour atteinte ». Dans les deux cas, la réponse écrite reste lisible. Téléphone en mode silencieux, vous n'entendrez rien : ce n'est pas une panne. La lecture fonctionne sur les mêmes navigateurs que la dictée.
 
+## 17.6 quater Noter depuis le plan avec Gaston
+
+Dans le **suivi d'une culture** (toucher une culture sur le plan), le bouton **Noter** ouvre Gaston **à propos de cette culture**. Une barre sous son en-tête le dit : « À propos de : 🥦 Chou de Bruxelles · Planche centrale, rang 3 ». Dites simplement ce que vous voyez :
+
+- « feuilles du bas un peu jaunies » → une **note de cette culture** ; « arrosé » → un arrosage de sa planche ;
+- une phrase qui nomme **une autre** culture ou parcelle l'emporte : « j'ai arrosé la serre » va à la serre ;
+- « les fèves ont levé côté allée » → une carte à **deux lignes** : la note, et l'étape « Levée » du jour.
+
+**Les raccourcis** suivent l'étape : **Levée vue** / **Pas encore** (étape à confirmer), **Récolte** puis la quantité (« 800 grammes ») / **Culture terminée** (en récolte), **Rang libéré** (terminée), **Arrosé** / **Paillé** / **Désherbé** (parcelle). **Pas encore** n'écrit rien : Gaston se ferme et le rappel revient dans trois jours. Mode vocal allumé, le **micro s'ouvre seul** à l'ouverture.
+
+**La barre** : la croix retire le contexte (« Tout le potager ») ; **Préciser** propose vos parcelles, hors pépinières. Ouvert par son visage, Gaston n'a pas de barre.
+
+Rien n'est écrit avant **Confirmer**. Gaston dit ensuite ce qui a changé (« Fève passe à « Levé » sur le plan ») et propose **Retour au plan**. Un membre en lecture seule ne voit pas « Noter ».
+
+**Sur téléphone**, **Noter** est aussi au centre de la barre basse, depuis n'importe quel écran. Sur le Plan, il porte en pastille la culture choisie (son emoji), une épingle pour une parcelle, un micro sinon, et ouvre Gaston à son propos ; ailleurs, sur « Tout le potager ». Sur une pépinière, il renvoie vers **Ma pépinière**, où se notent les lots.
+
 ## 18. Partager son potager
 
 *Depuis l'application web — le compagnon Telegram suit automatiquement.*
@@ -1622,7 +1639,7 @@ Tout le reste s'enregistre **sans commande**, en dictant ou en écrivant la phra
 | `/parcelle ajouter <nom> [exposition] [m²]` | Créer une parcelle |
 | `/parcelle modifier <nom> clé=valeur…` | Modifier `exposition`, `superficie`, `ordre`, `pepiniere` (`chaude` = chauffée ou à l'intérieur, `froide`, `oui` = pépinière sans type, `non` retire aussi le type ; ex. `pepiniere=chaude`), `abri`, `paillage`, `rangs` (1 à 99 ; `rangs=aucun` pour revenir à « non renseigné »), `longueur` (0,5 à 200 m, longueur utile de la planche ; `longueur=aucune` pour revenir à « non renseignée ») |
 | `/parcelle renommer <ancien> <nouveau>` | Renommer, avec propagation sur tout l'historique |
-| `/parcelle supprimer <nom>` | Retirer une parcelle — les événements passent en « Non localisé » |
+| `/parcelle supprimer <nom>` | Supprimer une parcelle vide ; avec cultures ou historique, la rendre inactive (`actif=non`) à la place |
 
 ### 21.5 Compte et potager
 

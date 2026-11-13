@@ -60,6 +60,7 @@ _NATURES_PAR_ACTION: dict[str, tuple[str, ...]] = {
     "recolte": (NATURE_RECOLTE, NATURE_STOCK),
     "vendu": (NATURE_STOCK,),
     "perte": (NATURE_STOCK, NATURE_PLAN),
+    "fin_culture": (NATURE_STOCK, NATURE_PLAN),   # [US-320] retire le reste de la ligne
     "plantation": (NATURE_STOCK, NATURE_PLAN, NATURE_PEPINIERE),
     "semis": (NATURE_SEMIS, NATURE_PEPINIERE, NATURE_STOCK),
     "mise_en_godet": (NATURE_PEPINIERE, NATURE_SEMIS),

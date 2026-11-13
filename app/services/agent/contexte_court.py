@@ -156,6 +156,9 @@ class ContexteCourt:
     spontane: Optional[dict] = None
     #: [US-284 / CA2] La question que le compagnon vient de poser, à laquelle la phrase répond sans doute.
     question: Optional[QuestionEnAttente] = None
+    #: [US-323 / C5] Ce que le jardinier a sous les yeux dans la PWA (culture, parcelle, rang) :
+    #: une précision par défaut pour une phrase qui ne nomme ni culture ni parcelle.
+    sous_les_yeux: Optional[dict] = None
 
     def sans_question(self) -> "ContexteCourt":
         """[US-284 / CA4] Le même contexte, la question effacée : la phrase est une demande nouvelle."""
@@ -210,6 +213,8 @@ class ContexteCourt:
             donnees["propositions_dans_d_autres_potagers"] = list(self.ailleurs)
         if self.spontane:
             donnees["message_spontane"] = self.spontane
+        if self.sous_les_yeux:
+            donnees["sous_les_yeux"] = self.sous_les_yeux
         if self.question is not None:
             question: dict = {"phrase_du_jardinier": self.question.phrase, "ta_question": self.question.question}
             if self.question.choix:
@@ -238,6 +243,15 @@ class ContexteCourt:
                 "\nTu as écrit de toi-même au jardinier (message_spontane) : sa phrase y répond "
                 "peut-être. Sers-toi des faits du signal pour la comprendre (lot, parcelle, culture). "
                 "Un geste qu'il rapporte se propose, il ne s'annonce jamais comme fait."
+            )
+        if self.sous_les_yeux:
+            # [US-323 / C5] Consigne lue seulement quand le jardinier parle depuis un écran précis.
+            entete += (
+                "\nLe jardinier te parle depuis l'écran de ce qu'il a sous les yeux (sous_les_yeux). Une "
+                "phrase qui ne nomme ni culture ni parcelle parle de celles-ci : un geste se rapporte à "
+                "elles, un constat (« feuilles un peu jaunies ») est une note à proposer sur cette culture "
+                "avec saisir_geste. Une phrase qui nomme une AUTRE culture ou une autre parcelle l'emporte "
+                "sur l'écran."
             )
         entete += self._consigne_question()
         if not self.en_attente:
@@ -444,6 +458,7 @@ def construire(
     traitee: Optional[Traitee] = None,
     spontane: Optional[dict] = None,
     question: Optional[QuestionEnAttente] = None,
+    sous_les_yeux: Optional[dict] = None,
 ) -> Optional[ContexteCourt]:
     """[CA1, CA5, CA6] Le contexte de la conversation, ou None.
 
@@ -465,6 +480,8 @@ def construire(
 
     [US-284 / CA2] `question` : la question en attente (`question_de`). Elle suffit, seule, à
     faire un contexte, et prime sur la dernière proposition traitée, qu'un « oui » ne vise plus.
+
+    [US-323 / C5] `sous_les_yeux` : le contexte d'écran de la PWA ; il suffit, seul, à faire un contexte.
     """
     maintenant = time.time() if maintenant is None else maintenant
     echanges = tuple(echanges)[-NB_ECHANGES_MAX:]
@@ -477,7 +494,7 @@ def construire(
             commandes=tuple(e.commande_equivalente() for e in commande.etapes),
             texte_origine=commande.texte_origine, echanges=echanges, plan=True,
             code=code, destructrice=decisions.est_destructrice(commande), ailleurs=tuple(ailleurs),
-            spontane=spontane, question=question,
+            spontane=spontane, question=question, sous_les_yeux=sous_les_yeux,
         )
     if reprise and isinstance(commande, CommandeInterpretee):
         return ContexteCourt(
@@ -488,12 +505,12 @@ def construire(
             echanges=echanges,
             code=code, destructrice=decisions.est_destructrice(commande),
             prete=decisions.est_prete(commande), ailleurs=tuple(ailleurs),
-            spontane=spontane, question=question,
+            spontane=spontane, question=question, sous_les_yeux=sous_les_yeux,
         )
     if question is not None:
         traitee = None
-    if echanges or ailleurs or traitee is not None or spontane or question is not None:
+    if echanges or ailleurs or traitee is not None or spontane or question is not None or sous_les_yeux:
         return ContexteCourt(commandes=(), texte_origine="", echanges=echanges,
                              ailleurs=tuple(ailleurs), traitee=traitee, spontane=spontane,
-                             question=question)
+                             question=question, sous_les_yeux=sous_les_yeux)
     return None

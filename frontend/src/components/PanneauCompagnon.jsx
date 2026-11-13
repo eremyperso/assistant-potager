@@ -30,6 +30,13 @@ import {
   MODE_ANALYSE, TEXTE_ANALYSE_EN_COURS, peutApprofondir, peutApprofondirEntree, analyseBornee,
 } from '../lib/compagnon.js'
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
+import {
+  TEXTE_A_PROPOS, TEXTE_PRECISER, TEXTE_CONTEXTE_INTROUVABLE,
+  barreDeContexte, contexteAEnvoyer, parcellesAPreciser, contexteIntrouvable,
+} from '../lib/contexteCompagnon.js'
+import {
+  SORTE, TEXTE_RETOUR_PLAN, PLACEHOLDER_QUANTITE, raccourcisNoter, accueilNoter, reportDEtape, apresConfirmation,
+} from '../lib/noter.js'
 
 const ETAGES_AVEC_AVIS = ['savoir', 'raisonnement']
 
@@ -186,7 +193,85 @@ function NoteDictee({ note }) {
   )
 }
 
-export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein = false, vue = null }) {
+/**
+ * [US-323 / C2, C3] La barre de contexte, sous l'en-tête : « À propos de : 🥦 Chou de Bruxelles ·
+ * Planche centrale, rang 3 » et une croix pour le retirer ; sans contexte, « Tout le potager » et
+ * « Préciser », qui propose les parcelles du potager (hors pépinières) en pastilles.
+ */
+function BarreContexte({ contexte, onContexte, plein, occupe }) {
+  const barre = barreDeContexte(contexte)
+  const [parcelles, setParcelles] = useState(null)
+  const [ouvert, setOuvert] = useState(false)
+  const [erreur, setErreur] = useState(false)
+  const cible = plein ? 'min-h-[44px] min-w-[44px]' : 'min-h-[32px] min-w-[32px]'
+
+  const preciser = useCallback(async () => {
+    setOuvert((o) => !o)
+    if (parcelles !== null) return
+    try {
+      setParcelles(parcellesAPreciser(await api.plan()))
+    } catch {
+      setErreur(true)
+    }
+  }, [parcelles])
+
+  return (
+    <div className="border-b border-[var(--gst-bord-doux)] bg-[var(--gst-bulle)] px-3.5 py-1.5" aria-label="Contexte de la conversation">
+      <div className="flex items-center gap-2 text-[12.5px]">
+        <span className="min-w-0 flex-1 truncate text-txt2">
+          {barre.aPropos && <span className="text-txt3">{TEXTE_A_PROPOS} </span>}
+          {barre.emoji && <span aria-hidden="true">{barre.emoji} </span>}
+          <b className="font-semibold text-txt">{barre.texte}</b>
+        </span>
+        {barre.retirable && (
+          <button
+            type="button"
+            onClick={() => onContexte?.(null)}
+            disabled={occupe}
+            aria-label="Retirer le contexte"
+            title="Retirer le contexte : parler de tout le potager"
+            className={`${cible} inline-flex shrink-0 items-center justify-center rounded-full text-txt2 hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-40`}
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
+        )}
+        {barre.preciser && (
+          <button
+            type="button"
+            onClick={preciser}
+            aria-expanded={ouvert}
+            className={`${cible} shrink-0 rounded-full border-[1.5px] border-brand px-3 text-[12.5px] font-semibold text-brand-text hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand`}
+          >
+            {TEXTE_PRECISER}
+          </button>
+        )}
+      </div>
+      {barre.preciser && ouvert && (
+        <div className="flex flex-wrap gap-1.5 pb-1 pt-1.5">
+          {erreur && <span className="text-[12px] text-txt3">Les parcelles ne se lisent pas pour l’instant.</span>}
+          {!erreur && parcelles === null && <span className="text-[12px] text-txt3">Je lis les parcelles…</span>}
+          {!erreur && parcelles?.length === 0 && <span className="text-[12px] text-txt3">Aucune parcelle à proposer.</span>}
+          {parcelles?.map((p) => (
+            <button
+              key={p.parcelleId}
+              type="button"
+              onClick={() => { setOuvert(false); onContexte?.(p) }}
+              className={`rounded-full border-[1.5px] border-brand bg-[var(--gst-fond)] px-3 text-[12.5px] font-semibold text-brand-text hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand ${plein ? 'min-h-[44px]' : 'py-1.5'}`}
+            >
+              📍 {p.parcelle}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function PanneauCompagnon({
+  onFermer, onEnregistre, onVu, plein = false, vue = null,
+  barreContexte = false, contexte = null, onContexte,
+  noter = false, onRetourPlan, placement = null,
+}) {
   const [mode, setMode] = useState(MODE_DEFAUT)
   const [fil, setFil] = useState([])
   const [texte, setTexte] = useState('')
@@ -205,7 +290,17 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
   const lecture = useLecture({ modeVocal, voixId })
 
   const support = mode === 'support'
-  const accueil = charge && fil.length === 0
+  // [US-324] Ouvert par « Noter » : l'accueil « Je vous écoute… » et les pastilles, jusqu'à la
+  // première phrase ; une pastille « Récolte » attend la quantité (`attente`) ; après confirmation,
+  // ce qui a changé et « Retour au plan » (`suite`).
+  const [noterEnCours, setNoterEnCours] = useState(noter)
+  const [attente, setAttente] = useState(null)
+  const [suite, setSuite] = useState(null)
+  const accueil = charge && fil.length === 0 && !noterEnCours
+  // « Noter » retouché alors que le panneau est ouvert : l'accueil et les pastilles reviennent.
+  useEffect(() => {
+    if (noter) { setNoterEnCours(true); setAttente(null); setSuite(null) }
+  }, [noter, contexte])
 
   // CA3 : à l'ouverture, ce que le compagnon a dit de lui-même, la conversation récente et les cartes en cours.
   useEffect(() => {
@@ -232,7 +327,8 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     return () => { vivant = false; clearInterval(minuterie) }
   }, [charge, onVu])
 
-  useEffect(() => { bas.current?.scrollIntoView?.({ block: 'end' }) }, [fil, occupe])
+  // [US-324] L'accueil de « Noter », ses pastilles et la suite d'une confirmation restent en vue.
+  useEffect(() => { bas.current?.scrollIntoView?.({ block: 'end' }) }, [fil, occupe, noterEnCours, suite, contexte])
 
   // [US-302 / CA1] Le mode vocal, lu à l'ouverture et suivi quand la section « Voix » le change.
   useEffect(() => {
@@ -270,9 +366,14 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     return () => window.removeEventListener('keydown', surTouche)
   }, [onFermer])
 
-  const envoyer = useCallback(async (brut, modeForce, dictee = false) => {
+  const envoyer = useCallback(async (brut, modeForce, dictee = false, raccourciForce = null, carteAPlacer = null, demandeDuPlan = null) => {
     const phrase = (brut ?? texte).trim()
     if (!peutEnvoyer(phrase, occupe)) return
+    // [US-324 / CA2] La pastille touchée, ou celle qui attend sa quantité (« Récolte » → « 800 g »).
+    const raccourci = raccourciForce ?? attente
+    setNoterEnCours(false)
+    setAttente(null)
+    setSuite(null)
     // La phrase s'affiche tout de suite : la saisie se vide, elle ne doit pas disparaître pendant
     // que Gaston réfléchit. Sa clé la désigne au retour de la réponse, pour ne pas la remettre.
     // [US-302 / CA6, CA9] Une phrase DICTÉE suit le même chemin, mais laisse telle quelle la
@@ -283,7 +384,11 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     if (!dictee) setTexte('')
     setFil((f) => ajouterPhrase(f, phrase, cleJ, dictee))
     try {
-      const reponse = await api.messageCompagnon(phrase, modeForce ?? mode)
+      // [US-323 / C4] Le contexte d'écran part avec la phrase, en identifiants (sans barre : aucun).
+      const reponse = await api.messageCompagnon(
+        phrase, modeForce ?? mode, barreContexte ? contexteAEnvoyer(contexte) : undefined, raccourci || undefined,
+        carteAPlacer || undefined, demandeDuPlan || undefined,
+      )
       setFil((f) => ajouterEchange(remplacerLesAnciennes(f, reponse.propositions), phrase, reponse, cleJ))
       // [US-304 / CA2, CA3] Une phrase DICTÉE, lecture automatique active : la réponse est lue
       // aussitôt (le tap sur 🎤 a déverrouillé le son sur iPhone et iPad). Jamais une phrase tapée.
@@ -292,7 +397,8 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
       }
     } catch (e) {
       // CA4 : réseau coupé, modèle indisponible, lecteur… dit en clair ; la phrase reste à reprendre.
-      setFil((f) => ajouterErreur(f, e, phrase, cleJ))
+      const erreur = contexteIntrouvable(e) ? new Error(TEXTE_CONTEXTE_INTROUVABLE) : e
+      setFil((f) => ajouterErreur(f, erreur, phrase, cleJ))
       if (dictee) setTexte((t) => t || phrase)
       else setTexte(phrase)
     } finally {
@@ -300,7 +406,17 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
       setAnalyse(false)
       saisie.current?.focus()
     }
-  }, [texte, occupe, mode, modeVocal, lectureAuto, lecture.lireAutomatiquement])
+  }, [texte, occupe, mode, modeVocal, lectureAuto, lecture.lireAutomatiquement, barreContexte, contexte, attente])
+
+  // [US-328 / CA4] Une carte « À placer » posée sur un rang : la proposition part aussitôt, une
+  // fois la conversation chargée (sinon la relecture du fil l'effacerait). Rien n'est écrit :
+  // le serveur répond par une carte de plantation à confirmer.
+  const placementEnvoye = useRef(null)
+  useEffect(() => {
+    if (!placement || !charge || placementEnvoye.current === placement.jeton) return
+    placementEnvoye.current = placement.jeton
+    envoyer(placement.phrase, undefined, false, null, placement.carte, placement.plan)
+  }, [placement, charge, envoyer])
 
   // [US-302 / D4] La phrase transcrite part aussitôt, dans le mode courant du panneau.
   const dictee = useDictee({
@@ -316,6 +432,41 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     appuyerDictee()
     deverrouillerSon()
   }, [appuyerDictee])
+  // [US-324 / CA1] Ouvert par « Noter », voix activée : le micro s'ouvre seul — le toucher de
+  // « Noter » vaut autorisation. Une seule fois par ouverture.
+  const microOuvertSeul = useRef(false)
+  useEffect(() => {
+    if (!noter || !modeVocal || microOuvertSeul.current || !micro.boutonActif) return
+    microOuvertSeul.current = true
+    appuyerMicro()
+  }, [noter, modeVocal, micro.boutonActif, appuyerMicro])
+
+  // [US-324 / CA2] Une pastille : envoyer le raccourci, attendre la quantité, ou « Pas encore ».
+  const toucherPastille = useCallback(async (pastille) => {
+    if (pastille.sorte === SORTE.ENVOYER) {
+      envoyer(pastille.libelle, undefined, false, pastille.raccourci)
+      return
+    }
+    if (pastille.sorte === SORTE.SAISIR) {
+      setAttente(pastille.raccourci)
+      saisie.current?.focus()
+      return
+    }
+    const report = reportDEtape(contexte)
+    if (!report) { onFermer?.(); return }
+    setOccupe(true)
+    try {
+      await api.pasEncoreEtape(report.serieId, report.etape)
+      onEnregistre?.()
+      onFermer?.()
+    } catch (e) {
+      setFil((f) => ajouterErreur(f, e))
+    } finally {
+      setOccupe(false)
+    }
+  }, [envoyer, contexte, onFermer, onEnregistre])
+  const pastilles = noterEnCours ? raccourcisNoter(contexte) : []
+
   const parle = modeVocal && gastonParle(lecture.etat)
   const ecoute = modeVocal && dictee.etat === ETAT_DICTEE.ECOUTE
   const transcription = modeVocal && dictee.etat === ETAT_DICTEE.TRANSCRIPTION
@@ -337,6 +488,8 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
         : await api.abandonnerProposition(carte.id)
       setFil((f) => remplacerCarte(f, carteApresIssue(carte, issue)))
       if (aEnregistre(issue)) onEnregistre?.()
+      // [US-324 / CA5] Ce qui a changé sur le plan, et « Retour au plan » quand on venait de « Noter ».
+      if (action === 'confirmer') setSuite(apresConfirmation(issue, { noter }))
     } catch (e) {
       // Déjà traitée ou disparue : la carte se ferme avec la raison. Sinon, on peut réessayer.
       setFil((f) => remplacerCarte(
@@ -345,7 +498,7 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
     } finally {
       setOccupe(false)
     }
-  }, [onEnregistre])
+  }, [onEnregistre, noter])
 
   const donnerAvis = useCallback(async (id, avis) => {
     setAvisDonnes((a) => ({ ...a, [id]: true }))
@@ -429,6 +582,9 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
         </div>
       </div>
 
+      {/* [US-323 / C2, C3, C6] Ce que le jardinier a sous les yeux ; absente d'une conversation libre. */}
+      {barreContexte && <BarreContexte contexte={contexte} onContexte={onContexte} plein={plein} occupe={occupe} />}
+
       {/* Fil de la conversation */}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3.5 py-4" aria-live="polite">
         <div className="mt-auto" />
@@ -465,6 +621,45 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
             modeVocal={modeVocal} lecture={lecture.etat} onEcouter={lecture.ecouter}
             microOuvert={ecoute || dictee.etat === ETAT_DICTEE.DEMANDE} />
         ))}
+        {noterEnCours && charge && (
+          /* [US-324 / temps 2] « Je vous écoute. Dites ce que vous voyez, je le note sur cette culture. » */
+          <>
+            <Bulle>{accueilNoter(contexte)}</Bulle>
+            {pastilles.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pl-[42px]" role="group" aria-label="Raccourcis">
+                {pastilles.map((pastille) => (
+                  <button
+                    key={pastille.libelle}
+                    type="button"
+                    disabled={occupe}
+                    onClick={() => toucherPastille(pastille)}
+                    aria-pressed={pastille.sorte === SORTE.SAISIR ? attente === pastille.raccourci : undefined}
+                    className={`rounded-full border-[1.5px] border-brand px-3 text-[12.5px] font-semibold hover:bg-brand-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-40 ${attente && attente === pastille.raccourci ? 'bg-brand text-white dark:text-bg' : 'bg-[var(--gst-bulle)] text-brand-text'} ${plein ? 'min-h-[44px]' : 'py-1.5'}`}
+                  >
+                    {pastille.libelle}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {suite && !occupe && (
+          /* [US-324 / CA5] « La fève passe à « Levé » sur le plan. » — puis « Retour au plan ». */
+          <>
+            <Bulle>{suite.texte}</Bulle>
+            {suite.retourPlan && (
+              <div className="pl-[42px]">
+                <button
+                  type="button"
+                  onClick={() => onRetourPlan?.()}
+                  className={`rounded-full bg-brand px-4 text-[13px] font-semibold text-white hover:opacity-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand dark:text-bg ${plein ? 'min-h-[44px]' : 'py-2'}`}
+                >
+                  {TEXTE_RETOUR_PLAN}
+                </button>
+              </div>
+            )}
+          </>
+        )}
         {occupe && (
           <div className="flex items-end gap-2" role="status" aria-label={analyse ? TEXTE_ANALYSE_EN_COURS : 'Gaston réfléchit'}>
             <Avatar />
@@ -524,7 +719,7 @@ export default function PanneauCompagnon({ onFermer, onEnregistre, onVu, plein =
               value={texte}
               onChange={(e) => setTexte(e.target.value)}
               maxLength={LONGUEUR_MAX}
-              placeholder={PLACEHOLDER[mode]}
+              placeholder={attente ? PLACEHOLDER_QUANTITE : PLACEHOLDER[mode]}
               autoComplete="off"
               className="min-w-0 flex-1 border-0 bg-transparent text-[13.5px] text-txt outline-none placeholder:text-txt3"
             />

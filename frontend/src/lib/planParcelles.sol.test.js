@@ -123,17 +123,16 @@ const lire = (chemin) => readFileSync(new URL(chemin, import.meta.url), 'utf-8')
 test('[CA1, CA3] la carte ne déclenche aucune lecture : tout vient de `GET /plan`', () => {
   const lib = lire('./planParcelles.js')
   assert.doesNotMatch(lib, /api\./)
-  const plan = lire('../views/Plan.jsx')
-  // Une seule LECTURE dans tout l'écran — celle du plan. L'autre appel est
-  // l'écriture d'US-230, déclenchée par le jardinier, jamais par un affichage.
-  assert.deepEqual(plan.match(/await api\.\w+\(/g), [
-    'await api.modifierParcelle(', 'await api.plan(',
-  ])
+  // Une seule LECTURE dans tout l'écran — celle du plan (PlanDessus) ; la carte, elle, n'en fait
+  // aucune. Son seul appel est l'écriture d'US-230, déclenchée par le jardinier.
+  const carte = lire('../components/DetailParcelle.jsx')
+  assert.deepEqual(carte.match(/await api\.\w+\(/g), ['await api.modifierParcelle('])
+  assert.deepEqual(lire('../views/PlanDessus.jsx').match(/await api\.\w+\(/g), ['await api.plan('])
 })
 
 test('[CA7, CA9] « Ajouter » PRÉPARE un geste : aucune écriture depuis la PWA', () => {
-  const plan = lire('../views/Plan.jsx')
-  const carte = plan.slice(plan.indexOf('function CarteSol'), plan.indexOf('function DetailParcelle'))
+  const plan = lire('../components/DetailParcelle.jsx')
+  const carte = plan.slice(plan.indexOf('function CarteSol'), plan.indexOf('function OngletEnPlace'))
   // [CA7] Le geste porte la parcelle en contexte, et passe par `BoutonGeste` —
   // qui dépose dans la file (US-224) au lieu d'écrire.
   assert.match(carte, /<BoutonGeste[\s\S]*?action: 'paillage'[\s\S]*?parcelleId[\s\S]*?parcelleNom/)
@@ -143,8 +142,8 @@ test('[CA7, CA9] « Ajouter » PRÉPARE un geste : aucune écriture depuis la PW
 })
 
 test('[CA8] « Tout voir » ouvre le Journal filtré, sans recopier la liste des gestes', () => {
-  const plan = lire('../views/Plan.jsx')
-  assert.match(plan, /aller\('journal', \{\s*parcelle: selection\.nom,\s*gestes: \(data\?\.gestes_sol \?\? \[\]\)\.join\(','\),/)
+  const plan = lire('../views/PlanDessus.jsx')
+  assert.match(plan, /aller\('journal', \{\s*parcelle: parcelleOuverte\.nom,\s*gestes: \(data\?\.gestes_sol \?\? \[\]\)\.join\(','\)/)
   // La liste ne figure nulle part en dur dans le frontend [CA2].
   assert.doesNotMatch(lire('./planParcelles.js'), /'desherbage'.*'binage'|desherbage,binage/)
 })

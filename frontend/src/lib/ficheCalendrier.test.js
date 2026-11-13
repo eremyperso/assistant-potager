@@ -215,7 +215,7 @@ test('[CA13] la fiche ne lit que ce que l’écran d’origine ne lui a pas donn
 
 // ⚠️ [US-222, amendement du 24/09/2026] La fiche parcelle ne porte plus de
 // tuiles de culture : la frise, la pastille de confiance et l'ouverture de la
-// fiche calendrier depuis une tuile ont quitté `Plan.jsx`. Régression ASSUMÉE
+// fiche calendrier depuis une tuile ont quitté l'ancien onglet Parcelles (aujourd'hui `DetailParcelle.jsx`). Régression ASSUMÉE
 // et annoncée dans `PATCH_NOTES.md` — elles reviennent avec la fiche culture
 // (US-206, US-207). Ce que ces tests garantissaient est donc vérifié là où le
 // chemin existe encore : Stocks, et le composant lui-même.
@@ -226,7 +226,7 @@ test('[CA13, CA2] la fiche reçoit ce que l’écran a déjà chargé — aucune
   assert.ok(bloc.includes('dateRef='), 'prop absente : dateRef=')
   // L'onglet Parcelles, lui, n'ouvre plus la fiche : il n'a plus de tuile d'où
   // l'ouvrir, et ne lit donc plus ni calendrier ni confiance.
-  const plan = source('../views/Plan.jsx')
+  const plan = source('../components/DetailParcelle.jsx')
   assert.doesNotMatch(plan, /<FicheCalendrier/)
   assert.doesNotMatch(plan, /api\.calendriersPlan|api\.confiancesPlan/)
 })

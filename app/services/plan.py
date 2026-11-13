@@ -70,3 +70,66 @@ def surface_par_culture(db: Session, ctx: TenantContext) -> dict[str, float]:
         nom: attributs["surface_m2"]
         for nom, attributs in attributs_par_culture(db, ctx).items()
     }
+
+
+# ── [US-327] Plan vu du dessus ───────────────────────────────────────────────
+
+def parcelles_inactives(db: Session, ctx: TenantContext) -> list[dict]:
+    """[US-327 / P7] Les parcelles INACTIVES du potager, dans l'ordre du chemin.
+
+    Le plan les garde à leur place, grisées : une parcelle mise au repos reste un
+    morceau du terrain. Elles ne portent ni culture ni rang — seulement de quoi les
+    dessiner (nom, nature, géométrie)."""
+    from app.services import geometrie as svc_geometrie   # import local : pas de cycle
+
+    q = db.query(Parcelle).filter(Parcelle.actif.is_(False))
+    if ctx.potager_id is not None:
+        q = q.filter(Parcelle.potager_id == ctx.potager_id)
+    return [
+        {
+            "id": p.id,
+            "nom": p.nom,
+            "actif": False,
+            "ordre": p.ordre,
+            "est_pepiniere": bool(p.est_pepiniere),
+            "type_pepiniere": p.type_pepiniere,
+            "geometrie": svc_geometrie.geometrie_parcelle(p),
+        }
+        for p in q.order_by(Parcelle.ordre).all()
+    ]
+
+
+#: [US-327 / P8] Les filtres du plan, dans l'ordre de la maquette.
+FILTRE_A_CONFIRMER = "a_confirmer"
+FILTRE_EN_RECOLTE = "en_recolte"
+FILTRE_RANGS_LIBRES = "rangs_libres"
+
+
+def compteurs_filtres(parcelles: list[dict]) -> dict:
+    """[US-327 / CA4] Les compteurs des filtres du plan, calculés ICI et nulle part
+    ailleurs : l'écran les affiche tels quels.
+
+    - `a_confirmer` : cultures en place dont l'étape est prévue et due à la date de
+      référence (US-320 le dit, `etapes.a_confirmer`) ;
+    - `en_recolte` : cultures en place à l'étape « En récolte » ;
+    - `rangs_libres` : rangs déclarés et libres (une parcelle sans nombre de rangs
+      déclaré n'en compte aucun — inconnu n'est pas libre, R6).
+
+    Les pépinières n'ont ni étapes ni rangs : elles ne comptent dans aucun filtre.
+    """
+    a_confirmer = en_recolte = rangs_libres = 0
+    for p in parcelles:
+        if p.get("est_pepiniere"):
+            continue
+        for c in p.get("cultures") or []:
+            etapes = c.get("etapes") or {}
+            if etapes.get("a_confirmer"):
+                a_confirmer += 1
+            if etapes.get("etape") == "en_recolte":
+                en_recolte += 1
+        rangs_libres += (p.get("disposition") or {}).get("rangs_libres") or 0
+    return {
+        FILTRE_A_CONFIRMER: a_confirmer,
+        FILTRE_EN_RECOLTE: en_recolte,
+        FILTRE_RANGS_LIBRES: rangs_libres,
+    }

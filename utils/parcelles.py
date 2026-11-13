@@ -127,7 +127,9 @@ def find_doublon(
 # [US_Plan_occupation_parcelles / CA13] Création d'une parcelle
 # ──────────────────────────────────────────────────────────────────────────────
 
-def resolve_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) -> Optional[Parcelle]:
+def resolve_parcelle(
+    db: Session, nom: str, potager_id: Optional[int] = None, inclure_inactives: bool = False,
+) -> Optional[Parcelle]:
     """
     Résout un nom de parcelle libre (issu du LLM) vers l'objet Parcelle en base.
 
@@ -148,7 +150,9 @@ def resolve_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) ->
         return None
     nom_normalise = normalize_parcelle_name(nom)
     exact, proche = find_doublon(db, nom_normalise, potager_id=potager_id)
-    if exact:
+    # [US-332 / CA4] Une parcelle inactive n'est pas un choix pour un nouveau geste : seul un appelant qui
+    # la gère elle-même (renommer, retirer) la demande par `inclure_inactives`.
+    if exact and (exact.actif or inclure_inactives):
         return exact
     if proche:
         log.warning(
@@ -630,8 +634,8 @@ def update_parcelle(
     pepiniere ([US-208] chaude/froide/oui/non, voir `_pepiniere` — [migration_v15] exclut la parcelle du calcul
     "semis pleine terre", voir utils.stock._cond_semis_pleine_terre),
     type_sol ([US-230] vocabulaire fermé, voir `normaliser_type_sol`),
-    actif ([US-230 / CA2] bool "true"/"false" — passer à false reprend le retrait
-    d'US-009 et réaffecte les gestes rattachés).
+    actif ([US-230 / CA2] bool "true"/"false" — [US-332] passer à false rend la parcelle inactive :
+    elle reste sur le plan, grisée, et garde ses gestes).
 
     [US-230 / CA6] Une valeur `None` (et non une chaîne) remet à `NULL` les
     champs qui acceptent « non renseigné » : exposition, superficie, abri,
@@ -751,27 +755,14 @@ def update_parcelle(
         )
 
     if "actif" in kwargs:
-        # [US-230 / CA2, US-009] Le statut de la parcelle. Repasser à
-        # « inactive » N'EST PAS une simple colonne à écrire : c'est le retrait
-        # d'US-009, qui réaffecte les gestes rattachés en « Non localisé ». La
-        # fiche web et la commande du compagnon doivent en passer par le même
-        # chemin, sans quoi un retrait fait depuis le web laisserait derrière
-        # lui des événements pointant une parcelle qui n'existe plus à l'écran.
+        # [US-332 / R5, CA4] Rendre une parcelle inactive la garde sur le plan, grisée, AVEC son
+        # historique : ses gestes restent rattachés (la rotation et le journal les lisent encore).
+        # Ce n'est plus le retrait d'US-009, qui les détachait en « Non localisé » ; la
+        # suppression réelle, elle, n'existe que pour une parcelle vide (`retrait_parcelle`).
         val_actif = _booleen(kwargs["actif"], "actif")
         if val_actif is False and parcelle.actif is not False:
-            _q_evt = db.query(Evenement).filter(Evenement.parcelle_id == parcelle.id)
-            if potager_id is not None:
-                _q_evt = _q_evt.filter(Evenement.potager_id == potager_id)
-            nb_reaffectes = _q_evt.count()
-            _q_evt.update({"parcelle_id": None}, synchronize_session="fetch")
-            modifs.append(
-                f"Statut : inactive — {nb_reaffectes} geste"
-                f"{'s' if nb_reaffectes > 1 else ''} repassé"
-                f"{'s' if nb_reaffectes > 1 else ''} en « Non localisé »"
-            )
+            modifs.append("Statut : inactive — historique et rotation conservés, grisée sur le plan")
         elif val_actif is True and parcelle.actif is False:
-            # Réactiver ne rend pas ses gestes à la parcelle : ils ont été
-            # délocalisés, et rien ne dit qu'ils lui revenaient.
             modifs.append("Statut : active")
         parcelle.actif = val_actif
 
@@ -828,7 +819,7 @@ def rename_parcelle(
         ValueError  : si nouveau_nom est déjà utilisé par une autre parcelle
     """
     # Résolution de l'ancienne parcelle via nom_normalise
-    parcelle = resolve_parcelle(db, ancien_nom, potager_id=potager_id)
+    parcelle = resolve_parcelle(db, ancien_nom, potager_id=potager_id, inclure_inactives=True)
     if parcelle is None:
         raise LookupError(ancien_nom)
 
@@ -900,7 +891,7 @@ def supprimer_parcelle(db: Session, nom: str, potager_id: Optional[int] = None) 
     Raises:
         LookupError : si la parcelle est introuvable ou déjà supprimée
     """
-    parcelle = resolve_parcelle(db, nom, potager_id=potager_id)
+    parcelle = resolve_parcelle(db, nom, potager_id=potager_id, inclure_inactives=True)
     if parcelle is None:
         raise LookupError(nom)
 
@@ -1005,14 +996,13 @@ def calcul_occupation_parcelles(
     cultures_actives = {c for c, s in stocks.items() if s.stock_plants > 0}
 
     # ── 2. Événements de plantation pour cultures actives ────────────────────
-    # Parcelle.nom retourné uniquement si actif=True — les parcelles soft-deletées
-    # tombent dans le groupe None (Non localisé) comme les events sans parcelle_id.
-    from sqlalchemy import case as sa_case
+    # [US-332 / CA4] Le nom d'une parcelle inactive reste lu : ses gestes lui sont encore rattachés.
+    # Seuls les événements sans parcelle_id (ou d'une ancienne suppression) tombent dans « Non localisé ».
     _q_rows = (
         db.query(
             Evenement.culture,
             Evenement.variete,
-            sa_case((Parcelle.actif.is_(True), Parcelle.nom), else_=None).label("parcelle_nom"),
+            Parcelle.nom.label("parcelle_nom"),
             Evenement.quantite,
             Evenement.rang,
             Evenement.unite,
@@ -1029,6 +1019,38 @@ def calcul_occupation_parcelles(
         _q_rows = _q_rows.filter(Evenement.date <= cutoff)
     rows = _q_rows.all()
 
+    # ── 2b. [US-320] Fins de culture : (culture, variété, parcelle) → dernière date ──
+    # Une fin de culture termine une ligne dans SA parcelle : tout ce qui y a été
+    # planté ou semé jusqu'à ce jour en sort, ainsi que les pertes et récoltes qui y
+    # ont été notées. Ce qui est planté APRÈS (la saison suivante) reste en place.
+    # Les fins ne passent jamais par la répartition au prorata des pertes : elles
+    # ont une parcelle, elles ne sont pas « à répartir ».
+    _q_fins = (
+        db.query(
+            Evenement.culture,
+            Evenement.variete,
+            Parcelle.nom.label("parcelle_nom"),
+            Evenement.date,
+        )
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "fin_culture")
+        .filter(Evenement.culture.isnot(None))
+    )
+    if potager_id is not None:
+        _q_fins = _q_fins.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        _q_fins = _q_fins.filter(Evenement.date <= cutoff)
+    fins_ligne: Dict[tuple, datetime] = {}
+    for c, v, p_nom, d in _q_fins.all():
+        cle = (c, v or "", p_nom)
+        if d is not None and (cle not in fins_ligne or d > fins_ligne[cle]):
+            fins_ligne[cle] = d
+
+    def _terminee(culture: str, variete_norm: str, parcelle_nom, date_evt) -> bool:
+        """[US-320] Le geste appartient-il à une ligne terminée depuis ?"""
+        fin = fins_ligne.get((culture, variete_norm, parcelle_nom))
+        return fin is not None and date_evt is not None and date_evt <= fin
+
     # ── 3. Agrégation par (culture, variete, parcelle, unite) — plantations ──
     # [US-037 / CA2] L'unité fait partie de la clé de regroupement — jamais de
     # somme entre deux unités différentes (ex: "plants" et "pieds") pour un même
@@ -1037,6 +1059,8 @@ def calcul_occupation_parcelles(
 
     for culture, variete, parcelle, quantite, rang, unite, date_evt in rows:
         variete_norm = variete or ""
+        if _terminee(culture, variete_norm, parcelle, date_evt):   # [US-320]
+            continue
         unite_norm = unite or "plants"
         key = (culture, variete_norm, parcelle, unite_norm)
         total = (quantite or 0) * (rang or 1)
@@ -1072,7 +1096,7 @@ def calcul_occupation_parcelles(
         db.query(
             Evenement.culture,
             Evenement.variete,
-            sa_case((Parcelle.actif.is_(True), Parcelle.nom), else_=None).label("parcelle_nom"),
+            Parcelle.nom.label("parcelle_nom"),
             Evenement.quantite,
             Evenement.unite,
             Evenement.date,
@@ -1094,6 +1118,8 @@ def calcul_occupation_parcelles(
     groupes_semis: Dict[tuple, dict] = {}
     for culture, variete, parcelle, quantite, unite, date_evt in semis_pt_rows:
         variete_norm = variete or ""
+        if _terminee(culture, variete_norm, parcelle, date_evt):   # [US-320]
+            continue
         unite_norm = unite or "graines"
         # [US-037 / CA2] L'unité fait partie de la clé de regroupement — jamais de
         # somme entre graines/pieds/m² pour une même culture+variété+parcelle.
@@ -1133,16 +1159,25 @@ def calcul_occupation_parcelles(
     # s'il existe, sinon réparties sur toutes les varietes nommées proportionnellement
     # à leur poids dans le total planté (seul cas où l'attribution est réellement inconnue).
     _q_pertes = (
-        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        db.query(
+            Evenement.culture, Evenement.variete, Evenement.quantite,
+            Parcelle.nom.label("parcelle_nom"),
+            Evenement.date,
+        )
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "perte")
         .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.culture, Evenement.variete)
     )
     if potager_id is not None:
         _q_pertes = _q_pertes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_pertes = _q_pertes.filter(Evenement.date <= cutoff)
-    pertes_raw = _q_pertes.all()
+    # [US-320] Une perte notée sur une ligne terminée depuis appartient à cette ligne :
+    # elle ne se répartit pas sur les parcelles encore en place.
+    pertes_raw = [
+        (c, v, q) for c, v, q, p_nom, d in _q_pertes.all()
+        if not _terminee(c, v or "", p_nom, d)
+    ]
     pertes_var: Dict[tuple, float] = {}
     pertes_sans_variete: Dict[str, float] = {}
     for c, v, q in pertes_raw:
@@ -1162,17 +1197,24 @@ def calcul_occupation_parcelles(
     # de pieds en terre, sous peine de double déduction avec l'événement "pièces".
     _UNITES_POIDS = ("kg", "g", "mg")
     _q_recoltes = (
-        db.query(Evenement.culture, Evenement.variete, func.sum(Evenement.quantite))
+        db.query(
+            Evenement.culture, Evenement.variete, Evenement.quantite,
+            Parcelle.nom.label("parcelle_nom"),
+            Evenement.date,
+        )
+        .outerjoin(Parcelle, Evenement.parcelle_id == Parcelle.id)
         .filter(Evenement.type_action == "recolte")
         .filter(Evenement.culture.isnot(None))
         .filter(~func.lower(func.coalesce(Evenement.unite, "")).in_(_UNITES_POIDS))
-        .group_by(Evenement.culture, Evenement.variete)
     )
     if potager_id is not None:
         _q_recoltes = _q_recoltes.filter(Evenement.potager_id == potager_id)
     if cutoff is not None:
         _q_recoltes = _q_recoltes.filter(Evenement.date <= cutoff)
-    recoltes_raw = _q_recoltes.all()
+    recoltes_raw = [   # [US-320] même règle que les pertes
+        (c, v, q) for c, v, q, p_nom, d in _q_recoltes.all()
+        if not _terminee(c, v or "", p_nom, d)
+    ]
     recoltes_var: Dict[tuple, float] = {}
     recoltes_sans_variete: Dict[str, float] = {}
     for c, v, q in recoltes_raw:

@@ -17,7 +17,7 @@ index_terms:
 **Intention :** comprendre
 **On parle aussi de :** d'où vient ce chiffre ; inventaire des pieds ; combien il me reste ; compteur ; solde ; comptage automatique
 
-Le stock ne se saisit jamais à la main : il se déduit des gestes enregistrés. L'assistant part de ce qui a été mis en terre, retire ce qui a été déclaré perdu, et retire aussi les récoltes lorsque récolter arrache le pied. Aucun inventaire n'est donc à tenir à jour, et il n'existe pas de bouton pour corriger un stock directement. Corriger le geste fautif dans le journal suffit : le chiffre se recalcule à chaque consultation, à partir de la liste des gestes et d'elle seule.
+Le stock ne se saisit jamais à la main : il se déduit des gestes enregistrés. L'assistant part de ce qui a été mis en terre, retire ce qui a été déclaré perdu ou terminé (une fin de culture retire tout ce qui restait sur sa parcelle), et retire aussi les récoltes lorsque récolter arrache le pied. Aucun inventaire n'est donc à tenir à jour, et il n'existe pas de bouton pour corriger un stock directement. Corriger le geste fautif dans le journal suffit : le chiffre se recalcule à chaque consultation, à partir de la liste des gestes et d'elle seule.
 
 ## Ce qu'une plantation ajoute au stock
 
