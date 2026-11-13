@@ -313,7 +313,7 @@ Le tableau de bord est conçu **pour le pouce** sur téléphone, et s'étale en 
 - **Un filtre par culture** sur les écrans qui listent des cultures.
 - **Un thème clair et un thème sombre**, votre choix est mémorisé.
 
-### 4.4 La date de référence — voir le potager dans le passé
+## 4.4 La date de référence — voir le potager dans le passé
 
 C'est la fonction la plus puissante du tableau de bord, et la plus facile à manquer.
 

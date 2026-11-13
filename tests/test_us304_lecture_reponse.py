@@ -270,7 +270,8 @@ class TestCA13Documentation:
         """Les deux copies diffèrent ailleurs (titres) ; la section de la lecture est la même."""
         def section(chemin):
             texte = chemin.read_text(encoding="utf-8")
-            debut = texte.index("### 17.6 ter Écouter les réponses de Gaston")
+            # `##` et non `###` : la sous-section forme son propre fragment (limite Telegram, CA12).
+            debut = texte.index("## 17.6 ter Écouter les réponses de Gaston")
             return texte[debut:texte.index("## 18. Partager son potager", debut)]
         assert section(GUIDES[0]) == section(GUIDES[1])
 
