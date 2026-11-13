@@ -152,7 +152,7 @@ test('[CA1] ce que l’écran ne sait pas reste null — le compagnon le demande
 })
 
 test('[CA9] un seul composant appelle l’API — aucun écran ne fabrique son appel', () => {
-  for (const vue of ['../views/Plan.jsx', '../views/Stocks.jsx', '../components/FicheCalendrier.jsx']) {
+  for (const vue of ['../components/DetailParcelle.jsx', '../views/PlanDessus.jsx', '../views/Stocks.jsx', '../components/FicheCalendrier.jsx']) {
     assert.doesNotMatch(lire(vue), /preparerGeste/, `${vue} ne doit pas appeler l'API directement`)
   }
   assert.match(lire('../components/BoutonGeste.jsx'), /api\.preparerGeste/)
@@ -228,7 +228,7 @@ test('[CA12] la relecture n’a lieu qu’une fois, et seulement si un geste est
 })
 
 test('[CA12] Plan et Stocks se relisent avec leur propre chargement', () => {
-  for (const vue of ['../views/Plan.jsx', '../views/Stocks.jsx']) {
+  for (const vue of ['../views/PlanDessus.jsx', '../views/Stocks.jsx']) {
     assert.match(lire(vue), /<RelectureAuRetourProvider relire=\{load\}>/, vue)
   }
 })

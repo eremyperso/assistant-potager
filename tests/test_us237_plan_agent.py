@@ -333,8 +333,9 @@ class TestCA4HorsPlan:
         assert verdict.plan is None
         assert "je ne sais faire celle-ci que seule" in verdict.precision
 
-    def test_us237_ca4_seules_ajouter_et_modifier_ont_un_executeur(self):
-        assert set(executeurs.EXECUTEURS) == {("parcelle", "ajouter"), ("parcelle", "modifier")}
+    def test_us237_ca4_seules_ajouter_modifier_et_supprimer_ont_un_executeur(self):
+        # [US-332] La suppression d'une parcelle vide a son exécuteur ; destructrice, elle reste hors plan.
+        assert set(executeurs.EXECUTEURS) == {("parcelle", "ajouter"), ("parcelle", "modifier"), ("parcelle", "supprimer")}
         assert executeurs.admise_dans_un_plan(_etape("ajouter", nom="x"))
         assert not executeurs.admise_dans_un_plan(_etape("supprimer", nom="x"))
 
@@ -491,7 +492,7 @@ class TestCA6CA7Execution:
         assert resultat.statut == "echouee" and "paramètre invalide" in resultat.message
 
     def test_us237_ca7_forme_sans_executeur_jamais_executee(self, potager):
-        resultat = executeurs.executer_etape(potager, CTX, _etape("supprimer", nom="Serre"))
+        resultat = executeurs.executer_etape(potager, CTX, _etape("renommer", ancien="Serre", nouveau="Abri"))
         assert resultat.statut == "echouee" and _parcelle(potager, "Serre") is not None
 
     @pytest.mark.asyncio

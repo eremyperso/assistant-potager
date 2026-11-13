@@ -42,6 +42,11 @@ UNITES_POIDS_EN_G: Dict[str, float] = {"kg": 1000.0, "g": 1.0, "mg": 0.001}
 LABEL_VARIETE_NON_PRECISEE = "Variété non précisée"
 
 
+#: [US-320] Gestes qui retirent des pieds du jardin : la perte, et la fin de culture,
+#: dont la quantité est le reste de la ligne au moment où elle est dite.
+ACTIONS_RETRAIT_PIEDS: tuple[str, ...] = ("perte", "fin_culture")
+
+
 def poids_lisible(total_g: float) -> tuple:
     """[US-002 / US-096 / CA4] Convertit un total en grammes vers le couple
     (valeur arrondie, unité) affiché partout ailleurs : kg à 2 décimales
@@ -267,9 +272,11 @@ def calcul_stock_cultures(
     plantes = _resoudre_unite_dominante(plantes_par_unite, contexte="plantations+semis pleine terre")
 
     # ── 2. Pertes par culture ───────────────────────────────────────────────
+    # [US-320] Une fin de culture porte le reste de sa ligne : elle sort du stock
+    # exactement comme une perte (ACTIONS_RETRAIT_PIEDS).
     _q_pertes = (
         db.query(Evenement.culture, func.sum(Evenement.quantite))
-        .filter(Evenement.type_action == "perte")
+        .filter(Evenement.type_action.in_(ACTIONS_RETRAIT_PIEDS))
         .filter(Evenement.culture.isnot(None))
         .group_by(Evenement.culture)
     )
@@ -877,7 +884,7 @@ def calcul_stock_par_variete(
     _q_pertes = (
         db.query(Evenement.variete, func.sum(Evenement.quantite))
         .filter(func.lower(Evenement.culture) == culture_lower)
-        .filter(Evenement.type_action == "perte")
+        .filter(Evenement.type_action.in_(ACTIONS_RETRAIT_PIEDS))   # [US-320]
         .group_by(Evenement.variete)
     )
     if potager_id is not None:

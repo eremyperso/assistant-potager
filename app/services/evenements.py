@@ -18,6 +18,7 @@ cache : quel que soit le chemin emprunté pour enregistrer un geste, les
 réponses que ce geste contredit tombent avec lui.
 """
 import logging
+from datetime import timedelta
 from typing import Optional
 
 from sqlalchemy import func, or_, and_, select
@@ -193,6 +194,31 @@ class LeveeHorsPepiniereError(LeveeRefuseeError):
     """[US-212 / CA4] « Les carottes ont levé » : aucun lot de pépinière ne correspond,
     c'est un semis en pleine terre. Ce n'est pas une levée de lot — le bot propose de la
     noter en observation (hors périmètre de la levée)."""
+
+
+class FinCultureRefuseeError(EvenementInvalideError):
+    """[US-320] Une fin de culture sans rien à terminer : aucune culture de ce nom n'est
+    en place là où elle est dite. Rien n'est enregistré."""
+
+
+class PositionRangRefuseeError(EvenementInvalideError):
+    """[US-326 / CA5, P4] « au rang 3 » impossible : rang inexistant, pas de parcelle,
+    pépinière, ou rang déjà posé par une autre culture sans longueur de parcelle
+    pour le partager. Rien n'est enregistré ; le message dit quoi faire."""
+
+
+class FinCultureAmbigueError(EvenementInvalideError):
+    """[US-320] « Les tomates sont finies » alors que des tomates sont en place dans
+    plusieurs parcelles : terminer partout effacerait des cultures sans le dire.
+    Le message cite les parcelles ; il suffit de redire le geste avec l'une d'elles."""
+
+    def __init__(self, culture: str, parcelles: list[str]):
+        self.culture = culture
+        self.parcelles = parcelles
+        super().__init__(
+            f"Des {culture} sont en place dans plusieurs parcelles ({', '.join(parcelles)}) : "
+            f"laquelle terminer ? Par exemple « fin de culture des {culture} sur {parcelles[0]} »."
+        )
 
 
 class ParcelleIncoherenteError(EvenementInvalideError):
@@ -425,7 +451,7 @@ _ACTIONS_SOURCE_CULTURE = {"semis", "plantation", "mise_en_godet", "vendu", "per
 # une culture déjà en place, donc passent par la suite de valider_evenement au
 # lieu d'un simple retour anticipé, mais doivent tout autant être rejetées si
 # culture est vide plutôt que silencieusement laissées passer.
-_ACTIONS_CULTURE_OBLIGATOIRE = _ACTIONS_SOURCE_CULTURE | {"recolte", "perte"}
+_ACTIONS_CULTURE_OBLIGATOIRE = _ACTIONS_SOURCE_CULTURE | {"recolte", "perte", "fin_culture"}   # [US-320]
 
 # [US-224] Actions de pépinière qui retirent des plants du stock : leur nombre est
 # obligatoire à la création (règle 9 de `valider_evenement`). `mise_en_godet` a le
@@ -835,12 +861,36 @@ def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
     culture dite (semis en pleine terre), `LeveeRefuseeError` pour un lot clôturé ou sans
     semis rattaché, `LotIndetermineError` quand plusieurs lots correspondent.
     """
-    lot = designer_lot(
-        db, ctx, parsed, LeveeRefuseeError,
-        quel_lot="Quel lot compter ? Citez son numéro (« levée du lot 128 : 40 ») ou sa culture.",
-        rien_a_faire="rien à compter",
-        refus_sans_lot=LeveeHorsPepiniereError,
+    # [US-320 / E4] Une levée dite sur une parcelle de pleine terre (« les fèves ont levé
+    # sur la planche centrale ») valide l'étape « Levé » d'un semis direct : elle ne vise
+    # aucun lot de pépinière.
+    parcelle_dite = (
+        resolve_parcelle(db, parsed["parcelle"], potager_id=ctx.potager_id)
+        if parsed.get("parcelle") else None
     )
+    if parcelle_dite is not None and not parcelle_dite.est_pepiniere:
+        semis = semis_pleine_terre_pour_levee(db, ctx, parsed)
+        if semis is None:
+            raise LeveeRefuseeError(
+                f"Je ne trouve aucun semis de {parsed.get('culture') or 'cette culture'} "
+                f"sur « {parcelle_dite.nom} » : rien n'a pu lever."
+            )
+        return _levee_pleine_terre(db, parsed, semis)
+    try:
+        lot = designer_lot(
+            db, ctx, parsed, LeveeRefuseeError,
+            quel_lot="Quel lot compter ? Citez son numéro (« levée du lot 128 : 40 ») ou sa culture.",
+            rien_a_faire="rien à compter",
+            refus_sans_lot=LeveeHorsPepiniereError,
+        )
+    except LeveeHorsPepiniereError:
+        # [US-320 / E4] « Les carottes ont levé » : aucun lot de pépinière, mais un
+        # semis en pleine terre — c'est sa levée. Sans semis direct non plus, le refus
+        # d'US-212 reste (le bot propose une observation).
+        semis = semis_pleine_terre_pour_levee(db, ctx, parsed)
+        if semis is None:
+            raise
+        return _levee_pleine_terre(db, parsed, semis)
 
     numero = lot.get("numero_lot")
     nom_lot = f"{lot['culture']} {lot['variete']}" if lot.get("variete") else lot["culture"]
@@ -887,6 +937,136 @@ def resoudre_lot_levee(db: Session, ctx: TenantContext, parsed: dict) -> dict:
         " — terminée" if parsed.get("levee_terminee") else "",
     )
     return lot
+
+
+def semis_pleine_terre_pour_levee(db: Session, ctx: TenantContext, parsed: dict) -> Optional[Evenement]:
+    """[US-320 / E4] Le semis en pleine terre dont une levée est dite : même culture (et
+    variété si dite), parcelle de pleine terre (celle dite si elle l'est), le plus récent
+    à la date du geste. None s'il n'y en a aucun."""
+    culture = (parsed.get("culture") or "").strip().lower()
+    if not culture:
+        return None
+    q = (
+        db.query(Evenement)
+        .join(Parcelle, Evenement.parcelle_id == Parcelle.id)
+        .filter(Evenement.type_action == "semis")
+        .filter(func.lower(Evenement.culture) == culture)
+        .filter(Parcelle.est_pepiniere.isnot(True))
+        .filter(Evenement.potager_id == ctx.potager_id)
+    )
+    variete = (parsed.get("variete") or "").strip().lower()
+    if variete:
+        q = q.filter(func.lower(Evenement.variete) == variete)
+    if parsed.get("parcelle"):
+        parcelle = resolve_parcelle(db, parsed["parcelle"], potager_id=ctx.potager_id)
+        if parcelle is None:
+            return None
+        q = q.filter(Evenement.parcelle_id == parcelle.id)
+    # parse_date rend minuit du jour dit (aujourd'hui sans date) : tout le jour compte.
+    q = q.filter(Evenement.date < parse_date(parsed.get("date")) + timedelta(days=1))
+    return q.order_by(Evenement.date.desc(), Evenement.id.desc()).first()
+
+
+def _levee_pleine_terre(db: Session, parsed: dict, semis: Evenement) -> dict:
+    """[US-320 / E4] Relie la levée à son semis direct. Mute `parsed` comme une levée de
+    lot (`origine_graines_id`, culture, variété) et y pose la parcelle du semis. Le nombre
+    de levés reste facultatif : en pleine terre, constater la levée EST le geste."""
+    parsed["origine_graines_id"] = semis.id
+    parsed["culture"] = semis.culture
+    parsed["variete"] = semis.variete
+    if not parsed.get("parcelle"):
+        parcelle = db.get(Parcelle, semis.parcelle_id)
+        parsed["parcelle"] = parcelle.nom if parcelle is not None else None
+    if parsed.get("quantite") is not None:
+        parsed["unite"] = "plants"
+    parsed["_levee_pleine_terre"] = True
+    parsed["_alertes_levee"] = []
+    log.info("[US-320] Levée d'un semis en pleine terre : semis id=%s (%s)", semis.id, semis.culture)
+    return {
+        "pleine_terre": True, "semis_id": semis.id, "culture": semis.culture,
+        "variete": semis.variete, "parcelle_id": semis.parcelle_id, "numero_lot": None,
+    }
+
+
+def lignes_en_place(
+    db: Session, ctx: TenantContext, culture: str, variete: Optional[str] = None,
+    parcelle: Optional[Parcelle] = None, date_ref=None,
+) -> list[dict]:
+    """[US-320] Les lignes d'occupation en place d'une culture (variété et parcelle si
+    dites), chacune avec son `parcelle` (nom, None si non localisée) — lues dans
+    `calcul_occupation_parcelles`, la lecture du Plan : une fin de culture ne retire
+    jamais autre chose que ce que le Plan montre."""
+    from utils.parcelles import calcul_occupation_parcelles
+
+    occupation = calcul_occupation_parcelles(db, date_ref=date_ref, potager_id=ctx.potager_id)
+    culture_l = culture.strip().lower()
+    variete_l = (variete or "").strip().lower()
+    lignes = []
+    for nom_parcelle, cultures in occupation.items():
+        if parcelle is not None and nom_parcelle != parcelle.nom:
+            continue
+        for ligne in cultures:
+            if (ligne.get("culture") or "").strip().lower() != culture_l:
+                continue
+            if variete_l and (ligne.get("variete") or "").strip().lower() != variete_l:
+                continue
+            if (ligne.get("nb_plants") or 0) <= 0:
+                continue
+            lignes.append({**ligne, "parcelle": nom_parcelle})
+    return lignes
+
+
+def preparer_fin_culture(
+    db: Session, ctx: TenantContext, parsed: dict, parcelle_obj: Optional[Parcelle],
+) -> tuple[Optional[Parcelle], list[dict]]:
+    """
+    [US-320 / E5, E6, E8] Une fin de culture (arrachée, finie, planche libérée) relue à
+    l'instant de la confirmation. Elle retire de la parcelle **tout ce qui reste** de la
+    culture : chaque ligne en place devient un événement `fin_culture` dont la quantité
+    est ce reste. Le stock la compte donc comme une perte (aucun calcul nouveau) et
+    l'occupation du Plan sort la ligne de SA parcelle seulement.
+
+    Retourne (parcelle, lignes) — une ligne par variété en place. Mute `parsed` :
+    l'action devient `perte` quand une quantité dite est inférieure au reste d'une
+    ligne unique (« arraché 3 pieds de tomates malades » : 3 pieds perdus, la
+    culture continue). Lève `FinCultureRefuseeError` sans rien à terminer,
+    `FinCultureAmbigueError` quand la culture est en place dans plusieurs parcelles et
+    qu'aucune n'est dite.
+    """
+    culture = (parsed.get("culture") or "").strip()
+    if not culture:
+        raise CultureManquanteError("fin_culture")
+    lignes = lignes_en_place(
+        db, ctx, culture, parsed.get("variete"), parcelle_obj,
+        date_ref=parse_date(parsed.get("date")).date(),
+    )
+    if not lignes:
+        ou = f" sur « {parcelle_obj.nom} »" if parcelle_obj is not None else ""
+        raise FinCultureRefuseeError(
+            f"Aucune culture de {culture} n'est en place{ou} : rien à terminer."
+        )
+    parcelles = sorted({l["parcelle"] or "Non localisé" for l in lignes})
+    if len(parcelles) > 1:
+        raise FinCultureAmbigueError(culture, parcelles)
+    # Même graphie que les plantations : le stock regroupe par culture telle qu'écrite.
+    parsed["culture"] = lignes[0]["culture"]
+    if parcelle_obj is None and lignes[0]["parcelle"]:
+        parcelle_obj = resolve_parcelle(db, lignes[0]["parcelle"], potager_id=ctx.potager_id)
+
+    dite = _to_float(parsed.get("quantite"))
+    if dite is not None and len(lignes) == 1 and 0 < dite < float(lignes[0]["nb_plants"]):
+        parsed["action"] = "perte"
+        parsed["variete"] = parsed.get("variete") or lignes[0]["variete"] or None
+        parsed["unite"] = parsed.get("unite") or lignes[0]["unite"]
+        log.info(
+            "[US-320] « %s » : %s sur %s en place — perte partielle, la culture continue",
+            culture, dite, lignes[0]["nb_plants"],
+        )
+        return parcelle_obj, []
+    return parcelle_obj, [
+        {"variete": l["variete"] or None, "quantite": float(l["nb_plants"]), "unite": l["unite"]}
+        for l in lignes
+    ]
 
 
 #: [US-241 / CA3, CA9] Gestes qui portent la pépinière d'où partent leurs godets.
@@ -1016,7 +1196,11 @@ def valider_evenement(
 
     # [US-212] Une levée sans nombre ne dit rien : le comptage EST le geste. Zéro est un
     # vrai résultat (« rien n'a levé »), à la différence d'une perte ou d'une vente.
-    if a_la_creation and action_norm == "levee" and quantite is None:
+    # [US-320 / E4] Sauf en pleine terre : constater qu'un semis direct a levé suffit.
+    if (
+        a_la_creation and action_norm == "levee" and quantite is None
+        and not (parcelle is not None and not parcelle.est_pepiniere)
+    ):
         raise QuantiteManquanteError(action_norm, culture)
 
     # [fix contrôle quantité perte] perte_godet quitte la fonction juste après
@@ -1312,6 +1496,7 @@ def _intervention_sol(event: Evenement) -> dict:
         "quantite": event.quantite,
         "unite": event.unite,
         "rang": event.rang,
+        "rang_position": event.rang_position,   # [US-326]
         "culture": event.culture,
         "commentaire": event.commentaire,
         "traitement": event.traitement,
@@ -1621,6 +1806,30 @@ def _oublier_memoire(db: Session, ctx: TenantContext, evenement_id: int) -> None
 
 
 # ── Écriture ──────────────────────────────────────────────────────────────────
+def _verifier_position_rang(db: Session, ctx: TenantContext, parsed: dict, parcelle_obj) -> None:
+    """[US-326 / CA5, G4, P4] Une position de rang dite (« au rang 3 ») est contrôlée
+    AVANT l'écriture, par `app.services.geometrie` — le seul à connaître la règle
+    du rang partagé. Sans position ni longueur dites, rien n'est vérifié : la
+    culture prendra le premier rang libre à la lecture du plan (G5)."""
+    position = _to_int(parsed.get("rang_position"))
+    longueur = _to_float(parsed.get("rang_longueur_m"))
+    if position is None and longueur is None:
+        return
+    from app.services import geometrie as svc_geometrie
+    if normalize_action(parsed.get("action")) not in ("plantation", "semis"):
+        raise PositionRangRefuseeError("Seuls un semis ou une plantation se posent à un rang.")
+    try:
+        svc_geometrie.verifier_position_rang(
+            db, ctx.potager_id, parcelle=parcelle_obj,
+            culture=parsed.get("culture"), variete=parsed.get("variete"),
+            rang_position=position, rang_multiplicateur=_to_int(parsed.get("rang")),
+            rang_longueur_m=longueur,
+        )
+    except svc_geometrie.PositionRangRefuseeError as e:
+        log.info("[US-326] Position de rang refusée : %s", e)
+        raise PositionRangRefuseeError(str(e)) from None
+
+
 def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, texte_original: str) -> Evenement:
     """[Enregistrement d'un item parsé ; ex-POST /parse et POST /voice, retirés par US-274] Crée un événement depuis un item parsé par Groq,
     avec héritage automatique de type_organe_recolte depuis culture_config."""
@@ -1648,6 +1857,7 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         contexte_semis=svc_contexte_semis.contexte_depuis_saisie(parsed, texte_original),
         a_la_creation=True,
     )
+    _verifier_position_rang(db, ctx, parsed, parcelle_obj)   # [US-326]
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
         type_action=action_norm,
@@ -1657,6 +1867,8 @@ def creer_evenement_depuis_parse(db: Session, ctx: TenantContext, parsed: dict, 
         unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=parsed.get("rang"),
+        rang_position=_to_int(parsed.get("rang_position")),     # [US-326] la POSITION
+        rang_longueur_m=_to_float(parsed.get("rang_longueur_m")),  # [US-326 / P4]
         duree=_to_int(parsed.get("duree_minutes")),
         traitement=parsed.get("traitement"),
         commentaire=parsed.get("commentaire"),
@@ -1717,6 +1929,7 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         a_la_creation=True,
         origine_graines_id=_to_int(parsed.get("origine_graines_id")),
     )
+    _verifier_position_rang(db, ctx, parsed, parcelle_obj)   # [US-326]
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
         type_action=action_norm,
@@ -1726,6 +1939,8 @@ def creer_evenement_ligne(db: Session, ctx: TenantContext, parsed: dict, texte_o
         unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=_to_int(parsed.get("rang")),
+        rang_position=_to_int(parsed.get("rang_position")),     # [US-326] la POSITION
+        rang_longueur_m=_to_float(parsed.get("rang_longueur_m")),  # [US-326 / P4]
         duree=_to_int(parsed.get("duree_minutes")),
         traitement=parsed.get("traitement"),
         commentaire=parsed.get("commentaire"),
@@ -1800,6 +2015,18 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     if normalize_action(parsed.get("action")) == "levee":
         # [US-212] Le lot est relu à l'instant de la confirmation (il a pu être clôturé).
         resoudre_lot_levee(db, ctx, parsed)
+        # [US-320] Une levée en pleine terre porte la parcelle de son semis.
+        if parsed.get("_levee_pleine_terre") and parcelle_obj is None and parsed.get("parcelle"):
+            parcelle_obj = resolve_parcelle(db, parsed["parcelle"], potager_id=ctx.potager_id)
+
+    fins: list[dict] = []
+    if normalize_action(parsed.get("action")) == "fin_culture":
+        # [US-320] Ce qui reste de la culture est relu à l'instant de la confirmation.
+        parcelle_obj, fins = preparer_fin_culture(db, ctx, parsed, parcelle_obj)
+        if fins:
+            parsed["variete"] = fins[0]["variete"]
+            parsed["quantite"] = fins[0]["quantite"]
+            parsed["unite"] = fins[0]["unite"]
 
     valider_evenement(
         db, ctx,
@@ -1814,6 +2041,7 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         origine_graines_id=_to_int(parsed.get("origine_graines_id")),   # [US-224] plafond par lot
     )
 
+    _verifier_position_rang(db, ctx, parsed, parcelle_obj)   # [US-326]
     action_norm = normalize_action(parsed.get("action"))
     event = Evenement(
         type_action=action_norm,
@@ -1823,6 +2051,8 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
         unite=_normalize_unite_denombrement(parsed.get("unite"), action_norm),
         parcelle_id=parcelle_obj.id if parcelle_obj else None,
         rang=_to_int(parsed.get("rang")),
+        rang_position=_to_int(parsed.get("rang_position")),     # [US-326] la POSITION
+        rang_longueur_m=_to_float(parsed.get("rang_longueur_m")),  # [US-326 / P4]
         duree=_to_int(parsed.get("duree_minutes")),
         traitement=parsed.get("traitement"),
         commentaire=parsed.get("commentaire"),
@@ -1848,9 +2078,25 @@ def creer_evenement_confirme(db: Session, ctx: TenantContext, parsed: dict, text
     )
     _invalider_cache(db, ctx, event.culture, event.type_action)
     db.add(event)
+    # [US-320] Une fin de culture sur une parcelle qui porte plusieurs variétés : un
+    # événement par variété, pour que le stock par variété retire chacune de son reste.
+    autres: list[Evenement] = []
+    for fin in fins[1:]:
+        autre = Evenement(
+            type_action=event.type_action, culture=event.culture, variete=fin["variete"],
+            quantite=fin["quantite"], unite=_normalize_unite_denombrement(fin["unite"], action_norm),
+            parcelle_id=event.parcelle_id, commentaire=event.commentaire,
+            texte_original=texte, date=event.date, origine_parsing=event.origine_parsing,
+            date_source=event.date_source, potager_id=ctx.potager_id,
+        )
+        db.add(autre)
+        autres.append(autre)
     db.commit()
     db.refresh(event)
     svc_actions_menees.noter_evenement(db, ctx, event)   # [US-261 / CA1] le geste devient une action menée
+    for autre in autres:
+        db.refresh(autre)
+        svc_actions_menees.noter_evenement(db, ctx, autre)
     log.info(
         f"💾 DB SAVE        : id={event.id} | action={event.type_action} | culture={event.culture} "
         f"| qte={event.quantite} {event.unite or ''} | parcelle={event.parcelle_id} | date={event.date}"

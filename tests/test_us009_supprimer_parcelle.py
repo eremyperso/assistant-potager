@@ -140,8 +140,9 @@ async def test_us009_ca7_annulation_callback():
 
 
 @pytest.mark.asyncio
-async def test_us009_ca5_message_final_avec_evenements():
-    """CA5 — Message final indique le nombre d'événements réaffectés."""
+async def test_us009_ca5_message_final_parcelle_vide():
+    """CA5 — [US-332] Le message final dit la suppression d'une parcelle VIDE (réelle) ; avec des
+    événements, la suppression est refusée (voir test_us332_retrait_parcelle.py)."""
     from app.bot import _parcelle_suppr_cb
 
     update = _make_callback("parcelle_suppr_confirm:42")
@@ -152,13 +153,7 @@ async def test_us009_ca5_message_final_avec_evenements():
     mock_parc.actif = True
 
     mock_db = MagicMock()
-    mock_db.get.return_value = mock_parc
-    mock_db.query.return_value.filter.return_value.count.return_value = 5
-    mock_db.query.return_value.filter.return_value.update.return_value = None
-
-    with patch("app.bot.SessionLocal", return_value=mock_db):
-        mock_db.__enter__ = lambda s: mock_db
-        mock_db.__exit__ = MagicMock(return_value=False)
+    with patch("app.bot.SessionLocal", return_value=mock_db),          patch("app.services.parcelles.get_parcelle", return_value=mock_parc),          patch("app.services.retrait_parcelle.supprimer", return_value="Parcelle « serre » supprimée."):
         await _parcelle_suppr_cb(update, MagicMock())
 
     update.callback_query.edit_message_text.assert_awaited_once()

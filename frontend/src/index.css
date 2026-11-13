@@ -41,6 +41,28 @@
     --end:   #9FCDEA;  --end-d: #2A6E8F;  --end-s: #E3EFF4;
     --frk:   #F3D35A;  --frk-d: #7A5C00;  --frk-s: #FBF3D1;  --frk-t: #F7E9A6;
 
+    /* [US-321 / CA2] Langage visuel des étapes : une famille de couleur par grande
+       étape (fond + encre, `-t`), plus la trame du « prévu » et la pastille « à
+       confirmer ». Les contrastes encre / fond (trame comprise) sont vérifiés par
+       `npm test` (lib/etapes.test.js) dans les deux thèmes. */
+    --etape-semee:      #E8D5A8;  --etape-semee-t:      #5A4012;
+    --etape-levee:      #CDE7A4;  --etape-levee-t:      #2A4E12;
+    --etape-croissance: #6DB43F;  --etape-croissance-t: #0E2605;
+    --etape-fleur:      #F2D24F;  --etape-fleur-t:      #473500;
+    --etape-recolte:    #F0841E;  --etape-recolte-t:    #2B1300;
+    --etape-terminee:   #D4D8CD;  --etape-terminee-t:   #3A4134;
+    --etape-trame:      rgba(255, 255, 255, .55);
+    --etape-pastille:   #E8731A;  --etape-pastille-bord: #FFFFFF;
+
+    /* [US-327] Plan vu du dessus : le fond en grille et le fond de chaque forme de
+       parcelle (planche = terre, serre = vitre, bac = cadre bois, pépinière = mauve). */
+    --plan-fond:        #F0F2EA;  --plan-grille:   rgba(120, 135, 100, .14);
+    --parcelle-sol:     #E7DCC6;  --parcelle-sol-bd:   #BFA77E;
+    --parcelle-serre:   #E2EDEF;  --parcelle-serre-bd: #8FB0B8;
+    --parcelle-bac-bd:  #B08A5A;
+    --parcelle-pep:     #F1EDF7;  --parcelle-pep-bd:   #A595C9;  --parcelle-pep-t: #4A3880;
+    --lot-fond:         #FFFFFF;  --lot-bd:            #8C7AB8;  --lot-t:         #3E2E66;
+
     --header-from:  #2F5416;
     --header-to:    #4E8226;
     --header-txt:   #FFFFFF;
@@ -138,6 +160,24 @@
     --god:   #5E8A36;  --god-d: #A9D47A;  --god-s: #1C2A12;
     --end:   #3F7E9E;  --end-d: #9FCDEA;  --end-s: #12242C;
     --frk:   #A88A1E;  --frk-d: #F3D35A;  --frk-s: #2A2408;  --frk-t: #3A3110;
+
+    /* [US-321 / CA2] Étapes — variante sombre (trame assombrie : l'encre claire gagne en contraste). */
+    --etape-semee:      #5E4826;  --etape-semee-t:      #F3E1B8;
+    --etape-levee:      #44702A;  --etape-levee-t:      #E3F5C8;
+    --etape-croissance: #2D6A1B;  --etape-croissance-t: #E8F8D8;
+    --etape-fleur:      #7C6410;  --etape-fleur-t:      #FDEEA8;
+    --etape-recolte:    #A24D0B;  --etape-recolte-t:    #FFF2E2;
+    --etape-terminee:   #3A4034;  --etape-terminee-t:   #D2D8CA;
+    --etape-trame:      rgba(0, 0, 0, .35);
+    --etape-pastille:   #F0841E;  --etape-pastille-bord: #161D0F;
+
+    /* [US-327] Plan vu du dessus — variante sombre. */
+    --plan-fond:        #1A2213;  --plan-grille:   rgba(200, 215, 180, .08);
+    --parcelle-sol:     #3A3122;  --parcelle-sol-bd:   #7A6643;
+    --parcelle-serre:   #22343A;  --parcelle-serre-bd: #5E8791;
+    --parcelle-bac-bd:  #8A6A3E;
+    --parcelle-pep:     #2A2338;  --parcelle-pep-bd:   #7E6CAE;  --parcelle-pep-t: #D9CCF5;
+    --lot-fond:         #1E1A2A;  --lot-bd:            #7E6CAE;  --lot-t:         #E3DAF8;
 
     --header-from:  #111A0A;
     --header-to:    #243A17;
@@ -446,3 +486,59 @@
   .dicte-point, .dicte-statut, .dicte-sonne { animation: none; }
   .dicte-niveau i { animation: none; height: 10px; }
 }
+
+/* [US-321 / V3-V6] Segments d'étape. Hors @layer : classes composées à l'exécution
+   (`etape-${famille}`). Plein = étape validée ; hachuré (blanc à 45° + filet) = prévue ;
+   gris hachuré = à libérer ; contour pointillé = rang libre. */
+.etape-semee      { background-color: var(--etape-semee);      color: var(--etape-semee-t); }
+.etape-levee      { background-color: var(--etape-levee);      color: var(--etape-levee-t); }
+.etape-croissance { background-color: var(--etape-croissance); color: var(--etape-croissance-t); }
+.etape-fleur      { background-color: var(--etape-fleur);      color: var(--etape-fleur-t); }
+.etape-recolte    { background-color: var(--etape-recolte);    color: var(--etape-recolte-t); }
+.etape-terminee   { background-color: var(--etape-terminee);   color: var(--etape-terminee-t); }
+.etape-prevue {
+  background-image: repeating-linear-gradient(45deg, var(--etape-trame) 0 3px, transparent 3px 6px);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 60%, transparent);
+}
+.etape-libre {
+  background: transparent; color: var(--txt3);
+  border: 1.5px dotted currentColor;
+}
+.etape-pastille {
+  background: var(--etape-pastille); box-shadow: 0 0 0 2px var(--etape-pastille-bord);
+}
+
+/* [US-327] Plan vu du dessus. Hors @layer : formes et états composés à l'exécution. */
+.plan-cadre { background-color: var(--plan-fond); box-shadow: inset 0 0 0 1px var(--border); }
+.plan-grille {
+  background-image: linear-gradient(var(--plan-grille) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--plan-grille) 1px, transparent 1px);
+}
+.parcelle-plan { background: var(--parcelle-sol); border-radius: 7px; box-shadow: inset 0 0 0 1.5px var(--parcelle-sol-bd); }
+.parcelle-plan.forme-serre { background: var(--parcelle-serre); box-shadow: inset 0 0 0 2px var(--parcelle-serre-bd); }
+.parcelle-plan.forme-bac { border-radius: 4px; box-shadow: inset 0 0 0 3px var(--parcelle-bac-bd); }
+.parcelle-plan.forme-butte { border-radius: 999px; }
+.parcelle-plan.forme-pepiniere { background: var(--parcelle-pep); box-shadow: inset 0 0 0 1.5px var(--parcelle-pep-bd); }
+.parcelle-plan.estimee { outline: 1.5px dashed var(--parcelle-sol-bd); outline-offset: 2px; }
+.parcelle-plan.inactive { opacity: .45; filter: grayscale(1); }
+.parcelle-plan.choisie { box-shadow: 0 0 0 3px var(--txt), 0 0 0 6px var(--card); z-index: 5; }
+.segment-plan { transition: opacity .2s; }
+.segment-plan.estompe { opacity: .22; }
+.segment-plan.choisi { box-shadow: 0 0 0 2.5px var(--txt), 0 0 0 5px var(--card); z-index: 2; }
+.segment-plan .vertical { writing-mode: vertical-rl; transform: rotate(180deg); overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
+.lot-plan { background: var(--lot-fond); box-shadow: inset 0 0 0 1.5px var(--lot-bd); color: var(--lot-t); }
+@media (prefers-reduced-motion: no-preference) {
+  .segment-plan .etape-pastille { animation: pastille-plan 1.8s ease-in-out infinite; }
+}
+@keyframes pastille-plan { 50% { transform: scale(1.25); } }
+/* [US-328 / CA4] Un rang libre prêt à recevoir la carte en main. */
+.segment-plan.accueillant { color: var(--brand); border: 2px dashed var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
+/* [US-328 / A2] La pastille « À confirmer » en texte, couleur de la pastille du plan. */
+.etape-pastille-texte { color: var(--etape-pastille); }
+/* [US-329 / M2] Le mini-plan : le même dessin, réduit, sans libellé. */
+.parcelle-plan.mini { display: block; padding: 0; border-radius: 3px; }
+.parcelle-plan.mini.en-evidence { box-shadow: 0 0 0 2px var(--txt); z-index: 5; }
+/* Zone de toucher élargie autour d'une petite parcelle, sans changer le dessin. */
+.parcelle-plan.mini::after { content: ''; position: absolute; inset: -3px; }
+/* [US-329 / CA5] La carte d'une parcelle atteinte depuis le mini-plan. */
+.carte-chemin.en-evidence { box-shadow: 0 0 0 2.5px var(--brand); }

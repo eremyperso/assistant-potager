@@ -366,6 +366,13 @@ def test_us197_ca7_aucun_moteur_de_calcul_ne_lit_nb_rangs() -> None:
         # [US-295] Le résumé du potager pour un assistant IA AFFICHE le nombre de rangs que
         # la lecture du plan rend déjà. Il ne calcule rien.
         Path("app/services/mcp/guides.py"),
+        # [US-326 / CA5] Le contrôle d'une position de rang LIT le nombre de rangs
+        # déclarés pour refuser « au rang 7 » d'une planche qui en a 5. Il ne calcule rien.
+        Path("app/services/geometrie.py"),
+        # [US-333] « Enregistrer » du plan écrit le nombre de rangs ET refuse de le baisser sous les
+        # rangs occupés (calculés par `repartition_rangs`) ; la demande de création le TRANSMET.
+        Path("app/services/plan_gaston.py"),
+        Path("app/services/agent/executeurs.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

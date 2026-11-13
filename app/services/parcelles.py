@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.services.context import TenantContext
 from app.services.permissions import require_role
+from app.services import geometrie as svc_geometrie  # [US-326]
 from database.models import CultureConfig, Evenement, Parcelle
 from utils.parcelles import create_parcelle as _create_parcelle
 from utils.parcelles import rename_parcelle as _rename_parcelle
@@ -120,6 +121,15 @@ def vocabulaires_fiche() -> dict:
             "ferme": False,
             "options": [{"valeur": v, "libelle": v} for v in EXPOSITIONS_PROPOSEES],
         },
+        # [US-331 / P7] Le « Type » de la parcelle est la `forme` du plan (US-326) : la même
+        # liste fermée, sans « pépinière », qui a son propre champ.
+        "forme": {
+            "ferme": True,
+            "options": [
+                {"valeur": f, "libelle": f.capitalize()}
+                for f in svc_geometrie.FORMES if f != "pepiniere"
+            ],
+        },
     }
 
 
@@ -157,7 +167,20 @@ def modifier_parcelle(
     if parcelle is None:
         raise LookupError(parcelle_id)
 
-    inconnus = set(champs) - set(CHAMPS_FICHE) - {"nom"}
+    # [US-331 / CA6] « Pépinière : Non / Froide / Chaude » écrit les deux colonnes de façon
+    # cohérente : le type voyage avec le statut, et c'est `_pepiniere` (US-208) qui tranche.
+    if "type_pepiniere" in champs:
+        champs = dict(champs)
+        type_p = champs.pop("type_pepiniere")
+        if type_p is not None and champs.get("est_pepiniere") is not False:
+            champs["est_pepiniere"] = type_p
+
+    # [US-326 / CA2] La géométrie (forme, x, y, largeur, rotation, sens des rangs)
+    # passe par ce même appel ; la longueur reste le champ de fiche `longueur_m` (G1).
+    inconnus = (
+        set(champs) - set(CHAMPS_FICHE) - {"nom"}
+        - set(svc_geometrie.CHAMPS_GEOMETRIE_PARCELLE) - {svc_geometrie.CHAMP_ALIGNER}
+    )
     if inconnus:
         raise ValueError(
             f"Champ(s) non modifiable(s) depuis la fiche : {', '.join(sorted(inconnus))}"
@@ -167,6 +190,7 @@ def modifier_parcelle(
         CHAMPS_FICHE[cle]: _texte_booleen(valeur)
         for cle, valeur in champs.items() if cle in CHAMPS_FICHE
     }
+    aligner = bool(champs.get(svc_geometrie.CHAMP_ALIGNER))
     # [CA13] Tout est contrôlé d'abord : une valeur hors borne au milieu du lot
     # ne doit pas laisser derrière elle les champs déjà écrits avant elle.
     # [E5] Le champ fautif repart sous son nom d'API, pour que l'écran pose le
@@ -176,6 +200,12 @@ def modifier_parcelle(
     except _ChampInvalide as e:
         vers_api = {v: k for k, v in CHAMPS_FICHE.items()}
         raise _ChampInvalide(vers_api.get(e.champ, e.champ), str(e)) from None
+    try:
+        geometrie = svc_geometrie.valider_geometrie_parcelle(champs)
+    except svc_geometrie.GeometrieInvalideError as e:
+        raise _ChampInvalide(e.champ, str(e)) from None
+    # [G1, G2] La superficie d'avant dit si la fiche suivait la géométrie.
+    avant = (parcelle.longueur_m, parcelle.largeur_m, parcelle.superficie_m2)
 
     modifs: list[str] = []
     nouveau_nom = champs.get("nom")
@@ -198,6 +228,16 @@ def modifier_parcelle(
             db, parcelle.nom, potager_id=ctx.potager_id, **kwargs
         )
         modifs.extend(autres)
+
+    if geometrie or aligner or "longueur_m" in champs:
+        modifs.extend(svc_geometrie.appliquer_geometrie_parcelle(parcelle, geometrie))
+        ligne = svc_geometrie.recalculer_superficie(
+            parcelle, avant=avant, superficie_dite="superficie_m2" in champs, aligner=aligner,
+        )
+        if ligne:
+            modifs.append(ligne)
+        db.commit()
+        db.refresh(parcelle)
     return parcelle, modifs
 
 

@@ -122,11 +122,15 @@ from app.services import lots_pepiniere as svc_lots_pepiniere  # [US-216]
 from app.services.permissions import PermissionInsuffisanteError, PotagerArchiveError  # [US-047, US-083]
 from app.services import stats as svc_stats
 from app.services import plan as svc_plan
+from app.services import taches_plan as svc_taches_plan  # [US-328]
 from app.services import parcelles as svc_parcelles
 from app.services import stock as svc_stock  # [US-065]
 from app.services import familles as svc_familles  # [US-067]
 from app.services import calendrier_cultural as svc_calendrier  # [US-068]
 from app.services import recalage_calendrier as svc_recalage  # [US-070]
+from app.services import etapes_culture as svc_etapes  # [US-320]
+from app.services import geometrie as svc_geometrie  # [US-326]
+from app.services import suivi_culture as svc_suivi  # [US-322]
 from app.services import repartition_rangs as svc_rangs  # [US-198]
 from app.services import rotation as svc_rotation  # [US-163, US-231]
 from app.services import confiance_semis as svc_confiance  # [US-178]
@@ -1028,7 +1032,17 @@ class ModifierParcelleRequest(BaseModel):
     abri: Optional[str] = None
     paillage: Optional[bool] = None
     est_pepiniere: Optional[bool] = None
+    type_pepiniere: Optional[str] = None   # [US-331 / CA6] « chaude » / « froide », avec est_pepiniere
     actif: Optional[bool] = None
+    # [US-326 / CA2] Géométrie sur le plan. La longueur est `longueur_m` ci-dessus
+    # (G1) ; `aligner_superficie` recopie L × l dans la fiche (G2).
+    forme: Optional[str] = None
+    x_m: Optional[float] = None
+    y_m: Optional[float] = None
+    largeur_m: Optional[float] = None
+    rotation_deg: Optional[float] = None
+    sens_rangs: Optional[str] = None
+    aligner_superficie: Optional[bool] = None
 
 
 @app.patch("/parcelles/{parcelle_id}")
@@ -1076,8 +1090,11 @@ def modifier_parcelle(
         # comprise : l'écran met à jour son en-tête et la Vue plan sans
         # recharger, et sans recalculer la largeur de son côté (CA3).
         largeur, incoherente = largeur_deduite(parcelle.superficie_m2, parcelle.longueur_m)
+        if svc_geometrie.largeur_posee(parcelle) is not None:   # [US-326] posée : plus déduite
+            largeur, incoherente = svc_geometrie.largeur_posee(parcelle), False
         return {
             "id": parcelle.id, "nom": parcelle.nom,
+            "geometrie": svc_geometrie.geometrie_parcelle(parcelle),   # [US-326 / CA2]
             "superficie_m2": parcelle.superficie_m2, "longueur_m": parcelle.longueur_m,
             "largeur_m": largeur, "largeur_incoherente": incoherente,
             "nb_rangs": parcelle.nb_rangs, "exposition": parcelle.exposition,
@@ -1088,6 +1105,74 @@ def modifier_parcelle(
             "actif": parcelle.actif,
             "modifications": modifs,
         }
+    finally:
+        db.close()
+
+
+class GeometriePotagerRequest(BaseModel):
+    """[US-326] Emprise (m), angle du plan (°) et orientation du nord du potager courant."""
+    model_config = {"extra": "forbid"}
+
+    emprise_longueur_m: Optional[float] = None
+    emprise_largeur_m: Optional[float] = None
+    angle_deg: Optional[float] = None
+    orientation_nord: Optional[str] = None
+
+
+@app.patch("/plan/geometrie")
+def modifier_geometrie_potager(
+    req: GeometriePotagerRequest, ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-326] Pose la géométrie du potager courant, réservée à un éditeur. Seuls les
+    champs transmis sont écrits ; `null` remet un champ à « non posé »."""
+    champs = req.model_dump(exclude_unset=True)
+    if not champs:
+        raise HTTPException(status_code=400, detail="Aucune modification transmise")
+    db = SessionLocal()
+    try:
+        try:
+            potager = svc_geometrie.modifier_geometrie_potager(db, ctx, champs)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Potager introuvable")
+        except svc_geometrie.GeometrieInvalideError as e:
+            raise HTTPException(status_code=400, detail={"message": str(e), "champ": e.champ})
+        return svc_geometrie.geometrie_potager(potager)
+    finally:
+        db.close()
+
+
+class EditionPlanRequest(BaseModel):
+    """[US-333 / CA3] Tout ce que l'éditeur a modifié, écrit en un seul appel : les parcelles (leur
+    `id` + les champs touchés) et la géométrie du potager (emprise, angle, nord)."""
+    model_config = {"extra": "forbid"}
+
+    parcelles: list[dict] = []
+    potager: Optional[dict] = None
+
+
+@app.post("/plan/edition")
+def enregistrer_edition_plan(req: EditionPlanRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """[US-333 / CA3, CA7] « Enregistrer » de l'éditeur du plan, réservé à un éditeur : un refus
+    n'écrit RIEN, et nomme la parcelle et le champ. Une nouvelle forme ne passe pas par ici : elle
+    se crée par Gaston, après confirmation (US-332)."""
+    if not req.parcelles and not req.potager:
+        raise HTTPException(status_code=400, detail="Aucune modification transmise")
+    db = SessionLocal()
+    try:
+        try:
+            return svc_geometrie.enregistrer_plan(db, ctx, req.parcelles, req.potager)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Parcelle introuvable")
+        except svc_geometrie.PlanRefuseError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail={"message": str(e), "champ": e.champ, "parcelle": e.parcelle})
+        except (svc_geometrie.GeometrieInvalideError, ValueError) as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail={"message": str(e), "champ": getattr(e, "champ", None)})
     finally:
         db.close()
 
@@ -1559,6 +1644,29 @@ def get_confiance_culture(
         return svc_confiance.confiance_en_dict(confiance)
     except svc_confiance.ActionInvalideError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+
+
+@app.get("/plan/suivi")
+def get_suivi_culture(
+    parcelle_id: int = Query(...),
+    culture: str = Query(...),
+    variete: str = Query(default=None),
+    date_ref: date = Query(default=None),
+    potager_id: int = Query(default=None),
+    ctx: TenantContext = Depends(get_current_user_ctx),
+):
+    """[US-322 / CA4] Le suivi d'une culture en place — origine, localisation, place
+    sur le rang, étapes, cumul récolté, notes — en UNE lecture. 404 si la parcelle
+    n'est pas de ce potager ou si la culture n'y est pas en place à la date."""
+    db = SessionLocal()
+    try:
+        use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
+        try:
+            return svc_suivi.suivi_culture(db, use_ctx, parcelle_id, culture, variete, date_ref)
+        except LookupError:
+            raise HTTPException(status_code=404, detail="Culture introuvable sur cette parcelle")
     finally:
         db.close()
 
@@ -2167,6 +2275,36 @@ def get_activite(
         db.close()
 
 
+class ReportEtapeRequest(BaseModel):
+    """[US-320 / E7] « Pas encore » : la série (son geste d'origine) et l'étape à taire."""
+    serie_id: int
+    etape: str
+
+
+@app.post("/plan/etapes/pas-encore")
+def post_etape_pas_encore(req: ReportEtapeRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
+    """
+    [US-320 / E7, CA9] « Pas encore » sur une étape à confirmer : aucune étape n'est
+    écrite, le rappel est repoussé de trois jours (un rappel US-266 sur l'étape).
+    """
+    db = SessionLocal()
+    try:
+        try:
+            rappel = svc_etapes.reporter_etape(db, ctx, req.serie_id, req.etape)
+        except PermissionInsuffisanteError as e:
+            raise HTTPException(status_code=403, detail=str(e))
+        except svc_etapes.EtapeError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except ValueError as e:   # RappelError (trop de rappels en attente)
+            raise HTTPException(status_code=409, detail=str(e))
+        return {
+            "serie_id": req.serie_id, "etape": req.etape,
+            "rappel_le": rappel.echeance_le.date().isoformat(),
+        }
+    finally:
+        db.close()
+
+
 @app.get("/plan")
 def get_plan(
     date_ref: date = Query(default=None),
@@ -2221,6 +2359,17 @@ def get_plan(
         }
         phases = svc_recalage.phases_du_plan(
             db, cultures_du_plan, use_ctx.potager_id, date_ref_effective
+        )
+
+        # [US-320 / CA1, E9] Étapes de chaque ligne en place (prévues, validées, à
+        # confirmer) et cultures « à libérer », calculées par `etapes_culture` : ni
+        # l'API ni l'écran ne déduisent une étape.
+        en_place = {
+            svc_etapes.cle_ligne(p.id, c.get("culture"), c.get("variete"))
+            for p in parcelles for c in occupation.get(p.nom, []) if c.get("culture")
+        }
+        etapes_lignes, a_liberer = svc_etapes.etapes_du_plan(
+            db, use_ctx.potager_id, date_ref_effective, en_place,
         )
 
         # [US-198 / CA1, CA2, CA3] Répartition en rangs — calculée à un seul
@@ -2302,6 +2451,11 @@ def get_plan(
                 c["phase_depuis"] = phase.get("phase_depuis")
                 c["phase_depuis_nature"] = phase.get("phase_depuis_nature")
                 c["nb_series"] = phase.get("nb_series")
+                # [US-320 / CA1] Étape courante, statut, date, à confirmer, et la
+                # séquence complète. None : ligne sans série en place (pépinière).
+                c["etapes"] = etapes_lignes.get(
+                    svc_etapes.cle_ligne(p.id, c["culture"], c["variete"])
+                )
 
             # [US-037 / CA10] Calcul occupation réel : une culture semée en m² occupe
             # directement cette surface (aucune conversion via une empreinte au pied) ;
@@ -2323,6 +2477,10 @@ def get_plan(
             largeur_m, largeur_incoherente = largeur_deduite(
                 p.superficie_m2, p.longueur_m
             )
+            # [US-326 / G1] Une largeur POSÉE sur le plan l'emporte sur la déduction.
+            largeur_posee = svc_geometrie.largeur_posee(p) is not None
+            if largeur_posee:
+                largeur_m, largeur_incoherente = svc_geometrie.largeur_posee(p), False
 
             nb_obs_parcelle = len(obs_index["parcelle"].get(p.id, []))
             result.append({
@@ -2357,7 +2515,7 @@ def get_plan(
                 # trop étroite pour être vraie, sans jamais corriger la valeur.
                 "longueur_m":    p.longueur_m,
                 "largeur_m":     largeur_m,
-                "largeur_deduite": largeur_m is not None,
+                "largeur_deduite": largeur_m is not None and not largeur_posee,
                 "largeur_incoherente": largeur_incoherente,
                 "ordre":         p.ordre,
                 "est_pepiniere": bool(p.est_pepiniere),
@@ -2379,6 +2537,12 @@ def get_plan(
                 # [US-231 / R8] None pour une pépinière : l'absence de rotation
                 # est une absence de SENS, pas une donnée manquante.
                 "rotation": rotations.get(p.id),
+                # [US-320 / E8] Cultures terminées dont le rang n'est pas libéré :
+                # elles ne sont plus dans `cultures`, une fin de culture les libère.
+                "a_liberer": [l for l in a_liberer if l["parcelle_id"] == p.id],
+                # [US-326 / G6, CA3] Forme, position, dimensions, rotation, sens des
+                # rangs ; « à placer » sans coordonnées si la parcelle n'est pas posée.
+                "geometrie": svc_geometrie.geometrie_parcelle(p),
             })
 
         # [US-200 / V17, CA1] Les cultures dont la parcelle n'a jamais été dite.
@@ -2405,6 +2569,20 @@ def get_plan(
             "total": len(result),
             "date_ref_effective": date_ref_effective.isoformat(),
             "non_localisees": non_localisees,
+            # [US-326] Emprise, angle et nord du potager, et vocabulaires du plan.
+            "potager_geometrie": svc_geometrie.geometrie_du_potager(db, use_ctx.potager_id),
+            # [US-327 / P7] Les parcelles inactives restent sur le plan, grisées :
+            # servies à part pour que `parcelles` garde son contrat (actives seules).
+            "parcelles_inactives": svc_plan.parcelles_inactives(db, use_ctx),
+            # [US-327 / CA4] Les compteurs des filtres du plan, calculés par le
+            # service : l'écran n'en recompte aucun.
+            "filtres_plan": svc_plan.compteurs_filtres(result),
+            # [US-328 / CA1-CA3] « Aujourd'hui au potager » : à confirmer, à libérer, à placer,
+            # à la date de référence. Les lots prêts suivent la règle de la Pépinière (US-217).
+            "taches_du_jour": svc_taches_plan.taches_du_jour(
+                result, non_localisees,
+                svc_echeances.lots_prets_pour_le_plan(db, use_ctx, dr),
+            ),
             # [US-198 / CA3] Totaux du plan en rangs — le pourcentage ne mêle
             # jamais une parcelle sans dénominateur.
             "totaux": repartition["totaux"],
@@ -2775,18 +2953,44 @@ def meteo_potager(ctx: TenantContext = Depends(get_current_user_ctx)):
 # Aucune logique ici (CA8) : tout est dans `app/services/compagnon/echange_pwa.py`, qui passe
 # par l'orchestrateur que le bot utilise aussi. Le potager est celui du compte connecté (RLS) :
 # une proposition d'un autre jardinier ou d'un autre potager n'existe pas pour lui (CA7).
+class ContexteEcranRequest(BaseModel):
+    """[US-323 / C4] Le contexte d'écran : des identifiants, jamais de texte reconstruit."""
+    parcelle_id: Optional[int] = None
+    culture: Optional[str] = None
+    variete: Optional[str] = None
+    rang: Optional[int] = None
+
+
 class MessageCompagnonRequest(BaseModel):
     texte: str
     #: [US-271] « normal » (défaut) ou « support » : la documentation de l'application d'abord.
     mode: str = "normal"
+    #: [US-323 / C4] Ce que le jardinier a sous les yeux. Absent : tout le potager.
+    contexte: Optional[ContexteEcranRequest] = None
+    #: [US-324 / CA2] Une pastille de « Noter » (etape_levee, recolte, culture_terminee,
+    #: rang_libere, arrose, paille, desherbe) : le geste est construit sans modèle.
+    raccourci: Optional[str] = None
+    #: [US-328 / CA4] Une carte « À placer » glissée sur un rang libre (le rang est dans
+    #: `contexte`) : culture, variete, quantite, unite, numero_lot, part (fraction du rang).
+    placement: Optional[dict] = None
+    #: [US-332, US-333] Une demande née de l'écran du plan : `{"action": "creer", forme, longueur_m,
+    #: largeur_m, x_m, y_m, sens_rangs, nb_rangs}` (forme posée dans l'éditeur) ou
+    #: `{"action": "retirer", "parcelle_id": N}` (« Rendre inactive ou supprimer… »).
+    plan: Optional[dict] = None
 
 
 def _erreur_compagnon(e: Exception) -> HTTPException:
     """Traduit un refus du service en réponse HTTP lisible (404, 409, 422, 403, 503)."""
-    if isinstance(e, (svc_echange_pwa.TexteVideError, svc_echange_pwa.ModeInconnuError)):
+    if isinstance(e, (svc_echange_pwa.TexteVideError, svc_echange_pwa.ModeInconnuError,
+                      svc_echange_pwa.svc_noter.RaccourciInconnuError,
+                      svc_echange_pwa.svc_placement.PlacementInvalideError,
+                      svc_echange_pwa.svc_plan_gaston.DemandePlanInvalideError)):
         return HTTPException(status_code=422, detail=str(e))
     if isinstance(e, svc_gestes_dits.GesteIntrouvableError):
         return HTTPException(status_code=404, detail="Proposition introuvable")
+    if isinstance(e, svc_echange_pwa.svc_contexte_ecran.ContexteIntrouvableError):
+        # [US-323 / CA2] Sans dire ce qui manque : ni l'existence d'une parcelle, ni d'un potager.
+        return HTTPException(status_code=404, detail="Contexte introuvable")
     if isinstance(e, svc_gestes_dits.GesteDejaTraiteError):
         return HTTPException(status_code=409, detail={
             "code": "deja_traitee", "etat": e.etat,
@@ -2808,7 +3012,10 @@ def _erreur_compagnon(e: Exception) -> HTTPException:
 def envoyer_message_compagnon(req: MessageCompagnonRequest, ctx: TenantContext = Depends(get_current_user_ctx)):
     """[US-270 / CA1] Transmet une phrase à l'orchestrateur ; rend la réponse et les cartes éventuelles."""
     try:
-        return svc_echange_pwa.repondre(ctx, req.texte, req.mode).en_donnees()
+        contexte = req.contexte.model_dump(exclude_none=True) if req.contexte is not None else None
+        return svc_echange_pwa.repondre(
+            ctx, req.texte, req.mode, contexte, req.raccourci, req.placement, req.plan,
+        ).en_donnees()
     except Exception as e:
         raise _erreur_compagnon(e)
 

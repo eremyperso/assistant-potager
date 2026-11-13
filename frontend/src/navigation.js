@@ -1,14 +1,11 @@
 import {
   Home,
-  LayoutGrid,
   Leaf,
   Sprout,
   Package,
   ScrollText,
   BarChart3,
-  MapPin,
   Layers,
-  Calendar,
 } from 'lucide-react'
 
 /**
@@ -50,22 +47,14 @@ export const NAV = [
     id: 'plan',
     label: 'Plan',
     shortLabel: 'Plan',
-    Icon: LayoutGrid,
+    Icon: Layers,
     title: 'Plan des parcelles',
     sub: 'Vos espaces de culture, leur occupation et leur contenu',
-    // [US-223 / CA1, CA3] Les sous-onglets suivent le zoom, du plus large au plus
-    // détaillé (règle 19). Les identifiants ne bougent pas : seul l'ordre change.
-    // `entree` : sous-onglet d'ouverture de l'activité (A18) — la seule place où
-    // il est dit. `memoriser` : revenir dans l'activité rouvre le dernier visité.
+    // [US-330 / CA1] Plus de sous-navigation : les tuiles « Plan » et « Rotation · à venir » ont été
+    // retirées pour gagner en hauteur. Le détail d'une parcelle s'ouvre dans le Plan, et les anciens
+    // liens (vue `plan`) y sont redirigés (`VUES_REDIRIGEES`, lib/intentions.js).
+    // `entree` : la vue d'ouverture de la section.
     entree: 'plan-vue',
-    memoriser: true,
-    subnav: [
-      { id: 'plan-vue', label: 'Vue plan', icon: Layers },
-      { id: 'plan', label: 'Parcelles', icon: MapPin },
-      // [US-223 / CA2] Rotation garde sa place, désactivée (règle 26) : hors
-      // périmètre des épics 9 à 12, elle reviendra sans que la barre bouge.
-      { id: 'plan-rot', label: 'Rotation · à venir', icon: Calendar, disabled: true },
-    ],
   },
   {
     id: 'cultures',
@@ -106,9 +95,7 @@ export const NAV = [
 export const NAV_OF = {
   bord: 'bord',
   stats: 'bord',
-  plan: 'plan',
   'plan-vue': 'plan',
-  'plan-rot': 'plan',
   cultures: 'cultures',
   pepiniere: 'pepiniere',
   stocks: 'stocks',
@@ -118,8 +105,28 @@ export const NAV_OF = {
 /** Vue affichée au démarrage [US-053 / CA4]. */
 export const VUE_PAR_DEFAUT = 'bord'
 
-/** Entrées visibles directement dans la barre d'onglets basse ; le reste passe sous « Plus ». */
-export const NAV_MOBILE_VISIBLE = 4
+/**
+ * [US-325] « Noter » n'est pas une section : c'est une ACTION, toujours active, qui ouvre Gaston
+ * (US-324) avec la sélection courante pour contexte (US-323). Elle n'est jamais l'onglet courant.
+ */
+export const NOTER = Object.freeze({ id: 'noter', label: 'Noter, avec Gaston', shortLabel: 'Noter', action: true })
+
+/**
+ * [US-325 / CA1, arbitrage P1 du 13/11/2026] La barre basse mobile : Accueil, Plan, **Noter** au
+ * centre, Pépinière, puis « Plus », qui ouvre Cultures, Stocks et Journal. La navigation de
+ * bureau (`NAV`, bandeau haut) ne change pas (CA4).
+ */
+export const NAV_MOBILE = Object.freeze(['bord', 'plan', NOTER.id, 'pepiniere'])
+export const NAV_MOBILE_PLUS = Object.freeze(['cultures', 'stocks', 'journal'])
+
+/** Les entrées de la barre basse : `principales` (dont l'action Noter) et celles de « Plus ». */
+export function barreBasse() {
+  const section = (id) => NAV.find((n) => n.id === id)
+  return {
+    principales: NAV_MOBILE.map((id) => (id === NOTER.id ? NOTER : section(id))),
+    secondaires: NAV_MOBILE_PLUS.map(section),
+  }
+}
 
 export function navEntry(view) {
   return NAV.find((n) => n.id === NAV_OF[view]) ?? NAV[0]

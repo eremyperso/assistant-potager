@@ -241,7 +241,7 @@ def test_us176_ca13_table_provisoire_supprimee_du_frontend():
     source = (RACINE / "frontend" / "src" / "lib" / "calendrier.js").read_text(encoding="utf-8")
     assert "const CALENDRIER" not in source
     assert "plant:" not in source
-    plan = (RACINE / "frontend" / "src" / "views" / "Plan.jsx").read_text(encoding="utf-8")
+    plan = (RACINE / "frontend" / "src" / "components" / "DetailParcelle.jsx").read_text(encoding="utf-8")
     assert "calendrierDe" not in plan
     # [US-222, amendement du 24/09/2026] L'onglet Parcelles n'a plus de frise à
     # dessiner : il ne lit plus le calendrier. Le point de lecture restant est

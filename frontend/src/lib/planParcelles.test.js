@@ -192,12 +192,13 @@ function plancheComplete() {
     nb_rangs: 7, exposition: 'sud', ensoleillement: 'plein soleil', type_sol: 'limoneux',
     abri: 'aucun', paillage: true, est_pepiniere: false, actif: true,
     cultures: [], disposition: { rangs_declares: 7, rangs_occupes: 0, rangs: [] },
+    geometrie: { forme: 'planche', placee: false },
   }
 }
 
 test('[US-229 / C2] les champs se rendent dans l’ordre de la maquette', () => {
   assert.deepEqual(cles(plancheComplete()), [
-    'nom', 'superficie', 'longueur', 'largeur', 'nb_rangs',
+    'nom', 'type', 'superficie', 'longueur', 'largeur', 'nb_rangs',
     'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
   ])
 })
@@ -273,9 +274,10 @@ test('[US-229 / C9] une pépinière retire rangs, longueur et largeur de la gril
     longueur_m: null, largeur_m: null, nb_rangs: null,
   }
   assert.deepEqual(cles(p), [
-    'nom', 'superficie', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
+    'nom', 'type', 'superficie', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut',
   ])
-  assert.equal(champ(p, 'pepiniere').valeur, 'Oui')
+  // [US-331 / CA6] Une pépinière sans type le dit, elle ne le suppose pas.
+  assert.equal(champ(p, 'pepiniere').valeur, 'Oui · type non renseigné')
   // [C9] Leur absence ne doit PAS produire la pastille de l'index.
   assert.equal(parcelleACompleter(p), false)
   assert.equal(ligneListeParcelle(p).aCompleter, false)
@@ -284,7 +286,7 @@ test('[US-229 / C9] une pépinière retire rangs, longueur et largeur de la gril
 test('[US-229 / C10] une parcelle inactive garde sa carte entière', () => {
   const p = { ...plancheComplete(), actif: false }
   assert.equal(champ(p, 'statut').valeur, 'Inactive')
-  assert.equal(cles(p).length, 12)
+  assert.equal(cles(p).length, 13)
   assert.equal(parcelleACompleter(p), false)
 })
 
@@ -296,11 +298,11 @@ test('[US-229 / CA6] une parcelle dont tout manque reste lisible', () => {
     cultures: [], disposition: {},
   }
   const champs = caracteristiquesDeParcelle(p)
-  assert.equal(champs.length, 12)
+  assert.equal(champs.length, 13)
   // Le nom reste connu ; tout le reste se dit manquant, sauf les deux booléens.
   assert.deepEqual(
     champs.filter((c) => c.manquant).map((c) => c.cle),
-    ['superficie', 'longueur', 'largeur', 'nb_rangs', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage'],
+    ['type', 'superficie', 'longueur', 'largeur', 'nb_rangs', 'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage'],
   )
   assert.equal(champ(p, 'nom').valeur, 'planche_est')
   assert.equal(parcelleACompleter(p), true)
@@ -318,16 +320,37 @@ test('[US-229 / C7] plusieurs champs manquants : la phrase reste générique', (
   const p = { ...plancheComplete(), nom: 'planche_est', nb_rangs: null, type_sol: null }
   const aide = aideCompagnon(p)
   assert.equal(aide.champ, null)
-  assert.match(aide.phrase, /^planche_est /)
+  assert.match(aide.phrase, /planche_est$/)
 })
 
-test('[US-229 / C7] un champ que le compagnon ne sait pas écrire n’invente pas de commande', () => {
-  // Le type de sol n'a aucune phrase dédiée aujourd'hui : on retombe sur
-  // l'exemple générique plutôt que sur une commande qui serait refusée.
-  const p = { ...plancheComplete(), nom: 'planche_salade', type_sol: null }
+test('[US-331] le type de sol manquant se dit à Gaston : « sol argileux pour … »', () => {
+  const p = { ...plancheComplete(), nom: 'planche centrale', type_sol: null }
   const aide = aideCompagnon(p)
-  assert.equal(aide.champ, null)
-  assert.equal(aide.phrase.includes('type de sol'), false)
+  assert.equal(aide.champ, 'type_sol')
+  assert.equal(aide.phrase, 'sol argileux pour planche centrale')
+})
+
+test('[US-331 / CA1] les dimensions se disent « défini sur le plan » et restent verrouillées', () => {
+  const p = { ...plancheComplete(), geometrie: { forme: 'planche', placee: true } }
+  for (const cle of ['superficie', 'longueur', 'largeur']) {
+    assert.equal(champ(p, cle).verrouille, true, cle)
+    assert.equal(champ(p, cle).suffixe, 'défini sur le plan', cle)
+  }
+  assert.equal(champ(p, 'statut').verrouille, true)
+  assert.equal(champ(p, 'statut').note, 'se change avec Gaston')
+  assert.equal(champ(p, 'nom').verrouille, false)
+})
+
+test('[US-331 / P7] le type manquant se complète mais ne marque pas la parcelle « à compléter »', () => {
+  const p = { ...plancheComplete(), geometrie: { placee: false } }
+  assert.equal(champ(p, 'type').manquant, true)
+  assert.equal(parcelleACompleter(p), false)
+  assert.equal(champ({ ...p, geometrie: { forme: 'bac' } }, 'type').valeur, 'Bac')
+})
+
+test('[US-331 / CA6] « Pépinière » dit Non, Froide ou Chaude', () => {
+  assert.equal(champ(plancheComplete(), 'pepiniere').valeur, 'Non')
+  assert.equal(champ({ ...plancheComplete(), est_pepiniere: true, type_pepiniere: 'froide' }, 'pepiniere').valeur, 'Froide')
 })
 
 test('[US-229 / CA2] aucune division n’est refaite : la largeur vient du serveur', () => {
@@ -339,7 +362,7 @@ test('[US-229 / CA2] aucune division n’est refaite : la largeur vient du serve
 
 test('[US-229 / CA1] le détail porte la carte, sans lecture supplémentaire', () => {
   const d = detailDeParcelle(plancheComplete())
-  assert.equal(d.caracteristiques.length, 12)
+  assert.equal(d.caracteristiques.length, 13)
   assert.equal(d.aideCompagnon.phrase.includes('planche_complete'), true)
 })
 

@@ -95,7 +95,7 @@ export default function PageHeader({ view, onGo }) {
         )}
         {/* [US-223 / CA5] Date de référence et Journal du jour : les mêmes, au
             même endroit, sur les deux sous-onglets actifs du Plan. */}
-        {nav.id === 'plan' && view !== 'plan-rot' && <BarreActivitePlan />}
+        {nav.id === 'plan' && <BarreActivitePlan />}
       </div>
 
       {personnaliser && <ModalPersonnaliserDashboard onClose={() => setPersonnaliser(false)} />}

@@ -29,6 +29,9 @@ from app.services.compagnon import actions_menees
 from app.services.context import TenantContext
 from app.services.interpreteur_commandes import CommandeInterpretee, Plan
 from app.services.permissions import PermissionInsuffisanteError, require_role
+from app.services import geometrie as svc_geometrie  # [US-333 / E3]
+from app.services import plan_gaston as svc_plan_gaston  # [US-332 / R1]
+from app.services import retrait_parcelle as svc_retrait  # [US-332]
 from utils import parcelles as _parcelles
 
 log = logging.getLogger("potager")
@@ -39,6 +42,7 @@ STATUT_NON_EXECUTEE = "non_executee"
 
 CLE_AJOUTER = ("parcelle", "ajouter")
 CLE_MODIFIER = ("parcelle", "modifier")
+CLE_SUPPRIMER = ("parcelle", "supprimer")  # [US-332] hors plan : destructrice
 
 #: [CA8] Le service de chaque forme admise dans un plan — celui qu'appelle aussi
 #: son handler (`app.bot.messages` pour la création confirmée,
@@ -46,6 +50,7 @@ CLE_MODIFIER = ("parcelle", "modifier")
 SERVICES: dict[tuple, Callable] = {
     CLE_AJOUTER: _parcelles.create_parcelle,
     CLE_MODIFIER: _parcelles.update_parcelle,
+    CLE_SUPPRIMER: svc_retrait.supprimer,   # [US-332] la suppression réelle d'une parcelle vide
 }
 
 
@@ -83,7 +88,7 @@ def revalider(db: Session, ctx: TenantContext, commande: CommandeInterpretee) ->
         if existante is not None:
             return f"la parcelle « {existante.nom} » existe déjà"
         return None
-    if commande.forme.cle == CLE_MODIFIER and _parcelle_active(db, ctx, nom) is None:
+    if commande.forme.cle in (CLE_MODIFIER, CLE_SUPPRIMER) and _parcelle_active(db, ctx, nom) is None:
         return f"la parcelle « {nom} » est introuvable"
     return None
 
@@ -94,6 +99,16 @@ def revalider(db: Session, ctx: TenantContext, commande: CommandeInterpretee) ->
 def _executer_ajouter(db: Session, ctx: TenantContext, commande: CommandeInterpretee) -> str:
     require_role(ctx, "editor", "créer une parcelle")
     superficie = commande.valeurs.get("superficie")
+    # [US-332 / CA2] Une forme posée dans l'éditeur arrive avec sa géométrie : elle est contrôlée AVANT
+    # la création, et écrite avec elle (même appel de service que la fiche, US-326).
+    geometrie = svc_plan_gaston.decoder(commande.valeurs.get("geometrie"))
+    if geometrie:
+        try:
+            svc_geometrie.valider_geometrie_parcelle(
+                {c: geometrie[c] for c in ("forme", "x_m", "y_m", "largeur_m", "rotation_deg", "sens_rangs")
+                 if c in geometrie})
+        except svc_geometrie.GeometrieInvalideError as e:
+            raise _EtapeRefusee(str(e))
     try:
         parcelle = SERVICES[CLE_AJOUTER](
             db, commande.valeurs["nom"],
@@ -101,6 +116,11 @@ def _executer_ajouter(db: Session, ctx: TenantContext, commande: CommandeInterpr
             superficie_m2=float(superficie.replace(",", ".")) if superficie else None,
             potager_id=ctx.potager_id,
         )
+        if geometrie:
+            from app.services import parcelles as svc_parcelles
+
+            champs = dict(geometrie)   # forme, x, y, longueur, largeur, rotation, sens, nb_rangs
+            svc_parcelles.modifier_parcelle(db, ctx, parcelle.id, champs)
     except ValueError as e:
         raise _EtapeRefusee(str(e))
     return f"Parcelle « {parcelle.nom} » créée"
@@ -131,9 +151,21 @@ def _executer_modifier(db: Session, ctx: TenantContext, commande: CommandeInterp
     return f"Parcelle « {parcelle.nom} » mise à jour : {', '.join(modifs) or 'rien à changer'}"
 
 
+def _executer_supprimer(db: Session, ctx: TenantContext, commande: CommandeInterpretee) -> str:
+    """[US-332 / R4, CA3, CA5] La suppression réelle, réservée à une parcelle sans culture ni historique."""
+    nom = commande.valeurs.get("nom", "")
+    try:
+        return SERVICES[CLE_SUPPRIMER](db, ctx, nom)
+    except LookupError:
+        raise _EtapeRefusee(f"la parcelle « {nom} » est introuvable")
+    except svc_retrait.ParcelleNonVideError as e:
+        raise _EtapeRefusee(str(e))
+
+
 EXECUTEURS: dict[tuple, Callable[[Session, TenantContext, CommandeInterpretee], str]] = {
     CLE_AJOUTER: _executer_ajouter,
     CLE_MODIFIER: _executer_modifier,
+    CLE_SUPPRIMER: _executer_supprimer,
 }
 
 

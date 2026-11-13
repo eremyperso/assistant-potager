@@ -901,6 +901,43 @@ def _construire_parcelle_supprimer(groupes):
     return {"nom": nom}
 
 
+# [US-332 / R3, R5] Rendre inactive (la parcelle reste sur le plan, grisée, avec son historique) et la
+# réactiver : un seul chemin d'écriture, `/parcelle modifier <nom> actif=non|oui`, déjà confirmé et
+# annoncé comme un retrait. Deux règles par intention : le verbe peut précéder ou suivre le nom.
+@_regle(
+    "parcelle_inactiver",
+    r"\A" + _INTENTION + r"(?:rends|rend|rendre|mets|mettre|passe|passer)\s+" + _ARTICLE
+    + r"parcelle\s+(?P<nom>.+?)\s+(?:inactive|hors service)\s*\Z",
+    "parcelle",
+    "modifier",
+)
+def _construire_parcelle_inactiver(groupes):
+    nom = _nettoyer_nom(groupes["nom"])
+    return {"nom": nom, "modification": "actif=non"} if _nom_plausible(nom) else None
+
+
+@_regle(
+    "parcelle_inactiver_verbe",
+    r"\A" + _INTENTION + r"(?:rends|rend|rendre)\s+inactive\s+" + _ARTICLE + r"parcelle\s+(?P<nom>.+)",
+    "parcelle",
+    "modifier",
+)
+def _construire_parcelle_inactiver_verbe(groupes):
+    return _construire_parcelle_inactiver(groupes)
+
+
+@_regle(
+    "parcelle_reactiver",
+    r"\A" + _INTENTION + r"(?:reactive|reactiver|reactivez|remets en service|remettre en service)\s+"
+    + _ARTICLE + r"parcelle\s+(?P<nom>.+)",
+    "parcelle",
+    "modifier",
+)
+def _construire_parcelle_reactiver(groupes):
+    nom = _nettoyer_nom(groupes["nom"])
+    return {"nom": nom, "modification": "actif=oui"} if _nom_plausible(nom) else None
+
+
 @_regle(
     "parcelle_pepiniere",
     r"\A" + _INTENTION + _ARTICLE + r"(?:parcelle\s+)?(?P<nom>.+?)\s+"

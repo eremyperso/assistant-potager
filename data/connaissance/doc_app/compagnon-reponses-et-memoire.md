@@ -9,6 +9,9 @@ index_terms:
   - "laisse tomber"
   - "confirmer par une phrase"
   - "dernier semis"
+  - "bouton Noter"
+  - "à propos de"
+  - "pas encore"
 ---
 
 # Répondre au compagnon d'un mot et ce dont il se souvient
@@ -146,3 +149,16 @@ Mode vocal allumé, Gaston peut répondre à voix haute, avec la voix choisie da
 Chaque réponse de Gaston porte un bouton ▶ « Écouter la réponse », y compris les réponses anciennes de la conversation ; pendant la lecture, il devient ⏹ « Arrêter la lecture » et l'en-tête dit « Parle… ». Une seule lecture à la fois : lancer ▶ sur une autre réponse arrête la première, et fermer le panneau, changer de page ou toucher 🎤 arrête la lecture. Une réponse déjà écoutée se réécoute aussitôt, sans nouvel appel, tant que la page reste ouverte ; après un changement de voix, elle est relue avec la nouvelle voix.
 
 Si la voix ne répond pas, le bouton dit « Lecture indisponible pour le moment » ; au-delà de cent lectures dans la journée, « Limite de lectures du jour atteinte ». Dans les deux cas, la réponse reste lisible à l'écran. Téléphone en mode silencieux, aucun son ne sort : ce n'est pas une panne de l'application. La lecture fonctionne sur les mêmes navigateurs que la dictée ; le bot Telegram garde ses propres réponses vocales.
+
+## Noter depuis le plan : Gaston sait de quoi vous parlez
+
+**Intention :** faire
+**On parle aussi de :** bouton Noter ; barre basse ; noter depuis le suivi d'une culture ; à propos de ; tout le potager ; préciser la parcelle ; levée vue ; pas encore ; rang libéré ; retour au plan ; raccourcis de Gaston
+
+Le bouton **Noter** du suivi d'une culture ouvre Gaston **à propos de cette culture** : une barre sous son en-tête l'écrit (« À propos de : 🥦 Chou de Bruxelles · Planche centrale, rang 3 »). Vous n'avez plus à répéter la culture ni la parcelle : « feuilles du bas un peu jaunies » devient une **note de cette culture**, et « arrosé » un arrosage de sa planche. Une phrase qui nomme **une autre** culture ou **une autre** parcelle l'emporte : « j'ai arrosé la serre » va à la serre. La croix de la barre retire le contexte : elle affiche alors **Tout le potager** et un bouton **Préciser**, qui propose vos parcelles (hors pépinières) d'un appui. Ouvert par son visage, Gaston n'a pas de barre : la conversation est libre.
+
+Gaston vous accueille par « Je vous écoute. Dites ce que vous voyez, je le note sur cette culture. » Si le mode vocal est allumé, le **micro s'ouvre seul** ; sinon, le clavier et des **raccourcis** selon l'étape : **Levée vue** et **Pas encore** quand une étape est à confirmer, **Récolte** (puis la quantité, « 800 grammes ») et **Culture terminée** en récolte, **Rang libéré** pour une culture terminée, **Arrosé**, **Paillé**, **Désherbé** pour une parcelle. **Pas encore** n'écrit rien : il ferme Gaston et repousse le rappel de trois jours. Une phrase qui annonce une étape (« les fèves ont levé côté allée ») donne une carte à **deux lignes**, la note et l'étape.
+
+Rien n'est écrit avant **Confirmer**. Gaston dit ensuite ce qui a changé (« Fève passe à « Levé » sur le plan ») et propose **Retour au plan**, qui montre le plan relu. Un membre en lecture seule ne voit pas « Noter ». Dans Telegram, « culture terminée », « rang libéré » et « en fleur » sont compris de la même façon (« en fleur » est une note : la floraison n'est pas une étape).
+
+Sur téléphone, **Noter** est aussi au **centre de la barre basse** (Accueil, Plan, Noter, Pépinière, Plus ; les Cultures passent sous « Plus »). Sur le Plan, sa pastille montre la culture choisie, une épingle pour une parcelle, un micro sinon, et Gaston s'ouvre à son propos ; ailleurs, sur « Tout le potager ». Sur une pépinière, il renvoie vers Ma pépinière, où se notent les lots.

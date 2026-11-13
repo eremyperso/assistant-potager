@@ -24,8 +24,9 @@ import { useMedia } from './hooks/useMedia.js'  // [US-271]
 import { useNonLusCompagnon } from './hooks/useNonLusCompagnon.js'  // [US-272]
 import { etatInitial, ecrireEtat, etatSuivant, PARAM_OUVRIR } from './lib/compagnon.js'  // [US-271, US-292]
 import Dashboard from './views/Dashboard.jsx'
-import Plan      from './views/Plan.jsx'
-import PlanVue   from './views/PlanVue.jsx'  // [US-200]
+import PlanDessus from './views/PlanDessus.jsx'  // [US-327] remplace la Vue plan d'US-200
+import { EVENEMENT_OUVRIR_COMPAGNON, EVENEMENT_SELECTION_PLAN, ouvertureDuPanneau } from './lib/contexteCompagnon.js'  // [US-322, US-323, US-325]
+import { VUE_PLAN } from './lib/noter.js'  // [US-324]
 import Cultures  from './views/Cultures.jsx'  // [US-205]
 import Stocks    from './views/Stocks.jsx'
 import Pepiniere from './views/Pepiniere.jsx'
@@ -99,18 +100,13 @@ const VIEWS = {
   // `Placeholder` à l'intérieur même de la vue (cf. `views/Dashboard.jsx`).
   bord: (props) => <Dashboard {...props} />,
   stats: (props) => <Stats {...props} />,
-  plan: (props) => <Plan {...props} />,
   // [US-200] L'écran d'attente d'US-053 laisse place à la Vue plan : une carte
   // par parcelle, un trait par rang. Le glisser-déposer annoncé par le
   // Placeholder n'est PAS revenu — la V1 retenue (wireframe v3) est en lecture
   // seule, la saisie reste au compagnon.
-  'plan-vue': (props) => <PlanVue {...props} />,
-  'plan-rot': () => (
-    <Placeholder
-      title="Rotation des cultures"
-      body="Historique des familles cultivées par parcelle sur trois ans, avec alerte en cas de retour trop rapide d'une même famille."
-    />
-  ),
+  // [US-327] La Vue plan devient le plan vu du dessus : les parcelles à leur place,
+  // à l'échelle, chaque rang découpé en segments par étape (US-320, US-321, US-326).
+  'plan-vue': (props) => <PlanDessus {...props} />,
   // [US-205] L'écran d'attente d'US-053 laisse place à l'écran Cultures : une
   // carte par culture, au potager ou dans tout le référentiel.
   cultures: (props) => <Cultures {...props} />,
@@ -149,6 +145,29 @@ function AppInner({ intentionAdresse }) {
   // [US-272 / CA5] La pastille des messages non lus, relue tant que le chat est fermé.
   const { nonLus: nonLusCompagnon, marquerVu: marquerCompagnonVu } = useNonLusCompagnon(compagnon === 'chat')
   const barreBasse = useMedia('(max-width: 899px)')
+  // [US-322 / S6, US-323 / C1, C6] « Noter » ouvre Gaston avec ce que le jardinier a sous les yeux
+  // (barre de contexte) ; le visage de Gaston ouvre une conversation libre, sans barre.
+  const [ouverture, setOuverture] = useState({ barre: false, contexte: null })
+  useEffect(() => {
+    const ouvrir = (e) => {
+      setOuverture(ouvertureDuPanneau(e.detail))
+      agirCompagnon('ouvrir')
+    }
+    window.addEventListener(EVENEMENT_OUVRIR_COMPAGNON, ouvrir)
+    return () => window.removeEventListener(EVENEMENT_OUVRIR_COMPAGNON, ouvrir)
+  }, [agirCompagnon])
+  const ouvrirConversationLibre = useCallback(() => {
+    setOuverture({ barre: false, contexte: null })
+    agirCompagnon('ouvrir')
+  }, [agirCompagnon])
+  const changerContexte = useCallback((contexte) => setOuverture({ barre: true, contexte }), [])
+  // [US-325 / CA3] La sélection courante de l'écran Plan : pastille et contexte du bouton « Noter ».
+  const [selectionPlan, setSelectionPlan] = useState(null)
+  useEffect(() => {
+    const suivre = (e) => setSelectionPlan(e.detail?.contexte ?? null)
+    window.addEventListener(EVENEMENT_SELECTION_PLAN, suivre)
+    return () => window.removeEventListener(EVENEMENT_SELECTION_PLAN, suivre)
+  }, [])
 
   const handleRefresh = useCallback(() => {
     setLoading(true)
@@ -220,7 +239,7 @@ function AppInner({ intentionAdresse }) {
             <BoutonCompagnon
               etat={compagnon}
               nonLus={nonLusCompagnon}
-              onOuvrir={() => agirCompagnon('ouvrir')}
+              onOuvrir={ouvrirConversationLibre}
               onReplier={() => agirCompagnon('replier')}
               onDeplier={() => agirCompagnon('deplier')}
             />
@@ -231,7 +250,7 @@ function AppInner({ intentionAdresse }) {
             la page — donc la même sur toutes les vues qui portent le sélecteur de date. */}
         <RegleTemps />
 
-        <BottomNav view={view} onGo={changerSection} />
+        <BottomNav view={view} onGo={changerSection} selection={NAV_OF[view] === 'plan' ? selectionPlan : null} />
 
         {/* Le chat de Gaston (maquette « Compagnon.html ») : plein écran au téléphone, carte de
             380 × 600 en bas à droite au-delà. Un geste confirmé relit l'écran courant. */}
@@ -251,6 +270,12 @@ function AppInner({ intentionAdresse }) {
               onFermer={() => agirCompagnon('fermer')}
               onEnregistre={handleRefresh}
               onVu={marquerCompagnonVu}
+              barreContexte={ouverture.barre}
+              contexte={ouverture.contexte}
+              onContexte={changerContexte}
+              noter={ouverture.barre && !ouverture.placement}
+              placement={ouverture.placement}
+              onRetourPlan={() => { agirCompagnon('fermer'); changerVue(VUE_PLAN) }}
             />
           </div>
         )}

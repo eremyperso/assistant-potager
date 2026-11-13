@@ -64,7 +64,7 @@ _LIBELLES_GESTE: dict[str, str] = {
     "mise_en_godet": "mise(s) en godet", "levee": "levée(s)", "desherbage": "désherbage(s)",
     "paillage": "paillage(s)", "amendement": "amendement(s)", "taille": "taille(s)",
     "tuteurage": "tuteurage(s)", "traitement": "traitement(s)", "protection": "protection(s)",
-    "observation": "observation(s)", "perte": "perte(s)", "perte_godet": "perte(s) de godets",
+    "observation": "observation(s)", "perte": "perte(s)", "fin_culture": "fin(s) de culture", "perte_godet": "perte(s) de godets",
     "vendu": "vente(s)", "deplacement": "déplacement(s)",
 }
 

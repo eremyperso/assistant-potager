@@ -901,6 +901,10 @@ async def _preparer_levee(update: Update, parsed: dict, texte: str, geste_file=N
     try:
         try:
             lot = svc_evenements.resoudre_lot_levee(db, current_context(), parsed)
+            if lot.get("pleine_terre"):
+                # [US-320 / E4] Levée d'un semis en pleine terre : ni comptage ni « terminée »
+                # à demander, constater la levée valide l'étape « Levé ».
+                return False
             if parsed.get("quantite") is None:
                 await _poser_question_levee(update, parsed, texte, geste_file, lot)
                 return True

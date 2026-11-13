@@ -34,8 +34,17 @@ const TEXTE = (v) => {
 }
 const DATE_ISO = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '').trim()) ? String(v).trim() : null)
 
+/**
+ * [US-330 / CA1, CA5] Les anciennes vues qui n'existent plus et la vue qui les remplace : l'onglet
+ * « Parcelles » (`plan`) est fondu dans le Plan (`plan-vue`). Un lien, une intention ou une adresse
+ * qui visent l'ancien nom arrivent au Plan, avec la même parcelle.
+ */
+export const VUES_REDIRIGEES = Object.freeze({ plan: 'plan-vue' })
+
+/** La vue réellement ouverte pour un nom de vue donné (l'identité hors redirection). */
+export const vueRedirigee = (vue) => VUES_REDIRIGEES[vue] ?? vue
+
 export const INTENTIONS = Object.freeze({
-  plan: Object.freeze({ parcelle: ENTIER }),
   'plan-vue': Object.freeze({ parcelle: ENTIER }),
   cultures: Object.freeze({ culture: TEXTE }),
   pepiniere: Object.freeze({ onglet: TEXTE, emplacement: TEXTE, lot: TEXTE }),
@@ -90,7 +99,7 @@ export function validerIntention(vue, brut) {
 export function lireIntentionAdresse({ pathname = '/', search = '' } = {}) {
   if (pathname !== '/' && pathname !== '') return null
   const params = new URLSearchParams(search)
-  const vue = params.get(CLE_VUE)
+  const vue = vueRedirigee(params.get(CLE_VUE))
   if (!vue || !INTENTIONS[vue]) return null
   const brut = {}
   for (const cle of clesDe(vue)) {
@@ -110,7 +119,7 @@ export function lireIntentionAdresse({ pathname = '/', search = '' } = {}) {
  */
 export function adresseSansIntention({ pathname = '/', search = '', hash = '' } = {}) {
   const params = new URLSearchParams(search)
-  const vue = params.get(CLE_VUE)
+  const vue = vueRedirigee(params.get(CLE_VUE))
   for (const cle of [CLE_VUE, CLE_POTAGER, ...clesDe(vue)]) params.delete(cle)
   const reste = params.toString()
   return `${pathname || '/'}${reste ? `?${reste}` : ''}${hash || ''}`

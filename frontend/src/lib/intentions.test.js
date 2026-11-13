@@ -9,16 +9,16 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   INTENTIONS, CLE_VUE, CLE_POTAGER,
-  clesDe, vuesAvecIntention, validerIntention,
+  clesDe, vuesAvecIntention, validerIntention, vueRedirigee, VUES_REDIRIGEES,
   lireIntentionAdresse, adresseSansIntention, adresseAvecIntention, consommerIntentionAdresse,
   creerMemoireEcrans, etatInitial,
 } from './intentions.js'
 
 // ── CA2 : les intentions reconnues, et elles seules ─────────────────────────
 
-test('[CA2] les cinq vues du tableau, avec exactement leurs clés', () => {
-  assert.deepEqual(vuesAvecIntention().sort(), ['cultures', 'journal', 'pepiniere', 'plan', 'plan-vue'])
-  assert.deepEqual(clesDe('plan'), ['parcelle'])
+test('[CA2] les vues du tableau, avec exactement leurs clés', () => {
+  // [US-330] L'ancienne vue `plan` (onglet Parcelles) est redirigée vers `plan-vue`.
+  assert.deepEqual(vuesAvecIntention().sort(), ['cultures', 'journal', 'pepiniere', 'plan-vue'])
   assert.deepEqual(clesDe('plan-vue'), ['parcelle'])
   assert.deepEqual(clesDe('cultures'), ['culture'])
   assert.deepEqual(clesDe('pepiniere'), ['onglet', 'emplacement', 'lot'])
@@ -34,25 +34,25 @@ test('[CA2] une vue hors du tableau n’a pas d’intention', () => {
 })
 
 test('[CA2] une clé inconnue est ignorée, les autres passent', () => {
-  assert.deepEqual(validerIntention('plan', { parcelle: 7, couleur: 'rouge' }), { parcelle: 7 })
+  assert.deepEqual(validerIntention('plan-vue', { parcelle: 7, couleur: 'rouge' }), { parcelle: 7 })
 })
 
 test('[CA2] une intention entièrement inconnue rend null, pas un objet vide', () => {
-  assert.equal(validerIntention('plan', { couleur: 'rouge' }), null)
-  assert.equal(validerIntention('plan', {}), null)
-  assert.equal(validerIntention('plan', null), null)
+  assert.equal(validerIntention('plan-vue', { couleur: 'rouge' }), null)
+  assert.equal(validerIntention('plan-vue', {}), null)
+  assert.equal(validerIntention('plan-vue', null), null)
 })
 
 test('[CA2] une valeur invalide est écartée comme une clé inconnue', () => {
-  assert.equal(validerIntention('plan', { parcelle: 'nord' }), null)      // identifiant attendu
-  assert.equal(validerIntention('plan', { parcelle: -1 }), null)
-  assert.equal(validerIntention('plan', { parcelle: 1.5 }), null)
+  assert.equal(validerIntention('plan-vue', { parcelle: 'nord' }), null)      // identifiant attendu
+  assert.equal(validerIntention('plan-vue', { parcelle: -1 }), null)
+  assert.equal(validerIntention('plan-vue', { parcelle: 1.5 }), null)
   assert.equal(validerIntention('journal', { date: '19/09/2026' }), null) // ISO attendu
   assert.equal(validerIntention('cultures', { culture: '   ' }), null)
 })
 
 test('[CA2] une valeur valide est normalisée sans être réinterprétée', () => {
-  assert.deepEqual(validerIntention('plan', { parcelle: '12' }), { parcelle: 12 })
+  assert.deepEqual(validerIntention('plan-vue', { parcelle: '12' }), { parcelle: 12 })
   assert.deepEqual(validerIntention('journal', { date: ' 2026-09-19 ' }), { date: '2026-09-19' })
   assert.deepEqual(validerIntention('pepiniere', { lot: '128' }), { lot: '128' })
 })
@@ -215,4 +215,21 @@ test('[CA10] aucun routeur, et le bouton Retour reste intact', () => {
   // `pushState` empilerait une entrée d’historique ; seul `replaceState` est utilisé.
   assert.doesNotMatch(lib, /pushState|react-router|createBrowserRouter/)
   assert.doesNotMatch(coquille, /pushState|react-router|createBrowserRouter/)
+})
+
+// ── [US-330 / CA5] Les anciens liens vers l'onglet Parcelles arrivent au Plan ──
+
+test('[US-330 / CA5] la vue `plan` est redirigée vers `plan-vue`, les autres ne bougent pas', () => {
+  assert.deepEqual({ ...VUES_REDIRIGEES }, { plan: 'plan-vue' })
+  assert.equal(vueRedirigee('plan'), 'plan-vue')
+  assert.equal(vueRedirigee('plan-vue'), 'plan-vue')
+  assert.equal(vueRedirigee('pepiniere'), 'pepiniere')
+})
+
+test('[US-330 / CA5] /?vue=plan&parcelle=12 ouvre le Plan sur cette parcelle', () => {
+  const lue = lireIntentionAdresse({ pathname: '/', search: '?vue=plan&parcelle=12' })
+  assert.equal(lue.vue, 'plan-vue')
+  assert.deepEqual(lue.intention, { parcelle: 12 })
+  const propre = adresseSansIntention({ pathname: '/', search: '?vue=plan&parcelle=12&autre=1' })
+  assert.equal(propre, '/?autre=1')
 })

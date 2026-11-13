@@ -7,33 +7,42 @@ de parcelle (US-222) et la Pépinière (« où mettre les plants », US-217) lis
 tous cette même répartition. C'est la raison d'être du module : deux écrans ne
 peuvent pas compter différemment la place qui reste.
 
-## Les deux sens du mot « rang »
+## Les deux sens du mot « rang » — et la position (US-326)
 
-Ils ne se mélangent jamais, et tout le module tient dans cette distinction :
+Ils ne se mélangent jamais, et tout le module tient dans cette distinction. US-326
+ajoute un troisième champ, la **position**, sans toucher aux deux premiers :
 
-| | Le rang d'une **parcelle** | Le rang d'un **geste** |
-|---|---|---|
-| Où | `Parcelle.nb_rangs` (US-197) | `Evenement.rang` |
-| Ce que c'est | un **dénominateur déclaré** : « la planche nord a 5 rangs » | un **multiplicateur de quantité** : « planté 4 salades **sur** 3 rangs » = 12 plants |
-| Ce que ça n'est pas | une mesure, une surface | une **position** |
+| | Le rang d'une **parcelle** | Le rang d'un **geste** | La **position** d'un geste (US-326) |
+|---|---|---|---|
+| Où | `Parcelle.nb_rangs` (US-197) | `Evenement.rang` | `Evenement.rang_position` (+ `rang_longueur_m`) |
+| Ce que c'est | un **dénominateur déclaré** : « la planche nord a 5 rangs » | un **multiplicateur de quantité** : « planté 4 salades **sur** 3 rangs » = 12 plants | le **numéro du premier rang occupé** : « planté 8 tomates **au** rang 3 » |
+| Ce que ça n'est pas | une mesure, une surface | une **position** | un nombre de rangs |
+
+« Sur 3 rangs » et « au rang 3 » peuvent se combiner : position 3, trois rangs, donc
+les rangs 3, 4 et 5. Le parseur déterministe ne lit que la position (« au rang 3 »,
+« dans le rang 3 », « au 3e rang », « au troisième rang ») ; le multiplicateur reste
+ambigu et part au modèle, comme avant.
 
 Une planche a en revanche **une longueur unique** (`Parcelle.longueur_m`,
 US-225), et tous ses rangs la partagent : « longueur de la parcelle » et
 « longueur d'un rang » sont le même nombre, ce qui évite d'avoir à déclarer quoi
 que ce soit rang par rang. C'est la longueur *utile*, allées et bordures
-exclues. La **largeur** n'existe nulle part en base : elle se déduit à la lecture
-(`superficie_m2 ÷ longueur_m`, `utils.parcelles.largeur_deduite`), sert de repère
-d'affichage et n'est jamais réinjectée dans un calcul — la stocker aurait créé un
-triplet longueur × largeur × superficie dont deux valeurs sur trois auraient
-dérivé à la première correction. Une largeur déduite sous 0,2 m est signalée
+exclues. La **largeur** se pose sur le plan depuis US-326 (`Parcelle.largeur_m`) ;
+tant qu'elle n'est pas posée, elle se déduit à la lecture (`superficie_m2 ÷
+longueur_m`, `utils.parcelles.largeur_deduite`), sert de repère d'affichage et n'est
+jamais réinjectée dans un calcul. Le triplet longueur × largeur × superficie que
+US-225 refusait de stocker est tenu par G1 / G2 (voir « La géométrie du plan ») : la
+superficie suit L × l tant que la fiche est alignée, et un écart se signale au lieu
+de dériver en silence. Une largeur déduite sous 0,2 m est signalée
 (`largeur_incoherente`) sans que rien ne soit corrigé : le jardinier seul sait
 laquelle des deux valeurs est fausse.
 
-La base ne sait donc pas qu'une tomate est « au rang 1 ». Les rangs sont
-numérotés **dans l'ordre d'installation** des cultures, et la réponse le dit
-(`mode_numerotation: "ordre_installation"`, arbitrage A5). La position réelle
-devient possible avec US-203, qui ouvrira `positions` et `mixte` — le champ
-existe pour ça dès maintenant.
+Sans position dite, les rangs sont numérotés **dans l'ordre d'installation** des
+cultures, et la réponse le dit (`mode_numerotation: "ordre_installation"`, arbitrage
+A5 ; chaque rang porte `position_source: "installation"`). Avec US-326 (qui absorbe
+US-203), une culture plantée « au rang 3 » occupe ce rang (`position_source:
+"jardinier"`) ; `mode_numerotation` vaut alors `positions` (toutes posées) ou
+`mixte`.
 
 ## Les neuf règles de répartition (US-198)
 
@@ -241,7 +250,12 @@ conseil.
 
 ## Le dessin, et où il s'arrête (US-200)
 
-La Vue plan (US-200 / US-228) représente les places connues par **sept symboles
+> **Remplacé par US-327** (« Le plan vu du dessus », plus bas) : la Vue plan ne
+> dessine plus de cartes ni de piste des places. `CartePlanParcelle` et `RangPlan`
+> sont supprimés ; `TraitRang` et `PisteDesPlaces` restent pour d'autres écrans.
+> Ce qui suit décrit l'ancien rendu, que l'onglet Parcelles cite encore.
+
+La Vue plan (US-200 / US-228) représentait les places connues par **sept symboles
 proportionnels**, avec les emoji de culture de la maquette : le nombre de
 repères pleins est `arrondi(prises / places × 7)`, borné à sept et au minimum
 un dès qu'une place est prise. Aucun repère ne vaut un nombre de plants ; les
@@ -468,4 +482,136 @@ cd frontend; node --test "src/lib/planParcelles.rotation.test.js"               
 .\.venv\Scripts\python.exe -m pytest tests/test_us232_journal_sol_parcelle.py -q  # le journal du sol d'une parcelle
 cd frontend; node --test "src/lib/planParcelles.sol.test.js"                   # son rendu, ses trois états
 .\.venv\Scripts\python.exe tools/controler_espacements.py                       # où manque l'espacement
+```
+
+## La géométrie du plan (US-326)
+
+Le plan sur vue du dessus (ÉPIC 19) dessine le terrain, pas l'ordre de la base. La
+géométrie vit dans `app/services/geometrie.py`, **seul** point d'écriture : bornes,
+vocabulaire, superficie déduite, contrôle d'une position de rang. Migration v76.
+
+| Objet | Champs | Remarque |
+|---|---|---|
+| Potager | `emprise_longueur_m`, `emprise_largeur_m`, `angle_deg`, `orientation_nord` (n, ne, e, se, s, so, o, no) | `PATCH /plan/geometrie`, éditeur ; le fond photo est US-335 |
+| Parcelle | `forme` (planche, bac, butte, serre, pepiniere), `x_m`, `y_m`, `largeur_m`, `rotation_deg` (ramenée dans [0, 360[), `sens_rangs` (longueur, travers) | `PATCH /parcelles/{id}` (US-230), éditeur. La longueur est `longueur_m` d'US-225 |
+| Geste d'installation | `rang_position` (1 à 99, et ≤ `nb_rangs` s'il est déclaré), `rang_longueur_m` | écrit par la dictée ; contrôlé avant écriture |
+
+**`forme` (arbitrage P7)** est un champ libre : aucune cohérence imposée avec `abri`
+(qui ne pilote que la confiance) ni avec `est_pepiniere` / `type_pepiniere`.
+
+**G1, G2 — superficie.** `superficie_posee_m2 = longueur × largeur`. À l'écriture
+(`geometrie.recalculer_superficie`), la fiche prend cette valeur si elle était vide,
+si elle suivait déjà la géométrie, ou sur `aligner_superficie: true`. Une superficie
+déclarée différente est gardée, et `geometrie.ecart_superficie` vaut
+`{"posee_m2": 60, "fiche_m2": 69}` jusqu'à l'alignement. Une superficie dite dans le
+même appel l'emporte toujours.
+
+**G6 — à placer.** `x_m` et `y_m` sont NULL ensemble (CHECK) : la parcelle est
+`a_placer`, et `GET /plan` ne lui donne aucune coordonnée. `parcelles[].geometrie`
+porte forme, placée / à placer, x, y, longueur, largeur, rotation, sens des rangs,
+superficie posée et écart ; `potager_geometrie` porte l'emprise, l'angle, le nord et
+les vocabulaires (formes, sens, orientations).
+
+**Position des rangs (`repartition_rangs._appliquer_positions`).** Après la
+répartition d'US-198, chaque ligne dont un geste d'installation dit une position
+(le premier qui en dit une) prend les numéros p … p + k − 1. Les autres lignes, dans
+leur ordre d'installation, prennent chacune le **premier bloc de rangs consécutifs
+libres** assez long (G5). Sans aucune position dans la parcelle, rien n'est
+renuméroté : le calcul est celui d'avant, à l'identique (CA4). Les rangs libres sont
+les numéros 1 … `nb_rangs` non occupés — ils peuvent donc précéder une position dite.
+
+**Rang partagé (G4, arbitrage P4 du 12/11/2026).** Un rang ne se partage entre
+plusieurs cultures **que si la parcelle a une longueur** ; sans elle, une culture par
+rang. Le contrôle est fait à l'écriture (`geometrie.verifier_position_rang`, appelé
+par `evenements._verifier_position_rang`, erreur `PositionRangRefuseeError`) contre
+les seules lignes **posées par le jardinier** : une culture numérotée par
+installation n'a pas de place réelle et cède le rang. Chaque rang porte `part_m`,
+`part` (fraction) et `part_source` : `jardinier` (longueur dite), `repartie` (reste
+partagé à parts égales), `rang_entier` (seule sur son rang). Sur un rang partagé,
+les places (US-227) se comptent sur la part de la culture, pas sur toute la longueur.
+Un rang partagé compte **une fois** dans `rangs_occupes`.
+
+**Limites assumées.** Une ligne née de deux plantations à deux rangs différents se
+lit à partir de la première position dite. Le contrôle P4 s'appuie sur le plan du
+jour, pas sur la date du geste. Les cultures existantes ne sont jamais placées
+d'office (pas de backfill) : elles gardent la numérotation d'installation.
+
+## Le plan vu du dessus (US-327) et le suivi d'une culture (US-322)
+
+Le sous-onglet `plan-vue` rend `views/PlanDessus.jsx` (l'identifiant ne change pas,
+la navigation non plus). Toujours **une** lecture, `GET /plan`, qui sert en plus :
+
+| Champ | Ce qu'il porte | Calculé par |
+|---|---|---|
+| `parcelles[].disposition.lots_en_cours` | les lots d'une pépinière (`lot_id`, `numero_lot`, culture, variété), dessinés en vignettes ; None hors pépinière | `repartition_rangs._lots_en_cours_par_parcelle` (même lecture que le compte) |
+| `parcelles_inactives` | les parcelles inactives, avec leur géométrie : dessinées grisées, hors de `parcelles` dont le contrat ne change pas | `plan.parcelles_inactives` |
+| `filtres_plan` | `a_confirmer`, `en_recolte`, `rangs_libres` — les compteurs des filtres ; les pépinières ne comptent pas | `plan.compteurs_filtres` |
+
+Le rendu tient dans `frontend/src/lib/planDessus.js` (sans React, `npm test`) :
+emprise posée ou déduite des parcelles (+ 1 m), échelle bornée 18-40 px/m (sous le
+plancher, le plan défile dans son cadre), segments d'un rang au prorata de `part`
+(une part inconnue se partage le reste, le reste final est un segment libre),
+libellé selon la place (seuils de la maquette), nom accessible complet, filtres qui
+estompent sans masquer, plan par zones quand aucune parcelle n'est placée. Les
+conventions géométriques : `x_m`, `y_m` = coin haut-gauche ; la longueur court selon
+x ; la rotation tourne autour du centre ; `angle_deg` du potager tourne tout le plan.
+Le dessin vit dans `components/PlanDessin.jsx` (réutilisable par US-329 / US-330).
+
+**Mini-plan mobile** (`PlanMobile.jsx`, `lib/planMobile.js`) : l'échelle se règle d'abord sur la
+**largeur** disponible ; la hauteur n'est qu'un garde-fou pour les terrains allongés
+(`hauteurMaxMiniPlan` : 55 % de la hauteur d'écran, plancher 280 px). Un plafond fixe de 200 px
+rendait un plan quasi carré illisible (~8,7 px/m pour 21 × 23 m, contre ~16 px/m). Le glissement
+vertical dans un cadre à hauteur fixe a été écarté : il entre en conflit avec le défilement de la
+page. Pour les parcelles petites ou serrées, le bouton « Agrandir » ouvre `PlanAgrandi.jsx` :
+modale plein écran, `ParcellePlan` non réduit, trois crans de zoom (18, 28, 40 px/m, boutons + / −,
+pas de pinch), déplacement au doigt (`touch-action: pan-x pan-y`) ; toucher une parcelle ferme la
+fenêtre puis rappelle `allerA` (défilement + mise en évidence de sa carte dans la liste).
+
+Le **suivi d'une culture** (US-322) a sa propre lecture, `GET /plan/suivi?parcelle_id=&
+culture=&variete=` → `app/services/suivi_culture.py`, qui assemble sans recalculer :
+la ligne et ses rangs (US-198), la place sur le premier rang mesurable (US-227, sur
+la part d'un rang partagé), les étapes (US-320), le cumul récolté depuis
+l'installation (poids en kg, sinon l'unité dominante), l'origine et les notes. L'origine
+part du **geste d'installation sur la parcelle** (dernière plantation ou dernier semis
+en place) : plantation → lot par `origine_graines_id` ou par les godets de
+`source_evenement_ids` ; sans lot → achat ; semis sur la parcelle → semis direct. Le
+geste d'origine de la série d'US-320 — le semis du lot, pour un plant de pépinière —
+ne sert que de repli. Aucun geste ne dit encore s'il a été dicté : `notes[].dictee`
+reste None et l'icône micro ne s'affiche pas. « Noter » ouvre Gaston par l'événement
+de fenêtre `potager:ouvrir-compagnon` (écouté par `App.jsx`) ; US-324 y ajoutera le
+contexte.
+
+## Retirer une parcelle, créer en la posant (US-332) et l'éditeur du plan (US-333)
+
+**Retirer.** `app/services/retrait_parcelle.py` est le seul chemin : `bilan` (cultures en place,
+lots de pépinière, gestes d'historique — `Evenement.parcelle_id` ou `parcelle_origine_id`), `inactiver`,
+`reactiver`, `supprimer`. Une parcelle qui a vécu ne se supprime jamais (`ParcelleNonVideError`, qui
+propose l'inactivation) ; une parcelle vide se supprime **réellement** (`db.delete`). Rendre inactive
+(`actif=false`, `/parcelle modifier … actif=non`) **ne détache plus les gestes** (l'ancien retrait
+d'US-009 les passait en « Non localisé ») : la parcelle reste sur le plan (`parcelles_inactives`),
+grisée, et son nom reste lu dans l'historique. `utils.parcelles.resolve_parcelle` n'offre plus une
+parcelle inactive à un nouveau geste (`inclure_inactives=True` pour renommer ou retirer).
+`utils.parcelles.supprimer_parcelle` (US-009) n'est plus appelée par les handlers.
+
+**Demandes du plan à Gaston.** `app/services/plan_gaston.py` : `POST /compagnon/messages` accepte
+`plan: {action: "creer" | "retirer", …}`. Une création devient la commande `/parcelle ajouter <nom
+proposé>` avec `valeurs["geometrie"]` (`clé=valeur`, hors catalogue : seule l'exécution PWA, `agent/executeurs
+._executer_ajouter`, l'applique — validée avant la création) ; un retrait devient `supprimer` si le bilan
+est vide, sinon `modifier … actif=non`. Rien n'est écrit avant « Confirmer ». Les lignes de la carte
+(`avertissements`) viennent de `plan_gaston.lignes_de_carte`. Règles de dictée : `parcelle_inactiver`,
+`parcelle_reactiver` (`interpreteur_commandes.py`).
+
+**Enregistrer le plan.** `geometrie.enregistrer_plan` (`POST /plan/edition`) valide tout, puis écrit sous
+un seul `commit` : géométrie de chaque parcelle, `longueur_m`, `nb_rangs` (jamais sous les rangs occupés,
+même répartition que `GET /plan`), `aligner_superficie` (envoyé seulement par le bouton de l'éditeur) et
+géométrie du potager. Un refus (`PlanRefuseError`) n'écrit rien et nomme parcelle et champ.
+
+**Éditeur (frontend).** `lib/editeurPlan.js` (sans React : aimantation 50 cm, rotation, cotes, contrôle de
+surface, charge d'Enregistrer, annulation, `synchroniser`) et `components/EditeurPlan.jsx`. Affiché par
+`PlanDessus` si `peutModifierLePlan(role, largeur du conteneur ≥ 720 px)`. Le plan y est montré **droit**
+(l'angle du potager ne s'applique qu'en lecture).
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_us332_retrait_parcelle.py tests/test_us333_edition_plan.py -q
+cd frontend; node --test "src/lib/editeurPlan.test.js"
 ```

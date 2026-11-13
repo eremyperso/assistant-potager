@@ -5,6 +5,7 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
+import { LegendeRepliable } from '../components/ui'
 
 // ─── constantes ───────────────────────────────────────────────────────────────
 const WD = ['D', 'L', 'M', 'M', 'J', 'V', 'S']
@@ -575,7 +576,7 @@ function ActivityHeatmap({ jours, annee, dateRef, isDark }) {
       </div>
 
       {/* légende avec valeurs */}
-      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+      <LegendeRepliable className="mt-2.5"><div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {[0, 1, 2, 3, 4, 5].map(v => (
             <div key={v} style={{ width: CS, height: CS, borderRadius: 3, flexShrink: 0, background: actColor(v, isDark) }}/>
@@ -587,7 +588,7 @@ function ActivityHeatmap({ jours, annee, dateRef, isDark }) {
           ))}
         </div>
         <span style={{ fontSize: 10, color: 'var(--g-sec)', fontStyle: 'italic' }}>nombre d'actions par jour</span>
-      </div>
+      </div></LegendeRepliable>
     </div>
   )
 }
@@ -721,9 +722,9 @@ export default function Stats({ refresh }) {
             </div>
 
             {/* légende paliers de chaleur */}
-            <div style={{ marginBottom: 10 }}>
+            <LegendeRepliable className="mb-2.5">
               <HeatScale/>
-            </div>
+            </LegendeRepliable>
 
             {/* graphique */}
             {chartData.length > 0 && <WeatherChart data={chartData} isDark={isDark}/>}

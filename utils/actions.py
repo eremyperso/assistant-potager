@@ -69,12 +69,17 @@ ACTION_MAP: dict[str, list[str]] = {
     ],
     "observation": [
         "observation", "observer", "observé", "surveiller", "constat", "noter",
-        "maladie", "mildiou", "attaque", "gel", "secheresse", "limaces"
+        "maladie", "mildiou", "attaque", "gel", "secheresse", "limaces",
+        # [US-324 / CA8] « En fleur » : un constat, pas une étape (arbitrage P3 d'US-320).
+        "en fleur", "en fleurs", "floraison",
     ],
     "perte": [
         "perte", "perdu", "perdue", "perdus", "perdues",
         "mort", "morte", "morts", "mortes",
-        "arrache", "arrachee", "arraches", "arrachees",
+        # [US-320] « arraché » a quitté la perte : arracher une culture, c'est la
+        # terminer (`fin_culture`, ci-dessous). Arbitrage du 12/11/2026. Sauf
+        # arraché PAR quelque chose (le vent, les sangliers) : un dégât, une perte.
+        "arrache par", "arrachee par", "arraches par", "arrachees par",
         "creve", "crevee", "creves", "crevees",
         "disparu", "disparue", "disparus", "disparues"
     ],
@@ -123,6 +128,18 @@ ACTION_MAP: dict[str, list[str]] = {
     # ou par sa culture) et ne lit « ont levé » qu'avec un nombre de plants.
     "levee": [
         "levee", "levees", "leve", "leves", "lever", "levent",
+    ],
+    # [US-320] La fin d'une culture : elle est arrachée, finie, la planche est
+    # libérée. Ce geste termine la culture et sort de la parcelle TOUT ce qui en
+    # reste (`evenements.preparer_fin_culture`). Jamais « fini » / « terminé »
+    # seuls : « j'ai fini d'arroser » n'est pas une fin de culture.
+    "fin_culture": [
+        "fin de culture", "fin culture",
+        "culture terminee", "culture finie", "cultures terminees",
+        "arrache", "arrachee", "arraches", "arrachees", "arracher", "arrachage",
+        "libere la planche", "planche liberee", "liberer la planche",
+        # [US-324 / CA8] La pastille « Rang libéré » de « Noter », dite aussi au bot.
+        "rang libere", "libere le rang", "liberer le rang", "rang liberee",
     ],
     "eclaircie": [
         # La forme réellement stockée en base est "eclaircie", pas

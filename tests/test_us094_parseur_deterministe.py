@@ -380,6 +380,17 @@ ECARTS_JUSTIFIES: dict[str, str] = {
     # Le modèle avait produit exactement la même chose que le parseur.
     "Perte de 10 courgette": "complété par la désambiguïsation perte/perte_godet",
     "Récolte cornichon": "quantité demandée après coup (US-021 CA9)",
+
+    # [US-320] Arbitrage du 12/11/2026 : « arraché » n'est plus une perte mais une
+    # fin de culture. Le nombre dit est relu à l'écriture
+    # (`evenements.preparer_fin_culture`) : inférieur au reste de la ligne, le geste
+    # redevient une perte de ces pieds ; égal, il termine la culture.
+    'J’ai arraché mes 15 pieds de navet le 14/07': "arracher = fin de culture (US-320)",
+    "j'ai arraché mes 8 plants de blette le 15/07": "arracher = fin de culture (US-320)",
+    'J’ai arraché mes 7 pieds de cornichons le 25/07': "arracher = fin de culture (US-320)",
+    'J’ai arraché 2 pieds de butternuts hier': "arracher = fin de culture (US-320)",
+    'Arrache 7 pieds de courges hier': "arracher = fin de culture (US-320)",
+    'Arrache 3 pieds de courges hier': "arracher = fin de culture (US-320)",
 }
 
 

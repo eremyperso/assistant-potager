@@ -273,7 +273,7 @@ class TestCA8EchangeId:
 
     def test_us303_ca8_messages_expose_echange_id(self, memoire_compagnon):
         reponse = svc_echange.ReponseCompagnon(texte="Bonjour.")
-        with patch.object(svc_echange, "_repondre", side_effect=lambda ctx, t, m: (
+        with patch.object(svc_echange, "_repondre", side_effect=lambda ctx, t, m, ecran=None: (  # [US-323] ecran : le contexte d'écran
                 svc_conversations.noter(ctx, t, "Bonjour.", canal="pwa"), reponse)[1]):
             donnees = svc_echange.repondre(CTX, "bonjour").en_donnees()
         assert donnees["echange_id"] == svc_conversations.dernier_id(CTX)

@@ -121,7 +121,7 @@ def _requete(db, ctx: TenantContext):
 # ═════════════════════════════════════════════════════════════════════════════
 # Lire la phrase — les mêmes étapes que le bot (`saisie._parse_and_save`), sans Telegram
 # ═════════════════════════════════════════════════════════════════════════════
-def preparer(db, ctx: TenantContext, texte: str) -> Preparation:
+def preparer(db, ctx: TenantContext, texte: str, contexte=None) -> Preparation:
     """[US-270 / CA1, CA6] Parse, normalise et contrôle une phrase de geste.
 
     Le parseur et la normalisation sont ceux du bot (`normalisation_gestes`) ; les contrôles
@@ -131,14 +131,30 @@ def preparer(db, ctx: TenantContext, texte: str) -> Preparation:
 
     Ce que le bot demande par boutons (quelle parcelle, quel lot…) devient ici une
     `precision` : le panneau la pose en texte et attend la phrase complète.
+
+    [US-323 / C5, CA3] `contexte` (`contexte_ecran.ContexteEcran`) : ce que le jardinier a sous les
+    yeux complète les items AVANT les contrôles — parcelle et culture non dites, constat noté.
     """
     # Une action potager nécessite le droit d'écrire : refusé AVANT tout appel de parsing (US-047).
     require_role(ctx, "editor", "enregistrer d'action")
+
+    # [US-324 / CA3] « Les fèves ont levé côté allée » sur la fève sous les yeux : la note ET
+    # l'étape, lues sans modèle. Une autre culture citée laisse la phrase au parseur.
+    if contexte is not None:
+        from app.services.compagnon import noter as svc_noter
+
+        deux_lignes = svc_noter.note_et_etape(texte, contexte)
+        if deux_lignes is not None:
+            return controler(db, ctx, deux_lignes, texte)
 
     items = svc_normalisation.parser_items(texte, ctx)
     for item in items:
         if isinstance(item, dict):
             item.setdefault("origine_parsing", ORIGINE_LLM)
+    if contexte is not None:
+        from app.services.compagnon import contexte_ecran as svc_contexte_ecran
+
+        items = svc_contexte_ecran.appliquer(items, contexte, texte)
     return controler(db, ctx, items, texte)
 
 
@@ -420,6 +436,7 @@ _LIBELLES_ACTION: dict[str, str] = {
     "recolte": "récolte", "mise_en_godet": "mise en godet", "perte_godet": "perte de godets",
     "cloture_lot": "clôture de lot", "levee": "levée", "desherbage": "désherbage",
     "fertilisation": "fertilisation", "deplacement": "déplacement", "repiquage": "repiquage",
+    "fin_culture": "fin de culture",   # [US-320]
 }
 
 

@@ -282,7 +282,9 @@ def test_us208_ca6_pwa_affiche_sans_corriger() -> None:
     src = RACINE / "frontend" / "src"
     # [US-242] L'onglet Lots dit l'emplacement par la fiche du journal de saison.
     assert "emplacementLot(lot)" in (src / "lib" / "lotsJournal.js").read_text(encoding="utf-8")
-    assert "typePepiniere" in (src / "components" / "ui" / "CartePlanParcelle.jsx").read_text(encoding="utf-8")
+    # [US-327] La carte de la Vue plan a laissé place au plan vu du dessus, qui nomme
+    # le type sur la parcelle pépinière (« Serre · pépinière chaude »).
+    assert "typePepiniere" in (src / "components" / "PlanDessin.jsx").read_text(encoding="utf-8")
     ECRITURE = ("<input", "onChange", "JSON.stringify", "body:", "value=")
     fautifs = [
         f"{f.relative_to(RACINE)}:{n}"
@@ -318,6 +320,12 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         # [US-253 / CA2] Une SUGGESTION, pas un calcul : constater qu'une parcelle déclarée
         # pépinière n'a pas encore de type pour proposer de le dire.
         Path("app/services/anticipation_commande.py"),
+        # [US-327 / P7] Une parcelle inactive reste sur le plan : le type est SERVI
+        # pour l'affichage (« pépinière froide »), aucun calcul ne le lit.
+        Path("app/services/plan.py"),
+        # [US-331 / CA6] La fiche écrit « Froide / Chaude » : le type est TRADUIT vers `pepiniere=`
+        # du domaine, sans qu'aucun moteur le lise.
+        Path("app/services/parcelles.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):

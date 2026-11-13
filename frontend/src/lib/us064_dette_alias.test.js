@@ -16,7 +16,8 @@ const ALIAS_RE = /--g-[a-z-]+|(?:bg|text|border)-g-[a-z-]+/
 const lireSrc = (chemin) => readFileSync(join(SRC, chemin), 'utf8')
 
 const ECRANS_LOT_B = [
-  'views/Plan.jsx',
+  'views/PlanDessus.jsx',
+  'components/DetailParcelle.jsx',
   'views/Pepiniere.jsx',
   'views/Stocks.jsx',
   'views/Journal.jsx',

@@ -249,13 +249,14 @@ Si une information n'est pas mentionnée, mets null. Ne jamais inventer.
 
 Champs à extraire :
 {{
-  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement | levee
+  "action"           : string,   // recolte | semis | repiquage | arrosage | fertilisation | traitement | desherbage | taille | paillage | observation | plantation | tuteurage | perte | mise_en_godet | vendu | perte_godet | binage | eclaircie | deplacement | levee | fin_culture
   "culture"          : string,   // légume au singulier minuscule ("tomates" → "tomate")
   "variete"          : string,   // variété ou couleur ("rouge", "nantaise"...)
   "quantite"         : number,   // quantité numérique (PAR RANG si rang mentionné)
   "unite"            : string,   // kg | g | l | plants | graines | pieds | m² | poquets | ml
   "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
   "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
+  "rang_position"    : number,   // POSITION du rang, seulement si dite : "au rang 3", "dans le 3e rang" → 3 (et rang=null). Absent sinon
   "duree_minutes"    : number,   // durée en minutes
   "traitement"       : string,   // produit utilisé (purin d ortie, compost...)
   "date"             : string,   // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}
@@ -304,6 +305,9 @@ Exemples :
 "planter 10 choux-fleurs sur 3 rangs parcelle nord"
 → {{"action":"plantation","culture":"chou-fleur","quantite":10,"unite":"plants","date":null,"parcelle":"nord","rang":3,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
 
+"planté 8 tomates au rang 3 de la planche centrale"
+→ {{"action":"plantation","culture":"tomate","quantite":8,"unite":"plants","date":null,"parcelle":"planche centrale","rang":null,"rang_position":3,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
+
 "traitement purin d'ortie sur les courgettes hier"
 → {{"action":"traitement","culture":"courgette","quantite":null,"unite":null,"date":"{yesterday}","parcelle":null,"rang":null,"duree_minutes":null,"traitement":"purin d ortie","variete":null,"commentaire":null}}
 
@@ -324,6 +328,9 @@ Exemples :
 
 "J'ai perdu 3 plants de tomates à cause du gel"
 → {{"action":"perte","culture":"tomate","quantite":3,"unite":"plants","date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":"gel"}}
+
+"les fèves sont terminées, j'ai tout arraché sur la planche centrale"
+→ {{"action":"fin_culture","culture":"fève","quantite":null,"unite":null,"date":null,"parcelle":"planche centrale","rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}
 
 "binage des carottes"
 → {{"action":"binage","culture":"carotte","quantite":null,"unite":null,"date":null,"parcelle":null,"rang":null,"duree_minutes":null,"traitement":null,"variete":null,"commentaire":null}}

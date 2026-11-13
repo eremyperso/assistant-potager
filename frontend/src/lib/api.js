@@ -220,6 +220,11 @@ export const api = {
   // [US-030/US-031] dateRef optionnel : ISO YYYY-MM-DD ou null → état à la date passée
   // [US-083 / CA7] potagerId optionnel : consulte un potager archivé (non-actif)
   plan:       (dateRef, potagerId) => get(`/plan${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
+  // [US-322 / CA4] Le suivi d'une culture en place : une seule lecture.
+  suiviCulture: ({ parcelleId, culture, variete, dateRef, potagerId }) => get(`/plan/suivi${qs({
+    parcelle_id: parcelleId, culture,
+    ...(variete && { variete }), ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }),
+  })}`),
   // [US-176 / CA11] Calendrier conseillé de toutes les cultures de l'écran Plan, en un appel
   // [US-070 / CA8] dateRef : les projections recalées se placent à la date de référence
   calendriersPlan: (cultures, potagerId, dateRef) => {
@@ -310,7 +315,20 @@ export const api = {
   // (agent, gestes, commandes), 'support' (la documentation de l'application, rien n'est écrit) ou
   // 'analyse' [US-273] (le bouton « Approfondir » : une synthèse en lecture seule, avec ses sources).
   // Un geste compris revient en CARTE, qui se confirme ici ; une commande se confirme dans Telegram.
-  messageCompagnon:      (texte, mode = 'normal') => post('/compagnon/messages', { texte, mode }),
+  // [US-323 / C4] `contexte` : ce que le jardinier a sous les yeux, en identifiants (parcelle_id,
+  // culture, variete, rang) — absent pour tout le potager.
+  // [US-324 / CA2] `raccourci` : une pastille de « Noter », traduite en geste par le serveur.
+  // [US-328 / CA4] `placement` : une carte « À placer » posée sur un rang libre (le rang est dans
+  // `contexte`) ; le serveur en fait une carte de plantation, sans modèle, à confirmer.
+  // [US-332, US-333] `plan` : une demande née du plan (créer une forme posée, rendre inactive ou supprimer).
+  messageCompagnon:      (texte, mode = 'normal', contexte, raccourci, placement, plan) => post('/compagnon/messages', {
+    texte, mode, ...(contexte && { contexte }), ...(raccourci && { raccourci }), ...(placement && { placement }),
+    ...(plan && { plan }),
+  }),
+  // [US-333 / CA3] « Enregistrer » de l'éditeur du plan : tout en un seul appel, ou rien.
+  enregistrerPlan:       (corps) => post('/plan/edition', corps),
+  // [US-320 / E7, US-324 / CA2] « Pas encore » : l'étape n'est pas écrite, son rappel est repoussé de 3 jours.
+  pasEncoreEtape:        (serieId, etape) => post('/plan/etapes/pas-encore', { serie_id: serieId, etape }),
   confirmerProposition:  (id) => post(`/compagnon/propositions/${id}/confirmer`),
   abandonnerProposition: (id) => post(`/compagnon/propositions/${id}/abandonner`),
   historiqueCompagnon:   () => get('/compagnon/historique'),

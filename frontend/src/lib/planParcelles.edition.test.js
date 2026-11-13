@@ -14,7 +14,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   saisieDeParcelle, valeursInitiales, chargeUtile, avertissementsBascule,
-  messageConfirmation, CHAMP_API, CHOIX_NON_RENSEIGNE, TEXTE_LARGEUR_CALCULEE,
+  messageConfirmation, CHAMP_API, CHOIX_NON_RENSEIGNE, TEXTE_SUR_LE_PLAN, TEXTE_STATUT_GASTON,
   SAISIE_DEDUITE, SAISIE_LISTE, SAISIE_NOMBRE, SAISIE_OUI_NON, SAISIE_TEXTE,
 } from './planParcelles.js'
 
@@ -34,6 +34,13 @@ const VOCABULAIRES = {
       { valeur: 'Argileux', libelle: 'Argileux' }, { valeur: 'Limoneux', libelle: 'Limoneux' },
       { valeur: 'Sableux', libelle: 'Sableux' }, { valeur: 'Humifère', libelle: 'Humifère' },
       { valeur: 'Calcaire', libelle: 'Calcaire' },
+    ],
+  },
+  forme: {
+    ferme: true,
+    options: [
+      { valeur: 'planche', libelle: 'Planche' }, { valeur: 'bac', libelle: 'Bac' },
+      { valeur: 'butte', libelle: 'Butte' }, { valeur: 'serre', libelle: 'Serre' },
     ],
   },
   exposition: {
@@ -61,7 +68,7 @@ const par = (champs) => Object.fromEntries(champs.map((c) => [c.cle, c]))
 
 test('[E1] la carte en édition porte les mêmes champs, dans le même ordre', () => {
   const p = planche()
-  const lecture = ['nom', 'superficie', 'longueur', 'largeur', 'nb_rangs',
+  const lecture = ['nom', 'type', 'superficie', 'longueur', 'largeur', 'nb_rangs',
                    'ensoleillement', 'exposition', 'type_sol', 'abri', 'paillage', 'pepiniere', 'statut']
   assert.deepEqual(saisieDeParcelle(p, VOCABULAIRES).map((c) => c.cle), lecture)
 })
@@ -69,30 +76,41 @@ test('[E1] la carte en édition porte les mêmes champs, dans le même ordre', (
 test('[E2] chaque champ porte son type de saisie', () => {
   const c = par(saisieDeParcelle(planche(), VOCABULAIRES))
   assert.equal(c.nom.type, SAISIE_TEXTE)
-  for (const cle of ['superficie', 'longueur', 'nb_rangs']) {
-    assert.equal(c[cle].type, SAISIE_NOMBRE, cle)
-  }
-  for (const cle of ['exposition', 'type_sol', 'abri']) {
+  assert.equal(c.nb_rangs.type, SAISIE_NOMBRE)
+  for (const cle of ['type', 'exposition', 'type_sol', 'abri', 'pepiniere']) {
     assert.equal(c[cle].type, SAISIE_LISTE, cle)
   }
-  for (const cle of ['paillage', 'pepiniere', 'statut']) {
-    assert.equal(c[cle].type, SAISIE_OUI_NON, cle)
-  }
+  assert.equal(c.paillage.type, SAISIE_OUI_NON)
 })
 
-test('[E3] la largeur n’est pas saisissable : sa case le dit', () => {
+test('[US-331 / CA6] « Pépinière » est un seul champ : Non, Froide, Chaude', () => {
   const c = par(saisieDeParcelle(planche(), VOCABULAIRES))
-  assert.equal(c.largeur.type, SAISIE_DEDUITE)
-  assert.equal(c.largeur.texte, TEXTE_LARGEUR_CALCULEE)
-  assert.equal(c.largeur.valeur, undefined)
-  // Et elle ne part jamais à l'écriture.
-  assert.equal('largeur' in CHAMP_API, false)
+  assert.deepEqual(c.pepiniere.options.map((o) => o.valeur), ['non', 'froide', 'chaude'])
+  assert.equal(c.pepiniere.valeur, 'non')
+  assert.equal(par(saisieDeParcelle(planche({ est_pepiniere: true, type_pepiniere: 'chaude' }), VOCABULAIRES)).pepiniere.valeur, 'chaude')
+  // Une pépinière sans type garde son état « oui » : rien n'est supposé.
+  const sansType = par(saisieDeParcelle(planche({ est_pepiniere: true }), VOCABULAIRES)).pepiniere
+  assert.equal(sansType.valeur, 'oui')
+  assert.ok(sansType.options.some((o) => o.valeur === 'oui'))
+})
+
+test('[US-331 / CA1] superficie, longueur, largeur et statut ne se saisissent jamais ici', () => {
+  const c = par(saisieDeParcelle(planche(), VOCABULAIRES))
+  for (const cle of ['superficie', 'longueur', 'largeur']) {
+    assert.equal(c[cle].type, SAISIE_DEDUITE, cle)
+    assert.equal(c[cle].texte, TEXTE_SUR_LE_PLAN, cle)
+    assert.equal(c[cle].valeur, undefined, cle)
+    // Et ils ne partent jamais à l'écriture.
+    assert.equal(cle in CHAMP_API, false, cle)
+  }
+  assert.equal(c.statut.type, SAISIE_DEDUITE)
+  assert.equal(c.statut.texte, TEXTE_STATUT_GASTON)
+  assert.equal('statut' in CHAMP_API, false)
 })
 
 test('[CA5] les bornes de la maquette sont des repères de frappe, pas la règle', () => {
   const c = par(saisieDeParcelle(planche(), VOCABULAIRES))
   assert.deepEqual([c.nb_rangs.min, c.nb_rangs.max], [1, 99])
-  assert.deepEqual([c.longueur.min, c.longueur.max], [0.5, 200])
   // La lib ne VALIDE rien : elle ne porte aucune fonction de contrôle.
   assert.equal(typeof c.nb_rangs.valider, 'undefined')
 })
@@ -171,11 +189,10 @@ test('[CA6] vider un champ l’envoie à null, jamais à "" ni à false', () => 
     ...initiales,
     type_sol: CHOIX_NON_RENSEIGNE, abri: CHOIX_NON_RENSEIGNE,
     paillage: CHOIX_NON_RENSEIGNE, nb_rangs: CHOIX_NON_RENSEIGNE,
-    longueur: CHOIX_NON_RENSEIGNE,
   }
 
   const charge = chargeUtile(initiales, saisies, p)
-  for (const champ of ['type_sol', 'abri', 'paillage', 'nb_rangs', 'longueur_m']) {
+  for (const champ of ['type_sol', 'abri', 'paillage', 'nb_rangs']) {
     assert.strictEqual(charge[champ], null, champ)
   }
 })
@@ -189,21 +206,49 @@ test('[E2] « Non » reste une déclaration, distincte du silence', () => {
   )
 })
 
-test('[CA6] les nombres partent en nombres, la virgule comprise', () => {
+test('[CA6] les nombres partent en nombres', () => {
   const p = planche()
   const initiales = valeursInitiales(p, VOCABULAIRES)
-  const charge = chargeUtile(initiales, { ...initiales, longueur: '8,5', superficie: '14' }, p)
-  assert.strictEqual(charge.longueur_m, 8.5)
-  assert.strictEqual(charge.superficie_m2, 14)
+  assert.strictEqual(chargeUtile(initiales, { ...initiales, nb_rangs: '9' }, p).nb_rangs, 9)
+})
+
+test('[US-331 / CA1] les dimensions ne partent jamais, même si on les glisse dans la saisie', () => {
+  const p = planche()
+  const initiales = valeursInitiales(p, VOCABULAIRES)
+  assert.deepEqual(chargeUtile(initiales, { ...initiales, longueur: '8,5', superficie: '14', statut: 'non' }, p), {})
+})
+
+test('[US-331 / CA6] « Pépinière » écrit les deux colonnes de façon cohérente', () => {
+  const p = planche()
+  const initiales = valeursInitiales(p, VOCABULAIRES)
+  assert.deepEqual(chargeUtile(initiales, { ...initiales, pepiniere: 'froide' }, p),
+    { est_pepiniere: true, type_pepiniere: 'froide' })
+  assert.deepEqual(chargeUtile(initiales, { ...initiales, pepiniere: 'chaude' }, p),
+    { est_pepiniere: true, type_pepiniere: 'chaude' })
+  const pep = planche({ est_pepiniere: true, type_pepiniere: 'chaude' })
+  const initPep = valeursInitiales(pep, VOCABULAIRES)
+  // Non → plus pépinière, et AUCUN type n'est envoyé.
+  assert.deepEqual(chargeUtile(initPep, { ...initPep, pepiniere: 'non' }, pep), { est_pepiniere: false })
+  // Une pépinière sans type qu'on n'a pas touchée n'envoie rien.
+  const sansType = planche({ est_pepiniere: true })
+  const initSans = valeursInitiales(sansType, VOCABULAIRES)
+  assert.deepEqual(chargeUtile(initSans, { ...initSans }, sansType), {})
+})
+
+test('[US-331 / P7] le type est la forme du plan', () => {
+  const p = planche({ geometrie: { forme: 'planche' } })
+  const initiales = valeursInitiales(p, VOCABULAIRES)
+  assert.equal(initiales.type, 'planche')
+  assert.deepEqual(chargeUtile(initiales, { ...initiales, type: 'bac' }, p), { forme: 'bac' })
 })
 
 test('[CA1] les clés envoyées sont celles de l’API, la largeur exceptée', () => {
   const p = planche()
   const initiales = valeursInitiales(p, VOCABULAIRES)
   const charge = chargeUtile(initiales, {
-    ...initiales, nom: 'Planche du milieu', pepiniere: 'oui', statut: 'non',
+    ...initiales, nom: 'Planche du milieu', pepiniere: 'chaude',
   }, p)
-  assert.deepEqual(charge, { nom: 'Planche du milieu', est_pepiniere: true, actif: false })
+  assert.deepEqual(charge, { nom: 'Planche du milieu', est_pepiniere: true, type_pepiniere: 'chaude' })
 })
 
 // ── E8, E9 — ce qu’une bascule entraîne, dit avant d’enregistrer ─────────────
@@ -211,17 +256,16 @@ test('[CA1] les clés envoyées sont celles de l’API, la largeur exceptée', (
 test('[E8] basculer en pépinière est annoncé, avec ses deux conséquences', () => {
   const p = planche()
   const initiales = valeursInitiales(p, VOCABULAIRES)
-  const avis = avertissementsBascule(initiales, { ...initiales, pepiniere: 'oui' })
+  const avis = avertissementsBascule(initiales, { ...initiales, pepiniere: 'froide' })
   assert.equal(avis.length, 1)
   assert.match(avis[0], /pleine terre/)
   assert.match(avis[0], /rangs/)
 })
 
-test('[E9] passer en inactive annonce la réaffectation des gestes', () => {
-  const p = planche()
+test('[US-331] changer de type de pépinière ne prévient pas : ce n’est pas une bascule', () => {
+  const p = planche({ est_pepiniere: true, type_pepiniere: 'froide' })
   const initiales = valeursInitiales(p, VOCABULAIRES)
-  const avis = avertissementsBascule(initiales, { ...initiales, statut: 'non' })
-  assert.match(avis[0], /Non localisé/)
+  assert.deepEqual(avertissementsBascule(initiales, { ...initiales, pepiniere: 'chaude' }), [])
 })
 
 test('[E8, E9] sans bascule, rien n’est annoncé', () => {

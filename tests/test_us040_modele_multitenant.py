@@ -56,9 +56,11 @@ def test_us040_ca2_table_potagers_colonnes(test_engine):
     # [US-068] "zone_climatique" — choix du jardinier, nullable (migration_v46)
     # [US-209] "compteur_lots" — dernier numéro de lot de pépinière attribué (migration_v55)
     # [US-294] "assistants_externes_interdits" — le propriétaire ferme le potager aux assistants IA (migration_v70)
+    # [US-326] emprise, angle du plan et orientation du nord (migration_v76), tous nullables
     assert columns == {
         "id", "nom", "ville", "latitude", "longitude", "altitude", "proprietaire_id", "plan", "cree_le",
         "etat", "archive_le", "supprime_le", "zone_climatique", "compteur_lots", "assistants_externes_interdits",
+        "emprise_longueur_m", "emprise_largeur_m", "angle_deg", "orientation_nord",
     }
 
 

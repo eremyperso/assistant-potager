@@ -1,3 +1,37 @@
+## [v3.128.0] — 2026-11-13
+
+### 🚀 Nouveautés
+- Ajoute le plan du potager vu du dessus : chaque parcelle est dessinée à sa place, à sa taille et avec sa rotation, avec sa grille, son échelle de 5 m et sa rose des vents (US-327).
+- Ajoute un chemin mobile dans l'écran Plan : un mini-plan pour se repérer, puis les parcelles dans l'ordre du chemin, une ligne par culture et par rang (US-329).
+- Agrandit le mini-plan mobile sur toute la largeur de l'écran et ajoute le bouton « Agrandir » : plan en plein écran déplaçable au doigt, zoom par boutons + / −, et retour à la carte de la parcelle touchée (US-329).
+- Donne à chaque culture en place son étape (semée, levée, plantée, en croissance, en fleur, en récolte, terminée), prévue ou déjà vue, avec un langage visuel commun : pastilles, légende et « À confirmer » (US-320, US-321).
+- Permet d'enregistrer la fin d'une culture par un geste (« arraché », « fin de culture ») (US-320).
+- Ajoute le suivi d'une culture : en la touchant sur le plan, on lit d'où elle vient, ses étapes, ses notes et ce qui est attendu (US-322).
+- Ajoute « Aujourd'hui au potager » : les cultures à confirmer, à libérer ou à placer, avec un bouton pour chaque liste et une carte « À placer » à déposer sur un rang libre (US-328).
+- Ouvre le détail d'une parcelle et ses caractéristiques depuis le Plan, et retire l'onglet Parcelles devenu inutile (US-330, US-331).
+- Permet de retirer, inactiver ou créer une parcelle en le disant à Gaston : l'inactivation ne détache plus les gestes de la parcelle (US-332).
+- Ajoute l'éditeur du plan sur ordinateur et tablette : poser, dimensionner et tourner les parcelles, indiquer le sens des rangs et le nord (US-333).
+- Transmet à Gaston ce qui est à l'écran (culture, parcelle, rang) : « récolte-la » sur la fiche d'une culture sait de quelle culture il s'agit (US-323).
+- Permet de noter avec Gaston depuis le plan, et place le bouton « Noter » au centre de la barre basse sur téléphone, avec la culture ou la parcelle choisie en pastille (US-324, US-325).
+- Retient la place réelle de chaque parcelle (forme, position, orientation, sens des rangs) et le rang exact de chaque culture, et comprend « au rang 3 » dans une phrase (US-326).
+
+### 🐛 Corrections
+- Corrige « planter 3 plants d'aubergine sur la planche courges » : le « 3 » n'est plus pris pour un nombre de rangs et la parcelle n'est plus modifiée à tort.
+- Corrige le mini-plan mobile qui était plafonné à 200 px de haut et devenait illisible sur un terrain presque carré (US-329).
+
+### 🔧 Améliorations techniques
+- Ajoute les routes `PATCH /plan/geometrie`, `POST /plan/edition`, `GET /plan/suivi` et `POST /plan/etapes/pas-encore` (US-322, US-326, US-333).
+- Ajoute les services `geometrie`, `etapes_culture`, `suivi_culture`, `taches_plan`, `plan_gaston` et `retrait_parcelle`, et les modules du compagnon `contexte_ecran`, `noter` et `placement` (US-320 à US-333).
+- Remplace `Plan.jsx`, `PlanVue.jsx` et les cartes de parcelle par `PlanDessus.jsx`, `PlanDessin.jsx`, `PlanMobile.jsx`, `PlanAgrandi.jsx`, `DetailParcelle.jsx`, `SuiviCulture.jsx`, `EditeurPlan.jsx` et `AujourdhuiPotager.jsx`, avec leurs tests node (US-327 à US-333).
+- Règle l'échelle du mini-plan d'abord sur la largeur, avec une hauteur bornée à 55 % de l'écran, et fige la règle dans `docs/domaines/plan-et-rangs.md` (US-329).
+- Met à jour les fiches du corpus de fonctionnement (parcelles et plan, gestes, récoltes, semis, stock, compagnon), le guide utilisateur (2 copies) et la décomposition de l'épic 19 (`docs/EPIC19_decomposition_US.md`).
+- Ajoute les cadrages d'US-334 (mise en place du plan d'un nouveau potager) et d'US-335 (fond photo et recalage), non livrés.
+
+### 💾 Base de données
+- Ajoute la migration `migration_v76.sql` : emprise, angle et orientation du nord sur `potagers`, forme, position, largeur, rotation et sens des rangs sur `parcelles`, position et longueur d'un rang sur `evenements`, et son `rollback_v76.sql` (US-326).
+- Ajoute la migration `migration_v77.sql` : colonne `contexte` sur `echanges_conversation`, sous la RLS existante, et son `rollback_v77.sql` (US-323).
+- Les migrations v76 et v77 n'ont pas encore été jouées sur PostgreSQL ; v73 à v75 appartiennent à la branche du pilotage LLM (US-306 à US-309).
+
 ## [v3.126.0] — 2026-11-10
 
 ### 🚀 Nouveautés

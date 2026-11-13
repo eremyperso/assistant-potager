@@ -220,6 +220,26 @@ export const MENTION_LARGEUR_DEDUITE = 'déduite de la superficie et de la longu
 /** [C5] Le suffixe qui dit qu'une valeur n'a pas été déclarée, mais calculée. */
 export const SUFFIXE_DEDUITE = 'déduite'
 
+/** [US-331 / CA1] Ce que disent les dimensions : elles se règlent sur le plan. */
+export const SUFFIXE_SUR_LE_PLAN = 'défini sur le plan'
+export const TEXTE_SUR_LE_PLAN = 'Défini sur le plan'
+export const TEXTE_STATUT_GASTON = 'Se change avec Gaston'
+export const PHRASE_SOL_GASTON = (nom) => `sol argileux pour ${nom}`
+
+/** [US-331 / P7] Le libellé du type (la forme du plan) ; `null` quand il n'est pas posé. */
+export function libelleForme(forme) {
+  const f = (forme || '').trim().toLowerCase()
+  if (!f) return null
+  return f === 'pepiniere' ? 'Pépinière' : capitaliser(f)
+}
+
+/** [US-331 / CA6] « Non », « Froide », « Chaude » — ou « Oui · type non renseigné » (US-208 / RT2). */
+export function libellePepiniere(parcelle) {
+  if (!parcelle?.est_pepiniere) return 'Non'
+  const type = (parcelle?.type_pepiniere || '').trim().toLowerCase()
+  return type ? capitaliser(type) : 'Oui · type non renseigné'
+}
+
 /** [C8] Le titre accessible de la pastille de l'index. */
 export const TITRE_A_COMPLETER = 'Informations à compléter'
 
@@ -235,9 +255,10 @@ const EXEMPLES = {
   longueur: (nom) => `${nom} fait 12 mètres de long`,
   abri: (nom) => `${nom} est sous serre`,
   paillage: (nom) => `${nom} est paillée`,
+  type_sol: PHRASE_SOL_GASTON,
 }
 
-const EXEMPLE_GENERIQUE = (nom) => `${nom} fait 12 mètres de long`
+const EXEMPLE_GENERIQUE = PHRASE_SOL_GASTON
 
 /**
  * [C2, C3, C4, C5, C6, C9, C10] Les caractéristiques d'une parcelle, dans
@@ -261,19 +282,32 @@ export function caracteristiquesDeParcelle(parcelle) {
       suffixe: absent ? null : (opts.suffixe ?? null),
       aide: absent ? (opts.aide ?? null) : null,
       manquant: absent,
+      // [US-331] Un champ que cet onglet ne modifie jamais (dimensions, statut) ; `note` se lit
+      // toujours, même renseigné.
+      verrouille: Boolean(opts.verrouille),
+      note: opts.note ?? null,
+      // [US-331 / P7] Le type est nouveau : son absence se dit et se complète, mais ne fait pas
+      // apparaître la pastille « à compléter » sur toutes les parcelles déjà saisies.
+      facultatif: Boolean(opts.facultatif),
     })
   }
+  const placee = Boolean(parcelle?.geometrie?.placee)
 
   ajouter('nom', 'Nom', (parcelle?.nom || '').trim() || null)
+  // [US-331 / P7] Le « Type » est la forme du plan (US-326) : planche, bac, butte, serre.
+  ajouter('type', 'Type', libelleForme(parcelle?.geometrie?.forme), { facultatif: true })
+  // [US-331 / CA1] Superficie, longueur et largeur se règlent sur le plan, jamais ici.
   ajouter('superficie', 'Superficie',
-    parcelle?.superficie_m2 ? `${nombre(parcelle.superficie_m2)} m²` : null)
+    parcelle?.superficie_m2 ? `${nombre(parcelle.superficie_m2)} m²` : null,
+    { suffixe: SUFFIXE_SUR_LE_PLAN, verrouille: true })
 
   // [C9] Une pépinière n'a ni longueur utile, ni largeur, ni rangs qui aient un
   // sens : ces trois champs sont RETIRÉS de la grille, pas rendus en état
   // manquant — et leur absence ne fait donc pas apparaître la pastille C8.
   if (!pepiniere) {
     ajouter('longueur', 'Longueur',
-      parcelle?.longueur_m ? `${nombre(parcelle.longueur_m)} m` : null)
+      parcelle?.longueur_m ? `${nombre(parcelle.longueur_m)} m` : null,
+      { suffixe: SUFFIXE_SUR_LE_PLAN, verrouille: true })
     // [C5, CA2] La largeur n'est JAMAIS présentée comme déclarée, et aucune
     // division n'est refaite ici : le serveur l'a déduite, l'écran la relit.
     const largeur = parcelle?.largeur_m
@@ -282,10 +316,11 @@ export function caracteristiquesDeParcelle(parcelle) {
       deductible && largeur != null ? `${nombre(largeur, 2)} m` : null, {
         // [US-225 / CA7] Une largeur absurde reste affichée telle quelle : on
         // dit qu'elle est à vérifier, on ne corrige aucune des deux valeurs.
-        suffixe: parcelle?.largeur_incoherente
-          ? `${SUFFIXE_DEDUITE}, à vérifier`
-          : SUFFIXE_DEDUITE,
+        suffixe: placee
+          ? SUFFIXE_SUR_LE_PLAN
+          : (parcelle?.largeur_incoherente ? `${SUFFIXE_DEDUITE}, à vérifier` : SUFFIXE_DEDUITE),
         aide: MENTION_LARGEUR_DEDUITE,
+        verrouille: true,
       })
     ajouter('nb_rangs', 'Nombre de rangs',
       parcelle?.nb_rangs == null ? null : String(parcelle.nb_rangs))
@@ -304,11 +339,12 @@ export function caracteristiquesDeParcelle(parcelle) {
     parcelle?.paillage == null ? null : (parcelle.paillage ? 'Oui' : 'Non'))
   // [C6] Deux booléens qui ont toujours une valeur : ils ne manquent jamais et
   // ne comptent pas dans la pastille.
-  ajouter('pepiniere', 'Pépinière', pepiniere ? 'Oui' : 'Non', { toujoursRenseigne: true })
+  ajouter('pepiniere', 'Pépinière', libellePepiniere(parcelle), { toujoursRenseigne: true })
   // [C10] Une parcelle inactive n'est pas une parcelle cassée : la carte est
   // rendue entière, et c'est le statut qui le dit.
+  // [US-331] Le statut ne se change jamais ici : c'est Gaston (US-332).
   ajouter('statut', 'Statut', parcelle?.actif === false ? 'Inactive' : 'Active',
-    { toujoursRenseigne: true })
+    { toujoursRenseigne: true, verrouille: true, note: 'se change avec Gaston' })
 
   return champs
 }
@@ -364,8 +400,7 @@ export const TEXTE_LARGEUR_CALCULEE = 'Calculée : superficie ÷ longueur'
  */
 export const CHAMP_API = {
   nom: 'nom',
-  superficie: 'superficie_m2',
-  longueur: 'longueur_m',
+  type: 'forme',
   nb_rangs: 'nb_rangs',
   exposition: 'exposition',
   ensoleillement: 'ensoleillement',
@@ -373,7 +408,6 @@ export const CHAMP_API = {
   abri: 'abri',
   paillage: 'paillage',
   pepiniere: 'est_pepiniere',
-  statut: 'actif',
 }
 
 const OUI_NON = [
@@ -402,27 +436,20 @@ export function saisieDeParcelle(parcelle, vocabulaires = {}) {
   const pepiniere = Boolean(parcelle?.est_pepiniere)
   const champs = [
     { cle: 'nom', type: SAISIE_TEXTE, valeur: parcelle?.nom ?? '', maxLength: 255, requis: true },
-    {
-      cle: 'superficie', type: SAISIE_NOMBRE, unite: 'm²',
-      valeur: texteNombre(parcelle?.superficie_m2), min: 0, step: 0.1, nonRenseignable: true,
-    },
+    // [US-331 / P7] Le type : la forme du plan, liste fermée servie par le domaine.
+    champListe('type', (parcelle?.geometrie?.forme || '').trim() || null, options(vocabulaires, 'forme')),
+    // [US-331 / CA1] Les dimensions se règlent sur le plan : la case le DIT, elle ne se saisit pas.
+    { cle: 'superficie', type: SAISIE_DEDUITE, texte: TEXTE_SUR_LE_PLAN },
   ]
 
   // [US-229 / C9] Une pépinière n'a ni longueur, ni largeur, ni rangs qui aient
   // un sens : les trois champs sont RETIRÉS, en lecture comme en édition.
   if (!pepiniere) {
     champs.push(
-      {
-        cle: 'longueur', type: SAISIE_NOMBRE, unite: 'm',
-        valeur: texteNombre(parcelle?.longueur_m),
-        // [CA5] Repères de frappe recopiés de la maquette. La règle, elle, est
-        // au point d'écriture : un navigateur qui les ignore reçoit le même
-        // refus que le compagnon.
-        min: 0.5, max: 200, step: 0.1, nonRenseignable: true,
-      },
+      { cle: 'longueur', type: SAISIE_DEDUITE, texte: TEXTE_SUR_LE_PLAN },
       // [E3] La largeur ne se saisit pas. Sa case le DIT, en teinte secondaire,
       // à la place du champ — elle ne devient pas un champ grisé.
-      { cle: 'largeur', type: SAISIE_DEDUITE, texte: TEXTE_LARGEUR_CALCULEE },
+      { cle: 'largeur', type: SAISIE_DEDUITE, texte: TEXTE_SUR_LE_PLAN },
       {
         cle: 'nb_rangs', type: SAISIE_NOMBRE,
         valeur: texteNombre(parcelle?.nb_rangs), min: 1, max: 99, step: 1,
@@ -455,18 +482,20 @@ export function saisieDeParcelle(parcelle, vocabulaires = {}) {
     },
     // [US-229 / C6] Deux booléens qui ont toujours une valeur : pas de
     // « Non renseigné » dans leur liste.
+    // [US-331 / CA6] Un seul champ « Pépinière » : Non, Froide ou Chaude. Il fusionne
+    // `est_pepiniere` et `type_pepiniere` (US-208). Une pépinière sans type garde son
+    // état « oui » tant que le jardinier n'en choisit pas.
     {
-      cle: 'pepiniere', type: SAISIE_OUI_NON, valeur: pepiniere ? 'oui' : 'non',
-      options: OUI_NON,
-    },
-    {
-      cle: 'statut', type: SAISIE_OUI_NON,
-      valeur: parcelle?.actif === false ? 'non' : 'oui',
+      cle: 'pepiniere', type: SAISIE_LISTE, valeur: valeurPepiniere(parcelle),
       options: [
-        { valeur: 'oui', libelle: 'Active' },
-        { valeur: 'non', libelle: 'Inactive' },
+        { valeur: 'non', libelle: 'Non' },
+        { valeur: 'froide', libelle: 'Froide' },
+        { valeur: 'chaude', libelle: 'Chaude' },
+        ...(valeurPepiniere(parcelle) === 'oui' ? [{ valeur: 'oui', libelle: 'Oui · type non renseigné' }] : []),
       ],
     },
+    // [US-331] Le statut ne se saisit pas ici (US-332) : Gaston.
+    { cle: 'statut', type: SAISIE_DEDUITE, texte: TEXTE_STATUT_GASTON },
   )
 
   return champs
@@ -484,6 +513,13 @@ function champListe(cle, valeur, servies) {
     cle, type: SAISIE_LISTE, nonRenseignable: true,
     valeur: valeurDeListe(liste, valeur), options: liste,
   }
+}
+
+/** [US-331] La valeur du champ « Pépinière » : non, froide, chaude — ou oui (type inconnu). */
+function valeurPepiniere(parcelle) {
+  if (!parcelle?.est_pepiniere) return 'non'
+  const type = (parcelle?.type_pepiniere || '').trim().toLowerCase()
+  return ['froide', 'chaude'].includes(type) ? type : 'oui'
 }
 
 /** Une valeur numérique telle qu'un champ de saisie la porte — jamais « null ». */
@@ -540,6 +576,16 @@ export function chargeUtile(initiales, saisies, parcelle) {
     if (valeur === initiales[cle]) continue
     // [C9] Les trois champs retirés d'une pépinière ne partent jamais.
     if (pepiniere && ['longueur', 'nb_rangs'].includes(cle)) continue
+    if (cle === 'pepiniere') {
+      // [US-331 / CA6] Non → plus pépinière ; Froide / Chaude → pépinière ET son type, d'un seul
+      // geste : les deux colonnes ne se contredisent jamais.
+      if (valeur === 'non') charge.est_pepiniere = false
+      else if (valeur === 'froide' || valeur === 'chaude') {
+        charge.est_pepiniere = true
+        charge.type_pepiniere = valeur
+      }
+      continue
+    }
     charge[CHAMP_API[cle]] = valeurApi(cle, valeur)
   }
   return charge
@@ -549,11 +595,8 @@ function valeurApi(cle, valeur) {
   const brut = typeof valeur === 'string' ? valeur.trim() : valeur
   if (brut === CHOIX_NON_RENSEIGNE || brut == null) return null
   if (cle === 'nom') return brut
-  if (['superficie', 'longueur'].includes(cle)) return Number(String(brut).replace(',', '.'))
   if (cle === 'nb_rangs') return Number(brut)
-  // [E2] Trois booléens, dont deux qui savent aussi ne rien valoir.
-  if (['paillage', 'pepiniere'].includes(cle)) return brut === 'oui'
-  if (cle === 'statut') return brut === 'oui'
+  if (cle === 'paillage') return brut === 'oui'
   return brut
 }
 
@@ -564,18 +607,13 @@ function valeurApi(cle, valeur) {
  */
 export function avertissementsBascule(initiales, saisies) {
   const avis = []
-  if (saisies.pepiniere !== initiales.pepiniere) {
+  const etait = initiales.pepiniere !== 'non'
+  const sera = saisies.pepiniere !== 'non'
+  if (etait !== sera) {
     avis.push(
-      saisies.pepiniere === 'oui'
+      sera
         ? 'Cette parcelle sera traitée comme une pépinière : ses semis sortiront du calcul des semis en pleine terre, et ses rangs disparaîtront de sa fiche.'
         : 'Cette parcelle cessera d’être une pépinière : ses semis rentreront dans le calcul des semis en pleine terre, et ses rangs réapparaîtront sur sa fiche.',
-    )
-  }
-  if (saisies.statut !== initiales.statut) {
-    avis.push(
-      saisies.statut === 'non'
-        ? 'Passée en inactive, elle sortira du plan et les gestes qui lui sont rattachés repasseront en « Non localisé ».'
-        : 'Repassée en active, elle réapparaîtra dans le plan. Les gestes délocalisés ne lui reviennent pas d’eux-mêmes.',
     )
   }
   return avis
@@ -590,7 +628,7 @@ export function messageConfirmation(modifications = []) {
 
 /** [C8] Reste-t-il une caractéristique à dire sur cette parcelle ? */
 export function parcelleACompleter(parcelle) {
-  return caracteristiquesDeParcelle(parcelle).some((c) => c.manquant)
+  return caracteristiquesDeParcelle(parcelle).some((c) => c.manquant && !c.facultatif)
 }
 
 /**
@@ -601,7 +639,7 @@ export function parcelleACompleter(parcelle) {
  */
 export function aideCompagnon(parcelle) {
   const nom = (parcelle?.nom || '').trim() || 'la parcelle'
-  const manquants = caracteristiquesDeParcelle(parcelle).filter((c) => c.manquant)
+  const manquants = caracteristiquesDeParcelle(parcelle).filter((c) => c.manquant && !c.facultatif)
   const seul = manquants.length === 1 ? manquants[0].cle : null
   const exemple = seul ? EXEMPLES[seul] : null
   return {

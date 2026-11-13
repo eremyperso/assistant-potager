@@ -136,13 +136,6 @@ def test_us200_ca6_les_parcelles_restent_inchangees(client):
 # Garde-fous de structure
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_us200_le_sous_onglet_nest_plus_un_ecran_dattente():
-    """[CA1] « Vue plan » monte la vue réelle, plus le Placeholder d'US-053."""
-    app_jsx = (FRONT / "App.jsx").read_text(encoding="utf-8")
-    assert "'plan-vue': (props) => <PlanVue {...props} />" in app_jsx
-    assert "Vue plan à l'échelle" not in app_jsx
-
-
 def test_us200_ca2_la_lib_de_rendu_ne_connait_pas_react():
     """[CA2] Les règles de rendu sont vérifiables sans monter de composant."""
     lib = (FRONT / "lib" / "planVue.js").read_text(encoding="utf-8")
@@ -151,28 +144,31 @@ def test_us200_ca2_la_lib_de_rendu_ne_connait_pas_react():
     assert (FRONT / "lib" / "planVue.test.js").exists()
 
 
-def test_us200_ca1_la_vue_ne_fait_quun_seul_appel_dapi():
-    """[CA1] Une seule lecture : `api.plan`, et aucune autre."""
-    vue = (FRONT / "views" / "PlanVue.jsx").read_text(encoding="utf-8")
+# ══════════════════════════════════════════════════════════════════════════════
+# [US-327] La Vue plan d'US-200 est remplacée par le plan vu du dessus
+# ══════════════════════════════════════════════════════════════════════════════
+# Les garde-fous de l'écran d'US-200 (une carte par parcelle, deux colonnes par
+# container query, `/vue-plan`) n'ont plus d'objet : l'écran est retiré (US-327 / CA6).
+# Ce qui reste vrai est tenu ici, le reste par `test_us327_plan_vue_du_dessus.py` et
+# `frontend/src/lib/planDessus.test.js`.
+
+def test_us200_us327_le_sous_onglet_monte_le_plan_vu_du_dessus():
+    """[CA1, US-327] « Vue plan » monte la vue réelle — désormais le plan vu du dessus."""
+    app_jsx = (FRONT / "App.jsx").read_text(encoding="utf-8")
+    assert "'plan-vue': (props) => <PlanDessus {...props} />" in app_jsx
+    assert not (FRONT / "views" / "PlanVue.jsx").exists()
+
+
+def test_us200_us327_une_seule_lecture_api_plan():
+    """[CA1] Une seule lecture du plan : `api.plan`. [US-328 / CA6] S'y ajoute la météo des
+    prévisions existantes, pour l'en-tête « Aujourd'hui au potager » — aucune autre."""
+    vue = (FRONT / "views" / "PlanDessus.jsx").read_text(encoding="utf-8")
     appels = [mot for mot in vue.split() if mot.startswith("api.")]
-    assert appels == ["api.plan(dateRef,"]
+    assert appels == ["api.plan(dateRef,", "api.meteo().then((m)"]
 
 
-def test_us200_ca5_deux_colonnes_par_container_query_jamais_trois():
-    """[CA5 / A1] Container queries, jamais de breakpoint d'écran, jamais 3 colonnes.
-
-    [US-228 / CA5, arbitrage A23] Le seuil passe de 720 à 1000 px : une carte
-    porte désormais une piste de places, il lui faut plus de largeur. La règle
-    elle-même ne bouge pas — container query, deux colonnes, jamais trois.
-    """
-    vue = (FRONT / "views" / "PlanVue.jsx").read_text(encoding="utf-8")
-    assert "@[1000px]/plan:grid-cols-2" in vue
-    assert "grid-cols-3" not in vue
-    assert "md:grid-cols" not in vue and "lg:grid-cols" not in vue
-
-
-def test_us200_ca11_la_page_de_controle_visuel_est_routee():
-    """[CA11] `/vue-plan` rejoue la vue sur des réponses simulées, en lazy()."""
+def test_us200_us327_la_page_de_controle_visuel_est_routee():
+    """[CA11 → US-327 / CA8] La page de contrôle visuel passe de `/vue-plan` à `/plan-dessus`."""
     main_jsx = (FRONT / "main.jsx").read_text(encoding="utf-8")
-    assert "'/vue-plan': () => import('./views/_PlanVuePreview.jsx')" in main_jsx
-    assert (FRONT / "views" / "_PlanVuePreview.jsx").exists()
+    assert "'/plan-dessus': () => import('./views/_PlanDessusPreview.jsx')" in main_jsx
+    assert "_PlanVuePreview" not in main_jsx

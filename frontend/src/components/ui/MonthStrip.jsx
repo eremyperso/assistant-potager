@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LegendeRepliable } from './LegendeRepliable.jsx'
 import {
   couleurDuMois, couleurDuMoisReferentiel, couleurDuMoisFiltre, phasesDuMois,
   PHASES_REFERENTIEL, ETAT_CROISSANCE,
@@ -148,10 +149,12 @@ export function MonthStrip({
         ))}
       </div>
       {legend && (
-        <MonthStripLegend
-          variante={referentiel ? 'referentiel' : undefined} avecCroissance={recalee} className="mt-2"
-          actif={filtre} onChoisir={setFiltre}
-        />
+        <LegendeRepliable className="mt-2">
+          <MonthStripLegend
+            variante={referentiel ? 'referentiel' : undefined} avecCroissance={recalee}
+            actif={filtre} onChoisir={setFiltre}
+          />
+        </LegendeRepliable>
       )}
       {legend && phaseVide && (
         <p className="mt-1 text-[11px] text-txt3">Aucun mois pour cette phase</p>

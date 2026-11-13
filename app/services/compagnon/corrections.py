@@ -126,6 +126,7 @@ _RACINES_GESTE: dict[str, tuple[str, ...]] = {
     "taille": ("taill",),
     "levee": ("leve",),
     "deplacement": ("deplac",),
+    "fin_culture": ("fin de culture", "termin", "arrach"),   # [US-320]
 }
 
 TEXTE_AUCUNE_ACTION = (

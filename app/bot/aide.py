@@ -51,9 +51,10 @@ _HELP_PARCELLE = (
     "  _tant qu'aucune plantation réelle n'a eu lieu ailleurs._\n"
     "• Renommer une parcelle (propagation sur tout l'historique)\n"
     "  → /parcelle renommer sud carré-sud\n"
-    "• Supprimer une parcelle (soft-delete — historique conservé)\n"
+    "• Supprimer une parcelle vide, ou la rendre inactive si elle a vécu\n"
     "  → /parcelle supprimer serre-1\n"
-    "  ⚠️ _Les événements liés deviennent « Non localisé »_\n\n"
+    "  → /parcelle modifier serre-1 actif=non _(grisée, historique conservé)_\n"
+    "  ⚠️ _Une parcelle avec cultures ou historique ne se supprime pas_\n\n"
     "💡 _Noms de parcelle insensibles à la casse.\n"
     "   Les doublons sont détectés automatiquement._"
 )

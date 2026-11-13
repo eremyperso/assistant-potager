@@ -464,3 +464,44 @@ Telegram dessus. `/parse` n'existe plus (US-274) : l'écriture ne passe que par 
   peut l'être, pas le geste. La règle s'écrit deux fois exprès — `lib/gestes.js`
   pour que le bouton la DISE avant qu'on appuie, `intentions_geste.py` en
   garde-fou serveur.
+
+## Étapes d'une culture, prévues puis validées [US-320]
+
+`app/services/etapes_culture.py` est le **seul** endroit où s'écrivent les étapes
+d'une culture en place ; `GET /plan` les recopie (`cultures[].etapes`,
+`parcelles[].a_liberer`), l'écran ne déduit rien (E9). La phase d'US-194 reste
+servie à côté, inchangée (CA10).
+
+- **Séquences** (arbitrage P3, 12/11/2026) : semis direct `semee → levee →
+  en_recolte → terminee` ; plant `plantee → en_recolte → terminee`. Ni « en
+  croissance » ni « en fleur » : aucun geste ne les porte.
+- **Validée** = un geste : semis, plantation, `levee` rattachée au semis
+  (`origine_graines_id`), première récolte de la série, `fin_culture`. Source
+  `compagnon` si le geste est devenu une action menée (US-261), sinon `jardinier`.
+- **Prévue** = le calendrier : levée (`ETAPE_LEVEE` du référentiel, itinéraire
+  non implicite), début et fin de `recolte_attendue` (projection US-070). Sans
+  calendrier, rien n'est prévu.
+- **À confirmer** : l'étape suivant la dernière validée a une date prévue
+  atteinte. « Pas encore » (`POST /plan/etapes/pas-encore`,
+  `reporter_etape`) = un **rappel US-266** de cible `etape_<code>` / id de la
+  série, à J+3 ; redit, le même rappel est repoussé. Aucune table nouvelle.
+- **À libérer** : ligne sortie de l'occupation sans `fin_culture` (végétatif
+  récolté jusqu'au dernier pied, perte totale), soldée depuis ≤ 60 jours
+  (`JOURS_A_LIBERER_MAX`).
+- `lire_tuiles` lit en plus `levee`, `perte`, `fin_culture` dans `TuileLue.suivis`
+  — ni la projection ni la phase ne les lisent.
+
+**Geste `fin_culture`** (`utils/actions.py` ; « arraché » y a quitté la perte,
+arbitrage du 12/11/2026). `evenements.preparer_fin_culture` relit à la
+confirmation les lignes en place (`calcul_occupation_parcelles`) : la quantité
+écrite est **le reste de la ligne**, un événement par variété. Le stock la compte
+comme une perte (`utils.stock.ACTIONS_RETRAIT_PIEDS`) ; l'occupation sort la
+ligne de **sa** parcelle (plantations, semis, pertes et récoltes datés jusqu'à la
+fin), jamais par la répartition au prorata. Plusieurs parcelles sans parcelle
+dite → `FinCultureAmbigueError` ; rien en place → `FinCultureRefuseeError` ; un
+nombre inférieur au reste d'une ligne unique → reste une `perte`.
+
+**Levée en pleine terre** : `resoudre_lot_levee` retombe sur
+`semis_pleine_terre_pour_levee` quand aucun lot de pépinière ne correspond (ou
+quand la parcelle dite est de pleine terre). Le nombre de levés y est
+facultatif ; en pépinière il reste obligatoire (US-212).

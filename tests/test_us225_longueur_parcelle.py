@@ -494,6 +494,19 @@ def test_us225_ca8_aucun_moteur_de_calcul_ne_lit_la_longueur() -> None:
         # `repartition_rangs._places_du_rang`, sans calcul propre : les places
         # d'un rang se comptent toujours au même endroit.
         Path("app/services/echeances_lots.py"),
+        # [US-326 / G1, P4] La géométrie : la longueur EST celle du plan, et un rang
+        # ne se partage que si elle est connue. `evenements` ne fait que transmettre
+        # `rang_longueur_m` (longueur dite sur un rang partagé), sans calcul.
+        Path("app/services/geometrie.py"),
+        Path("app/services/evenements.py"),
+        # [US-322 / S3] Le suivi d'une culture transmet la longueur de la parcelle à la
+        # ligne de place (mètres occupés / libres) : les places restent celles d'US-227.
+        Path("app/services/suivi_culture.py"),
+        # [US-328 / CA5] Le placement d'une carte « À placer » ne fait que TRANSMETTRE
+        # `rang_longueur_m`, mesurée par `geometrie.longueur_de_la_part` : aucun calcul ici.
+        Path("app/services/compagnon/placement.py"),
+        # [US-332] La demande de création posée sur le plan TRANSMET la longueur : aucun calcul ici.
+        Path("app/services/plan_gaston.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):
@@ -596,7 +609,9 @@ def test_us225_ca11_fiche_de_corpus_a_jour() -> None:
     assert "longueur non renseignée" in fiche
     assert "le même nombre" in fiche          # longueur de parcelle = longueur de rang
     assert "allées" in fiche                  # c'est la longueur UTILE
-    assert "ne se déclare jamais" in fiche    # la largeur se déduit
+    # [US-326] La largeur se pose désormais sur le plan ; tant qu'elle ne l'est pas,
+    # elle se DÉDUIT toujours de la superficie et de la longueur.
+    assert "se déduit de la superficie divisée par la longueur" in fiche
 
 
 def test_us225_ca11_guide_utilisateur_a_jour() -> None:

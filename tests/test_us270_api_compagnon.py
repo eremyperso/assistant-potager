@@ -261,10 +261,10 @@ class TestCA2Confirmer:
             assert _compter(db, Evenement) == 0
 
     def test_ca2_une_commande_se_confirme_dans_telegram_mais_s_abandonne_ici(self, potager):
-        # [US-289] Une forme SANS exécuteur de service (ici `/parcelle supprimer`) reste à Telegram.
+        # [US-289] Une forme SANS exécuteur de service (ici `/parcelle renommer`) reste à Telegram.
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "supprimer")],
-            {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "supprime la sud",
+            interp.FORMES_PAR_CLE[("parcelle", "renommer")],
+            {"ancien": "Sud", "nouveau": "Midi"}, interp.ORIGINE_REGLE, 1.0, "renomme la sud en midi",
         )
         proposition = svc_propositions.proposer(CTX, commande, canal="pwa")
         with pytest.raises(svc_echange.NonConfirmableDansLaPwaError):
@@ -496,8 +496,8 @@ class TestRoutes:
 
     def test_commande_non_confirmable_donne_409_explicite(self, client):
         commande = interp._construire_commande(
-            interp.FORMES_PAR_CLE[("parcelle", "supprimer")],
-            {"nom": "Sud"}, interp.ORIGINE_REGLE, 1.0, "x",
+            interp.FORMES_PAR_CLE[("parcelle", "renommer")],
+            {"ancien": "Sud", "nouveau": "Midi"}, interp.ORIGINE_REGLE, 1.0, "x",
         )
         proposition = svc_propositions.proposer(CTX, commande, canal="pwa")
         reponse = client.post(f"/compagnon/propositions/{proposition.id}/confirmer")
