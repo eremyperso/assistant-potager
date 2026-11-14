@@ -196,3 +196,14 @@ test('une parcelle qu’on pose écrit toujours ses dimensions, même connues de
   const e = poser(etatInitial(plan()), 3, 5, 5)           // le bac : 2 × 1 déjà connus
   assert.deepEqual(chargeEnregistrement(e).parcelles, [{ id: 3, x_m: 5, y_m: 5, longueur_m: 2, largeur_m: 1 }])
 })
+
+test('une fiche déjà incohérente (rangs occupés > rangs déclarés) ne bloque pas Enregistrer', () => {
+  const p = plan()
+  p.parcelles[0].nb_rangs = 2                      // 3 rangs occupés pour 2 déclarés : donnée existante
+  let e = etatInitial(p)
+  e = deplacer(e, 1, 6, 6)
+  assert.equal(erreurs(e).length, 0)
+  assert.equal(chargeEnregistrement(e).parcelles.length, 1)
+  e = definirRangs(e, 1, 1)                        // mais descendre encore est refusé
+  assert.equal(erreurs(e).length, 1)
+})

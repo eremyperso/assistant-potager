@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Undo2, Redo2, Copy, Trash2, MoveHorizontal, MoveVertical, MapPin, Plus, GripVertical } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { Btn } from './ui'
+import AssistantMiseEnPlace from './AssistantMiseEnPlace.jsx'  // [US-334]
 import { RoseDesVents, EchellePlan } from './PlanDessin.jsx'
 import { ouvrirGastonPourPlan } from '../lib/contexteCompagnon.js'
 import { ECHELLE_MIN, ECHELLE_MAX } from '../lib/planDessus.js'
@@ -17,7 +18,7 @@ import {
   retirer, orienter, annuler, refaire, selectionner, alignerFiche, posees, aPlacer, parcelleDe, cotes,
   ecartSurface, erreurRangs, erreurs, modifie, chargeEnregistrement, resumeModifications, demandeDeCreation,
   demandeDeDuplication, directionDuNord, estAlignee, aimanter, aimanterRotation, texteMetres,
-  DIRECTIONS, FORMES_NOUVELLES, PAS_AIMANT_M, TEXTE_ABANDON,
+  DIRECTIONS, FORMES_NOUVELLES, PAS_AIMANT_M, TEXTE_ABANDON, empriseDe,
 } from '../lib/editeurPlan.js'
 
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand'
@@ -78,13 +79,15 @@ function ParcelleEditable({ p, u, choisie, onChoisir, onGeste, onTouche }) {
 }
 
 export default function EditeurPlan({
-  plan, emprise, selectionInitiale = null, onQuitter, onEnregistre, onCaracteristiques, annoncer = () => {},
+  plan, emprise: empriseEcran, selectionInitiale = null, guide = false, onQuitter, onEnregistre, onCaracteristiques, annoncer = () => {},
 }) {
   const [etat, setEtat] = useState(() => etatInitial(plan, selectionInitiale))
   const [geste, setGeste] = useState(null)         // l'aperçu d'un glisser en cours : { id, x, y, w, h, rotation }
   const [erreur, setErreur] = useState('')
   const [enCours, setEnCours] = useState(false)
   const [abandon, setAbandon] = useState(false)
+  // [US-334 / M4] La première ouverture déroule l'assistant ; il se ferme, il ne revient pas dans la même séance.
+  const [assistant, setAssistant] = useState(guide)
   const cadre = useRef(null)
   const toile = useRef(null)
   // La barre d'actions se déplace : sa position (px dans le cadre) est gardée tant que l'éditeur est ouvert.
@@ -121,6 +124,7 @@ export default function EditeurPlan({
   const sur = posees(etat)
   const libres = aPlacer(etat)
   const nord = directionDuNord(etat)
+  const emprise = empriseDe(etat, empriseEcran)   // [US-334] l'emprise posée ici l'emporte sur celle de l'écran
   const changements = modifie(etat)
   const refus = erreurs(etat)
 
@@ -294,6 +298,10 @@ export default function EditeurPlan({
         </div>
       )}
       {erreur && <p role="alert" className="rounded-[10px] bg-red-soft px-3 py-2 text-[12.5px] text-red">{erreur}</p>}
+      {assistant && (
+        <AssistantMiseEnPlace etat={etat} appliquer={appliquer} plan={plan} emprise={emprise} annoncer={annoncer}
+          onTerminer={() => setAssistant(false)} />
+      )}
 
       <div className="grid gap-4 @[760px]:grid-cols-[190px_minmax(0,1fr)_230px] @[760px]:items-start">
         {/* Colonne de gauche : fond, À placer, formes nouvelles, orientation */}

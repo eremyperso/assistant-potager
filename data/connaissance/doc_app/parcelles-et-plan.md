@@ -36,6 +36,10 @@ index_terms:
   - "suivi d'une culture"
   - "rang partagé"
   - "à confirmer"
+  - "mettre en place le plan"
+  - "parcelles à placer"
+  - "premier potager"
+  - "plan par zones"
 ---
 
 # Les parcelles et le plan d'occupation
@@ -334,3 +338,16 @@ Si la surface posée diffère de la fiche (« Surface posée 60 m², fiche parce
 **On parle aussi de :** nouvelle planche ; poser une forme nouvelle ; créer un bac ; dupliquer une parcelle ; nom proposé Planche 9 ; créer une parcelle avec Gaston
 
 Glisser une forme nouvelle (planche, bac, pépinière, serre) sur le plan, ou **Dupliquer** une parcelle, ouvre Gaston : il propose une carte — « Créer une planche de 3,5 × 3 m · 10,5 m², rangs dans la longueur, à l'endroit posé » — avec un nom unique proposé (« Planche 9 »). La parcelle n'existe qu'après **« Confirmer »** ; elle naît alors avec sa géométrie, et rejoint l'éditeur si celui-ci est resté ouvert. Un lecteur ne peut pas la demander. Dicter « crée une parcelle planche 9 » reste possible, sans position.
+
+## Mettre en place le plan d'un potager neuf ou existant
+
+**Intention :** procédure
+**On parle aussi de :** mettre en place le plan ; premier plan du potager ; mon plan est vide ; parcelles à placer ; plan par zones ; encart Mettre en place le plan ; environ 5 minutes ; assistant premier potager plan ; placer mes parcelles ; plan sur téléphone à faire sur ordinateur ; emprise du potager ; orienter le nord
+
+Un potager neuf comme un potager déjà utilisé commence de la même façon : **toutes ses parcelles sont « à placer »**, aucune n'a de position. Le Plan s'ouvre alors sur le **plan par zones** — une tuile par parcelle, dans l'ordre du chemin — surmonté d'un encart **« Mettre en place le plan · environ 5 minutes »** et de son bouton. Sur téléphone, l'encart dit **« à faire sur ordinateur »** : l'éditeur n'existe pas sur petit écran. Un membre en lecture seule voit l'encart sans bouton.
+
+Quand certaines parcelles seulement sont posées, le plan dessine celles-là — **aucune forme n'est inventée** pour les autres — et l'encart devient **« N parcelles à placer »**. Il se masque dès que toutes sont posées, et **se rouvre** si une parcelle est retirée du plan ou créée sans position (par Telegram, par exemple) : rien n'est mémorisé, il se déduit de ce que le plan contient. Un potager sans aucune parcelle n'a pas d'encart, mais l'invitation à créer la première (« crée une planche de 4 mètres sur 1,20 »).
+
+**La dernière étape de l'assistant « Premier potager »** (après l'activation du compagnon) propose **« Mettre en place le plan »** maintenant ou **« Plus tard »** : le premier ouvre le Plan directement sur l'éditeur, le second le Plan par zones avec son encart. La superficie dite à l'assistant n'est pas ressaisie : l'éditeur la reprend (une parcelle posée prend ses dimensions connues, sinon un carré de sa superficie) et **propose** une emprise de potager d'après elle.
+
+**À la première ouverture de l'éditeur** — potager encore vierge : ni emprise, ni nord, aucune parcelle posée — un assistant enchaîne quatre étapes, **chacune pouvant être passée** : l'**emprise** (longueur × largeur, proposée d'après vos parcelles, à corriger), l'**orientation du nord**, le **fond** (« Sans fond » tant que le fond photo n'existe pas), puis la **pose** des parcelles « À placer », une à une ou **toutes d'un coup**, rangées dans l'ordre du chemin pour être ajustées ensuite. Le plan ne change qu'au bouton « Enregistrer ». Dès que le plan est posé et sauvegardé, l'assistant ne se redéroule plus : l'éditeur s'ouvre comme d'habitude.

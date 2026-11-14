@@ -1,3 +1,16 @@
+## [v3.129.0] — 2026-11-14
+
+### 🚀 Nouveautés
+- Ajoute l'encart « Mettre en place le plan · environ 5 minutes » au-dessus du plan par zones tant qu'aucune parcelle n'est posée, puis « N parcelles à placer » ; il disparaît quand tout est posé et revient si une parcelle est retirée du plan ou créée sans position, par Telegram par exemple (US-334).
+- Termine l'assistant « Premier potager » sur la proposition de mettre le plan en place maintenant ou plus tard : « maintenant » ouvre l'éditeur, « plus tard » ouvre le Plan avec son encart (US-334).
+- Guide la première ouverture de l'éditeur du plan en quatre étapes, chacune pouvant être passée : emprise du potager (proposée d'après les superficies saisies), orientation du nord, fond, pose des parcelles une à une ou toutes d'un coup (US-334).
+- Dit sur téléphone que la mise en place du plan se fait sur ordinateur, au lieu d'un bouton qui ne mènerait nulle part (US-334).
+
+### 🔧 Améliorations techniques
+- Ajoute `lib/miseEnPlace.js`, `AssistantMiseEnPlace.jsx` et `ProposerMiseEnPlace.jsx`, et l'emprise du potager dans la charge de `POST /plan/edition` envoyée par l'éditeur (US-334).
+- Ajoute l'intention d'adresse `/?vue=plan-vue&editeur=oui`, qui ouvre le Plan sur l'éditeur (US-334).
+- Décrit la mise en place du plan dans la fiche `parcelles-et-plan.md` du corpus, le guide utilisateur (2 copies) et deux questions de mesure (US-334).
+
 ## [v3.128.0] — 2026-11-13
 
 ### 🚀 Nouveautés

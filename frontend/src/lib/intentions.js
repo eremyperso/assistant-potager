@@ -32,6 +32,8 @@ const TEXTE = (v) => {
   const s = String(v ?? '').trim()
   return s ? s : null
 }
+// Idempotent : l'intention est validée deux fois (adresse, puis coquille) et `true` doit rester `true`.
+const OUI = (v) => (v === true || String(v ?? '').trim().toLowerCase() === 'oui' ? true : null)
 const DATE_ISO = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v ?? '').trim()) ? String(v).trim() : null)
 
 /**
@@ -45,7 +47,8 @@ export const VUES_REDIRIGEES = Object.freeze({ plan: 'plan-vue' })
 export const vueRedirigee = (vue) => VUES_REDIRIGEES[vue] ?? vue
 
 export const INTENTIONS = Object.freeze({
-  'plan-vue': Object.freeze({ parcelle: ENTIER }),
+  // [US-334] `editeur=oui` : le plan s'ouvre sur l'éditeur (sortie de l'assistant « Premier potager »). Lecture seule : l'éditeur n'écrit qu'à « Enregistrer ».
+  'plan-vue': Object.freeze({ parcelle: ENTIER, editeur: OUI }),
   cultures: Object.freeze({ culture: TEXTE }),
   pepiniere: Object.freeze({ onglet: TEXTE, emplacement: TEXTE, lot: TEXTE }),
   // [US-232 / CA8] « Tout voir » ouvre le Journal filtré sur UNE parcelle et sur
