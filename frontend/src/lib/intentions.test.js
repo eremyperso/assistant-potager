@@ -19,7 +19,7 @@ import {
 test('[CA2] les vues du tableau, avec exactement leurs clés', () => {
   // [US-330] L'ancienne vue `plan` (onglet Parcelles) est redirigée vers `plan-vue`.
   assert.deepEqual(vuesAvecIntention().sort(), ['cultures', 'journal', 'pepiniere', 'plan-vue'])
-  assert.deepEqual(clesDe('plan-vue'), ['parcelle'])
+  assert.deepEqual(clesDe('plan-vue'), ['parcelle', 'editeur'])
   assert.deepEqual(clesDe('cultures'), ['culture'])
   assert.deepEqual(clesDe('pepiniere'), ['onglet', 'emplacement', 'lot'])
   // [US-232 / CA8] « Tout voir » de la carte « Sol et entretien » ouvre le

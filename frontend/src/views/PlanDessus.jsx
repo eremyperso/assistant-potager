@@ -39,6 +39,7 @@ import DetailParcelle, { ListeParcelles } from '../components/DetailParcelle.jsx
 import { peutEnregistrer } from '../lib/gestes.js'
 import EditeurPlan from '../components/EditeurPlan.jsx'  // [US-333]
 import { peutModifierLePlan } from '../lib/editeurPlan.js'  // [US-333 / CA7]
+import { encartMiseEnPlace, estPremiereOuverture, TEXTE_SUR_ORDINATEUR } from '../lib/miseEnPlace.js'  // [US-334]
 import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'  // [US-196 / CA12]
 import {
   AFFICHAGES, AFFICHAGE_PLAN, AFFICHAGE_LISTE, ONGLET_EN_PLACE, ONGLET_LOTS,
@@ -106,6 +107,33 @@ function ParcellesSansPosition({ aPlacer }) {
   )
 }
 
+/**
+ * [US-334 / M1, M2] L'encart « Mettre en place le plan » (aucune parcelle posée) ou « N parcelles à placer »
+ * (quelques-unes). Il ne mémorise rien : il disparaît quand tout est posé et revient dès qu'une parcelle ne l'est plus (M5).
+ * Sans éditeur — téléphone, lecteur — il dit ce qu'il faut faire au lieu d'offrir un bouton qui ne mène nulle part.
+ */
+function EncartMiseEnPlace({ encart, onOuvrir, peutEditer, peutEcrire }) {
+  if (!encart) return null
+  return (
+    <section aria-label={encart.titre} data-encart-mise-en-place={encart.type}
+      className="@container flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand bg-brand-soft/40 px-4 py-3">
+      <div className="min-w-0 flex-1 basis-[260px]">
+        <h3 className="font-serif text-[15px] font-semibold text-txt">
+          {encart.titre}{encart.duree ? <span className="font-sans text-[12.5px] font-normal text-txt2"> · {encart.duree}</span> : null}
+        </h3>
+        <p className="mt-0.5 text-[12.5px] text-txt2">{encart.texte}</p>
+        {!peutEditer && peutEcrire && <p className="mt-1 text-[12.5px] font-semibold text-txt">{TEXTE_SUR_ORDINATEUR}</p>}
+      </div>
+      {peutEditer && (
+        <button type="button" onClick={onOuvrir}
+          className="min-h-[36px] rounded-[10px] bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+          {encart.libelleBouton}
+        </button>
+      )}
+    </section>
+  )
+}
+
 export default function PlanDessus({ refresh }) {
   const { dateRef } = useDateRef()
   const { potagerId, potagerActif } = usePotager()
@@ -123,6 +151,8 @@ export default function PlanDessus({ refresh }) {
       setEtat({ parcelle: recue.parcelle, culture: null })
       setFeuilleParcelle(true)
     }
+    // [US-334 / M3] « Mettre en place le plan maintenant », en sortie de l'assistant « Premier potager ».
+    if (recue.editeur) setOuvrirApresChargement(true)
   })
   const [etat, setEtat] = useEtatEcran('plan-vue',
     { parcelle: null, onglet: ONGLET_EN_PLACE, affichage: AFFICHAGE_PLAN, culture: null }, intention)
@@ -130,7 +160,8 @@ export default function PlanDessus({ refresh }) {
   const setChoix = useCallback((c) => setEtat({ culture: c }), [setEtat])
   const [feuilleParcelle, setFeuilleParcelle] = useState(Boolean(etat.parcelle))
   // [US-333] L'éditeur du plan : un mode de l'écran, jamais mémorisé (on ne rouvre pas un brouillon).
-  const [edition, setEdition] = useState({ ouverte: false, parcelle: null })
+  const [edition, setEdition] = useState({ ouverte: false, parcelle: null, guide: false })
+  const [ouvrirApresChargement, setOuvrirApresChargement] = useState(false)
   const ancreDetail = useRef(null)
   // [US-325 / CA3] Mobile : fermer la feuille du suivi garde la culture choisie — elle reste
   // marquée sur le plan et en pastille sur « Noter » de la barre basse, que la feuille recouvre.
@@ -223,14 +254,14 @@ export default function PlanDessus({ refresh }) {
     const obs = new ResizeObserver(([e]) => setLargeurCadre(Math.floor(e.contentRect.width)))
     obs.observe(el)
     return () => obs.disconnect()
-  }, [data])
+  }, [data, edition.ouverte])
   useEffect(() => {
     const el = racine.current
     if (!el || typeof ResizeObserver === 'undefined') return undefined
     const obs = new ResizeObserver(([e]) => setLargeurRacine(Math.floor(e.contentRect.width)))
     obs.observe(el)
     return () => obs.disconnect()
-  }, [data, loading, error])
+  }, [data, loading, error, edition.ouverte])
 
   const formes = useMemo(() => formesDuPlan(data), [data])
   const emprise = useMemo(() => empriseDuPlan(data, formes), [data, formes])
@@ -251,6 +282,14 @@ export default function PlanDessus({ refresh }) {
   const panneauDroit = ordinateur && !mobile
   // [US-333 / CA7, E7] L'éditeur : un membre éditeur, sur un conteneur de 720 px et plus.
   const peutEditer = !mobile && peutModifierLePlan(role, largeurRacine || (typeof window !== 'undefined' ? window.innerWidth : 0))
+
+  const encart = useMemo(() => encartMiseEnPlace(data), [data])
+  // [US-334 / M3] L'intention `editeur` attend le plan : ouvre l'éditeur s'il est possible ici, sinon l'encart parle.
+  useEffect(() => {
+    if (!ouvrirApresChargement || !data || !potagerActif) return   // le rôle n'est connu qu'avec le potager actif
+    setOuvrirApresChargement(false)
+    if (peutEditer) setEdition({ ouverte: true, parcelle: null, guide: estPremiereOuverture(data) })
+  }, [ouvrirApresChargement, data, potagerActif, peutEditer])
 
   if (loading && !data) return <LoadingSkeleton lines={5} />
   if (error) return <ApiError message={error} onRetry={load} />
@@ -282,8 +321,9 @@ export default function PlanDessus({ refresh }) {
     if (choix) setEtat({ parcelle: choix.parcelleId, culture: null })
     setFeuille(false)
   }
-  const ouvrirEditeur = (parcelle = null) => { setEdition({ ouverte: true, parcelle }); setMessage('') }
-  const fermerEditeur = () => setEdition({ ouverte: false, parcelle: null })
+  // [US-334 / M4] Le potager encore vierge : l'éditeur déroule l'assistant de première mise en place.
+  const ouvrirEditeur = (parcelle = null) => { setEdition({ ouverte: true, parcelle, guide: estPremiereOuverture(data) }); setMessage('') }
+  const fermerEditeur = () => setEdition({ ouverte: false, parcelle: null, guide: false })
   const rangLibre = () => { setMessage(MESSAGE_RANG_LIBRE); annoncer(MESSAGE_RANG_LIBRE) }
   // [US-328 / A2, A3] Une ligne de tâche ouvre le suivi de sa culture (US-322).
   const ouvrirLigne = (selection) => {
@@ -392,7 +432,8 @@ export default function PlanDessus({ refresh }) {
   if (mobile) {
     // [US-329] Un seul écran : mini-plan, légende, tâches, puis le chemin.
     return (
-      <div ref={racine} className="@container min-w-0">
+      <div ref={racine} className="@container min-w-0 flex flex-col gap-3">
+        <EncartMiseEnPlace encart={encart} peutEditer={false} peutEcrire={peutEnregistrer(role)} />
         <PlanMobile entete={entete} formes={mode === MODE_PLAN ? formes : []} emprise={emprise} angle={angle}
           chemin={chemin} taches={taches} largeur={largeurRacine || 343}
           onOuvrir={ouvrirLigne}
@@ -410,7 +451,7 @@ export default function PlanDessus({ refresh }) {
     // [US-333] « Modifier le plan » prend tout l'écran ; Gaston reste ouvrable pour les formes nouvelles.
     return (
       <div ref={racine} className="@container min-w-0">
-        <EditeurPlan plan={data} emprise={emprise} selectionInitiale={edition.parcelle}
+        <EditeurPlan plan={data} emprise={emprise} selectionInitiale={edition.parcelle} guide={edition.guide}
           annoncer={annoncer}
           onQuitter={fermerEditeur}
           onEnregistre={() => { fermerEditeur(); load(); setMessage('Plan enregistré.') }}
@@ -445,6 +486,9 @@ export default function PlanDessus({ refresh }) {
           </div>
         </div>
 
+        <EncartMiseEnPlace encart={encart} peutEditer={peutEditer} peutEcrire={peutEnregistrer(role)}
+          onOuvrir={() => ouvrirEditeur(null)} />
+
         <div ref={cadre} className="min-w-0">
           {etat.affichage === AFFICHAGE_LISTE ? (
             // [US-330 / CA4] La liste : toutes les parcelles, posées ou non — même sélection que le plan.
@@ -478,11 +522,6 @@ export default function PlanDessus({ refresh }) {
 
         {message && (
           <p role="status" className="rounded-[10px] border border-border bg-card px-3 py-2 text-[12.5px] text-txt2">{message}</p>
-        )}
-        {mode === MODE_ZONES && (
-          <p className="text-[12.5px] text-txt2">
-            Pour dessiner le vrai plan, donnez à chaque parcelle sa place sur le terrain : dites à Gaston « la planche nord est à 2 mètres du bord ».
-          </p>
         )}
         {!rose && mode === MODE_PLAN && (
           <p className="text-[12px] text-txt3">Le nord du potager n’est pas encore posé : la rose des vents s’affichera dès qu’il le sera.</p>

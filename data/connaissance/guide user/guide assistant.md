@@ -289,7 +289,7 @@ Le tableau de bord s'ouvre dans un simple navigateur, sur téléphone comme sur 
 
 > **⚠️ À COMPLÉTER** — indiquer ici l'adresse de votre installation et les modalités d'accès.
 
-Vous y créez votre compte (e-mail + mot de passe), vous validez le lien de vérification reçu par e-mail, puis vous créez votre premier potager. Le compagnon Telegram s'active ensuite depuis cet écran (chapitre 3).
+Vous y créez votre compte (e-mail + mot de passe), vous validez le lien de vérification reçu par e-mail, puis vous créez votre premier potager. Le compagnon Telegram s'active ensuite depuis cet écran (chapitre 3), puis l'assistant vous propose de mettre en place le plan de votre potager (section 5.3 bis).
 
 ### 4.2 L'installer sur votre iPhone
 
@@ -402,6 +402,16 @@ Le bot vous montre les parcelles existantes et demande confirmation avant de cr�
 - Les noms sont insensibles à la casse et aux accents.
 
 Les parcelles se créent aussi depuis l'application web, mais uniquement pendant l'assistant de création du potager. Ensuite, c'est ici, depuis le compagnon de terrain, que la vie des parcelles se gère.
+
+## 5.3 bis Mettre en place le plan du potager
+
+Le **Plan** de l'application web dessine votre potager vu du dessus, à l'échelle. Au départ, que le potager soit neuf ou déjà utilisé, **toutes vos parcelles sont « à placer »** : le Plan les montre en tuiles, dans l'ordre du chemin, avec un encart **« Mettre en place le plan · environ 5 minutes »**.
+
+1. À la fin de l'assistant de création du potager, choisissez **« Mettre en place le plan »** (ou **« Plus tard »** : l'encart vous attend dans le Plan).
+2. Sur ordinateur, l'éditeur s'ouvre et vous guide en quatre étapes, que vous pouvez passer : la **taille du potager** (proposée d'après les superficies que vous avez dites), l'**orientation du nord**, le **fond** (« Sans fond » pour l'instant), puis la **pose des parcelles** — une à une, ou toutes d'un coup à ajuster ensuite.
+3. Touchez **Enregistrer** : le plan ne change qu'à ce bouton.
+
+L'encart devient **« N parcelles à placer »** tant qu'il en reste, disparaît quand toutes sont posées, et revient si vous en retirez une du plan ou si vous en créez une depuis Telegram. Sur téléphone, il vous dit que la mise en place se fait **sur ordinateur**.
 
 ## 5.4 Ajuster une parcelle
 

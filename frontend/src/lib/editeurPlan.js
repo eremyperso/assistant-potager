@@ -17,6 +17,8 @@ export const PAS_AIMANT_M = 0.5
 /** Les dimensions et positions bornées (celles du serveur, `geometrie.py`). */
 export const COTE_MIN_M = 0.5
 export const COTE_MAX_M = 200
+/** L'emprise du potager : celle du serveur (`geometrie.py`, EMPRISE_MIN). */
+export const EMPRISE_MIN_M = 1
 export const POSITION_MAX_M = 2000
 /** [E1] En deçà de cet écart, une rotation se recolle sur l'angle du potager. */
 export const SEUIL_ALIGNEMENT_DEG = 5
@@ -270,6 +272,20 @@ export function orienter(etat, direction) {
   return modifier(etat, (b) => { b.potager.nord = direction; return b })
 }
 
+/** [US-334 / M4] L'emprise du potager (longueur × largeur, en mètres) : une proposition qu'on valide. */
+export function definirEmprise(etat, { longueur, largeur }) {
+  const L = nombre(longueur)
+  const l = nombre(largeur)
+  if (!L || !l || L < EMPRISE_MIN_M || l < EMPRISE_MIN_M || L > COTE_MAX_M * 10 || l > COTE_MAX_M * 10) return etat
+  return modifier(etat, (b) => { b.potager.emprise = { longueur: arrondi(L, 1), largeur: arrondi(l, 1) }; return b })
+}
+
+/** [US-334] L'emprise de l'éditeur si elle est posée, sinon celle de l'écran (déduite des parcelles). */
+export const empriseDe = (etat, repli) => {
+  const e = etat.potager.emprise
+  return e?.longueur && e?.largeur ? e : repli
+}
+
 export const directionDuNord = (etat) => DIRECTIONS.find((d) => d.id === etat.potager.nord) || null
 
 // ── Cotes, surface, rangs ────────────────────────────────────────────────────
@@ -319,7 +335,11 @@ export function erreurRangs(p) {
 }
 
 /** « Enregistrer » est possible quand quelque chose a changé et que rien n'est refusé. */
-export const erreurs = (etat) => etat.parcelles.map(erreurRangs).filter(Boolean)
+// Seule une parcelle dont le nombre de rangs a été CHANGÉ ici bloque : une fiche déjà incohérente
+// (12 rangs occupés pour 4 déclarés) n'empêche pas d'enregistrer le déplacement d'une autre.
+export const erreurs = (etat) => etat.parcelles
+  .filter((p) => p.nbRangs !== etat.origine.parcelles.find((q) => q.id === p.id)?.nbRangs)
+  .map(erreurRangs).filter(Boolean)
 
 // ── Enregistrer (E5, CA3) ────────────────────────────────────────────────────
 
@@ -355,6 +375,10 @@ export function chargeEnregistrement(etat) {
   const potager = {}
   if (etat.potager.nord !== etat.origine.potager.nord) potager.orientation_nord = etat.potager.nord
   if (etat.potager.angle !== etat.origine.potager.angle) potager.angle_deg = etat.potager.angle
+  const e = etat.potager.emprise || {}
+  const eo = etat.origine.potager.emprise || {}
+  if (e.longueur !== eo.longueur) potager.emprise_longueur_m = e.longueur
+  if (e.largeur !== eo.largeur) potager.emprise_largeur_m = e.largeur
   if (!parcelles.length && !Object.keys(potager).length) return null
   return { parcelles, ...(Object.keys(potager).length && { potager }) }
 }
@@ -364,7 +388,7 @@ export function resumeModifications(etat) {
   const charge = chargeEnregistrement(etat)
   if (!charge) return 'Aucune modification'
   const n = charge.parcelles.length
-  return `${n} parcelle${n > 1 ? 's' : ''} modifiée${n > 1 ? 's' : ''}${charge.potager ? ' · orientation' : ''}`
+  return `${n} parcelle${n > 1 ? 's' : ''} modifiée${n > 1 ? 's' : ''}${charge.potager ? ' · plan du potager' : ''}`
 }
 
 // ── Formes nouvelles et duplication (E3 → US-332) ────────────────────────────

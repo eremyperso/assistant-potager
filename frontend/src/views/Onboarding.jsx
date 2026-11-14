@@ -15,6 +15,7 @@ import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
 import { Field, VilleSearch, Badge, Tip, InfoBanner, Btn } from '../components/ui'
 import ActivationCompagnon from '../components/ActivationCompagnon.jsx'
+import ProposerMiseEnPlace from '../components/ProposerMiseEnPlace.jsx'  // [US-334]
 import LogoMark from '../components/brand/LogoMark.jsx'
 
 const STEPS = [
@@ -388,6 +389,8 @@ export default function Onboarding() {
   // [US-091 / CA1] Écran d'activation du compagnon Telegram, affiché une fois
   // le potager créé, avant de rejoindre le tableau de bord.
   const [activation, setActivation] = useState(false)
+  // [US-334 / M3, CA3] Dernière étape : mettre en place le plan maintenant ou plus tard — seulement si une parcelle existe.
+  const [propositionPlan, setPropositionPlan] = useState(false)
   // [CA2, CA3, CA4] État local le temps de l'assistant — aucun appel API avant
   // la validation finale du récapitulatif (CA5, CA6).
   const [st, setSt] = useState({
@@ -452,8 +455,14 @@ export default function Onboarding() {
   // un second potager via handleFinish). « Plus tard » comme une activation
   // réussie mènent tous deux au tableau de bord via le même rechargement complet
   // que l'ancien comportement de finaliserOnboarding.
+  if (propositionPlan) {
+    return (
+      <ProposerMiseEnPlace parcelles={[{ nom: st.pnom.trim(), surface: toFloat(st.surface) }]} />
+    )
+  }
   if (activation) {
-    return <ActivationCompagnon onSkip={() => window.location.reload()} />
+    // [US-334 / M3] Une parcelle a été créée : l'assistant se termine sur la proposition de mettre le plan en place.
+    return <ActivationCompagnon onSkip={() => (st.pnom.trim() ? setPropositionPlan(true) : window.location.reload())} />
   }
 
   return (
