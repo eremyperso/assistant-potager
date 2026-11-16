@@ -1,3 +1,30 @@
+## [v3.130.0] — 2026-11-16
+
+### 🚀 Nouveautés
+- Marque chaque appel au modèle de sa provenance (usage, mesure, test, fond) : les campagnes de `tools/` et le mode test n'apparaissent plus comme de l'usage de jardinier (US-306).
+- Relie les appels d'une même réponse par un identifiant d'échange, de la dictée à la voix, avec leur canal (Telegram, PWA, MCP, fond, outil), la version de l'application et l'unité comptée (jeton, seconde, caractère) (US-307).
+- Chiffre chaque appel en micro-euros d'après une grille tarifaire datée et sourcée (`data/tarifs/tarifs_llm.json`), figé à l'écriture et calculé au tarif public même au palier gratuit (US-309).
+- Ajoute `python tools/chiffrer_historique.py` pour rejouer le coût des lignes existantes d'après une grille donnée, en simulation par défaut (US-309).
+
+### 🔧 Améliorations techniques
+- Ajoute `llm/contexte_appel.py` : provenance, canal et échange voyagent par contexte, sans modifier la signature d'aucune fonction métier (US-306, US-307).
+- Ajoute `app/services/pilotage/` (lecture et validation de la grille, calcul exact sans flottant, rejeu de l'historique) (US-309).
+- Fait échouer `tools/audit_appels_llm.py` et un test quand un outil appelle un modèle sans fixer sa provenance ; une réponse simulée n'écrit plus de ligne hors d'une base de test (US-306).
+- Fait renvoyer `echange_ref` par `POST /compagnon/voix/transcrire` et le fait reprendre par `POST /compagnon/messages`, le résumé parlé et la lecture à voix haute (US-307).
+- Valide au démarrage `GROQ_MODEL`, `GROQ_WHISPER_MODEL` et chaque `GROQ_MODEL_<TYPE>` (espace, parenthèse, `#`, longueur, préfixe), au lieu de rogner la valeur en silence (US-308).
+- Réinitialise le contexte d'appel avant chaque test (`tests/conftest.py`) et ajoute la fiche `docs/domaines/pilotage-llm.md`.
+
+### 💾 Base de données
+- Ajoute la migration `migration_v73.sql` : colonne `conso_tokens.provenance` (les lignes existantes passent en `historique`) et son `rollback_v73.sql` (US-306).
+- Ajoute la migration `migration_v74.sql` : colonnes `echange_ref`, `canal`, `version_app`, `unite` sur `conso_tokens` (unité de l'existant rejouée d'après le type d'appel) et `echange_ref` sur `echanges_conversation`, avec `rollback_v74.sql` (US-307).
+- Ajoute la migration `migration_v75.sql` : colonnes `fournisseur`, `cout_micro_eur`, `tarif_version` sur `conso_tokens`, et son `rollback_v75.sql` (US-309).
+- Les migrations v73, v74 et v75 n'ont pas encore été jouées sur PostgreSQL.
+
+### ⚠️ Breaking changes
+- Un nom de modèle invalide dans `.env` (commentaire en fin de ligne, espace, préfixe inconnu) arrête désormais le démarrage du bot et de l'API : les commentaires vont sur une ligne à part (US-308).
+- Une grille tarifaire absente ou mal formée arrête aussi le démarrage (US-309).
+- La réponse de `POST /compagnon/voix/transcrire` gagne le champ `echange_ref` (US-307).
+
 ## [v3.129.0] — 2026-11-14
 
 ### 🚀 Nouveautés

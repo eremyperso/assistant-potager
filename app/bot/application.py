@@ -9,6 +9,7 @@ from database.db import current_potager_id
 from utils.tts import is_tts_enabled
 from app.services.context import default_context
 from app.services.compagnon.actions_menees import CANAL_TELEGRAM, canal_courant  # [US-261]
+from llm import contexte_appel  # [US-307]
 from app.services import menu_commandes as svc_menu_commandes
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services.compagnon import distribution as svc_distribution  # [US-267]
@@ -83,6 +84,8 @@ async def _arm_tenant_context(update: Update, context: ContextTypes.DEFAULT_TYPE
     current_potager_id.set(default_context().potager_id)
     # [US-261] Tout ce que ce message fera s'écrit dans les actions menées sous le canal Telegram.
     canal_courant.set(CANAL_TELEGRAM)
+    # [US-307 / CA3] Une Update (message texte ou vocal, commande, bouton) = un échange.
+    contexte_appel.ouvrir_echange()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

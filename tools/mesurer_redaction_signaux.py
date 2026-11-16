@@ -87,6 +87,10 @@ def _cas_groupe() -> tuple[str, tuple[SignalARediger, ...]]:
 
 
 def main() -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])

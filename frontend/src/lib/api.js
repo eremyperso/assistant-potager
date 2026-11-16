@@ -315,15 +315,17 @@ export const api = {
   // (agent, gestes, commandes), 'support' (la documentation de l'application, rien n'est écrit) ou
   // 'analyse' [US-273] (le bouton « Approfondir » : une synthèse en lecture seule, avec ses sources).
   // Un geste compris revient en CARTE, qui se confirme ici ; une commande se confirme dans Telegram.
+  // [US-307] `echangeRef` : l'échange ouvert par la dictée de cette phrase, pour que la dictée et la
+  // réponse partagent leurs lignes de consommation (omis pour une phrase tapée).
   // [US-323 / C4] `contexte` : ce que le jardinier a sous les yeux, en identifiants (parcelle_id,
   // culture, variete, rang) — absent pour tout le potager.
   // [US-324 / CA2] `raccourci` : une pastille de « Noter », traduite en geste par le serveur.
   // [US-328 / CA4] `placement` : une carte « À placer » posée sur un rang libre (le rang est dans
   // `contexte`) ; le serveur en fait une carte de plantation, sans modèle, à confirmer.
   // [US-332, US-333] `plan` : une demande née du plan (créer une forme posée, rendre inactive ou supprimer).
-  messageCompagnon:      (texte, mode = 'normal', contexte, raccourci, placement, plan) => post('/compagnon/messages', {
+  messageCompagnon:      (texte, mode = 'normal', contexte, raccourci, placement, plan, echangeRef) => post('/compagnon/messages', {
     texte, mode, ...(contexte && { contexte }), ...(raccourci && { raccourci }), ...(placement && { placement }),
-    ...(plan && { plan }),
+    ...(plan && { plan }), ...(echangeRef && { echange_ref: echangeRef }),
   }),
   // [US-333 / CA3] « Enregistrer » de l'éditeur du plan : tout en un seul appel, ou rien.
   enregistrerPlan:       (corps) => post('/plan/edition', corps),

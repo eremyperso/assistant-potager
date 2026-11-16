@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
-from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Iterator, Optional
@@ -49,15 +48,11 @@ NATURE_COMMANDE = "commande"
 STATUT_REUSSIE = "reussie"
 STATUT_ECHOUEE = "echouee"
 
-CANAL_TELEGRAM = "telegram"
-CANAL_PWA = "pwa"
-CANAL_MCP = "mcp"  # [US-290] un assistant IA externe, via le serveur MCP
-CANAL_INCONNU = "inconnu"
-
-#: Le canal du traitement en cours : posé par le point d'entrée (le bot pour Telegram,
-#: le middleware de l'API pour la PWA), lu par l'écriture qui retient l'action. Une
-#: `ContextVar`, comme le contexte de tenant : elle suit la tâche asyncio ou la requête.
-canal_courant: ContextVar[str] = ContextVar("canal_courant", default=CANAL_INCONNU)
+# [US-307] Le canal du traitement en cours vit désormais dans `llm/contexte_appel.py`, lu aussi
+# par la passerelle : ici, les mêmes noms et le même objet (`canal_courant`), rien à changer.
+from llm.contexte_appel import (  # noqa: E402,F401
+    CANAL_INCONNU, CANAL_MCP, CANAL_PWA, CANAL_TELEGRAM, canal_courant,
+)
 
 #: [CA3] Les actions transmises à l'agent à chaque phrase : les 5 dernières des 24 h…
 NB_DANS_LE_CONTEXTE = 5

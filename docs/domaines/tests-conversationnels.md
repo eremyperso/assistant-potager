@@ -26,6 +26,7 @@ aussi les handlers, les boutons inline, les états en attente et la base.
   d'où une commande du bot plutôt qu'un simple `DELETE`.
 * **Pas de journal JSON dédié** : l'instrumentation est la base elle-même — `echanges_conversation.outils`,
   `actions_menees`, `evenements`, `conso_tokens`.
+  [US-306] Le bot du mode test écrit la provenance `test` dans `conso_tokens` (`mode_test.actif()`), et `python -m tests_conv` la fixe aussi pour son propre processus : ces lignes sont exclues des vues de consommation par défaut.
 * **Verdict** : un passage réussit sans vérification bloquante en échec ; un scénario est `ÉCHEC` sous son
   `seuil`, `À SURVEILLER` entre le seuil et 100 %. Une puce `- ? …` est informative.
 * **Le juge LLM n'est pas branché** (phase 2). La puce `- juge: …` se parse et ressort « non évaluée ».

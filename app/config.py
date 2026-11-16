@@ -14,6 +14,19 @@ if not os.path.exists(_fichier_env):
     _fichier_env = os.path.join(RACINE_PROJET, _fichier_env)
 load_dotenv(_fichier_env, override=True)
 
+
+def _lire_version_app() -> Optional[str]:
+    """[US-307 / CA5] Contenu du fichier `VERSION`, lu UNE fois au démarrage ; `None` s'il
+    manque ou s'il est vide (la colonne `conso_tokens.version_app` est alors nulle)."""
+    try:
+        with open(os.path.join(RACINE_PROJET, "VERSION"), encoding="utf-8") as f:
+            return f.read().strip()[:40] or None
+    except OSError:
+        return None
+
+
+VERSION_APP: Optional[str] = _lire_version_app()
+
 GROQ_API_KEY       = os.environ["GROQ_API_KEY"]
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 DATABASE_URL       = os.environ["DATABASE_URL"]
@@ -134,22 +147,6 @@ GROQ_MODELE_PAR_TYPE["voix"] = os.environ.get(
 GROQ_MODELE_PAR_TYPE["oral"] = os.environ.get("GROQ_MODEL_ORAL", GROQ_MODELE_PAR_TYPE["agent"])
 
 
-def nettoyer_modele(brut: str) -> tuple[str, bool]:
-    """Un identifiant de modèle ne contient jamais d'espace : seul le premier mot est
-    retenu (`mistral/x   (voix : texte → MP3)` → `mistral/x`). Rend (modèle, rogné ?)."""
-    mots = (brut or "").split()
-    return (mots[0] if mots else brut), len(mots) > 1
-
-
-# Une explication laissée sur la ligne de la valeur dans le .env en ferait partie, et
-# ce texte serait envoyé au fournisseur comme nom de modèle. On la retire, signalée au démarrage.
-MODELES_ROGNES: dict[str, str] = {}
-for _type, _brut in list(GROQ_MODELE_PAR_TYPE.items()):
-    _propre, _rogne = nettoyer_modele(_brut)
-    GROQ_MODELE_PAR_TYPE[_type] = _propre
-    if _rogne:
-        MODELES_ROGNES[_type] = _brut
-
 # [US-300 / CA2] Voix du compagnon tant que le jardinier n'en a pas choisi (ou si la sienne
 # a été retirée par Mistral) : Marie, voix française de Voxtral 3.
 VOIX_PAR_DEFAUT = os.environ.get("VOIX_PAR_DEFAUT", "").strip() or "voice_592"
@@ -242,6 +239,86 @@ def lire_fournisseurs_compatibles(environ) -> tuple[dict[str, dict[str, str]], l
 
 
 FOURNISSEURS_COMPATIBLES, FOURNISSEURS_ECARTES = lire_fournisseurs_compatibles(os.environ)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-308] Un nom de modèle invalide est refusé au démarrage
+# -----------------------------------------------------------------------------
+# Le 10/11/2026, cinq appels `voix` ont échoué avec le modèle journalisé
+# `mistral/voxtral-mini-tts-3-0            (voix : texte → MP3)` : un commentaire en fin de
+# ligne du `.env` avait été lu comme partie de la valeur. Rogner la valeur en silence
+# cachait la faute ; on la refuse, en nommant la variable et en montrant la valeur lue.
+# ─────────────────────────────────────────────────────────────────────────────
+class ConfigurationInvalideError(RuntimeError):
+    """Une variable de configuration est invalide : le bot et l'API ne démarrent pas."""
+
+
+#: Longueur maximale d'un nom de modèle (la colonne `conso_tokens.modele` en admet 120).
+LONGUEUR_MODELE_MAX = 100
+_CARACTERES_MODELE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+/-]*$")
+
+
+def motif_modele_invalide(valeur: str, prefixes_connus) -> Optional[str]:
+    """Pourquoi `valeur` n'est pas un nom de modèle acceptable, ou `None` si elle l'est.
+
+    Refusés : un espace, une parenthèse, un `#` (le début d'un commentaire), tout autre
+    caractère hors `A-Z a-z 0-9 . _ : @ + - /`, une longueur au-delà de `LONGUEUR_MODELE_MAX`,
+    un préfixe `<x>/` qui n'est ni un espace de modèles Groq / Mistral connu ni un fournisseur
+    compatible déclaré. Un nom sans `/` n'a pas de préfixe : il est accepté."""
+    if not valeur:
+        return "valeur vide"
+    if len(valeur) > LONGUEUR_MODELE_MAX:
+        return f"{len(valeur)} caractères (maximum {LONGUEUR_MODELE_MAX})"
+    if re.search(r"\s", valeur):
+        return "contient un espace (un commentaire sur la ligne de la valeur ?)"
+    if "(" in valeur or ")" in valeur:
+        return "contient une parenthèse (un commentaire sur la ligne de la valeur ?)"
+    if "#" in valeur:
+        return "contient « # » (un commentaire sur la ligne de la valeur ?)"
+    if not _CARACTERES_MODELE.match(valeur):
+        return "contient un caractère interdit (permis : lettres, chiffres, . _ : @ + - /)"
+    prefixe, separateur, _ = valeur.partition("/")
+    if separateur and prefixe not in prefixes_connus:
+        return (f"préfixe « {prefixe}/ » inconnu (connus : {', '.join(sorted(prefixes_connus))} ; "
+                "un autre fournisseur se déclare par FOURNISSEURS_COMPATIBLES)")
+    return None
+
+
+def erreurs_modeles(variables: dict[str, str], prefixes_connus) -> list[str]:
+    """Une ligne par variable de modèle invalide : son nom, le motif et la valeur lue."""
+    erreurs = []
+    for nom, valeur in variables.items():
+        motif = motif_modele_invalide(valeur, prefixes_connus)
+        if motif:
+            erreurs.append(f'{nom} : {motif} — valeur lue : "{valeur}"')
+    return erreurs
+
+
+def variables_de_modele(environ) -> dict[str, str]:
+    """Les variables de modèle effectivement renseignées dans `environ`, valeur nettoyée de ses
+    blancs de bord : `GROQ_MODEL`, `GROQ_WHISPER_MODEL`, `GROQ_MODEL_<TYPE>` (dont la dictée et
+    la voix). Une variable vide vaut « non renseignée »."""
+    noms = ["GROQ_MODEL", "GROQ_WHISPER_MODEL"] + [f"GROQ_MODEL_{t.upper()}" for t in GROQ_MODELE_PAR_TYPE]
+    noms += sorted(n for n in environ if n.startswith("GROQ_MODEL_") and n not in noms)
+    lues = {n: (environ.get(n) or "").strip() for n in noms}
+    return {n: v for n, v in lues.items() if v}
+
+
+def controler_modeles(environ=None) -> None:
+    """[US-308 / CA1, CA2] Arrête le démarrage si une variable de modèle est invalide."""
+    prefixes = NOMS_FOURNISSEURS_RESERVES | frozenset(FOURNISSEURS_COMPATIBLES)
+    erreurs = erreurs_modeles(variables_de_modele(os.environ if environ is None else environ), prefixes)
+    if erreurs:
+        detail = "\n  ".join(erreurs)
+        raise ConfigurationInvalideError(
+            "Configuration invalide — nom de modèle refusé, le démarrage s'arrête :\n  "
+            f"{detail}\n"
+            f"(fichier lu : {os.path.basename(_fichier_env)} ; "
+            "un commentaire va sur une ligne à part, jamais en fin de ligne de valeur)"
+        )
+
+
+controler_modeles()
 
 
 def lire_catalogue_voix(brut: str) -> tuple[tuple[str, str, Optional[str]], ...]:
@@ -418,6 +495,11 @@ def etat_configuration() -> list[str]:
         alerte = f" ⚠️ « {brut} » non retenu → valeur par défaut" if invalide and brut is not None else ""
         lignes.append(f"   {nom:<30}: {retenu}  ({_origine(nom)}){alerte}")
 
+    def _ligne_modele(nom: str, modele: str, prefixes) -> None:
+        motif = motif_modele_invalide(modele, prefixes)
+        suite = f" ⚠️ INVALIDE : {motif}" if motif else " ✓ format valide"
+        lignes.append(f"   {nom:<30}: {modele}  ({_origine(nom)}){suite}")
+
     def _secret(nom: str, valeur) -> None:
         lignes.append(f"   {nom:<30}: {'défini' if valeur else 'absent'}")
 
@@ -437,11 +519,10 @@ def etat_configuration() -> list[str]:
     _ligne("ANALYSE_MAX_JETONS", ANALYSE_MAX_JETONS)
     _ligne("COMPAGNON_PROACTIF", "oui" if COMPAGNON_PROACTIF else "non")
 
+    # [US-308 / CA4] Les variables de modèle sont contrôlées au chargement ; ici, on le dit.
+    prefixes = NOMS_FOURNISSEURS_RESERVES | frozenset(FOURNISSEURS_COMPATIBLES)
     for type_appel, modele in GROQ_MODELE_PAR_TYPE.items():
-        _ligne(f"GROQ_MODEL_{type_appel.upper()}", modele)
-    for type_appel, brut in MODELES_ROGNES.items():
-        lignes.append(f"   {'GROQ_MODEL_' + type_appel.upper():<30}: ⚠️ « {brut} » rogné au premier "
-                      "mot (commentaire sur la ligne de la valeur ?)")
+        _ligne_modele(f"GROQ_MODEL_{type_appel.upper()}", modele, prefixes)
     if VOIX_CATALOGUE and VOIX_PAR_DEFAUT not in {v[0] for v in VOIX_CATALOGUE}:
         lignes.append(f"   {'VOIX_PAR_DEFAUT':<30}: ⚠️ « {VOIX_PAR_DEFAUT} » absente de VOIX_CATALOGUE")
     _ligne("VOIX_PAR_DEFAUT", VOIX_PAR_DEFAUT)
@@ -452,8 +533,8 @@ def etat_configuration() -> list[str]:
     _ligne("VOIX_ORAL_MAX_CARACTERES", VOIX_ORAL_MAX_CARACTERES)
     _ligne("VOIX_PLAFOND_LECTURES_JOUR", VOIX_PLAFOND_LECTURES_JOUR)
     _ligne("GROQ_BASE_URL", GROQ_BASE_URL or "adresse du SDK Groq")
-    _ligne("GROQ_MODEL", GROQ_MODEL)
-    _ligne("GROQ_WHISPER_MODEL", GROQ_WHISPER_MODEL)
+    _ligne_modele("GROQ_MODEL", GROQ_MODEL, prefixes)
+    _ligne_modele("GROQ_WHISPER_MODEL", GROQ_WHISPER_MODEL, prefixes)
     _ligne("GROQ_REASONING_EFFORT", GROQ_REASONING_EFFORT or "aucun")
     _ligne("MISTRAL_BASE_URL", MISTRAL_BASE_URL or "absente")
     if MISTRAL_API_KEY and not MISTRAL_BASE_URL:

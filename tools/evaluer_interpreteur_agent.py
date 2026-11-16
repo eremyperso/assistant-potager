@@ -369,6 +369,10 @@ def rediger_rapport(lignes: list[Ligne], modele: str) -> str:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
+    # [US-306 / CA4] Une campagne de mesure n'est pas de l'usage : ses lignes de
+    # `conso_tokens` portent la provenance « mesure ».
+    from llm import contexte_appel
+    contexte_appel.demarrer_outil()  # provenance « mesure », canal « outil », un échange pour l'exécution
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     parser.add_argument("--dry-run", action="store_true", help="compter les appels sans les faire")
     parser.add_argument("--detail", action="store_true", help="une ligne par phrase à l'écran")

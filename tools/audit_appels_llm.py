@@ -148,7 +148,80 @@ def auditer() -> list[tuple[str, int, str, str]]:
     return infractions
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-306 / CA4, CA7] Provenance des appels faits depuis `tools/`
+# -----------------------------------------------------------------------------
+# Un outil qui appelle un modèle écrit des lignes dans `conso_tokens`. Sans
+# provenance fixée, elles seraient comptées comme de l'usage de jardinier : c'est
+# toute la raison d'être de ce contrôle. « Appeler la passerelle » se lit dans les
+# imports de l'outil lui-même (la fermeture transitive des imports est trop large :
+# presque tout `tools/` atteint la passerelle sans jamais l'exécuter).
+# ─────────────────────────────────────────────────────────────────────────────
+MODULES_DU_MODELE = ("llm.passerelle", "llm.routeur", "llm.groq_client")
+
+#: Outils qui appellent un modèle sans importer ces modules (ils passent par un service).
+OUTILS_INDIRECTS = frozenset({"mesurer_corpus_savoir.py", "mesurer_redaction_signaux.py"})
+
+#: Hors contrôle : l'audit lui-même, et le banc du fournisseur nu qui ne passe pas par la
+#: passerelle (donc n'écrit aucune ligne dans `conso_tokens`).
+OUTILS_EXCLUS_PROVENANCE = frozenset({"audit_appels_llm.py", "mesurer_modeles_llm.py"})
+
+
+def _importe_le_modele(arbre: ast.AST) -> bool:
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.Import):
+            if any(a.name in MODULES_DU_MODELE for a in noeud.names):
+                return True
+        elif isinstance(noeud, ast.ImportFrom):
+            module = noeud.module or ""
+            if module in MODULES_DU_MODELE:
+                return True
+            if module == "llm" and any(f"llm.{a.name}" in MODULES_DU_MODELE for a in noeud.names):
+                return True
+    return False
+
+
+def _fixe_la_provenance(arbre: ast.AST) -> bool:
+    """Vrai si le fichier appelle `fixer_provenance(...)`, `demarrer_outil()` ou ouvre `provenance(...)`."""
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, ast.Call):
+            chaine = _chaine_attributs(noeud.func)
+            if chaine and chaine[-1] in {"fixer_provenance", "provenance", "demarrer_outil"}:
+                return True
+    return False
+
+
+def outils_appelant_un_modele() -> list[str]:
+    """Noms des fichiers de `tools/` qui ont un point d'entrée (`__main__`) et appellent
+    un modèle : import direct de la passerelle ou du routeur, ou liste `OUTILS_INDIRECTS`."""
+    trouves = []
+    for chemin in sorted((RACINE / "tools").glob("*.py")):
+        if chemin.name in OUTILS_EXCLUS_PROVENANCE:
+            continue
+        source = chemin.read_text(encoding="utf-8-sig")
+        if "__main__" not in source:
+            continue
+        arbre = ast.parse(source)
+        if chemin.name in OUTILS_INDIRECTS or _importe_le_modele(arbre):
+            trouves.append(chemin.name)
+    return trouves
+
+
+def outils_sans_provenance() -> list[str]:
+    """[US-306 / CA7] Outils qui appellent un modèle sans avoir fixé la provenance."""
+    return [
+        nom for nom in outils_appelant_un_modele()
+        if not _fixe_la_provenance(ast.parse((RACINE / "tools" / nom).read_text(encoding="utf-8-sig")))
+    ]
+
+
 def main() -> int:
+    sans_provenance = outils_sans_provenance()
+    if sans_provenance:
+        print(f"❌ [US-306 / CA7] {len(sans_provenance)} outil(s) appellent un modèle sans fixer la provenance :")
+        for nom in sans_provenance:
+            print(f"  tools/{nom} — appeler contexte_appel.fixer_provenance(PROVENANCE_MESURE) dans main()")
+        return 1
     infractions = auditer()
     if not infractions:
         print("✅ [US-092 / CA1] Aucun appel direct au fournisseur de modèles "

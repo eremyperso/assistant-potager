@@ -273,20 +273,20 @@ class TestAdressesEnConfiguration:
 
 
 class TestValeursMalFormees:
-    def test_commentaire_colle_a_la_valeur_rogne(self):
-        assert config.nettoyer_modele("mistral/voxtral-mini-tts-3-0            (voix : texte → MP3)") \
-            == ("mistral/voxtral-mini-tts-3-0", True)
-        assert config.nettoyer_modele(" oai/gpt-4o-mini-tts ") == ("oai/gpt-4o-mini-tts", False)
+    def test_commentaire_colle_a_la_valeur_refuse(self):
+        """[US-308] Le commentaire collé n'est plus rogné en silence : la valeur est REFUSÉE
+        (voir tests/test_us308_refus_modele_invalide.py)."""
+        assert config.motif_modele_invalide(
+            "mistral/voxtral-mini-tts-3-0            (voix : texte → MP3)", {"mistral"})
+        assert config.motif_modele_invalide("oai/gpt-4o-mini-tts", {"oai"}) is None
 
     def test_aucun_modele_retenu_ne_contient_d_espace(self):
         assert all(" " not in m for m in config.GROQ_MODELE_PAR_TYPE.values())
 
-    def test_demarrage_signale_le_rognage_et_la_voix_hors_catalogue(self):
-        with patch.object(config, "MODELES_ROGNES", {"voix": "mistral/x   (voix)"}), \
-             patch.object(config, "VOIX_CATALOGUE", (("nova", "Nova", None),)), \
+    def test_demarrage_signale_la_voix_hors_catalogue(self):
+        with patch.object(config, "VOIX_CATALOGUE", (("nova", "Nova", None),)), \
              patch.object(config, "VOIX_PAR_DEFAUT", "voice_592"):
             lignes = "\n".join(config.etat_configuration())
-        assert "rogné au premier mot" in lignes
         assert "« voice_592 » absente de VOIX_CATALOGUE" in lignes
 
     def test_env_example_sans_commentaire_sur_une_ligne_de_valeur(self):

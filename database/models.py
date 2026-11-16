@@ -1059,6 +1059,20 @@ class ConsoTokens(Base):
     - issue        : ok | quota | delai | erreur
     - user_id      : [CA2] auteur de l'appel, en complément du potager — ajout au
                      cadrage initial, nullable (appels de fond sans utilisateur)
+    - provenance   : [US-306] usage | mesure | test | fond | historique — d'où vient
+                     l'appel ; `historique` = lignes d'avant la colonne (jamais reclassées)
+    - echange_ref  : [US-307] identifiant de l'échange (la réponse) auquel l'appel a servi ;
+                     partagé par la dictée, l'agent, le résumé parlé et la voix d'une même
+                     réponse. Nul pour les lignes d'avant la colonne. Sans clé étrangère.
+    - canal        : [US-307] telegram | pwa | mcp | fond | outil | inconnu
+    - version_app  : [US-307] contenu du fichier VERSION au démarrage du processus
+    - unite        : [US-307] ce que `tokens_in` / `tokens_out` comptent : jeton | seconde
+                     | caractere — fixée par la passerelle d'après le type d'appel
+    - fournisseur  : [US-309] qui a servi l'appel (groq | mistral | fournisseur compatible)
+    - cout_micro_eur : [US-309] coût estimé en micro-euros ENTIERS, figé à l'écriture au tarif
+                     public de la grille `tarif_version` (même au palier gratuit). NULL = non
+                     chiffrable (modèle absent de la grille) ; jamais un coût inventé.
+    - tarif_version : [US-309] version de `data/tarifs/tarifs_llm.json` utilisée pour le calcul
     """
     __tablename__ = "conso_tokens"
 
@@ -1073,12 +1087,28 @@ class ConsoTokens(Base):
     tokens_cache = Column(Integer, nullable=False, default=0)
     latence_ms   = Column(Integer, nullable=False, default=0)
     issue        = Column(String(16), nullable=False, default="ok")
+    provenance   = Column(String(12), nullable=False, server_default="historique")  # [US-306]
+    echange_ref  = Column(String(40), nullable=True, index=True)                     # [US-307]
+    canal        = Column(String(12), nullable=False, server_default="inconnu")      # [US-307]
+    version_app  = Column(String(40), nullable=True)                                 # [US-307]
+    unite        = Column(String(10), nullable=False, server_default="jeton")        # [US-307]
+    fournisseur  = Column(String(40), nullable=True)                                 # [US-309]
+    cout_micro_eur = Column(BigInteger, nullable=True)                               # [US-309]
+    tarif_version = Column(String(40), nullable=True)                                # [US-309]
     cree_le      = Column(DateTime, server_default=func.now())
 
     __table_args__ = (
         # Agrégation type « consommation du potager X sur le mois » — c'est la
         # requête que l'US de quotas exécutera à chaque appel.
         Index("idx_conso_tokens_potager_date", "potager_id", "date"),
+        CheckConstraint("provenance IN ('usage', 'mesure', 'test', 'fond', 'historique')",
+                        name="ck_conso_tokens_provenance"),  # [US-306]
+        CheckConstraint("canal IN ('telegram', 'pwa', 'mcp', 'fond', 'outil', 'inconnu')",
+                        name="ck_conso_tokens_canal"),  # [US-307]
+        CheckConstraint("unite IN ('jeton', 'seconde', 'caractere')",
+                        name="ck_conso_tokens_unite"),  # [US-307]
+        CheckConstraint("cout_micro_eur IS NULL OR cout_micro_eur >= 0",
+                        name="ck_conso_tokens_cout_positif"),  # [US-309]
     )
 
 
@@ -1528,6 +1558,9 @@ class EchangeConversation(Base):
     #: {"niveau", "parcelle_id", "parcelle", "culture", "variete", "rang"} ; NULL sans contexte
     #: (Telegram, conversation libre). Sert à mesurer l'effet du contexte (migration_v77).
     contexte        = Column(JSON(none_as_null=True), nullable=True)
+    #: [US-307 / CA7] L'échange (au sens de la mesure) que cette réponse a produit : retrouve ses
+    #: lignes de `conso_tokens`. Sans clé étrangère (migration_v74).
+    echange_ref     = Column(String(40), nullable=True, index=True)
     cree_le         = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (

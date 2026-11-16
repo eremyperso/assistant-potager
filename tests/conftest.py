@@ -13,6 +13,23 @@ from database.db import Base
 
 
 @pytest.fixture(autouse=True)
+def _contexte_d_appel_propre():
+    """[US-306, US-307] Provenance, échange, canal et simulation sont des `ContextVar` : un test qui
+    appelle `main()` d'un outil, ou arme le canal d'une Update, les laisserait posés pour tous les
+    suivants. Chaque test repart d'un contexte vierge."""
+    from llm import contexte_appel as c
+    variables = [(c._provenance, None), (c._echange_ref, None), (c.canal_courant, c.CANAL_INCONNU),
+                 (c._modele_simule, False)]
+    jetons = [(variable, variable.set(defaut)) for variable, defaut in variables]
+    yield
+    for variable, jeton in reversed(jetons):
+        try:
+            variable.reset(jeton)
+        except ValueError:       # jeton créé dans un autre contexte (test asynchrone)
+            variable.set(dict(variables)[variable])
+
+
+@pytest.fixture(autouse=True)
 def _sans_accueil_du_compagnon(monkeypatch):
     """[US-258] L'accueil du premier échange (message de plus) a ses propres tests ;
     les autres tests de l'agent lisent LA réponse, pas l'accueil qui la suit."""

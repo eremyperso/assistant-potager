@@ -366,7 +366,7 @@ export default function PanneauCompagnon({
     return () => window.removeEventListener('keydown', surTouche)
   }, [onFermer])
 
-  const envoyer = useCallback(async (brut, modeForce, dictee = false, raccourciForce = null, carteAPlacer = null, demandeDuPlan = null) => {
+  const envoyer = useCallback(async (brut, modeForce, dictee = false, raccourciForce = null, carteAPlacer = null, demandeDuPlan = null, echangeRef = null) => {
     const phrase = (brut ?? texte).trim()
     if (!peutEnvoyer(phrase, occupe)) return
     // [US-324 / CA2] La pastille touchée, ou celle qui attend sa quantité (« Récolte » → « 800 g »).
@@ -387,7 +387,7 @@ export default function PanneauCompagnon({
       // [US-323 / C4] Le contexte d'écran part avec la phrase, en identifiants (sans barre : aucun).
       const reponse = await api.messageCompagnon(
         phrase, modeForce ?? mode, barreContexte ? contexteAEnvoyer(contexte) : undefined, raccourci || undefined,
-        carteAPlacer || undefined, demandeDuPlan || undefined,
+        carteAPlacer || undefined, demandeDuPlan || undefined, echangeRef || undefined,
       )
       setFil((f) => ajouterEchange(remplacerLesAnciennes(f, reponse.propositions), phrase, reponse, cleJ))
       // [US-304 / CA2, CA3] Une phrase DICTÉE, lecture automatique active : la réponse est lue
@@ -422,7 +422,7 @@ export default function PanneauCompagnon({
   const dictee = useDictee({
     actif: modeVocal,
     dureeMaxS,
-    onTexte: (phrase) => envoyer(phrase, undefined, true),
+    onTexte: (phrase, echangeRef) => envoyer(phrase, undefined, true, null, null, null, echangeRef),
   })
   const micro = affichageMicro(dictee.etat, { modeVocal, occupe })
   // [US-304 / CA2, CA5] Le tap sur 🎤 arrête d'abord la lecture en cours (dans `useDictee`), puis

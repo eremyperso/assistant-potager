@@ -1,0 +1,78 @@
+{
+  "version": "2026-11",
+  "devise_reference": "EUR",
+  "palier_gratuit": "Le coût est calculé AU TARIF PUBLIC, même quand l'appel est servi par un palier gratuit (Groq, Mistral…). Ce qui compte pour fixer un prix d'abonnement est le coût à l'échelle, pas la facture de la phase de développement (décision D6, US-309).",
+  "lecture": "Prix par million de jetons (prix_entree_par_million, prix_sortie_par_million, prix_cache_par_million), par minute ou par heure d'audio (prix_par_minute, prix_par_heure) ou par million de caractères (prix_par_million_caracteres), dans la devise de l'entrée. Les jetons en cache sont comptés à prix_cache_par_million et retirés des jetons d'entrée au plein tarif ; sans prix de cache publié (null), ils sont comptés au prix d'entrée (borne haute, jamais un rabais inventé). Aucun prix n'est écrit de mémoire : chaque entrée porte sa source et sa date de relevé.",
+  "taux_change": {
+    "USD": {
+      "pour_1_eur": "1.1127",
+      "date_releve": "2026-11-11",
+      "source": "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml",
+      "note": "Taux de référence de la BCE, fixe pour toute la version de la grille. Aucun appel à un service de change."
+    }
+  },
+  "fournisseurs": {
+    "groq": {
+      "modeles": {
+        "openai/gpt-oss-120b": {
+          "unite": "jeton",
+          "devise": "USD",
+          "prix_entree_par_million": "0.15",
+          "prix_sortie_par_million": "0.60",
+          "prix_cache_par_million": null,
+          "date_releve": "2026-11-12",
+          "source": "https://console.groq.com/docs/models",
+          "note": "Section « Production Models », colonne « PRICE PER 1M TOKENS » : $0.15 input / $0.60 output. Prix du cache non publié sur la page."
+        },
+        "whisper-large-v3-turbo": {
+          "unite": "seconde",
+          "devise": "USD",
+          "prix_par_heure": "0.04",
+          "date_releve": "2026-11-12",
+          "source": "https://console.groq.com/docs/models",
+          "note": "Section « Production Models » : $0.04 per hour. Le type d'appel « transcription » ne journalise pas encore la durée (0 seconde) : ses lignes n'ont donc pas de coût chiffré."
+        }
+      }
+    },
+    "mistral": {
+      "modeles": {
+        "ministral-8b-latest": {
+          "unite": "jeton",
+          "devise": "USD",
+          "prix_entree_par_million": "0.15",
+          "prix_sortie_par_million": "0.15",
+          "prix_cache_par_million": "0.015",
+          "date_releve": "2026-11-12",
+          "source": "https://docs.mistral.ai/inference/pricing",
+          "note": "Ligne « Ministral 3 8B » de la page. L'identifiant « ministral-8b-latest » n'y figure pas : la correspondance est celle de l'alias « latest » (à reconfirmer à chaque relevé)."
+        },
+        "mistral-small-2603": {
+          "unite": "jeton",
+          "devise": "USD",
+          "prix_entree_par_million": "0.15",
+          "prix_sortie_par_million": "0.6",
+          "prix_cache_par_million": "0.015",
+          "date_releve": "2026-11-12",
+          "source": "https://docs.mistral.ai/inference/pricing",
+          "note": "Ligne « Mistral Small 4 » de la page (version 26.03 d'après la page Models Overview)."
+        },
+        "voxtral-mini-transcribe-3-0": {
+          "unite": "seconde",
+          "devise": "USD",
+          "prix_par_minute": "0.0035",
+          "date_releve": "2026-11-12",
+          "source": "https://docs.mistral.ai/inference/pricing",
+          "note": "Ligne « Voxtral Mini Transcribe 3 » : $0.0035 /Min."
+        },
+        "voxtral-mini-tts-3-0": {
+          "unite": "caractere",
+          "devise": "USD",
+          "prix_par_million_caracteres": "13",
+          "date_releve": "2026-11-12",
+          "source": "https://docs.mistral.ai/inference/pricing",
+          "note": "Ligne « Voxtral TTS 3 » : $13 /M Chars."
+        }
+      }
+    }
+  }
+}

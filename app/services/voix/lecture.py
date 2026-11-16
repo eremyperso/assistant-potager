@@ -28,6 +28,7 @@ from app.services.context import TenantContext
 from app.services.voix import oral, preferences
 from app.services.voix.synthese import synthetiser
 from database.models import ConsoTokens
+from llm import contexte_appel
 from llm.passerelle import ISSUE_OK, TYPE_VOIX
 
 log = logging.getLogger("potager")
@@ -87,8 +88,11 @@ def lire_echange(db: Session, ctx: TenantContext, echange_id: int) -> bytes:
     reglages = preferences.lire(db, ctx)
     if not reglages.mode_vocal:
         raise ModeVocalEteintError(MESSAGE_MODE_VOCAL_ETEINT)
-    if svc_conversations.lire(ctx, echange_id) is None:
+    echange = svc_conversations.lire(ctx, echange_id)
+    if echange is None:
         raise EchangeIntrouvableError(MESSAGE_ECHANGE_INTROUVABLE)
+    # [US-307 / CA3] La synthèse vocale est demandée après la réponse : même échange.
+    contexte_appel.reprendre_echange(echange.echange_ref)
     if lectures_du_jour(db, ctx) >= config.VOIX_PLAFOND_LECTURES_JOUR:
         log.info("🔊 VOIX │ plafond de lectures atteint │ user=%s │ %d/jour",
                  ctx.user_id, config.VOIX_PLAFOND_LECTURES_JOUR)

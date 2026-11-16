@@ -106,6 +106,10 @@ def _lancer(args) -> int:
 
 
 def main(argv=None) -> int:
+    # [US-306 / CA5] Tout appel au modèle fait depuis ce processus est un appel de test. Le bot
+    # joué sur Telegram est un autre processus : il écrit « test » dès que `mode_test.actif()`.
+    from llm import contexte_appel
+    contexte_appel.fixer_provenance(contexte_appel.PROVENANCE_TEST)
     for flux in (sys.stdout, sys.stderr):  # console Windows en cp1252 : les ✔ et les accents passent
         if hasattr(flux, "reconfigure"):
             flux.reconfigure(encoding="utf-8")
