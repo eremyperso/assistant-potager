@@ -1,5 +1,8 @@
 # ÉPIC 19 — Plan du potager sur vue du dessus : décomposition par US
 
+> **Document périmé (état du 13/11/2026).** US-330 à US-334 sont depuis livrées et commitées, et le code est
+> dans `dev`. Le suivi à jour est dans le dossier [`EPIC 19 - PLAN VUE DU DESSUS/`](<EPIC 19 - PLAN VUE DU DESSUS/README.md>).
+
 *État au 13/11/2026. Maquette de référence : `Plan - Pistes.html` (Claude Design, hors `compat.json`).
 Numéro d'épic à valider.*
 

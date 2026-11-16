@@ -431,6 +431,10 @@ def _detacher_position_rang(mots: list[str]) -> tuple[list[str], Optional[int]]:
             if debut >= 1 and mots[debut] == "le" and mots[debut - 1] in _PREFIXES_POSITION_RANG:
                 debut -= 1
             return mots[:debut] + mots[i + 1:], position
+        elif i + 1 < len(mots) and (_valeur_rang(mots[i + 1]) is not None or mots[i + 1] in _MOTS_NUMERO):
+            # « sur la planche courges rang 1 » : « rang » SUIVI de son numéro, sans préposition, est une
+            # position (le multiplicateur s'écrit « 1 rang » : le nombre précède, et « rangs » au pluriel).
+            pass
         else:
             continue
         fin = i + 1

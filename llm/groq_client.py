@@ -256,7 +256,7 @@ Champs à extraire :
   "unite"            : string,   // kg | g | l | plants | graines | pieds | m² | poquets | ml
   "parcelle"         : string,   // localisation (nord, sud, carré sud, serre...)
   "rang"             : number,   // NOMBRE de rangs (pas un identifiant). "3 rangs" → 3
-  "rang_position"    : number,   // POSITION du rang, seulement si dite : "au rang 3", "dans le 3e rang" → 3 (et rang=null). Absent sinon
+  "rang_position"    : number,   // POSITION du rang, seulement si dite : "au rang 3", "dans le 3e rang", "planche nord rang 3" → 3 (et rang=null). Absent sinon
   "duree_minutes"    : number,   // durée en minutes
   "traitement"       : string,   // produit utilisé (purin d ortie, compost...)
   "date"             : string,   // date ISO si mentionnée : "hier"→{yesterday}, "aujourd'hui"→{today_iso}, "avant-hier"→{day_before}

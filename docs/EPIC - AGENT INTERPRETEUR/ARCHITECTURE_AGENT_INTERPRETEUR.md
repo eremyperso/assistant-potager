@@ -29,6 +29,13 @@
 > rend compte de ce qui a été fait et pose de vraies questions quand il doute.
 > Les garanties d'écriture (§2.2, §3.5, §3.7) sont **conservées à l'identique**.
 > Les sections que le §12 remplace portent un renvoi.
+>
+> **⚠️ Révision proposée le 14/11/2026, à valider** :
+> [ARCHITECTURE_COMPAGNON_CAPACITES.md](ARCHITECTURE_COMPAGNON_CAPACITES.md). La mesure du 14/11
+> ([RAPPORT_MESURE_1411_QUATRE_CONFIGURATIONS.md](RAPPORT_MESURE_1411_QUATRE_CONFIGURATIONS.md)) montre que le
+> cadre de départ (traduire une phrase en commandes existantes, catalogue projeté, mémoire sans résultats de
+> lecture) est la cause des réponses à côté, quel que soit le modèle. La sécurité de l'écriture (§2.2, §3.5, §3.7)
+> et l'évaluation sur le vrai modèle (§12.10) restent la référence.
 
 ---
 

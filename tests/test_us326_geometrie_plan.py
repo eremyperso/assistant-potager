@@ -379,6 +379,8 @@ def test_us326_ca5_parseur_lit_au_rang_3_comme_une_position(test_db):
     ("planté 8 tomates dans le rang 2 de la planche centrale", 2),
     ("planté 8 tomates au troisième rang de la planche centrale", 3),
     ("planté 8 tomates au 4e rang de la planche centrale", 4),
+    ("planté 8 tomates de la planche centrale rang 5", 5),            # sans préposition : « rang » suivi du numéro
+    ("planter 8 tomates sur la planche centrale rang numero 2", 2),
 ])
 def test_us326_ca5_parseur_tournures_de_position(test_db, phrase, position):
     test_db.add(Parcelle(id=10, nom="planche centrale", nom_normalise="planchecentrale",
