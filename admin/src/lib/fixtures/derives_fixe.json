@@ -1,0 +1,314 @@
+{
+  "derives": {
+    "courbe": {
+      "appel_type": "agent",
+      "appels": [
+        0,
+        9,
+        8,
+        9,
+        8,
+        7,
+        7
+      ],
+      "points": [
+        "2026-11-04",
+        "2026-11-05",
+        "2026-11-06",
+        "2026-11-07",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10"
+      ],
+      "reperes": [
+        {
+          "date": "2026-11-05",
+          "version": "3.127.0"
+        },
+        {
+          "date": "2026-11-08",
+          "version": "3.128.0"
+        }
+      ],
+      "valeurs": [
+        null,
+        6000.0,
+        6000.0,
+        6000.0,
+        8900.0,
+        8900.0,
+        8900.0
+      ]
+    },
+    "par_version_et_canal": [
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "mcp",
+        "cout_par_echange_mediane_micro_eur": 0.0,
+        "echanges": 1,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 0.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 2.0,
+        "appels_par_echange_p95": 2.0,
+        "canal": "pwa",
+        "cout_par_echange_mediane_micro_eur": 9000.0,
+        "echanges": 13,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 17800.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "telegram",
+        "cout_par_echange_mediane_micro_eur": 100.0,
+        "echanges": 2,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 400.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "pwa",
+        "cout_par_echange_mediane_micro_eur": 3000.0,
+        "echanges": 25,
+        "echantillon_faible": false,
+        "entree_par_echange_mediane": 6000.0,
+        "version": "3.127.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "telegram",
+        "cout_par_echange_mediane_micro_eur": 0.0,
+        "echanges": 2,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 0.0,
+        "version": null
+      }
+    ],
+    "par_version_et_type": [
+      {
+        "appel_type": "agent",
+        "appels": 22,
+        "echantillon_faible": false,
+        "entree_mediane": 8900.0,
+        "entree_p95": 8900.0,
+        "sortie_mediane": 120.0,
+        "taux_cache": 0.449438202247191,
+        "version": "3.128.0"
+      },
+      {
+        "appel_type": "question",
+        "appels": 2,
+        "echantillon_faible": true,
+        "entree_mediane": 400.0,
+        "entree_p95": 500.0,
+        "sortie_mediane": 40.0,
+        "taux_cache": 0.0,
+        "version": "3.128.0"
+      },
+      {
+        "appel_type": "agent",
+        "appels": 25,
+        "echantillon_faible": false,
+        "entree_mediane": 6000.0,
+        "entree_p95": 6000.0,
+        "sortie_mediane": 100.0,
+        "taux_cache": 0.5,
+        "version": "3.127.0"
+      },
+      {
+        "appel_type": "agent",
+        "appels": 1,
+        "echantillon_faible": true,
+        "entree_mediane": 1500.0,
+        "entree_p95": 1500.0,
+        "sortie_mediane": 80.0,
+        "taux_cache": 0.0,
+        "version": null
+      }
+    ],
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "seuil_ecart": 0.2,
+    "seuil_echantillon": 20,
+    "versions": [
+      "3.128.0",
+      "3.127.0",
+      null
+    ]
+  },
+  "derives_question": {
+    "courbe": {
+      "appel_type": "question",
+      "appels": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2
+      ],
+      "points": [
+        "2026-11-04",
+        "2026-11-05",
+        "2026-11-06",
+        "2026-11-07",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10"
+      ],
+      "reperes": [
+        {
+          "date": "2026-11-05",
+          "version": "3.127.0"
+        },
+        {
+          "date": "2026-11-08",
+          "version": "3.128.0"
+        }
+      ],
+      "valeurs": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        400.0
+      ]
+    },
+    "par_version_et_canal": [
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "mcp",
+        "cout_par_echange_mediane_micro_eur": 0.0,
+        "echanges": 1,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 0.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 2.0,
+        "appels_par_echange_p95": 2.0,
+        "canal": "pwa",
+        "cout_par_echange_mediane_micro_eur": 9000.0,
+        "echanges": 13,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 17800.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "telegram",
+        "cout_par_echange_mediane_micro_eur": 100.0,
+        "echanges": 2,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 400.0,
+        "version": "3.128.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "pwa",
+        "cout_par_echange_mediane_micro_eur": 3000.0,
+        "echanges": 25,
+        "echantillon_faible": false,
+        "entree_par_echange_mediane": 6000.0,
+        "version": "3.127.0"
+      },
+      {
+        "appels_par_echange_mediane": 1.0,
+        "appels_par_echange_p95": 1.0,
+        "canal": "telegram",
+        "cout_par_echange_mediane_micro_eur": 0.0,
+        "echanges": 2,
+        "echantillon_faible": true,
+        "entree_par_echange_mediane": 0.0,
+        "version": null
+      }
+    ],
+    "par_version_et_type": [
+      {
+        "appel_type": "agent",
+        "appels": 22,
+        "echantillon_faible": false,
+        "entree_mediane": 8900.0,
+        "entree_p95": 8900.0,
+        "sortie_mediane": 120.0,
+        "taux_cache": 0.449438202247191,
+        "version": "3.128.0"
+      },
+      {
+        "appel_type": "question",
+        "appels": 2,
+        "echantillon_faible": true,
+        "entree_mediane": 400.0,
+        "entree_p95": 500.0,
+        "sortie_mediane": 40.0,
+        "taux_cache": 0.0,
+        "version": "3.128.0"
+      },
+      {
+        "appel_type": "agent",
+        "appels": 25,
+        "echantillon_faible": false,
+        "entree_mediane": 6000.0,
+        "entree_p95": 6000.0,
+        "sortie_mediane": 100.0,
+        "taux_cache": 0.5,
+        "version": "3.127.0"
+      },
+      {
+        "appel_type": "agent",
+        "appels": 1,
+        "echantillon_faible": true,
+        "entree_mediane": 1500.0,
+        "entree_p95": 1500.0,
+        "sortie_mediane": 80.0,
+        "taux_cache": 0.0,
+        "version": null
+      }
+    ],
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "seuil_ecart": 0.2,
+    "seuil_echantillon": 20,
+    "versions": [
+      "3.128.0",
+      "3.127.0",
+      null
+    ]
+  }
+}

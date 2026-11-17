@@ -41,9 +41,13 @@ function etiquettes(modele) {
  * - Une pile par pas ; un pas sans appel est un « 0 » posé sur l'axe (pas de trou).
  * - La légende, au-dessus, isole une série : un second clic la rend aux autres.
  * - `modele.mode === 'ventile'` : la part servie par le cache est une ligne en pointillé.
+ * - `modele.mode === 'empile'` : une pile par série, sans ligne de cache (issues, versions…) ; la légende
+ *   garde la part de chaque série comme en mode ventilé.
+ * - `formatValeur` / `formatAxe` : l'unité de la mesure (euros, millisecondes…), jetons par défaut ;
+ *   `reperes` : [{ index, libelle }], un trait vertical au début du pas (première apparition d'une version).
  * Écrit à la main (pas de bibliothèque) : maquette respectée au pixel, application légère.
  */
-export default function Graphique({ modele, titre }) {
+export default function Graphique({ modele, titre, formatValeur = entier, formatAxe = abrege, reperes = [] }) {
   const [ref, w] = useLargeur()
   const [isolee, setIsolee] = useState(null)
   const visibles = modele.series.filter((s) => !isolee || s.cle === isolee)
@@ -54,9 +58,10 @@ export default function Graphique({ modele, titre }) {
   const pile = modele.points.map((_, i) => visibles.reduce((a, s) => a + (s.valeurs[i] || 0), 0))
   const maximum = Math.max(0, ...pile, ...(modele.mode === 'ventile' && !isolee ? modele.cache : []))
   const ech = echelle(maximum)
-  const cw = (w - MARGE.gauche - MARGE.droite) / n
+  const marge = { ...MARGE, gauche: formatAxe === abrege ? MARGE.gauche : 62 }
+  const cw = (w - marge.gauche - MARGE.droite) / n
   const bw = Math.min(cw * 0.62, 48)
-  const y = (v) => MARGE.haut + (H - MARGE.haut - MARGE.bas) * (1 - v / ech.max)
+  const y = (v) => marge.haut + (H - marge.haut - marge.bas) * (1 - v / ech.max)
   const libelles = etiquettes(modele)
   const avecValeurs = w >= 420 && !horaire && n <= 14
 
@@ -70,7 +75,7 @@ export default function Graphique({ modele, titre }) {
               <button type="button" aria-pressed={isolee === s.cle} onClick={() => setIsolee(isolee === s.cle ? null : s.cle)}
                 className={`inline-flex items-center gap-1.5 rounded px-0.5 ${actif ? '' : 'opacity-45 line-through'}`}>
                 <i className="inline-block h-3 w-3 rounded-[3px]" style={{ background: couleurDe(s, i) }} aria-hidden="true" />
-                {modele.mode === 'ventile'
+                {modele.mode === 'ventile' || modele.mode === 'empile'
                   ? <><b className="font-semibold text-txt">{s.libelle}</b> {s.part === null || s.part === undefined ? '' : pourcent(s.part, s.part < 0.01 ? 1 : 0)}</>
                   : s.libelle}
               </button>
@@ -89,12 +94,12 @@ export default function Graphique({ modele, titre }) {
         <svg viewBox={`0 0 ${w} ${H}`} role="img" aria-label={titre} className="block h-auto w-full">
           {ech.graduations.map((g) => (
             <g key={g}>
-              <line x1={MARGE.gauche} x2={w - MARGE.droite} y1={y(g)} y2={y(g)} stroke="var(--border)" strokeDasharray={g ? '2 3' : undefined} />
-              <text x={MARGE.gauche - 6} y={y(g) + 4} textAnchor="end" fontSize="10.5" fill="var(--txt2)">{g ? abrege(g) : '0'}</text>
+              <line x1={marge.gauche} x2={w - MARGE.droite} y1={y(g)} y2={y(g)} stroke="var(--border)" strokeDasharray={g ? '2 3' : undefined} />
+              <text x={marge.gauche - 6} y={y(g) + 4} textAnchor="end" fontSize="10.5" fill="var(--txt2)">{g ? formatAxe(g) : '0'}</text>
             </g>
           ))}
           {modele.points.map((p, i) => {
-            const x = MARGE.gauche + cw * i + (cw - bw) / 2
+            const x = marge.gauche + cw * i + (cw - bw) / 2
             let cumul = 0
             return (
               <g key={p.cle}>
@@ -110,13 +115,13 @@ export default function Graphique({ modele, titre }) {
                       const rect = (
                         <rect key={s.cle} x={x} y={y0} width={bw} height={Math.max(y(cumul) - y0, 0)}
                           fill={couleurDe(s, rang)} stroke="var(--card)" strokeWidth="1">
-                          <title>{`${p.libelle} — ${s.libelle} : ${entier(v)}`}</title>
+                          <title>{`${p.libelle} — ${s.libelle} : ${formatValeur(v)}`}</title>
                         </rect>
                       )
                       cumul += v
                       return rect
                     })}
-                    {avecValeurs ? <text x={x + bw / 2} y={y(pile[i]) - 5} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--txt)">{abrege(pile[i])}</text> : null}
+                    {avecValeurs ? <text x={x + bw / 2} y={y(pile[i]) - 5} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--txt)">{formatAxe(pile[i])}</text> : null}
                   </>
                 )}
               </g>
@@ -125,10 +130,19 @@ export default function Graphique({ modele, titre }) {
           {modele.mode === 'ventile' && !isolee ? (
             <g>
               <polyline fill="none" stroke="var(--serie-cache)" strokeWidth="2" strokeDasharray="5 4"
-                points={modele.cache.map((v, i) => `${MARGE.gauche + cw * i + cw / 2},${y(v)}`).join(' ')} />
-              {modele.cache.map((v, i) => <circle key={i} cx={MARGE.gauche + cw * i + cw / 2} cy={y(v)} r="3" fill="var(--card)" stroke="var(--serie-cache)" strokeWidth="2" />)}
+                points={modele.cache.map((v, i) => `${marge.gauche + cw * i + cw / 2},${y(v)}`).join(' ')} />
+              {modele.cache.map((v, i) => <circle key={i} cx={marge.gauche + cw * i + cw / 2} cy={y(v)} r="3" fill="var(--card)" stroke="var(--serie-cache)" strokeWidth="2" />)}
             </g>
           ) : null}
+          {reperes.map((r, k) => {
+            const x = marge.gauche + cw * r.index
+            return (
+              <g key={r.libelle}>
+                <line x1={x} x2={x} y1={marge.haut} y2={H - marge.bas} stroke="var(--txt2)" strokeWidth="1.25" strokeDasharray="3 3" />
+                <text x={x + 3} y={marge.haut + 9 + (k % 2) * 11} fontSize="10" fontWeight="600" fill="var(--txt2)">{r.libelle}</text>
+              </g>
+            )
+          })}
         </svg>
       </div>
     </div>

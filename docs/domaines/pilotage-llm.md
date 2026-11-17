@@ -2,7 +2,7 @@
 
 ÉPIC 18 (cadrage : `docs/EPIC 18 - PILOTAGE LLM/CADRAGE_PILOTAGE_LLM.md`). Cette fiche couvre
 le **lot 1 (mesure fiable)** et le **lot 2 (coût)** : US-306 à US-309, puis les **agrégats** servis à
-l'administrateur (US-310) et la PWA d'administration qui les affiche (US-311, US-312). Les alertes
+l'administrateur (US-310) et la PWA d'administration qui les affiche (US-311, US-312, puis les vues Coût, Fiabilité et Dérives : US-313, US-314, US-315). Les alertes
 (lot 4) viendront s'y ajouter.
 
 Tout part de `llm/passerelle.py::_enregistrer_conso`, qui écrit **une ligne de `conso_tokens` par
@@ -94,6 +94,9 @@ va sur une ligne à part du `.env`, jamais en fin de ligne de valeur.
 | `GET /admin/pilotage/series?mesure=&dimension=&pas=` | une série par jour (par heure sur une journée), chaque pas présent à zéro ; dimension : `modele`, `appel_type`, `canal`, `provenance`, `issue`, `version` |
 | `GET /admin/pilotage/ventilation?dimension=&mesure=&limite=` | le classement d'une dimension (dont `potager`, `utilisateur`), avec part, médiane et coût par ligne |
 | `GET /admin/pilotage/echanges` | médiane, P95 et maximum du coût, des jetons et du nombre d'appels **par échange** |
+| `GET /admin/pilotage/cout` [US-313] | coût de la période, du mois en cours, projection de fin de mois, jardiniers actifs, coût par jardinier actif (médiane, P95, maximum, et ramené à 30 jours), coût d'un échange par canal, lignes non chiffrées et leurs modèles, version de grille dominante |
+| `GET /admin/pilotage/fiabilite` [US-314] | décomptes et taux par issue, latences (succès / échecs séparées), par modèle et par type d'appel, grille heure × jour des quotas, 20 derniers échecs — avec la période précédente |
+| `GET /admin/pilotage/derives?type_courbe=` [US-315] | par version de l'application (10 dernières + « avant suivi ») : taille des appels par type, courbe journalière d'un type avec repères de version, appels par échange par canal |
 
 Filtres communs : `depuis`, `jusqu_a` (dates incluses ; défaut 7 jours glissants), `provenance` (une ou
 plusieurs, séparées par une virgule), `canal`, `modele`, `appel_type`, `potager_id`. Une valeur hors
@@ -116,6 +119,17 @@ vocabulaire → 422.
   politique RLS est ajoutée à `conso_tokens`, la lecture d'administration devra passer par un rôle dédié,
   pas par un contournement.
 - **Index** (migration v78) : `(date, provenance)` et `cree_le` ; `echange_ref` l'était déjà (v74).
+- **Les trois routes de vue** (`cout.py`, `fiabilite.py`, `derives.py`, dans `app/services/pilotage/`) lisent par
+  `agregats._filtrer` / `_executer` / `_agreger` : mêmes filtres, mêmes provenances par défaut, même chemin de
+  lecture hors RLS. Définitions testées et affichées par l'écran :
+  - **Jardinier actif** : au moins une ligne `usage` sur la période, quelle que soit la provenance demandée.
+  - **Projection** : coût du mois à ce jour + moyenne des 7 derniers jours × jours restants ; le mois et la
+    projection ne dépendent pas de la période choisie (seul l'instant de référence, `cout._aujourd_hui`).
+  - **Coût mensuel d'un jardinier** : son coût sur la période × 30 / nombre de jours.
+  - **Taux de succès / quota / erreur** : appels de l'issue ÷ tous les appels (une issue inconnue compte au
+    dénominateur). **Latence** : appels réussis seulement ; celle des échecs est rendue à part.
+  - **Dérives** : appels réussis d'unité `jeton` ; un échange = tous ses appels, échecs compris ; en dessous de
+    20 appels (ou échanges) → `echantillon_faible` ; écart mis en évidence au-delà de 20 % (`seuil_ecart`).
 - **Ajouter une dimension ou une mesure** : l'ajouter à `DIMENSIONS_*` / `MESURES` et à `_Cumul.valeur` —
   les trois routes qui la lisent la prennent ensemble.
 
@@ -131,7 +145,7 @@ réponse `/admin/...` (hors ligne : « pas de données »).
   `require_admin_user`) : un autre compte voit « Accès réservé » et n'envoie aucune requête `/admin/...`.
 - **Maquette** : US-318 (projet Claude Design « Pilotage - PWA administration »). Seul jeton ajouté à l'identité :
   `--brand-soft-strong` ; les couleurs de séries sont des alias des teintes existantes.
-- **Coquille** : navigation entre six vues (Consommation livrée ; Coût, Fiabilité, Dérives, Potagers,
+- **Coquille** : navigation entre six vues (Consommation, Coût, Fiabilité, Dérives livrées ; Potagers,
   Seuils s'ouvrent sur un écran d'attente), période (aujourd'hui, 7, 30, 90 jours, personnalisée) et
   filtres provenance / canal / modèle gardés dans l'adresse. La vue du jour se rafraîchit toutes les
   60 s onglet visible ; en panne d'API, les dernières valeurs (en mémoire seulement) restent affichées
@@ -142,6 +156,12 @@ réponse `/admin/...` (hors ligne : « pas de données »).
   type d'appel et par modèle, bloc audio à part. Un rappel dit que seules `usage` et `fond` sont comptées.
   Les chiffres sont ceux de `GET /admin/pilotage/synthese` : le contrat est
   `admin/src/lib/fixtures/consommation_fixe.json`, vérifié des deux côtés (voir `admin/CLAUDE.md`).
+- **Vues Coût, Fiabilité, Dérives** (US-313 à US-315) : sans maquette propre, elles réutilisent les composants de la
+  vue Consommation (`ChiffreCle`, `Graphique`, cartes, segments) ; `TableauDonnees`, `GrilleChaleur`,
+  `CarteGraphique` et `CadreVue` sont les seuls ajoutés, dans le même style. Le prix d'abonnement de la vue Coût
+  reste sur l'appareil (`localStorage`, clé `pilotage_prix_abonnement`), jamais envoyé. Contrats :
+  `admin/src/lib/fixtures/{cout,fiabilite,derives}_fixe.json`, vérifiés par
+  `tests/test_us313_315_contrat_vues.py` (`REGENERER_FIXTURE_US313_315=1` pour les régénérer).
 - **Déploiement** : étapes « Build admin PWA (Pilotage) » des workflows `deploy.yml` / `deploy-dev.yml`,
   après le build du frontend (sa config Tailwind étend celle de `frontend/`) ; runbook A9 bis.
 

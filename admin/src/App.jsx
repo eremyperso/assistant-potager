@@ -3,12 +3,15 @@ import Coquille, { texteMiseAJour } from './components/Coquille.jsx'
 import VueEnAttente from './components/VueEnAttente.jsx'
 import { EcranAccesReserve, EcranChargement, EcranConnexion, EcranHorsLigne } from './components/Ecrans.jsx'
 import Consommation from './views/Consommation.jsx'
+import Cout from './views/Cout.jsx'
+import Derives from './views/Derives.jsx'
+import Fiabilite from './views/Fiabilite.jsx'
 import { useAdresse } from './hooks/useAdresse.js'
 import { useSession } from './hooks/useSession.js'
 
-// Les vues livrées. Les autres (Coût, Fiabilité, Dérives, Potagers, Seuils) s'ouvrent sur un écran
+// Les vues livrées. Les autres (Potagers, Seuils) s'ouvrent sur un écran
 // d'attente qui nomme l'US qui les remplira : même coquille, mêmes filtres.
-const VUES_LIVREES = { consommation: Consommation }
+const VUES_LIVREES = { consommation: Consommation, cout: Cout, fiabilite: Fiabilite, derives: Derives }
 
 export default function App() {
   const session = useSession()
