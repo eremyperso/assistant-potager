@@ -1,3 +1,20 @@
+## [v3.132.0] — 2026-11-17
+
+### 🚀 Nouveautés
+- Ajoute la vue Coût de la PWA d'administration : coût de la période, du mois en cours et projection de fin de mois, coût par jardinier actif, graphique par jour ventilé par modèle, type ou canal, coût d'un échange par canal et les 10 potagers les plus coûteux (US-313).
+- Ajoute le calcul de marge d'un abonnement : le prix mensuel envisagé, gardé sur l'appareil seulement, donne la marge pour le jardinier actif médian et pour le jardinier au P95 (US-313).
+- Signale les appels non chiffrés et leurs modèles, la version de grille tarifaire dominante et la mention « coût estimé au tarif public, hors palier gratuit » (US-313).
+- Ajoute la vue Fiabilité : taux de succès, de quota et d'erreur et latences P50 et P95 avec l'écart à la période précédente, issues par jour, tableaux par modèle et par type d'appel, grille heure × jour des quotas et 20 derniers échecs (US-314).
+- Calcule les latences sur les seuls appels réussis et donne celle des échecs à part ; toute issue présente en base est affichée, y compris une valeur inconnue de l'écran (US-314).
+- Ajoute la vue Dérives : taille des appels par version de l'application et par type, courbe journalière des jetons d'entrée avec un repère à chaque nouvelle version, appels par échange par canal (US-315).
+- Ajoute la comparaison côte à côte de deux versions, mise en évidence au-delà de 20 % d'écart, avec « échantillon faible » sous 20 appels et un groupe « avant suivi des versions » (US-315).
+
+### 🔧 Améliorations techniques
+- Ajoute les routes `GET /admin/pilotage/cout`, `/fiabilite` et `/derives`, réservées à `ADMIN_EMAIL`, et les modules `cout.py`, `fiabilite.py` et `derives.py` qui lisent par les mêmes filtres que les agrégats d'US-310 (US-313, US-314, US-315).
+- Ajoute les composants `TableauDonnees`, `GrilleChaleur`, `CarteGraphique`, `CadreVue` et `Segments` à la PWA d'administration, et des propriétés additionnelles à `Graphique` (unité, repères) et `ChiffreCle` (note) sans changer leur rendu existant.
+- Ajoute des fixtures de contrat `cout_fixe.json`, `fiabilite_fixe.json` et `derives_fixe.json` : l'API les rend à l'identique et l'écran en tire les mêmes chiffres.
+- Autorise `cout.py` et `derives.py` comme lecteurs de coûts dans la garde d'US-309, qui continue d'interdire toute écriture de coût hors passerelle.
+
 ## [v3.131.0] — 2026-11-17
 
 ### 🚀 Nouveautés
