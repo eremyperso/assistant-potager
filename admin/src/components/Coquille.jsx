@@ -37,8 +37,11 @@ export default function Coquille({ client, compte, vue, filtres, majTexte, enPan
   const bouton = 'grid h-9 w-9 place-items-center rounded-[10px] text-header-txt hover:bg-header-glass'
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-txt">
-      <header className="bg-gradient-to-r from-header-from to-header-to text-header-txt">
+    // La coquille tient dans l'écran, à toutes les tailles : bandeau, barre d'outils (et barre
+    // d'onglets basse sous 900 px) restent fixes, seul le contenu défile. `dvh` : la hauteur visible
+    // réelle sur mobile, barre d'adresse comprise.
+    <div className="coquille-pilotage relative flex h-dvh flex-col overflow-hidden bg-bg text-txt">
+      <header className="shrink-0 bg-gradient-to-r from-header-from to-header-to text-header-txt">
         <div className="flex h-[58px] items-center gap-3 px-4 nav:px-6">
           <span className="flex items-center gap-[9px]">
             <Logo />
@@ -61,9 +64,14 @@ export default function Coquille({ client, compte, vue, filtres, majTexte, enPan
 
       <BarreOutils filtres={filtres} modeles={modeles} surFiltres={surFiltres} majTexte={majTexte} enPanne={enPanne} surRafraichir={surRafraichir} />
 
-      <main className="mx-auto flex w-full flex-1 flex-col gap-3 px-3 pb-6 pt-3.5 tab:gap-3.5 tab:px-5 tab:pb-7 tab:pt-[18px] nav:max-w-[1232px] nav:px-6 nav:pb-8 nav:pt-5">
-        {children}
-      </main>
+      {/* `relative` est indispensable : sans parent positionné, un élément absolu du contenu (les
+          textes `sr-only` de ChiffreCle, GrilleChaleur…) se place par rapport à la page, la rallonge
+          bien au-delà de l'écran, et le doigt fait alors défiler TOUTE la coquille au lieu du contenu. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
+        <main className="mx-auto flex w-full flex-1 flex-col gap-3 px-3 pb-6 pt-3.5 tab:gap-3.5 tab:px-5 tab:pb-7 tab:pt-[18px] nav:max-w-[1232px] nav:px-6 nav:pb-8 nav:pt-5">
+          {children}
+        </main>
+      </div>
 
       <BarreBasse vue={vue} surChangement={surVue} alertesOuvertes={alertesOuvertes} />
     </div>
