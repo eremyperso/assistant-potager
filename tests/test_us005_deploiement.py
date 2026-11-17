@@ -116,3 +116,20 @@ class TestSystemdService:
         """CA3 — le service démarre au boot."""
         content = open(SERVICE).read()
         assert "WantedBy=multi-user.target" in content
+
+
+WORKFLOW_DEV = os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "deploy-dev.yml")
+
+
+class TestPaquetAdmin:
+    """[US-311 / CA8] La PWA d'administration (`admin/`) est construite et publiée par les deux
+    déploiements ; le détail est dans tests/test_us311_pwa_administration.py."""
+
+    @pytest.mark.parametrize("chemin,env", [(WORKFLOW, "prod"), (WORKFLOW_DEV, "dev")])
+    def test_workflow_construit_et_publie_admin(self, chemin, env):
+        content = open(chemin, encoding="utf-8").read()
+        assert "cd admin" in content and "npm run build" in content
+        assert f"/opt/potager-{env}/admin/dist/" in content
+
+    def test_admin_a_son_paquet(self):
+        assert os.path.isfile(os.path.join(os.path.dirname(__file__), "..", "admin", "package.json"))

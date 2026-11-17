@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Assistant Potager 🌿",
-    "version": "3.84.1"
+    "title": "Les bons gestes 🌿",
+    "version": "3.130.0"
   },
   "paths": {
     "/auth/register": {
@@ -831,6 +831,90 @@
         }
       }
     },
+    "/plan/geometrie": {
+      "patch": {
+        "summary": "Modifier Geometrie Potager",
+        "description": "[US-326] Pose la géométrie du potager courant, réservée à un éditeur. Seuls les\nchamps transmis sont écrits ; `null` remet un champ à « non posé ».",
+        "operationId": "modifier_geometrie_potager_plan_geometrie_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GeometriePotagerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/plan/edition": {
+      "post": {
+        "summary": "Enregistrer Edition Plan",
+        "description": "[US-333 / CA3, CA7] « Enregistrer » de l'éditeur du plan, réservé à un éditeur : un refus\nn'écrit RIEN, et nomme la parcelle et le champ. Une nouvelle forme ne passe pas par ici : elle\nse crée par Gaston, après confirmation (US-332).",
+        "operationId": "enregistrer_edition_plan_plan_edition_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditionPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/potagers/{potager_id}/invitations": {
       "post": {
         "summary": "Creer Invitation",
@@ -1574,6 +1658,86 @@
         }
       }
     },
+    "/plan/suivi": {
+      "get": {
+        "summary": "Get Suivi Culture",
+        "description": "[US-322 / CA4] Le suivi d'une culture en place — origine, localisation, place\nsur le rang, étapes, cumul récolté, notes — en UNE lecture. 404 si la parcelle\nn'est pas de ce potager ou si la culture n'y est pas en place à la date.",
+        "operationId": "get_suivi_culture_plan_suivi_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "parcelle_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Parcelle Id"
+            }
+          },
+          {
+            "name": "culture",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Culture"
+            }
+          },
+          {
+            "name": "variete",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Variete"
+            }
+          },
+          {
+            "name": "date_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Date Ref"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/plan/confiances": {
       "get": {
         "summary": "Get Confiances Plan",
@@ -1921,7 +2085,7 @@
     "/ask": {
       "post": {
         "summary": "Ask",
-        "description": "Répond en langage naturel à une question sur l'historique du potager.\nExemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'",
+        "description": "Répond en langage naturel à une question sur l'historique du potager.\nExemples : 'Combien de kg de tomates ?', 'Historique traitements courgettes'\n\n[US-270 / CA5] Par la cascade COMMUNE aux canaux (`routeur.repondre_avec_cascade`, étape E0) :\nla même réponse que `/ask` dans Telegram — données, savoir ou raisonnement. `routage_log_id`\net `etage` permettent le retour 👍/👎 (`POST /routage/{id}/retour`) sur une réponse de savoir.",
         "operationId": "ask_ask_post",
         "requestBody": {
           "content": {
@@ -2102,6 +2266,701 @@
               "minimum": 1,
               "default": 20,
               "title": "Limite"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/pilotage/synthese": {
+      "get": {
+        "summary": "Admin Pilotage Synthese",
+        "description": "[US-310 / CA1] Appels, jetons, taux de cache, audio, caractères, coût, issues et latences\nde la période, avec les mêmes valeurs pour la période précédente de même durée.",
+        "operationId": "admin_pilotage_synthese_admin_pilotage_synthese_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "depuis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Premier jour (inclus) ; défaut : 7 jours glissants",
+              "title": "Depuis"
+            },
+            "description": "Premier jour (inclus) ; défaut : 7 jours glissants"
+          },
+          {
+            "name": "jusqu_a",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Dernier jour (inclus) ; défaut : aujourd'hui",
+              "title": "Jusqu A"
+            },
+            "description": "Dernier jour (inclus) ; défaut : aujourd'hui"
+          },
+          {
+            "name": "provenance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond",
+              "title": "Provenance"
+            },
+            "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond"
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Canal"
+            }
+          },
+          {
+            "name": "modele",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Modele"
+            }
+          },
+          {
+            "name": "appel_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Appel Type"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/pilotage/series": {
+      "get": {
+        "summary": "Admin Pilotage Series",
+        "description": "[US-310 / CA2] Une série par jour (par heure sur une journée) d'une mesure, ventilée par\nla dimension choisie. Un pas sans appel vaut zéro.",
+        "operationId": "admin_pilotage_series_admin_pilotage_series_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "mesure",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "jetons_entree",
+              "title": "Mesure"
+            }
+          },
+          {
+            "name": "dimension",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "modele, appel_type, canal, provenance, issue ou version",
+              "title": "Dimension"
+            },
+            "description": "modele, appel_type, canal, provenance, issue ou version"
+          },
+          {
+            "name": "pas",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "jour, ou heure sur une période d'un jour",
+              "title": "Pas"
+            },
+            "description": "jour, ou heure sur une période d'un jour"
+          },
+          {
+            "name": "depuis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Premier jour (inclus) ; défaut : 7 jours glissants",
+              "title": "Depuis"
+            },
+            "description": "Premier jour (inclus) ; défaut : 7 jours glissants"
+          },
+          {
+            "name": "jusqu_a",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Dernier jour (inclus) ; défaut : aujourd'hui",
+              "title": "Jusqu A"
+            },
+            "description": "Dernier jour (inclus) ; défaut : aujourd'hui"
+          },
+          {
+            "name": "provenance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond",
+              "title": "Provenance"
+            },
+            "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond"
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Canal"
+            }
+          },
+          {
+            "name": "modele",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Modele"
+            }
+          },
+          {
+            "name": "appel_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Appel Type"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/pilotage/ventilation": {
+      "get": {
+        "summary": "Admin Pilotage Ventilation",
+        "description": "[US-310 / CA3] Le classement d'une dimension pour une mesure, avec limite.",
+        "operationId": "admin_pilotage_ventilation_admin_pilotage_ventilation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dimension",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "modele, appel_type, canal, provenance, issue, version, potager ou utilisateur",
+              "title": "Dimension"
+            },
+            "description": "modele, appel_type, canal, provenance, issue, version, potager ou utilisateur"
+          },
+          {
+            "name": "mesure",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "appels",
+              "title": "Mesure"
+            }
+          },
+          {
+            "name": "limite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limite"
+            }
+          },
+          {
+            "name": "depuis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Premier jour (inclus) ; défaut : 7 jours glissants",
+              "title": "Depuis"
+            },
+            "description": "Premier jour (inclus) ; défaut : 7 jours glissants"
+          },
+          {
+            "name": "jusqu_a",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Dernier jour (inclus) ; défaut : aujourd'hui",
+              "title": "Jusqu A"
+            },
+            "description": "Dernier jour (inclus) ; défaut : aujourd'hui"
+          },
+          {
+            "name": "provenance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond",
+              "title": "Provenance"
+            },
+            "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond"
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Canal"
+            }
+          },
+          {
+            "name": "modele",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Modele"
+            }
+          },
+          {
+            "name": "appel_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Appel Type"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/pilotage/echanges": {
+      "get": {
+        "summary": "Admin Pilotage Echanges",
+        "description": "[US-310 / CA4] Distribution du coût, des jetons et du nombre d'appels par échange\n(médiane, P95, maximum).",
+        "operationId": "admin_pilotage_echanges_admin_pilotage_echanges_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "depuis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Premier jour (inclus) ; défaut : 7 jours glissants",
+              "title": "Depuis"
+            },
+            "description": "Premier jour (inclus) ; défaut : 7 jours glissants"
+          },
+          {
+            "name": "jusqu_a",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Dernier jour (inclus) ; défaut : aujourd'hui",
+              "title": "Jusqu A"
+            },
+            "description": "Dernier jour (inclus) ; défaut : aujourd'hui"
+          },
+          {
+            "name": "provenance",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond",
+              "title": "Provenance"
+            },
+            "description": "usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond"
+          },
+          {
+            "name": "canal",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Canal"
+            }
+          },
+          {
+            "name": "modele",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Modele"
+            }
+          },
+          {
+            "name": "appel_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Appel Type"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Potager Id"
             }
           }
         ],
@@ -2357,6 +3216,48 @@
         }
       }
     },
+    "/plan/etapes/pas-encore": {
+      "post": {
+        "summary": "Post Etape Pas Encore",
+        "description": "[US-320 / E7, CA9] « Pas encore » sur une étape à confirmer : aucune étape n'est\nécrite, le rappel est repoussé de trois jours (un rappel US-266 sur l'étape).",
+        "operationId": "post_etape_pas_encore_plan_etapes_pas_encore_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportEtapeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/plan": {
       "get": {
         "summary": "Get Plan",
@@ -2524,10 +3425,62 @@
         }
       }
     },
+    "/pepiniere/lots/{numero}": {
+      "get": {
+        "summary": "Get Pepiniere Lot Par Numero",
+        "description": "[US-209 / CA9] Un lot de pépinière désigné par son numéro court, dans le potager\nconsulté. Un numéro inconnu — ou celui d'un autre potager — répond 404\n« Aucun lot n° N dans ce potager ».",
+        "operationId": "get_pepiniere_lot_par_numero_pepiniere_lots__numero__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "numero",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Numero"
+            }
+          },
+          {
+            "name": "potager_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pepiniere/lots": {
       "get": {
         "summary": "Get Pepiniere Lots",
-        "description": "[US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.\n\nUn lot = un événement de semis en pépinière, identifié par sa date ; les mises\nen godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).\nChaque lot porte son propre avancement (`taux_germination`), son état de\ngermination à trois valeurs (`etat_germination` : en_cours / close /\nindeterminee) et le signalement d'une éventuelle incohérence de saisie\n(`incoherence_saisie`).\n\nCette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui\nconserve exactement son contrat actuel — écrans Stocks, Statistiques et bot\ninchangés (CA5).\n\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).",
+        "description": "[US-065 / CA1, CA7] État de la pépinière LOT DE SEMIS PAR LOT DE SEMIS.\n\nUn lot = un événement de semis en pépinière, identifié par sa date ; les mises\nen godet sans semis rattaché forment un lot distinct (`sans_semis_rattache`).\nChaque lot porte son propre avancement (`taux_germination`), son état de\ngermination à trois valeurs (`etat_germination` : en_cours / close /\nindeterminee) et le signalement d'une éventuelle incohérence de saisie\n(`incoherence_saisie`).\n\nCette lecture **s'ajoute** à `GET /godets` (agrégée par culture + variété), qui\nconserve exactement son contrat actuel — écrans Stocks, Statistiques et bot\ninchangés (CA5).\n\n[US-030] date_ref optionnel (YYYY-MM-DD) : reconstitue l'état à une date passée.\n[US-083 / CA7] potager_id optionnel : consulte un potager archivé (non-actif).\n\n[US-214 / CA7, CA8] Chaque lot gagne `echeances`, `action_suggeree` et\n`rang_urgence` ; la réponse gagne `resume` (à repiquer, à endurcir, prêts pour\nle plan, à semer). Champs AJOUTÉS : aucun n'est retiré ni renommé. Le calcul\nvit dans `app/services/echeances_lots.py` ; l'API recopie.\n\n[US-240 / CA1] La réponse gagne `parcours` (onglet Parcours, US-218).",
         "operationId": "get_pepiniere_lots_pepiniere_lots_get",
         "security": [
           {
@@ -2663,6 +3616,643 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/messages": {
+      "post": {
+        "summary": "Envoyer Message Compagnon",
+        "description": "[US-270 / CA1] Transmet une phrase à l'orchestrateur ; rend la réponse et les cartes éventuelles.",
+        "operationId": "envoyer_message_compagnon_compagnon_messages_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageCompagnonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/propositions/{proposition_id}/confirmer": {
+      "post": {
+        "summary": "Confirmer Proposition Compagnon",
+        "description": "[US-270 / CA2] Confirme une carte : sortie atomique de l'attente (US-259), puis écriture.",
+        "operationId": "confirmer_proposition_compagnon_compagnon_propositions__proposition_id__confirmer_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposition Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/propositions/{proposition_id}/abandonner": {
+      "post": {
+        "summary": "Abandonner Proposition Compagnon",
+        "description": "[US-270 / CA2] Laisse tomber une carte : sortie atomique de l'attente, rien n'est écrit.",
+        "operationId": "abandonner_proposition_compagnon_compagnon_propositions__proposition_id__abandonner_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "proposition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Proposition Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/historique": {
+      "get": {
+        "summary": "Historique Compagnon",
+        "description": "[US-270 / CA3] Les échanges récents (30 min glissantes, 10 au plus) et les cartes en cours.",
+        "operationId": "historique_compagnon_compagnon_historique_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/etat": {
+      "get": {
+        "summary": "Etat Compagnon",
+        "description": "[US-272 / CA5] L'état réel des cartes et les messages spontanés, relus à intervalle court (sans WebSocket).",
+        "operationId": "etat_compagnon_compagnon_etat_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/voix/preferences": {
+      "get": {
+        "summary": "Lire Preferences Voix",
+        "description": "[US-300 / CA2] Réglages vocaux du jardinier (défauts s'il n'en a jamais enregistré).",
+        "operationId": "lire_preferences_voix_compagnon_voix_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "summary": "Enregistrer Preferences Voix",
+        "description": "[US-300 / CA3] Enregistre les réglages fournis ; une voix hors catalogue est refusée (422).",
+        "operationId": "enregistrer_preferences_voix_compagnon_voix_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesVoixRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/voix/catalogue": {
+      "get": {
+        "summary": "Catalogue Voix",
+        "description": "[US-300 / CA4, CA5] Voix françaises (cache 24 h) ; liste de secours si Mistral ne répond pas.",
+        "operationId": "catalogue_voix_compagnon_voix_catalogue_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/voix/catalogue/{voix_id}/extrait": {
+      "get": {
+        "summary": "Extrait Voix",
+        "description": "[US-300 / CA6] MP3 court de la voix (extrait Mistral, sinon phrase d'essai gardée en cache).",
+        "operationId": "extrait_voix_compagnon_voix_catalogue__voix_id__extrait_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "voix_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Voix Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/voix/transcrire": {
+      "post": {
+        "summary": "Transcrire Dictee",
+        "description": "[US-302 / CA5] Dictée de la PWA (multipart) → `{ texte }`, que la PWA envoie ensuite à\n`/compagnon/messages` comme une phrase tapée. 403 sans mode vocal, 413 trop longue ou trop\nlourde, 429 au-delà du plafond du jour, 503 si Voxtral ne répond pas.",
+        "operationId": "transcrire_dictee_compagnon_voix_transcrire_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_transcrire_dictee_compagnon_voix_transcrire_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/voix/oral/{echange_id}": {
+      "get": {
+        "summary": "Resume Oral",
+        "description": "[US-303 / CA7, CA8] Le résumé parlé d'une réponse de Gaston, calculé à la première demande\npuis gardé. 404 pour un échange d'un autre jardinier ou d'un autre potager, 403 sans mode vocal.\nLa synthèse de ce texte (MP3) est l'affaire de la lecture (US-304).",
+        "operationId": "resume_oral_compagnon_voix_oral__echange_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "echange_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Echange Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/voix/lecture/{echange_id}": {
+      "post": {
+        "summary": "Lecture Voix",
+        "description": "[US-304 / CA1, CA8, CA9] Le MP3 du résumé parlé d'un échange, dans la voix du jardinier.\nLecture PAR IDENTIFIANT : aucun texte de la PWA n'est synthétisé. 403 sans mode vocal, 404 hors\nde son compte ou de son potager, 429 au-delà du plafond du jour, 503 si Voxtral ne répond pas.",
+        "operationId": "lecture_voix_compagnon_voix_lecture__echange_id__post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "echange_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Echange Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/carnet": {
+      "get": {
+        "summary": "Lire Carnet",
+        "description": "[US-265 / CA3] Faits, niveau, niveau proposé et objectifs de saison du jardinier sur ce potager.",
+        "operationId": "lire_carnet_compagnon_carnet_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "Tout Oublier Carnet",
+        "description": "[US-265 / CA3, CA6] Efface faits, niveau et objectifs (droit à l'effacement).",
+        "operationId": "tout_oublier_carnet_compagnon_carnet_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/carnet/faits/{fait_id}": {
+      "patch": {
+        "summary": "Modifier Fait Carnet",
+        "description": "[US-265 / CA3] Corrige un fait (200 caractères au plus).",
+        "operationId": "modifier_fait_carnet_compagnon_carnet_faits__fait_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fait_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fait Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaitCarnetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Oublier Fait Carnet",
+        "description": "[US-265 / CA3] Oublie un fait.",
+        "operationId": "oublier_fait_carnet_compagnon_carnet_faits__fait_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "fait_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Fait Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compagnon/carnet/niveau": {
+      "put": {
+        "summary": "Regler Niveau Carnet",
+        "description": "[US-265 / CA5] Confirme le niveau proposé (`debutant` | `confirme`), ou l'efface avec null.",
+        "operationId": "regler_niveau_carnet_compagnon_carnet_niveau_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NiveauCarnetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/compagnon/carnet/objectifs": {
+      "put": {
+        "summary": "Regler Objectifs Carnet",
+        "description": "[US-265 / CA5] Remplace les objectifs de saison (3 au plus).",
+        "operationId": "regler_objectifs_carnet_compagnon_carnet_objectifs_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObjectifsCarnetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2874,10 +4464,299 @@
           }
         }
       }
+    },
+    "/mcp/connexions": {
+      "get": {
+        "summary": "Lister Connexions Mcp",
+        "operationId": "lister_connexions_mcp_mcp_connexions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/mcp/connexions/{autorisation_id}": {
+      "delete": {
+        "summary": "Revoquer Connexion Mcp",
+        "operationId": "revoquer_connexion_mcp_mcp_connexions__autorisation_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "autorisation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Autorisation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/connexions/{autorisation_id}/activite": {
+      "get": {
+        "summary": "Activite Connexion Mcp",
+        "description": "[US-294 / CA3] Les 100 derniers appels d'une connexion : date, outil, potager, résultat.",
+        "operationId": "activite_connexion_mcp_mcp_connexions__autorisation_id__activite_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "autorisation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Autorisation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/potagers/{potager_id}/assistants-externes": {
+      "patch": {
+        "summary": "Interdire Assistants Externes",
+        "description": "[US-294 / CA6] Le propriétaire interdit (ou rouvre) les assistants externes pour ce potager.",
+        "operationId": "interdire_assistants_externes_potagers__potager_id__assistants_externes_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "potager_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Potager Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantsExternesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/mcp/jetons-personnels": {
+      "post": {
+        "summary": "Creer Jeton Personnel Mcp",
+        "operationId": "creer_jeton_personnel_mcp_mcp_jetons_personnels_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JetonPersonnelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
     }
   },
   "components": {
     "schemas": {
+      "AssistantsExternesRequest": {
+        "properties": {
+          "interdit": {
+            "type": "boolean",
+            "title": "Interdit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "interdit"
+        ],
+        "title": "AssistantsExternesRequest"
+      },
+      "Body_transcrire_dictee_compagnon_voix_transcrire_post": {
+        "properties": {
+          "audio": {
+            "type": "string",
+            "format": "binary",
+            "title": "Audio"
+          },
+          "duree_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duree S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audio"
+        ],
+        "title": "Body_transcrire_dictee_compagnon_voix_transcrire_post"
+      },
+      "ContexteEcranRequest": {
+        "properties": {
+          "parcelle_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parcelle Id"
+          },
+          "culture": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Culture"
+          },
+          "variete": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variete"
+          },
+          "rang": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rang"
+          }
+        },
+        "type": "object",
+        "title": "ContexteEcranRequest",
+        "description": "[US-323 / C4] Le contexte d'écran : des identifiants, jamais de texte reconstruit."
+      },
       "CreerParcelleRequest": {
         "properties": {
           "nom": {
@@ -2991,6 +4870,100 @@
         ],
         "title": "CreerPotagerRequest"
       },
+      "EditionPlanRequest": {
+        "properties": {
+          "parcelles": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parcelles",
+            "default": []
+          },
+          "potager": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Potager"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EditionPlanRequest",
+        "description": "[US-333 / CA3] Tout ce que l'éditeur a modifié, écrit en un seul appel : les parcelles (leur\n`id` + les champs touchés) et la géométrie du potager (emprise, angle, nord)."
+      },
+      "FaitCarnetRequest": {
+        "properties": {
+          "texte": {
+            "type": "string",
+            "title": "Texte"
+          }
+        },
+        "type": "object",
+        "required": [
+          "texte"
+        ],
+        "title": "FaitCarnetRequest"
+      },
+      "GeometriePotagerRequest": {
+        "properties": {
+          "emprise_longueur_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emprise Longueur M"
+          },
+          "emprise_largeur_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emprise Largeur M"
+          },
+          "angle_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Angle Deg"
+          },
+          "orientation_nord": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientation Nord"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "GeometriePotagerRequest",
+        "description": "[US-326] Emprise (m), angle du plan (°) et orientation du nord du potager courant."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -3028,6 +5001,43 @@
         ],
         "title": "InviterMembreRequest"
       },
+      "JetonPersonnelRequest": {
+        "properties": {
+          "libelle": {
+            "type": "string",
+            "title": "Libelle"
+          },
+          "ecriture": {
+            "type": "boolean",
+            "title": "Ecriture",
+            "default": false
+          },
+          "potager_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Potager Ids"
+          },
+          "duree_jours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duree Jours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "libelle",
+          "potager_ids"
+        ],
+        "title": "JetonPersonnelRequest"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -3045,6 +5055,80 @@
           "mot_de_passe"
         ],
         "title": "LoginRequest"
+      },
+      "MessageCompagnonRequest": {
+        "properties": {
+          "texte": {
+            "type": "string",
+            "title": "Texte"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "normal"
+          },
+          "contexte": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContexteEcranRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "raccourci": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raccourci"
+          },
+          "placement": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placement"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan"
+          },
+          "echange_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Echange Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "texte"
+        ],
+        "title": "MessageCompagnonRequest"
       },
       "ModifierParcelleRequest": {
         "properties": {
@@ -3103,6 +5187,17 @@
             ],
             "title": "Exposition"
           },
+          "ensoleillement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ensoleillement"
+          },
           "type_sol": {
             "anyOf": [
               {
@@ -3147,6 +5242,17 @@
             ],
             "title": "Est Pepiniere"
           },
+          "type_pepiniere": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type Pepiniere"
+          },
           "actif": {
             "anyOf": [
               {
@@ -3157,6 +5263,83 @@
               }
             ],
             "title": "Actif"
+          },
+          "forme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forme"
+          },
+          "x_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X M"
+          },
+          "y_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y M"
+          },
+          "largeur_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largeur M"
+          },
+          "rotation_deg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rotation Deg"
+          },
+          "sens_rangs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sens Rangs"
+          },
+          "aligner_superficie": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aligner Superficie"
           }
         },
         "additionalProperties": true,
@@ -3262,6 +5445,77 @@
         ],
         "title": "MotDePasseOublieRequest"
       },
+      "NiveauCarnetRequest": {
+        "properties": {
+          "niveau": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Niveau"
+          }
+        },
+        "type": "object",
+        "title": "NiveauCarnetRequest"
+      },
+      "ObjectifsCarnetRequest": {
+        "properties": {
+          "objectifs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Objectifs",
+            "default": []
+          }
+        },
+        "type": "object",
+        "title": "ObjectifsCarnetRequest"
+      },
+      "PreferencesVoixRequest": {
+        "properties": {
+          "mode_vocal": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode Vocal"
+          },
+          "voix_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voix Id"
+          },
+          "lecture_auto": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lecture Auto"
+          }
+        },
+        "type": "object",
+        "title": "PreferencesVoixRequest",
+        "description": "Champs tous facultatifs : seuls ceux fournis sont modifiés. `voix_id: null` = voix par défaut."
+      },
       "PreparerGesteRequest": {
         "properties": {
           "action": {
@@ -3344,6 +5598,17 @@
               }
             ],
             "title": "Lot Id"
+          },
+          "emplacement_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emplacement Id"
           },
           "date": {
             "anyOf": [
@@ -3467,6 +5732,25 @@
           "nouveau_mot_de_passe"
         ],
         "title": "ReinitialiserMotDePasseRequest"
+      },
+      "ReportEtapeRequest": {
+        "properties": {
+          "serie_id": {
+            "type": "integer",
+            "title": "Serie Id"
+          },
+          "etape": {
+            "type": "string",
+            "title": "Etape"
+          }
+        },
+        "type": "object",
+        "required": [
+          "serie_id",
+          "etape"
+        ],
+        "title": "ReportEtapeRequest",
+        "description": "[US-320 / E7] « Pas encore » : la série (son geste d'origine) et l'étape à taire."
       },
       "ResendVerificationRequest": {
         "properties": {

@@ -129,7 +129,7 @@ def test_us055_ca1_aucun_secret_dans_la_reponse(app_client, _auth_engine):
 
     corps = app_client.get("/auth/me", headers=_entetes(token)).json()
 
-    assert set(corps) == {"id", "email", "nom", "telegram_lie", "bot_username"}
+    assert set(corps) == {"id", "email", "nom", "telegram_lie", "bot_username", "administrateur"}  # [US-311] un booléen
 
 
 def test_us091_bot_username_expose_pour_construire_le_deep_link(app_client, _auth_engine):

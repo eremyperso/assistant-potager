@@ -455,6 +455,32 @@ Puis déployer le build statique sur le serveur (l'API le sert via
 rsync -az --delete frontend/dist/ <user>@<serveur>:/opt/potager-prod/frontend/dist/
 ```
 
+### A9 bis — Build et déploiement de la PWA d'administration « Pilotage » [US-311]
+
+Application distincte de celle des jardiniers (`admin/`, Vite + React), réservée à `ADMIN_EMAIL`,
+servie par la **même API** sous `/pilotage/` (Nginx proxifie déjà tout `location /` : aucune
+configuration de plus). Sans `admin/dist`, l'API ne sert rien sous ce chemin — les routes du
+jardinier et `/admin/...` ne bougent pas.
+
+Le build se fait **après** celui du frontend : la configuration Tailwind d'`admin/` étend celle de
+`frontend/` (dont `node_modules` doit donc être installé).
+
+```bash
+cd admin
+echo "VITE_API_URL=https://potager.eremy.fr" > .env.local   # prod
+# echo "VITE_API_URL=https://dev.potager.eremy.fr" > .env.local  # dev
+npm install
+npm test
+npm run build
+rsync -az --delete admin/dist/ <user>@<serveur>:/opt/potager-prod/admin/dist/
+```
+
+Les workflows `deploy.yml` et `deploy-dev.yml` le font (étapes « Build admin PWA (Pilotage) » et
+« Deploy admin dist to server ») ; les tests de l'application passent avant la publication.
+Vérification : `https://potager.eremy.fr/pilotage/` s'ouvre sur l'écran de connexion ; connecté avec
+un compte autre que `ADMIN_EMAIL`, il affiche « Accès réservé » et ne charge aucune donnée. Le service
+worker n'est actif que sous `/pilotage/` et ne garde jamais de réponse `/admin/...`.
+
 ### A10 — Services systemd (API + bot)
 
 Les 4 unités sont versionnées dans `infra/` — à copier telles quelles :

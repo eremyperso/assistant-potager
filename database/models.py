@@ -1101,6 +1101,9 @@ class ConsoTokens(Base):
         # Agrégation type « consommation du potager X sur le mois » — c'est la
         # requête que l'US de quotas exécutera à chaque appel.
         Index("idx_conso_tokens_potager_date", "potager_id", "date"),
+        # [US-310] Lecture de pilotage : période + provenance, tous potagers confondus.
+        Index("idx_conso_tokens_date_provenance", "date", "provenance"),
+        Index("idx_conso_tokens_cree_le", "cree_le"),
         CheckConstraint("provenance IN ('usage', 'mesure', 'test', 'fond', 'historique')",
                         name="ck_conso_tokens_provenance"),  # [US-306]
         CheckConstraint("canal IN ('telegram', 'pwa', 'mcp', 'fond', 'outil', 'inconnu')",

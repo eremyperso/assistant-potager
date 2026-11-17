@@ -1,0 +1,30 @@
+/* Jetons de l'identité visuelle PARTAGÉS avec le frontend des jardiniers [US-311 / CA1] :
+   on importe sa feuille (variables clair / sombre, polices), on n'en recopie rien. La configuration
+   Tailwind d'ici étend celle du frontend ; seuls les fichiers de `admin/src` sont scannés. */
+@import '../../frontend/src/index.css';
+@import '../../frontend/src/brand.css';
+
+/* Propre à Pilotage : pas de défilement horizontal de la page, jamais. `clip` et non `hidden` : avec
+   `overflow-x: hidden` sur html ET body, la molette ne fait plus défiler la page (testé). Corps à 13,5 px, comme la
+   maquette d'US-318 (outil de travail, plus dense que l'application du jardinier). */
+body { overflow-x: clip; }
+body { font-size: 13.5px; line-height: 1.45; }
+:focus-visible { outline: 3px solid #1F6FD1; outline-offset: 2px; }
+
+/* Séries des graphiques [US-312 / CA9] — maquette d'US-318 : des alias des teintes de l'application
+   (aucune valeur nouvelle), dans l'ordre qui alterne sombre et clair ; le seul jeton ajouté à
+   l'identité est `--brand-soft-strong`, la part servie par le cache. Même ordre dans la légende,
+   l'empilement et le tableau : la couleur ne porte jamais seule la différence. */
+:root {
+  --brand-soft-strong: #B9D79A;
+  --serie-1: var(--blue);
+  --serie-2: var(--amber);
+  --serie-3: var(--god);
+  --serie-4: var(--violet);
+  --serie-5: var(--sem);
+  --serie-autres: var(--txt3);
+  --serie-cache: var(--brand-soft-strong);
+  --ecart-defavorable: var(--red);
+  --ecart-neutre: var(--txt2);
+}
+.dark { --brand-soft-strong: #3F5E25; }
