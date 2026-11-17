@@ -1,0 +1,548 @@
+{
+  "fiabilite": {
+    "derniers_echecs": [
+      {
+        "appel_type": "voix",
+        "canal": "pwa",
+        "cree_le": "2026-11-10T20:30:00",
+        "date": "2026-11-10",
+        "issue": "voix_inconnue",
+        "latence_ms": 50,
+        "modele": "voxtral"
+      },
+      {
+        "appel_type": "agent",
+        "canal": "pwa",
+        "cree_le": "2026-11-10T14:30:00",
+        "date": "2026-11-10",
+        "issue": "quota",
+        "latence_ms": 2000,
+        "modele": "mistral/small"
+      },
+      {
+        "appel_type": "agent",
+        "canal": "mcp",
+        "cree_le": "2026-11-09T14:30:00",
+        "date": "2026-11-09",
+        "issue": "quota",
+        "latence_ms": 2100,
+        "modele": "mistral/small"
+      },
+      {
+        "appel_type": "agent",
+        "canal": "telegram",
+        "cree_le": "2026-11-07T07:30:00",
+        "date": "2026-11-07",
+        "issue": "erreur",
+        "latence_ms": 4000,
+        "modele": "mistral/small"
+      }
+    ],
+    "grille_quota": {
+      "depuis": "2026-11-04",
+      "jours": [
+        "2026-11-04",
+        "2026-11-05",
+        "2026-11-06",
+        "2026-11-07",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10"
+      ],
+      "jusqu_a": "2026-11-10",
+      "modeles": [
+        {
+          "cellules": [
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "maximum": 1,
+          "modele": "mistral/small",
+          "total": 2
+        }
+      ]
+    },
+    "mesures": {
+      "appels": 54,
+      "autres": {
+        "voix_inconnue": 1
+      },
+      "delai": 0,
+      "erreur": 1,
+      "issues": {
+        "erreur": 1,
+        "ok": 50,
+        "quota": 2,
+        "voix_inconnue": 1
+      },
+      "latence_echecs_p50_ms": 2000.0,
+      "latence_echecs_p95_ms": 4000.0,
+      "latence_p50_ms": 900.0,
+      "latence_p95_ms": 1100.0,
+      "quota": 2,
+      "succes": 50,
+      "taux_erreur": 0.018518518518518517,
+      "taux_quota": 0.037037037037037035,
+      "taux_succes": 0.9259259259259259
+    },
+    "mesures_precedentes": {
+      "appels": 6,
+      "autres": {},
+      "delai": 0,
+      "erreur": 0,
+      "issues": {
+        "ok": 6
+      },
+      "latence_echecs_p50_ms": null,
+      "latence_echecs_p95_ms": null,
+      "latence_p50_ms": 800.0,
+      "latence_p95_ms": 800.0,
+      "quota": 0,
+      "succes": 6,
+      "taux_erreur": 0.0,
+      "taux_quota": 0.0,
+      "taux_succes": 1.0
+    },
+    "par_modele": [
+      {
+        "appels": 51,
+        "autres": {},
+        "cle": "mistral/small",
+        "delai": 0,
+        "erreur": 1,
+        "issues": {
+          "erreur": 1,
+          "ok": 48,
+          "quota": 2
+        },
+        "latence_echecs_p50_ms": 2100.0,
+        "latence_echecs_p95_ms": 4000.0,
+        "latence_p50_ms": 900.0,
+        "latence_p95_ms": 1100.0,
+        "quota": 2,
+        "succes": 48,
+        "taux_erreur": 0.0196078431372549,
+        "taux_quota": 0.0392156862745098,
+        "taux_succes": 0.9411764705882353
+      },
+      {
+        "appels": 1,
+        "autres": {},
+        "cle": "inconnu/modele",
+        "delai": 0,
+        "erreur": 0,
+        "issues": {
+          "ok": 1
+        },
+        "latence_echecs_p50_ms": null,
+        "latence_echecs_p95_ms": null,
+        "latence_p50_ms": 250.0,
+        "latence_p95_ms": 250.0,
+        "quota": 0,
+        "succes": 1,
+        "taux_erreur": 0.0,
+        "taux_quota": 0.0,
+        "taux_succes": 1.0
+      },
+      {
+        "appels": 1,
+        "autres": {},
+        "cle": "mistral/ministral",
+        "delai": 0,
+        "erreur": 0,
+        "issues": {
+          "ok": 1
+        },
+        "latence_echecs_p50_ms": null,
+        "latence_echecs_p95_ms": null,
+        "latence_p50_ms": 300.0,
+        "latence_p95_ms": 300.0,
+        "quota": 0,
+        "succes": 1,
+        "taux_erreur": 0.0,
+        "taux_quota": 0.0,
+        "taux_succes": 1.0
+      },
+      {
+        "appels": 1,
+        "autres": {
+          "voix_inconnue": 1
+        },
+        "cle": "voxtral",
+        "delai": 0,
+        "erreur": 0,
+        "issues": {
+          "voix_inconnue": 1
+        },
+        "latence_echecs_p50_ms": 50.0,
+        "latence_echecs_p95_ms": 50.0,
+        "latence_p50_ms": null,
+        "latence_p95_ms": null,
+        "quota": 0,
+        "succes": 0,
+        "taux_erreur": 0.0,
+        "taux_quota": 0.0,
+        "taux_succes": 0.0
+      }
+    ],
+    "par_type": [
+      {
+        "appels": 51,
+        "autres": {},
+        "cle": "agent",
+        "delai": 0,
+        "erreur": 1,
+        "issues": {
+          "erreur": 1,
+          "ok": 48,
+          "quota": 2
+        },
+        "latence_echecs_p50_ms": 2100.0,
+        "latence_echecs_p95_ms": 4000.0,
+        "latence_p50_ms": 900.0,
+        "latence_p95_ms": 1100.0,
+        "quota": 2,
+        "succes": 48,
+        "taux_erreur": 0.0196078431372549,
+        "taux_quota": 0.0392156862745098,
+        "taux_succes": 0.9411764705882353
+      },
+      {
+        "appels": 2,
+        "autres": {},
+        "cle": "question",
+        "delai": 0,
+        "erreur": 0,
+        "issues": {
+          "ok": 2
+        },
+        "latence_echecs_p50_ms": null,
+        "latence_echecs_p95_ms": null,
+        "latence_p50_ms": 250.0,
+        "latence_p95_ms": 300.0,
+        "quota": 0,
+        "succes": 2,
+        "taux_erreur": 0.0,
+        "taux_quota": 0.0,
+        "taux_succes": 1.0
+      },
+      {
+        "appels": 1,
+        "autres": {
+          "voix_inconnue": 1
+        },
+        "cle": "voix",
+        "delai": 0,
+        "erreur": 0,
+        "issues": {
+          "voix_inconnue": 1
+        },
+        "latence_echecs_p50_ms": 50.0,
+        "latence_echecs_p95_ms": 50.0,
+        "latence_p50_ms": null,
+        "latence_p95_ms": null,
+        "quota": 0,
+        "succes": 0,
+        "taux_erreur": 0.0,
+        "taux_quota": 0.0,
+        "taux_succes": 0.0
+      }
+    ],
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "periode_precedente": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-10-28",
+      "jours": 7,
+      "jusqu_a": "2026-11-03",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    }
+  },
+  "serie_issues": {
+    "dimension": "issue",
+    "mesure": "appels",
+    "pas": "jour",
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "points": [
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+      "2026-11-07",
+      "2026-11-08",
+      "2026-11-09",
+      "2026-11-10"
+    ],
+    "series": [
+      {
+        "cle": "ok",
+        "total": 50,
+        "valeurs": [
+          0,
+          9,
+          8,
+          9,
+          8,
+          7,
+          9
+        ]
+      },
+      {
+        "cle": "quota",
+        "total": 2,
+        "valeurs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1
+        ]
+      },
+      {
+        "cle": "erreur",
+        "total": 1,
+        "valeurs": [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "cle": "voix_inconnue",
+        "total": 1,
+        "valeurs": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ]
+      }
+    ],
+    "total": [
+      0,
+      9,
+      8,
+      10,
+      8,
+      8,
+      11
+    ]
+  }
+}

@@ -48,14 +48,20 @@ pour être visible via l'API ; `npm run dev` suffit pour itérer.
   (`@container`, `@lg:`) pour tout composant. Utilisable à 360 px, sans défilement horizontal.
 - Tout `import.meta.env` vit dans `src/config.js` : les modules de `src/lib/` restent testables sous Node.
 - Ajouter une vue : la déclarer dans `lib/navigation.js`, l'ajouter à `VUES_LIVREES` dans `App.jsx`. Les
-  vues non livrées s'ouvrent sur `VueEnAttente`.
+  vues non livrées s'ouvrent sur `VueEnAttente`. Livrées : Consommation, Coût (US-313), Fiabilité (US-314),
+  Dérives (US-315). Une vue = `views/X.jsx` (chargement par `useDonnees` + `CadreVue`) + `lib/x.js` (mise en forme,
+  testée) ; les composants de la maquette (`ChiffreCle`, `Graphique`, `TableauDonnees`, `CarteGraphique`,
+  `GrilleChaleur`, `Segments`) ne prennent que des propriétés additionnelles, jamais de variante visuelle.
+- Un tableau passe en cartes sous un seuil de **container query** qui dépend de son nombre de colonnes
+  (`TableauDonnees`) : 8 colonnes ne tiennent pas à 768 px.
 
 ## Contrat avec l'API
 
-`src/lib/fixtures/consommation_fixe.json` est la réponse réelle des routes sur un jeu de données fixe.
-`tests/test_us312_contrat_consommation.py` vérifie que l'API le rend à l'identique ; `consommation.test.js`
-vérifie que l'écran en tire les mêmes chiffres. Après un changement voulu de l'API :
-`REGENERER_FIXTURE_US312=1 pytest tests/test_us312_contrat_consommation.py`.
+`src/lib/fixtures/{consommation,cout,fiabilite,derives}_fixe.json` sont les réponses réelles des routes sur un jeu de données fixe.
+`tests/test_us312_contrat_consommation.py` et `tests/test_us313_315_contrat_vues.py` vérifient que l'API les rend
+à l'identique ; les `*.test.js` vérifient que l'écran en tire les mêmes chiffres. Après un changement voulu de
+l'API : `REGENERER_FIXTURE_US312=1 pytest tests/test_us312_contrat_consommation.py` ou
+`REGENERER_FIXTURE_US313_315=1 pytest tests/test_us313_315_contrat_vues.py`.
 
 ## Validation visuelle
 

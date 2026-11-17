@@ -1,0 +1,316 @@
+{
+  "cout": {
+    "appels": 54,
+    "cout_micro_eur": 174800,
+    "cout_par_jardinier_actif_micro_eur": 43700,
+    "echanges_par_canal": [
+      {
+        "appels": {
+          "maximum": 2.0,
+          "mediane": 1.0,
+          "p95": 2.0
+        },
+        "canal": "pwa",
+        "cout_micro_eur": {
+          "maximum": 9000.0,
+          "mediane": 3000.0,
+          "p95": 9000.0
+        },
+        "echanges_non_chiffres": 0,
+        "nb_echanges": 38
+      },
+      {
+        "appels": {
+          "maximum": 1.0,
+          "mediane": 1.0,
+          "p95": 1.0
+        },
+        "canal": "telegram",
+        "cout_micro_eur": {
+          "maximum": 700.0,
+          "mediane": 100.0,
+          "p95": 700.0
+        },
+        "echanges_non_chiffres": 1,
+        "nb_echanges": 4
+      },
+      {
+        "appels": {
+          "maximum": 1.0,
+          "mediane": 1.0,
+          "p95": 1.0
+        },
+        "canal": "mcp",
+        "cout_micro_eur": {
+          "maximum": 0.0,
+          "mediane": 0.0,
+          "p95": 0.0
+        },
+        "echanges_non_chiffres": 0,
+        "nb_echanges": 1
+      }
+    ],
+    "jardiniers_actifs": 4,
+    "lignes_non_chiffrees": 1,
+    "modeles_non_chiffres": [
+      {
+        "appels": 1,
+        "modele": "inconnu/modele"
+      }
+    ],
+    "mois": {
+      "cout_7_jours_micro_eur": 174800,
+      "cout_micro_eur": 189800,
+      "depuis": "2026-11-01",
+      "jusqu_a": "2026-11-10",
+      "projection_fin_de_mois_micro_eur": 689229
+    },
+    "par_jardinier": {
+      "mensuel": {
+        "maximum": 270428.5714285714,
+        "mediane": 237857.14285714284,
+        "p95": 270428.5714285714
+      },
+      "nb": 4,
+      "periode": {
+        "maximum": 63100.0,
+        "mediane": 55500.0,
+        "p95": 63100.0
+      }
+    },
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "tarif_version": "2026-11-12",
+    "versions_tarif": {
+      "2026-11-12": 53
+    }
+  },
+  "potagers": {
+    "dimension": "potager",
+    "lignes": [
+      {
+        "appels": 25,
+        "caracteres": 0,
+        "cle": 1,
+        "cout_micro_eur": 88600,
+        "jetons_cache": 83000,
+        "jetons_entree": 176400,
+        "jetons_entree_mediane_par_appel": 6000.0,
+        "jetons_sortie": 2670,
+        "libelle": "Potager A",
+        "part": 0.5068649885583524,
+        "secondes_audio": 0,
+        "valeur": 88600
+      },
+      {
+        "appels": 29,
+        "caracteres": 0,
+        "cle": 2,
+        "cout_micro_eur": 86200,
+        "jetons_cache": 80000,
+        "jetons_entree": 171800,
+        "jetons_entree_mediane_par_appel": 6000.0,
+        "jetons_sortie": 2640,
+        "libelle": "Potager B",
+        "part": 0.4931350114416476,
+        "secondes_audio": 0,
+        "valeur": 86200
+      }
+    ],
+    "limite": 10,
+    "mesure": "cout_micro_eur",
+    "nb_valeurs": 2,
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "total": 174800
+  },
+  "serie_par_canal": {
+    "dimension": "canal",
+    "mesure": "cout_micro_eur",
+    "pas": "jour",
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "points": [
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+      "2026-11-07",
+      "2026-11-08",
+      "2026-11-09",
+      "2026-11-10"
+    ],
+    "series": [
+      {
+        "cle": "pwa",
+        "total": 174000,
+        "valeurs": [
+          null,
+          27000,
+          24000,
+          24000,
+          36000,
+          31500,
+          31500
+        ]
+      },
+      {
+        "cle": "telegram",
+        "total": 800,
+        "valeurs": [
+          null,
+          null,
+          null,
+          700,
+          null,
+          null,
+          100
+        ]
+      },
+      {
+        "cle": "mcp",
+        "total": 0,
+        "valeurs": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          0,
+          null
+        ]
+      }
+    ],
+    "total": [
+      null,
+      27000,
+      24000,
+      24700,
+      36000,
+      31500,
+      31600
+    ]
+  },
+  "serie_par_modele": {
+    "dimension": "modele",
+    "mesure": "cout_micro_eur",
+    "pas": "jour",
+    "periode": {
+      "appel_type": null,
+      "canal": null,
+      "depuis": "2026-11-04",
+      "jours": 7,
+      "jusqu_a": "2026-11-10",
+      "modele": null,
+      "potager_id": null,
+      "provenances": [
+        "usage",
+        "fond"
+      ]
+    },
+    "points": [
+      "2026-11-04",
+      "2026-11-05",
+      "2026-11-06",
+      "2026-11-07",
+      "2026-11-08",
+      "2026-11-09",
+      "2026-11-10"
+    ],
+    "series": [
+      {
+        "cle": "mistral/small",
+        "total": 174700,
+        "valeurs": [
+          null,
+          27000,
+          24000,
+          24700,
+          36000,
+          31500,
+          31500
+        ]
+      },
+      {
+        "cle": "mistral/ministral",
+        "total": 100,
+        "valeurs": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          100
+        ]
+      },
+      {
+        "cle": "inconnu/modele",
+        "total": null,
+        "valeurs": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      },
+      {
+        "cle": "voxtral",
+        "total": 0,
+        "valeurs": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          0
+        ]
+      }
+    ],
+    "total": [
+      null,
+      27000,
+      24000,
+      24700,
+      36000,
+      31500,
+      31600
+    ]
+  }
+}

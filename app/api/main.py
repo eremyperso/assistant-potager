@@ -63,6 +63,9 @@ Pilotage de la consommation du modèle [US-310] — lecture seule, réservé à 
   GET  /admin/pilotage/series            → une mesure par jour (ou par heure), ventilée
   GET  /admin/pilotage/ventilation       → classement d'une dimension pour une mesure
   GET  /admin/pilotage/echanges          → coût, jetons et appels par échange (médiane, P95, max)
+  GET  /admin/pilotage/cout              → coût, mois en cours, projection, jardiniers actifs [US-313]
+  GET  /admin/pilotage/fiabilite         → issues, quotas, latences, grille de quotas, échecs [US-314]
+  GET  /admin/pilotage/derives           → appels et échanges par version de l'application [US-315]
 """
 import logging
 import os
@@ -149,6 +152,9 @@ from utils.parcelles import largeur_deduite  # [US-225]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
 from app.services.pilotage import agregats as svc_pilotage_agregats  # [US-310]
+from app.services.pilotage import cout as svc_pilotage_cout  # [US-313]
+from app.services.pilotage import derives as svc_pilotage_derives  # [US-315]
+from app.services.pilotage import fiabilite as svc_pilotage_fiabilite  # [US-314]
 from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
@@ -2224,6 +2230,36 @@ def admin_pilotage_echanges(
     """[US-310 / CA4] Distribution du coût, des jetons et du nombre d'appels par échange
     (médiane, P95, maximum)."""
     return _lire_pilotage(svc_pilotage_agregats.echanges, filtres)
+
+
+@app.get("/admin/pilotage/cout")
+def admin_pilotage_cout(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-313] Coût de la période et du mois, projection de fin de mois, jardiniers actifs, coût par
+    jardinier (médiane, P95), coût d'un échange par canal, lignes non chiffrées, version de grille."""
+    return _lire_pilotage(svc_pilotage_cout.cout, filtres)
+
+
+@app.get("/admin/pilotage/fiabilite")
+def admin_pilotage_fiabilite(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-314] Taux de succès, de quota et d'erreur, latences (succès / échecs), par modèle et par
+    type d'appel, grille heure × jour des quotas, vingt derniers échecs."""
+    return _lire_pilotage(svc_pilotage_fiabilite.fiabilite, filtres)
+
+
+@app.get("/admin/pilotage/derives")
+def admin_pilotage_derives(
+    type_courbe: Optional[str] = Query(default=None, description="Type d'appel de la courbe ; défaut : agent"),
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-315] Taille des appels et appels par échange, par version de l'application."""
+    return _lire_pilotage(svc_pilotage_derives.derives, filtres, appel_type=type_courbe)
 
 
 @app.get("/stats")

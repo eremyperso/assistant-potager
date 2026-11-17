@@ -21,19 +21,21 @@ export const LIBELLE_JUGEMENT = { favorable: 'favorable', defavorable: 'défavor
 /**
  * @param {number|null} actuel
  * @param {number|null} precedent
- * @param {{sens?: string, mode?: 'relatif'|'points'}} options  `points` : un taux, écart en points
+ * @param {{sens?: string, mode?: 'relatif'|'points', decimales?: number}} options  `points` : un taux, écart en points
+ *   (`decimales` : combien de chiffres après la virgule pour les points, 0 par défaut — un taux de quota
+ *   de 1,2 % qui passe à 1,9 % est un écart de 0,7 point, pas de 1)
  * @returns {{texte: string, jugement: string, libelle: string, delta: number|null}}
  */
-export function ecart(actuel, precedent, { sens = SENS.NEUTRE, mode = 'relatif' } = {}) {
+export function ecart(actuel, precedent, { sens = SENS.NEUTRE, mode = 'relatif', decimales = 0 } = {}) {
   const indisponible = { texte: 'n/d', jugement: 'indisponible', libelle: '', delta: null }
   if (actuel === null || actuel === undefined || precedent === null || precedent === undefined) return indisponible
 
   if (mode === 'points') {
     const delta = (actuel - precedent) * 100
-    const arrondi = Number(delta.toFixed(0))
+    const arrondi = Number(delta.toFixed(decimales))
     const j = jugement(arrondi, sens)
     const signe = arrondi > 0 ? PLUS : arrondi < 0 ? MOINS : ''
-    return { texte: `${signe}${nombre(Math.abs(arrondi))}${ESPACE}point${Math.abs(arrondi) > 1 ? 's' : ''}`, jugement: j, libelle: LIBELLE_JUGEMENT[j], delta: arrondi }
+    return { texte: `${signe}${nombre(Math.abs(arrondi), decimales)}${ESPACE}point${Math.abs(arrondi) > 1 ? 's' : ''}`, jugement: j, libelle: LIBELLE_JUGEMENT[j], delta: arrondi }
   }
 
   if (precedent === 0) return actuel === 0 ? { texte: '0 %', jugement: 'neutre', libelle: '', delta: 0 } : indisponible

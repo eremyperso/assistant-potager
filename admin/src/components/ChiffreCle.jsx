@@ -19,9 +19,9 @@ function separerUnite(texte) {
  * jamais par la couleur seule. `vide` : période sans appel (« — pas d'appel ») ;
  * `ancien` : dernières valeurs connues, marquées de leur heure (« de 14 h 32 »).
  */
-export default function ChiffreCle({ libelle, texte, ecart, periodePrecedente, vide = false, ancien = '' }) {
+export default function ChiffreCle({ libelle, texte, ecart = null, periodePrecedente = '', vide = false, ancien = '', note = '', ariaVide = "— pas d'appel" }) {
   const { nombre, unite } = separerUnite(vide ? '0' : texte)
-  const Fleche = ecart.delta !== null && ecart.delta < 0 ? ArrowDown : ArrowUp
+  const Fleche = ecart && ecart.delta !== null && ecart.delta < 0 ? ArrowDown : ArrowUp
   return (
     <div className="rounded-2xl border border-border bg-card px-[13px] py-3 shadow-card">
       <div className="text-xs leading-[1.3] text-txt2">{libelle}</div>
@@ -29,7 +29,10 @@ export default function ChiffreCle({ libelle, texte, ecart, periodePrecedente, v
         {nombre}{unite ? <small className="ml-[3px] text-[12.5px] font-semibold text-txt3">{unite}</small> : null}
       </div>
       {vide ? (
-        <span className="mt-[5px] inline-flex items-center gap-1 text-xs font-semibold text-txt3">— pas d'appel</span>
+        <span className="mt-[5px] inline-flex items-center gap-1 text-xs font-semibold text-txt3">{ariaVide}</span>
+      ) : !ecart ? (
+        // Un chiffre sans période de comparaison (coût du mois, par jardinier…) : une précision, pas un écart.
+        note ? <span className="mt-[5px] block text-xs font-semibold text-txt2">{note}</span> : null
       ) : (
         <span className={`mt-[5px] inline-flex items-center gap-1 text-xs font-bold ${COULEURS[ecart.jugement]}`}>
           {ecart.jugement !== 'indisponible' && ecart.delta !== 0 ? <Fleche size={13} aria-hidden="true" /> : null}
@@ -38,7 +41,7 @@ export default function ChiffreCle({ libelle, texte, ecart, periodePrecedente, v
         </span>
       )}
       {ancien ? <div><span className="mt-1 inline-flex items-center gap-1 rounded-full bg-card-alt px-2 py-px text-[11px] font-bold text-txt2">de {ancien}</span></div> : null}
-      <p className="sr-only">par rapport à {periodePrecedente}</p>
+      {ecart && periodePrecedente ? <p className="sr-only">par rapport à {periodePrecedente}</p> : null}
     </div>
   )
 }
