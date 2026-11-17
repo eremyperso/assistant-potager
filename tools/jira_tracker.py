@@ -89,8 +89,14 @@ Configuration (variables d'environnement)
 
 Usage
 -----
+    # Aide complète (commandes, cibles, statuts, variables, exemples)
+    python tools/jira_tracker.py --help
+
     # En ligne de commande (c'est ainsi que les agents l'invoquent)
     python tools/jira_tracker.py US-066 en_cours
+
+    # Repousser le contenu d'une fiche backlog vers une issue existante
+    python tools/jira_tracker.py update-issue US-066
 
     # Créer le ticket Jira à partir du fichier rédigé par Persona PO
     python tools/jira_tracker.py create-issue backlog/US-066_titre-court.md
@@ -888,6 +894,51 @@ def list_sprint_issues(sprint_id: str, cfg: dict) -> list[dict]:
         return []
 
 
+#: Écritures reconnues pour demander l'aide
+_OPTIONS_AIDE = ("-h", "--help", "help", "aide", "--aide", "/?")
+
+
+def _aide() -> str:
+    """Texte d'aide complet : commandes, cibles, statuts, variables, exemples."""
+    libelles = _statuts_jira()
+    statuts = "\n".join(
+        f"    {cle:<9} → « {libelles[cle]} »" for cle in (STATUT_A_FAIRE, STATUT_EN_COURS, STATUT_EN_QA)
+    )
+    return (
+        "Usage : python tools/jira_tracker.py <commande> [arguments]\n"
+        "\n"
+        "COMMANDES\n"
+        "  <US> <statut>                 Changer le statut d'une issue (ex. US-318 en_qa)\n"
+        "  create-issue <cible>...       Créer l'issue Jira depuis backlog/ (idempotent, statut « À faire »)\n"
+        "  update-issue <cible>...       Repousser résumé, description, épic et story points d'une issue\n"
+        "                                existante ; ne touche NI au statut NI aux pièces jointes ;\n"
+        "                                crée l'issue si elle n'existe pas encore\n"
+        "  sync-backlog [dossier] [--update]\n"
+        "                                Traiter tout backlog/ : crée les US absentes de Jira ;\n"
+        "                                --update met aussi à jour les existantes\n"
+        "  list-sprints                  Lister les sprints du projet\n"
+        "  list-sprint <sprint_id>       Lister les issues d'un sprint avec leur statut\n"
+        "  -h, --help, help, aide        Afficher cette aide\n"
+        "\n"
+        "CIBLES (create-issue, update-issue ; répétables sur une même ligne)\n"
+        "  US-318, 318, INC-013          identifiant : fichier backlog/<ID>_*.md retrouvé automatiquement\n"
+        "  311-316                       plage d'US (toutes les US de 311 à 316 incluses)\n"
+        "  backlog/US-318_titre.md       chemin d'un fichier\n"
+        "  \"backlog/US-31*.md\"           motif glob (à mettre entre guillemets sous PowerShell)\n"
+        "\n"
+        "STATUTS PILOTÉS (la colonne « Terminé » est volontairement hors de portée)\n"
+        f"{statuts}\n"
+        "  Variantes acceptées : « en qa », « in review », « todo », « in progress »…\n"
+        "\n"
+        "EXEMPLES\n"
+        "  python tools/jira_tracker.py US-318 en_qa\n"
+        "  python tools/jira_tracker.py update-issue US-311 US-312 US-316 US-318\n"
+        "  python tools/jira_tracker.py create-issue 320-335\n"
+        "  python tools/jira_tracker.py sync-backlog --update\n"
+        "  python tools/jira_tracker.py list-sprint 42\n"
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """Point d'entrée CLI."""
     # Force l'UTF-8 en sortie : certains shells Windows (Git Bash non
@@ -902,19 +953,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s │ %(message)s")
     args = list(argv if argv is not None else sys.argv[1:])
 
+    if args and args[0].lower() in _OPTIONS_AIDE:
+        print(_aide())
+        return 0
+
     if not args:
-        print(
-            "Usage : python tools/jira_tracker.py <commande>\n\n"
-            "Commandes:\n"
-            "  <issue_key> <statut>        Mettre à jour le statut d'une issue\n"
-            "  create-issue <cible>...     Créer l'issue Jira depuis un fichier backlog (cible : chemin, US-197, 197-202, motif glob)\n"
-            "  update-issue <cible>...     Repousser résumé/description/épic d'une issue existante (mêmes cibles)\n"
-            "  sync-backlog [dossier] [--update]  Créer les US manquantes (--update : mettre aussi à jour les existantes)\n"
-            "  list-sprints                Lister les sprints actifs\n"
-            "  list-sprint <sprint_id>     Lister les issues d'un sprint\n\n"
-            f"Statuts acceptés : {', '.join(sorted(STATUTS_JIRA))}\n",
-            file=sys.stderr,
-        )
+        print(_aide(), file=sys.stderr)
         return 2
 
     cfg = _config()
@@ -975,11 +1019,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Mise à jour de statut
     if len(args) < 2:
-        print(
-            "Usage : python tools/jira_tracker.py <issue_key> <statut>\n"
-            f"Statuts : {', '.join(sorted(STATUTS_JIRA))}",
-            file=sys.stderr,
-        )
+        print(_aide(), file=sys.stderr)
         return 2
 
     try:

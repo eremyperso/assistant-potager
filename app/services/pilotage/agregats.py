@@ -154,6 +154,8 @@ class Filtres:
     modele: Optional[str] = None
     appel_type: Optional[str] = None
     potager_id: Optional[int] = None
+    #: [US-319] Un seul jardinier (fiche d'un jardinier) ; absent des routes et de `vers_dict`.
+    user_id: Optional[int] = None
 
     @property
     def jours(self) -> int:
@@ -165,7 +167,7 @@ class Filtres:
         return Filtres(
             depuis=self.depuis - duree, jusqu_a=self.depuis - timedelta(days=1),
             provenances=self.provenances, canal=self.canal, modele=self.modele,
-            appel_type=self.appel_type, potager_id=self.potager_id,
+            appel_type=self.appel_type, potager_id=self.potager_id, user_id=self.user_id,
         )
 
     def vers_dict(self) -> dict:
@@ -359,6 +361,8 @@ def _filtrer(requete, filtres: Filtres):
         requete = requete.filter(ConsoTokens.appel_type == filtres.appel_type)
     if filtres.potager_id is not None:
         requete = requete.filter(ConsoTokens.potager_id == filtres.potager_id)
+    if filtres.user_id is not None:
+        requete = requete.filter(ConsoTokens.user_id == filtres.user_id)
     return requete
 
 

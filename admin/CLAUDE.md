@@ -49,7 +49,7 @@ pour être visible via l'API ; `npm run dev` suffit pour itérer.
 - Tout `import.meta.env` vit dans `src/config.js` : les modules de `src/lib/` restent testables sous Node.
 - Ajouter une vue : la déclarer dans `lib/navigation.js`, l'ajouter à `VUES_LIVREES` dans `App.jsx`. Les
   vues non livrées s'ouvrent sur `VueEnAttente`. Livrées : Consommation, Coût (US-313), Fiabilité (US-314),
-  Dérives (US-315). Une vue = `views/X.jsx` (chargement par `useDonnees` + `CadreVue`) + `lib/x.js` (mise en forme,
+  Dérives (US-315), Potagers et jardiniers (US-319), Seuils (US-316 : seule vue qui écrit — `client.modifier`, PATCH — et qui n'a ni période ni filtres). Une vue = `views/X.jsx` (chargement par `useDonnees` + `CadreVue`) + `lib/x.js` (mise en forme,
   testée) ; les composants de la maquette (`ChiffreCle`, `Graphique`, `TableauDonnees`, `CarteGraphique`,
   `GrilleChaleur`, `Segments`) ne prennent que des propriétés additionnelles, jamais de variante visuelle.
 - Un tableau passe en cartes sous un seuil de **container query** qui dépend de son nombre de colonnes

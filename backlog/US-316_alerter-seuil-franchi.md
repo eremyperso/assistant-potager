@@ -30,6 +30,7 @@ Décisions D10 et D11 (canaux choisis le 10/11/2026 : Telegram et e-mail). Les s
 - Cadrage : `docs/EPIC 18 - PILOTAGE LLM/CADRAGE_PILOTAGE_LLM.md` (numéro d'épic à valider)
 - Migration BDD requise : oui
 - Dépendances : US-310 ; US-311 et US-318 (maquette de référence) pour la vue « Seuils » ; US-309 pour les seuils de coût
+- Maquette de référence : vue Seuils d'US-318 (`maquette front/pilotage/Pilotage - PWA administration.html`, écran B).
 - Décisions liées : D10, D11
 - Point ouvert : planification par le mécanisme du veilleur du compagnon (US-266) ou par une unité systemd à minuteur dans `infra/` ; à trancher à l'analyse.
 - L'identifiant Telegram de l'administrateur est celui du compte lié à `ADMIN_EMAIL`, sinon une variable `ADMIN_TELEGRAM_ID`.

@@ -62,7 +62,8 @@ export default function Coquille({ client, compte, vue, filtres, majTexte, enPan
         </div>
       </header>
 
-      <BarreOutils filtres={filtres} modeles={modeles} surFiltres={surFiltres} majTexte={majTexte} enPanne={enPanne} surRafraichir={surRafraichir} />
+      {/* La vue Seuils n'a ni période ni filtres (maquette d'US-318) : elle est toujours « maintenant ». */}
+      {vue === 'seuils' ? null : <BarreOutils filtres={filtres} modeles={modeles} surFiltres={surFiltres} majTexte={majTexte} enPanne={enPanne} surRafraichir={surRafraichir} />}
 
       {/* `relative` est indispensable : sans parent positionné, un élément absolu du contenu (les
           textes `sr-only` de ChiffreCle, GrilleChaleur…) se place par rapport à la page, la rallonge

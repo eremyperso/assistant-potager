@@ -399,6 +399,38 @@ GROQ_RETRY_MAX_S = float(os.environ.get("GROQ_RETRY_MAX_S", "2"))
 ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
 
 # ─────────────────────────────────────────────────────────────────────────────
+# [US-316, US-317] Alertes, résumé quotidien et bilan hebdomadaire du pilotage LLM.
+# Tous éteints par défaut : « oui » les allume. `PILOTAGE_ALERTES=non` désactive tout
+# envoi, les alertes restent journalisées en base. Lus à l'appel (`config.X`), jamais
+# importés une fois : un test ou un redémarrage à chaud les change sans recharger.
+# ─────────────────────────────────────────────────────────────────────────────
+_VALEURS_OUI_PILOTAGE = ("oui", "1", "true", "on", "actif")
+
+
+def _booleen_pilotage(nom: str) -> bool:
+    return os.environ.get(nom, "non").strip().lower() in _VALEURS_OUI_PILOTAGE
+
+
+def _entier_borne(nom: str, defaut: int, minimum: int, maximum: int) -> int:
+    """Entier d'environnement borné ; une valeur absente, illisible ou hors bornes rend `defaut`."""
+    try:
+        valeur = int(os.environ.get(nom, defaut))
+    except (TypeError, ValueError):
+        return defaut
+    return valeur if minimum <= valeur <= maximum else defaut
+
+
+PILOTAGE_ALERTES = _booleen_pilotage("PILOTAGE_ALERTES")
+PILOTAGE_EVALUATION_MINUTES = _entier_borne("PILOTAGE_EVALUATION_MINUTES", 15, 1, 1440)
+PILOTAGE_RESUME_QUOTIDIEN = _booleen_pilotage("PILOTAGE_RESUME_QUOTIDIEN")
+PILOTAGE_RESUME_HEURE = _entier_borne("PILOTAGE_RESUME_HEURE", 8, 0, 23)
+PILOTAGE_BILAN_HEBDO = _booleen_pilotage("PILOTAGE_BILAN_HEBDO")
+# Identifiant Telegram de l'administrateur, quand le compte lié à ADMIN_EMAIL n'a pas de Telegram lié.
+ADMIN_TELEGRAM_ID = os.environ.get("ADMIN_TELEGRAM_ID", "").strip()
+# Adresse de la PWA d'administration, pour les liens des messages (défaut : FRONTEND_URL + /pilotage/).
+PILOTAGE_URL = os.environ.get("PILOTAGE_URL", "").strip().rstrip("/") or f"{FRONTEND_URL.rstrip('/')}/pilotage"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # [US-098] Étage 2 — socle de connaissance (recherche plein texte)
 # -----------------------------------------------------------------------------
 # RAG_ACTIF est un INTERRUPTEUR, pas un verrou de livraison : tant que le corpus
@@ -518,6 +550,9 @@ def etat_configuration() -> list[str]:
     _ligne("ANALYSE_MAX_TOURS", ANALYSE_MAX_TOURS)
     _ligne("ANALYSE_MAX_JETONS", ANALYSE_MAX_JETONS)
     _ligne("COMPAGNON_PROACTIF", "oui" if COMPAGNON_PROACTIF else "non")
+    _ligne("PILOTAGE_ALERTES", "oui" if PILOTAGE_ALERTES else "non")  # [US-316]
+    _ligne("PILOTAGE_RESUME_QUOTIDIEN", "oui" if PILOTAGE_RESUME_QUOTIDIEN else "non")  # [US-317]
+    _ligne("PILOTAGE_BILAN_HEBDO", "oui" if PILOTAGE_BILAN_HEBDO else "non")  # [US-317]
 
     # [US-308 / CA4] Les variables de modèle sont contrôlées au chargement ; ici, on le dit.
     prefixes = NOMS_FOURNISSEURS_RESERVES | frozenset(FOURNISSEURS_COMPATIBLES)

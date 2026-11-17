@@ -1890,3 +1890,95 @@ class McpAppel(Base):
         CheckConstraint("resultat IN ('ok', 'refus', 'erreur')", name="ck_mcp_appels_resultat"),
         Index("ix_mcp_appels_autorisation_horodatage", "autorisation_id", "horodatage"),
     )
+
+
+class SeuilPilotage(Base):
+    """[US-316 / CA1] Un seuil de contrôle de la consommation, du coût ou de la fiabilité du modèle.
+
+    Table d'administration (comme `conso_tokens`, sans RLS) : elle ne dit rien d'un potager.
+    - indicateur    : un des `app.services.pilotage.seuils.INDICATEURS` (coût du jour, jetons d'entrée
+                      médians, taux d'erreur…)
+    - perimetre     : `tous` ou un type d'appel (`agent`…) pour les indicateurs qui en portent un
+    - fenetre_jours : 1 = la journée en cours ; N = les N derniers jours, aujourd'hui compris
+    - comparaison   : `fixe` (valeur dans l'unité de l'indicateur) ou `ecart_7j` (écart en pourcentage
+                      à la valeur des 7 jours précédant la fenêtre)
+    - gravite       : `haute` (rappel quotidien tant qu'elle reste ouverte) | `moyenne` | `basse`
+    - a_valider     : vrai tant que l'administrateur n'a pas confirmé la valeur (défauts posés par le code)
+    """
+    __tablename__ = "seuils_pilotage"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    indicateur    = Column(String(32), nullable=False)
+    perimetre     = Column(String(32), nullable=False, server_default="tous")
+    fenetre_jours = Column(SmallInteger, nullable=False, server_default="1")
+    comparaison   = Column(String(12), nullable=False, server_default="fixe")
+    valeur        = Column(Float, nullable=False)
+    gravite       = Column(String(8), nullable=False, server_default="moyenne")
+    actif         = Column(Boolean, nullable=False, server_default=text("false"))
+    a_valider     = Column(Boolean, nullable=False, server_default=text("true"))
+    cree_le       = Column(DateTime, server_default=func.now())
+    modifie_le    = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("indicateur", "perimetre", "fenetre_jours", "comparaison",
+                         name="uq_seuils_pilotage_definition"),
+        CheckConstraint("comparaison IN ('fixe', 'ecart_7j')", name="ck_seuils_pilotage_comparaison"),
+        CheckConstraint("gravite IN ('haute', 'moyenne', 'basse')", name="ck_seuils_pilotage_gravite"),
+        CheckConstraint("fenetre_jours BETWEEN 1 AND 31", name="ck_seuils_pilotage_fenetre"),
+    )
+
+
+class AlertePilotage(Base):
+    """[US-316 / CA1, CA7, CA9] Un franchissement de seuil, de son ouverture à sa résolution.
+
+    Au plus UNE alerte ouverte (`resolue_le` nul) par seuil : l'index partiel `uq_alertes_pilotage_ouverte`
+    le garantit, et c'est ce qui empêche de renvoyer une alerte déjà ouverte.
+    - canaux_notifies : canaux qui ont réellement reçu l'alerte (`telegram`, `email`, séparés par une
+                        virgule) ; un canal en échec n'y figure pas
+    - retour_notifie  : le message de « retour à la normale » est parti (une seule fois)
+    - dernier_rappel_le : dernier rappel quotidien d'une alerte de gravité haute
+    Ne contient jamais le contenu d'un message de jardinier : que des mesures.
+    """
+    __tablename__ = "alertes_pilotage"
+
+    id                = Column(Integer, primary_key=True, index=True)
+    seuil_id          = Column(Integer, ForeignKey("seuils_pilotage.id", ondelete="CASCADE"), nullable=False)
+    valeur_mesuree    = Column(Float, nullable=False)
+    valeur_reference  = Column(Float, nullable=True)
+    nb_appels         = Column(Integer, nullable=False, server_default="0")
+    declenchee_le     = Column(DateTime, nullable=False, server_default=func.now())
+    resolue_le        = Column(DateTime, nullable=True)
+    canaux_notifies   = Column(String(40), nullable=False, server_default="")
+    dernier_rappel_le = Column(DateTime, nullable=True)
+    retour_notifie    = Column(Boolean, nullable=False, server_default=text("false"))
+
+    __table_args__ = (
+        Index("uq_alertes_pilotage_ouverte", "seuil_id", unique=True,
+              postgresql_where=text("resolue_le IS NULL"), sqlite_where=text("resolue_le IS NULL")),
+        Index("idx_alertes_pilotage_declenchee", "declenchee_le"),
+    )
+
+
+class BilanPilotage(Base):
+    """[US-317 / CA8] La trace d'un résumé quotidien ou d'un bilan hebdomadaire.
+
+    UNIQUE `(type, periode_debut)` : un bilan n'est jamais produit deux fois pour la même période.
+    `tentatives` plafonne à 2 : un envoi échoué est rejoué une seule fois, jamais davantage.
+    """
+    __tablename__ = "bilans_pilotage"
+
+    id            = Column(Integer, primary_key=True, index=True)
+    type          = Column(String(12), nullable=False)
+    periode_debut = Column(Date, nullable=False)
+    periode_fin   = Column(Date, nullable=False)
+    statut        = Column(String(8), nullable=False)
+    tentatives    = Column(SmallInteger, nullable=False, server_default="0")
+    envoye_le     = Column(DateTime, nullable=True)
+    erreur        = Column(String(200), nullable=True)
+    cree_le       = Column(DateTime, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("type", "periode_debut", name="uq_bilans_pilotage_periode"),
+        CheckConstraint("type IN ('quotidien', 'hebdomadaire')", name="ck_bilans_pilotage_type"),
+        CheckConstraint("statut IN ('envoye', 'echoue')", name="ck_bilans_pilotage_statut"),
+    )

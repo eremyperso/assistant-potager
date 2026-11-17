@@ -1,3 +1,32 @@
+## [v3.134.0] — 2026-11-17
+
+### 🚀 Nouveautés
+- Ajoute la vue Potagers et jardiniers à la PWA d'administration : tous les potagers et tous les comptes, y compris ceux sans appel, avec coût, part du coût, appels, échanges, jetons, taux d'échec, dernier appel et canaux, triables par coût, appels, échanges ou dernier appel (US-319).
+- Ajoute un bandeau (potagers et jardiniers existants et actifs, coût médian et P95 par jardinier actif, part du coût du premier décile) et signale « usage élevé » au-delà de trois fois la médiane, règle affichée (US-319).
+- Ajoute la fiche d'un potager et celle d'un jardinier : coût et appels par jour, répartition par type d'appel et par canal, coût médian d'un échange, issues, part de chaque membre ou de chaque potager ; les appels de fond forment les « tâches automatiques » (US-319).
+
+### 🔧 Améliorations techniques
+- Ajoute `acteurs.py` dans `app/services/pilotage/` et les routes `GET /admin/pilotage/potagers` et `/utilisateurs` (et leurs fiches `/{id}`), en lecture seule et réservées à `ADMIN_EMAIL`, par le chemin de lecture hors périmètre de potager d'US-310 (US-319).
+- Ajoute le filtre `user_id` aux `Filtres` des agrégats, absent des routes existantes (US-319).
+- Ajoute le registre RGPD du traitement, `docs/RGPD/RGPD_PILOTAGE_LLM.md` : finalité, accès limité à l'administrateur, données lues (nom du potager, e-mail), aucun contenu de message (US-319).
+
+## [v3.133.0] — 2026-11-17
+
+### 🚀 Nouveautés
+- Envoie à l'administrateur un message Telegram et un e-mail quand un seuil de contrôle est franchi : indicateur, valeur mesurée, seuil, fenêtre et lien vers la vue concernée de la PWA d'administration, sans jamais citer un jardinier ni un message (US-316).
+- Surveille le coût du jour et du mois projeté, les jetons d'entrée médians par appel d'un type, les appels par échange, les taux de quota et d'erreur, la latence P95 d'un type et les appels non chiffrés, contre une valeur fixe ou contre la moyenne des 7 jours précédents (US-316).
+- Ne renvoie pas une alerte déjà ouverte, envoie un retour à la normale une seule fois et rappelle chaque jour une alerte de gravité haute ; un indicateur mesuré sur moins de 20 appels ne déclenche rien, et l'échec d'un canal n'empêche pas l'autre (US-316).
+- Ajoute la vue Seuils à la PWA d'administration : alertes ouvertes, liste des seuils avec leur état courant, activation, modification de la valeur, de la comparaison, de la fenêtre et de la gravité, envois périodiques et historique des 50 dernières alertes ; une pastille signale les alertes ouvertes dans la navigation (US-316).
+- Envoie chaque matin un résumé Telegram de la veille (appels, jardiniers actifs, coût, taux de succès, latence P95 de l'agent, alertes ouvertes) avec l'écart à la moyenne des 7 jours précédents, et chaque lundi par e-mail un bilan de la semaine : répartition du coût par modèle et par type d'appel, coût par jardinier actif, 3 plus fortes variations, alertes et versions livrées (US-317).
+- Met le résumé à une ligne les jours sans appel d'usage, donne le volume des mesures à part et ne compte que l'usage et le fond (US-317).
+
+### 🔧 Améliorations techniques
+- Ajoute la migration v80 (`bilans_pilotage`, unique par type et début de période) et son rollback : un bilan n'est jamais envoyé deux fois, et un envoi échoué n'est rejoué qu'une fois (US-317).
+- Ajoute la migration v79 (`seuils_pilotage`, `alertes_pilotage` avec un index partiel qui garantit une seule alerte ouverte par seuil) et son rollback (US-316).
+- Ajoute `seuils.py`, `bilans.py` et `notifications.py` dans `app/services/pilotage/`, sans appel de modèle, planifiés par le bot avec le mécanisme du veilleur (`app/bot/pilotage_jobs.py`) : aucune unité systemd à ajouter (US-316, US-317).
+- Ajoute les routes `GET /admin/pilotage/seuils` et `PATCH /admin/pilotage/seuils/{id}`, réservées à `ADMIN_EMAIL`, et `email.envoyer_email`, qui rend si l'envoi a réussi (US-316).
+- Ajoute les réglages `PILOTAGE_ALERTES`, `PILOTAGE_EVALUATION_MINUTES`, `PILOTAGE_RESUME_QUOTIDIEN`, `PILOTAGE_RESUME_HEURE`, `PILOTAGE_BILAN_HEBDO`, `ADMIN_TELEGRAM_ID` et `PILOTAGE_URL` : tout est éteint par défaut (US-316, US-317).
+
 ## [v3.132.0] — 2026-11-17
 
 ### 🚀 Nouveautés

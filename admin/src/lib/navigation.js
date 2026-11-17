@@ -1,5 +1,5 @@
-// Les six vues de l'application [US-311 / CA4]. Une seule est livrée avec la coquille (Consommation,
-// US-312) ; les autres s'ouvrent sur un écran d'attente qui nomme l'US qui les remplira.
+// Les six vues de l'application [US-311 / CA4]. Les six sont livrées (US-312 à US-316, US-319) ;
+// `VueEnAttente` annonce l'US d'une vue qui ne le serait pas encore.
 // La vue courante vit dans le fragment (#/cout), les filtres dans la requête : les deux se
 // copient avec l'adresse.
 //

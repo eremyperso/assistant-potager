@@ -29,7 +29,7 @@ Première vue de la PWA d'administration, page d'accueil. Elle remplace l'extrac
 - Migration BDD requise : non
 - Dépendances : US-310, US-311, US-318 (maquette de référence)
 - Décisions liées : D8, D9
-- Maquette de référence : vue Consommation d'US-318.
+- Maquette de référence : vue Consommation d'US-318 (`maquette front/pilotage/Pilotage - PWA administration.html`, écran A).
 
 **Estimation :** 5 points
 

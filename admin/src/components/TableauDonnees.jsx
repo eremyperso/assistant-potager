@@ -17,6 +17,20 @@ const TABLEAU = {
 }
 const gabarit = (nbColonnes) => (nbColonnes <= 3 ? TABLEAU.court : nbColonnes <= 5 ? TABLEAU.moyen : TABLEAU.large)
 
+const ELEVE = (
+  <span className="ml-1.5 inline-flex rounded-full bg-amber-soft px-2 py-px align-middle text-[11px] font-bold text-txt">usage élevé</span>
+)
+
+function Ouvrir({ ligne }) {
+  if (!ligne.surOuvrir) return null
+  return (
+    <button type="button" onClick={() => ligne.surOuvrir(ligne)} aria-label={`Ouvrir la fiche : ${ligne.titre}`}
+      className="mt-0.5 block min-h-[28px] text-[12.5px] font-bold text-brand-text">
+      Ouvrir la fiche →
+    </button>
+  )
+}
+
 const FAIBLE = (
   <span className="ml-1.5 inline-flex rounded-full bg-card-alt px-2 py-px align-middle text-[11px] font-bold text-txt2">échantillon faible</span>
 )
@@ -71,7 +85,9 @@ export default function TableauDonnees({ titre, sousTitre, premiereColonne, colo
               <th scope="row" className={`${td} text-left font-normal`}>
                 {l.mono ? <code className="font-mono text-[12.5px] text-txt">{l.titre}</code> : <span className="font-semibold text-txt">{l.titre}</span>}
                 {l.faible ? FAIBLE : null}
-                {l.note ? <span className="block whitespace-normal text-[11.5px] text-txt2">{l.note}</span> : null}
+                {l.usageEleve ? ELEVE : null}
+                {l.note && !l.usageEleve ? <span className="block whitespace-normal text-[11.5px] text-txt2">{l.note}</span> : null}
+                <Ouvrir ligne={l} />
               </th>
               {colonnes.map((c, i) => (
                 <td key={c.id} className={`${td} text-right`}>
@@ -90,7 +106,7 @@ export default function TableauDonnees({ titre, sousTitre, premiereColonne, colo
           <li key={l.cle} className="border-t border-border-soft px-0.5 py-2.5 first:border-t-0">
             <div className="flex items-baseline justify-between gap-2.5">
               {l.mono ? <code className="break-all font-mono text-[13px] font-semibold text-txt">{l.titre}</code> : <b className="text-[13px] text-txt">{l.titre}</b>}
-              {l.faible ? FAIBLE : null}
+              {l.faible ? FAIBLE : null}{l.usageEleve ? ELEVE : null}
             </div>
             {l.part !== undefined ? <BarrePart part={l.part} /> : null}
             <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-txt2">
@@ -101,7 +117,8 @@ export default function TableauDonnees({ titre, sousTitre, premiereColonne, colo
                 </div>
               ))}
             </dl>
-            {l.note ? <p className="mt-1 text-[11.5px] text-txt2">{l.note}</p> : null}
+            {l.note && !l.usageEleve ? <p className="mt-1 text-[11.5px] text-txt2">{l.note}</p> : null}
+            <Ouvrir ligne={l} />
           </li>
         ))}
       </ul>
