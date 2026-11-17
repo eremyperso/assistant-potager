@@ -1,3 +1,26 @@
+## [v3.131.0] — 2026-11-17
+
+### 🚀 Nouveautés
+- Ajoute la PWA d'administration « Pilotage », distincte de celle des jardiniers, installable sur téléphone et servie sous `/pilotage/` ; elle n'ouvre ses vues qu'au compte administrateur (US-311).
+- Ajoute la vue Consommation : chiffres clés de la période comparés à la précédente, courbes par jour ou par heure, ventilation par modèle, type d'appel, canal, provenance, issue, version, potager ou utilisateur, et distribution du coût par échange (médiane, P95, maximum) (US-312).
+- Ajoute quatre routes de lecture réservées à `ADMIN_EMAIL` : `GET /admin/pilotage/synthese`, `/series`, `/ventilation` et `/echanges`, filtrables par période, provenance, canal, modèle, type d'appel et potager (US-310).
+- Compte par défaut les appels d'usage et de fond : les mesures, tests et lignes historiques restent hors des chiffres sauf demande (US-310).
+
+### 🔧 Améliorations techniques
+- Ajoute `app/services/pilotage/agregats.py` : toute la lecture de `conso_tokens` y est regroupée, sans appel à un modèle, et les coûts déjà figés en micro-euros sont additionnés sans recalcul (US-310).
+- Fait renvoyer `administrateur` par `GET /auth/me` pour que la PWA décide d'ouvrir ses vues avant toute requête `/admin/...`, et factorise le contrôle dans `est_administrateur` (US-311).
+- Redirige `/pilotage` vers `/pilotage/` ; sans build `admin/dist`, rien n'est servi et les routes existantes ne bougent pas (US-311).
+- Ajoute le build, les tests (`npm test`) et le déploiement de `admin/` à `deploy-dev.yml` et `deploy.yml`, après celui de `frontend/` dont il étend la configuration Tailwind (US-311).
+- Autorise `http://localhost:3001` en CORS pour le serveur de dev de la PWA d'administration (US-311).
+- Met à jour `docs/domaines/pilotage-llm.md`, `migrations.md`, le runbook de déploiement et `docs/openapi.json` (US-310, US-311).
+
+### 💾 Base de données
+- Ajoute la migration `migration_v78.sql` : index `idx_conso_tokens_date_provenance` (date, provenance) et `idx_conso_tokens_cree_le` sur `conso_tokens`, avec `rollback_v78.sql` ; aucune colonne ni donnée ajoutée (US-310).
+- La migration v78 suppose v73, v74 et v75 déjà jouées ; aucune de ces migrations n'a encore été jouée sur PostgreSQL.
+
+### ⚠️ Breaking changes
+- La réponse de `GET /auth/me` gagne le champ booléen `administrateur` (US-311).
+
 ## [v3.130.0] — 2026-11-16
 
 ### 🚀 Nouveautés
