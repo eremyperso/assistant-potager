@@ -57,6 +57,12 @@ Observabilité de la cascade de réponses + retour du jardinier [US-097] :
   GET  /admin/routage/metriques          → métriques de routage (réservé à ADMIN_EMAIL)
   GET  /admin/savoir/lacunes             → questions que la base de connaissance ne sert pas [US-098]
   GET  /admin/routage/retours-negatifs   → questions les plus souvent jugées mauvaises (réservé)
+
+Pilotage de la consommation du modèle [US-310] — lecture seule, réservé à ADMIN_EMAIL :
+  GET  /admin/pilotage/synthese          → chiffres de la période et de la période précédente
+  GET  /admin/pilotage/series            → une mesure par jour (ou par heure), ventilée
+  GET  /admin/pilotage/ventilation       → classement d'une dimension pour une mesure
+  GET  /admin/pilotage/echanges          → coût, jetons et appels par échange (médiane, P95, max)
 """
 import logging
 import os
@@ -142,6 +148,7 @@ from utils.culture_resolve import normaliser_culture
 from utils.parcelles import largeur_deduite  # [US-225]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from app.services.pilotage import agregats as svc_pilotage_agregats  # [US-310]
 from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
@@ -268,6 +275,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",        # dev React local
         "http://localhost:5173",        # dev Vite local
+        "http://localhost:3001",        # dev de la PWA d'administration [US-311]
         "https://*.netlify.app",        # frontend Netlify (prod)
     ],
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # DELETE [US-048] membres, PATCH [US-074] modifier_potager, PUT [US-265, US-301] carnet et voix (en dev, Vite → API)
@@ -362,11 +370,17 @@ def get_current_user_ctx(user: User = Depends(get_current_user)) -> TenantContex
         db.close()
 
 
+def est_administrateur(user: User) -> bool:
+    """[US-097 / US-311] Vrai si le compte est l'administrateur de la plateforme (`ADMIN_EMAIL`,
+    comparaison insensible à la casse). `ADMIN_EMAIL` absent ou vide → faux pour tout le monde."""
+    return bool(ADMIN_EMAIL) and (user.email or "").strip().lower() == ADMIN_EMAIL.strip().lower()
+
+
 def require_admin_user(user: User = Depends(get_current_user)) -> User:
     """[US-097 / CA7] Dépendance FastAPI : réserve un endpoint au compte
     administrateur de la plateforme (`ADMIN_EMAIL`, variable d'environnement).
     `ADMIN_EMAIL` absent/vide → 403 systématique, jamais de repli implicite."""
-    if not ADMIN_EMAIL or (user.email or "").strip().lower() != ADMIN_EMAIL.strip().lower():
+    if not est_administrateur(user):
         raise HTTPException(status_code=403, detail="Réservé à l'administrateur de la plateforme")
     return user
 
@@ -734,6 +748,9 @@ def auth_me(user: User = Depends(get_current_user)):
         # Booléen plutôt que le chat_id lui-même : le front n'a besoin que de
         # l'état, et l'identifiant Telegram n'a pas à circuler côté navigateur.
         "telegram_lie": user.telegram_chat_id is not None,
+        # [US-311 / CA3] La PWA d'administration décide d'ouvrir ou non ses vues AVANT toute
+        # requête `/admin/...` : un compte qui n'est pas l'administrateur ne déclenche aucun appel.
+        "administrateur": est_administrateur(user),
         # [US-091] Identifiant public du bot, déduit du token via l'API
         # Telegram (getMe, mis en cache) — jamais une variable d'environnement
         # séparée à maintenir en double par environnement, cf.
@@ -1509,6 +1526,22 @@ if os.path.isdir(_DIST):
         return FileResponse(os.path.join(_DIST, "index.html"))
 
 
+# ── PWA d'administration [US-311] ─────────────────────────────────────────────
+# Application distincte de celle des jardiniers (`admin/`, Vite + React), servie sous `/pilotage/`
+# uniquement : son manifeste et son service worker n'ont pas d'autre portée. Sans build
+# (`admin/dist` absent), rien n'est servi — les routes du jardinier et `/admin/...` ne bougent pas.
+_ADMIN_DIST = os.path.join(_RACINE, "admin", "dist")
+
+if os.path.isdir(_ADMIN_DIST):
+    # `/pilotage` SANS barre finale n'est pas capté par le montage (qui exige `/pilotage/…`) : sans
+    # cette redirection, le repli SPA des jardiniers répondait à sa place (écran de connexion du jardinier).
+    @app.get("/pilotage", include_in_schema=False)
+    def pilotage_sans_barre():
+        return RedirectResponse("/pilotage/")
+
+    app.mount("/pilotage", StaticFiles(directory=_ADMIN_DIST, html=True), name="pilotage")
+
+
 # ── Modèle de requête ──────────────────────────────────────────────────────────
 class TexteRequest(BaseModel):
     texte: str
@@ -2102,6 +2135,95 @@ def admin_routage_retours_negatifs(
         return {"questions": svc_metriques_routage.top_questions_mal_notees(db, limite=limite)}
     finally:
         db.close()
+
+
+# ── Pilotage de la consommation du modèle [US-310] ─────────────────────────────
+# Lecture seule, réservée à l'administrateur (CA7). Aucune route n'appelle un modèle (CA9) ;
+# toute la lecture est dans `app/services/pilotage/agregats.py` (CA11).
+
+def _filtres_pilotage(
+    depuis: Optional[date] = Query(default=None, description="Premier jour (inclus) ; défaut : 7 jours glissants"),
+    jusqu_a: Optional[date] = Query(default=None, description="Dernier jour (inclus) ; défaut : aujourd'hui"),
+    provenance: Optional[str] = Query(
+        default=None,
+        description="usage, mesure, test, fond, historique (séparées par une virgule) ; défaut : usage et fond",
+    ),
+    canal: Optional[str] = Query(default=None),
+    modele: Optional[str] = Query(default=None),
+    appel_type: Optional[str] = Query(default=None),
+    potager_id: Optional[int] = Query(default=None),
+) -> svc_pilotage_agregats.Filtres:
+    """[US-310 / CA5] Les filtres communs aux quatre routes ; une valeur hors vocabulaire → 422."""
+    try:
+        return svc_pilotage_agregats.construire_filtres(
+            depuis=depuis, jusqu_a=jusqu_a, provenance=provenance, canal=canal,
+            modele=modele, appel_type=appel_type, potager_id=potager_id,
+        )
+    except svc_pilotage_agregats.FiltreInvalideError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+def _lire_pilotage(lecture, *args, **kwargs) -> dict:
+    """Ouvre une session, appelle la fonction du service et traduit ses erreurs de paramètre."""
+    db = SessionLocal()
+    try:
+        return lecture(db, *args, **kwargs)
+    except svc_pilotage_agregats.FiltreInvalideError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except svc_pilotage_agregats.LectureHorsPerimetreError as e:
+        log.error("pilotage : %s", e)
+        raise HTTPException(status_code=500, detail="Lecture de la consommation indisponible")
+    finally:
+        db.close()
+
+
+@app.get("/admin/pilotage/synthese")
+def admin_pilotage_synthese(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-310 / CA1] Appels, jetons, taux de cache, audio, caractères, coût, issues et latences
+    de la période, avec les mêmes valeurs pour la période précédente de même durée."""
+    return _lire_pilotage(svc_pilotage_agregats.synthese, filtres)
+
+
+@app.get("/admin/pilotage/series")
+def admin_pilotage_series(
+    mesure: str = Query(default="jetons_entree"),
+    dimension: Optional[str] = Query(
+        default=None, description="modele, appel_type, canal, provenance, issue ou version",
+    ),
+    pas: Optional[str] = Query(default=None, description="jour, ou heure sur une période d'un jour"),
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-310 / CA2] Une série par jour (par heure sur une journée) d'une mesure, ventilée par
+    la dimension choisie. Un pas sans appel vaut zéro."""
+    return _lire_pilotage(svc_pilotage_agregats.serie, filtres, mesure=mesure, dimension=dimension, pas=pas)
+
+
+@app.get("/admin/pilotage/ventilation")
+def admin_pilotage_ventilation(
+    dimension: str = Query(description="modele, appel_type, canal, provenance, issue, version, potager ou utilisateur"),
+    mesure: str = Query(default="appels"),
+    limite: int = Query(default=10, ge=1, le=200),
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-310 / CA3] Le classement d'une dimension pour une mesure, avec limite."""
+    return _lire_pilotage(
+        svc_pilotage_agregats.ventilation, filtres, dimension=dimension, mesure=mesure, limite=limite,
+    )
+
+
+@app.get("/admin/pilotage/echanges")
+def admin_pilotage_echanges(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-310 / CA4] Distribution du coût, des jetons et du nombre d'appels par échange
+    (médiane, P95, maximum)."""
+    return _lire_pilotage(svc_pilotage_agregats.echanges, filtres)
 
 
 @app.get("/stats")

@@ -1,8 +1,9 @@
 # Pilotage LLM — mesure fiable et coût de chaque appel au modèle
 
 ÉPIC 18 (cadrage : `docs/EPIC 18 - PILOTAGE LLM/CADRAGE_PILOTAGE_LLM.md`). Cette fiche couvre
-le **lot 1 (mesure fiable)** et le **lot 2 (coût)** : US-306 à US-309. Les vues d'administration
-(lot 3) et les alertes (lot 4) viendront s'y ajouter.
+le **lot 1 (mesure fiable)** et le **lot 2 (coût)** : US-306 à US-309, puis les **agrégats** servis à
+l'administrateur (US-310) et la PWA d'administration qui les affiche (US-311, US-312). Les alertes
+(lot 4) viendront s'y ajouter.
 
 Tout part de `llm/passerelle.py::_enregistrer_conso`, qui écrit **une ligne de `conso_tokens` par
 appel** au modèle, succès comme échec. Ce qu'elle écrit au-delà de l'appel lui-même n'est jamais un
@@ -81,6 +82,68 @@ l'écriture**, **figés** : changer la grille ne modifie aucune ligne déjà éc
 qui nomme la variable et montre la valeur lue : le démarrage s'arrête. Préfixes connus :
 `NOMS_FOURNISSEURS_RESERVES` (Groq, Mistral…) et les `FOURNISSEURS_COMPATIBLES` déclarés. Un commentaire
 va sur une ligne à part du `.env`, jamais en fin de ligne de valeur.
+
+## Les agrégats — `app/services/pilotage/agregats.py` et `/admin/pilotage/...` [US-310]
+
+**Source unique** des chiffres de consommation : les quatre routes, les vues de la PWA d'administration
+(US-312 à US-315), les seuils (US-316) et le bilan (US-317) lisent ici. Aucun écran n'additionne lui-même.
+
+| Route (lecture seule, `require_admin_user` : 401 sans jeton, 403 sinon) | Rend |
+|---|---|
+| `GET /admin/pilotage/synthese` | appels, jetons d'entrée / de sortie / en cache, taux de cache, secondes d'audio, caractères, coût, issues, latence P50 et P95, jetons d'entrée médians par appel — pour la période **et** la période précédente de même durée |
+| `GET /admin/pilotage/series?mesure=&dimension=&pas=` | une série par jour (par heure sur une journée), chaque pas présent à zéro ; dimension : `modele`, `appel_type`, `canal`, `provenance`, `issue`, `version` |
+| `GET /admin/pilotage/ventilation?dimension=&mesure=&limite=` | le classement d'une dimension (dont `potager`, `utilisateur`), avec part, médiane et coût par ligne |
+| `GET /admin/pilotage/echanges` | médiane, P95 et maximum du coût, des jetons et du nombre d'appels **par échange** |
+
+Filtres communs : `depuis`, `jusqu_a` (dates incluses ; défaut 7 jours glissants), `provenance` (une ou
+plusieurs, séparées par une virgule), `canal`, `modele`, `appel_type`, `potager_id`. Une valeur hors
+vocabulaire → 422.
+
+- **Provenance** : sans filtre, seules `usage` et `fond` sont comptées ; `mesure`, `test` et `historique`
+  ne sont jamais mêlées à un chiffre d'usage par accident. `provenance=mesure` ne compte QUE les mesures.
+- **Unité** : les jetons ne sont sommés que sur les lignes d'unité `jeton` ; secondes d'audio et
+  caractères sont des mesures distinctes. Le taux de cache est `jetons_cache / jetons_entree` (les jetons
+  en cache sont inclus dans les jetons d'entrée).
+- **Coût** : `None` (jamais 0) quand aucune ligne de la période n'est chiffrée ; `lignes_non_chiffrees`
+  dit combien manquent.
+- **Période** lue sur `conso_tokens.date` (jour d'imputation, indexé) ; le pas horaire lit `cree_le`.
+- **Percentiles en Python** (rang le plus proche, comme `metriques_routage._p95`) : identiques sous SQLite
+  et PostgreSQL. Les sommes et décomptes sont faits par la base (`GROUP BY`) ; seule une colonne est
+  ramenée pour les percentiles. Budget : 90 jours sur 100 000 lignes en moins d'une seconde (test).
+- **Lecture de tous les potagers** : `conso_tokens` n'est pas sous RLS. La lecture hors périmètre passe
+  par `lecture_toute_la_plateforme()`, qui **refuse** de s'exécuter (`LectureHorsPerimetreError`) si
+  PostgreSQL signale la table sous RLS ; le module ne pose jamais de `tenant_scope` factice. Si un jour une
+  politique RLS est ajoutée à `conso_tokens`, la lecture d'administration devra passer par un rôle dédié,
+  pas par un contournement.
+- **Index** (migration v78) : `(date, provenance)` et `cree_le` ; `echange_ref` l'était déjà (v74).
+- **Ajouter une dimension ou une mesure** : l'ajouter à `DIMENSIONS_*` / `MESURES` et à `_Cumul.valeur` —
+  les trois routes qui la lisent la prennent ensemble.
+
+## La PWA d'administration « Pilotage » — `admin/` [US-311, US-312]
+
+Application **séparée** de celle des jardiniers (Vite + React, `admin/`, règles dans `admin/CLAUDE.md`),
+servie par l'API sous **`/pilotage/`** (montage statique de `admin/dist`, rien si non construit).
+Manifeste et service worker limités à ce chemin ; le service worker ne garde que la coquille, jamais une
+réponse `/admin/...` (hors ligne : « pas de données »).
+
+- **Accès** : connexion et jetons du jardinier (mêmes clés `localStorage`). La décision se prend sur
+  `GET /auth/me` → `administrateur` (`app.api.main.est_administrateur`, la même règle que
+  `require_admin_user`) : un autre compte voit « Accès réservé » et n'envoie aucune requête `/admin/...`.
+- **Maquette** : US-318 (projet Claude Design « Pilotage - PWA administration »). Seul jeton ajouté à l'identité :
+  `--brand-soft-strong` ; les couleurs de séries sont des alias des teintes existantes.
+- **Coquille** : navigation entre six vues (Consommation livrée ; Coût, Fiabilité, Dérives, Potagers,
+  Seuils s'ouvrent sur un écran d'attente), période (aujourd'hui, 7, 30, 90 jours, personnalisée) et
+  filtres provenance / canal / modèle gardés dans l'adresse. La vue du jour se rafraîchit toutes les
+  60 s onglet visible ; en panne d'API, les dernières valeurs (en mémoire seulement) restent affichées
+  avec leur âge.
+- **Vue Consommation** (US-312) : cinq chiffres clés avec écart à la période précédente (le mot
+  « défavorable » accompagne l'icône), graphique par jour (par heure sur « aujourd'hui ») avec la part du
+  cache distinguée, « Ventiler par » cache / modèle / type / canal (cinq séries + « Autres »), tableaux par
+  type d'appel et par modèle, bloc audio à part. Un rappel dit que seules `usage` et `fond` sont comptées.
+  Les chiffres sont ceux de `GET /admin/pilotage/synthese` : le contrat est
+  `admin/src/lib/fixtures/consommation_fixe.json`, vérifié des deux côtés (voir `admin/CLAUDE.md`).
+- **Déploiement** : étapes « Build admin PWA (Pilotage) » des workflows `deploy.yml` / `deploy-dev.yml`,
+  après le build du frontend (sa config Tailwind étend celle de `frontend/`) ; runbook A9 bis.
 
 ## Pièges
 

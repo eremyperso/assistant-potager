@@ -420,7 +420,8 @@ class TestCA6Fige:
         ecrivains = []
         for chemin in list((RACINE / "app").rglob("*.py")) + list((RACINE / "llm").rglob("*.py")):
             source = chemin.read_text(encoding="utf-8-sig")
-            if "cout_micro_eur" in source and chemin.name not in {"passerelle.py", "chiffrage.py", "tarifs.py"}:
+            # agregats.py [US-310] : lecteur seul, il somme des coûts déjà figés.
+            if "cout_micro_eur" in source and chemin.name not in {"passerelle.py", "chiffrage.py", "tarifs.py", "agregats.py"}:
                 ecrivains.append(chemin.relative_to(RACINE).as_posix())
         assert ecrivains == []
 

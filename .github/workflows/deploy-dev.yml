@@ -58,6 +58,22 @@ jobs:
           rsync -az --delete frontend/dist/ \
             ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager-dev/frontend/dist/
 
+      # [US-311] PWA d'administration « Pilotage » (admin/), servie par l'API sous /pilotage/.
+      # Construite APRÈS le frontend : sa configuration Tailwind étend celle de frontend/, dont les
+      # dépendances (node_modules) viennent d'être installées.
+      - name: Build admin PWA (Pilotage)
+        run: |
+          cd admin
+          echo "VITE_API_URL=https://dev.potager.eremy.fr" > .env.local
+          npm install
+          npm test
+          npm run build
+
+      - name: Deploy admin dist to server
+        run: |
+          rsync -az --delete admin/dist/ \
+            ${{ secrets.SCALEWAY_USER }}@${{ secrets.SCALEWAY_HOST }}:/opt/potager-dev/admin/dist/
+
       - name: Install systemd services (API + Bot)
         run: |
           scp infra/potager-dev.service \
