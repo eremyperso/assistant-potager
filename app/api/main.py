@@ -66,6 +66,12 @@ Pilotage de la consommation du modèle [US-310] — lecture seule, réservé à 
   GET  /admin/pilotage/cout              → coût, mois en cours, projection, jardiniers actifs [US-313]
   GET  /admin/pilotage/fiabilite         → issues, quotas, latences, grille de quotas, échecs [US-314]
   GET  /admin/pilotage/derives           → appels et échanges par version de l'application [US-315]
+  GET  /admin/pilotage/potagers          → consommation par potager, bandeau, usage élevé [US-319]
+  GET  /admin/pilotage/potagers/{id}     → fiche d'un potager [US-319]
+  GET  /admin/pilotage/utilisateurs      → consommation par jardinier + tâches automatiques [US-319]
+  GET  /admin/pilotage/utilisateurs/{id} → fiche d'un jardinier [US-319]
+  GET  /admin/pilotage/seuils            → seuils, 50 dernières alertes, interrupteurs [US-316, US-317]
+  PATCH /admin/pilotage/seuils/{id}      → active/désactive un seuil ou change sa valeur [US-316]
 """
 import logging
 import os
@@ -151,10 +157,12 @@ from utils.culture_resolve import normaliser_culture
 from utils.parcelles import largeur_deduite  # [US-225]
 from app.services import retours as svc_retours  # [US-097]
 from app.services import metriques_routage as svc_metriques_routage  # [US-097]
+from app.services.pilotage import acteurs as svc_pilotage_acteurs  # [US-319]
 from app.services.pilotage import agregats as svc_pilotage_agregats  # [US-310]
 from app.services.pilotage import cout as svc_pilotage_cout  # [US-313]
 from app.services.pilotage import derives as svc_pilotage_derives  # [US-315]
 from app.services.pilotage import fiabilite as svc_pilotage_fiabilite  # [US-314]
+from app.services.pilotage import seuils as svc_pilotage_seuils  # [US-316]
 from app.services import file_gestes as svc_file_gestes  # [US-196, US-224]
 from app.services import relances_file as svc_relances_file  # [US-224]
 from app.services import contexte_semis as svc_contexte_semis  # [US-069]
@@ -2260,6 +2268,97 @@ def admin_pilotage_derives(
 ):
     """[US-315] Taille des appels et appels par échange, par version de l'application."""
     return _lire_pilotage(svc_pilotage_derives.derives, filtres, appel_type=type_courbe)
+
+
+@app.get("/admin/pilotage/potagers")
+def admin_pilotage_potagers(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-319 / CA1, CA3] Tous les potagers (ceux sans appel à zéro), le bandeau, la règle d'usage élevé."""
+    return _lire_pilotage(svc_pilotage_acteurs.potagers, filtres)
+
+
+@app.get("/admin/pilotage/utilisateurs")
+def admin_pilotage_utilisateurs(
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-319 / CA2, CA8] Tous les comptes (e-mail, potagers, inscription) et les tâches automatiques."""
+    return _lire_pilotage(svc_pilotage_acteurs.utilisateurs, filtres)
+
+
+@app.get("/admin/pilotage/potagers/{cible_id}")
+def admin_pilotage_fiche_potager(
+    cible_id: int,
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-319 / CA5] La fiche d'un potager."""
+    fiche = _lire_pilotage(svc_pilotage_acteurs.fiche_potager, filtres, cible_id)
+    if fiche is None:
+        raise HTTPException(status_code=404, detail="Potager introuvable")
+    return fiche
+
+
+@app.get("/admin/pilotage/utilisateurs/{cible_id}")
+def admin_pilotage_fiche_utilisateur(
+    cible_id: int,
+    filtres: svc_pilotage_agregats.Filtres = Depends(_filtres_pilotage),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-319 / CA6] La fiche d'un jardinier, répartie entre ses potagers."""
+    fiche = _lire_pilotage(svc_pilotage_acteurs.fiche_utilisateur, filtres, cible_id)
+    if fiche is None:
+        raise HTTPException(status_code=404, detail="Jardinier introuvable")
+    return fiche
+
+
+class SeuilPilotageMiseAJour(BaseModel):
+    """[US-316 / CA10] Ce que la vue « Seuils » peut changer : activation, valeur, comparaison, fenêtre, gravité."""
+    actif: Optional[bool] = None
+    valeur: Optional[float] = None
+    comparaison: Optional[str] = None
+    fenetre_jours: Optional[int] = None
+    gravite: Optional[str] = None
+
+
+@app.get("/admin/pilotage/seuils")
+def admin_pilotage_seuils(
+    etats: bool = Query(default=True, description="false : ne mesure pas chaque seuil (lecture légère)"),
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-316 / CA10, US-317 / CA7] Les seuils (valeur, activation, état courant, alerte ouverte), les
+    alertes ouvertes, les 50 dernières alertes, les canaux joignables et les interrupteurs de
+    configuration. Aucun contenu de jardinier."""
+    db = SessionLocal()
+    try:
+        return svc_pilotage_seuils.vue_seuils(db, avec_etats=etats)
+    finally:
+        db.close()
+
+
+@app.patch("/admin/pilotage/seuils/{seuil_id}")
+def admin_pilotage_modifier_seuil(
+    seuil_id: int,
+    corps: SeuilPilotageMiseAJour,
+    _admin: User = Depends(require_admin_user),
+):
+    """[US-316 / CA10] Active ou désactive un seuil, change sa valeur (qui le valide), sa comparaison, sa fenêtre ou sa gravité."""
+    db = SessionLocal()
+    try:
+        try:
+            seuil = svc_pilotage_seuils.modifier_seuil(
+                db, seuil_id, actif=corps.actif, valeur=corps.valeur, comparaison=corps.comparaison,
+                fenetre_jours=corps.fenetre_jours, gravite=corps.gravite,
+            )
+        except svc_pilotage_seuils.SeuilInvalideError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        if seuil is None:
+            raise HTTPException(status_code=404, detail="Seuil introuvable")
+        return seuil
+    finally:
+        db.close()
 
 
 @app.get("/stats")

@@ -113,6 +113,8 @@ US-311. Elle ne couvre que deux écrans de référence (brief :
 `BRIEF_MAQUETTE_PWA_ADMINISTRATION.md`) ; les vues US-313 à US-315 et US-319 réutilisent les
 composants de la vue Consommation et n'ont pas de maquette propre.
 
+Maquette de référence (US-318, validée le 17/11/2026) : `maquette front/pilotage/Pilotage - PWA administration.html` — écran A Consommation, écran B Seuils, composants communs et jetons, à 375, 768 et 1280 px, thèmes clair et sombre.
+
 ### 6.1 Synthèse de production
 
 | Profil | US | Points |

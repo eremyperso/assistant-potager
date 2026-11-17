@@ -4,6 +4,7 @@ Module extrait de l'ancien bot.py monolithique (découpage 2026-09).
 """
 from telegram import Update, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, TypeHandler
+from app import config  # [US-316] réglages du pilotage lus à chaque démarrage
 from app.config import APP_ENV, TELEGRAM_BOT_TOKEN, etat_configuration
 from database.db import current_potager_id
 from utils.tts import is_tts_enabled
@@ -28,6 +29,7 @@ from .enregistrement import _action_confirm_cb
 from .file_gestes import cmd_gestes, file_cb  # [US-224]
 from .veilleur_jobs import job_bilan_semaine, job_veilleur  # [US-266]
 from .messages_spontanes import _spontane_cb, job_distributeur  # [US-267]
+from .pilotage_jobs import INTERVALLE_BILANS_SECONDES, job_bilans_pilotage, job_evaluation_seuils  # [US-316, US-317]
 from .godets import (
     _deplacement_lot_cb, _levee_detail_cb, _levee_lot_cb, _godet_graines_cb, _godet_lot_cb, _godet_plants_cb, _godet_variete_cb, cmd_lot,
 )
@@ -345,6 +347,28 @@ def _construire_application() -> "Application":
     )
     log.info("📨 JOB DISTRIBUTEUR : tous les quarts d'heure · COMPAGNON_PROACTIF=%s",
              "oui" if svc_distribution.actif() else "non (rien ne part)")
+
+    # ── [US-316 / CA5, US-317] Pilotage du modèle : seuils, résumé quotidien, bilan du lundi ──
+    # Même mécanisme que le veilleur (le bot est le seul processus de tâches de fond) : aucune unité
+    # systemd à ajouter. Aucun modèle n'est appelé. Les interrupteurs sont lus à chaque passage.
+    app.job_queue.run_repeating(
+        job_evaluation_seuils,
+        interval=config.PILOTAGE_EVALUATION_MINUTES * 60,
+        first=600,
+        name="pilotage_seuils",
+    )
+    app.job_queue.run_repeating(
+        job_bilans_pilotage,
+        interval=INTERVALLE_BILANS_SECONDES,
+        first=660,
+        name="pilotage_bilans",
+    )
+    log.info(
+        "📟 JOB PILOTAGE     : seuils toutes les %d min (envois : %s) · résumé %s à %dh · bilan du lundi %s",
+        config.PILOTAGE_EVALUATION_MINUTES, "oui" if config.PILOTAGE_ALERTES else "non (journalisés seulement)",
+        "oui" if config.PILOTAGE_RESUME_QUOTIDIEN else "non", config.PILOTAGE_RESUME_HEURE,
+        "oui" if config.PILOTAGE_BILAN_HEBDO else "non",
+    )
 
     return app
 

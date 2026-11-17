@@ -8,7 +8,7 @@ Je veux une application d'administration distincte de celle des jardiniers, inst
 Afin de consulter le pilotage sans extraction et sans mêler l'administration à l'application livrée aux utilisateurs
 
 **Contexte fonctionnel :**
-Décisions D1 et D2 (choix du 10/11/2026 : application séparée). Elle accueillera d'abord les vues de pilotage LLM (US-312 à US-315), puis d'autres vues de contrôle. Sa maquette de référence est produite par US-318.
+Décisions D1 et D2 (choix du 10/11/2026 : application séparée). Elle accueillera d'abord les vues de pilotage LLM (US-312 à US-315), puis d'autres vues de contrôle. Sa maquette de référence est produite par US-318 : `maquette front/pilotage/Pilotage - PWA administration.html`.
 
 **Critères d'acceptance :**
 - [ ] CA1 : Une application Vite + React vit dans `admin/`, avec son `package.json`, son manifeste, son icône et son service worker ; elle partage la configuration Tailwind et les jetons de l'identité visuelle du frontend, sans importer de code métier du jardinier.

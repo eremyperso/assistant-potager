@@ -122,3 +122,33 @@ def envoyer_email_reset_mdp(destinataire: str, token: str, definition_initiale: 
         reponse.raise_for_status()
     except httpx.HTTPError as exc:
         log.error("[US-057] Échec de l'envoi de l'e-mail de réinitialisation à %s : %s", destinataire, exc)
+
+
+def envoyer_email(destinataire: str, sujet: str, contenu_html: str) -> bool:
+    """[US-316 / CA6, CA9] Envoie un e-mail libre par Brevo et rend si l'envoi a réussi.
+
+    Contrairement aux e-mails de compte ci-dessus, l'appelant a besoin de savoir : une alerte
+    de pilotage reste « non notifiée » sur ce canal tant que l'envoi échoue. Sans `BREVO_API_KEY`
+    (dev/test), rien n'est appelé et le retour est `False` — jamais un faux « envoyé ».
+    Ne lève jamais : l'échec est journalisé."""
+    if not BREVO_API_KEY:
+        log.info("[US-316] Mode dégradé (BREVO_API_KEY absente) — e-mail « %s » non envoyé à %s", sujet, destinataire)
+        return False
+    payload = {
+        "sender": {"name": EMAIL_FROM_NOM, "email": EMAIL_FROM},
+        "to": [{"email": destinataire}],
+        "subject": sujet,
+        "htmlContent": contenu_html,
+    }
+    try:
+        reponse = httpx.post(
+            _BREVO_ENDPOINT,
+            json=payload,
+            headers={"api-key": BREVO_API_KEY, "content-type": "application/json"},
+            timeout=_TIMEOUT_SECONDES,
+        )
+        reponse.raise_for_status()
+        return True
+    except httpx.HTTPError as exc:
+        log.error("[US-316] Échec de l'envoi de l'e-mail « %s » à %s : %s", sujet, destinataire, exc)
+        return False

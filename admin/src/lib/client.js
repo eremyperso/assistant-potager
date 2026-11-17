@@ -103,6 +103,22 @@ export function creerClient({ base = '', stockage, fetchImpl = (...a) => fetch(.
     return lireReponse(res, chemin)
   }
 
+  /** PATCH JSON authentifié [US-316] — même rafraîchissement de jeton qu'un GET. */
+  async function modifier(chemin, corps) {
+    const options = () => ({ method: 'PATCH', headers: entetes(), body: JSON.stringify(corps) })
+    let res = await envoyer(chemin, options())
+    if (res.status === 401) {
+      if ((await code(res)) === 'token_expired' && (await rafraichir())) {
+        res = await envoyer(chemin, options())
+      }
+      if (res.status === 401) {
+        effacerJetons()
+        surSessionExpiree()
+      }
+    }
+    return lireReponse(res, chemin)
+  }
+
   async function connecter(email, motDePasse) {
     const res = await envoyer('/auth/login', {
       method: 'POST',
@@ -116,6 +132,7 @@ export function creerClient({ base = '', stockage, fetchImpl = (...a) => fetch(.
 
   return {
     appeler,
+    modifier,
     connecter,
     deconnecter: effacerJetons,
     aUnJeton: () => Boolean(acces()),

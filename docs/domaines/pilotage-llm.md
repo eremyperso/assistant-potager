@@ -2,8 +2,8 @@
 
 ÉPIC 18 (cadrage : `docs/EPIC 18 - PILOTAGE LLM/CADRAGE_PILOTAGE_LLM.md`). Cette fiche couvre
 le **lot 1 (mesure fiable)** et le **lot 2 (coût)** : US-306 à US-309, puis les **agrégats** servis à
-l'administrateur (US-310) et la PWA d'administration qui les affiche (US-311, US-312, puis les vues Coût, Fiabilité et Dérives : US-313, US-314, US-315). Les alertes
-(lot 4) viendront s'y ajouter.
+l'administrateur (US-310) et la PWA d'administration qui les affiche (US-311, US-312, puis les vues Coût, Fiabilité et Dérives : US-313, US-314, US-315). Le **lot 4** (alertes et bilans : US-316, US-317) est décrit à la section « Alertes, résumé quotidien et bilan
+hebdomadaire » ci-dessous.
 
 Tout part de `llm/passerelle.py::_enregistrer_conso`, qui écrit **une ligne de `conso_tokens` par
 appel** au modèle, succès comme échec. Ce qu'elle écrit au-delà de l'appel lui-même n'est jamais un
@@ -146,7 +146,7 @@ réponse `/admin/...` (hors ligne : « pas de données »).
 - **Maquette** : US-318 (projet Claude Design « Pilotage - PWA administration »). Seul jeton ajouté à l'identité :
   `--brand-soft-strong` ; les couleurs de séries sont des alias des teintes existantes.
 - **Coquille** : navigation entre six vues (Consommation, Coût, Fiabilité, Dérives livrées ; Potagers,
-  Seuils s'ouvrent sur un écran d'attente), période (aujourd'hui, 7, 30, 90 jours, personnalisée) et
+  Seuils : voir plus bas ; Potagers s'ouvre sur un écran d'attente), période (aujourd'hui, 7, 30, 90 jours, personnalisée) et
   filtres provenance / canal / modèle gardés dans l'adresse. La vue du jour se rafraîchit toutes les
   60 s onglet visible ; en panne d'API, les dernières valeurs (en mémoire seulement) restent affichées
   avec leur âge.
@@ -164,6 +164,60 @@ réponse `/admin/...` (hors ligne : « pas de données »).
   `tests/test_us313_315_contrat_vues.py` (`REGENERER_FIXTURE_US313_315=1` pour les régénérer).
 - **Déploiement** : étapes « Build admin PWA (Pilotage) » des workflows `deploy.yml` / `deploy-dev.yml`,
   après le build du frontend (sa config Tailwind étend celle de `frontend/`) ; runbook A9 bis.
+
+## Alertes, résumé quotidien et bilan hebdomadaire — `seuils.py`, `bilans.py`, `notifications.py` [US-316, US-317]
+
+Trois modules de `app/services/pilotage/`, sans appel de modèle (garde de test sur leurs imports), qui lisent
+`conso_tokens` par `agregats` (provenances `usage` et `fond` seulement) et n'y écrivent jamais.
+
+- **Seuils** (`seuils_pilotage`, v79) : indicateur + périmètre (`tous` ou un type d'appel) + fenêtre en jours (1 = aujourd'hui,
+  la mesure lit `conso_tokens.date`, au jour près) + comparaison (`fixe`, ou `ecart_7j` = écart en % à la valeur des 7 jours
+  précédant la fenêtre ; une somme est ramenée à la moyenne quotidienne × la fenêtre) + valeur + gravité + actif.
+  `seuils.INDICATEURS` est le seul endroit qui dit ce qui est surveillable (coût du jour, coût du mois projeté, jetons d'entrée
+  médians par appel d'un type, appels par échange, taux de quota, taux d'erreur, latence P95 d'un type, appels non chiffrés).
+  La projection de fin de mois n'accepte que la valeur fixe (pas d'historique comparable).
+- **Seuils par défaut** : posés par le code au premier passage (`assurer_seuils_par_defaut`, idempotent, jamais écrasés), tous
+  **« à valider »** ; ceux qui dépendent du coût ne sont actifs que si la grille tarifaire (US-309) est chargée. Changer la
+  **valeur** d'un seuil le valide ; l'activer seul ne le valide pas.
+- **Évaluation** (`seuils.evaluer`) : toutes les `PILOTAGE_EVALUATION_MINUTES` (15) par `job_evaluation_seuils`
+  (`app/bot/pilotage_jobs.py`), avec le mécanisme du veilleur du compagnon : le bot est le seul processus de tâches de fond,
+  aucune unité systemd. Moins de **20 appels** dans la fenêtre : rien n'est déclenché **ni résolu** (on ne sait pas).
+- **Cycle d'une alerte** (`alertes_pilotage`) : au plus UNE alerte ouverte par seuil (index partiel `uq_alertes_pilotage_ouverte`) ;
+  rien n'est renvoyé tant qu'elle est ouverte ; le retour à la normale part **une fois** ; une gravité **haute** rappelle toutes
+  les 24 h. Un canal en échec n'est pas inscrit dans `canaux_notifies` et est réessayé au passage suivant, sans renvoyer l'autre.
+- **`PILOTAGE_ALERTES=non`** (défaut) : tout est évalué et journalisé, rien ne part ; allumé plus tard, les alertes déjà ouvertes
+  sont notifiées. Aucun message ne contient de contenu ni de nom de jardinier : des mesures et un lien.
+- **Destinataires** (`notifications.py`) : Telegram → le compte lié à `ADMIN_EMAIL`, sinon `ADMIN_TELEGRAM_ID` ; e-mail →
+  `ADMIN_EMAIL` par Brevo (`email.envoyer_email`, qui rend si l'envoi a réussi). Liens : `PILOTAGE_URL` (défaut
+  `FRONTEND_URL` + `/pilotage`) + `/#/<vue>`.
+- **Résumé quotidien** (Telegram, `PILOTAGE_RESUME_QUOTIDIEN`, à partir de `PILOTAGE_RESUME_HEURE` = 8 h, pour la veille) et **bilan
+  hebdomadaire** (e-mail, `PILOTAGE_BILAN_HEBDO`, le lundi, pour la semaine écoulée comparée à la précédente) : textes par gabarit,
+  les `mesure` sur une ligne à part, trace `bilans_pilotage` (v80) UNIQUE par (type, début de période). Le planificateur passe
+  toutes les 30 minutes : un redémarrage rattrape le résumé du jour, un envoi échoué est rejoué **une seule fois**, jamais deux envois.
+- **API** : `GET /admin/pilotage/seuils` (seuils avec état courant `franchi|norme|nodata|inactif`, alertes ouvertes, 50 dernières alertes,
+  canaux joignables, interrupteurs ; `?etats=false` ne mesure rien, pour la pastille de la navigation) et
+  `PATCH /admin/pilotage/seuils/{id}` (activation, valeur, comparaison, fenêtre, gravité ; 422 hors vocabulaire ou définition en double).
+  Seule route d'écriture de `/admin/pilotage/`.
+- **Vue « Seuils »** de la PWA (`admin/src/views/Seuils.jsx`, `components/PanneauSeuil.jsx`, `lib/seuils.js`), d'après l'écran B de la
+  maquette d'US-318 : alertes ouvertes en tête, liste des seuils (règle en une phrase, gravité, état avec icône, interrupteur), feuille
+  montante / panneau latéral de modification (la règle se relit et dit si elle serait franchie maintenant), envois périodiques et
+  historique. **Écarts à la maquette** : les interrupteurs des envois périodiques sont en lecture seule (ils relèvent de la
+  configuration du serveur, US-317 / CA7) ; les fenêtres sont en jours (1, 3, 7), pas en heures.
+
+## Potagers et jardiniers — `acteurs.py` [US-319]
+
+Qui consomme quoi, par `agregats` (mêmes filtres, mêmes provenances `usage` + `fond`, même lecture hors périmètre) ; les tables
+`potagers`, `potager_membres` et `users` ne donnent que nom de potager, e-mail, rôle, décomptes et date d'inscription (registre :
+`docs/RGPD/RGPD_PILOTAGE_LLM.md`). Aucun contenu de message, aucun nom d'affichage.
+
+- **Routes** (lecture seule, `require_admin_user`) : `GET /admin/pilotage/potagers`, `/utilisateurs` (listes + bandeau), `/potagers/{id}`,
+  `/utilisateurs/{id}` (fiches). Tous les potagers non supprimés et tous les comptes y figurent, à zéro sans appel.
+- **Actif** : au moins une ligne `usage` sur la période. **Usage élevé** : coût > 3 × la médiane des coûts des actifs de même nature
+  (`FACTEUR_USAGE_ELEVE`, valeur de départ à valider). **Tâches automatiques** : appels sans utilisateur, une ligne à part côté jardiniers,
+  rattachés à leur potager côté potagers. Premier décile : au moins un jardinier actif.
+- `Filtres.user_id` (fiche d'un jardinier) n'est ni une route ni dans `vers_dict`.
+- **Vue** (`admin/src/views/Potagers.jsx`, `lib/acteurs.js`) : sans maquette propre, composants de la vue Consommation ; `TableauDonnees`
+  accepte `surOuvrir` et `usageEleve`. Liste → fiche en état local.
 
 ## Pièges
 

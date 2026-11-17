@@ -11,6 +11,27 @@ body { overflow-x: clip; }
 body { font-size: 13.5px; line-height: 1.45; }
 :focus-visible { outline: 3px solid #1F6FD1; outline-offset: 2px; }
 
+/* Coquille affichée : la PAGE ne défile jamais, seule la zone de contenu défile (Coquille.jsx).
+   Sans ce verrou, le moindre débordement de la page (élément absolu, barre d'adresse mobile) laisse
+   le doigt faire glisser toute la coquille, bandeau et filtres compris. L'écran de connexion, sans
+   coquille, garde le défilement normal. */
+html:has(.coquille-pilotage),
+html:has(.coquille-pilotage) body { height: 100%; overflow: hidden; }
+
+/* Ascenseurs visibles sur desktop. La feuille du frontend importée plus haut les masque partout
+   (`scrollbar-width: none`, `::-webkit-scrollbar { display: none }`), ce qui convient au tactile
+   mais laisse la souris sans repère ni prise. Dès 900 px (seuil `nav`) ET avec un pointeur fin, on
+   les rétablit : la page et les zones qui défilent (tableaux de valeurs, panneau de seuil).
+   Règle hors couche : elle l'emporte sur celle du frontend, déclarée dans `@layer base`.
+   `scrollbar-width: thin` (valeur autre que `auto`) fait ignorer les pseudo-éléments WebKit par
+   Chrome/Edge 121+ ; ces pseudo-éléments restent pour Safari. */
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+  html, * { scrollbar-width: thin; scrollbar-color: var(--txt3) transparent; }
+  ::-webkit-scrollbar { display: block; width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--txt3); border-radius: 5px; border: 2px solid var(--bg); }
+}
+
 /* Séries des graphiques [US-312 / CA9] — maquette d'US-318 : des alias des teintes de l'application
    (aucune valeur nouvelle), dans l'ordre qui alterne sombre et clair ; le seul jeton ajouté à
    l'identité est `--brand-soft-strong`, la part servie par le cache. Même ordre dans la légende,
