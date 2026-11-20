@@ -58,3 +58,6 @@ rapport_tests.html
 .env.test
 rapports_conv/
 *.session
+
+# [US-337] Traces et résultats des passages du jeu d'évaluation du compagnon
+rapports_evaluation/

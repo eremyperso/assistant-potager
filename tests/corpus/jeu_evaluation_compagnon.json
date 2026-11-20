@@ -1,0 +1,1951 @@
+{
+  "version": 1,
+  "_lisez_moi": "Jeu d'évaluation du compagnon (US-336) : besoins × formulations × tours. Format et règles de renouvellement : docs/EPIC - AGENT INTERPRETEUR/JEU_EVALUATION_COMPAGNON.md. Ce fichier n'est jamais cité dans un prompt ; les formulations `renouvelable` n'apparaissent dans aucun exemple de prompt (contrôle : tools/jeu_evaluation/jeu.py::controler_renouvelables).",
+  "jeux_de_donnees": {
+    "neuf": {
+      "description": "Potager neuf calqué sur le potager 34 : une parcelle « planche légumes », 20 m², plein sud, zone océanique, rien en stock. Créé par `python tools/creer_potager_test_neuf.py`, jamais à la main.",
+      "parcelles": [
+        "planche légumes"
+      ],
+      "script": "tools/creer_potager_test_neuf.py"
+    },
+    "rempli": {
+      "description": "Copie, dans potager_test, du potager 33 « Potager de recette » de potager_dev : localisé (ville et coordonnées), 14 parcelles dont « principal », « serre », « tunnel », 31 gestes, carnet, un rappel, un itinéraire personnalisé de la tomate. Créé par `python tools/creer_potager_test_rempli.py`, jamais à la main ; ses numéros se passent au lanceur (--potager-rempli, --utilisateur-rempli). Numéros dans potager_test au 20/11/2026 : potager 38, utilisateur 49 (le script les réaffiche).",
+      "parcelles": [
+        "principal",
+        "serre",
+        "tunnel"
+      ],
+      "script": "tools/creer_potager_test_rempli.py",
+      "lecture_seule": true,
+      "potager_id": 38,
+      "utilisateur_id": 49
+    }
+  },
+  "configurations": [
+    {
+      "id": "A",
+      "nom": "Chaîne actuelle, Small 4",
+      "modele": "mistral/mistral-small-2603",
+      "moteur": "actuel",
+      "description": "`tools/evaluer_dialogues.py --mode prioritaire --potager 34 --utilisateur 42` : vraie cascade, vrai prompt, catalogue projeté des commandes, contexte court et question en attente.",
+      "resultats_14_11": {
+        "verdict_de_saison_tour_1": "non",
+        "intention_gardee_jusqu_au_tour_7": "non, perdue au tour 2",
+        "part_vers_une_commande_hors_sujet": "oui : programmer_rappel (×2)",
+        "passage_tomate_montre": "oui",
+        "rien_d_invente": "oui",
+        "proposition_de_geste": "non",
+        "jetons_entree_7_tours": 108894,
+        "part_cache": 0.61,
+        "latence_s": [
+          0.6,
+          3.0
+        ]
+      }
+    },
+    {
+      "id": "B",
+      "nom": "Chaîne actuelle, Large 3",
+      "modele": "mistral/mistral-large-2512",
+      "moteur": "actuel",
+      "description": "Même outil que A ; la passerelle avait dû être contournée hors dépôt (top_p, voir US-350).",
+      "resultats_14_11": {
+        "verdict_de_saison_tour_1": "non",
+        "intention_gardee_jusqu_au_tour_7": "non",
+        "part_vers_une_commande_hors_sujet": "oui : modifier_parcelle (×4)",
+        "passage_tomate_montre": "oui, deux fois, recopié par le code",
+        "rien_d_invente": "non : pépinière froide et voile proposés",
+        "proposition_de_geste": "non",
+        "jetons_entree_7_tours": 158000,
+        "part_cache": null,
+        "latence_s": [
+          1.4,
+          10.8
+        ]
+      }
+    },
+    {
+      "id": "C",
+      "nom": "Small 4 + capacités + historique",
+      "modele": "mistral/mistral-small-2603",
+      "moteur": "capacites",
+      "description": "Prototype du 14/11 versé comme moteur `capacites` du lanceur : les 9 lectures du registre MCP dans une transaction annulée, `proposer_geste` simulé au schéma du registre, vraie passerelle, historique complet, prompt générique d'une quinzaine de lignes.",
+      "resultats_14_11": {
+        "verdict_de_saison_tour_1": "non (l'outil a répondu « indéterminé »)",
+        "intention_gardee_jusqu_au_tour_7": "oui",
+        "part_vers_une_commande_hors_sujet": "non",
+        "passage_tomate_montre": "non, écarté et signalé",
+        "rien_d_invente": "oui",
+        "proposition_de_geste": "non (attend la variété, propose 10 plants par défaut)",
+        "jetons_entree_7_tours": 51211,
+        "part_cache": 0.86,
+        "latence_s": [
+          0.9,
+          3.3
+        ]
+      }
+    },
+    {
+      "id": "D",
+      "nom": "Claude + MCP",
+      "modele": "claude (connecteur MCP)",
+      "moteur": "claude_mcp",
+      "description": "Sous-agent Claude sans contexte avec le connecteur MCP en lecture seule, les phrases envoyées une par une. Jouée le 14/11 sur un AUTRE potager (« Potager de Bretagne », id 11) : depuis le moteur `claude_mcp`, elle se rejoue sur le même potager que les autres.",
+      "resultats_14_11": {
+        "verdict_de_saison_tour_1": "oui (reconstitué depuis les fenêtres)",
+        "intention_gardee_jusqu_au_tour_7": "oui",
+        "part_vers_une_commande_hors_sujet": "non",
+        "passage_tomate_montre": "non, écarté et signalé",
+        "rien_d_invente": "oui",
+        "proposition_de_geste": "non (attend la quantité)",
+        "jetons_entree_7_tours": null,
+        "part_cache": null,
+        "latence_s": null,
+        "defaut": "repose ses trois questions à chaque tour au lieu de proposer une valeur par défaut"
+      }
+    }
+  ],
+  "besoins": [
+    {
+      "id": "B01",
+      "libelle": "Planter une culture qui n'est pas encore au potager (salade)",
+      "categorie": "conseil",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "vegetatif",
+      "fiche": {
+        "culture": "salade",
+        "parcelle": "planche légumes",
+        "quantite": "12",
+        "unite": "pieds",
+        "date": "demain"
+      },
+      "attendus": {
+        "bonne_reponse": "Lit la météo du potager (ou dit qu'il n'a pas de ville pour la lire et propose de la renseigner) et le calendrier de la salade en zone océanique, puis croise les deux : ce n'est pas le moment de planter en pleine terre (plantation de mars à septembre), en nommant le risque de planter aujourd'hui (froid, gel, reprise). Donne la prochaine fenêtre tirée du calendrier (semis en pépinière de février à mars, plantation à partir de mars). Lit le plan : sans serre chauffée déclarée, le dit et propose de la déclarer ; avec une serre chauffée, dit que le référentiel ne couvre pas la culture sous serre chauffée. Dit que la salade n'est pas au potager. Aucun chiffre qui ne vienne d'un outil ou d'une fiche ; ne promet pas « je regarde » sans appeler d'outil.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "date",
+          "quantite"
+        ],
+        "ecritures_interdites": [],
+        "passages_hors_culture_interdits": true,
+        "valeur_par_defaut": "permise",
+        "outils_attendus": [
+          [
+            "meteo",
+            "voir_meteo"
+          ],
+          [
+            "voir_calendrier",
+            "situation_culture",
+            "confiance",
+            "lire:culture"
+          ],
+          [
+            "voir_plan",
+            "lire:parcelles",
+            "lire:parcelle"
+          ]
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "reel",
+          "ouverture": "j'aimerai planter des salades",
+          "suite": [
+            "oui si tu veux",
+            "oui je veux bien",
+            "la planche légumes",
+            "demain",
+            "des salades",
+            "comment je plante des salades ?"
+          ],
+          "simule": false,
+          "source": "RAPPORT_MESURE_1411_QUATRE_CONFIGURATIONS.md §1, échanges 441 à 447",
+          "tours_max": 7,
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "rien à semer",
+                  "ni planter",
+                  "aucune fenêtre",
+                  "pas de fenêtre",
+                  "pas ce mois",
+                  "pas en ce moment",
+                  "pas la saison",
+                  "pas le moment"
+                ],
+                [
+                  "février"
+                ],
+                [
+                  "pas au potager",
+                  "pas dans ton potager",
+                  "pas de salade",
+                  "aucune salade",
+                  "pas encore de salade",
+                  "n'as pas de salade"
+                ]
+              ],
+              "textes_interdits": [
+                "tomate"
+              ]
+            }
+          }
+        },
+        {
+          "genre": "directe",
+          "ouverture": "Je voudrais planter des salades dans mon potager"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "dis donc je peux mettre des salades en terre ou c'est trop tard ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "planter salade"
+        },
+        {
+          "genre": "faute",
+          "ouverture": "je veu plentér de la salad sur ma planche"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'aimerais planter des salades",
+          "suite": [
+            "oui",
+            "la planche légumes",
+            "demain"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "comment je plante des salades ?"
+        },
+        {
+          "genre": "reel",
+          "ouverture": "salut, dis-moi, est ce que je peux planter des salades en ce moment ?",
+          "suite": [
+            "dis moi quand c'est possible ?",
+            "et pour planter mes pieds de salades en intérieur je dois le faire comment ?",
+            "pourquoi tu me proposes pas d'utiliser ou d'installer une serre chauffé ?"
+          ],
+          "simule": false,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 248 à 251",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "pas le moment",
+                  "pas en ce moment",
+                  "pas maintenant",
+                  "trop tot",
+                  "pas la saison",
+                  "pas ce mois",
+                  "rien a semer",
+                  "ni planter"
+                ],
+                [
+                  "mars",
+                  "fevrier"
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "meteo",
+                  "voir_meteo"
+                ],
+                [
+                  "voir_calendrier",
+                  "situation_culture",
+                  "confiance",
+                  "lire:culture"
+                ]
+              ]
+            },
+            "2": {
+              "textes_attendus": [
+                [
+                  "mars",
+                  "fevrier"
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "voir_calendrier",
+                  "situation_culture",
+                  "confiance",
+                  "lire:culture"
+                ]
+              ]
+            },
+            "4": {
+              "textes_attendus": [
+                [
+                  "serre"
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "voir_plan",
+                  "lire:parcelles",
+                  "lire:parcelle"
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "B02",
+      "libelle": "Semer une culture végétative (carotte)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "vegetatif",
+      "fiche": {
+        "culture": "carotte",
+        "parcelle": "planche légumes",
+        "quantite": "2",
+        "unite": "rangs",
+        "date": "aujourd'hui"
+      },
+      "attendus": {
+        "bonne_reponse": "Lit la saison de la carotte avant de proposer ; si c'est hors saison, le dit avec la prochaine fenêtre ; sinon propose un semis de carotte sur la planche légumes, à confirmer, avec les valeurs dites seulement.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Je veux semer des carottes sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "je mets des carottes quand même, ça passe ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "semer carottes",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "je voudré semé des carrote"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je veux semer des carottes",
+          "suite": [
+            "oui",
+            "planche légumes",
+            "2 rangs"
+          ]
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "je voudrais semer des panais",
+          "renouvelable": true,
+          "fiche": {
+            "culture": "panais"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B03",
+      "libelle": "Semer un reproducteur en pleine terre (haricot)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche légumes",
+        "quantite": "30",
+        "unite": "graines",
+        "date": "demain"
+      },
+      "attendus": {
+        "bonne_reponse": "Vérifie la saison du haricot ; hors saison, le dit. Sinon propose un semis de haricot en pleine terre, à confirmer. Ne parle pas de pépinière ni de plants pour un haricot semé en place.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Je voudrais semer des haricots en pleine terre"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "je balance des haricots demain sur ma planche, tu en penses quoi ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "semis haricots",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "je veu semé des aricots"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je veux semer des haricots",
+          "suite": [
+            "oui",
+            "planche légumes",
+            "demain"
+          ]
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "je voudrais semer des pois chiches",
+          "renouvelable": true,
+          "fiche": {
+            "culture": "pois chiche"
+          }
+        }
+      ],
+      "couvre": "semis_initial"
+    },
+    {
+      "id": "B04",
+      "libelle": "Planter un reproducteur en plants (tomate)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate",
+        "parcelle": "planche légumes",
+        "quantite": "6",
+        "unite": "plants",
+        "date": "demain"
+      },
+      "attendus": {
+        "bonne_reponse": "Lit le calendrier de la tomate en zone océanique (plantation en mai) : hors saison, le dit avec le risque (gel) et donne la fenêtre de plantation ; jamais « attends le printemps » sans le mois. Pour noter une plantation, demande sur quelle parcelle l'affecter quand elle n'est pas dite (une plantation sans parcelle devient invisible dans l'application) ; ne redemande ni la culture, ni la quantité, ni la date déjà dites. Lit le plan avant de parler d'une serre : ne demande jamais au jardinier ce que le plan lui dit déjà.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise",
+        "parcelle_requise": [
+          "plantation"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Je voudrais planter des plants de tomates sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "j'ai des plants de tomates qui attendent, je les mets en terre ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "planter tomates",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "je veu plenter des tomate"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je veux planter des tomates",
+          "suite": [
+            "oui",
+            "6 plants",
+            "demain"
+          ]
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "je voudrais planter des plants de physalis",
+          "renouvelable": true,
+          "fiche": {
+            "culture": "physalis"
+          }
+        },
+        {
+          "genre": "reel",
+          "ouverture": "j'ai planté hier 5 plants de tomate, tu peux l'enregistrer",
+          "simule": true,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 272-273",
+          "fiche": {
+            "quantite": "5",
+            "date": "hier"
+          },
+          "attendus": {
+            "bonne_reponse": "Demande sur quelle parcelle affecter la plantation, sans redemander culture, quantité ni date, puis propose : plantation, tomate, 5 plants, hier, sur la parcelle dite, à confirmer. Jamais de plantation sans parcelle."
+          }
+        },
+        {
+          "genre": "reel",
+          "ouverture": "salut, est-ce que je peux planter des pieds de tomates en ce moment ?",
+          "suite": [
+            "si je veux planter des pieds et pas semer, tu me proposes quoi ?",
+            "je dispose d'une serre chauffée, est-ce possible alors ?",
+            "tu ne me proposes pas de les ajouter dans ma serre chauffée ?"
+          ],
+          "simule": false,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 256 à 260 (trace propre)",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "pas le moment",
+                  "pas en ce moment",
+                  "pas maintenant",
+                  "trop tot",
+                  "pas la saison",
+                  "pas ce mois",
+                  "rien a semer",
+                  "ni planter"
+                ],
+                [
+                  "en mai",
+                  "de mai",
+                  "des mai",
+                  "mi mai",
+                  "fin mai",
+                  "debut mai",
+                  "mai prochain",
+                  "mai a "
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "voir_calendrier",
+                  "situation_culture",
+                  "confiance",
+                  "lire:culture"
+                ]
+              ]
+            },
+            "2": {
+              "textes_attendus": [
+                [
+                  "en mai",
+                  "de mai",
+                  "des mai",
+                  "mi mai",
+                  "fin mai",
+                  "debut mai",
+                  "mai prochain",
+                  "mai a "
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "voir_calendrier",
+                  "situation_culture",
+                  "confiance",
+                  "lire:culture"
+                ]
+              ]
+            },
+            "3": {
+              "textes_attendus": [
+                [
+                  "serre"
+                ]
+              ],
+              "outils_attendus": [
+                [
+                  "voir_plan",
+                  "lire:parcelles",
+                  "lire:parcelle"
+                ]
+              ]
+            },
+            "4": {
+              "textes_interdits": [
+                "tu as deja une serre",
+                "as tu une serre",
+                "as tu deja une serre"
+              ],
+              "outils_attendus": [
+                [
+                  "voir_plan",
+                  "lire:parcelles",
+                  "lire:parcelle"
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "B05",
+      "libelle": "Savoir si c'est le moment pour une culture",
+      "categorie": "conseil",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "vegetatif",
+      "fiche": {
+        "culture": "radis",
+        "date": "ce mois-ci"
+      },
+      "attendus": {
+        "bonne_reponse": "Radis en novembre : non. Le verdict se fonde sur la zone du potager (océanique) et le calendrier, sans avoir besoin de la météo : semis en pleine terre de mars à mai ; en itinéraire d'hiver, semis en pleine terre sous abri (qui peut être chauffé) en février. Le potager n'a pas de ville : s'il parle de météo, le dit et propose de la renseigner, sans jamais citer une ville au hasard. Ne propose aucune parcelle à créer.",
+        "ne_jamais_redemander": [
+          "culture"
+        ],
+        "ecritures_interdites": [
+          "*"
+        ],
+        "passages_hors_culture_interdits": true,
+        "outils_attendus": [
+          [
+            "voir_calendrier",
+            "situation_culture",
+            "confiance",
+            "lire:culture"
+          ]
+        ],
+        "textes_interdits": [
+          "lyon",
+          "parcelle ajouter"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Est-ce que c'est le moment de semer des radis ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "les radis, c'est bon pour moi en ce moment ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "radis maintenant ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "est ce que c'est la saison pour les radi ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "c'est le moment pour semer ?",
+          "suite": [
+            "des radis"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "est-ce le moment de semer du cerfeuil tubéreux ?",
+          "fiche": {
+            "culture": "cerfeuil tubéreux"
+          },
+          "couverture_absente": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "salut, je veux semer des radis ce WE, c'est bon pour toi ?",
+          "simule": true,
+          "tours_max": 3,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 261 à 265",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "pas le moment",
+                  "pas en ce moment",
+                  "pas maintenant",
+                  "trop tot",
+                  "pas la saison",
+                  "pas ce mois",
+                  "rien a semer",
+                  "ni planter"
+                ],
+                [
+                  "mars",
+                  "fevrier"
+                ]
+              ],
+              "textes_interdits": [
+                "lyon"
+              ],
+              "outils_attendus": [
+                [
+                  "voir_calendrier",
+                  "situation_culture",
+                  "confiance",
+                  "lire:culture"
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "B06",
+      "libelle": "Que semer ce mois-ci",
+      "categorie": "conseil",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Répond d'après la rubrique « Le bon moment pour semer » de la vue Pépinière pour la zone du potager, et seulement d'après elle : en novembre en zone océanique elle est vide, il dit donc qu'il n'y a aucun semis à faire ce mois-ci, sans proposer de liste de cultures. Ne cite aucune culture dont la fenêtre de semis ne couvre pas le mois, ni une source qui ne parle pas du calendrier. Un autre mois, la liste change avec la rubrique.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ],
+        "outils_attendus": [
+          [
+            "voir_calendrier",
+            "voir_pepiniere",
+            "semis_du_mois",
+            "confiance"
+          ]
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Que puis-je semer ce mois-ci ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "bon, je sème quoi en ce moment ?",
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échange 282"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "à semer en novembre",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "qu'est ce que je peu semé ce moi si"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai envie de semer un truc",
+          "suite": [
+            "oui, ce mois-ci"
+          ],
+          "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B07",
+      "libelle": "Que faire au potager",
+      "categorie": "conseil",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "S'appuie sur ce que le potager contient et sur ses échéances pour dire les gestes utiles maintenant ; ne cite aucune parcelle ni culture qui ne soit pas au potager.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Que dois-je faire au potager aujourd'hui ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "bon alors, je m'occupe de quoi aujourd'hui ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "à faire ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "que doit je faire au potagé ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai une heure devant moi",
+          "suite": [
+            "oui, qu'est-ce que je fais ?"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "que dois je faire ?",
+          "source": "terrain_compagnon_2026_11.json TER-16"
+        }
+      ]
+    },
+    {
+      "id": "B08",
+      "libelle": "Arroser ou non",
+      "categorie": "conseil",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate",
+        "parcelle": "planche principal"
+      },
+      "attendus": {
+        "bonne_reponse": "Lit la météo et le carnet (derniers arrosages) avant de répondre ; donne un avis argumenté (arroser ou attendre) sans inventer de quantité d'eau.",
+        "ne_jamais_redemander": [
+          "culture"
+        ],
+        "ecritures_interdites": [
+          "*"
+        ],
+        "passages_hors_culture_interdits": true
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Dois-je arroser mes tomates aujourd'hui ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "j'arrose ou pas mes tomates ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "arroser tomates ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "dois je arosé mes tomate ce soir"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je dois arroser ?",
+          "suite": [
+            "mes tomates"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "quand dois je arroser mes tomates ?",
+          "source": "terrain_compagnon_2026_11.json TER-11"
+        }
+      ]
+    },
+    {
+      "id": "B09",
+      "libelle": "Noter un semis déjà fait",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche légumes",
+        "quantite": "30",
+        "unite": "graines",
+        "date": "hier"
+      },
+      "attendus": {
+        "bonne_reponse": "Propose de noter un semis de haricot sur la planche légumes, hier, 30 graines, à confirmer ; ne demande que ce qui manque.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "creer_parcelle",
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise",
+        "textes_interdits": [
+          "parcelle ajouter"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai semé 30 graines de haricot hier sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "hier j'ai mis des haricots en terre, note-le"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "semé haricots hier",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai semé des aricot yer sur la planche legume"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "note un semis de haricots",
+          "suite": [
+            "planche légumes",
+            "hier",
+            "30"
+          ]
+        },
+        {
+          "genre": "reel",
+          "ouverture": "j'ai semé des carottes ce matin",
+          "suite": [
+            "20 graines en pépinière chaude"
+          ],
+          "simule": true,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 274 à 277",
+          "fiche": {
+            "culture": "carotte",
+            "quantite": "20",
+            "unite": "graines",
+            "date": "ce matin",
+            "parcelle": null
+          },
+          "attendus": {
+            "bonne_reponse": "Se réfère à la fiche de la carotte : en zone océanique elle se sème en pleine terre (mars à mai), pas en pépinière, et il le précise. N'anticipe jamais la création d'une parcelle (« pépinière chaude ») que le jardinier n'a pas demandée. Garde la culture et la date ; ne demande que ce qui manque, sans faire redire la phrase ; propose ensuite un semis (carotte, 20 graines, aujourd'hui) à confirmer.",
+            "outils_attendus": [
+              [
+                "voir_calendrier",
+                "situation_culture",
+                "confiance",
+                "lire:culture"
+              ]
+            ]
+          },
+          "attendus_tours": {
+            "2": {
+              "textes_attendus": [
+                [
+                  "pleine terre"
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      "couvre": "semis_initial"
+    },
+    {
+      "id": "B10",
+      "libelle": "Noter une plantation déjà faite",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate",
+        "parcelle": "planche légumes",
+        "quantite": "6",
+        "unite": "plants",
+        "date": "aujourd'hui"
+      },
+      "attendus": {
+        "bonne_reponse": "Propose de noter une plantation de 6 plants de tomate sur la planche légumes, aujourd'hui, à confirmer.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai planté 6 plants de tomates aujourd'hui sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "ça y est, mes tomates sont en terre, 6 plants"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "planté tomates",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai plenté 6 tomate ojourdui"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "note une plantation de tomates",
+          "suite": [
+            "6 plants",
+            "planche légumes",
+            "aujourd'hui"
+          ]
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "j'ai planté 4 plants de physalis aujourd'hui",
+          "renouvelable": true,
+          "fiche": {
+            "culture": "physalis",
+            "quantite": "4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B11",
+      "libelle": "Noter une première récolte (reproducteur : aucune perte de stock)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche légumes",
+        "quantite": "1,5",
+        "unite": "kg",
+        "date": "aujourd'hui"
+      },
+      "attendus": {
+        "bonne_reponse": "Propose de noter une récolte de haricot de 1,5 kg. Une récolte de haricot n'enlève aucun pied : le récapitulatif ne parle jamais d'une perte de stock ni de pieds en moins.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte"
+        ],
+        "textes_interdits": [
+          "perte de stock",
+          "pieds en moins",
+          "stock diminue",
+          "pieds retirés"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai récolté 1,5 kg de haricots aujourd'hui sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "première cueillette de haricots, 1,5 kilo !"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "récolte haricots 1,5 kg",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai recolté 1,5 kilos d'aricots"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "note une récolte de haricots",
+          "suite": [
+            "planche légumes",
+            "1,5 kg"
+          ],
+          "renouvelable": true
+        }
+      ],
+      "couvre": "premiere_recolte"
+    },
+    {
+      "id": "B12",
+      "libelle": "Noter une N-ième récolte (les pieds restent)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche légumes",
+        "quantite": "2",
+        "unite": "kg",
+        "date": "aujourd'hui",
+        "contexte": "quatrième récolte de la saison"
+      },
+      "attendus": {
+        "bonne_reponse": "Propose de noter une récolte de haricot de 2 kg ; les pieds actifs ne changent pas et le récapitulatif ne parle d'aucune perte de stock, même à la quatrième récolte.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "quantite",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte"
+        ],
+        "textes_interdits": [
+          "perte de stock",
+          "pieds en moins",
+          "stock diminue",
+          "pieds retirés"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Je viens de récolter encore 2 kg de haricots sur la planche légumes, c'est la quatrième fois"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "encore des haricots, 2 kilos de plus aujourd'hui"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "encore récolté haricots 2 kg",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai encor recolté 2 kg d'aricots"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai encore récolté des haricots",
+          "suite": [
+            "2 kg",
+            "planche légumes"
+          ],
+          "renouvelable": true
+        }
+      ],
+      "couvre": "nieme_recolte"
+    },
+    {
+      "id": "B13",
+      "libelle": "Noter la fin de vie du pied (arrachage)",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche légumes",
+        "date": "aujourd'hui"
+      },
+      "attendus": {
+        "bonne_reponse": "Comprend qu'il s'agit d'une fin de culture (arrachage), ni d'une récolte ni d'une perte ; propose de noter la fin de la culture de haricot sur la planche légumes, à confirmer, sans destruction non demandée.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai arraché mes haricots sur la planche légumes, la saison est finie"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "bon, les haricots c'est terminé, j'ai tout enlevé"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "haricots arrachés",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai arrasché les aricots, c'est fini"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'arrête mes haricots",
+          "suite": [
+            "je les ai arrachés",
+            "planche légumes"
+          ],
+          "renouvelable": true
+        }
+      ],
+      "couvre": "fin_de_vie"
+    },
+    {
+      "id": "B14",
+      "libelle": "Noter une perte",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate",
+        "parcelle": "planche légumes",
+        "quantite": "3",
+        "unite": "plants",
+        "date": "aujourd'hui",
+        "cause": "limaces"
+      },
+      "attendus": {
+        "bonne_reponse": "Propose de noter une perte de 3 plants de tomate pour cause de limaces, à confirmer. Aucun produit de traitement ni dose proposés.",
+        "ne_jamais_redemander": [
+          "culture",
+          "quantite",
+          "parcelle"
+        ],
+        "ecritures_interdites": [
+          "recolte",
+          "semis"
+        ],
+        "textes_interdits": [
+          "dose",
+          "ml de",
+          "granulés"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai perdu 3 plants de tomates à cause des limaces sur la planche légumes"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "les limaces m'ont bouffé 3 tomates cette nuit"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "perdu 3 tomates",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai perdu 3 plan de tomate, les limasses"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai perdu des tomates",
+          "suite": [
+            "3 plants",
+            "limaces",
+            "planche légumes"
+          ],
+          "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B15",
+      "libelle": "Corriger ce qui vient d'être noté",
+      "categorie": "correction",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "vegetatif",
+      "fiche": {
+        "culture": "carotte",
+        "parcelle": "planche légumes",
+        "quantite": "3",
+        "unite": "rangs",
+        "date": "hier"
+      },
+      "attendus": {
+        "bonne_reponse": "Comprend qu'il corrige le geste qu'il vient de dire, propose la correction (3 rangs) à confirmer, sans créer un second geste.",
+        "ne_jamais_redemander": [
+          "culture",
+          "parcelle",
+          "date"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "recolte"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai semé 4 rangs de carottes hier sur la planche légumes",
+          "suite": [
+            "non, c'était 3 rangs"
+          ]
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "j'ai mis des carottes hier sur la planche légumes, 4 rangs",
+          "suite": [
+            "oups non, 3 rangs en fait"
+          ]
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "semé carottes hier planche légumes 4 rangs",
+          "suite": [
+            "3 rangs"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai semé 4 rang de carrotes yer sur la planche legume",
+          "suite": [
+            "non 3 rang"
+          ]
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai semé des carottes hier sur la planche légumes",
+          "suite": [
+            "4 rangs",
+            "en fait non, 3 rangs"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "passe la planche principal à 2 rangs",
+          "suite": [
+            "non 4 rangs"
+          ],
+          "source": "terrain_compagnon_2026_11.json TER-27",
+          "fiche": {
+            "parcelle": "planche principal",
+            "quantite": "4",
+            "unite": "rangs"
+          }
+        },
+        {
+          "genre": "reel",
+          "ouverture": "j'ai semé des carottes hier sur la planche légumes sur 3 m2",
+          "suite": [
+            "en fait c'était 2 m2 et non 3"
+          ],
+          "simule": true,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 278 à 280 (verdict humain : juste)",
+          "fiche": {
+            "quantite": "2",
+            "unite": "m2"
+          },
+          "attendus": {
+            "bonne_reponse": "Propose le semis (carotte, 3 m², planche légumes, hier), puis la correction 3 m² → 2 m² sur ce même geste, à confirmer, sans créer un second geste ni rien redemander."
+          }
+        }
+      ]
+    },
+    {
+      "id": "B16",
+      "libelle": "Lire son stock",
+      "categorie": "lecture",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit le stock avant de répondre et rend ce qui s'y trouve, par variété ; n'invente aucun chiffre.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Qu'est-ce qu'il me reste en stock ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "j'ai encore des graines ou j'ai tout semé ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "stock graines",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "qu'est ce qui me rest en stoque ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "regarde mon stock",
+          "suite": [
+            "de tomates"
+          ],
+          "renouvelable": true,
+          "fiche": {
+            "culture": "tomate"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B17",
+      "libelle": "Lire son carnet",
+      "categorie": "lecture",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit le carnet de la période demandée et rend les gestes notés, du plus récent au plus ancien ; n'invente aucun geste.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Qu'est-ce que j'ai noté dans mon carnet cette semaine ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "c'était quoi mon dernier semis déjà ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "carnet récent",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "kel est mon derniè semi ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "regarde mon carnet",
+          "suite": [
+            "cette semaine"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "quel est mon dernier semis ?",
+          "source": "terrain_compagnon_2026_11.json TER-03"
+        }
+      ]
+    },
+    {
+      "id": "B18",
+      "libelle": "Comprendre un symptôme",
+      "categorie": "conseil",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate",
+        "parcelle": "planche principal",
+        "symptome": "feuilles qui jaunissent"
+      },
+      "attendus": {
+        "bonne_reponse": "Cherche dans la connaissance rattachée à la tomate, donne des causes possibles avec leur source, et ne donne ni dose ni produit de traitement. Au plus une question de précision.",
+        "ne_jamais_redemander": [
+          "culture"
+        ],
+        "ecritures_interdites": [
+          "*"
+        ],
+        "passages_hors_culture_interdits": true,
+        "textes_interdits": [
+          "dose",
+          "ml par litre",
+          "bouillie"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Les feuilles de mes tomates jaunissent, qu'est-ce que ça peut être ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "mes tomates ont les feuilles toutes jaunes, c'est grave ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "tomates feuilles jaunes",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "mes tomate on les feuille jone"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai un souci sur mes plants",
+          "suite": [
+            "des tomates",
+            "les feuilles jaunissent"
+          ],
+          "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B19",
+      "libelle": "Trouver une fonction de l'application",
+      "categorie": "aide",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "À « comment ajouter une parcelle ? » : explique et affiche l'aide correspondante, sans proposer de créer la parcelle. À « comment régler ma ville pour la météo ? » : dit comment ajouter ou modifier la ville associée au potager (réglage du potager), pas comment demander la météo d'une ville ponctuelle. Dans la PWA, la ville se règle dans « Modifier le potager », champ « Ville » (accessible depuis la carte météo « Localisation manquante » ou le bouton « Localiser » de la fiche calendrier) ; la ville est une propriété du potager. Quand la ville est inconnue et qu'on demande la météo : le dit, demande la ville, puis donne la météo. Un « oui » ou un « non » répond à la dernière question posée. N'invente aucune fonction.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ],
+        "textes_interdits": [
+          "parcelle ajouter"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Comment ajouter une parcelle dans l'application ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "où est-ce que je règle ma ville pour la météo ?",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "modifier le potager",
+                  "localiser"
+                ],
+                [
+                  "ville"
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "ajouter parcelle",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "comen je fé pour voir mon plan ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je cherche une fonction",
+          "suite": [
+            "pour noter une récolte"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "est ce que je peux obtenir la météo d'une autre région ?",
+          "source": "terrain_compagnon_2026_11.json TER-06"
+        },
+        {
+          "genre": "reel",
+          "ouverture": "comment ajouter une parcelle dans mon potager ?",
+          "suite": [
+            "une autre",
+            "non. as tu l'aide pour l'ajout d'une parcelle ?"
+          ],
+          "simule": false,
+          "tours_max": 3,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 283 à 285"
+        },
+        {
+          "genre": "reel",
+          "ouverture": "quel est la météo ?",
+          "suite": [
+            "paris"
+          ],
+          "simule": false,
+          "tours_max": 2,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 288-289 (verdict humain : juste)",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "ville",
+                  "ou se trouve",
+                  "localisation"
+                ]
+              ]
+            },
+            "2": {
+              "outils_attendus": [
+                [
+                  "meteo",
+                  "voir_meteo"
+                ]
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "B20",
+      "libelle": "Cultiver une culture sans fiche agronomique",
+      "categorie": "conseil",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "vegetatif",
+      "fiche": {
+        "culture": "navet",
+        "parcelle": "planche légumes"
+      },
+      "attendus": {
+        "bonne_reponse": "Vérifie dans le référentiel si la fiche culture existe pour la zone du potager (océanique). Si elle existe, rend ce qu'elle dit (saison, durée) et dit qu'il n'y a pas de fiche de conseils. Si elle n'existe que pour une autre zone, le dit et propose de la copier pour la zone du potager, puis de la compléter ou la modifier, puis de l'ajouter en plantation. Si elle n'existe dans aucune zone, propose de la créer et demande au jardinier de la compléter, puis de l'ajouter en plantation. Ne confond jamais culture et parcelle ; ne propose aucune autre culture en remplacement ; ne redemande pas la culture déjà nommée.",
+        "ne_jamais_redemander": [
+          "culture"
+        ],
+        "ecritures_interdites": [
+          "*"
+        ],
+        "passages_hors_culture_interdits": true,
+        "couverture_absente": true,
+        "outils_attendus": [
+          [
+            "voir_calendrier",
+            "situation_culture",
+            "confiance",
+            "fiche_culture",
+            "lire:culture"
+          ]
+        ],
+        "textes_interdits": [
+          "parcelle ajouter"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Comment cultiver du navet ?",
+          "fiche": {
+            "culture": "navet"
+          }
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "tu m'expliques comment je fais pousser du céleri ?",
+          "fiche": {
+            "culture": "céleri"
+          }
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "aubergines conseils",
+          "renouvelable": true,
+          "fiche": {
+            "culture": "aubergine"
+          }
+        },
+        {
+          "genre": "faute",
+          "ouverture": "comen on cultive les panè ?",
+          "fiche": {
+            "culture": "panais"
+          }
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'aimerais cultiver quelque chose de nouveau",
+          "suite": [
+            "des topinambours"
+          ],
+          "renouvelable": true,
+          "fiche": {
+            "culture": "topinambour"
+          }
+        },
+        {
+          "genre": "culture_absente",
+          "ouverture": "tu as une fiche sur le fenouil ?",
+          "fiche": {
+            "culture": "fenouil"
+          }
+        },
+        {
+          "genre": "reel",
+          "ouverture": "j'aimerai cultiver des topinambours",
+          "suite": [
+            "non je veux cultiver la topinambour",
+            "non pas la parcelle mais la culture",
+            "topinambour"
+          ],
+          "simule": false,
+          "tours_max": 4,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échanges 266 à 269",
+          "fiche": {
+            "culture": "topinambour"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B21",
+      "libelle": "Ce qui est à récolter ou à faire bientôt",
+      "categorie": "lecture",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit les échéances (lots à repiquer, récoltes attendues, rappels) et les rend ; n'invente aucune échéance.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Qu'est-ce que je dois récolter ou repiquer bientôt ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "y a des trucs qui m'attendent au potager ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "échéances",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "kes ke je doi repiquer ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai du retard sur quelque chose ?",
+          "suite": [
+            "oui, regarde mes échéances"
+          ],
+          "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B22",
+      "libelle": "Associations et voisinage d'une culture",
+      "categorie": "conseil",
+      "jeu_de_donnees": "neuf",
+      "culture_type": "reproducteur_plants",
+      "fiche": {
+        "culture": "tomate"
+      },
+      "attendus": {
+        "bonne_reponse": "Lit les associations de la tomate dans la fiche de la zone du potager (données structurées, table des associations), pas le texte libre des fiches de conseils. Restitue les deux listes, même si la question ne porte que sur l'une : à éviter — chou, concombre, fenouil, et la famille des Brassicacées ; favorables — basilic, ciboulette, laitue, persil, ail, carotte, poivron, et la famille des Lamiacées. Les familles sont dites comme familles. Ne cite aucune culture absente de la fiche, ne présente jamais une culture favorable comme à éviter, ne cite pas une source qui ne contient pas l'information.",
+        "ne_jamais_redemander": [
+          "culture"
+        ],
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ],
+        "outils_attendus": [
+          [
+            "associations",
+            "voir_associations",
+            "associations_culture"
+          ]
+        ],
+        "textes_attendus": [
+          [
+            "chou",
+            "brassicac"
+          ],
+          [
+            "concombre"
+          ],
+          [
+            "fenouil"
+          ],
+          [
+            "basilic"
+          ],
+          [
+            "poivron"
+          ]
+        ],
+        "textes_interdits": [
+          "pomme de terre",
+          "aubergine",
+          "conduite et recolte de la tomate"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Qu'est-ce que je peux planter à côté de mes tomates ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "mes tomates ont des copains qui leur font du bien ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "tomates voisins",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "kwa mettre a coté des tomate ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "je cherche quoi associer",
+          "suite": [
+            "avec des tomates"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "je veux planter des tomates mais je me demandais si je devais éviter certaines cultures de proximité ? des compagnons à éviter ?",
+          "simule": true,
+          "tours_max": 2,
+          "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échange 281",
+          "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B23",
+      "libelle": "Où en est la pépinière",
+      "categorie": "lecture",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit la pépinière lot par lot et rend leur stade et leurs échéances ; dit s'il n'y a aucun lot ; n'invente aucun lot.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Où en sont mes semis en pépinière ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "mes petits plants au chaud, ça donne quoi ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "pépinière",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "ou en son mes semi en pépiniere"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "regarde ma pépinière",
+          "suite": [
+            "tous les lots"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "reel",
+          "ouverture": "mes cultures en pépinière ?",
+          "source": "terrain_compagnon_2026_11.json TER-14"
+        }
+      ]
+    },
+    {
+      "id": "B24",
+      "libelle": "Savoir s'il va geler",
+      "categorie": "conseil",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit la météo du potager et répond sur le risque de gel avec les prévisions lues ; dit si la localisation manque ; n'invente aucune température.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "Est-ce qu'il va geler cette semaine ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "je rentre mes plants ce soir ou ça passe ?"
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "gel ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "il va gelé cet semène ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "il va faire froid ?",
+          "suite": [
+            "oui, cette semaine"
+          ],
+          "renouvelable": true
+        }
+      ]
+    }
+  ]
+}

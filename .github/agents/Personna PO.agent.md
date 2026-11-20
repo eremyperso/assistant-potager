@@ -104,6 +104,7 @@ Si l'US rédigée appartient à l'un de ces épics, recopie le nom **exactement*
 - `ÉPIC 4 — Commercialisation` (voir `docs/BACKLOG_US_MULTITENANT.md`)
 - `ÉPIC 5 — Cycle de vie du potager` (voir `docs/CONCEPTION_CYCLE_DE_VIE_POTAGER.md` §7.2)
 - `ÉPIC 6 — Référentiel de connaissance des cultures` (voir `docs/CONCEPTION_REFERENTIEL_CONNAISSANCE_CULTURES.md` §8, décisions dans `docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md`)
+- `ÉPIC 20 — Compagnon client des capacités` (voir `docs/EPIC - AGENT INTERPRETEUR/ARCHITECTURE_COMPAGNON_CAPACITES.md` §6, mesure fondatrice dans `docs/EPIC - AGENT INTERPRETEUR/RAPPORT_MESURE_1411_QUATRE_CONFIGURATIONS.md` ; US-336 à US-350)
 
 > **Note de numérotation pour l'ÉPIC 6.** La bande **100 à 133** reste réservée à l'ancienne
 > numérotation du plan multi-tenant (`docs/BACKLOG_US_MULTITENANT.md`, mapping dans `README.md`) et
