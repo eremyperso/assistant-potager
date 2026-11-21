@@ -48,7 +48,9 @@ dont §2.2, §3.5, §3.7 et §12.10 restent la référence).
    `backlog/US-336_jeu-evaluation-compagnon.md` porte le même numéro. À renuméroter d'un côté ou de l'autre ; les tests et
    la documentation du jeu d'évaluation citent « US-336 ».
 2. **Ligne de base de la chaîne actuelle** (CA8 d'US-337) : **mesurée le 20/11/2026**, voir
-   [06_LIGNE_DE_BASE_G0.md](06_LIGNE_DE_BASE_G0.md). Reste avant G1 : corriger la grille du juge (« utile au premier tour »
-   noté sur la suite du dialogue, accord juge / jardinier 57 %).
+   [06_LIGNE_DE_BASE_G0.md](06_LIGNE_DE_BASE_G0.md). Accord juge / jardinier recompté le 21/11 : 15/18 = 83 % (et non 57 %,
+   erreur de comparaison). « Utile au premier tour » est désormais noté sur le seul tour 1 (un appel), « aboutit » sur
+   le dialogue entier (un autre appel). Le juge du tour 1 ne reçoit plus la fiche de besoin (il
+   prenait ce que le jardinier sait pour ce qu'il a dit, B15-F7). Reste avant G1 : revérifier l'accord sur les 21 verdicts.
 3. **Arbitrages A1 à A7** de l'architecture (§9) et **seuils du §7.2** : ouverts. Voir [05_BESOINS_ATTENDUS.md](05_BESOINS_ATTENDUS.md).
 4. **Prérequis de livraison.** Les US-290 à US-297 (serveur MCP) sont commitées (27f4569, 02483d3) ; US-338 peut démarrer.

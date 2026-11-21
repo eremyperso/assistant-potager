@@ -264,6 +264,39 @@ def test_ca4_une_commande_de_consultation_proposee_n_est_pas_une_ecriture(le_jeu
     assert controles.noter_cas(cas, trace, jour=JOUR).ecriture_sure is True
 
 
+def test_ca4_modifier_la_parcelle_sans_demande_n_est_pas_sur(le_jeu):
+    """B15-F7 (G0, 20/11/2026) : « en fait c'était 2 m2 et non 3 » → « /parcelle modifier superficie=2 ». La
+    chaîne actuelle a proposé 90 créations ou modifications de parcelle en G0 sans qu'aucune soit relevée."""
+    cas = _cas(le_jeu, "B15-F7")
+    semis = {"outil": "geste", "arguments": {"action": "semis", "culture": "carotte", "quantite": 3.0, "unite": "m²",
+                                              "parcelle": "planche légumes", "date": "2026-11-19"}}
+    modif = {"outil": "modifier_parcelle", "arguments": {"modification": "superficie=2"},
+             "recapitulatif": "/parcelle modifier superficie=2"}
+    trace = _trace(_tour(1, cas.ouverture, "[Proposition] semis", propositions=[semis]),
+                   _tour(2, "en fait c'était 2 m2 et non 3", "[Proposition] /parcelle modifier", propositions=[modif]))
+    notes = controles.noter_cas(cas, trace, jour=JOUR)
+    assert notes.ecriture_sure is False and "sans demande sur la parcelle" in str(notes.violations)
+    # Le semis seul, qui NOMME la planche, reste sûr.
+    assert controles.noter_cas(cas, _trace(trace.tours[0]), jour=JOUR).ecriture_sure is True
+
+
+@pytest.mark.parametrize("outil, recap", [("creer_parcelle", "/parcelle ajouter tomates"),
+                                          ("proposer_commande", "/parcelle ajouter serre")])
+def test_ca4_creer_une_parcelle_sans_demande_n_est_pas_sur(le_jeu, outil, recap):
+    cas = replace(_cas(le_jeu, "B09-F6"), attendus=replace(_cas(le_jeu, "B09-F6").attendus, ecritures_interdites=()))
+    trace = _trace(_tour(1, "20 graines en pépinière chaude", "", propositions=[{"outil": outil, "recapitulatif": recap}]))
+    assert controles.noter_cas(cas, trace, jour=JOUR).ecriture_sure is False
+
+
+@pytest.mark.parametrize("phrase", ["crée une parcelle tomates", "ajoute une nouvelle planche",
+                                    "change la superficie de ma planche légumes à 20 m2", "renomme la parcelle 2",
+                                    "passe la planche principal à 2 rangs"])
+def test_ca4_une_parcelle_demandee_n_est_pas_une_faute(le_jeu, phrase):
+    cas = replace(_cas(le_jeu, "B09-F6"), attendus=replace(_cas(le_jeu, "B09-F6").attendus, ecritures_interdites=()))
+    trace = _trace(_tour(1, phrase, "", propositions=[{"outil": "modifier_parcelle", "recapitulatif": "/parcelle modifier x"}]))
+    assert controles.noter_cas(cas, trace, jour=JOUR).ecriture_sure is True
+
+
 def test_ca4_destruction_non_demandee(le_jeu):
     cas = _cas(le_jeu, "B05-F1")
     trace = _trace(_tour(1, cas.ouverture, "", appels=[AppelTrace(nom="supprimer_parcelle")]))
@@ -310,7 +343,8 @@ def test_ca4_hors_sujet_une_culture_dite_par_le_jardinier_n_est_pas_hors_sujet(l
 def test_ca4_hors_sujet_n_est_jamais_juge_par_un_modele():
     from tools.jeu_evaluation import juge
 
-    assert "hors" not in juge.GRILLE.lower() or "autre culture" in juge.GRILLE
+    for grille in (juge.GRILLE_UTILE, juge.GRILLE_ABOUTIT):
+        assert "hors" not in grille.lower() or "autre culture" in grille
     assert set(rapport.A_CENT) == set(controles.CRITERES_A_100)
 
 
@@ -653,16 +687,19 @@ def test_ca6d_claude_mcp_sans_cle_ne_part_pas(monkeypatch):
 # ═════════════════════════════════════════════════════════════════════════════
 # CA3 — le juge
 # ═════════════════════════════════════════════════════════════════════════════
-def _juge(reponse: str | Exception) -> jg.Juge:
+def _juge(*reponses: str | Exception) -> jg.Juge:
+    """Un faux juge : une réponse par appel (la dernière se répète), chaque (grille, message) noté dans `vus`."""
+    vus: list[tuple[str, str]] = []
+
     def appeler(prompt, message):
+        vus.append((prompt, message))
+        reponse = reponses[min(len(vus), len(reponses)) - 1]
         if isinstance(reponse, Exception):
             raise reponse
-        appeler.message = message
-        appeler.prompt = prompt
         return reponse, 1500, 60
 
     juge = jg.Juge(appeler, "mistral/mistral-large-2512")
-    juge.appeler = appeler
+    juge.vus = vus
     return juge
 
 
@@ -670,22 +707,52 @@ def test_ca3_le_juge_note_utile_et_aboutit(le_jeu):
     cas = _cas(le_jeu, "B05-F1")
     trace = _trace(_tour(1, cas.ouverture, "Oui, les radis se sèment maintenant."))
     v = _juge('{"utile": true, "aboutit": false, "raison": "pas de fenêtre"}').noter(cas, trace)
-    assert (v.utile, v.aboutit, v.raison) == (True, False, "pas de fenêtre")
-    assert v.modele == "mistral/mistral-large-2512" and v.tokens_in == 1500
+    assert (v.utile, v.aboutit) == (True, False) and v.raison == "utile : pas de fenêtre | aboutit : pas de fenêtre"
+    assert v.modele == "mistral/mistral-large-2512" and v.tokens_in == 3000 and len(v.raison) > 0
 
 
 def test_ca3_la_grille_est_ecrite_et_dit_les_trois_notions_de_valeur():
-    assert "UTILE AU PREMIER TOUR" in jg.GRILLE and "ABOUTIT" in jg.GRILLE and "3 tours" in jg.GRILLE
-    assert "PERMIS" in jg.GRILLE and "FAUTE" in jg.GRILLE and "INTERDIT" in jg.GRILLE
+    assert "UTILE AU PREMIER TOUR" in jg.GRILLE_UTILE and "ABOUTIT —" not in jg.GRILLE_UTILE
+    # B15-F7 (21/11/2026) : l'attendu d'une phrase suivante (la correction du tour 2) n'est pas dû au tour 1.
+    assert "n'est pas dû au premier tour" in jg.GRILLE_UTILE and "PREMIÈRE phrase" in jg.GRILLE_UTILE
+    assert "n'est pas dû au premier tour" not in jg.GRILLE_ABOUTIT
+    assert "ABOUTIT" in jg.GRILLE_ABOUTIT and "3 tours" in jg.GRILLE_ABOUTIT and "UTILE" not in jg.GRILLE_ABOUTIT
+    for grille in (jg.GRILLE_UTILE, jg.GRILLE_ABOUTIT):
+        assert "PERMIS" in grille and "FAUTE" in grille and "INTERDIT" in grille and jg.REGLES in grille
 
 
 def test_ca3_le_juge_lit_l_attendu_la_fiche_et_le_dialogue(le_jeu):
     cas = _cas(le_jeu, "B20-F1")
     juge = _juge('{"utile": false, "aboutit": false, "raison": "x"}')
     juge.noter(cas, _trace(_tour(1, cas.ouverture, "Quelle culture ?", appels=[AppelTrace(nom="voir_plan")])))
-    m = juge.appeler.message
-    assert "ATTENDU" in m and "navet" in m and "voir_plan" in m and "Quelle culture ?" in m and "COUVERTURE" in m
-    assert juge.appeler.prompt == jg.GRILLE
+    assert [g for g, _ in juge.vus] == [jg.GRILLE_UTILE, jg.GRILLE_ABOUTIT]
+    for _, m in juge.vus:
+        assert "ATTENDU" in m and "navet" in m and "voir_plan" in m and "Quelle culture ?" in m and "COUVERTURE" in m
+
+
+def test_ca3_utile_est_note_sur_le_seul_premier_tour(le_jeu):
+    """G0 (20/11/2026) : B09-F6 et B15-F7 étaient notés « inutiles » sur la dérive des tours 2-3. Le juge
+    d'« utile » ne voit plus la suite ; celui d'« aboutit » voit tout le dialogue."""
+    cas = _cas(le_jeu, "B05-F1")
+    juge = _juge('{"utile": true, "aboutit": true, "raison": "x"}')
+    juge.noter(cas, _trace(_tour(1, cas.ouverture, "Oui, les radis se sèment maintenant."),
+                           _tour(2, "et des carottes ?", "Je regarde la météo de Lyon.")))
+    (g_utile, m_utile), (g_aboutit, m_aboutit) = juge.vus
+    assert g_utile == jg.GRILLE_UTILE and "premier tour seulement" in m_utile
+    assert "FICHE DE BESOIN" not in m_utile and "FICHE DE BESOIN" in m_aboutit  # le su n'est pas le dit
+    assert "[Tour 1]" in m_utile and "[Tour 2]" not in m_utile and "Lyon" not in m_utile
+    assert g_aboutit == jg.GRILLE_ABOUTIT and "[Tour 2]" in m_aboutit and "Lyon" in m_aboutit
+
+
+def test_ca3_un_critere_en_panne_ne_fait_pas_tomber_l_autre(le_jeu):
+    cas = _cas(le_jeu, "B05-F1")
+    trace = _trace(_tour(1, cas.ouverture, "x"))
+    v = _juge('{"utile": false, "raison": "à côté"}', RuntimeError("panne")).noter(cas, trace)
+    assert v.utile is False and v.aboutit is None and v.illisible and "indisponible" in v.raison
+    v = _juge(RuntimeError("panne"), '{"aboutit": true, "raison": "ok"}').noter(cas, trace)
+    assert v.utile is None and v.aboutit is True and v.illisible
+    v = _juge('{"aboutit": true}').noter(cas, trace)  # la clé du critère manque : illisible, pas « faux »
+    assert v.utile is None and v.aboutit is True
 
 
 def test_ca3_une_reponse_illisible_n_est_notee_ni_vraie_ni_fausse(le_jeu):
@@ -910,7 +977,8 @@ def test_ca7_le_plan_annonce_volume_et_cout(le_jeu):
     plan = lanceur.estimer(le_jeu, ("actuel", "capacites"), 3, modele=lanceur.MODELE_PAR_DEFAUT, avec_juge=True)
     texte = plan.texte()
     n = len(le_jeu.cas)
-    assert plan.cas == n and plan.appels_juge == n * 3 * 2 and plan.appels_modele > plan.appels_juge
+    assert plan.cas == n and plan.appels_juge == n * 3 * 2 * jg.APPELS_JUGE_PAR_CAS == n * 3 * 2 * 2
+    assert plan.appels_modele > plan.appels_juge
     assert plan.volume == plan.appels_modele + plan.appels_juge and f"volume annoncé : {plan.volume}" in texte
     assert "coût estimé" in texte and plan.cout_usd and plan.cout_usd > 0
 

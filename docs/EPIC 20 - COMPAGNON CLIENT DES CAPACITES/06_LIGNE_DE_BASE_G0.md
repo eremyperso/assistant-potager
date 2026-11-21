@@ -43,9 +43,16 @@ Réserves : 3 tours `actuel` arrêtés au geste (ancien moteur de mesure), 9 tou
 - Corrigé pendant G0 : la mesure suit le geste comme la PWA (`_suivre_le_geste`) ; le juge reçoit la date du jour et ne
   confond plus la fiche de besoin avec le dit ; contrôles : date du jour par défaut, lettres doublées, `afficher` n'est
   pas une écriture, une valeur LUE dans le potager n'est pas inventée.
-- Accord juge / jardinier (phrases réelles du 18/11, première réponse, verdicts tranchés) : 12/21 = 57 %. Deux
-  désaccords sont une faute du juge : il note « utile au premier tour » sur la suite du dialogue (B09-F6, B15-F7).
-  **À corriger dans la grille avant G1.**
+- Accord juge / jardinier (phrases réelles du 18/11, première réponse, verdicts tranchés) : **15/18 = 83 %**
+  (recompté le 21/11 ; le 57 % du 20/11 comparait au verdict de l'aiguillage « aiguillé vers geste » au lieu du
+  verdict sur la réponse, ligne « (même phrase) » : B04 #273, B09 #275, B15 #279). Seul désaccord : B15-F7, noté
+  « inutile » parce que l'ATTENDU décrit tout le dialogue (la correction 3 m² → 2 m² du tour 2).
+  Le 21/11, « utile » est noté sur le seul tour 1 et « aboutit » sur tout le dialogue (deux appels) : même accord,
+  15/18, sur ces cas. Reste à dire au juge que l'attendu d'un tour suivant n'est pas dû au tour 1.
+- Contrôle « écriture sûre » durci le 21/11 : créer ou modifier une parcelle sans que le jardinier le demande est une
+  faute (B15-F7 : « en fait c'était 2 m2 et non 3 » → « /parcelle modifier superficie=2 », reproduit en dev v3.134).
+  Renoté sans appel : potager neuf, chaîne actuelle **95 % → 87 %** (24 passages de plus en faute, 11 cas) ;
+  `capacites` et potager rempli inchangés.
 - Le moteur `capacites` n'est pas comparé aux verdicts humains : ils portent sur la chaîne actuelle.
 
 ## Déroulé

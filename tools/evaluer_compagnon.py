@@ -46,7 +46,7 @@ except (AttributeError, OSError):
     pass
 
 from tools.jeu_evaluation import campagne, jeu as modele_jeu, moteurs, rapport  # noqa: E402
-from tools.jeu_evaluation.juge import MODELE_JUGE, Juge  # noqa: E402
+from tools.jeu_evaluation.juge import APPELS_JUGE_PAR_CAS, MODELE_JUGE, Juge  # noqa: E402
 
 DOSSIER_SORTIE = RACINE / "rapports_evaluation"
 DOSSIER_EPIC = RACINE / "docs" / "EPIC - AGENT INTERPRETEUR"
@@ -115,7 +115,8 @@ def estimer(jeu: modele_jeu.Jeu, noms: tuple[str, ...], passages: int, *, modele
         appels += appels_moteur
         # Le préfixe est relu à chaque étape, l'historique grossit d'environ 600 jetons par tour.
         jetons_in += appels_moteur * (prefixe + 600 * (TOURS_PAR_CAS + 1) / 2)
-    juge = n * passages * len(noms) if avec_juge else 0
+    # Deux appels par cas : « utile » sur le premier tour, « aboutit » sur le dialogue entier.
+    juge = n * passages * len(noms) * APPELS_JUGE_PAR_CAS if avec_juge else 0
     jetons_juge_in, jetons_juge_out = juge * JETONS_JUGE[0], juge * JETONS_JUGE[1]
     sortie = appels * JETONS_SORTIE_PAR_APPEL
     tarif = TARIFS.get(modele)

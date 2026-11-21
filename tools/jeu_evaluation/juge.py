@@ -22,18 +22,8 @@ MODELE_JUGE = "mistral/mistral-large-2512"
 TEMPERATURE_JUGE = 0.2
 PART_RELECTURE_HUMAINE = 0.10
 
-GRILLE = """Tu es le relecteur d'un compagnon de jardinage. Tu notes UN dialogue entre un jardinier et son compagnon.
-Tu notes deux critères, chacun vrai ou faux, uniquement d'après l'attendu fourni et ce que le jardinier a lu.
-
-UTILE AU PREMIER TOUR — vrai si le premier texte du compagnon répond au besoin, ou pose la SEULE question nécessaire.
-Faux s'il répond à côté, redemande ce que le jardinier a déjà dit, passe sous silence ce que l'attendu exige
-(saison, couverture absente…), montre un passage sur une autre culture, ou renvoie à une commande sans rapport.
-
-ABOUTIT — vrai si, en 3 tours du jardinier au plus, il obtient la bonne réponse ou la bonne proposition décrite par
-l'attendu. Faux s'il tourne en rond, s'il n'obtient qu'une question de plus, ou si la proposition porte une valeur
-que le jardinier n'a pas dite.
-
-Règles de lecture :
+#: Les règles communes aux deux critères.
+REGLES = """Règles de lecture :
 - Proposer une valeur par défaut que le jardinier peut accepter (« 10 plants, ça te va ? ») est PERMIS.
 - Reposer à chaque tour la même question restée sans réponse est une FAUTE.
 - Mettre une valeur non dite dans une proposition d'écriture est INTERDIT.
@@ -48,10 +38,42 @@ Règles de lecture :
   pour « valeur dite » (une correction « 2 m² et non 3 » fait que 3 puis 2 ont été dits).
 - La date du jour est donnée : une date égale ou antérieure n'est pas « future ».
 - Créer une parcelle, ou proposer « /parcelle ajouter », quand le jardinier ne l'a pas demandé est FAUX.
-- Tu ne juges ni le style ni la longueur.
+- Tu ne juges ni le style ni la longueur."""
+
+#: « Utile au premier tour » est noté sur le SEUL premier tour : le juge ne voit pas la suite, qui ne peut donc ni
+#: racheter ni condamner la première réponse (G0, 20/11/2026 : B09-F6 et B15-F7 notés sur la dérive des tours 2-3).
+GRILLE_UTILE = f"""Tu es le relecteur d'un compagnon de jardinage. Tu lis le PREMIER tour d'un dialogue entre un
+jardinier et son compagnon, et rien d'autre : la suite n'existe pas pour toi, ne la suppose pas.
+Tu n'as pas la fiche de besoin : le jardinier n'a dit QUE sa première phrase.
+Tu notes un seul critère, vrai ou faux, uniquement d'après l'attendu fourni et ce que le jardinier a lu.
+
+UTILE AU PREMIER TOUR — vrai si le premier texte du compagnon répond au besoin, ou pose la SEULE question nécessaire.
+Faux s'il répond à côté, redemande ce que le jardinier a déjà dit, passe sous silence ce que l'attendu exige
+(saison, couverture absente…), montre un passage sur une autre culture, ou renvoie à une commande sans rapport.
+
+L'ATTENDU décrit tout le dialogue. Au premier tour, seule compte la part de l'attendu qui répond à la PREMIÈRE phrase
+du jardinier : ce que l'attendu prévoit après une phrase suivante (une correction, une précision, une confirmation)
+n'est pas dû au premier tour, et son absence ne rend pas le premier tour inutile.
+
+{REGLES}
 
 Réponds par un seul objet JSON, sans autre texte :
-{"utile": true|false, "aboutit": true|false, "raison": "une phrase"}"""
+{{"utile": true|false, "raison": "une phrase"}}"""
+
+GRILLE_ABOUTIT = f"""Tu es le relecteur d'un compagnon de jardinage. Tu notes UN dialogue entre un jardinier et son compagnon.
+Tu notes un seul critère, vrai ou faux, uniquement d'après l'attendu fourni et ce que le jardinier a lu.
+
+ABOUTIT — vrai si, en 3 tours du jardinier au plus, il obtient la bonne réponse ou la bonne proposition décrite par
+l'attendu. Faux s'il tourne en rond, s'il n'obtient qu'une question de plus, ou si la proposition porte une valeur
+que le jardinier n'a pas dite.
+
+{REGLES}
+
+Réponds par un seul objet JSON, sans autre texte :
+{{"aboutit": true|false, "raison": "une phrase"}}"""
+
+#: Deux appels au juge par cas : « utile » sur le premier tour, « aboutit » sur le dialogue entier.
+APPELS_JUGE_PAR_CAS = 2
 
 
 @dataclass
@@ -74,19 +96,25 @@ class Verdict:
         return cls(**d) if d else None
 
 
-def transcrire(cas: Cas, trace: TraceCas, jour: Optional[date] = None) -> str:
-    """Le dialogue tel que le juge le lit : ce que le jardinier a dit, ce qu'il a lu, ce que le compagnon a appelé."""
-    lignes = ([f"AUJOURD'HUI : {jour.isoformat()}"] if jour else []) + [f"BESOIN : {cas.libelle}", f"FICHE DE BESOIN (ce que le jardinier sait et peut dire) : "
-              f"{json.dumps(cas.fiche, ensure_ascii=False)}",
-              f"ATTENDU : {cas.attendus.bonne_reponse}"]
+def transcrire(cas: Cas, trace: TraceCas, jour: Optional[date] = None, jusqu_au_tour: Optional[int] = None) -> str:
+    """Le dialogue tel que le juge le lit : ce que le jardinier a dit, ce qu'il a lu, ce que le compagnon a appelé.
+    `jusqu_au_tour` coupe la transcription après ce tour : le juge ne voit rien de la suite, ni la fiche de besoin.
+    Avec la fiche, il prenait ce que le jardinier SAIT pour ce qu'il a DIT (21/11/2026 : B15-F7 « la fiche dit 2 m² »,
+    B09-F6 « la fiche dit 20 graines »)."""
+    lignes = ([f"AUJOURD'HUI : {jour.isoformat()}"] if jour else []) + [f"BESOIN : {cas.libelle}"]
+    if jusqu_au_tour is None:
+        lignes.append(f"FICHE DE BESOIN (ce que le jardinier sait et peut dire) : "
+                      f"{json.dumps(cas.fiche, ensure_ascii=False)}")
+    lignes.append(f"ATTENDU : {cas.attendus.bonne_reponse}")
     if cas.attendus.couverture_absente:
         lignes.append("COUVERTURE : la culture n'a pas de fiche agronomique ; la réponse doit le dire.")
     if cas.attendus.interdit_toute_ecriture:
         lignes.append("ÉCRITURE : aucune écriture n'est attendue pour ce besoin.")
     elif cas.attendus.ecritures_interdites:
         lignes.append(f"ÉCRITURES INTERDITES : {', '.join(cas.attendus.ecritures_interdites)}")
-    lignes.append("DIALOGUE :")
-    for t in trace.tours:
+    tours = [t for t in trace.tours if jusqu_au_tour is None or t.rang <= jusqu_au_tour]
+    lignes.append("DIALOGUE (premier tour seulement) :" if jusqu_au_tour is not None else "DIALOGUE :")
+    for t in tours:
         lignes.append(f"[Tour {t.rang}] Jardinier : {t.phrase or '(rien)'}")
         for a in t.appels:
             lignes.append(f"    · appel {a.nom}({json.dumps(a.arguments, ensure_ascii=False)})"
@@ -119,25 +147,33 @@ def _booleen(valeur: Any) -> Optional[bool]:
 
 
 class Juge:
-    """Note un dialogue avec la grille. `appeler(prompt_fixe, message) -> (texte, jetons_in, jetons_out)` est
+    """Note un dialogue avec les deux grilles, un appel par critère. `appeler(prompt_fixe, message) -> (texte, jetons_in, jetons_out)` est
     injectable : les tests y mettent un faux, la mesure y met la passerelle (`appeler_par_la_passerelle`)."""
 
     def __init__(self, appeler: Callable[[str, str], tuple[str, int, int]], modele: str = MODELE_JUGE,
                  jour: Optional[date] = None):
         self._appeler, self.modele, self.jour = appeler, modele, jour
 
+    def _critere(self, grille: str, message: str, cle: str) -> tuple[Optional[bool], str, int, int, bool]:
+        """Un critère, un appel : (valeur, raison, jetons entrée, jetons sortie, illisible)."""
+        try:
+            texte, entree, sortie = self._appeler(grille, message)
+        except Exception as e:  # noqa: BLE001 — un juge en panne n'invente pas de note
+            return None, f"juge indisponible : {type(e).__name__}", 0, 0, True
+        brut = lire_verdict(texte)
+        if brut is None or _booleen(brut.get(cle)) is None:
+            return None, "réponse du juge illisible", entree, sortie, True
+        return _booleen(brut.get(cle)), str(brut.get("raison") or "")[:300], entree, sortie, False
+
     def noter(self, cas: Cas, trace: TraceCas) -> Verdict:
         if not trace.tours:
             return Verdict(False, False, "aucun tour joué", self.modele)
-        try:
-            texte, entree, sortie = self._appeler(GRILLE, transcrire(cas, trace, self.jour))
-        except Exception as e:  # noqa: BLE001 — un juge en panne n'invente pas de note
-            return Verdict(None, None, f"juge indisponible : {type(e).__name__}", self.modele, illisible=True)
-        brut = lire_verdict(texte)
-        if brut is None:
-            return Verdict(None, None, "réponse du juge illisible", self.modele, entree, sortie, illisible=True)
-        return Verdict(_booleen(brut.get("utile")), _booleen(brut.get("aboutit")),
-                       str(brut.get("raison") or "")[:300], self.modele, entree, sortie)
+        premier = min(t.rang for t in trace.tours)
+        utile, r_utile, e1, s1, i1 = self._critere(
+            GRILLE_UTILE, transcrire(cas, trace, self.jour, jusqu_au_tour=premier), "utile")
+        aboutit, r_aboutit, e2, s2, i2 = self._critere(GRILLE_ABOUTIT, transcrire(cas, trace, self.jour), "aboutit")
+        return Verdict(utile, aboutit, f"utile : {r_utile} | aboutit : {r_aboutit}"[:600], self.modele,
+                       e1 + e2, s1 + s2, illisible=i1 or i2)
 
 
 def appeler_par_la_passerelle(ctx, modele: str = MODELE_JUGE) -> Callable[[str, str], tuple[str, int, int]]:
