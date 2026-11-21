@@ -324,7 +324,14 @@ def _voir_calendrier(db: Session, appel: AppelCapacite) -> dict:
         api.get_confiance_culture, culture=culture, action=action, date_cible=quand,
         parcelle_id=None, itineraire=None, ctx=appel.ctx,
     )
-    return _enveloppe({"culture": culture, "date": quand.isoformat(), "calendrier": calendrier, "confiance": confiance})
+    # [US-339 / CA5b] La confiance d'UNE action (plantation par défaut) disait « indéterminé » pour la salade
+    # hors saison : la réponse porte désormais le verdict de la fiche, toutes actions confondues. Le schéma
+    # d'entrée ne change pas ; seul un champ s'ajoute à la réponse.
+    from app.services.capacites.situation import verdict_de_saison
+
+    situation, _calendriers = verdict_de_saison(db, appel, culture, quand)
+    return _enveloppe({"culture": culture, "date": quand.isoformat(), "situation": situation,
+                       "calendrier": calendrier, "confiance": confiance})
 
 
 # ── 8. voir_echeances ─────────────────────────────────────────────────────────

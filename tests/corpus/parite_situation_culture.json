@@ -1,0 +1,64 @@
+{
+  "description": "[US-339 / CA2] Cas partagés : la section « Maintenant » de la fiche culture (frontend/src/lib/ficheCulture.js::sectionMaintenant) et le verdict du compagnon (app/services/situation_culture.py::section_maintenant) doivent rendre le même etat, geste, etoiles et fenMois. Lu par tests/test_us339_situation_culture.py ET frontend/src/lib/ficheCulture.test.js.",
+  "cas": [
+    {
+      "nom": "salade en novembre : rien ce mois-ci, prochaine fenêtre semis en pépinière",
+      "culture": "salade",
+      "confianceLue": true,
+      "entree": {"a_calendrier": true, "culture_connue": true, "actions": [
+        {"action": "plantation", "score": 2, "etoiles": 1, "motifs": [{"regle": "R1", "etat": "perdu"}]},
+        {"action": "semis_pepiniere", "score": 3, "etoiles": 1, "motifs": [{"regle": "R1", "etat": "perdu"}]}
+      ]},
+      "mois": {"semis_pepiniere": [2, 3], "plantation": [3, 4, 5, 6, 7, 8, 9]},
+      "attendu": {"etat": "fermee", "geste": "Semer en pépinière", "etoiles": 1, "fenMois": "février à mars"}
+    },
+    {
+      "nom": "tomate en mai : c'est le moment de planter",
+      "culture": "tomate",
+      "confianceLue": true,
+      "entree": {"a_calendrier": true, "culture_connue": true, "actions": [
+        {"action": "semis_pepiniere", "score": 2, "etoiles": 1, "motifs": [{"regle": "R1", "etat": "perdu"}]},
+        {"action": "plantation", "score": 6, "etoiles": 3, "motifs": [{"regle": "R1", "etat": "gagne"}]}
+      ]},
+      "mois": {"semis_pepiniere": [2, 3, 4], "plantation": [5, 6]},
+      "attendu": {"etat": "ouverte", "geste": "Planter", "etoiles": 3, "fenMois": "mai à juin"}
+    },
+    {
+      "nom": "à score égal, le geste le plus avancé l'emporte",
+      "culture": "radis",
+      "confianceLue": true,
+      "entree": {"a_calendrier": true, "culture_connue": true, "actions": [
+        {"action": "semis_pepiniere", "score": 3, "etoiles": 2, "motifs": [{"regle": "R1", "etat": "gagne"}]},
+        {"action": "semis_pleine_terre", "score": 3, "etoiles": 2, "motifs": [{"regle": "R1", "etat": "gagne"}]}
+      ]},
+      "mois": {"semis_pepiniere": [3], "semis_pleine_terre": [3, 4, 5, 6, 7, 8, 9]},
+      "attendu": {"etat": "ouverte", "geste": "Semer en place", "etoiles": 2, "fenMois": "mars à septembre"}
+    },
+    {
+      "nom": "une fenêtre à cheval sur l'année se lit de son premier à son dernier mois",
+      "culture": "mache",
+      "confianceLue": true,
+      "entree": {"a_calendrier": true, "culture_connue": true, "actions": [
+        {"action": "semis_pleine_terre", "score": 4, "etoiles": 2, "motifs": [{"regle": "R1", "etat": "gagne"}]}
+      ]},
+      "mois": {"semis_pleine_terre": [8, 9, 10]},
+      "attendu": {"etat": "ouverte", "geste": "Semer en place", "etoiles": 2, "fenMois": "août à octobre"}
+    },
+    {
+      "nom": "sans fenêtre pour la zone : sans calendrier",
+      "culture": "topinambour",
+      "confianceLue": true,
+      "entree": {"a_calendrier": false, "culture_connue": true, "actions": []},
+      "mois": {},
+      "attendu": {"etat": "sans_calendrier"}
+    },
+    {
+      "nom": "confiance illisible : dite, jamais devinée",
+      "culture": "salade",
+      "confianceLue": false,
+      "entree": null,
+      "mois": {},
+      "attendu": {"etat": "illisible"}
+    }
+  ]
+}

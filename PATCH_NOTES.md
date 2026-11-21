@@ -1,3 +1,16 @@
+## [v3.136.0] — 2026-11-21
+
+### 🚀 Nouveautés
+- Ajoute la capacité `situation_culture` pour Claude, Le Chat et bientôt le compagnon : « est-ce le moment de planter des salades ? » rend le verdict de la fiche culture toutes actions confondues (c'est le moment, pas ce mois-ci avec la prochaine fenêtre, hors calendrier connu, culture inconnue) (US-339).
+- Dit dans la même réponse où en est la culture chez le jardinier (parcelles et étape, lots en pépinière, récoltes de la saison), ses pieds et son rendement, et le geste suivant plausible, sans rien écrire (US-339).
+- Comprend la culture comme le jardinier la dit (« salades », « tomattes ») sans jamais lire « laitue » pour « salade » (US-339).
+
+### 🐛 Corrections
+- Corrige `voir_calendrier` du connecteur, qui répondait « indéterminé » pour la salade hors saison : la réponse porte désormais le verdict de la fiche, sans changer les arguments de l'outil (US-339).
+
+### 🔧 Améliorations techniques
+- Tient la fiche culture de la PWA et le compagnon au même verdict par un jeu de cas partagé, vérifié à la fois par pytest et par les tests du frontend (US-339).
+
 ## [v3.135.0] — 2026-11-20
 
 ### 🔧 Améliorations techniques

@@ -118,3 +118,18 @@ test('sourcesDeFiche [CA21] — joint les attributions dédoublonnées', () => {
 test('sourcesDeFiche [CA21] — null sans aucune source', () => {
   assert.equal(sourcesDeFiche({ attributions: [] }), null)
 })
+
+// [US-339 / CA2] Parité avec le compagnon : les mêmes cas sont vérifiés côté serveur par
+// tests/test_us339_situation_culture.py (app/services/situation_culture.py). Si l'un des deux change
+// son choix, l'un des deux tests casse : la fiche et le compagnon ne peuvent plus diverger.
+test('[US-339 / CA2] sectionMaintenant rend le même verdict que la capacité situation_culture', async () => {
+  const { readFileSync } = await import('node:fs')
+  const corpus = JSON.parse(readFileSync(new URL('../../../tests/corpus/parite_situation_culture.json', import.meta.url), 'utf8'))
+  assert.ok(corpus.cas.length >= 5)
+  for (const c of corpus.cas) {
+    const calendriers = { cultures: { [c.culture]: { mois: c.mois } } }
+    const m = sectionMaintenant({ entree: c.entree, calendriers, culture: c.culture, confianceLue: c.confianceLue })
+    const vu = Object.fromEntries(Object.keys(c.attendu).map((k) => [k, m[k]]))
+    assert.deepEqual(vu, c.attendu, c.nom)
+  }
+})

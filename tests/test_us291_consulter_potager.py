@@ -88,7 +88,8 @@ class TestCA1Catalogue:
     def test_us291_les_dix_lectures_sont_exposees(self, client, lecteur):
         outils = _rpc(client, lecteur, "tools/list").json()["result"]["tools"]
         # [US-293] + le lien vers l'application, qui n'écrit rien et que le lecteur peut donc voir.
-        assert {o["name"] for o in outils} == set(LECTURES) | {"ouvrir_dans_l_application"}
+        # [US-339 / CA7] + la lecture du registre neutre visible des deux clients.
+        assert {o["name"] for o in outils} == set(LECTURES) | {"ouvrir_dans_l_application", "situation_culture"}
 
     def test_us291_chaque_outil_porte_une_description_francaise_et_un_schema(self, client, lecteur):
         for outil in _rpc(client, lecteur, "tools/list").json()["result"]["tools"]:

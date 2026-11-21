@@ -399,9 +399,9 @@ def test_ca6c_une_lecture_qui_voudrait_valider_ne_laisse_rien(test_db):
     assert test_db.query(Parcelle).filter(Parcelle.nom == "Fantôme").count() == 0
 
 
-def test_ca6c_les_neuf_lectures_ne_sont_pas_des_ecritures():
+def test_ca6c_les_lectures_ne_sont_pas_des_ecritures():
     registre = moteurs.RegistreMesure(CTX, jour=JOUR)
-    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 9
+    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 10  # + situation_culture (US-339)
     assert registre.noms == (*moteurs.LECTURES, "proposer_geste")
 
 
