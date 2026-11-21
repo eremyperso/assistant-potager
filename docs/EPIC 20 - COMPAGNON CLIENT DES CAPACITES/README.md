@@ -34,6 +34,7 @@ MCP), **une boucle où le modèle conduit**, **un fil complet**, et **une mesure
 | [04_PLAN_DE_TESTS.md](04_PLAN_DE_TESTS.md) | Les étapes de test que je mène à chaque US et à chaque porte, avec les seuils |
 | [05_BESOINS_ATTENDUS.md](05_BESOINS_ATTENDUS.md) | Ce dont j'ai besoin de vous : accords, clés, bases, arbitrages, relectures |
 | [06_LIGNE_DE_BASE_G0.md](06_LIGNE_DE_BASE_G0.md) | Porte G0 (20/11/2026) : ligne de base de la chaîne actuelle et du prototype à capacités, fidélité de la mesure, déroulé |
+| [07_REGLE_D_UNE_CAPACITE.md](07_REGLE_D_UNE_CAPACITE.md) | Règle d'écriture d'une capacité (R1 à R5), où vit le registre neutre, exemple de verdict (US-338) |
 | [REFERENCE_HUMAINE_B01.md](REFERENCE_HUMAINE_B01.md) | Verdicts et bonnes réponses du jardinier sur 9 scénarios joués le 18/11/2026, versés dans le jeu |
 
 Autres documents de référence : [JEU_EVALUATION_COMPAGNON.md](../EPIC%20-%20AGENT%20INTERPRETEUR/JEU_EVALUATION_COMPAGNON.md)

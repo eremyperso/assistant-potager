@@ -69,13 +69,14 @@ class RegistreMesure:
 
     def __init__(self, ctx, *, decisions: bool = False, ouvrir_session: Optional[Callable] = None,
                  jour: Optional[date] = None):
-        from app.services.mcp.serveur import REGISTRE  # l'import remplit le registre (lectures, écritures, commandes)
+        from app.services.capacites.registre import REGISTRE  # [US-338] le registre neutre, partagé avec le MCP
+        import app.services.capacites  # noqa: F401 — l'import remplit le registre (lectures, écritures, commandes)
 
         self.ctx, self.jour = ctx, jour or date.today()
         self.registre = REGISTRE
         manquants = [n for n in (*LECTURES, *ECRITURES_SIMULEES, *DECISIONS_SIMULEES) if n not in REGISTRE]
         if manquants:
-            raise RuntimeError(f"capacités absentes du registre MCP : {manquants}")
+            raise RuntimeError(f"capacités absentes du registre : {manquants}")
         for nom in LECTURES:
             if REGISTRE[nom].ecriture:
                 raise RuntimeError(f"{nom} n'est plus une lecture : la mesure ne peut plus l'exécuter")
@@ -113,7 +114,7 @@ class RegistreMesure:
 
     def executer(self, nom: str, arguments: Any, tour: TraceTour) -> AppelTrace:
         """Exécute (ou simule) un appel d'outil et le range dans la trace du tour."""
-        from app.services.mcp.serveur import AppelOutil, RefusOutil, _verifier_arguments
+        from app.services.capacites.registre import AppelCapacite, RefusCapacite, appelant_compagnon, verifier_arguments
 
         arguments = arguments if isinstance(arguments, dict) else {}
         appel = AppelTrace(nom=nom, arguments=arguments)
@@ -124,7 +125,7 @@ class RegistreMesure:
             appel.refus, appel.resultat = True, f"Outil inconnu : {nom}"
             return appel
         try:
-            _verifier_arguments(outil, arguments)
+            verifier_arguments(outil, arguments)
             if nom in ECRITURES_SIMULEES:
                 appel.ecriture, appel.simule = True, True
                 donnees = self._proposer_geste_simule(arguments, tour)
@@ -133,9 +134,9 @@ class RegistreMesure:
                 donnees = self._decision_simulee(nom, arguments, tour)
             else:
                 with self._session() as db:
-                    donnees = outil.executer(db, AppelOutil(connexion=None, ctx=self.ctx, arguments=arguments))
+                    donnees = outil.executer(db, AppelCapacite(appelant_compagnon(self.ctx), self.ctx, arguments))
             appel.resultat = tronquer(json.dumps(donnees, ensure_ascii=False, default=str))
-        except RefusOutil as refus:
+        except RefusCapacite as refus:
             appel.refus, appel.resultat = True, tronquer(str(refus.message))
         except Exception as e:  # noqa: BLE001 — un outil en erreur est un résultat, pas la fin de la mesure
             log.warning("[US-337] %s en erreur : %s", nom, e)
@@ -145,8 +146,8 @@ class RegistreMesure:
     # ── écritures simulées au schéma du registre ────────────────────────────
     def _proposer_geste_simule(self, arguments: dict, tour: TraceTour) -> dict:
         from app.services.compagnon import gestes_conversation as dits
-        from app.services.mcp import ecritures
-        from app.services.mcp.serveur import RefusOutil
+        from app.services.capacites import ecritures
+        from app.services.capacites.registre import RefusCapacite as RefusOutil
 
         item = ecritures._item({**arguments, **({} if arguments.get("date") else {"date": self.jour.isoformat()})})
         if item.get("action") not in _SANS_QUANTITE and item.get("quantite") is None and item.get("rang") is None:

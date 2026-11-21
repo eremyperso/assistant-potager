@@ -1,11 +1,10 @@
 """
-app/services/mcp/outils.py — Les outils du serveur MCP [US-290]
-===============================================================
+app/services/capacites/potagers.py — La capacité `lister_potagers` [US-290, US-338]
+==================================================================================
 
-US-290 pose le socle et un seul outil, `lister_potagers`, qui suffit à vérifier une
-connexion de bout en bout (CA10). Les lectures du catalogue (§5.1 de l'étude) vivent
-dans `lectures.py` (US-291), les propositions d'écriture avec US-292 : elles s'enregistrent ici, au
-même registre, et héritent des garde-fous de `serveur.appeler_outil`.
+US-290 a posé cette capacité, qui suffit à vérifier une connexion MCP de bout en bout (CA10). Elle vivait dans
+`app/services/mcp/outils.py` ; depuis US-338 elle est au registre neutre, comme les lectures (`lectures.py`), les
+propositions d'écriture (`ecritures.py`) et les commandes (`commandes.py`).
 """
 from __future__ import annotations
 
@@ -13,14 +12,14 @@ from sqlalchemy.orm import Session
 
 from app.services import calendrier_cultural as svc_calendrier
 from app.services import potager_actif as svc_potager_actif
-from app.services.mcp.serveur import AppelOutil, Outil, _peut_ecrire, enregistrer_outil
+from app.services.capacites.registre import AppelCapacite, Capacite, enregistrer_capacite, peut_ecrire
 from app.services.permissions import LIBELLES_ROLE
 from database.models import User
 
 
-def _lister_potagers(db: Session, appel: AppelOutil) -> dict:
+def _lister_potagers(db: Session, appel: AppelCapacite) -> dict:
     """Les potagers que ce connecteur peut lire : rôle, potager actif, zone climatique."""
-    connexion = appel.connexion
+    connexion = appel.appelant
     utilisateur = db.query(User).filter(User.id == connexion.user_id).first()
     actif = utilisateur.potager_actif_id if utilisateur else None
     consentis = set(connexion.potager_ids)
@@ -36,12 +35,12 @@ def _lister_potagers(db: Session, appel: AppelOutil) -> dict:
             "role": LIBELLES_ROLE.get(role, role),
             "actif": potager.id == actif,
             "zone_climatique": zone,
-            "ecriture_possible": connexion.ecriture and _peut_ecrire(role),
+            "ecriture_possible": connexion.ecriture and peut_ecrire(role),
         })
     return {"potagers": potagers, "portee": connexion.portee}
 
 
-enregistrer_outil(Outil(
+enregistrer_capacite(Capacite(
     nom="lister_potagers",
     titre="Lister mes potagers",
     description=(
@@ -52,10 +51,3 @@ enregistrer_outil(Outil(
     besoin_potager=False,
 ))
 
-
-# US-291 : les dix lectures du catalogue s'enregistrent au même registre.
-from app.services.mcp import lectures  # noqa: E402,F401
-# US-292 : les propositions d'écriture (geste, correction, confirmer, abandonner).
-from app.services.mcp import ecritures  # noqa: E402,F401
-# US-293 : les commandes non destructives (proposer_commande) et les liens vers l'application.
-from app.services.mcp import commandes  # noqa: E402,F401

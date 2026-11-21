@@ -150,7 +150,7 @@ class TestCA2Parite:
         assert mcp["total_varietes"] == pwa["total"] > 0
 
     def test_us291_aucune_regle_dupliquee_les_outils_appellent_les_endpoints(self):
-        source = (RACINE / "app/services/mcp/lectures.py").read_text(encoding="utf-8")
+        source = (RACINE / "app/services/capacites/lectures.py").read_text(encoding="utf-8")  # [US-338] registre neutre
         for appel in ("get_plan", "get_pepiniere_lots", "get_stats_varietes", "historique", "stats"):
             assert f"_api().{appel}" in source, appel
         assert "db.query" not in source
@@ -454,7 +454,7 @@ class TestAutresLectures:
 class TestCA9SansModele:
 
     def test_us291_aucun_appel_modele_dans_les_lectures(self):
-        source = (RACINE / "app/services/mcp/lectures.py").read_text(encoding="utf-8")
+        source = (RACINE / "app/services/capacites/lectures.py").read_text(encoding="utf-8")  # [US-338] registre neutre
         for interdit in ("passerelle", "groq", "mistral", "repondre_a_une_question", "questions.repondre", "interpreteur"):
             assert interdit not in source.lower(), interdit
 

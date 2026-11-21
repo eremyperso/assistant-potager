@@ -19,16 +19,21 @@ Ordre des garde-fous d'un `tools/call`, chacun journalisé (CA7) :
 
 Aucun appel à un modèle de langage : les arguments arrivent déjà structurés par le
 modèle du client.
+
+[US-338] Le registre et ses capacités vivent dans `app/services/capacites/` (couche neutre, appelable par le
+compagnon). Ce module n'en est que l'ADAPTATEUR MCP : protocole JSON-RPC, authentification (la `Connexion` relue du
+jeton), quotas, portée du connecteur, choix du potager consenti et journal `mcp_appels`. La garde des arguments, la
+garde de rôle et l'exécution sous le GUC RLS sont celles du registre.
 """
 from __future__ import annotations
 
 import json
 import logging
 import time
-from dataclasses import dataclass, field
+
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -36,13 +41,16 @@ from unidecode import unidecode
 
 from app import config
 from app.services import potager_actif as svc_potager_actif
+from app.services import capacites as _capacites  # noqa: F401 — l'import remplit le registre
+from app.services.capacites import registre
+from app.services.capacites.registre import (
+    REFUS_LECTEUR, REGISTRE, AppelCapacite, Capacite, RefusCapacite, enregistrer_capacite,
+)
 from app.services.compagnon.actions_menees import CANAL_MCP, canal_courant
 from llm import contexte_appel  # [US-307]
 from app.services.context import TenantContext
 from app.services.mcp import autorisation as svc_autorisation
 from app.services.mcp.autorisation import Connexion
-from app.services.permissions import NIVEAUX_ROLE
-from database.db import tenant_scope
 from database.models import McpAppel, McpAutorisation, User
 
 log = logging.getLogger("potager")
@@ -52,7 +60,6 @@ VERSIONS_PROTOCOLE = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
 REFUS_PORTEE = "Écriture non autorisée pour ce connecteur"
 REFUS_INTERDIT = "Le propriétaire de ce potager a interdit les assistants externes pour ce potager."
-REFUS_LECTEUR = "Tu es lecteur sur ce potager"
 REFUS_QUOTA_MINUTE = (
     "Trop d'appels en une minute pour ce connecteur : rien n'a été exécuté. "
     "Attends une minute avant de recommencer."
@@ -84,80 +91,29 @@ _ERR_PARAMS = -32602
 _ERR_INTERNE = -32603
 
 
-# ── Registre des outils ───────────────────────────────────────────────────────
-@dataclass
-class AppelOutil:
-    """Ce qu'un outil reçoit : la connexion, le contexte locataire résolu, ses arguments."""
-    connexion: Connexion
-    ctx: Optional[TenantContext]
-    arguments: dict
+# ── Registre : les noms d'avant l'extraction [US-338] ─────────────────────────
+#: Un outil MCP EST une capacité du registre neutre ; ces noms restent pour les appelants d'avant US-338.
+Outil = Capacite
+AppelOutil = AppelCapacite
+RefusOutil = RefusCapacite
+enregistrer_outil = enregistrer_capacite
 
 
-@dataclass(frozen=True)
-class Outil:
-    """Un outil MCP. `ecriture` déclenche les garde-fous de portée et de rôle (CA5)."""
-    nom: str
-    titre: str
-    description: str
-    executer: Callable[[Session, AppelOutil], Any]
-    proprietes: dict = field(default_factory=dict)
-    requis: tuple[str, ...] = ()
-    ecriture: bool = False
-    destructeur: bool = False
-    idempotent: bool = True
-    besoin_potager: bool = True
-    #: [US-292] Le potager visé quand l'appel n'en nomme pas : celui de la proposition à confirmer,
-    #: plutôt que le potager actif. None → le potager actif (`resoudre_potager`).
-    potager_de: Optional[Callable[[Session, "Connexion", dict], Optional[int]]] = None
-
-    def schema_entree(self) -> dict:
-        proprietes = dict(self.proprietes)
-        if self.besoin_potager:
-            proprietes.setdefault("potager", {
-                "type": ["string", "integer"],
-                "description": "Nom ou identifiant du potager ; sans lui, le potager actif.",
-            })
-        schema: dict = {"type": "object", "properties": proprietes, "additionalProperties": False}
-        if self.requis:
-            schema["required"] = list(self.requis)
-        return schema
-
-    def declaration(self) -> dict:
-        return {
-            "name": self.nom,
-            "title": self.titre,
-            "description": self.description,
-            "inputSchema": self.schema_entree(),
-            "annotations": {
-                "title": self.titre,
-                "readOnlyHint": not self.ecriture,
-                "destructiveHint": self.destructeur,
-                "idempotentHint": self.idempotent,
-                "openWorldHint": False,
-            },
-        }
-
-
-REGISTRE: dict[str, Outil] = {}
-
-
-def enregistrer_outil(outil: Outil) -> Outil:
-    """Ajoute un outil au registre (US-291 et suivantes y ajoutent les leurs)."""
-    if outil.destructeur:
-        # L7 : aucune destruction par ce canal — un modèle externe peut enchaîner
-        # proposer + confirmer sans que le jardinier ait vraiment dit oui.
-        raise ValueError(f"Outil destructeur refusé sur le canal MCP : {outil.nom}")
-    REGISTRE[outil.nom] = outil
-    return outil
-
-
-class RefusOutil(Exception):
-    """Un refus métier rendu au modèle (`isError`) et journalisé en `refus`."""
-
-    def __init__(self, message: str, motif: str):
-        super().__init__(message)
-        self.message = message
-        self.motif = motif
+def declaration(outil: Capacite) -> dict:
+    """La déclaration MCP d'une capacité (`tools/list`) : nom, titre, description, schéma, annotations."""
+    return {
+        "name": outil.nom,
+        "title": outil.titre,
+        "description": outil.description,
+        "inputSchema": outil.schema_entree(),
+        "annotations": {
+            "title": outil.titre,
+            "readOnlyHint": not outil.ecriture,
+            "destructiveHint": outil.destructeur,
+            "idempotentHint": outil.idempotent,
+            "openWorldHint": False,
+        },
+    }
 
 
 class ErreurProtocole(Exception):
@@ -170,8 +126,7 @@ class ErreurProtocole(Exception):
 
 
 # ── Garde-fous ────────────────────────────────────────────────────────────────
-def _peut_ecrire(role: Optional[str]) -> bool:
-    return NIVEAUX_ROLE.get(role or "", -1) >= NIVEAUX_ROLE["editor"]
+_peut_ecrire = registre.peut_ecrire
 
 
 def _normaliser_nom(nom: str) -> str:
@@ -305,14 +260,7 @@ def _resultat_donnees(donnees: Any) -> dict:
     return resultat
 
 
-def _verifier_arguments(outil: Outil, arguments: dict) -> None:
-    connus = set(outil.schema_entree()["properties"])
-    inconnus = set(arguments) - connus
-    if inconnus:
-        raise RefusOutil(f"Argument inconnu : {', '.join(sorted(inconnus))}.", "arguments")
-    manquants = [nom for nom in outil.requis if arguments.get(nom) in (None, "")]
-    if manquants:
-        raise RefusOutil(f"Argument obligatoire manquant : {', '.join(manquants)}.", "arguments")
+_verifier_arguments = registre.verifier_arguments
 
 
 def appeler_outil(db: Session, connexion: Connexion, nom: str, arguments: Any) -> dict:
@@ -338,8 +286,7 @@ def appeler_outil(db: Session, connexion: Connexion, nom: str, arguments: Any) -
             if cible in (None, "") and outil.potager_de is not None:
                 cible = outil.potager_de(db, connexion, arguments)
             ctx = resoudre_potager(db, connexion, cible)
-            if outil.ecriture and not _peut_ecrire(ctx.role):
-                raise RefusOutil(REFUS_LECTEUR, "role")
+            registre.verifier_role(outil, ctx)
     except RefusOutil as refus:
         _journaliser(db, connexion, outil.nom, ctx.potager_id if ctx else None, RESULTAT_REFUS, refus.motif, debut)
         return _resultat_texte(refus.message, erreur=True)
@@ -350,13 +297,7 @@ def appeler_outil(db: Session, connexion: Connexion, nom: str, arguments: Any) -
     jeton_canal = canal_courant.set(CANAL_MCP)
     jeton_echange = contexte_appel.ouvrir_echange()  # [US-307 / CA3] un appel d'outil = un échange
     try:
-        if ctx is not None:
-            with tenant_scope(ctx.potager_id):
-                donnees = outil.executer(db, AppelOutil(connexion, ctx, arguments))
-                db.commit()
-        else:
-            donnees = outil.executer(db, AppelOutil(connexion, None, arguments))
-            db.commit()
+        donnees = registre.executer(db, outil, AppelCapacite(connexion, ctx, arguments))
     except RefusOutil as refus:
         _journaliser(db, connexion, outil.nom, ctx.potager_id if ctx else None, RESULTAT_REFUS, refus.motif, debut)
         return _resultat_texte(refus.message, erreur=True)
@@ -379,7 +320,7 @@ def outils_visibles(db: Session, connexion: Connexion) -> list[Outil]:
         _peut_ecrire(svc_potager_actif.role_utilisateur(db, connexion.user_id, p.id))
         for p in _potagers_accessibles(db, connexion)
     )
-    return [o for o in sorted(REGISTRE.values(), key=lambda o: o.nom) if ecriture_visible or not o.ecriture]
+    return registre.lister(ecriture=ecriture_visible)
 
 
 # ── JSON-RPC ──────────────────────────────────────────────────────────────────
@@ -411,7 +352,7 @@ def _executer_methode(db: Session, connexion: Connexion, methode: str, params: A
     if methode == "ping":
         return {}
     if methode == "tools/list":
-        return {"tools": [o.declaration() for o in outils_visibles(db, connexion)]}
+        return {"tools": [declaration(o) for o in outils_visibles(db, connexion)]}
     if methode == "tools/call":
         if not isinstance(params, dict):
             raise ErreurProtocole(_ERR_PARAMS, "Paramètres attendus : name, arguments")
@@ -471,6 +412,3 @@ def traiter(db: Session, connexion: Connexion, corps: Any) -> Optional[Any]:
         return reponses or None
     return traiter_message(db, connexion, corps)
 
-
-# Les outils s'enregistrent à l'import (en fin de module : ils utilisent ce qui précède).
-from app.services.mcp import outils as _outils  # noqa: E402,F401

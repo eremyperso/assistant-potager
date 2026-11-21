@@ -1,3 +1,12 @@
+## [v3.135.0] — 2026-11-20
+
+### 🔧 Améliorations techniques
+- Extrait le registre de capacités du serveur MCP vers une couche neutre, `app/services/capacites/` : `lister_potagers`, les dix lectures, les propositions d'écriture et les commandes y vivent, et le compagnon de l'application peut les lister et les appeler pour un jardinier et un potager donnés (`registre.lister`, `registre.appeler`) sans jeton ni JSON-RPC (US-338).
+- Réduit le serveur MCP à un adaptateur : protocole, jeton, quotas, portée du connecteur, potager consenti et journal `mcp_appels` ; la garde des arguments, la garde de rôle et l'exécution sous le potager du jardinier sont celles du registre, et le contrat MCP (noms, descriptions, schémas, réponses) est inchangé (US-338).
+- Garde importables les anciens chemins `app/services/mcp/{lectures,ecritures,commandes}.py`, alias du même module (US-338).
+- Ajoute un test de parité : Claude par le MCP et le compagnon voient les mêmes capacités, avec les mêmes descriptions et les mêmes schémas, et lisent le même plan (US-338).
+- Documente la règle d'écriture d'une capacité (R1 à R5) avec un exemple de verdict, dans le dossier de l'ÉPIC 20 (US-338).
+
 ## [v3.134.0] — 2026-11-17
 
 ### 🚀 Nouveautés

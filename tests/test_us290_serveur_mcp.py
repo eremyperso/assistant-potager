@@ -871,6 +871,6 @@ def test_us290_migration_v69_cree_les_cinq_tables_et_son_rollback():
 
 def test_us290_aucun_appel_modele_sur_le_canal_mcp():
     """Principe 4 de l'étude : pas de LLM chez nous sur ce canal."""
-    for fichier in ("app/services/mcp/serveur.py", "app/services/mcp/outils.py", "app/services/mcp/autorisation.py", "app/api/mcp.py"):
+    for fichier in ("app/services/mcp/serveur.py", "app/services/capacites/potagers.py", "app/services/capacites/registre.py", "app/services/mcp/autorisation.py", "app/api/mcp.py"):
         source = (RACINE / fichier).read_text(encoding="utf-8")
         assert "passerelle" not in source and "groq" not in source.lower()

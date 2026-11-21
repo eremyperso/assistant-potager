@@ -9,7 +9,7 @@ désigne celui qui **écrit le code** dans Claude Code ; le compagnon lui-même 
 |---|---|---|---|---|---|---|---|
 | 0 | **US-336** | Constituer le jeu d'évaluation du compagnon | 5 | Sonnet 5.5 · medium | non | ✅ Livrée, non commitée ⚠️ numéro à régler | *(PIA-319 est une autre US-336)* |
 | 0 | **US-337** | Lanceur d'évaluation commun, juge et rapport | 5 | Sonnet 5.5 · medium | non | ✅ Livrée ; CA8 : ligne de base G0 mesurée le 20/11 ([06](06_LIGNE_DE_BASE_G0.md)) ; CA0 : prototype reconstitué, hors dépôt | PIA-320, En cours |
-| 1 | **US-338** | Extraire le registre de capacités en couche neutre ; le serveur MCP devient un adaptateur | 5 | Sonnet 5.5 · medium | non | À faire | PIA-321 |
+| 1 | **US-338** | Extraire le registre de capacités en couche neutre ; le serveur MCP devient un adaptateur | 5 | Sonnet 5.5 · medium | non | ✅ Livrée le 20/11, non commitée (v3.135.0) | PIA-321, Revue en cours |
 | 1 | **US-339** | Capacité `situation_culture` : « est-ce le moment ? » | 3 | Sonnet 5.5 · low | non | À faire | PIA-322 |
 | 1 | **US-340** | Capacité `que_faire_maintenant` : « qu'est-ce que je fais au potager ? » | 3 | Sonnet 5.5 · low | non | À faire | PIA-323 |
 | 1 | **US-341** | Rattacher la recherche de connaissance à une culture et dire quand le savoir manque | 3 | Sonnet 5.5 · low | non (colonne éventuelle à dire au cadrage) | À faire | PIA-324 |
