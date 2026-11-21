@@ -401,7 +401,7 @@ def test_ca6c_une_lecture_qui_voudrait_valider_ne_laisse_rien(test_db):
 
 def test_ca6c_les_lectures_ne_sont_pas_des_ecritures():
     registre = moteurs.RegistreMesure(CTX, jour=JOUR)
-    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 10  # + situation_culture (US-339)
+    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 13  # + situation_culture (US-339), trois lectures d'écran (US-351)
     assert registre.noms == (*moteurs.LECTURES, "proposer_geste")
 
 
@@ -1230,3 +1230,27 @@ def test_g0_un_geste_incomplet_devient_la_question_du_parseur(monkeypatch):
     tour = TraceTour(rang=1, jardinier="j'ai semé des carottes ce matin")
     moteur._suivre_le_geste(tour.jardinier, tour, 0.0)
     assert tour.texte == "Combien de graines ?" and not tour.propositions
+
+
+def test_chaque_outil_attendu_est_lisible_par_le_moteur_capacites():
+    """[US-351 / CA6] Un groupe d'outils attendus sans aucun nom du moteur `capacites` rend le critère « données
+    lues » impossible à tenir : B22 attendait `associations…` alors que la capacité s'appelle
+    `voisinages_culture`. Les noms de la chaîne actuelle restent des alternatives, pas des obligations."""
+    jeu = j.charger()
+    lisibles = {*moteurs.LECTURES, *moteurs.ECRITURES_SIMULEES}
+    orphelins = []
+    for cas in jeu.cas:
+        groupes = list(cas.attendus.outils_attendus)
+        for rang in cas.attendus_tours:
+            a = cas.attendus_du_tour(int(rang))
+            groupes += list(a.outils_attendus if a else ())
+        orphelins += [(cas.id, g) for g in groupes if not any(e.partition(":")[0] in lisibles for e in g)]
+    assert not orphelins, orphelins
+
+
+def test_filtrer_par_cas_retient_ces_cas_seulement_et_refuse_un_cas_inconnu():
+    """[US-351 / CA6] `--cas` joue exactement les cas visés ; une faute de frappe est une erreur, pas un cas en moins."""
+    jeu = j.charger()
+    assert [c.id for c in jeu.filtrer(cas=["B22-F1", "B01-F8"]).cas] == ["B01-F8", "B22-F1"]
+    with pytest.raises(KeyError, match="B99-F1"):
+        jeu.filtrer(cas=["B22-F1", "B99-F1"])

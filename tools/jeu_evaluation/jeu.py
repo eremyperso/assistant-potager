@@ -167,9 +167,14 @@ class Jeu:
         raise KeyError(identifiant)
 
     def filtrer(self, *, besoins: Iterable[str] = (), jeu: str = "", renouvelables: Optional[bool] = None,
-                limite: int = 0) -> "Jeu":
+                limite: int = 0, cas: Iterable[str] = ()) -> "Jeu":
+        cas = set(cas)
+        inconnus = cas - {c.id for c in self.cas}
+        if inconnus:  # une faute de frappe ne doit pas réduire la mesure en silence
+            raise KeyError(f"cas absents du jeu : {sorted(inconnus)}")
         retenus = [c for c in self.cas
                    if (not besoins or c.besoin in set(besoins))
+                   and (not cas or c.id in cas)
                    and (not jeu or c.jeu_de_donnees == jeu)
                    and (renouvelables is None or c.renouvelable == renouvelables)]
         if limite:

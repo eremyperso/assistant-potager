@@ -1,3 +1,11 @@
+## [v3.137.0] — 2026-11-21
+
+### 🚀 Nouveautés
+- Ajoute la capacité `voisinages_culture` : « quoi planter à côté de mes tomates ? » rend les bons et les mauvais voisins de la fiche culture, cultures et familles séparées, avec leur niveau de preuve, et rien d'autre (US-351).
+- Ajoute la capacité `que_semer_ce_mois` : ce qui se sème en pépinière ce mois-ci, par le calcul de « Le bon moment pour semer » de la Pépinière ; un mois vide le dit, avec la prochaine ouverture (US-351).
+- Ajoute la capacité `voir_mon_potager` : la ville, la zone, les parcelles, les abris et les pépinières déclarés, pour que l'assistant ne demande plus « as-tu une serre ? » ni ne cite une ville que rien ne porte (US-351).
+- Dit dans le guide, l'aide `/help meteo` et une nouvelle fiche du corpus où régler la ville du potager : Paramètres du potager › Identité › Ville, ou « Localiser » (US-351).
+
 ## [v3.136.0] — 2026-11-21
 
 ### 🚀 Nouveautés

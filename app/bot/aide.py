@@ -255,7 +255,10 @@ _HELP_METEO = (
     "  → _\"il va pleuvoir au Havre ?\"_\n\n"
     "💡 _La ville est nommée avec sa région et son pays ; si le même nom existe ailleurs, "
     "c'est dit. Seule la météo du jour est donnée : « demain » est signalé, jamais ignoré "
-    "en silence. Chaque matin à 5 h, la météo de votre potager est aussi relevée seule._"
+    "en silence. Chaque matin à 5 h, la météo de votre potager est aussi relevée seule._\n\n"
+    # [US-351 / CA5] Le compagnon répondait « nomme la ville dans ta phrase » : le réglage est dit ici.
+    "📍 _La ville de votre potager se règle dans l'application web : menu du potager › "
+    "Paramètres du potager › Identité › Ville, ou « Localiser » sur la carte météo._"
 )
 
 

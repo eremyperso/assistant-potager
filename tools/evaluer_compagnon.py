@@ -153,6 +153,7 @@ def construire_parser() -> argparse.ArgumentParser:
     p.add_argument("--modele-claude", default=moteurs.MODELE_CLAUDE, help="modèle de la configuration D")
     p.add_argument("--passages", type=int, default=campagne.PASSAGES_MIN, help="passages par cas et par moteur (≥ 3)")
     p.add_argument("--besoin", help="ne jouer que ces besoins (B01,B05…)")
+    p.add_argument("--cas", help="ne jouer que ces cas (B22-F1,B01-F8…) : la mesure ciblée d'un critère (US-351 / CA6)")
     p.add_argument("--donnees", choices=modele_jeu.JEUX_DE_DONNEES, help="ne jouer que ce jeu de données")
     p.add_argument("--limite", type=int, default=0, help="ne jouer que les N premiers cas retenus")
     p.add_argument("--potager-neuf", type=int, default=_entier_env("JEU_EVAL_POTAGER_NEUF"))
@@ -304,6 +305,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("❌ Le jeu ne tient pas ses exigences :", *ecarts, sep="\n  - ", file=sys.stderr)
         return 2
     jeu = jeu.filtrer(besoins=[b.strip() for b in args.besoin.split(",")] if args.besoin else (),
+                      cas=[c.strip() for c in args.cas.split(",")] if args.cas else (),
                       jeu=args.donnees or "", limite=args.limite)
     if not jeu.cas:
         parser.error("aucun cas retenu")

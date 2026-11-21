@@ -30,7 +30,8 @@ MOTEURS = (MOTEUR_ACTUEL, MOTEUR_CAPACITES, MOTEUR_CLAUDE_MCP)
 #: Les lectures du registre (US-291, US-339) que la configuration C appelle.
 LECTURES = ("voir_plan", "voir_pepiniere", "voir_stock", "consulter_carnet", "voir_statistiques", "voir_meteo",
             "voir_calendrier", "voir_echeances", "chercher_connaissance",
-            "situation_culture")  # [US-339] le verdict de saison de la fiche culture
+            "situation_culture",  # [US-339] le verdict de saison de la fiche culture
+            "voisinages_culture", "que_semer_ce_mois", "voir_mon_potager")  # [US-351] lectures d'écran
 #: Dans la configuration C, une seule écriture : proposer le geste, simulée au schéma du MCP.
 ECRITURES_SIMULEES = ("proposer_geste",)
 DECISIONS_SIMULEES = ("confirmer_proposition", "abandonner_proposition")

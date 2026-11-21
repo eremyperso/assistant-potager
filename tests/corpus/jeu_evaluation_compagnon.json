@@ -145,7 +145,8 @@
           [
             "voir_plan",
             "lire:parcelles",
-            "lire:parcelle"
+            "lire:parcelle",
+            "voir_mon_potager"
           ]
         ]
       },
@@ -294,7 +295,8 @@
                 [
                   "voir_plan",
                   "lire:parcelles",
-                  "lire:parcelle"
+                  "lire:parcelle",
+                  "voir_mon_potager"
                 ]
               ]
             }
@@ -586,7 +588,8 @@
                 [
                   "voir_plan",
                   "lire:parcelles",
-                  "lire:parcelle"
+                  "lire:parcelle",
+                  "voir_mon_potager"
                 ]
               ]
             },
@@ -600,7 +603,8 @@
                 [
                   "voir_plan",
                   "lire:parcelles",
-                  "lire:parcelle"
+                  "lire:parcelle",
+                  "voir_mon_potager"
                 ]
               ]
             }
@@ -734,6 +738,7 @@
             "voir_calendrier",
             "voir_pepiniere",
             "semis_du_mois",
+            "que_semer_ce_mois",
             "confiance"
           ]
         ]
@@ -1791,7 +1796,8 @@
           [
             "associations",
             "voir_associations",
-            "associations_culture"
+            "associations_culture",
+            "voisinages_culture"
           ]
         ],
         "textes_attendus": [

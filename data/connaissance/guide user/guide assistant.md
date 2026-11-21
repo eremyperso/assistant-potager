@@ -1337,7 +1337,7 @@ Pour connaître la météo d'une **autre ville** que celle de votre potager, nom
 
 « Quel temps fait-il à Lyon ? » ou « Quelle météo à Saint-Étienne ? » fonctionnent aussi, à l'écrit comme à la voix. L'assistant donne la météo du jour de cette ville et la nomme avec sa région et son pays ; si le même nom existe ailleurs, il le dit. Cette météo n'est **pas enregistrée** : l'historique météo reste celui de votre potager, et « quel temps fait-il ? » sans ville donne toujours la météo de votre potager. Seule la météo du jour est donnée : si vous demandez « demain », l'assistant le signale au lieu de répondre pour aujourd'hui sans rien dire. `/help meteo` rappelle ces formulations.
 
-Sur le tableau de bord, le widget météo affiche en plus le lever et le coucher du soleil, la prévision à 5 jours et un **conseil potager du jour** (arrosage, gel, vent…) calculé sur la localisation réelle de votre potager. Pensez à renseigner la commune du potager depuis l'écran de paramètres, sans quoi la météo affichée n'est pas la vôtre.
+Sur le tableau de bord, le widget météo affiche en plus le lever et le coucher du soleil, la prévision à 5 jours et un **conseil potager du jour** (arrosage, gel, vent…) calculé sur la localisation réelle de votre potager. Pensez à renseigner la ville du potager, sans quoi la météo affichée n'est pas la vôtre : menu du potager › **Paramètres du potager** › Identité › **Ville**, ou le bouton **Localiser** de la carte météo « Localisation manquante » (et de la fiche calendrier). Le compagnon ne devine jamais la ville : sans elle, il le dit et vous indique ce réglage.
 
 ### 17.2 Les réponses vocales
 

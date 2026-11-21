@@ -326,6 +326,9 @@ def test_us208_ca7_aucun_moteur_ne_lit_le_type() -> None:
         # [US-331 / CA6] La fiche écrit « Froide / Chaude » : le type est TRADUIT vers `pepiniere=`
         # du domaine, sans qu'aucun moteur le lise.
         Path("app/services/parcelles.py"),
+        # [US-351 / CA3] `voir_mon_potager` SERT le type déclaré au compagnon (« pépinière chaude »)
+        # pour qu'il ne le redemande pas ; aucun calcul ne le lit.
+        Path("app/services/capacites/potager_ecrans.py"),
     }
     fautifs = []
     for chemin in RACINE.glob("**/*.py"):
