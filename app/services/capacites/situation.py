@@ -148,6 +148,11 @@ def _situation_culture(db: Session, appel: AppelCapacite) -> dict:
         "chez_toi": chez_toi,
         "geste_suivant": _geste_suivant(verdict, chez_toi),
         "a_ecrire": "rien : pour noter un geste, proposer_geste, puis l'accord du jardinier",
+        "consigne": (
+            "Donne la fenêtre de l'action que le jardinier dit (planter des plants = `plantation`, semer = semis), "
+            "puis les autres de `fenetres` ; hors saison, nomme le risque de le faire quand même (gel, froid, "
+            "reprise), sans chiffre. Dis si la culture est déjà chez lui (`chez_toi`). Aucun chiffre de culture "
+            "(profondeur, température, dose) qui ne vienne pas de ces données."),
         "source": "fiche culture de l'application (calendrier de la zone et confiance du jour)",
     }
     if culture != dite:
@@ -166,7 +171,7 @@ enregistrer_capacite(Capacite(
         "de l'application, toutes actions confondues : c'est le moment, pas ce mois-ci avec la prochaine "
         "fenêtre, hors calendrier connu, ou culture inconnue ; puis où elle en est chez le jardinier (parcelles et "
         "étape, lots en pépinière, récoltes de la saison), ses pieds et son rendement, et le geste suivant "
-        "plausible. À appeler AVANT de parler de saison. Lecture seule : n'écrit rien."
+        "plausible. À appeler AVANT de parler de saison, y compris pour « planter des plants ». Lecture seule : n'écrit rien."
     ),
     proprietes={
         "culture": {"type": "string", "description": "La culture, comme le jardinier l'a dite (salades, tomate…)."},

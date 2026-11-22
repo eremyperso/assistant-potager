@@ -437,12 +437,20 @@ def _fenetres_semis_pepiniere(
 ) -> tuple[str, list[tuple[str, int, int]]]:
     """La zone du potager et ses fenêtres de semis en pépinière `(culture, mois_debut,
     mois_fin)`, par ordre de culture — référentiel commun et cultures du potager."""
+    return fenetres_de_phase(db, potager_id, cal.PHASE_SEMIS_PEPINIERE)
+
+
+def fenetres_de_phase(
+    db: Session, potager_id: Optional[int], phase: str,
+) -> tuple[str, list[tuple[str, int, int]]]:
+    """[US-351] La zone du potager et les fenêtres d'UNE phase `(culture, mois_debut, mois_fin)` : la requête de la
+    bande « Le bon moment pour semer », ouverte à la pleine terre pour que le compagnon recoupe les deux."""
     zone, _ = cal.zone_du_potager(db, potager_id)
     requete = (
         db.query(CultureConfig.nom, FenetreCulturale.mois_debut, FenetreCulturale.mois_fin)
         .join(ItineraireCultural, ItineraireCultural.culture_id == CultureConfig.id)
         .join(FenetreCulturale, FenetreCulturale.itineraire_id == ItineraireCultural.id)
-        .filter(FenetreCulturale.phase == cal.PHASE_SEMIS_PEPINIERE)
+        .filter(FenetreCulturale.phase == phase)
         .filter(FenetreCulturale.zone_climatique == zone)
     )
     if potager_id is not None:

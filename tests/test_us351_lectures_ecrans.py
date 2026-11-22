@@ -214,3 +214,67 @@ def test_us351_l_aide_meteo_dit_ou_regler_la_ville():
     from app.bot import aide
 
     assert "Paramètres du potager" in aide._HELP_METEO and "Localiser" in aide._HELP_METEO
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Décisions du porteur du 22/11/2026 (mesure CA6 du 21/11) — B22-F6, B06, B01, B04
+# ═════════════════════════════════════════════════════════════════════════════
+class TestDecisions2211:
+
+    def test_us351_famille_a_eviter_avec_exemples_du_referentiel(self, client, fabrique, jardin, voisinages):
+        """B22-F6 : « la famille des Brassicacées » vient avec deux ou trois cultures du référentiel, jamais une
+        culture déjà citée à part, jamais deux « chou », jamais la culture elle-même."""
+        with fabrique() as db:
+            famille = db.query(FamilleBotanique).filter_by(nom="Brassicacées").one()
+            for nom in ("brocoli", "chou frisé", "navet", "radis"):
+                db.add(CultureConfig(nom=nom, type_organe_recolte="vegetatif", famille_id=famille.id))
+            db.query(CultureConfig).filter_by(nom="chou").update({"famille_id": famille.id})
+            db.commit()
+        d = _lire(fabrique, jardin, "voisinages_culture", {"culture": "tomate"})
+        exemples = d["familles_a_eviter"][0]["exemples"]
+        assert exemples == ["brocoli", "navet", "radis"]  # ni « chou » (déjà cité), ni « chou frisé » (même mot)
+
+    def test_us351_une_seule_liste_quand_la_question_ne_porte_que_sur_elle(self, client, fabrique, jardin, voisinages):
+        d = _lire(fabrique, jardin, "voisinages_culture", {"culture": "tomate", "sens": "a_eviter"})
+        assert d["liste_demandee"] == "a_eviter" and "favorables" not in d and "familles_favorables" not in d
+        assert [v["nom"] for v in d["a_eviter"]] == ["chou"] and "seulement à la liste demandée" in d["consigne"]
+        tout = _lire(fabrique, jardin, "voisinages_culture", {"culture": "tomate"})
+        assert "favorables" in tout and "a_eviter" in tout and "les deux listes" in tout["consigne"]
+
+    def test_us351_semis_du_mois_recoupe_pepiniere_et_pleine_terre(self):
+        pepiniere = [("oignon", 1, 2), ("tomate", 2, 4), ("salade", 2, 3)]
+        pleine_terre = [("radis", 2, 5), ("carotte", 3, 6), ("mâche", 8, 10)]
+        suite = cap.suite_du_calendrier(pepiniere, pleine_terre, date(2026, 11, 22))
+        assert suite == [
+            {"mois": "janvier", "en_pepiniere": ["oignon"], "en_pleine_terre": []},
+            {"mois": "février", "en_pepiniere": ["salade", "tomate"], "en_pleine_terre": ["radis"]},
+            {"mois": "mars", "en_pepiniere": [], "en_pleine_terre": ["carotte"]},
+        ]
+        assert cap._ouverts_ce_mois(pleine_terre, 9) == ["mâche"] and cap._ouverts_ce_mois(pleine_terre, 11) == []
+
+    def test_us351_novembre_dit_rien_sur_les_deux_phases_puis_la_suite(self, client, fabrique, jardin, referentiel):
+        d = _lire(fabrique, jardin, "que_semer_ce_mois", {"date": "2025-11-15"})
+        assert d["a_semer_pleine_terre"] == []
+        assert d["texte"].startswith("Aucun semis ce mois-ci, ni en pépinière ni en pleine terre.")
+        assert d["suite_du_calendrier"] and d["suite_du_calendrier"][0]["mois"] == "février"
+        assert "février" in d["texte"] and "habitudes" in d and "Ne propose ni rappel" in d["consigne"]
+
+    def test_us351_habitudes_des_saisons_precedentes_seulement(self):
+        evenements = [
+            {"date": "2025-11-20", "culture": "ail"}, {"date": "2025-12-05", "culture": "fève"},
+            {"date": "2026-01-10", "culture": "oignon"},   # janvier dernier : dans les trois mois qui viennent
+            {"date": "2026-07-01", "culture": "salade"},   # hors fenêtre de mois
+            {"date": "2026-11-10", "culture": "mâche"},    # ce mois-ci : ce n'est pas une habitude
+            {"date": "n'importe quoi", "culture": "x"}, {"date": "2025-12-01", "culture": None},
+        ]
+        h = cap.habitudes_de_saison(evenements, date(2026, 11, 22))
+        assert [(x["culture"], x["mois"], x["annees"]) for x in h] == [
+            ("ail", "novembre", [2025]), ("fève", "décembre", [2025]), ("oignon", "janvier", [2026])]
+
+    def test_us351_voir_mon_potager_dit_de_lire_le_plan_et_pas_la_ville_pour_la_serre(self, client, fabrique, jardin,
+                                                                                    referentiel):
+        d = _lire(fabrique, jardin, "voir_mon_potager")
+        assert "ICI" in d["consigne"] and "ville n'a rien à voir avec la serre" in d["consigne"]
+        assert "Abri" in d["reglage_abri"]
+        description = registre.REGISTRE["voir_mon_potager"].description
+        assert "serre" in description and "AVANT de lui demander" in description

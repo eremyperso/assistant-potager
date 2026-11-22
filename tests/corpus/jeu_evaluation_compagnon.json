@@ -249,18 +249,26 @@
                   "pas la saison",
                   "pas ce mois",
                   "rien a semer",
-                  "ni planter"
+                  "ni planter",
+                  "pas en novembre"
                 ],
                 [
-                  "mars",
-                  "fevrier"
+                  "mars"
+                ],
+                [
+                  "gel",
+                  "froid",
+                  "reprise"
+                ],
+                [
+                  "pas au potager",
+                  "pas dans ton potager",
+                  "pas encore de salade",
+                  "aucune salade",
+                  "pas de salade"
                 ]
               ],
               "outils_attendus": [
-                [
-                  "meteo",
-                  "voir_meteo"
-                ],
                 [
                   "voir_calendrier",
                   "situation_culture",
@@ -290,6 +298,11 @@
                 [
                   "serre"
                 ]
+              ],
+              "textes_interdits": [
+                "regle ta ville",
+                "regler la ville",
+                "ville de ton potager"
               ],
               "outils_attendus": [
                 [
@@ -534,7 +547,8 @@
                   "pas la saison",
                   "pas ce mois",
                   "rien a semer",
-                  "ni planter"
+                  "ni planter",
+                  "pas en novembre"
                 ],
                 [
                   "en mai",
@@ -545,6 +559,10 @@
                   "debut mai",
                   "mai prochain",
                   "mai a "
+                ],
+                [
+                  "gel",
+                  "froid"
                 ]
               ],
               "outils_attendus": [
@@ -726,7 +744,7 @@
       "culture_type": "aucune",
       "fiche": {},
       "attendus": {
-        "bonne_reponse": "Répond d'après la rubrique « Le bon moment pour semer » de la vue Pépinière pour la zone du potager, et seulement d'après elle : en novembre en zone océanique elle est vide, il dit donc qu'il n'y a aucun semis à faire ce mois-ci, sans proposer de liste de cultures. Ne cite aucune culture dont la fenêtre de semis ne couvre pas le mois, ni une source qui ne parle pas du calendrier. Un autre mois, la liste change avec la rubrique.",
+        "bonne_reponse": "Recoupe « Le bon moment pour semer » de la Pépinière avec les fenêtres de semis en pleine terre de la zone du potager (« sous abri » se lit en pépinière). En novembre en zone océanique, ni l'une ni l'autre n'est ouverte : il dit qu'il n'y a aucun semis à faire ce mois-ci, ni en pépinière ni en pleine terre, sans citer de culture comme semable maintenant. Il donne ensuite la suite du calendrier (janvier : oignon, poireau en pépinière ; février : tomate, poivron, salade… et le radis en pleine terre ; mars : le gros des semis en pleine terre), et, si le carnet en a, ce que le jardinier a semé à ces mois les saisons précédentes, dit comme une habitude et non un conseil. Il ne propose ni rappel ni geste non demandé. Un autre mois, la liste change avec le calendrier.",
         "ecritures_interdites": [
           "*"
         ],
@@ -740,6 +758,16 @@
             "semis_du_mois",
             "que_semer_ce_mois",
             "confiance"
+          ]
+        ],
+        "textes_attendus": [
+          [
+            "aucun semis",
+            "rien a semer",
+            "pas de semis"
+          ],
+          [
+            "janvier"
           ]
         ]
       },
@@ -1856,7 +1884,38 @@
           "simule": true,
           "tours_max": 2,
           "source": "REFERENCE_HUMAINE_B01.md (session du 18/11/2026), échange 281",
-          "renouvelable": true
+          "renouvelable": true,
+          "attendus": {
+            "bonne_reponse": "La question ne porte que sur les compagnons à éviter : il ne rend que cette liste, celle de la fiche de la tomate : chou, concombre, fenouil, et la famille des Brassicacées dite comme famille, avec deux ou trois exemples de cette famille tirés du référentiel (brocoli, navet, radis…). Il ne cite aucune culture favorable.",
+            "textes_attendus": [
+              [
+                "chou"
+              ],
+              [
+                "concombre"
+              ],
+              [
+                "fenouil"
+              ],
+              [
+                "brassicac"
+              ],
+              [
+                "brocoli",
+                "navet",
+                "radis",
+                "roquette",
+                "chou frise"
+              ]
+            ],
+            "textes_interdits": [
+              "basilic",
+              "ciboulette",
+              "poivron",
+              "pomme de terre",
+              "aubergine"
+            ]
+          }
         }
       ]
     },

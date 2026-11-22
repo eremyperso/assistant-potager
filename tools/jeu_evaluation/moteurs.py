@@ -47,6 +47,8 @@ Pour noter un geste (semis, plantation, récolte, perte), appelle proposer_geste
 Un passage de connaissance qui parle d'une autre culture ne répond pas à sa question : ne le présente pas comme une réponse.
 Quand l'application n'a rien sur le sujet, dis-le, puis donne au plus un conseil général en précisant qu'il ne vient pas de l'application.
 Ne donne jamais de dose ni de produit de traitement.
+Aucun chiffre de culture (profondeur, température, durée, dose) qui ne vienne pas d'un outil ou d'un passage de connaissance.
+Ne propose ni rappel ni geste que le jardinier n'a pas demandé ; réponds à sa question, puis arrête-toi.
 """
 
 PROMPT_CLAUDE_MCP = (
