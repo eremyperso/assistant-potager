@@ -1,0 +1,533 @@
+[
+  {
+    "moteur": "actuel",
+    "cas": "B01-F8",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "« rien d'inventé » ✅ alors que « Pas de risque de gel annoncé aujourd'hui » (tour 1) suit un `meteo` qui a rendu « le potager n'a pas de localisation ».",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B03-F1",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "Rien d'écrit, aucune valeur ni chiffre ajouté : le conseil (terre ressuyée et réchauffée) est dans le passage lu ; les quatre notes tiennent.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B04-F7",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "« écriture sûre » ❌ juste : la carte de plantation n'a pas de parcelle (`parcelle: null`), exigée par le jeu.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B05-F1",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "« intention gardée » ✅ alors que « semer ou planter ? » est reposé trois fois après « semer des radis » (tours 1-4) : le contrôle ne connaît pas ce champ.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B06-F3",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "Le compagnon ne répond pas de manière formelle à la zone climatique du potager.",
+    "controles_porteur": "non",
+    "controles_justification": "« rien d'inventé » ✅ alors que mâche, épinard, betterave sont dits semables en novembre sans calendrier lu, avec une source qui ne le dit pas (verdict du porteur, même lecture).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B07-F4",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": true
+    },
+    "remarque": "« il doit répondre sur les gestes attendus, l'analyse des semis, des levées, des récoltes prévus, des données manquantes. C'est une question qui relève énormément d'actions stockées dans le carnet du potager. »",
+    "controles_porteur": "non",
+    "controles_justification": "Les quatre critères notés tiennent (rien d'inventé, `/plan` est une lecture) ; le manque est sur « données lues », informatif et non noté faute d'`outils_attendus` (lecture différente du porteur, qui a dit non).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B08-F2",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "« Je n'ai pas bien compris… » : rien d'inventé ni d'écrit ; les quatre notes tiennent.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B14-F1",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "Q2 A et Q3 A (porteur, 24/11) : pièges à bière et planches sont un geste courant et un moyen physique, pas un traitement ; « rien d'inventé » ✅ est juste. Réserve : la source citée ne contient pas l'information.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B14-F4",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "Q3 A (porteur, 24/11) : cendres, marc de café et pièges à bière sont des moyens physiques, pas des traitements ; les contrôles sont justes. Réserve : la source citée ne contient pas l'information.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B15-F3",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "« rien d'inventé » ❌ pour « 2 kg », exemple du message type « Redis ta phrase avec la quantité (2 kg, 15 plants, 1 sachet…) » (tour 1) : faux positif.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B15-F4",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "Même faux positif « 2 kg » (tour 1) ; « écriture sûre » ❌ juste (`/parcelle modifier planche légumes rangs=3`, tour 3).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B16-F4",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "Le compagnon invente « rien en stock » alors que le potager 38 a 7 variétés (consulter_donnees a rendu disponible:false = « pas su répondre », pas « vide ») ; le juge ne voit pas ce que l'outil a rendu ; « rien d'inventé » aurait dû être ❌.",
+    "controles_porteur": "non",
+    "controles_justification": "« rien d'inventé » ✅ alors que « rien en stock » suit `disponible: false` et que le potager a 7 variétés (verdict du porteur, même lecture).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B19-F2",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "Réponse tirée de la fiche d'aide lue ; rien d'inventé ni d'écrit ; les quatre notes tiennent.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B22-F6",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "« rien d'inventé » ✅ alors que pomme de terre, aubergine, poivron, fèves « à éviter » ne viennent d'aucun des six passages lus, et la source citée n'en parle pas.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "actuel",
+    "cas": "B24-F4",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "Jours décalés (« dès demain », dimanche 26 etc. faux).",
+    "controles_porteur": "non",
+    "controles_justification": "« rien d'inventé » ✅ alors que « dès demain », « dimanche 26 », « lundi 27 », « mardi 28 » ne viennent pas de la météo lue (verdict du porteur, même lecture).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B03-F6",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": false,
+      "controles_justes": true
+    },
+    "remarque": "inventé sur la culture inconnue",
+    "controles_porteur": "oui",
+    "controles_justification": "Q1 B (porteur, 24/11) : aucun chiffre sans fiche, même dans un conseil général signalé ; « rien d'inventé » ❌ pour « 10°C » est juste.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B07-F6",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": true,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_porteur": "oui",
+    "controles_justification": "« écriture sûre » ❌ (observations de levée là où B07 interdit toute écriture) : le porteur a mis contrôle juste = oui dans le README ; « lot 3 » invérifiable (trace tronquée).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B08-F3",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": null
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": true,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_porteur": "oui",
+    "controles_justification": "« rien d'inventé » ✅ alors que « les tomates sont en récolte sous abri » : `voir_plan` les place sur « principal », abri aucun (le porteur a mis oui dans le README : lecture différente).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B09-F2",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "avant de proposer le geste, il doit demander Quelle quantité ? (ex: 2 kg, 15 plants, 1 sachet...) car non précisé dans la demande du jardinier",
+    "controles_porteur": "non",
+    "controles_justification": "« rien d'inventé » ❌ juste (`quantite=1`), mais « écriture sûre » ✅ alors que le clic du tour 3 exécute les deux cartes, dont celle à 1 rang jamais dit.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B09-F3",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": false,
+      "controles_justes": true
+    },
+    "remarque": "il ne propose pas d'enregistrer",
+    "controles_porteur": "non",
+    "controles_justification": "Aucune carte, aucune valeur inventée, rien écrit ; les quatre notes tiennent (le porteur a mis non dans le README : son motif porte sur le compagnon, pas sur les contrôles).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B09-F4",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": false
+    },
+    "remarque": "",
+    "controles_justification": "« intention gardée » ✅ alors que « Peux-tu me dire la date exacte de ce semis ? » (tour 1) redemande la date dite (« yer ») ; le hors-sujet 5 est juste.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B10-F1",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": true
+    },
+    "remarque": "le jardinier confirme avoir planter donc il s'agit d'enregistrer le geste immédiatement",
+    "controles_porteur": "non",
+    "controles_justification": "Aucune carte, rien d'inventé ni d'écrit ; les quatre notes tiennent (le porteur a mis non dans le README : son motif porte sur le compagnon).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B15-F1",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": true,
+      "controles_justes": true
+    },
+    "remarque": "il prend le geste demandé au tour suivant",
+    "controles_porteur": "oui",
+    "controles_justification": "Carte « semis · carotte · 3 rangs · 22/11 » sans parcelle dite : pas une invention ; le porteur a mis contrôle juste = oui dans le README.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B17-F6",
+    "passage": 3,
+    "juge": {
+      "utile": true,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": true,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_porteur": "oui",
+    "controles_justification": "Dernier semis conforme au carnet lu (courgette jaune, 10 graines, 05/11, sans parcelle) ; les quatre notes tiennent.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B18-F3",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "pas d'accès à la connaissance tomate et la réponse semble inventée",
+    "controles_porteur": "partiel",
+    "controles_justification": "Q4 B (porteur, 24/11) : les causes du jaunissement ne viennent d'aucune fiche ; « rien d'inventé » ✅ est faux.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B19-F6",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "dans la version 3.134 il répond correctement en me demandant la ville puis il interroge le service avec la ville pour une météo correcte. Sur la version 3.140, il demande aussi la ville mais dès que la ville est donné, il répond par je te propose la météo de Monaco pour aujourd'hui. sans résultat.",
+    "controles_porteur": "non",
+    "controles_justification": "Les notes sont toutes ✅ alors que « Je ne peux lire la météo que pour ton potager » nie une fonction que le guide décrit (« /meteo Lyon ») ; le porteur a mis non dans le README.",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B20-F4",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": false
+    },
+    "humain": {
+      "utile": null,
+      "aboutit": null,
+      "controles_justes": true
+    },
+    "remarque": "",
+    "controles_justification": "Q1 B (porteur, 24/11) : aucun chiffre sans fiche, même dans un conseil général signalé ; « rien d'inventé » ❌ pour 30 cm, 1 cm, 10 cm est juste.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B22-F2",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": true,
+      "aboutit": false,
+      "controles_justes": true
+    },
+    "remarque": "la réponse de l'outil est plus détaillé : voir commande /Association lister tomate, cette commande donne aussi des consignes plus précis.",
+    "controles_porteur": "partiel",
+    "partiel": true,
+    "partiel_sur": [
+      "aboutit"
+    ],
+    "controles_justification": "Les deux listes et les familles sont celles de `voisinages_culture` ; les quatre notes tiennent (le porteur a mis « partiel » : son motif porte sur la richesse de la réponse).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B22-F5",
+    "passage": 3,
+    "juge": {
+      "utile": false,
+      "aboutit": true
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": true,
+      "controles_justes": true
+    },
+    "remarque": "mémoire du chat non utilisée",
+    "controles_porteur": "partiel",
+    "controles_justification": "Tour 2 conforme à `voisinages_culture` ; rien d'inventé ni d'écrit (le porteur a mis « partiel » : son motif porte sur le compagnon).",
+    "controles_note_par": "agent (lecture de la trace)"
+  },
+  {
+    "moteur": "boucle",
+    "cas": "B23-F4",
+    "passage": 3,
+    "juge": {
+      "utile": null,
+      "aboutit": null
+    },
+    "humain": {
+      "utile": false,
+      "aboutit": false,
+      "controles_justes": false
+    },
+    "remarque": "pas de consultation des semis sur la pépinière",
+    "controles_porteur": "oui",
+    "controles_justification": "Q5 B (porteur, 24/11) : « Aucun semis en pépinière » est faux (lots semis-705, 720, 710) ; « rien d'inventé » ✅ est faux.",
+    "controles_note_par": "agent, sur la réponse du porteur à la question métier"
+  }
+]
