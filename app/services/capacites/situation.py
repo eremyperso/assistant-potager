@@ -157,6 +157,13 @@ def _situation_culture(db: Session, appel: AppelCapacite) -> dict:
     }
     if culture != dite:
         donnees["culture_dite"] = dite
+    if verdict["verdict"] == svc_situation.VERDICT_PAS_CE_MOIS and verdict.get("fenetres"):
+        # Le modèle recopie `texte` : il porte donc TOUTES les fenêtres (la plantation comprise, pas seulement la
+        # prochaine) et la raison du « pas maintenant ». Le verdict lui-même (et la parité avec la PWA) ne change pas.
+        donnees["texte"] = (
+            f"{verdict['texte']} Toutes les fenêtres : "
+            + " ; ".join(f"{f['geste'].lower()} {f['fenetre']}" for f in verdict["fenetres"])
+            + ". Hors fenêtre, le faire quand même expose au froid, au gel et à une mauvaise reprise.")
     if chiffres:  # [CA4]
         donnees["chiffres"] = chiffres
     log.info("[US-339] situation_culture : %s le %s → %s ; chez toi %s", culture, quand, verdict["verdict"],

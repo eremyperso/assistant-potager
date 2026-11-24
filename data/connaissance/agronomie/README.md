@@ -18,7 +18,7 @@ python tools/mesurer_corpus_savoir.py \
     --racine data/connaissance/agronomie --detail          # classement (CA11)
 ```
 
-## Le périmètre : dix cultures, pas trente
+## Le périmètre d'origine : dix cultures, pas trente
 
 Les dix cultures les plus présentes dans les données réelles, établies par une
 mesure et non par intuition (`docs/VAGUE0_EPIC6_DECISIONS_ET_EXTRACTIONS.md`
@@ -44,6 +44,53 @@ jamais au rythme de l'envie d'exhaustivité.
 > « On parle aussi de » de chaque section, qui est ce que la recherche
 > interroge. Les fichiers gardent le nom `blette-*.md`, celui qu'on cherche
 > dans le dossier.
+
+## Extension du périmètre — vingt cultures [US-348]
+
+Dix cultures courantes s'ajoutent aux dix d'origine, au rythme de ce que les jardiniers
+cultivent réellement et de ce que l'évaluation du compagnon a trouvé sans fiche : **salade,
+mâche, radis, épinard, poireau, oignon, betterave, pomme de terre, petit pois, fraise**.
+Même plan, mêmes refus, même niveau `a-valider`. Le nom de fichier porte la culture au sens
+du référentiel (`pomme-de-terre-problemes.md`, `petit-pois-conduite-recolte.md`) ; le contrôle
+lit le thème comme le **suffixe** du nom, une culture pouvant contenir des tirets. L'en-tête
+`culture:` reste le nom exact de `culture_config` (`pomme de terre`, `petit pois`, `mâche`,
+`épinard`) et c'est lui que l'ingestion résout.
+
+Chaque fiche de conduite s'ouvre sur une section de **cycle de vie** (semis, mise en godet,
+plantation, récolte, sans date ni durée : celles-ci restent au calendrier). Elle dit si la
+culture se sème en place ou en godet, si elle se plante, et si la récolte est unique ou
+**répétée sur le même pied** — le cas du petit pois et de la fraise.
+
+### Carte de couverture
+
+| Culture | Type d'organe | Conduite | Problèmes |
+|---|---|---|---|
+| tomate | reproducteur | ✅ | ✅ |
+| haricot | reproducteur | ✅ | ✅ |
+| courgette | reproducteur | ✅ | ✅ |
+| chou | végétatif | ✅ | ✅ |
+| carotte | végétatif | ✅ | ✅ |
+| concombre | reproducteur | ✅ | ✅ |
+| cornichon | reproducteur | ✅ | ✅ |
+| poivron | reproducteur | ✅ | ✅ |
+| ail | végétatif | ✅ | ✅ |
+| blette | reproducteur | ✅ | ✅ |
+| salade | végétatif | ✅ | ✅ |
+| mâche | végétatif | ✅ | ✅ |
+| radis | végétatif | ✅ | ✅ |
+| épinard | végétatif | ✅ | ✅ |
+| poireau | végétatif | ✅ | ✅ |
+| oignon | végétatif | ✅ | ✅ |
+| betterave | végétatif | ✅ | ✅ |
+| pomme de terre | végétatif | ✅ | ✅ |
+| petit pois | reproducteur | ✅ | ✅ |
+| fraise | reproducteur | ✅ | ✅ |
+
+Cultures du référentiel **sans fiche** à ce jour, par ordre probable de besoin (à confirmer
+par `GET /admin/savoir/lacunes` : c'est la demande réelle qui décide, pas cette liste) :
+aubergine, navet, fève, brocoli, chou-fleur, échalote, céleri, panais, melon, courge, basilic,
+persil, framboise. Toute fiche ajoutée met à jour ce tableau dans le même commit :
+`tests/test_us348_fiches_cultures_courantes.py` échoue tant que la carte et le dossier divergent.
 
 ## Le plan imposé — deux fiches par culture, et pas une de plus
 
@@ -161,6 +208,26 @@ jardine.
 | `ail-conduite-recolte.md` | le choix de l'emplacement, le désherbage, les repères d'arrachage ou le séchage sont contredits |
 | `blette-problemes.md` | les mineuses, les taches du feuillage, la montaison ou les limaces se manifestent autrement |
 | `blette-conduite-recolte.md` | la récolte feuille à feuille, l'arrosage, l'éclaircissage ou la conservation sont contredits |
+| `salade-problemes.md` | la montée à graine, les limaces, la pourriture du collet ou le mildiou se manifestent autrement |
+| `salade-conduite-recolte.md` | la plantation, l'arrosage ou les repères de coupe sont contredits |
+| `mache-problemes.md` | la levée, le jaunissement des rosettes ou les taches du feuillage se comportent autrement |
+| `mache-conduite-recolte.md` | le semis sur sol tassé, le désherbage ou la récolte des rosettes sont contredits |
+| `radis-problemes.md` | les radis creux, piquants, montés ou les altises se manifestent autrement |
+| `radis-conduite-recolte.md` | le rythme des semis, l'arrosage ou la conservation des fanes sont contredits |
+| `epinard-problemes.md` | la montaison, le jaunissement, le mildiou ou les mineuses se manifestent autrement |
+| `epinard-conduite-recolte.md` | la récolte feuille à feuille, l'éclaircissage ou le lavage sont contredits |
+| `poireau-problemes.md` | la teigne, la rouille, la montaison ou la pourriture du pied se manifestent autrement |
+| `poireau-conduite-recolte.md` | la plantation au plantoir, le buttage ou la mise en jauge sont contredits |
+| `oignon-problemes.md` | le mildiou, la pourriture blanche, la mouche ou la montaison se manifestent autrement |
+| `oignon-conduite-recolte.md` | la plantation en surface, le séchage ou le stockage sont contredits |
+| `betterave-problemes.md` | les racines dures, le zonage, les taches ou les mineuses se manifestent autrement |
+| `betterave-conduite-recolte.md` | l'éclaircissage, l'arrachage ou la conservation sont contredits |
+| `pomme-de-terre-problemes.md` | le mildiou, le doryphore, la gale ou les tubercules verts se manifestent autrement |
+| `pomme-de-terre-conduite-recolte.md` | le buttage, l'arrachage ou la conservation à l'obscurité sont contredits |
+| `petit-pois-problemes.md` | la levée, l'oïdium, les pucerons ou les gousses vides se manifestent autrement |
+| `petit-pois-conduite-recolte.md` | l'appui, la cueillette répétée ou la fraîcheur après cueillette sont contredits |
+| `fraise-problemes.md` | la pourriture grise, les fruits déformés, l'oïdium ou le dépérissement se manifestent autrement |
+| `fraise-conduite-recolte.md` | la plantation du collet, le paillage, les stolons ou la cueillette répétée sont contredits |
 
 Toute fiche ajoutée ici entre dans cette table **dans le même commit** :
 `tests/test_us140_corpus_agronomique.py` échoue tant que ce n'est pas fait.

@@ -1,6 +1,6 @@
 # Migrations de base de données
 
-Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v80),
+Fichiers SQL manuels dans `migrations/`, numérotés séquentiellement (v2 → v81),
 chacun avec son `rollback_vN.sql` depuis v16. À appliquer dans l'ordre sur une
 base neuve. En dev, `scripts/update_dev.ps1` joue celles qui manquent (suivi
 dans `.migrations_applied`) ; en prod et en dev distant, les workflows
@@ -12,6 +12,11 @@ psql -d potager -f migrations/migration_v57.sql
 
 ## Ce que portent les dernières migrations
 
+- **v81 [US-343]** — `echanges_conversation.messages` JSONB nullable : le tour complet de la boucle à capacités (phrase datée,
+  appels d'outils avec arguments, résultats datés et tronqués, réponse). NULL pour l'ancien moteur. Même RLS (v61), même purge
+  à 30 jours. Additive, sans backfill. Rollback : `rollback_v81.sql` (le fil retombe sur phrase + réponse). **À jouer AVANT de
+  déployer le code** : le modèle déclare la colonne, toute lecture d'`echanges_conversation` échoue sans elle (la mémoire des
+  deux moteurs serait vide). **Jouée nulle part pour l'instant.**
 - **v76 [US-326]** — géométrie du plan vue du dessus. `potagers` : `emprise_longueur_m`, `emprise_largeur_m`, `angle_deg`, `orientation_nord` (CHECK `ck_potagers_geometrie`). `parcelles` : `forme`, `x_m`, `y_m`, `largeur_m`, `rotation_deg`, `sens_rangs` (CHECK `ck_parcelles_geometrie` : x et y NULL ensemble, vocabulaires, bornes). `evenements` : `rang_position` SMALLINT (1-99, la POSITION ; `rang` reste le multiplicateur) et `rang_longueur_m` (exige une position ; CHECK `ck_evenements_rang_position`). Tout est nullable, **aucun backfill** : les parcelles existantes sont « à placer », les cultures gardent la numérotation d'installation. Les numéros v73 à v75 sont pris par la branche du pilotage LLM (US-306→309). Rollback : `rollback_v76.sql` (perd la géométrie et les positions dites, aucun geste).
 - **v80 [US-317]** — `bilans_pilotage` : la trace des résumés quotidiens et bilans hebdomadaires envoyés (`type` quotidien|hebdomadaire, `periode_debut`, `periode_fin`, `statut` envoye|echoue, `tentatives` — 2 au plus —, `envoye_le`, `erreur`), **UNIQUE `(type, periode_debut)`** : jamais deux envois pour la même période. Table d'administration, **sans RLS**, aucune donnée de jardinier. Idempotente. Rollback : `rollback_v80.sql` (le résumé du jour peut repartir). **Non jouée sur PostgreSQL.**
 - **v79 [US-316]** — `seuils_pilotage` (indicateur, périmètre, fenêtre en jours 1-31, comparaison fixe|ecart_7j, valeur, gravité haute|moyenne|basse, actif, à valider ; UNIQUE sur la définition) et `alertes_pilotage` (seuil ON DELETE CASCADE, valeur mesurée et de référence, déclenchée / résolue, `canaux_notifies`, `dernier_rappel_le`, `retour_notifie`) avec l'**index partiel unique `uq_alertes_pilotage_ouverte`** (une seule alerte ouverte par seuil). Tables d'administration, **sans RLS** ; les seuils par défaut sont posés par le code, pas par la migration. Idempotente. Rollback : `rollback_v79.sql` (perd seuils réglés et historique). **Non jouée sur PostgreSQL ; ne pas laisser `create_all` la créer (pas de RLS à retirer ici, mais les contraintes nommées doivent venir du SQL).**

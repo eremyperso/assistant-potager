@@ -1533,8 +1533,10 @@ class EchangeConversation(Base):
     du veilleur, plus tard). Rangée par jardinier ET par potager, lue sur 30
     minutes glissantes, purgée à 30 jours (`app.services.compagnon.conversations`).
 
-    Les résultats des lectures n'y sont pas : seul le texte du compagnon l'est
-    (architecture §12.5) — une donnée lue il y a dix minutes est relue, pas crue.
+    Pour l'ancien moteur, les résultats des lectures n'y sont pas : seul le texte du
+    compagnon l'est (architecture §12.5). [US-343] La boucle à capacités garde le tour
+    complet dans `messages` (résultats datés) : elle les relit pour COMPRENDRE la phrase
+    suivante ; le validateur relit toujours en base pour proposer et exécuter.
 
     RLS stricte par potager (migration_v61) : un échange s'écrit et se lit dans
     le potager où il a eu lieu.
@@ -1564,6 +1566,9 @@ class EchangeConversation(Base):
     #: [US-307 / CA7] L'échange (au sens de la mesure) que cette réponse a produit : retrouve ses
     #: lignes de `conso_tokens`. Sans clé étrangère (migration_v74).
     echange_ref     = Column(String(40), nullable=True, index=True)
+    #: [US-343 / CA1] Les messages complets d'un tour de la boucle à capacités (US-342) : phrase, appels
+    #: d'outils avec arguments, résultats datés et tronqués, réponse. NULL pour l'ancien moteur (migration_v81).
+    messages        = Column(JSON(none_as_null=True), nullable=True)
     cree_le         = Column(DateTime, nullable=False, server_default=func.now())
 
     __table_args__ = (

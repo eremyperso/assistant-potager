@@ -229,7 +229,20 @@ def chercher_connaissance(arguments: dict, ctx: TenantContext, releves: Releves)
         from app.services import connaissance
 
         db = SessionLocal()
-        contexte = connaissance.rechercher(db, ctx, question, domaine=domaine)
+        # [US-341 / CA1, CA2] La culture nommée ne se relâche pas : jamais le passage d'une autre.
+        culture, fiche_absente = None, None
+        try:
+            culture = connaissance.culture_visee(db, ctx, question, _texte_argument(arguments, "culture") or None)
+            if (culture is not None and domaine == connaissance.DOMAINE_JARDINAGE
+                    and not connaissance.a_une_fiche(db, ctx, culture.id, connaissance.FAMILLE_AGRONOMIE)):
+                fiche_absente = {"culture": culture.nom,
+                                 "referentiel": connaissance.savoir_du_referentiel(db, ctx, culture)}
+        except Exception as e:  # noqa: BLE001 — ne pas reconnaître la culture ne doit jamais couper la recherche
+            log.warning("🤖 AGENT          : culture non reconnue pour la connaissance (%s)", type(e).__name__)
+            culture, fiche_absente = None, None
+        contexte = connaissance.rechercher(
+            db, ctx, question, domaine=domaine,
+            culture_id=culture.id if culture is not None else None, culture_stricte=culture is not None)
     except Exception as e:  # noqa: BLE001
         log.warning("🤖 AGENT          : chercher_connaissance impossible (%s)", type(e).__name__)
         return _json({"passages": [], "disponible": False})
@@ -237,6 +250,16 @@ def chercher_connaissance(arguments: dict, ctx: TenantContext, releves: Releves)
         if db is not None:
             db.close()
     retenus = contexte.passages[:NB_PASSAGES_MAX]
+    if fiche_absente is not None:
+        # [US-341 / CA3] Pas de fiche : le dire, et rendre ce que le référentiel sait de la culture.
+        texte_absent = f"Pas de fiche {fiche_absente['culture']} dans l'application."
+        donnees = _json({"passages": [], "disponible": False, "fiche_absente": True, "texte": texte_absent,
+                         "referentiel": fiche_absente["referentiel"],
+                         "a_faire": "Dis qu'il n'y a pas de fiche pour cette culture, puis donne ce que `referentiel` en "
+                                    "dit (famille, fenêtres, durées) et rien d'autre. Un conseil général se signale comme tel : "
+                                    "aucun chiffre, aucune dose, aucun traitement."})
+        releves.ajouter(donnees, resume=texte_absent)
+        return donnees
     if retenus and contexte.confiance < RAG_SEUIL_CONFIANCE:
         # [US-283 / CA2] Le meilleur passage, même hors sujet, était recopié tel quel.
         log.info("🤖 AGENT          : chercher_connaissance[%s] %r → score %.2f < %.2f, rien de fiable",
@@ -727,9 +750,9 @@ def controler(texte: str, releves: Releves, phrase: str = "", jour: Optional[dat
         log.info("🤖 AGENT          : dose ou produit de traitement → texte du code")
         return texte_du_code(releves)
     if recopie(texte, releves):
-        # [US-283 / CA3] Déjà renvoyé une fois (ou plus de tour) : le code répond.
-        log.info("🤖 AGENT          : passage toujours recopié → texte du code")
-        return texte_du_code(releves)
+        # [US-341 / CA4] Le passage a été renvoyé une fois au modèle (US-283 / CA3) : s'il le recopie encore, la
+        # réponse affichée reste la sienne. Le code n'y substitue plus le résumé d'un passage ; il ajoute la source.
+        log.info("🤖 AGENT          : passage toujours recopié → texte du modèle conservé, source citée")
     mauvais_lieux = lieux_non_releves(texte, releves)
     if mauvais_lieux and _nombres_de(texte):
         log.info("🤖 AGENT          : chiffres attribués à %s, absent des relevés → texte du code", mauvais_lieux)

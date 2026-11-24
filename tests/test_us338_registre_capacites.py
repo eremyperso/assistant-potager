@@ -213,7 +213,13 @@ def test_us338_regle_d_une_capacite_documentee():
 # CA6 — Le compagnon actuel n'utilise pas encore le registre
 # ═════════════════════════════════════════════════════════════════════════════
 def test_us338_le_compagnon_actuel_n_appelle_pas_le_registre():
+    # [US-342] Seule la boucle à capacités (derrière COMPAGNON_MOTEUR=capacites) est cliente du registre ;
+    # l'ancien moteur (agent, bot, reste du compagnon) ne l'appelle toujours pas.
+    boucle = RACINE / "app/services/compagnon/boucle.py"
+    assert "services.capacites" in boucle.read_text(encoding="utf-8")
     for dossier in ("app/services/agent", "app/services/compagnon", "app/bot"):
         for fichier in (RACINE / dossier).rglob("*.py"):
+            if fichier == boucle:
+                continue
             assert "services.capacites" not in fichier.read_text(encoding="utf-8"), fichier
     assert "services.capacites" not in (RACINE / "app/services/interpreteur_commandes.py").read_text(encoding="utf-8")

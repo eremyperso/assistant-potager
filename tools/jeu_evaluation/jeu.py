@@ -375,5 +375,8 @@ def textes_des_prompts_livres() -> list[str]:
     from tools.jeu_evaluation import moteurs
 
     textes.append(moteurs.PROMPT_CAPACITES)
+    from app.services.compagnon import boucle  # [US-342] le prompt de la boucle de production
+
+    textes.append(boucle.PROMPT_FIXE)
     textes.append(moteurs.PROMPT_CLAUDE_MCP)
     return textes

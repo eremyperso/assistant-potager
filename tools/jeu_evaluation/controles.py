@@ -447,14 +447,15 @@ def _groupes_manquants(groupes: tuple[tuple[str, ...], ...], appels: list) -> li
 
 def controler_donnees_lues(cas: Cas, trace: TraceCas, notes: Notes) -> None:
     """Le compagnon lit avant de répondre (références humaines du 18/11) : météo, calendrier, plan, associations…
-    Chaque groupe d'outils attendus voit au moins un de ses outils appelé, sur tout le dialogue ou au tour visé."""
+    Chaque groupe d'outils attendus voit au moins un de ses outils appelé, sur tout le dialogue ou à ce tour **ou
+    avant** : une donnée lue au tour 3 vaut toujours au tour 4, relire le plan à chaque phrase n'est pas ce qu'on mesure."""
     verifs: list[bool] = []
     for rang in cas.attendus_tours:
         a = cas.attendus_du_tour(int(rang))
-        tour = next((t for t in trace.tours if t.rang == int(rang)), None)
         if a is None or not a.outils_attendus:
             continue
-        manquants = _groupes_manquants(a.outils_attendus, tour.appels if tour else [])
+        lus = [appel for t in trace.tours if t.rang <= int(rang) for appel in t.appels]
+        manquants = _groupes_manquants(a.outils_attendus, lus)
         verifs.append(not manquants)
         for g in manquants:
             notes.noter("donnees_lues", f"tour {rang} : aucun de {' / '.join(g)} appelé")

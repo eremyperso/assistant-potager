@@ -124,10 +124,12 @@ TYPE_ANALYSE        = "analyse"          # [US-273 / CA3] analyse approfondie, e
 TYPE_DICTEE         = "dictee"           # [US-299 / CA1] dictée de la PWA (Voxtral), audio → texte
 TYPE_VOIX           = "voix"             # [US-299 / CA2] voix du compagnon (Voxtral), texte → MP3
 TYPE_ORAL           = "oral"             # [US-303 / CA9] résumé parlé d'une réponse du compagnon
+TYPE_COMPAGNON      = "compagnon"        # [US-342 / CA7] boucle du compagnon à capacités (moteur « capacites »)
 
 TYPES_APPEL: frozenset[str] = frozenset({
     TYPE_CLASSIFICATION, TYPE_PARSING, TYPE_QUESTION, TYPE_SYNTHESE, TYPE_TRANSCRIPTION,
     TYPE_AGENT, TYPE_COMPAGNON_SIGNAL, TYPE_ANALYSE, TYPE_DICTEE, TYPE_VOIX, TYPE_ORAL,
+    TYPE_COMPAGNON,
 })
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +155,7 @@ UNITES_PAR_TYPE: dict[str, str] = {
     TYPE_DICTEE:           UNITE_SECONDE,
     TYPE_VOIX:             UNITE_CARACTERE,
     TYPE_ORAL:             UNITE_JETON,
+    TYPE_COMPAGNON:        UNITE_JETON,
 }
 
 

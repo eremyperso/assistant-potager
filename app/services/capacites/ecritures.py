@@ -44,6 +44,11 @@ TEXTE_A_FAIRE = (
     "Montre ce récapitulatif au jardinier, tel quel. Appelle confirmer_proposition seulement "
     "s'il dit oui ; sinon abandonner_proposition. Rien n'est écrit avant."
 )
+#: [US-342] Ce que lit le compagnon de l'application : la carte et ses boutons sont montrés par l'application.
+TEXTE_A_FAIRE_COMPAGNON = (
+    "L'application montre ce récapitulatif au jardinier dans une carte, avec ses boutons : il confirme au "
+    "bouton. Dis-lui en une phrase ce que tu as préparé ; rien n'est écrit avant."
+)
 TEXTE_DESTRUCTION = (
     "Une suppression ne se confirme pas depuis un assistant : ouvre la carte dans l'application "
     "pour la confirmer ou l'annuler."
@@ -51,6 +56,33 @@ TEXTE_DESTRUCTION = (
 TEXTE_A_CONFIRMER_DANS_L_APPLICATION = (
     "Cette proposition se confirme dans l'application (ou dans Telegram) : ouvre la carte."
 )
+
+
+def _du_compagnon(appelant: Any) -> bool:
+    from app.services.capacites.registre import CLIENT_COMPAGNON
+
+    return getattr(appelant, "client", None) == CLIENT_COMPAGNON
+
+
+def canal_de(appelant: Any) -> str:
+    """[US-342] Le canal de la proposition : celui du jardinier (PWA, Telegram) quand le compagnon de l'application
+    propose, `mcp` pour un assistant extérieur. La carte, l'état « confirmé depuis… » et le journal le disent."""
+    if not _du_compagnon(appelant):
+        return CANAL
+    from llm import contexte_appel
+
+    canal = contexte_appel.canal_courant.get()
+    return canal if canal in (svc_propositions.CANAL_PWA, svc_propositions.CANAL_TELEGRAM) else svc_propositions.CANAL_PWA
+
+
+def a_faire_pour(appelant: Any) -> str:
+    """La consigne rendue avec une proposition : au bouton dans l'application, par confirmer_proposition ailleurs."""
+    return TEXTE_A_FAIRE_COMPAGNON if _du_compagnon(appelant) else TEXTE_A_FAIRE
+
+
+def origine_de(appelant: Any) -> str:
+    """La trace au carnet de qui a transmis : « [compagnon] », ou « [Claude via MCP] » (US-292 / CA12)."""
+    return "[compagnon]" if _du_compagnon(appelant) else f"[{appelant.client} via MCP]"
 
 
 def lien_vers_la_carte() -> str:
@@ -230,12 +262,12 @@ def _item(arguments: dict) -> dict:
     return {k: v for k, v in item.items() if v is not None}
 
 
-def _phrase(item: dict, client: str) -> str:
+def _phrase(item: dict, client: str, origine: Optional[str] = None) -> str:
     """La trace du geste au carnet (`texte_original`) : ce que l'assistant a transmis, et qui (CA12)."""
     morceaux = [item.get("action"), item.get("quantite"), item.get("unite"), item.get("culture"),
                 item.get("variete"), f"parcelle {item['parcelle']}" if item.get("parcelle") else None,
                 item.get("date"), item.get("commentaire")]
-    return f"[{client} via MCP] " + " ".join(str(m) for m in morceaux if m not in (None, ""))
+    return f"{origine or f'[{client} via MCP]'} " + " ".join(str(m) for m in morceaux if m not in (None, ""))
 
 
 def _recapitulatif(item: dict) -> dict:
@@ -259,7 +291,7 @@ def _proposer_geste(db: Session, appel: AppelCapacite) -> dict:
     item = _item(appel.arguments)
     if item.get("parcelle"):
         _controler_parcelle(db, ctx.potager_id, item["parcelle"])
-    texte = _phrase(item, client)
+    texte = _phrase(item, client, origine_de(appel.appelant))
 
     preparation = svc_gestes_dits.controler(db, ctx, [item], texte)
     if preparation.precision:
@@ -275,13 +307,15 @@ def _proposer_geste(db: Session, appel: AppelCapacite) -> dict:
     avertissements += [i["_alerte_lot"] for i in items if i.get("_alerte_lot")]
     db.commit()
 
-    geste = svc_gestes_dits.proposer(ctx, items, texte, canal=CANAL, client=client)
+    # [US-342] Le compagnon de l'application propose sur le canal du jardinier, sans « Proposé par » sur la carte.
+    geste = svc_gestes_dits.proposer(ctx, items, texte, canal=canal_de(appel.appelant),
+                                     client=None if _du_compagnon(appel.appelant) else client)
     svc_deux_canaux.apres_creation(geste.id, ctx.potager_id)  # [CA9] la carte part aussi dans Telegram
     log.info("[US-292] Geste proposé par %s : proposition=%s potager=%s", client, geste.id, ctx.potager_id)
     return {
         "proposition": geste.id, "etat": geste.etat, "expire_le": geste.expire_le.isoformat(),
         "recapitulatif": [_recapitulatif(i) for i in items], "stock": " ".join(effets),
-        "avertissements": avertissements, "a_faire": TEXTE_A_FAIRE,
+        "avertissements": avertissements, "a_faire": a_faire_pour(appel.appelant),
     }
 
 
@@ -340,7 +374,7 @@ def _proposer_correction(db: Session, appel: AppelCapacite) -> dict:
     verdict = svc_corrections.valider(
         OUTIL_CORRIGER_ACTION, {"ref": candidate.ref, "champs": champs}, _valeurs_dites(champs), ctx,
         noms_parcelles=tuple(_parcelles(db, ctx.potager_id)),
-        texte_origine=f"[{appel.appelant.client} via MCP] correction",
+        texte_origine=f"{origine_de(appel.appelant)} correction",
     )
     if verdict.commande is None:
         if verdict.question:
@@ -352,13 +386,14 @@ def _proposer_correction(db: Session, appel: AppelCapacite) -> dict:
     if ancienne is not None:
         svc_interpreteur.persister_journal(ctx, ancienne.commande, svc_interpreteur.ISSUE_ABANDONNEE, ancienne.log_id)
     log_id = svc_interpreteur.persister_journal(ctx, verdict.commande, svc_interpreteur.ISSUE_PROPOSEE)
-    proposition = svc_propositions.proposer(ctx, verdict.commande, log_id=log_id, canal=CANAL)
-    _noter_client(proposition.id, ctx.potager_id, appel.appelant.client)
+    proposition = svc_propositions.proposer(ctx, verdict.commande, log_id=log_id, canal=canal_de(appel.appelant))
+    if not _du_compagnon(appel.appelant):
+        _noter_client(proposition.id, ctx.potager_id, appel.appelant.client)
     svc_deux_canaux.apres_creation(proposition.id, ctx.potager_id)
     return {
         "proposition": proposition.id, "etat": proposition.etat, "expire_le": proposition.expire_le.isoformat(),
         "geste": candidate.resume, "avant_apres": svc_corrections.lignes_avant_apres(verdict.commande),
-        "a_faire": TEXTE_A_FAIRE,
+        "a_faire": a_faire_pour(appel.appelant),
     }
 
 
@@ -418,7 +453,7 @@ def _confirmer_proposition(db: Session, appel: AppelCapacite) -> dict:
         if _destructrice(proposition.commande):
             raise RefusCapacite(f"{TEXTE_DESTRUCTION} {lien_vers_la_carte()}", "destruction")
     try:
-        resultat = svc_echange.confirmer(ctx, ident, canal=CANAL)
+        resultat = svc_echange.confirmer(ctx, ident, canal=canal_de(appel.appelant))
     except svc_gestes_dits.GesteIntrouvableError:
         raise RefusCapacite(f"Aucune proposition {ident} dans ce potager.", "introuvable")
     except svc_gestes_dits.GesteDejaTraiteError as erreur:
@@ -441,7 +476,7 @@ def _abandonner_proposition(db: Session, appel: AppelCapacite) -> dict:
 
     ctx, ident = appel.ctx, _ident(appel.arguments)
     try:
-        resultat = svc_echange.abandonner(ctx, ident, canal=CANAL)
+        resultat = svc_echange.abandonner(ctx, ident, canal=canal_de(appel.appelant))
     except svc_gestes_dits.GesteIntrouvableError:
         raise RefusCapacite(f"Aucune proposition {ident} dans ce potager.", "introuvable")
     except svc_gestes_dits.GesteDejaTraiteError as erreur:

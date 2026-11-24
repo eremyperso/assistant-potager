@@ -100,9 +100,15 @@ dans la même livraison. Avant de livrer un changement de comportement :
 
 Une fiche ajoutée entre dans cette table dans le même commit.
 
-## Corpus agronomique [US-140]
+## Corpus agronomique [US-140, US-348]
 
-20 fiches dans `data/connaissance/agronomie/`, famille `agronomie`, niveau
+[US-348] Passé à 40 fiches : dix cultures courantes (salade, mâche, radis, épinard, poireau,
+oignon, betterave, pomme de terre, petit pois, fraise) s'ajoutent au même plan. Le thème d'un
+fichier est son SUFFIXE (`pomme-de-terre-problemes.md`), la carte de couverture est dans
+`data/connaissance/agronomie/README.md`. Une culture sans fiche est dite telle par le compagnon ;
+les cas « culture sans fiche » du jeu d'évaluation (B20) portent des cultures encore sans fiche.
+
+20 fiches (périmètre d'origine) dans `data/connaissance/agronomie/`, famille `agronomie`, niveau
 `a-valider` (donc `indicatif` en base), `potager_id` nul. Dix cultures — tomate,
 haricot, courgette, chou, carotte, concombre, cornichon, poivron, ail, blette —
 et DEUX thèmes imposés par culture, portés par le nom du fichier :

@@ -265,7 +265,10 @@
                   "pas dans ton potager",
                   "pas encore de salade",
                   "aucune salade",
-                  "pas de salade"
+                  "pas de salade",
+                  "n'en as pas",
+                  "n'as pas de salade",
+                  "pas en place"
                 ]
               ],
               "outils_attendus": [
@@ -313,6 +316,22 @@
                 ]
               ]
             }
+          },
+          "attendus": {
+            "outils_attendus": [
+              [
+                "voir_calendrier",
+                "situation_culture",
+                "confiance",
+                "lire:culture"
+              ],
+              [
+                "voir_plan",
+                "lire:parcelles",
+                "lire:parcelle",
+                "voir_mon_potager"
+              ]
+            ]
           }
         }
       ]

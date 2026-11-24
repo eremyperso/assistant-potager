@@ -25,13 +25,16 @@ log = logging.getLogger("potager")
 MOTEUR_ACTUEL = "actuel"
 MOTEUR_CAPACITES = "capacites"
 MOTEUR_CLAUDE_MCP = "claude_mcp"
-MOTEURS = (MOTEUR_ACTUEL, MOTEUR_CAPACITES, MOTEUR_CLAUDE_MCP)
+#: [US-342] La boucle de production (`app/services/compagnon/boucle.py`) et son fil (US-343), jouées telles quelles.
+MOTEUR_BOUCLE = "boucle"
+MOTEURS = (MOTEUR_ACTUEL, MOTEUR_CAPACITES, MOTEUR_CLAUDE_MCP, MOTEUR_BOUCLE)
 
 #: Les lectures du registre (US-291, US-339) que la configuration C appelle.
 LECTURES = ("voir_plan", "voir_pepiniere", "voir_stock", "consulter_carnet", "voir_statistiques", "voir_meteo",
             "voir_calendrier", "voir_echeances", "chercher_connaissance",
             "situation_culture",  # [US-339] le verdict de saison de la fiche culture
-            "voisinages_culture", "que_semer_ce_mois", "voir_mon_potager")  # [US-351] lectures d'écran
+            "voisinages_culture", "que_semer_ce_mois", "voir_mon_potager",  # [US-351] lectures d écran
+            "que_faire_maintenant")  # [US-340] les gestes du jour et ce qui se sème ce mois-ci
 #: Dans la configuration C, une seule écriture : proposer le geste, simulée au schéma du MCP.
 ECRITURES_SIMULEES = ("proposer_geste",)
 DECISIONS_SIMULEES = ("confirmer_proposition", "abandonner_proposition")
@@ -72,7 +75,7 @@ class RegistreMesure:
       `confirmer_proposition` ne fait que noter l'exécution qui aurait eu lieu."""
 
     def __init__(self, ctx, *, decisions: bool = False, ouvrir_session: Optional[Callable] = None,
-                 jour: Optional[date] = None):
+                 jour: Optional[date] = None, noms: Optional[tuple[str, ...]] = None, a_faire: Optional[str] = None):
         from app.services.capacites.registre import REGISTRE  # [US-338] le registre neutre, partagé avec le MCP
         import app.services.capacites  # noqa: F401 — l'import remplit le registre (lectures, écritures, commandes)
 
@@ -85,6 +88,18 @@ class RegistreMesure:
             if REGISTRE[nom].ecriture:
                 raise RuntimeError(f"{nom} n'est plus une lecture : la mesure ne peut plus l'exécuter")
         self.noms = (*LECTURES, *ECRITURES_SIMULEES, *(DECISIONS_SIMULEES if decisions else ()))
+        if noms is not None:
+            # [US-342] Le moteur `boucle` donne au modèle les outils de la boucle de production : toute lecture
+            # s'exécute (annulée), une écriture n'est admise que si la mesure sait la simuler.
+            inconnus = [n for n in noms if n not in REGISTRE]
+            ecritures = [n for n in noms if n in REGISTRE and REGISTRE[n].ecriture
+                         and n not in (*ECRITURES_SIMULEES, *DECISIONS_SIMULEES)]
+            if inconnus or ecritures:
+                raise RuntimeError(f"outils que la mesure ne sait pas jouer : {inconnus + ecritures}")
+            self.noms = tuple(noms)
+        self._a_faire = a_faire
+        #: Les données brutes du dernier appel exécuté (None après un refus) : la boucle de production les lit.
+        self.dernieres_donnees: Any = None
         self._ouvrir_session = ouvrir_session
         self._propositions: dict[int, dict] = {}
         self._prochaine = 900_000_000  # identifiants simulés, hors de toute plage réelle
@@ -121,6 +136,7 @@ class RegistreMesure:
         from app.services.capacites.registre import AppelCapacite, RefusCapacite, appelant_compagnon, verifier_arguments
 
         arguments = arguments if isinstance(arguments, dict) else {}
+        self.dernieres_donnees = None
         appel = AppelTrace(nom=nom, arguments=arguments)
         tour.appels.append(appel)
         self.appels += 1
@@ -139,6 +155,7 @@ class RegistreMesure:
             else:
                 with self._session() as db:
                     donnees = outil.executer(db, AppelCapacite(appelant_compagnon(self.ctx), self.ctx, arguments))
+            self.dernieres_donnees = donnees
             appel.resultat = tronquer(json.dumps(donnees, ensure_ascii=False, default=str))
         except RefusCapacite as refus:
             appel.refus, appel.resultat = True, tronquer(str(refus.message))
@@ -164,7 +181,8 @@ class RegistreMesure:
         self._prochaine += 1
         identifiant = self._prochaine
         recap = dits.resume(item)
-        self._propositions[identifiant] = {"outil": "proposer_geste", "arguments": dict(arguments)}
+        self._propositions[identifiant] = {"outil": "proposer_geste", "arguments": dict(arguments),
+                                           "recapitulatif": recap}
         tour.propositions.append({"outil": "proposer_geste", "arguments": dict(arguments), "id": identifiant,
                                   "recapitulatif": recap})
         tour.proposition_en_attente = True
@@ -173,7 +191,7 @@ class RegistreMesure:
                                    "parcelle": item.get("parcelle"), "quantite": item.get("quantite"),
                                    "unite": item.get("unite"), "date": item.get("date"), "resume": recap}],
                 "stock": "(simulé : le stock n'est pas calculé par la mesure)", "avertissements": [],
-                "a_faire": ecritures.TEXTE_A_FAIRE}
+                "a_faire": self._a_faire or ecritures.TEXTE_A_FAIRE}
 
     def _decision_simulee(self, nom: str, arguments: dict, tour: TraceTour) -> dict:
         identifiant = arguments.get("proposition")
@@ -315,6 +333,111 @@ def _avec_carte(tour: TraceTour) -> str:
     l'ajoute dans l'application, §4.3)."""
     cartes = [f"[Proposition] {p['recapitulatif']}" for p in tour.propositions if p.get("recapitulatif")]
     return "\n".join(x for x in (tour.texte, *cartes) if x)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# [US-342] La boucle de production et son fil (US-343)
+# ═════════════════════════════════════════════════════════════════════════════
+class MoteurBoucle:
+    """Le compagnon tel qu'il tourne dans la PWA derrière `COMPAGNON_MOTEUR=capacites` : `boucle.jouer_tour` (prompt,
+    outils, étapes, garde-fous) et `fil.construire` (fil complet, borné, compacté), sans une ligne recopiée. Seuls
+    changent les bords : les capacités passent par `RegistreMesure` (lectures annulées, `proposer_geste` simulé), le
+    fil est gardé en mémoire au lieu d'`echanges_conversation`, l'horloge avance d'une minute par tour.
+
+    La PWA confirme au bouton de la carte : un clic « Confirmer » vide la proposition simulée sans rien exécuter, et
+    le tour suivant le dit au modèle comme l'application le lui dirait (`fil.note_des_cartes`)."""
+
+    nom = MOTEUR_BOUCLE
+    mode_confirmation = "bouton"
+
+    def __init__(self, ctx, *, appeler: Optional[Callable] = None, modele_simule: bool = False,
+                 jour: Optional[date] = None, ouvrir_session: Optional[Callable] = None):
+        from llm import passerelle
+
+        self.ctx = ctx
+        self._appeler = appeler or passerelle.appeler_chat_outils
+        self.modele_simule = modele_simule
+        self.jour = jour or date.today()
+        self._ouvrir_session = ouvrir_session
+        self.modele = ""
+        self.ouvrir(None)
+
+    def _nouveau_registre(self) -> RegistreMesure:
+        from app.services.capacites import ecritures
+        from app.services.compagnon import boucle
+
+        return RegistreMesure(self.ctx, ouvrir_session=self._ouvrir_session, jour=self.jour,
+                              noms=boucle.noms_des_outils(), a_faire=ecritures.TEXTE_A_FAIRE_COMPAGNON)
+
+    def ouvrir(self, cas: Optional[Cas]) -> None:
+        from datetime import datetime, time as heure
+
+        self.tours: list = []
+        self._traitees: list = []
+        self.registre = self._nouveau_registre()
+        self._instant = datetime.combine(self.jour, heure(9, 0))
+
+    def fermer(self) -> None:
+        self.tours, self._traitees = [], []
+
+    def _cliquer(self, tour: TraceTour, clic: str) -> TraceTour:
+        from app.services.compagnon import fil as svc_fil
+
+        for identifiant, proposition in list(self.registre._propositions.items()):
+            if clic == "Confirmer":
+                tour.executions.append({"proposition": identifiant, "outil": proposition["outil"], "simule": True})
+            etat, dit = (("confirmee", "✅ Confirmé depuis le portail") if clic == "Confirmer"
+                         else ("abandonnee", "❌ Laissé tomber depuis le portail"))
+            self._traitees.append(svc_fil.EtatCarte(identifiant, proposition.get("recapitulatif", ""), etat, dit,
+                                                    self._instant))
+        self.registre._propositions.clear()
+        tour.texte = {"Confirmer": "(Confirmé : la mesure n'exécute rien.)", "Annuler": "(Annulé.)"}.get(clic, "")
+        return tour
+
+    def jouer(self, rang: int, phrase: str = "", clic: str = "") -> TraceTour:
+        from datetime import timedelta
+
+        from app.services.compagnon import boucle
+        from app.services.compagnon import fil as svc_fil
+
+        tour = TraceTour(rang=rang, jardinier=phrase, clic=clic)
+        self._instant += timedelta(minutes=1)
+        if clic:
+            return self._cliquer(tour, clic)
+        fil = svc_fil.construire(self.tours, self._instant)
+        depuis = self.tours[-1].cree_le if self.tours else None
+        note = svc_fil.note_des_cartes(self._traitees, depuis)
+
+        def executer(nom: str, arguments: dict) -> "boucle.ResultatOutil":
+            appel = self.registre.executer(nom, arguments, tour)
+            donnees = self.registre.dernieres_donnees
+            if appel.refus or donnees is None:
+                return boucle.ResultatOutil(appel.resultat, refus=appel.refus)
+            return boucle.ResultatOutil(json.dumps(donnees, ensure_ascii=False, default=str), donnees=donnees)
+
+        def abandonner(ids: list) -> None:
+            for identifiant in ids:
+                self.registre._propositions.pop(identifiant, None)
+            tour.propositions = [p for p in tour.propositions if p.get("id") not in ids]
+            tour.proposition_en_attente = bool(self.registre._propositions)
+
+        try:
+            resultat = boucle.jouer_tour(self.ctx, phrase, fil=fil, executer=executer, appeler=self._appeler,
+                                         jour=self.jour, maintenant=self._instant, note=note, abandonner=abandonner)
+        except Exception as e:  # noqa: BLE001 — quota, panne : le tour est marqué, la mesure continue
+            tour.erreur = f"{type(e).__name__}: {e}"
+            return tour
+        tour.etapes, tour.tokens_in, tour.tokens_out = resultat.etapes, resultat.tokens_in, resultat.tokens_out
+        tour.tokens_cache, tour.latence_ms = resultat.tokens_cache, resultat.latence_ms
+        self.modele = resultat.modele or self.modele
+        tour.erreur = resultat.erreur or (f"borne : plus de {boucle.ETAPES_MAX} étapes" if resultat.borne else "")
+        tour.texte = resultat.texte
+        self.tours.append(svc_fil.TourFil(
+            texte_jardinier=phrase, texte_compagnon=resultat.texte, cree_le=self._instant,
+            messages=tuple(resultat.messages), canal="pwa",
+            proposition_id=resultat.propositions[-1] if resultat.propositions else None))
+        tour.texte = _avec_carte(tour)
+        return tour
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -676,6 +799,9 @@ def creer_moteur(nom: str, ctx, *, simule: bool = False, jour: Optional[date] = 
     if nom == MOTEUR_CAPACITES:
         return MoteurCapacites(ctx, appeler=appeler, modele_simule=simule, jour=jour,
                                **{k: v for k, v in options.items() if k in ("decisions", "ouvrir_session")})
+    if nom == MOTEUR_BOUCLE:
+        return MoteurBoucle(ctx, appeler=appeler, modele_simule=simule, jour=jour,
+                            **{k: v for k, v in options.items() if k in ("ouvrir_session",)})
     if nom == MOTEUR_CLAUDE_MCP:
         options = {k: v for k, v in options.items() if k in ("client", "modele", "ouvrir_session")}
         if simule and "client" not in options:

@@ -113,6 +113,10 @@ class ReponseCompagnon:
     borne: str = ""
     #: [US-303 / CA8] L'échange retenu pour cette réponse : la PWA demande sa lecture par lui.
     echange_id: Optional[int] = None
+    #: [US-342 / CA5] Les liens vers un écran de l'application rendus par la boucle : {"url", "libelle"}.
+    liens: list[dict] = field(default_factory=list)
+    #: [US-342 / CA7] Le moteur qui a répondu : « ancien » ou « capacites ».
+    moteur: str = "ancien"
 
     def en_donnees(self) -> dict:
         donnees = {
@@ -123,6 +127,12 @@ class ReponseCompagnon:
         if self.vers == VERS_ANALYSE:
             donnees["sources"] = self.sources
             donnees["borne"] = self.borne or None
+        elif self.sources:
+            donnees["sources"] = self.sources  # [US-342 / CA5] la source citée par la boucle
+        if self.liens:
+            donnees["liens"] = self.liens
+        if self.moteur != "ancien":
+            donnees["moteur"] = self.moteur
         return donnees
 
 
@@ -416,6 +426,7 @@ def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL,
         nom=CANAL, dialogue=_dialogue,
         contexte_court=lambda: svc_orchestrateur.contexte_court_du_jardinier(
             ctx, sous_les_yeux=ecran.pour_l_agent() if ecran is not None else None),
+        journal=journal,
     )
     distribution = _executer(svc_orchestrateur.distribuer(phrase, ctx, canal))
     if distribution.pris_par_le_canal:
@@ -424,6 +435,9 @@ def _repondre(ctx: TenantContext, texte: str, mode: str = MODE_NORMAL,
         return reponse
 
     resultat = distribution.resultat
+    if distribution.moteur == "capacites":
+        # [US-342] La boucle a répondu et gardé son tour dans le fil (US-343) : il ne reste qu'à montrer.
+        return _presenter_boucle(ctx, resultat)
     if svc_orchestrateur.presente_par_le_canal(resultat):
         reponse = _presenter(ctx, phrase, resultat)
         svc_orchestrateur.noter_echange(ctx, resultat, CANAL, contexte=journal)
@@ -547,6 +561,34 @@ def _avertissements(db, ctx: TenantContext, items: list[dict]) -> list[str]:
     except Exception:  # noqa: BLE001 — un avertissement manqué ne bloque pas la proposition
         log.exception("[US-270] Avertissements de plantation non évalués")
         return []
+
+
+# ── [US-342] ce que la boucle à capacités a fait ─────────────────────────────
+def _carte_de_la_boucle(ctx: TenantContext, proposition_id: int, avertissements: list[str]) -> Optional[dict]:
+    """La carte d'une proposition rangée par la boucle, si elle attend encore (une seconde proposition de geste
+    remplace la première) ; None sinon."""
+    try:
+        geste = svc_gestes_dits.par_id(ctx, proposition_id)
+        return carte_de_geste(geste, avertissements) if geste.en_attente else None
+    except svc_gestes_dits.GesteIntrouvableError:
+        pass
+    proposition = svc_propositions.par_id(proposition_id, ctx.user_id, ctx.potager_id)
+    return carte_de_commande(proposition) if proposition is not None and proposition.en_attente else None
+
+
+def _presenter_boucle(ctx: TenantContext, tour: Any) -> ReponseCompagnon:
+    """[US-342 / CA5] Le texte est celui du modèle ; le code n'ajoute que les cartes et leurs boutons, la source
+    citée et le lien vers un écran."""
+    cartes = [c for c in (_carte_de_la_boucle(ctx, pid, tour.avertissements.get(pid, []))
+                          for pid in tour.propositions) if c is not None]
+    vers = VERS_REPONSE
+    if cartes:
+        vers = VERS_GESTE if any(c["nature"] == svc_propositions.NATURE_GESTE for c in cartes) else VERS_COMMANDE
+    return ReponseCompagnon(
+        texte=tour.texte, vers=vers, propositions=cartes,
+        avertissements=[a for c in cartes for a in c.get("avertissements", [])],
+        sources=list(tour.sources), liens=list(tour.liens), moteur="capacites",
+    )
 
 
 # ── ce que l'interpréteur a lu ───────────────────────────────────────────────

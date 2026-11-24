@@ -26,7 +26,8 @@ from sqlalchemy.orm import Session
 from app.config import FRONTEND_URL
 from app.services.compagnon import propositions as svc_propositions
 from app.services.capacites.ecritures import (
-    CANAL, TEXTE_A_FAIRE, TEXTE_DESTRUCTION, _controler_parcelle, _noter_client, _parcelles,
+    TEXTE_A_FAIRE, TEXTE_DESTRUCTION, _controler_parcelle, _du_compagnon, _noter_client, _parcelles, a_faire_pour,
+    canal_de, origine_de,
 )
 from app.services.capacites.registre import AppelCapacite, Capacite, RefusCapacite, enregistrer_capacite
 
@@ -268,8 +269,9 @@ def _proposer_commande(db: Session, appel: AppelCapacite) -> dict:
         raise RefusCapacite(f"{raison} Rien n'est proposé.", "commande_refusee")
 
     plan = verdict.plan
-    commande = replace(plan.etapes[0], texte_origine=f"[{client} via MCP]") if len(plan.etapes) == 1 else \
-        replace(plan, texte_origine=f"[{client} via MCP]")
+    origine = origine_de(appel.appelant)  # [US-342] « [compagnon] » ou « [Claude via MCP] »
+    commande = replace(plan.etapes[0], texte_origine=origine) if len(plan.etapes) == 1 else \
+        replace(plan, texte_origine=origine)
     etapes = commande.etapes if isinstance(commande, svc_interpreteur.Plan) else (commande,)
     incompletes = [e for e in etapes if not e.complete]
     if incompletes:
@@ -287,15 +289,16 @@ def _proposer_commande(db: Session, appel: AppelCapacite) -> dict:
     if ancienne is not None:
         svc_interpreteur.persister_journal(ctx, ancienne.commande, svc_interpreteur.ISSUE_ABANDONNEE, ancienne.log_id)
     log_id = svc_interpreteur.persister_journal(ctx, commande, svc_interpreteur.ISSUE_PROPOSEE)
-    proposition = svc_propositions.proposer(ctx, commande, log_id=log_id, canal=CANAL)
-    _noter_client(proposition.id, ctx.potager_id, client)
+    proposition = svc_propositions.proposer(ctx, commande, log_id=log_id, canal=canal_de(appel.appelant))
+    if not _du_compagnon(appel.appelant):
+        _noter_client(proposition.id, ctx.potager_id, client)
     svc_deux_canaux.apres_creation(proposition.id, ctx.potager_id)
     log.info("[US-293] Commande proposée par %s : proposition=%s potager=%s (%d étape(s))",
              client, proposition.id, ctx.potager_id, len(etapes))
     return {
         "proposition": proposition.id, "etat": proposition.etat, "expire_le": proposition.expire_le.isoformat(),
         "recapitulatif": recapitulatif, "etapes": [e.commande_equivalente() for e in etapes],
-        "a_faire": TEXTE_A_FAIRE,
+        "a_faire": a_faire_pour(appel.appelant),
     }
 
 

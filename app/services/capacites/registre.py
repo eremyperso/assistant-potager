@@ -8,7 +8,7 @@ d'écriture, appelable par deux clients :
 * le serveur MCP (`app/services/mcp/serveur.py`), pour les assistants extérieurs (Claude, Le Chat) : il ajoute
   l'authentification, les quotas, la portée du connecteur et le journal `mcp_appels`, rien d'autre ;
 * le compagnon de l'application (`appeler`, `lister`), sans OAuth ni JSON-RPC, pour un jardinier et un potager
-  donnés (il ne s'en sert pas encore : US-342).
+  donnés : la boucle à capacités (`app/services/compagnon/boucle.py`, US-342).
 
 Les deux voient le MÊME registre : mêmes noms, mêmes descriptions, mêmes schémas, même code exécuté. La règle
 d'écriture d'une capacité (R1 à R5) est dans `docs/EPIC 20 - COMPAGNON CLIENT DES CAPACITES/07_REGLE_D_UNE_CAPACITE.md`.

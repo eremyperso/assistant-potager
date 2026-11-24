@@ -134,9 +134,15 @@ function Entree({ entree, occupe, onAction, onAvis, avisDonnes, onApprofondir, m
       {porteLecture(entree, modeVocal) && (
         <LigneEcoute echangeId={entree.echangeId} lecture={lecture} onEcouter={onEcouter} bloque={microOuvert} />
       )}
-      {entree.vers === 'analyse' && entree.sources?.length > 0 && (
+      {entree.sources?.length > 0 && (
         <p className="ml-[42px] text-[12px] text-txt3">Sources : {entree.sources.join(' · ')}</p>
       )}
+      {/* [US-342 / CA5] Le lien vers un écran rendu par la boucle à capacités. */}
+      {(entree.liens ?? []).map((lien) => (
+        <p key={lien.url} className="ml-[42px] text-[12.5px]">
+          <a href={lien.url} className="font-semibold text-brand-text underline underline-offset-2">{lien.libelle}</a>
+        </p>
+      ))}
       {peutApprofondirEntree(entree) && (
         <div className="ml-[42px]">
           <button

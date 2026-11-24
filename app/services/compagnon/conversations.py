@@ -59,6 +59,7 @@ def noter(
     outils: tuple[str, ...] = (), proposition_id: Optional[int] = None,
     signal: Optional[str] = None, maintenant: Optional[datetime] = None,
     question: Optional[dict] = None, contexte: Optional[dict] = None,
+    messages: Optional[list[dict]] = None,
 ) -> None:
     """[CA1] Retient un échange : ce qu'a dit le jardinier, ce que le compagnon en a fait.
 
@@ -67,7 +68,9 @@ def noter(
     que celle du dernier échange).
 
     [US-323 / CA6] `contexte` : ce que le jardinier avait sous les yeux dans la PWA (identifiants
-    et noms), pour mesurer l'effet du contexte d'écran sur l'interprétation."""
+    et noms), pour mesurer l'effet du contexte d'écran sur l'interprétation.
+
+    [US-343 / CA1] `messages` : le tour complet de la boucle à capacités (`compagnon/fil.py`)."""
     try:
         with _session(ctx.potager_id) as db:
             db.add(EchangeConversation(
@@ -76,6 +79,7 @@ def noter(
                 outils=list(outils) or None, proposition_id=proposition_id, signal=signal,
                 question=question or None, contexte=contexte or None, cree_le=maintenant or datetime.utcnow(),
                 echange_ref=contexte_appel.echange_courant(),  # [US-307 / CA7]
+                messages=messages or None,  # [US-343 / CA1]
             ))
             db.commit()
     except Exception:  # noqa: BLE001 — la mémoire ne casse jamais la réponse

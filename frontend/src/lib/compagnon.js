@@ -208,6 +208,9 @@ export function ajouterEchange(fil, phrase, reponse, cleJ = null) {
       // [US-273] La phrase dite, pour « Approfondir » sous une réponse ; les sources d'une analyse.
       phrase,
       ...(reponse.vers === 'analyse' ? { sources: reponse.sources ?? [], borne: reponse.borne ?? null } : {}),
+      // [US-342 / CA5] La boucle à capacités : la source citée et le lien vers un écran, ajoutés par le code.
+      ...(reponse.vers !== 'analyse' && reponse.sources?.length ? { sources: reponse.sources } : {}),
+      ...(reponse.liens?.length ? { liens: reponse.liens } : {}),
     },
   ]
 }

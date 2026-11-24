@@ -67,6 +67,9 @@ CTX = TenantContext(user_id=1, potager_id=1, role="owner")
 PERIMETRE: tuple[str, ...] = (
     "tomate", "haricot", "courgette", "chou", "carotte",
     "concombre", "cornichon", "poivron", "ail", "blette",
+    # [US-348] dix cultures courantes ajoutées au même plan (deux fiches chacune)
+    "salade", "mache", "radis", "epinard", "poireau",
+    "oignon", "betterave", "pomme-de-terre", "petit-pois", "fraise",
 )
 
 # La blette était la seule culture du périmètre dont le libellé du jardinier
@@ -75,7 +78,11 @@ PERIMETRE: tuple[str, ...] = (
 # c'est elle, et non l'en-tête, qui décide de ce que la recherche retrouve.
 # Le référentiel (wind_river_attributs.json) et les fiches disent désormais « blette » :
 # plus aucune culture n'a de libellé distinct.
-LIBELLE_REFERENTIEL: dict[str, str] = {}
+# [US-348] Le nom de fichier est un slug sans accent ni espace ; l'en-tête `culture:` et
+# `culture_config` portent le nom exact du référentiel.
+LIBELLE_REFERENTIEL: dict[str, str] = {
+    "mache": "mâche", "epinard": "épinard", "pomme-de-terre": "pomme de terre", "petit-pois": "petit pois",
+}
 
 # [CA11] Cible de l'US : la bonne fiche dans les trois premiers résultats.
 RANG_CIBLE = 3
@@ -186,8 +193,8 @@ _CORPS_VALIDE = (
 # ═════════════════════════════════════════════════════════════════════════════
 # CA1 / CA5 — le périmètre et ce que chaque culture doit posséder
 # ═════════════════════════════════════════════════════════════════════════════
-def test_us140_ca1_les_dix_cultures_du_perimetre_ont_leurs_fiches():
-    """CA1 — les dix cultures nommées par l'US, ni plus ni moins."""
+def test_us140_ca1_les_cultures_du_perimetre_ont_leurs_fiches():
+    """CA1 — les dix cultures nommées par l'US-140 et les dix de l'US-348, ni plus ni moins."""
     presentes = controle.cultures_du_perimetre(CORPUS)
     assert set(presentes) == set(PERIMETRE), (
         f"périmètre du dépôt {sorted(presentes)} ≠ périmètre de l'US {sorted(PERIMETRE)}"
@@ -809,7 +816,7 @@ def test_us140_la_commande_de_relecture_rend_zero_sur_le_corpus_livre(capsys):
     pourtant valide."""
     assert controle.main([]) == 0
     sortie = capsys.readouterr().out
-    assert "20" in sortie and "10" in sortie
+    assert "40" in sortie and "20" in sortie
 
 
 def test_us140_la_commande_rend_un_code_d_erreur_sur_une_fiche_refusee(tmp_path, capsys):

@@ -495,7 +495,8 @@ def resoudre_culture(db: Session, ctx: TenantContext, question: str) -> Optional
 def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
                         culture_id: Optional[int], type_fragment: Optional[str],
                         limite: int, famille: Optional[str] = None,
-                        sources: Optional[frozenset[str]] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                        sources: Optional[frozenset[str]] = None,
+                        culture_ou_general: bool = False) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     requete_texte = tsquery(question)
     rang = func.ts_rank_cd(
         KnowledgeChunk.recherche_fts, requete_texte, _NORMALISATION_RANG,
@@ -503,7 +504,7 @@ def _classer_postgresql(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).add_columns(rang.label("rang")).filter(
         KnowledgeChunk.recherche_fts.op("@@")(requete_texte)
     )
-    requete = _restreindre(requete, culture_id, type_fragment, famille, sources)
+    requete = _restreindre(requete, culture_id, type_fragment, famille, sources, culture_ou_general)
     lignes = requete.order_by(text("rang DESC")).limit(limite).all()
     return [(fragment, document, float(score or 0.0)) for fragment, document, score in lignes]
 
@@ -545,7 +546,8 @@ def score_lexical(termes: Iterable[str], indexe: Iterable[str]) -> float:
 def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
                     culture_id: Optional[int], type_fragment: Optional[str],
                     limite: int, famille: Optional[str] = None,
-                    sources: Optional[frozenset[str]] = None) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
+                    sources: Optional[frozenset[str]] = None,
+                    culture_ou_general: bool = False) -> list[tuple[KnowledgeChunk, KnowledgeDocument, float]]:
     """Repli de test — même sémantique, moteur sans dictionnaire.
 
     Le classement est fait en Python sur les seuls fragments qui portent au
@@ -560,7 +562,7 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
     requete = _requete_base(db, ctx).filter(
         or_(*[KnowledgeChunk.recherche_fts.like(f"%{terme}%") for terme in termes])
     )
-    requete = _restreindre(requete, culture_id, type_fragment, famille, sources)
+    requete = _restreindre(requete, culture_id, type_fragment, famille, sources, culture_ou_general)
 
     classees: list[tuple[KnowledgeChunk, KnowledgeDocument, float]] = []
     for fragment, document in requete.all():
@@ -572,7 +574,8 @@ def _classer_sqlite(db: Session, ctx: TenantContext, question: str,
 
 
 def _restreindre(requete, culture_id: Optional[int], type_fragment: Optional[str],
-                 famille: Optional[str] = None, sources: Optional[frozenset[str]] = None):
+                 famille: Optional[str] = None, sources: Optional[frozenset[str]] = None,
+                 culture_ou_general: bool = False):
     """[CA6] Restriction par métadonnée — appliquée seulement quand elle existe.
 
     [US-141 / CA5] `famille` n'est PAS une métadonnée du même ordre : c'est le
@@ -581,13 +584,20 @@ def _restreindre(requete, culture_id: Optional[int], type_fragment: Optional[str
     demande pas de conseil sur la tomate — elle demande les notes du jardinier.
 
     [US-283 / CA1] `sources`, la liste blanche du domaine, ne se relâche pas non plus.
+
+    [US-341 / CA1, CA2] `culture_ou_general` : la culture visée ne se relâche pas non plus. Ne passent que les
+    fragments de CETTE culture et les fragments généraux (sans culture) : un passage d'une autre culture n'est
+    jamais rendu, quelle que soit sa note.
     """
     if famille:
         requete = requete.filter(KnowledgeDocument.famille == famille)
     if sources is not None:
         requete = requete.filter(KnowledgeDocument.source.in_(sorted(sources)))
     if culture_id is not None:
-        requete = requete.filter(KnowledgeChunk.culture_id == culture_id)
+        if culture_ou_general:
+            requete = requete.filter(or_(KnowledgeChunk.culture_id == culture_id, KnowledgeChunk.culture_id.is_(None)))
+        else:
+            requete = requete.filter(KnowledgeChunk.culture_id == culture_id)
     if type_fragment:
         requete = requete.filter(KnowledgeChunk.type == type_fragment)
     return requete
@@ -603,6 +613,7 @@ def rechercher(
     famille: Optional[str] = None,
     domaine: Optional[str] = None,
     detecter_metadonnees: bool = True,
+    culture_stricte: bool = False,
     limite: int = RAG_MAX_PASSAGES,
     seuil: float = RAG_SEUIL_CONFIANCE,
 ) -> ContexteConnaissance:
@@ -630,6 +641,10 @@ def rechercher(
 
     [US-283 / CA1] `domaine` (`application`, `jardinage`, `carnet`) fixe la famille ET
     la liste blanche de ses sources : une source hors liste n'est jamais rendue.
+
+    [US-341 / CA1, CA2] `culture_stricte` : quand une culture est visée (donnée, ou reconnue dans la question), les
+    passages d'une AUTRE culture ne sont jamais rendus, quelle que soit leur note. Le relâchement de la culture est
+    supprimé : seul le type de question peut se relâcher. Sans culture visée, rien ne change.
     """
     debut = time.monotonic()
     question = (question or "").strip()
@@ -657,16 +672,19 @@ def rechercher(
     # abandonnée. « des taches sur les feuilles de courgette » ne doit pas
     # perdre « courgette » parce qu'aucun fragment ne porte le type « maladie ».
     tentatives = [(culture_id, type_fragment)]
+    stricte = culture_stricte and culture_id is not None
     if culture_id is not None and type_fragment:
         tentatives.append((culture_id, None))
-        tentatives.append((None, type_fragment))
-    if culture_id is not None or type_fragment:
+        if not stricte:
+            tentatives.append((None, type_fragment))
+    if (culture_id is not None or type_fragment) and not stricte:
         tentatives.append((None, None))
 
     lignes: list = []
     metadonnees: dict[str, str] = {}
     for culture_essai, type_essai in tentatives:
-        lignes = classer(db, ctx, question, culture_essai, type_essai, limite, famille, sources)
+        lignes = classer(db, ctx, question, culture_essai, type_essai, limite, famille, sources,
+                         culture_ou_general=stricte)
         if lignes:
             if culture_essai is not None:
                 metadonnees["culture_id"] = str(culture_essai)
@@ -705,6 +723,8 @@ def rechercher(
     else:
         issue = ISSUE_TRANSMIS
 
+    if stricte:
+        metadonnees.setdefault("culture_id", str(culture_id))
     contexte = ContexteConnaissance(
         question=question,
         passages=passages,
@@ -728,6 +748,38 @@ def rechercher(
         question[:60],
     )
     return contexte
+
+
+def culture_visee(db: Session, ctx: TenantContext, question: str, culture: Optional[str] = None) -> Optional[CultureConfig]:
+    """[US-341 / CA1] La culture dont parle le jardinier : celle qu'il a nommée, sinon celle que la question contient."""
+    if culture:
+        identifiant = resoudre_culture(db, ctx, culture)
+    else:
+        identifiant = resoudre_culture(db, ctx, question)
+    return db.get(CultureConfig, identifiant) if identifiant is not None else None
+
+
+def a_une_fiche(db: Session, ctx: TenantContext, culture_id: int, famille: Optional[str] = None) -> bool:
+    """[US-341 / CA3] Vrai si le corpus a au moins un fragment propre à cette culture (dans la famille donnée)."""
+    requete = _requete_base(db, ctx).filter(KnowledgeChunk.culture_id == culture_id)
+    if famille:
+        requete = requete.filter(KnowledgeDocument.famille == famille)
+    return requete.first() is not None
+
+
+def savoir_du_referentiel(db: Session, ctx: TenantContext, culture: CultureConfig) -> dict:
+    """[US-341 / CA3] Ce que le référentiel sait d'une culture sans fiche : sa famille, ses fenêtres et ses durées
+    pour la zone du potager. Le texte l'attribue au référentiel et jamais à une fiche de conduite."""
+    from app.services import calendrier_cultural as svc_calendrier
+
+    calendrier = svc_calendrier.calendrier_en_dict(svc_calendrier.lire_calendrier(db, culture.nom, ctx.potager_id))
+    fenetres, durees = [], []
+    for itineraire in calendrier["itineraires"][:1]:
+        fenetres = [{"phase": f["phase"], "fenetre": f["affichage"]} for f in itineraire["fenetres"]]
+        durees = [{"etape": d["etape"], "duree": d["affichage"]} for d in itineraire["durees"] if d.get("affichage")]
+    famille = culture.famille_rel.nom if culture.famille_rel is not None else None
+    return {"culture": culture.nom, "famille": famille, "zone_climatique": calendrier["zone_climatique"],
+            "fenetres": fenetres, "durees": durees, "source": "référentiel des cultures de l'application"}
 
 
 def _passages_lisibles(passages: tuple[Passage, ...]) -> str:

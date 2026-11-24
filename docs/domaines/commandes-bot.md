@@ -1048,3 +1048,31 @@ se lance par un geste délibéré.
   par le dialogue ordinaire : une proposition que le jardinier confirme.
 - **Réponse** : `vers="analyse"`, `sources`, `borne` (« tours », « jetons » ou `null`) ; l'échange est noté dans la conversation.
   Tout membre, lecteur compris, peut analyser.
+
+### La boucle du compagnon à capacités — `COMPAGNON_MOTEUR=capacites` [US-342, US-343]
+
+`app/services/compagnon/boucle.py` (la boucle) et `app/services/compagnon/fil.py` (le fil), derrière l'interrupteur
+`COMPAGNON_MOTEUR` (défaut `ancien`), pour le **panneau compagnon de la PWA seulement** (Telegram au lot 4, US-346).
+Cadrage : `docs/EPIC - AGENT INTERPRETEUR/ARCHITECTURE_COMPAGNON_CAPACITES.md` §4.3, §4.4.
+
+- **Porte** : `orchestrateur.distribuer` reste la porte unique. Avec l'interrupteur, une phrase libre de la PWA passe la
+  garde de dialogue du canal, puis va à `boucle.repondre` : ni agent, ni raccourcis, ni interpréteur, ni parseur. Une
+  commande tapée (`/…`) et le texte exact d'un bouton gardent l'ancien chemin ; raccourcis « Noter », placement, demandes
+  du plan, modes Support et Extra aussi (ils ne passent pas par `_repondre` libre).
+- **Outils** : `boucle.schemas_des_outils()` = le registre (`app/services/capacites/`) **moins** `CAPACITES_ECARTEES`
+  (`proposer_commande`, `proposer_correction` → US-344/345 ; `confirmer_proposition`, `abandonner_proposition` → la PWA
+  confirme au bouton, la phrase viendra avec US-344 ; `lister_potagers` → potager actif seulement). Une lecture ajoutée au
+  registre arrive d'elle-même. Aucun outil projeté depuis les commandes.
+- **Tour** : `tool_choice="auto"`, type d'appel `compagnon` (pilotage LLM), au plus `COMPAGNON_ETAPES_MAX` (6) appels ; au-delà,
+  `TEXTE_BORNE` et les propositions du tour sont abandonnées. Le texte montré est celui du modèle ; le code ajoute la carte
+  (`echange_pwa._presenter_boucle`), les sources (`chercher_connaissance`) et le lien (`ouvrir_dans_l_application`) : champs
+  `sources`, `liens`, `moteur="capacites"` de la réponse.
+- **Écriture** : `proposer_geste` appelé par le compagnon range la proposition sur le canal du jardinier (`ecritures.canal_de`,
+  PWA), trace `[compagnon]`, sans « Proposé par » ; la consigne rendue (`TEXTE_A_FAIRE_COMPAGNON`) renvoie au bouton.
+- **Fil** (US-343) : `echanges_conversation.messages` (v81) garde le tour complet ; résultats datés « [lu le JJ/MM HH:MM] »,
+  tronqués à 6 000 caractères à l'écriture ; 12 tours entiers, les plus anciens compactés **par blocs de 6** en faits établis
+  (résumé calculé par le code, dans la partie variable du prompt) ; une pause de plus de 3 h clôt la séance, relue en résumé
+  pendant 36 h. Un échange de l'ancien moteur (Telegram) se relit en phrase + réponse. L'état des cartes traitées au bouton
+  depuis le tour précédent est joint à la phrase (`fil.note_des_cartes`).
+- **Mesure** : moteur `boucle` de `tools/evaluer_compagnon.py`, qui joue `jouer_tour` et `fil.construire` tels quels
+  (voir [evaluation-compagnon.md](evaluation-compagnon.md)).

@@ -15,3 +15,4 @@ from app.services.capacites import ecritures  # noqa: E402,F401
 from app.services.capacites import commandes  # noqa: E402,F401
 from app.services.capacites import situation  # noqa: E402,F401 — [US-339] situation_culture
 from app.services.capacites import potager_ecrans  # noqa: E402,F401 — [US-351] voisinages, semis du mois, potager
+from app.services.capacites import que_faire  # noqa: E402,F401 — [US-340] que_faire_maintenant

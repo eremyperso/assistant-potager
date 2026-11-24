@@ -147,6 +147,16 @@ test('[CA3] un échange ajoute la phrase puis la réponse avec ses cartes', () =
   assert.equal(cartesEnAttente(fil).length, 1)
 })
 
+test('[US-342 / CA5] la réponse de la boucle porte sa source et son lien ; l\'ancienne n\'en porte pas', () => {
+  const lien = { url: 'https://potager.test/plan', libelle: "Ouvrir dans l'application" }
+  const fil = ajouterEchange([], 'arroser ?', { texte: 'Pas aujourd\'hui.', vers: 'reponse', sources: ['Fiche salade'], liens: [lien] })
+  assert.deepEqual(fil[1].sources, ['Fiche salade'])
+  assert.deepEqual(fil[1].liens, [lien])
+  const ancien = ajouterEchange([], 'x', { texte: 'ok', vers: 'question' })
+  assert.equal(ancien[1].sources, undefined)
+  assert.equal(ancien[1].liens, undefined)
+})
+
 test('[CA3] une réponse de savoir porte de quoi la noter 👍/👎', () => {
   const fil = ajouterEchange([], 'quand semer les poireaux ?', { texte: 'En mars.', vers: 'question', routage_log_id: 12, etage: 'savoir' })
   assert.equal(fil[1].routageLogId, 12)

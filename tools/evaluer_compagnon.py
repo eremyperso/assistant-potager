@@ -57,7 +57,8 @@ MODELE_PAR_DEFAUT = "mistral/mistral-small-2603"
 TARIFS = {"mistral/mistral-small-2603": (0.15, 0.60), "mistral/mistral-large-2512": (0.50, 1.50)}
 
 #: Estimations du volume (annoncées avant tout appel, jamais présentées comme mesurées).
-ETAPES_PAR_TOUR = {moteurs.MOTEUR_ACTUEL: 2.0, moteurs.MOTEUR_CAPACITES: 2.5, moteurs.MOTEUR_CLAUDE_MCP: 2.5}
+ETAPES_PAR_TOUR = {moteurs.MOTEUR_ACTUEL: 2.0, moteurs.MOTEUR_CAPACITES: 2.5, moteurs.MOTEUR_CLAUDE_MCP: 2.5,
+                   moteurs.MOTEUR_BOUCLE: 2.5}
 TOURS_PAR_CAS = 3.0
 JETONS_JUGE = (1500, 120)
 JETONS_SORTIE_PAR_APPEL = 150
@@ -108,13 +109,20 @@ def estimer(jeu: modele_jeu.Jeu, noms: tuple[str, ...], passages: int, *, modele
                       + len(moteurs.PROMPT_CAPACITES) / 5)
     except Exception:  # noqa: BLE001 — l'estimation ne doit jamais empêcher d'annoncer un volume
         prefixe = 3000
+    try:  # [US-342] le moteur `boucle` relit les outils et le prompt de la boucle de production
+        from app.services.compagnon import boucle
+
+        prefixe_boucle = int(len(json.dumps(boucle.schemas_des_outils())) / 5 + len(boucle.PROMPT_FIXE) / 5)
+    except Exception:  # noqa: BLE001
+        prefixe_boucle = prefixe
     appels = jetons_in = 0
     for nom in noms:
         par_cas = TOURS_PAR_CAS * ETAPES_PAR_TOUR[nom]
         appels_moteur = int(n * passages * par_cas)
         appels += appels_moteur
         # Le préfixe est relu à chaque étape, l'historique grossit d'environ 600 jetons par tour.
-        jetons_in += appels_moteur * (prefixe + 600 * (TOURS_PAR_CAS + 1) / 2)
+        base = prefixe_boucle if nom == moteurs.MOTEUR_BOUCLE else prefixe
+        jetons_in += appels_moteur * (base + 600 * (TOURS_PAR_CAS + 1) / 2)
     # Deux appels par cas : « utile » sur le premier tour, « aboutit » sur le dialogue entier.
     juge = n * passages * len(noms) * APPELS_JUGE_PAR_CAS if avec_juge else 0
     jetons_juge_in, jetons_juge_out = juge * JETONS_JUGE[0], juge * JETONS_JUGE[1]
@@ -230,6 +238,7 @@ def jouer(args, jeu: modele_jeu.Jeu, noms: tuple[str, ...], dossier: Path) -> li
     jour = date.today()
     mesures: list[campagne.Mesure] = []
     modele_initial = passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT]
+    modele_compagnon = passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_COMPAGNON]  # [US-342] moteur `boucle`
     from contextlib import ExitStack
 
     with ExitStack() as pile:
@@ -237,6 +246,7 @@ def jouer(args, jeu: modele_jeu.Jeu, noms: tuple[str, ...], dossier: Path) -> li
             pile.enter_context(ed.cle_branchee(cle))
         if not simule:
             passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT] = args.modele
+            passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_COMPAGNON] = args.modele
             passerelle.reinitialiser_capacites_outils()
         try:
             juge = None
@@ -275,6 +285,7 @@ def jouer(args, jeu: modele_jeu.Jeu, noms: tuple[str, ...], dossier: Path) -> li
                 mesures.append(mesure)
         finally:
             passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_AGENT] = modele_initial
+            passerelle.GROQ_MODELE_PAR_TYPE[passerelle.TYPE_COMPAGNON] = modele_compagnon
             passerelle.reinitialiser_capacites_outils()
     return mesures
 

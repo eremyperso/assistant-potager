@@ -241,10 +241,12 @@ class TestRecopie:
         assert savoir.relance_recopie(PASSAGE_LONG, releves) == savoir.CONSIGNE_RECOPIE
         assert savoir.relance_recopie(PASSAGE_LONG, releves) is None
 
-    def test_us283_ca3_le_controle_remplace_une_recopie_par_le_texte_du_code(self):
+    def test_us283_ca3_le_controle_ne_remplace_plus_une_recopie_par_le_texte_du_code(self):
+        """[US-341 / CA4] La réponse affichée est celle du modèle ; le code n'y ajoute que la source."""
         texte = savoir.controler(PASSAGE_LONG, _releves_avec_passage())
-        assert texte.split("\n")[0] == savoir._resume_passage(PASSAGE_LONG) != PASSAGE_LONG
-        assert "Source : Autonomie en tomates" in texte
+        assert texte == PASSAGE_LONG != savoir._resume_passage(PASSAGE_LONG)  # la source y est déjà citée
+        sans_source = texte.replace("autonomie en tomates", "autonomie")
+        assert savoir.controler(sans_source, _releves_avec_passage()).endswith("Source : Autonomie en tomates.")
 
     def test_us283_ca3_le_texte_du_code_cite_le_debut_du_passage(self):
         resume = savoir._resume_passage("Échelonne les plantations. " + PASSAGE_LONG)
@@ -262,11 +264,11 @@ class TestRecopie:
         relance = modele.call_args_list[2].kwargs["historique"][-1]
         assert relance == {"role": "user", "content": savoir.CONSIGNE_RECOPIE}
 
-    def test_us283_ca3_une_seconde_recopie_cede_au_texte_du_code(self, modele, boucle_simulee):
+    def test_us283_ca3_une_seconde_recopie_garde_la_reponse_du_modele_avec_sa_source(self, modele, boucle_simulee):
+        """[US-341 / CA4] Plus de substitution par le résumé du premier passage : la source seule est ajoutée."""
         resultat, _ = _boucle(modele, PHRASE_AUTONOMIE,
                               _reponse("", _appel_connaissance()), _reponse(PASSAGE_LONG), _reponse(PASSAGE_LONG))
-        assert resultat.texte != PASSAGE_LONG
-        assert "Source : Autonomie en tomates" in resultat.texte
+        assert resultat.texte == PASSAGE_LONG  # la source y est déjà citée : rien n'est ajouté
         assert modele.call_count == 3
 
 

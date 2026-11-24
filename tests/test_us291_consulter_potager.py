@@ -90,7 +90,7 @@ class TestCA1Catalogue:
         # [US-293] + le lien vers l'application, qui n'écrit rien et que le lecteur peut donc voir.
         # [US-339 / CA7, US-351 / CA4] + les lectures du registre neutre visibles des deux clients.
         assert {o["name"] for o in outils} == set(LECTURES) | {
-            "ouvrir_dans_l_application", "situation_culture", "voisinages_culture", "que_semer_ce_mois",
+            "ouvrir_dans_l_application", "situation_culture", "voisinages_culture", "que_semer_ce_mois", "que_faire_maintenant",
             "voir_mon_potager"}
 
     def test_us291_chaque_outil_porte_une_description_francaise_et_un_schema(self, client, lecteur):

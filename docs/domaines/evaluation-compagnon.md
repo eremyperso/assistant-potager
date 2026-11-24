@@ -13,7 +13,7 @@ s'accepte ou se refuse sur le **même jeu**, avec la chaîne actuelle comme tém
 | `tools/jeu_evaluation/utilisateur.py` | le jardinier simulé : répond depuis la fiche de besoin, `verifier_reponse` refuse tout chiffre hors fiche |
 | `tools/jeu_evaluation/controles.py` | les critères à 100 % et les attendus textuels, par le code, sans modèle |
 | `tools/jeu_evaluation/juge.py` | « utile » et « aboutit » par un modèle plus fort, grille écrite ; échantillon à relire |
-| `tools/jeu_evaluation/moteurs.py` | `actuel`, `capacites`, `claude_mcp` ; `RegistreMesure` (lectures annulées, écritures simulées) |
+| `tools/jeu_evaluation/moteurs.py` | `actuel`, `capacites` (prototype C, référence de G0), `claude_mcp`, `boucle` (la boucle de production d'US-342 et son fil, US-343) ; `RegistreMesure` (lectures annulées, écritures simulées) |
 | `tools/jeu_evaluation/campagne.py` | un dialogue, un passage, `Mesure` (ce que lit le rapport), écriture des traces |
 | `tools/jeu_evaluation/rapport.py` | critère par critère, dispersion, comparaison avant / après, régressions bloquantes |
 | `tools/evaluer_compagnon.py` | le lanceur en ligne de commande |
@@ -42,6 +42,10 @@ s'accepte ou se refuse sur le **même jeu**, avec la chaîne actuelle comme tém
   jamais été versé au dépôt, et son prompt n'a pas été conservé. Le moteur reprend la description du rapport (9 lectures du registre,
   `proposer_geste` simulé, historique complet avec résultats d'outils, `tool_choice="auto"`, 6 étapes au plus, prompt générique d'une
   quinzaine de lignes sans mot de scénario). Sa première mesure fera foi, pas la ressemblance avec le prototype.
+* **Le moteur `boucle` est le code de production** (US-342) : `boucle.jouer_tour`, `fil.construire`, prompt et outils de la
+  boucle, type d'appel `compagnon` (le lanceur y pose `--modele`). Seuls les bords changent : `RegistreMesure(noms=…)` (lectures
+  annulées, `proposer_geste` simulé, toute autre écriture refusée au démarrage), fil en mémoire, horloge d'une minute par tour,
+  confirmation au bouton (`mode_confirmation="bouton"`). Le moteur `capacites` reste le prototype C, pour comparer.
 * **Le juge est Large 3** (`mistral-large-2512`), à une température faible non nulle : Large 3 refuse le glouton sans `top_p`
   (US-350). Large 4 rend un `content` en liste que la passerelle ne lit pas encore (US-350).
 * **La configuration D** (`claude_mcp`) utilise le SDK `anthropic` (non installé par défaut : `pip install anthropic`) et sa propre

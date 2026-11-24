@@ -401,7 +401,7 @@ def test_ca6c_une_lecture_qui_voudrait_valider_ne_laisse_rien(test_db):
 
 def test_ca6c_les_lectures_ne_sont_pas_des_ecritures():
     registre = moteurs.RegistreMesure(CTX, jour=JOUR)
-    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 13  # + situation_culture (US-339), trois lectures d'écran (US-351)
+    assert all(not registre.registre[n].ecriture for n in moteurs.LECTURES) and len(moteurs.LECTURES) == 14  # + situation_culture (US-339), trois lectures d écran (US-351), que_faire_maintenant (US-340)
     assert registre.noms == (*moteurs.LECTURES, "proposer_geste")
 
 
@@ -554,7 +554,7 @@ def test_ca0_un_clic_confirmer_devient_un_oui(test_db):
 # CA1 — un même lanceur, trois moteurs, deux jeux de données
 # ═════════════════════════════════════════════════════════════════════════════
 def test_ca1_creer_moteur_connait_les_trois_moteurs_et_refuse_un_inconnu():
-    assert moteurs.MOTEURS == ("actuel", "capacites", "claude_mcp")
+    assert moteurs.MOTEURS == ("actuel", "capacites", "claude_mcp", "boucle")  # + la boucle de production (US-342)
     assert isinstance(moteurs.creer_moteur("capacites", CTX, simule=True), moteurs.MoteurCapacites)
     assert isinstance(moteurs.creer_moteur("claude_mcp", CTX, simule=True), moteurs.MoteurClaudeMcp)
     with pytest.raises(ValueError, match="moteur inconnu"):
@@ -1254,3 +1254,29 @@ def test_filtrer_par_cas_retient_ces_cas_seulement_et_refuse_un_cas_inconnu():
     assert [c.id for c in jeu.filtrer(cas=["B22-F1", "B01-F8"]).cas] == ["B01-F8", "B22-F1"]
     with pytest.raises(KeyError, match="B99-F1"):
         jeu.filtrer(cas=["B22-F1", "B99-F1"])
+
+
+def test_une_lecture_faite_a_un_tour_precedent_vaut_pour_les_tours_suivants(le_jeu):
+    """[US-351 / CA6, 22/11] Le plan lu au tour 3 vaut au tour 4 : relire à chaque phrase n'est pas ce qu'on mesure."""
+    cas = _cas(le_jeu, "B04-F8")
+    plan = AppelTrace(nom="voir_mon_potager", resultat="x")
+    calendrier = AppelTrace(nom="situation_culture", resultat="x")
+    tours = [_tour(1, cas.ouverture, "mai", appels=[calendrier]), _tour(2, "q", "mai", appels=[calendrier]),
+             _tour(3, "serre ?", "ta serre", appels=[plan]), _tour(4, "ajoute", "non")]
+    assert controles.noter_cas(cas, _trace(*tours), jour=JOUR).donnees_lues is True
+    sans_plan = [t for t in tours if t.rang != 3]
+    notes = controles.noter_cas(cas, _trace(*sans_plan), jour=JOUR)
+    assert notes.donnees_lues is False and any("tour 3" in v for v in notes.violations["donnees_lues"])
+    # À l'envers, une lecture tardive ne rattrape pas un tour qui parle avant d'avoir lu.
+    tardive = [_tour(1, cas.ouverture, "mai", appels=[calendrier]), _tour(2, "q", "mai"),
+               _tour(3, "serre ?", "ta serre"), _tour(4, "ajoute", "non", appels=[plan])]
+    assert controles.noter_cas(cas, _trace(*tardive), jour=JOUR).donnees_lues is False
+
+
+def test_b01_f8_ne_demande_plus_la_meteo_et_accepte_n_en_as_pas(le_jeu):
+    """Décisions du 22/11 : le tour 1 ne dit ni la météo ni la serre ; « tu n'en as pas » dit « pas au potager »."""
+    cas = _cas(le_jeu, "B01-F8")
+    groupes = [g for g in cas.attendus.outils_attendus]
+    assert not any("meteo" in g for g in groupes) and any("voir_mon_potager" in g for g in groupes)
+    formules = cas.attendus_du_tour(1).textes_attendus[3]
+    assert "n'en as pas" in formules

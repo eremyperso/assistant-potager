@@ -288,3 +288,18 @@ def test_us339_description_est_une_question_de_jardinier():
     """R1 de `07_REGLE_D_UNE_CAPACITE.md` : une question de jardinier, pas une commande."""
     c = registre.REGISTRE["situation_culture"]
     assert "est-ce le moment" in c.description.lower() and "/" not in c.description
+
+
+def test_us339_pas_ce_mois_donne_toutes_les_fenetres_et_le_risque(client, fabrique, jardin, referentiel):
+    """22/11 : Small 4 recopie `texte` ; la plantation et la raison du « pas maintenant » y sont donc, pas seulement
+    la prochaine fenêtre (B04-F8 ne disait jamais « mai », B01-F8 jamais le froid)."""
+    d = _situation(fabrique, jardin, "tomate", LE_20_NOVEMBRE)
+    assert d["verdict"] == svc.VERDICT_PAS_CE_MOIS and d["texte"].startswith("Rien à semer ni planter ce mois-ci.")
+    assert "Toutes les fenêtres" in d["texte"] and "mai à juin" in d["texte"]
+    assert "semer en pépinière février à avril" in d["texte"]
+    assert "froid" in d["texte"] and "gel" in d["texte"]
+
+
+def test_us339_c_est_le_moment_garde_son_texte(client, fabrique, jardin, referentiel):
+    d = _situation(fabrique, jardin, "salade", date(2026, 3, 10))
+    assert d["verdict"] == svc.VERDICT_MAINTENANT and "Toutes les fenêtres" not in d["texte"]

@@ -63,6 +63,8 @@ class Canal:
     raccourcis: Callable[[str], Any] = lambda texte: False
     contexte_court: Callable[[], Any] = lambda: None
     boutons_exacts: frozenset = field(default_factory=frozenset)
+    #: [US-342] Le contexte d'écran à garder avec le tour de la boucle à capacités (`echanges_conversation.contexte`).
+    journal: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +80,9 @@ class Distribution:
     garde: Optional[str] = None
     resultat: Any = None
     mode_agent_prioritaire: bool = False
+    #: [US-342] Le moteur qui a traité la phrase : `ancien` ou `capacites` (alors `resultat` est un `TourBoucle`,
+    #: déjà gardé dans le fil).
+    moteur: str = "ancien"
 
 
 @dataclass(frozen=True)
@@ -93,13 +98,40 @@ async def _attendre(valeur: Any) -> Any:
     return await valeur if inspect.isawaitable(valeur) else valeur
 
 
+def moteur_capacites(canal: str) -> bool:
+    """[US-342 / CA1] La phrase de ce canal va-t-elle à la boucle à capacités ? Seulement derrière
+    `COMPAGNON_MOTEUR=capacites`, et pour le panneau compagnon de la PWA : Telegram reste sur l'ancien moteur
+    (arbitrage A6, US-346)."""
+    from app import config
+
+    return config.COMPAGNON_MOTEUR == config.COMPAGNON_MOTEUR_CAPACITES and canal == svc_propositions.CANAL_PWA
+
+
+def est_commande_tapee(texte: str) -> bool:
+    """[US-342 / CA2] Une commande tapée (« /plan ») garde son chemin : elle ne va pas à la boucle."""
+    return (texte or "").lstrip().startswith("/")
+
+
 async def distribuer(texte: str, ctx: Optional[TenantContext], canal: Canal) -> Distribution:
     """[US-270 / CA4] Les gardes du canal, l'agent, puis l'interpréteur de commandes.
 
     Reprend à l'identique l'ordre de `handle_text` (US-287) : le canal n'a plus à le
     connaître, il fournit ses gardes.
+
+    [US-342 / CA1, CA2] Derrière `COMPAGNON_MOTEUR=capacites`, la phrase libre de la PWA passe les gardes de
+    dialogue du canal, puis va à la boucle à capacités (`compagnon/boucle.py`) : ni agent, ni raccourcis, ni
+    interpréteur. Une commande tapée et le texte exact d'un bouton gardent l'ancien chemin.
     """
     texte_min = (texte or "").lower()
+    if (ctx is not None and moteur_capacites(canal.nom) and not est_commande_tapee(texte)
+            and texte_min not in canal.boutons_exacts):
+        from app.services.compagnon import boucle as svc_boucle
+
+        if await _attendre(canal.dialogue(texte)):
+            return Distribution(pris_par_le_canal=True, garde="dialogue", moteur="capacites")
+        log.info("🔁 BOUCLE CAPACITÉS : canal=%s user_id=%s potager_id=%s", canal.nom, ctx.user_id, ctx.potager_id)
+        tour = svc_boucle.repondre(ctx, texte, canal=canal.nom, contexte=canal.journal)
+        return Distribution(resultat=tour, moteur="capacites")
     agent_prioritaire = svc_interpreteur.agent_prioritaire()
     resultat = svc_interpreteur.CASCADE_HABITUELLE
 

@@ -145,6 +145,9 @@ GROQ_MODELE_PAR_TYPE["voix"] = os.environ.get(
 )
 # [US-303] Résumé parlé d'une réponse (appel de chat ordinaire) : le modèle de l'agent par défaut.
 GROQ_MODELE_PAR_TYPE["oral"] = os.environ.get("GROQ_MODEL_ORAL", GROQ_MODELE_PAR_TYPE["agent"])
+# [US-342 / CA7] La boucle du compagnon à capacités : un type d'appel à part, pour que le pilotage LLM la
+# distingue de l'ancien moteur (« agent »). Par défaut le modèle de l'agent (Mistral Small 4, arbitrage A4).
+GROQ_MODELE_PAR_TYPE["compagnon"] = os.environ.get("GROQ_MODEL_COMPAGNON", GROQ_MODELE_PAR_TYPE["agent"])
 
 
 # [US-300 / CA2] Voix du compagnon tant que le jardinier n'en a pas choisi (ou si la sienne
@@ -384,6 +387,30 @@ AGENT_MAX_TOURS = _entier_strictement_positif("AGENT_MAX_TOURS", 6)
 ANALYSE_MAX_TOURS = _entier_strictement_positif("ANALYSE_MAX_TOURS", 6)
 ANALYSE_MAX_JETONS = _entier_strictement_positif("ANALYSE_MAX_JETONS", 20000)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# [US-342 / CA1, CA4] Le moteur du compagnon. « capacites » : les phrases libres du panneau compagnon de
+# la PWA vont à la boucle à capacités (`app/services/compagnon/boucle.py`) ; toute autre valeur (défaut
+# « ancien ») garde l'ancien moteur (agent, cascade, parseur). Telegram n'est pas concerné (US-346).
+# COMPAGNON_ETAPES_MAX : au plus ce nombre d'appels au modèle par tour (6 par défaut).
+# ─────────────────────────────────────────────────────────────────────────────
+COMPAGNON_MOTEUR_ANCIEN = "ancien"
+COMPAGNON_MOTEUR_CAPACITES = "capacites"
+def moteur_du_compagnon(brut: Optional[str]) -> str:
+    """« capacites » seulement s'il est écrit tel quel : une faute de frappe garde l'ancien moteur."""
+    valeur = (brut or "").strip().lower()
+    return COMPAGNON_MOTEUR_CAPACITES if valeur == COMPAGNON_MOTEUR_CAPACITES else COMPAGNON_MOTEUR_ANCIEN
+
+
+_COMPAGNON_MOTEUR_BRUT = os.environ.get("COMPAGNON_MOTEUR", COMPAGNON_MOTEUR_ANCIEN).strip().lower()
+COMPAGNON_MOTEUR = moteur_du_compagnon(_COMPAGNON_MOTEUR_BRUT)
+COMPAGNON_ETAPES_MAX = _entier_strictement_positif("COMPAGNON_ETAPES_MAX", 6)
+# [US-343 / CA3, CA6, arbitrage A3] Le fil de conversation : les 12 derniers tours en entier, les plus anciens
+# compactés en faits établis. Une pause de plus de COMPAGNON_FIL_PAUSE_H heures clôt la séance : la suivante
+# repart sur le seul résumé, tant que la séance close a moins de COMPAGNON_FIL_REPRISE_H heures.
+COMPAGNON_FIL_TOURS = _entier_strictement_positif("COMPAGNON_FIL_TOURS", 12)
+COMPAGNON_FIL_PAUSE_H = _entier_strictement_positif("COMPAGNON_FIL_PAUSE_H", 3)
+COMPAGNON_FIL_REPRISE_H = _entier_strictement_positif("COMPAGNON_FIL_REPRISE_H", 36)
+
 # [US-092 / CA12] Délai maximal par appel LLM, en secondes. Un appel qui
 # n'aboutit pas dans ce délai emprunte le même chemin de repli qu'un 429.
 GROQ_TIMEOUT_S = float(os.environ.get("GROQ_TIMEOUT_S", "30"))
@@ -550,6 +577,10 @@ def etat_configuration() -> list[str]:
     _ligne("ANALYSE_MAX_TOURS", ANALYSE_MAX_TOURS)
     _ligne("ANALYSE_MAX_JETONS", ANALYSE_MAX_JETONS)
     _ligne("COMPAGNON_PROACTIF", "oui" if COMPAGNON_PROACTIF else "non")
+    _ligne("COMPAGNON_MOTEUR", COMPAGNON_MOTEUR,  # [US-342]
+           invalide=_COMPAGNON_MOTEUR_BRUT not in (COMPAGNON_MOTEUR_ANCIEN, COMPAGNON_MOTEUR_CAPACITES))
+    _ligne("COMPAGNON_ETAPES_MAX", COMPAGNON_ETAPES_MAX)
+    _ligne("COMPAGNON_FIL_TOURS", COMPAGNON_FIL_TOURS)  # [US-343]
     _ligne("PILOTAGE_ALERTES", "oui" if PILOTAGE_ALERTES else "non")  # [US-316]
     _ligne("PILOTAGE_RESUME_QUOTIDIEN", "oui" if PILOTAGE_RESUME_QUOTIDIEN else "non")  # [US-317]
     _ligne("PILOTAGE_BILAN_HEBDO", "oui" if PILOTAGE_BILAN_HEBDO else "non")  # [US-317]

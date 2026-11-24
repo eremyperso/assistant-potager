@@ -194,6 +194,20 @@ class SectionLue:
     metadonnees: dict[str, str]  # les lignes `**Clé :** valeur` de la section
 
 
+def _decouper_nom(stem: str) -> tuple[str, str]:
+    """[US-348] `<culture>-<thème>` → (culture, thème), le thème étant le SUFFIXE.
+
+    Une culture peut contenir des tirets (`pomme-de-terre`, `petit-pois`) : couper
+    au premier tiret lui volait la moitié de son nom. Un nom sans thème connu
+    garde l'ancien découpage, pour que le refus « hors plan » reste lisible.
+    """
+    for theme in sorted(THEMES_IMPOSES, key=len, reverse=True):
+        if stem.endswith("-" + theme):
+            return stem[: -(len(theme) + 1)], theme
+    culture, _, theme = stem.partition("-")
+    return culture, theme
+
+
 @dataclass(frozen=True)
 class FicheAgronomie:
     chemin: Path
@@ -202,11 +216,11 @@ class FicheAgronomie:
 
     @property
     def culture(self) -> str:
-        return self.chemin.stem.split("-", 1)[0]
+        return _decouper_nom(self.chemin.stem)[0]
 
     @property
     def theme(self) -> str:
-        return self.chemin.stem.split("-", 1)[1] if "-" in self.chemin.stem else ""
+        return _decouper_nom(self.chemin.stem)[1]
 
 
 @dataclass
@@ -399,7 +413,7 @@ def cultures_du_perimetre(racine: Path) -> tuple[str, ...]:
     révision plus coûteuse qu'un renommage de fichiers.
     """
     return tuple(sorted({
-        chemin.stem.split("-", 1)[0]
+        _decouper_nom(chemin.stem)[0]
         for chemin in racine.rglob("*.md")
         if chemin.name.upper() != "README.MD"
     }))

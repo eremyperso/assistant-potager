@@ -1,3 +1,39 @@
+## [v3.140.0] — 2026-11-23
+
+### 🚀 Nouveautés
+- Ajoute, derrière le réglage `COMPAGNON_MOTEUR=capacites` (désactivé par défaut), un compagnon de la PWA qui lit lui-même ce dont il a besoin dans les capacités de l'application, rédige sa réponse et ne pose que la question qui manque ; Telegram n'est pas concerné (US-342).
+- Le compagnon de la PWA se souvient de toute la conversation, ce qu'il a lu compris : les 12 derniers échanges en entier, les plus anciens résumés en faits établis, et la reprise le lendemain sur ce résumé ; un fil par jardinier et par potager, commun à Telegram et à la PWA (US-343).
+- Montre sous la réponse la source citée et le lien vers l'écran concerné ; un geste dit devient une carte à confirmer au bouton, sur le canal de la PWA (US-342).
+- Non vérifié sur le vrai modèle : la mesure sur le jeu d'évaluation (Mistral Small 4) reste à faire avant toute activation (US-342, US-343).
+
+### 🔧 Améliorations techniques
+- Borne chaque tour à 6 appels au modèle (`COMPAGNON_ETAPES_MAX`) : au-delà, un message clair et rien n'est laissé en attente (US-342).
+- Compte les appels de la boucle sous un type à part, `compagnon`, dans le pilotage LLM (`GROQ_MODEL_COMPAGNON`, par défaut le modèle de l'agent) (US-342).
+- Ajoute au lanceur d'évaluation le moteur `boucle`, qui joue le code de production de la boucle et du fil (US-342, US-343).
+
+### 💾 Base de données
+- Ajoute la colonne `echanges_conversation.messages` (migration v81, rollback fourni), à jouer avant de déployer ce code (US-343).
+
+## [v3.139.0] — 2026-11-22
+
+### 🚀 Nouveautés
+- Ne rend plus jamais, à une question sur une culture, le passage d'une autre : « comment je fais pour mes salades ? » ne montre plus la fiche des tomates, quelle que soit sa note. Seuls les passages de cette culture et les passages généraux sont rendus (US-341).
+- Dit « pas de fiche salade » quand l'application n'en a pas, puis rend ce que le référentiel sait de la culture : sa famille, ses fenêtres et ses durées pour la zone du potager (US-341).
+- La capacité `chercher_connaissance` accepte la culture visée ; sans elle, la culture est lue dans la question. Le domaine (application, jardinage, carnet) est conservé (US-341).
+
+### 🐛 Corrections
+- La réponse affichée est celle du modèle : quand il reprend un passage, le code ne la remplace plus par le résumé du premier passage, il ajoute seulement la source citée. Les doses et produits de traitement restent remplacés par sécurité (US-341).
+
+### 🔧 Améliorations techniques
+- Ajoute `tools/carte_couverture_corpus.py`, qui dit quelles cultures du référentiel ont une fiche de conduite et de problèmes, pour orienter la rédaction des fiches manquantes (US-341).
+
+## [v3.138.0] — 2026-11-22
+
+### 🚀 Nouveautés
+- Ajoute la capacité `que_faire_maintenant` : « qu'est-ce que je fais au potager ? » rend la liste des gestes du jour, la même que l'écran « Aujourd'hui au potager », classée par urgence (en retard, aujourd'hui, à traiter), avec les lots de pépinière à traiter et les rappels (US-340).
+- Rend aussi les cultures à semer ou planter ce mois-ci selon le climat du potager, chacune avec sa source : le calcul de la Pépinière pour les semis en pépinière, les fenêtres de la zone pour la pleine terre et la plantation (US-340).
+- Une culture reproductive déjà en récolte (tomate, haricot) se propose comme une nouvelle cueillette, jamais comme la fin de la culture ; un potager neuf le dit et ne rend que les semis du mois (US-340).
+
 ## [v3.137.0] — 2026-11-21
 
 ### 🚀 Nouveautés
