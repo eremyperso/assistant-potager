@@ -1628,19 +1628,18 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
 def get_vue_cultures(
     date_cible: date = Query(default=None, alias="date"),
     potager_id: int = Query(default=None),
-    confiance: bool = Query(default=True),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US-204 / CA1-CA10] Lecture unique de l'écran Cultures : pour chaque
     culture du référentiel visible par le potager (et celles hors référentiel
-    plantées quand même), présence au potager, calendrier de la zone,
-    confiance du moment et fenêtre utile — une seule requête, une seule
+    plantées quand même), présence au potager, calendrier de la zone
+    et fenêtre utile (sans confiance : US-361) — une seule requête, une seule
     lecture météo, aucune règle recalculée côté front (CA7)."""
     db = SessionLocal()
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
         vue = svc_vue_cultures.composer_vue_cultures(
-            db, use_ctx, date_cible or date.today(), avec_confiance=confiance,
+            db, use_ctx, date_cible or date.today(),
         )
         return svc_vue_cultures.vue_cultures_en_dict(vue)
     finally:

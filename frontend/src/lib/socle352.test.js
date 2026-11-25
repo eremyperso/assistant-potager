@@ -204,8 +204,6 @@ test('[CA3] le calendrier : douze cases de 9 px, gouttière de 2 px, mois couran
 })
 
 test('[CA3] Cultures et la fiche Référence utilisent le calendrier commun, plus MonthStrip', () => {
-  assert.doesNotMatch(lire('components/CarteCulture.jsx'), /MonthStrip/)
-  assert.match(lire('components/CarteCulture.jsx'), /CalendrierAnnee/)
   assert.doesNotMatch(lire('components/FicheCulture.jsx'), /MonthStrip/)
   assert.match(lire('components/FicheCulture.jsx'), /CalendrierAnnee/)
 })

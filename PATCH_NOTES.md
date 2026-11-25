@@ -1,3 +1,16 @@
+## [v3.148.0] — 2026-11-25
+
+### ⚡ Performance
+- L'écran Cultures s'ouvre sans évaluer la confiance de chaque espèce du référentiel : la lecture `GET /cultures/vue` ne fait plus trois évaluations par espèce (calendrier, météo, pépinières), soit environ 300 évaluations et 4 secondes à chaque ouverture sur une centaine d'espèces. Plus aucune ligne de confiance n'apparaît dans le journal du serveur à l'ouverture (US-361).
+
+### 🔧 Améliorations techniques
+- Supprime l'ancien écran Cultures devenu sans objet : la carte `CarteCulture`, le tri par confiance, les filtres de mois et de tri, le message « confiance indisponible », la suggestion et leurs libellés dans `lib/cultures.js` ; l'option `confiance` du client `vueCultures` disparaît (US-361).
+- Amende les critères d'US-204 sur les étoiles (CA4), la suggestion de la semaine (CA6) et la météo indisponible (CA10) : leurs tests sont remplacés par un test qui garantit qu'aucune confiance ni lecture météo n'a lieu. La confiance d'UNE culture est inchangée (onglet Référence de la fiche, fiche calendrier, tuiles du Plan, `GET /plan/confiances/candidates`) (US-361).
+- Aucune fiche du corpus ne décrivait d'étoiles ni de suggestion sur l'écran Cultures : rien à corriger (US-099, US-361).
+
+### ⚠️ Breaking changes
+- `GET /cultures/vue` ne renvoie plus `etoiles`, `confiance_equivalent` et `suggestion` par culture, ni `meteo_disponible` et `confiance_indisponible` au niveau de la réponse ; le paramètre `confiance` ajouté par US-355 est retiré. Seul client connu : la PWA du même dépôt (aucun appel dans les capacités du compagnon, les outils MCP ni `tools/`) (US-361).
+
 ## [v3.147.0] — 2026-11-25
 
 ### 🚀 Nouveautés

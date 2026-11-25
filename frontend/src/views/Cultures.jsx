@@ -91,7 +91,7 @@ export default function Cultures({ refresh }) {
   async function charger() {
     setLoading(true)
     setError(null)
-    const [v, p] = await Promise.allSettled([api.vueCultures(dateRef, potagerId, { confiance: false }), api.plan(dateRef, potagerId)])
+    const [v, p] = await Promise.allSettled([api.vueCultures(dateRef, potagerId), api.plan(dateRef, potagerId)])
     if (v.status === 'rejected') setError(v.reason?.message || 'Lecture impossible')
     setVue(v.status === 'fulfilled' ? v.value : null)
     setPlan(p.status === 'fulfilled' ? p.value : null)

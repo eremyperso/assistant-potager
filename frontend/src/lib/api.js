@@ -249,12 +249,10 @@ export const api = {
   statsVarietes: (dateRef, potagerId) => get(`/stats/varietes${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   godets:     (dateRef, potagerId) => get(`/godets${qs({ ...(dateRef && { date_ref: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   cultures:   () => get('/cultures'),
-  // [US-204] Lecture unique de l'écran Cultures — les deux onglets, la
-  // suggestion de la semaine, la météo-disponibilité. `dateRef`/`potagerId` optionnels.
-  // [US-355 / perf] `confiance: false` saute les étoiles (trois évaluations par espèce du référentiel) : le
-  // socle ne les affiche plus.
-  vueCultures: (dateRef, potagerId, { confiance = true } = {}) =>
-    get(`/cultures/vue${qs({ ...(dateRef && { date: dateRef }), ...(potagerId && { potager_id: potagerId }), ...(!confiance && { confiance: 'false' }) })}`),
+  // [US-204] Lecture unique de l'écran Cultures — présence au potager, calendrier de la zone, fenêtre.
+  // [US-361] Elle ne porte plus de confiance : celle d'UNE culture se lit par `confiancesPlan`.
+  vueCultures: (dateRef, potagerId) =>
+    get(`/cultures/vue${qs({ ...(dateRef && { date: dateRef }), ...(potagerId && { potager_id: potagerId }) })}`),
   // [US-206/US-207] Fiche structurée d'une culture — référentiel, variétés
   // cultivées, voisinages, bioagresseurs. `dateRef`/`potagerId` optionnels.
   ficheCulture: (culture, potagerId, dateRef) =>

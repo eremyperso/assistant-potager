@@ -45,26 +45,3 @@ def test_une_culture_hors_referentiel_n_a_pas_d_espacement(db):
     fiche = svc_fiche.composer_fiche_pwa(db, "kiwano", 1, DATE_REF)
     assert fiche.fiche_absente is True
     assert fiche.espacement is None
-
-
-# ── Performance de l'écran Cultures : la confiance n'est plus évaluée pour rien ─────────────
-
-def test_la_vue_cultures_peut_sauter_la_confiance(db, monkeypatch):
-    """[US-355 / perf] Le socle n'affiche ni étoiles ni suggestion : `avec_confiance=False` ne lance aucune
-    évaluation (trois par culture du référentiel) ; la fenêtre, qui vient du calendrier, reste servie."""
-    from app.services import confiance_semis as svc_confiance
-    from app.services import vue_cultures as svc_vue
-    from app.services.context import default_context
-
-    _culture(db, "tomate")
-    appels = []
-    monkeypatch.setattr(svc_confiance, "confiances_du_plan", lambda *a, **k: appels.append(a) or {})
-
-    vue = svc_vue.composer_vue_cultures(db, default_context(), DATE_REF, avec_confiance=False)
-    assert appels == []
-    ligne = next(l for l in vue.cultures if l.culture == "tomate")
-    assert ligne.etoiles is None and ligne.confiance_equivalent is None and ligne.suggestion is False
-    assert vue.meteo_disponible is True
-
-    svc_vue.composer_vue_cultures(db, default_context(), DATE_REF)   # par défaut : la confiance est évaluée
-    assert len(appels) == 1

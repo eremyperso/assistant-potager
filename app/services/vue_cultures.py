@@ -47,23 +47,9 @@ GESTES: tuple[str, ...] = (
     svc_confiance.ACTION_PLANTATION,
 )
 
-#: [CA4] Équivalent écrit de l'étoile — décision produit écrite UNE fois, ici,
-#: pour cette lecture (le Plan et Stocks en gardent chacun leur propre copie
-#: minimale côté front, comme `NIVEAU_COURT` de `frontend/src/lib/confiance.js`).
-EQUIVALENT_ETOILES: dict[int, str] = {1: "faible", 2: "moyenne", 3: "élevée"}
-
 #: [CA3] Ordre du cycle, du moins au plus avancé — sert à choisir la phase la
 #: plus avancée présente, la même hiérarchie que `PHASES` du front (US-194).
 ORDRE_PHASES: tuple[str, ...] = ("semee", "en_place", "en_recolte")
-
-#: [CA6] Décisions produit écrites UNE fois : au plus trois suggestions, à
-#: partir de deux étoiles.
-PLAFOND_SUGGESTIONS = 3
-SEUIL_ETOILES_SUGGESTION = 2
-
-#: Causes d'une confiance muette (`VueCultures.confiance_indisponible`).
-CAUSE_METEO = "meteo"
-CAUSE_HORS_HORIZON = "hors_horizon"
 
 ETAT_MAINTENANT = "maintenant"
 ETAT_BIENTOT = "bientot"
@@ -96,15 +82,10 @@ class LigneCulture:
     repartition_phases: dict[str, int]
     phase_plus_avancee: Optional[str]
     nb_lots_pepiniere: int
-    #: [CA4] Confiance du moment — même évaluation que le Plan et Stocks.
-    etoiles: Optional[int]
-    confiance_equivalent: Optional[str]
     #: [CA5] Fenêtre : état brut, geste brut, mois bruts — le libellé est assemblé au front.
     fenetre_etat: str
     fenetre_geste: Optional[str]
     fenetre_mois: tuple[int, ...]
-    #: [CA6] Suggestion de la semaine.
-    suggestion: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,13 +97,6 @@ class VueCultures:
     cultures: tuple[LigneCulture, ...]
     effectif_toutes: int
     effectif_au_potager: int
-    #: [CA10] Météo indisponible : la confiance de TOUTES les cultures reste
-    #: sans étoile, la réponse le dit plutôt que de laisser deviner pourquoi.
-    meteo_disponible: bool
-    #: Pourquoi la confiance est muette : `CAUSE_METEO` (météo illisible, potager
-    #: non localisé) ou `CAUSE_HORS_HORIZON` (météo lisible, mais la date de
-    #: référence sort des 14 jours de prévision). None quand elle est évaluée.
-    confiance_indisponible: Optional[str] = None
 
 
 def _etat_fenetre(fenetre, date_ref: _date) -> str:
@@ -184,15 +158,13 @@ def _lot_en_cours(lot: dict) -> bool:
 
 
 def composer_vue_cultures(
-    db: Session, ctx: TenantContext, date_ref: _date, avec_confiance: bool = True,
+    db: Session, ctx: TenantContext, date_ref: _date,
 ) -> VueCultures:
     """[CA1-CA10] La lecture unique de l'écran Cultures.
 
-    [US-355 / perf] `avec_confiance=False` saute l'évaluation de la confiance (US-178), qui coûte
-    trois évaluations par culture du référentiel (calendrier, météo, pépinière : plusieurs secondes
-    pour une centaine d'espèces) : l'écran Cultures du socle n'affiche plus d'étoiles ni de
-    suggestion. Alors `etoiles`, `confiance_equivalent` et `suggestion` restent vides ; la fenêtre
-    (`fenetre_*`) vient du calendrier et reste servie.
+    [US-361] Aucune confiance n'est évaluée ici : l'écran n'affiche ni étoiles ni suggestion, et les
+    trois évaluations par espèce coûtaient plusieurs secondes. La confiance d'UNE culture se lit à
+    l'ouverture de sa fiche (onglet Référence) ou du calendrier.
     """
     potager_id = ctx.potager_id
 
@@ -248,31 +220,8 @@ def composer_vue_cultures(
         if c in phases_par_culture or lots_par_culture.get(c, 0) > 0
     }
 
-    # ── Familles (US-067) et confiance (US-178, US-180) en une lecture chacune ─
+    # ── Familles (US-067) en une lecture ─
     familles = svc_familles.familles_par_culture(db, ctx)
-    confiances = (
-        svc_confiance.confiances_du_plan(db, univers.keys(), date_ref, potager_id) if avec_confiance else {}
-    )
-    # [CA10] Pas de seconde lecture météo (CA7) : R3/R4 indéterminées disent déjà
-    # que la météo n'a pas pu être lue — la même lecture partagée par toutes les
-    # évaluations de `confiances_du_plan` (CA6), jamais relue ici.
-    motifs_meteo_muets = [
-        m
-        for entree in confiances.values()
-        for action in entree.actions
-        for m in action.motifs
-        if m.regle in (svc_confiance.R3_GEL_ANNONCE, svc_confiance.R4_NUITS_DOUCES)
-        and m.etat == svc_confiance.ETAT_INDETERMINE
-    ]
-    # Une vraie panne l'emporte : « hors horizon » n'est dit que si TOUS les
-    # motifs muets le sont (date passée, ou à plus de 14 jours).
-    if not motifs_meteo_muets:
-        cause_muette = None
-    elif all(m.libelle == svc_confiance.MOTIF_HORIZON for m in motifs_meteo_muets):
-        cause_muette = CAUSE_HORS_HORIZON
-    else:
-        cause_muette = CAUSE_METEO
-    meteo_disponible = cause_muette is None
 
     zone, origine, altitude = svc_calendrier.zone_et_altitude_du_potager(db, potager_id)
     attributions: list[str] = []
@@ -293,9 +242,6 @@ def composer_vue_cultures(
         phases_lignes = phases_par_culture.get(cle, [])
         phase_plus_avancee = max(phases_lignes, key=ORDRE_PHASES.index) if phases_lignes else None
 
-        entree_confiance = confiances.get(cle)
-        meilleure = entree_confiance.candidates[0] if entree_confiance and entree_confiance.candidates else None
-
         fenetre_etat, fenetre_geste, fenetre_mois = _fenetre_de_la_culture(itineraire, date_ref)
 
         lignes.append(LigneCulture(
@@ -313,26 +259,10 @@ def composer_vue_cultures(
             repartition_phases={p: phases_lignes.count(p) for p in ORDRE_PHASES if phases_lignes.count(p) > 0},
             phase_plus_avancee=phase_plus_avancee,
             nb_lots_pepiniere=lots_par_culture.get(cle, 0),
-            etoiles=meilleure.etoiles if meilleure else None,
-            confiance_equivalent=EQUIVALENT_ETOILES.get(meilleure.etoiles) if meilleure else None,
             fenetre_etat=fenetre_etat,
             fenetre_geste=fenetre_geste,
             fenetre_mois=fenetre_mois,
         ))
-
-    # ── [CA6] Suggestion de la semaine : au plus trois, les mieux notées d'abord ─
-    candidates_suggestion = [
-        l for l in lignes
-        if not l.au_potager and l.fenetre_etat == ETAT_MAINTENANT
-        and (l.etoiles or 0) >= SEUIL_ETOILES_SUGGESTION
-    ]
-    candidates_suggestion.sort(key=lambda l: (-(l.etoiles or 0), l.nom_culture.lower()))
-    suggeres = {l.culture for l in candidates_suggestion[:PLAFOND_SUGGESTIONS]}
-    if suggeres:
-        lignes = [
-            l if l.culture not in suggeres else _avec_suggestion(l)
-            for l in lignes
-        ]
 
     return VueCultures(
         zone_climatique=zone,
@@ -342,14 +272,7 @@ def composer_vue_cultures(
         cultures=tuple(lignes),
         effectif_toutes=len(univers),
         effectif_au_potager=len(au_potager),
-        meteo_disponible=meteo_disponible,
-        confiance_indisponible=cause_muette,
     )
-
-
-def _avec_suggestion(ligne: LigneCulture) -> LigneCulture:
-    from dataclasses import replace
-    return replace(ligne, suggestion=True)
 
 
 def vue_cultures_en_dict(vue: VueCultures) -> dict:
@@ -361,8 +284,6 @@ def vue_cultures_en_dict(vue: VueCultures) -> dict:
         "familles": list(vue.familles),
         "effectif_toutes": vue.effectif_toutes,
         "effectif_au_potager": vue.effectif_au_potager,
-        "meteo_disponible": vue.meteo_disponible,
-        "confiance_indisponible": vue.confiance_indisponible,
         "cultures": [
             {
                 "culture": l.culture,
@@ -379,12 +300,9 @@ def vue_cultures_en_dict(vue: VueCultures) -> dict:
                 "repartition_phases": l.repartition_phases,
                 "phase_plus_avancee": l.phase_plus_avancee,
                 "nb_lots_pepiniere": l.nb_lots_pepiniere,
-                "etoiles": l.etoiles,
-                "confiance_equivalent": l.confiance_equivalent,
                 "fenetre_etat": l.fenetre_etat,
                 "fenetre_geste": l.fenetre_geste,
                 "fenetre_mois": list(l.fenetre_mois),
-                "suggestion": l.suggestion,
             }
             for l in vue.cultures
         ],

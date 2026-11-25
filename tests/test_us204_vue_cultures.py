@@ -7,13 +7,13 @@ affiche — critère par critère :
 
 - CA2  périmètre des deux onglets, culture hors référentiel jamais masquée
 - CA3  présence au potager : variétés, parcelles, phases, lots de pépinière
-- CA4  confiance du moment == celle du Plan (même fonction, même date)
+- CA4  [amendé par US-361, 25/11/2026] la lecture ne porte plus de confiance
 - CA5  état de fenêtre : maintenant / bientôt / plus tard / aucune
 - CA5 ter mois actifs (semis + plantation, jamais la récolte)
-- CA6  suggestion de la semaine, plafonnée à trois
+- CA6  [amendé par US-361] plus de suggestion de la semaine
 - CA7  une seule requête, une seule lecture météo
 - CA8  une correction locale du potager est prise en compte
-- CA10 météo indisponible : la réponse le dit, rien n'est masqué
+- CA10 [amendé par US-361] la météo n'est plus lue : rien à dire de sa disponibilité
 
 ⚠️ Les fenêtres et durées écrites ici sont des VALEURS DE TEST : elles
 n'engagent aucune agronomie.
@@ -170,7 +170,6 @@ class TestPerimetre:
         ligne = _ligne(vue, "verveine")
         assert ligne.hors_referentiel is True
         assert ligne.au_potager is True
-        assert ligne.etoiles is None
         assert ligne.a_calendrier is False
 
 
@@ -205,20 +204,30 @@ class TestPresence:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA4 — même confiance que le Plan
+# CA4, CA6, CA10 — amendés par US-361 : aucune confiance dans la lecture
 # ═════════════════════════════════════════════════════════════════════════════
-def test_us204_meme_confiance_que_le_plan(db):
-    """[CA4, Gherkin: Même confiance que le Plan] Deux étoiles pour le haricot, comme le Plan."""
-    _seed_culture(db, "haricot", fenetres={cal.PHASE_SEMIS_PLEINE_TERRE: (4, 6)},
-                  durees={cal.ETAPE_RECOLTE: (55, 70)})
-    date_ref = date(2027, 5, 19)
-    with patch.object(svc_previsions, "lire_prevision_potager", return_value=_meteo(date_ref, 8.0)):
-        du_plan = conf.confiances_de_culture(db, "haricot", date_ref, 1, _meteo(date_ref, 8.0))
-        vue = vc.composer_vue_cultures(db, CTX, date_ref)
-    ligne = _ligne(vue, "haricot")
-    attendu = du_plan.candidates[0] if du_plan.candidates else None
-    assert ligne.etoiles == (attendu.etoiles if attendu else None)
-    assert ligne.confiance_equivalent == vc.EQUIVALENT_ETOILES.get(ligne.etoiles)
+def test_us361_la_lecture_n_evalue_aucune_confiance(db, monkeypatch):
+    """[US-361 / CA1, CA2] Quel que soit le nombre d'espèces : aucune évaluation de confiance, aucune lecture météo."""
+    for nom in ["a", "b", "c", "d", "e"]:
+        _seed_culture(db, nom, fenetres={cal.PHASE_SEMIS_PLEINE_TERRE: (5, 6)},
+                     durees={cal.ETAPE_RECOLTE: (50, 60)})
+    appels = []
+    for nom_fn in ("confiances_du_plan", "confiances_de_culture", "evaluer", "evaluer_cultures"):
+        monkeypatch.setattr(conf, nom_fn, lambda *a, _n=nom_fn, **k: appels.append(_n))
+    with patch.object(svc_previsions, "lire_prevision_potager") as lecture:
+        vue = vc.composer_vue_cultures(db, CTX, date(2027, 5, 15))
+    assert appels == []
+    assert lecture.call_count == 0
+    assert len(vue.cultures) >= 5
+    assert _ligne(vue, "a").fenetre_etat == vc.ETAT_MAINTENANT  # la fenêtre vient du calendrier
+
+
+def test_us361_champs_de_confiance_retires_de_la_reponse():
+    """[US-361 / CA1] Ni la ligne ni la vue ne portent plus les champs de confiance."""
+    from dataclasses import fields
+    retires = {"etoiles", "confiance_equivalent", "suggestion", "meteo_disponible", "confiance_indisponible"}
+    assert retires.isdisjoint({f.name for f in fields(vc.LigneCulture)} | {f.name for f in fields(vc.VueCultures)})
+    assert not hasattr(vc, "EQUIVALENT_ETOILES") and not hasattr(vc, "PLAFOND_SUGGESTIONS")
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -266,45 +275,8 @@ class TestFenetre:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# CA6 — suggestion de la semaine
+# CA7 — budget de lectures (amendé : la météo n'est plus lue, voir US-361)
 # ═════════════════════════════════════════════════════════════════════════════
-def test_us204_suggestion_de_la_semaine(db):
-    """[Gherkin: Suggestion de la semaine] Épinard absent du potager, fenêtre ouverte."""
-    _epinard_hiver(db)
-    vue = _vue(db, date(2027, 12, 15))
-    ligne = _ligne(vue, "epinard")
-    assert ligne.fenetre_etat == vc.ETAT_MAINTENANT
-    if (ligne.etoiles or 0) >= 2:
-        assert ligne.suggestion is True
-
-
-def test_us204_au_plus_trois_suggestions(db):
-    """[Gherkin: Au plus trois suggestions] Cinq cultures ouvertes, trois retenues."""
-    for i, nom in enumerate(["a", "b", "c", "d", "e"]):
-        _seed_culture(db, nom, fenetres={cal.PHASE_SEMIS_PLEINE_TERRE: (5, 5)},
-                     durees={cal.ETAPE_RECOLTE: (50, 60)})
-    date_ref = date(2027, 5, 15)
-    with patch.object(svc_previsions, "lire_prevision_potager", return_value=_meteo(date_ref, 12.0)):
-        vue = vc.composer_vue_cultures(db, CTX, date_ref)
-    suggerees = [l for l in vue.cultures if l.suggestion]
-    assert len(suggerees) <= vc.PLAFOND_SUGGESTIONS
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# CA7 — budget de lectures
-# ═════════════════════════════════════════════════════════════════════════════
-def test_us204_une_seule_lecture_meteo_pour_tout_l_ecran(db):
-    """[CA7] Cinq cultures : la météo est lue une seule fois."""
-    for nom in ["a", "b", "c", "d", "e"]:
-        _seed_culture(db, nom, fenetres={cal.PHASE_SEMIS_PLEINE_TERRE: (5, 6)},
-                     durees={cal.ETAPE_RECOLTE: (50, 60)})
-    date_ref = date(2027, 5, 15)
-    with patch.object(svc_previsions, "lire_prevision_potager",
-                      return_value=_meteo(date_ref, 12.0)) as lecture:
-        vc.composer_vue_cultures(db, CTX, date_ref)
-    assert lecture.call_count == 1
-
-
 def test_us204_lecture_sans_ecriture(db):
     """[CA9] Aucun événement, stock ni référentiel modifié par la consultation."""
     _tomate(db)
@@ -336,40 +308,6 @@ def test_us204_correction_locale_prise_en_compte(db):
     db.commit()
     ligne = _ligne(_vue(db, date(2027, 6, 15)), "poireau")
     assert ligne.fenetre_etat == vc.ETAT_MAINTENANT
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# CA10 — météo indisponible
-# ═════════════════════════════════════════════════════════════════════════════
-def test_us204_meteo_indisponible_le_dit_sans_rien_masquer(db):
-    """[CA10] Potager non localisé : pas d'étoile de repli, le reste est intact."""
-    _tomate(db)
-    vue = _vue(db, date(2027, 4, 15), meteo=_sans_meteo())
-    assert vue.meteo_disponible is False
-    ligne = _ligne(vue, "tomate")
-    assert ligne.famille is None or isinstance(ligne.famille, str)  # inchangé, jamais levé
-    assert ligne.fenetre_etat == vc.ETAT_MAINTENANT  # la fenêtre ne dépend pas de la météo
-    assert vue.confiance_indisponible == vc.CAUSE_METEO
-
-
-def test_us204_date_hors_horizon_n_est_pas_une_panne_meteo(db):
-    """Date de référence passée : la météo est lisible, mais ses 14 jours de prévision
-    ne couvrent pas cette date — la cause dite n'est PAS « météo illisible »."""
-    _tomate(db)
-    date_ref = date(2027, 4, 15)
-    meteo_future = _meteo(date(2027, 10, 7), 11.0)   # prévisions d'« aujourd'hui », 6 mois plus tard
-    vue = _vue(db, date_ref, meteo=meteo_future)
-    assert vue.meteo_disponible is False             # aucune étoile n'est affichée
-    assert vue.confiance_indisponible == vc.CAUSE_HORS_HORIZON
-    assert _ligne(vue, "tomate").fenetre_etat == vc.ETAT_MAINTENANT   # le reste est intact
-
-
-def test_us204_confiance_evaluee_ne_porte_aucune_cause(db):
-    """Date couverte par la prévision : aucune cause, les étoiles sont évaluées."""
-    _tomate(db)
-    vue = _vue(db, date(2027, 4, 15))
-    assert vue.meteo_disponible is True
-    assert vue.confiance_indisponible is None
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -421,3 +359,6 @@ class TestApi:
         tomate = next(c for c in corps["cultures"] if c["culture"] == "tomate")
         assert tomate["au_potager"] is True
         assert tomate["fenetre_etat"] == "maintenant"
+        for c in corps["cultures"]:
+            assert {"etoiles", "confiance_equivalent", "suggestion"}.isdisjoint(c)
+        assert {"meteo_disponible", "confiance_indisponible"}.isdisjoint(corps)
