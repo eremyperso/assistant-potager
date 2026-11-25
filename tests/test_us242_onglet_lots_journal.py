@@ -45,7 +45,8 @@ def test_us242_ca1_le_filtre_ouvre_sur_tous() -> None:
     lib = _lire("lib/lotsJournal.js")
     for libelle in ("En cours", "À régler", "Terminés", "Tous"):
         assert f"libelle: '{libelle}'" in lib, libelle
-    assert "filtreLots: 'tous'" in _lire("views/Pepiniere.jsx")
+    # [US-356 / CA9] Le registre s'ouvre sur « En cours » (maquette) ; le filtre est une colonne aimantée sur mobile.
+    assert "filtreLots: 'en_cours'" in _lire("views/Pepiniere.jsx")
 
 
 def test_us242_l_onglet_lots_rend_le_journal() -> None:
@@ -57,34 +58,35 @@ def test_us242_l_onglet_lots_rend_le_journal() -> None:
 
 
 def test_us242_ca7_la_fiche_n_a_aucun_bouton_de_geste() -> None:
-    """CA7 — registre sans geste : aucun `BoutonGeste`, un lien « Agir dans Ma pépinière »."""
+    """CA7 — registre sans geste : aucun `BoutonGeste`, et le pied le dit.
+    [US-356 / CA9] « Registre sans geste : on agit depuis le Parcours ou par Noter »."""
     onglet = _lire("components/OngletLots.jsx")
     assert "BoutonGeste" not in onglet
-    assert "Agir dans Ma pépinière" in onglet
-    vue = _lire("views/Pepiniere.jsx")
-    assert "setEtat({ onglet: 'parcours' })" in vue
+    assert "Registre sans geste : on agit depuis le Parcours ou par Noter." in onglet
+    assert "Voir au Parcours" in _lire("components/FicheLotCommune.jsx")
 
 
 def test_us242_ca6_ligne_cliquable_au_clavier_et_fiche_depliee() -> None:
-    """CA6 — ligne clavier + `aria-expanded`, fiche dépliée au large, plein écran à l'étroit."""
+    """CA6 — une ligne est un vrai bouton (clavier), qui ouvre la fiche du lot.
+    [US-356 / CA11] La fiche s'ouvre dans le panneau droit (ordinateur) ou en feuille (mobile)."""
     onglet = _lire("components/OngletLots.jsx")
-    assert 'role="button" tabIndex={0} aria-expanded={estOuvert}' in onglet
-    assert "e.key === 'Enter' || e.key === ' '" in onglet
-    assert "<FicheDepliee" in onglet and "<FichePleinEcran" in onglet
+    assert "<button" in onglet and "aria-pressed={ouverte}" in onglet
+    assert "onClick={onOuvrir}" in onglet
 
 
 def test_us242_ca8_aller_au_lot_remet_tous_et_deplie() -> None:
-    """CA8 — « Aller au lot n° » remet le filtre sur Tous et déplie le lot ; inconnu, il le dit."""
-    onglet = _lire("components/OngletLots.jsx")
-    assert "setEtat({ filtreLots: 'tous', q: '', lotDeplie: cible.lot_id })" in onglet
-    assert "messageLotInconnu(numero)" in onglet
+    """CA8 — l'adresse d'un lot (`/?vue=pepiniere&lot=57`) ouvre sa fiche ; inconnu, la vue le dit.
+    [US-356] « Aller au lot n° » est remplacé par la recherche de la barre d'outils."""
+    vue = _lire("views/Pepiniere.jsx")
+    assert "ouvrirParNumero(cible.numero_lot)" in vue
+    assert "messageLotInconnu(numero)" in vue
 
 
 def test_us242_ca10_composants_en_container_queries() -> None:
-    """CA10 — la mise en page des blocs suit leur conteneur, pas l'écran."""
+    """CA10 — la mise en page des blocs suit leur conteneur, pas l'écran (la bascule mobile / ordinateur
+    est une structure de page : `bureau`, 900 px)."""
     onglet = _lire("components/OngletLots.jsx")
-    for conteneur in ("@container/journal", "@container/bilan", "@container/fichej", "@container/barre-lots"):
-        assert conteneur in onglet, conteneur
+    assert "@container/lots" in onglet and "bureau" in onglet
     assert " md:" not in onglet and " lg:" not in onglet
 
 

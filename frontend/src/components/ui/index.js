@@ -17,6 +17,7 @@ export { Tip } from './Tip.jsx'
 export { Placeholder } from './Placeholder.jsx'
 export { Pop, PopItem, PopHead, PopSep } from './Pop.jsx'
 export { Modal } from './Modal.jsx'
+export { default as IconeLot, Lot } from './IconeLot.jsx'
 export { Toast } from './Toast.jsx'
 export { SectionLabel } from './SectionLabel.jsx'
 export { GroupHead, useGroups } from './GroupHead.jsx'
@@ -43,3 +44,11 @@ export { PisteDesPlaces, IconeCote } from './PisteDesPlaces.jsx'
 // [US-321] Langage visuel des étapes : étiquette, segment, légende, pictogrammes.
 // La correspondance étape → couleur / pictogramme / libellé est dans `lib/etapes.js`.
 export { EtiquetteEtape, SegmentEtape, LegendeEtapes, PictoEtape, IconeEtape } from './EtapeCulture.jsx'
+
+// [US-352] Les pièces du socle : pastille et puce d'étape, calendrier de l'année, note du
+// carnet, légende commune, infobulle (survol / appui long de 380 ms).
+export { PastilleEtape, PuceEtape } from './EtapeCulture.jsx'
+export { CalendrierAnnee } from './CalendrierAnnee.jsx'
+export { NoteCarnet } from './NoteCarnet.jsx'
+export { LegendeCommune } from './LegendeCommune.jsx'
+export { InfobulleEtapes } from './InfobulleEtapes.jsx'

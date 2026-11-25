@@ -599,9 +599,11 @@ class TestPwa:
     def test_us209_ca10_ca11_l_ecran_porte_le_numero_et_le_champ(self):
         source = (RACINE / "frontend" / "src" / "views" / "Pepiniere.jsx").read_text(encoding="utf-8")
         assert "libelleNumeroLot(lot)" in source
-        # [US-242] « Aller au lot n° » vit dans l'onglet Lots (journal de saison).
-        onglet = (RACINE / "frontend" / "src" / "components" / "OngletLots.jsx").read_text(encoding="utf-8")
-        assert "Aller au lot n°" in onglet and "lireNumeroLot(numeroSaisi)" in onglet
+        # [US-356] « Aller au lot n° » devient la recherche de la barre d'outils (« Lot n°, culture ou variété ») :
+        # `#57` ou `57` trouve le lot par son numéro court, dans le registre comme dans le Parcours.
+        assert "Lot n°, culture ou variété" in source
+        lib = (RACINE / "frontend" / "src" / "lib" / "pepiniereSocle.js").read_text(encoding="utf-8")
+        assert ".replace(/^#/, '')" in lib and "l.numero_lot" in lib
         assert "api.pepiniereLot(" in source
 
     def test_us209_ca11_l_adresse_ouvre_le_lot_par_son_numero(self):

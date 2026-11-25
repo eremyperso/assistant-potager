@@ -1,19 +1,21 @@
 // [US-329] Le Plan sur mobile : un petit plan pour se repérer, puis le chemin.
 //
-// M1 barre, M2 mini-plan (le dessin d'US-327 réduit, sans libellés), M3 légende compacte,
+// M1 bandeau « Au 23 novembre · fond … » (US-360 / CA2), M2 mini-plan (le dessin d'US-327 réduit, sans
+// libellés, avec sa rose des vents), M3 « ? Légende ⌄ » repliable (US-352) et l'appui long,
 // M4 « N à confirmer » / « N à libérer » (US-328), M5 les parcelles dans l'ordre du chemin, une
 // ligne de 54 px par culture, M6 les pépinières et leurs lots. Pas de modification ici.
 import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, Maximize2, Sprout } from 'lucide-react'
-import { ParcellePlan } from './PlanDessin.jsx'
+import { ParcellePlan, RoseDesVents } from './PlanDessin.jsx'
 import PlanAgrandi from './PlanAgrandi.jsx'
-import { LegendeEtapes, LegendeRepliable } from './ui'
+import { LegendeCommune, IconeLot } from './ui'
 import { IconeEtape } from './ui/EtapeCulture.jsx'
 import { classesSegment, VARIANTE_PLEIN } from '../lib/etapes.js'
 import { boutonsMobile } from '../lib/aujourdhui.js'
 import {
-  echelleMiniPlan, hauteurMaxMiniPlan, idCarteChemin, TEXTE_LEGENDE_MOBILE, TEXTE_LOTS_PEPINIERE,
+  echelleMiniPlan, hauteurMaxMiniPlan, idCarteChemin, TEXTE_LOTS_PEPINIERE,
 } from '../lib/planMobile.js'
+import { infobulleRang } from '../lib/planSocle.js'  // [US-360]
 
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand'
 
@@ -34,7 +36,9 @@ export function LigneChemin({ ligne, onOuvrir }) {
       <button type="button" aria-label={ligne.nomAccessible} onClick={() => onOuvrir?.(ligne.selection)}
         className={`flex w-full min-h-[54px] items-center gap-3 px-3 py-1.5 text-left hover:bg-card-alt ${FOCUS}`}>
         <span className="w-8 shrink-0 text-[12px] font-bold text-txt2">{ligne.rang}</span>
-        <span aria-hidden="true" className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] ${barre}`}>
+        {/* [US-360 / CA3] Appui long sur la pastille : l'étape, sans ouvrir la fiche. */}
+        <span aria-hidden="true" data-tip={infobulleRang({ nom: ligne.nom, etape: ligne.etape, prevu: ligne.prevu || ligne.aConfirmer })}
+          className={`inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] ${barre}`}>
           <IconeEtape etape={ligne.etape} taille={14} />
         </span>
         <span className="min-w-0 flex-1">
@@ -86,7 +90,7 @@ function CarteChemin({ parcelle, enEvidence, onOuvrir, onDetail, onLot, onPepini
                 <li key={lot.cle}>
                   <button type="button" aria-label={lot.nomAccessible} onClick={() => onLot?.(lot)}
                     className={`flex w-full min-h-[54px] items-center gap-3 px-3 py-1.5 text-left hover:bg-card-alt ${FOCUS}`}>
-                    <span className="w-10 shrink-0 text-[12px] font-bold text-txt2">{lot.numero != null ? `#${lot.numero}` : '—'}</span>
+                    <span className="inline-flex w-auto min-w-[24px] shrink-0 items-center gap-[3px] text-[12px] font-bold text-txt2"><IconeLot />{lot.numero != null ? lot.numero : '—'}</span>
                     <span aria-hidden="true" className="text-[18px] leading-none">{lot.emoji}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-semibold text-txt">
@@ -122,7 +126,7 @@ function CarteChemin({ parcelle, enEvidence, onOuvrir, onDetail, onLot, onPepini
  * `chemin` : `parcellesDuChemin(plan)` ; `taches` : `tachesDuPlan(plan)`.
  */
 export default function PlanMobile({
-  entete, formes, emprise, angle = 0, chemin, taches, largeur,
+  bandeau, rose = null, trouvees = null, formes, emprise, angle = 0, chemin, taches, largeur,
   onOuvrir, onDetail, onLot, onPepiniere, annoncer,
 }) {
   const [enEvidence, setEnEvidence] = useState(null)
@@ -157,11 +161,11 @@ export default function PlanMobile({
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      {/* M1 */}
+      {/* M1 — [US-360 / CA2] « Au 23 novembre · fond … » à gauche, « 25 × 15 m » à droite ; suit la règle des temps. */}
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="font-serif text-[17px] font-semibold text-txt">{entete.titre}</h2>
-          <p className="text-[12px] text-txt2">{[entete.fond, entete.dimension].filter(Boolean).join(' · ')}</p>
+        <div className="min-w-0 text-[12.5px] text-txt2" data-bandeau-plan="">
+          <b className="font-bold text-txt">{bandeau.date}</b>{bandeau.fond ? ` · ${bandeau.fond}` : ''}
+          {bandeau.dimension && <span className="ml-2 text-txt3">{bandeau.dimension}</span>}
         </div>
         {/* Hors du dessin : un bouton posé sur le plan masquerait une parcelle. */}
         {u > 0 && formes.length > 0 && (
@@ -180,9 +184,10 @@ export default function PlanMobile({
             <div className="absolute inset-0" style={angle ? { transform: `rotate(${angle}deg)` } : undefined}>
               {formes.filter((f) => f.actif).map((forme) => (
                 <ParcellePlan key={forme.id} forme={forme} u={u} mini parcelleChoisie={enEvidence}
-                  onParcelle={allerA} />
+                  estompee={Boolean(trouvees) && !trouvees.has(forme.id)} onParcelle={allerA} />
               ))}
             </div>
+            <RoseDesVents rose={rose} petite />
           </div>
         </div>
       )}
@@ -191,13 +196,8 @@ export default function PlanMobile({
           onChoisir={choisirDepuisAgrandi} onClose={() => setAgrandi(false)} />
       )}
 
-      {/* M3 */}
-      <div className="flex flex-col gap-1">
-        <LegendeRepliable>
-          <LegendeEtapes compact />
-          <p className="text-[12px] text-txt3 mt-1">{TEXTE_LEGENDE_MOBILE}</p>
-        </LegendeRepliable>
-      </div>
+      {/* M3 — [US-352 / CA7] « ? Légende ⌄ » repliable et l'appui long sur un rang ou une pastille. */}
+      <LegendeCommune sujet="un rang ou une pastille" />
 
       {/* M4 — US-328 / CA7 : chaque bouton ouvre la première culture de sa liste. */}
       {boutons.length > 0 && (
@@ -205,7 +205,7 @@ export default function PlanMobile({
           {boutons.map((b) => (
             <button key={b.cle} type="button" onClick={() => onOuvrir?.(b.premiere.selection)}
               className={`min-h-[44px] rounded-full border-[1.5px] border-dashed border-current px-4 text-[13px] font-bold etape-pastille-texte bg-card ${FOCUS}`}>
-              {b.texte}
+              {b.cle === 'a_confirmer' && <span aria-hidden="true">● </span>}{b.texte}
             </button>
           ))}
         </div>
@@ -214,7 +214,7 @@ export default function PlanMobile({
       {/* M5, M6 */}
       <h3 className="mt-1 text-[11.5px] font-bold uppercase tracking-[.05em] text-txt2">Dans l’ordre du chemin</h3>
       <div className="flex flex-col gap-3">
-        {chemin.map((p) => (
+        {chemin.filter((p) => !trouvees || trouvees.has(p.id)).map((p) => (
           <CarteChemin key={p.id} parcelle={p} enEvidence={enEvidence === p.id}
             onOuvrir={onOuvrir} onDetail={onDetail} onLot={onLot} onPepiniere={onPepiniere} />
         ))}

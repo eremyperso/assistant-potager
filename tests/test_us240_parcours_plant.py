@@ -793,6 +793,7 @@ def test_us240_ca1_l_api_porte_le_parcours(client_api, _moteur_api):
         "stades", "pepinieres", "sans_emplacement", "etiquettes", "compteurs",
         "a_semer", "a_semer_sans_graines", "source_stock_graines", "dormants",
         "calendrier_semis",   # [US-218] ajouté par la maquette HF
+        "a_semer_ecartees", "prochaines_ouvertures",   # [US-356 / CA7] lus par l'onglet « Semer »
     }
     (etiquette,) = parcours["etiquettes"]
     assert etiquette["lot"]["numero"] == 128 and etiquette["etat"] == "repiquer_retard"

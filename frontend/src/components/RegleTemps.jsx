@@ -1,15 +1,16 @@
 // Règle des temps : réglette de timeline qui pilote la date de référence
 // (maquette « Curseur de date », projet Claude Design).
 //
-// Montée UNE fois dans la coquille de l'app (`App.jsx`), elle sert toutes les
-// vues qui portent le sélecteur de date : le bouton « Parcourir » de
-// `DateRefPicker` l'ouvre, elle écrit dans la même `dateRef` globale.
+// [US-353 / CA10] Montée UNE fois dans la coquille de l'app (`App.jsx`), JUSTE SOUS la barre
+// d'outils, dans toutes les vues qui portent un bouton date : « Aujourd'hui » (`BarreOutils`)
+// l'ouvre, elle écrit dans la même `dateRef` globale. Elle a la tête de la maquette : la date
+// longue en police système 14 px sur une ligne, « il y a 11 j », « Aujourd'hui », ×.
 //
 // Deux temps, volontairement : pendant qu'on fait glisser, seule la date
 // affichée suit (aucun appel réseau) ; la date de référence n'est écrite qu'une
 // fois la réglette posée sur un jour. Les écrans rechargent leurs données à
 // chaque changement de `dateRef` — la leur écrire à chaque pixel les noierait.
-import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react'
 import { useDateRef } from '../context/AppContext.jsx'
 import { jourLocal } from '../lib/gestes.js'
@@ -30,14 +31,17 @@ const mouvementReduit = () =>
 
 // Les 700 traits ne changent jamais tant que la réglette garde la même étendue :
 // `memo` évite de les réconcilier à chaque jour traversé.
-const Graduations = memo(function Graduations({ regle }) {
+const Graduations = memo(function Graduations({ regle, onMois }) {
   const traits = useMemo(() => graduations(regle), [regle])
   return (
     <div className="regle-rl">
       {traits.map(({ i, type, etiquette }) => (
         <Fragment key={i}>
           <i className={`regle-trait regle-trait-${type}`} style={{ left: i * PPJ }} />
-          {etiquette && <span className="regle-mois" style={{ left: i * PPJ }}>{etiquette}</span>}
+          {/* [US-353 / CA10] Toucher un mois y saute. */}
+          {etiquette && (
+            <span className="regle-mois" role="button" style={{ left: i * PPJ }} onClick={() => onMois?.(i)}>{etiquette}</span>
+          )}
         </Fragment>
       ))}
       <span className="regle-auj" style={{ left: (regle.n - 1) * PPJ }} />
@@ -49,7 +53,7 @@ const BoutonPas = ({ sens, onClick, children }) => (
   <button
     type="button" onClick={onClick}
     aria-label={sens < 0 ? 'Jour précédent' : 'Jour suivant'}
-    className="hidden @[30rem]/regle:flex items-center justify-center shrink-0 w-[34px] h-[34px] rounded-[10px] border border-border bg-surface text-txt2 hover:border-brand hover:text-brand-text transition-colors"
+    className="flex items-center justify-center shrink-0 w-8 h-8 rounded-[10px] border border-border bg-surface text-txt2 hover:border-brand hover:text-brand-text transition-colors"
   >
     {children}
   </button>
@@ -69,6 +73,7 @@ function Dock() {
   const appui = useRef(null)          // glissé à la souris : { x, gauche, bouge }
   const actif = useRef(false)         // la réglette bouge : la date de référence ne la déplace pas
   const doigt = useRef(false)         // dernier geste au doigt : autorise la vibration
+  const inertie = useRef(0)           // [US-353 / CA10] l'animation d'inertie du glissé à la souris
   const indexCibleRef = useRef(indexCible)
   const dernierIndex = useRef(indexCible)
   indexCibleRef.current = indexCible
@@ -98,6 +103,25 @@ function Dock() {
     if (i !== indexCibleRef.current) setDateRef(versDateRef(regle, i))
   }
 
+  const arreterInertie = () => cancelAnimationFrame(inertie.current)
+
+  // [US-353 / CA10] Le glissé à la souris se lance : la vitesse du relâchement s'éteint doucement,
+  // puis la réglette se pose sur un jour. `vitesse` en px/ms de défilement.
+  const lancer = (vitesse) => {
+    arreterInertie()
+    let v = vitesse
+    let t0 = performance.now()
+    const pas = (t) => {
+      const dt = Math.min(32, t - t0)
+      t0 = t
+      if (vue.current) vue.current.scrollLeft += v * dt
+      v *= 0.94 ** (dt / 16)
+      if (Math.abs(v) > 0.03 && vue.current) inertie.current = requestAnimationFrame(pas)
+      else poser()
+    }
+    inertie.current = requestAnimationFrame(pas)
+  }
+
   const surDefilement = () => {
     const v = vue.current
     if (!v || !v.clientWidth) return
@@ -123,7 +147,8 @@ function Dock() {
     if (e.pointerType !== 'mouse') return
     const v = vue.current
     doigt.current = false
-    appui.current = { x: e.clientX, gauche: v.scrollLeft, bouge: 0 }
+    arreterInertie()
+    appui.current = { x: e.clientX, gauche: v.scrollLeft, bouge: 0, t: performance.now(), vitesse: 0 }
     setSurvol(null)
     v.parentElement.classList.add('regle-glisse')
     v.setPointerCapture(e.pointerId)
@@ -136,7 +161,12 @@ function Dock() {
     if (a) {
       const dx = e.clientX - a.x
       a.bouge = Math.max(a.bouge, Math.abs(dx))
+      const avant = vue.current.scrollLeft
       vue.current.scrollLeft = a.gauche - dx
+      const maintenant = performance.now()
+      const dt = Math.max(1, maintenant - a.t)
+      a.vitesse = 0.7 * a.vitesse + 0.3 * ((vue.current.scrollLeft - avant) / dt)
+      a.t = maintenant
       return
     }
     const r = vue.current.getBoundingClientRect()
@@ -149,11 +179,13 @@ function Dock() {
     appui.current = null
     vue.current.parentElement.classList.remove('regle-glisse')
     if (a.bouge < SEUIL_GLISSE) aller(jourSousLeCurseur(e.clientX), true)   // clic sur un jour : on y saute
+    else if (Math.abs(a.vitesse) > 0.15 && !mouvementReduit() && performance.now() - a.t < 80) lancer(a.vitesse)
     else poser()
   }
 
   const surTouche = (e) => {
     const pas = pasDuClavier(e.key, e.shiftKey)
+    arreterInertie()
     doigt.current = false
     if (pas !== null) aller(courant() + pas)
     else if (estToucheAujourdhui(e.key)) aller(regle.n - 1, true)
@@ -171,6 +203,7 @@ function Dock() {
     const roue = (e) => {
       e.preventDefault()
       e.stopPropagation()
+      arreterInertie()
       doigt.current = false
       v.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
     }
@@ -183,7 +216,7 @@ function Dock() {
     aller(indexCible)
     // Le focus sert le clavier : au doigt, il ne ferait qu'allumer l'anneau de focus.
     if (!window.matchMedia?.('(pointer: coarse)').matches) vue.current?.focus({ preventScroll: true })
-    return () => clearTimeout(repos.current)
+    return () => { clearTimeout(repos.current); cancelAnimationFrame(inertie.current) }
   }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // La date de référence a changé ailleurs (calendrier natif, remise à zéro du
@@ -200,33 +233,38 @@ function Dock() {
   const mention = mentionDuJour(iso, aujourdhui)
   const enDirect = jour >= regle.n - 1
 
+  // Les mois se touchent : la fonction passée à `Graduations` reste stable (le composant est mémoïsé).
+  const allerRef = useRef(aller)
+  allerRef.current = aller
+  const versMois = useCallback((i) => allerRef.current(i, true), [])
+
   return (
     <section
       aria-label="Règle des temps"
-      className="@container/regle shrink-0 bg-surface border-t border-border shadow-[0_-6px_20px_rgba(22,33,12,.07)]"
+      className="@container/regle mt-2.5 rounded-[14px] border border-border bg-surface px-2.5 pb-2 pt-2.5 shadow-[0_4px_14px_rgba(22,33,12,.06)]"
     >
-      <div className="max-w-[1320px] mx-auto px-3 nav:px-6 pt-2 pb-2.5 flex flex-col gap-1.5">
-        <div className="flex items-center gap-2 min-h-[40px]">
-          <span className="font-hand text-[22px] font-bold leading-none text-txt whitespace-nowrap" aria-live="polite">
-            <span className="@[30rem]/regle:hidden">{libelleCourt(iso)}</span>
-            <span className="hidden @[30rem]/regle:inline">{libelleLong(iso)}</span>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex h-9 min-w-0 flex-nowrap items-center gap-2 px-0.5">
+          {/* [CA10] La date longue en police système 14 px, sur une ligne : la règle garde la même
+              hauteur quel que soit le jour (Kalam est réservée au texte du jardinier). */}
+          <span className="min-w-0 truncate text-[14px] font-semibold leading-none tabular-nums text-txt" aria-live="polite">
+            {libelleLong(iso)}
           </span>
-          {/* En étroit, la pastille ambre du sélecteur dit déjà qu'on lit le passé. */}
           {mention && (
-            <span className="hidden @[30rem]/regle:inline text-[10px] font-bold uppercase tracking-[.05em] px-1.5 py-0.5 rounded-md bg-card-alt text-txt2">
+            <span className="shrink-0 whitespace-nowrap rounded-md bg-amb-bg px-[7px] py-0.5 text-[11px] font-bold uppercase tracking-[.04em] text-amb-tx">
               {mention}
             </span>
           )}
           <span className="flex-1" />
           <button
             type="button" onClick={() => aller(regle.n - 1, true)} tabIndex={enDirect ? -1 : 0}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-3 rounded-full bg-brand-soft text-brand-text font-bold text-[12.5px] whitespace-nowrap ${enDirect ? 'invisible' : ''}`}
+            className={`inline-flex min-h-[34px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-soft px-3 text-[12.5px] font-bold text-brand-text ${enDirect ? 'invisible' : ''}`}
           >
             <RotateCcw size={14} aria-hidden="true" />Aujourd'hui
           </button>
           <button
             type="button" onClick={() => setRegleOuverte(false)} aria-label="Fermer la réglette"
-            className="inline-flex items-center justify-center w-10 h-10 rounded-[10px] bg-card-alt text-txt2 hover:text-txt transition-colors"
+            className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-card-alt text-txt2 transition-colors hover:text-txt"
           >
             <X size={16} aria-hidden="true" />
           </button>
@@ -248,7 +286,7 @@ function Dock() {
               onKeyDown={surTouche}
             >
               <div className="regle-in" style={{ width: regle.n * PPJ }}>
-                <Graduations regle={regle} />
+                <Graduations regle={regle} onMois={versMois} />
               </div>
             </div>
             <div className="regle-centre" aria-hidden="true" />
@@ -259,7 +297,7 @@ function Dock() {
           <BoutonPas sens={1} onClick={() => aller(courant() + 1)}><ChevronRight size={16} aria-hidden="true" /></BoutonPas>
         </div>
 
-        <p className="hidden @[40rem]/regle:block text-[11px] text-txt3 px-[42px]">
+        <p className="hidden @[40rem]/regle:block text-[11px] text-txt3 px-10">
           Glisser, molette ou clic sur un jour · <kbd className="regle-kbd">←</kbd> <kbd className="regle-kbd">→</kbd> un jour,
           {' '}<kbd className="regle-kbd">Maj</kbd> une semaine · <kbd className="regle-kbd">T</kbd> aujourd'hui
         </p>

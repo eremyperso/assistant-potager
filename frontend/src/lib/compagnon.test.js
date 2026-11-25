@@ -286,10 +286,12 @@ test('[CA5] le panneau se met en page par container queries, jamais par breakpoi
   }
 })
 
-test('[CA5] le bouton flottant est posé par la structure de page (App), pas par le panneau', () => {
+test('[US-353 / CA4] le médaillon flottant est supprimé : Noter est la seule porte vers Gaston', () => {
   const app = lire('../App.jsx')
-  assert.match(app, /BoutonCompagnon/)
+  assert.doesNotMatch(app, /BoutonCompagnon/)
+  assert.match(app, /BoutonNoter/)
   assert.match(app, /PanneauCompagnon/)
+  assert.match(app, /PanneauPartage/)
 })
 
 test('[CA1][CA2] la PWA ne confirme rien elle-même : un seul chemin d’écriture, l’API du compagnon', () => {
@@ -365,21 +367,13 @@ test('[maquette] l’en-tête du chat porte les trois boutons ronds : Support, R
   assert.match(panneau, /Version bêta/)
 })
 
-test('[maquette] le bouton flottant a deux visages, replié (chevron) et présent (avatar, main, pastille)', () => {
-  const bouton = lire('../components/BoutonCompagnon.jsx')
-  assert.match(bouton, /gst-tab/)
-  assert.match(bouton, /gst-pres/)
-  assert.match(bouton, /gst-dot/)
-  assert.match(bouton, /Parler au compagnon/)
-  const css = lire('../index.css')
-  assert.match(css, /prefers-reduced-motion/)                       // les animations se coupent à la demande
-})
-
-test('[CA5] le placement du chat (plein écran / carte flottante) est décidé par la page, pas par le panneau', () => {
+test('[US-353 / CA12] le placement du chat est décidé par la page : panneau droit de 400 px, plein écran sur mobile', () => {
   const app = lire('../App.jsx')
-  assert.ok(app.includes("useMedia('(max-width: 639px)')"))
-  assert.ok(app.includes('w-[380px]'))
-  assert.ok(app.includes('h-[600px]'))
+  assert.ok(app.includes("useMedia('(min-width: 900px)')"))
+  assert.match(app, /panneauGaston\(true\)/)
+  assert.match(app, /panneauGaston\(false\)/)
+  assert.match(lire('./coquille.js'), /LARGEUR_PANNEAU_PX = 400/)
+  assert.match(lire('../components/PanneauPartage.jsx'), /plein-ecran/)
 })
 
 // ── [US-272] Deux fenêtres : l'état réel des cartes, la pastille des non-lus ─
@@ -462,10 +456,11 @@ test('[US-272 / CA9] sans compagnon de terrain, l’invitation entre dans le fil
   assert.equal(filDepuisHistorique({ invitation_telegram: null }).length, 0)
 })
 
-test('[US-272 / CA5] la pastille et le potager de la carte sont posés par l’écran', () => {
-  const bouton = lire('../components/BoutonCompagnon.jsx')
+test('[US-272 / CA5, US-353 / CA3] le compteur de non-lus passe sur la pastille de Noter ; le potager de la carte est posé par l’écran', () => {
+  const noter = lire('../components/BoutonNoter.jsx')
   const carte = lire('../components/CarteProposition.jsx')
-  assert.match(bouton, /gst-nonlus/)
+  assert.match(noter, /noter-nonlus/)
+  assert.match(noter, /libellePastille\(nonLus\)/)
   assert.match(carte, /carte\.potager/)
 })
 

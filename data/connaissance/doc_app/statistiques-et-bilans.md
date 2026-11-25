@@ -33,6 +33,8 @@ Le bilan d'une culture précise détaille chaque variété séparément : ce qui
 
 La production d'une année se lit aussi mois par mois, ce qui montre où se situent les pics de récolte et les creux d'une saison. L'activité du jardin, c'est-à-dire le nombre de gestes enregistrés jour après jour, se consulte de la même façon et donne une idée du temps réellement passé au potager.
 
+Le tableau de bord (vue d'ensemble) tient en quatre rubriques : ce qui est à faire aujourd'hui (étapes dues, rangs à libérer), les récoltes possibles, la météo des trois prochains jours (le jour de gel en ambre) et les dernières notes du carnet. Une rubrique vide disparaît ; l'écran ne se personnalise plus. Dans l'écran Stocks, la tuile des kilos récoltés dans l'année ouvre « Récoltes par saison » : une barre par année qui a des récoltes et, d'un appui sur une année, ses cultures en barres. Seules les récoltes pesées y comptent : une récolte en pièces n'est jamais convertie en kilos. Le détail mois par mois reste dans l'onglet Statistiques.
+
 ## Poser une question chiffrée plutôt que d'ouvrir un écran
 
 **Intention :** procédure

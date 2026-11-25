@@ -16,7 +16,7 @@ index_terms:
 **Intention :** procédure
 **On parle aussi de :** journal ; historique ; carnet ; quand ai-je semé ; retrouver une date ; mes dernières actions
 
-Le journal liste tout ce qui a été enregistré, du plus récent au plus ancien, groupé par journée. Il se parcourt page par page, vingt gestes à la fois, et se filtre par type de geste, par culture ou par date. Depuis le compagnon de terrain, une demande directe — « quand ai-je planté les courgettes ? » — évite d'avoir à faire défiler quoi que ce soit.
+Le journal liste tout ce qui a été enregistré, du plus récent au plus ancien, groupé par journée (le nom du jour est en capitales). Dans une journée, les gestes restent chacun sur une ligne, et les notes du jour sont regroupées en « 3 notes » : la première s'affiche à la main avec sa culture et sa parcelle, les notes sans texte sont seulement comptées (« 1 sans texte ») et « + 1 autre » déplie les suivantes. Un bandeau de Gaston résume la semaine (« Cette semaine : 1 récolte (1,2 kg), 1 paillage et 6 notes »). Il se parcourt page par page, trente lignes à la fois, se cherche par culture, parcelle ou mot de la note, et se filtre par type de geste ou par jour ; il suit la date choisie sur la réglette. Depuis le compagnon de terrain, une demande directe — « quand ai-je planté les courgettes ? » — évite d'avoir à faire défiler quoi que ce soit.
 
 Le compagnon répond aussi, en une phrase et sans appel au modèle, aux questions de compte et de période posées au carnet : combien de fois un geste a été fait (« combien de fois j'ai arrosé les tomates ce mois-ci »), la liste des occurrences d'un type de geste (« quels traitements ai-je faits sur les tomates »), ou ce qui s'est fait sur une période (« qu'ai-je fait hier », « cette semaine », « le 4 mars »). Sans période citée, le compte porte sur la saison en cours et le récapitulatif sur les sept derniers jours : la réponse le dit. Une période sans geste reçoit la réponse « rien d'enregistré ». Au-delà de quinze gestes, la réponse résume par type de geste et renvoie vers l'historique de l'application.
 
@@ -39,9 +39,9 @@ Un geste saisi deux fois, ou qui n'a jamais eu lieu, peut être supprimé depuis
 ## Emporter le contenu du journal
 
 **Intention :** procédure
-**On parle aussi de :** export ; tableur ; télécharger ; sauvegarde ; fichier
+**On parle aussi de :** export ; tableur ; télécharger ; sauvegarde ; fichier ; où sont les exports ; menu des trois points ; CSV ; JSON
 
-Depuis l'application web, la page de journal affichée peut être exportée en tableur ou en fichier de données. L'export reprend exactement ce qui est à l'écran, filtres appliqués, et non l'intégralité du carnet : ce qui est exporté est donc ce qui a été relu.
+Les exports ne sont plus en ligne dans la page : ils se trouvent dans le menu « ⋯ » de la barre d'outils, sous « Exporter en CSV » et « Exporter en JSON ». Le Journal et les Stocks en ont un ; le menu exporte la page affichée en tableur ou en fichier de données. L'export reprend exactement ce qui est à l'écran, filtres appliqués, et non l'intégralité du carnet : ce qui est exporté est donc ce qui a été relu.
 
 ## Corriger ou annuler d'une phrase ce qui vient d'être enregistré
 

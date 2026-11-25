@@ -39,13 +39,40 @@ export function normaliserContexte(c) {
 }
 
 /**
+ * [US-358 / CA1, CA6] Le SUJET d'une porte qui n'a pas de parcelle à désigner (espèce du catalogue, tuile
+ * « Semer », lot de pépinière, culture sans place, ajout libre) : ce que le bandeau affiche. Il n'est
+ * JAMAIS envoyé au serveur — une porte n'ajoute aucun champ inconnu du compagnon.
+ */
+export const SUJET = Object.freeze({
+  CATALOGUE: 'catalogue', SEMER: 'semer', LOT: 'lot', CULTURE: 'culture', AJOUT: 'ajout', MOT: 'mot',
+})
+
+export function normaliserSujet(s) {
+  if (!s || !Object.values(SUJET).includes(s.type)) return null
+  return {
+    type: s.type,
+    culture: s.culture || null,
+    variete: s.variete || null,
+    numero: s.numero ?? null,
+    texte: s.texte || '',
+    emoji: s.emoji ?? (s.culture ? symboleDeCulture(s.culture, s.variete || '') : ''),
+    varietes: Array.isArray(s.varietes) ? s.varietes.filter(Boolean) : [],
+  }
+}
+
+/**
  * [C1, C6] Ce que l'ouverture du panneau dit de sa barre de contexte.
  * `detail` absent (visage de Gaston) : pas de barre. `detail.contexte` présent : la barre,
  * sur ce contexte ou sur « Tout le potager ».
  */
 export function ouvertureDuPanneau(detail) {
-  if (!detail || !('contexte' in detail)) return { barre: false, contexte: null }
-  const ouverture = { barre: true, contexte: normaliserContexte(detail.contexte) }
+  if (!detail || !('contexte' in detail)) return { barre: false, contexte: null, sujet: null, champ: null }
+  const ouverture = {
+    barre: true, contexte: normaliserContexte(detail.contexte),
+    // [US-358] Ce que la porte affiche sans l'envoyer, et la phrase pré-écrite dans le champ (non envoyée).
+    sujet: normaliserSujet(detail.sujet),
+    champ: detail.champ ? { texte: String(detail.champ), jeton: detail.jeton ?? Date.now() + Math.random() } : null,
+  }
   // [US-328 / CA4] Une carte « À placer » posée sur un rang : la proposition part à l'ouverture.
   if (detail.placement) ouverture.placement = detail.placement
   return ouverture
@@ -54,6 +81,16 @@ export function ouvertureDuPanneau(detail) {
 /** Ouvre Gaston avec un contexte (null : « Tout le potager »). */
 export function ouvrirGastonAvec(contexte, cible = typeof window !== 'undefined' ? window : null) {
   cible?.dispatchEvent(new CustomEvent(EVENEMENT_OUVRIR_COMPAGNON, { detail: { contexte: contexte ?? null } }))
+}
+
+/**
+ * [US-358 / CA1, CA2] Ouvre Gaston sur une porte : `contexte` (identifiants, US-323), `sujet` (bandeau, jamais
+ * envoyé) et `champ` (une phrase PRÉ-ÉCRITE dans la saisie : le jardinier l'envoie lui-même).
+ */
+export function ouvrirGastonSur({ contexte = null, sujet = null, champ = null } = {}, cible = typeof window !== 'undefined' ? window : null) {
+  cible?.dispatchEvent(new CustomEvent(EVENEMENT_OUVRIR_COMPAGNON, {
+    detail: { contexte: contexte ?? null, sujet: sujet ?? null, champ: champ || null, jeton: Date.now() + Math.random() },
+  }))
 }
 
 /**
@@ -79,16 +116,23 @@ export function ouvrirGastonPourPlan({ phrase, contexte = null, plan }, cible = 
   }))
 }
 
-/** « Planche centrale, rang 3 » */
-const lieu = (c) => (c.rang ? `${c.parcelle}, rang ${c.rang}` : c.parcelle)
+/** « Planche centrale · rang 3 » [US-357 / CA3] */
+const lieu = (c) => (c.rang ? `${c.parcelle} · rang ${c.rang}` : c.parcelle)
 
 /**
  * [C2, C3] Le libellé de la barre : « 🥦 Chou de Bruxelles · Planche centrale, rang 3 »,
  * « 📍 Serre », ou « Tout le potager » (avec « Préciser »).
  */
-export function barreDeContexte(contexte) {
+export function barreDeContexte(contexte, sujet = null) {
   const c = normaliserContexte(contexte)
-  if (!c) return { aPropos: false, emoji: '', texte: TEXTE_TOUT_LE_POTAGER, retirable: false, preciser: true }
+  if (!c) {
+    // [US-358] Une porte sans parcelle : « Céleri-rave · catalogue », « Lot n° 12 · Laitue ». Rien n'en part.
+    const s = normaliserSujet(sujet)
+    if (s && s.type !== SUJET.AJOUT && s.texte) {
+      return { aPropos: true, emoji: s.emoji, texte: s.texte, retirable: true, preciser: false }
+    }
+    return { aPropos: false, emoji: '', texte: TEXTE_TOUT_LE_POTAGER, retirable: false, preciser: true }
+  }
   if (c.culture) {
     return {
       aPropos: true,

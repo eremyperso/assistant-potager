@@ -277,4 +277,5 @@ class TestPwa:
         assert 'aria-label="Phrase dictée"' in panneau
 
     def test_us302_ca13_cibles_de_44_px_en_plein_ecran(self):
-        assert "const tailleRonde = plein ? 'h-11 w-11'" in self.PANNEAU.read_text(encoding="utf-8")
+        # [US-357 / CA8] Le micro rond est de 54 px, en plein écran comme sur ordinateur.
+        assert "const tailleRonde = 'h-[54px] w-[54px]'" in self.PANNEAU.read_text(encoding="utf-8")

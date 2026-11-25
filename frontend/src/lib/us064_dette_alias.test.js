@@ -24,7 +24,6 @@ const ECRANS_LOT_B = [
 ]
 
 const COMPOSANTS_TRANSVERSES_US059 = [
-  'components/DateRefPicker.jsx',
   'components/CultureFilter.jsx',
   'components/MetricStrip.jsx',
   'components/Observations.jsx',

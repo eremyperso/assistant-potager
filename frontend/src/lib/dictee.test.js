@@ -271,8 +271,8 @@ test('CA12 — plafond atteint (429) : « Limite de dictées du jour atteinte »
 
 // ── CA13 : maquette, zones tactiles ─────────────────────────────────────────────────────
 
-test('CA13 — 44 px en plein écran, 38 px sur ordinateur, conteneur du panneau', () => {
-  assert.match(PANNEAU, /const tailleRonde = plein \? 'h-11 w-11' : 'h-\[38px\] w-\[38px\]'/)
+test('CA13 — [US-357 / CA8] micro rond de 54 px (mobile comme ordinateur), conteneur du panneau', () => {
+  assert.match(PANNEAU, /const tailleRonde = 'h-\[54px\] w-\[54px\]'/)
   assert.match(PANNEAU, /@container\/compagnon/)
 })
 

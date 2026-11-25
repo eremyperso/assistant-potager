@@ -14,6 +14,7 @@
 // « Plan | Liste » rend la même sélection, et l'ancien onglet « Parcelles » n'existe plus.
 // L'état exact (parcelle, onglet, mode, culture) survit à un aller-retour (US-195 / CA8).
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Leaf, MapPin, ChevronLeft } from 'lucide-react'
 import { api } from '../lib/api.js'
 import {
@@ -22,12 +23,15 @@ import {
   MODE_PLAN, MODE_ZONES, MODE_VIDE, FILTRE_TOUT, MESSAGE_RANG_LIBRE,
 } from '../lib/planDessus.js'
 import { useDateRef } from '../context/AppContext.jsx'
+import { useCoquille, useDeclarerEcran, HotePanneau } from '../context/CoquilleContext.jsx'  // [US-360]
+import { LARGEUR_PANNEAU_PX } from '../lib/coquille.js'
+import { bandeauDuPlan, motDuPlan, parcellesTrouvees, PLACEHOLDER_RECHERCHE_PLAN } from '../lib/planSocle.js'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useNavigation, useIntention, useEtatEcran } from '../context/NavigationContext.jsx'
 import { useMedia } from '../hooks/useMedia.js'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
-import SuiviCulture from '../components/SuiviCulture.jsx'
+import FicheCommune from '../components/FicheCommune.jsx'   // [US-355 / CA1] la même fiche que partout
 import { ParcellePlan, RoseDesVents, EchellePlan } from '../components/PlanDessin.jsx'
 import { LegendeEtapes, LegendeRepliable, Modal } from '../components/ui'
 import { publierSelection, ouvrirGastonPourPlacer, ouvrirGastonAvec, ouvrirGastonPourPlan } from '../lib/contexteCompagnon.js'  // [US-325, US-328, US-330]
@@ -139,7 +143,11 @@ export default function PlanDessus({ refresh }) {
   const { potagerId, potagerActif } = usePotager()
   const { aller, annoncer, signaler } = useNavigation()
   const role = potagerActif?.role
-  const ordinateur = useMedia('(min-width: 1024px)')
+  // [US-353 / CA12, D7] Un panneau droit de 400 px à partir de 900 px ; en dessous, la mise en page mobile.
+  const bureau = useMedia('(min-width: 900px)')
+  const { ouvrirPanneau, fermerPanneau: fermerPanneauPartage, occupant: occupantPartage, hote } = useCoquille()
+  // [US-360 / CA1] La recherche « Parcelle ou culture » de la barre d'outils.
+  const [recherche, setRecherche] = useState('')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -278,10 +286,14 @@ export default function PlanDessus({ refresh }) {
   const meteoJour = meteoDuJour(meteo)
   // [US-329 / CA1] Sous 720 px de conteneur : le chemin mobile. Avant la première mesure, la
   // largeur de la fenêtre en tient lieu (pas de clignotement sur téléphone).
-  const mobile = estCheminMobile(largeurRacine || (typeof window !== 'undefined' ? window.innerWidth : 0))
-  const panneauDroit = ordinateur && !mobile
+  // [US-360 / CA4] Le panneau droit réduit le plan, il ne le fait pas basculer en mobile : sa largeur
+  // est rendue au conteneur pour le calcul.
+  const largeurEffective = (largeurRacine || (typeof window !== 'undefined' ? window.innerWidth : 0))
+    + (bureau && occupantPartage ? LARGEUR_PANNEAU_PX : 0)
+  const mobile = !bureau || estCheminMobile(largeurEffective)
+  const panneauDroit = bureau && !mobile
   // [US-333 / CA7, E7] L'éditeur : un membre éditeur, sur un conteneur de 720 px et plus.
-  const peutEditer = !mobile && peutModifierLePlan(role, largeurRacine || (typeof window !== 'undefined' ? window.innerWidth : 0))
+  const peutEditer = !mobile && peutModifierLePlan(role, largeurEffective)
 
   const encart = useMemo(() => encartMiseEnPlace(data), [data])
   // [US-334 / M3] L'intention `editeur` attend le plan : ouvre l'éditeur s'il est possible ici, sinon l'encart parle.
@@ -290,6 +302,43 @@ export default function PlanDessus({ refresh }) {
     setOuvrirApresChargement(false)
     if (peutEditer) setEdition({ ouverte: true, parcelle: null, guide: estPremiereOuverture(data) })
   }, [ouvrirApresChargement, data, potagerActif, peutEditer])
+
+  // [US-360 / CA2] Le bandeau « Au 23 novembre · … » : suit la règle des temps (`date_ref_effective`).
+  const bandeau = useMemo(() => bandeauDuPlan(entete), [entete.titre, entete.fond, entete.dimension]) // eslint-disable-line react-hooks/exhaustive-deps
+  // [US-360 / CA1] Ce que cherche le jardinier : les parcelles qui y répondent, les autres s'estompent.
+  const trouvees = useMemo(() => parcellesTrouvees(data, recherche), [data, recherche])
+  // [US-360 / CA5] Le mot de Gaston du Plan, calculé sans modèle ; la barre : date et recherche.
+  const mot = useMemo(() => motDuPlan({ taches, engraisVert: data?.engrais_vert }), [taches, data])
+  useDeclarerEcran({
+    mot,
+    barre: { recherche: { placeholder: PLACEHOLDER_RECHERCHE_PLAN, valeur: recherche, onChange: setRecherche } },
+  }, [JSON.stringify(mot), recherche])
+
+  // [US-360 / CA4] Une culture ou une parcelle ouverte sur ordinateur : la fiche vit dans le panneau
+  // droit partagé (un seul occupant, US-353), dessinée ici par portail — l'état de l'écran reste ici.
+  const dansPanneau = panneauDroit && Boolean(choix || parcelleOuverte)
+  const titrePanneau = choix ? `Suivi · ${choix.culture}` : parcelleOuverte?.nom ?? ''
+  const panneauOuvertParMoi = useRef(false)
+  useEffect(() => {
+    if (dansPanneau) {
+      panneauOuvertParMoi.current = true
+      ouvrirPanneau({ cle: 'fiche', titre: titrePanneau, contenu: <HotePanneau /> })
+    } else if (panneauOuvertParMoi.current) {
+      panneauOuvertParMoi.current = false
+      fermerPanneauPartage()
+    }
+  }, [dansPanneau, titrePanneau]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (panneauOuvertParMoi.current) { panneauOuvertParMoi.current = false; fermerPanneauPartage() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Le panneau fermé de l'extérieur (×, Gaston qui s'ouvre) : la sélection de l'écran suit.
+  useEffect(() => {
+    if (occupantPartage || !panneauOuvertParMoi.current) return
+    panneauOuvertParMoi.current = false
+    setEtat({ parcelle: null, culture: null })
+    setFeuille(false)
+    setFeuilleParcelle(false)
+  }, [occupantPartage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading && !data) return <LoadingSkeleton lines={5} />
   if (error) return <ApiError message={error} onRetry={load} />
@@ -360,12 +409,10 @@ export default function PlanDessus({ refresh }) {
   }
 
   const suivi = choix && (
-    <SuiviCulture
+    <FicheCommune
       key={`${choix.parcelleId}|${choix.culture}|${choix.variete || ''}`}
-      selection={choix} dateRef={dateRef} potagerId={potagerId} role={role}
-      compact={!panneauDroit}
-      onClose={fermer}
-      onParcelle={() => { retourParcelle(); setFeuilleParcelle(true) }}
+      selection={choix} publier onFermer={panneauDroit ? undefined : fermer}
+      onVoirAuPlan={() => { retourParcelle(); setFeuilleParcelle(true) }}
       onLot={(numero) => aller('pepiniere', { onglet: 'parcours', lot: String(numero) })}
     />
   )
@@ -380,7 +427,7 @@ export default function PlanDessus({ refresh }) {
       onOnglet={(o) => setEtat({ onglet: o })}
       dateRef={data?.date_ref_effective} vocabulaires={data?.vocabulaires} gestesSol={data?.gestes_sol}
       lectureSeule={!peutEnregistrer(role)} ordinateur={panneauDroit}
-      onFermer={fermerParcelle}
+      onFermer={panneauDroit ? undefined : fermerParcelle}
       onCulture={ouvrirLigne}
       onVoirCulture={(culture) => aller('cultures', { culture })}
       onLot={ouvrirLot}
@@ -410,8 +457,8 @@ export default function PlanDessus({ refresh }) {
   }
 
   const feuilleSuivi = choix && feuille && (
-    <Modal title={`Suivi · ${choix.culture}`} onClose={fermer} disposition="basse" entete={false}
-      bodyClassName="p-4 overflow-y-auto min-h-0">
+    <Modal title={`Fiche · ${choix.culture}`} onClose={fermer} disposition="basse" entete={false}
+      bodyClassName="overflow-y-auto min-h-0">
       {suivi}
     </Modal>
   )
@@ -434,7 +481,7 @@ export default function PlanDessus({ refresh }) {
     return (
       <div ref={racine} className="@container min-w-0 flex flex-col gap-3">
         <EncartMiseEnPlace encart={encart} peutEditer={false} peutEcrire={peutEnregistrer(role)} />
-        <PlanMobile entete={entete} formes={mode === MODE_PLAN ? formes : []} emprise={emprise} angle={angle}
+        <PlanMobile bandeau={bandeau} rose={rose} trouvees={trouvees} formes={mode === MODE_PLAN ? formes : []} emprise={emprise} angle={angle}
           chemin={chemin} taches={taches} largeur={largeurRacine || 343}
           onOuvrir={ouvrirLigne}
           onDetail={(p) => ouvrirParcelle({ id: p.id, nom: p.nom })}
@@ -461,18 +508,14 @@ export default function PlanDessus({ refresh }) {
   }
 
   return (
-    <div ref={racine} className="@container flex flex-col gap-3 lg:flex-row lg:items-start lg:gap-0">
-      <div className="flex-1 min-w-0 flex flex-col gap-3 lg:pr-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-[18px] font-semibold text-txt">
-              {mode === MODE_ZONES ? 'Plan par zones' : entete.titre}
-            </h2>
-            <p className="text-[12.5px] text-txt2 mt-0.5">
-              {mode === MODE_ZONES
-                ? 'Aucune parcelle n’est encore placée : chacune en tuile, dans l’ordre du chemin'
-                : [entete.fond, entete.dimension].filter(Boolean).join(' · ')}
-            </p>
+    <div ref={racine} className="@container flex flex-col gap-3">
+      <div className="flex-1 min-w-0 flex flex-col gap-3">
+        {/* [US-360 / CA2] Le bandeau : « Au 23 novembre · fond … » et l'emprise ; l'en-tête de page porte le titre. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 text-[12.5px] text-txt2" data-bandeau-plan="">
+            <b className="font-bold text-txt">{bandeau.date}</b>{bandeau.fond ? ` · ${bandeau.fond}` : ''}
+            {mode === MODE_ZONES && ' · plan par zones : aucune parcelle n’est encore placée, chacune en tuile dans l’ordre du chemin'}
+            {bandeau.dimension && <span className="ml-3 text-txt3">{bandeau.dimension}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {peutEditer && (
@@ -492,7 +535,7 @@ export default function PlanDessus({ refresh }) {
         <div ref={cadre} className="min-w-0">
           {etat.affichage === AFFICHAGE_LISTE ? (
             // [US-330 / CA4] La liste : toutes les parcelles, posées ou non — même sélection que le plan.
-            <ListeParcelles parcelles={liste} choisie={etat.parcelle}
+            <ListeParcelles parcelles={trouvees ? liste.filter((p) => trouvees.has(p.id)) : liste} choisie={etat.parcelle}
               onChoisir={(id) => ouvrirParcelle({ id })} />
           ) : mode === MODE_PLAN ? (
             // [CA5] Le plan défile dans son cadre, jamais la page.
@@ -502,6 +545,7 @@ export default function PlanDessus({ refresh }) {
                 <div className="absolute inset-0" style={angle ? { transform: `rotate(${angle}deg)` } : undefined}>
                   {formes.map((forme) => (
                     <ParcellePlan key={`${forme.actif ? 'a' : 'i'}-${forme.id}`} forme={forme} u={u} filtre={filtre}
+                      estompee={Boolean(trouvees) && !trouvees.has(forme.id)}
                       choix={choix} parcelleChoisie={etat.parcelle} {...handlers} />
                   ))}
                 </div>
@@ -514,6 +558,7 @@ export default function PlanDessus({ refresh }) {
             <div className="plan-cadre rounded-xl p-5 pt-6 flex flex-wrap gap-x-4 gap-y-6 items-start">
               {tuilesParZones(data).map((t) => (
                 <ParcellePlan key={t.id} forme={t} u={u} filtre={filtre} choix={choix} parcelleChoisie={etat.parcelle} positionnee={false}
+                  estompee={Boolean(trouvees) && !trouvees.has(t.id)}
                   largeurPx={t.largeurPx} hauteurPx={t.hauteurPx} {...handlers} />
               ))}
             </div>
@@ -530,10 +575,18 @@ export default function PlanDessus({ refresh }) {
         <LegendeRepliable className="mt-1"><LegendeEtapes /></LegendeRepliable>
       </div>
 
-      {/* [CA5] Ordinateur : le panneau de droite. Mobile : le suivi en feuille basse. */}
-      {panneauDroit ? (
-        <aside aria-label={choix ? 'Suivi de la culture' : parcelleOuverte ? 'Détail de la parcelle' : 'Aujourd’hui au potager'}
-          className="w-[360px] shrink-0 self-stretch border-l border-border bg-card px-5 py-[18px] rounded-r-xl">
+      {/* [US-360 / CA4] « Aujourd'hui au potager » reste sous le plan (cartes à placer, tâches). La fiche d'une
+          culture ou d'une parcelle s'ouvre dans le panneau droit partagé (portail) sur ordinateur, en feuille
+          sur mobile. */}
+      <section aria-label="Aujourd’hui au potager"
+        className="flex flex-col gap-5 rounded-xl border border-border bg-card px-4 py-4">
+        {panneauAujourdhui}
+        <ParcellesSansPosition aPlacer={mode === MODE_ZONES ? [] : aPlacer} />
+      </section>
+      {!panneauDroit && feuilleDetail}
+      {!panneauDroit && feuilleSuivi}
+      {dansPanneau && hote && createPortal(
+        <div className="px-5 pb-5 pt-12" aria-label={choix ? 'Suivi de la culture' : 'Détail de la parcelle'}>
           {suivi ? (
             <>
               {/* [US-330] Le retour vers la parcelle d'où l'on vient. */}
@@ -543,24 +596,9 @@ export default function PlanDessus({ refresh }) {
               </button>
               {suivi}
             </>
-          ) : detail || (
-            <div className="flex flex-col gap-5">
-              {panneauAujourdhui}
-              <ParcellesSansPosition aPlacer={mode === MODE_ZONES ? [] : aPlacer} />
-            </div>
-          )}
-        </aside>
-      ) : (
-        <>
-          {/* Conteneur de 720 px et plus, écran sous l'ordinateur : le panneau sous le plan. */}
-          <section aria-label="Aujourd’hui au potager"
-            className="flex flex-col gap-5 rounded-xl border border-border bg-card px-4 py-4">
-            {panneauAujourdhui}
-            <ParcellesSansPosition aPlacer={mode === MODE_ZONES ? [] : aPlacer} />
-          </section>
-          {feuilleDetail}
-          {feuilleSuivi}
-        </>
+          ) : detail}
+        </div>,
+        hote,
       )}
     </div>
   )

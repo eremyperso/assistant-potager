@@ -6,6 +6,8 @@ import {
   ScrollText,
   BarChart3,
   Layers,
+  BookOpen,
+  RefreshCcw,
 } from 'lucide-react'
 
 /**
@@ -50,11 +52,17 @@ export const NAV = [
     Icon: Layers,
     title: 'Plan des parcelles',
     sub: 'Vos espaces de culture, leur occupation et leur contenu',
-    // [US-330 / CA1] Plus de sous-navigation : les tuiles « Plan » et « Rotation · à venir » ont été
-    // retirées pour gagner en hauteur. Le détail d'une parcelle s'ouvre dans le Plan, et les anciens
-    // liens (vue `plan`) y sont redirigés (`VUES_REDIRIGEES`, lib/intentions.js).
+    // [US-353 / CA5] Les onglets « Plan » et « Rotation · à venir » reviennent dans l'en-tête (la
+    // maquette « Socle commun » les redessine, compacts sur mobile) ; US-330 les avait retirés. Le
+    // détail d'une parcelle s'ouvre dans le Plan, et les anciens liens (vue `plan`) y sont
+    // redirigés (`VUES_REDIRIGEES`, lib/intentions.js). « Rotation » n'est pas encore une vue :
+    // l'onglet est désactivé, il n'ouvre rien.
     // `entree` : la vue d'ouverture de la section.
     entree: 'plan-vue',
+    subnav: [
+      { id: 'plan-vue', label: 'Plan', icon: Layers },
+      { id: 'plan-rot', label: 'Rotation · à venir', icon: RefreshCcw, disabled: true },
+    ],
   },
   {
     id: 'cultures',
@@ -63,14 +71,21 @@ export const NAV = [
     Icon: Leaf,
     title: 'Mes cultures',
     sub: 'Fiches, variétés et calendrier cultural de la saison',
+    // [US-353 / CA5] Au potager | Catalogue : le catalogue est l'écran d'US-355, son onglet reste
+    // désactivé d'ici là.
+    subnav: [
+      { id: 'cultures', label: 'Au potager', icon: Leaf },
+      { id: 'catalogue', label: 'Catalogue · à venir', icon: BookOpen, disabled: true },
+    ],
   },
   {
     id: 'pepiniere',
     label: 'Pépinière',
     shortLabel: 'Pépinière',
     Icon: Sprout,
-    title: 'Semis & pépinière',
-    sub: 'Suivi des lots semés, de leur stade et des plants disponibles',
+    // [US-356 / CA1] « Ma pépinière » et ses trois onglets, déclarés par la vue (la ligne de contexte change avec l'onglet).
+    title: 'Ma pépinière',
+    sub: 'Châssis froid et serre chaude, lot par lot',
   },
   {
     id: 'stocks',

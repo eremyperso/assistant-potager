@@ -333,9 +333,12 @@ class TestPanneauAtteignable:
         assert "[grid-template-columns:minmax(0,1fr)_420px]" not in source
 
     def test_us242_la_fiche_se_deplie_sous_la_ligne(self):
-        onglet = (RACINE / "frontend" / "src" / "components" / "OngletLots.jsx").read_text(encoding="utf-8")
-        assert "<FicheDepliee" in onglet and "<FichePleinEcran" in onglet
-        assert "aria-expanded={estOuvert}" in onglet
+        # [US-356 / CA11] La fiche d'un lot s'ouvre au format de la fiche commune (panneau droit / feuille) ;
+        # les gestes d'US-216 restent joignables par « Toutes les actions du lot ».
+        vue = self._source()
+        fiche = (RACINE / "frontend" / "src" / "components" / "FicheLotCommune.jsx").read_text(encoding="utf-8")
+        assert "Toutes les actions du lot" in fiche
+        assert "forme=\"modale\"" in vue and "setToutes(true)" in vue
 
 
 # ═════════════════════════════════════════════════════════════════════════════

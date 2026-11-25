@@ -19,18 +19,19 @@ const composant = readFileSync(new URL('../components/ui/EtapeCulture.jsx', impo
 
 // ── CA6 : la table ──────────────────────────────────────────────────────────────
 
-test('[CA6, V1, V2] sept étapes dans l’ordre du cycle, un pictogramme chacune', () => {
+test('[CA6, V1, V2, US-352 CA2b] huit étapes dans l’ordre du cycle, un pictogramme chacune', () => {
   assert.deepEqual(ETAPES.map((e) => e.cle),
-    ['semee', 'levee', 'plantee', 'croissance', 'fleur', 'en_recolte', 'terminee'])
+    ['semee', 'levee', 'en_godet', 'plantee', 'croissance', 'fleur', 'en_recolte', 'terminee'])
   assert.deepEqual(ETAPES.map((e) => e.picto),
-    [PICTO_GRAINE, PICTO_LEVEE, PICTO_PLANT, PICTO_TIGE, PICTO_FLEUR, PICTO_PANIER, PICTO_COCHE])
-  assert.equal(new Set(ETAPES.map((e) => e.picto)).size, 7)
+    [PICTO_GRAINE, PICTO_LEVEE, 'godet', PICTO_PLANT, PICTO_TIGE, PICTO_FLEUR, PICTO_PANIER, PICTO_COCHE])
+  assert.equal(new Set(ETAPES.map((e) => e.picto)).size, 8)
 })
 
 test('[V1] six familles de couleur : Levé et Planté partagent le vert tendre', () => {
   assert.equal(FAMILLES.length, 6)
   assert.equal(new Set(ETAPES.map((e) => e.famille)).size, 6)
   assert.equal(etape('levee').famille, etape('plantee').famille)
+  assert.equal(etape('levee').famille, etape('en_godet').famille)
   assert.notEqual(etape('levee').picto, etape('plantee').picto)
 })
 
@@ -88,7 +89,7 @@ test('[Gherkin 2, V8] quatre états distinguables sans couleur : trame, contour,
     libelleAccessible(null, VARIANTE_A_LIBERER), libelleAccessible(null, VARIANTE_LIBRE),
   ]
   assert.equal(new Set(noms).size, 4)
-  assert.match(css, /\.etape-prevue\s*\{[^}]*repeating-linear-gradient\(45deg/)
+  assert.match(css, /\.etape-prevue\s*\{[^}]*repeating-linear-gradient\(-45deg/)
   assert.match(css, /\.etape-libre\s*\{[^}]*dotted/)
 })
 
@@ -114,7 +115,8 @@ test('[CA4] légende compacte : six étapes, Levé et Planté fusionnés', () =>
 /** Le bloc de déclarations (clair ou sombre) qui porte les jetons d'étape. */
 function jetons(theme) {
   const re = new RegExp(`${theme === 'sombre' ? '\\.dark' : ':root'}\\s*\\{([\\s\\S]*?)\\n  \\}`, 'g')
-  for (const m of css.matchAll(re)) if (m[1].includes('--etape-semee:')) return m[1]
+  const marque = theme === 'sombre' ? '--etape-semee-t:' : '--etape-semee:'
+  for (const m of css.matchAll(re)) if (m[1].includes(marque)) return m[1]
   throw new Error(`jetons ${theme} introuvables`)
 }
 const valeur = (bloc, nom) => {
@@ -137,23 +139,51 @@ const contraste = (a, b) => {
 }
 const melange = (fond, dessus) => fond.map((c, i) => Math.round(c * (1 - dessus.a) + dessus.rgb[i] * dessus.a))
 
+// [US-352 / CA1, CA1b] Les valeurs de la maquette : les fonds sont ceux du clair et NE CHANGENT PAS
+// en sombre, où seule l'encre passe à #16210C.
+const FONDS_MAQUETTE = {
+  semee: '#E6CFA2', levee: '#CDE9A6', croissance: '#86C163', fleur: '#F4D35E', recolte: '#F2A54A', terminee: '#DADAD2',
+}
+
+test('[US-352 / CA1] les six fonds d’étape sont ceux de la maquette', () => {
+  const bloc = jetons('clair')
+  for (const [f, hex] of Object.entries(FONDS_MAQUETTE)) {
+    assert.equal(valeur(bloc, jetonFond(f)).toUpperCase(), hex, f)
+  }
+  assert.equal(valeur(bloc, '--etape-pastille').toUpperCase(), '#D9822B')
+  assert.equal(valeur(bloc, '--etape-filet').toUpperCase(), '#6B7B55')
+})
+
+test('[US-352 / CA1b] en sombre les fonds ne sont pas redéfinis et l’encre est #16210C', () => {
+  const sombre = jetons('sombre')
+  for (const f of FAMILLES) {
+    assert.doesNotMatch(sombre, new RegExp(`${jetonFond(f)}:`), `${f} ne change pas`)
+    assert.equal(valeur(sombre, jetonEncre(f)).toUpperCase(), '#16210C', f)
+  }
+})
+
 for (const theme of ['clair', 'sombre']) {
+  const lire = (nom) => {
+    const sombre = jetons('sombre')
+    const clair = jetons('clair')
+    const m = (theme === 'sombre' ? sombre : clair).match(new RegExp(`${nom}:\\s*([^;]+);`))
+    return (m || clair.match(new RegExp(`${nom}:\\s*([^;]+);`)))[1].trim()
+  }
+
   test(`[CA2] ${theme} : les six familles ont un fond et une encre`, () => {
-    const bloc = jetons(theme)
     for (const f of FAMILLES) {
-      valeur(bloc, jetonFond(f))
-      valeur(bloc, jetonEncre(f))
+      assert.ok(lire(jetonFond(f)))
+      assert.ok(lire(jetonEncre(f)))
     }
-    valeur(bloc, '--etape-trame')
-    valeur(bloc, '--etape-pastille')
+    assert.ok(lire('--etape-trame'))
+    assert.ok(lire('--etape-pastille'))
   })
 
-  test(`[CA5] ${theme} : contraste AA du pictogramme et du libellé, plein et hachuré`, () => {
-    const bloc = jetons(theme)
-    const trame = canaux(valeur(bloc, '--etape-trame'))
+  test(`[CA5, US-352 CA8] ${theme} : contraste d’au moins 4,5:1 du pictogramme et du libellé, plein et hachuré`, () => {
+    const trame = canaux(lire('--etape-trame'))
     for (const f of FAMILLES) {
-      const fond = canaux(valeur(bloc, jetonFond(f))).rgb
-      const encre = canaux(valeur(bloc, jetonEncre(f))).rgb
+      const fond = canaux(lire(jetonFond(f))).rgb
+      const encre = canaux(lire(jetonEncre(f))).rgb
       assert.ok(contraste(fond, encre) >= 4.5, `${f} plein ${contraste(fond, encre).toFixed(2)}`)
       const raye = melange(fond, trame)
       assert.ok(contraste(raye, encre) >= 4.5, `${f} hachuré ${contraste(raye, encre).toFixed(2)}`)
@@ -161,14 +191,12 @@ for (const theme of ['clair', 'sombre']) {
   })
 
   test(`[CA2] ${theme} : les six familles sont distinctes entre elles`, () => {
-    const bloc = jetons(theme)
-    assert.equal(new Set(FAMILLES.map((f) => valeur(bloc, jetonFond(f)))).size, 6)
+    assert.equal(new Set(FAMILLES.map((f) => lire(jetonFond(f)))).size, 6)
   })
 
   test(`[V7] ${theme} : la récolte est plus saturée que le sable, le vert tendre et le gris`, () => {
-    const bloc = jetons(theme)
     const sat = (f) => {
-      const [r, g, b] = canaux(valeur(bloc, jetonFond(f))).rgb
+      const [r, g, b] = canaux(lire(jetonFond(f))).rgb
       const mx = Math.max(r, g, b)
       return mx === 0 ? 0 : (mx - Math.min(r, g, b)) / mx
     }
@@ -184,10 +212,10 @@ test('[CA2] une classe CSS par famille, et aucune couleur en dur dans le composa
 
 // ── CA3 : des SVG, pas des emoji ────────────────────────────────────────────────
 
-test('[CA3] pictogrammes : SVG teinté par currentColor, aucun emoji, sept dessinés', () => {
+test('[CA3] pictogrammes : SVG teinté par currentColor, aucun emoji, huit dessinés', () => {
   assert.match(composant, /stroke="currentColor"/)
   assert.doesNotMatch(composant, /\p{Extended_Pictographic}/u)
-  for (const nom of ['GRAINE', 'LEVEE', 'PLANT', 'TIGE', 'FLEUR', 'PANIER', 'COCHE']) {
+  for (const nom of ['GRAINE', 'LEVEE', 'GODET', 'PLANT', 'TIGE', 'FLEUR', 'PANIER', 'COCHE']) {
     assert.ok(composant.includes(`picto === PICTO_${nom}`), nom)
   }
 })

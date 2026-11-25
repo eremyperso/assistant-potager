@@ -1,3 +1,151 @@
+## [v3.147.0] — 2026-11-25
+
+### 🚀 Nouveautés
+- Ajoute « Aide de la vue » au menu ⋯ de la barre d'outils : une fenêtre par écran (Statistiques, Plan, Cultures, Pépinière, Stocks, Journal) qui renvoie à la section du guide et propose « Demander à Gaston » (US-359).
+- Réécrit le guide utilisateur pour la navigation d'aujourd'hui : l'anatomie d'une page, Noter seule porte vers Gaston, la règle des temps, le menu ⋯ et ses exports, la fiche commune, le catalogue et « Ajouter à mon potager », les Récoltes par saison, les trois onglets de la Pépinière et le mode sombre ; ajoute la section « Les écrans, un par un » (US-359).
+
+### 🔧 Améliorations techniques
+- Met à jour dans le corpus les fiches sur Gaston, sur le journal et sur les cultures (nouvelle section « Ajouter à mon potager une culture du catalogue »), avec quatre questions de mesure dont « où sont les exports ? » (US-099, US-359).
+- Ajoute `docs/EPIC 21 - SOCLE COMMUN DES VUES/03_RECETTE.md` : ce qui a été vérifié sur les écrans du socle (aucun débordement à 375, 768 et 1440 px, clair et sombre) et ce qui reste à regarder (US-359).
+
+### ⚠️ Breaking changes
+- Retire du guide les mentions du médaillon, de « Parcourir », des exports en ligne et de la personnalisation du tableau de bord (US-359).
+
+## [v3.146.0] — 2026-11-25
+
+### 🚀 Nouveautés
+- Ouvre Gaston déjà renseigné depuis chaque porte : la culture sélectionnée ou ouverte, la fiche commune, la levée due, la fiche du lot, une tuile de l'onglet Semer, une action d'un Mot de Gaston, « Ajouter à mon potager » et « Une culture absente du catalogue ? » (US-358).
+- Ajoute la phrase d'ouverture de Gaston (« Vous êtes sur fève. Dites ce que vous voyez, ou touchez une suggestion. »), déduite du contexte sans appel au modèle (US-358).
+- Ajoute les suggestions selon le contexte : Récolte, Semis, Observation sans contexte ; « J'ai vu la levée » et « Pas encore » pour une étape due ; Récolte et Note en récolte ; « Libérer le rang » et Note une fois terminé ; les variétés du catalogue après la réponse de Gaston (US-358).
+- Pré-écrit dans le champ la phrase d'une action (« Ajouter le céleri-rave à mon potager », « Semer l'oignon blanc de Paris en pépinière froide ») : le jardinier l'envoie lui-même (US-358).
+- Affiche au bandeau le sujet d'une porte sans parcelle (« Céleri-rave · catalogue », « Lot n° 12 · Laitue ») sans jamais l'envoyer au serveur ; la croix le retire (US-358).
+
+### 🐛 Corrections
+- Corrige « Noter » depuis une fiche ouverte (culture du Tableau de bord, du Plan ou de Cultures, lot de la Pépinière sur ordinateur) : Gaston s'ouvrait puis se refermait aussitôt, la fiche et Gaston se fermant l'un l'autre ; c'est maintenant la fiche qui cède la place (US-358).
+- Corrige le lien de la fiche d'un lot ouverte depuis le Parcours, qui proposait « Voir au Parcours » et ne menait nulle part : il propose « Voir dans Lots » et ouvre le registre entier sur la colonne de ce lot, qu'il amène en vue ; depuis les Lots, il mène toujours au Parcours (US-358).
+
+### 🔧 Améliorations techniques
+- Ajoute `lib/ouvertureGaston.js` (ouverture et suggestions, fonctions pures) et `ouvrirGastonSur` ; un Mot de Gaston peut porter un `sujet` en plus de sa `phrase` (US-358).
+
+### ⚠️ Breaking changes
+- « Pas encore » ne reporte plus l'étape d'un geste : il propose le report, qui n'est écrit qu'au « Confirmer » (US-358).
+- Le bouton « Semer » d'une tuile de l'onglet Semer ouvre Gaston au lieu de déposer le geste dans la file (US-358).
+
+## [v3.145.1] — 2026-11-25
+
+### 🚀 Nouveautés
+- Refait l'onglet Lots de la Pépinière sur la forme du Parcours : colonnes En cours, À régler, Terminés (la colonne « Tous » disparaît), lignes par mois de semis avec leur teinte, « vide » dans les cases sans lot ; sur mobile, un état à la fois avec les points, les lots groupés par mois (US-356).
+- Les cartes de lot sont les mêmes dans le Parcours et dans Lots : l'icône du lot devant le numéro, et la frise des gestes datés (points passés évidés, dernier plein) (US-356).
+- Pose les icônes retravaillées : la carte pliante pour l'onglet Parcours (celle de « Voir au Parcours ») et l'étiquette de lot pour l'onglet Lots, le titre de sa fiche, les numéros de lot, les variétés, l'origine d'une culture et le Journal (US-356).
+
+### 🔧 Améliorations techniques
+- Ajoute `IconeLot` et `Lot` (`components/ui`), `FriseGestes`, et `matriceRegistre` / `rangeesParMoisDeSemis` / `carteLotDuRegistre` dans `lib/pepiniereSocle.js` (US-356).
+- Met à jour la fiche du corpus sur la pépinière par lot (US-099).
+
+### ⚠️ Breaking changes
+- Retire le filtre « Tous » et le bouton « Voir les lots à régler » du Mot de Gaston de l'onglet Lots : le tableau montre déjà la colonne « À régler » (US-356).
+
+## [v3.145.0] — 2026-11-25
+
+### 🚀 Nouveautés
+- Ajoute la fiche commune d'une culture : la même s'ouvre depuis le Tableau de bord, le Plan, Cultures, les Stocks et le Journal, en panneau droit sur ordinateur et en feuille sur mobile (US-355).
+- Ajoute à la fiche l'onglet Suivi (frise des étapes, carnet de la culture avec ses récoltes, gestes et notes, origine) et l'onglet Référence (calendrier, espacement, rotation, puis Maintenant, Référentiel, Variétés, Voisinages, Bioagresseurs) (US-355).
+- Dit « Pas encore placé » et « Aucune étape notée » pour une culture sans place, et affiche un bandeau quand la composition de la fiche n'a pas pu être lue, chaque section non lue le disant à sa place (US-355).
+- Refait Cultures en deux onglets : « Au potager · n », rangé par ce qui demande une action (À confirmer, À placer, En récolte, En croissance, Semé ou planté, Terminé), et « Catalogue · n », rangé par prochaine fenêtre de semis (US-355).
+- Ajoute le Mot de Gaston de Cultures (les étapes à confirmer et le retard) et celui du Catalogue (la prochaine espèce à semer, « Ajouter le céleri-rave ») (US-355).
+- Ajoute la fiche catalogue : « Pas encore au potager » ou « Au potager », la fenêtre, « Ajouter à mon potager » qui ouvre Gaston sans rien écrire, le calendrier, les variétés, l'espacement et la famille (US-355).
+
+### 🐛 Corrections
+- Corrige « Météo · 3 jours » du Tableau de bord : la carte « Aujourd'hui » montrait les températures de demain, car les prévisions du serveur commencent à demain ; elle affiche maintenant le maximum et le minimum de la journée d'aujourd'hui (US-354).
+
+### 🔧 Améliorations techniques
+- Ajoute `espacement` à `GET /cultures/{culture}/fiche`, en lecture seule et sans migration (US-355).
+- Accélère l'écran Cultures : `GET /cultures/vue?confiance=false` saute l'évaluation de la confiance (trois par espèce du référentiel), que le nouvel écran n'affiche plus ; sans le paramètre, le comportement d'US-204 est inchangé (US-355).
+- Ajoute `lib/ficheCommune.js`, `lib/culturesSocle.js`, `FicheCommune`, `FicheCatalogue`, `ReferenceCulture`, `CarteCultureSocle` et le hook `useFiches` (US-355).
+- Permet à une action du Mot de Gaston de porter une phrase que Gaston reçoit à l'ouverture (US-355).
+- Met à jour les fiches du corpus sur le plan et sur le calendrier (US-099).
+
+### ⚠️ Breaking changes
+- Remplace le suivi de culture du Plan et la fiche culture modale de Cultures par la fiche commune ; une ligne des Stocks ouvre cette fiche au lieu de la fiche calendrier, atteinte par l'onglet Référence (US-355).
+- Retire de Cultures les filtres de mois et de tri, l'onglet « Toutes » et la confiance en étoiles sur les cartes ; les familles passent dans Filtrer (US-355).
+
+## [v3.144.0] — 2026-11-25
+
+### 🚀 Nouveautés
+- Refait le Tableau de bord sur quatre rubriques : « À faire aujourd'hui · n », « Récoltes possibles · n », « Météo · 3 jours » (le jour de gel en ambre) et « Dernières notes du carnet » ; une rubrique vide disparaît (US-354).
+- Ajoute le Mot de Gaston du Tableau de bord : le gel annoncé dans les trois jours, puis les étapes qui attendent votre œil (US-354).
+- Refait les Stocks : quatre chiffres, cartes par famille botanique avec la pastille d'étape de chaque ligne, et recherche, Filtrer (famille, ordre alphabétique, origine) et exports dans la barre d'outils (US-354).
+- Ajoute « Récoltes par saison » : la tuile des kilos récoltés ouvre une barre par année puis les cultures de l'année choisie, dans le panneau droit ou une feuille sur mobile (US-354).
+- Ajoute le Mot de Gaston des Stocks : des godets qui attendent une place depuis plus de trois semaines alors qu'un rang est libre (US-354).
+- Refait le Journal : jours en capitales, notes du jour regroupées (« 3 notes », la première à la main, « 1 sans texte », « + 1 autre »), gestes en ligne avec leur pastille, recherche « Culture, parcelle ou mot » et bilan de la semaine par Gaston (US-354).
+- Fait suivre la date de la règle des temps au Journal, qui l'ignorait jusqu'ici (US-354).
+
+### 🔧 Améliorations techniques
+- Ajoute `commentaire` et `rang` aux événements de `GET /historique`, en lecture seule et sans migration (US-354).
+- Ajoute `lib/accueilSocle.js`, `lib/stocksSocle.js`, `lib/journalSocle.js`, `SectionSocle`, `FeuilleFiltres` et `RecoltesParSaison` (US-354).
+- Met à jour les fiches du corpus sur le Journal et sur les statistiques (US-099).
+
+### ⚠️ Breaking changes
+- Supprime la personnalisation du Tableau de bord (`ModalPersonnaliserDashboard`, `useDashboardWidgets`), les rubriques sans donnée et le conseil du jour ; les préférences déjà enregistrées sont ignorées (US-354).
+- Retire de Stocks le tableau grand écran, les cartes détaillées et la modale des récoltes par variété ; une ligne ouvre la fiche calendrier de sa culture (US-354).
+
+## [v3.143.0] — 2026-11-25
+
+### 🚀 Nouveautés
+- Refait l'écran de Gaston : en-tête clair, bandeau de contexte « Fève · Planche centrale · rang 6 », bulle du jardinier sur papier crème en écriture manuscrite avec « Dicté · 0:06 » ou « Écrit », champ en pilule et micro rond de 54 px (US-357).
+- Regroupe ce que Gaston a compris dans un même tour en une seule carte « À enregistrer », une ligne par proposition avec la pastille de l'étape ; Confirmer les valide l'une après l'autre et dit l'échec sur la ligne concernée (US-357).
+- Ajoute une rangée de pilules au-dessus de la saisie, « Photo · bientôt » toujours en dernier (US-357).
+- Pose le Plan sur le socle : recherche « Parcelle ou culture », bandeau « Au 23 novembre » qui suit la règle des temps, rose des vents sur le plan réduit, légende repliable, et Mot de Gaston « 3 rangs à libérer » (US-360).
+- Ouvre la fiche d'une culture ou d'une parcelle du Plan dans le panneau droit partagé, qui réduit le plan au lieu de le faire basculer en mobile (US-360).
+- Affiche l'étape d'un rang à l'appui long sur le plan réduit et sur les pastilles des cartes, sans ouvrir la fiche (US-360).
+- Passe « Ma pépinière » en trois onglets : Parcours, Semer · n et Lots · n, avec une ligne de contexte propre à chacun (US-356).
+- Montre le Parcours en matrice emplacement × stade sur ordinateur, et un stade à la fois sur mobile (défilement aimanté, points, lots groupés par emplacement) (US-356).
+- Ajoute la carte de lot avec son alerte orange (« Pas levé après 34 j », « Sans emplacement ») et la note du jardinier ; « Durée ? » n'y figure plus (US-356).
+- Ajoute l'onglet Semer : fenêtres ouvertes avec « reste 7 j », cultures écartées avec leur motif (« Graines épuisées : à racheter », « Un lot est déjà en cours (#59) ») et prochaines ouvertures (US-356).
+- Refait le registre des Lots : bilan de la saison, filtres avec leurs comptes (points sur mobile), groupes par mois de semis et frise des gestes datés (US-356).
+- Ouvre la fiche d'un lot au format de la fiche commune (panneau droit ou feuille) avec Noter, Voir au Parcours, gestes datés et carnet du lot (US-356).
+- Ajoute les Mots de Gaston du Parcours, de Semer et des Lots, calculés sans modèle (US-356).
+
+### 🔧 Améliorations techniques
+- Ajoute à la lecture du parcours les champs `a_semer_ecartees` et `prochaines_ouvertures`, et la `note` du lot, sans migration ni route nouvelle (US-356).
+- Ajoute `lib/carteAEnregistrer.js`, `lib/planSocle.js` et `lib/pepiniereSocle.js`, ainsi que `PagerAimante`, `CarteAEnregistrer`, `CarteLot` et `FicheLotCommune` (US-356, US-357, US-360).
+- Permet à une vue de déclarer son en-tête (onglets et ligne de contexte) et de dessiner son contenu dans le panneau partagé par portail (US-356, US-360).
+- Met à jour les fiches du corpus sur la Pépinière et la carte de Gaston (US-099).
+
+### ⚠️ Breaking changes
+- Retire « Aller au lot n° » (remplacé par la recherche « Lot n°, culture ou variété »), la bande des semis et le tiroir des dormants du Parcours, et le panneau interne de 360 px du Plan (US-356, US-360).
+- Ne propose plus « Préciser » dans le bandeau de contexte de Gaston : sans contexte, le bandeau n'est pas affiché (US-357).
+
+## [v3.142.0] — 2026-11-24
+
+### 🚀 Nouveautés
+- Pose la coquille commune : chaque écran a le même en-tête, le même Mot de Gaston, la même barre d'outils (date, recherche, Filtrer, ⋯) et un contenu qui défile seul (US-353).
+- Remplace le médaillon flottant de Gaston par Noter, le seul bouton rond : au centre de la barre basse sur mobile, en bas à droite sur ordinateur, avec la pastille de la culture (ou le micro) et les messages non lus (US-353).
+- Ajoute le Mot de Gaston, calculé sans modèle : deux phrases au plus, une à trois actions, absent quand Gaston n'a rien à dire (US-353).
+- Ouvre la règle des temps juste sous la barre d'outils dans toutes les vues ; le bouton date passe en ambre avec la date courte, et le glissé à la souris continue sur son élan (US-353).
+- Ajoute un panneau partagé de 400 px sur ordinateur et une feuille montante sur mobile, où Gaston s'ouvre en plein écran (US-353).
+- Rend la barre du bas plus lisible : pastille verte derrière l'onglet actif, « Plus » qui prend le nom de la vue rangée dessous ; l'onglet actif du bandeau est une pastille blanche (US-353).
+- Rétablit les onglets « Plan » et « Rotation · à venir », et ajoute « Au potager » et « Catalogue · à venir » dans Cultures (US-353).
+
+### 🔧 Améliorations techniques
+- Supprime `BoutonCompagnon`, `DateRefPicker` et `BarreActivitePlan` ; les vues déclarent leur mot et leur barre par `useDeclarerEcran` (US-353).
+- Ajoute `lib/motDeGaston.js` (contrat, règle commune gel > étape due > manque de donnée) et `lib/coquille.js`, couverts par `lib/socle353.test.js` (US-353).
+- Met à jour les fiches du corpus sur Noter, le panneau de Gaston et la règle des temps (US-099).
+
+## [v3.141.0] — 2026-11-24
+
+### 🚀 Nouveautés
+- Ajoute la pastille d'étape de la maquette (carré arrondi, hachurée quand l'étape est prévue, point orange quand elle est due) et la puce d'étape, avec « En godet » pour la pépinière (US-352).
+- Ajoute le calendrier de l'année aux cinq couleurs de geste, le mois courant cerclé ; il remplace la frise des cartes de Cultures et de la fiche Référence (US-352).
+- Affiche l'étape en clair au survol et à l'appui long de 380 ms sur une pastille, un rang du plan ou une case du calendrier, sans ouvrir ce qui est dessous (US-352).
+- Ajoute la note du carnet (papier crème, encre bleue, Kalam) et la légende repliable commune (US-352).
+- Réactive le mode sombre avec les couleurs de la maquette : les couleurs d'étape ne changent pas, les boutons pleins gardent leur vert (US-352).
+- Réserve la police Kalam au texte du jardinier : le nom de Gaston, le titre des cartes de proposition, « Mode Support » et « auj. » de la règle des temps passent en Lora ou en police système (US-352).
+
+### 🔧 Améliorations techniques
+- Ajoute les jetons `--due`, `--amb-*`, `--ink`, `--paper`, `--pep`, `--soil` et la correspondance des stades de pépinière vers le langage d'étape (US-352).
+- Ajoute `lib/socle352.test.js`, qui vérifie les jetons, l'appui long et recense les usages de `font-hand` (US-352).
+
 ## [v3.140.0] — 2026-11-23
 
 ### 🚀 Nouveautés

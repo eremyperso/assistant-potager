@@ -2,7 +2,7 @@
  * Bouton du design system [US-052] — 4 variantes : primary, ghost, soft, quiet.
  */
 const KINDS = {
-  primary: 'bg-brand text-white dark:text-bg border border-brand',
+  primary: 'bg-brand text-white border border-brand',
   ghost: 'bg-card text-txt2 border border-border',
   soft: 'bg-brand-soft text-brand-text border border-transparent',
   quiet: 'bg-transparent text-txt3 border border-transparent',

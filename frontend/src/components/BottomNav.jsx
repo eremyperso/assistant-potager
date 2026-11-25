@@ -1,51 +1,37 @@
 import { useState } from 'react'
-import { MoreHorizontal, Mic, Pencil } from 'lucide-react'
+import { MoreHorizontal } from 'lucide-react'
 import { NAV_OF, NOTER, barreBasse } from '../navigation.js'
-import { useNotifier } from '../context/NotificationsContext.jsx'
-import { usePotager } from '../context/PotagerContext.jsx'
-import { peutEnregistrer } from '../lib/gestes.js'
-import { ouvrirGastonAvec, pastilleNoter, TEXTE_PEPINIERE_NOTER } from '../lib/contexteCompagnon.js'
+import { entreePlus } from '../lib/coquille.js'
+import BoutonNoter from './BoutonNoter.jsx'
 
 /**
- * Barre d'onglets basse [US-053 / CA1, US-325].
+ * Barre d'onglets basse [US-053 / CA1, US-325, US-353 / CA2].
  *
- * Visible uniquement sous 900px : au-delà, la navigation principale remonte
- * dans le bandeau supérieur, inchangée. [US-325] Accueil, Plan, **Noter** au centre,
- * Pépinière, puis « Plus » (Cultures, Stocks, Journal — arbitrage P1).
+ * Visible uniquement sous 900 px : au-delà, la navigation principale remonte dans le bandeau
+ * supérieur. Accueil, Plan, **Noter** (rond de 62 px en dégradé, qui déborde de 30 px), Pépinière,
+ * puis « Plus ». L'onglet actif a une **pastille verte de 56 × 30** derrière l'icône. Quand la vue
+ * active est rangée sous « Plus » (Cultures, Stocks, Journal), ce bouton prend son nom, son icône
+ * et la pastille.
  *
- * « Noter » est une ACTION, jamais l'onglet courant : il ouvre Gaston (US-324) avec la
- * sélection courante de l'écran Plan pour contexte (US-323), ou « Tout le potager ».
+ * « Noter » est une ACTION, jamais l'onglet courant (voir `BoutonNoter`).
  */
-export default function BottomNav({ view, onGo, selection = null }) {
+export default function BottomNav({ view, onGo, selection = null, nonLus = 0 }) {
   const [plusOuvert, setPlusOuvert] = useState(false)
-  const { notifier } = useNotifier()
-  // [US-324 / CA9] Un membre en lecture seule ne note rien : « Noter » ne lui est pas proposé.
-  const { potagerActif } = usePotager()
-  const ecrire = peutEnregistrer(potagerActif?.role)
 
   const { principales, secondaires } = barreBasse()
   const navId = NAV_OF[view]
-  const dansSecondaires = secondaires.some((n) => n.id === navId)
+  const rangee = entreePlus(navId, secondaires)
 
   const aller = (id) => {
     setPlusOuvert(false)
     onGo(id)
   }
 
-  const pastille = pastilleNoter(selection)
-  const noter = () => {
-    setPlusOuvert(false)
-    if (pastille.sorte === 'pepiniere') {
-      // [US-325] Sur une parcelle pépinière : les lots se notent dans Ma pépinière.
-      notifier({ tone: 'blue', titre: TEXTE_PEPINIERE_NOTER, cle: 'noter-pepiniere' })
-      onGo('pepiniere')
-      return
-    }
-    ouvrirGastonAvec(selection)
-  }
+  const PlusIcone = rangee?.Icon ?? MoreHorizontal
+  const plusActif = Boolean(rangee)
 
   return (
-    <div className="shrink-0 relative nav:hidden">
+    <div className="shrink-0 relative nav:hidden z-20">
       {plusOuvert && (
         <>
           {/* Zone de fermeture au clic — limitée à ce qui est AU-DESSUS de la barre
@@ -78,36 +64,13 @@ export default function BottomNav({ view, onGo, selection = null }) {
       )}
 
       <nav
-        className="flex bg-surface border-t border-border"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="flex border-t border-border bg-surface"
+        style={{ paddingBottom: 'max(18px, env(safe-area-inset-bottom, 0px))' }}
         aria-label="Navigation principale"
       >
         {principales.map((entree) => {
           if (entree.id === NOTER.id) {
-            if (!ecrire) return null
-            return (
-              /* [US-325 / CA2, CA5] Mis en avant, jamais « courant » ; 44 px au pouce, focus visible. */
-              <div key={NOTER.id} className="flex flex-1 justify-center">
-                <button
-                  type="button"
-                  onClick={noter}
-                  aria-label={NOTER.label}
-                  title={NOTER.label}
-                  className="relative -mt-3 flex min-h-[44px] min-w-[44px] flex-col items-center gap-0.5 rounded-2xl bg-brand px-3.5 pb-1.5 pt-2 text-[10px] font-bold text-white shadow-[0_6px_16px_rgba(22,33,12,.25)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand dark:text-bg"
-                >
-                  <Pencil size={19} strokeWidth={2.2} aria-hidden="true" />
-                  {NOTER.shortLabel}
-                  {/* La sélection courante : l'emoji de la culture, l'épingle d'une parcelle, le micro sinon. */}
-                  <span
-                    className="absolute -right-1.5 -top-1.5 flex h-[22px] min-w-[22px] items-center justify-center rounded-full border-2 border-surface bg-[var(--gst-bulle,#fff)] text-[12px] leading-none text-brand-text"
-                    aria-hidden="true"
-                    data-pastille={pastille.sorte}
-                  >
-                    {pastille.emoji || <Mic size={12} strokeWidth={2.4} />}
-                  </span>
-                </button>
-              </div>
-            )
+            return <BoutonNoter key={NOTER.id} variante="barre" selection={selection} nonLus={nonLus} onGo={onGo} />
           }
           const { id, shortLabel, label, Icon } = entree
           const on = id === navId
@@ -117,11 +80,13 @@ export default function BottomNav({ view, onGo, selection = null }) {
               onClick={() => aller(id)}
               aria-label={label}
               aria-current={on ? 'page' : undefined}
-              className={`flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1.5 text-[10px] transition-colors ${
-                on ? 'text-brand-text font-bold' : 'text-txt3 font-medium'
+              className={`flex flex-1 flex-col items-center gap-[3px] pt-2 text-[10.5px] transition-colors ${
+                on ? 'font-bold text-brand-deep' : 'font-medium text-txt3'
               }`}
             >
-              <Icon size={21} strokeWidth={on ? 2 : 1.7} className={on ? 'text-brand' : 'text-txt3'} />
+              <span className={`bn-ind ${on ? 'actif' : ''}`}>
+                <Icon size={21} strokeWidth={on ? 2 : 1.7} className={on ? 'text-brand' : 'text-txt3'} />
+              </span>
               {shortLabel}
             </button>
           )
@@ -129,18 +94,17 @@ export default function BottomNav({ view, onGo, selection = null }) {
 
         <button
           onClick={() => setPlusOuvert((o) => !o)}
-          aria-label="Plus de sections"
+          aria-label={rangee ? `${rangee.label}, plus de sections` : 'Plus de sections'}
           aria-expanded={plusOuvert}
-          className={`flex flex-1 flex-col items-center gap-1 pt-2.5 pb-1.5 text-[10px] transition-colors ${
-            dansSecondaires || plusOuvert ? 'text-brand-text font-bold' : 'text-txt3 font-medium'
+          aria-current={rangee ? 'page' : undefined}
+          className={`flex flex-1 flex-col items-center gap-[3px] pt-2 text-[10.5px] transition-colors ${
+            plusActif || plusOuvert ? 'font-bold text-brand-deep' : 'font-medium text-txt3'
           }`}
         >
-          <MoreHorizontal
-            size={21}
-            strokeWidth={dansSecondaires || plusOuvert ? 2.4 : 2}
-            className={dansSecondaires || plusOuvert ? 'text-brand' : 'text-txt3'}
-          />
-          Plus
+          <span className={`bn-ind ${plusActif || plusOuvert ? 'actif' : ''}`}>
+            <PlusIcone size={21} strokeWidth={plusActif ? 2 : 1.7} className={plusActif || plusOuvert ? 'text-brand' : 'text-txt3'} />
+          </span>
+          {rangee ? rangee.shortLabel : 'Plus'}
         </button>
       </nav>
     </div>

@@ -1,5 +1,6 @@
 import {
   etape as lireEtape, classesSegment, libelleAccessible, entreesLegende,
+  etatPastille, nomPastille, texteInfobulleEtape, classeEtape, PICTO_GODET,
   VARIANTE_PLEIN, VARIANTE_PREVU, VARIANTE_A_CONFIRMER, VARIANTE_A_LIBERER, VARIANTE_LIBRE,
   PICTO_GRAINE, PICTO_LEVEE, PICTO_PLANT, PICTO_TIGE, PICTO_FLEUR, PICTO_PANIER, PICTO_COCHE,
   ETAPE_TERMINEE,
@@ -39,6 +40,10 @@ export function PictoEtape({ picto, taille = 14, className = '' }) {
         <circle cx="8.2" cy="8.6" r="1.9" />
         <circle cx="15.8" cy="8.6" r="1.9" />
       </>}
+      {picto === PICTO_GODET && <>
+        <path d="M5.25 11.25h13.5l-1.95 9.75H7.2zM12 11.25V6.75" />
+        <path d="M12 8.25c0-2.4 1.65-3.9 4.5-3.9 0 2.4-1.65 3.9-4.5 3.9zM12 9.3C12 7.35 10.5 6 8.1 6c0 1.95 1.5 3.3 3.9 3.3z" />
+      </>}
       {picto === PICTO_PANIER && (
         <path d="M3 10h18l-1.7 9.2a2 2 0 0 1-2 1.6H6.7a2 2 0 0 1-2-1.6zM8 10l3-6.5M16 10l-3-6.5M9 14.5v2.5M15 14.5v2.5" />
       )}
@@ -75,6 +80,13 @@ export function EtiquetteEtape({ etape, prevue = false, small = false, className
   )
 }
 
+/** [US-352 / CA4] Le texte lu au survol / à l'appui long d'un segment (un rang du plan). */
+function infobulleSegment(cle, variante) {
+  if (variante === VARIANTE_LIBRE) return 'Rang libre'
+  if (variante === VARIANTE_A_LIBERER) return 'Terminé · rang à libérer'
+  return texteInfobulleEtape(cle, etatPastille(variante))
+}
+
 /**
  * Segment d'étape [US-321 / CA1] : la bande colorée d'un rang ou d'une ligne de
  * suivi. Cinq états (V3-V6) — `plein`, `prevu`, `a_confirmer` (pastille orange),
@@ -94,7 +106,7 @@ export function SegmentEtape({ etape, variante = VARIANTE_PLEIN, className = '' 
   return (
     <span className={`@container relative block min-w-0 ${className}`}>
       <span
-        role="img" aria-label={nom} title={nom}
+        role="img" aria-label={nom} title={nom} data-tip={infobulleSegment(cle, variante)}
         data-etape={cle || 'libre'} data-variante={variante}
         className={`flex items-center justify-center gap-1.5 h-7 px-1.5 rounded-md overflow-hidden text-[11.5px] font-semibold whitespace-nowrap ${classesSegment(cle, variante)}`}
       >
@@ -142,5 +154,45 @@ export function LegendeEtapes({ compact = false, className = '' }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * Pastille d'étape [US-352 / CA2] : carré arrondi de 40 px (30 px en `petite`), fond de
+ * l'étape, pictogramme de 21 px (16 px). `prevue` : hachurée à −45° avec filet ; `due` : point
+ * orange de 11 px cerclé. Nom accessible « Levé, prévu, dû » (CA8) ; au survol et à l'appui long,
+ * l'étape en clair (CA4). Aucune couleur écrite ici : tout vient des tokens `etape-*`.
+ */
+export function PastilleEtape({ etape, prevue = false, due = false, petite = false, className = '' }) {
+  const e = lireEtape(etape)
+  if (!e) return null
+  const nom = nomPastille(e.cle, { prevue, due })
+  return (
+    <span
+      role="img" aria-label={nom} data-tip={texteInfobulleEtape(e.cle, { prevue, due })}
+      data-etape={e.cle} data-prevue={prevue || undefined} data-due={due || undefined}
+      className={`pastille-etape ${petite ? 'petite' : ''} ${classeEtape(e.cle)} ${prevue ? 'etape-prevue' : ''} ${className}`}
+    >
+      <PictoEtape picto={e.picto} taille={petite ? 16 : 21} />
+      {due && <i className="pastille-point" aria-hidden="true" />}
+    </span>
+  )
+}
+
+/**
+ * Puce d'étape [US-352 / CA2] : pilule avec pictogramme et libellé ; `prevue` la hachure et
+ * ajoute « · prévu ». `petite` : 11 px.
+ */
+export function PuceEtape({ etape, prevue = false, petite = false, className = '' }) {
+  const e = lireEtape(etape)
+  if (!e) return null
+  return (
+    <span
+      data-etape={e.cle} data-prevue={prevue || undefined}
+      className={`puce-etape ${petite ? 'petite' : ''} ${classeEtape(e.cle)} ${prevue ? 'etape-prevue' : ''} ${className}`}
+    >
+      <PictoEtape picto={e.picto} />
+      {e.libelle}{prevue ? ' · prévu' : ''}
+    </span>
   )
 }

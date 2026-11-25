@@ -3,7 +3,6 @@ import { api } from '../lib/api.js'
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useTheme } from '../hooks/useTheme.js'
-import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import { LegendeRepliable } from '../components/ui'
 
@@ -672,7 +671,6 @@ export default function Stats({ refresh }) {
     <div className="space-y-3">
       {/* [filtre commun] cohérent avec Plan/Pépinière/etc. */}
       <div className="flex items-center gap-2 mb-1">
-        <DateRefPicker />
         <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
       </div>
 

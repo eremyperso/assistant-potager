@@ -36,7 +36,7 @@ Un récapitulatif est proposé avant tout enregistrement, reprenant ce qui a ét
 ## Enregistrer plusieurs gestes d'un coup
 
 **Intention :** procédure
-**On parle aussi de :** plusieurs actions ; à la suite ; en une fois ; retour à la ligne
+**On parle aussi de :** plusieurs actions ; annoncer plusieurs choses dans un seul message ; à la suite ; en une fois ; retour à la ligne
 
 Plusieurs gestes peuvent être annoncés dans le même message, à raison d'un par ligne. Chacun est analysé séparément et présenté à la validation avec les autres, ce qui évite d'avoir à revenir six fois au téléphone après une matinée bien remplie.
 

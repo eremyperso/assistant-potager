@@ -10,6 +10,8 @@
 export const ETAPE_SEMEE = 'semee'
 export const ETAPE_LEVEE = 'levee'
 export const ETAPE_PLANTEE = 'plantee'
+/** [US-352 / CA2b] Plant en godet : étape de la pépinière, mêmes couleurs que Levé. */
+export const ETAPE_EN_GODET = 'en_godet'
 export const ETAPE_CROISSANCE = 'croissance'
 export const ETAPE_FLEUR = 'fleur'
 export const ETAPE_EN_RECOLTE = 'en_recolte'
@@ -19,19 +21,22 @@ export const ETAPE_TERMINEE = 'terminee'
 export const PICTO_GRAINE = 'graine'
 export const PICTO_LEVEE = 'levee'
 export const PICTO_PLANT = 'plant'
+export const PICTO_GODET = 'godet'
 export const PICTO_TIGE = 'tige'
 export const PICTO_FLEUR = 'fleur'
 export const PICTO_PANIER = 'panier'
 export const PICTO_COCHE = 'coche'
 
 /**
- * [V1, V2] Sept étapes, six familles de couleur : Levé et Planté partagent le vert
- * tendre, et c'est le pictogramme (levée / plant) qui les distingue. Dans l'ordre du
+ * [V1, V2] Huit étapes, six familles de couleur : Levé, En godet et Planté partagent le
+ * vert tendre, et c'est le pictogramme (levée / godet / plant) qui les distingue.
+ * [US-352 / CA2b] « En godet » est l'étape de la pépinière ajoutée au langage. Dans l'ordre du
  * cycle, qui est aussi celui de la légende (CA4).
  */
 export const ETAPES = Object.freeze([
   Object.freeze({ cle: ETAPE_SEMEE, libelle: 'Semé', famille: 'semee', picto: PICTO_GRAINE }),
   Object.freeze({ cle: ETAPE_LEVEE, libelle: 'Levé', famille: 'levee', picto: PICTO_LEVEE }),
+  Object.freeze({ cle: ETAPE_EN_GODET, libelle: 'En godet', famille: 'levee', picto: PICTO_GODET }),
   Object.freeze({ cle: ETAPE_PLANTEE, libelle: 'Planté', famille: 'levee', picto: PICTO_PLANT }),
   Object.freeze({ cle: ETAPE_CROISSANCE, libelle: 'En croissance', famille: 'croissance', picto: PICTO_TIGE }),
   Object.freeze({ cle: ETAPE_FLEUR, libelle: 'En fleur', famille: 'fleur', picto: PICTO_FLEUR }),
@@ -130,6 +135,7 @@ export function libelleAccessible(cle, v) {
  */
 export function entreesLegende({ compact = false } = {}) {
   const etapes = ETAPES
+    .filter((e) => e.cle !== ETAPE_EN_GODET)
     .filter((e) => !(compact && e.cle === ETAPE_PLANTEE))
     .map((e) => (compact && e.cle === ETAPE_LEVEE
       ? { type: 'etape', cle: e.cle, libelle: 'Levé / Planté', famille: e.famille, picto: e.picto }
@@ -140,4 +146,53 @@ export function entreesLegende({ compact = false } = {}) {
     { type: 'pastille', libelle: 'à confirmer aujourd’hui' },
     { type: 'libre', libelle: 'rang libre' },
   ]
+}
+
+// ── [US-352] Pastille, puce, infobulle : le langage en mots ─────────────────────
+
+/**
+ * [US-352 / CA2b] Les stades de la pépinière se lisent dans le langage d'étape :
+ * En levée → Levé, En godet → En godet, Endurcissement → En croissance, Prêt à sortir
+ * → Planté, Terminé → Terminé. Cette correspondance remplace la palette propre de
+ * `lib/parcours.js` (motifs `sem/god/end/frk`), que l'onglet Parcours lit encore
+ * jusqu'à sa refonte (US-356).
+ */
+export const ETAPE_DU_STADE = Object.freeze({
+  levee: ETAPE_LEVEE,
+  godet: ETAPE_EN_GODET,
+  endurcissement: ETAPE_CROISSANCE,
+  pret: ETAPE_PLANTEE,
+  terminee: ETAPE_TERMINEE,
+  termine: ETAPE_TERMINEE,
+})
+
+/** L'étape du langage commun pour un stade de pépinière, ou `null` s'il est inconnu. */
+export const etapeDuStade = (stade) => ETAPE_DU_STADE[stade] || null
+
+/** Ce que dessine une pastille d'après une variante (V3-V6) : prévue, due. */
+export function etatPastille(v) {
+  return {
+    prevue: v === VARIANTE_PREVU || v === VARIANTE_A_CONFIRMER,
+    due: v === VARIANTE_A_CONFIRMER,
+  }
+}
+
+/**
+ * [US-352 / CA8] Le nom accessible d'une pastille : « Levé, prévu, dû ». Le libellé
+ * d'abord, l'état ensuite — jamais la couleur seule.
+ */
+export function nomPastille(cle, { prevue = false, due = false } = {}) {
+  const nom = libelleEtape(cle)
+  if (!nom) return ''
+  return `${nom}${prevue ? ', prévu' : ''}${due ? ', dû' : ''}`
+}
+
+/**
+ * [US-352 / CA4] Le texte de l'infobulle d'une pastille, en clair :
+ * « Levé · prévu, à confirmer · dû aujourd'hui ».
+ */
+export function texteInfobulleEtape(cle, { prevue = false, due = false } = {}) {
+  const nom = libelleEtape(cle)
+  if (!nom) return ''
+  return `${nom}${prevue ? ' · prévu, à confirmer' : ''}${due ? ' · dû aujourd’hui' : ''}`
 }

@@ -55,7 +55,9 @@ test('[CA1] sous 720 px de conteneur, le chemin mobile', () => {
   assert.equal(estCheminMobile(0), false)
   // Container query : la vue mesure son conteneur, aucune media query ne décide de la bascule.
   const vue = lire('../views/PlanDessus.jsx')
-  assert.match(vue, /estCheminMobile\(largeurRacine/)
+  // [US-360] La largeur du conteneur, à laquelle on rend celle du panneau droit quand il est ouvert ;
+  // sous 900 px de fenêtre, la mise en page mobile (D7).
+  assert.match(vue, /estCheminMobile\(largeurEffective\)/)
   // (chaînes littérales : Tailwind lit aussi ce fichier, un motif échappé y deviendrait une classe)
   assert.ok(vue.includes('className="' + '@' + 'container'))
 })

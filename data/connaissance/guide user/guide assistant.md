@@ -306,24 +306,27 @@ L'icône apparaît sur votre écran d'accueil. Vous pouvez maintenant l'ouvrir d
 
 Le tableau de bord est conçu **pour le pouce** sur téléphone, et s'étale en largeur sur grand écran.
 
-- **Les écrans de consultation** : Tableau de bord (vue d'ensemble et statistiques), Plan, Cultures, Pépinière, Stocks et Journal. En bandeau haut sur ordinateur. Sur téléphone, la barre d'onglets basse porte **Accueil**, **Plan**, le bouton **Noter** au centre, **Pépinière** et **Plus**, qui ouvre Cultures, Stocks et Journal.
-- **Le plan vu du dessus** : la Vue plan dessine chaque parcelle à sa place, à l'échelle, et chaque rang en segments colorés selon l'étape de la culture (hachuré : prévu ; pastille orange : à confirmer). Toucher une culture ouvre son suivi — origine, étapes, récolté, notes — et un bouton « Noter » ; une parcelle sans position est listée « à placer ». Toucher le nom d'une parcelle ouvre son détail dans le Plan — en place, caractéristiques (modifiables), rotation, entretien — et la bascule « Plan | Liste » montre les mêmes parcelles en liste : l'ancien onglet « Parcelles » n'existe plus.
+- **L'anatomie d'une page** : toutes les pages se lisent de la même façon, de haut en bas. Un **en-tête** (le nom de la page et son sous-titre), le **Mot de Gaston** (une ou deux phrases sur ce que Gaston sait de CET écran, avec une à trois actions ; la croix le masque pour la session), puis la **barre d'outils** — la date, la recherche, **Filtrer** (réduit à son icône sur un écran étroit) et le menu **⋯** —, et enfin le contenu. Les trois premières bandes restent en place ; seul le contenu défile. Le Tableau de bord n'a pas de barre d'outils.
+- **Les écrans de consultation** : Tableau de bord (vue d'ensemble et statistiques), Plan, Cultures (Au potager et Catalogue), Pépinière (Parcours, Semer et Lots), Stocks (avec les Récoltes par saison) et Journal. En bandeau haut sur ordinateur. Sur téléphone, la barre d'onglets basse porte **Accueil**, **Plan**, **Pépinière** et **Plus**, qui ouvre Cultures, Stocks et Journal.
+- **Noter, seule porte vers Gaston** : un seul bouton rond, **Noter**, ouvre Gaston, déjà renseigné (section 17.6 quater). Tout passe par lui, ou par l'action d'un Mot de Gaston.
+- **Le menu ⋯ de la barre d'outils** : **Exporter en CSV** et **Exporter en JSON** (sur les écrans qui exportent : Stocks, Journal), puis **Aide de la vue**, qui ouvre l'aide de l'écran où vous êtes. Les exports ne sont plus en ligne dans la page : ils reprennent exactement ce qui est à l'écran, filtres appliqués.
+- **Le plan vu du dessus** : la Vue plan dessine chaque parcelle à sa place, à l'échelle, et chaque rang en segments colorés selon l'étape de la culture (hachuré : prévu ; pastille orange : à confirmer). Toucher une culture ouvre sa **fiche commune** — la même depuis le Plan, Cultures, les Stocks, le Journal et le Tableau de bord — et un bouton « Noter » ; une parcelle sans position est listée « à placer ». Toucher le nom d'une parcelle ouvre son détail dans le Plan — en place, caractéristiques (modifiables), rotation, entretien — et la bascule « Plan | Liste » montre les mêmes parcelles en liste : l'ancien onglet « Parcelles » n'existe plus.
 - **Un écran annoncé mais pas encore disponible** : Rotation. Il reste visible, grisé, plutôt qu'un lien mort — en attendant, `/rotation` répond depuis Telegram.
-- **Un sélecteur de date de référence** en tête d'écran, pour remonter dans le temps.
+- **La règle des temps**, ouverte par le bouton date « Aujourd'hui » de la barre d'outils, pour remonter dans le temps (section 4.4).
 - **Un filtre par culture** sur les écrans qui listent des cultures.
-- **Un thème clair et un thème sombre**, votre choix est mémorisé.
+- **Un thème clair et un thème sombre** (menu du compte) ; votre choix est mémorisé. Les couleurs d'étape d'une culture sont les mêmes dans les deux thèmes.
 
 ## 4.4 La date de référence — voir le potager dans le passé
 
 C'est la fonction la plus puissante du tableau de bord, et la plus facile à manquer.
 
-En haut de l'écran, un bouton affiche **« Aujourd'hui »**. Touchez-le : un calendrier s'ouvre, et vous choisissez n'importe quelle date passée. Les écrans se recalculent alors comme si vous étiez ce jour-là.
+Dans la barre d'outils, un bouton affiche **« Aujourd'hui »**. Touchez-le : la **règle des temps** s'ouvre sous la barre, et vous choisissez n'importe quelle date passée. Les écrans se recalculent alors comme si vous étiez ce jour-là.
 
 - Le bouton **change de couleur (ambre)** pour vous rappeler en permanence que vous n'êtes plus « en direct ».
 - La date **vous suit d'un écran à l'autre** : réglée sur le Plan, elle reste active sur Stocks et Pépinière.
 - Elle **survit à un rechargement** de page.
 - Les dates futures ne sont pas sélectionnables.
-- Pour revenir au présent, rouvrez le calendrier et touchez **« Aujourd'hui »**.
+- Pour revenir au présent, rouvrez la règle des temps et touchez **« Aujourd'hui »**.
 - L'écran **Journal** fait exception : il a son propre filtre de date, indépendant.
 
 **Usages concrets :** comparer l'occupation de vos parcelles à la même date l'an dernier, retrouver l'état de votre pépinière au moment d'une vente de plants, vérifier ce qui poussait avant un arrachage.
@@ -336,6 +339,28 @@ La même chose est possible depuis Telegram, en donnant une date à `/plan` ou `
 ```
 
 Le **filtre par culture**, lui, ne suit pas : il est propre à chaque écran et se remet à zéro quand vous changez de section. C'est volontaire — on filtre pour une consultation ponctuelle, pas pour une session entière.
+
+## 4.5 Les écrans, un par un
+
+Chaque écran a sa section ici, et son **Aide de la vue** (menu ⋯) l'ouvre. Tous suivent l'anatomie de la section 4.3.
+
+**Tableau de bord.** La vue d'ensemble de votre potager : ce qui demande votre œil aujourd'hui, la « Météo · 3 jours » (le jour de gel en ambre) et les dernières notes du carnet. Une section vide disparaît. Il n'a ni barre d'outils ni personnalisation : il se range de lui-même.
+
+**Plan.** Le potager vu du dessus, parcelle par parcelle. La **règle des temps** (bouton « Aujourd'hui ») remonte dans le passé ; toucher une culture ouvre sa fiche commune, toucher une parcelle son détail.
+
+**Cultures · Au potager.** Vos cultures rangées par ce qui demande une action : À confirmer, À placer, En récolte, En croissance, Semé ou planté, Terminé.
+
+**Cultures · Catalogue.** Toutes les espèces du référentiel, rangées par prochaine fenêtre de semis. Toucher une espèce ouvre sa **fiche catalogue** : « Pas encore au potager » ou « Au potager », la fenêtre, le calendrier, les variétés. **Ajouter à mon potager** ouvre Gaston avec « Ajouter le céleri-rave à mon potager » déjà écrit dans le champ : vous l'envoyez vous-même, Gaston répond avec la fenêtre de l'espèce, demande la variété (les variétés du catalogue s'affichent en suggestions) puis propose, dans la carte **À enregistrer**, le rappel de semis. Rien n'est créé avant **Confirmer**. Une culture absente du catalogue : « Dites-la à Gaston », en bas de l'écran.
+
+**Fiche commune d'une culture.** Deux onglets : **Suivi** (la frise des étapes, le carnet de la culture avec ses récoltes, gestes et notes, l'origine) et **Référence** (calendrier, espacement, rotation, variétés). Son bouton **Noter** ouvre Gaston sur cette culture ; sur une levée due, il s'appelle **Noter la levée**.
+
+**Pépinière.** Trois onglets : **Parcours** (la carte du parcours de vos lots : semis, godets, endurcissement, mise en terre), **Semer** (le bon moment pour semer : une tuile par culture dont la fenêtre est ouverte ; son bouton **Semer** ouvre Gaston avec « Semer l'oignon blanc de Paris en pépinière froide » prêt à envoyer) et **Lots** (le registre des lots : En cours, À régler, Terminés). Toucher un lot ouvre sa fiche, avec son bouton **Noter**.
+
+**Stocks.** Les stocks par variété, avec les **Récoltes par saison**. Le menu ⋯ exporte en CSV ou en JSON ce qui est à l'écran.
+
+**Journal.** Tous vos gestes et notes, filtrables par type, culture et date. Il a son propre filtre de date. Le menu ⋯ exporte exactement ce qui est affiché.
+
+**Mode sombre.** Le thème sombre reprend les mêmes écrans avec les mêmes couleurs d'étape ; il se choisit depuis le menu du compte.
 
 ---
 
@@ -707,7 +732,7 @@ Quels plants sont en godet ?
 /stats tomate
 ```
 
-Ou, bien plus lisible, l'écran **Pépinière** du tableau de bord, qui montre chaque lot avec sa frise Germination → Godet → Terre.
+Ou, bien plus lisible, l'écran **Pépinière** du tableau de bord, en trois onglets : **Parcours** (chaque lot avec sa frise Germination → Godet → Terre), **Semer** (les cultures dont la fenêtre de semis est ouverte) et **Lots** (le registre, par colonnes En cours, À régler et Terminés).
 
 **Le numéro de lot.** Chaque semis en pépinière reçoit un numéro court (1, 2, 3… dans votre potager, jamais réutilisé) que vous pouvez écrire au crayon sur l'étiquette de la barquette. Vous le dites dans une phrase — « repiqué 40 plants du lot 128 en godet », « perdu 5 plants du lot 128 » — et l'assistant rattache le geste à ce lot sans vous demander de quelles graines viennent les plants. Un numéro inconnu, ou d'une autre culture que celle dite, est signalé au récapitulatif : rien n'est corrigé à votre place. `/lot 128` (ou « où en est le lot 128 ? ») donne la fiche du lot, et `/lot` seul (ou « mes lots ») liste vos lots pour retrouver un numéro oublié ; dans l'écran Pépinière, le champ **« Aller au lot n° »** l'ouvre.
 
@@ -1148,7 +1173,7 @@ Tout y est recalculé à la demande depuis les gestes enregistrés : aucune vale
 
 Les **10 derniers événements** enregistrés, du plus récent au plus ancien. Pratique pour vérifier ce que vous venez de saisir.
 
-Pour aller plus loin — filtrer par type de geste, par culture ou par date, remonter page par page, exporter en tableur — passez par l'écran **Journal** du tableau de bord. L'export reprend exactement ce qui est à l'écran, filtres appliqués : ce qui est exporté est donc ce qui a été relu.
+Pour aller plus loin — filtrer par type de geste, par culture ou par date, remonter page par page, exporter en tableur — passez par l'écran **Journal** du tableau de bord. L'export se trouve dans le menu **⋯** de la barre d'outils (Exporter en CSV, Exporter en JSON) ; il reprend exactement ce qui est à l'écran, filtres appliqués : ce qui est exporté est donc ce qui a été relu. Les Stocks s'exportent au même endroit.
 
 ## 15.4 Poser une question libre
 
@@ -1337,7 +1362,7 @@ Pour connaître la météo d'une **autre ville** que celle de votre potager, nom
 
 « Quel temps fait-il à Lyon ? » ou « Quelle météo à Saint-Étienne ? » fonctionnent aussi, à l'écrit comme à la voix. L'assistant donne la météo du jour de cette ville et la nomme avec sa région et son pays ; si le même nom existe ailleurs, il le dit. Cette météo n'est **pas enregistrée** : l'historique météo reste celui de votre potager, et « quel temps fait-il ? » sans ville donne toujours la météo de votre potager. Seule la météo du jour est donnée : si vous demandez « demain », l'assistant le signale au lieu de répondre pour aujourd'hui sans rien dire. `/help meteo` rappelle ces formulations.
 
-Sur le tableau de bord, le widget météo affiche en plus le lever et le coucher du soleil, la prévision à 5 jours et un **conseil potager du jour** (arrosage, gel, vent…) calculé sur la localisation réelle de votre potager. Pensez à renseigner la ville du potager, sans quoi la météo affichée n'est pas la vôtre : menu du potager › **Paramètres du potager** › Identité › **Ville**, ou le bouton **Localiser** de la carte météo « Localisation manquante » (et de la fiche calendrier). Le compagnon ne devine jamais la ville : sans elle, il le dit et vous indique ce réglage.
+Sur le tableau de bord, la carte **Météo · 3 jours** donne la prévision des trois prochains jours (le jour de gel en ambre), calculée sur la localisation réelle de votre potager. Pensez à renseigner la ville du potager, sans quoi la météo affichée n'est pas la vôtre : menu du potager › **Paramètres du potager** › Identité › **Ville**, ou le bouton **Localiser** de la carte météo « Localisation manquante » (et de la fiche calendrier). Le compagnon ne devine jamais la ville : sans elle, il le dit et vous indique ce réglage.
 
 ### 17.2 Les réponses vocales
 
@@ -1465,9 +1490,9 @@ Dans le **suivi d'une culture** (toucher une culture sur le plan), le bouton **N
 - une phrase qui nomme **une autre** culture ou parcelle l'emporte : « j'ai arrosé la serre » va à la serre ;
 - « les fèves ont levé côté allée » → une carte à **deux lignes** : la note, et l'étape « Levée » du jour.
 
-**Les raccourcis** suivent l'étape : **Levée vue** / **Pas encore** (étape à confirmer), **Récolte** puis la quantité (« 800 grammes ») / **Culture terminée** (en récolte), **Rang libéré** (terminée), **Arrosé** / **Paillé** / **Désherbé** (parcelle). **Pas encore** n'écrit rien : Gaston se ferme et le rappel revient dans trois jours. Mode vocal allumé, le **micro s'ouvre seul** à l'ouverture.
+**Gaston s'ouvre déjà renseigné**, depuis chaque porte : la culture sélectionnée ou ouverte, la fiche d'une culture, la levée due, la fiche d'un lot, le bouton **Semer** d'une tuile, l'action d'un Mot de Gaston, **Ajouter à mon potager**, ou « Une culture absente du catalogue ? Dites-la à Gaston ». Sans rien envoyer, il dit où vous êtes — « Vous êtes sur fève. Dites ce que vous voyez, ou touchez une suggestion. » — et propose des **suggestions** qui suivent le contexte : **Récolte**, **Semis**, **Observation** sans contexte ; **J'ai vu la levée** / **Pas encore** (étape prévue ou due) ; **Récolte** puis la quantité (« 800 grammes ») / **Note** (en récolte) ; **Libérer le rang** / **Note** (terminée) ; **Arrosé** / **Paillé** / **Désherbé** (parcelle). Toucher une suggestion l'envoie comme votre message. **Pas encore** ne reporte rien d'emblée : Gaston propose le report de l'étape, qui n'est écrit qu'à **Confirmer**. Mode vocal allumé, le **micro s'ouvre seul** à l'ouverture, sauf quand une phrase est déjà prête dans le champ.
 
-**La barre** : la croix retire le contexte (« Tout le potager ») ; **Préciser** propose vos parcelles, hors pépinières. Ouvert par son visage, Gaston n'a pas de barre.
+**La barre** : elle montre la culture, le lot ou l'espèce du catalogue dont vous venez (« Céleri-rave · catalogue »), et la pastille du bouton **Noter** montre la même culture. La croix retire le contexte : le message suivant part sans contexte. Ouvert par son visage, ou par « Une culture absente du catalogue ? », Gaston n'a pas de barre.
 
 Rien n'est écrit avant **Confirmer**. Gaston dit ensuite ce qui a changé (« Fève passe à « Levé » sur le plan ») et propose **Retour au plan**. Un membre en lecture seule ne voit pas « Noter ».
 

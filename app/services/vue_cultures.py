@@ -183,8 +183,17 @@ def _lot_en_cours(lot: dict) -> bool:
     return lot.get("etat_germination") == "en_cours" or (lot.get("stock_residuel_godet") or 0) > 0
 
 
-def composer_vue_cultures(db: Session, ctx: TenantContext, date_ref: _date) -> VueCultures:
-    """[CA1-CA10] La lecture unique de l'écran Cultures."""
+def composer_vue_cultures(
+    db: Session, ctx: TenantContext, date_ref: _date, avec_confiance: bool = True,
+) -> VueCultures:
+    """[CA1-CA10] La lecture unique de l'écran Cultures.
+
+    [US-355 / perf] `avec_confiance=False` saute l'évaluation de la confiance (US-178), qui coûte
+    trois évaluations par culture du référentiel (calendrier, météo, pépinière : plusieurs secondes
+    pour une centaine d'espèces) : l'écran Cultures du socle n'affiche plus d'étoiles ni de
+    suggestion. Alors `etoiles`, `confiance_equivalent` et `suggestion` restent vides ; la fenêtre
+    (`fenetre_*`) vient du calendrier et reste servie.
+    """
     potager_id = ctx.potager_id
 
     # ── Référentiel visible par le potager (CA2 « Toutes ») ──────────────────
@@ -241,7 +250,9 @@ def composer_vue_cultures(db: Session, ctx: TenantContext, date_ref: _date) -> V
 
     # ── Familles (US-067) et confiance (US-178, US-180) en une lecture chacune ─
     familles = svc_familles.familles_par_culture(db, ctx)
-    confiances = svc_confiance.confiances_du_plan(db, univers.keys(), date_ref, potager_id)
+    confiances = (
+        svc_confiance.confiances_du_plan(db, univers.keys(), date_ref, potager_id) if avec_confiance else {}
+    )
     # [CA10] Pas de seconde lecture météo (CA7) : R3/R4 indéterminées disent déjà
     # que la météo n'a pas pu être lue — la même lecture partagée par toutes les
     # évaluations de `confiances_du_plan` (CA6), jamais relue ici.

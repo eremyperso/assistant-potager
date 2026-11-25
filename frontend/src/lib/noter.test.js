@@ -7,49 +7,48 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
-  RACCOURCI, SORTE, VUE_PLAN, TEXTE_ACCUEIL_CULTURE, TEXTE_ACCUEIL_PARCELLE, TEXTE_ACCUEIL_POTAGER,
-  raccourcisNoter, accueilNoter, reportDEtape, apresConfirmation,
+  RACCOURCI, SORTE, VUE_PLAN, reportDEtape, apresConfirmation,
 } from './noter.js'
+import { suggestionsDe, phraseOuverture, PHRASE_SANS_CONTEXTE } from './ouvertureGaston.js'
 import { contexteAEnvoyer, normaliserContexte } from './contexteCompagnon.js'
 
 const lire = (chemin) => readFileSync(new URL(chemin, import.meta.url), 'utf8')
 const SEMIS = [{ code: 'semee' }, { code: 'levee' }, { code: 'en_recolte' }, { code: 'terminee' }]
 const PLANT = [{ code: 'plantee' }, { code: 'en_recolte' }, { code: 'terminee' }]
 const feve = (etapes) => ({ parcelleId: 2, parcelle: 'Planche centrale', culture: 'fève', etapes })
-const libelles = (c) => raccourcisNoter(c).map((x) => x.libelle)
+const libelles = (c) => suggestionsDe({ contexte: c }).map((x) => x.libelle)
 
-test('[US-324 / CA2] étape à confirmer : « Levée vue », « Pas encore »', () => {
+test('[US-324 / CA2, US-358 / CA3] étape à confirmer : « J’ai vu la levée », « Pas encore »', () => {
   const c = feve({ serie_id: 7, etape: 'levee', a_confirmer: true, etapes: SEMIS })
-  assert.deepEqual(libelles(c), ['Levée vue', 'Pas encore'])
-  assert.equal(raccourcisNoter(c)[0].raccourci, RACCOURCI.ETAPE_LEVEE)
-  assert.equal(raccourcisNoter(c)[1].sorte, SORTE.PAS_ENCORE)
+  assert.deepEqual(libelles(c), ['J’ai vu la levée', 'Pas encore'])
+  assert.equal(suggestionsDe({ contexte: c })[0].raccourci, RACCOURCI.ETAPE_LEVEE)
+  assert.equal(suggestionsDe({ contexte: c })[1].sorte, SORTE.PAS_ENCORE)
 })
 
-test('[US-324 / CA2] en récolte : « Récolte » (attend la quantité), « Culture terminée »', () => {
+test('[US-358 / CA3] en récolte : « Récolte » (attend la quantité), « Note »', () => {
   const c = feve({ serie_id: 7, etape: 'en_recolte', a_confirmer: false, etapes: PLANT })
-  assert.deepEqual(libelles(c), ['Récolte', 'Culture terminée'])
-  assert.equal(raccourcisNoter(c)[0].sorte, SORTE.SAISIR)
+  assert.deepEqual(libelles(c), ['Récolte', 'Note'])
+  assert.equal(suggestionsDe({ contexte: c })[0].sorte, SORTE.SAISIR)
 })
 
-test('[US-324 / CA2] terminé ou à libérer : « Rang libéré »', () => {
-  assert.deepEqual(libelles(feve({ etape: 'terminee', etapes: PLANT })), ['Rang libéré'])
-  assert.deepEqual(libelles(feve({ etape: 'en_recolte', a_liberer: true, etapes: PLANT })), ['Rang libéré'])
+test('[US-358 / CA3] terminé ou à libérer : « Libérer le rang », « Note »', () => {
+  assert.deepEqual(libelles(feve({ etape: 'terminee', etapes: PLANT })), ['Libérer le rang', 'Note'])
+  assert.deepEqual(libelles(feve({ etape: 'en_recolte', a_liberer: true, etapes: PLANT })), ['Libérer le rang', 'Note'])
 })
 
-test('[US-324 / CA2] autre étape : l’étape suivante', () => {
-  assert.deepEqual(libelles(feve({ etape: 'semee', etapes: SEMIS })), ['Levée vue'])
-  assert.deepEqual(libelles(feve({ etape: 'plantee', etapes: PLANT })), ['Récolte'])
+test('[US-358 / CA3] étape prévue : l’étape suivante, « Pas encore »', () => {
+  assert.deepEqual(libelles(feve({ etape: 'semee', etapes: SEMIS })), ['J’ai vu la levée', 'Pas encore'])
+  assert.deepEqual(libelles(feve({ etape: 'plantee', etapes: PLANT })), ['Récolte', 'Pas encore'])
 })
 
-test('[US-324 / CA2] parcelle ou potager : « Arrosé », « Paillé », « Désherbé »', () => {
+test('[US-324 / CA2, US-358 / CA3] parcelle : gestes ; aucun contexte : Récolte, Semis, Observation', () => {
   assert.deepEqual(libelles({ parcelleId: 5, parcelle: 'Serre' }), ['Arrosé', 'Paillé', 'Désherbé'])
-  assert.deepEqual(libelles(null), ['Arrosé', 'Paillé', 'Désherbé'])
+  assert.deepEqual(libelles(null), ['Récolte', 'Semis', 'Observation'])
 })
 
-test('[US-324 / temps 2] l’accueil dit où la note ira', () => {
-  assert.equal(accueilNoter(feve(null)), TEXTE_ACCUEIL_CULTURE)
-  assert.equal(accueilNoter({ parcelleId: 5, parcelle: 'Serre' }), TEXTE_ACCUEIL_PARCELLE)
-  assert.equal(accueilNoter(null), TEXTE_ACCUEIL_POTAGER)
+test('[US-358 / CA2] l’ouverture dit où la note ira, sans modèle', () => {
+  assert.equal(phraseOuverture({ contexte: null }), PHRASE_SANS_CONTEXTE)
+  assert.match(phraseOuverture({ contexte: { parcelleId: 5, parcelle: 'Serre' } }), /^Vous êtes sur Serre\./)
 })
 
 test('[US-324 / CA2, E7] « Pas encore » vise la série et l’étape servies par le suivi', () => {

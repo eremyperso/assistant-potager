@@ -23,7 +23,7 @@ const ouvrirGaston = (contexte) => ouvrirGastonAvec(contexte)
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand'
 const TITRE_BLOC = 'flex items-center justify-between text-[11.5px] font-bold uppercase tracking-[.05em] text-txt2 mt-5 mb-2'
 
-function Frise({ etapes }) {
+export function Frise({ etapes }) {
   return (
     <ol className="flex flex-col">
       {etapes.map((x, i) => (
@@ -48,7 +48,7 @@ function Frise({ etapes }) {
   )
 }
 
-function Origine({ o, onLot }) {
+export function Origine({ o, onLot }) {
   const Icone = o.type === 'pepiniere' ? Sprout : o.type === 'achat' ? ShoppingBag : Bean
   return (
     <div className="flex gap-2.5 items-start rounded-[10px] border border-border px-3 py-2.5 text-[13px]">

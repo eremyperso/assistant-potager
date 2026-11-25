@@ -243,6 +243,9 @@ class FichePWA:
     #: [CA9] Distingue « rien ne lui est rattaché » de « pas d'information ».
     bioagresseurs_connus: bool
     attributions: tuple[str, ...]
+    #: [US-355 / CA3] L'espacement tel que la fiche de culture le porte (chaîne libre, lue sans
+    #: la recalculer) : « 60 cm entre plants, 60 cm entre rangs ». `None` si non renseigné.
+    espacement: Optional[str] = None
 
 
 def _lire_varietes_cultivees(
@@ -326,6 +329,7 @@ def composer_fiche_pwa(
         fiche_absente = True
 
     type_organe_recolte: Optional[str] = None
+    espacement: Optional[str] = None
     itineraires_connus: tuple[str, ...] = ()
     durees: tuple[DureeLue, ...] = ()
     associations: tuple[AssociationLue, ...] = ()
@@ -336,6 +340,7 @@ def composer_fiche_pwa(
     if not fiche_absente:
         fiches = svc_attributs.fiches_de_culture(db, culture)
         type_organe_recolte = fiches[0].type_organe_recolte if fiches else None
+        espacement = next((f.espacement.strip() for f in fiches if (f.espacement or "").strip()), None)
 
         calendrier = svc_calendrier.lire_calendrier(db, culture, potager_id)
         itineraires_connus = tuple(it.nom for it in calendrier.itineraires)
@@ -401,6 +406,7 @@ def composer_fiche_pwa(
         bioagresseurs=bioagresseurs,
         bioagresseurs_connus=bioagresseurs_connus,
         attributions=tuple(attributions),
+        espacement=espacement,
     )
 
 
@@ -471,4 +477,5 @@ def fiche_pwa_en_dict(fiche: FichePWA) -> dict:
         "bioagresseurs_total": len(fiche.bioagresseurs),
         "bioagresseurs_connus": fiche.bioagresseurs_connus,
         "attributions": list(fiche.attributions),
+        "espacement": fiche.espacement,
     }

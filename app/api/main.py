@@ -1628,6 +1628,7 @@ def get_calendrier_culture(culture: str, ctx: TenantContext = Depends(get_curren
 def get_vue_cultures(
     date_cible: date = Query(default=None, alias="date"),
     potager_id: int = Query(default=None),
+    confiance: bool = Query(default=True),
     ctx: TenantContext = Depends(get_current_user_ctx),
 ):
     """[US-204 / CA1-CA10] Lecture unique de l'écran Cultures : pour chaque
@@ -1638,7 +1639,9 @@ def get_vue_cultures(
     db = SessionLocal()
     try:
         use_ctx = ctx_pour_potager_consulte(db, ctx, potager_id)
-        vue = svc_vue_cultures.composer_vue_cultures(db, use_ctx, date_cible or date.today())
+        vue = svc_vue_cultures.composer_vue_cultures(
+            db, use_ctx, date_cible or date.today(), avec_confiance=confiance,
+        )
         return svc_vue_cultures.vue_cultures_en_dict(vue)
     finally:
         db.close()
@@ -3632,6 +3635,11 @@ def historique(
                     "nb_plants_godets": e.nb_plants_godets,
                     "parcelle"   : e.parcelle,
                     "traitement" : e.traitement,
+                    # [US-354 / CA7] Le Journal regroupe les notes du jour et montre la première
+                    # en Kalam : il lui faut le texte du jardinier (jusqu'ici lu nulle part) et le
+                    # rang. Lecture seule, aucune migration.
+                    "commentaire": e.commentaire,
+                    "rang"       : e.rang,
                 }
                 for e in events
             ],

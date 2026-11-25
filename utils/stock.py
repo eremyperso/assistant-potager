@@ -1220,15 +1220,36 @@ def calcul_stock_varietes(
 
     # ── État "pep" ───────────────────────────────────────────────────────────
     godets_tous = calcul_godets(db, include_epuises=True, date_ref=date_ref, potager_id=potager_id)
-    en_attente = [
-        v for v in godets_tous.values()
-        if v["stock_residuel_godet"] > 0 or v.get("graines_en_germination", 0) > 0
-    ]
-    for g in sorted(en_attente, key=lambda v: (v["culture"], v["variete"] or "")):
-        en_godet = g["nb_plants_godets"] > 0
-        total_entre = g["nb_plants_godets"] if en_godet else g.get("graines_en_germination", 0)
-        stock_actuel = g["stock_residuel_godet"] if en_godet else g.get("graines_en_germination", 0)
-        unite_v = "plants" if en_godet else g.get("unite_germination", "graines")
+    # Les graines encore en germination se lisent comme la Pépinière (par lot : un lot dont la
+    # levée est terminée ou clôturé n'en a plus). calcul_godets, lui, tient tout le semis pour
+    # consommé dès qu'un godet s'y rattache : il ne voyait pas les 20 graines restantes d'un
+    # lot de 100 dont 80 ont été repiqués.
+    germination: Dict[tuple, dict] = {}
+    for lot in calcul_lots_pepiniere(db, date_ref, potager_id=potager_id):
+        reste = int(lot.get("graines_en_germination") or 0)
+        if reste <= 0:
+            continue
+        cle = (lot["culture"], lot["variete"])
+        entree = germination.setdefault(cle, {"n": 0, "unite": lot.get("unite") or "graines"})
+        entree["n"] += reste
+    en_attente = {
+        (v["culture"], v["variete"]): v for v in godets_tous.values() if v["stock_residuel_godet"] > 0
+    }
+    for cle in germination:
+        en_attente.setdefault(cle, {
+            "culture": cle[0], "variete": cle[1], "nb_plants_godets": 0, "stock_residuel_godet": 0,
+        })
+    # Un lot peut avoir À LA FOIS des godets restants et des graines encore en germination
+    # (poireau : 80 repiqués puis plantés, 20 graines non levées) : deux lignes distinctes,
+    # chacune dans son unité. Un lot tout planté n'a plus de ligne « godets » (stock 0).
+    lignes_pep = []
+    for cle, g in sorted(en_attente.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
+        if g["stock_residuel_godet"] > 0:
+            lignes_pep.append((g, g["nb_plants_godets"], g["stock_residuel_godet"], "plants"))
+        if cle in germination:
+            germ = germination[cle]
+            lignes_pep.append((g, germ["n"], germ["n"], germ["unite"]))
+    for g, total_entre, stock_actuel, unite_v in lignes_pep:
         result.append({
             "culture":           g["culture"],
             "variete":           g["variete"] if g["variete"] is not None else LABEL_VARIETE_NON_PRECISEE,
@@ -1251,6 +1272,71 @@ def calcul_stock_varietes(
         })
 
     return result
+
+
+def _plantations_sortant_des_godets(
+    db: Session, potager_id: Optional[int], cutoff, culture_lower: Optional[str] = None,
+) -> Dict[tuple, int]:
+    """
+    Plants plantés qui sortent des godets, par (culture, variété du GODET).
+
+    Règle PO du 07/10/2026, précisée : une plantation ne sort des godets que si le lien
+    est CERTAIN.
+      1. Lien explicite (`source_evenement_ids`, US-029 : « Lots : #595 » côté lot) — la
+         plantation cite ses godets, qu'elle ait une variété ou non. Aucune supposition :
+         c'est le jardinier (ou le lot cité) qui a dit d'où viennent les plants. Un godet
+         ne peut pas fournir plus de plants qu'il n'en contient.
+      2. Sans lien (ou pour le reliquat), repli STRICT : même culture ET même variété,
+         variété renseignée. Une plantation sans variété et sans lien reste un évènement
+         à part : on ne devine pas qu'elle vient d'un godet.
+    Même lecture que `calcul_lots_pepiniere` (étape 3a) : les deux vues ne se contredisent plus.
+    """
+    q_g = (
+        db.query(Evenement.id, Evenement.culture, Evenement.variete, Evenement.nb_plants_godets)
+        .filter(Evenement.type_action == "mise_en_godet")
+        .filter(Evenement.culture.isnot(None))
+    )
+    q_p = (
+        db.query(Evenement.culture, Evenement.variete, Evenement.quantite, Evenement.source_evenement_ids)
+        .filter(Evenement.type_action == "plantation")
+        .filter(Evenement.culture.isnot(None))
+    )
+    if culture_lower is not None:
+        q_g = q_g.filter(func.lower(Evenement.culture) == culture_lower)
+        q_p = q_p.filter(func.lower(Evenement.culture) == culture_lower)
+    if potager_id is not None:
+        q_g = q_g.filter(Evenement.potager_id == potager_id)
+        q_p = q_p.filter(Evenement.potager_id == potager_id)
+    if cutoff is not None:
+        q_g = q_g.filter(Evenement.date <= cutoff)
+        q_p = q_p.filter(Evenement.date <= cutoff)
+
+    cle_du_godet: Dict[int, tuple] = {}
+    reste_du_godet: Dict[int, int] = {}
+    for gid, c, v, nb in q_g.all():
+        cle_du_godet[gid] = (c, v)
+        reste_du_godet[gid] = int(nb or 0)
+
+    sortis: Dict[tuple, int] = {}
+    for culture, variete, quantite, sources in q_p.order_by(Evenement.date.asc(), Evenement.id.asc()).all():
+        restant = int(quantite or 0)
+        for part in (sources or "").split(";"):
+            if restant <= 0:
+                break
+            if not part.strip().isdigit():
+                continue
+            gid = int(part.strip())
+            pris = min(restant, reste_du_godet.get(gid, 0))
+            if pris <= 0:
+                continue
+            cle = cle_du_godet[gid]
+            sortis[cle] = sortis.get(cle, 0) + pris
+            reste_du_godet[gid] -= pris
+            restant -= pris
+        if restant > 0 and (variete or "").strip():
+            cle = (culture, variete)
+            sortis[cle] = sortis.get(cle, 0) + restant
+    return sortis
 
 
 def calcul_godets(
@@ -1348,31 +1434,9 @@ def calcul_godets(
             graines_cloturees.get((c_cl, v_cl), 0) + int((ligne_sem[0] if ligne_sem else 0) or 0)
         )
 
-    # [US-022] Plantations par (culture, variété)
-    _q_plant = (
-        db.query(
-            Evenement.culture,
-            Evenement.variete,
-            func.sum(Evenement.quantite),
-        )
-        .filter(Evenement.type_action == "plantation")
-        .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.culture, Evenement.variete)
-    )
-    if potager_id is not None:
-        _q_plant = _q_plant.filter(Evenement.potager_id == potager_id)
-    if cutoff is not None:
-        _q_plant = _q_plant.filter(Evenement.date <= cutoff)
-    plant_rows = _q_plant.all()
-    plantations: Dict[tuple, int] = {(c, v): int(q or 0) for c, v, q in plant_rows}
-
-    # Seule une plantation de même culture ET de même variété (renseignée) sort
-    # des godets. Décision PO du 07/10/2026, qui remplace les rattachements
-    # d'US-022 CA6 et CA6-reverse : une plantation sans variété — même face à un
-    # godet sans variété — est un évènement à part, jamais pris à la pépinière.
-    plantations = {
-        (c, v): q for (c, v), q in plantations.items() if (v or "").strip()
-    }
+    # [US-022] Plantations par (culture, variété du godet). Lien explicite d'abord,
+    # repli strict ensuite (décision PO du 07/10/2026, précisée) : voir le helper.
+    plantations: Dict[tuple, int] = _plantations_sortant_des_godets(db, potager_id, cutoff)
 
     # [vendu + perte_godet] Sorties de la pépinière hors plantation
     _q_sorties = (
@@ -1580,26 +1644,11 @@ def calcul_godets_par_culture(
             graines_par_variete[r.variete] = graines_par_variete.get(r.variete, 0) + _semis_qtites_var.get(r.origine_graines_id, 0)
 
     # [US-022 / CA1] Plantations par variété — à déduire du stock godet
-    _q_plant_var = (
-        db.query(
-            Evenement.variete,
-            func.sum(Evenement.quantite),
-        )
-        .filter(Evenement.type_action == "plantation")
-        .filter(func.lower(Evenement.culture) == culture_lower)
-        .filter(Evenement.culture.isnot(None))
-        .group_by(Evenement.variete)
-    )
-    if potager_id is not None:
-        _q_plant_var = _q_plant_var.filter(Evenement.potager_id == potager_id)
-    if cutoff is not None:
-        _q_plant_var = _q_plant_var.filter(Evenement.date <= cutoff)
-    plant_rows = _q_plant_var.all()
-    plantations: Dict[Optional[str], int] = {v: int(q or 0) for v, q in plant_rows}
-
-    # Décision PO du 07/10/2026 (remplace US-022 CA6, CA6-reverse et US-029
-    # CA10) : seule une plantation de même variété, renseignée, sort des godets.
-    plantations = {v: q for v, q in plantations.items() if (v or "").strip()}
+    # Décision PO du 07/10/2026, précisée : lien explicite (`source_evenement_ids`) d'abord,
+    # puis repli strict même variété renseignée — voir `_plantations_sortant_des_godets`.
+    plantations: Dict[Optional[str], int] = {}
+    for (_c, v), q in _plantations_sortant_des_godets(db, potager_id, cutoff, culture_lower).items():
+        plantations[v] = plantations.get(v, 0) + q
 
     # [vendu + perte_godet] Sorties hors plantation
     _q_sorties_var = (
@@ -2093,6 +2142,9 @@ def calcul_lots_pepiniere(
             "nb_leves":                   None,
             "date_derniere_levee":        None,
             "levee_terminee":             False,
+            # [US-356 / CA4, CA11] La note du jardinier sur le semis (son commentaire), telle qu'il l'a dite :
+            # la carte de lot et le « Carnet du lot » la montrent en Kalam. None sans note.
+            "note":                       None,
             "_parcelle_godet_id":         None,
             "_parcelle_deplacement_id":   None,
             # [US-241] Destination du dernier déplacement du lot ENTIER (sans quantité) :
@@ -2131,6 +2183,7 @@ def calcul_lots_pepiniere(
             type_pepiniere = s.parcelle_rel.type_pepiniere if s.parcelle_rel else None,
             graines_semees = int(s.quantite or 0),
             unite          = s.unite or "graines",
+            note           = (s.commentaire or "").strip() or None,
         )
 
     # ── 2. Mises en godet rattachées à leur lot, graines soldées lot par lot (CA2) ──

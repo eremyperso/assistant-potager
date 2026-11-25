@@ -173,10 +173,10 @@ export const cleDePhrase = () => cle('j')
  * La phrase du jardinier s'affiche dès l'envoi, pas au retour de la réponse : pendant que « Gaston
  * réfléchit », elle reste lisible au lieu de disparaître avec la saisie vidée.
  */
-export const ajouterPhrase = (fil, phrase, cleJ = cle('j'), dictee = false) => [
+export const ajouterPhrase = (fil, phrase, cleJ = cle('j'), dictee = false, dureeS = null) => [
   ...fil,
-  // [US-302 / CA6] Une phrase dictée porte la marque 🎤 dans sa bulle.
-  { cle: cleJ, role: 'jardinier', texte: phrase, ...(dictee ? { dictee: true } : {}) },
+  // [US-302 / CA6] Une phrase dictée porte la marque 🎤 dans sa bulle ; [US-357 / CA4] et sa durée.
+  { cle: cleJ, role: 'jardinier', texte: phrase, ...(dictee ? { dictee: true, ...(dureeS ? { dureeS } : {}) } : {}) },
 ]
 
 /** La bulle du jardinier à ajouter : aucune si elle est déjà dans le fil (`ajouterPhrase`), sinon la sienne. */

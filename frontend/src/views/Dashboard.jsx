@@ -1,213 +1,200 @@
-// [US-076] Écran « Tableau de bord — Vue d'ensemble » — portage partiel de
-// `ScreenDashboard` (`web-screens.jsx`, maquette 2026, gel du 15/08/2026) :
-// seul le widget météo consomme une donnée réelle (`GET /meteo`, US-075) ; les
-// trois autres widgets de la maquette (à faire cette semaine, récoltes de la
-// saison, dernières interventions) restent en `Placeholder` explicite tant que
-// leurs données ne sont pas calculables côté backend (cf. §6 point ouvert n°1,
-// docs/ANALYSE_REFONTE_UI_WEB_2026.md — Lot D, non cadré).
+// [US-354 / CA1-CA3] Tableau de bord — « Vue d'ensemble » sur le socle commun.
 //
-// [US-077] Chaque widget n'est rendu que s'il figure dans la préférence
-// d'affichage locale (`useDashboardWidgets`) — mécanisme générique, un futur
-// widget réel du Lot D n'a qu'à rejoindre `WIDGETS_CATALOGUE` pour en hériter.
+// La maquette « Socle commun » le fige sur QUATRE sections (D11) : « À faire aujourd'hui », « Récoltes
+// possibles », « Météo · 3 jours » et « Dernières notes du carnet ». Une section vide disparaît (CA2) :
+// il n'y a plus de placeholder, ni de personnalisation des widgets (US-077, US-078 retirées), ni de
+// conseil du jour. Pas de barre d'outils (la coquille n'en dessine pas pour `bord`).
 //
-// [US-078] Enrichissement de la carte météo : lever/coucher du soleil,
-// libellés explicites humidité/vent, conseil potager du jour — les trois
-// champs (`lever_soleil`, `coucher_soleil`, `conseil`) étaient déjà renvoyés
-// par `GET /meteo` (US-075) sans être consommés ici.
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react'
-import { Sun, MapPinned, CheckSquare, ShoppingBasket, ScrollText, Sunrise, Sunset, Send } from 'lucide-react'
+// Les lectures existent toutes : `GET /plan` (tâches du jour, US-328), `GET /meteo` (US-075) et
+// `GET /historique` (notes). Le Mot de Gaston se calcule ici, sans modèle (`lib/accueilSocle.js`).
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { MapPinned, Send } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { usePotager } from '../context/PotagerContext.jsx'
-import { useDashboardWidgets } from '../hooks/useDashboardWidgets.js'
+import { useDateRef } from '../context/AppContext.jsx'
+import { useNavigation } from '../context/NavigationContext.jsx'
+import { useDeclarerEcran } from '../context/CoquilleContext.jsx'
+import { useFiches } from '../hooks/useFiches.jsx'
+import {
+  aFaireAujourdhui, recoltesPossibles, meteoTroisJours, dernieresNotes, motDuTableauDeBord,
+  contexteTableauDeBord, NB_RECOLTES_ACCUEIL,
+} from '../lib/accueilSocle.js'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
 import ModalModifierPotager from '../components/ModalModifierPotager.jsx'
 import LierTelegram from '../components/LierTelegram.jsx'
-import { Card, CardHead, Btn, Placeholder, InfoBanner } from '../components/ui'
+import { EnTeteSection, ListeSocle, LigneSocle } from '../components/SectionSocle.jsx'
+import { Btn, InfoBanner } from '../components/ui'
+import NoteCarnet from '../components/ui/NoteCarnet.jsx'
 
-const JOUR_LABEL = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']
+const aujourdhuiIso = () => new Date().toISOString().slice(0, 10)
 
-/**
- * [US-078 / CA3, CA4, CA5] Conseil potager du jour — hauteur figée à 3 lignes
- * (`line-clamp-3`) ; le lien « Afficher plus » n'apparaît que si le texte est
- * réellement tronqué (mesuré via `scrollHeight` vs `clientHeight`, pas déduit
- * d'un nombre de caractères qui varierait avec la largeur de carte).
- */
-function ConseilPotager({ texte }) {
-  const ref = useRef(null)
-  const [ouvert, setOuvert] = useState(false)
-  const [tronque, setTronque] = useState(false)
-
-  useEffect(() => { setOuvert(false) }, [texte])
-
-  useLayoutEffect(() => {
-    if (!ouvert && ref.current) {
-      setTronque(ref.current.scrollHeight > ref.current.clientHeight + 1)
-    }
-  }, [texte, ouvert])
-
-  return (
-    <div className="mt-3.5 pt-3.5 border-t border-border-soft">
-      <p ref={ref} className={`text-[12.5px] text-txt2 leading-relaxed ${ouvert ? '' : 'line-clamp-3'}`}>
-        {texte}
-      </p>
-      {tronque && !ouvert && (
-        <button
-          onClick={() => setOuvert(true)}
-          className="text-[12px] font-semibold text-brand-text mt-1"
-        >
-          Afficher plus
-        </button>
-      )}
-    </div>
-  )
-}
-
-/**
- * [CA2, CA3, CA4] Carte météo — donnée réelle, invitation à localiser le
- * potager si `localisation_manquante` (US-075/CA4), ou erreur cohérente avec
- * le reste de l'application en cas d'échec (`ApiError`, US-059).
- */
-function CarteMeteo({ meteo, loading, error, onRetry, onLocaliser }) {
-  if (loading) return <LoadingSkeleton lines={2} />
-  if (error) return <ApiError message={error} onRetry={onRetry} />
-
-  if (meteo?.localisation_manquante) {
+/** « Météo · 3 jours » : trois tuiles, le jour de gel en ambre. Sans localisation, l'invitation à la renseigner. */
+function SectionMeteo({ jours, localisationManquante, onLocaliser }) {
+  if (localisationManquante) {
     return (
-      <Card className="text-center" pad="px-5 py-8">
-        <div className="w-12 h-12 rounded-2xl bg-brand-soft flex items-center justify-center mx-auto mb-3">
-          <MapPinned size={22} className="text-brand" />
+      <section>
+        <EnTeteSection titre="Météo · 3 jours" />
+        <div className="rounded-[14px] border border-border bg-card px-4 py-4 text-center">
+          <MapPinned size={22} aria-hidden="true" className="mx-auto mb-2 text-brand" />
+          <p className="text-[13px] text-txt2">Renseignez la ville de ce potager pour afficher sa météo.</p>
+          <Btn kind="soft" small className="mt-3" onClick={onLocaliser}>Modifier le potager</Btn>
         </div>
-        <div className="font-serif text-[16px] font-semibold text-txt">Localisation manquante</div>
-        <p className="text-[13px] text-txt2 mt-1.5 max-w-[320px] mx-auto leading-relaxed">
-          Renseignez la ville de ce potager pour afficher sa météo locale.
-        </p>
-        <Btn kind="soft" small className="mt-3.5" onClick={onLocaliser}>
-          Modifier le potager
-        </Btn>
-      </Card>
+      </section>
     )
   }
-
+  if (!jours.length) return null
   return (
-    <Card>
-      <CardHead icon={Sun} tint="amber" title={meteo.ville} sub={meteo.label} />
-      <div className="flex items-baseline gap-2.5 flex-wrap">
-        <span className="font-serif text-[40px] font-bold text-txt tracking-tight">
-          {meteo.temp_actuelle ?? meteo.temp_max}°
-        </span>
-        <span className="text-[12.5px] text-txt3">
-          ressenti {meteo.ressenti ?? '—'}° · Humidité : {meteo.humidite ?? '—'} % · Vent : {meteo.vent_actuel_kmh ?? '—'} km/h
-        </span>
-      </div>
-      {/* [US-078 / CA1] `lever_soleil`/`coucher_soleil` — déjà exposés par `GET /meteo` (US-075) */}
-      <div className="flex items-center gap-4 mt-2 text-[12px] text-txt3">
-        <span className="inline-flex items-center gap-1.5">
-          <Sunrise size={14} className="text-amber" />{meteo.lever_soleil}
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <Sunset size={14} className="text-amber" />{meteo.coucher_soleil}
-        </span>
-      </div>
-      {meteo.conseil && <ConseilPotager texte={meteo.conseil} />}
-      <div className="flex gap-2 mt-3.5">
-        {meteo.previsions.map((p) => (
-          <div key={p.date} className="flex-1 bg-card-alt rounded-[11px] py-2 px-1 text-center">
-            <div className="text-[10px] font-bold text-txt3 tracking-wide uppercase">
-              {JOUR_LABEL[new Date(`${p.date}T12:00:00`).getDay()]}
-            </div>
-            <div className="my-1.5 text-[18px] leading-none">{p.emoji}</div>
-            <div className="text-[12.5px] font-bold text-txt">{p.temp_max}°</div>
-            <div className="text-[11px] text-txt3">{p.temp_min}°</div>
+    <section>
+      <EnTeteSection titre="Météo · 3 jours" />
+      <div className="grid grid-cols-3 gap-2">
+        {jours.map((j) => (
+          <div
+            key={j.cle} data-gel={j.gel || undefined}
+            className={`rounded-[12px] border px-2.5 py-2 text-[12px] ${j.gel ? 'border-amber bg-amber-soft text-amber-text' : 'border-border bg-card text-txt2'}`}
+          >
+            {j.nom}
+            <b className={`block text-[15px] ${j.gel ? 'text-amber-text' : 'text-txt'}`}>{j.libelle}</b>
+            {j.texte}
           </div>
         ))}
       </div>
-    </Card>
+    </section>
   )
 }
 
 export default function Dashboard({ refresh }) {
-  const { potagerActif } = usePotager()
-  const { visible } = useDashboardWidgets()
-  const afficheMeteo = visible.includes('meteo')
+  const { potagerActif, potagerId } = usePotager()
+  const { dateRef } = useDateRef()
+  const { aller } = useNavigation()
+  const { ouvrirCulture } = useFiches()   // [US-355 / CA1] la fiche commune, dans le panneau partagé
 
+  const [plan, setPlan] = useState(null)
   const [meteo, setMeteo] = useState(null)
+  const [evenements, setEvenements] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [modaleLocalisation, setModaleLocalisation] = useState(false)
 
-  // [US-091 / CA14] Bandeau de relance tant que le compagnon Telegram n'est
-  // pas activé — l'état est déjà exposé par GET /auth/me (US-055), rechargé à
-  // la fermeture de la modale pour disparaître dès la liaison effectuée.
-  const [telegramLie, setTelegramLie] = useState(true) // true par défaut : pas de flash du bandeau le temps du premier chargement
+  // [US-091 / CA14] Bandeau de relance tant que le compagnon Telegram n'est pas activé : ce n'est pas
+  // une section du tableau de bord, il reste.
+  const [telegramLie, setTelegramLie] = useState(true)   // true par défaut : pas de flash le temps du premier chargement
   const [modaleTelegram, setModaleTelegram] = useState(false)
   const chargerIdentite = useCallback(() => {
     api.moi().then((m) => setTelegramLie(m.telegram_lie === true)).catch(() => {})
   }, [])
   useEffect(() => { chargerIdentite() }, [chargerIdentite])
 
-  async function chargerMeteo() {
+  async function charger() {
     setLoading(true); setError(null)
-    try { setMeteo(await api.meteo()) }
-    catch (e) { setError(e.message) }
+    try {
+      // Le plan est la lecture qui compte ; la météo et les notes sont facultatives : leur échec retire
+      // la section (une section absente ne dit rien de faux), il ne casse pas l'écran.
+      const [p, m, h] = await Promise.all([
+        api.plan(dateRef, potagerId),
+        api.meteo().catch(() => null),
+        api.historique({ action: 'observation', limit: 12, ...(potagerId ? { potager_id: potagerId } : {}) }).catch(() => null),
+      ])
+      setPlan(p); setMeteo(m); setEvenements(h?.evenements ?? [])
+    } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
+  useEffect(() => { charger() }, [refresh, dateRef, potagerId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ne pas appeler l'API pour un widget masqué [US-077] — se redéclenche à sa
-  // réapparition (dépendance sur `afficheMeteo`, pas seulement au montage).
-  useEffect(() => { if (afficheMeteo) chargerMeteo() }, [refresh, afficheMeteo])
+  const jourRef = plan?.date_ref_effective || dateRef || aujourdhuiIso()
+  const aFaire = useMemo(() => aFaireAujourdhui(plan), [plan])
+  const recoltes = useMemo(() => recoltesPossibles(plan), [plan])
+  const jours = useMemo(() => meteoTroisJours(meteo), [meteo])
+  const notes = useMemo(() => dernieresNotes(evenements, aujourdhuiIso()), [evenements])
+  const mot = useMemo(() => motDuTableauDeBord({ meteo, plan }), [meteo, plan])
+
+  // [CA3] Le mot et la ligne de contexte vont à la coquille ; le tableau de bord n'a pas de barre.
+  useDeclarerEcran({
+    entete: { contexte: contexteTableauDeBord(jourRef, meteo) },
+    mot,
+  }, [JSON.stringify(mot), jourRef, meteo?.temp_actuelle, meteo?.label])
+
+
+  if (loading) return <LoadingSkeleton lines={5} />
+  if (error) return <ApiError message={error} onRetry={charger} />
+
+  const colonneGauche = (
+    <div className="flex flex-col gap-[18px]">
+      {aFaire.length > 0 && (
+        <section>
+          <EnTeteSection titre={`À faire aujourd’hui · ${aFaire.length}`} />
+          <ListeSocle>
+            {aFaire.map((l) => (
+              <LigneSocle
+                key={l.cle} etape={l.etape} prevue={l.type === 'due'} due={l.du} emoji={l.emoji}
+                titre={l.titre} detail={l.detail} nomAccessible={l.nomAccessible}
+                onOuvrir={() => ouvrirCulture(l.selection)}
+              />
+            ))}
+          </ListeSocle>
+        </section>
+      )}
+      {recoltes.length > 0 && (
+        <section>
+          <EnTeteSection titre={`Récoltes possibles · ${recoltes.length}`} lien="Tout voir" onLien={() => aller('cultures')} />
+          <ListeSocle>
+            {recoltes.slice(0, NB_RECOLTES_ACCUEIL).map((l) => (
+              <LigneSocle
+                key={l.cle} etape={l.etape} emoji={l.emoji} titre={l.titre} detail={l.detail}
+                nomAccessible={l.nomAccessible} onOuvrir={() => ouvrirCulture(l.selection)}
+              />
+            ))}
+          </ListeSocle>
+        </section>
+      )}
+    </div>
+  )
+
+  const colonneDroite = (
+    <div className="flex flex-col gap-[18px]">
+      <SectionMeteo
+        jours={jours} localisationManquante={Boolean(meteo?.localisation_manquante)}
+        onLocaliser={() => setModaleLocalisation(true)}
+      />
+      {notes.length > 0 && (
+        <section>
+          <EnTeteSection titre="Dernières notes du carnet" lien="Journal" onLien={() => aller('journal')} />
+          <div className="flex flex-col gap-2">
+            {notes.map((n) => (
+              <NoteCarnet key={n.cle} texte={n.texte} dicte={null} date={n.date} lieu={n.lieu} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+
+  const vide = !aFaire.length && !recoltes.length && !jours.length && !notes.length && !meteo?.localisation_manquante
 
   return (
     <div className="@container/dash">
       {!telegramLie && (
         <InfoBanner
-          className="mb-4"
-          tint="blue"
-          icon={Send}
-          dismissible={false}
+          className="mb-4" tint="blue" icon={Send} dismissible={false}
           title="Activez votre compagnon de terrain"
           body="Dictez vos observations à la voix et recevez vos rappels directement sur Telegram."
           action={<Btn kind="primary" small onClick={() => setModaleTelegram(true)}>Activer</Btn>}
         />
       )}
 
-      <div className="grid gap-4 @[720px]/dash:grid-cols-2">
-        {visible.includes('todo') && (
-          <Placeholder
-            icon={CheckSquare}
-            title="À faire cette semaine"
-            body="Liste des tâches de la semaine, dérivée du calendrier de vos cultures."
-          />
-        )}
-        {afficheMeteo && (
-          <CarteMeteo
-            meteo={meteo}
-            loading={loading}
-            error={error}
-            onRetry={chargerMeteo}
-            onLocaliser={() => setModaleLocalisation(true)}
-          />
-        )}
-        {visible.includes('recoltes') && (
-          <Placeholder
-            icon={ShoppingBasket}
-            title="Récoltes de la saison"
-            body="Suivi des récoltes pesées depuis le début de la saison."
-          />
-        )}
-        {visible.includes('journal') && (
-          <Placeholder
-            icon={ScrollText}
-            title="Dernières interventions"
-            body="Vos dernières actions enregistrées dans le journal du potager."
-          />
-        )}
-      </div>
+      {/* [CA1] Deux colonnes à partir de 700 px de conteneur, sinon une. */}
+      {vide ? (
+        <p className="py-10 text-center text-[13px] text-txt3">Rien à signaler pour l’instant.</p>
+      ) : (
+        <div className="grid gap-[18px] @[700px]/dash:grid-cols-2 @[700px]/dash:items-start">
+          {colonneGauche}
+          {colonneDroite}
+        </div>
+      )}
 
       {modaleLocalisation && potagerActif && (
         <ModalModifierPotager potager={potagerActif} onClose={() => setModaleLocalisation(false)} />
       )}
-
       {modaleTelegram && (
         <LierTelegram
           telegramLie={telegramLie}

@@ -4,7 +4,8 @@
 // au potager et libellé de fenêtre. Toute la mise en forme vit dans
 // `lib/cultures.js` (CA14) : ce composant assemble, il ne calcule rien.
 import { useState } from 'react'
-import { MonthStrip } from './ui/MonthStrip.jsx'
+import { CalendrierAnnee } from './ui/CalendrierAnnee.jsx'
+import { moisDeFrise } from '../lib/calendrierAnnee.js'
 import { PastillePhase } from './ui/PastillePhase.jsx'
 import { Etoiles } from './ui/RegleConfiance.jsx'
 import {
@@ -98,7 +99,7 @@ export function CarteCulture({ ligne, meteoDisponible = true, enSuggestion = lig
         </div>
       ) : (
         <div className={ligne.a_calendrier ? '' : 'opacity-55'}>
-          <MonthStrip {...frise} moisCourant={undefined} />
+          <CalendrierAnnee mois={moisDeFrise(frise)} frise={frise} moisCourant={new Date().getMonth()} />
         </div>
       )}
 

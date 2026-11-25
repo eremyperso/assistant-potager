@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  ajouterJours, construireRegle, ecartEnJours, estToucheAujourdhui, graduations, indexDepuisDefilement,
+  ajouterJours, construireRegle, dateCourte, ecartEnJours, estToucheAujourdhui, graduations, indexDepuisDefilement,
   indexDuJour, jourDeIndex, libelleCourt, libelleLong, mentionDuJour, pasDuClavier, versDateRef,
 } from './regleTemps.js'
 
@@ -54,8 +54,11 @@ test('les libellés sont en français, le 1er s\'écrit « 1er »', () => {
   assert.equal(libelleLong('2026-03-07'), 'Sam. 7 mars 2026')
 })
 
-test('« historique » dès qu\'on lit un jour passé, rien sur aujourd\'hui', () => {
-  assert.equal(mentionDuJour('2026-10-24', AUJ), 'historique')
+test('« il y a N j » dès qu\'on lit un jour passé, rien sur aujourd\'hui', () => {
+  assert.equal(mentionDuJour('2026-10-24', AUJ), 'il y a 1 j')
+  assert.equal(mentionDuJour('2026-10-14', AUJ), 'il y a 11 j')
+  assert.equal(dateCourte('2026-11-12'), '12 nov.')
+  assert.equal(dateCourte('2026-11-01'), '1er nov.')
   assert.equal(mentionDuJour(AUJ, AUJ), '')
 })
 

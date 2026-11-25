@@ -7,10 +7,18 @@ const plan = () => NAV.find((n) => n.id === 'plan')
 
 // ── US-223 / CA1 : l'ordre du zoom ───────────────────────────────────────────
 
-test('le Plan n’a plus de tuiles : ni « Plan », ni « Rotation · à venir »', () => {
-  assert.equal(plan().subnav, undefined)
-  assert.deepEqual(sousOngletsActifs('plan'), [])
+test('[US-353 / CA5] le Plan retrouve ses onglets : « Plan » et « Rotation · à venir » (désactivé)', () => {
+  assert.deepEqual(plan().subnav.map((t) => t.label), ['Plan', 'Rotation · à venir'])
+  assert.deepEqual(plan().subnav.map((t) => Boolean(t.disabled)), [false, true])
+  assert.deepEqual(sousOngletsActifs('plan'), ['plan-vue'])
   assert.equal(plan().Icon, Layers)                // l'icône des plans superposés
+})
+
+test('[US-353 / CA5] seuls le tableau de bord, le Plan et Cultures déclarent des onglets', () => {
+  assert.deepEqual(NAV.filter((n) => n.subnav).map((n) => n.id), ['bord', 'plan', 'cultures'])
+  const cultures = NAV.find((n) => n.id === 'cultures')
+  assert.deepEqual(cultures.subnav.map((t) => t.id), ['cultures', 'catalogue'])
+  assert.equal(cultures.subnav[1].disabled, true)   // le catalogue est l'écran d'US-355
 })
 
 test('la vue plan reste rattachée à la section Plan, l’ancienne Rotation n’existe plus', () => {
@@ -91,11 +99,16 @@ test('[US-325 / CA4] la navigation de bureau ne change pas', () => {
 })
 
 test('[US-325 / CA2, CA5] le bouton : 44 px, aria-label, focus visible, jamais aria-current ; masqué en lecture seule', () => {
-  const src = lireFichier(new URL('./components/BottomNav.jsx', import.meta.url), 'utf8')
-  const bouton = src.slice(src.indexOf('onClick={noter}'), src.indexOf('{NOTER.shortLabel}'))
-  assert.match(bouton, /min-h-\[44px\] min-w-\[44px\]/)
-  assert.match(bouton, /aria-label=\{NOTER\.label\}/)
-  assert.match(bouton, /focus-visible:outline/)
-  assert.doesNotMatch(bouton, /aria-current/)
-  assert.match(src, /if \(!ecrire\) return null/)
+  // [US-353] Le bouton est partagé : `BoutonNoter` sert la barre basse et le bureau.
+  const src = lireFichier(new URL('./components/BoutonNoter.jsx', import.meta.url), 'utf8')
+  const bouton = src.slice(src.indexOf('onClick={noter}'), src.indexOf('const rond'))
+  const rond = src.slice(src.indexOf('const rond'), src.indexOf("if (variante === 'bureau') {"))
+  assert.match(rond, /aria-label=\{aria\}/)
+  assert.match(rond, /focus-visible:outline/)
+  assert.doesNotMatch(rond, /aria-current/)
+  assert.match(src, /if \(!peutEnregistrer\(potagerActif\?\.role\)\) return null/)
+  assert.ok(bouton.length >= 0)
+  const css = lireFichier(new URL('./index.css', import.meta.url), 'utf8')
+  assert.match(css, /\.noter-rond\s*\{[^}]*width:\s*62px;\s*height:\s*62px;\s*margin-top:\s*-30px/)
+  assert.match(lireFichier(new URL('./components/BottomNav.jsx', import.meta.url), 'utf8'), /<BoutonNoter /)
 })

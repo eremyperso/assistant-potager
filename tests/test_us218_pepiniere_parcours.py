@@ -148,11 +148,12 @@ def test_us218_calendrier_seulement_quand_rien_n_est_a_semer() -> None:
 # ── CA1, CA29 — deux onglets, les onglets retirés supprimés ─────────────────
 
 def test_us218_ca1_deux_onglets_parcours_par_defaut() -> None:
-    """CA1 — la vue ouvre le parcours par défaut ; « Lots » est le journal de saison (US-242)."""
+    """CA1 — la vue ouvre le parcours par défaut ; « Lots » est le registre de saison (US-242).
+    [US-356] Trois onglets d'en-tête (Parcours, Semer, Lots) : la bande des semis a son propre onglet."""
     vue = _lire("views/Pepiniere.jsx")
     assert "onglet: 'parcours'" in vue
-    assert "<OngletParcours" in vue and "ONGLETS_PEPINIERE" in vue
-    assert "<OngletLots" in vue and "libelleNumeroLot(lot)" in vue
+    assert "<OngletParcours" in vue and "ongletsPepiniere" in vue
+    assert "<OngletLots" in vue and "<OngletSemer" in vue
 
 
 @pytest.mark.parametrize("chemin", [
@@ -169,7 +170,7 @@ def test_us218_ca29_aucune_reference_aux_onglets_retires() -> None:
     """CA29 — plus aucune importation des onglets retirés."""
     for chemin in ("views/Pepiniere.jsx", "main.jsx", "lib/pepiniere.js"):
         texte = _lire(chemin)
-        for retire in ("OngletAujourdhui", "OngletCalendrier", "calendrierPepiniere", "ongletsPepiniere"):
+        for retire in ("OngletAujourdhui", "OngletCalendrier", "calendrierPepiniere"):
             assert retire not in texte, (chemin, retire)
 
 
@@ -183,11 +184,15 @@ def test_us218_ca25_une_seule_lecture() -> None:
 
 
 def test_us218_ca14_gestes_deposes_sans_redirection() -> None:
-    """CA14 — les gestes passent par BoutonGeste : dépôt dans la file, notification, pas de Telegram."""
-    onglet = _lire("components/OngletParcours.jsx")
-    assert "BoutonGeste" in onglet and "gestesEtiquette(" in onglet
-    for interdit in ("t.me", "window.open", "location.href", "preparerGeste"):
-        assert interdit not in onglet, interdit
+    """CA14 — les gestes passent par BoutonGeste : dépôt dans la file, notification, pas de Telegram.
+    [US-356] Le Parcours ouvre la fiche du lot (les gestes s'y font).
+    [US-358] « Semer » d'une tuile ouvre Gaston avec la phrase prête dans le champ, sans rien écrire."""
+    for chemin in ("components/OngletParcours.jsx", "components/OngletSemer.jsx", "components/CarteLot.jsx"):
+        onglet = _lire(chemin)
+        for interdit in ("t.me", "window.open", "location.href", "preparerGeste"):
+            assert interdit not in onglet, (chemin, interdit)
+    assert "ouvrirGastonSur" in _lire("components/OngletSemer.jsx")
+    assert "gestesDuLot" in _lire("lib/ficheLot.js")
 
 
 def test_us218_ca14_une_seule_regle_de_gestes() -> None:
@@ -198,29 +203,32 @@ def test_us218_ca14_une_seule_regle_de_gestes() -> None:
 
 
 def test_us218_ca23_lecture_seule_sans_bouton() -> None:
-    """CA23 — en lecture seule, aucun geste : BoutonGeste se tait, l'onglet aussi."""
+    """CA23 — en lecture seule, aucun geste : BoutonGeste se tait, et « Noter » de la fiche aussi."""
     assert "if (!peutEnregistrer(potagerActif?.role)) return null" in _lire("components/BoutonGeste.jsx")
-    onglet = _lire("components/OngletParcours.jsx")
-    assert "const ecriture = peutEnregistrer(potagerActif?.role)" in onglet
-    assert "if (!ecriture || !gestes.length) return null" in onglet
+    assert "{ecriture && (" in _lire("components/FicheLotCommune.jsx")
 
 
 # ── CA22, CA24 — container queries, tableau sémantique ──────────────────────
 
 def test_us218_ca22_container_queries_sans_breakpoint() -> None:
-    """CA22 — container queries pour le composant, aucun breakpoint d'écran."""
+    """CA22 — container queries pour le composant, aucun breakpoint d'écran.
+    [US-356] La bascule matrice / un stade à la fois est une structure de page (`bureau`, 900 px)."""
     onglet = _lire("components/OngletParcours.jsx")
-    assert "@container/parcours" in onglet and "@[48rem]/parcours:hidden" in onglet
+    assert "@container/parcours" in onglet and "bureau" in onglet
     for bp in (" sm:", " md:", " lg:", " xl:"):
         assert bp not in onglet, bp
 
 
 def test_us218_ca24_tableau_semantique() -> None:
-    """CA24 — un tableau : lignes = pépinières, colonnes = stades ; étiquettes focalisables et nommées."""
+    """CA24 — une matrice : lignes = pépinières, colonnes = stades ; cartes focalisables et nommées.
+    [US-356] Grille ARIA (`role="table"`) ; sur mobile, le pager aimanté a ses `tablist` et `tabpanel`."""
     onglet = _lire("components/OngletParcours.jsx")
-    for repere in ("<table", '<th scope="row"', '<th key={c.cle} scope="col"', "tabIndex={0}",
-                   "aria-label={nomAccessible(etiquette)}", 'role="tablist"'):
+    for repere in ('role="table"', 'role="columnheader"', 'role="rowheader"', 'role="cell"', "<PagerAimante"):
         assert repere in onglet, repere
+    carte = _lire("components/CarteLot.jsx")
+    assert "aria-label={carte.nomAccessible}" in carte
+    pager = _lire("components/PagerAimante.jsx")
+    assert 'role="tablist"' in pager and 'role="tabpanel"' in pager
 
 
 def test_us218_monthstrip_non_modifie() -> None:
@@ -254,8 +262,8 @@ def test_us218_ca27_page_de_controle_branchee() -> None:
 def test_us218_ca30_corpus_decrit_le_parcours() -> None:
     """CA30 — la fiche jardinier décrit l'onglet et ne parle plus des onglets retirés."""
     fiche = (RACINE / "data" / "connaissance" / "doc_app" / "pepiniere-par-lot.md").read_text(encoding="utf-8")
-    for mot in ("onglet **Ma pépinière**", "En levée", "En godet", "Endurcissement", "Prêt à sortir",
-                "Le bon moment pour semer", "lots dormants", "1/2", "onglet **Lots**"):
+    for mot in ("**Parcours**", "**Semer · n**", "En levée", "En godet", "Endurcissement", "Prêt à sortir",
+                "Le bon moment pour semer", "lot dormant", "onglet **Lots**"):
         assert mot in fiche, mot
     for retire in ("onglet **Aujourd'hui**", "onglet **Calendrier**", "onglet **Emplacements**"):
         assert retire not in fiche, retire
@@ -272,15 +280,12 @@ def test_us218_fiche_de_domaine_a_jour(fichier: str) -> None:
 # ── Maquette HF, option B — la fiche en bandeau sous la rangée ──────────────
 
 def test_us218_ca20_fiche_en_bandeau_sous_la_rangee() -> None:
-    """CA20 / HF option B — au large, la fiche s'ouvre dans une ligne du tableau, sous la rangée."""
-    onglet = _lire("components/OngletParcours.jsx")
-    assert "<FicheLotBandeau" in onglet and "cleLigneDe(ouvert.etiquette) === l.cle" in onglet
-    assert "colSpan={STADES.length + 1}" in onglet
+    """CA20 / HF option B — remplacé par US-356 / CA11 : la fiche d'un lot s'ouvre au format de la fiche
+    commune, dans le panneau droit partagé sur ordinateur et en feuille sur mobile."""
     vue = _lire("views/Pepiniere.jsx")
-    assert "const LARGEUR_BANDEAU = 768" in vue
-    assert "etiquetteOuverte(data?.parcours, fiche.lot_id, etiquetteChoisie)" in vue
-    # [US-242] Sur « Lots », la fiche se déplie sous la ligne : la fenêtre ne sert qu'au parcours.
-    assert "const enFenetre = fiche != null && !enBandeau && onglet === 'parcours'" in vue
+    assert "<HotePanneau />" in vue and "createPortal(" in vue
+    assert "<FicheLotCommune" in vue
+    assert "const LARGEUR_BANDEAU" not in vue
 
 
 def test_us218_ca20_bandeau_reutilise_les_regles_de_la_fiche() -> None:

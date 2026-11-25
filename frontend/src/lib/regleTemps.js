@@ -78,9 +78,18 @@ export function libelleCourt(iso) {
   return `${JOURS[jourDeSemaine(iso)]} ${jm(iso)}`
 }
 
-/** « historique » dès qu'on lit un jour passé, rien sur le jour même. */
+/**
+ * [US-353 / CA10] « 12 nov. » : la date courte du bouton date quand on regarde un autre jour.
+ * Le premier du mois s'écrit « 1er nov. », comme dans la règle.
+ */
+export function dateCourte(iso) {
+  return jm(iso)
+}
+
+/** [US-353 / CA10] « il y a 11 j » dès qu'on lit un jour passé, rien sur le jour même. */
 export function mentionDuJour(iso, aujourdhui) {
-  return iso < aujourdhui ? 'historique' : ''
+  const n = ecartEnJours(iso, aujourdhui)
+  return n > 0 ? `il y a ${n} j` : ''
 }
 
 /**

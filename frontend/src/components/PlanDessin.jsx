@@ -9,10 +9,21 @@ import {
   LIBELLE_VERTICAL, LIBELLE_COMPLET, LIBELLE_EMOJI_PICTO, LIBELLE_PICTO,
   MARGE_PARCELLE_PX, ECART_RANGS_PX, LONGUEUR_ECHELLE_M,
 } from '../lib/planDessus.js'
-import { classesSegment, VARIANTE_A_CONFIRMER, VARIANTE_PLEIN } from '../lib/etapes.js'
+import { classesSegment, VARIANTE_A_CONFIRMER, VARIANTE_PLEIN, VARIANTE_PREVU } from '../lib/etapes.js'
+import { infobulleRang } from '../lib/planSocle.js'  // [US-360]
 import { IconeEtape } from './ui/EtapeCulture.jsx'
 
 const FOCUS = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand'
+
+/** [US-360] « Fève · Levé, prévu » : ce que lit l'appui long sur un rang (survol sur ordinateur). */
+function infobulleDuSegment(segment) {
+  return infobulleRang({
+    nom: segment.nom,
+    etape: segment.etape,
+    prevu: segment.variante === VARIANTE_PREVU || segment.variante === VARIANTE_A_CONFIRMER,
+    libre: Boolean(segment.libre),
+  })
+}
 
 /** [P2, P3, P4] Un segment : une culture sur sa part du rang, ou un morceau libre. */
 function Segment({ forme, mesure, segment, filtre, choisi, onSegment, onRangLibre, onDeposer, accueillant, mini }) {
@@ -27,7 +38,8 @@ function Segment({ forme, mesure, segment, filtre, choisi, onSegment, onRangLibr
   // [US-329 / CA2] Le mini-plan : le même dessin, sans libellé ni cible (la parcelle entière en est une).
   if (mini) {
     const fond = segment.libre ? 'etape-libre' : (segment.etape ? classesSegment(segment.etape, segment.variante || VARIANTE_PLEIN) : 'bg-card border border-border')
-    return <span aria-hidden="true" style={style} className={`min-w-0 min-h-0 rounded-[2px] ${fond}`} />
+    // [US-360 / CA3] Appui long (380 ms) : l'étape du rang, sans ouvrir la fiche.
+    return <span aria-hidden="true" style={style} data-tip={infobulleDuSegment(segment)} className={`min-w-0 min-h-0 rounded-[2px] ${fond}`} />
   }
 
   if (segment.libre) {
@@ -35,7 +47,7 @@ function Segment({ forme, mesure, segment, filtre, choisi, onSegment, onRangLibr
     // puis Entrée ici. Rien n'est écrit : le dépôt ouvre Gaston avec la proposition.
     const surDeposer = (e) => { e.preventDefault(); onDeposer?.(forme, segment) }
     return (
-      <button type="button" style={style}
+      <button type="button" style={style} data-tip={infobulleDuSegment(segment)}
         aria-label={accueillant ? `${segment.nomAccessible} — déposer ici la carte en main` : segment.nomAccessible}
         onClick={() => (accueillant ? onDeposer?.(forme, segment) : onRangLibre?.(forme, segment))}
         onDragOver={(e) => { if (onDeposer) { e.preventDefault(); try { e.dataTransfer.dropEffect = 'move' } catch { /* jsdom */ } } }}
@@ -47,7 +59,7 @@ function Segment({ forme, mesure, segment, filtre, choisi, onSegment, onRangLibr
   }
   const classes = segment.etape ? classesSegment(segment.etape, segment.variante || VARIANTE_PLEIN) : 'bg-card text-txt border border-border'
   return (
-    <button type="button" style={style} aria-label={segment.nomAccessible}
+    <button type="button" style={style} aria-label={segment.nomAccessible} data-tip={infobulleDuSegment(segment)}
       aria-pressed={choisi ? 'true' : 'false'}
       onClick={() => onSegment?.(forme, segment)}
       className={`${base} ${classes}${estompe}${choisi ? ' choisi' : ''}`}>
@@ -98,7 +110,7 @@ function Lots({ forme, mesure, onLot }) {
  */
 export function ParcellePlan({
   forme, u, filtre, choix, parcelleChoisie, positionnee = true, largeurPx, hauteurPx,
-  onSegment, onParcelle, onRangLibre, onLot, onDeposer, accueillant = false, mini = false,
+  onSegment, onParcelle, onRangLibre, onLot, onDeposer, accueillant = false, mini = false, estompee = false,
 }) {
   const w = largeurPx ?? forme.w * u
   const h = hauteurPx ?? forme.h * u
@@ -110,7 +122,7 @@ export function ParcellePlan({
   const mesure = positionnee ? { forme, u } : { forme: { ...forme, w, h }, u: 1 }
   const nature = forme.pepiniere ? ` · pépinière${forme.typePepiniere ? ` ${forme.typePepiniere}` : ''}` : ''
   const etat = forme.actif ? '' : ' · inactive'
-  const classes = `parcelle-plan forme-${forme.forme}${forme.estimee ? ' estimee' : ''}${forme.actif ? '' : ' inactive'}${parcelleChoisie === forme.id ? ' choisie' : ''}`
+  const classes = `parcelle-plan forme-${forme.forme}${forme.estimee ? ' estimee' : ''}${forme.actif ? '' : ' inactive'}${parcelleChoisie === forme.id ? ' choisie' : ''}${estompee ? ' estompee' : ''}`
   const vertical = forme.dir === DIR_V
 
   if (mini) {

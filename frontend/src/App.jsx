@@ -6,7 +6,7 @@ import { setTokens } from './lib/api.js'
 import { PotagerContextProvider, usePotager } from './context/PotagerContext.jsx'
 import TopBar    from './components/TopBar.jsx'
 import BottomNav from './components/BottomNav.jsx'
-import RegleTemps from './components/RegleTemps.jsx'
+import { InfobulleEtapes } from './components/ui'  // [US-352 / CA4] survol et appui long de 380 ms
 import PageHeader from './components/PageHeader.jsx'
 import { Placeholder } from './components/ui'
 import { VUE_PAR_DEFAUT, NAV_OF, vueDeSection } from './navigation.js'
@@ -17,7 +17,11 @@ import MessageIntention from './components/MessageIntention.jsx'
 import BandeauFile from './components/BandeauFile.jsx'  // [US-224]
 import { FileGestesProvider } from './context/FileGestesContext.jsx'  // [US-224]
 import { NotificationsProvider } from './context/NotificationsContext.jsx'  // retour d'action
-import BoutonCompagnon from './components/BoutonCompagnon.jsx'  // [US-271]
+import BandesFixes from './components/BandesFixes.jsx'  // [US-353] mot de Gaston, barre d'outils, règle des temps
+import BoutonNoter from './components/BoutonNoter.jsx'  // [US-353] le seul bouton rond vers Gaston
+import PanneauPartage from './components/PanneauPartage.jsx'  // [US-353 / CA12]
+import { CoquilleProvider, useCoquille } from './context/CoquilleContext.jsx'  // [US-353]
+import { estCompact, occupantAFermer } from './lib/coquille.js'  // [US-353 / CA11]
 import PanneauCompagnon from './components/PanneauCompagnon.jsx'  // [US-271]
 import { GastonDefs } from './components/Gaston.jsx'  // [US-271]
 import { useMedia } from './hooks/useMedia.js'  // [US-271]
@@ -139,15 +143,15 @@ function AppInner({ intentionAdresse }) {
     ecrireEtat(window.localStorage, suivant)
     return suivant
   }), [])
-  // Structure de page : plein écran au téléphone, carte flottante au-delà ; au-dessus de la barre
-  // d'onglets basse tant qu'elle existe (sous 900 px).
-  const compagnonPlein = useMedia('(max-width: 639px)')
+  // [US-353 / CA12] Structure de page : un panneau droit de 400 px à partir de 900 px ; en dessous,
+  // une feuille montante, et Gaston en plein écran.
+  const bureau = useMedia('(min-width: 900px)')
+  const coquille = useCoquille()
   // [US-272 / CA5] La pastille des messages non lus, relue tant que le chat est fermé.
   const { nonLus: nonLusCompagnon, marquerVu: marquerCompagnonVu } = useNonLusCompagnon(compagnon === 'chat')
-  const barreBasse = useMedia('(max-width: 899px)')
   // [US-322 / S6, US-323 / C1, C6] « Noter » ouvre Gaston avec ce que le jardinier a sous les yeux
   // (barre de contexte) ; le visage de Gaston ouvre une conversation libre, sans barre.
-  const [ouverture, setOuverture] = useState({ barre: false, contexte: null })
+  const [ouverture, setOuverture] = useState({ barre: false, contexte: null, sujet: null, champ: null })
   useEffect(() => {
     const ouvrir = (e) => {
       setOuverture(ouvertureDuPanneau(e.detail))
@@ -156,17 +160,37 @@ function AppInner({ intentionAdresse }) {
     window.addEventListener(EVENEMENT_OUVRIR_COMPAGNON, ouvrir)
     return () => window.removeEventListener(EVENEMENT_OUVRIR_COMPAGNON, ouvrir)
   }, [agirCompagnon])
-  const ouvrirConversationLibre = useCallback(() => {
-    setOuverture({ barre: false, contexte: null })
-    agirCompagnon('ouvrir')
-  }, [agirCompagnon])
-  const changerContexte = useCallback((contexte) => setOuverture({ barre: true, contexte }), [])
+  // [US-358 / CA6] Retirer le contexte (×) retire aussi le sujet affiché : le message suivant part sans contexte.
+  const changerContexte = useCallback((contexte) => setOuverture({ barre: true, contexte, sujet: null, champ: null }), [])
   // [US-325 / CA3] La sélection courante de l'écran Plan : pastille et contexte du bouton « Noter ».
   const [selectionPlan, setSelectionPlan] = useState(null)
   useEffect(() => {
     const suivre = (e) => setSelectionPlan(e.detail?.contexte ?? null)
     window.addEventListener(EVENEMENT_SELECTION_PLAN, suivre)
     return () => window.removeEventListener(EVENEMENT_SELECTION_PLAN, suivre)
+  }, [])
+
+  // [US-353 / CA12] Un seul occupant du panneau à la fois : ouvrir Gaston referme la fiche, et
+  // ouvrir une fiche referme Gaston.
+  const gastonOuvert = compagnon === 'chat'
+  const { occupant: occupantFiche, fermerPanneau } = coquille
+  // [US-358] Le dernier venu l'emporte : Noter depuis une fiche ouvre Gaston ET doit fermer la fiche, pas
+  // Gaston. Les deux règles ne sont donc plus indépendantes (elles se fermaient l'une l'autre dans le même rendu).
+  const avantPanneau = useRef({ gastonOuvert: false, occupant: null })
+  useEffect(() => {
+    const aFermer = occupantAFermer({ gastonOuvert, occupant: occupantFiche }, avantPanneau.current)
+    avantPanneau.current = { gastonOuvert, occupant: occupantFiche }
+    if (aFermer === 'fiche') fermerPanneau()
+    else if (aFermer === 'gaston') agirCompagnon('fermer')
+  }, [gastonOuvert, occupantFiche, fermerPanneau, agirCompagnon])
+  // [US-355 / CA1] Une fiche ouverte (commune ou catalogue) ne survit pas au changement de vue : le panneau est celui de l'écran.
+  useEffect(() => { if (occupantFiche?.commune) fermerPanneau() }, [view])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // [US-353 / CA11] Seule la bande de contenu défile ; au-delà de 8 px, l'en-tête se resserre.
+  const [compact, setCompact] = useState(false)
+  const surDefilement = useCallback((e) => setCompact(estCompact(e.currentTarget.scrollTop)), [])
+  const remonter = useCallback(() => {
+    mainRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })
   }, [])
 
   const handleRefresh = useCallback(() => {
@@ -207,6 +231,26 @@ function AppInner({ intentionAdresse }) {
     if (mainRef.current) mainRef.current.scrollTop = defilements.current.get(view) ?? 0
   }, [view])
 
+  // Le chat de Gaston (maquette « Compagnon.html »), dans le panneau partagé : un geste confirmé relit
+  // l'écran courant.
+  const panneauGaston = (plein) => (
+    <PanneauCompagnon
+      plein={plein}
+      vue={view}
+      onFermer={() => agirCompagnon('fermer')}
+      onEnregistre={handleRefresh}
+      onVu={marquerCompagnonVu}
+      barreContexte={ouverture.barre}
+      contexte={ouverture.contexte}
+      sujet={ouverture.sujet}
+      champ={ouverture.champ}
+      onContexte={changerContexte}
+      noter={ouverture.barre && !ouverture.placement}
+      placement={ouverture.placement}
+      onRetourPlan={() => { agirCompagnon('fermer'); changerVue(VUE_PLAN) }}
+    />
+  )
+
   return (
     <NavigationProvider
       vue={view}
@@ -220,66 +264,66 @@ function AppInner({ intentionAdresse }) {
       <div className="flex flex-col h-dvh bg-bg">
         <TopBar view={view} onGo={changerSection} onRefresh={handleRefresh} loading={loading} />
 
-        <main ref={mainRef} className="flex-1 overflow-y-auto min-h-0">
-          <PageHeader view={view} onGo={changerVue} />
-          <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-7">
-            <MessageIntention />
-            {/* [US-224 / CA22] Le compte de la file, sur tous les écrans — une
-                file invisible serait une file oubliée. */}
-            <BandeauFile />
-            {renderView({ refresh: refreshKey })}
-          </div>
-        </main>
+        <div className="flex min-h-0 flex-1">
+          {/* [US-353 / CA11] Les bandes fixes (en-tête, mot de Gaston, barre d'outils) ne défilent
+              pas ; seul le contenu défile. Le conteneur `page` sert les container queries de la
+              barre d'outils (Filtrer se réduit à son icône sous 520 px). */}
+          <div className="@container/page flex min-w-0 flex-1 flex-col">
+            <div className="relative z-[2] shrink-0 bg-bg shadow-[0_1px_0_var(--border),0_6px_10px_-8px_rgba(22,33,12,.18)]">
+              <PageHeader view={view} onGo={changerVue} compact={compact} />
+              <BandesFixes view={view} compact={compact} onRemonter={remonter} />
+            </div>
 
-        {/* [US-271 / CA1] Bouton flottant du compagnon. L'ancre est de hauteur nulle et suit le
-            flux : elle se pose juste au-dessus de la règle des temps et de la barre d'onglets,
-            qu'elle ne recouvre donc jamais. Structure de page : les breakpoints sont ici à leur place. */}
-        <div className="relative z-30 h-0 w-full shrink-0 overflow-x-clip">
-          {compagnon !== 'chat' && (
-            <BoutonCompagnon
-              etat={compagnon}
-              nonLus={nonLusCompagnon}
-              onOuvrir={ouvrirConversationLibre}
-              onReplier={() => agirCompagnon('replier')}
-              onDeplier={() => agirCompagnon('deplier')}
-            />
+            <main ref={mainRef} onScroll={surDefilement} className="min-h-0 flex-1 overflow-y-auto">
+              <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-28 nav:pb-24">
+                <MessageIntention />
+                {/* [US-224 / CA22] Le compte de la file, sur tous les écrans — une
+                    file invisible serait une file oubliée. */}
+                <BandeauFile />
+                {renderView({ refresh: refreshKey })}
+              </div>
+            </main>
+          </div>
+
+          {/* [US-353 / CA12] Panneau droit de 400 px sur ordinateur : un seul occupant, Gaston ou la
+              fiche déclarée par la vue. Sur mobile, il est rendu plus bas (feuille ou plein écran). */}
+          {bureau && (gastonOuvert || occupantFiche) && (
+            <PanneauPartage
+              bureau occupant={gastonOuvert ? 'gaston' : occupantFiche.cle}
+              titre={gastonOuvert ? 'Gaston' : occupantFiche.titre}
+              onFermer={gastonOuvert ? () => agirCompagnon('fermer') : fermerPanneau}
+            >
+              {gastonOuvert ? panneauGaston(false) : occupantFiche.contenu}
+            </PanneauPartage>
           )}
         </div>
 
-        {/* Règle des temps : au-dessus de la barre basse, hors du défilement de
-            la page — donc la même sur toutes les vues qui portent le sélecteur de date. */}
-        <RegleTemps />
+        <BottomNav
+          view={view} onGo={changerSection} nonLus={nonLusCompagnon}
+          selection={NAV_OF[view] === 'plan' ? selectionPlan : null}
+        />
 
-        <BottomNav view={view} onGo={changerSection} selection={NAV_OF[view] === 'plan' ? selectionPlan : null} />
+        {/* [US-353 / CA3] Sur ordinateur, le même bouton rond en bas à droite : décalé à gauche du
+            panneau ouvert, absent tant que Gaston est ouvert. */}
+        {bureau && (
+          <BoutonNoter
+            variante="bureau" nonLus={nonLusCompagnon} onGo={changerSection}
+            selection={NAV_OF[view] === 'plan' ? selectionPlan : null}
+            panneauOuvert={Boolean(occupantFiche)} gastonOuvert={gastonOuvert}
+          />
+        )}
 
-        {/* Le chat de Gaston (maquette « Compagnon.html ») : plein écran au téléphone, carte de
-            380 × 600 en bas à droite au-delà. Un geste confirmé relit l'écran courant. */}
-        {compagnon === 'chat' && (
-          <div
-            className={compagnonPlein
-              ? 'fixed inset-0 z-50'
-              : 'fixed right-4 z-50 h-[600px] w-[380px] overflow-hidden rounded-[22px] shadow-[0_18px_50px_rgba(22,33,12,.28),0_2px_6px_rgba(22,33,12,.1)]'}
-            style={compagnonPlein ? undefined : {
-              bottom: barreBasse ? 96 : 16,
-              maxHeight: `calc(100dvh - ${barreBasse ? 112 : 32}px)`,
-            }}
+        {!bureau && (gastonOuvert || occupantFiche) && (
+          <PanneauPartage
+            bureau={false} occupant={gastonOuvert ? 'gaston' : occupantFiche.cle}
+            titre={gastonOuvert ? 'Gaston' : occupantFiche.titre}
+            onFermer={gastonOuvert ? () => agirCompagnon('fermer') : fermerPanneau}
           >
-            <PanneauCompagnon
-              plein={compagnonPlein}
-              vue={view}
-              onFermer={() => agirCompagnon('fermer')}
-              onEnregistre={handleRefresh}
-              onVu={marquerCompagnonVu}
-              barreContexte={ouverture.barre}
-              contexte={ouverture.contexte}
-              onContexte={changerContexte}
-              noter={ouverture.barre && !ouverture.placement}
-              placement={ouverture.placement}
-              onRetourPlan={() => { agirCompagnon('fermer'); changerVue(VUE_PLAN) }}
-            />
-          </div>
+            {gastonOuvert ? panneauGaston(true) : occupantFiche.contenu}
+          </PanneauPartage>
         )}
         <GastonDefs />
+        <InfobulleEtapes />
       </div>
       </NotificationsProvider>
       </FileGestesProvider>
@@ -297,7 +341,9 @@ function PotagerGate() {
 
   return (
     <AppContextProvider>
-      <AppInner intentionAdresse={INTENTION_ADRESSE} />
+      <CoquilleProvider>
+        <AppInner intentionAdresse={INTENTION_ADRESSE} />
+      </CoquilleProvider>
     </AppContextProvider>
   )
 }

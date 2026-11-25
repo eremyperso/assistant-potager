@@ -3,19 +3,33 @@
 // (US-065). La mise en forme suit la maquette ; les fonctions qu'elle ne connaît
 // pas (date de référence, panneau de traçabilité, états de germination) sont
 // conservées et logées dans ses composants plutôt que réinventées.
-import { useState, useEffect, useCallback } from 'react'
-import { Sprout } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { Sprout, CalendarDays, Map as IconeCarte } from 'lucide-react'
+import { Lot as IconeDuLot } from '../components/ui/IconeLot.jsx'
 import { api } from '../lib/api.js'
 import { etatDuLot } from '../lib/ficheLot.js'
 import { tauxTint, libelleNumeroLot, lireNumeroLot, messageLotInconnu } from '../lib/pepiniere.js'
-import { ONGLETS_PEPINIERE, ongletInitial, fragmentsDuLot, etiquetteOuverte } from '../lib/parcours.js'   // [US-218]
+import { fragmentsDuLot } from '../lib/parcours.js'   // [US-218]
+import {
+  ongletPepiniere, ongletDeLIntention, ongletsPepiniere, CONTEXTE_ONGLET, alertesDesLots, nbASemer,
+  motDuParcours, motDeSemer, motDesLots, emplacementDuLot, statutPepiniere,
+} from '../lib/pepiniereSocle.js'   // [US-356]
+import { filtreInitial } from '../lib/lotsJournal.js'
+import { ouvrirGastonSur } from '../lib/contexteCompagnon.js'
+import { sujetLot } from '../lib/ouvertureGaston.js'  // [US-358]
 import { useDateRef } from '../context/AppContext.jsx'
 import { usePotager } from '../context/PotagerContext.jsx'
 import { useIntention, useEtatEcran, useNavigation } from '../context/NavigationContext.jsx'
+import { useCoquille, useDeclarerEcran, HotePanneau } from '../context/CoquilleContext.jsx'   // [US-353, US-356]
+import { useMedia } from '../hooks/useMedia.js'
+import { peutEnregistrer } from '../lib/gestes.js'
 import FicheLot, { FicheLotInconnu } from '../components/FicheLot.jsx'   // [US-216]
+import FicheLotCommune from '../components/FicheLotCommune.jsx'   // [US-356 / CA11]
 import FicheCulture from '../components/FicheCulture.jsx'
-import OngletParcours from '../components/OngletParcours.jsx'   // [US-218]
-import OngletLots from '../components/OngletLots.jsx'   // [US-242]
+import OngletParcours from '../components/OngletParcours.jsx'   // [US-218, US-356]
+import OngletSemer from '../components/OngletSemer.jsx'   // [US-356]
+import OngletLots from '../components/OngletLots.jsx'   // [US-242, US-356]
 import { RelectureAuRetourProvider } from '../hooks/useRelectureAuRetour.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
 import ApiError from '../components/ApiError.jsx'
@@ -32,27 +46,6 @@ function fmt(dateStr) {
 }
 
 const pluriel = (n, mot, suffixe = 's') => `${n} ${mot}${n > 1 ? suffixe : ''}`
-
-// [US-218, maquette HF option B] À partir de 48rem (le kanban en tableau), la fiche d'un
-// lot s'ouvre en bandeau sous sa rangée ; en dessous, en plein écran.
-const LARGEUR_BANDEAU = 768
-
-/**
- * Largeur du CONTENEUR de l'écran, pas de la fenêtre : la fiche est un composant
- * destiné à plus d'un contexte de layout. Un composant React ne change pas d'arbre
- * sur une container query CSS — d'où cette mesure.
- */
-function useLargeur(el) {
-  const [largeur, setLargeur] = useState(0)
-  useEffect(() => {
-    if (!el || typeof ResizeObserver === 'undefined') return undefined
-    setLargeur(Math.round(el.getBoundingClientRect().width))
-    const obs = new ResizeObserver(([e]) => setLargeur(Math.round(e.contentRect.width)))
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [el])
-  return largeur
-}
 
 // ── Panneau de détail : cycle de vie du lot ───────────────────────────────────
 
@@ -289,37 +282,42 @@ function DetailModal({ lot, onClose }) {
 
 // ── Vue principale ────────────────────────────────────────────────────────────
 
+/**
+ * Les icônes des onglets d'en-tête (tuiles sur ordinateur, pastilles sur mobile) : la carte pliante
+ * pour le Parcours — la même que « Voir au Parcours » —, le calendrier pour Semer, l'étiquette de lot.
+ */
+const ICONES_ONGLETS = { parcours: IconeCarte, semer: CalendarDays, lots: IconeDuLot }
+
 export default function Pepiniere({ refresh }) {
   const { dateRef } = useDateRef()
-  const { potagerId } = usePotager()
+  const { potagerId, potagerActif } = usePotager()
   const { annoncer, signaler } = useNavigation()
+  // [US-353 / CA12, D7] Un panneau droit de 400 px à partir de 900 px ; en dessous, la mise en page mobile.
+  const bureau = useMedia('(min-width: 900px)')
+  const { ouvrirPanneau, fermerPanneau, occupant: occupantPartage, hote } = useCoquille()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lotOuvert, setLotOuvert] = useState(null)        // le cycle de vie (DetailModal)
-  // [US-216] La fiche du lot : un lot, ou le numéro d'un lot inconnu (CA13).
+  // [US-356 / CA11] Le lot dont la fiche est ouverte (panneau droit ou feuille) ; `toutes` : la fiche
+  // complète d'US-216 (« Toutes les actions du lot »), dont les gestes restent joignables.
   const [fiche, setFiche] = useState(null)
-  // [US-218] L'étiquette ouverte : le bandeau se glisse sous SA rangée.
-  const [etiquetteChoisie, setEtiquetteChoisie] = useState(null)
+  const [toutes, setToutes] = useState(false)
   const [numeroInconnu, setNumeroInconnu] = useState(null)
   const [cultureOuverte, setCultureOuverte] = useState(null)
-  // Callback ref : le conteneur n'existe pas pendant le chargement de la liste.
-  const [racine, setRacine] = useState(null)
-  const largeur = useLargeur(racine)
-  // [US-195 / CA2] Une étiquette scannée ou un lien partagé ouvrent CE lot
-  // (`/?vue=pepiniere&lot=128`). [US-218 / CA1, CA3] `onglet` et `emplacement` viennent
-  // du Plan (US-201 / I5) : « Lots » s'il est demandé, le parcours sinon (les adresses
-  // d'« Aujourd'hui » et d'« Emplacements » y mènent), filtré sur la pépinière.
-  // [RT12] Onglet, recherche, tri, filtre, compteur actif, onglet de stade et tiroir
-  // font l'état exact de l'écran, rendu tel quel au retour.
+  // [US-195 / CA2] Une étiquette scannée ou un lien partagé ouvrent CE lot (`/?vue=pepiniere&lot=128`).
+  // [US-356 / CA1] `onglet` (parcours, semer, lots), `emplacement` et `filtreLots` viennent du Plan
+  // (US-201 / I5) et du mot de Gaston. [RT12] L'état exact de l'écran est rendu tel quel au retour.
   const [etat, setEtat] = useEtatEcran('pepiniere', {
-    q: '', onglet: 'parcours', filtre: null, compteur: null, stade: null, tiroir: false,
-    // [US-242] L'onglet Lots : filtre de statut, fenêtre de temps, lot déplié.
-    filtreLots: 'tous', zoom: 'saison', lotDeplie: null,
+    q: '', onglet: 'parcours', filtre: null, stade: null, filtreLots: 'en_cours',
   })
   const intention = useIntention('pepiniere', (i) => {
-    if (i?.onglet || i?.emplacement) {
-      setEtat({ onglet: ongletInitial(i.onglet), filtre: i.emplacement ?? null, compteur: null })
+    const onglet = ongletDeLIntention(i)
+    if (onglet || i?.emplacement || i?.filtreLots) {
+      setEtat({
+        onglet: onglet ?? 'parcours', filtre: i.emplacement ?? null, q: '',
+        ...(i.filtreLots ? { filtreLots: filtreInitial(i.filtreLots) } : {}),
+      })
     }
   })
 
@@ -332,8 +330,8 @@ export default function Pepiniere({ refresh }) {
 
   useEffect(() => { load() }, [refresh, dateRef, potagerId])
 
-  // [US-216 / CA14] Au retour d'un geste envoyé au compagnon, UNE relecture : la
-  // liste et le lot ouvert. Silencieuse — pas de squelette, la fiche reste ouverte.
+  // [US-216 / CA14] Au retour d'un geste envoyé au compagnon, UNE relecture : la liste et le lot
+  // ouvert. Silencieuse — pas de squelette, la fiche reste ouverte.
   const relire = useCallback(async () => {
     try {
       const [liste, lotFrais] = await Promise.all([
@@ -346,35 +344,25 @@ export default function Pepiniere({ refresh }) {
   }, [dateRef, potagerId, fiche?.numero_lot])
 
   const tousLots = data?.lots ?? []
+  const parcours = data?.parcours ?? {}
+  const aujourdhui = data?.date_ref_effective ?? null
+  const onglet = ongletPepiniere(etat.onglet)
+  const alertes = useMemo(() => alertesDesLots(tousLots, parcours, aujourdhui), [data]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ecriture = peutEnregistrer(potagerActif?.role)
 
-  // [US-218 / maquette HF] La pastille météo de la barre : la météo du jour, donc
-  // seulement sans date de référence passée. Facultative : illisible, elle se tait.
-  const [meteo, setMeteo] = useState(null)
-  useEffect(() => {
-    if (dateRef) { setMeteo(null); return }
-    let actif = true
-    api.meteo().then((m) => { if (actif) setMeteo(m) }).catch(() => {})
-    return () => { actif = false }
-  }, [dateRef, potagerId])
-
-  // [US-195 / CA3, CA4] Le lot désigné par l'intention, une fois les lots
-  // chargés : sa fiche s'ouvre et son arrivée est annoncée. Lot inconnu — sorti
-  // de pépinière, supprimé, d'un autre potager — l'écran s'ouvre quand même, et
-  // le dit. L'intention ne déclenche aucune écriture : elle ne fait qu'ouvrir.
-  // [US-209 / CA11] `lot=128` désigne le NUMÉRO court écrit sur l'étiquette ; un
-  // identifiant technique (`semis-12`) reste reconnu pour les liens déjà partagés.
+  // [US-195 / CA3, CA4] Le lot désigné par l'intention, une fois les lots chargés : sa fiche s'ouvre et son
+  // arrivée est annoncée. Lot inconnu — sorti de pépinière, supprimé, d'un autre potager — l'écran s'ouvre
+  // quand même, et le dit. L'intention ne déclenche aucune écriture : elle ne fait qu'ouvrir.
+  // [US-209 / CA11] `lot=128` désigne le NUMÉRO court écrit sur l'étiquette ; un identifiant technique
+  // (`semis-12`) reste reconnu pour les liens déjà partagés.
   useEffect(() => {
     if (!intention?.lot || loading) return
     const numero = lireNumeroLot(intention.lot)
     const cible = tousLots.find((l) =>
       (numero != null && l.numero_lot === numero) || String(l.lot_id) === String(intention.lot))
-    if (cible && ongletInitial(etat.onglet) === 'lots') {
-      // [US-242] Sur l'onglet Lots, l'adresse déplie la ligne du lot.
-      setEtat({ filtreLots: 'tous', q: '', lotDeplie: cible.lot_id })
-      annoncer(`Lot ${cible.culture}${cible.variete ? ` · ${cible.variete}` : ''} ouvert.`)
-    } else if (cible) {
-      // [US-216 / CA2] Ouverte par l'adresse : UNE lecture, celle du lot par son
-      // numéro — c'est elle qui porte échéances et action suggérée à jour.
+    if (cible) {
+      // [US-216 / CA2] Ouverte par l'adresse : UNE lecture, celle du lot par son numéro — c'est elle qui
+      // porte échéances et action suggérée à jour.
       if (cible.numero_lot != null) ouvrirParNumero(cible.numero_lot)
       else setFiche(cible)
       annoncer(`Lot ${cible.culture}${cible.variete ? ` · ${cible.variete}` : ''} ouvert.`)
@@ -403,84 +391,101 @@ export default function Pepiniere({ refresh }) {
     }
   }
 
+  const fermerFiche = useCallback(() => { setFiche(null); setToutes(false) }, [])
+
+  // ── Le socle (US-353) : l'en-tête, le mot de Gaston, la barre d'outils ─────────────────────────
+  const nbSemer = nbASemer(parcours)
+  const mot = useMemo(() => {
+    if (!data) return null
+    if (onglet === 'semer') return motDeSemer(parcours)
+    if (onglet === 'lots') return motDesLots({ lots: tousLots, alertes })
+    return motDuParcours({ lots: tousLots, alertes })
+  }, [data, onglet, alertes, bureau]) // eslint-disable-line react-hooks/exhaustive-deps
+  const placeholder = onglet === 'semer' ? 'Culture ou variété' : onglet === 'lots' ? 'Lot n°, culture ou variété' : 'Lot, culture ou variété'
+  useDeclarerEcran({
+    entete: {
+      contexte: CONTEXTE_ONGLET[onglet],
+      onglets: ongletsPepiniere({ nbSemer, nbLots: tousLots.length }).map((o) => ({ ...o, icon: ICONES_ONGLETS[o.id] })),
+      actif: onglet,
+      onChoisir: (id) => { setEtat({ onglet: id }); fermerFiche() },
+    },
+    mot,
+    barre: { recherche: { placeholder, valeur: etat.q ?? '', onChange: (q) => setEtat({ q }) } },
+  }, [onglet, JSON.stringify(mot), etat.q, nbSemer, tousLots.length])
+
+  // [US-356 / CA11] La fiche d'un lot sur ordinateur : le panneau droit partagé (un seul occupant), dessiné par
+  // portail — l'état de l'écran reste ici. Sur mobile, une feuille.
+  const dansPanneau = bureau && fiche != null && !toutes
+  const panneauOuvertParMoi = useRef(false)
+  const titreFiche = fiche ? `Lot ${fiche.numero_lot != null ? `#${fiche.numero_lot} · ` : ''}${fiche.culture ?? ''}` : ''
+  useEffect(() => {
+    if (dansPanneau) {
+      panneauOuvertParMoi.current = true
+      ouvrirPanneau({ cle: 'fiche', titre: titreFiche, contenu: <HotePanneau /> })
+    } else if (panneauOuvertParMoi.current) {
+      panneauOuvertParMoi.current = false
+      fermerPanneau()
+    }
+  }, [dansPanneau, titreFiche]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (panneauOuvertParMoi.current) { panneauOuvertParMoi.current = false; fermerPanneau() }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Le panneau fermé de l'extérieur (×, Gaston qui s'ouvre) : la fiche suit.
+  useEffect(() => {
+    if (occupantPartage || !panneauOuvertParMoi.current) return
+    panneauOuvertParMoi.current = false
+    setFiche(null)
+  }, [occupantPartage]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (loading) return <LoadingSkeleton lines={4} />
   if (error) return <ApiError message={error} onRetry={load} />
 
   const nbPepinieres = Array.isArray(data?.pepinieres) ? data.pepinieres.length : null
-  // [US-218 / CA1] Deux onglets : « Ma pépinière » (le parcours) et « Lots ».
-  const onglet = ongletInitial(etat.onglet)
-  const barreOnglets = (
-    <div className="@container/onglets">
-      <div role="tablist" aria-label="Pépinière" className="grid grid-cols-2 @[30rem]/onglets:inline-flex gap-1 bg-card-alt rounded-[10px] p-[3px]">
-        {ONGLETS_PEPINIERE.map((o) => (
-          <button
-            key={o.cle} type="button" role="tab" aria-selected={onglet === o.cle}
-            onClick={() => setEtat({ onglet: o.cle })}
-            className={`min-h-[44px] @[30rem]/onglets:min-h-[40px] px-3.5 rounded-lg text-[13px] ${onglet === o.cle ? 'bg-card text-txt font-bold shadow-card' : 'text-txt2 font-medium'}`}
-          >
-            {o.libelle}
-          </button>
-        ))}
-      </div>
-    </div>
+  const alerteDeLaFiche = fiche ? alertes.get(fiche.lot_id) ?? null : null
+
+  // Le contenu de la fiche : le même dans le panneau et dans la feuille.
+  const contenuFiche = fiche && (
+    <FicheLotCommune
+      lot={fiche} parcours={parcours} alerte={alerteDeLaFiche} ecriture={ecriture}
+      onNoter={() => ouvrirGastonSur({ sujet: sujetLot({ numero: fiche.numero_lot, culture: fiche.culture, variete: fiche.variete, emplacement: emplacementDuLot(fiche, parcours).texte }) })}
+      onVoirParcours={() => { setEtat({ onglet: 'parcours' }); setToutes(false) }}
+      // [US-358] Depuis le Parcours, la fiche mène au registre des Lots, sur la colonne de ce lot (le lot est amené en vue).
+      onglet={onglet}
+      onVoirLots={() => { setEtat({ onglet: 'lots', q: '', filtreLots: statutPepiniere(fiche, alertes) }); setToutes(false) }}
+      onToutesLesActions={() => setToutes(true)}
+    />
   )
 
-  if (onglet === 'lots' && !tousLots.length) return (
-    <div className="flex flex-col gap-3.5">
-      {barreOnglets}
-      <div className="flex flex-col items-center gap-2 mt-12 text-txt3">
-        <Sprout size={36} />
-        <p className="text-base">Aucun lot de semis pour l'instant.</p>
-      </div>
-    </div>
-  )
-
-  // [US-218, maquette HF option B] Sur « Ma pépinière », assez large : la fiche en bandeau
-  // sous la rangée de l'étiquette ouverte. Un lot sans étiquette (dormant, terminé) s'ouvre
-  // en fenêtre.
-  const enBandeau = onglet === 'parcours' && largeur >= LARGEUR_BANDEAU && fiche != null
-    ? etiquetteOuverte(data?.parcours, fiche.lot_id, etiquetteChoisie)
-    : null
-  // [US-242] Sur « Lots », la fiche se déplie sous la ligne (OngletLots) : plus de panneau.
-  const enFenetre = fiche != null && !enBandeau && onglet === 'parcours'
-  const fermerFiche = () => { setFiche(null); setEtiquetteChoisie(null) }
+  const ouvrirLot = (lot) => { setNumeroInconnu(null); setToutes(false); setFiche(lot) }
 
   return (
     <RelectureAuRetourProvider relire={relire}>
-    <div ref={setRacine} className="flex flex-col gap-3.5">
+    <div className="flex flex-col gap-3.5">
       <div className="flex flex-col gap-3.5 min-w-0">
-      {barreOnglets}
-      {onglet === 'parcours' ? (
-        <OngletParcours
-          data={data} etat={etat} setEtat={setEtat} dateRef={dateRef} meteo={meteo}
-          nbPepinieres={nbPepinieres} lotSelectionne={fiche?.lot_id}
-          onOuvrirLot={(lot, etiquette = null) => {
-            // Un second appui sur l'étiquette ouverte referme sa fiche.
-            if (enBandeau && etiquette && enBandeau.id === etiquette.id) { fermerFiche(); return }
-            setNumeroInconnu(null); setFiche(lot); setEtiquetteChoisie(etiquette?.id ?? null)
-          }}
-          onVoirLots={() => setEtat({ onglet: 'lots' })}
-          ouvert={enBandeau ? { lot: fiche, etiquette: enBandeau } : null}
-          onFermerFiche={fermerFiche}
-          onChoisirFragment={(e) => setEtiquetteChoisie(e.id)}
-          onOuvrirDetail={() => setLotOuvert(fiche)}
-          onOuvrirCulture={setCultureOuverte}
-        />
-      ) : (
-        <OngletLots
-          lots={tousLots} dateRef={dateRef} etat={etat} setEtat={setEtat} signaler={signaler}
-          onLotInconnu={setNumeroInconnu}
-          onAgir={(lot) => {
-            // [US-242 / CA7] On agit dans « Ma pépinière » : l'onglet bascule et la fiche du lot s'y ouvre.
-            setEtat({ onglet: 'parcours' })
-            setNumeroInconnu(null); setEtiquetteChoisie(null); setFiche(lot)
-          }}
-        />
-      )}
+        {onglet === 'parcours' && (
+          <OngletParcours
+            data={recherche(data, etat.q)} etat={etat} setEtat={setEtat} bureau={bureau} alertes={alertes}
+            lotSelectionne={fiche?.lot_id} onOuvrirLot={ouvrirLot}
+          />
+        )}
+        {onglet === 'semer' && <OngletSemer data={data} dateRef={dateRef} q={etat.q} />}
+        {onglet === 'lots' && (
+          <OngletLots
+            data={data} etat={etat} setEtat={setEtat} bureau={bureau} alertes={alertes} aujourdhui={aujourdhui}
+            lotOuvert={fiche?.lot_id} onOuvrirLot={ouvrirLot}
+          />
+        )}
       </div>
 
-      {/* [US-216 / CA2] En dessous de 900 px : fenêtre adaptative, plein écran à 375 px. */}
-      {enFenetre && (
+      {/* [US-356 / CA11] Ordinateur : le panneau droit (portail). Mobile : la feuille de la fiche commune. */}
+      {dansPanneau && hote && createPortal(<div className="pt-12">{contenuFiche}</div>, hote)}
+      {!bureau && fiche != null && !toutes && (
+        <Modal title={titreFiche} onClose={fermerFiche} disposition="basse" entete={false} bodyClassName="p-0 overflow-y-auto min-h-0">
+          <div className="pt-1">{contenuFiche}</div>
+        </Modal>
+      )}
+      {/* « Toutes les actions du lot » : la fiche complète d'US-216 — repiquer, mettre en terre, clôturer, ranger… */}
+      {fiche != null && toutes && (
         <FicheLot
           lot={fiche} forme="modale" nbPepinieres={nbPepinieres} dateRef={dateRef}
           fragments={fragmentsDuLot(data?.parcours, fiche.lot_id)}
@@ -500,4 +505,15 @@ export default function Pepiniere({ refresh }) {
     </div>
     </RelectureAuRetourProvider>
   )
+}
+
+/**
+ * [US-356 / CA1] La recherche du Parcours (« Lot, culture ou variété ») : ne garde que les étiquettes qui
+ * y répondent — les compteurs des colonnes suivent. Sans recherche, la lecture telle quelle.
+ */
+function recherche(data, q) {
+  const t = String(q ?? '').trim().toLowerCase().replace(/^#/, '')
+  if (!t || !data?.parcours) return data
+  const garde = (e) => `${e.lot?.numero ?? ''} ${e.lot?.culture ?? ''} ${e.lot?.variete ?? ''}`.toLowerCase().includes(t)
+  return { ...data, parcours: { ...data.parcours, etiquettes: (data.parcours.etiquettes ?? []).filter(garde) } }
 }

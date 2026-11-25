@@ -227,6 +227,27 @@ la levée est cherché dans **toute** la phrase quand aucun geste n'est en tête
 (`_extraire_geste_levee`), avec son auxiliaire ; `llm/routeur._est_levee_dictee` fait de même
 pour le routage. « terminée » n'est un drapeau qu'avec une levée.
 
+## La Pépinière sur le socle : trois onglets (US-356)
+
+Depuis l'ÉPIC 21 (maquette « Socle commun », version 2), `views/Pepiniere.jsx` a **trois onglets d'en-tête**
+déclarés à la coquille (`useDeclarerEcran({ entete, mot, barre })`) : **Parcours**, **Semer · n**, **Lots · n**. Les
+règles vivent dans `lib/pepiniereSocle.js` (pures, testées par `us356_pepiniere_socle.test.js`) :
+
+- **Parcours** (`OngletParcours`) : matrice emplacement × stade sur ordinateur, un stade à la fois (`PagerAimante`,
+  défilement aimanté et points) sur mobile ; chaque lot est une `CarteLot` (alerte orange, note en Kalam). Les gestes
+  se font depuis la fiche du lot ; plus de compteurs, de bande des semis ni de tiroir dans cet onglet.
+- **Semer** (`OngletSemer`) : `parcours.a_semer` (fenêtre ouverte), `a_semer_ecartees` (motif `lot_en_cours` avec le n° du
+  lot, `graines_epuisees` quand le stock est connu et nul) et `prochaines_ouvertures` (plusieurs). Ces deux champs sont
+  AJOUTÉS à `echeances_lots._parcours` — lecture seule, sans migration ni route (`tests/test_us356_semer_donnees.py`).
+- **Lots** (`OngletLots`) : bilan en une phrase, puis le tableau du Parcours — colonnes En cours / À régler / Terminés
+  (pas de « Tous »), lignes = mois de semis, chacune sa teinte, « vide » dans les cases sans lot (`matriceRegistre`,
+  `rangeesParMoisDeSemis`) ; mobile : un état à la fois (points). Cartes = `CarteLot` du Parcours (icône du lot `IconeLot`,
+  n°, frise des gestes datés `FriseGestes`). Les icônes d'onglet : Parcours = lucide `Map`, Lots = `Lot`. Un lot est « à régler » dès qu'il porte une alerte
+  (`alertesDesLots` : pas de levée après le délai du serveur, sans emplacement, quantité non dite, dormant).
+- **Fiche du lot** (`FicheLotCommune`) : panneau droit partagé (portail, `HotePanneau`) sur ordinateur, feuille sur
+  mobile ; « Toutes les actions du lot » ouvre la fiche d'US-216, dont les gestes restent joignables.
+- La note du jardinier (`lot.note`) est le commentaire de son semis (`utils/stock.py`).
+
 ## L'onglet « Ma pépinière » (US-218)
 
 Deux onglets (`ONGLETS_PEPINIERE` de `lib/parcours.js`) : **Ma pépinière**, ouvert par

@@ -109,7 +109,7 @@ def test_ca2_la_liste_est_servie_par_le_plan_et_n_est_pas_recopiee_cote_ecran():
     # FILTRE, plus large et indépendante. Ce qu'il ne fait pas, c'est recomposer
     # la liste de sol : il la reçoit par l'intention, telle quelle.
     journal = JOURNAL.read_text(encoding="utf-8")
-    assert "if (gestesFilter) params.action = gestesFilter" in journal
+    assert "if (etat.gestes) params.action = etat.gestes" in journal
 
 
 def test_livrable_annexe_les_gestes_de_la_maquette_sans_equivalent_sont_nommes():

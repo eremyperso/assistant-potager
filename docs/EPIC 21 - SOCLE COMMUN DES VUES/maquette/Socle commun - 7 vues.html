@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Socle commun · sept vues</title>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F5F7F1;--surface:#fff;--alt:#F1F5EB;--bd:#E2E7DA;--bd2:#EDF0E7;--brand:#4A7C22;--brand-deep:#2F5416;--brand-soft:#EAF3DE;--brand-text:#3B6A1B;--txt:#16210C;--txt2:#56634A;--txt3:#7C8A72;--hfrom:#2F5416;--hto:#4E8226;--hdim:rgba(255,255,255,.78);--hglass:rgba(255,255,255,.18);--due:#D9822B;--due-bg:#FFF1E2;--due-bd:#F3C796;--due-tx:#8A3B0B;--amb-bg:#FFF4DC;--amb-bd:#E9B949;--amb-tx:#7A4D00;--ink:#2B3A63;--paper:#FBF8EF;--paper-bd:#E9E1CB;--pep:#5B4690;--pep-soft:#F1EDF7;--soil:#EADFCB;--soil-bd:#C9B58F;--sans:"Segoe UI",system-ui,-apple-system,sans-serif;--serif:Lora,Georgia,serif;--hand:Kalam,cursive}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:13.5px/1.42 var(--sans);color:var(--txt);background:#ECEFE6}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit}
+a{color:var(--brand-text)}
+:focus-visible{outline:3px solid #1F6FD1;outline-offset:2px}
+svg{flex-shrink:0}
+
+/* ---------- document ---------- */
+#doc{position:absolute;left:40px;top:30px;width:3460px}
+.ttl h1{font:700 34px/1.15 var(--serif)}.ttl p{font-size:15px;color:var(--txt2);margin-top:8px;max-width:1250px}
+.sx{margin-top:64px}.sx>h2{font:700 26px/1.2 var(--serif)}.sx>p{font-size:14.5px;color:var(--txt2);margin:6px 0 22px;max-width:1350px}
+.doc-card{background:var(--surface);border:1px solid var(--bd);border-radius:16px;padding:22px 24px;box-shadow:0 1px 2px rgba(22,33,12,.05),0 6px 18px rgba(22,33,12,.05)}
+.doc-card h3{font:600 17px/1.3 var(--serif);margin-bottom:12px}
+.doc-card .hint{font-size:12.5px;color:var(--txt2);margin-top:12px}
+.sheet{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;max-width:1900px}
+.sheet .w2{grid-column:span 2}
+.dec{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-top:20px;max-width:1900px}
+.dec div{background:var(--surface);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;font-size:12.5px;color:var(--txt2)}.dec b{display:block;color:var(--txt);font-size:13px;margin-bottom:2px}
+.dec div.nw{border-color:var(--brand);box-shadow:inset 3px 0 0 var(--brand)}
+.lineup{display:flex;gap:44px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:12px;flex-shrink:0;width:390px}
+.lb{font-size:14px;font-weight:700;color:var(--txt)}.lb small{display:block;font-weight:500;color:var(--txt2);font-size:12.5px}
+.ann{font-size:12.5px;line-height:1.5;color:var(--txt2)}.ann ul{padding-left:16px}.ann li+li{margin-top:4px}.ann b{color:var(--txt)}
+.anat{display:grid;grid-template-columns:390px 1fr;gap:36px;align-items:start;max-width:1250px}
+.bands{list-style:none;display:flex;flex-direction:column;gap:12px}
+.bands li{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start;background:var(--surface);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--txt2)}
+.bands li b{display:block;color:var(--txt);font-size:14px}
+.bands .n{width:30px;height:30px;border-radius:50%;background:var(--txt);color:#fff;font-weight:700;display:grid;place-items:center}
+.bands li.g{border-color:var(--brand);background:var(--brand-soft)}.bands li.g .n{background:var(--brand)}
+.mark{position:absolute;left:-15px;width:26px;height:26px;border-radius:50%;background:var(--txt);color:#fff;font:700 12.5px/26px var(--sans);text-align:center;z-index:40;box-shadow:0 0 0 3px #ECEFE6}
+.mark.g{background:var(--brand)}
+.navdemo{border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--bd)}
+.navdemo+.navdemo{margin-top:14px}
+.navdemo .bn{position:relative}
+.navdemo .pm{display:none}
+
+/* ---------- cadres ---------- */
+.fr{position:relative;overflow:hidden;border-radius:22px;background:var(--bg);box-shadow:0 2px 6px rgba(22,33,12,.08),0 20px 50px rgba(22,33,12,.12);flex-shrink:0}
+.fr.m{width:390px;height:844px;border-radius:34px}
+.fr.d{width:1440px;height:900px;border-radius:14px}
+.scr{position:absolute;inset:0;display:flex;flex-direction:column}
+
+/* TopBar */
+.ah{flex-shrink:0;color:#fff;background:linear-gradient(100deg,var(--hfrom),var(--hto));display:flex;align-items:center;gap:12px;padding:0 24px;height:60px}
+.m .ah{height:auto;padding:46px 14px 12px}
+.ahl{display:flex;align-items:center;gap:10px;min-width:0}
+.pm{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;background:var(--hglass);font-weight:700;font-size:13px;white-space:nowrap;color:#fff}.pm svg{width:15px;height:15px}
+/* repère de vue, ordinateur : l'onglet actif devient une pastille claire */
+.ah nav{display:flex;gap:4px;margin-left:8px}
+.ah nav button{display:flex;align-items:center;gap:7px;height:38px;padding:0 13px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--hdim);white-space:nowrap}
+.ah nav button:hover{background:rgba(255,255,255,.1);color:#fff}
+.ah nav svg{width:16px;height:16px}
+.ah nav button[aria-current="page"]{background:var(--surface);color:var(--brand-deep);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.ah nav button[aria-current="page"] svg{color:var(--brand)}
+.ahr{margin-left:auto;display:flex;align-items:center;gap:6px}.ahr button{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;color:#fff}.ahr svg{width:17px;height:17px}
+.avt{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.22);display:grid;place-items:center}.avt svg{width:17px;height:17px}
+
+.body{flex:1;min-height:0;display:flex}
+/* bandes 1 à 3 fixes, seule la bande 4 (contenu) défile ; l'en-tête se resserre dès qu'on fait défiler */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;container-type:inline-size;container-name:page}
+.fix{flex-shrink:0;background:var(--bg);box-shadow:0 1px 0 var(--bd),0 6px 10px -8px rgba(22,33,12,.18);position:relative;z-index:2}
+.fix>.wrap{padding-bottom:12px}
+.scl2{flex:1;min-height:0;overflow-y:auto}
+.scl2>.wrap{padding-top:2px;padding-bottom:28px}
+.m .scl2>.wrap{padding-bottom:110px}
+.m .scl2{scrollbar-width:none}.m .scl2::-webkit-scrollbar{display:none}
+.main .pgh,.main .pgh h1,.main .mg,.main .mg .fc{transition:all .18s ease}
+.main.scd .pgh{padding-top:10px;padding-bottom:10px}.main.scd .pgh h1{font-size:18px}.main.scd .pgh p{display:none}.main.scd .tiles{margin-top:8px}.d .main.scd .tiles{display:none}
+.main.scd .mg{margin-top:10px;padding:7px 36px 7px 10px;grid-template-columns:26px 1fr;align-items:center;cursor:pointer}.main.scd .mg .fc{width:26px;height:26px}
+.main.scd .mg .who,.main.scd .mg .acts{display:none}.main.scd .mg p{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;font-size:13px;padding-right:0}
+.main.scd .tb{margin-top:10px}
+.wrap{padding:0 16px}
+.d .wrap{padding:0 32px;max-width:1120px}
+
+/* 1 · en-tête de page */
+.pgh{background:var(--surface);border-bottom:1px solid var(--bd);padding:18px 16px 14px}
+.d .pgh{padding:22px 32px 16px}
+.pgh h1{font:700 25px/1.15 var(--serif);letter-spacing:-.01em}.d .pgh h1{font-size:28px}
+.pgh p{font-size:13px;color:var(--txt2);margin-top:3px}
+.tiles{display:flex;gap:8px;margin-top:12px}
+.tile{width:84px;height:64px;border-radius:13px;border:1px solid var(--bd);background:var(--surface);color:var(--txt2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:11.5px;font-weight:500;text-align:center;line-height:1.15}
+.tile svg{width:19px;height:19px;color:var(--txt3)}
+.tile[aria-selected="true"]{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-text);font-weight:700}.tile[aria-selected="true"] svg{color:var(--brand)}
+.tile:disabled{opacity:.55;cursor:default}
+
+/* 2 · mot de Gaston */
+.mg{margin:14px 0 0;display:grid;grid-template-columns:40px 1fr;gap:10px;background:var(--brand-soft);border:1px solid #CFE3B6;border-radius:16px;padding:12px 14px 12px 12px;position:relative}
+.mg .fc{width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#FBF3D1,#F1E6C3);box-shadow:0 0 0 2px #fff,0 0 0 3px var(--brand);overflow:hidden}
+.mg .fc svg{width:100%;height:100%;display:block}
+.mg .who{font-size:11.5px;font-weight:700;color:var(--brand-text);letter-spacing:.02em}
+.mg p{font-size:13.5px;line-height:1.45;color:var(--txt);margin-top:1px;padding-right:18px}
+.mg .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.mg .acts button{min-height:34px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid #BFD8A2;font-size:12.5px;font-weight:700;color:var(--brand-deep)}
+.mg .acts button.p{background:var(--brand);border-color:var(--brand);color:#fff}
+.mg .x{position:absolute;top:6px;right:6px;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--txt3)}.mg .x svg{width:14px;height:14px}
+
+/* 3 · barre d'outils */
+.tb{display:flex;gap:8px;align-items:center;margin:14px 0 0;position:relative}
+.tb .dt,.tb .fi,.tb .mo{height:40px;border-radius:12px;background:var(--surface);border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 11px;font-size:13px;font-weight:600;color:var(--txt);white-space:nowrap}
+.tb svg{width:16px;height:16px;color:var(--txt2)}
+.tb .dt[aria-expanded="true"]{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
+.tb .dt.past{background:var(--amb-bg);border-color:var(--amb-bd);color:var(--amb-tx)}.tb .dt.past svg{color:var(--amb-tx)}
+.tb .sf{flex:1;min-width:0;height:40px;border-radius:12px;background:var(--surface);border:1px solid var(--bd);display:flex;align-items:center;gap:7px;padding:0 11px;color:var(--txt3);font-size:13px;white-space:nowrap;overflow:hidden}
+.tb .mo{width:40px;padding:0}
+.tb .fi .ct{min-width:18px;height:18px;border-radius:9px;background:var(--brand);color:#fff;font-size:11px;display:grid;place-items:center;padding:0 5px}
+@container page (max-width:520px){.tb .fi .flt{display:none}.tb .fi{width:40px;padding:0;position:relative}.tb .fi .ct{position:absolute;top:-5px;right:-5px}}
+.menu{position:absolute;right:0;top:46px;width:220px;background:var(--surface);border:1px solid var(--bd);border-radius:12px;box-shadow:0 10px 28px rgba(22,33,12,.16);padding:6px;z-index:30}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;min-height:40px;padding:0 10px;border-radius:8px;font-size:13px}.menu button:hover{background:var(--alt)}.menu svg{width:16px;height:16px;color:var(--txt2)}
+.menu hr{border:0;border-top:1px solid var(--bd2);margin:4px 0}
+
+/* règle des temps (curseur de date) : s'ouvre sous la barre d'outils, commune à toutes les vues */
+.regle{margin-top:10px;background:var(--surface);border:1px solid var(--bd);border-radius:14px;padding:10px 10px 8px;box-shadow:0 4px 14px rgba(22,33,12,.06)}
+.rgh{display:flex;align-items:center;gap:8px;height:36px;padding:0 2px;flex-wrap:nowrap;min-width:0}
+.rgh .rd{font:600 14px/1 var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-variant-numeric:tabular-nums}
+.rgh .ago,.rgh .rt,.rgh .cx{flex-shrink:0}
+.rgh .ago{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:6px;background:var(--alt);color:var(--txt2);white-space:nowrap}
+.rgh .ago.past{background:var(--amb-bg);color:var(--amb-tx)}
+.rgh .sp{flex:1}
+.rgh .rt{min-height:34px;padding:0 12px;border-radius:999px;background:var(--brand-soft);color:var(--brand-text);font-weight:700;font-size:12.5px;white-space:nowrap}
+.rgh .cx{width:34px;height:34px;border-radius:10px;background:var(--alt);display:grid;place-items:center;color:var(--txt2)}.rgh .cx svg{width:15px;height:15px}
+.rgb{display:flex;align-items:center;gap:6px;margin-top:6px}
+.rgb>button{width:32px;height:32px;border-radius:10px;border:1px solid var(--bd);display:grid;place-items:center;color:var(--txt2);flex-shrink:0}.rgb>button svg{width:15px;height:15px}
+.rgv{flex:1;min-width:0;height:46px;position:relative;overflow:hidden;border-radius:10px;background:var(--alt)}
+.rgi{position:absolute;top:0;bottom:0;left:50%}
+.rgi button{position:absolute;top:0;bottom:0;width:10px;margin-left:-5px}
+.rgi button i{position:absolute;left:4.5px;bottom:6px;width:1px;height:8px;background:#B9C2AE}
+.rgi button.wk i{height:13px;background:#98A38B}
+.rgi button.mo i{height:22px;width:1.5px;background:var(--txt2)}
+.rgi button.td i{background:var(--brand);width:2px;height:22px}
+.rgi .ml{position:absolute;top:4px;font-size:10.5px;font-weight:700;color:var(--txt2);white-space:nowrap;transform:translateX(3px);pointer-events:none}
+.rgc{position:absolute;left:50%;top:3px;bottom:3px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--brand-deep);pointer-events:none;box-shadow:0 0 0 2px #fff}
+.rgc.past{background:#C27C0E}
+.rgv{cursor:grab;touch-action:pan-y;user-select:none;-webkit-user-select:none}.rgv:active{cursor:grabbing}
+.rgi .ml{pointer-events:auto;cursor:pointer;padding:0 3px;border-radius:5px}.rgi .ml:hover{background:var(--surface);color:var(--brand-deep)}
+.rgn{font-size:11px;color:var(--txt3);margin-top:5px;padding:0 40px;line-height:1.35}
+/* tuiles de sous-vue : compactes sur mobile (36 px au lieu de 64) */
+.m .tiles{gap:6px;margin-top:10px}.m .tile{width:auto;height:36px;flex-direction:row;gap:6px;padding:0 13px;border-radius:999px;font-size:12.5px}.m .tile svg{width:16px;height:16px}
+/* légende repliable et appui long (survol à la souris) : l'étape d'une pastille */
+.lgt{display:flex;align-items:center;gap:10px;margin:8px 0 4px}.lgt span{font-size:11.5px;color:var(--txt3)}
+.lgb{display:inline-flex;align-items:center;gap:5px;min-height:34px;padding:0 10px;border-radius:999px;border:1px solid var(--bd);background:var(--surface);font-size:12.5px;font-weight:600;flex-shrink:0}.lgb svg{width:14px;height:14px;color:var(--txt2)}
+[data-tip]{position:relative}
+.tipon::after,.d [data-tip]:hover::after,#doc .doc-card [data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:var(--txt);color:#fff;font:600 12px/1.3 var(--sans);padding:5px 9px;border-radius:8px;white-space:nowrap;z-index:50;pointer-events:none;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.tipon{box-shadow:0 0 0 2.5px var(--txt)!important;z-index:5}
+/* pépinière mobile : une colonne à la fois, points comme le kanban Jira mobile */
+.kdots{display:flex;justify-content:center;align-items:center;gap:6px;margin:0 0 10px}
+.m .kdots{margin:12px 0 0}
+.kdl{font-size:12.5px;font-weight:700;color:var(--txt);margin-right:auto}
+.kdots button{width:8px;height:8px;border-radius:4px;background:#C9D0BF;transition:width .2s,background .2s}.kdots button[aria-selected="true"]{width:22px;background:var(--brand)}
+.m .kb.snap{scroll-snap-type:x mandatory;gap:0;margin:0 -16px;padding:0;scrollbar-width:none}.m .kb.snap::-webkit-scrollbar{display:none}
+.m .kb.snap .kc{flex:0 0 calc(100% - 32px);margin:0 16px;scroll-snap-align:center}
+
+/* 4 · contenu */
+.sec{margin-top:18px}
+.sh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 2px 8px}
+.sh h2{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.sh button{font-size:12.5px;font-weight:700;color:var(--brand-text)}
+.list{background:var(--surface);border:1px solid var(--bd);border-radius:14px;overflow:hidden}
+.grid{display:grid;gap:10px}
+@container page (min-width:700px){.grid.c2{grid-template-columns:repeat(2,minmax(0,1fr))}.cols{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:start}}
+.it{display:flex;width:100%;align-items:center;gap:11px;min-height:60px;padding:8px 12px;border-top:1px solid var(--bd2);text-align:left}
+.list>.it:first-child{border-top:0}
+.it:hover{background:var(--alt)}.it.on{background:var(--brand-soft)}
+.it .tx{flex:1;min-width:0}.it b{display:block;font-size:14px;font-weight:600}.it b .e{margin-right:5px}
+.it small{display:block;font-size:12.5px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.it .go{color:var(--txt3)}.it .go svg{width:16px;height:16px}
+.it .q{font-size:12.5px;font-weight:700;color:var(--txt);white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}.it .q small{font-weight:500;text-align:right}
+.card{background:var(--surface);border:1px solid var(--bd);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;text-align:left;width:100%}
+.card:hover{border-color:var(--txt3)}.card.on{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand)}
+.card .hd{display:flex;gap:11px;align-items:center}
+.card .hd .tx{flex:1;min-width:0}.card .hd b{display:block;font-size:14.5px;font-weight:600}.card .hd small{display:block;font-size:12.5px;color:var(--txt2)}
+.card .ft{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--txt2)}
+.due-l{color:var(--due-tx)!important;font-weight:600}
+.tabs{display:flex;gap:3px;background:var(--alt);border-radius:12px;padding:3px;margin-top:12px}
+.tabs button{flex:1;min-height:38px;border-radius:10px;font-size:13px;font-weight:600;color:var(--txt2);text-align:center}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--txt);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.d .wrap>.tabs{max-width:420px}
+
+/* langage d'étape */
+.stk{width:40px;height:40px;border-radius:11px;background:var(--sc);display:grid;place-items:center;flex-shrink:0;color:#2A3A1A;position:relative}
+.stk .gl{width:21px;height:21px}
+.stk.s>svg:not(.gl){width:16px;height:16px}
+.stk.s{width:30px;height:30px;border-radius:9px}.stk.s .gl{width:16px;height:16px}
+.stk.est{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.62) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1.5px #6B7B55}
+.stk .dd{position:absolute;top:-3px;right:-3px;width:11px;height:11px;border-radius:50%;background:var(--due);box-shadow:0 0 0 2px #fff}
+.stk.em{background:var(--alt);font-size:21px}
+.stc{display:inline-flex;align-items:center;gap:5px;background:var(--sc);border-radius:999px;padding:3px 10px 3px 7px;font-size:12px;font-weight:600;color:var(--txt);white-space:nowrap}
+.stc .gl{width:14px;height:14px}
+.stc.est{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.6) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1.5px #6B7B55}
+.stc.sm{font-size:11px;padding:2px 8px 2px 5px}.stc.sm .gl{width:12px;height:12px}
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;background:var(--alt);color:var(--txt2);white-space:nowrap}
+.pill.pep{background:var(--pep-soft);color:var(--pep)}
+.pill.in{background:var(--brand-soft);color:var(--brand-deep)}
+.leg2{display:flex;flex-wrap:wrap;gap:5px}
+.cal{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:2px}
+.cal i{height:9px;border-radius:2px;background:#EEF0EA;display:block}
+.cal i.now{box-shadow:0 0 0 1.5px var(--txt)}
+.cal span{font-size:9.5px;color:var(--txt3);text-align:center;margin-top:1px}
+.cal i.f-seme{background:#E6CFA2}.cal i.f-leve{background:#CDE9A6}.cal i.f-croiss{background:#86C163}.cal i.f-flor{background:#F4D35E}.cal i.f-prod{background:#F2A54A}
+
+/* carnet : texte du jardinier en Kalam */
+.hand{font-family:var(--hand);font-weight:400;font-size:16.5px;line-height:1.3;color:var(--ink)}
+.note{background:var(--paper);border:1px solid var(--paper-bd);border-radius:12px;padding:9px 12px 10px}
+.note .mt{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt2);margin-bottom:2px}
+.note .mt svg{width:13px;height:13px}
+.note+.note{margin-top:8px}
+.lg{list-style:none}.lg li{display:grid;grid-template-columns:30px 1fr;gap:10px;align-items:start;padding:8px 0;border-top:1px solid var(--bd2)}.lg li:first-child{border-top:0}
+.lg b{font-size:13.5px;font-weight:600}.lg .dt{font-size:12px;color:var(--txt2);margin-left:6px}
+.lg .mt2{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--txt2);margin-top:3px}.lg .mt2 svg{width:12px;height:12px}
+.lg .hand{display:block;font-size:15.5px;margin-top:1px}
+.lk2{font-size:12.5px;font-weight:700;color:var(--brand-text);margin-top:6px;min-height:36px}
+
+.wx{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.wx div{background:var(--surface);border:1px solid var(--bd);border-radius:12px;padding:8px 10px;font-size:12px;color:var(--txt2)}
+.wx b{display:block;font-size:15px;color:var(--txt)}.wx .fz b{color:#1F5FA8}
+
+.kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+@container page (min-width:700px){.kpi{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.kpi>*{background:var(--surface);border:1px solid var(--bd);border-radius:12px;padding:10px 12px;font-size:12px;color:var(--txt2);text-align:left}
+.kpi b{display:block;font:700 20px/1.1 var(--serif);color:var(--txt);margin-bottom:2px}
+.kpi button{border-color:#F3C796;background:#FFFAF3}.kpi button .lk{display:block;margin-top:4px;font-weight:700;color:var(--brand-text)}
+
+/* récoltes par saison */
+.rs{padding:16px 18px 24px}
+.rs h2{font:600 21px/1.2 var(--serif)}
+.yrs{display:flex;flex-direction:column;gap:6px;margin-top:14px}
+.yr{display:grid;grid-template-columns:44px 1fr 64px;gap:10px;align-items:center;width:100%;min-height:42px;border-radius:10px;padding:0 6px;font-size:13px;font-weight:600;text-align:left}
+.yr[aria-pressed="true"]{background:var(--alt);box-shadow:inset 0 0 0 1px var(--bd)}
+.yr .bw{display:block;height:14px}.yr .br{display:block;height:14px;border-radius:7px;background:#F9D9B2}.yr[aria-pressed="true"] .br{background:#F2A54A}
+.yr .v{text-align:right;font-variant-numeric:tabular-nums}
+.rs h4{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);margin:20px 0 8px}
+.top{list-style:none}.top li{display:grid;grid-template-columns:26px 1fr 100px 60px;gap:8px;align-items:center;min-height:36px;font-size:13px;border-top:1px solid var(--bd2)}.top li:first-child{border-top:0}
+.top .bw{display:block;height:8px}.top .br{display:block;height:8px;border-radius:4px;background:#F2A54A}.top .v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.top .e{font-size:17px;text-align:center}
+
+/* plan */
+.plan{position:relative;border-radius:12px;background-color:#F0F2EA;box-shadow:inset 0 0 0 1px var(--bd);overflow:hidden}
+.grid1{background-image:linear-gradient(rgba(120,135,100,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(120,135,100,.10) 1px,transparent 1px)}
+.aer{position:absolute;inset:0;display:block}
+.ovl{position:absolute;inset:0;transform-origin:50% 50%}
+.pa{position:absolute;background:var(--soil);border-radius:7px;box-shadow:inset 0 0 0 1.5px var(--soil-bd)}
+.pa.t-serre{background:#E2EDEF;box-shadow:inset 0 0 0 2px #8FB0B8}
+.pa.t-bac{border-radius:4px;box-shadow:inset 0 0 0 3px #B08A5A}
+.pa.t-butte{border-radius:999px}
+.pa.t-pep{background:#F1EDF7;box-shadow:inset 0 0 0 1.5px #A595C9}.t-pep .pn{color:#4A3880}
+.lots{position:absolute;inset:6px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.lt{display:flex;align-items:center;justify-content:center;gap:4px;background:var(--surface);border-radius:5px;box-shadow:inset 0 0 0 1.5px #8C7AB8;font-size:11px;font-weight:700;color:#3E2E66;text-decoration:none;min-width:0;overflow:hidden;white-space:nowrap}
+.lt:hover{background:#F7F4FC;color:#3E2E66}.lt .em{font-size:13px}
+.pa.mini .lots{inset:2px;gap:1px}.pa.mini .lt{box-shadow:none}
+.lotl{text-decoration:none;color:inherit}.lotl:hover{color:inherit;background:var(--alt)}.lotl .go{color:var(--txt3);font-size:20px}
+.pepb{color:#5B4690!important;font-weight:700}.pepn{font-size:12px;color:var(--txt2);padding:8px 14px 10px;border-top:1px solid var(--bd2)}
+.dueb{margin-top:12px;display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:600;color:var(--due-tx);background:var(--due-bg);border:1px solid var(--due-bd);border-radius:10px;padding:8px 10px}.dueb i{width:9px;height:9px;border-radius:50%;background:var(--due);flex-shrink:0}
+.ovl .pa{box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.9),0 0 0 1px rgba(0,0,0,.28),0 2px 6px rgba(0,0,0,.18)}
+.pn{position:absolute;left:8px;top:-11px;z-index:3;font-size:11.5px;font-weight:700;background:var(--surface);color:var(--txt);border:1px solid var(--bd);border-radius:999px;padding:1px 9px;text-decoration:none;white-space:nowrap;box-shadow:0 1px 2px rgba(22,33,12,.12)}
+.pn:hover{border-color:var(--brand);color:var(--brand-deep)}.pn::after{content:" →";color:var(--txt3)}
+.rgs{position:absolute;inset:5px;display:flex;flex-direction:column;gap:2px}.v>.rgs{flex-direction:row}.t-butte .rgs{inset:5px 14px}
+.rg{flex:1 1 0;display:flex;gap:2px;min-width:0;min-height:0}.v .rg{flex-direction:column}
+.sg{position:relative;flex-basis:0;min-width:0;min-height:0;background:var(--sc);border-radius:4px;display:flex;align-items:center;gap:4px;padding:0 5px;overflow:hidden;white-space:nowrap;font-size:11.5px;font-weight:600;color:var(--txt);transition:opacity .2s}
+.v .sg{justify-content:center;flex-direction:column;padding:4px 0}
+button.sg:hover{filter:brightness(.95)}
+.sg .em{font-size:13px;line-height:1}.sg .nm{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.sg .vt{writing-mode:vertical-rl;transform:rotate(180deg);overflow:hidden;text-overflow:ellipsis;max-height:100%}
+.sg .gl{width:13px;height:13px;margin-left:auto;color:#2A3A1A}
+.st-seme{background-image:radial-gradient(circle,rgba(110,80,40,.45) 1px,transparent 1.5px);background-size:6px 6px}
+.st-fin{background-image:repeating-linear-gradient(-45deg,rgba(90,95,80,.18) 0 3px,transparent 3px 7px);color:var(--txt2)}
+.sg.est{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.6) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1.5px #6B7B55}
+.sg.free{background:rgba(255,255,255,.35);box-shadow:inset 0 0 0 1.5px #C2B492;color:var(--txt2);font-weight:500;justify-content:center;background-image:none}
+.sg.on{box-shadow:0 0 0 2.5px var(--txt),0 0 0 5px #fff;z-index:2}.sg.dim{opacity:.22}
+.due{position:absolute;top:2px;right:2px;width:9px;height:9px;border-radius:50%;background:var(--due);box-shadow:0 0 0 2px #fff;animation:pulse 1.8s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 4px rgba(217,130,43,.35)}}
+.cps{position:absolute;right:10px;top:10px;width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.88);box-shadow:0 1px 4px rgba(0,0,0,.15);padding:3px;z-index:4;transition:transform .3s}
+.cps svg{display:block;width:100%;height:100%}.cps.sm{width:46px;height:46px;right:6px;top:6px;padding:2px}
+.scl{position:absolute;left:12px;bottom:10px;font-size:11px;font-weight:700;color:var(--txt);display:flex;flex-direction:column;gap:2px;background:rgba(255,255,255,.8);padding:3px 6px;border-radius:6px}
+.scl i{display:block;height:5px;border:1.5px solid var(--txt);border-top:0}
+.leg .k{display:inline-flex;align-items:center;gap:6px}.leg .k i{width:22px;height:13px;border-radius:3px;display:inline-block}
+.dueDot{width:9px!important;height:9px!important;border-radius:50%!important;background:var(--due)}
+.duec{font-size:11.5px;font-weight:700;color:var(--due-tx);background:var(--due-bg);border:1px solid var(--due-bd);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.mplan{position:relative;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 0 0 1px var(--bd)}
+.pa.mini{display:block}.pa.mini .rgs{inset:2px;gap:1px}.pa.mini .rg{gap:1px}.pa.mini .sg{border-radius:1.5px;padding:0}
+.pa.mini.hit{box-shadow:0 0 0 2.5px #fff,0 0 0 4.5px var(--txt)}
+.mpl{font-size:11.5px;color:var(--txt2);text-align:center;margin:6px 0 12px}
+.todo{display:flex;gap:8px;margin-bottom:12px}
+.todo button{flex:1;min-height:44px;border-radius:12px;background:var(--surface);border:1px solid var(--bd);font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}
+.todo button i{width:9px;height:9px;border-radius:50%;background:var(--due)}
+.mh3{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt2);margin:4px 2px 8px}
+.mc{background:var(--surface);border:1px solid var(--bd);border-radius:14px;margin-bottom:10px;overflow:hidden}
+.mc.hit{border-color:var(--txt);box-shadow:0 0 0 1px var(--txt)}
+.mc-h{display:flex;align-items:center;gap:8px;padding:4px 4px 4px 14px}
+.mc-h h3{font:600 16px/1.2 var(--serif);flex:1}.mc-h .ty{font-size:11.5px;color:var(--txt2)}
+.mc-h a{min-width:44px;min-height:44px;display:grid;place-items:center;font-size:12.5px;font-weight:700;text-decoration:none;padding:0 8px}
+.mi{display:flex;width:100%;align-items:center;gap:10px;min-height:54px;padding:6px 12px;border-top:1px solid var(--bd2);text-align:left}
+.mi .rn{width:24px;font-size:11.5px;font-weight:700;color:var(--txt2);flex-shrink:0}
+.mi .bar{width:8px;align-self:stretch;border-radius:4px;background:var(--sc);flex-shrink:0}
+.mi .tx b .ce{font-size:16px;margin-right:4px}
+.mleg{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 6px}.mleg .stc{font-size:11px;padding:2px 8px 2px 5px}.mleg .stc .gl{width:12px;height:12px}
+.v .sg .gl{margin-left:0}
+.mi .bar.est{background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.65) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1.2px #6B7B55}
+.mi .bar.st-fin{background-image:repeating-linear-gradient(-45deg,rgba(90,95,80,.25) 0 2px,transparent 2px 5px)}
+.mi.free .bar{background:transparent;box-shadow:inset 0 0 0 1.2px #C2B492}
+.mi .em{font-size:21px;width:26px;text-align:center;flex-shrink:0}
+.mi .tx{flex:1;min-width:0}.mi b{display:block;font-size:14px}.mi small{display:block;font-size:12px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mi.free{min-height:40px;color:var(--txt2);font-size:13px}
+.mbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:12px;color:var(--txt2)}.mbar b{color:var(--txt)}
+
+.mi.on{background:var(--brand-soft)}
+.mc-h .mcl{min-width:44px;min-height:44px;display:grid;place-items:center;font-size:12.5px;font-weight:700;color:var(--brand-text);padding:0 8px}
+
+/* pépinière */
+.kb{display:flex;gap:10px;overflow-x:auto;margin:0 -16px;padding:0 16px 4px}
+.d .kb{margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.kc{flex:0 0 260px;background:#EEF0E8;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.kc h3{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--txt2);padding:2px 2px 0}
+.kc h3 .stk{width:24px;height:24px;border-radius:7px}.kc h3 .stk .gl{width:14px;height:14px}
+.lot{background:var(--surface);border:1px solid var(--bd);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.lot .hd{display:flex;align-items:center;gap:8px}.lot .hd b{flex:1;font-size:14px;font-weight:600}.lot .hd .e{font-size:20px}
+.lot small{font-size:12px;color:var(--txt2)}
+.lot .hand{font-size:15px}
+
+.fam{margin-top:14px}
+.fam h3{display:flex;align-items:center;justify-content:space-between;font:600 15px/1.2 var(--serif);margin:0 2px 6px}.fam h3 small{font:500 12px var(--sans);color:var(--txt2)}
+
+/* journal */
+.day{margin-top:16px}
+.day h3{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);margin:0 2px 6px}
+.jn{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border-top:1px solid var(--bd2);width:100%;text-align:left}
+.list>.jn:first-child{border-top:0}
+.jn .tx{flex:1;min-width:0}.jn b{display:block;font-size:14px;font-weight:600}.jn small{display:block;font-size:12.5px;color:var(--txt2)}
+.jn .ic{width:40px;height:40px;border-radius:11px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--paper-bd);display:grid;place-items:center;color:#7B6A3E;flex-shrink:0}.jn .ic svg{width:19px;height:19px}
+.jn .hand{display:block;margin-top:2px}
+.jn .more{font-size:12.5px;font-weight:700;color:var(--brand-text);margin-top:4px;display:block}
+.jn .empty{font-size:12.5px;color:var(--txt3);display:block}
+
+/* fiche commune */
+.fiche{padding:16px 18px 24px}
+.fh{display:flex;gap:12px;align-items:flex-start}.fh .pem{width:52px;height:52px;border-radius:14px;background:var(--alt);display:grid;place-items:center;font-size:28px;flex-shrink:0}
+.fh>div{flex:1;min-width:0}.fh h2{font:600 21px/1.2 var(--serif)}.fh p{font-size:12.5px;color:var(--txt2);margin-top:2px}
+.xb{width:38px;height:38px;border-radius:50%;background:var(--alt);display:grid;place-items:center;flex-shrink:0}.xb svg{width:16px;height:16px}
+.loc{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:12px;min-height:42px;padding:0 12px;border-radius:11px;background:var(--alt);font-size:13px;font-weight:600}.loc span{color:var(--brand-text);font-size:12.5px}
+.cur{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12.5px;color:var(--txt2)}
+.fiche h4{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2);margin:18px 0 8px}
+.steps{list-style:none}
+.steps li{display:grid;grid-template-columns:30px 1fr auto;gap:10px;align-items:center;padding:5px 0;font-size:13px;position:relative}
+.steps li::before{content:"";position:absolute;left:14.5px;top:-6px;height:12px;border-left:1.5px solid var(--bd)}.steps li:first-child::before{display:none}
+.steps li time{font-size:12px;color:var(--txt2)}.steps li.next{color:var(--txt3)}.steps li.next .stk{background:var(--surface);box-shadow:inset 0 0 0 1.5px #D2D8C8;color:var(--txt3)}
+.harv{margin-top:10px;font-size:13px;font-weight:700;background:#FEF3E6;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center}.harv .gl{width:18px;height:18px}
+.btn{min-height:44px;padding:0 16px;border-radius:12px;font-weight:700;font-size:13.5px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--bd);background:var(--surface)}
+.btn svg{width:17px;height:17px}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.w{width:100%}
+.ref{font-size:13px;color:var(--txt2)}.ref dt{font-size:12px;font-weight:700;color:var(--txt);margin-top:12px}
+
+/* barre basse : repère de vue = pastille derrière l'icône, Noter rond */
+.bn{position:absolute;left:0;right:0;bottom:0;display:flex;background:var(--surface);border-top:1px solid var(--bd);padding-bottom:18px;z-index:20}
+.bn>button{flex:1;padding-top:8px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:500;color:var(--txt3)}
+.bn .ind{width:56px;height:30px;border-radius:15px;display:grid;place-items:center;transition:background .2s}
+.bn .ind svg{width:21px;height:21px}
+.bn>button[aria-current="page"]{color:var(--brand-deep);font-weight:700}
+.bn>button[aria-current="page"] .ind{background:var(--brand-soft);box-shadow:inset 0 0 0 1px #CFE3B6}
+.bn>button[aria-current="page"] .ind svg{color:var(--brand)}
+.bn>button.nt{color:var(--brand-text);font-weight:700;position:relative}
+.nb{width:62px;height:62px;margin-top:-30px;border-radius:50%;background:linear-gradient(145deg,#5E9A2E,var(--brand-deep));color:#fff;display:grid;place-items:center;box-shadow:0 0 0 5px var(--surface),0 8px 18px rgba(47,84,22,.42);position:relative}
+.nb svg{width:27px;height:27px;color:#fff}
+.nb .mk{position:absolute;right:-4px;top:-4px;width:24px;height:24px;border-radius:50%;background:var(--surface);color:var(--brand-deep);display:grid;place-items:center;box-shadow:0 1px 3px rgba(0,0,0,.25);font-size:13px}
+.nb .mk svg{width:13px;height:13px;color:var(--brand-deep)}
+.plus{position:absolute;right:8px;bottom:92px;width:200px;background:var(--surface);border:1px solid var(--bd);border-radius:14px;box-shadow:0 10px 30px rgba(22,33,12,.18);padding:6px;z-index:25}
+.plus button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px;border-radius:9px;font-size:14px;font-weight:600}.plus button svg{width:18px;height:18px;color:var(--txt2)}
+.plus button[aria-current="page"]{background:var(--brand-soft);color:var(--brand-deep)}
+
+.fab{position:absolute;right:28px;bottom:26px;z-index:20;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px;font-weight:700;color:var(--brand-text)}
+.fab.sd{right:428px}
+.fab .nb{margin-top:0;box-shadow:0 0 0 4px #fff,0 10px 22px rgba(47,84,22,.4)}
+.side{width:400px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--bd);overflow-y:auto;position:relative}
+
+.shz{position:absolute;inset:0;z-index:30;background:rgba(22,33,12,.28);display:flex;flex-direction:column;justify-content:flex-end}
+.shz .pn2{background:var(--surface);border-radius:22px 22px 0 0;max-height:calc(100% - 60px);overflow-y:auto;position:relative;padding-bottom:28px}
+.shz .grab{width:40px;height:5px;border-radius:3px;background:#D6DCCD;margin:8px auto 0}
+.shz.full .pn2{max-height:100%;height:100%;border-radius:0;padding-bottom:0;display:flex;flex-direction:column}
+
+/* Gaston */
+.gs{display:flex;flex-direction:column;height:100%}
+.gh{display:flex;align-items:center;gap:10px;padding:48px 14px 12px;border-bottom:1px solid var(--bd)}
+.d .gh{padding:14px 16px}
+.gh .fc{width:38px;height:38px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#FBF3D1,#F1E6C3);box-shadow:0 0 0 2px var(--brand);overflow:hidden}.gh .fc svg{width:100%;height:100%;display:block}
+.gh b{flex:1;font:600 17px var(--serif)}.gh b small{display:block;font:500 12px var(--sans);color:var(--brand-text)}
+.ctx{display:flex;align-items:center;gap:8px;margin:10px 14px 0;padding:8px 10px;border-radius:11px;background:var(--alt);font-size:12.5px;font-weight:600}
+.ctx .e{font-size:16px}.ctx .lbl{flex:1}.ctx button{color:var(--txt3)}.ctx button svg{width:14px;height:14px}
+.gm{flex:1;overflow-y:auto;padding:14px 14px 10px;display:flex;flex-direction:column;gap:10px}
+.bub{max-width:88%;border-radius:16px;padding:9px 12px;font-size:13.5px;line-height:1.45}
+.bub.g{background:var(--alt);border-bottom-left-radius:5px;align-self:flex-start}
+.bub.me{background:var(--paper);border:1px solid var(--paper-bd);border-bottom-right-radius:5px;align-self:flex-end}
+.bub.me .mt{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--txt2);margin-bottom:2px}.bub.me .mt svg{width:12px;height:12px}
+.prop{align-self:stretch;border:1.5px solid var(--brand);border-radius:14px;overflow:hidden}
+.prop .pt{background:var(--brand-soft);padding:8px 12px;font-size:12px;font-weight:700;color:var(--brand-deep)}
+.prop ul{list-style:none;padding:8px 12px}.prop li{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:13px}.prop li+li{border-top:1px solid var(--bd2)}
+.prop .pa2{display:flex;gap:8px;padding:0 12px 12px}.prop .pa2 .btn{flex:1;min-height:40px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 8px}
+.chips button{min-height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--bd);background:var(--surface);font-size:12.5px;font-weight:600}
+.chips button:disabled{opacity:.5;cursor:default}
+.gin{display:flex;align-items:center;gap:8px;padding:10px 14px 26px;border-top:1px solid var(--bd)}
+.d .gin{padding-bottom:14px}
+.gin .tf{flex:1;height:44px;border-radius:22px;border:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;color:var(--txt3);font-size:13.5px}
+.gin .mic{width:54px;height:54px;border-radius:50%;background:linear-gradient(145deg,#5E9A2E,var(--brand-deep));color:#fff;display:grid;place-items:center;box-shadow:0 6px 14px rgba(47,84,22,.35)}.gin .mic svg{width:24px;height:24px}
+
+.fr{color:var(--txt)}
+/* ---------- mode sombre (bouton lune du bandeau) ---------- */
+.dk{--bg:#11160F;--surface:#1A2117;--alt:#232C1F;--bd:#323D2C;--bd2:#283224;--brand:#7DB548;--brand-deep:#B5DB82;--brand-soft:#22311A;--brand-text:#A8D072;--txt:#E6ECDD;--txt2:#AEB9A3;--txt3:#8C9882;--hfrom:#16260D;--hto:#264212;--hglass:rgba(255,255,255,.12);--due-bg:#3A2414;--due-bd:#7A4A1F;--due-tx:#F3B27A;--amb-bg:#3A2C0F;--amb-bd:#8A6A1F;--amb-tx:#F2C766;--ink:#B9C8F2;--paper:#24211A;--paper-bd:#3E3828;--pep:#C7B8F0;--pep-soft:#2A2438;--soil:#3B3326;--soil-bd:#6B5B40;background:var(--bg)}
+.dk .mg{border-color:#33502A}.dk .mg .acts button{border-color:#3E5E2E;color:var(--brand-text)}.dk .mg .acts button.p{background:#4A7C22;border-color:#4A7C22;color:#fff}
+.dk .stc,.dk .stk,.dk .sg{color:#16210C}.dk .stk.s[style*="paper"]{color:#C9B98A}
+.dk .kc{background:#1F271B}.dk .cal i{background:#2A3326}.dk .cal i.f-seme{background:#E6CFA2}.dk .cal i.f-leve{background:#CDE9A6}.dk .cal i.f-croiss{background:#86C163}.dk .cal i.f-flor{background:#F4D35E}.dk .cal i.f-prod{background:#F2A54A}
+.dk .kpi button{background:#2A2216;border-color:#6A4A20}.dk .harv{background:#2E2416}.dk .wx .fz b{color:#8FB8F0}
+.dk .ah nav button[aria-current="page"]{background:#E6ECDD;color:#1A2117}.dk .ah nav button[aria-current="page"] svg{color:#4A7C22}
+.dk .bn>button[aria-current="page"] .ind{box-shadow:inset 0 0 0 1px #3E5E2E}.dk .rgc{box-shadow:0 0 0 2px var(--surface)}
+.dk .shz{background:rgba(0,0,0,.55)}.dk .mplan,.dk .plan{filter:brightness(.8) saturate(.9)}.dk .yr .br{background:#5A4022}
+.dk .btn.pri{background:#4A7C22;border-color:#4A7C22;color:#fff}.dk .tile[aria-selected="true"]{border-color:#4A7C22}
+.dk .tb .fi .ct{background:#4A7C22}.dk .nb,.dk .gin .mic{background:linear-gradient(145deg,#5E9A2E,#2F5416)}.dk .fab{color:var(--brand-text)}.dk .lgt span,.dk .rgn{color:var(--txt3)}
+/* ---------- pépinière : bande « bon moment pour semer », matrice emplacement × stade, registre des lots ---------- */
+.bs{background:var(--surface);border:1px solid var(--bd);border-radius:16px;padding:12px 14px}
+.bs h3{font:600 17px/1.2 var(--serif);color:var(--brand-text)}.bs .crit{font-size:11.5px;color:var(--txt2);margin-top:2px}
+.bs .chips2{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.bs .chips2 span{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;background:var(--brand-soft);border-radius:999px;padding:4px 10px}.bs .chips2 b{color:var(--due-tx)}
+.bs .tl2{display:grid;gap:8px;margin-top:10px}
+@container page (min-width:700px){.bs .tl2{grid-template-columns:repeat(3,minmax(0,1fr))}.bs{display:grid;grid-template-columns:220px minmax(0,1fr);gap:18px;align-items:start;padding:16px 20px}.bs .tl2{margin-top:0}}
+.st2{background:var(--alt);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:5px}
+.st2 .hh{display:flex;justify-content:space-between;align-items:baseline;gap:6px}.st2 b{font:600 15px var(--serif)}.st2 .rs2{font-size:12.5px;font-weight:700;color:var(--due-tx);white-space:nowrap}
+.st2 .bar2{height:7px;border-radius:4px;background:var(--surface);overflow:hidden}.st2 .bar2 i{display:block;height:100%;background:#E6CFA2}
+.st2 small{font-size:11.5px;color:var(--txt2)}.st2 .ft2{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.st2 .ft2 button{min-height:36px;padding:0 12px;border-radius:10px;background:#4A7C22;color:#fff;font-weight:700;font-size:12.5px}
+.bs .more2{font-size:12.5px;font-weight:700;color:var(--brand-text);min-height:34px;margin-top:4px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.m .kb.snap .kc.lc{background:transparent;padding:0}.kc.lc .sec:first-of-type{margin-top:0}
+.kc .eh{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--txt2);margin:6px 2px 0;display:flex;align-items:center;gap:6px}
+.kc .eh i{width:8px;height:8px;border-radius:2px}
+.lot .wn{font-size:12px;font-weight:600;color:var(--due-tx);background:var(--due-bg);border-radius:8px;padding:3px 8px;align-self:flex-start}
+.lot .num{font-size:11.5px;font-weight:700;color:var(--txt3)}
+.mx{display:grid;grid-template-columns:170px repeat(4,minmax(0,1fr));border:1px solid var(--bd);border-radius:16px;overflow:hidden;background:var(--surface)}
+.mx>div{padding:10px;border-top:1px solid var(--bd2);border-left:1px solid var(--bd2);display:flex;flex-direction:column;gap:6px;min-width:0}
+.mx .hd2{border-top:0;font-size:12.5px;font-weight:700;color:var(--txt2);display:flex;flex-direction:row;align-items:center;gap:7px;background:var(--alt)}
+.mx .rh{border-left:0;font:600 14px var(--serif)}.mx .rh small{font:500 11.5px var(--sans);color:var(--txt2)}
+.mx .r-chaude{background:linear-gradient(90deg,rgba(242,165,74,.10),transparent)}.mx .r-froide{background:linear-gradient(90deg,rgba(80,140,200,.10),transparent)}.mx .r-sans{background:repeating-linear-gradient(-45deg,transparent 0 6px,rgba(140,150,120,.08) 6px 12px)}
+.mx .lot{padding:7px 8px;gap:3px}.mx .lot .hd b{font-size:13px}
+.seg2{display:flex;gap:3px;background:var(--alt);border-radius:12px;padding:3px;margin-top:12px}
+.seg2 button{flex:1;min-height:40px;border-radius:10px;font-size:12.5px;font-weight:600;color:var(--txt2);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.15;text-align:center}
+.seg2 button b{font-size:13px}.seg2 button[aria-checked="true"]{background:var(--surface);color:var(--txt);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+@container page (min-width:700px){.seg2{max-width:520px}.seg2 button{flex-direction:row;gap:6px}}
+.bil{font-size:12.5px;color:var(--txt2);margin-top:4px}.bil b{color:var(--txt)}
+.lr{display:flex;align-items:center;gap:10px;width:100%;min-height:58px;padding:8px 12px;border-top:1px solid var(--bd2);text-align:left}
+.list>.lr:first-child{border-top:0}.lr:hover{background:var(--alt)}.lr.on{background:var(--brand-soft)}
+.lr .nm{width:34px;font-size:11.5px;font-weight:700;color:var(--txt3);flex-shrink:0}.lr .tx{flex:1;min-width:0}.lr b{display:block;font-size:14px;font-weight:600}.lr small{display:block;font-size:12px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lr .wn2{font-size:11.5px;font-weight:700;color:var(--due-tx);background:var(--due-bg);border-radius:999px;padding:2px 8px;white-space:nowrap}
+.fr2{display:flex;gap:3px;align-items:center;margin-top:4px}.fr2 i{width:7px;height:7px;border-radius:50%;background:var(--brand)}.fr2 i.o{background:var(--txt3)}.fr2 span{flex:1;height:2px;background:var(--bd)}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="c-body" viewBox="0 0 100 120">
+<g stroke="#3F6E1E" stroke-width="2" stroke-linejoin="round"><path d="M50 32C44 18 34 10 25 8C33 16 40 24 46 34Z" fill="#6BA832"></path><path d="M49 32C49 18 52 8 56 1C59 12 57 23 55 33Z" fill="#4A7C22"></path><path d="M53 34C59 22 68 14 77 12C71 21 63 29 57 35Z" fill="#8DBA5E"></path></g>
+<path d="M27 34Q50 22 73 34Q76 52 61 90Q53 110 50 115Q46 109 39 90Q24 52 27 34Z" fill="#F08A24" stroke="#A9520E" stroke-width="2.5" stroke-linejoin="round"></path>
+<path d="M30 64h6M64 72h6M40 86h6M56 96h5M47 106h4" stroke="#C0661A" stroke-width="2" stroke-linecap="round"></path>
+<path d="M35 37Q41 33 47 37M53 37Q59 33 65 37" fill="none" stroke="#6B3410" stroke-width="2" stroke-linecap="round"></path>
+<ellipse cx="41" cy="47" rx="7" ry="8" fill="#fff" stroke="#3a2a1a" stroke-width="2"></ellipse><ellipse cx="59" cy="47" rx="7" ry="8" fill="#fff" stroke="#3a2a1a" stroke-width="2"></ellipse><circle cx="42.5" cy="49" r="3.6" fill="#2a1a10"></circle><circle cx="60.5" cy="49" r="3.6" fill="#2a1a10"></circle><circle cx="44" cy="47.5" r="1.2" fill="#fff"></circle><circle cx="62" cy="47.5" r="1.2" fill="#fff"></circle>
+<ellipse cx="33" cy="58" rx="4.5" ry="2.6" fill="#E0503A" opacity=".45"></ellipse><ellipse cx="67" cy="58" rx="4.5" ry="2.6" fill="#E0503A" opacity=".45"></ellipse>
+<path d="M42 57Q50 69 58 57Z" fill="#6B2414" stroke="#3a2a1a" stroke-width="2" stroke-linejoin="round"></path><path d="M46 62Q50 65 54 62" fill="#E86A5A"></path>
+</symbol></defs></svg>
+
+<div id="doc">
+<header class="ttl">
+<h1>Socle commun · les sept vues</h1>
+<p>Une seule grammaire pour tout le carnet : même en-tête, même « Mot de Gaston », même barre d’outils avec la règle des temps, même langage d’étape, même fiche, et un seul bouton rond <b>Noter</b> pour parler à Gaston. Les écrans sont cliquables : barre basse, menu Plus, cultures, date, Noter. Données d’exemple au lundi 23 novembre.</p>
+<div class="dec">
+<div><b>Noter, seule porte</b>Médaillon flottant supprimé sur mobile ; sur ordinateur, le même bouton rond en bas à droite.</div>
+<div><b>Kalam = le carnet</b>Seul le texte dicté ou écrit par le jardinier est en Kalam, encre bleue sur papier crème.</div>
+<div class="nw"><b>Repère de vue</b>Onglet actif en pastille blanche dans le bandeau ; sur mobile, pastille verte derrière l’icône.</div>
+<div class="nw"><b>Règle des temps</b>« Aujourd’hui » ouvre la réglette sous la barre d’outils, dans toutes les vues.</div>
+<div class="nw"><b>Plan</b>Le découpage de la piste C est repris tel quel : vue du dessus, rangs proportionnels, cartes dans l’ordre du chemin.</div>
+<div class="nw"><b>Catalogue et récoltes</b>Cultures › onglet Catalogue pour ajouter une culture via Gaston ; Stocks › Récoltes par saison.</div>
+</div>
+</header>
+
+<section class="sx">
+<h2>L’anatomie commune d’une page</h2>
+<p>Cinq bandes, toujours dans cet ordre. Une bande sans contenu disparaît, elle n’est jamais remplacée par un placeholder.</p>
+<div class="anat">
+<div style="position:relative"><div class="fr m" id="vAnat"></div>
+<span class="mark" style="top:118px">1</span><span class="mark g" style="top:262px">2</span><span class="mark" style="top:406px">3</span><span class="mark" style="top:472px">4</span><span class="mark" style="top:790px">N</span></div>
+<ol class="bands">
+<li><span class="n">1</span><span><b>En-tête de page</b>Titre en Lora et une ligne de contexte. Onglets de sous-vue seulement quand l’activité en a (Tableau de bord, Plan, Cultures) : tuiles sur ordinateur, pastilles compactes de 36 px sur mobile. Aucun export, aucune aide ici.</span></li>
+<li class="g"><span class="n">2</span><span><b>Mot de Gaston</b>Ce que Gaston sait pour cet écran, en deux phrases au plus : météo utile, étape due, manque de donnée. Une à trois actions ; celles qui écrivent ouvrent Gaston déjà renseigné. Masqué quand il n’a rien à dire, refermable.</span></li>
+<li><span class="n">3</span><span><b>Barre d’outils</b>Toujours dans cet ordre : date (« Aujourd’hui », ouvre la règle des temps juste dessous), recherche, Filtrer avec le nombre de filtres actifs, menu ⋯ qui range les exports et l’aide. Rien d’autre ne s’y ajoute : les sous-vues (Au potager / Catalogue) sont des onglets de l’en-tête.</span></li>
+<li><span class="n">4</span><span><b>Contenu</b>La seule bande qui défile : en-tête, Mot de Gaston et barre d’outils restent fixes. Dès qu’on descend, l’en-tête se resserre et le Mot de Gaston tient sur une ligne ; le × le replie tout à fait. Trié par ce qui demande une action, pas par alphabet. Toute culture porte sa pastille d’étape : même couleur, même pictogramme partout. Le texte du jardinier est en Kalam.</span></li>
+<li><span class="n">5</span><span><b>Fiche commune</b>Toucher une culture, où qu’elle apparaisse, ouvre la même fiche : feuille sur mobile, panneau à droite sur ordinateur. Onglets Suivi et Référence (l’ancienne fiche espèce).</span></li>
+<li class="g"><span class="n">N</span><span><b>Noter, rond, au centre</b>La seule porte vers Gaston. Sa pastille montre ce qui sera noté : la culture ouverte, sinon le micro.</span></li>
+</ol>
+</div>
+</section>
+
+<section class="sx">
+<h2>Les pièces du socle</h2>
+<p>Les mêmes composants sur les sept vues. Ils remplacent les badges, étoiles, palettes de calendrier et cartes propres à chaque écran.</p>
+<div class="sheet">
+<div class="doc-card"><h3>Langage d’étape, partout</h3><div class="leg2" id="kLeg"></div>
+<div style="display:flex;gap:14px;align-items:center;margin-top:14px" id="kStk"></div>
+<p class="hint">Hachuré = prévu, à confirmer. Point orange = dû aujourd’hui ou en retard. Survol à la souris ou appui long au doigt sur une pastille : son étape en clair (essayez ici). Le calendrier de Cultures et les colonnes de la Pépinière prennent ces six couleurs.</p>
+<div style="margin-top:12px" id="kCal"></div></div>
+<div class="doc-card"><h3>Barre d’outils et menu ⋯</h3><div style="position:relative;height:250px;container-type:inline-size;container-name:page" id="kTb"></div>
+<p class="hint">Les exports CSV et JSON quittent la barre : ils servent rarement, surtout sur mobile.</p></div>
+<div class="doc-card"><h3>Le carnet du jardinier</h3><div id="kNote"></div>
+<p class="hint">Kalam est réservée à ce que le jardinier a dicté ou écrit. Tout le reste (libellés, Gaston, dates, chiffres) reste en police système ou en Lora : on voit d’un coup d’œil ce qui vient de lui.</p></div>
+<div class="doc-card"><h3>Mot de Gaston</h3><div id="kMg"></div>
+<p class="hint">Une seule forme pour tout ce que Gaston dit sans qu’on l’appelle. Les actions qui écrivent ouvrent Gaston pré-rempli, avec une carte à confirmer.</p></div>
+<div class="doc-card w2"><h3>Règle des temps · la frise de date</h3><div id="kRegle" style="container-type:inline-size;container-name:page"></div>
+<p class="hint">Conservée et rendue commune : le bouton date de la barre d’outils l’ouvre, elle se loge juste dessous, dans toutes les vues. On la glisse au doigt ou à la souris et on la lance pour remonter vite la saison (inertie) ; molette et flèches sur ordinateur ; toucher un mois y saute ; ‹ › avancent d’un jour. Le bouton date passe en ambre tant qu’on regarde un autre jour ; « Aujourd’hui » ramène au présent. Un seul bouton au lieu de deux (date + règle). Le libellé de la date tient sur une ligne, en police système 14 px : la règle garde la même hauteur quel que soit le jour (Kalam reste réservée au texte du jardinier).</p></div>
+<div class="doc-card w2"><h3>Savoir où l’on est</h3><div id="kNav"></div>
+<p class="hint">Deux repères standards et discrets : sur ordinateur, l’onglet actif devient une pastille blanche, seule tache claire du bandeau ; sur mobile, une pastille verte derrière l’icône active, le motif des barres de navigation Android et iOS récentes. Quand la vue est rangée sous « Plus », le bouton prend son nom, son icône et la pastille.</p></div>
+</div>
+</section>
+
+<section class="sx">
+<h2>Mobile · les vues</h2>
+<p>Chaque écran répond à une seule question. Touchez la barre basse, « Plus », une culture, la date ou Noter : chaque téléphone est navigable.</p>
+<div class="lineup" id="mobA"></div>
+<div class="lineup" id="mobB" style="margin-top:44px"></div>
+<div class="lineup" id="mobC" style="margin-top:44px"></div>
+</section>
+
+<section class="sx">
+<h2>Ordinateur · le même socle</h2>
+<p>Mêmes bandes, mêmes composants : la liste passe en colonnes, la fiche commune s’ouvre à droite, Noter reste un bouton rond en bas à droite. Naviguez avec le bandeau.</p>
+<div class="fr d" id="vDesk"></div>
+</section>
+<div style="height:80px"></div>
+</div>
+
+<script>
+/* ---------- icônes ---------- */
+const SV=(p,f)=>`<svg viewBox="0 0 24 24" aria-hidden="true" ${f?'fill="currentColor"':'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'}>${p}</svg>`;
+const ic={
+ home:SV('<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+ grid:SV('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>'),
+ leaf:SV('<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>'),
+ sprout:SV('<path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/>'),
+ pkg:SV('<path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>'),
+ scroll:SV('<path d="M15 12h-5M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/>'),
+ more:SV('<circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/><circle cx="5" cy="12" r="1.3"/>'),
+ layers:SV('<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>'),
+ chart:SV('<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>'),
+ cal:SV('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
+ rot:SV('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+ moon:SV('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+ sun:SV('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+ user:SV('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>'),
+ chev:SV('<path d="m6 9 6 6 6-6"/>'),right:SV('<path d="m9 6 6 6-6 6"/>'),left:SV('<path d="m15 6-6 6 6 6"/>'),
+ pencil:SV('<path d="M12 20h9"/><path d="M16.38 3.62a1 1 0 0 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z"/>'),
+ x:SV('<path d="M6 6l12 12M18 6L6 18"/>'),
+ mic:SV('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/>'),
+ search:SV('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
+ filter:SV('<path d="M3 5h18M6 12h12M10 19h4"/>'),
+ dl:SV('<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>'),
+ clip:SV('<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/>'),
+ help:SV('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 0 1 5 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>'),
+ note:SV('<path d="M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4"/>'),
+ plus:SV('<path d="M12 5v14M5 12h14"/>'),
+ book:SV('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>')
+};
+const LOGO='<svg viewBox="0 0 200 200" width="32" height="32" aria-hidden="true"><path d="M160.4 172 A94 94 0 1 1 183 144.1 L186 192 Z" fill="none" stroke="#F6F1E4" stroke-width="9" stroke-linejoin="round"/><path d="M44 144 Q100 126 156 144M58 164 Q100 150 142 164" fill="none" stroke="#E8A583" stroke-width="9" stroke-linecap="round"/><path d="M100 130 C100 112 100 98 100 86" fill="none" stroke="#F6F1E4" stroke-width="9" stroke-linecap="round"/><path d="M100 104 C80 104 64 92 62 70 C84 70 98 82 100 104 Z" fill="#F6F1E4"/><path d="M100 90 C100 64 118 46 144 44 C146 70 128 90 100 90 Z" fill="#A8D072"/></svg>';
+const FACE='<svg aria-hidden="true" viewBox="22 22 56 56"><use href="#c-body" width="100" height="120"/></svg>';
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+/* ---------- langage d'étape (identique au Plan) ---------- */
+const ST={godet:{l:'En godet',c:'#CDE9A6'},seme:{l:'Semé',c:'#E6CFA2'},leve:{l:'Levé',c:'#CDE9A6'},plante:{l:'Planté',c:'#CDE9A6'},croiss:{l:'En croissance',c:'#86C163'},flor:{l:'En fleur',c:'#F4D35E'},prod:{l:'En récolte',c:'#F2A54A'},fin:{l:'Terminé',c:'#DADAD2'}};
+const GP={seme:'<ellipse cx="8" cy="9.5" rx="2.6" ry="3.6" transform="rotate(-25 8 9.5)" fill="currentColor" stroke="none"/>',
+leve:'<path d="M2 14h12M8 14V8.5M8 8.5C8 5.5 6 4.2 3.2 4.2c0 2.8 2 4.3 4.8 4.3ZM8 8.5c0-3 2-4.3 4.8-4.3 0 2.8-2 4.3-4.8 4.3Z"/>',
+plante:'<path d="M2 14h12M8 14V7M8 10c0-3 2-5 5-5 0 3-2 5-5 5ZM8 8.5C8 6 6.5 4.5 4 4.5 4 7 5.5 8.5 8 8.5Z"/><path d="M5 14l1.5-2h3L11 14"/>',
+croiss:'<path d="M8 15V2.5M8 5.5c0-2 1.6-3 4-3 0 2-1.6 3-4 3ZM8 9C8 7 6.4 6 4 6c0 2 1.6 3 4 3ZM8 12.5c0-2 1.6-3 4-3 0 2-1.6 3-4 3Z"/>',
+flor:'<circle cx="8" cy="6" r="1.6" fill="currentColor"/><path d="M8 2.2a1.9 1.9 0 0 1 0 2.2M11.6 6a1.9 1.9 0 0 1-2.2 0M8 9.8a1.9 1.9 0 0 1 0-2.2M4.4 6a1.9 1.9 0 0 1 2.2 0M8 8v7M8 12c1.5-1.6 3-1.8 4-1.4"/>',
+prod:'<path d="M2 7h12l-1.4 6.3a1.6 1.6 0 0 1-1.6 1.2H5a1.6 1.6 0 0 1-1.6-1.2zM5.3 7 8 2.4 10.7 7M6 10v2M10 10v2"/>',
+fin:'<path d="M3 8.5l3 3 7-7"/>',
+godet:'<path d="M3.5 7.5h9l-1.3 6.5H4.8zM8 7.5V4.5M8 5.5c0-1.6 1.1-2.6 3-2.6 0 1.6-1.1 2.6-3 2.6ZM8 6.2C8 4.9 7 4 5.4 4c0 1.3 1 2.2 2.6 2.2Z"/>'};
+const G=s=>`<svg class="gl" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${GP[s]}</svg>`;
+const stk=(s,o={})=>`<span class="stk${o.sm?' s':''}${o.est?' est':''}" style="--sc:${ST[s].c}" role="img" data-tip="${ST[s].l}${o.est?' · prévu, à confirmer':''}${o.due?' · dû aujourd’hui':''}" aria-label="${ST[s].l}${o.est?', prévu':''}${o.due?', dû':''}">${G(s)}${o.due?'<i class="dd"></i>':''}</span>`;
+const stc=(s,o={})=>`<span class="stc${o.sm?' sm':''}${o.est?' est':''}" style="--sc:${ST[s].c}">${G(s)}${ST[s].l}${o.est?' · prévu':''}</span>`;
+const FAM={s:'seme',l:'leve',c:'croiss',f:'flor',p:'prod'};
+const CALW={s:'semis',l:'levée ou plantation',c:'croissance',f:'floraison',p:'récolte'};
+const cal=(str,lab)=>`<div><div class="cal" role="img" aria-label="Calendrier sur l’année">${[...str].map((k,i)=>`<i class="${FAM[k]?'f-'+FAM[k]:''}${i===10?' now':''}" data-tip="${MC[i]}${i===10?' (ce mois-ci)':''} · ${CALW[k]||'rien à faire'}"></i>`).join('')}</div>${lab?`<div class="cal">${'JFMAMJJASOND'.split('').map(x=>`<span>${x}</span>`).join('')}</div>`:''}</div>`;
+
+/* ---------- règle des temps ---------- */
+const D0=Date.UTC(2026,2,1),TI=267;/* 1er mars → 23 nov. = jour 267 : toute la saison */
+const JR=['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'],MS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'],MC=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
+const dOf=i=>new Date(D0+i*864e5);
+const dLong=i=>{const d=dOf(i),j=JR[d.getUTCDay()];return `${j[0].toUpperCase()+j.slice(1)} ${d.getUTCDate()} ${MS[d.getUTCMonth()]}`};
+const dShort=i=>{const d=dOf(i);return `${d.getUTCDate()} ${MC[d.getUTCMonth()]}`};
+const agoTxt=i=>{const a=TI-i;return a?(a===1?'hier':a<14?`il y a ${a} j`:a<60?`il y a ${Math.round(a/7)} sem.`:`il y a ${Math.round(a/30)} mois`):'aujourd’hui'};
+const dAu=i=>{const d=dOf(i);return `Au ${d.getUTCDate()} ${MS[d.getUTCMonth()]}`};
+function regle(v){const i=v.day??TI,ago=TI-i;
+ const ticks=Array.from({length:TI+1},(_,k)=>{const d=dOf(k),m=d.getUTCDate()===1,w=d.getUTCDay()===1;
+  return `<button type="button" class="${k===TI?'td':m?'mo':w?'wk':''}" style="left:${(k-i)*10}px" data-i="${k}" tabindex="-1" aria-label="${dLong(k)}"><i></i></button>${m?`<button type="button" class="ml" style="left:${(k-i)*10}px" data-act="day" data-i="${k}">${MS[d.getUTCMonth()]}</button>`:''}`}).join('');
+ return `<div class="regle" role="group" aria-label="Règle des temps"><div class="rgh"><span class="rd">${dLong(i)}</span><span class="ago${ago?' past':''}">${agoTxt(i)}</span><span class="sp"></span>${ago?'<button type="button" class="rt" data-act="today">Aujourd’hui</button>':''}<button type="button" class="cx" data-act="regle" aria-label="Fermer la règle">${ic.x}</button></div>
+ <div class="rgb"><button type="button" data-act="dprev" aria-label="Jour précédent">${ic.left}</button><div class="rgv" role="slider" tabindex="0" aria-valuetext="${dLong(i)}" aria-label="Date de référence"><div class="rgi">${ticks}</div><span class="rgc${ago?' past':''}"></span></div><button type="button" data-act="dnext" aria-label="Jour suivant"${ago?'':' disabled style="opacity:.4"'}>${ic.right}</button></div><p class="rgn">Glissez la règle du doigt ou à la souris, lancez-la pour aller vite · molette et ← → sur ordinateur · touchez un mois pour y sauter</p></div>`}
+/* glisser la règle : suit le doigt ou la souris, puis continue sur son élan (inertie) */
+function regleGestes(el,v,draw){
+ el.addEventListener('pointerdown',e=>{const vw=e.target.closest('.rgv');if(!vw||!el.contains(vw))return;e.preventDefault();
+  const inner=vw.querySelector('.rgi'),box=vw.closest('.regle'),lab=box.querySelector('.rd'),ag=box.querySelector('.ago'),i0=v.day??TI;
+  let x0=e.clientX,last=x0,lt=performance.now(),vel=0,moved=false,cur=i0;
+  try{vw.setPointerCapture(e.pointerId)}catch(_){}
+  const show=f=>{cur=Math.max(0,Math.min(TI,f));inner.style.transform=`translateX(${(i0-cur)*10}px)`;const r=Math.round(cur);lab.textContent=dLong(r);ag.textContent=agoTxt(r);ag.classList.toggle('past',r!==TI)};
+  const mv=ev=>{const dx=ev.clientX-x0;if(Math.abs(dx)>3)moved=true;const now=performance.now();vel=.8*vel+.2*((ev.clientX-last)/Math.max(1,now-lt));last=ev.clientX;lt=now;show(i0-dx/10)};
+  const end=()=>{vw.removeEventListener('pointermove',mv);vw.removeEventListener('pointerup',end);vw.removeEventListener('pointercancel',end);
+   if(!moved){const t=document.elementFromPoint(x0,e.clientY);const b=t&&t.closest('[data-i]');if(b){v.day=+b.dataset.i;draw()}return}
+   let f=cur,vd=-vel/10,pt=performance.now();
+   const step=now=>{const dt=now-pt;pt=now;f+=vd*dt;vd*=Math.pow(.994,dt);show(f);if(Math.abs(vd)>.002&&f>0&&f<TI)requestAnimationFrame(step);else{v.day=Math.round(cur);draw()}};
+   requestAnimationFrame(step)};
+  vw.addEventListener('pointermove',mv);vw.addEventListener('pointerup',end);vw.addEventListener('pointercancel',end)});
+ el.addEventListener('wheel',e=>{if(!e.target.closest('.rgv'))return;e.preventDefault();const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;v.acc=(v.acc||0)+d;const n=Math.trunc(v.acc/12);if(!n)return;v.acc-=n*12;v.day=Math.max(0,Math.min(TI,(v.day??TI)+n));draw()},{passive:false});
+ el.addEventListener('keydown',e=>{if(!e.target.closest('.rgv'))return;const k={ArrowLeft:-1,ArrowRight:1}[e.key];if(!k)return;e.preventDefault();v.day=Math.max(0,Math.min(TI,(v.day??TI)+k*(e.shiftKey?7:1)));draw();const n=el.querySelector('.rgv');n&&n.focus()});
+}
+
+/* ---------- données d'exemple ---------- */
+const C=[
+ {id:'fev',e:'🫘',n:'Fève',v:'Aguadulce',st:'leve',est:1,due:1,w:'Planche centrale · rang 6',t:'Levée prévue aujourd’hui',cal:'ccffpp....sl',q:'40 graines',d:[['seme','2 nov.']],notes:[['2 nov.','Semées à 5 cm, terre humide',0],['23 nov.','Les fèves pointent sur tout le rang, terre encore humide.',1]],o:'Semis direct'},
+ {id:'epi',e:'🍃',n:'Épinard',v:'Géant d’hiver',st:'leve',est:1,due:1,w:'Serre · rang 2',t:'Levée prévue le 9 nov. · en retard',cal:'cc.......slc',q:'1 m²',d:[['seme','28 oct.']],o:'Semis direct'},
+ {id:'mac3',e:'🌿',n:'Mâche',v:'Verte de Cambrai',st:'leve',est:1,w:'Bac à salades · rang 3',t:'Levée prévue le 10 nov.',cal:'pp.......slc',q:'1 rang',d:[['seme','30 oct.']],o:'Semis direct'},
+ {id:'chb',e:'🥦',n:'Chou de Bruxelles',v:'Long Island',st:'prod',w:'Planche centrale · rang 3',t:'En récolte depuis le 20 oct.',cal:'pp...lcccppp',q:'12 plants',h:'2,9 kg récoltés',d:[['plante','3 juil.'],['croiss','20 juil.'],['prod','20 oct.']],notes:[['21 nov.','Les pommes du bas, bien fermes.',1],['28 oct.','Feuilles jaunies du bas retirées',0]],log:[['rec','21 nov.','1,2 kg','Les pommes du bas, bien fermes.',1],['rec','6 nov.','0,9 kg'],['note','28 oct.','Feuilles jaunies du bas retirées',0],['rec','20 oct.','0,8 kg','Première récolte, petites pommes.',1]],o:'Pépinière · lot #18, semé le 2 juin'},
+ {id:'poi1',e:'🌱',n:'Poireau',v:'Bleu de Solaise',st:'prod',w:'Planche centrale · rang 1',t:'En récolte depuis le 20 oct.',cal:'ppp..lcccppp',q:'60 plants',h:'4,1 kg récoltés',d:[['plante','15 juin'],['croiss','1 juil.'],['prod','20 oct.']],notes:[['5 nov.','Buttés',1]],log:[['rec','18 nov.','1,6 kg'],['note','5 nov.','Buttés',1],['rec','5 nov.','1,3 kg'],['rec','20 oct.','1,2 kg']],o:'Pépinière · lot #9'},
+ {id:'kal',e:'🥬',n:'Chou kale',v:'Nero di Toscana',st:'prod',w:'Planche centrale · rang 3',t:'En récolte depuis le 1 oct.',cal:'pp...lccpppp',q:'9 plants',d:[['plante','3 juil.'],['croiss','18 juil.'],['prod','1 oct.']],o:'Pépinière · lot #18'},
+ {id:'car',e:'🥕',n:'Carotte',v:'Nantaise',st:'prod',w:'Planche est · rang 1',t:'En récolte depuis le 20 oct.',cal:'......sccppp',q:'9 m de rang',d:[['seme','15 juil.'],['leve','2 août'],['croiss','20 août'],['prod','20 oct.']],o:'Semis direct'},
+ {id:'lai',e:'🥬',n:'Laitue d’hiver',v:'Merveille d’hiver',st:'croiss',w:'Serre · rang 1',t:'Récolte à partir de mars',cal:'ccp......lcc',q:'10 plants',d:[['plante','8 oct.'],['croiss','22 oct.']],o:'Pépinière · lot #44'},
+ {id:'poi2',e:'🌱',n:'Poireau',v:'Monstrueux de Carentan',st:'croiss',w:'Planche centrale · rang 2',t:'Récolte en décembre',cal:'pp....lccccc',q:'50 plants',d:[['plante','2 juil.'],['croiss','20 juil.']],o:'Pépinière · lot #10'},
+ {id:'rn',e:'🌱',n:'Radis noir',v:'Long d’hiver',st:'croiss',w:'Planche est · rang 3',t:'Récolte vers fin novembre',cal:'p.......sccp',q:'5 m de rang',d:[['seme','1 sept.'],['leve','8 sept.'],['croiss','20 sept.']],o:'Semis direct'},
+ {id:'ail',e:'🧄',n:'Ail',v:'Rose de Lautrec',st:'plante',w:'Planche centrale · rang 4',t:'Planté le 25 oct. · levée fin novembre',cal:'cccccp...lcc',q:'45 caïeux',d:[['plante','25 oct.']],o:'Achat · 3 têtes'},
+ {id:'oig',e:'🧅',n:'Oignon blanc',v:'de Paris',st:'seme',w:'Pépinière · lot #57',t:'Semé le 20 oct. · repiquage en mars',cal:'cccpp....ssc',q:'1 caissette',d:[['seme','20 oct.']],o:'Pépinière · lot #57'},
+ {id:'tom',e:'🍅',n:'Tomate cerise',v:'Sweet 100',st:'fin',w:'Serre · rang 3',t:'Terminé le 30 oct. · rang à libérer',cal:'...lcfpppp..',q:'6 plants',h:'7,4 kg récoltés',d:[['plante','28 avr.'],['croiss','12 mai'],['flor','2 juin'],['prod','5 juil.'],['fin','30 oct.']],o:'Pépinière · lot #12'},
+ {id:'pdt',e:'🥔',n:'Pomme de terre',v:'Charlotte',st:'fin',w:'Tubercules · rang 1',t:'Terminé le 20 sept. · rang à libérer',cal:'...lccpp....',q:'5 kg de plants',h:'21 kg récoltés',d:[['plante','5 avr.'],['croiss','25 avr.'],['prod','10 juil.'],['fin','20 sept.']],o:'Achat · 5 kg'},
+ {id:'har',e:'🫘',n:'Haricot nain',v:'Contender',st:'fin',w:'Planche haricots · rang 1',t:'Terminé le 15 sept. · rang à libérer',cal:'....slfpp...',q:'2 rangs',h:'6,2 kg récoltés',d:[['seme','15 mai'],['leve','25 mai'],['croiss','5 juin'],['prod','10 juil.'],['fin','15 sept.']],o:'Semis direct'}
+];
+const CU={};C.forEach(c=>CU[c.id]=c);
+const GROUPS=[['À confirmer',c=>c.est],['En récolte',c=>!c.est&&c.st==='prod'],['En croissance',c=>c.st==='croiss'],['Semé ou planté',c=>!c.est&&(c.st==='seme'||c.st==='plante')],['Terminé · rang à libérer',c=>c.st==='fin']];
+const XS={mac:['🌿','Mâche','croiss','Verte de Cambrai'],ech:['🧅','Échalote','plante','Grise'],eng:['🌾','Engrais vert','croiss','Phacélie'],nav:['🌱','Navet','prod','Boule d’or'],bat:['🥬','Laitue','croiss','Batavia blonde'],rqt:['🌿','Roquette','prod','Cultivée'],mac2:['🌿','Mâche','croiss','Coquille de Louviers'],epi2:['🍃','Épinard','prod','Monstrueux de Viroflay'],per:['🌿','Persil','prod','Commun'],top:['🥔','Topinambour','prod','Fuseau'],sei:['🌾','Engrais vert','leve','Seigle']};
+const PC=id=>CU[id]?{...CU[id],stl:CU[id].t}:XS[id]?{id,e:XS[id][0],n:XS[id][1],st:XS[id][2],v:XS[id][3],stl:ST[XS[id][2]].l}:null;
+
+/* plan : découpage repris de « Plan · pistes », piste C */
+const GW=25,GH=15,ANG=-2.5;
+const PAR=[
+{id:'serre',nom:'Serre',t:'serre',x:1,y:1,w:6,h:4,dir:'h',r:[[['lai',1]],[['mac',.6],['epi',.4]],[['tom',.5],[null,.5]],[[null,1]]]},
+{id:'pc',nom:'Planche centrale',t:'planche',x:9,y:1,w:12,h:5,dir:'h',r:[[['poi1',1]],[['poi2',1]],[['chb',.6],['kal',.4]],[['ail',1]],[['ech',.5],[null,.5]],[['fev',1]],[['eng',1]],[[null,1]]]},
+{id:'est',nom:'Planche est',t:'planche',x:22,y:1,w:2,h:9,dir:'v',r:[[['car',1]],[['nav',1]],[['rn',.6],[null,.4]]]},
+{id:'sal',nom:'Bac à salades',t:'bac',x:12,y:7.5,w:5,h:1.5,dir:'v',r:[[['bat',1]],[['rqt',1]],[['mac3',1]],[[null,1]],[[null,1]]]},
+{id:'omb',nom:'Planche ombre',t:'planche',x:1,y:7,w:9,h:3,dir:'h',r:[[['mac2',1]],[['epi2',1]],[['per',.5],[null,.5]],[[null,1]]]},
+{id:'tub',nom:'Tubercules',t:'planche',x:12,y:10,w:6,h:4.5,dir:'h',r:[[['pdt',1]],[['top',.5],[null,.5]],[['sei',1]],[[null,1]]]},
+{id:'phar',nom:'Planche haricots',t:'planche',x:19,y:11,w:3.5,h:3,dir:'h',r:[[['har',1]],[[null,1]],[[null,1]]]},
+{id:'sem',nom:'Châssis',t:'pep',pep:'froide',x:1,y:11.5,w:5,h:2,dir:'h',r:[],lots:[{lot:'51',e:'🥬',n:'Chou pommé',v:'Cœur de bœuf',q:'14 godets',sd:'Endurcissement'},{lot:'42',e:'🍓',n:'Fraisier',v:'Mara des bois',q:'12 godets',sd:'Prêt à planter'},{lot:'57',e:'🧅',n:'Oignon blanc',v:'de Paris',q:'1 caissette',sd:'Germination'}]}
+];
+const P={};PAR.forEach(p=>P[p.id]=p);
+const CHEMIN=['serre','pc','est','sal','tub','phar','sem','omb'];
+const ROSE=(()=>{const R=x=>x*Math.PI/180,Pt=(a,r)=>[Math.sin(R(a))*r,-Math.cos(R(a))*r].map(n=>n.toFixed(2)).join(' ');
+ let s='<svg viewBox="-50 -50 100 100" aria-hidden="true"><circle r="33" fill="none" stroke="#C9B58F" stroke-width="1"/><circle r="26" fill="none" stroke="#C9B58F" stroke-width=".6" stroke-dasharray="1.5 2"/>';
+ const pt=(a,r,w,c1,c2)=>`<path d="M0 0L${Pt(a-90,w)}L${Pt(a,r)}Z" fill="${c1}"/><path d="M0 0L${Pt(a+90,w)}L${Pt(a,r)}Z" fill="${c2}"/>`;
+ [22.5,67.5,112.5,157.5,202.5,247.5,292.5,337.5].forEach(a=>s+=pt(a,16,2.5,'#D9CDB2','#B8A47C'));
+ [45,135,225,315].forEach(a=>s+=pt(a,25,5,'#B8C9A4','#7E9566'));
+ [0,90,180,270].forEach(a=>s+=pt(a,38,7,a===0?'#2F5416':'#56634A',a===0?'#5E9A2E':'#9AA58F'));
+ s+='<circle r="3" fill="#fff" stroke="#2F5416" stroke-width="1.2"/>';
+ [['N',0,-45],['E',45,0],['S',0,45],['O',-45,0]].forEach(([t,x,y])=>s+=`<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="central" font-size="10.5" font-weight="700" font-family="Segoe UI,system-ui,sans-serif" fill="${t==='N'?'#2F5416':'#56634A'}">${t}</text>`);
+ return s+'</svg>'})();
+const compass=sm=>`<span class="cps${sm?' sm':''}" role="img" aria-label="Rose des vents : nord en haut du plan">${ROSE}</span>`;
+function segLabel(c,w,h,dir){
+ if(dir==='v'&&h>=110&&w>=18)return `<span class="em">${c.e}</span><span class="vt">${esc(c.n)}</span>${G(c.st)}`;
+ if(w>=104&&h>=17)return `<span class="em">${c.e}</span><span class="nm">${esc(c.n)}</span>${G(c.st)}`;
+ if(w>=44&&h>=15)return `<span class="em">${c.e}</span>${G(c.st)}`;
+ if(w>=17&&h>=14)return G(c.st);return '';
+}
+function pepParcel(p,u,o){
+ const pos=`left:${p.x*u}px;top:${p.y*u}px;width:${p.w*u}px;height:${p.h*u}px`,tw=(p.w*u-20)/3;
+ if(o.mini)return `<span class="pa mini t-pep" style="${pos}"><span class="lots">${p.lots.map(()=>'<span class="lt"></span>').join('')}</span></span>`;
+ return `<div class="pa t-pep" style="${pos}"><a class="pn" href="Ma pepiniere - HF.html">${esc(p.nom)} · pépinière ${p.pep}</a><div class="lots">${p.lots.map(l=>`<a class="lt" href="Ma pepiniere - fiche lot 1280.html" aria-label="Lot #${l.lot}, ${esc(l.n)}, ${l.sd} : ouvrir dans Ma pépinière"><span class="em" aria-hidden="true">${l.e}</span>#${l.lot}${tw>90?' · '+esc(l.n):''}</a>`).join('')}</div></div>`;
+}
+function parcel(p,u,o={}){
+ if(p.pep)return pepParcel(p,u,o);
+ const iw=p.w*u-10,ih=p.h*u-10,n=p.r.length,pos=`left:${p.x*u}px;top:${p.y*u}px;width:${p.w*u}px;height:${p.h*u}px`;
+ const rows=p.r.map((r,i)=>`<div class="rg">${r.map(([cid,part])=>{
+  const w=p.dir==='h'?part*iw:(iw-(n-1)*2)/n,h=p.dir==='h'?(ih-(n-1)*2)/n:part*ih;
+  if(!cid)return o.mini?`<span class="sg free" style="flex-grow:${part}"></span>`:`<span class="sg free" style="flex-grow:${part}">${w>=104&&h>=17?'libre':''}</span>`;
+  const c=PC(cid),cls=`sg st-${c.st}${c.est?' est':''}${o.sel===cid?' on':''}`;
+  if(o.mini)return `<span class="${cls}" style="flex-grow:${part};--sc:${ST[c.st].c}" data-tip="${esc(c.n)} · ${ST[c.st].l}${c.est?', prévu':''}"></span>`;
+  return `<button type="button" class="${cls}" style="flex-grow:${part};--sc:${ST[c.st].c}" data-sel="${cid}" aria-label="${esc(c.n+' '+c.v)}, ${ST[c.st].l}${c.est?', prévu, à confirmer':''}, ${esc(p.nom)} rang ${i+1}">${segLabel(c,w,h,p.dir)}${c.est?'<i class="due" aria-hidden="true"></i>':''}</button>`;
+ }).join('')}</div>`).join('');
+ if(o.mini)return `<span class="pa mini t-${p.t} ${p.dir}" style="${pos}"><span class="rgs">${rows}</span></span>`;
+ return `<div class="pa t-${p.t} ${p.dir}" style="${pos}"><button type="button" class="pn" aria-label="Parcelle ${esc(p.nom)}">${esc(p.nom)}</button><div class="rgs">${rows}</div></div>`;
+}
+function aerial(w,h,u){
+ let s=`<svg class="aer" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><rect width="${w}" height="${h}" fill="#94AE70"/>`;
+ let r=7;const rnd=()=>(r=(r*9301+49297)%233280)/233280;
+ for(let i=0;i<70;i++)s+=`<circle cx="${(rnd()*w).toFixed(1)}" cy="${(rnd()*h).toFixed(1)}" r="${((18+rnd()*46)*u/35).toFixed(1)}" fill="${rnd()>.5?'#86A262':'#A3BC80'}" opacity=".55"/>`;
+ s+=`<path d="M${7.6*u} 0 C ${7.8*u} ${5*u}, ${10.6*u} ${6.4*u}, ${11*u} ${h}" stroke="#D8C8A2" stroke-width="${.85*u}" fill="none" opacity=".9"/>`;
+ s+=`<rect x="0" y="${h-.45*u}" width="${w}" height="${.45*u}" fill="#4F6E3A"/><circle cx="${8*u}" cy="${10.8*u}" r="${u}" fill="#4E6F37"/><circle cx="${19.8*u}" cy="${7.4*u}" r="${.75*u}" fill="#557A3D"/>`;
+ s+=`<polygon points="${w-3.4*u},${h} ${w-3.4*u},${h-1.65*u} ${w},${h-1.65*u} ${w},${h}" fill="#A9705A"/>`;
+ s+=`<g transform="rotate(${ANG} ${w/2} ${h/2}) translate(${.15*u} ${.1*u})">${PAR.map(p=>`<rect x="${p.x*u}" y="${p.y*u}" width="${p.w*u}" height="${p.h*u}" rx="${u/7}" fill="${p.t==='serre'?'#C9DADE':'#9C7E57'}"/>`).join('')}</g></svg>`;
+ return s;
+}
+const scale=u=>`<span class="scl" aria-hidden="true">5 m<i style="width:${5*u}px"></i></span>`;
+function mItem(c,i,v){return `<button type="button" class="mi${v.sel===c.id?' on':''}" data-sel="${c.id}"><span class="rn">R${i+1}</span><span class="stk st-${c.st}${c.est?' est':''}" style="--sc:${ST[c.st].c}" data-tip="${ST[c.st].l}${c.est?' · prévu, à confirmer':''}" aria-hidden="true">${G(c.st)}</span><span class="tx"><b><span class="ce" aria-hidden="true">${c.e}</span>${esc(c.n)}</b><small>${esc(c.stl)}${c.v?' · '+esc(c.v):''}</small></span>${c.est?'<span class="duec">À confirmer</span>':''}</button>`}
+function mPep(p){return `<section class="mc" aria-label="${esc(p.nom)}"><div class="mc-h"><h3>${esc(p.nom)}</h3><span class="ty pepb">pépinière ${p.pep}</span><a href="Ma pepiniere - HF.html">Ma pépinière</a></div>${p.lots.map(l=>`<a class="mi lotl" href="Ma pepiniere - fiche lot 1280.html"><span class="rn">#${l.lot}</span><span class="em" aria-hidden="true">${l.e}</span><span class="tx"><b>${esc(l.n)}</b><small>${esc(l.v)} · ${l.q} · ${l.sd}</small></span><span class="go" aria-hidden="true">›</span></a>`).join('')}<p class="pepn">Les lots se suivent et se notent dans Ma pépinière.</p></section>`}
+function mCard(p,v){if(p.pep)return mPep(p);const items=p.r.flatMap((r,i)=>r.map(([cid])=>cid?mItem(PC(cid),i,v):`<div class="mi free"><span class="rn">R${i+1}</span><span class="bar"></span><span class="tx">Libre</span></div>`)).join('');
+ return `<section class="mc" aria-label="${esc(p.nom)}"><div class="mc-h"><h3>${esc(p.nom)}</h3><span class="ty">${p.r.length} rangs</span><button type="button" class="mcl">Détail</button></div>${items}</section>`}
+function mPlan(v){const u=14.3,W=GW*u,H=GH*u;return `<div class="mplan" style="width:${W}px;height:${H}px">${aerial(W,H,u)}<div style="position:absolute;inset:0;background:rgba(245,247,241,.3)"></div><div class="ovl" style="transform:rotate(${ANG}deg)">${PAR.map(p=>parcel(p,u,{mini:1})).join('')}</div>${compass(1)}</div><div class="lgt"><button type="button" class="lgb" data-act="leg" aria-expanded="${!!v.leg}">${ic.help}Légende ${v.leg?ic.chev.replace('m6 9 6 6 6-6','m6 15 6-6 6 6'):ic.chev}</button><span>Appui long sur un rang ou une pastille : son étape</span></div>${v.leg?`<div class="mleg" aria-label="Légende des étapes">${['seme','leve','croiss','flor','prod','fin'].map(s=>stc(s)).join('')}<span class="stc" style="--sc:#CDE9A6;background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.6) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1.5px #6B7B55">hachuré · prévu</span><span class="stc" style="--sc:#fff;box-shadow:inset 0 0 0 1px var(--bd)"><i class="dueDot" style="display:inline-block"></i>à confirmer</span></div>`:''}`}
+function legendFull(){return `<div class="leg">${['seme','leve','plante','croiss','flor','prod','fin'].map(s=>stc(s)).join('')}<span class="k"><i style="background:${ST.leve.c};background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.6) 0 3px,transparent 3px 7px);box-shadow:inset 0 0 0 1.5px #6B7B55"></i>hachuré : prévu, à confirmer</span><span class="k"><i class="dueDot"></i>à confirmer aujourd’hui</span><span class="k"><i style="box-shadow:inset 0 0 0 1.5px #C2B492"></i>rang libre</span></div>`}
+
+/* catalogue */
+const CAT=[
+ {id:'cel',e:'🥬',n:'Céleri-rave',f:'Apiacées',nv:2,va:'Monarch, Prinz',cal:'..s.lccppp..',win:'Semer en pépinière chaude en mars',esp:'40 cm entre plants, 40 cm entre rangs',soon:1},
+ {id:'aub',e:'🍆',n:'Aubergine',f:'Solanacées',nv:1,va:'Black Beauty',cal:'.s.lccfpp...',win:'Semer en pépinière chaude février → mars',esp:'50 cm entre plants, 70 cm entre rangs',soon:1},
+ {id:'poiv',e:'🫑',n:'Poivron',f:'Solanacées',nv:2,va:'Corno di toro, Yolo Wonder',cal:'.s.lccfpp...',win:'Semer en pépinière chaude février → mars',esp:'45 cm entre plants, 60 cm entre rangs',soon:1},
+ {id:'pois',e:'🫛',n:'Petit pois',f:'Fabacées',nv:3,va:'Petit provençal, Kelvedon, Douce Provence',cal:'.sslcfpp....',win:'Semer en place février → avril',esp:'3 cm sur le rang, 40 cm entre rangs',soon:1},
+ {id:'cou',e:'🥒',n:'Courgette',f:'Cucurbitacées',nv:2,va:'Black Beauty, Gold Rush',cal:'...slcfppp..',win:'Semer en pépinière en avril',esp:'1 m entre plants',soon:0},
+ {id:'bet',e:'🌱',n:'Betterave',f:'Amaranthacées',nv:1,va:'Crapaudine',cal:'...sslccppp.',win:'Semer en place avril → juin',esp:'10 cm sur le rang, 30 cm entre rangs',soon:0},
+ {id:'mel',e:'🍈',n:'Melon',f:'Cucurbitacées',nv:1,va:'Charentais',cal:'...slcfpp...',win:'Semer en pépinière en avril',esp:'80 cm entre plants',soon:0},
+ {id:'bas',e:'🌿',n:'Basilic',f:'Lamiacées',nv:1,va:'Grand vert',cal:'...slcpppp..',win:'Semer en pépinière avril → mai',esp:'25 cm entre plants',soon:0},
+ {id:'fevc',e:'🫘',n:'Fève',f:'Fabacées',nv:1,va:'Aguadulce',cal:'ccffpp....sl',win:'Au potager · Planche centrale',inG:'fev'},
+ {id:'ailc',e:'🧄',n:'Ail',f:'Amaryllidacées',nv:1,va:'Rose de Lautrec',cal:'cccccp...lcc',win:'Au potager · Planche centrale',inG:'ail'}
+];
+const CA={};CAT.forEach(k=>CA[k.id]=k);
+/* récoltes par saison (exemple ; 2026 = total affiché sur dev) */
+const REC={2024:{t:31.2,top:[['🥔','Pomme de terre',14.2],['🍅','Tomate',9.8],['🥒','Courgette',4.5],['·','Autres',2.7]]},2025:{t:52.8,top:[['🍅','Tomate',18.4],['🥔','Pomme de terre',16.0],['🥒','Courgette',9.6],['🫘','Haricot nain',5.1],['·','Autres',3.7]]},2026:{t:44.7,top:[['🥔','Pomme de terre',21.0],['🍅','Tomate cerise',7.4],['🫘','Haricot nain',6.2],['🌱','Poireau',4.1],['🥦','Chou de Bruxelles',2.9],['·','Autres',3.1]]}};
+const kg=x=>x.toFixed(1).replace('.',',')+' kg';
+
+/* ---------- briques du socle ---------- */
+const NAV=[['accueil','Tableau de bord','Accueil','home'],['plan','Plan','Plan','grid'],['cultures','Cultures','Cultures','leaf'],['pep','Pépinière','Pépinière','sprout'],['stocks','Stocks','Stocks','pkg'],['journal','Journal','Journal','scroll']];
+const topbar=(v,mob)=>`<header class="ah"><span class="ahl">${LOGO}<button class="pm" type="button">Potager de Cormeilles ${ic.chev}</button></span>${mob?'':`<nav aria-label="Navigation principale">${NAV.map(([k,l,,i])=>`<button type="button" data-go="${k}"${v.v===k?' aria-current="page"':''}>${ic[i]}${l}</button>`).join('')}</nav>`}<span class="ahr"><button type="button" data-act="theme" aria-pressed="${!!v.dark}" aria-label="${v.dark?'Passer en mode clair':'Passer en mode sombre'}">${v.dark?ic.sun:ic.moon}</button><span class="avt" role="img" aria-label="Compte">${ic.user}</span></span></header>`;
+const pgh=(t,s,tiles)=>`<div class="pgh"><h1>${t}</h1><p>${s}</p>${tiles?`<div class="tiles" role="tablist">${tiles.map(([l,i,dis,sel,at],k)=>`<button type="button" class="tile" role="tab" aria-selected="${sel===undefined?k===0:!!sel}"${dis?' disabled':''}${at?' '+at:''}>${ic[i]}<span>${l}</span></button>`).join('')}</div>`:''}</div>`;
+const mot=(html,acts=[])=>`<section class="mg" aria-label="Mot de Gaston"><span class="fc" aria-hidden="true">${FACE}</span><div><span class="who">Gaston · ce matin</span><p>${html}</p>${acts.length?`<div class="acts">${acts.map(([l,a,p,x])=>`<button type="button"${a?` data-act="${a}"`:''}${x?` data-k="${x}" data-t="${x}" data-f="a_regler"`:''}${p?' class="p"':''}>${l}</button>`).join('')}</div>`:''}</div><button type="button" class="x" data-act="nomot" aria-label="Masquer ce mot">${ic.x}</button></section>`;
+const menuOps=()=>`<div class="menu" role="menu"><button type="button" role="menuitem">${ic.dl}Exporter en CSV</button><button type="button" role="menuitem">${ic.dl}Exporter en JSON</button><hr><button type="button" role="menuitem">${ic.help}Aide de la vue</button></div>`;
+const tools=(v,o={})=>{const past=v.day!=null&&v.day!==TI;
+ return `<div class="tb">${o.date===false?'':`<button type="button" class="dt${past?' past':''}" data-act="regle" aria-expanded="${!!v.regle}">${ic.cal}${past?dShort(v.day):'Aujourd’hui'}</button>`}<span class="sf">${ic.search}${o.ph||'Rechercher'}</span>${o.filter===false?'':`<button type="button" class="fi">${ic.filter}<span class="flt">Filtrer</span>${o.nf?`<span class="ct">${o.nf}</span>`:''}</button>`}<button type="button" class="mo" data-act="menu" aria-label="Plus d’options" aria-expanded="${!!v.menu}">${ic.more}</button>${v.menu?menuOps():''}</div>${v.regle&&o.date!==false?regle(v):''}`};
+const sh=(t,a)=>`<div class="sh"><h2>${t}</h2>${a?`<button type="button" ${a[1]}>${a[0]}</button>`:''}</div>`;
+const item=(c,v,sub)=>`<button type="button" class="it${v.sel===c.id?' on':''}" data-sel="${c.id}">${stk(c.st,{est:c.est,due:c.due})}<span class="tx"><b><span class="e" aria-hidden="true">${c.e}</span>${esc(c.n)}${c.v?` <span style="font-weight:400;color:var(--txt2)">· ${esc(c.v)}</span>`:''}</b><small${c.due?' class="due-l"':''}>${esc(sub||c.t)}</small></span><span class="go">${ic.right}</span></button>`;
+const noteBox=(d,t,dict,where)=>`<div class="note"><div class="mt">${dict?ic.mic+'Dicté':ic.pencil+'Écrit'} · ${d}${where?` · ${where}`:''}</div><div class="hand">${esc(t)}</div></div>`;
+
+/* ---------- les vues ---------- */
+const V={};
+V.accueil=(v,mob)=>({h:pgh('Tableau de bord','Lundi 23 novembre · 8 °C, ciel couvert',[['Vue d’ensemble','home'],['Statistiques','chart']]),
+ g:mot('<b>Gel annoncé samedi (−2 °C).</b> Voilez la mâche et les salades du bac vendredi soir. Deux levées attendent votre œil.',[['Voir les levées','go-cultures'],['Noter le voilage','noter',1]]),
+ t:'',
+ b:`<div class="cols"><div>
+ <div class="sec">${sh('À faire aujourd’hui · 3')}<div class="list">${['fev','epi'].map(id=>item(CU[id],v)).join('')}<button type="button" class="it" data-sel="tom">${stk('fin')}<span class="tx"><b><span class="e" aria-hidden="true">🍅</span>Libérer le rang 3 de la serre</b><small>Tomate cerise terminée le 30 oct.</small></span><span class="go">${ic.right}</span></button></div></div>
+ <div class="sec">${sh('Récoltes possibles · 4',['Tout voir','data-go="cultures"'])}<div class="list">${['poi1','chb','kal','car'].map(id=>item(CU[id],v,CU[id].w)).join('')}</div></div>
+ </div><div>
+ <div class="sec">${sh('Météo · 3 jours')}<div class="wx"><div>Aujourd’hui<b>8° / 3°</b>Couvert</div><div>Mardi<b>7° / 1°</b>Pluie 6 mm</div><div class="fz">Samedi<b>4° / −2°</b>Gel</div></div></div>
+ <div class="sec">${sh('Dernières notes du carnet',['Journal','data-go="journal"'])}${noteBox('aujourd’hui','Les fèves pointent sur tout le rang, terre encore humide.',1,'Fève')}${noteBox('sam. 21 nov.','Récolte 1,2 kg, les pommes du bas. Bien fermes.',1,'Chou de Bruxelles')}</div>
+ </div></div>`});
+V.plan=(v,mob)=>{const au=dAu(v.day??TI);
+ const body=mob?`<div class="sec"><div class="mbar"><span><b>${au}</b> · fond photo</span><span>25 × 15 m</span></div>${mPlan(v)}<div class="todo"><button type="button" data-sel="fev"><i></i>3 à confirmer</button><button type="button" data-sel="tom">3 à libérer</button></div><h3 class="mh3">Dans l’ordre du chemin</h3>${CHEMIN.map(id=>mCard(P[id],v)).join('')}</div>`
+ :(()=>{const u=v.sel?37:42;return `<div class="sec"><div class="mbar"><span><b>${au}</b> · fond : photo importée, atténuée</span><span>25 × 15 m</span></div><div class="plan" style="width:${GW*u}px;height:${GH*u}px">${aerial(GW*u,GH*u,u)}<div style="position:absolute;inset:0;background:rgba(245,247,241,.32)"></div><div class="ovl" style="transform:rotate(${ANG}deg)">${PAR.map(p=>parcel(p,u,{sel:v.sel})).join('')}</div>${compass()}${scale(u)}</div>${legendFull()}</div>`})();
+ return {h:pgh('Plan des parcelles','Vos espaces de culture, leur occupation et leur contenu',[['Plan','layers'],['Rotation · à venir','rot',1]]),
+ g:mot('<b>3 rangs à libérer</b> : tomates cerises (serre), pommes de terre, haricots. Un engrais vert de seigle peut encore y être semé cette semaine.',[['Voir les rangs','go-cultures'],['Noter','noter',1]]),
+ t:tools(v,{ph:'Parcelle ou culture'}),b:body}};
+V.cultures=(v,mob)=>{const cat=v.tab2==='cat';
+ const tiles=[['Au potager · 25','leaf',0,!cat,'data-act="t2" data-t="pot"'],['Catalogue · 109','book',0,cat,'data-act="t2" data-t="cat"']];
+ if(cat){const card=k=>`<button type="button" class="card${v.cat===k.id?' on':''}" data-cat="${k.id}"><span class="hd"><span class="stk em" aria-hidden="true">${k.e}</span><span class="tx"><b>${esc(k.n)}</b><small>${k.nv} variété${k.nv>1?'s':''} · ${k.f}</small></span>${k.inG?'<span class="pill in">Au potager</span>':''}</span>${cal(k.cal,0)}<span class="ft"><span>${k.inG?esc(k.win):'Prochaine fenêtre : '+esc(k.win.toLowerCase())}</span></span></button>`;
+  const grp=(t,L)=>L.length?`<div class="sec">${sh(`${t} · ${L.length}`)}<div class="grid c2">${L.map(card).join('')}</div></div>`:'';
+  return {h:pgh('Mes cultures','109 espèces : semer, comparer, ajouter',tiles),
+  g:mot('<b>Le céleri-rave se sème en mars</b>, en serre chaude. Votre châssis aura de la place après les choux pommés.',[['Ajouter le céleri-rave','add',1,'cel']]),
+  t:tools(v,{ph:'Espèce ou variété',date:false}),
+  b:grp('À semer d’ici mars',CAT.filter(k=>k.soon&&!k.inG))+grp('Plus tard dans la saison',CAT.filter(k=>!k.soon&&!k.inG))+grp('Déjà au potager',CAT.filter(k=>k.inG))+`<div class="sec"><button type="button" class="btn w" data-act="noter">${ic.mic}Une culture absente du catalogue ? Dites-la à Gaston</button></div>`};
+ }
+ return {h:pgh('Mes cultures','De la serre au châssis, à leur étape du jour',tiles),
+ g:mot('<b>3 levées à confirmer.</b> L’épinard de la serre a 2 semaines de retard : un coup d’œil aujourd’hui ?',[['Confirmer la fève','noter',1]]),
+ t:tools(v,{ph:'Culture ou variété'}),
+ b:`<div class="lgt"><button type="button" class="lgb" data-act="leg" aria-expanded="${!!v.leg}">${ic.help}Légende du calendrier ${v.leg?ic.chev.replace('m6 9 6 6 6-6','m6 15 6-6 6 6'):ic.chev}</button><span>${mob?'Appui long sur un mois':'Survolez un mois'} : son geste</span></div>${v.leg?`<div class="mleg" aria-label="Légende du calendrier">${['seme','leve','croiss','flor','prod'].map(s=>stc(s,{sm:1})).join('')}<span class="stc sm" style="--sc:#fff;box-shadow:inset 0 0 0 1.5px var(--txt)">cadre = ce mois-ci</span></div>`:''}`+GROUPS.map(([g,f])=>{const L=C.filter(f);return L.length?`<div class="sec">${sh(`${g} · ${L.length}`)}<div class="grid c2">${L.map(c=>`<button type="button" class="card${v.sel===c.id?' on':''}" data-sel="${c.id}"><span class="hd">${stk(c.st,{est:c.est,due:c.due})}<span class="tx"><b>${c.e} ${esc(c.n)} <span style="font-weight:400;color:var(--txt2)">· ${esc(c.v)}</span></b><small${c.due?' class="due-l"':''}>${esc(c.t)}</small></span></span>${cal(c.cal,0)}<span class="ft"><span>${esc(c.w)}</span></span></button>`).join('')}</div></div>`:''}).join('')}};
+/* pépinière : données d'exemple (stades et emplacements comme dans l'application) */
+const PST=[['levee','En levée','leve'],['godet','En godet','godet'],['endu','Endurcissement','croiss'],['pret','Prêt à sortir','plante']];
+const EMP=[['chaude','Serre chaude','pépinière chaude','#F2A54A'],['froide','Châssis froid','pépinière froide','#5A8CC8'],[null,'Sans emplacement','à ranger','#9AA58F']];
+const LOTS=[
+ {n:61,e:'🍅',c:'Tomate',v:'Cœur de bœuf',st:'levee',emp:'chaude',q:'12 godets',d:'18 nov.',m:'nov',g:[['18 nov.','Semis']],note:'Serre chaude, 22 °C.',s:'en_cours'},
+ {n:62,e:'🌶️',c:'Piment',v:'Espelette',st:'levee',emp:'chaude',q:'6 godets',d:'18 nov.',m:'nov',g:[['18 nov.','Semis']],s:'en_cours'},
+ {n:63,e:'🍆',c:'Aubergine',v:'Black Beauty',st:'levee',emp:'chaude',q:'8 godets',d:'20 nov.',m:'nov',g:[['20 nov.','Semis']],note:'Tapis chauffant branché.',s:'en_cours'},
+ {n:59,e:'🥬',c:'Laitue',v:'Reine de mai',st:'levee',emp:'froide',q:'24 mottes',d:'12 nov.',m:'nov',g:[['12 nov.','Semis']],note:'Arrosé par le dessous, à surveiller.',s:'en_cours'},
+ {n:60,e:'🌱',c:'Poireau',v:'Bleu de Solaise',st:'levee',emp:'froide',q:'1 caissette',d:'14 nov.',m:'nov',g:[['14 nov.','Semis']],s:'en_cours'},
+ {n:57,e:'🧅',c:'Oignon blanc',v:'de Paris',st:'levee',emp:'froide',q:'1 caissette',d:'20 oct.',m:'oct',g:[['20 oct.','Semis']],s:'a_regler',warn:'Pas de levée après 34 j'},
+ {n:64,e:'🥬',c:'Chou-fleur',v:'Merveille de toutes saisons',st:'levee',emp:null,q:'1 caissette',d:'21 nov.',m:'nov',g:[['21 nov.','Semis']],s:'a_regler',warn:'Sans emplacement'},
+ {n:55,e:'🌿',c:'Mâche',v:'Coquille de Louviers',st:'godet',emp:'froide',q:'1 caissette',d:'2 nov.',m:'nov',g:[['2 nov.','Semis'],['9 nov.','Levée'],['18 nov.','Mise en godet']],s:'en_cours'},
+ {n:56,e:'🧅',c:'Oignon jaune',v:'Paille des vertus',st:'godet',emp:'froide',q:'40 godets',d:'28 oct.',m:'oct',g:[['28 oct.','Semis'],['6 nov.','Levée'],['15 nov.','Mise en godet']],note:'Levée régulière.',s:'en_cours'},
+ {n:58,e:'🌿',c:'Persil',v:'Géant d’Italie',st:'godet',emp:'chaude',q:'6 godets',d:'5 nov.',m:'nov',g:[['5 nov.','Semis'],['16 nov.','Levée'],['20 nov.','Mise en godet']],s:'en_cours'},
+ {n:51,e:'🥬',c:'Chou pommé',v:'Cœur de bœuf',st:'endu',emp:'froide',q:'14 godets',d:'12 sept.',m:'sep',g:[['12 sept.','Semis'],['19 sept.','Levée'],['5 oct.','Mise en godet'],['28 oct.','Endurcissement']],note:'Sortir le châssis les jours sans gel.',s:'en_cours'},
+ {n:54,e:'🫘',c:'Fève',v:'Aguadulce',st:'endu',emp:'froide',q:'10 godets',d:'20 oct.',m:'oct',g:[['20 oct.','Semis'],['30 oct.','Levée'],['5 nov.','Endurcissement']],s:'en_cours'},
+ {n:42,e:'🍓',c:'Fraisier',v:'Mara des bois',st:'pret',emp:'froide',q:'12 godets',d:'20 août',m:'sep',g:[['20 août','Stolons en godets'],['2 nov.','Prêt à sortir']],note:'2 godets perdus le 12 nov.',s:'en_cours'},
+ {n:53,e:'🧄',c:'Ail',v:'Rose de Lautrec',st:'pret',emp:'froide',q:'20 caïeux',d:'15 oct.',m:'oct',g:[['15 oct.','Caïeux en godets'],['8 nov.','Prêt à sortir']],note:'Caïeux en godets, au sec.',s:'en_cours'},
+ {n:44,e:'🥬',c:'Laitue d’hiver',v:'Merveille d’hiver',st:'fin',emp:'froide',q:'12 godets, 10 plantés',d:'2 sept.',m:'sep',g:[['2 sept.','Semis'],['10 sept.','Levée'],['8 oct.','Plantée en serre']],s:'termine'},
+ {n:18,e:'🥦',c:'Chou de Bruxelles',v:'Long Island',st:'fin',emp:'froide',q:'16 godets, 12 plantés',d:'2 juin',m:'avant',g:[['2 juin','Semis'],['3 juil.','Planté, planche centrale']],s:'termine'},
+ {n:12,e:'🍅',c:'Tomate cerise',v:'Sweet 100',st:'fin',emp:'chaude',q:'8 godets, 6 plantés',d:'10 mars',m:'avant',g:[['10 mars','Semis'],['28 avr.','Plantée en serre']],s:'termine'},
+ {n:9,e:'🌱',c:'Poireau',v:'Bleu de Solaise',st:'fin',emp:'froide',q:'60 plants repiqués',d:'1 mars',m:'avant',g:[['1 mars','Semis'],['15 juin','Repiqué, planche centrale']],s:'termine'}
+];
+const LO={};LOTS.forEach(l=>LO[l.n]=l);
+const PSK={levee:'leve',godet:'godet',endu:'croiss',pret:'plante',fin:'fin'};
+const SEMER=[['Oignon blanc','de Paris','7 j',85,'1 sept. → 30 nov.','pépinière froide'],['Laitue d’hiver','Merveille d’hiver, Rouge grenobloise','8 j',70,'15 sept. → 1 déc.','pépinière froide'],['Fève','Aguadulce','22 j',45,'1 oct. → 15 déc.','pépinière froide ou en place']];
+const lotCard=l=>`<button type="button" class="lot" data-lot="${l.n}"><span class="hd"><span class="e" aria-hidden="true">${l.e}</span><b>${esc(l.c)}</b><span class="num">#${l.n}</span></span><small>${esc(l.v)} · ${l.q} · semé le ${l.d}</small>${l.warn?`<span class="wn">${l.warn}</span>`:''}${l.note?`<span class="hand">${esc(l.note)}</span>`:''}</button>`;
+function ficheLot(l){const E=EMP.find(x=>x[0]===l.emp);
+ return `<div class="fiche"><div class="fh"><span class="pem" aria-hidden="true">${l.e}</span><div><h2>Lot #${l.n} · ${esc(l.c)}</h2><p>${esc(l.v)} · ${l.q}</p></div><button type="button" class="xb" data-act="close" aria-label="Fermer la fiche">${ic.x}</button></div>
+ <div class="cur"><span class="stc" style="--sc:${ST[PSK[l.st]].c}">${G(PSK[l.st])}${l.st==='fin'?'Terminé':PST.find(x=>x[0]===l.st)[1]}</span><span>${E[1]} · ${E[2]}</span></div>${l.warn?`<div class="harv" style="background:var(--due-bg);color:var(--due-tx)">${l.warn}</div>`:''}
+ <div style="display:flex;gap:8px;margin-top:12px"><button type="button" class="btn pri" style="flex:1" data-act="noter">${ic.pencil}Noter</button><button type="button" class="btn" style="flex:1" data-act="p2" data-t="parcours">Voir au Parcours</button></div>
+ <h4>Gestes datés</h4><ol class="steps">${l.g.map(([d,t])=>`<li>${stk(PSK[l.st]==='fin'?'fin':'leve',{sm:1})}<span>${t}</span><time>${d}</time></li>`).join('')}</ol>
+ ${l.note?`<h4>Carnet du lot</h4>${noteBox(l.d,l.note,0)}`:''}</div>`}
+const BIENTOT=[['Poireau d’été','Carentan','dans 45 j','semis en pépinière froide à partir du 7 janv.'],['Petit pois','Douce Provence','dans 68 j','semis en place à partir du 1er févr.'],['Céleri-rave','Monarch','dans 98 j','semis en pépinière chaude à partir du 2 mars']];
+V.pep=(v,mob)=>{const tab=v.p2||'parcours';
+ const tiles=[['Parcours','sprout',0,tab==='parcours','data-act="p2" data-t="parcours"'],['Semer · 3','cal',0,tab==='semer','data-act="p2" data-t="semer"'],['Lots · 18','scroll',0,tab==='lots','data-act="p2" data-t="lots"']];
+ const ci=v.col||0;
+ const dotsOf=(cols)=>mob?`<div class="kdots" role="tablist" aria-label="Colonnes"><span class="kdl">${cols[Math.min(ci,cols.length-1)]}</span>${cols.map((t,i)=>`<button type="button" role="tab" aria-selected="${i===ci}" aria-label="${t}" data-act="col" data-i="${i}"></button>`).join('')}</div>`:'';
+ if(tab==='semer'){
+  const tile=([n,va,r,pc,fe,ni])=>`<div class="st2"><span class="hh"><b>${n}</b><span class="rs2">reste ${r}</span></span><span class="bar2" role="img" aria-label="${pc} % de la fenêtre écoulée"><i style="width:${pc}%"></i></span><small>${fe} · ${ni}</small><span class="ft2"><span>${va}</span><button type="button" data-act="noter">Semer</button></span></div>`;
+  return {h:pgh('Ma pépinière','Le bon moment pour semer',tiles),
+  g:mot('<b>3 cultures sont dans leur fenêtre</b> et vous avez les graines. L’oignon blanc ferme dans 7 jours.',[['Semer l’oignon blanc','noter',1]]),
+  t:tools(v,{ph:'Culture ou variété'}),
+  b:`<div class="sec">${sh('Fenêtre ouverte · 3')}<p class="bil" style="margin:-2px 2px 8px">Fenêtre de semis ouverte · graines en stock · aucun lot de la culture en cours</p><div class="grid c2">${SEMER.map(tile).join('')}</div></div>
+  <div class="sec">${sh('Fenêtre ouverte, mais rien à semer · 2')}<div class="list"><div class="it"><span class="stk s" style="--sc:var(--alt)">${ic.pkg}</span><span class="tx"><b>🌿 Mâche</b><small>Graines épuisées : à racheter</small></span></div><div class="it"><span class="stk s" style="--sc:var(--alt)">${ic.sprout}</span><span class="tx"><b>🥬 Laitue · Reine de mai</b><small>Un lot est déjà en cours (#59)</small></span></div></div></div>
+  <div class="sec">${sh('Bientôt')}<div class="list">${BIENTOT.map(([n,va,d,t])=>`<div class="it"><span class="stk s" style="--sc:#E6CFA2">${G('seme')}</span><span class="tx"><b>${n} <span style="font-weight:400;color:var(--txt2)">· ${va}</span></b><small>${t}</small></span><span class="q">${d}</span></div>`).join('')}</div></div>`};
+ }
+ if(tab==='lots'){const F=[['en_cours','En cours'],['a_regler','À régler'],['termine','Terminés'],['tous','Tous']],f=v.lf||'en_cours';
+  const cnt=k=>k==='tous'?LOTS.length:LOTS.filter(l=>l.s===k).length;
+  const MOIS=[['nov','Semés en novembre'],['oct','Semés en octobre'],['sep','Septembre et août'],['avant','Plus tôt dans la saison']];
+  const row=l=>`<button type="button" class="lr${v.lot===l.n?' on':''}" data-lot="${l.n}"><span class="nm">#${l.n}</span>${stk(PSK[l.st],{sm:1})}<span class="tx"><b><span aria-hidden="true">${l.e}</span> ${esc(l.c)} <span style="font-weight:400;color:var(--txt2)">· ${esc(l.v)}</span></b><small>${(EMP.find(x=>x[0]===l.emp)||EMP[2])[1]} · ${l.q} · semé le ${l.d}</small><span class="fr2" aria-label="${l.g.length} gestes datés">${l.g.map((x,i)=>`${i?'<span></span>':''}<i class="${i<l.g.length-1?'o':''}"></i>`).join('')}</span>${l.warn?`<span class="wn2" style="display:inline-block;margin-top:5px">${l.warn}</span>`:''}</span></button>`;
+  const listOf=k=>{const vis=LOTS.filter(l=>k==='tous'||l.s===k);return MOIS.map(([m,t])=>{const L=vis.filter(l=>l.m===m);return L.length?`<div class="sec" style="margin-top:12px">${sh(`${t} · ${L.length}`)}<div class="list">${L.map(row).join('')}</div></div>`:''}).join('')};
+  const bil=`<p class="bil" style="margin-top:14px"><b>${LOTS.length} lots</b> cette saison · <b>14</b> en cours dont 2 à régler · <b>4</b> terminés, 34 plants sortis vers le potager</p>`;
+  return {h:pgh('Ma pépinière','Le registre de la saison, lot par lot',tiles),
+  g:mot('<b>2 lots à régler</b> : l’oignon blanc n’a pas levé après 34 jours, le chou-fleur n’a pas d’emplacement.',mob?[]:[['Voir les lots à régler','lf',0,'x']]),
+  t:tools(v,{ph:'Lot n°, culture ou variété'})+(mob?'':`<div class="seg2" role="radiogroup" aria-label="Filtrer les lots">${F.map(([k,l])=>`<button type="button" role="radio" aria-checked="${f===k}" data-act="lf" data-f="${k}">${l} <b>${cnt(k)}</b></button>`).join('')}</div>`),
+  d:dotsOf(F.map(([k,l])=>`${l} · ${cnt(k)}`)),
+  b:mob?`${bil}<div class="kb snap" style="margin-top:8px">${F.map(([k,l])=>`<div class="kc lc"><h3 class="sr">${l} · ${cnt(k)}</h3>${listOf(k)}</div>`).join('')}</div>`
+   :bil+listOf(f)+`<p class="bil" style="margin-top:14px">Registre sans geste : on agit depuis le Parcours ou par Noter.</p>`};
+ }
+ const cnt=k=>LOTS.filter(l=>l.st===k).length;
+ const kan=mob?`<div class="kb snap">${PST.map(([k,t,g])=>`<div class="kc"><h3>${stk(g,{sm:1})}${t} · ${cnt(k)}</h3>${EMP.map(([e,en,et,col])=>{const L=LOTS.filter(l=>l.st===k&&l.emp===e);return L.length?`<div class="eh"><i style="background:${col}"></i>${en} · ${L.length}</div>${L.map(lotCard).join('')}`:''}).join('')}</div>`).join('')}</div>`
+  :`<div class="mx" role="table" aria-label="Les lots par emplacement et par stade"><div class="hd2 rh" style="font:700 12.5px var(--sans)">Emplacement</div>${PST.map(([k,t,g])=>`<div class="hd2">${stk(g,{sm:1})}${t} · ${cnt(k)}</div>`).join('')}${EMP.map(([e,en,et])=>`<div class="rh r-${e||'sans'}">${en}<small>${et}</small></div>${PST.map(([k])=>`<div class="r-${e||'sans'}">${LOTS.filter(l=>l.st===k&&l.emp===e).map(lotCard).join('')}</div>`).join('')}`).join('')}</div>`;
+ return {h:pgh('Ma pépinière','Châssis froid et serre chaude, lot par lot',tiles),
+ g:mot('<b>2 lots à régler</b> : l’oignon blanc n’a pas levé après 34 jours, le chou-fleur attend un emplacement.',[['Ranger le chou-fleur','noter',1],['Voir les lots','p2',0,'lots']]),
+ t:tools(v,{ph:'Lot, culture ou variété'}),d:dotsOf(PST.map(([k,t])=>`${t} · ${cnt(k)}`)),
+ b:`<div class="sec">${mob?'':sh('Le parcours du plant · emplacement × stade')}${kan}</div>`}};
+V.stocks=(v,mob)=>{const row=(c,qa,qb)=>`<button type="button" class="it" data-sel="${c.id||''}">${stk(c.st,{sm:1,est:c.est})}<span class="tx"><b><span class="e" aria-hidden="true">${c.e}</span>${esc(c.n)}</b><small>${esc(c.v||'')}</small></span><span class="q">${qa}<small>${qb}</small></span></button>`;
+ return {h:pgh('Stocks','Ce qui est en terre, en godets et déjà récolté'),
+ g:mot('<b>14 godets de chou pommé</b> attendent une place depuis 4 semaines. Le rang 3 de la serre se libère : je l’y propose ?',[['Oui, proposer','noter',1]]),
+ t:tools(v,{ph:'Culture ou variété'}),
+ b:`<div class="sec"><div class="kpi"><div><b>235</b>unités au potager</div><div><b>38</b>godets à replanter</div><button type="button" data-act="rec"><b>44,7 kg</b>récoltés en 2026<span class="lk">Comparer les saisons ›</span></button><div><b>28</b>unités perdues</div></div></div>
+ <div class="grid c2" style="margin-top:4px"><div class="fam"><h3>Alliacées <small>3 cultures</small></h3><div class="list">${row(CU.ail,'45','caïeux en terre')+row(CU.poi1,'60 · 4,1 kg','en terre · récolté')+row({e:'🧅',n:'Échalote',v:'Grise',st:'plante'},'30','bulbes en terre')}</div></div>
+ <div class="fam"><h3>Brassicacées <small>3 cultures</small></h3><div class="list">${row(CU.chb,'12 · 2,9 kg','en terre · récolté')+row(CU.kal,'9','plants en terre')+row({e:'🥬',n:'Chou pommé',v:'Cœur de bœuf',st:'croiss'},'14','godets à replanter')}</div></div>
+ <div class="fam"><h3>Solanacées <small>2 cultures</small></h3><div class="list">${row(CU.tom,'7,4 kg','récolté · terminé')+row(CU.pdt,'21 kg','récolté · terminé')}</div></div></div>`}};
+V.journal=(v,mob)=>{const ev=(icn,t,s,c)=>`<button type="button" class="jn"${c?` data-sel="${c}"`:''}>${icn}<span class="tx"><b>${t}</b><small>${s}</small></span></button>`;
+ const grp=(n,txts,empty)=>`<div class="jn"><span class="ic">${ic.note}</span><span class="tx"><b>${n} note${n>1?'s':''}</b>${txts.slice(0,1).map(([t,w])=>`<span class="hand">${esc(t)}</span>${w?`<small>${w}</small>`:''}`).join('')}${empty?`<span class="empty">${empty} sans texte</span>`:''}${txts.length>1?`<span class="more">+ ${txts.length-1} autre${txts.length>2?'s':''}</span>`:''}</span></div>`;
+ return {h:pgh('Journal du potager','Le carnet de la saison, jour par jour'),
+ g:mot('Cette semaine : <b>1 récolte (1,2 kg)</b>, 1 paillage et 6 notes, dont 4 dictées.',[]),
+ t:tools(v,{ph:'Culture, parcelle ou mot'}),
+ b:`<div class="day"><h3>Aujourd’hui · 23 novembre</h3><div class="list">${grp(3,[['Les fèves pointent sur tout le rang, terre encore humide.','Fève · Planche centrale'],['Limaces sur la mâche du bac, pose de cendre.','Mâche · Bac à salades']],1)}</div></div>
+ <div class="day"><h3>Samedi 21 novembre</h3><div class="list">${ev(stk('prod'),'Récolte de 1,2 kg de chou de Bruxelles','Planche centrale · rang 3','chb')}${grp(1,[['Les pommes du bas bien fermes.','Chou de Bruxelles']],0)}</div></div>
+ <div class="day"><h3>Jeudi 19 novembre</h3><div class="list">${ev(`<span class="ic">${ic.layers}</span>`,'Paillage','Planche ombre · tonte sèche')}${grp(2,[],2)}</div></div>
+ <div class="day"><h3>Jeudi 12 novembre</h3><div class="list">${ev(`<span class="ic" style="color:#A3402F">${ic.x}</span>`,'Perte de fraisiers','Pépinière · lot #42 · 2 godets')}</div></div>`}};
+
+/* carnet de la culture : récoltes, gestes et notes du jardinier, du plus récent au plus ancien (= le Journal filtré sur cette culture) */
+function clog(c){const L=c.log||(c.notes||[]).map(([d,t,dc])=>['note',d,t,dc]);
+ if(!L.length)return '<p style="font-size:12.5px;color:var(--txt2)">Rien de noté pour l’instant.</p>';
+ return `<ul class="lg">${L.map(([k,d,a,n,dc])=>k==='rec'?`<li>${stk('prod',{sm:1})}<span><b>Récolte · ${a}</b><span class="dt">${d}</span>${n?`<span class="mt2">${dc?ic.mic+'Dicté':ic.pencil+'Écrit'}</span><span class="hand">${esc(n)}</span>`:''}</span></li>`:`<li><span class="stk s" style="--sc:var(--paper);box-shadow:inset 0 0 0 1px var(--paper-bd);color:#7B6A3E">${ic.note}</span><span><b>Note</b><span class="dt">${d}</span><span class="mt2">${n?ic.mic+'Dicté':ic.pencil+'Écrit'}</span><span class="hand">${esc(a)}</span></span></li>`).join('')}</ul><button type="button" class="lk2" data-go="journal">Voir dans le Journal →</button>`}
+/* fiche commune (culture en place) */
+const SEQ=c=>(c.d[0][0]==='seme'?['seme','leve']:['plante']).concat(['croiss'],c.id==='tom'?['flor']:[],['prod','fin']);
+function fiche(c,v,close){
+ const done=Object.fromEntries(c.d),s=SEQ(c);
+ return `<div class="fiche"><div class="fh"><span class="pem" aria-hidden="true">${c.e}</span><div><h2>${esc(c.n)}</h2><p>${esc(c.v)} · ${esc(c.q)}</p></div>${close?`<button type="button" class="xb" data-act="close" aria-label="Fermer la fiche">${ic.x}</button>`:''}</div>
+ <button type="button" class="loc" data-go="plan">${esc(c.w)}<span>Voir au plan →</span></button>
+ <div class="cur">${stc(c.st,{est:c.est})}<span${c.due?' class="due-l"':''}>${done[c.st]?'depuis le '+done[c.st]:esc(c.t)}</span></div>
+ ${c.h?`<div class="harv">${G('prod')}${c.h}${c.log?` · ${c.log.filter(x=>x[0]==='rec').length} récoltes`:''}</div>`:''}
+ <div style="margin-top:12px"><button type="button" class="btn pri w" data-act="noter" data-c="${c.id}">${ic.pencil}Noter${c.est?' la levée':''}</button></div>
+ <div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="${v.tab!=='ref'}" data-act="tab" data-t="suivi">Suivi</button><button type="button" role="tab" aria-selected="${v.tab==='ref'}" data-act="tab" data-t="ref">Référence</button></div>
+ ${v.tab==='ref'?`<dl class="ref"><dt>Calendrier de l’espèce</dt><dd style="margin-top:6px">${cal(c.cal,1)}</dd><dt>Espacement</dt><dd>60 cm entre plants, 60 cm entre rangs</dd><dt>Rotation</dt><dd>Pas de la même famille à cet endroit avant trois ans</dd></dl>`:
+ `<h4>Étapes</h4><ol class="steps">${s.map(k=>done[k]?`<li>${stk(k,{sm:1})}<span>${ST[k].l}</span><time>${done[k]}</time></li>`:k===c.st&&c.est?`<li>${stk(k,{sm:1,est:1,due:c.due})}<span>${ST[k].l}</span><time${c.due?' class="due-l"':''}>prévu</time></li>`:`<li class="next">${stk(k,{sm:1})}<span>${ST[k].l}</span><time></time></li>`).join('')}</ol>
+ <h4>Carnet de la culture</h4>${clog(c)}
+ <h4>Origine</h4><p style="font-size:13px">${esc(c.o)}</p>`}</div>`;
+}
+function ficheCat(k,close){
+ return `<div class="fiche"><div class="fh"><span class="pem" aria-hidden="true">${k.e}</span><div><h2>${esc(k.n)}</h2><p>${k.nv} variété${k.nv>1?'s':''} · ${esc(k.f)}</p></div>${close?`<button type="button" class="xb" data-act="close" aria-label="Fermer la fiche">${ic.x}</button>`:''}</div>
+ <div class="cur">${k.inG?'<span class="pill in">Au potager</span>':'<span class="pill">Pas encore au potager</span>'}<span>${esc(k.win)}</span></div>
+ <div style="margin-top:12px">${k.inG?`<button type="button" class="btn w" data-sel="${k.inG}">Ouvrir la culture en place</button>`:`<button type="button" class="btn pri w" data-act="add" data-k="${k.id}">${ic.plus}Ajouter à mon potager</button>`}</div>
+ <dl class="ref"><dt>Calendrier</dt><dd style="margin-top:6px">${cal(k.cal,1)}</dd><dt>Variétés du catalogue</dt><dd>${esc(k.va)}</dd>${k.esp?`<dt>Espacement</dt><dd>${esc(k.esp)}</dd>`:''}<dt>Famille</dt><dd>${esc(k.f)} · Gaston choisira une parcelle qui respecte la rotation</dd></dl></div>`;
+}
+function recoltes(v,close){const s=v.season||2026,R=REC[s],mx=Math.max(...Object.values(REC).map(r=>r.t)),tm=Math.max(...R.top.map(t=>t[2]));
+ return `<div class="rs"><div class="fh"><div><h2>Récoltes par saison</h2><p>Saison ${s} : du 1er janvier au ${s===2026?'23 novembre':'31 décembre'}</p></div>${close?`<button type="button" class="xb" data-act="close" aria-label="Fermer">${ic.x}</button>`:''}</div>
+ <div class="yrs">${[2024,2025,2026].map(y=>`<button type="button" class="yr" data-act="season" data-s="${y}" aria-pressed="${y===s}"><span>${y}</span><span class="bw"><span class="br" style="width:${REC[y].t/mx*100}%"></span></span><span class="v">${kg(REC[y].t)}</span></button>`).join('')}</div>
+ <h4>${s} · par culture</h4><ul class="top">${R.top.map(([e,n,q])=>`<li><span class="e" aria-hidden="true">${e}</span><span>${n}</span><span class="bw"><span class="br" style="width:${q/tm*100}%"></span></span><span class="v">${kg(q)}</span></li>`).join('')}</ul>
+ <p style="font-size:12px;color:var(--txt2);margin-top:14px">Le détail mois par mois reste dans Tableau de bord › Statistiques.</p></div>`}
+function gaston(v,mob){const c=v.gc&&CU[v.gc],k=v.gk&&CA[v.gk];
+ let ctx='',msgs='',chips='<button type="button">Récolte</button><button type="button">Semis</button><button type="button">Observation</button>';
+ const ctxb=(e,t)=>`<div class="ctx"><span class="e" aria-hidden="true">${e}</span><span class="lbl">${t}</span><button type="button" aria-label="Retirer le contexte">${ic.x}</button></div>`;
+ if(k){ctx=ctxb(k.e,`${esc(k.n)} · catalogue`);
+  msgs=`<div class="bub me"><span class="mt">${ic.pencil}Écrit</span><span class="hand">Ajouter le ${esc(k.n.toLowerCase())} à mon potager</span></div><div class="bub g">Bonne idée. ${esc(k.win)} : je prévois le semis et un rappel. Quelle variété ?</div><div class="prop"><div class="pt">À enregistrer</div><ul><li>${stk('seme',{sm:1,est:1})}<span><b>Nouvelle culture</b> · ${esc(k.n)}, ${esc(k.va.split(',')[0])}</span></li><li><span class="stk s" style="--sc:var(--alt)">${ic.cal}</span><span><b>Rappel</b> · semis en pépinière le 2 mars</span></li></ul><div class="pa2"><button type="button" class="btn">Corriger</button><button type="button" class="btn pri" data-act="close">Confirmer</button></div></div>`;
+  chips=k.va.split(', ').map(x=>`<button type="button">${esc(x)}</button>`).join('');}
+ else if(c&&c.est){ctx=ctxb(c.e,`${esc(c.n)} · ${esc(c.w)}`);
+  msgs=`<div class="bub g">Vous êtes sur ${esc(c.n.toLowerCase())}. Dites ce que vous voyez, ou touchez une suggestion.</div><div class="bub me"><span class="mt">${ic.mic}Dicté · 0:06</span><span class="hand">Les fèves pointent sur tout le rang, terre encore humide.</span></div><div class="bub g">C’est la levée prévue aujourd’hui. Je l’enregistre avec votre note :</div><div class="prop"><div class="pt">À enregistrer</div><ul><li>${stk('leve',{sm:1})}<span><b>Levée</b> · ${esc(c.n)}, ${esc(c.w)} · aujourd’hui</span></li><li><span class="stk s" style="--sc:var(--paper);box-shadow:inset 0 0 0 1px var(--paper-bd);color:#7B6A3E">${ic.note}</span><span>Note au carnet : <span class="hand" style="font-size:15px">« Les fèves pointent sur tout le rang… »</span></span></li></ul><div class="pa2"><button type="button" class="btn">Corriger</button><button type="button" class="btn pri" data-act="close">Confirmer</button></div></div>`;
+  chips='<button type="button">J’ai vu la levée</button><button type="button">Pas encore</button>';}
+ else if(c){ctx=ctxb(c.e,`${esc(c.n)} · ${esc(c.w)}`);
+  msgs=`<div class="bub g">Vous êtes sur ${esc(c.n.toLowerCase())}, ${ST[c.st].l.toLowerCase()}. Une récolte, une observation ?</div>`;
+  chips=(c.st==='prod'?'<button type="button">Récolte</button>':'')+(c.st==='fin'?'<button type="button">Libérer le rang</button>':'')+'<button type="button">Note</button>';}
+ else msgs='<div class="bub g">Je vous écoute : une récolte, un semis, une observation, ou une culture à ajouter…</div>';
+ return `<div class="gs"><div class="gh"><span class="fc" aria-hidden="true">${FACE}</span><b>Gaston<small>connaît votre potager et la météo</small></b><button type="button" class="xb" data-act="close" aria-label="Fermer Gaston">${ic.x}</button></div>${ctx}
+ <div class="gm">${msgs}</div><div class="chips">${chips}<button type="button" disabled>Photo · bientôt</button></div>
+ <div class="gin"><span class="tf">Écrire à Gaston…</span><button type="button" class="mic" aria-label="Dicter">${ic.mic}</button></div></div>`;
+}
+
+/* ---------- assemblage ---------- */
+function bnav(v){const inPlus=['cultures','stocks','journal'].includes(v.v);
+ const b=(k,l,i)=>`<button type="button" data-go="${k}"${v.v===k?' aria-current="page"':''}><span class="ind">${ic[i]}</span>${l}</button>`;
+ const se=v.sel&&PC(v.sel),mk=se?`<span aria-hidden="true">${se.e}</span>`:ic.mic,cur=inPlus?NAV.find(n=>n[0]===v.v):null;
+ return `${v.plus?`<div class="plus" role="menu">${[['cultures','Cultures','leaf'],['stocks','Stocks','pkg'],['journal','Journal','scroll']].map(([k,l,i])=>`<button type="button" role="menuitem" data-go="${k}"${v.v===k?' aria-current="page"':''}>${ic[i]}${l}</button>`).join('')}</div>`:''}
+ <nav class="bn" aria-label="Navigation principale">${b('accueil','Accueil','home')}${b('plan','Plan','grid')}<button type="button" class="nt" data-act="noter" aria-label="Noter avec Gaston${se?', '+se.n:''}"><span class="nb">${ic.pencil}<span class="mk">${mk}</span></span>Noter</button>${b('pep','Pépinière','sprout')}<button type="button" data-act="plus" aria-expanded="${!!v.plus}"${cur?' aria-current="page"':''}><span class="ind">${cur?ic[cur[3]]:ic.more}</span>${cur?cur[2]:'Plus'}</button></nav>`;
+}
+function panel(v){const c=v.sel&&CU[v.sel],k=v.cat&&CA[v.cat];
+ if(v.lot)return ficheLot(LO[v.lot]);
+ if(v.rec)return recoltes(v,1);if(k)return ficheCat(k,1);if(c)return fiche(c,v,1);return ''}
+function screen(v,mob){
+ const s=V[v.v](v,mob);
+ const main=`<main class="main"><div class="fix">${s.h}<div class="wrap">${v.nomot?'':s.g}${s.t}${s.d||''}</div></div><div class="scl2"><div class="wrap">${s.b}</div></div></main>`;
+ if(mob){
+  let sheet='';
+  if(v.g)sheet=`<div class="shz full"><div class="pn2">${gaston(v,1)}</div></div>`;
+  else if(v.sheet){const p=panel(v);if(p)sheet=`<div class="shz" data-act="close-bg"><div class="pn2"><div class="grab"></div>${p}</div></div>`}
+  return `<div class="scr">${topbar(v,1)}<div class="body">${main}</div>${bnav(v)}${sheet}</div>`;
+ }
+ const p=v.g?gaston(v,0):panel(v),se=v.sel&&PC(v.sel);
+ return `<div class="scr">${topbar(v,0)}<div class="body">${main}${p?`<aside class="side">${p}</aside>`:''}</div>${v.g?'':`<button type="button" class="fab${p?' sd':''}" data-act="noter" aria-label="Noter avec Gaston"><span class="nb">${ic.pencil}<span class="mk">${se?`<span aria-hidden="true">${se.e}</span>`:ic.mic}</span></span>Noter</button>`}</div>`;
+}
+function mount(el,v,mob){
+ v.render=keep=>{const sc=el.querySelector('.scl2');const top=sc?sc.scrollTop:0;el.innerHTML=screen(v,mob);el.classList.toggle('dk',!!v.dark);const n=el.querySelector('.scl2');if(n&&keep){n.scrollTop=top;n.parentNode.classList.toggle('scd',top>8)}};
+ el.addEventListener('scroll',e=>{const s2=e.target;if(!s2.classList||!s2.classList.contains('scl2'))return;s2.parentNode.classList.toggle('scd',s2.scrollTop>8)},true);
+ el.addEventListener('click',e=>{if(el.dataset.lp){delete el.dataset.lp;e.preventDefault();return}const cm=e.target.closest('.scd .mg');if(cm&&!e.target.closest('button')){const s2=el.querySelector('.scl2');s2.scrollTo({top:0,behavior:'smooth'});return}const t=e.target.closest('[data-go],[data-sel],[data-cat],[data-lot],[data-act]');if(!t||!el.contains(t)||t.tagName==='A')return;
+  if(t.dataset.go){Object.assign(v,{v:t.dataset.go,plus:false,menu:false,sel:null,cat:null,rec:false,lot:null,sheet:false,g:false,tab:'suivi',tab2:'pot'});return v.render()}
+  if(t.dataset.sel!==undefined){const id=t.dataset.sel;if(!id)return;if(v.cat){v.v='cultures';v.tab2='pot'}Object.assign(v,{sel:id,cat:null,rec:false,sheet:!!CU[id],tab:'suivi'});return v.render(1)}
+  if(t.dataset.cat){Object.assign(v,{cat:t.dataset.cat,sel:null,rec:false,sheet:true});return v.render(1)}
+  if(t.dataset.lot){Object.assign(v,{lot:+t.dataset.lot,sel:null,cat:null,rec:false,sheet:true});return v.render(1)}
+  const a=t.dataset.act;
+  if(a==='plus'){v.plus=!v.plus;return v.render(1)}
+  if(a==='menu'){v.menu=!v.menu;return v.render(1)}
+  if(a==='regle'){v.regle=!v.regle;return v.render(1)}
+  if(a==='day'){v.day=+t.dataset.i;return v.render(1)}
+  if(a==='dprev'){v.day=Math.max(0,(v.day??TI)-1);return v.render(1)}
+  if(a==='dnext'){v.day=Math.min(TI,(v.day??TI)+1);return v.render(1)}
+  if(a==='today'){v.day=TI;return v.render(1)}
+  if(a==='tab'){v.tab=t.dataset.t;return v.render(1)}
+  if(a==='t2'){Object.assign(v,{tab2:t.dataset.t,sel:null,cat:null,sheet:false});return v.render()}
+  if(a==='leg'){v.leg=!v.leg;return v.render(1)}
+  if(a==='nomot'){v.nomot=true;return v.render(1)}
+  if(a==='theme'){v.dark=!v.dark;return v.render(1)}
+  if(a==='p2'){Object.assign(v,{p2:t.dataset.t,lot:null,sheet:false,col:0});return v.render()}
+  if(a==='lf'){v.lf=t.dataset.f;return v.render(1)}
+  if(a==='band'){v.band=!v.band;return v.render(1)}
+  if(a==='col'){const kb=el.querySelector('.kb.snap');if(kb)kb.scrollTo({left:+t.dataset.i*kb.clientWidth,behavior:'smooth'});return}
+  if(a==='rec'){Object.assign(v,{rec:true,sel:null,cat:null,sheet:true});return v.render(1)}
+  if(a==='season'){v.season=+t.dataset.s;return v.render(1)}
+  if(a==='add'){Object.assign(v,{g:true,gk:t.dataset.k,gc:null,plus:false});return v.render(1)}
+  if(a==='noter'){Object.assign(v,{g:true,gk:null,plus:false});v.gc=t.dataset.c||(v.sel&&CU[v.sel]?v.sel:(['accueil','cultures'].includes(v.v)&&v.tab2!=='cat'&&t.closest('.mg')?'fev':null));return v.render(1)}
+  if(a==='go-cultures'){Object.assign(v,{v:'cultures',tab2:'pot'});return v.render()}
+  if(a==='close'){if(v.g)v.g=false;else{v.sheet=false;if(!mob){v.sel=null;v.cat=null;v.rec=false;v.lot=null}}return v.render(1)}
+  if(a==='close-bg'&&e.target===t){v.sheet=false;return v.render(1)}
+ });
+ regleGestes(el,v,()=>v.render(1));
+ el.addEventListener('scroll',e=>{const kb=e.target;if(!kb.classList||!kb.classList.contains('snap'))return;const i=Math.round(kb.scrollLeft/kb.clientWidth);if(i===v.col)return;v.col=i;el.querySelectorAll('.kdots button').forEach((b,k)=>b.setAttribute('aria-selected',k===i));const l=el.querySelector('.kdl'),h=kb.querySelectorAll('.kc h3')[i];if(l&&h)l.textContent=h.textContent},true);
+ if(mob)longPress(el);
+ v.render();
+}
+/* appui long (mobile) : montre l'étape d'une pastille ou d'un rang, comme un survol */
+function longPress(el){let tm,on;const off=()=>{clearTimeout(tm);if(on){on.classList.remove('tipon');on=null}};
+ el.addEventListener('pointerdown',e=>{const t=e.target.closest('[data-tip]');off();if(!t)return;tm=setTimeout(()=>{on=t;t.classList.add('tipon');el.dataset.lp='1';setTimeout(()=>{delete el.dataset.lp},1500)},380)});
+ ['pointerup','pointercancel','pointerleave'].forEach(n=>el.addEventListener(n,()=>{clearTimeout(tm);setTimeout(off,900)}));}
+
+/* ---------- pièces du socle ---------- */
+document.getElementById('kLeg').innerHTML=['seme','leve','croiss','flor','prod','fin'].map(s=>stc(s)).join('');
+document.getElementById('kStk').innerHTML=`${stk('croiss')}<span style="font-size:12.5px;color:var(--txt2)">réalisé</span>${stk('leve',{est:1})}<span style="font-size:12.5px;color:var(--txt2)">prévu</span>${stk('leve',{est:1,due:1})}<span style="font-size:12.5px;color:var(--txt2)">prévu, dû</span>`;
+document.getElementById('kCal').innerHTML=`<div style="font-size:12px;font-weight:600;margin-bottom:4px">Chou de Bruxelles · calendrier aux six couleurs</div>${cal(CU.chb.cal,1)}`;
+document.getElementById('kTb').innerHTML=tools({menu:1},{ph:'Rechercher',nf:2});
+document.getElementById('kNote').innerHTML=noteBox('aujourd’hui','Les fèves pointent sur tout le rang, terre encore humide.',1,'Fève · Planche centrale')+noteBox('5 nov.','Buttés',0,'Poireau');
+document.getElementById('kMg').innerHTML=`<div style="container-type:inline-size;container-name:page">${mot('<b>Gel annoncé samedi (−2 °C).</b> Voilez la mâche et les salades du bac vendredi soir.',[['Voir les cultures',''],['Noter le voilage','',1]])}</div>`;
+(()=>{const kr=document.getElementById('kRegle'),st={regle:1,day:TI-11};const draw=()=>{kr.innerHTML=tools(st,{ph:'Rechercher'})};regleGestes(kr,st,draw);kr.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(a==='day')st.day=+t.dataset.i;if(a==='dprev')st.day=Math.max(0,st.day-1);if(a==='dnext')st.day=Math.min(TI,st.day+1);if(a==='today')st.day=TI;if(a==='regle')st.regle=!st.regle;draw()});draw()})();
+document.getElementById('kNav').innerHTML=`<div class="navdemo d">${topbar({v:'stocks'},0)}</div><div class="navdemo" style="width:390px;padding-top:34px;background:var(--bg)">${bnav({v:'stocks'})}</div>`;
+
+/* ---------- écrans ---------- */
+mount(document.getElementById('vAnat'),{v:'cultures'},1);
+const MOB=[
+ ['mobA','Tableau de bord','Que faire aujourd’hui ?',{v:'accueil'},['Le Mot de Gaston devient le <b>brief du jour</b> : gel, levées dues.','<b>Plus aucun placeholder</b> : à faire, récoltes, météo, dernières notes en Kalam.']],
+ ['mobA','Plan · règle des temps ouverte','Où en est chaque parcelle ?',{v:'plan',regle:1,day:TI-11},['<b>Découpage de la piste C repris tel quel</b>. Légende repliée sous « Légende » ; <b>appui long</b> sur un rang ou une pastille pour lire son étape.','La règle des temps se <b>glisse au doigt et se lance</b> pour remonter la saison ; la date passe en ambre.']],
+ ['mobA','Cultures · au potager','Où en sont mes cultures ?',{v:'cultures'},['Triées par <b>ce qui demande une action</b>, plus par alphabet.','« Au potager » et « Catalogue » deviennent des <b>onglets compacts de l’en-tête</b>, comme les sous-vues du Tableau de bord et du Plan : plus de barre en plus.']],
+ ['mobA','Pépinière · Parcours','Que semer, où en sont mes plants ?',{v:'pep'},['Trois onglets : <b>Parcours</b>, <b>Semer</b> (le bon moment pour semer, isolé) et <b>Lots</b>.','Kanban <b>emplacement × stade</b> : un stade à la fois (points), les lots groupés par emplacement (serre chaude, châssis froid, sans emplacement).']],
+ ['mobB','Stocks','Qu’ai-je, que vais-je manquer ?',{v:'stocks'},['Les quatre chiffres restent ; la tuile récoltes ouvre <b>la comparaison des saisons</b>.','Familles et alphabet passent dans Filtrer, exports dans ⋯.']],
+ ['mobB','Journal','Qu’est-il arrivé ?',{v:'journal'},['Notes du jour <b>regroupées en « n notes »</b>, texte du jardinier en Kalam.','Les notes sans texte sont comptées, pas listées.']],
+ ['mobB','Fiche commune','Ouverte depuis Cultures',{v:'cultures',sel:'chb',sheet:true},['La <b>même fiche</b> depuis Accueil, Plan, Cultures, Stocks, Journal.','Onglet <b>Référence</b> = l’ancienne fiche espèce.']],
+ ['mobB','Gaston via Noter','Seule porte vers le compagnon',{v:'cultures',sel:'fev',g:true,gc:'fev'},['Noter ouvre Gaston <b>avec le contexte</b> de la culture ouverte.','La dictée s’affiche en Kalam ; rien n’est écrit sans <b>Confirmer</b>.']],
+ ['mobC','Cultures · catalogue','Consulter une culture absente du potager',{v:'cultures',tab2:'cat'},['Les 109 espèces, <b>rangées par prochaine fenêtre de semis</b>.','Toucher une espèce ouvre sa fiche Référence, avec <b>Ajouter à mon potager</b>.']],
+ ['mobC','Ajouter une culture','Toujours par Gaston',{v:'cultures',tab2:'cat',g:true,gk:'cel'},['Ajouter ne crée rien directement : Gaston propose <b>la culture et le rappel de semis</b>, on confirme.','Une espèce absente du catalogue se dit à Gaston, depuis le bas du catalogue.']],
+ ['mobC','Récoltes par saison','Depuis la tuile de Stocks',{v:'stocks',rec:true,sheet:true,season:2026},['Une barre par saison, <b>touchez une année</b> pour voir ses cultures.','Le détail mois par mois reste dans Tableau de bord › Statistiques.']],
+ ['mobC','Pépinière · Semer','Le bon moment pour semer',{v:'pep',p2:'semer'},['La bande devient un <b>onglet à part</b>, à côté de Parcours et Lots.','Fenêtres ouvertes avec bouton Semer, cultures bloquées (graines épuisées, lot déjà en cours), puis les prochaines fenêtres.']],
+ ['mobC','Pépinière · Lots','Le registre de la saison',{v:'pep',p2:'lots'},['Mêmes <b>points</b> que le Parcours : on glisse d’En cours à À régler, Terminés, Tous ; lots groupés par mois de semis, frise des gestes datés.','Registre sans geste : la fiche du lot renvoie au Parcours ou à Noter.']],
+ ['mobC','Mode sombre','Le bouton lune du bandeau',{v:'cultures',dark:true},['Toutes les vues passent en sombre : surfaces, textes, Mot de Gaston, carnet.','Les couleurs d’étape restent les mêmes, avec un texte foncé dessus pour rester lisibles.']]
+];
+MOB.forEach(([row,t,q,st,ann])=>{const col=document.createElement('div');col.className='col';
+ col.innerHTML=`<span class="lb">${t}<small>${q}</small></span><div class="fr m"></div><div class="ann"><ul>${ann.map(a=>`<li>${a}</li>`).join('')}</ul></div>`;
+ document.getElementById(row).appendChild(col);mount(col.querySelector('.fr'),{...st},1)});
+mount(document.getElementById('vDesk'),{v:'plan'},0);
+</script>
+</body></html>

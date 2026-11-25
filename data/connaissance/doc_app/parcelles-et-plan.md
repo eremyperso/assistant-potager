@@ -159,9 +159,9 @@ Le plan **n'écrit rien** : aucune parcelle ne s'y déplace, et toucher un rang 
 **Intention :** comprendre
 **On parle aussi de :** appuyer sur un rang ; que se passe-t-il quand j'appuie sur un rang du plan ; toucher une culture ; suivi d'une culture ; noter la levée ; bouton Noter ; Journal du jour
 
-Toucher une culture sur le plan ouvre son **suivi** : l'histoire de CETTE culture, sur CE rang — pas la fiche d'une espèce, qui reste dans l'écran Cultures. Sur ordinateur, il s'ouvre à droite du plan et le segment choisi est cerclé ; sur mobile, il monte dans une feuille basse. Échap ou Fermer le referme.
+Toucher une culture sur le plan ouvre sa **fiche commune** : la même fiche s'ouvre quand on touche cette culture depuis le Tableau de bord, Cultures, les Stocks ou le Journal. Son onglet **Suivi** est l'histoire de CETTE culture, sur CE rang ; son onglet **Référence** est la fiche de l'espèce (Maintenant, calendrier, espacement, rotation, référentiel, variétés cultivées, voisinages, bioagresseurs). Sur ordinateur, elle s'ouvre dans le panneau de droite et le segment choisi est cerclé ; sur mobile, elle monte dans une feuille basse. Échap ou Fermer la referme.
 
-Le suivi dit la culture et sa quantité, **où** elle est (« Planche centrale, rang 3 — Voir la parcelle → »), sa place sur le rang, son **étape** avec sa date, un bandeau « Levée prévue aujourd'hui : à confirmer en notant » quand l'étape est due, puis un seul bouton **Noter**, qui ouvre Gaston — « Noter la levée » sur mobile. Viennent ensuite ce qui a été récolté, la frise des étapes, l'origine et les notes (voir « Retrouver d'où vient une culture et ce qu'elle a donné »). Un membre en lecture seule lit le suivi sans le bouton Noter.
+La fiche dit la culture et sa quantité, **où** elle est (« Planche centrale · rang 3 — Voir au plan → », ou « Pas encore placé — Placer sur le plan → » en pointillé pour une culture sans place), son **étape** avec sa date (« depuis le 20 octobre », en orange quand elle est prévue et due, « Aucune étape notée » sans étape), ce qui a été récolté, puis un seul bouton **Noter**, qui ouvre Gaston — « Noter la levée » quand l'étape est prévue. L'onglet Suivi montre la frise des étapes, le carnet de la culture et l'origine (voir « Retrouver d'où vient une culture et ce qu'elle a donné »). Un membre en lecture seule lit la fiche sans le bouton Noter.
 
 Toucher le nom d'une parcelle ouvre son détail dans le Plan (voir « Ouvrir une parcelle dans le Plan »). **« Journal du jour »**, dans la barre de l'activité Plan, à côté du sélecteur de date, ouvre le Journal filtré sur le jour affiché.
 
@@ -295,9 +295,9 @@ Une parcelle **inactive** reste à sa place, **grisée**. Une **pépinière** mo
 **Intention :** comprendre
 **On parle aussi de :** origine d'une culture ; d'où vient cette culture ; lot d'origine ; Voir le lot ; achat ; semis direct ; combien de kilos récoltés ; récoltés sur cette culture ; notes d'une culture ; frise des étapes
 
-Le suivi d'une culture dit son **origine** : **Pépinière · lot #18** — semé le …, combien de godets, combien de plants mis en terre — avec « Voir le lot → », qui ouvre la fiche du lot dans Ma pépinière ; **Achat**, pour une plantation qui ne vient d'aucun lot ; **Semis direct**, semé en place le ….
+La fiche commune d'une culture dit son **origine** : **Pépinière · lot #18** — semé le …, combien de godets, combien de plants mis en terre — avec « Voir le lot → », qui ouvre la fiche du lot dans Ma pépinière ; **Achat**, pour une plantation qui ne vient d'aucun lot ; **Semis direct**, semé en place le ….
 
-Il dit aussi ce qui a déjà été **récolté** sur cette culture depuis son installation, en kilos quand on a pesé (« 2,9 kg récoltés »), et la **frise des étapes** : les étapes passées et datées, la courante, puis la prochaine avec sa date prévue. Les **notes** prises sur la culture suivent, les plus récentes d'abord. La photo d'une culture est annoncée, pas encore disponible.
+Elle dit aussi ce qui a déjà été **récolté** sur cette culture depuis son installation, en kilos quand on a pesé (« 2,9 kg récoltés · 4 récoltes »), et la **frise des étapes** : les étapes passées et datées, la courante, la prévue hachurée avec « prévu », les suivantes grisées. Le **carnet de la culture** suit : ses récoltes, ses gestes (paillage, arrosage, perte en rouge…) et ses notes en écriture à la main, les plus récentes d'abord, avec « Voir dans le Journal → » filtré sur cette culture. La photo d'une culture est annoncée, pas encore disponible.
 
 ## Voir ce qui m'attend aujourd'hui au potager
 

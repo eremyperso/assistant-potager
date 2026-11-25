@@ -45,6 +45,14 @@ export default {
         violet:        'var(--violet)',
         'violet-soft': 'var(--violet-soft)',
 
+        // [US-352 / CA1] Dû, autre jour, carnet du jardinier, pépinière, sol.
+        due: 'var(--due)', 'due-bg': 'var(--due-bg)', 'due-bd': 'var(--due-bd)', 'due-tx': 'var(--due-tx)',
+        'amb-bg': 'var(--amb-bg)', 'amb-bd': 'var(--amb-bd)', 'amb-tx': 'var(--amb-tx)',
+        ink: 'var(--ink)', paper: 'var(--paper)', 'paper-bd': 'var(--paper-bd)',
+        pep: 'var(--pep)', 'pep-soft': 'var(--pep-soft)',
+        soil: 'var(--soil)', 'soil-bd': 'var(--soil-bd)',
+        btn: 'var(--btn)',
+
         'header-from':  'var(--header-from)',
         'header-to':    'var(--header-to)',
         'header-txt':   'var(--header-txt)',
@@ -74,7 +82,10 @@ export default {
       },
       fontFamily: {
         serif: ['Lora', 'Georgia', '"Times New Roman"', 'serif'],
-        // [US-218] L'écriture des jalons de la pépinière (« J34 », « +6 j », « 105 j »).
+        // [US-352 / CA6] Kalam est RÉSERVÉE au texte dicté ou écrit par le jardinier (note du
+        // carnet, bulle du jardinier). Ni le nom de Gaston, ni un titre de carte, ni une date.
+        // Les anciens usages de la pépinière (jalons « J34 », chiffres) sont recensés par
+        // `lib/kalam.test.js` et sortent avec US-356.
         hand:  ['Kalam', 'cursive'],
         sans:  ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', 'system-ui', 'sans-serif'],
       },

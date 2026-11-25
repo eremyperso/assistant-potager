@@ -221,9 +221,11 @@ test('[CA13] la fiche ne lit que ce que l’écran d’origine ne lui a pas donn
 // chemin existe encore : Stocks, et le composant lui-même.
 
 test('[CA13, CA2] la fiche reçoit ce que l’écran a déjà chargé — aucune lecture de plus', () => {
-  const stocks = source('../views/Stocks.jsx')
-  const bloc = stocks.slice(stocks.indexOf('<FicheCalendrier'), stocks.indexOf('/>', stocks.indexOf('<FicheCalendrier')))
-  assert.ok(bloc.includes('dateRef='), 'prop absente : dateRef=')
+  // [US-355 / CA3] La fiche calendrier s'empile depuis l'onglet Référence de la fiche commune : elle reçoit la date,
+  // le calendrier et la confiance que l'onglet vient de lire — jamais une lecture de plus.
+  const reference = source('../components/ReferenceCulture.jsx')
+  const bloc = reference.slice(reference.indexOf('<FicheCalendrier'), reference.indexOf('/>', reference.indexOf('<FicheCalendrier')))
+  for (const prop of ['dateRef=', 'calendriers=', 'confiances=']) assert.ok(bloc.includes(prop), `prop absente : ${prop}`)
   // L'onglet Parcelles, lui, n'ouvre plus la fiche : il n'a plus de tuile d'où
   // l'ouvrir, et ne lit donc plus ni calendrier ni confiance.
   const plan = source('../components/DetailParcelle.jsx')
@@ -231,10 +233,12 @@ test('[CA13, CA2] la fiche reçoit ce que l’écran a déjà chargé — aucune
   assert.doesNotMatch(plan, /api\.calendriersPlan|api\.confiancesPlan/)
 })
 
-test('[CA1] depuis Stocks, chaque ligne ET chaque carte portent la puce qui ouvre la fiche', () => {
+test('[CA1] depuis Stocks, chaque ligne ouvre la fiche commune de sa culture (et, de là, la fiche calendrier)', () => {
+  // [US-354 / CA4] La ligne du socle remplace la puce : c'est la ligne entière qui ouvre la fiche.
+  // [US-355 / CA1] La fiche calendrier s'atteint par l'onglet Référence de la fiche commune.
   const stocks = source('../views/Stocks.jsx')
-  assert.equal((stocks.match(/<PuceFiche /g) || []).length, 2)
-  assert.match(stocks, /<FicheCalendrier/)
+  assert.match(stocks, /<LigneSocle[\s\S]*?onOuvrir=\{\(\) => ouvrirCulture\(l\.selection\)/)
+  assert.match(source('../components/ReferenceCulture.jsx'), /<FicheCalendrier/)
 })
 
 test('[CA12] le composant de frise partagé n’est pas modifié par cette US', () => {
@@ -246,10 +250,9 @@ test('[CA15] la fiche se ferme au clavier (Échap, dans le Modal partagé)', () 
 })
 
 test('[CA2, retour terrain 18/09] chaque ligne de Stocks garde une entrée VISIBLE vers la fiche', () => {
-  // Sans geste d'actualité, la pastille d'étoiles se tait mais la puce
-  // « calendrier » la remplace : jamais une ligne sans porte d'entrée.
-  const stocks = source('../views/Stocks.jsx')
-  assert.match(stocks, /<PuceConfiance[\s\S]*?onClick=/)
+  // [US-354 / CA4] La ligne du socle est un bouton (chevron à droite) : jamais une ligne sans porte d'entrée.
+  assert.match(source('../components/SectionSocle.jsx'), /<button\s+type="button" onClick=\{onOuvrir\}/)
+  assert.match(source('../views/Stocks.jsx'), /onOuvrir=\{\(\) => ouvrirCulture\(/)
 })
 
 test('[retour terrain 18/09] « Pourquoi ce niveau ? » mène explicitement à la fiche calendrier', () => {

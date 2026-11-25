@@ -432,6 +432,60 @@ def _cultures_a_semer(
     return _evaluer_a_semer(db, potager_id, ref, candidates)
 
 
+#: [US-356 / CA7] Pourquoi une culture à la fenêtre ouverte n'est PAS proposée au semis (onglet « Semer »).
+MOTIF_LOT_EN_COURS = "lot_en_cours"
+MOTIF_GRAINES_EPUISEES = "graines_epuisees"
+#: [US-356 / CA7] Combien de prochaines ouvertures l'onglet « Semer » peut citer (« Bientôt »).
+NB_PROCHAINES_OUVERTURES = 8
+
+
+def _est_en_cours(lot: dict) -> bool:
+    """[CA8] Un lot « en cours » : il a encore des godets ou des graines, ou n'a pas été mis en godet
+    (et son semis est rattaché). Une culture qui en a un n'est pas proposée au semis."""
+    return (_a_des_godets(lot) or _a_des_graines(lot)) or (
+        (lot.get("nb_mises_en_godet") or 0) == 0 and not lot.get("sans_semis_rattache")
+    )
+
+
+def _cultures_ecartees_par_lot(
+    db: Session, potager_id: Optional[int], ref: date, lots: list[dict],
+) -> list[dict]:
+    """[US-356 / CA7] Les cultures dont la fenêtre de semis en pépinière est ouverte ce mois-ci, mais
+    qui ont déjà un lot en cours : « Un lot est déjà en cours (#59) ». Lecture seule, rien n'est
+    recalculé : le numéro cité est celui du lot en cours le plus récent de la culture."""
+    numeros: dict[str, Optional[int]] = {}
+    for lot in lots:
+        if not _est_en_cours(lot):
+            continue
+        cle = _cle_culture(lot.get("culture"))
+        numero = lot.get("numero_lot")
+        if cle not in numeros or (numero is not None and (numeros[cle] is None or numero > numeros[cle])):
+            numeros[cle] = numero
+    if not numeros:
+        return []
+    ecartees, vues = [], set()
+    for nom, debut, fin in _fenetres_semis_pepiniere(db, potager_id)[1]:
+        cle = _cle_culture(nom)
+        if cle in vues or cle not in numeros or ref.month not in cal.mois_couverts(debut, fin):
+            continue
+        vues.add(cle)
+        ecartees.append({
+            "culture": nom, "fenetre": cal.formater_fenetre(debut, fin),
+            "motif": MOTIF_LOT_EN_COURS, "lot_numero": numeros[cle],
+        })
+    return ecartees
+
+
+def _prochaines_ouvertures(db: Session, potager_id: Optional[int], ref: date) -> list[dict]:
+    """[US-356 / CA7] Les prochaines ouvertures de fenêtre de semis en pépinière, dans l'ordre, à partir de
+    `_calendrier_semis` : `{culture, date, jours}`. Une fenêtre est connue au mois : elle s'ouvre le 1er (RT2)."""
+    sortie: list[dict] = []
+    for mois in _calendrier_semis(db, potager_id, ref)["mois"]:
+        for nom in mois["s_ouvrent"]:
+            sortie.append({"culture": nom, "date": f"{mois['mois']}-01", "jours": mois["dans_jours"]})
+    return sortie[:NB_PROCHAINES_OUVERTURES]
+
+
 def _fenetres_semis_pepiniere(
     db: Session, potager_id: Optional[int],
 ) -> tuple[str, list[tuple[str, int, int]]]:
@@ -1039,24 +1093,40 @@ def _varietes_en_stock(db: Session, ctx: TenantContext, date_ref: Optional[date]
     """[CA15] Variétés « en stock » par culture : lignes de l'écran Stocks dont le stock
     est supérieur à zéro — UNE lecture groupée, la règle existante, rien de recalculé.
     Une culture présente avec une variété non précisée est en stock, sans variété citée."""
+    return _stock_graines(db, ctx, date_ref)[0]
+
+
+def _stock_graines(
+    db: Session, ctx: TenantContext, date_ref: Optional[date],
+) -> tuple[dict[str, list[str]], set[str]]:
+    """[CA15, US-356 / CA7] UNE lecture des lignes de l'écran Stocks : les variétés en stock par culture,
+    et les cultures dont le stock est CONNU ET NUL (des lignes existent, aucune n'a de graines) — ce qui
+    fait dire « Graines épuisées : à racheter ». Une culture sans aucune ligne n'est pas dite épuisée."""
     par_culture: dict[str, list[str]] = {}
+    avec_ligne: set[str] = set()
     for ligne in svc_stock.calcul_stock_varietes(db, ctx, date_ref):
+        avec_ligne.add(_cle_culture(ligne.get("culture")))
         if (ligne.get("stock_actuel") or 0) <= 0:
             continue
         varietes = par_culture.setdefault(_cle_culture(ligne.get("culture")), [])
         variete = ligne.get("variete")
         if variete and variete != LABEL_VARIETE_NON_PRECISEE and variete not in varietes:
             varietes.append(variete)
-    return par_culture
+    epuisees = {cle for cle in avec_ligne if cle not in par_culture}
+    return par_culture, epuisees
 
 
 def _parcours(
     db: Session, ctx: TenantContext, lots: list[dict], calculs: dict[str, dict],
     delais_par_lot: dict[str, _Delais], a_semer: list[dict], ref: date, date_ref: Optional[date],
-    pepinieres: list[dict],
+    pepinieres: list[dict], ecartees_lots: Optional[list[dict]] = None,
 ) -> dict:
     """[US-240] Le bloc `parcours` de `GET /pepiniere/lots` : de quoi dessiner le kanban
-    emplacement × stade sans rien recalculer côté écran (RT7)."""
+    emplacement × stade sans rien recalculer côté écran (RT7).
+
+    [US-356 / CA7] Deux champs en LECTURE y sont ajoutés pour l'onglet « Semer », sans route ni migration :
+    `a_semer_ecartees` (les cultures à la fenêtre ouverte et leur motif : `lot_en_cours` avec le n° du lot,
+    `graines_epuisees` quand le stock est connu et nul) et `prochaines_ouvertures` (plusieurs, pas une)."""
     par_nom = {p["nom"]: p["id"] for p in pepinieres}
     ids_pepinieres = set(par_nom.values())
     etiquettes: list[dict] = []
@@ -1102,14 +1172,21 @@ def _parcours(
     sans = _ligne(None)
 
     # ── À semer, limité aux graines dont on dispose (CA13-CA15, A34) ────────
-    varietes = _varietes_en_stock(db, ctx, date_ref) if a_semer else {}
+    varietes, epuisees = _stock_graines(db, ctx, date_ref) if a_semer else ({}, set())
     a_semer_stock, sans_graines = [], []
+    ecartees = list(ecartees_lots or [])
     for culture in a_semer:
         cle = _cle_culture(culture["culture"])
         if cle in varietes:
             a_semer_stock.append({**culture, "varietes_en_stock": varietes[cle]})
         else:
             sans_graines.append({"culture": culture["culture"]})
+            # [US-356 / CA7] Un motif non calculable n'est pas dit : seulement un stock connu ET nul.
+            if cle in epuisees:
+                ecartees.append({
+                    "culture": culture["culture"], "fenetre": culture.get("fenetre"),
+                    "motif": MOTIF_GRAINES_EPUISEES, "lot_numero": None,
+                })
 
     def _compteur(etats: tuple) -> dict:
         sel = [e for e in etiquettes if e["etat"] in etats]
@@ -1137,6 +1214,8 @@ def _parcours(
         "a_semer": a_semer_stock,
         "a_semer_sans_graines": sans_graines,
         "source_stock_graines": SOURCE_STOCK_GRAINES,
+        "a_semer_ecartees": ecartees,
+        "prochaines_ouvertures": _prochaines_ouvertures(db, ctx.potager_id, ref),
         "dormants": dormants,
         # [US-218] Quand ça rouvre — lu seulement quand rien n'est à semer ni replié.
         "calendrier_semis": (
@@ -1260,13 +1339,10 @@ def lire_echeances(
     prets = [lot for lot in lots if _est_pret(lot, par_lot[lot["lot_id"]]["echeances"])]
     plants_prets = sum(int(lot.get("stock_residuel_godet") or 0) for lot in prets)
 
-    cultures_en_cours = {
-        _cle_culture(lot.get("culture"))
-        for lot in lots
-        if (_a_des_godets(lot) or _a_des_graines(lot))
-        or ((lot.get("nb_mises_en_godet") or 0) == 0 and not lot.get("sans_semis_rattache"))
-    }
+    cultures_en_cours = {_cle_culture(lot.get("culture")) for lot in lots if _est_en_cours(lot)}
     a_semer = _cultures_a_semer(db, ctx.potager_id, ref, cultures_en_cours)
+    # [US-356 / CA7] Les cultures à la fenêtre ouverte mais écartées pour un lot en cours (lecture seule).
+    ecartees_lots = _cultures_ecartees_par_lot(db, ctx.potager_id, ref, lots)
 
     resume = {
         "a_repiquer": {
@@ -1295,6 +1371,7 @@ def lire_echeances(
     parcours = _parcours(
         db, ctx, lots, calculs, delais_par_lot, a_semer, ref, date_ref,
         pepinieres if pepinieres is not None else _pepinieres_du_potager(db, ctx),
+        ecartees_lots=ecartees_lots,
     )
     return {"date_reference": ref.isoformat(), "par_lot": par_lot, "resume": resume, "parcours": parcours}
 

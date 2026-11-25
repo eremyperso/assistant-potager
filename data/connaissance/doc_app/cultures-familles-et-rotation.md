@@ -46,3 +46,10 @@ Un conflit de rotation est signalé au moment d'enregistrer une plantation ou un
 **On parle aussi de :** puis-je planter ici ; remettre la même culture au même endroit ; est-ce que ça revient trop tôt ; antécédent de la planche ; bon voisinage ; association
 
 La question se pose aussi à l'avance, en nommant une parcelle et la culture envisagée : la réponse dit si le délai de retour est tenu, et sur quel antécédent elle se fonde. Les associations connues entre deux cultures voisines se consultent de la même façon, culture par culture, avec la nature de l'association et ce qui la motive.
+
+## Ajouter à mon potager une culture du catalogue
+
+**Intention :** procédure
+**On parle aussi de :** catalogue ; ajouter une culture ; culture absente du catalogue ; fiche catalogue ; nouvelle espèce ; céleri-rave
+
+Pour ajouter une culture qui n'est pas dans votre potager, ouvrez **Cultures**, puis l'onglet **Catalogue**, et touchez l'espèce : sa fiche dit si elle est « Pas encore au potager » et ce que dit sa fenêtre de semis. **Ajouter à mon potager** ouvre Gaston avec la phrase « Ajouter le céleri-rave à mon potager » déjà écrite dans le champ : vous l'envoyez vous-même. Gaston répond avec la fenêtre de l'espèce, demande la variété (celles du catalogue s'affichent en suggestions), puis propose, dans la carte « À enregistrer », le rappel de semis. Rien n'est créé avant **Confirmer**. Une culture qui manque au catalogue se dit à Gaston : « Une culture absente du catalogue ? Dites-la à Gaston », en bas de l'écran.

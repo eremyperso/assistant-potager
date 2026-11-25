@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Leaf, CalendarDays, MapPin, ShoppingBasket, BookOpen, AlertTriangle, ChevronDown } from 'lucide-react'
 import { api } from '../lib/api.js'
-import { Modal, Btn, Badge, InfoBanner, MonthStrip, PastillePhase } from './ui'
+import { Modal, Btn, Badge, InfoBanner, CalendrierAnnee, LegendeCommune, PastillePhase, IconeLot } from './ui'
+import { moisDeFrise } from '../lib/calendrierAnnee.js'
 import FicheCalendrier from './FicheCalendrier.jsx'
 import {
   sectionMaintenant, etatAuPotager, lignesReferentiel, groupesVoisinages, badgeContexte, sourcesDeFiche,
@@ -121,7 +122,7 @@ export default function FicheCulture({
   )
 }
 
-function BlocTitre({ children, n }) {
+export function BlocTitre({ children, n }) {
   return (
     <h3 className="text-[11px] font-bold text-txt3 uppercase tracking-[.06em] mb-2.5">
       {children}{n != null ? ` · ${n}` : ''}
@@ -129,7 +130,7 @@ function BlocTitre({ children, n }) {
   )
 }
 
-function NonLue() {
+export function NonLue() {
   return (
     <div className="text-[12.5px] text-txt3 border border-dashed border-border rounded-[10px] px-3 py-2.5">
       Cette section n’a pas pu être lue.
@@ -137,7 +138,7 @@ function NonLue() {
   )
 }
 
-function Absence({ children }) {
+export function Absence({ children }) {
   return (
     <div className="text-[12.5px] text-txt2 bg-card-alt rounded-[10px] px-3 py-2.5 leading-[1.5]">{children}</div>
   )
@@ -198,7 +199,7 @@ function CorpsFiche({ culture, dateRef, parcelleId, fiche, ficheEchouee, calendr
 }
 
 /** [CA4] Le geste le mieux noté, ouvert ou non, et l'état au potager. */
-function SectionMaintenant({ entree, calendriers, culture, confianceLue, varietesCultivees, onOuvrirCalendrier }) {
+export function SectionMaintenant({ entree, calendriers, culture, confianceLue, varietesCultivees, onOuvrirCalendrier }) {
   const m = sectionMaintenant({ entree, calendriers, culture, confianceLue })
   const etatPotager = etatAuPotager(varietesCultivees)
   return (
@@ -250,17 +251,17 @@ function SectionMaintenant({ entree, calendriers, culture, confianceLue, variete
 }
 
 /** [CA5] La frise conseillée — sa version recalée vit dans la fiche calendrier. */
-function SectionCalendrier({ calendriers, culture, dateRef }) {
+export function SectionCalendrier({ calendriers, culture, dateRef, titre = 'Calendrier de la zone' }) {
   const frise = friseDeCulture(calendriers, culture)
   return (
     <section>
-      <BlocTitre>Calendrier de la zone</BlocTitre>
+      <BlocTitre>{titre}</BlocTitre>
       {frise.degrade ? (
         <Absence>Aucune fenêtre connue pour cette zone.</Absence>
       ) : (
         <>
-          <MonthStrip pepiniere={frise.pepiniere} pleineTerre={frise.pleineTerre} plantation={frise.plantation}
-            rec={frise.rec} moisCourant={moisDeLaDate(dateRef)} legend />
+          <CalendrierAnnee mois={moisDeFrise(frise)} frise={frise} moisCourant={moisDeLaDate(dateRef)} initiales />
+          <LegendeCommune sujet="un mois" calendrier className="mt-2" />
           <div className="text-[11.5px] text-txt3 mt-2">
             Calendrier conseillé. Le calendrier recalé sur tes séries est dans la fiche calendrier.
           </div>
@@ -271,7 +272,7 @@ function SectionCalendrier({ calendriers, culture, dateRef }) {
 }
 
 /** [CA6, CA19] Neuf lignes fixes, deux colonnes qui passent à une sous 400px de conteneur. */
-function SectionReferentiel({ fiche }) {
+export function SectionReferentiel({ fiche }) {
   const lignes = lignesReferentiel(fiche)
   return (
     <section>
@@ -291,7 +292,7 @@ function SectionReferentiel({ fiche }) {
 }
 
 /** [CA7] Une variété seulement en pépinière n'est jamais masquée. */
-function SectionVarietes({ fiche, onOuvrirLot = null }) {
+export function SectionVarietes({ fiche, onOuvrirLot = null }) {
   const varietes = fiche?.varietes_cultivees || []
   return (
     <section>
@@ -315,12 +316,12 @@ function SectionVarietes({ fiche, onOuvrirLot = null }) {
                     {onOuvrirLot ? (
                       <button
                         type="button" onClick={() => onOuvrirLot(lot.numero)}
-                        className="text-[12.5px] font-semibold text-brand-text underline decoration-dotted underline-offset-4 min-h-[32px] text-left"
+                        className="inline-flex items-center gap-[3px] text-[12.5px] font-semibold text-brand-text underline decoration-dotted underline-offset-4 min-h-[32px] text-left"
                       >
-                        lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}
+                        <IconeLot />lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}
                       </button>
                     ) : (
-                      <span className="text-[12.5px] font-semibold text-brand-text">lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}</span>
+                      <span className="inline-flex items-center gap-[3px] text-[12.5px] font-semibold text-brand-text"><IconeLot />lot #{lot.numero}{lot.emplacement ? ` · ${lot.emplacement}` : ''}</span>
                     )}
                     {lot.stade && <span className="text-[11.5px] text-txt2">{lot.stade}</span>}
                   </div>
@@ -343,7 +344,7 @@ function PastilleVoisinage({ plus, texte, trad = false }) {
 }
 
 /** [CA22] Quatre groupes : favorables/défavorables établis, puis en pointillé la pratique traditionnelle. */
-function SectionVoisinages({ fiche }) {
+export function SectionVoisinages({ fiche }) {
   const g = groupesVoisinages(fiche?.associations)
   const vide = !fiche?.associations_connues
   return (
@@ -373,7 +374,7 @@ function SectionVoisinages({ fiche }) {
 }
 
 /** [CA23] Cinq bioagresseurs visibles, « + N autres » déplie le reste, sans lecture de plus. */
-function SectionBioagresseurs({ fiche }) {
+export function SectionBioagresseurs({ fiche }) {
   const [tout, setTout] = useState(false)
   const bio = fiche?.bioagresseurs || []
   const visibles = tout ? bio : bio.slice(0, 5)

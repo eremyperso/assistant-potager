@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { api } from '../lib/api.js'
 import { AuthContextProvider } from '../context/AuthContext.jsx'
 import { PotagerContextProvider } from '../context/PotagerContext.jsx'
@@ -9,6 +9,12 @@ import { Placeholder } from '../components/ui'
 import { AppContextProvider } from '../context/AppContext.jsx'
 import { NavigationProvider } from '../context/NavigationContext.jsx'
 import { VUE_PAR_DEFAUT, navEntry, vueDeSection } from '../navigation.js'
+import BandesFixes from '../components/BandesFixes.jsx'
+import BoutonNoter from '../components/BoutonNoter.jsx'
+import { CoquilleProvider, useDeclarerEcran } from '../context/CoquilleContext.jsx'
+import { estCompact } from '../lib/coquille.js'
+import { InfobulleEtapes, PastilleEtape } from '../components/ui'
+import { useMedia } from '../hooks/useMedia.js'
 
 /**
  * Page de contrôle visuel de la coquille applicative [US-053, US-054, US-055].
@@ -18,6 +24,10 @@ import { VUE_PAR_DEFAUT, navEntry, vueDeSection } from '../navigation.js'
  * Placeholder, la liste des potagers et l'identité du compte sont simulées, ce
  * qui permet de valider la structure isolément.
  * Non référencée par la navigation applicative.
+ *
+ * [US-353] Monte aussi les bandes fixes (mot de Gaston, barre d'outils, règle des temps) : la vue
+ * factice déclare un mot et une barre, la bande de contenu défile seule et l'en-tête se resserre.
+ * `?mot=0` : Gaston n'a rien à dire, aucun bloc n'est rendu.
  *
  * Deux paramètres d'URL pilotent les cas à contrôler [US-055] :
  * - `?role=owner|editor|lecteur` — rôle sur le potager actif, qui conditionne
@@ -82,9 +92,64 @@ function simulerApi() {
   }
 }
 
+/** Une vue factice : elle DÉCLARE son mot et sa barre comme le fera chaque vue (US-354 et suivantes). */
+function EcranDemo({ view }) {
+  const sansMot = new URLSearchParams(window.location.search).get('mot') === '0'
+  useDeclarerEcran({
+    mot: sansMot ? null : {
+      texte: 'Gel annoncé samedi (−2 °C). Voilez la mâche et les salades du bac vendredi soir.',
+      actions: [{ libelle: 'Voir les cultures', vue: 'cultures' }, { libelle: 'Noter le voilage', noter: true, principale: true }],
+    },
+    barre: {
+      recherche: { placeholder: 'Rechercher une culture…', valeur: '', onChange: () => {} },
+      filtre: { nombre: 2, onOuvrir: () => {} },
+      menu: { exporterCsv: () => {}, exporterJson: () => {}, aide: () => {} },
+    },
+  }, [view, sansMot])
+  return (
+    <div className="flex flex-col gap-3">
+      {Array.from({ length: 24 }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+          <PastilleEtape etape="levee" prevue due={i % 3 === 0} />
+          <span className="text-[13.5px] text-txt">Culture {i + 1} · vue « {view} »</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Coquille({ view, setView }) {
+  const bureau = useMedia('(min-width: 900px)')
+  const [compact, setCompact] = useState(false)
+  const surDefilement = useCallback((e) => setCompact(estCompact(e.currentTarget.scrollTop)), [])
+  const aller = (id) => setView(vueDeSection(id))
+  return (
+    <div className="flex flex-col h-dvh bg-bg">
+      <TopBar view={view} onGo={aller} onRefresh={() => {}} loading={false} />
+      <div className="flex min-h-0 flex-1">
+        <div className="@container/page flex min-w-0 flex-1 flex-col">
+          <div className="relative z-[2] shrink-0 bg-bg shadow-[0_1px_0_var(--border),0_6px_10px_-8px_rgba(22,33,12,.18)]">
+            <PageHeader view={view} onGo={setView} compact={compact} />
+            <BandesFixes view={view} compact={compact} onRemonter={() => {}} />
+          </div>
+          <main onScroll={surDefilement} className="min-h-0 flex-1 overflow-y-auto">
+            <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-28 nav:pb-24">
+              {view === 'bord'
+                ? <Placeholder title={navEntry(view).title} body={`Vue « ${view} » — le tableau de bord n'a pas de barre d'outils.`} />
+                : <EcranDemo view={view} />}
+            </div>
+          </main>
+        </div>
+      </div>
+      <BottomNav view={view} onGo={aller} />
+      {bureau && <BoutonNoter variante="bureau" onGo={aller} />}
+      <InfobulleEtapes />
+    </div>
+  )
+}
+
 export default function ShellPreview() {
   const [view, setView] = useState(VUE_PAR_DEFAUT)
-  const nav = navEntry(view)
 
   // Avant le montage des providers enfants, qui appellent api.potagers().
   simulerApi()
@@ -95,19 +160,9 @@ export default function ShellPreview() {
        {/* [US-223] La barre du Plan lit la date de référence et la navigation. */}
        <AppContextProvider>
         <NavigationProvider vue={view} onVue={setView}>
-        <div className="flex flex-col h-dvh bg-bg">
-          <TopBar view={view} onGo={(id) => setView(vueDeSection(id))} onRefresh={() => {}} loading={false} />
-          <main className="flex-1 overflow-y-auto min-h-0">
-            <PageHeader view={view} onGo={setView} />
-            <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-7">
-              <Placeholder
-                title={nav.title}
-                body={`Vue « ${view} » — contrôle visuel de la coquille de navigation.`}
-              />
-            </div>
-          </main>
-          <BottomNav view={view} onGo={(id) => setView(vueDeSection(id))} />
-        </div>
+          <CoquilleProvider>
+            <Coquille view={view} setView={setView} />
+          </CoquilleProvider>
         </NavigationProvider>
        </AppContextProvider>
       </PotagerContextProvider>

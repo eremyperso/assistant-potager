@@ -1,29 +1,34 @@
 import { useState, useEffect, useCallback } from 'react'
-import { SlidersHorizontal, Archive, Settings, X } from 'lucide-react'
+import { Archive, Settings, X } from 'lucide-react'
 import { usePotager } from '../context/PotagerContext.jsx'
+import { useCoquille } from '../context/CoquilleContext.jsx'
 import { api } from '../lib/api.js'
-import { Btn, TileNav, InfoBanner } from './ui'
+import { TileNav } from './ui'
 import { navEntry } from '../navigation.js'
-import BarreActivitePlan from './BarreActivitePlan.jsx'
-import ModalPersonnaliserDashboard from './ModalPersonnaliserDashboard.jsx'
 import ParametresPotager from '../views/ParametresPotager.jsx'
 
 /**
- * En-tête de page [US-053 / CA2, CA3] : titre, sous-titre descriptif, et
- * tuiles de sous-navigation pour les sections qui en déclarent.
+ * En-tête de page [US-053 / CA2, CA3, US-353 / CA5] : titre en Lora (25 px sur mobile, 28 px sur
+ * ordinateur), une ligne de contexte, et les onglets de sous-vue pour les sections qui en déclarent
+ * (Tableau de bord, Plan, Cultures) : tuiles de 84 × 64 sur ordinateur, pastilles compactes de 36 px
+ * sur mobile ; un onglet peut être désactivé (« Rotation · à venir »).
  *
- * Les sections sans `subnav` (Cultures, Pépinière, Stocks, Journal)
- * n'affichent pas la zone de tuiles.
+ * L'en-tête ne contient NI export NI aide (ils sont dans le menu ⋯ de la barre d'outils). Quand le
+ * contenu a défilé de plus de 8 px (`compact`, CA11), il se resserre : titre en 18 px, ligne de
+ * contexte masquée, tuiles masquées sur ordinateur.
  */
-export default function PageHeader({ view, onGo }) {
+export default function PageHeader({ view, onGo, compact = false }) {
   const { potagerId, setPotagerId } = usePotager()
   const [potagerDetail, setPotagerDetail] = useState(null)
   const nav = navEntry(view)
-  const sousTitre = typeof nav.sub === 'function' ? nav.sub() : nav.sub
-  // [US-077 / CA1] `view` (pas `nav.id`) : la section "bord" couvre aussi
-  // l'écran Statistiques (même `subnav`) — le bouton ne doit apparaître que
-  // sur "Vue d'ensemble", pas sur "Statistiques".
-  const [personnaliser, setPersonnaliser] = useState(false)
+  // [US-356 / CA1] Une vue peut déclarer SON en-tête : la ligne de contexte qui change avec l'onglet, et
+  // ses onglets (« Parcours », « Semer · 3 », « Lots · 18 »). Sans déclaration, ceux de la navigation.
+  const { declaration } = useCoquille()
+  const entete = declaration?.entete
+  const sousTitre = entete?.contexte ?? (typeof nav.sub === 'function' ? nav.sub() : nav.sub)
+  const onglets = entete?.onglets ?? nav.subnav
+  const ongletActif = entete?.actif ?? view
+  const choisirOnglet = entete?.onChoisir ?? onGo
   // [US-083 / CA7] Réouvre Paramètres sur le potager consulté — seul chemin vers
   // « Zone sensible » (désarchiver) une fois qu'on n'est plus sur son potager actif.
   const [parametresOuvert, setParametresOuvert] = useState(false)
@@ -75,30 +80,23 @@ export default function PageHeader({ view, onGo }) {
         </div>
       )}
 
-      <div className={`max-w-[1320px] mx-auto px-4 nav:px-6 pt-5 ${nav.subnav ? 'pb-3.5' : 'pb-5'}`}>
-        <div className="flex items-center flex-wrap justify-between gap-3">
-          <h1 className="font-serif text-[27px] font-bold text-txt tracking-tight leading-tight">
-            {nav.title}
-          </h1>
-          {view === 'bord' && (
-            <Btn small icon={SlidersHorizontal} onClick={() => setPersonnaliser(true)}>
-              Personnaliser l'affichage
-            </Btn>
-          )}
-        </div>
-        {sousTitre && <p className="text-[13.5px] text-txt2 mt-1 first-letter:uppercase">{sousTitre}</p>}
+      <div className={`max-w-[1320px] mx-auto px-4 nav:px-6 transition-[padding] duration-200 ${
+        compact ? 'py-2.5' : `pt-[18px] nav:pt-[22px] ${onglets ? 'pb-3.5' : 'pb-3.5 nav:pb-4'}`
+      }`}>
+        <h1 className={`font-serif font-bold leading-[1.15] tracking-[-.01em] text-txt transition-[font-size] duration-200 ${
+          compact ? 'text-[18px]' : 'text-[25px] nav:text-[28px]'
+        }`}>
+          {nav.title}
+        </h1>
+        {sousTitre && !compact && <p className="mt-[3px] text-[13px] text-txt2 first-letter:uppercase">{sousTitre}</p>}
 
-        {nav.subnav && (
-          <div className="mt-3.5">
-            <TileNav items={nav.subnav} active={view} onPick={onGo} />
+        {onglets && (
+          <div className={compact ? 'mt-2' : 'mt-3'}>
+            <TileNav items={onglets} active={ongletActif} onPick={choisirOnglet} compact={compact} />
           </div>
         )}
-        {/* [US-223 / CA5] Date de référence et Journal du jour : les mêmes, au
-            même endroit, sur les deux sous-onglets actifs du Plan. */}
-        {nav.id === 'plan' && <BarreActivitePlan />}
       </div>
 
-      {personnaliser && <ModalPersonnaliserDashboard onClose={() => setPersonnaliser(false)} />}
       {parametresOuvert && (
         <ParametresPotager
           potagerId={potagerId}

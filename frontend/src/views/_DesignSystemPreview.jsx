@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Sprout, Leaf, ShoppingBasket, MapPin, BarChart3, Home, Calendar, Layers } from 'lucide-react'
 import { AppContextProvider } from '../context/AppContext.jsx'
-import DateRefPicker from '../components/DateRefPicker.jsx'
 import CultureFilter from '../components/CultureFilter.jsx'
 import MetricStrip from '../components/MetricStrip.jsx'
 import LoadingSkeleton from '../components/LoadingSkeleton.jsx'
@@ -185,10 +184,9 @@ function TransversesPreview() {
     <AppContextProvider>
       <section className="flex flex-col gap-3">
         <h2 className="text-[11.5px] font-bold uppercase tracking-wider text-txt3">
-          US-059 — Filtres transverses (DateRefPicker + CultureFilter)
+          US-059 — Filtre transverse (CultureFilter ; la date est dans la barre d'outils, US-353)
         </h2>
         <div className="flex items-center gap-2">
-          <DateRefPicker />
           <CultureFilter value={search} onChange={setSearch} className="relative flex-1" />
         </div>
       </section>

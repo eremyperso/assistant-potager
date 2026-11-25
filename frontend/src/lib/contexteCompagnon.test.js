@@ -15,10 +15,10 @@ import { contexteNoter } from './suiviCulture.js'
 const CHOU = { parcelleId: 2, parcelle: 'Planche centrale', culture: 'chou de Bruxelles', variete: 'Groninger', rang: 3 }
 const lire = (chemin) => readFileSync(new URL(chemin, import.meta.url), 'utf8')
 
-test('[US-323 / C2] Gherkin 1 — « À propos de : Chou de Bruxelles · Planche centrale, rang 3 »', () => {
+test('[US-323 / C2] Gherkin 1 — « Chou de Bruxelles · Planche centrale · rang 3 »', () => {
   const barre = barreDeContexte(CHOU)
   assert.equal(barre.aPropos, true)
-  assert.equal(barre.texte, 'Chou de Bruxelles · Planche centrale, rang 3')
+  assert.equal(barre.texte, 'Chou de Bruxelles · Planche centrale · rang 3')
   assert.ok(barre.emoji)
   assert.equal(barre.retirable, true)
   assert.equal(barre.preciser, false)
@@ -52,9 +52,9 @@ test('[US-323 / C4] à l’envoi, des identifiants seulement — jamais le libel
 })
 
 test('[US-323 / C6] le visage de Gaston ouvre une conversation libre ; « Noter » ouvre la barre', () => {
-  assert.deepEqual(ouvertureDuPanneau(undefined), { barre: false, contexte: null })
-  assert.deepEqual(ouvertureDuPanneau({}), { barre: false, contexte: null })
-  assert.deepEqual(ouvertureDuPanneau({ contexte: null }), { barre: true, contexte: null })
+  assert.deepEqual(ouvertureDuPanneau(undefined), { barre: false, contexte: null, sujet: null, champ: null })
+  assert.deepEqual(ouvertureDuPanneau({}), { barre: false, contexte: null, sujet: null, champ: null })
+  assert.deepEqual(ouvertureDuPanneau({ contexte: null }), { barre: true, contexte: null, sujet: null, champ: null })
   assert.equal(ouvertureDuPanneau({ contexte: CHOU }).contexte.culture, 'chou de Bruxelles')
 })
 
@@ -93,7 +93,7 @@ test('[US-323 / CA1] le panneau porte la barre et envoie le contexte ; App disti
   assert.match(panneau, /contexteAEnvoyer\(contexte\)/)
   assert.match(panneau, /aria-label="Retirer le contexte"/)
   const app = lire('../App.jsx')
-  assert.match(app, /onOuvrir=\{ouvrirConversationLibre\}/)
+  assert.match(app, /<BoutonNoter/)
   assert.match(app, /ouvertureDuPanneau\(e\.detail\)/)
 })
 
