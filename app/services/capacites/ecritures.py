@@ -241,6 +241,15 @@ def effet_sur_le_stock(db: Session, ctx, item: dict) -> str:
 
 
 # ── proposer_geste ────────────────────────────────────────────────────────────
+def question_de_parcelle(db: Session, potager_id: int, item: dict, arguments: dict) -> Optional[str]:
+    """[US-342] Une plantation sans parcelle est invisible au plan : la parcelle se demande, avec la liste, avant de
+    proposer. `sans_parcelle` dit que le jardinier a répondu ne pas vouloir la préciser."""
+    if item.get("action") != "plantation" or item.get("parcelle") or (arguments or {}).get("sans_parcelle"):
+        return None
+    noms = _parcelles(db, potager_id)
+    return f"Sur quelle parcelle ? {', '.join(noms)}." if noms else None
+
+
 def _item(arguments: dict) -> dict:
     type_geste = _texte(arguments, "type")
     if type_geste not in TYPES_GESTE:
@@ -291,6 +300,10 @@ def _proposer_geste(db: Session, appel: AppelCapacite) -> dict:
     item = _item(appel.arguments)
     if item.get("parcelle"):
         _controler_parcelle(db, ctx.potager_id, item["parcelle"])
+    question = question_de_parcelle(db, ctx.potager_id, item, appel.arguments)
+    if question:
+        return {"proposition": None, "question": question,
+                "a_faire": "Pose cette question au jardinier, puis rappelle proposer_geste avec la parcelle."}
     texte = _phrase(item, client, origine_de(appel.appelant))
 
     preparation = svc_gestes_dits.controler(db, ctx, [item], texte)
@@ -501,7 +514,8 @@ enregistrer_capacite(Capacite(
         "variete": {"type": "string", "description": "La variété, si elle est dite."},
         "quantite": {"type": "number", "minimum": 0, "description": "La quantité dite (obligatoire pour semis, plantation, récolte)."},
         "unite": {"type": "string", "description": "L'unité : graines, plants, kg, g, rangs, godets…"},
-        "parcelle": {"type": "string", "description": "Le nom d'une parcelle existante."},
+        "parcelle": {"type": "string", "description": "Le nom d'une parcelle existante : transmets-la dès qu'elle est dite."},
+        "sans_parcelle": {"type": "boolean", "description": "Plantation seulement : vrai si le jardinier, interrogé, ne veut pas dire de parcelle."},
         "lot": {"type": "integer", "description": "Le numéro du lot de pépinière visé (mise en godet, plantation)."},
         "rang": {"type": "integer", "minimum": 1, "description": "Le nombre de rangs, s'il est dit."},
         "date": {"type": "string", "description": "Date du geste, ISO (AAAA-MM-JJ) ; aujourd'hui par défaut."},

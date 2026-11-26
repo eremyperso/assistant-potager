@@ -476,3 +476,17 @@ def test_gherkin_salades_le_14_novembre(monkeypatch):
     assert "pas le moment" in tour.texte and "février à mars" in tour.texte
     assert tour.propositions == [] and tour.liens == []
     assert not any(n.startswith("proposer_") or n in ("programmer_rappel",) for n, _ in espion.appels)
+
+@pytest.mark.parametrize("phrase, messages, quantite, gardee", [
+    ("semé haricots hier", [], 1, False),
+    ("j'ai planté une tomate", [], 1, True),
+    ("récolté 500 g de fraises", [], 0.5, True),
+    ("planté 10 choux par rang sur 3 rangs", [], 30, True),
+    ("oui", [{"role": "assistant", "content": "Je note 12 plants, ça te va ?"}], 12, True),
+    ("planté le lot 2", [{"role": "tool", "content": '{"plants": 5}'}], 5, True),
+    ("planté des tomates", [{"role": "user", "content": "[2026-11-14 10:00] salut\ncarte 7 confirmée"}], 7, False),
+])
+def test_une_quantite_non_dite_est_retiree_de_la_proposition(phrase, messages, quantite, gardee):
+    arguments = {"type": "semis", "culture": "haricot", "quantite": quantite, "unite": "rangs"}
+    retenus = svc_boucle._ancrer_la_quantite("proposer_geste", arguments, phrase, messages)
+    assert ("quantite" in retenus) is gardee and ("unite" in retenus) is gardee

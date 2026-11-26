@@ -5,6 +5,7 @@ Le modèle conduit la conversation (principe P3, §4.3 de `ARCHITECTURE_COMPAGNO
 capacités du registre comme outils, `tool_choice="auto"`, autant de lectures qu'il lui en faut, puis un texte.
 Aucune cascade ne décide avant lui, aucune expression régulière ne lit sa phrase, aucun outil n'est projeté depuis
 les commandes du bot.
+Une seule exception, décidée le 26/11/2026 : la quantité d'un geste proposé doit avoir été dite (`_ancrer_la_quantite`).
 
 Ce qui reste au code (principe P5 : il garde l'écriture, pas le langage) :
 
@@ -28,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Callable, Optional
@@ -59,6 +61,7 @@ N'invente jamais une parcelle, une culture, une quantité ni une date. Une valeu
 Les résultats d'outils de la conversation sont datés (« lu le ») : avant de proposer une écriture, relis une donnée lue il y a plus de quelques minutes.
 Une consultation (plan, calendrier, stock, carnet, météo…) se lit et se montre dans ta réponse : elle ne se propose jamais.
 Pour noter un geste, appelle proposer_geste : l'application montre une carte au jardinier et lui fait confirmer au bouton. Tu n'écris jamais toi-même.
+Un geste que le jardinier dit avoir fait, même mal orthographié, se propose dès ce tour : ne cherche pas d'abord au carnet, ne demande pas s'il faut le noter (la carte le demande), transmets tout ce qui est dit, parcelle comprise, et rien de plus ; s'il corrige, propose à nouveau avec la valeur corrigée.
 Si une valeur manque, tu peux en avancer une dans ta réponse et attendre son accord ; ne la mets jamais dans une proposition avant qu'il l'ait acceptée.
 Un passage de connaissance qui parle d'une autre culture ne répond pas à sa question : ne le présente pas comme une réponse.
 Quand l'application n'a rien sur le sujet, dis-le, puis donne au plus un conseil général en précisant qu'il ne vient pas de l'application.
@@ -189,6 +192,62 @@ def _garde(nom: str, arguments: dict, tour: TourBoucle) -> Optional[str]:
     return None
 
 
+# ── La quantité d'un geste est une valeur DITE ───────────────────────────────
+# Seule exception à « aucune expression régulière ne lit la phrase » (décision du porteur, 26/11/2026) : malgré la
+# consigne, le modèle remplissait « 1 » (18 passages sur 72), et une carte confirmée sans être lue l'écrivait au carnet.
+# Le code ne décide de rien : il retire la valeur non dite, et la capacité pose la question.
+_NOMBRES_EN_LETTRES = {
+    "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5, "six": 6, "sept": 7, "huit": 8, "neuf": 9,
+    "dix": 10, "onze": 11, "douze": 12, "treize": 13, "quatorze": 14, "quinze": 15, "seize": 16, "vingt": 20,
+    "trente": 30, "quarante": 40, "cinquante": 50, "soixante": 60, "cent": 100, "demi": 0.5, "douzaine": 12,
+    "dizaine": 10, "quinzaine": 15, "vingtaine": 20,
+}
+_ACCORD = re.compile(r"^\s*(?:oui|ouais|ok|d['’]accord|vas[- ]y|parfait|c['’]est (?:bon|ça)|exact|je veux bien)\b",
+                     re.IGNORECASE)
+_QUANTITE_LUE = re.compile(r'"[a-z_]*(?:plant|quantit|godet|graine|pied|nombre)[a-z_]*"\s*:\s*(\d+(?:\.\d+)?)',
+                           re.IGNORECASE)
+
+
+def _nombres_dits(texte: str) -> set[float]:
+    trouves = {float(n.replace(",", ".")) for n in re.findall(r"\d+(?:[.,]\d+)?", texte or "")}
+    trouves |= {float(_NOMBRES_EN_LETTRES[m]) for m in re.findall(r"[a-zà-ÿ]+", (texte or "").lower())
+                if m in _NOMBRES_EN_LETTRES}
+    return trouves
+
+
+def _quantites_permises(phrase: str, messages: list[dict]) -> set[float]:
+    """Les nombres du jardinier (ce tour et le fil), ceux qu'il accepte d'un « oui », et les quantités lues dans le
+    potager (les plants d'un lot)."""
+    dites = _nombres_dits(phrase)
+    for m in messages:
+        contenu = m.get("content") or ""
+        if m.get("role") == "user":
+            # « [lu le …] phrase » suivie de l'état des cartes : seule la phrase est du jardinier.
+            dites |= _nombres_dits(contenu.split("] ", 1)[-1].split("\n")[0])
+        elif m.get("role") == "tool":
+            dites |= {float(n) for n in _QUANTITE_LUE.findall(contenu)}
+    if _ACCORD.match(phrase or ""):
+        avance = next((m.get("content") for m in reversed(messages)
+                       if m.get("role") == "assistant" and m.get("content")), "")
+        dites |= _nombres_dits(avance)
+    return dites
+
+
+def _ancrer_la_quantite(nom: str, arguments: dict, phrase: str, messages: list[dict]) -> dict:
+    """La quantité d'une proposition de geste, ou rien. Une conversion kg ↔ g et un produit « 10 par rang sur 3 rangs »
+    restent des valeurs dites."""
+    quantite = arguments.get("quantite")
+    if nom != "proposer_geste" or not isinstance(quantite, (int, float)):
+        return arguments
+    dites = _quantites_permises(phrase, messages)
+    possibles = dites | {n * 1000 for n in dites} | {n / 1000 for n in dites} | {a * b for a in dites for b in dites
+                                                                                if a > 1 and b > 1}
+    if any(abs(float(quantite) - n) < 1e-9 for n in possibles):
+        return arguments
+    log.info("[US-342] Quantité non dite retirée de la proposition : %s %s", quantite, arguments.get("unite"))
+    return {k: v for k, v in arguments.items() if k not in ("quantite", "unite")}
+
+
 def _retenir(appel: AppelBoucle, tour: TourBoucle) -> None:
     """[CA5] Ce que le code ajoute au texte du modèle : la carte, la source, le lien."""
     donnees = appel.donnees if isinstance(appel.donnees, dict) else {}
@@ -264,6 +323,7 @@ def jouer_tour(ctx: Optional[TenantContext], phrase: str, *, fil: svc_fil.Fil, e
             tour.messages.append(_message_d_appels(reponse))
             for i, a in enumerate(reponse.appels):
                 arguments = dict(a.arguments) if a.arguments_valides and isinstance(a.arguments, dict) else {}
+                arguments = _ancrer_la_quantite(a.nom, arguments, phrase, [*fil.messages, *tour.messages[:-1]])
                 refus = _garde(a.nom, arguments, tour)
                 resultat = ResultatOutil(refus, refus=True) if refus else executer(a.nom, arguments)
                 appel = AppelBoucle(a.nom, arguments, resultat.contenu, resultat.refus, resultat.donnees)

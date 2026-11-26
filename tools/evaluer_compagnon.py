@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -360,7 +361,13 @@ def _rejouer(args, jeu, mesures, source: Path, sortie: Path, cas, relus, appels:
             pile.enter_context(ed.cle_branchee(ed.cle_de_mesure()))
             ed.verifier_modeles([args.modele_juge])
             ctx = _contexte(jeu, args, modele_jeu.JEU_NEUF if args.potager_neuf else modele_jeu.JEU_REMPLI, False)
-            juge = Juge(appeler_par_la_passerelle(ctx, args.modele_juge), args.modele_juge)
+            appeler = appeler_par_la_passerelle(ctx, args.modele_juge)
+
+            def espacer(grille: str, message: str):  # --pause : le quota du juge est vite atteint (26/11)
+                time.sleep(args.pause)
+                return appeler(grille, message)
+
+            juge = Juge(espacer, args.modele_juge)
         return [rj.rejuger(m, jeu, source=source, sortie=sortie, juge=juge, cas=cas, relus=relus, detail=detail)
                 for m in mesures]
 

@@ -176,6 +176,12 @@ class RegistreMesure:
             return {"proposition": None, "question": "Quelle quantité ?",
                     "a_faire": "Pose cette question au jardinier, puis rappelle proposer_geste avec sa réponse.",
                     "simule": True}
+        with self._session() as db:
+            question = ecritures.question_de_parcelle(db, self.ctx.potager_id, item, arguments)
+        if question:
+            return {"proposition": None, "question": question,
+                    "a_faire": "Pose cette question au jardinier, puis rappelle proposer_geste avec la parcelle.",
+                    "simule": True}
         if item.get("date") and date.fromisoformat(item["date"]) > self.jour:
             raise RefusOutil("Une date future est refusée : un geste se note après coup.", "geste_invalide")
         self._prochaine += 1

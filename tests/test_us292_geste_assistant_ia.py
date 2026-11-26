@@ -259,6 +259,14 @@ class TestCA5Perte:
                                    parcelle="Planche Est"))["stock"]
         assert stock == "Pieds actifs : 37 → 40."
 
+    def test_us342_plantation_sans_parcelle_demande_la_parcelle(self, client, fabrique, ecrivain, mesanges):
+        """[US-342] Relecture du 26/11 : la parcelle se demande, avec la liste ; `sans_parcelle` passe outre."""
+        donnees = _donnees(_proposer(client, ecrivain, type="plantation", culture="fève", quantite=3, unite="plants"))
+        assert donnees["proposition"] is None and donnees["question"] == "Sur quelle parcelle ? Planche Est."
+        assert _nb(fabrique, Proposition) == 0
+        assert _donnees(_proposer(client, ecrivain, type="plantation", culture="fève", quantite=3, unite="plants",
+                                  sans_parcelle=True))["proposition"]
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # CA6 — Parcelle inconnue : jamais créée, noms proches, aucune proposition
