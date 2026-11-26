@@ -425,7 +425,15 @@
           "perte",
           "recolte"
         ],
-        "valeur_par_defaut": "permise"
+        "valeur_par_defaut": "permise",
+        "outils_attendus": [
+          [
+            "voir_calendrier",
+            "situation_culture",
+            "confiance",
+            "lire:culture"
+          ]
+        ]
       },
       "formulations": [
         {
@@ -460,6 +468,10 @@
           "renouvelable": true,
           "fiche": {
             "culture": "pois chiche"
+          },
+          "couverture_absente": true,
+          "attendus": {
+            "bonne_reponse": "Dit que la culture demandée n'a pas de fiche, ne donne aucun chiffre ni conseil inventé, et propose de créer la fiche et de la compléter, en disant comment. Ne parle pas du haricot et ne propose aucune autre culture."
           }
         }
       ],
@@ -827,12 +839,21 @@
       "culture_type": "aucune",
       "fiche": {},
       "attendus": {
-        "bonne_reponse": "S'appuie sur ce que le potager contient et sur ses échéances pour dire les gestes utiles maintenant ; ne cite aucune parcelle ni culture qui ne soit pas au potager.",
+        "bonne_reponse": "Lit le carnet et les échéances du potager, puis dit les gestes attendus maintenant : semis à faire, levées à constater, récoltes prévues, et signale les données manquantes. Ne cite aucune parcelle ni culture qui ne soit pas au potager.",
         "ecritures_interdites": [
           "*"
         ],
         "cultures_admises": [
           "*"
+        ],
+        "outils_attendus": [
+          [
+            "que_faire_maintenant",
+            "voir_echeances",
+            "consulter_carnet",
+            "lire:actions",
+            "consulter_donnees"
+          ]
         ]
       },
       "formulations": [
@@ -886,7 +907,18 @@
         "ecritures_interdites": [
           "*"
         ],
-        "passages_hors_culture_interdits": true
+        "passages_hors_culture_interdits": true,
+        "outils_attendus": [
+          [
+            "voir_meteo",
+            "meteo"
+          ],
+          [
+            "consulter_carnet",
+            "lire:actions",
+            "consulter_donnees"
+          ]
+        ]
       },
       "formulations": [
         {
@@ -1435,6 +1467,12 @@
         ],
         "cultures_admises": [
           "*"
+        ],
+        "outils_attendus": [
+          [
+            "voir_stock",
+            "consulter_donnees"
+          ]
         ]
       },
       "formulations": [
@@ -1513,7 +1551,10 @@
         {
           "genre": "reel",
           "ouverture": "quel est mon dernier semis ?",
-          "source": "terrain_compagnon_2026_11.json TER-03"
+          "source": "terrain_compagnon_2026_11.json TER-03",
+          "attendus": {
+            "bonne_reponse": "Lit le carnet et rend le dernier semis noté (date, culture, quantité) ; n'invente aucun geste."
+          }
         }
       ]
     },
@@ -1541,6 +1582,11 @@
           "dose",
           "ml par litre",
           "bouillie"
+        ],
+        "outils_attendus": [
+          [
+            "chercher_connaissance"
+          ]
         ]
       },
       "formulations": [
@@ -1580,7 +1626,7 @@
       "culture_type": "aucune",
       "fiche": {},
       "attendus": {
-        "bonne_reponse": "À « comment ajouter une parcelle ? » : explique et affiche l'aide correspondante, sans proposer de créer la parcelle. À « comment régler ma ville pour la météo ? » : dit comment ajouter ou modifier la ville associée au potager (réglage du potager), pas comment demander la météo d'une ville ponctuelle. Dans la PWA, la ville se règle dans « Modifier le potager », champ « Ville » (accessible depuis la carte météo « Localisation manquante » ou le bouton « Localiser » de la fiche calendrier) ; la ville est une propriété du potager. Quand la ville est inconnue et qu'on demande la météo : le dit, demande la ville, puis donne la météo. Un « oui » ou un « non » répond à la dernière question posée. N'invente aucune fonction.",
+        "bonne_reponse": "À « comment ajouter une parcelle ? » : explique et affiche l'aide correspondante, sans proposer de créer la parcelle. À « comment régler ma ville pour la météo ? » : dit comment ajouter ou modifier la ville associée au potager (réglage du potager), pas comment demander la météo d'une ville ponctuelle. Dans la PWA, la ville se règle dans « Paramètres du potager », section « Identité », champ « Ville » (ou, depuis la carte météo « Localisation manquante », par le bouton « Modifier le potager ») ; la ville est une propriété du potager. Quand la ville est inconnue et qu'on demande la météo : le dit, demande la ville, puis donne la météo. Un « oui » ou un « non » répond à la dernière question posée. N'invente aucune fonction.",
         "ecritures_interdites": [
           "*"
         ],
@@ -1603,6 +1649,7 @@
             "1": {
               "textes_attendus": [
                 [
+                  "parametres du potager",
                   "modifier le potager",
                   "localiser"
                 ],
@@ -1633,7 +1680,10 @@
         {
           "genre": "reel",
           "ouverture": "est ce que je peux obtenir la météo d'une autre région ?",
-          "source": "terrain_compagnon_2026_11.json TER-06"
+          "source": "terrain_compagnon_2026_11.json TER-06",
+          "attendus": {
+            "bonne_reponse": "Dit que oui : demande de quelle ville il s'agit, puis donne la météo de cette ville quand elle est dite. Ne nie pas la fonction et ne renvoie pas au seul réglage de la ville du potager."
+          }
         },
         {
           "genre": "reel",
@@ -1952,6 +2002,13 @@
         ],
         "cultures_admises": [
           "*"
+        ],
+        "outils_attendus": [
+          [
+            "voir_pepiniere",
+            "lire:lot",
+            "consulter_donnees"
+          ]
         ]
       },
       "formulations": [

@@ -60,7 +60,7 @@ TARIFS = {"mistral/mistral-small-2603": (0.15, 0.60), "mistral/mistral-large-251
 ETAPES_PAR_TOUR = {moteurs.MOTEUR_ACTUEL: 2.0, moteurs.MOTEUR_CAPACITES: 2.5, moteurs.MOTEUR_CLAUDE_MCP: 2.5,
                    moteurs.MOTEUR_BOUCLE: 2.5}
 TOURS_PAR_CAS = 3.0
-JETONS_JUGE = (1500, 120)
+JETONS_JUGE = (1800, 120)
 JETONS_SORTIE_PAR_APPEL = 150
 
 

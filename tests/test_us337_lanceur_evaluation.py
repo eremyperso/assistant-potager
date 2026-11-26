@@ -81,8 +81,12 @@ def test_ca2_une_valeur_absente_de_la_fiche_n_est_jamais_donnee():
 
 def test_ca2_un_accord_est_un_oui_ou_un_clic_selon_le_moteur():
     assert u.JardinierSimule(FICHE).repondre("Je te propose de noter ce semis. Tu confirmes ?").phrase == "oui"
-    r = u.JardinierSimule(FICHE, mode_confirmation="bouton").repondre("Je te propose de noter ce semis.")
+    bouton = u.JardinierSimule(FICHE, mode_confirmation="bouton")
+    r = bouton.repondre("Je te propose de noter ce semis.", proposition_en_attente=True)
     assert r.clic == "Confirmer" and not r.phrase
+    # Sans carte en attente, pas de bouton à cliquer : le jardinier répond avec des mots (mesure du 23/11).
+    sans_carte = bouton.repondre("Je te propose de noter ce semis.")
+    assert sans_carte.phrase == "oui" and not sans_carte.clic
 
 
 def test_ca2_une_valeur_par_defaut_differente_de_la_fiche_est_corrigee_par_la_fiche():

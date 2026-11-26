@@ -205,6 +205,23 @@ def controler_intention(cas: Cas, trace: TraceCas, notes: Notes) -> None:
             notes.questions_repetees += len(repetees)
             notes.noter("question_repetee", f"tour {tour.rang} : reprend la question « {', '.join(repetees)} »")
         precedente = set(demandes)
+    _controler_choix_geste(trace, notes)
+
+
+_CHOIX_GESTE = re.compile(r"(?:semer|semis)\b[^.?!]{0,30}\bou\b[^.?!]{0,20}\b(?:planter|plantation)[^.!]*\?",
+                          re.IGNORECASE)
+_SEMER = re.compile(r"\b(?:semer|semis|sem[ée]e?s?)\b", re.IGNORECASE)
+_PLANTER = re.compile(r"\bplant(?:er|ée?s?|ation)\b", re.IGNORECASE)
+
+
+def _controler_choix_geste(trace: TraceCas, notes: Notes) -> None:
+    """« semer ou planter ? » alors que le jardinier n'a dit que l'un des deux : la réponse est déjà donnée."""
+    dites = ""
+    for tour in trace.tours:
+        dites += " " + (tour.jardinier or "")
+        if bool(_SEMER.search(dites)) != bool(_PLANTER.search(dites)) and _CHOIX_GESTE.search(tour.texte or ""):
+            notes.intention_gardee = False
+            notes.noter("intention_gardee", f"tour {tour.rang} : redemande « semer ou planter », déjà dit")
 
 
 # ── rien d'inventé ───────────────────────────────────────────────────────────
@@ -273,6 +290,8 @@ def controler_invention(cas: Cas, trace: TraceCas, notes: Notes, *, jour: Option
                     notes.rien_d_invente = False
                     notes.noter("rien_d_invente", f"tour {tour.rang} : {champ}={valeur!r} n'a jamais été dit")
     controler_chiffres(trace, notes)
+    controler_affirmations(trace, notes)
+    controler_dates(trace, notes, jour=jour)
 
 
 #: Un chiffre porteur d'une unité (« 5 °C », « 10 cm », « 7 à 10 jours ») est une donnée : il vient d'un outil
@@ -281,6 +300,9 @@ _CHIFFRE_UNITE = re.compile(
     r"(\d+(?:[.,]\d+)?)(?:\s*(?:à|a|-|–)\s*(\d+(?:[.,]\d+)?))?\s*"
     r"(°\s*c|°|degr[ée]s?|cm|mm|m²|m2|%|jours?|semaines?|litres?|kg)(?![a-zà-ÿ0-9])", re.IGNORECASE)
 _TRONQUE = "… [tronqué"
+#: Les exemples d'un message type (« (2 kg, 15 plants, 1 sachet…) ») n'affirment rien.
+_EXEMPLES = re.compile(r"\([^()]*(?:…|\.\.\.|\bex\s*:|par exemple)[^()]*\)", re.IGNORECASE)
+_SIGNE = re.compile(r"(?:^|[\s:(«])[-−]\s?$")
 
 
 def controler_chiffres(trace: TraceCas, notes: Notes) -> None:
@@ -299,9 +321,14 @@ def controler_chiffres(trace: TraceCas, notes: Notes) -> None:
             if not a.resultat or _TRONQUE in a.resultat:
                 incomplet = True
         connus = nombres(" ".join(sources))
-        for m in _CHIFFRE_UNITE.finditer(tour.texte or ""):
+        texte = _EXEMPLES.sub(" ", tour.texte or "")
+        for m in _CHIFFRE_UNITE.finditer(texte):
             valeurs = {float(v.replace(",", ".")) for v in m.groups()[:2] if v}
-            if valeurs <= connus:
+            # « -2 °C » n'est pas sourcé par un « 2 » : une température négative doit être lue avec son signe.
+            negatif = "°" in m.group(3) and _SIGNE.search(texte[:m.start()])
+            signe_lu = not negatif or bool(re.search(
+                rf"[-−]\s?{re.escape(m.group(1).replace(',', '.'))}", " ".join(sources)))
+            if valeurs <= connus and signe_lu:
                 continue
             if incomplet:
                 notes.chiffres_indetermines += 1
@@ -309,6 +336,80 @@ def controler_chiffres(trace: TraceCas, notes: Notes) -> None:
             else:
                 notes.rien_d_invente = False
                 notes.noter("rien_d_invente", f"tour {tour.rang} : chiffre « {m.group(0)} » sans source (ni outil, ni jardinier)")
+
+
+# ── affirmations sans lecture ────────────────────────────────────────────────
+#: (sujet, ce que le texte affirme, outils qui permettent de l'affirmer).
+_AFFIRMATIONS: tuple[tuple[str, re.Pattern, tuple[str, ...]], ...] = (
+    ("stock", re.compile(r"rien en stock|aucune? (?:\w+ )?en stock|(?:ton|le) stock est vide", re.IGNORECASE),
+     ("voir_stock", "consulter_donnees", "lire")),
+    ("pépinière", re.compile(r"aucun (?:semis|lot|plant)s? (?:en|dans la) p[ée]pini[èe]re|p[ée]pini[èe]re est vide",
+                             re.IGNORECASE), ("voir_pepiniere", "voir_mon_potager", "consulter_donnees", "lire")),
+    ("météo", re.compile(r"pas de (?:risque de )?gel(?:[ée]es?)? (?:annonc|pr[ée]vu)|gel[ée]es? (?:annonc|pr[ée]vu)",
+                         re.IGNORECASE), ("meteo", "voir_meteo")),
+    ("saison", re.compile(r"\b(?:en|ce mois de) (?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|"
+                          r"octobre|novembre|d[ée]cembre)\b[^.!?]*\btu peux (?:semer|planter)|"
+                          r"\bsemables? (?:en|ce)\b", re.IGNORECASE),
+     ("voir_calendrier", "situation_culture", "que_semer_ce_mois", "que_faire_maintenant", "confiance", "lire")),
+    ("causes", re.compile(r"causes? (?:possibles?|probables?)|\bcarence en\b", re.IGNORECASE),
+     ("chercher_connaissance",)),
+)
+_VOISINAGE = re.compile(r"[àa] [ée]viter|[ée]vite[rz]?\b[^.!?]{0,40}\bpr[èe]s\b|compagnons?|\bassoci", re.IGNORECASE)
+#: Une question ou une offre (« si tu veux, je peux chercher… ») nomme des cultures sans rien affirmer sur elles.
+_OFFRE = re.compile(r"je peux (?:te )?(?:chercher|regarder|v[ée]rifier)", re.IGNORECASE)
+
+
+def _affirmations_seules(texte: str) -> str:
+    return " ".join(p for p in re.split(r"(?<=[.!?…])\s+|\n+", texte) if not p.rstrip().endswith("?")
+                    and not _OFFRE.search(p))
+
+
+def a_repondu(appel) -> bool:
+    """L'outil a réellement rendu quelque chose : ni refusé, ni simulé, ni « je n'ai pas su répondre »."""
+    r = appel.resultat or ""
+    return not (appel.refus or appel.simule or '"disponible": false' in r or '"verdict": "refusée"' in r)
+
+
+def controler_affirmations(trace: TraceCas, notes: Notes) -> None:
+    """Une absence, une météo, une saison, des causes ou des voisinages affirmés sans la lecture qui les porte."""
+    lus: list = []
+    dites = ""
+    for tour in trace.tours:
+        dites += " " + (tour.jardinier or "")
+        lus += [a for a in tour.appels if a_repondu(a)]
+        texte = tour.texte or ""
+        for sujet, motif, outils in _AFFIRMATIONS:
+            m = motif.search(texte)
+            if m and not any(a.nom in outils for a in lus):
+                notes.rien_d_invente = False
+                notes.noter("rien_d_invente", f"tour {tour.rang} : « {m.group(0)} » ({sujet}) affirmé sans lecture")
+        if _VOISINAGE.search(texte):
+            sources = " ".join(a.resultat for a in lus)
+            inconnues = cultures_citees(_affirmations_seules(texte), CULTURES_CONNUES) -cultures_citees(f"{sources} {dites}",
+                                                                                    CULTURES_CONNUES)
+            if inconnues:
+                notes.rien_d_invente = False
+                notes.noter("rien_d_invente",
+                            f"tour {tour.rang} : voisinage affirmé sans source ({', '.join(sorted(inconnues))})")
+
+
+_JOUR_NUMERO = re.compile(r"\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(\d{1,2})\b", re.IGNORECASE)
+
+
+def controler_dates(trace: TraceCas, notes: Notes, *, jour: date) -> None:
+    """« dimanche 26 » doit être un dimanche, ce mois-ci ou le suivant."""
+    suivant = (jour.replace(day=1) + timedelta(days=32)).replace(day=1)
+    for tour in trace.tours:
+        for m in _JOUR_NUMERO.finditer(tour.texte or ""):
+            possibles = set()
+            for mois in (jour, suivant):
+                try:
+                    possibles.add(_JOURS_SEMAINE[mois.replace(day=int(m.group(2))).weekday()])
+                except ValueError:
+                    continue
+            if m.group(1).lower() not in possibles:
+                notes.rien_d_invente = False
+                notes.noter("rien_d_invente", f"tour {tour.rang} : « {m.group(0)} » n'existe pas au calendrier")
 
 
 # ── écriture sûre ────────────────────────────────────────────────────────────
@@ -441,8 +542,14 @@ def _appel_correspond(entree: str, appel) -> bool:
     return appel.nom == nom and (not quoi or str((appel.arguments or {}).get("quoi") or "") == quoi)
 
 
+def _a_lu(appel) -> bool:
+    """« Pas de localisation » est une réponse de la météo ; un refus ou « je n'ai pas su répondre » n'en est pas une."""
+    r = appel.resultat or ""
+    return not (appel.refus or '"donnees": null' in r or '"verdict": "refusée"' in r)
+
+
 def _groupes_manquants(groupes: tuple[tuple[str, ...], ...], appels: list) -> list[tuple[str, ...]]:
-    return [g for g in groupes if not any(_appel_correspond(e, a) for e in g for a in appels if not a.refus)]
+    return [g for g in groupes if not any(_appel_correspond(e, a) for e in g for a in appels if _a_lu(a))]
 
 
 def controler_donnees_lues(cas: Cas, trace: TraceCas, notes: Notes) -> None:

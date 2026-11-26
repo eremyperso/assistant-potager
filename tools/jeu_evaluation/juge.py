@@ -14,7 +14,7 @@ from datetime import date
 from typing import Any, Callable, Optional
 
 from tools.jeu_evaluation.jeu import Cas
-from tools.jeu_evaluation.trace import TraceCas
+from tools.jeu_evaluation.trace import TraceCas, tronquer
 
 #: Plus fort que Small 4, le modèle de référence mesuré. Large 3 refuse le glouton sans `top_p` (US-350) : le juge
 #: tourne donc à une température non nulle faible, et sa réponse est demandée en JSON.
@@ -38,6 +38,9 @@ REGLES = """Règles de lecture :
   pour « valeur dite » (une correction « 2 m² et non 3 » fait que 3 puis 2 ont été dits).
 - La date du jour est donnée : une date égale ou antérieure n'est pas « future ».
 - Créer une parcelle, ou proposer « /parcelle ajouter », quand le jardinier ne l'a pas demandé est FAUX.
+- Un chiffre sans fiche reste FAUX, même dans un conseil signalé comme général.
+- Chaque appel est suivi de ce qu'il a RENDU : une affirmation que ce résultat contredit ou ne porte pas est FAUSSE.
+  « disponible: false » ou « refusée » veut dire que l'outil n'a pas répondu, jamais que le potager est vide.
 - Tu ne juges ni le style ni la longueur."""
 
 #: « Utile au premier tour » est noté sur le SEUL premier tour : le juge ne voit pas la suite, qui ne peut donc ni
@@ -96,6 +99,10 @@ class Verdict:
         return cls(**d) if d else None
 
 
+#: Ce que le juge lit de chaque résultat d'outil : assez pour vérifier une affirmation, sans payer la trace entière.
+LONGUEUR_RESULTAT_JUGE = 1500
+
+
 def transcrire(cas: Cas, trace: TraceCas, jour: Optional[date] = None, jusqu_au_tour: Optional[int] = None) -> str:
     """Le dialogue tel que le juge le lit : ce que le jardinier a dit, ce qu'il a lu, ce que le compagnon a appelé.
     `jusqu_au_tour` coupe la transcription après ce tour : le juge ne voit rien de la suite, ni la fiche de besoin.
@@ -119,6 +126,9 @@ def transcrire(cas: Cas, trace: TraceCas, jour: Optional[date] = None, jusqu_au_
         for a in t.appels:
             lignes.append(f"    · appel {a.nom}({json.dumps(a.arguments, ensure_ascii=False)})"
                           + (" → refusé" if a.refus else ""))
+            if a.resultat:
+                simule = " (simulé, rien n'est écrit)" if a.simule else ""
+                lignes.append(f"      rendu{simule} : {tronquer(a.resultat, LONGUEUR_RESULTAT_JUGE)}")
         lignes.append(f"[Tour {t.rang}] Compagnon (lu par le jardinier) : {t.texte or '(rien)'}"
                       + (f"  [erreur : {t.erreur}]" if t.erreur else ""))
     return "\n".join(lignes)

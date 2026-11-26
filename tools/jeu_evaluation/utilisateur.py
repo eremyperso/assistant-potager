@@ -29,7 +29,8 @@ QUESTIONS: dict[str, re.Pattern] = {
         r"combien|quelle quantit[ée]|quel(?:s)? nombre|quel poids|c[']est de combien|quelle longueur|"
         r"combien de (?:rangs|plants|pieds|graines)", re.IGNORECASE),
     "date": re.compile(
-        r"quand|quel jour|quelle date|[àa] quelle date|pour quand|ce jour-l[àa]|aujourd[']hui ou", re.IGNORECASE),
+        r"quand|quel jour|quelle date|[àa] quelle date|pour quand|ce jour-l[àa]|aujourd[']hui ou|"
+        r"(?:la|ta) date (?:exacte|de |du )", re.IGNORECASE),
 }
 
 #: Les gabarits de réponse d'un champ : la valeur de la fiche, et rien d'autre.
@@ -156,7 +157,9 @@ class JardinierSimule:
             quantite = str(self.fiche.get("quantite") or "").replace(",", ".")
             if proposees and quantite and quantite not in proposees:
                 return self._repondre(f"non, plutôt {_morceau('quantite', self.fiche)}")
-            return self._accord()
+            # Un bouton n'existe que si une carte attend : sans carte, le jardinier répond avec des mots, et le
+            # dialogue continue (mesure du 23/11 : des clics « Confirmer » sans carte coupaient le dialogue).
+            return self._accord() if proposition_en_attente else self._repondre(REPONSE_OUI)
         if question_posee(texte_du_compagnon):
             return self._repondre(REPONSE_INCONNUE)
         return Reponse(fin=True)

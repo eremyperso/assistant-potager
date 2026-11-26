@@ -98,3 +98,34 @@ Cas : B16-F4, B18-F3, B20-F4, B22-F2, B22-F6, B23-F4, B24-F4.
    « Modifier le potager ».
 3. Relancer le juge sur les traces existantes, après accord sur le volume.
 4. Corriger la boucle selon les trois attentes ci-dessus, puis remesurer, après accord sur le volume.
+
+## Correction de la mesure (26/11/2026, aucun appel au modèle)
+
+Points 1 et 2 faits :
+
+- **Juge** : il lit le résultat de chaque outil (1 500 caractères au plus) ; « disponible: false » n'est jamais « vide » ;
+  aucun chiffre sans fiche, même signalé comme conseil général.
+- **Jardinier simulé** : il ne clique « Confirmer » que si une carte attend, sinon il répond « oui ».
+- **Contrôles** : affirmations sans lecture (stock, pépinière, météo, saison, causes, voisinages), jours de semaine
+  faux, température négative sans son signe, « semer ou planter ? » reposé ; les exemples d'un message type ne sont plus
+  comptés ; un outil qui n'a pas répondu n'est plus une « donnée lue ».
+- **Jeu** : outils attendus sur B03, B07, B08, B16, B18, B23 ; libellé de B19 ; attendus propres à B03-F6, B17-F6,
+  B19-F6 et attendu de B07, **rédigés d'après les remarques du porteur, à valider**.
+
+Renotation des traces du 23/11 par le code : **10 des 14 contrôles jugés faux** sont maintenant relevés ou corrigés.
+Restent B08-F3 (abri), B09-F2 (valeur non dite acceptée par « écriture sûre »), B09-F4 (« yer » non reconnu comme
+« hier ») et B19-F6 (fonction niée). Ces contrôles ont été écrits **d'après les cas relus** : leur justesse sur de
+nouvelles traces reste à vérifier.
+
+| Traces KO (sur 432) | Actuel avant → après | Boucle avant → après |
+|---|---|---|
+| Intention gardée | 8 → 13 | 7 → 7 |
+| Rien d'inventé | 43 → 31 | 46 → 63 |
+| Écriture sûre | 41 → 41 | 28 → 28 |
+
+Défaut du compagnon mis au jour (B24) : `voir_meteo` ne rend que des dates, et le modèle leur attribue de mauvais jours
+de semaine.
+
+Point 3 : la mesure n'a pas encore d'option pour rejouer le juge seul sur des traces existantes ; elle est à écrire.
+Volume : environ 1 728 appels au juge pour les 864 traces, soit à peu près 1,6 $ (estimation). Le jardinier simulé a
+changé : les dialogues coupés par un clic sans carte ne peuvent être rejoués qu'avec de nouveaux tours du compagnon.
