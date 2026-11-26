@@ -68,7 +68,8 @@ B18-F3 ne lit pas la connaissance de la tomate et invente des causes.
 
 ## Marche à suivre à la reprise
 
-1. Finir la relecture des 13 cas, puis `SYNTHESE.md`.
+1. ~~Finir la relecture des 13 cas, puis `SYNTHESE.md`.~~ Fait le 26/11/2026 : voir `SYNTHESE.md` (la section
+   « Relecture humaine » ci-dessus décrit l'état au 24/11).
 2. Corriger la **mesure** (points 1 à 4 ci-dessus), sans appel au modèle : le juge doit voir les résultats des outils, le
    jardinier simulé ne confirme que s'il y a une carte, attendus propres aux formulations F6, outils attendus sur B03 /
    B07 / B08 / B16 / B18 / B23, contrôle d'absence affirmée.

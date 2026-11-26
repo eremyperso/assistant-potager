@@ -8,11 +8,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "en fonction de la météo de ta ville sur les prochains jours ainsi que le calendrier de la salade, je suis en mesure de te répondre",
     "controles_justification": "« rien d'inventé » ✅ alors que « Pas de risque de gel annoncé aujourd'hui » (tour 1) suit un `meteo` qui a rendu « le potager n'a pas de localisation ».",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -25,11 +25,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "sur la base de la météo sur les prochains jours et de la confiance associée à cette culture",
     "controles_justification": "Rien d'écrit, aucune valeur ni chiffre ajouté : le conseil (terre ressuyée et réchauffée) est dans le passage lu ; les quatre notes tiennent.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -42,11 +42,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "proposer d'enregistrer le geste et demander sur quelle parcelle, ou proposer les parcelles",
     "controles_justification": "« écriture sûre » ❌ juste : la carte de plantation n'a pas de parcelle (`parcelle: null`), exigée par le jeu.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -59,11 +59,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "suivant la confiance de la culture, suivant sa météo et la ville",
     "controles_justification": "« intention gardée » ✅ alors que « semer ou planter ? » est reposé trois fois après « semer des radis » (tours 1-4) : le contrôle ne connaît pas ce champ.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -112,11 +112,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "le compagnon doit vérifier si une pluie est prévue en journée ou non ; si aucune note d'arrosage récent n'est présente dans le carnet, il peut poser la question au jardinier pour lui confirmer d'arroser ou non en fonction de la météo",
     "controles_justification": "« Je n'ai pas bien compris… » : rien d'inventé ni d'écrit ; les quatre notes tiennent.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -129,11 +129,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "proposer de noter la perte avec la cause",
     "controles_justification": "Q2 A et Q3 A (porteur, 24/11) : pièges à bière et planches sont un geste courant et un moyen physique, pas un traitement ; « rien d'inventé » ✅ est juste. Réserve : la source citée ne contient pas l'information.",
     "controles_note_par": "agent, sur la réponse du porteur à la question métier"
   },
@@ -146,11 +146,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "noter la perte dans le carnet en appliquant le geste de perte sur la parcelle ; si plusieurs variétés sur la parcelle, le compagnon demande une précision",
     "controles_justification": "Q3 A (porteur, 24/11) : cendres, marc de café et pièges à bière sont des moyens physiques, pas des traitements ; les contrôles sont justes. Réserve : la source citée ne contient pas l'information.",
     "controles_note_par": "agent, sur la réponse du porteur à la question métier"
   },
@@ -163,11 +163,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "le compagnon doit directement interpréter pour enregistrer le geste ; il peut déduire la quantité de la longueur de chaque rang de la parcelle ; il doit ensuite pouvoir modifier le geste sur demande de correction du jardinier",
     "controles_justification": "« rien d'inventé » ❌ pour « 2 kg », exemple du message type « Redis ta phrase avec la quantité (2 kg, 15 plants, 1 sachet…) » (tour 1) : faux positif.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -180,11 +180,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "le compagnon doit proposer le geste de semis de la culture sur 4 rangs de la parcelle, et prendre en compte la demande de correction",
     "controles_justification": "Même faux positif « 2 kg » (tour 1) ; « écriture sûre » ❌ juste (`/parcelle modifier planche légumes rangs=3`, tour 3).",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -215,8 +215,8 @@
       "aboutit": true
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": true,
+      "aboutit": true,
       "controles_justes": true
     },
     "remarque": "",
@@ -232,11 +232,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "le compagnon peut accéder en priorité à ces informations depuis la fiche de la culture tomate",
     "controles_justification": "« rien d'inventé » ✅ alors que pomme de terre, aubergine, poivron, fèves « à éviter » ne viennent d'aucun des six passages lus, et la source citée n'en parle pas.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -357,11 +357,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": false,
+      "aboutit": false,
       "controles_justes": false
     },
-    "remarque": "",
+    "remarque": "le compagnon doit proposer le geste et, si besoin, demander des informations complémentaires pour enregistrer complètement le geste",
     "controles_justification": "« intention gardée » ✅ alors que « Peux-tu me dire la date exacte de ce semis ? » (tour 1) redemande la date dite (« yer ») ; le hors-sujet 5 est juste.",
     "controles_note_par": "agent (lecture de la trace)"
   },
@@ -464,11 +464,11 @@
       "aboutit": false
     },
     "humain": {
-      "utile": null,
-      "aboutit": null,
+      "utile": true,
+      "aboutit": false,
       "controles_justes": true
     },
-    "remarque": "",
+    "remarque": "le compagnon ne doit pas inventer ; il peut demander de compléter la fiche en proposant la procédure",
     "controles_justification": "Q1 B (porteur, 24/11) : aucun chiffre sans fiche, même dans un conseil général signalé ; « rien d'inventé » ❌ pour 30 cm, 1 cm, 10 cm est juste.",
     "controles_note_par": "agent, sur la réponse du porteur à la question métier"
   },
