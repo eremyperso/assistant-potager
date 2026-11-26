@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Callable, Optional
 
+from unidecode import unidecode
+
 from app import config
 from app.services.compagnon import fil as svc_fil
 from app.services.context import TenantContext
@@ -158,9 +160,12 @@ def schemas_des_outils() -> list[dict]:
             for c in capacites_du_compagnon()]
 
 
-def prompt_variable(jour: date, fil: svc_fil.Fil) -> str:
-    """La partie qui change : la date (une fois par jour) et le résumé du fil (une fois par bloc compacté)."""
-    return f"\nAujourd'hui : {_JOURS[jour.weekday()]} {jour.isoformat()}." + (f"\n{fil.resume}" if fil.resume else "")
+def prompt_variable(jour: date, fil: svc_fil.Fil, parcelles: tuple[str, ...] = ()) -> str:
+    """La partie qui change : la date (une fois par jour), les noms des parcelles (sans eux, « sur la planche légumes »
+    se lit comme une tournure et la parcelle dite se perd) et le résumé du fil (une fois par bloc compacté)."""
+    noms = f"\nParcelles du potager : {', '.join(parcelles)}." if parcelles else ""
+    return (f"\nAujourd'hui : {_JOURS[jour.weekday()]} {jour.isoformat()}.{noms}"
+            + (f"\n{fil.resume}" if fil.resume else ""))
 
 
 def message_du_jardinier(phrase: str, instant_local: datetime, note: str = "") -> dict:
@@ -248,6 +253,43 @@ def _ancrer_la_quantite(nom: str, arguments: dict, phrase: str, messages: list[d
     return {k: v for k, v in arguments.items() if k not in ("quantite", "unite")}
 
 
+# ── La parcelle d'un geste est un nom DIT ────────────────────────────────────
+# Seconde exception (décision du porteur, 26/11/2026) : avec les noms des parcelles sous les yeux, le modèle en
+# remplissait une non dite (30 propositions sur 54). Même règle que la quantité : le code retire, la capacité demande.
+def _mots(texte: str) -> list[str]:
+    return [m.rstrip("s") or m for m in re.findall(r"[a-z0-9]+", unidecode(texte or "").lower())]
+
+
+def _nomme(texte: str, parcelle: str) -> bool:
+    """Le nom figure en mots entiers : accents, casse, pluriel, espaces et tirets ne comptent pas."""
+    cible, mots = "".join(_mots(parcelle)), _mots(texte)
+    for debut in range(len(mots)):
+        suite = ""
+        for mot in mots[debut:]:
+            suite += mot
+            if suite == cible:
+                return True
+            if len(suite) >= len(cible):
+                break
+    return False
+
+
+def _ancrer_la_parcelle(nom: str, arguments: dict, phrase: str, messages: list[dict]) -> dict:
+    """La parcelle d'une proposition de geste, dite par le jardinier ou acceptée d'un « oui », ou rien."""
+    parcelle = arguments.get("parcelle")
+    if nom != "proposer_geste" or not isinstance(parcelle, str) or not parcelle.strip():
+        return arguments
+    dits = [phrase, *((m.get("content") or "").split("] ", 1)[-1].split("\n")[0]
+                      for m in messages if m.get("role") == "user")]
+    if _ACCORD.match(phrase or ""):
+        dits.append(next((m.get("content") for m in reversed(messages)
+                          if m.get("role") == "assistant" and m.get("content")), ""))
+    if any(_nomme(texte, parcelle) for texte in dits):
+        return arguments
+    log.info("[US-342] Parcelle non dite retirée de la proposition : %s", parcelle)
+    return {k: v for k, v in arguments.items() if k != "parcelle"}
+
+
 def _retenir(appel: AppelBoucle, tour: TourBoucle) -> None:
     """[CA5] Ce que le code ajoute au texte du modèle : la carte, la source, le lien."""
     donnees = appel.donnees if isinstance(appel.donnees, dict) else {}
@@ -271,7 +313,8 @@ def _retenir(appel: AppelBoucle, tour: TourBoucle) -> None:
 def jouer_tour(ctx: Optional[TenantContext], phrase: str, *, fil: svc_fil.Fil, executer: Executeur,
                appeler: Optional[Callable] = None, jour: Optional[date] = None,
                maintenant: Optional[datetime] = None, note: str = "", etapes_max: Optional[int] = None,
-               abandonner: Optional[Callable[[list[int]], None]] = None) -> TourBoucle:
+               abandonner: Optional[Callable[[list[int]], None]] = None,
+               parcelles: tuple[str, ...] = ()) -> TourBoucle:
     """[CA3–CA6] Un tour : la phrase, le fil, les capacités ; le modèle lit puis rédige.
 
     `maintenant` : l'instant UTC du tour (les tables sont en UTC) ; l'heure montrée au modèle est locale.
@@ -287,7 +330,7 @@ def jouer_tour(ctx: Optional[TenantContext], phrase: str, *, fil: svc_fil.Fil, e
     tour = TourBoucle(phrase=phrase)
     tour.messages.append(message_du_jardinier(phrase, local, note))
     schemas = schemas_des_outils()
-    variable = prompt_variable(jour, fil)
+    variable = prompt_variable(jour, fil, parcelles)
 
     def _abandonner() -> None:
         if tour.propositions and abandonner is not None:
@@ -324,6 +367,7 @@ def jouer_tour(ctx: Optional[TenantContext], phrase: str, *, fil: svc_fil.Fil, e
             for i, a in enumerate(reponse.appels):
                 arguments = dict(a.arguments) if a.arguments_valides and isinstance(a.arguments, dict) else {}
                 arguments = _ancrer_la_quantite(a.nom, arguments, phrase, [*fil.messages, *tour.messages[:-1]])
+                arguments = _ancrer_la_parcelle(a.nom, arguments, phrase, [*fil.messages, *tour.messages[:-1]])
                 refus = _garde(a.nom, arguments, tour)
                 resultat = ResultatOutil(refus, refus=True) if refus else executer(a.nom, arguments)
                 appel = AppelBoucle(a.nom, arguments, resultat.contenu, resultat.refus, resultat.donnees)
@@ -374,6 +418,20 @@ def executeur_du_registre(ctx: TenantContext) -> Executeur:
     return executer
 
 
+def _parcelles_du_potager(ctx: TenantContext) -> tuple[str, ...]:
+    from app.services.capacites.ecritures import noms_des_parcelles
+    from database.db import SessionLocal
+
+    db = SessionLocal()
+    try:
+        return noms_des_parcelles(db, ctx.potager_id)
+    except Exception:  # noqa: BLE001 — sans la liste, le tour se joue quand même
+        log.exception("[US-342] Parcelles non lues : potager_id=%s", ctx.potager_id)
+        return ()
+    finally:
+        db.close()
+
+
 def _abandonneur(ctx: TenantContext) -> Callable[[list[int]], None]:
     def abandonner(ids: list[int]) -> None:
         from app.services.compagnon import echange_pwa as svc_echange
@@ -396,7 +454,8 @@ def repondre(ctx: TenantContext, phrase: str, *, canal: str, contexte: Optional[
     depuis = derniers[-1].cree_le if derniers else None
     note = svc_fil.note_des_cartes(svc_fil.etat_des_cartes(ctx, fil), depuis)
     tour = jouer_tour(ctx, phrase, fil=fil, executer=executeur_du_registre(ctx), maintenant=maintenant,
-                      note=note, abandonner=_abandonneur(ctx))
+                      note=note, abandonner=_abandonneur(ctx),
+                      parcelles=_parcelles_du_potager(ctx))
     svc_fil.noter_tour(ctx, phrase, tour.texte, tour.messages, canal=canal, outils=tour.outils,
                        proposition_id=tour.propositions[-1] if tour.propositions else None, contexte=contexte,
                        maintenant=maintenant)

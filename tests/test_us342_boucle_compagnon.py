@@ -490,3 +490,21 @@ def test_une_quantite_non_dite_est_retiree_de_la_proposition(phrase, messages, q
     arguments = {"type": "semis", "culture": "haricot", "quantite": quantite, "unite": "rangs"}
     retenus = svc_boucle._ancrer_la_quantite("proposer_geste", arguments, phrase, messages)
     assert ("quantite" in retenus) is gardee and ("unite" in retenus) is gardee
+
+def test_les_noms_des_parcelles_sont_donnes_au_modele():
+    variable = svc_boucle.prompt_variable(JOUR, svc_fil.Fil(), ("planche légumes", "serre"))
+    assert variable == "\nAujourd'hui : samedi 2026-11-14.\nParcelles du potager : planche légumes, serre."
+
+@pytest.mark.parametrize("phrase, messages, parcelle, gardee", [
+    ("semé haricots hier", [], "planche légumes", False),
+    ("planté sur la planche legume", [], "planche légumes", True),
+    ("planté dans la serre", [], "Serre", True),
+    ("planté des radis ce matin", [], "A", False),
+    ("6 plants", [{"role": "user", "content": "[2026-11-14 10:00] planté sur la planche légumes"}], "planche légumes", True),
+    ("oui", [{"role": "assistant", "content": "Je la mets sur la planche légumes ?"}], "planche légumes", True),
+    ("planté des tomates", [{"role": "tool", "content": "Sur quelle parcelle ? planche légumes."}], "planche légumes", False),
+])
+def test_une_parcelle_non_dite_est_retiree_de_la_proposition(phrase, messages, parcelle, gardee):
+    arguments = {"type": "plantation", "culture": "tomate", "parcelle": parcelle}
+    retenus = svc_boucle._ancrer_la_parcelle("proposer_geste", arguments, phrase, messages)
+    assert ("parcelle" in retenus) is gardee

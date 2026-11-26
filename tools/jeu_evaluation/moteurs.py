@@ -403,6 +403,7 @@ class MoteurBoucle:
     def jouer(self, rang: int, phrase: str = "", clic: str = "") -> TraceTour:
         from datetime import timedelta
 
+        from app.services.capacites import ecritures
         from app.services.compagnon import boucle
         from app.services.compagnon import fil as svc_fil
 
@@ -427,9 +428,12 @@ class MoteurBoucle:
             tour.propositions = [p for p in tour.propositions if p.get("id") not in ids]
             tour.proposition_en_attente = bool(self.registre._propositions)
 
+        with self.registre._session() as db:
+            parcelles = ecritures.noms_des_parcelles(db, self.ctx.potager_id)
         try:
             resultat = boucle.jouer_tour(self.ctx, phrase, fil=fil, executer=executer, appeler=self._appeler,
-                                         jour=self.jour, maintenant=self._instant, note=note, abandonner=abandonner)
+                                         jour=self.jour, maintenant=self._instant, note=note, abandonner=abandonner,
+                                         parcelles=parcelles)
         except Exception as e:  # noqa: BLE001 — quota, panne : le tour est marqué, la mesure continue
             tour.erreur = f"{type(e).__name__}: {e}"
             return tour

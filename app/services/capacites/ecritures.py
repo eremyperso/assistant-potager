@@ -147,6 +147,11 @@ def _parcelles(db: Session, potager_id: int) -> list[str]:
             .filter(Parcelle.potager_id == potager_id, Parcelle.actif.isnot(False)).all()]
 
 
+def noms_des_parcelles(db: Session, potager_id: int) -> tuple[str, ...]:
+    """[US-342] Les noms que le compagnon doit reconnaître dans ce qu'on lui dit."""
+    return tuple(_parcelles(db, potager_id))
+
+
 def _controler_parcelle(db: Session, potager_id: int, nom: str) -> None:
     """[CA6] Jamais de parcelle créée par un geste : introuvable → les noms proches, rien n'est proposé."""
     from utils.parcelles import resolve_parcelle
