@@ -179,6 +179,10 @@ def construire_parser() -> argparse.ArgumentParser:
                    help="compare deux fichiers de résultats, sans rien jouer")
     p.add_argument("--verser-ligne-de-base", action="store_true",
                    help="verse le rapport de la chaîne actuelle dans le dossier de l'épic (mesure réelle seulement)")
+    p.add_argument("--rejuger", type=Path, metavar="DOSSIER",
+                   help="rejoue l'appréciation (code et juge) sur les traces d'une mesure, sans rejouer le compagnon")
+    p.add_argument("--relus", type=Path, metavar="VERDICTS",
+                   help="avec --rejuger : seulement les cas relus par un humain, et l'accord du juge avec lui")
     p.add_argument("--pause", type=float, default=0.5, help="secondes entre deux tours")
     p.add_argument("--detail", action="store_true")
     return p
@@ -290,6 +294,77 @@ def jouer(args, jeu: modele_jeu.Jeu, noms: tuple[str, ...], dossier: Path) -> li
     return mesures
 
 
+def rejouer_l_appreciation(args, noms: tuple[str, ...]) -> int:
+    """[US-337] `--rejuger` : le plan et le volume d'abord, le juge seulement avec un accord sur ce volume."""
+    from tools.jeu_evaluation import rejuger as rj
+
+    jeu = modele_jeu.charger(args.jeu)
+    source = args.rejuger
+    sortie = args.sortie or source.with_name(source.name + "_rejuge")
+    if sortie.resolve() == source.resolve():
+        print("❌ --sortie ne peut pas être le dossier de la mesure d'origine.", file=sys.stderr)
+        return 2
+    mesures = [campagne.Mesure.lire(source / f"resultats_{n}.json") for n in noms]
+    cas = [c.strip() for c in args.cas.split(",")] if args.cas else []
+    relus = rj.lire_relus(args.relus) if args.relus else None
+    sans_juge = args.sans_juge or args.simule
+    appels = 0 if sans_juge else sum(rj.appels_a_faire(m, sortie, cas=cas, relus=relus) for m in mesures)
+    tarif = TARIFS.get(args.modele_juge)
+    cout = "non chiffré" if not tarif else f"≈ {appels * (JETONS_JUGE[0] * tarif[0] + JETONS_JUGE[1] * tarif[1]) / 1e6:.2f} $"
+    print("Appréciation rejouée (aucun tour du compagnon) :")
+    for m in mesures:
+        retenus = rj.a_rejouer(m, cas=cas, relus=relus)
+        selection = campagne.Mesure(moteur=m.moteur, resultats=retenus)
+        print(f"  • {m.moteur:8} : {len(retenus)} traces du {m.date[:10]}, dont "
+              f"{rj.traces_coupees_sans_carte(selection, source)} coupées par un clic sans carte")
+    print(f"  • sortie   : {sortie}\n  • coût estimé    : {cout}\n  • volume annoncé : {appels}")
+    if args.dry_run:
+        return 0
+    if appels and not accord_donne(PlanMesure(0, noms, 0, 0, appels, 0, 0, None, "", args.modele_juge), args.accord,
+                                   interactif=sys.stdin.isatty()):
+        print(f"\n❌ Aucun accord sur le volume annoncé ({appels} appels) : rien n'est lancé. "
+              f"Relance avec --accord {appels}.", file=sys.stderr)
+        return 2
+    try:
+        notees = _rejouer(args, jeu, mesures, source, sortie, cas, relus, appels)
+    except Exception as e:  # noqa: BLE001 — clé absente, potager inconnu
+        print(f"\n❌ {e}", file=sys.stderr)
+        return 2
+    for m in notees:
+        m.ecrire(sortie / f"resultats_{m.moteur}.json")
+        if relus:
+            for critere, (ok, total) in rj.accord_avec_l_humain(m, relus).items():
+                print(f"  accord juge / humain, {m.moteur}, {critere} : {ok} / {total}")
+    chemin = args.rapport or sortie / "rapport.md"
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(rapport.rediger_rapport(notees, titre="Appréciation rejouée", graine=sortie.name),
+                      encoding="utf-8")
+    print(f"Rapport écrit : {chemin}")
+    return 0
+
+
+def _rejouer(args, jeu, mesures, source: Path, sortie: Path, cas, relus, appels: int) -> list[campagne.Mesure]:
+    from contextlib import ExitStack
+
+    from tools.jeu_evaluation import rejuger as rj
+
+    detail = print if args.detail else (lambda _: None)
+    with ExitStack() as pile:
+        juge = None
+        if appels:
+            from llm import contexte_appel
+            from tools import evaluer_dialogues as ed
+            from tools.jeu_evaluation.juge import appeler_par_la_passerelle
+
+            contexte_appel.demarrer_outil()
+            pile.enter_context(ed.cle_branchee(ed.cle_de_mesure()))
+            ed.verifier_modeles([args.modele_juge])
+            ctx = _contexte(jeu, args, modele_jeu.JEU_NEUF if args.potager_neuf else modele_jeu.JEU_REMPLI, False)
+            juge = Juge(appeler_par_la_passerelle(ctx, args.modele_juge), args.modele_juge)
+        return [rj.rejuger(m, jeu, source=source, sortie=sortie, juge=juge, cas=cas, relus=relus, detail=detail)
+                for m in mesures]
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = construire_parser()
     args = parser.parse_args(argv)
@@ -308,6 +383,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1 if comparaison.bloquee else 0
 
     noms = _noms_moteurs(args, parser)
+    if args.rejuger:
+        return rejouer_l_appreciation(args, noms)
     if args.passages < campagne.PASSAGES_MIN:
         parser.error(f"--passages : {campagne.PASSAGES_MIN} au moins par moteur (CA6b)")
     jeu = modele_jeu.charger(args.jeu)
