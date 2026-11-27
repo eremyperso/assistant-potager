@@ -20,7 +20,7 @@ from __future__ import annotations
 import calendar
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -291,13 +291,61 @@ def _voir_statistiques(db: Session, appel: AppelCapacite) -> dict:
 
 
 # ── 6. voir_meteo ─────────────────────────────────────────────────────────────
+_JOURS_SEMAINE = ("lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche")
+JOURS_A_VENIR = 7
+JOURS_D_ARROSAGE = 14
+ARROSAGES_MAX = 5
+
+
+def _nommer_le_jour(jour: dict) -> dict:
+    """Une date seule se voit attribuer un mauvais jour de semaine par le modèle : le code le nomme (copie : le
+    dictionnaire d'origine est celui du cache)."""
+    try:
+        return {"jour": _JOURS_SEMAINE[date.fromisoformat(str(jour.get("date"))[:10]).weekday()], **jour}
+    except ValueError:
+        return dict(jour)
+
+
+def meteo_a_venir(appel: AppelCapacite) -> dict:
+    """Aujourd'hui et les prochains jours à la ville du potager, en bref — ce sur quoi une décision s'appuie."""
+    try:
+        meteo = _appeler(_api().meteo_potager, ctx=appel.ctx)
+    except RefusCapacite as refus:
+        return {"message": f"Météo indisponible : {refus.message}"}
+    if meteo.get("localisation_manquante"):
+        return {"message": "Ce potager n'a pas de localisation : pas de météo."}
+    cles = ("date", "label", "temp_min", "temp_max", "precipitations")
+    jours = [{k: j[k] for k in ("jour", *cles) if j.get(k) is not None}
+             for j in (_nommer_le_jour(x) for x in [meteo, *(meteo.get("previsions_etendues") or [])])]
+    return {"ville": meteo.get("ville"), "jours": jours[:JOURS_A_VENIR]}
+
+
+def _arrosage(appel: AppelCapacite, meteo: dict) -> dict:
+    """« J'arrose ? » : la pluie prévue aujourd'hui et les derniers arrosages notés ; sans eux, la question."""
+    aujourdhui = date.today()
+    gestes = _appeler(
+        _api().historique, limit=ARROSAGES_MAX, offset=0, action="arrosage", culture=None, parcelle=None,
+        from_date=(aujourdhui - timedelta(days=JOURS_D_ARROSAGE)).isoformat(), to_date=aujourdhui.isoformat(),
+        date_ref=None, potager_id=None, ctx=appel.ctx,
+    )["evenements"]
+    donnees = {"pluie_prevue_aujourd_hui_mm": meteo.get("precipitations"), "derniers_arrosages": gestes}
+    if not gestes:
+        donnees["a_demander"] = (f"Aucun arrosage noté depuis {JOURS_D_ARROSAGE} jours : demande au jardinier quand "
+                                 "il a arrosé, ne le suppose pas.")
+    return donnees
+
+
 def _voir_meteo(db: Session, appel: AppelCapacite) -> dict:
     """[CA1, CA2] Prévisions du potager, et son historique si on le demande."""
     jours = _entier(appel.arguments, "historique_jours", 0, 0, JOURS_METEO_HISTORIQUE_MAX)
     meteo = _appeler(_api().meteo_potager, ctx=appel.ctx)
     if meteo.get("localisation_manquante"):
         return _enveloppe({"message": "Ce potager n'a pas de localisation : pas de météo."})
-    donnees = {"meteo": meteo}
+    nommee = _nommer_le_jour(meteo)
+    for cle in ("previsions", "previsions_etendues"):
+        if nommee.get(cle):
+            nommee[cle] = [_nommer_le_jour(j) for j in nommee[cle]]
+    donnees = {"meteo": nommee, "arrosage": _arrosage(appel, meteo)}
     if jours:
         from utils import meteo as utils_meteo
 
@@ -415,7 +463,9 @@ def _chercher_connaissance(db: Session, appel: AppelCapacite) -> dict:
                 "consigne": ("Dis que l'application n'a pas de fiche pour cette culture, puis donne ce que "
                              "`referentiel` en dit (famille, fenêtres, durées) et rien d'autre. Un conseil général est "
                              "possible, signalé comme tel : aucun chiffre (profondeur, distance, température, "
-                             "durée), aucune dose, aucun traitement."),
+                             "durée), aucune dose, aucun traitement. Propose de compléter ce que l'application "
+                             "sait de cette culture (famille, périodes, durées) : le jardinier le dicte, ou passe par "
+                             "la commande /calendrier."),
             })
     retenus = contexte.passages[:PASSAGES_MAX]
     if not retenus or contexte.confiance < RAG_SEUIL_CONFIANCE:
@@ -483,7 +533,8 @@ enregistrer_capacite(Capacite(
 ))
 enregistrer_capacite(Capacite(
     nom="voir_meteo", titre="Voir la météo",
-    description="Lit la météo du jour et les prévisions du potager, et son historique si demandé. Lecture seule.",
+    description=("Lit la météo du jour et les prévisions du potager, la pluie prévue aujourd'hui et les derniers "
+                 "arrosages notés (« faut-il arroser ? »), et son historique si demandé. Lecture seule."),
     proprietes={"historique_jours": {
         "type": "integer", "minimum": 0, "maximum": JOURS_METEO_HISTORIQUE_MAX,
         "description": "Nombre de jours passés à ajouter (0 par défaut).",

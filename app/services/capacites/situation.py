@@ -26,7 +26,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.services import situation_culture as svc_situation
-from app.services.capacites.lectures import _api, _appeler, _cle, _date_iso, _enveloppe, _ligne_statistique, _texte
+from app.services.capacites.lectures import _api, _appeler, _cle, _date_iso, _enveloppe, _ligne_statistique, _texte, meteo_a_venir
 from app.services.capacites.registre import AppelCapacite, Capacite, RefusCapacite, enregistrer_capacite
 from database.models import CultureConfig
 from utils.culture_resolve import _meilleure_correspondance, normaliser_culture
@@ -147,11 +147,13 @@ def _situation_culture(db: Session, appel: AppelCapacite) -> dict:
         **verdict,
         "chez_toi": chez_toi,
         "geste_suivant": _geste_suivant(verdict, chez_toi),
+        "meteo_a_venir": meteo_a_venir(appel),
         "a_ecrire": "rien : pour noter un geste, proposer_geste, puis l'accord du jardinier",
         "consigne": (
             "Donne la fenêtre de l'action que le jardinier dit (planter des plants = `plantation`, semer = semis), "
             "puis les autres de `fenetres` ; hors saison, nomme le risque de le faire quand même (gel, froid, "
-            "reprise), sans chiffre. Dis si la culture est déjà chez lui (`chez_toi`). Aucun chiffre de culture "
+            "reprise), sans chiffre. Appuie ta réponse sur le calendrier, les étoiles de confiance et la météo des "
+            "prochains jours (`meteo_a_venir`). Dis si la culture est déjà chez lui (`chez_toi`). Aucun chiffre de culture "
             "(profondeur, température, dose) qui ne vienne pas de ces données."),
         "source": "fiche culture de l'application (calendrier de la zone et confiance du jour)",
     }

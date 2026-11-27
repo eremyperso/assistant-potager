@@ -508,3 +508,19 @@ def test_une_parcelle_non_dite_est_retiree_de_la_proposition(phrase, messages, p
     arguments = {"type": "plantation", "culture": "tomate", "parcelle": parcelle}
     retenus = svc_boucle._ancrer_la_parcelle("proposer_geste", arguments, phrase, messages)
     assert ("parcelle" in retenus) is gardee
+
+
+def test_une_reponse_qui_annonce_une_carte_inexistante_est_corrigee():
+    tour = svc_boucle.TourBoucle(phrase="x")
+    tour.appels.append(svc_boucle.AppelBoucle("proposer_geste", {}, "{}", False, {}))
+    assert svc_boucle._sans_carte_annoncee("Confirme dans l'application.", tour).endswith(svc_boucle.TEXTE_AUCUNE_CARTE)
+    assert svc_boucle._sans_carte_annoncee("Sur quelle parcelle ?", tour) == "Sur quelle parcelle ?"
+    tour.propositions.append(1)
+    assert svc_boucle._sans_carte_annoncee("Confirme.", tour) == "Confirme."
+
+
+def test_la_parcelle_retiree_est_dite_au_modele():
+    sans = svc_boucle._dire_la_parcelle_retiree(svc_boucle.ResultatOutil("{}", donnees={}), "serre")
+    assert "« serre » a été retirée" in sans.contenu and "sans_parcelle=true" in sans.contenu
+    avec = svc_boucle._dire_la_parcelle_retiree(svc_boucle.ResultatOutil("{}", donnees={"proposition": 3}), "serre")
+    assert "sans_parcelle" not in avec.contenu
