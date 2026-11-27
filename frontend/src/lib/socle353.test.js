@@ -14,7 +14,7 @@ import {
   momentDeJournee, MAX_PHRASES, MAX_ACTIONS, PRIORITE_COMMUNE,
 } from './motDeGaston.js'
 import {
-  estCompact, SEUIL_COMPACT_PX, barreEffective, controlesPresents, entreesMenu, boutonDate, entreePlus,
+  etatReplie, barreEffective, controlesPresents, entreesMenu, boutonDate, entreePlus,
   formePanneau, LARGEUR_PANNEAU_PX, DECALAGE_NOTER_PX, ORDRE_BARRE, aUneBarre, OCCUPANTS_PANNEAU,
 } from './coquille.js'
 import { barreBasse, NAV, NAV_OF } from '../navigation.js'
@@ -216,16 +216,25 @@ test('[CA10, D3] DateRefPicker et BarreActivitePlan sont retirés', () => {
 
 // ── CA11 : défilement ───────────────────────────────────────────────────────────
 
-test('[CA11] au-delà de 8 px de défilement, l’en-tête se resserre', () => {
-  assert.equal(SEUIL_COMPACT_PX, 8)
-  assert.equal(estCompact(0), false)
-  assert.equal(estCompact(8), false)
-  assert.equal(estCompact(9), true)
+test('[CA11] repli avec hystérésis : replier au-delà de 24 px et 220 px de débord, déplier en haut', () => {
+  // Replier : les deux conditions, strictement.
+  assert.equal(etatReplie(25, 221, false), true)
+  assert.equal(etatReplie(24, 500, false), false)
+  assert.equal(etatReplie(100, 220, false), false)
+  // Déplier : seulement en haut.
+  assert.equal(etatReplie(3, 0, true), true)
+  assert.equal(etatReplie(2, 500, true), false)
+  assert.equal(etatReplie(0, 500, true), false)
+  // Entre les deux seuils, rien ne bascule.
+  for (const y of [3, 9, 24]) {
+    assert.equal(etatReplie(y, 500, false), false)
+    assert.equal(etatReplie(y, 500, true), true)
+  }
 })
 
 test('[CA11] seule la bande de contenu défile ; l’en-tête, le mot et la barre restent fixes', () => {
   const app = lire('App.jsx')
-  assert.match(app, /<main ref=\{mainRef\} onScroll=\{surDefilement\} className="min-h-0 flex-1 overflow-y-auto"/)
+  assert.match(app, /<main ref=\{mainRef\} onScroll=\{surDefilement\} className="zone-defilement relative min-h-0 flex-1 overflow-y-auto"/)
   assert.ok(app.indexOf('<PageHeader') < app.indexOf('<BandesFixes'))
   assert.ok(app.indexOf('<BandesFixes') < app.indexOf('<main'))
   assert.match(app, /onRemonter=\{remonter\}/)

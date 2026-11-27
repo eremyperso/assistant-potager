@@ -6,8 +6,12 @@
 // (seule bande qui défile), fiche commune (panneau). Une bande sans contenu disparaît.
 import { dateCourte } from './regleTemps.js'
 
-/** Au-delà de ce défilement (px), l'en-tête se resserre et le Mot de Gaston tient sur une ligne (CA11). */
-export const SEUIL_COMPACT_PX = 8
+/** Repli de l'en-tête (CA11) : au-delà de ce défilement (px)… */
+export const SEUIL_REPLI_PX = 24
+/** … et seulement si le contenu déborde de plus que cela : replier rend de la hauteur à la zone qui défile. */
+export const DEBORD_MIN_REPLI_PX = 220
+/** On ne déplie qu'une fois revenu en haut. */
+export const SEUIL_DEPLI_PX = 2
 
 /** Largeur du panneau droit sur ordinateur (CA12). */
 export const LARGEUR_PANNEAU_PX = 400
@@ -17,8 +21,15 @@ export const DECALAGE_NOTER_PX = LARGEUR_PANNEAU_PX + 28
 /** Sous cette largeur de conteneur, Filtrer se réduit à son icône (CA8, container query). */
 export const LARGEUR_FILTRER_COMPLET_PX = 520
 
-/** [CA11] L'en-tête est resserré dès que le contenu a défilé de plus de 8 px. */
-export const estCompact = (scrollTop) => Number(scrollTop) > SEUIL_COMPACT_PX
+/**
+ * [CA11] L'en-tête replié (et le Mot de Gaston sur une ligne), avec hystérésis : replier change la
+ * hauteur de la zone qui défile, un seuil unique ferait « sauter » l'écran. `debord` vaut
+ * `scrollHeight - clientHeight`. Entre les deux seuils, l'état ne change jamais.
+ */
+export function etatReplie(scrollTop, debord, repliActuel) {
+  if (repliActuel) return scrollTop > SEUIL_DEPLI_PX
+  return scrollTop > SEUIL_REPLI_PX && debord > DEBORD_MIN_REPLI_PX
+}
 
 /**
  * [CA8] L'ordre FIXE de la barre d'outils : date, recherche, Filtrer, menu ⋯. Une vue peut retirer

@@ -21,7 +21,7 @@ import BandesFixes from './components/BandesFixes.jsx'  // [US-353] mot de Gasto
 import BoutonNoter from './components/BoutonNoter.jsx'  // [US-353] le seul bouton rond vers Gaston
 import PanneauPartage from './components/PanneauPartage.jsx'  // [US-353 / CA12]
 import { CoquilleProvider, useCoquille } from './context/CoquilleContext.jsx'  // [US-353]
-import { estCompact, occupantAFermer } from './lib/coquille.js'  // [US-353 / CA11]
+import { etatReplie, occupantAFermer } from './lib/coquille.js'  // [US-353 / CA11]
 import PanneauCompagnon from './components/PanneauCompagnon.jsx'  // [US-271]
 import { GastonDefs } from './components/Gaston.jsx'  // [US-271]
 import { useMedia } from './hooks/useMedia.js'  // [US-271]
@@ -186,9 +186,12 @@ function AppInner({ intentionAdresse }) {
   // [US-355 / CA1] Une fiche ouverte (commune ou catalogue) ne survit pas au changement de vue : le panneau est celui de l'écran.
   useEffect(() => { if (occupantFiche?.commune) fermerPanneau() }, [view])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  // [US-353 / CA11] Seule la bande de contenu défile ; au-delà de 8 px, l'en-tête se resserre.
+  // [US-353 / CA11] Seule la bande de contenu défile ; l'en-tête se replie avec hystérésis.
   const [compact, setCompact] = useState(false)
-  const surDefilement = useCallback((e) => setCompact(estCompact(e.currentTarget.scrollTop)), [])
+  const surDefilement = useCallback((e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    setCompact((replie) => etatReplie(scrollTop, scrollHeight - clientHeight, replie))
+  }, [])
   const remonter = useCallback(() => {
     mainRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' })
   }, [])
@@ -228,7 +231,11 @@ function AppInner({ intentionAdresse }) {
   }, [changerVue])
 
   useLayoutEffect(() => {
-    if (mainRef.current) mainRef.current.scrollTop = defilements.current.get(view) ?? 0
+    const zone = mainRef.current
+    if (!zone) return
+    zone.scrollTop = defilements.current.get(view) ?? 0
+    // L'état replié se recalcule pour la vue affichée, sans hériter de la précédente.
+    setCompact(etatReplie(zone.scrollTop, zone.scrollHeight - zone.clientHeight, false))
   }, [view])
 
   // Le chat de Gaston (maquette « Compagnon.html »), dans le panneau partagé : un geste confirmé relit
@@ -274,7 +281,9 @@ function AppInner({ intentionAdresse }) {
               <BandesFixes view={view} compact={compact} onRemonter={remonter} />
             </div>
 
-            <main ref={mainRef} onScroll={surDefilement} className="min-h-0 flex-1 overflow-y-auto">
+            {/* `relative` : sans parent positionné, un élément absolu du contenu (`sr-only`) s'accroche
+                au document et l'allonge — toute la page se mettait à défiler. */}
+            <main ref={mainRef} onScroll={surDefilement} className="zone-defilement relative min-h-0 flex-1 overflow-y-auto">
               <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-28 nav:pb-24">
                 <MessageIntention />
                 {/* [US-224 / CA22] Le compte de la file, sur tous les écrans — une

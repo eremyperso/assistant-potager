@@ -12,7 +12,7 @@ import { VUE_PAR_DEFAUT, navEntry, vueDeSection } from '../navigation.js'
 import BandesFixes from '../components/BandesFixes.jsx'
 import BoutonNoter from '../components/BoutonNoter.jsx'
 import { CoquilleProvider, useDeclarerEcran } from '../context/CoquilleContext.jsx'
-import { estCompact } from '../lib/coquille.js'
+import { etatReplie } from '../lib/coquille.js'
 import { InfobulleEtapes, PastilleEtape } from '../components/ui'
 import { useMedia } from '../hooks/useMedia.js'
 
@@ -121,7 +121,10 @@ function EcranDemo({ view }) {
 function Coquille({ view, setView }) {
   const bureau = useMedia('(min-width: 900px)')
   const [compact, setCompact] = useState(false)
-  const surDefilement = useCallback((e) => setCompact(estCompact(e.currentTarget.scrollTop)), [])
+  const surDefilement = useCallback((e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    setCompact((replie) => etatReplie(scrollTop, scrollHeight - clientHeight, replie))
+  }, [])
   const aller = (id) => setView(vueDeSection(id))
   return (
     <div className="flex flex-col h-dvh bg-bg">
@@ -132,7 +135,7 @@ function Coquille({ view, setView }) {
             <PageHeader view={view} onGo={setView} compact={compact} />
             <BandesFixes view={view} compact={compact} onRemonter={() => {}} />
           </div>
-          <main onScroll={surDefilement} className="min-h-0 flex-1 overflow-y-auto">
+          <main onScroll={surDefilement} className="zone-defilement relative min-h-0 flex-1 overflow-y-auto">
             <div className="max-w-[1320px] mx-auto px-4 nav:px-6 pt-4 pb-28 nav:pb-24">
               {view === 'bord'
                 ? <Placeholder title={navEntry(view).title} body={`Vue « ${view} » — le tableau de bord n'a pas de barre d'outils.`} />

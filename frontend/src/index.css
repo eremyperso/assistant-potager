@@ -256,9 +256,33 @@
     color: var(--txt);
   }
 
-  /* Masquer la scrollbar sur mobile */
-  ::-webkit-scrollbar { display: none; }
-  * { scrollbar-width: none; }
+  /* Masquer la scrollbar sur mobile, sous le point de bascule `nav` (900px) */
+  @media (max-width: 899.98px) {
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; }
+  }
+}
+
+/* Couleurs de la barre de défilement (maquette « Socle commun · 7 vues »). */
+:root { --defil-pouce: #A9B39D; --defil-survol: #7C8A72; }
+.dark { --defil-pouce: #56634A; --defil-survol: #71815F; }
+
+/* [US-353 / CA11] Ordinateur : la bande de contenu montre toujours sa barre de défilement. */
+@media (min-width: 900px) {
+  .zone-defilement { overflow-y: scroll; scrollbar-gutter: stable; }
+  .zone-defilement::-webkit-scrollbar { width: 14px; }
+  .zone-defilement::-webkit-scrollbar-track { background: var(--card-alt); border-left: 1px solid var(--border); }
+  .zone-defilement::-webkit-scrollbar-thumb {
+    background: var(--defil-pouce);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 7px;
+  }
+  .zone-defilement::-webkit-scrollbar-thumb:hover { background-color: var(--defil-survol); }
+  /* Firefox seulement : dans Chrome, `scrollbar-color` annulerait les règles ci-dessus. */
+  @supports not selector(::-webkit-scrollbar) {
+    .zone-defilement { scrollbar-width: auto; scrollbar-color: var(--defil-pouce) var(--card-alt); }
+  }
 }
 
 /* [US-200 / CA3] Trames de la Vue plan — le mode d'implantation se lit à la
