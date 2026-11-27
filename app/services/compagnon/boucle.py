@@ -188,12 +188,24 @@ def _message_d_appels(reponse) -> dict:
 # ═════════════════════════════════════════════════════════════════════════════
 # Un tour
 # ═════════════════════════════════════════════════════════════════════════════
+# Troisième exception (décision du porteur, 27/11/2026) : le compagnon peut offrir de noter, mais une réponse qui ne
+# tranche pas n'est pas un accord. Malgré la consigne, « je ne sais pas, à toi de voir » donnait 26 cartes sur 93
+# passages (levées, pertes jamais constatées).
+_INDECIS = re.compile(
+    r"\b(?:je (?:ne )?sais pas|j'?en sais rien|sais pas|aucune idée|à toi de voir|a toi de voir|comme tu veux|"
+    r"je ne suis pas sûr|peut-être|peut etre|bof|chais pas)\b", re.IGNORECASE)
+TEXTE_INDECIS = ("Le jardinier n'a pas donné son accord : n'en prépare pas la carte. Réponds-lui, et ne propose un geste "
+                 "que s'il dit l'avoir fait ou dit clairement oui.")
+
+
 def _garde(nom: str, arguments: dict, tour: TourBoucle) -> Optional[str]:
     """P5 : les garde-fous portent sur l'action, jamais sur la phrase. Une capacité écartée n'est pas appelable,
     même si le modèle l'invente ; une proposition rangée dans CE tour ne se confirme pas dans ce tour (le jardinier
     n'a pas encore vu sa carte)."""
     if nom in CAPACITES_ECARTEES:
         return f"Outil indisponible ici : {nom}."
+    if nom.startswith(_PROPOSER) and _INDECIS.search(tour.phrase or ""):
+        return TEXTE_INDECIS
     if nom == "confirmer_proposition" and arguments.get("proposition") in tour.propositions:
         return "Le jardinier n'a pas encore vu cette carte : montre-la-lui et attends sa réponse."
     return None

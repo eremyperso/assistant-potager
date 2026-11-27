@@ -524,3 +524,12 @@ def test_la_parcelle_retiree_est_dite_au_modele():
     assert "« serre » a été retirée" in sans.contenu and "sans_parcelle=true" in sans.contenu
     avec = svc_boucle._dire_la_parcelle_retiree(svc_boucle.ResultatOutil("{}", donnees={"proposition": 3}), "serre")
     assert "sans_parcelle" not in avec.contenu
+
+@pytest.mark.parametrize("phrase, refusee", [
+    ("je ne sais pas, à toi de voir", True), ("comme tu veux", True), ("oui", False),
+    ("oui vas-y note-le", False), ("j'ai perdu 3 tomates", False),
+])
+def test_une_reponse_qui_ne_tranche_pas_ne_prepare_aucune_carte(phrase, refusee):
+    tour = svc_boucle.TourBoucle(phrase=phrase)
+    assert (svc_boucle._garde("proposer_geste", {}, tour) == svc_boucle.TEXTE_INDECIS) is refusee
+    assert svc_boucle._garde("voir_plan", {}, tour) is None
