@@ -248,9 +248,11 @@ class TestCA5Carnet:
         donnees = _donnees(_appeler(client, lecteur, "consulter_carnet", {"parcelle": "Planche 1"}))
         assert donnees["total"] > 0 and all(g["parcelle"] for g in donnees["gestes"])
 
-    def test_us291_par_defaut_les_douze_derniers_mois(self, client, lecteur, carnet):
+    def test_us291_par_defaut_les_six_derniers_mois(self, client, lecteur, carnet):
         donnees = _donnees(_appeler(client, lecteur, "consulter_carnet", {"culture": "radis"}))
         assert donnees["total"] == 0  # le semis de radis a 400 jours : hors période
+        periode = _donnees(_appeler(client, lecteur, "consulter_carnet"))["periode"]
+        assert periode["depuis"] == svc_lectures._ajouter_mois(AUJOURD_HUI, -6).isoformat()
 
     def test_us291_plus_de_douze_mois_est_refuse(self, client, lecteur, carnet):
         resultat = _appeler(client, lecteur, "consulter_carnet", {"depuis": (AUJOURD_HUI - timedelta(days=500)).isoformat()})

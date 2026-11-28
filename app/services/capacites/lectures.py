@@ -46,6 +46,8 @@ _CLES_MEMBRES = frozenset({
 #: [CA5] Bornes de `consulter_carnet`.
 GESTES_PAR_PAGE = 50
 MOIS_PAR_APPEL_MAX = 12
+#: Sans date de début : six mois (relecture G2, 27/11/2026 — un an rendait trop de gestes).
+MOIS_PAR_DEFAUT = 6
 #: Bornes des autres listes : le contexte du modèle client est précieux.
 LOTS_MAX = 50
 VARIETES_MAX = 100
@@ -202,10 +204,10 @@ def _voir_stock(db: Session, appel: AppelCapacite) -> dict:
 
 # ── 4. consulter_carnet ───────────────────────────────────────────────────────
 def _periode_carnet(arguments: dict) -> tuple[date, date]:
-    """[CA5] La période du carnet : 12 mois au plus, les 12 derniers mois par défaut."""
+    """[CA5] La période du carnet : 12 mois au plus par appel, les 6 derniers mois par défaut."""
     aujourd_hui = date.today()
     jusqua = _date_iso(arguments, "jusqua") or aujourd_hui
-    depuis = _date_iso(arguments, "depuis") or _ajouter_mois(jusqua, -MOIS_PAR_APPEL_MAX)
+    depuis = _date_iso(arguments, "depuis") or _ajouter_mois(jusqua, -MOIS_PAR_DEFAUT)
     if depuis > jusqua:
         raise RefusCapacite("`depuis` doit précéder `jusqua`.", "arguments")
     if depuis < _ajouter_mois(jusqua, -MOIS_PAR_APPEL_MAX):
@@ -508,7 +510,7 @@ enregistrer_capacite(Capacite(
     nom="consulter_carnet", titre="Consulter le carnet",
     description=(
         f"Lit les gestes notés au carnet, du plus récent au plus ancien, {GESTES_PAR_PAGE} par page. "
-        f"Filtres : période ({MOIS_PAR_APPEL_MAX} mois au plus par appel, les {MOIS_PAR_APPEL_MAX} "
+        f"Filtres : période ({MOIS_PAR_APPEL_MAX} mois au plus par appel, les {MOIS_PAR_DEFAUT} "
         "derniers mois par défaut), culture, parcelle, type de geste. La réponse dit s'il reste des pages."
     ),
     proprietes={
