@@ -21,6 +21,20 @@ Toujours répondre en français, quelle que soit la langue utilisée dans les me
 - Les sorties volumineuses (diff complet, `git log` long, rapports HTML) restent
   dans le terminal ou un fichier, pas dans le contexte.
 
+## Carnet de travail (NON NÉGOCIABLE, toute session)
+
+Le suivi vit dans **`docs/CARNET_DE_TRAVAIL.md`**, par US : étapes avant la suite de l'implémentation, points et
+actions ouverts, vérifications en cours, arbitrages attendus, pense-bêtes.
+
+1. **Le lire** à la reprise d'un chantier, et dès que le porteur demande où l'on en est, quoi faire ensuite ou ce qui
+   reste : répondre d'après lui, vérifié contre le dépôt.
+2. **Le mettre à jour de sa propre initiative**, sans attendre qu'on le demande, à chaque avancée : étape franchie,
+   mesure faite (chiffres, volume), verdict de relecture, défaut ou piste découverts, décision du porteur, commit.
+3. Chaque élément nouveau est classé : **à traiter maintenant** (sous son US), **à décider ou vérifier** (`[?]`),
+   **plus tard** (proposer une US, sinon un pense-bête 💡). Ne rien laisser seulement dans la conversation.
+4. **Terminer toute synthèse d'étape** par ce qu'il reste à faire avant de passer à la suite.
+5. Rester court : une ligne par point, le détail dans les documents liés. Marquer ce qui n'est pas vérifié.
+
 ## Règles d'exécution des agents (NON NÉGOCIABLES)
 
 Ces règles s'appliquent à chaque invocation d'un agent défini dans `.github/agents/`.
