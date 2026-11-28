@@ -59,7 +59,8 @@ class PotagerNeuf:
     purge: dict
 
 
-def creer_ou_reinitialiser(db, *, email: str = EMAIL, url_base: Optional[str] = None) -> PotagerNeuf:
+def creer_ou_reinitialiser(db, *, email: str = EMAIL, url_base: Optional[str] = None,
+                           nom_potager: str = NOM_POTAGER) -> PotagerNeuf:
     """Le potager neuf dans son état de départ. Idempotent. La session sort de là vidée de ses objets : ne garder
     que les identifiants du résultat."""
     from unittest.mock import patch
@@ -80,10 +81,10 @@ def creer_ou_reinitialiser(db, *, email: str = EMAIL, url_base: Optional[str] = 
         user.email_verifie = True
         db.commit()
         cree = True
-    potager = (db.query(Potager).filter(Potager.proprietaire_id == user.id, Potager.nom == NOM_POTAGER)
+    potager = (db.query(Potager).filter(Potager.proprietaire_id == user.id, Potager.nom == nom_potager)
                .order_by(Potager.id).first())
     if potager is None:
-        potager = potagers.creer_potager(db, user.id, NOM_POTAGER)
+        potager = potagers.creer_potager(db, user.id, nom_potager)
         cree = True
     potager.zone_climatique = ZONE_CLIMATIQUE
     db.commit()

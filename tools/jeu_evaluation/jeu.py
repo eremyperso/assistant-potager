@@ -21,7 +21,9 @@ JEU = RACINE / "tests" / "corpus" / "jeu_evaluation_compagnon.json"
 
 JEU_NEUF = "neuf"
 JEU_REMPLI = "rempli"
-JEUX_DE_DONNEES = (JEU_NEUF, JEU_REMPLI)
+#: La même culture sur deux parcelles (relecture G2, 27/11/2026).
+JEU_MULTI = "multi"
+JEUX_DE_DONNEES = (JEU_NEUF, JEU_REMPLI, JEU_MULTI)
 
 GENRES = ("directe", "familiere", "incomplete", "faute", "deux_temps", "culture_absente", "reel")
 #: Ce que le jardinier peut dire, et qu'on ne lui redemande pas une fois dit.

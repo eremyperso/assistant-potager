@@ -90,7 +90,7 @@ def test_ca2_le_potager_neuf_de_reference_est_calque_sur_le_potager_34(le_jeu):
 
 # ── CA3 ──────────────────────────────────────────────────────────────────────
 def test_ca3_chaque_cas_dit_son_jeu_de_donnees_et_le_neuf_vient_d_un_script(le_jeu):
-    assert {c.jeu_de_donnees for c in le_jeu.cas} == {j.JEU_NEUF, j.JEU_REMPLI}
+    assert {c.jeu_de_donnees for c in le_jeu.cas} == {j.JEU_NEUF, j.JEU_REMPLI, j.JEU_MULTI}
     script = le_jeu.jeux_de_donnees[j.JEU_NEUF]["script"]
     assert (RACINE / script).is_file()
     rempli = le_jeu.jeux_de_donnees[j.JEU_REMPLI]
@@ -422,3 +422,22 @@ def test_le_script_rempli_refuse_une_base_qui_n_est_pas_de_test(test_db):
 
 def test_le_jeu_decrit_le_script_du_potager_rempli(le_jeu):
     assert le_jeu.jeux_de_donnees["rempli"]["script"] == "tools/creer_potager_test_rempli.py"
+
+
+# ── Le potager multi-parcelles (relecture G2) ─────────────────────────────────
+def test_le_potager_multi_porte_la_meme_culture_sur_deux_parcelles(test_db):
+    from database.models import Evenement, Parcelle
+    from tools import creer_potager_test_multi as script
+
+    for _ in range(2):  # rejouable
+        resultat = script.creer_ou_reinitialiser(test_db)
+        gestes = test_db.query(Evenement).filter(Evenement.potager_id == resultat.potager_id).all()
+        assert len(gestes) == 2 and {g.culture for g in gestes} == {"haricot"}
+        noms = {p.id: p.nom for p in test_db.query(Parcelle).filter(Parcelle.potager_id == resultat.potager_id)}
+        assert {noms[g.parcelle_id] for g in gestes} == {"planche légumes", "planche nord"}
+
+
+def test_les_cas_multi_parcelles_sont_dans_le_jeu(le_jeu):
+    multi = [c for c in le_jeu.cas if c.jeu_de_donnees == j.JEU_MULTI]
+    assert {c.besoin for c in multi} == {"B25", "B26"} and len(multi) == 12
+    assert le_jeu.jeux_de_donnees[j.JEU_MULTI]["script"] == "tools/creer_potager_test_multi.py"

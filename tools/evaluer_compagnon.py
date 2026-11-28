@@ -167,6 +167,8 @@ def construire_parser() -> argparse.ArgumentParser:
     p.add_argument("--limite", type=int, default=0, help="ne jouer que les N premiers cas retenus")
     p.add_argument("--potager-neuf", type=int, default=_entier_env("JEU_EVAL_POTAGER_NEUF"))
     p.add_argument("--utilisateur-neuf", type=int, default=_entier_env("JEU_EVAL_UTILISATEUR_NEUF"))
+    p.add_argument("--potager-multi", type=int, default=_entier_env("JEU_EVAL_POTAGER_MULTI"))
+    p.add_argument("--utilisateur-multi", type=int, default=_entier_env("JEU_EVAL_UTILISATEUR_MULTI"))
     p.add_argument("--potager-rempli", type=int, help="défaut : celui du jeu (potager 33)")
     p.add_argument("--utilisateur-rempli", type=int, help="défaut : celui du jeu")
     p.add_argument("--sans-juge", action="store_true", help="ne note que les critères du code")
@@ -205,6 +207,12 @@ def _contexte(jeu: modele_jeu.Jeu, args, donnees: str, simule: bool):
                 "Le potager neuf se crée avec `python tools/creer_potager_test_neuf.py` ; passe ensuite ses numéros "
                 "par --potager-neuf et --utilisateur-neuf (ou JEU_EVAL_POTAGER_NEUF / JEU_EVAL_UTILISATEUR_NEUF).")
         return TenantContext(user_id=args.utilisateur_neuf, potager_id=args.potager_neuf, role="owner")
+    if donnees == modele_jeu.JEU_MULTI:
+        if not (args.potager_multi and args.utilisateur_multi):
+            raise SystemExit(
+                "Le potager multi-parcelles se crée avec `python tools/creer_potager_test_multi.py` ; passe ensuite "
+                "ses numéros par --potager-multi et --utilisateur-multi.")
+        return TenantContext(user_id=args.utilisateur_multi, potager_id=args.potager_multi, role="owner")
     d = jeu.jeux_de_donnees.get(modele_jeu.JEU_REMPLI, {})
     potager = args.potager_rempli or d.get("potager_id")
     utilisateur = args.utilisateur_rempli or d.get("utilisateur_id")
@@ -279,7 +287,8 @@ def jouer(args, jeu: modele_jeu.Jeu, noms: tuple[str, ...], dossier: Path) -> li
                     moteur=nom, modele=(args.modele_claude if nom == moteurs.MOTEUR_CLAUDE_MCP else args.modele),
                     mesure_reelle=not simule, jeu=str(args.jeu.name), date=campagne.maintenant(),
                     passages=args.passages, juge=(juge.modele if juge else ""),
-                    potager={k: v for k, v in (("neuf", args.potager_neuf), ("rempli", args.potager_rempli or 33))
+                    potager={k: v for k, v in (("neuf", args.potager_neuf), ("rempli", args.potager_rempli or 33),
+                                                 ("multi", args.potager_multi))
                              if v and any(c.jeu_de_donnees == k for c in jeu.cas)})
                 for passage in range(1, args.passages + 1):
                     print(f" passage {passage}/{args.passages}")

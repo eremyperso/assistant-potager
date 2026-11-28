@@ -9,6 +9,14 @@
       ],
       "script": "tools/creer_potager_test_neuf.py"
     },
+    "multi": {
+      "description": "Deux parcelles, « planche légumes » et « planche nord », des haricots semés en place sur chacune. Créé par `python tools/creer_potager_test_multi.py`, jamais à la main.",
+      "parcelles": [
+        "planche légumes",
+        "planche nord"
+      ],
+      "script": "tools/creer_potager_test_multi.py"
+    },
     "rempli": {
       "description": "Copie, dans potager_test, du potager 33 « Potager de recette » de potager_dev : localisé (ville et coordonnées), 14 parcelles dont « principal », « serre », « tunnel », 31 gestes, carnet, un rappel, un itinéraire personnalisé de la tomate. Créé par `python tools/creer_potager_test_rempli.py`, jamais à la main ; ses numéros se passent au lanceur (--potager-rempli, --utilisateur-rempli). Numéros dans potager_test au 20/11/2026 : potager 38, utilisateur 49 (le script les réaffiche).",
       "parcelles": [
@@ -2085,6 +2093,320 @@
             "oui, cette semaine"
           ],
           "renouvelable": true
+        }
+      ]
+    },
+    {
+      "id": "B25",
+      "libelle": "Noter une récolte d'une culture présente sur deux parcelles",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "multi",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche nord",
+        "quantite": "2",
+        "unite": "kg",
+        "date": "aujourd'hui"
+      },
+      "attendus": {
+        "bonne_reponse": "Des haricots sont en place sur deux parcelles : demande sur laquelle, en proposant « planche légumes » et « planche nord », sans redemander culture ni quantité ; puis propose la récolte de 2 kg de haricot sur la parcelle dite, à confirmer. Jamais de carte sans parcelle ni sur une parcelle choisie à sa place.",
+        "ne_jamais_redemander": [
+          "culture",
+          "quantite"
+        ],
+        "ecritures_interdites": [
+          "perte",
+          "semis"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai récolté 2 kg de haricots aujourd'hui",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "bonne cueillette de haricots ce matin, 2 kilos !",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "récolte haricots 2 kg",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai recolté 2 kg d'aricots",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai récolté des haricots",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "suite": [
+            "2 kg",
+            "planche nord"
+          ]
+        },
+        {
+          "genre": "directe",
+          "ouverture": "J'ai récolté 2 kg de haricots sur la planche nord",
+          "attendus": {
+            "bonne_reponse": "La parcelle est dite : propose directement la récolte de 2 kg de haricot sur la planche nord, à confirmer, sans redemander la parcelle.",
+            "ne_jamais_redemander": [
+              "culture",
+              "quantite",
+              "parcelle"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "B26",
+      "libelle": "Noter une perte d'une culture présente sur deux parcelles",
+      "categorie": "ecriture",
+      "jeu_de_donnees": "multi",
+      "culture_type": "reproducteur_pleine_terre",
+      "fiche": {
+        "culture": "haricot",
+        "parcelle": "planche nord",
+        "quantite": "5",
+        "unite": "plants",
+        "date": "aujourd'hui",
+        "cause": "limaces"
+      },
+      "attendus": {
+        "bonne_reponse": "Des haricots sont en place sur deux parcelles : demande sur laquelle, en proposant « planche légumes » et « planche nord », sans redemander culture ni quantité ; puis propose la perte de 5 plants de haricot sur la parcelle dite, à confirmer. Jamais de carte sans parcelle ni sur une parcelle choisie à sa place. La cause de la perte, dès que le jardinier la dit (les limaces), est notée sur la carte ; elle n'est jamais inventée.",
+        "ne_jamais_redemander": [
+          "culture",
+          "quantite"
+        ],
+        "ecritures_interdites": [
+          "recolte",
+          "semis"
+        ],
+        "valeur_par_defaut": "permise"
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "J'ai perdu 5 plants de haricots à cause des limaces",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          }
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "les limaces m'ont bouffé 5 haricots",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "perdu 5 haricots",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai perdu 5 plan d'aricot, les limasses",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "renouvelable": true
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "j'ai perdu des haricots",
+          "attendus_tours": {
+            "1": {
+              "textes_attendus": [
+                [
+                  "planche légumes"
+                ],
+                [
+                  "planche nord"
+                ]
+              ]
+            }
+          },
+          "suite": [
+            "5 plants",
+            "limaces",
+            "planche nord"
+          ]
+        },
+        {
+          "genre": "directe",
+          "ouverture": "J'ai perdu 5 plants de haricots sur la planche nord, les limaces",
+          "attendus": {
+            "bonne_reponse": "La parcelle est dite : propose directement la perte de 5 plants de haricot sur la planche nord, à confirmer, sans redemander la parcelle. La cause de la perte, dès que le jardinier la dit (les limaces), est notée sur la carte ; elle n'est jamais inventée.",
+            "ne_jamais_redemander": [
+              "culture",
+              "quantite",
+              "parcelle"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "B27",
+      "libelle": "Savoir ce qui reste en semis et ce qui est repiqué",
+      "categorie": "lecture",
+      "jeu_de_donnees": "rempli",
+      "culture_type": "aucune",
+      "fiche": {},
+      "attendus": {
+        "bonne_reponse": "Lit les semis et les lots avant de répondre. Distingue les semis non levés, les semis levés pas encore repiqués, et ce qui a été repiqué, en godet ou en pleine terre. Un semis sans levée notée est dit « non levé ». Des graines semées ne sont jamais présentées comme des graines restantes. N'invente aucun lot ni aucun chiffre.",
+        "ecritures_interdites": [
+          "*"
+        ],
+        "cultures_admises": [
+          "*"
+        ],
+        "outils_attendus": [
+          [
+            "voir_pepiniere",
+            "lire:lot",
+            "voir_stock",
+            "consulter_carnet",
+            "consulter_donnees"
+          ]
+        ]
+      },
+      "formulations": [
+        {
+          "genre": "directe",
+          "ouverture": "j'ai encore des semis ou j'ai tout repiqué ?"
+        },
+        {
+          "genre": "familiere",
+          "ouverture": "tout est parti en godet ou en terre, ou il me reste des semis ?",
+          "renouvelable": true
+        },
+        {
+          "genre": "incomplete",
+          "ouverture": "semis pas repiqués",
+          "renouvelable": true
+        },
+        {
+          "genre": "faute",
+          "ouverture": "j'ai encor des semi ou j'ai tout repiker ?"
+        },
+        {
+          "genre": "deux_temps",
+          "ouverture": "regarde mes semis",
+          "suite": [
+            "ceux qui ne sont pas encore repiqués"
+          ],
+          "renouvelable": true
+        },
+        {
+          "genre": "directe",
+          "ouverture": "Quels semis n'ont pas encore levé ?"
         }
       ]
     }
