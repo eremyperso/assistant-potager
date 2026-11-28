@@ -1,0 +1,242 @@
+[
+ {
+  "moteur": "boucle",
+  "cas": "B13-F1",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": false,
+   "aboutit": false,
+   "controles_justes": null
+  },
+  "remarque": "le compagnon n'a pas orienté l'enregistrement du geste pour uniquement la culture indiquée"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B03-F4",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": false,
+   "aboutit": false,
+   "controles_justes": null
+  },
+  "remarque": "Le compagnon n'a pas proposé de semis de haricot en pleine terre"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B04-F7",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": "Amélioration à faire : afficher la liste des choix possibles (ici les parcelles) pour aider à répondre"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B05-F2",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B05-F4",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B05-F6",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": false,
+   "aboutit": false,
+   "controles_justes": null
+  },
+  "remarque": "N'a pas abouti : doit répondre à partir d'une recherche web (géolocalisation, période, région) et proposer la procédure pour compléter la fiche de la culture"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B08-F4",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": false,
+   "aboutit": false,
+   "controles_justes": null
+  },
+  "remarque": "Doit demander le dernier arrosage ou le vérifier dans le carnet de suivi"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B12-F2",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B12-F3",
+  "passage": 3,
+  "juge": {
+   "utile": true,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B15-F7",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B16-F2",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": false,
+   "aboutit": false,
+   "controles_justes": null
+  },
+  "remarque": "présente des graines semées comme des graines restantes"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B17-F5",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": "période par défaut de 1 an trop large : la réduire à 6 mois"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B23-F1",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": "vérifié avec le jeu de données : réponses cohérentes, permettent au jardinier de prendre la bonne décision"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B23-F4",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": false
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": "cohérent avec les réponses du B23-F1"
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B23-F5",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ },
+ {
+  "moteur": "boucle",
+  "cas": "B24-F4",
+  "passage": 3,
+  "juge": {
+   "utile": false,
+   "aboutit": true
+  },
+  "humain": {
+   "utile": true,
+   "aboutit": true,
+   "controles_justes": null
+  },
+  "remarque": ""
+ }
+]
